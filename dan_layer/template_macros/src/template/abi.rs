@@ -124,7 +124,8 @@ mod tests {
                     }
                     pub fn no_return_function() {}
                     pub fn constructor() -> Self {}
-                    pub fn method(&self){}  
+                    pub fn method(&self){}
+                    fn private_function() {}
                 } 
             }
         "})
