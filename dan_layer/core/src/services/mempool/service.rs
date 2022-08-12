@@ -27,7 +27,7 @@ use tari_common_types::types::FixedHash;
 use tari_dan_engine::instructions::Instruction;
 use tokio::sync::Mutex;
 
-use super::mempool_outbound_service::MempoolOutboundService;
+use super::outbound::MempoolOutboundService;
 use crate::{digital_assets_error::DigitalAssetError, models::TreeNodeHash};
 
 #[async_trait]

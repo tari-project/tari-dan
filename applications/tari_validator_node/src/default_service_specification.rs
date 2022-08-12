@@ -24,13 +24,13 @@ use tari_common_types::types::PublicKey;
 use tari_dan_core::{
     models::{domain_events::ConsensusWorkerDomainEvent, TariDanPayload},
     services::{
+        mempool::service::MempoolServiceHandle,
         ConcreteAcceptanceManager,
         ConcreteAssetProcessor,
         ConcreteAssetProxy,
         ConcreteCheckpointManager,
         ConcreteCommitteeManager,
         LoggingEventsPublisher,
-        MempoolServiceHandle,
         NodeIdentitySigningService,
         ServiceSpecification,
         TariDanPayloadProcessor,

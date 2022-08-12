@@ -36,6 +36,7 @@ use tari_crypto::tari_utilities::{hex::Hex, message_format::MessageFormat, ByteA
 use tari_dan_core::{
     models::{AssetDefinition, BaseLayerMetadata, Committee},
     services::{
+        mempool::service::MempoolServiceHandle,
         AcceptanceManager,
         BaseNodeClient,
         ConcreteAcceptanceManager,
@@ -43,7 +44,6 @@ use tari_dan_core::{
         ConcreteCheckpointManager,
         ConcreteCommitteeManager,
         LoggingEventsPublisher,
-        MempoolServiceHandle,
         NodeIdentitySigningService,
         TariDanPayloadProcessor,
         TariDanPayloadProvider,

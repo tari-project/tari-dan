@@ -22,7 +22,7 @@
 
 use tari_dan_engine::state::StateDbBackendAdapter;
 
-use super::acceptance_manager::AcceptanceManager;
+use super::{acceptance_manager::AcceptanceManager, mempool::service::MempoolService};
 use crate::{
     models::{domain_events::ConsensusWorkerDomainEvent, Payload},
     services::{
@@ -34,7 +34,6 @@ use crate::{
         CheckpointManager,
         CommitteeManager,
         EventsPublisher,
-        MempoolService,
         PayloadProcessor,
         PayloadProvider,
         SigningService,

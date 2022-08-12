@@ -1,2 +1,3 @@
-pub mod mempool_outbound_service;
-pub mod mempool_service;
+pub mod inbound;
+pub mod outbound;
+pub mod service;

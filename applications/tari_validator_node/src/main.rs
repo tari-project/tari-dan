@@ -52,10 +52,10 @@ use tari_comms::{
 use tari_comms_dht::Dht;
 use tari_dan_core::{
     services::{
+        mempool::service::MempoolServiceHandle,
         ConcreteAcceptanceManager,
         ConcreteAssetProcessor,
         ConcreteAssetProxy,
-        MempoolServiceHandle,
         ServiceSpecification,
     },
     storage::{global::GlobalDb, DbFactory},

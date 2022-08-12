@@ -29,7 +29,7 @@ use tari_comms::{
 };
 use tari_dan_core::{
     models::TreeNodeHash,
-    services::{AssetProcessor, MempoolService},
+    services::{mempool::service::MempoolService, AssetProcessor},
     storage::DbFactory,
 };
 use tari_dan_engine::state::StateDbUnitOfWorkReader;

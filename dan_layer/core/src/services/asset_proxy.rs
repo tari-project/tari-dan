@@ -32,12 +32,12 @@ use tari_dan_engine::instructions::Instruction;
 use tari_utilities::hex::Hex;
 use tokio_stream::StreamExt;
 
+use super::mempool::service::MempoolService;
 use crate::{
     models::BaseLayerOutput,
     services::{
         validator_node_rpc_client::ValidatorNodeRpcClient,
         BaseNodeClient,
-        MempoolService,
         ServiceSpecification,
         ValidatorNodeClientFactory,
     },
