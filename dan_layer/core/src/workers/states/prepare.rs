@@ -476,7 +476,7 @@ mod test {
             .send(
                 address_a.clone(),
                 address_b.clone(),
-                HotStuffMessage::new_view(locked_qc.clone(), ViewId(0), contract_id),
+                HotStuffMessage::new_view(locked_qc.clone(), ViewId(0), 1),
             )
             .await
             .unwrap();
@@ -485,7 +485,7 @@ mod test {
             .send(
                 address_c.clone(),
                 address_b.clone(),
-                HotStuffMessage::new_view(locked_qc.clone(), ViewId(0), contract_id),
+                HotStuffMessage::new_view(locked_qc.clone(), ViewId(0), 1),
             )
             .await
             .unwrap();
@@ -494,7 +494,7 @@ mod test {
             .send(
                 address_d.clone(),
                 address_b.clone(),
-                HotStuffMessage::new_view(locked_qc.clone(), ViewId(0), contract_id),
+                HotStuffMessage::new_view(locked_qc.clone(), ViewId(0), 1),
             )
             .await
             .unwrap();

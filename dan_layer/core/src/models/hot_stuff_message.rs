@@ -41,11 +41,31 @@ pub struct HotStuffMessage<TPayload: Payload> {
     view_number: ViewId,
     message_type: HotStuffMessageType,
     justify: Option<QuorumCertificate>,
+    // The high qc: used for new view messages
+    high_qc: Option<QuorumCertificate>,
     node: Option<HotStuffTreeNode<TPayload>>,
     node_hash: Option<TreeNodeHash>,
     partial_sig: Option<ValidatorSignature>,
     checkpoint_signature: Option<SignerSignature>,
-    contract_id: FixedHash,
+    contract_id: Option<FixedHash>,
+    shard: Option<u32>,
+}
+
+impl<TPayload: Payload> Default for HotStuffMessage<TPayload> {
+    fn default() -> Self {
+        Self {
+            view_number: Default::default(),
+            message_type: Default::default(),
+            justify: Default::default(),
+            high_qc: Default::default(),
+            node: Default::default(),
+            node_hash: Default::default(),
+            partial_sig: Default::default(),
+            checkpoint_signature: Default::default(),
+            contract_id: Default::default(),
+            shard: Default::default(),
+        }
+    }
 }
 
 impl<TPayload: Payload> HotStuffMessage<TPayload> {
@@ -67,20 +87,24 @@ impl<TPayload: Payload> HotStuffMessage<TPayload> {
             node_hash,
             partial_sig,
             checkpoint_signature,
-            contract_id,
+            contract_id: Some(contract_id),
+            high_qc: None,
+            shard: None,
         }
     }
 
-    pub fn new_view(prepare_qc: QuorumCertificate, view_number: ViewId, contract_id: FixedHash) -> Self {
+    pub fn new_view(high_qc: QuorumCertificate, view_number: ViewId, shard: u32) -> Self {
         Self {
             message_type: HotStuffMessageType::NewView,
             view_number,
-            justify: Some(prepare_qc),
+            high_qc: Some(high_qc),
+            shard: Some(shard),
+            justify: None,
             node: None,
             partial_sig: None,
             checkpoint_signature: None,
             node_hash: None,
-            contract_id,
+            contract_id: None,
         }
     }
 
@@ -98,7 +122,8 @@ impl<TPayload: Payload> HotStuffMessage<TPayload> {
             partial_sig: None,
             checkpoint_signature: None,
             node_hash: None,
-            contract_id,
+            contract_id: Some(contract_id),
+            ..Default::default()
         }
     }
 
@@ -110,8 +135,8 @@ impl<TPayload: Payload> HotStuffMessage<TPayload> {
             node: None,
             partial_sig: None,
             checkpoint_signature: None,
-            justify: None,
-            contract_id,
+            contract_id: Some(contract_id),
+            ..Default::default()
         }
     }
 
@@ -129,7 +154,8 @@ impl<TPayload: Payload> HotStuffMessage<TPayload> {
             node_hash: None,
             checkpoint_signature: None,
             partial_sig: None,
-            contract_id,
+            contract_id: Some(contract_id),
+            ..Default::default()
         }
     }
 
@@ -141,8 +167,8 @@ impl<TPayload: Payload> HotStuffMessage<TPayload> {
             node: None,
             partial_sig: None,
             checkpoint_signature: None,
-            justify: None,
-            contract_id,
+            contract_id: Some(contract_id),
+            ..Default::default()
         }
     }
 
@@ -160,7 +186,8 @@ impl<TPayload: Payload> HotStuffMessage<TPayload> {
             partial_sig: None,
             checkpoint_signature: None,
             node_hash: None,
-            contract_id,
+            contract_id: Some(contract_id),
+            ..Default::default()
         }
     }
 
@@ -177,8 +204,8 @@ impl<TPayload: Payload> HotStuffMessage<TPayload> {
             node: None,
             partial_sig: None,
             checkpoint_signature: Some(checkpoint_signature),
-            justify: None,
-            contract_id,
+            contract_id: Some(contract_id),
+            ..Default::default()
         }
     }
 
@@ -196,7 +223,8 @@ impl<TPayload: Payload> HotStuffMessage<TPayload> {
             partial_sig: None,
             checkpoint_signature: None,
             node_hash: None,
-            contract_id,
+            contract_id: Some(contract_id),
+            ..Default::default()
         }
     }
 
@@ -217,8 +245,12 @@ impl<TPayload: Payload> HotStuffMessage<TPayload> {
         self.view_number
     }
 
+    pub fn high_qc(&self) -> Option<QuorumCertificate> {
+        self.high_qc.clone()
+    }
+
     pub fn contract_id(&self) -> &FixedHash {
-        &self.contract_id
+        todo!()
     }
 
     pub fn node(&self) -> Option<&HotStuffTreeNode<TPayload>> {

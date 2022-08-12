@@ -27,3 +27,6 @@ pub use consensus_worker::ConsensusWorker;
 
 mod state_sync;
 pub use state_sync::StateSyncError;
+
+#[cfg(test)]
+mod tests;

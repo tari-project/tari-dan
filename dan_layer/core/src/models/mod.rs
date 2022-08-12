@@ -98,6 +98,12 @@ pub enum HotStuffMessageType {
     Genesis,
 }
 
+impl Default for HotStuffMessageType {
+    fn default() -> Self {
+        Self::NewView
+    }
+}
+
 impl HotStuffMessageType {
     pub fn as_u8(&self) -> u8 {
         match self {

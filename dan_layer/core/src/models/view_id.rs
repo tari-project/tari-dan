@@ -26,7 +26,7 @@ use std::{
     ops::{Add, Sub},
 };
 
-#[derive(Debug, Copy, Clone, Eq, PartialEq)]
+#[derive(Debug, Default, Copy, Clone, Eq, PartialEq)]
 pub struct ViewId(pub u64);
 
 impl ViewId {
