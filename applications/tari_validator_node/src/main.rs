@@ -52,10 +52,10 @@ use tari_comms::{
 use tari_comms_dht::Dht;
 use tari_dan_core::{
     services::{
+        mempool::service::MempoolServiceHandle,
         ConcreteAcceptanceManager,
         ConcreteAssetProcessor,
         ConcreteAssetProxy,
-        MempoolServiceHandle,
         ServiceSpecification,
     },
     storage::{global::GlobalDb, DbFactory},
@@ -125,7 +125,7 @@ async fn run_node(config: &ApplicationConfig) -> Result<(), ExitError> {
     let global_db = db_factory
         .get_or_create_global_db()
         .map_err(|e| ExitError::new(ExitCode::DatabaseError, e))?;
-    let mempool_service = MempoolServiceHandle::default();
+    let mempool_service = MempoolServiceHandle::new();
 
     info!(
         target: LOG_TARGET,
@@ -202,7 +202,7 @@ async fn run_dan_node(
     mempool_service: MempoolServiceHandle,
     db_factory: SqliteDbFactory,
     handles: ServiceHandles,
-    subscription_factory: SubscriptionFactory,
+    subscription_factory: Arc<SubscriptionFactory>,
     node_identity: Arc<NodeIdentity>,
     global_db: GlobalDb<SqliteGlobalDbBackendAdapter>,
 ) -> Result<(), ExitError> {

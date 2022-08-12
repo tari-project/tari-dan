@@ -26,7 +26,7 @@ use tari_app_utilities::{identity_management, identity_management::load_from_jso
 use tari_common::exit_codes::{ExitCode, ExitError};
 use tari_comms::{protocol::rpc::RpcServer, NodeIdentity, UnspawnedCommsNode};
 use tari_comms_dht::Dht;
-use tari_dan_core::services::{ConcreteAssetProcessor, MempoolServiceHandle};
+use tari_dan_core::services::{mempool::service::MempoolServiceHandle, ConcreteAssetProcessor};
 use tari_dan_storage_sqlite::SqliteDbFactory;
 use tari_p2p::{
     comms_connector::{pubsub_connector, SubscriptionFactory},
@@ -35,7 +35,10 @@ use tari_p2p::{
 use tari_service_framework::{ServiceHandles, StackBuilder};
 use tari_shutdown::ShutdownSignal;
 
-use crate::{config::ApplicationConfig, p2p::create_validator_node_rpc_service};
+use crate::{
+    config::ApplicationConfig,
+    p2p::{create_validator_node_rpc_service, services::mempool::initializer::MempoolInitializer},
+};
 
 pub async fn build_service_and_comms_stack(
     config: &ApplicationConfig,
@@ -44,8 +47,9 @@ pub async fn build_service_and_comms_stack(
     mempool: MempoolServiceHandle,
     db_factory: SqliteDbFactory,
     asset_processor: ConcreteAssetProcessor,
-) -> Result<(ServiceHandles, SubscriptionFactory), ExitError> {
+) -> Result<(ServiceHandles, Arc<SubscriptionFactory>), ExitError> {
     let (publisher, peer_message_subscriptions) = pubsub_connector(100, 50);
+    let peer_message_subscriptions = Arc::new(peer_message_subscriptions);
 
     let mut p2p_config = config.validator_node.p2p.clone();
     p2p_config.transport.tor.identity = load_from_json(&config.validator_node.tor_identity_file)
@@ -58,6 +62,10 @@ pub async fn build_service_and_comms_stack(
             config.network,
             node_identity.clone(),
             publisher,
+        ))
+        .add_initializer(MempoolInitializer::new(
+            mempool.clone(),
+            peer_message_subscriptions.clone(),
         ))
         .build()
         .await

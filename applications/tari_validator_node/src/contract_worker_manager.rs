@@ -36,6 +36,7 @@ use tari_crypto::tari_utilities::{hex::Hex, message_format::MessageFormat, ByteA
 use tari_dan_core::{
     models::{AssetDefinition, BaseLayerMetadata, Committee},
     services::{
+        mempool::service::MempoolServiceHandle,
         AcceptanceManager,
         BaseNodeClient,
         ConcreteAcceptanceManager,
@@ -43,7 +44,6 @@ use tari_dan_core::{
         ConcreteCheckpointManager,
         ConcreteCommitteeManager,
         LoggingEventsPublisher,
-        MempoolServiceHandle,
         NodeIdentitySigningService,
         TariDanPayloadProcessor,
         TariDanPayloadProvider,
@@ -90,7 +90,7 @@ pub struct ContractWorkerManager {
     active_workers: HashMap<FixedHash, Arc<AtomicBool>>,
     mempool: MempoolServiceHandle,
     handles: ServiceHandles,
-    subscription_factory: SubscriptionFactory,
+    subscription_factory: Arc<SubscriptionFactory>,
     db_factory: SqliteDbFactory,
     shutdown: ShutdownSignal,
 }
@@ -113,7 +113,7 @@ impl ContractWorkerManager {
         acceptance_manager: ConcreteAcceptanceManager<GrpcWalletClient, GrpcBaseNodeClient>,
         mempool: MempoolServiceHandle,
         handles: ServiceHandles,
-        subscription_factory: SubscriptionFactory,
+        subscription_factory: Arc<SubscriptionFactory>,
         db_factory: SqliteDbFactory,
         shutdown: ShutdownSignal,
     ) -> Self {
@@ -470,7 +470,7 @@ impl ContractWorkerManager {
         node_identity: Arc<NodeIdentity>,
         mempool_service: MempoolServiceHandle,
         handles: ServiceHandles,
-        subscription_factory: SubscriptionFactory,
+        subscription_factory: Arc<SubscriptionFactory>,
         shutdown: ShutdownSignal,
         config: ValidatorNodeConfig,
         db_factory: SqliteDbFactory,
