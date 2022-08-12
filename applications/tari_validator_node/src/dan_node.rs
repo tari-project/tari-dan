@@ -67,7 +67,7 @@ impl DanNode {
         mempool_service: MempoolServiceHandle,
         db_factory: SqliteDbFactory,
         handles: ServiceHandles,
-        subscription_factory: SubscriptionFactory,
+        subscription_factory: Arc<SubscriptionFactory>,
     ) -> Result<(), ExitError> {
         let base_node_client = GrpcBaseNodeClient::new(self.config.base_node_grpc_address);
         let wallet_client = GrpcWalletClient::new(self.config.wallet_grpc_address);

@@ -76,10 +76,7 @@ use crate::{
         services::{base_node_client::GrpcBaseNodeClient, wallet_client::GrpcWalletClient},
         validator_node_grpc_server::ValidatorNodeGrpcServer,
     },
-    p2p::services::{
-        mempool_outbound_service::TariCommsMempoolOutboundService,
-        rpc_client::TariCommsValidatorNodeClientFactory,
-    },
+    p2p::services::rpc_client::TariCommsValidatorNodeClientFactory,
 };
 
 const LOG_TARGET: &str = "tari::validator_node::app";
@@ -128,9 +125,7 @@ async fn run_node(config: &ApplicationConfig) -> Result<(), ExitError> {
     let global_db = db_factory
         .get_or_create_global_db()
         .map_err(|e| ExitError::new(ExitCode::DatabaseError, e))?;
-
-    let mempool_outbound_service = TariCommsMempoolOutboundService::new();
-    let mempool_service = MempoolServiceHandle::new(Box::new(mempool_outbound_service));
+    let mempool_service = MempoolServiceHandle::new();
 
     info!(
         target: LOG_TARGET,
@@ -207,7 +202,7 @@ async fn run_dan_node(
     mempool_service: MempoolServiceHandle,
     db_factory: SqliteDbFactory,
     handles: ServiceHandles,
-    subscription_factory: SubscriptionFactory,
+    subscription_factory: Arc<SubscriptionFactory>,
     node_identity: Arc<NodeIdentity>,
     global_db: GlobalDb<SqliteGlobalDbBackendAdapter>,
 ) -> Result<(), ExitError> {
