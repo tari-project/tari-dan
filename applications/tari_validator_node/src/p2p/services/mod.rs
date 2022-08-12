@@ -21,5 +21,6 @@
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 pub mod inbound_connection_service;
+pub mod mempool_outbound_service;
 pub mod outbound_connection_service;
 pub mod rpc_client;

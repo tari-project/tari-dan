@@ -27,6 +27,7 @@ use tari_common_types::types::FixedHash;
 use tari_dan_engine::instructions::Instruction;
 use tokio::sync::Mutex;
 
+use super::mempool_outbound_service::MempoolOutboundService;
 use crate::{digital_assets_error::DigitalAssetError, models::TreeNodeHash};
 
 #[async_trait]
@@ -43,15 +44,26 @@ pub trait MempoolService: Sync + Send + 'static {
     async fn size(&self) -> usize;
 }
 
-#[derive(Default)]
 pub struct ConcreteMempoolService {
     instructions: Vec<(Instruction, Option<TreeNodeHash>)>,
+    outbound_service: Box<dyn MempoolOutboundService>,
+}
+
+impl ConcreteMempoolService {
+    pub fn new(outbound_service: Box<dyn MempoolOutboundService>) -> Self {
+        Self {
+            instructions: vec![],
+            outbound_service,
+        }
+    }
 }
 
 #[async_trait]
 impl MempoolService for ConcreteMempoolService {
     async fn submit_instruction(&mut self, instruction: Instruction) -> Result<(), DigitalAssetError> {
-        self.instructions.push((instruction, None));
+        // TODO: validate the instruction
+        self.instructions.push((instruction.clone(), None));
+        self.outbound_service.propagate_instruction(instruction).await?;
         Ok(())
     }
 
@@ -124,10 +136,12 @@ pub struct MempoolServiceHandle {
     mempool: Arc<Mutex<ConcreteMempoolService>>,
 }
 
-impl Default for MempoolServiceHandle {
-    fn default() -> Self {
+impl MempoolServiceHandle {
+    pub fn new(outbound_service: Box<dyn MempoolOutboundService>) -> Self {
+        let mempool_service = ConcreteMempoolService::new(outbound_service);
+
         Self {
-            mempool: Arc::new(Mutex::new(ConcreteMempoolService::default())),
+            mempool: Arc::new(Mutex::new(mempool_service)),
         }
     }
 }
