@@ -29,7 +29,7 @@ pub use service_impl::ValidatorNodeRpcServiceImpl;
 use tari_comms::protocol::rpc::{Request, Response, RpcStatus, Streaming};
 use tari_comms_rpc_macros::tari_rpc;
 use tari_dan_core::{
-    services::{AssetProcessor, MempoolService},
+    services::{mempool::service::MempoolService, AssetProcessor},
     storage::DbFactory,
 };
 

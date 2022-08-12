@@ -22,10 +22,11 @@
 
 use async_trait::async_trait;
 
+use super::mempool::service::MempoolService;
 use crate::{
     digital_assets_error::DigitalAssetError,
     models::{AssetDefinition, InstructionSet, Payload, TariDanPayload, TreeNodeHash},
-    services::{asset_processor::TemplateFactory, MempoolService},
+    services::asset_processor::TemplateFactory,
 };
 
 #[async_trait]

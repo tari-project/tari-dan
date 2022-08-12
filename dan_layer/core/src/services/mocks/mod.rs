@@ -44,6 +44,7 @@ use tari_dan_engine::{
     },
 };
 
+use super::mempool::service::MempoolService;
 use crate::{
     digital_assets_error::DigitalAssetError,
     models::{
@@ -69,7 +70,6 @@ use crate::{
         CommitteeManager,
         ConcreteCheckpointManager,
         EventsPublisher,
-        MempoolService,
         PayloadProcessor,
         PayloadProvider,
         SigningService,

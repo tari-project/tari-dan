@@ -25,7 +25,7 @@ use std::sync::Arc;
 use tari_common::exit_codes::{ExitCode, ExitError};
 use tari_comms::NodeIdentity;
 use tari_dan_core::{
-    services::{ConcreteAcceptanceManager, MempoolServiceHandle},
+    services::{mempool::service::MempoolServiceHandle, ConcreteAcceptanceManager},
     storage::global::GlobalDb,
 };
 use tari_dan_storage_sqlite::{global::SqliteGlobalDbBackendAdapter, SqliteDbFactory};
@@ -67,7 +67,7 @@ impl DanNode {
         mempool_service: MempoolServiceHandle,
         db_factory: SqliteDbFactory,
         handles: ServiceHandles,
-        subscription_factory: SubscriptionFactory,
+        subscription_factory: Arc<SubscriptionFactory>,
     ) -> Result<(), ExitError> {
         let base_node_client = GrpcBaseNodeClient::new(self.config.base_node_grpc_address);
         let wallet_client = GrpcWalletClient::new(self.config.wallet_grpc_address);
