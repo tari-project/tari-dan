@@ -24,6 +24,7 @@ use std::fmt::Debug;
 
 use crate::models::ConsensusHash;
 
+// TODO: Rename to Command - most of the hotstuff docs refers to this as command
 pub trait Payload: Debug + Clone + Send + Sync + ConsensusHash {}
 
 impl Payload for &str {}

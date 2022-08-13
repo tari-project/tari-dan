@@ -104,18 +104,19 @@ impl ChainDbBackendAdapter for MockChainDbBackupAdapter {
     }
 
     fn find_highest_prepared_qc(&self) -> Result<QuorumCertificate, Self::Error> {
-        let lock = self.db.read()?;
-        let highest = lock
-            .prepare_qc
-            .rows()
-            .fold(None, |found: Option<&DbQc>, rec| match found {
-                Some(r) if rec.view_number > r.view_number => Some(rec),
-                Some(r) => Some(r),
-                None => Some(rec),
-            })
-            .ok_or(StorageError::NotFound)?;
-
-        Ok(highest.clone().into())
+        todo!()
+        // let lock = self.db.read()?;
+        // let highest = lock
+        //     .prepare_qc
+        //     .rows()
+        //     .fold(None, |found: Option<&DbQc>, rec| match found {
+        //         Some(r) if rec.view_number > r.view_number => Some(rec),
+        // Some(r) => Some(r),
+        // None => Some(rec),
+        // })
+        // .ok_or(StorageError::NotFound)?;
+        //
+        // Ok(highest.clone().into())
     }
 
     fn get_locked_qc(&self) -> Result<QuorumCertificate, Self::Error> {

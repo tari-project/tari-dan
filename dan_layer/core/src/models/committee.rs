@@ -29,6 +29,9 @@ pub struct Committee<TAddr: NodeAddressable> {
 }
 
 impl<TAddr: NodeAddressable> Committee<TAddr> {
+    pub fn empty() -> Self {
+        Self::new(vec![])
+    }
     pub fn new(members: Vec<TAddr>) -> Self {
         Self { members }
     }

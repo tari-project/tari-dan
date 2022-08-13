@@ -174,8 +174,9 @@ impl<TBackendAdapter: ChainDbBackendAdapter> ChainDbUnitOfWork for ChainDbUnitOf
             let locked_qc = locked_qc.get();
             return Ok(QuorumCertificate::new(
                 locked_qc.message_type,
-                locked_qc.view_number,
+                todo!(),
                 locked_qc.node_hash,
+                todo!(),
                 locked_qc.signature.clone(),
             ));
         }
@@ -188,7 +189,6 @@ impl<TBackendAdapter: ChainDbBackendAdapter> ChainDbUnitOfWork for ChainDbUnitOf
         inner.locked_qc = Some(UnitOfWorkTracker::new(
             DbQc {
                 message_type: qc.message_type(),
-                view_number: qc.view_number(),
                 node_hash: *qc.node_hash(),
                 signature: qc.signature().cloned(),
             },
@@ -203,14 +203,14 @@ impl<TBackendAdapter: ChainDbBackendAdapter> ChainDbUnitOfWork for ChainDbUnitOf
         if let Some(locked_qc) = &inner.locked_qc.as_ref() {
             let mut locked_qc = locked_qc.get_mut();
             locked_qc.message_type = qc.message_type();
-            locked_qc.view_number = qc.view_number();
+            // locked_qc.view_number = qc.view_number();
             locked_qc.node_hash = *qc.node_hash();
             locked_qc.signature = qc.signature().cloned();
         } else {
             inner.locked_qc = Some(UnitOfWorkTracker::new(
                 DbQc {
                     message_type: qc.message_type(),
-                    view_number: qc.view_number(),
+                    // view_number: qc.view_number(),
                     node_hash: *qc.node_hash(),
                     signature: qc.signature().cloned(),
                 },
@@ -237,8 +237,10 @@ impl<TBackendAdapter: ChainDbBackendAdapter> ChainDbUnitOfWork for ChainDbUnitOf
             let prepare_qc = prepare_qc.get();
             return Ok(Some(QuorumCertificate::new(
                 prepare_qc.message_type,
-                prepare_qc.view_number,
+                todo!(),
+                // prepare_qc.view_number,
                 prepare_qc.node_hash,
+                todo!(),
                 prepare_qc.signature.clone(),
             )));
         }
@@ -253,7 +255,7 @@ impl<TBackendAdapter: ChainDbBackendAdapter> ChainDbUnitOfWork for ChainDbUnitOf
             UnitOfWorkTracker::new(
                 DbQc {
                     message_type: qc.message_type(),
-                    view_number: qc.view_number(),
+                    // view_number: qc.view_number(),
                     node_hash: *qc.node_hash(),
                     signature: qc.signature().cloned(),
                 },
@@ -272,7 +274,7 @@ impl<TBackendAdapter: ChainDbBackendAdapter> ChainDbUnitOfWork for ChainDbUnitOf
                 inner.prepare_qc = Some(UnitOfWorkTracker::new(
                     DbQc {
                         message_type: qc.message_type(),
-                        view_number: qc.view_number(),
+                        // view_number: qc.view_number(),
                         node_hash: *qc.node_hash(),
                         signature: qc.signature().cloned(),
                     },
@@ -282,7 +284,7 @@ impl<TBackendAdapter: ChainDbBackendAdapter> ChainDbUnitOfWork for ChainDbUnitOf
             Some(db_qc) => {
                 let mut db_qc = db_qc.get_mut();
                 db_qc.message_type = qc.message_type();
-                db_qc.view_number = qc.view_number();
+                // db_qc.view_number = qc.view_number();
                 db_qc.node_hash = *qc.node_hash();
                 db_qc.signature = qc.signature().cloned();
             },

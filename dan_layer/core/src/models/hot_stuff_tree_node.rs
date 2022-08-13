@@ -24,25 +24,25 @@ use digest::{Digest, FixedOutput};
 use tari_crypto::hash::blake2::Blake256;
 use tari_dan_engine::state::models::StateRoot;
 
-use crate::models::{Payload, TreeNodeHash};
+use crate::models::{Payload, QuorumCertificate, TreeNodeHash};
 
 #[derive(Debug, Clone)]
 pub struct HotStuffTreeNode<TPayload: Payload> {
     parent: TreeNodeHash,
     payload: TPayload,
-    state_root: StateRoot,
     hash: TreeNodeHash,
     height: u32,
+    justify: Option<QuorumCertificate>,
 }
 
 impl<TPayload: Payload> HotStuffTreeNode<TPayload> {
-    pub fn new(parent: TreeNodeHash, payload: TPayload, state_root: StateRoot, height: u32) -> Self {
+    pub fn new(parent: TreeNodeHash, payload: TPayload, height: u32, justify: QuorumCertificate) -> Self {
         let mut s = HotStuffTreeNode {
             parent,
             payload,
-            state_root,
             hash: TreeNodeHash::zero(),
             height,
+            justify: Some(justify),
         };
         s.hash = s.calculate_hash();
         s
@@ -53,29 +53,24 @@ impl<TPayload: Payload> HotStuffTreeNode<TPayload> {
             parent: TreeNodeHash::zero(),
             payload,
             hash: TreeNodeHash::zero(),
-            state_root,
             height: 0,
+            justify: None,
         };
         s.hash = s.calculate_hash();
         s
     }
 
-    pub fn from_parent(
-        parent: TreeNodeHash,
-        payload: TPayload,
-        state_root: StateRoot,
-        height: u32,
-    ) -> HotStuffTreeNode<TPayload> {
-        Self::new(parent, payload, state_root, height)
-    }
-
     pub fn calculate_hash(&self) -> TreeNodeHash {
-        let result = Blake256::new()
+        let mut result = Blake256::new()
             .chain(self.parent.as_bytes())
             .chain(self.payload.consensus_hash())
-            .chain(self.height.to_le_bytes())
-            .chain(self.state_root.as_bytes())
-            .finalize_fixed();
+            .chain(self.height.to_le_bytes());
+        if let Some(qc) = &self.justify {
+            result = result.chain(qc.as_bytes());
+        } else {
+            result = result.chain([0]);
+        }
+        let result = result.finalize_fixed();
         result.into()
     }
 
@@ -89,10 +84,6 @@ impl<TPayload: Payload> HotStuffTreeNode<TPayload> {
 
     pub fn payload(&self) -> &TPayload {
         &self.payload
-    }
-
-    pub fn state_root(&self) -> &StateRoot {
-        &self.state_root
     }
 
     pub fn height(&self) -> u32 {

@@ -162,12 +162,12 @@ impl<TSpecification: ServiceSpecification> Prepare<TSpecification> {
         outbound: &mut TSpecification::OutboundService,
         db_factory: &TSpecification::DbFactory,
     ) -> Result<Option<ConsensusWorkerStateEvent>, DigitalAssetError> {
-        debug!(
-            target: LOG_TARGET,
-            "Received message as leader:{:?} for view:{}",
-            message.message_type(),
-            message.view_number()
-        );
+        // debug!(
+        //     target: LOG_TARGET,
+        //     "Received message as leader:{:?} for view:{}",
+        //     message.message_type(),
+        //     message.view_number()
+        // );
 
         // TODO: This might need to be checked in the QC rather
         if self.received_new_view_messages.contains_key(sender) {
@@ -266,16 +266,17 @@ impl<TSpecification: ServiceSpecification> Prepare<TSpecification> {
             .process_payload(node.payload(), state_tx.clone())
             .await?;
 
-        if state_root != *node.state_root() {
-            warn!(
-                target: LOG_TARGET,
-                "Calculated state root did not match the state root provided by the leader: Expected: {:?} Leader \
-                 provided:{:?}",
-                state_root,
-                node.state_root()
-            );
-            return Ok(None);
-        }
+        todo!();
+        // if state_root != *node.state_root() {
+        //     warn!(
+        //         target: LOG_TARGET,
+        //         "Calculated state root did not match the state root provided by the leader: Expected: {:?} Leader \
+        //          provided:{:?}",
+        //         state_root,
+        //         node.state_root()
+        //     );
+        //     return Ok(None);
+        // }
 
         debug!(
             target: LOG_TARGET,
@@ -301,21 +302,22 @@ impl<TSpecification: ServiceSpecification> Prepare<TSpecification> {
     }
 
     fn find_highest_qc(&self) -> QuorumCertificate {
-        let mut max_qc = None;
-        for message in self.received_new_view_messages.values() {
-            match &max_qc {
-                None => max_qc = message.justify().cloned(),
-                Some(qc) => {
-                    if let Some(justify) = message.justify() {
-                        if qc.view_number() < justify.view_number() {
-                            max_qc = Some(justify.clone())
-                        }
-                    }
-                },
-            }
-        }
-        // TODO: this will panic if nothing found
-        max_qc.unwrap()
+        todo!()
+        // let mut max_qc = None;
+        // for message in self.received_new_view_messages.values() {
+        //     match &max_qc {
+        //         None => max_qc = message.justify().cloned(),
+        //         Some(qc) => {
+        //             if let Some(justify) = message.justify() {
+        //                 if qc.view_number() < justify.view_number() {
+        //                     max_qc = Some(justify.clone())
+        //                 }
+        //             }
+        //         },
+        //     }
+        // }
+        // // TODO: this will panic if nothing found
+        // max_qc.unwrap()
     }
 
     #[allow(clippy::cast_possible_truncation)]
@@ -341,12 +343,13 @@ impl<TSpecification: ServiceSpecification> Prepare<TSpecification> {
             let payload = payload_provider.create_payload().await?;
 
             let state_root = payload_processor.process_payload(&payload, state_db).await?;
-            Ok(HotStuffTreeNode::from_parent(
-                parent,
-                payload,
-                state_root,
-                view_id.as_u64() as u32,
-            ))
+            todo!()
+            // Ok(HotStuffTreeNode::from_parent(
+            //     parent,
+            //     payload,
+            //     state_root,
+            //     view_id.as_u64() as u32,
+            // ))
         }
     }
 
@@ -374,8 +377,10 @@ impl<TSpecification: ServiceSpecification> Prepare<TSpecification> {
         quorum_certificate: &QuorumCertificate,
         chain_tx: &mut TUnitOfWork,
     ) -> Result<bool, StorageError> {
-        let locked_qc = chain_tx.get_locked_qc()?;
-        Ok(self.does_extend(node, locked_qc.node_hash()) || quorum_certificate.view_number() > locked_qc.view_number())
+        todo!()
+        // let locked_qc = chain_tx.get_locked_qc()?;
+        // Ok(self.does_extend(node, locked_qc.node_hash()) || quorum_certificate.view_number() >
+        // locked_qc.view_number())
     }
 
     async fn send_vote_to_leader(
@@ -421,85 +426,86 @@ mod test {
     async fn basic_test_as_leader() {
         // let mut inbound = mock_inbound();
         // let mut sender = inbound.create_sender();
-        let locked_qc = QuorumCertificate::genesis(TreeNodeHash::zero());
-        let contract_id = FixedHash::default();
-        let address_a = create_public_key();
-        let address_b = create_public_key();
-        let address_c = create_public_key();
-        let address_d = create_public_key();
-
-        let mut state = Prepare::<MockServiceSpecification>::new(address_b.clone(), contract_id);
-        let current_view = View {
-            view_id: ViewId(1),
-            is_leader: true,
-        };
-        let timeout = Duration::from_secs(10);
-        let asset_definition = AssetDefinition::default();
-        let committee = Committee::new(vec![
-            address_a.clone(),
-            address_b.clone(),
-            address_c.clone(),
-            address_d.clone(),
-        ]);
-        let mut outbound = mock_outbound(committee.members.clone());
-        let mut outbound2 = outbound.clone();
-        let inbound = outbound.take_inbound(&address_b).unwrap();
-        let mut payload_provider = mock_static_payload_provider();
-        let signing_service = mock_signing_service();
-        let mut payload_processor = mock_payload_processor();
-        let chain_storage_service = MockChainStorageService::default();
-        let db_factory = MockDbFactory::default();
-        let chain_db = db_factory.get_or_create_chain_db(&contract_id.clone()).unwrap();
-        let chain_tx = chain_db.new_unit_of_work();
-        let mut state_tx = db_factory
-            .get_or_create_state_db(&contract_id)
-            .unwrap()
-            .new_unit_of_work(current_view.view_id.as_u64());
-
-        let task = state.next_event(
-            &current_view,
-            timeout,
-            &asset_definition,
-            &committee,
-            &inbound,
-            &mut outbound,
-            &mut payload_provider,
-            &signing_service,
-            &mut payload_processor,
-            &chain_storage_service,
-            chain_tx,
-            &mut state_tx,
-            &db_factory,
-        );
-
-        outbound2
-            .send(
-                address_a.clone(),
-                address_b.clone(),
-                HotStuffMessage::new_view(locked_qc.clone(), ViewId(0), 1),
-            )
-            .await
-            .unwrap();
-
-        outbound2
-            .send(
-                address_c.clone(),
-                address_b.clone(),
-                HotStuffMessage::new_view(locked_qc.clone(), ViewId(0), 1),
-            )
-            .await
-            .unwrap();
-
-        outbound2
-            .send(
-                address_d.clone(),
-                address_b.clone(),
-                HotStuffMessage::new_view(locked_qc.clone(), ViewId(0), 1),
-            )
-            .await
-            .unwrap();
-
-        let event = task.await.unwrap();
-        assert_eq!(event, ConsensusWorkerStateEvent::Prepared);
+        // let locked_qc = QuorumCertificate::genesis(TreeNodeHash::zero());
+        // let contract_id = FixedHash::default();
+        // let address_a = create_public_key();
+        // let address_b = create_public_key();
+        // let address_c = create_public_key();
+        // let address_d = create_public_key();
+        //
+        // let mut state = Prepare::<MockServiceSpecification>::new(address_b.clone(), contract_id);
+        // let current_view = View {
+        //     view_id: ViewId(1),
+        //     is_leader: true,
+        // };
+        // let timeout = Duration::from_secs(10);
+        // let asset_definition = AssetDefinition::default();
+        // let committee = Committee::new(vec![
+        //     address_a.clone(),
+        //     address_b.clone(),
+        //     address_c.clone(),
+        //     address_d.clone(),
+        // ]);
+        // let mut outbound = mock_outbound(committee.members.clone());
+        // let mut outbound2 = outbound.clone();
+        // let inbound = outbound.take_inbound(&address_b).unwrap();
+        // let mut payload_provider = mock_static_payload_provider();
+        // let signing_service = mock_signing_service();
+        // let mut payload_processor = mock_payload_processor();
+        // let chain_storage_service = MockChainStorageService::default();
+        // let db_factory = MockDbFactory::default();
+        // let chain_db = db_factory.get_or_create_chain_db(&contract_id.clone()).unwrap();
+        // let chain_tx = chain_db.new_unit_of_work();
+        // let mut state_tx = db_factory
+        //     .get_or_create_state_db(&contract_id)
+        //     .unwrap()
+        //     .new_unit_of_work(current_view.view_id.as_u64());
+        //
+        // let task = state.next_event(
+        //     &current_view,
+        //     timeout,
+        //     &asset_definition,
+        //     &committee,
+        //     &inbound,
+        //     &mut outbound,
+        //     &mut payload_provider,
+        //     &signing_service,
+        //     &mut payload_processor,
+        //     &chain_storage_service,
+        //     chain_tx,
+        //     &mut state_tx,
+        //     &db_factory,
+        // );
+        //
+        // outbound2
+        //     .send(
+        //         address_a.clone(),
+        //         address_b.clone(),
+        //         HotStuffMessage::new_view(locked_qc.clone(), ViewId(0), 1),
+        //     )
+        //     .await
+        //     .unwrap();
+        //
+        // outbound2
+        //     .send(
+        //         address_c.clone(),
+        //         address_b.clone(),
+        //         HotStuffMessage::new_view(locked_qc.clone(), ViewId(0), 1),
+        //     )
+        //     .await
+        //     .unwrap();
+        //
+        // outbound2
+        //     .send(
+        //         address_d.clone(),
+        //         address_b.clone(),
+        //         HotStuffMessage::new_view(locked_qc.clone(), ViewId(0), 1),
+        //     )
+        //     .await
+        //     .unwrap();
+        //
+        // let event = task.await.unwrap();
+        // assert_eq!(event, ConsensusWorkerStateEvent::Prepared);
+        todo!("fix")
     }
 }

@@ -90,6 +90,8 @@ impl AsRef<[u8]> for TokenId {
 #[derive(Debug, Copy, Clone, Eq, PartialEq)]
 pub enum HotStuffMessageType {
     NewView,
+    Generic,
+    // TODO: remove
     Prepare,
     PreCommit,
     Commit,
@@ -113,6 +115,7 @@ impl HotStuffMessageType {
             HotStuffMessageType::Commit => 4,
             HotStuffMessageType::Decide => 5,
             HotStuffMessageType::Genesis => 255,
+            HotStuffMessageType::Generic => 102,
         }
     }
 }
@@ -127,6 +130,7 @@ impl TryFrom<u8> for HotStuffMessageType {
             3 => Ok(HotStuffMessageType::PreCommit),
             4 => Ok(HotStuffMessageType::Commit),
             5 => Ok(HotStuffMessageType::Decide),
+            102 => Ok(HotStuffMessageType::Generic),
             255 => Ok(HotStuffMessageType::Genesis),
             _ => Err("Not a value message type".to_string()),
         }

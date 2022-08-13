@@ -20,6 +20,9 @@
 // WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 // USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+use digest::Digest;
+use tari_crypto::hash::blake2::Blake256;
+
 use crate::{
     models::{HotStuffMessageType, TreeNodeHash, ValidatorSignature, ViewId},
     storage::chain::DbQc,
@@ -28,41 +31,51 @@ use crate::{
 #[derive(Debug, Clone)]
 pub struct QuorumCertificate {
     message_type: HotStuffMessageType,
+    // Cache the node hash
     node_hash: TreeNodeHash,
-    view_number: ViewId,
+    // cache the node height
+    node_height: u32,
+    shard: u32,
     signatures: Option<ValidatorSignature>,
 }
 
 impl QuorumCertificate {
     pub fn new(
         message_type: HotStuffMessageType,
-        view_number: ViewId,
+        node_height: u32,
         node_hash: TreeNodeHash,
+        shard: u32,
         signature: Option<ValidatorSignature>,
     ) -> Self {
         Self {
             message_type,
             node_hash,
-            view_number,
+            shard,
+            node_height,
             signatures: signature,
         }
     }
 
-    pub fn genesis(node_hash: TreeNodeHash) -> Self {
+    pub fn genesis(shard: u32) -> Self {
         Self {
             message_type: HotStuffMessageType::Genesis,
-            node_hash,
-            view_number: 0.into(),
+            node_hash: TreeNodeHash::zero(),
+            shard,
+            node_height: 0,
             signatures: None,
         }
+    }
+
+    pub fn shard(&self) -> u32 {
+        self.shard
     }
 
     pub fn node_hash(&self) -> &TreeNodeHash {
         &self.node_hash
     }
 
-    pub fn view_number(&self) -> ViewId {
-        self.view_number
+    pub fn node_height(&self) -> u32 {
+        self.node_height
     }
 
     pub fn message_type(&self) -> HotStuffMessageType {
@@ -81,18 +94,35 @@ impl QuorumCertificate {
     }
 
     pub fn matches(&self, message_type: HotStuffMessageType, view_id: ViewId) -> bool {
+        todo!("Update as this has changed from view number to height")
         // from hotstuf spec
-        self.message_type() == message_type && view_id == self.view_number()
+        // self.message_type() == message_type && view_id == self.view_number()
+    }
+
+    pub fn as_bytes(&self) -> Vec<u8> {
+        let mut result = Blake256::new()
+            .chain([self.message_type.as_u8()])
+            .chain(self.node_hash.as_bytes())
+            .chain(self.node_height.to_le_bytes())
+            .chain(self.shard.to_le_bytes());
+
+        if let Some(sig) = &self.signatures {
+            result = result.chain(sig.to_bytes());
+        } else {
+            result = result.chain([0]);
+        }
+        result.finalize().to_vec()
     }
 }
 
 impl From<DbQc> for QuorumCertificate {
     fn from(rec: DbQc) -> Self {
-        Self {
-            message_type: rec.message_type,
-            node_hash: rec.node_hash,
-            view_number: rec.view_number,
-            signatures: rec.signature,
-        }
+        // Self {
+        //     message_type: rec.message_type,
+        //     node_hash: rec.node_hash,
+        //     view_number: rec.view_number,
+        //     signatures: rec.signature,
+        // }
+        todo!()
     }
 }

@@ -38,7 +38,6 @@ use crate::models::{
 
 #[derive(Debug, Clone)]
 pub struct HotStuffMessage<TPayload: Payload> {
-    view_number: ViewId,
     message_type: HotStuffMessageType,
     justify: Option<QuorumCertificate>,
     // The high qc: used for new view messages
@@ -49,12 +48,13 @@ pub struct HotStuffMessage<TPayload: Payload> {
     checkpoint_signature: Option<SignerSignature>,
     contract_id: Option<FixedHash>,
     shard: Option<u32>,
+    // Used for broadcasting the payload in new view
+    payload: Option<TPayload>,
 }
 
 impl<TPayload: Payload> Default for HotStuffMessage<TPayload> {
     fn default() -> Self {
         Self {
-            view_number: Default::default(),
             message_type: Default::default(),
             justify: Default::default(),
             high_qc: Default::default(),
@@ -64,13 +64,13 @@ impl<TPayload: Payload> Default for HotStuffMessage<TPayload> {
             checkpoint_signature: Default::default(),
             contract_id: Default::default(),
             shard: Default::default(),
+            payload: None,
         }
     }
 }
 
 impl<TPayload: Payload> HotStuffMessage<TPayload> {
     pub fn new(
-        view_number: ViewId,
         message_type: HotStuffMessageType,
         justify: Option<QuorumCertificate>,
         node: Option<HotStuffTreeNode<TPayload>>,
@@ -80,7 +80,6 @@ impl<TPayload: Payload> HotStuffMessage<TPayload> {
         contract_id: FixedHash,
     ) -> Self {
         Self {
-            view_number,
             message_type,
             justify,
             node,
@@ -90,13 +89,13 @@ impl<TPayload: Payload> HotStuffMessage<TPayload> {
             contract_id: Some(contract_id),
             high_qc: None,
             shard: None,
+            payload: None,
         }
     }
 
-    pub fn new_view(high_qc: QuorumCertificate, view_number: ViewId, shard: u32) -> Self {
+    pub fn new_view(high_qc: QuorumCertificate, shard: u32, payload: Option<TPayload>) -> Self {
         Self {
             message_type: HotStuffMessageType::NewView,
-            view_number,
             high_qc: Some(high_qc),
             shard: Some(shard),
             justify: None,
@@ -105,6 +104,19 @@ impl<TPayload: Payload> HotStuffMessage<TPayload> {
             checkpoint_signature: None,
             node_hash: None,
             contract_id: None,
+            // Traditional hotstuff does not include broadcasting a payload at the same time,
+            // but if this is a view for a specific payload, then it can be sent to the leader as
+            // an attachment
+            payload,
+        }
+    }
+
+    pub fn generic(node: HotStuffTreeNode<TPayload>, shard: u32) -> Self {
+        Self {
+            message_type: HotStuffMessageType::Generic,
+            shard: Some(shard),
+            node: Some(node),
+            ..Default::default()
         }
     }
 
@@ -118,7 +130,6 @@ impl<TPayload: Payload> HotStuffMessage<TPayload> {
             message_type: HotStuffMessageType::Prepare,
             node: Some(proposal),
             justify: high_qc,
-            view_number,
             partial_sig: None,
             checkpoint_signature: None,
             node_hash: None,
@@ -131,7 +142,6 @@ impl<TPayload: Payload> HotStuffMessage<TPayload> {
         Self {
             message_type: HotStuffMessageType::Prepare,
             node_hash: Some(node_hash),
-            view_number,
             node: None,
             partial_sig: None,
             checkpoint_signature: None,
@@ -150,7 +160,6 @@ impl<TPayload: Payload> HotStuffMessage<TPayload> {
             message_type: HotStuffMessageType::PreCommit,
             node,
             justify: prepare_qc,
-            view_number,
             node_hash: None,
             checkpoint_signature: None,
             partial_sig: None,
@@ -163,7 +172,6 @@ impl<TPayload: Payload> HotStuffMessage<TPayload> {
         Self {
             message_type: HotStuffMessageType::PreCommit,
             node_hash: Some(node_hash),
-            view_number,
             node: None,
             partial_sig: None,
             checkpoint_signature: None,
@@ -182,7 +190,6 @@ impl<TPayload: Payload> HotStuffMessage<TPayload> {
             message_type: HotStuffMessageType::Commit,
             node,
             justify: pre_commit_qc,
-            view_number,
             partial_sig: None,
             checkpoint_signature: None,
             node_hash: None,
@@ -200,7 +207,6 @@ impl<TPayload: Payload> HotStuffMessage<TPayload> {
         Self {
             message_type: HotStuffMessageType::Commit,
             node_hash: Some(node_hash),
-            view_number,
             node: None,
             partial_sig: None,
             checkpoint_signature: Some(checkpoint_signature),
@@ -219,7 +225,6 @@ impl<TPayload: Payload> HotStuffMessage<TPayload> {
             message_type: HotStuffMessageType::Decide,
             node,
             justify: commit_qc,
-            view_number,
             partial_sig: None,
             checkpoint_signature: None,
             node_hash: None,
@@ -229,20 +234,21 @@ impl<TPayload: Payload> HotStuffMessage<TPayload> {
     }
 
     pub fn create_signature_challenge(&self) -> Vec<u8> {
-        let mut b = dan_layer_models_hasher::<Blake256>(HOT_STUFF_MESSAGE_LABEL)
-            .chain(&[self.message_type.as_u8()])
-            .chain(self.view_number.as_u64().to_le_bytes());
-        if let Some(ref node) = self.node {
-            b = b.chain(node.calculate_hash().as_bytes());
-        } else if let Some(ref node_hash) = self.node_hash {
-            b = b.chain(node_hash.as_bytes());
-        } else {
-        }
-        b.finalize().as_ref().to_vec()
+        todo!()
+        // let mut b = dan_layer_models_hasher::<Blake256>(HOT_STUFF_MESSAGE_LABEL)
+        //     .chain(&[self.message_type.as_u8()])
+        //     .chain(self.view_number.as_u64().to_le_bytes());
+        // if let Some(ref node) = self.node {
+        //     b = b.chain(node.calculate_hash().as_bytes());
+        // } else if let Some(ref node_hash) = self.node_hash {
+        //     b = b.chain(node_hash.as_bytes());
+        // } else {
+        // }
+        // b.finalize().as_ref().to_vec()
     }
 
     pub fn view_number(&self) -> ViewId {
-        self.view_number
+        todo!()
     }
 
     pub fn high_qc(&self) -> Option<QuorumCertificate> {
@@ -251,6 +257,10 @@ impl<TPayload: Payload> HotStuffMessage<TPayload> {
 
     pub fn contract_id(&self) -> &FixedHash {
         todo!()
+    }
+
+    pub fn payload(&self) -> Option<&TPayload> {
+        self.payload.as_ref()
     }
 
     pub fn node(&self) -> Option<&HotStuffTreeNode<TPayload>> {

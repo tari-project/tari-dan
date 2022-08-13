@@ -181,7 +181,7 @@ impl<TSpecification: ServiceSpecification> PreCommitState<TSpecification> {
         }
 
         let node_hash = node_hash.unwrap();
-        let mut qc = QuorumCertificate::new(HotStuffMessageType::Prepare, current_view.view_id, node_hash, None);
+        let mut qc = QuorumCertificate::new(HotStuffMessageType::Prepare, todo!(), node_hash, todo!(), None);
         for message in self.received_prepare_messages.values() {
             qc.combine_sig(message.partial_sig().unwrap())
         }

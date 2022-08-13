@@ -25,7 +25,6 @@ use crate::models::{HotStuffMessageType, TreeNodeHash, ValidatorSignature, ViewI
 #[derive(Debug, Clone)]
 pub struct DbQc {
     pub message_type: HotStuffMessageType,
-    pub view_number: ViewId,
     pub node_hash: TreeNodeHash,
     pub signature: Option<ValidatorSignature>,
 }
