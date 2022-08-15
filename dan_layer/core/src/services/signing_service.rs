@@ -24,6 +24,7 @@ use std::sync::Arc;
 
 use tari_comms::NodeIdentity;
 use tari_core::transactions::transaction_components::{CheckpointChallenge, SignerSignature};
+use tari_utilities::ByteArray;
 
 use crate::{digital_assets_error::DigitalAssetError, models::ValidatorSignature};
 
@@ -44,9 +45,11 @@ impl NodeIdentitySigningService {
 }
 
 impl SigningService for NodeIdentitySigningService {
-    fn sign(&self, _challenge: &[u8]) -> Result<ValidatorSignature, DigitalAssetError> {
+    fn sign(&self, challenge: &[u8]) -> Result<ValidatorSignature, DigitalAssetError> {
         // TODO better sig
-        Ok(ValidatorSignature {})
+        Ok(ValidatorSignature {
+            signer: Vec::from(self.node_identity.public_key().as_bytes()),
+        })
     }
 
     fn sign_checkpoint(&self, challenge: &CheckpointChallenge) -> Result<SignerSignature, DigitalAssetError> {

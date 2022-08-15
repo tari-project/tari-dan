@@ -36,7 +36,7 @@ pub struct QuorumCertificate {
     // cache the node height
     node_height: u32,
     shard: u32,
-    signatures: Option<ValidatorSignature>,
+    signatures: Vec<ValidatorSignature>,
 }
 
 impl QuorumCertificate {
@@ -45,14 +45,14 @@ impl QuorumCertificate {
         node_height: u32,
         node_hash: TreeNodeHash,
         shard: u32,
-        signature: Option<ValidatorSignature>,
+        signatures: Vec<ValidatorSignature>,
     ) -> Self {
         Self {
             message_type,
             node_hash,
             shard,
             node_height,
-            signatures: signature,
+            signatures,
         }
     }
 
@@ -62,7 +62,7 @@ impl QuorumCertificate {
             node_hash: TreeNodeHash::zero(),
             shard,
             node_height: 0,
-            signatures: None,
+            signatures: vec![],
         }
     }
 
@@ -82,16 +82,16 @@ impl QuorumCertificate {
         self.message_type
     }
 
-    pub fn signature(&self) -> Option<&ValidatorSignature> {
-        self.signatures.as_ref()
+    pub fn signature(&self) -> &[ValidatorSignature] {
+        self.signatures.as_slice()
     }
 
-    pub fn combine_sig(&mut self, partial_sig: &ValidatorSignature) {
-        self.signatures = match &self.signatures {
-            None => Some(partial_sig.clone()),
-            Some(s) => Some(s.combine(partial_sig)),
-        };
-    }
+    // pub fn combine_sig(&mut self, partial_sig: &ValidatorSignature) {
+    //     self.signatures = match &self.signatures {
+    //         None => Some(partial_sig.clone()),
+    //         Some(s) => Some(s.combine(partial_sig)),
+    //     };
+    // }
 
     pub fn matches(&self, message_type: HotStuffMessageType, view_id: ViewId) -> bool {
         todo!("Update as this has changed from view number to height")
@@ -104,12 +104,11 @@ impl QuorumCertificate {
             .chain([self.message_type.as_u8()])
             .chain(self.node_hash.as_bytes())
             .chain(self.node_height.to_le_bytes())
-            .chain(self.shard.to_le_bytes());
+            .chain(self.shard.to_le_bytes())
+            .chain((self.signatures.len() as u64).to_le_bytes());
 
-        if let Some(sig) = &self.signatures {
+        for sig in &self.signatures {
             result = result.chain(sig.to_bytes());
-        } else {
-            result = result.chain([0]);
         }
         result.finalize().to_vec()
     }

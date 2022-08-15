@@ -177,7 +177,7 @@ impl<TBackendAdapter: ChainDbBackendAdapter> ChainDbUnitOfWork for ChainDbUnitOf
                 todo!(),
                 locked_qc.node_hash,
                 todo!(),
-                locked_qc.signature.clone(),
+                todo!(), // locked_qc.signature.clone(),
             ));
         }
 
@@ -190,7 +190,7 @@ impl<TBackendAdapter: ChainDbBackendAdapter> ChainDbUnitOfWork for ChainDbUnitOf
             DbQc {
                 message_type: qc.message_type(),
                 node_hash: *qc.node_hash(),
-                signature: qc.signature().cloned(),
+                signature: todo!(), // qc.signature().cloned(),
             },
             false,
         ));
@@ -205,14 +205,14 @@ impl<TBackendAdapter: ChainDbBackendAdapter> ChainDbUnitOfWork for ChainDbUnitOf
             locked_qc.message_type = qc.message_type();
             // locked_qc.view_number = qc.view_number();
             locked_qc.node_hash = *qc.node_hash();
-            locked_qc.signature = qc.signature().cloned();
+            locked_qc.signature = todo!() // qc.signature().cloned();
         } else {
             inner.locked_qc = Some(UnitOfWorkTracker::new(
                 DbQc {
                     message_type: qc.message_type(),
                     // view_number: qc.view_number(),
                     node_hash: *qc.node_hash(),
-                    signature: qc.signature().cloned(),
+                    signature: todo!(), // qc.signature().cloned(),
                 },
                 true,
             ));
@@ -241,7 +241,7 @@ impl<TBackendAdapter: ChainDbBackendAdapter> ChainDbUnitOfWork for ChainDbUnitOf
                 // prepare_qc.view_number,
                 prepare_qc.node_hash,
                 todo!(),
-                prepare_qc.signature.clone(),
+                todo!(), // prepare_qc.signature.clone(),
             )));
         }
 
@@ -257,7 +257,7 @@ impl<TBackendAdapter: ChainDbBackendAdapter> ChainDbUnitOfWork for ChainDbUnitOf
                     message_type: qc.message_type(),
                     // view_number: qc.view_number(),
                     node_hash: *qc.node_hash(),
-                    signature: qc.signature().cloned(),
+                    signature: todo!(), // qc.signature().cloned(),
                 },
                 false,
             )
@@ -276,7 +276,7 @@ impl<TBackendAdapter: ChainDbBackendAdapter> ChainDbUnitOfWork for ChainDbUnitOf
                         message_type: qc.message_type(),
                         // view_number: qc.view_number(),
                         node_hash: *qc.node_hash(),
-                        signature: qc.signature().cloned(),
+                        signature: todo!(), // qc.signature().cloned(),
                     },
                     true,
                 ));
@@ -286,7 +286,7 @@ impl<TBackendAdapter: ChainDbBackendAdapter> ChainDbUnitOfWork for ChainDbUnitOf
                 db_qc.message_type = qc.message_type();
                 // db_qc.view_number = qc.view_number();
                 db_qc.node_hash = *qc.node_hash();
-                db_qc.signature = qc.signature().cloned();
+                db_qc.signature = todo!() // qc.signature().cloned();
             },
         }
 

@@ -175,9 +175,11 @@ impl<TSpecification: ServiceSpecification> DecideState<TSpecification> {
         }
 
         let node_hash = node_hash.unwrap();
-        let mut qc = QuorumCertificate::new(HotStuffMessageType::Commit, todo!(), node_hash, todo!(), None);
+        let mut qc = QuorumCertificate::new(HotStuffMessageType::Commit, todo!(), node_hash, todo!(), todo!());
+
         for message in self.received_new_view_messages.values() {
-            qc.combine_sig(message.partial_sig().unwrap())
+            todo!();
+            // qc.combine_sig(message.partial_sig().unwrap())
         }
         Some(qc)
     }

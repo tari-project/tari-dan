@@ -262,9 +262,9 @@ impl<TSpecification: ServiceSpecification> Prepare<TSpecification> {
             current_view.view_id()
         );
 
-        let state_root = payload_processor
-            .process_payload(node.payload(), state_tx.clone())
-            .await?;
+        // let state_root = payload_processor
+        //     .process_payload(node.payload(), state_tx.clone())
+        //     .await?;
 
         todo!();
         // if state_root != *node.state_root() {
@@ -278,26 +278,26 @@ impl<TSpecification: ServiceSpecification> Prepare<TSpecification> {
         //     return Ok(None);
         // }
 
-        debug!(
-            target: LOG_TARGET,
-            "[PREPARE] Merkle root matches payload for view {}. Adding node '{}'",
-            current_view.view_id(),
-            node.hash()
-        );
-
-        chain_storage_service
-            .add_node::<TChainDbUnitOfWork>(node, chain_tx.clone())
-            .await?;
-
-        payload_provider.reserve_payload(node.payload(), node.hash()).await?;
-        self.send_vote_to_leader(
-            *node.hash(),
-            outbound,
-            view_leader,
-            current_view.view_id,
-            signing_service,
-        )
-        .await?;
+        // debug!(
+        //     target: LOG_TARGET,
+        //     "[PREPARE] Merkle root matches payload for view {}. Adding node '{}'",
+        //     current_view.view_id(),
+        //     node.hash()
+        // );
+        //
+        // chain_storage_service
+        //     .add_node::<TChainDbUnitOfWork>(node, chain_tx.clone())
+        //     .await?;
+        //
+        // payload_provider.reserve_payload(node.payload(), node.hash()).await?;
+        // self.send_vote_to_leader(
+        //     *node.hash(),
+        //     outbound,
+        //     view_leader,
+        //     current_view.view_id,
+        //     signing_service,
+        // )
+        // .await?;
         Ok(Some(ConsensusWorkerStateEvent::Prepared))
     }
 

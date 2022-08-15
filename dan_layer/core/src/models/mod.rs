@@ -61,6 +61,8 @@ pub use tree_node_hash::TreeNodeHash;
 pub use view::View;
 pub use view_id::ViewId;
 
+use crate::services::infrastructure_services::NodeAddressable;
+
 // TODO: encapsulate
 pub struct InstructionCaller {
     pub owner_token_id: TokenId,
@@ -168,11 +170,15 @@ pub enum ConsensusWorkerState {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct ValidatorSignature {}
+pub struct ValidatorSignature {
+    pub signer: Vec<u8>,
+}
 
 impl ValidatorSignature {
-    pub fn from_bytes(_source: &[u8]) -> Self {
-        Self {}
+    pub fn from_bytes(source: &[u8]) -> Self {
+        Self {
+            signer: Vec::from(source),
+        }
     }
 
     pub fn combine(&self, other: &ValidatorSignature) -> ValidatorSignature {

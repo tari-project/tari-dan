@@ -208,7 +208,7 @@ pub struct MockSigningService;
 
 impl SigningService for MockSigningService {
     fn sign(&self, _challenge: &[u8]) -> Result<ValidatorSignature, DigitalAssetError> {
-        Ok(ValidatorSignature {})
+        Ok(ValidatorSignature { signer: vec![8u8; 32] })
     }
 
     fn sign_checkpoint(&self, _challenge: &CheckpointChallenge) -> Result<SignerSignature, DigitalAssetError> {

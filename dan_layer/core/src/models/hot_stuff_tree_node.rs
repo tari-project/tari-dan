@@ -29,14 +29,14 @@ use crate::models::{Payload, QuorumCertificate, TreeNodeHash};
 #[derive(Debug, Clone)]
 pub struct HotStuffTreeNode<TPayload: Payload> {
     parent: TreeNodeHash,
-    payload: TPayload,
+    payload: Option<TPayload>,
     hash: TreeNodeHash,
     height: u32,
     justify: QuorumCertificate,
 }
 
 impl<TPayload: Payload> HotStuffTreeNode<TPayload> {
-    pub fn new(parent: TreeNodeHash, payload: TPayload, height: u32, justify: QuorumCertificate) -> Self {
+    pub fn new(parent: TreeNodeHash, payload: Option<TPayload>, height: u32, justify: QuorumCertificate) -> Self {
         let mut s = HotStuffTreeNode {
             parent,
             payload,
@@ -48,10 +48,10 @@ impl<TPayload: Payload> HotStuffTreeNode<TPayload> {
         s
     }
 
-    pub fn genesis(payload: TPayload, shard: u32) -> HotStuffTreeNode<TPayload> {
+    pub fn genesis(shard: u32) -> HotStuffTreeNode<TPayload> {
         let mut s = Self {
             parent: TreeNodeHash::zero(),
-            payload,
+            payload: None,
             hash: TreeNodeHash::zero(),
             height: 0,
             justify: QuorumCertificate::genesis(shard),
@@ -63,9 +63,14 @@ impl<TPayload: Payload> HotStuffTreeNode<TPayload> {
     pub fn calculate_hash(&self) -> TreeNodeHash {
         let mut result = Blake256::new()
             .chain(self.parent.as_bytes())
-            .chain(self.payload.consensus_hash())
             .chain(self.height.to_le_bytes())
             .chain(self.justify.as_bytes());
+        if let Some(p) = &self.payload {
+            let hash = p.consensus_hash();
+            result = result.chain((hash.len() as u32).to_le_bytes()).chain(hash);
+        } else {
+            result = result.chain(0u32.to_le_bytes())
+        }
         let result = result.finalize_fixed();
         result.into()
     }
@@ -78,8 +83,8 @@ impl<TPayload: Payload> HotStuffTreeNode<TPayload> {
         &self.parent
     }
 
-    pub fn payload(&self) -> &TPayload {
-        &self.payload
+    pub fn payload(&self) -> Option<&TPayload> {
+        self.payload.as_ref()
     }
 
     pub fn justify(&self) -> &QuorumCertificate {
