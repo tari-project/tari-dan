@@ -36,6 +36,7 @@ use crate::models::{
     ViewId,
 };
 
+// TODO: convert to enum
 #[derive(Debug, Clone)]
 pub struct HotStuffMessage<TPayload: Payload> {
     message_type: HotStuffMessageType,
@@ -43,13 +44,13 @@ pub struct HotStuffMessage<TPayload: Payload> {
     // The high qc: used for new view messages
     high_qc: Option<QuorumCertificate>,
     node: Option<HotStuffTreeNode<TPayload>>,
-    node_hash: Option<TreeNodeHash>,
-    partial_sig: Option<ValidatorSignature>,
-    checkpoint_signature: Option<SignerSignature>,
-    contract_id: Option<FixedHash>,
+    // node_hash: Option<TreeNodeHash>,
+    // partial_sig: Option<ValidatorSignature>,
+    // checkpoint_signature: Option<SignerSignature>,
+    // contract_id: Option<FixedHash>,
     shard: Option<u32>,
     // Used for broadcasting the payload in new view
-    payload: Option<TPayload>,
+    new_view_payload: Option<TPayload>,
 }
 
 impl<TPayload: Payload> Default for HotStuffMessage<TPayload> {
@@ -59,12 +60,8 @@ impl<TPayload: Payload> Default for HotStuffMessage<TPayload> {
             justify: Default::default(),
             high_qc: Default::default(),
             node: Default::default(),
-            node_hash: Default::default(),
-            partial_sig: Default::default(),
-            checkpoint_signature: Default::default(),
-            contract_id: Default::default(),
             shard: Default::default(),
-            payload: None,
+            new_view_payload: None,
         }
     }
 }
@@ -79,17 +76,14 @@ impl<TPayload: Payload> HotStuffMessage<TPayload> {
         checkpoint_signature: Option<SignerSignature>,
         contract_id: FixedHash,
     ) -> Self {
+        todo!();
         Self {
             message_type,
             justify,
             node,
-            node_hash,
-            partial_sig,
-            checkpoint_signature,
-            contract_id: Some(contract_id),
             high_qc: None,
             shard: None,
-            payload: None,
+            new_view_payload: None,
         }
     }
 
@@ -100,14 +94,10 @@ impl<TPayload: Payload> HotStuffMessage<TPayload> {
             shard: Some(shard),
             justify: None,
             node: None,
-            partial_sig: None,
-            checkpoint_signature: None,
-            node_hash: None,
-            contract_id: None,
             // Traditional hotstuff does not include broadcasting a payload at the same time,
             // but if this is a view for a specific payload, then it can be sent to the leader as
             // an attachment
-            payload,
+            new_view_payload: payload,
         }
     }
 
@@ -126,26 +116,20 @@ impl<TPayload: Payload> HotStuffMessage<TPayload> {
         view_number: ViewId,
         contract_id: FixedHash,
     ) -> Self {
+        todo!();
         Self {
             message_type: HotStuffMessageType::Prepare,
             node: Some(proposal),
             justify: high_qc,
-            partial_sig: None,
-            checkpoint_signature: None,
-            node_hash: None,
-            contract_id: Some(contract_id),
             ..Default::default()
         }
     }
 
     pub fn vote_prepare(node_hash: TreeNodeHash, view_number: ViewId, contract_id: FixedHash) -> Self {
+        todo!();
         Self {
             message_type: HotStuffMessageType::Prepare,
-            node_hash: Some(node_hash),
             node: None,
-            partial_sig: None,
-            checkpoint_signature: None,
-            contract_id: Some(contract_id),
             ..Default::default()
         }
     }
@@ -156,26 +140,20 @@ impl<TPayload: Payload> HotStuffMessage<TPayload> {
         view_number: ViewId,
         contract_id: FixedHash,
     ) -> Self {
+        todo!();
         Self {
             message_type: HotStuffMessageType::PreCommit,
             node,
             justify: prepare_qc,
-            node_hash: None,
-            checkpoint_signature: None,
-            partial_sig: None,
-            contract_id: Some(contract_id),
             ..Default::default()
         }
     }
 
     pub fn vote_pre_commit(node_hash: TreeNodeHash, view_number: ViewId, contract_id: FixedHash) -> Self {
+        todo!();
         Self {
             message_type: HotStuffMessageType::PreCommit,
-            node_hash: Some(node_hash),
             node: None,
-            partial_sig: None,
-            checkpoint_signature: None,
-            contract_id: Some(contract_id),
             ..Default::default()
         }
     }
@@ -186,14 +164,11 @@ impl<TPayload: Payload> HotStuffMessage<TPayload> {
         view_number: ViewId,
         contract_id: FixedHash,
     ) -> Self {
+        todo!();
         Self {
             message_type: HotStuffMessageType::Commit,
             node,
             justify: pre_commit_qc,
-            partial_sig: None,
-            checkpoint_signature: None,
-            node_hash: None,
-            contract_id: Some(contract_id),
             ..Default::default()
         }
     }
@@ -204,13 +179,10 @@ impl<TPayload: Payload> HotStuffMessage<TPayload> {
         contract_id: FixedHash,
         checkpoint_signature: SignerSignature,
     ) -> Self {
+        todo!();
         Self {
             message_type: HotStuffMessageType::Commit,
-            node_hash: Some(node_hash),
             node: None,
-            partial_sig: None,
-            checkpoint_signature: Some(checkpoint_signature),
-            contract_id: Some(contract_id),
             ..Default::default()
         }
     }
@@ -221,14 +193,11 @@ impl<TPayload: Payload> HotStuffMessage<TPayload> {
         view_number: ViewId,
         contract_id: FixedHash,
     ) -> Self {
+        todo!();
         Self {
             message_type: HotStuffMessageType::Decide,
             node,
             justify: commit_qc,
-            partial_sig: None,
-            checkpoint_signature: None,
-            node_hash: None,
-            contract_id: Some(contract_id),
             ..Default::default()
         }
     }
@@ -259,8 +228,13 @@ impl<TPayload: Payload> HotStuffMessage<TPayload> {
         todo!()
     }
 
-    pub fn payload(&self) -> Option<&TPayload> {
-        self.payload.as_ref()
+    pub fn new_view_payload(&self) -> Option<&TPayload> {
+        self.new_view_payload.as_ref()
+    }
+
+    pub fn shard(&self) -> u32 {
+        // TODO: remove unwrap, every message should have a shard
+        self.shard.unwrap()
     }
 
     pub fn node(&self) -> Option<&HotStuffTreeNode<TPayload>> {
@@ -268,7 +242,7 @@ impl<TPayload: Payload> HotStuffMessage<TPayload> {
     }
 
     pub fn node_hash(&self) -> Option<&TreeNodeHash> {
-        self.node_hash.as_ref()
+        todo!()
     }
 
     pub fn message_type(&self) -> HotStuffMessageType {
@@ -285,14 +259,14 @@ impl<TPayload: Payload> HotStuffMessage<TPayload> {
     }
 
     pub fn add_partial_sig(&mut self, signature: ValidatorSignature) {
-        self.partial_sig = Some(signature)
+        todo!()
     }
 
     pub fn partial_sig(&self) -> Option<&ValidatorSignature> {
-        self.partial_sig.as_ref()
+        todo!()
     }
 
     pub fn checkpoint_signature(&self) -> Option<&SignerSignature> {
-        self.checkpoint_signature.as_ref()
+        todo!()
     }
 }

@@ -32,7 +32,7 @@ pub struct HotStuffTreeNode<TPayload: Payload> {
     payload: TPayload,
     hash: TreeNodeHash,
     height: u32,
-    justify: Option<QuorumCertificate>,
+    justify: QuorumCertificate,
 }
 
 impl<TPayload: Payload> HotStuffTreeNode<TPayload> {
@@ -42,19 +42,19 @@ impl<TPayload: Payload> HotStuffTreeNode<TPayload> {
             payload,
             hash: TreeNodeHash::zero(),
             height,
-            justify: Some(justify),
+            justify,
         };
         s.hash = s.calculate_hash();
         s
     }
 
-    pub fn genesis(payload: TPayload, state_root: StateRoot) -> HotStuffTreeNode<TPayload> {
+    pub fn genesis(payload: TPayload, shard: u32) -> HotStuffTreeNode<TPayload> {
         let mut s = Self {
             parent: TreeNodeHash::zero(),
             payload,
             hash: TreeNodeHash::zero(),
             height: 0,
-            justify: None,
+            justify: QuorumCertificate::genesis(shard),
         };
         s.hash = s.calculate_hash();
         s
@@ -64,12 +64,8 @@ impl<TPayload: Payload> HotStuffTreeNode<TPayload> {
         let mut result = Blake256::new()
             .chain(self.parent.as_bytes())
             .chain(self.payload.consensus_hash())
-            .chain(self.height.to_le_bytes());
-        if let Some(qc) = &self.justify {
-            result = result.chain(qc.as_bytes());
-        } else {
-            result = result.chain([0]);
-        }
+            .chain(self.height.to_le_bytes())
+            .chain(self.justify.as_bytes());
         let result = result.finalize_fixed();
         result.into()
     }
@@ -84,6 +80,10 @@ impl<TPayload: Payload> HotStuffTreeNode<TPayload> {
 
     pub fn payload(&self) -> &TPayload {
         &self.payload
+    }
+
+    pub fn justify(&self) -> &QuorumCertificate {
+        &self.justify
     }
 
     pub fn height(&self) -> u32 {

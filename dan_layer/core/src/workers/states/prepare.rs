@@ -338,7 +338,8 @@ impl<TSpecification: ServiceSpecification> Prepare<TSpecification> {
         if view_id.is_genesis() {
             let payload = payload_provider.create_genesis_payload(asset_definition);
             let state_root = payload_processor.process_payload(&payload, state_db).await?;
-            Ok(HotStuffTreeNode::genesis(payload, state_root))
+            todo!()
+            // Ok(HotStuffTreeNode::genesis(payload, state_root))
         } else {
             let payload = payload_provider.create_payload().await?;
 
