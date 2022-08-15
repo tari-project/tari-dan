@@ -24,6 +24,7 @@ tari_utilities = { git = "https://github.com/tari-project/tari_utilities.git", t
 tari_dan_engine = { path = "../engine"}
 
 anyhow = "1.0.53"
+async-recursion = "1.0.0"
 async-trait = "0.1.50"
 blake2 = "0.9.2"
 clap = "3.1.8"

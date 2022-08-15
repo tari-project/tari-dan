@@ -1,5 +1,6 @@
 use std::{collections::HashMap, time::Duration};
 
+use async_recursion::async_recursion;
 use tari_common_types::types::FixedHash;
 use tari_dan_engine::instruction::Instruction;
 use tokio::{
@@ -34,6 +35,7 @@ pub struct ShardDb<TAddr: NodeAddressable, TPayload: Payload> {
     lock_node_and_heights: HashMap<u32, (TreeNodeHash, u32)>,
     votes: HashMap<(TreeNodeHash, u32), Vec<(TAddr, ValidatorSignature)>>,
     nodes: HashMap<TreeNodeHash, HotStuffTreeNode<TPayload>>,
+    last_executed_height: HashMap<u32, u32>,
 }
 
 impl<TAddr: NodeAddressable, TPayload: Payload> ShardDb<TAddr, TPayload> {
@@ -45,6 +47,7 @@ impl<TAddr: NodeAddressable, TPayload: Payload> ShardDb<TAddr, TPayload> {
             lock_node_and_heights: HashMap::new(),
             votes: HashMap::new(),
             nodes: HashMap::new(),
+            last_executed_height: HashMap::new(),
         }
     }
 
@@ -97,6 +100,12 @@ impl<TAddr: NodeAddressable, TPayload: Payload> ShardDb<TAddr, TPayload> {
             .clone()
     }
 
+    pub fn set_locked(&mut self, shard: u32, node_hash: TreeNodeHash, node_height: u32) {
+        self.lock_node_and_heights
+            .entry(shard)
+            .and_modify(|e| *e = (node_hash, node_height));
+    }
+
     pub fn has_vote_for(&self, from: &TAddr, node_hash: TreeNodeHash, shard: u32) -> bool {
         if let Some(sigs) = self.votes.get(&(node_hash, shard)) {
             sigs.iter().any(|(f, _)| f == from)
@@ -132,6 +141,14 @@ impl<TAddr: NodeAddressable, TPayload: Payload> ShardDb<TAddr, TPayload> {
     pub fn node(&self, node_hash: &TreeNodeHash) -> Option<&HotStuffTreeNode<TPayload>> {
         self.nodes.get(node_hash)
     }
+
+    pub fn set_last_executed_height(&mut self, shard: u32, height: u32) {
+        self.last_executed_height.entry(shard).and_modify(|e| *e = height);
+    }
+
+    pub fn get_last_executed_height(&self, shard: u32) -> u32 {
+        *self.last_executed_height.get(&shard).unwrap_or(&0)
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -149,6 +166,8 @@ pub struct HotStuffWaiter<TPayload: Payload, TAddr: NodeAddressable> {
     tx_leader: Sender<HotStuffMessage<TPayload>>,
     tx_broadcast: Sender<(HotStuffMessage<TPayload>, Vec<TAddr>)>,
     tx_vote_message: Sender<(VoteMessage, TAddr)>,
+    // TODO: perhaps change to a service like Payload processor?
+    tx_execute: Sender<TPayload>,
     committee: Committee<TAddr>,
     shard_db: ShardDb<TAddr, TPayload>,
     current_payload: Option<TPayload>,
@@ -164,6 +183,7 @@ impl<TPayload: Payload + 'static, TAddr: NodeAddressable + 'static> HotStuffWait
         tx_leader: Sender<HotStuffMessage<TPayload>>,
         tx_broadcast: Sender<(HotStuffMessage<TPayload>, Vec<TAddr>)>,
         tx_vote_message: Sender<(VoteMessage, TAddr)>,
+        tx_execute: Sender<TPayload>,
         rx_shutdown: Receiver<()>,
     ) -> JoinHandle<Result<(), String>> {
         tokio::spawn(async move {
@@ -176,6 +196,7 @@ impl<TPayload: Payload + 'static, TAddr: NodeAddressable + 'static> HotStuffWait
                 tx_leader,
                 tx_broadcast,
                 tx_vote_message,
+                tx_execute,
             )
             .run(rx_shutdown)
             .await
@@ -191,6 +212,7 @@ impl<TPayload: Payload + 'static, TAddr: NodeAddressable + 'static> HotStuffWait
         tx_leader: Sender<HotStuffMessage<TPayload>>,
         tx_broadcast: Sender<(HotStuffMessage<TPayload>, Vec<TAddr>)>,
         tx_vote_message: Sender<(VoteMessage, TAddr)>,
+        tx_execute: Sender<TPayload>,
     ) -> Self {
         Self {
             identity,
@@ -201,6 +223,7 @@ impl<TPayload: Payload + 'static, TAddr: NodeAddressable + 'static> HotStuffWait
             tx_leader,
             tx_broadcast,
             tx_vote_message,
+            tx_execute,
             shard_db: ShardDb::new(),
             current_payload: None,
         }
@@ -222,7 +245,6 @@ impl<TPayload: Payload + 'static, TAddr: NodeAddressable + 'static> HotStuffWait
 
     // pacemaker
     async fn on_beat(&mut self, shard: u32, payload: Option<TPayload>) -> Result<(), String> {
-        dbg!("on beat");
         if self.is_leader(payload.as_ref()) {
             // if self.current_payload.is_none() {
             self.current_payload = payload.clone();
@@ -247,6 +269,7 @@ impl<TPayload: Payload + 'static, TAddr: NodeAddressable + 'static> HotStuffWait
 
         let leaf_node = self.create_leaf(leaf, payload, qc, leaf_height + 1);
         self.shard_db.save_node(leaf_node.clone());
+        dbg!(&leaf_node);
         self.tx_broadcast
             .send((
                 HotStuffMessage::generic(leaf_node.clone(), shard),
@@ -300,6 +323,78 @@ impl<TPayload: Payload + 'static, TAddr: NodeAddressable + 'static> HotStuffWait
         Ok(())
     }
 
+    async fn update_nodes(&mut self, node: HotStuffTreeNode<TPayload>, shard: u32) -> Result<(), String> {
+        dbg!("Update nodes");
+        if node.justify().node_hash() == &TreeNodeHash::zero() {
+            dbg!("Node is parented to genesis, no need to update");
+            return Ok(());
+        }
+        self.shard_db.update_high_qc(node.justify().clone());
+        let b_two = self
+            .shard_db
+            .node(node.justify().node_hash())
+            .ok_or("No node b2")?
+            .clone();
+
+        if b_two.justify().node_hash() == &TreeNodeHash::zero() {
+            dbg!("b one is genesis, nothing to do");
+            return Ok(());
+        }
+        dbg!(&b_two);
+        let b_one = self
+            .shard_db
+            .node(b_two.justify().node_hash())
+            .ok_or("No node b1")?
+            .clone();
+
+        dbg!(&b_one);
+        let (b_lock, b_lock_height) = self.shard_db.get_locked_node_hash_and_height(shard);
+        if b_one.height() > b_lock_height {
+            // commit
+            dbg!("Commiting height", b_one.height());
+            self.shard_db.set_locked(shard, b_one.hash().clone(), b_one.height());
+        }
+        if b_one.justify().node_hash() == &TreeNodeHash::zero() {
+            dbg!("b is genesis, nothing to do");
+            return Ok(());
+        }
+        let b = self
+            .shard_db
+            .node(b_one.justify().node_hash())
+            .ok_or("No node b")?
+            .clone();
+        dbg!(&b);
+        if b_two.parent() == b_one.hash() && b_one.parent() == b.hash() {
+            // decide
+            dbg!("Deciding height:", b.height());
+            self.on_commit(b.clone(), shard).await?;
+            self.shard_db.set_last_executed_height(shard, b.height());
+        }
+        Ok(())
+    }
+
+    #[async_recursion]
+    async fn on_commit(&mut self, node: HotStuffTreeNode<TPayload>, shard: u32) -> Result<(), String> {
+        if self.shard_db.get_last_executed_height(shard) < node.height() {
+            if node.parent() != &TreeNodeHash::zero() {
+                let parent = self.shard_db.node(node.parent()).ok_or("No parent node")?;
+                dbg!("Committing parent");
+                self.on_commit(parent.clone(), shard).await?;
+            }
+            if let Some(payload) = node.payload() {
+                self.execute(payload.clone()).await?;
+            }
+        }
+        Ok(())
+    }
+
+    async fn execute(&mut self, payload: TPayload) -> Result<(), String> {
+        self.tx_execute
+            .send(payload)
+            .await
+            .map_err(|e| format!("Could not send execute cmd:{}", e))
+    }
+
     async fn on_receive_proposal(&mut self, from: TAddr, message: HotStuffMessage<TPayload>) -> Result<(), String> {
         if let Some(node) = message.node() {
             // TODO: validate message from leader
@@ -307,12 +402,6 @@ impl<TPayload: Payload + 'static, TAddr: NodeAddressable + 'static> HotStuffWait
             self.shard_db.save_node(node.clone());
             let v_height = self.shard_db.get_last_voted_height(shard);
             let (locked_node, locked_height) = self.shard_db.get_locked_node_hash_and_height(shard);
-
-            dbg!(&locked_node);
-            dbg!(locked_height);
-            dbg!(node.height());
-            dbg!(node.parent());
-
             // TODO: Change parent check to allow a chain?
             if node.height() > v_height &&
                 (node.parent() == &locked_node || node.justify().node_height() > locked_height)
@@ -334,6 +423,7 @@ impl<TPayload: Payload + 'static, TAddr: NodeAddressable + 'static> HotStuffWait
                 dbg!("Invalid proposal");
                 dbg!("ignoring");
             }
+            self.update_nodes(node.clone(), shard).await?;
         } else {
             dbg!("No node attached");
         }
@@ -372,7 +462,6 @@ impl<TPayload: Payload + 'static, TAddr: NodeAddressable + 'static> HotStuffWait
                 msg.shard,
                 signatures.iter().map(|(_, sig)| sig.clone()).collect(),
             );
-            dbg!(&qc);
             self.shard_db.update_high_qc(qc);
             // Should be the pace maker actually
             self.on_beat(msg.shard, None).await?;
@@ -399,8 +488,6 @@ impl<TPayload: Payload + 'static, TAddr: NodeAddressable + 'static> HotStuffWait
                 },
                 msg = self.rx_hs_message.recv() => {
                     if let Some((from, msg) ) = msg {
-                        dbg!("Hotstuff received");
-                        dbg!(&msg);
                         match msg.message_type() {
                             HotStuffMessageType::NewView => {
                                 self.on_receive_new_view(from, msg.high_qc().unwrap());
@@ -411,7 +498,6 @@ impl<TPayload: Payload + 'static, TAddr: NodeAddressable + 'static> HotStuffWait
                                 }
                             },
                             HotStuffMessageType::Generic => {
-                                dbg!("Generic message received");
                                 self.on_receive_proposal(from, msg).await?;
                             }
                             _ => todo!()
@@ -443,6 +529,7 @@ async fn test_receives_new_payload_starts_new_chain() {
     let (tx_broadcast, rx_broadcast) = channel(1);
     let (tx_vote_message, rx_vote_message) = channel(1);
     let (tx_votes, rx_votes) = channel(1);
+    let (tx_execute, rx_execute) = channel(1);
     let instance = HotStuffWaiter::<String, String>::spawn(
         "leader".to_string(),
         Committee::empty(),
@@ -452,6 +539,7 @@ async fn test_receives_new_payload_starts_new_chain() {
         tx_leader,
         tx_broadcast,
         tx_vote_message,
+        tx_execute,
         rx_shutdown,
     );
 
@@ -473,6 +561,7 @@ async fn test_hs_waiter_leader_proposes() {
     let (tx_broadcast, mut rx_broadcast) = channel(1);
     let (tx_votes, rx_votes) = channel(1);
     let (tx_vote_message, rx_vote_message) = channel(1);
+    let (tx_execute, rx_execute) = channel(1);
     let (tx_shutdown, rx_shutdown) = channel(1);
     let node1 = "node1".to_string();
     let node2 = "node2".to_string();
@@ -487,6 +576,7 @@ async fn test_hs_waiter_leader_proposes() {
         tx_leader,
         tx_broadcast,
         tx_vote_message,
+        tx_execute,
         rx_shutdown,
     );
     let payload = "Hello World".to_string();
@@ -516,6 +606,7 @@ async fn test_hs_waiter_replica_sends_vote_for_proposal() {
     let (tx_broadcast, mut rx_broadcast) = channel(1);
     let (tx_votes, rx_votes) = channel(1);
     let (tx_vote_message, mut rx_vote_message) = channel(1);
+    let (tx_execute, rx_execute) = channel(1);
     let (tx_shutdown, rx_shutdown) = channel(1);
     let node1 = "node1".to_string();
     let node2 = "node2".to_string();
@@ -530,6 +621,7 @@ async fn test_hs_waiter_replica_sends_vote_for_proposal() {
         tx_leader,
         tx_broadcast,
         tx_vote_message,
+        tx_execute,
         rx_shutdown,
     );
     let payload = "Hello World".to_string();
@@ -567,6 +659,7 @@ async fn test_hs_waiter_leader_sends_new_proposal_when_enough_votes_are_received
     let (tx_broadcast, mut rx_broadcast) = channel(1);
     let (tx_votes, rx_votes) = channel(1);
     let (tx_vote_message, mut rx_vote_message) = channel(1);
+    let (tx_execute, rx_execute) = channel(1);
     let (tx_shutdown, rx_shutdown) = channel(1);
     let node1 = "node1".to_string();
     let node2 = "node2".to_string();
@@ -581,6 +674,7 @@ async fn test_hs_waiter_leader_sends_new_proposal_when_enough_votes_are_received
         tx_leader,
         tx_broadcast,
         tx_vote_message,
+        tx_execute,
         rx_shutdown,
     );
     let payload = "Hello World".to_string();
@@ -642,6 +736,122 @@ async fn test_hs_waiter_leader_sends_new_proposal_when_enough_votes_are_received
 
     assert_eq!(proposed_node.justify().node_hash(), &vote_hash);
 
+    tx_shutdown.send(()).await.unwrap();
+    instance.await.expect("did not end cleanly");
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn test_hs_waiter_execute_called_when_consensus_reached() {
+    let (tx_new, rx_new) = channel(1);
+    let (tx_hs_messages, rx_hs_messages) = channel(1);
+    let (tx_leader, mut rx_leader) = channel(1);
+    let (tx_broadcast, mut rx_broadcast) = channel(1);
+    let (tx_votes, rx_votes) = channel(1);
+    let (tx_vote_message, mut rx_vote_message) = channel(1);
+    let (tx_execute, mut rx_execute) = channel(1);
+    let (tx_shutdown, rx_shutdown) = channel(1);
+    let node1 = "node1".to_string();
+    let committee = Committee::new(vec![node1.clone()]);
+
+    let instance = HotStuffWaiter::<String, String>::spawn(
+        node1.clone(),
+        committee,
+        rx_new,
+        rx_hs_messages,
+        rx_votes,
+        tx_leader,
+        tx_broadcast,
+        tx_vote_message,
+        tx_execute,
+        rx_shutdown,
+    );
+    let payload = "Hello World".to_string();
+
+    let new_view_message = HotStuffMessage::new_view(QuorumCertificate::genesis(0), 0, Some(payload.clone()));
+    tx_hs_messages
+        .send((node1.clone(), new_view_message.clone()))
+        .await
+        .unwrap();
+
+    // Get the node hash from the proposal
+    let (proposal1, broadcast_group) = timeout(Duration::from_secs(10), rx_broadcast.recv())
+        .await
+        .expect("timed out")
+        .expect("Should not be None");
+
+    // loopback the proposal
+    tx_hs_messages.send((node1.clone(), proposal1)).await.unwrap();
+    let (vote, _) = timeout(Duration::from_secs(10), rx_vote_message.recv())
+        .await
+        .expect("timedout")
+        .expect("should not be none");
+    // loopback the vote
+    tx_votes.send((node1.clone(), vote.clone())).await.unwrap();
+    let (proposal2, broadcast_group) = timeout(Duration::from_secs(10), rx_broadcast.recv())
+        .await
+        .expect("timed out")
+        .expect("Should not be None");
+
+    // loopback the proposal
+    tx_hs_messages.send((node1.clone(), proposal2)).await.unwrap();
+    let (vote, _) = timeout(Duration::from_secs(10), rx_vote_message.recv())
+        .await
+        .expect("timedout")
+        .expect("should not be none");
+
+    // No execute yet
+    assert!(
+        timeout(Duration::from_secs(1), rx_execute.recv()).await.is_err(),
+        "received an execute when we weren't expecting it"
+    );
+
+    tx_votes.send((node1.clone(), vote.clone())).await.unwrap();
+
+    let (proposal3, broadcast_group) = timeout(Duration::from_secs(10), rx_broadcast.recv())
+        .await
+        .expect("timed out")
+        .expect("Should not be None");
+
+    // loopback the proposal
+    tx_hs_messages.send((node1.clone(), proposal3)).await.unwrap();
+    let (vote, _) = timeout(Duration::from_secs(10), rx_vote_message.recv())
+        .await
+        .expect("timedout")
+        .expect("should not be none");
+
+    // No execute yet
+    assert!(
+        timeout(Duration::from_secs(1), rx_execute.recv()).await.is_err(),
+        "received an execute when we weren't expecting it"
+    );
+    // loopback the vote
+    tx_votes.send((node1.clone(), vote.clone())).await.unwrap();
+
+    let (proposal4, broadcast_group) = timeout(Duration::from_secs(10), rx_broadcast.recv())
+        .await
+        .expect("timed out")
+        .expect("Should not be None");
+
+    tx_hs_messages.send((node1.clone(), proposal4)).await.unwrap();
+    let (vote, _) = timeout(Duration::from_secs(10), rx_vote_message.recv())
+        .await
+        .expect("timedout")
+        .expect("should not be none");
+
+    // // No execute yet
+    // assert!(
+    //     timeout(Duration::from_secs(1), rx_execute.recv()).await.is_err(),
+    //     "received an execute when we weren't expecting it"
+    // );
+    //
+    // tx_votes.send((node1, vote.clone())).await.unwrap();
+    //
+    let executed_payload = timeout(Duration::from_secs(10), rx_execute.recv())
+        .await
+        .expect("timed out")
+        .expect("Should not be None");
+
+    assert_eq!(executed_payload, payload);
     tx_shutdown.send(()).await.unwrap();
     instance.await.expect("did not end cleanly");
 }
