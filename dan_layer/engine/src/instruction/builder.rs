@@ -22,16 +22,16 @@
 
 use tari_common_types::types::PrivateKey;
 
-use super::{Instruction, InstructionSet};
+use super::{Instruction, Transaction};
 use crate::instruction::signature::InstructionSignature;
 
 #[derive(Debug, Clone, Default)]
-pub struct InstructionBuilder {
+pub struct TransactionBuilder {
     instructions: Vec<Instruction>,
     signature: Option<InstructionSignature>,
 }
 
-impl InstructionBuilder {
+impl TransactionBuilder {
     pub fn new() -> Self {
         Self {
             instructions: Vec::new(),
@@ -51,8 +51,8 @@ impl InstructionBuilder {
         self
     }
 
-    pub fn build(&mut self) -> InstructionSet {
-        InstructionSet {
+    pub fn build(&mut self) -> Transaction {
+        Transaction {
             instructions: self.instructions.drain(..).collect(),
             signature: self.signature.take().expect("not signed"),
         }

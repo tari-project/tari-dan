@@ -21,7 +21,7 @@
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 mod builder;
-pub use builder::InstructionBuilder;
+pub use builder::TransactionBuilder;
 
 mod error;
 
@@ -49,7 +49,7 @@ pub enum Instruction {
 }
 
 #[derive(Debug, Clone)]
-pub struct InstructionSet {
+pub struct Transaction {
     pub instructions: Vec<Instruction>,
     pub signature: InstructionSignature,
 }

@@ -26,7 +26,7 @@ use borsh::BorshDeserialize;
 use tari_crypto::ristretto::RistrettoSecretKey;
 use tari_dan_engine::{
     crypto::create_key_pair,
-    instruction::{Instruction, InstructionBuilder, InstructionProcessor},
+    instruction::{Instruction, InstructionProcessor, TransactionBuilder},
     packager::Package,
     state_store::memory::MemoryStateStore,
     wasm::{compile::compile_template, LoadedWasmModule},
@@ -84,7 +84,7 @@ impl TemplateTest {
 
     pub fn call_function<T>(&self, template_name: &str, func_name: &str, args: Vec<Vec<u8>>) -> T
     where T: BorshDeserialize {
-        let instruction = InstructionBuilder::new()
+        let instruction = TransactionBuilder::new()
             .add_instruction(Instruction::CallFunction {
                 package_id: self.package.id(),
                 template: template_name.to_owned(),
@@ -100,7 +100,7 @@ impl TemplateTest {
 
     pub fn call_method<T>(&self, component_id: ComponentId, method_name: &str, args: Vec<Vec<u8>>) -> T
     where T: BorshDeserialize {
-        let instruction = InstructionBuilder::new()
+        let instruction = TransactionBuilder::new()
             .add_instruction(Instruction::CallMethod {
                 package_id: self.package.id(),
                 component_id,

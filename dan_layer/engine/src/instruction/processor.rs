@@ -25,7 +25,7 @@ use std::sync::Arc;
 use tari_template_abi::encode;
 
 use crate::{
-    instruction::{error::InstructionError, Instruction, InstructionSet},
+    instruction::{error::InstructionError, Instruction, Transaction},
     packager::Package,
     runtime::{Runtime, RuntimeInterface},
     traits::Invokable,
@@ -48,12 +48,12 @@ where TRuntimeInterface: RuntimeInterface + Clone + 'static
         }
     }
 
-    pub fn execute(&self, instruction_set: InstructionSet) -> Result<Vec<ExecutionResult>, InstructionError> {
-        let mut results = Vec::with_capacity(instruction_set.instructions.len());
+    pub fn execute(&self, transaction: Transaction) -> Result<Vec<ExecutionResult>, InstructionError> {
+        let mut results = Vec::with_capacity(transaction.instructions.len());
 
         // TODO: implement engine
         let state = Runtime::new(Arc::new(self.runtime_interface.clone()));
-        for instruction in instruction_set.instructions {
+        for instruction in transaction.instructions {
             let result = match instruction {
                 Instruction::CallFunction {
                     package_id,
