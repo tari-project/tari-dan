@@ -56,7 +56,6 @@ message InvokeReadMethodResponse {
   bytes result = 1;
 }
 
-
 message InvokeMethodRequest{
   bytes contract_id = 1;
   uint32 template_id = 2;
@@ -120,4 +119,12 @@ message GetTipNodeRequest{
 
 message GetTipNodeResponse {
   tari.dan.common.Node tip_node = 1;
+}
+
+message GetIdentityRequest { }
+
+message GetIdentityResponse {
+    bytes public_key = 1;
+    string public_address = 2;
+    bytes node_id = 3;
 }

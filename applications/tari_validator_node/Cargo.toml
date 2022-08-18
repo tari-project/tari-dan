@@ -10,6 +10,7 @@ edition = "2018"
 [dependencies]
 tari_app_utilities = { git = "https://github.com/tari-project/tari.git", tag = "v0.35.0", package = "tari_app_utilities" }
 tari_app_grpc = { git = "https://github.com/tari-project/tari.git", tag = "v0.35.0", package = "tari_app_grpc" }
+tari_vn_grpc = { path = "../tari_vn_grpc" }
 tari_common = { git = "https://github.com/tari-project/tari.git", tag = "v0.35.0", package ="tari_common" }
 tari_comms = { git = "https://github.com/tari-project/tari.git", tag = "v0.35.0", package ="tari_comms" }
 

@@ -4548,10 +4548,26 @@ dependencies = [
  "tari_shutdown",
  "tari_storage",
  "tari_test_utils",
+ "tari_vn_grpc",
  "thiserror",
  "tokio",
  "tokio-stream",
  "tonic",
+]
+
+[[package]]
+name = "tari_vn_grpc"
+version = "0.35.0"
+dependencies = [
+ "chrono",
+ "num-traits",
+ "prost",
+ "prost-types",
+ "tari_common_types",
+ "tari_crypto",
+ "tari_utilities",
+ "tonic",
+ "tonic-build",
 ]
 
 [[package]]
