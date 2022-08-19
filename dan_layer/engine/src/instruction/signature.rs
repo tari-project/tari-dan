@@ -20,6 +20,8 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+use std::convert::TryFrom;
+
 use tari_common_types::types::{PrivateKey, Signature};
 
 use crate::{crypto::create_key_pair, instruction::Instruction};
@@ -33,5 +35,13 @@ impl InstructionSignature {
         // TODO: create proper challenge
         let challenge = [0u8; 32];
         Self(Signature::sign(secret_key.clone(), nonce, &challenge).unwrap())
+    }
+}
+
+impl TryFrom<Signature> for InstructionSignature {
+    type Error = String;
+
+    fn try_from(sig: Signature) -> Result<Self, Self::Error> {
+        Ok(InstructionSignature(sig))
     }
 }

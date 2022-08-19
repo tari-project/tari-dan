@@ -20,7 +20,8 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use tari_common_types::types::PrivateKey;
+use tari_common_types::types::{PrivateKey, PublicKey};
+use tari_crypto::{keys::PublicKey as PublicKeyTrait, ristretto::RistrettoPublicKey};
 
 use super::{Instruction, Transaction};
 use crate::instruction::signature::InstructionSignature;
@@ -29,6 +30,7 @@ use crate::instruction::signature::InstructionSignature;
 pub struct TransactionBuilder {
     instructions: Vec<Instruction>,
     signature: Option<InstructionSignature>,
+    sender_public_key: Option<RistrettoPublicKey>,
 }
 
 impl TransactionBuilder {
@@ -36,6 +38,7 @@ impl TransactionBuilder {
         Self {
             instructions: Vec::new(),
             signature: None,
+            sender_public_key: None,
         }
     }
 
@@ -48,6 +51,7 @@ impl TransactionBuilder {
 
     pub fn sign(&mut self, secret_key: &PrivateKey) -> &mut Self {
         self.signature = Some(InstructionSignature::sign(secret_key, &self.instructions));
+        self.sender_public_key = Some(PublicKey::from_secret_key(secret_key));
         self
     }
 
@@ -55,6 +59,7 @@ impl TransactionBuilder {
         Transaction {
             instructions: self.instructions.drain(..).collect(),
             signature: self.signature.take().expect("not signed"),
+            sender_public_key: self.sender_public_key.take().expect("not signed"),
         }
     }
 }

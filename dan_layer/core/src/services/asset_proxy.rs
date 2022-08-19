@@ -28,7 +28,7 @@ use log::*;
 use tari_common_types::types::{FixedHash, PublicKey};
 use tari_core::transactions::transaction_components::OutputType;
 use tari_dan_common_types::TemplateId;
-use tari_dan_engine::instructions::Instruction;
+use tari_dan_engine::{instruction::Transaction, instructions::Instruction};
 use tari_utilities::hex::Hex;
 use tokio_stream::StreamExt;
 
@@ -49,6 +49,8 @@ const LOG_TARGET: &str = "tari::dan_layer::core::services::asset_proxy";
 
 #[async_trait]
 pub trait AssetProxy: Send + Sync {
+    async fn submit_transaction(&self, transaction: &Transaction) -> Result<Vec<u8>, DigitalAssetError>;
+
     async fn invoke_method(
         &self,
         contract_id: &FixedHash,
@@ -228,6 +230,16 @@ impl<TServiceSpecification: ServiceSpecification<Addr = PublicKey>> ConcreteAsse
 impl<TServiceSpecification: ServiceSpecification<Addr = PublicKey>> AssetProxy
     for ConcreteAssetProxy<TServiceSpecification>
 {
+    async fn submit_transaction(&self, _transaction: &Transaction) -> Result<Vec<u8>, DigitalAssetError> {
+        // TODO: validate the transaction signature
+        // TODO: check if this VN should process the instruction
+        // TODO: process the instruction in the engine
+        // TODO: send the transaction to the mempool
+        // TODO: update the state and reach consensus
+
+        Ok(vec![])
+    }
+
     async fn invoke_method(
         &self,
         contract_id: &FixedHash,

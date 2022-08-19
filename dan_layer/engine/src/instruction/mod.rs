@@ -30,6 +30,7 @@ pub use processor::InstructionProcessor;
 
 mod signature;
 pub use signature::InstructionSignature;
+use tari_common_types::types::PublicKey;
 use tari_template_lib::models::{ComponentId, PackageId};
 
 #[derive(Debug, Clone)]
@@ -52,4 +53,5 @@ pub enum Instruction {
 pub struct Transaction {
     pub instructions: Vec<Instruction>,
     pub signature: InstructionSignature,
+    pub sender_public_key: PublicKey,
 }

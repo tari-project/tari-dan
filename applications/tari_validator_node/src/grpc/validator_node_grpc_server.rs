@@ -30,7 +30,7 @@ use tari_dan_core::{
     storage::DbFactory,
 };
 use tari_dan_engine::instructions::Instruction;
-use tari_vn_grpc::tari_rpc::{
+use tari_vn_grpc::tari_vn_rpc::{
     validator_node_server::ValidatorNode,
     Authority,
     GetIdentityRequest,
@@ -39,6 +39,8 @@ use tari_vn_grpc::tari_rpc::{
     InvokeMethodResponse,
     InvokeReadMethodRequest,
     InvokeReadMethodResponse,
+    SubmitTransactionRequest,
+    SubmitTransactionResponse,
 };
 use tonic::{Request, Response, Status};
 
@@ -79,6 +81,27 @@ impl<TServiceSpecification: ServiceSpecification + 'static> ValidatorNode
             node_id: self.node_identity.node_id().to_vec(),
         };
         Ok(Response::new(response))
+    }
+
+    async fn submit_transaction(
+        &self,
+        request: Request<SubmitTransactionRequest>,
+    ) -> Result<Response<SubmitTransactionResponse>, Status> {
+        let transaction = request
+            .into_inner()
+            .try_into()
+            .map_err(|err| Status::invalid_argument(format!("Transaction was not valid: {}", err)))?;
+
+        match self.asset_proxy.submit_transaction(&transaction).await {
+            Ok(result) => Ok(Response::new(SubmitTransactionResponse {
+                status: "Accepted".to_string(),
+                result,
+            })),
+            Err(err) => Ok(Response::new(SubmitTransactionResponse {
+                status: format!("Errored: {}", err),
+                result: vec![],
+            })),
+        }
     }
 
     async fn invoke_method(

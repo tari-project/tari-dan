@@ -4559,12 +4559,15 @@ dependencies = [
 name = "tari_vn_grpc"
 version = "0.35.0"
 dependencies = [
+ "borsh",
  "chrono",
  "num-traits",
  "prost",
  "prost-types",
  "tari_common_types",
  "tari_crypto",
+ "tari_dan_engine",
+ "tari_template_lib",
  "tari_utilities",
  "tonic",
  "tonic-build",
