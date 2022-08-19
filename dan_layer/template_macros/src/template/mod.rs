@@ -73,7 +73,7 @@ mod tests {
     fn test_state() {
         let input = TokenStream::from_str(indoc! {"
             mod test {
-                struct State {
+                pub struct State {
                     value: u32
                 }
                 impl State {
