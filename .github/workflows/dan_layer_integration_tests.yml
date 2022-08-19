@@ -75,11 +75,6 @@ jobs:
         with:
           command: build
           args: --release --bin tari_miner -Z unstable-options
-      - name: build wallet-ffi
-        uses: actions-rs/cargo@v1
-        with:
-          command: build
-          args: --release --package tari_wallet_ffi -Z unstable-options
       - name: build validator node
         uses: actions-rs/cargo@v1
         with:
