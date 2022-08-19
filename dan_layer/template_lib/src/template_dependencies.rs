@@ -25,9 +25,4 @@
 pub use borsh;
 pub use tari_template_abi::{call_debug as debug, Decode, Encode};
 
-pub use crate::{
-    args::LogLevel,
-    engine,
-    get_context as context,
-    models::{Bucket, BucketId, ResourceAddress, Vault},
-};
+pub use crate::{args::LogLevel, engine, get_context as context};

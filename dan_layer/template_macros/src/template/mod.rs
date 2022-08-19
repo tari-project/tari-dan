@@ -96,7 +96,8 @@ mod tests {
         assert_code_eq(output, quote! {
             use tari_template_lib::template_dependencies::*;
 
-            pub mod template {
+            #[allow(non_snake_case)]
+            pub mod State_template {
                 use super::*;
 
                 #[derive(Decode, Encode)]
@@ -149,7 +150,7 @@ mod tests {
             #[no_mangle]
             pub extern "C" fn State_main(call_info: *mut u8, call_info_len: usize) -> *mut u8 {
                 use ::tari_template_abi::{decode, encode_with_len, CallInfo, wrap_ptr};
-                use ::tari_template_lib::set_context_from_call_info;
+                use ::tari_template_lib::init_context;
 
                 if call_info.is_null() {
                     panic!("call_info is null");
@@ -158,27 +159,27 @@ mod tests {
                 let call_data = unsafe { Vec::from_raw_parts(call_info, call_info_len, call_info_len) };
                 let call_info: CallInfo = decode(&call_data).unwrap();
 
-                set_context_from_call_info(&call_info);
+                init_context(&call_info);
                 engine().emit_log(LogLevel::Debug, format!("Dispatcher called with function {}" , call_info.func_name));
 
                 let result;
                 match call_info.func_name.as_str() {
                     "new" => {
-                        let state = template::State::new();
+                        let state = State_template::State::new();
                         let rtn = engine().instantiate("State".to_string(), state);
                         result = encode_with_len(&rtn);
                     },
                     "get" => {
                         let component = decode::<::tari_template_lib::models::ComponentInstance>(&call_info.args[0usize]).unwrap();
-                        let mut state = decode::<template::State>(&component.state).unwrap();
-                        let rtn = template::State::get(&mut state);
+                        let mut state = decode::<State_template::State>(&component.state).unwrap();
+                        let rtn = State_template::State::get(&mut state);
                         result = encode_with_len(&rtn);
                     },
                     "set" => {
                         let component = decode::<::tari_template_lib::models::ComponentInstance>(&call_info.args[0usize]).unwrap();
-                        let mut state = decode::<template::State>(&component.state).unwrap();
+                        let mut state = decode::<State_template::State>(&component.state).unwrap();
                         let arg_1 = decode::<u32>(&call_info.args[1usize]).unwrap();
-                        let rtn = template::State::set(&mut state, arg_1);
+                        let rtn = State_template::State::set(&mut state, arg_1);
                         result = encode_with_len(&rtn);
                         engine().set_component_state(component.id(), state);
                     },

@@ -26,6 +26,16 @@ use std::{error::Error, io};
 
 use tari_template_abi::{encode, Decode, Encode};
 
+// pub trait StateStorage<'a>: AtomicDb<'a, Error = StateStoreError> + Send + Sync {}
+//
+// impl<'a, T> StateStorage<'a> for T
+// where
+//     T: AtomicDb<'a, Error = StateStoreError> + Send + Sync,
+//     T::ReadAccess: StateReader,
+//     T::WriteAccess: StateWriter,
+// {
+// }
+
 /// Abstraction for any database that has atomic read/write semantics.
 pub trait AtomicDb<'a> {
     type Error;
@@ -37,8 +47,6 @@ pub trait AtomicDb<'a> {
 
     /// Obtain write access to the underlying database
     fn write_access(&'a self) -> Result<Self::WriteAccess, Self::Error>;
-
-    fn commit(&self, tx: Self::WriteAccess) -> Result<(), Self::Error>;
 }
 
 pub trait StateReader {
@@ -55,9 +63,12 @@ pub trait StateReader {
 
 pub trait StateWriter: StateReader {
     fn set_state_raw(&mut self, key: &[u8], value: Vec<u8>) -> Result<(), StateStoreError>;
+
     fn set_state<K: Encode, V: Encode>(&mut self, key: &K, value: V) -> Result<(), StateStoreError> {
         self.set_state_raw(&encode(key)?, encode(&value)?)
     }
+
+    fn commit(self) -> Result<(), StateStoreError>;
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -65,9 +76,11 @@ pub enum StateStoreError {
     #[error("Encoding error: {0}")]
     EncodingError(#[from] io::Error),
     #[error(transparent)]
-    Custom(anyhow::Error),
+    Custom(#[from] anyhow::Error),
     #[error("Error: {0}")]
     CustomStr(String),
+    #[error("{kind} not found with id {id}")]
+    NotFound { kind: &'static str, id: String },
 }
 
 impl StateStoreError {

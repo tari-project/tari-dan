@@ -3,11 +3,9 @@
 
 use std::sync::{Arc, RwLock};
 
-use d3ne::{InputData, Node, OutputData, OutputDataBuilder, Worker};
-use tari_common_types::types::PublicKey;
-use tari_utilities::{hex::Hex, ByteArray};
+use d3ne::{InputData, Node, OutputData, Worker};
 
-use crate::{models::Bucket, state::StateDbUnitOfWork};
+use crate::state::StateDbUnitOfWork;
 
 pub struct StoreBucketWorker<TUnitOfWork: StateDbUnitOfWork> {
     pub state_db: Arc<RwLock<TUnitOfWork>>,
@@ -66,24 +64,28 @@ impl<TUnitOfWork: StateDbUnitOfWork> Worker for StoreBucketWorker<TUnitOfWork> {
         "tari::store_bucket"
     }
 
-    fn work(&self, node: &Node, inputs: InputData) -> anyhow::Result<OutputData> {
-        let bucket: Bucket = serde_json::from_str(&node.get_string_field("bucket", &inputs)?)?;
-        let to = PublicKey::from_hex(&node.get_string_field("to", &inputs)?)?;
-        let mut state = self.state_db.write().unwrap();
-        // TODO: handle panics
-        let balance_key = format!(
-            "token_id-{}-{}",
-            bucket.resource_address(),
-            bucket.token_ids().unwrap()[0]
-        );
-        let balance = state.get_u64(&balance_key, to.as_bytes())?.unwrap_or(0);
-        state.set_u64(
-            &balance_key,
-            to.as_bytes(),
-            bucket.amount().checked_add(balance).expect("overflowed"),
-        )?;
-
-        let output = OutputDataBuilder::new().data("default", Box::new(())).build();
-        Ok(output)
+    fn work(&self, _node: &Node, _inputs: InputData) -> anyhow::Result<OutputData> {
+        todo!("fix compile errors")
+        // let bucket: Bucket = serde_json::from_str(&node.get_string_field("bucket", &inputs)?)?;
+        // let to = PublicKey::from_hex(&node.get_string_field("to", &inputs)?)?;
+        // let mut state = self.state_db.write().unwrap();
+        // // TODO: handle panics
+        // let balance_key = format!(
+        //     "token_id-{}-{}",
+        //     bucket.resource_address(),
+        //     bucket.resource().non_fungible_token_ids()[0]
+        // );
+        // let balance = state.get_u64(&balance_key, to.as_bytes())?.unwrap_or(0);
+        // state.set_u64(
+        //     &balance_key,
+        //     to.as_bytes(),
+        //     u64::try_from(bucket.amount().value())
+        //         .unwrap()
+        //         .checked_add(balance)
+        //         .expect("overflowed"),
+        // )?;
+        //
+        // let output = OutputDataBuilder::new().data("default", Box::new(())).build();
+        // Ok(output)
     }
 }

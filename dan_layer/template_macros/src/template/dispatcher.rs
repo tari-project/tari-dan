@@ -35,7 +35,7 @@ pub fn generate_dispatcher(ast: &TemplateAst) -> Result<TokenStream> {
         #[no_mangle]
         pub extern "C" fn #dispatcher_function_name(call_info: *mut u8, call_info_len: usize) -> *mut u8 {
             use ::tari_template_abi::{decode, encode_with_len, CallInfo, wrap_ptr};
-            use ::tari_template_lib::set_context_from_call_info;
+            use ::tari_template_lib::init_context;
 
             if call_info.is_null() {
                 panic!("call_info is null");
@@ -44,7 +44,7 @@ pub fn generate_dispatcher(ast: &TemplateAst) -> Result<TokenStream> {
             let call_data = unsafe { Vec::from_raw_parts(call_info, call_info_len, call_info_len) };
             let call_info: CallInfo = decode(&call_data).unwrap();
 
-            set_context_from_call_info(&call_info);
+            init_context(&call_info);
             // TODO: wrap this in a nice macro
             engine().emit_log(LogLevel::Debug, format!("Dispatcher called with function {}", call_info.func_name));
 
@@ -77,6 +77,7 @@ fn get_function_blocks(ast: &TemplateAst) -> Vec<Expr> {
 }
 
 fn get_function_block(template_ident: &Ident, ast: FunctionAst) -> Expr {
+    let template_mod_name = format_ident!("{}_template", template_ident);
     let mut args: Vec<Expr> = vec![];
     let mut stmts = vec![];
     let mut should_set_state = false;
@@ -96,7 +97,7 @@ fn get_function_block(template_ident: &Ident, ast: FunctionAst) -> Expr {
                             .unwrap();
                     },
                     parse_quote! {
-                        let mut state = decode::<template::#template_ident>(&component.state).unwrap();
+                        let mut state = decode::<#template_mod_name::#template_ident>(&component.state).unwrap();
                     },
                 ]
             },
@@ -109,6 +110,14 @@ fn get_function_block(template_ident: &Ident, ast: FunctionAst) -> Expr {
                         .unwrap();
                 }]
             },
+            TypeAst::Tuple(tuple) => {
+                args.push(parse_quote! { #arg_ident });
+                vec![parse_quote! {
+                    let #arg_ident =
+                        decode::<#tuple>(&call_info.args[#i])
+                        .unwrap();
+                }]
+            },
         };
         stmts.extend(stmt);
     }
@@ -117,7 +126,7 @@ fn get_function_block(template_ident: &Ident, ast: FunctionAst) -> Expr {
     let function_ident = Ident::new(&ast.name, Span::call_site());
     if ast.is_constructor {
         stmts.push(parse_quote! {
-            let state = template::#template_ident::#function_ident(#(#args),*);
+            let state = #template_mod_name::#template_ident::#function_ident(#(#args),*);
         });
 
         let template_name_str = template_ident.to_string();
@@ -126,7 +135,7 @@ fn get_function_block(template_ident: &Ident, ast: FunctionAst) -> Expr {
         });
     } else {
         stmts.push(parse_quote! {
-            let rtn = template::#template_ident::#function_ident(#(#args),*);
+            let rtn = #template_mod_name::#template_ident::#function_ident(#(#args),*);
         });
     }
 

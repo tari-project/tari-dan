@@ -26,21 +26,19 @@ use quote::{format_ident, quote};
 use crate::ast::TemplateAst;
 
 pub fn generate_definition(ast: &TemplateAst) -> TokenStream {
-    let template_name = format_ident!("{}", ast.struct_section.ident);
-    let template_fields = &ast.struct_section.fields;
-    let semi_token = &ast.struct_section.semi_token;
-    let functions = &ast.impl_section.items;
+    let template_mod_name = format_ident!("{}_template", ast.struct_section.ident);
+    let template_struct = &ast.struct_section;
+    let impl_section = &ast.impl_section;
 
     quote! {
-        pub mod template {
+        #[allow(non_snake_case)]
+        pub mod #template_mod_name {
             use super::*;
 
             #[derive(Decode, Encode)]
-            pub struct #template_name #template_fields #semi_token
+            #template_struct
 
-            impl #template_name {
-                #(#functions)*
-            }
+            #impl_section
         }
     }
 }

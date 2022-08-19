@@ -24,12 +24,13 @@ mod tooling;
 
 use tari_dan_engine::{
     packager::{Package, PackageError},
-    state_store::{AtomicDb, StateReader},
+    runtime::{RuntimeInterfaceImpl, StateTracker},
+    state_store::{memory::MemoryStateStore, AtomicDb, StateReader},
     wasm::{compile::compile_template, WasmExecutionError},
 };
 use tari_template_lib::{
     args,
-    models::{ComponentId, ComponentInstance},
+    models::{Amount, Bucket, ComponentAddress, ComponentInstance},
 };
 use tooling::TemplateTest;
 
@@ -47,34 +48,34 @@ fn test_state() {
     let store = template_test.state_store();
 
     // constructor
-    let component_id1: ComponentId = template_test.call_function("State", "new", args![]);
+    let component_address1: ComponentAddress = template_test.call_function("State", "new", args![]);
     template_test.assert_calls(&["emit_log", "create_component"]);
     template_test.clear_calls();
 
-    let component_id2: ComponentId = template_test.call_function("State", "new", args![]);
-    assert_ne!(component_id1, component_id2);
+    let component_address2: ComponentAddress = template_test.call_function("State", "new", args![]);
+    assert_ne!(component_address1, component_address2);
 
     let component: ComponentInstance = store
         .read_access()
         .unwrap()
-        .get_state(&component_id1)
+        .get_state(&component_address1)
         .unwrap()
         .expect("component1 not found");
     assert_eq!(component.module_name, "State");
     let component: ComponentInstance = store
         .read_access()
         .unwrap()
-        .get_state(&component_id2)
+        .get_state(&component_address2)
         .unwrap()
         .expect("component2 not found");
     assert_eq!(component.module_name, "State");
 
     // call the "set" method to update the instance value
     let new_value = 20_u32;
-    template_test.call_method::<()>(component_id2, "set", args![new_value]);
+    template_test.call_method::<()>(component_address2, "set", args![new_value]);
 
     // call the "get" method to get the current value
-    let value: u32 = template_test.call_method(component_id2, "get", args![]);
+    let value: u32 = template_test.call_method(component_address2, "get", args![]);
 
     assert_eq!(value, new_value);
 }
@@ -101,8 +102,8 @@ fn test_composed() {
         .collect::<Vec<_>>();
     assert_eq!(functions, vec!["new", "set", "get"]);
 
-    let component_state: ComponentId = template_test.call_function("State", "new", args![]);
-    let component_hw: ComponentId = template_test.call_function("HelloWorld", "new", args!["أهلا"]);
+    let component_state: ComponentAddress = template_test.call_function("State", "new", args![]);
+    let component_hw: ComponentAddress = template_test.call_function("HelloWorld", "new", args!["أهلا"]);
 
     let result: String = template_test.call_method(component_hw, "custom_greeting", args!["Wasm"]);
     assert_eq!(result, "أهلا Wasm!");
@@ -136,4 +137,17 @@ fn test_dodgy_template() {
         err,
         PackageError::WasmModuleError(WasmExecutionError::UnexpectedAbiFunction { .. })
     ));
+}
+
+#[test]
+fn test_erc20() {
+    let state_db = MemoryStateStore::default();
+    let tracker = StateTracker::new(state_db, Default::default());
+    let template_test =
+        TemplateTest::with_runtime_interface(vec!["tests/templates/erc20"], RuntimeInterfaceImpl::new(tracker));
+    let component_addr: ComponentAddress =
+        template_test.call_function("KoinVault", "initial_mint", args![Amount(1_000_000_000_000)]);
+
+    let bucket: Bucket<()> = template_test.call_method(component_addr, "take_koins", args![Amount(100)]);
+    eprintln!("{:?}", bucket);
 }

@@ -20,21 +20,20 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use std::collections::HashMap;
+use std::{collections::HashMap, ops::DerefMut};
 
-use digest::Digest;
 use rand::{rngs::OsRng, RngCore};
-use tari_template_lib::models::PackageId;
+use tari_template_lib::models::PackageAddress;
 
 use crate::{
-    crypto,
+    hashing::hasher,
     packager::{error::PackageError, PackageModuleLoader},
     wasm::{LoadedWasmModule, WasmModule},
 };
 
 #[derive(Debug, Clone)]
 pub struct Package {
-    id: PackageId,
+    id: PackageAddress,
     wasm_modules: HashMap<String, LoadedWasmModule>,
 }
 
@@ -47,7 +46,7 @@ impl Package {
         self.wasm_modules.get(name)
     }
 
-    pub fn id(&self) -> PackageId {
+    pub fn id(&self) -> PackageAddress {
         self.id
     }
 }
@@ -71,21 +70,23 @@ impl PackageBuilder {
 
     pub fn build(&self) -> Result<Package, PackageError> {
         let mut wasm_modules = HashMap::with_capacity(self.wasm_modules.len());
-        let id = new_package_id();
         for wasm in &self.wasm_modules {
             let loaded = wasm.load_module()?;
             wasm_modules.insert(loaded.template_name().to_string(), loaded);
         }
+        let id = new_package_address(wasm_modules.values());
 
         Ok(Package { id, wasm_modules })
     }
 }
 
-fn new_package_id() -> PackageId {
-    let v = OsRng.next_u32();
-    let hash: [u8; 32] = crypto::hasher("package")
-          // TODO: Proper package id
-        .chain(&v.to_le_bytes())
-        .finalize().into();
-    hash.into()
+fn new_package_address<'a, I: IntoIterator<Item = &'a LoadedWasmModule>>(modules: I) -> PackageAddress {
+    let nonce = OsRng.next_u32();
+    let mut hasher = hasher("package").chain(&nonce);
+    for module in modules {
+        hasher.update(&module.template_def());
+    }
+    let mut hash = hasher.result();
+    hash.deref_mut()[..4].copy_from_slice(&nonce.to_le_bytes());
+    hash
 }
