@@ -37,11 +37,11 @@ pub trait InboundConnectionService {
         &self,
         message_type: HotStuffMessageType,
         for_view: ViewId,
-    ) -> Result<(Self::Addr, HotStuffMessage<Self::Payload>), DigitalAssetError>;
+    ) -> Result<(Self::Addr, HotStuffMessage<Self::Payload, Self::Addr>), DigitalAssetError>;
 
     async fn wait_for_qc(
         &self,
         message_type: HotStuffMessageType,
         for_view: ViewId,
-    ) -> Result<(Self::Addr, HotStuffMessage<Self::Payload>), DigitalAssetError>;
+    ) -> Result<(Self::Addr, HotStuffMessage<Self::Payload, Self::Addr>), DigitalAssetError>;
 }

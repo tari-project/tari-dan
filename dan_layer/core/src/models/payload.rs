@@ -22,11 +22,39 @@
 
 use std::fmt::Debug;
 
+use tari_common_types::types::FixedHash;
+
 use crate::models::ConsensusHash;
 
 // TODO: Rename to Command - most of the hotstuff docs refers to this as command
-pub trait Payload: Debug + Clone + Send + Sync + ConsensusHash {}
+pub trait Payload: Debug + Clone + Send + Sync + ConsensusHash {
+    fn involved_shards(&self) -> &[u32];
+}
 
-impl Payload for &str {}
+pub struct PayloadId {
+    id: FixedHash,
+}
 
-impl Payload for String {}
+// impl Payload for &str {
+//     fn involved_shards(&self) -> Vec<u32> {
+//         self.as_bytes()
+//     }
+// }
+
+// impl Payload for String {
+//     fn involved_shards(&self) -> Vec<u32> {
+//         vec![0]
+//     }
+// }
+
+impl ConsensusHash for (String, Vec<u32>) {
+    fn consensus_hash(&self) -> &[u8] {
+        self.0.consensus_hash()
+    }
+}
+
+impl Payload for (String, Vec<u32>) {
+    fn involved_shards(&self) -> &[u32] {
+        &self.1
+    }
+}

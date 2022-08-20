@@ -27,6 +27,7 @@ use std::{
 
 use async_trait::async_trait;
 use tari_common_types::types::{FixedHash, PublicKey};
+use tari_comms::types::CommsPublicKey;
 use tari_core::{
     chain_storage::UtxoMinedInfo,
     transactions::transaction_components::{CheckpointChallenge, OutputType, SignerSignature},
@@ -162,12 +163,6 @@ impl<TPayload: Payload> PayloadProvider<TPayload> for MockStaticPayloadProvider<
 
     async fn remove_payload(&mut self, _reservation_key: &TreeNodeHash) -> Result<(), DigitalAssetError> {
         todo!()
-    }
-}
-
-pub fn mock_payload_provider() -> MockStaticPayloadProvider<&'static str> {
-    MockStaticPayloadProvider {
-        static_payload: "<Empty>",
     }
 }
 
@@ -447,14 +442,14 @@ impl ValidatorNodeClientFactory for MockValidatorNodeClientFactory {
 pub struct MockChainStorageService;
 
 #[async_trait]
-impl ChainStorageService<TariDanPayload> for MockChainStorageService {
+impl ChainStorageService<TariDanPayload, CommsPublicKey> for MockChainStorageService {
     async fn get_metadata(&self) -> Result<SidechainMetadata, StorageError> {
         todo!()
     }
 
     async fn add_node<TUnitOfWork: ChainDbUnitOfWork>(
         &self,
-        _node: &HotStuffTreeNode<TariDanPayload>,
+        _node: &HotStuffTreeNode<TariDanPayload, CommsPublicKey>,
         _db: TUnitOfWork,
     ) -> Result<(), StorageError> {
         Ok(())

@@ -58,7 +58,7 @@ pub trait ServiceSpecification: Default + Clone {
     type AssetProxy: AssetProxy + Clone;
     type BaseNodeClient: BaseNodeClient + Clone;
     type ChainDbBackendAdapter: ChainDbBackendAdapter + MetadataBackendAdapter<ChainDbMetadataKey>;
-    type ChainStorageService: ChainStorageService<Self::Payload>;
+    type ChainStorageService: ChainStorageService<Self::Payload, Self::Addr>;
     type CheckpointManager: CheckpointManager;
     type CommitteeManager: CommitteeManager<Self::Addr>;
     type DbFactory: DbFactory<

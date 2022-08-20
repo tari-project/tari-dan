@@ -47,7 +47,8 @@ pub struct CommitState<TSpecification: ServiceSpecification> {
     node_id: TSpecification::Addr,
     contract_id: FixedHash,
     committee: Committee<TSpecification::Addr>,
-    received_new_view_messages: HashMap<TSpecification::Addr, HotStuffMessage<TSpecification::Payload>>,
+    received_new_view_messages:
+        HashMap<TSpecification::Addr, HotStuffMessage<TSpecification::Payload, TSpecification::Addr>>,
 }
 
 impl<TSpecification: ServiceSpecification> CommitState<TSpecification> {
@@ -115,7 +116,7 @@ impl<TSpecification: ServiceSpecification> CommitState<TSpecification> {
     async fn process_leader_message(
         &mut self,
         current_view: &View,
-        message: HotStuffMessage<TSpecification::Payload>,
+        message: HotStuffMessage<TSpecification::Payload, TSpecification::Addr>,
         sender: &TSpecification::Addr,
         outbound: &mut TSpecification::OutboundService,
     ) -> Result<Option<ConsensusWorkerStateEvent>, DigitalAssetError> {
@@ -198,7 +199,7 @@ impl<TSpecification: ServiceSpecification> CommitState<TSpecification> {
 
     async fn process_replica_message<TUnitOfWork: ChainDbUnitOfWork>(
         &mut self,
-        message: &HotStuffMessage<TSpecification::Payload>,
+        message: &HotStuffMessage<TSpecification::Payload, TSpecification::Addr>,
         current_view: &View,
         from: &TSpecification::Addr,
         view_leader: &TSpecification::Addr,

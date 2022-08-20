@@ -56,7 +56,8 @@ const LOG_TARGET: &str = "tari::dan::workers::states::prepare";
 pub struct Prepare<TSpecification: ServiceSpecification> {
     node_id: TSpecification::Addr,
     contract_id: FixedHash,
-    received_new_view_messages: HashMap<TSpecification::Addr, HotStuffMessage<TSpecification::Payload>>,
+    received_new_view_messages:
+        HashMap<TSpecification::Addr, HotStuffMessage<TSpecification::Payload, TSpecification::Addr>>,
 }
 
 impl<TSpecification: ServiceSpecification> Prepare<TSpecification> {
@@ -153,7 +154,7 @@ impl<TSpecification: ServiceSpecification> Prepare<TSpecification> {
     async fn process_leader_message(
         &mut self,
         current_view: &View,
-        message: HotStuffMessage<TSpecification::Payload>,
+        message: HotStuffMessage<TSpecification::Payload, TSpecification::Addr>,
         sender: &TSpecification::Addr,
         asset_definition: &AssetDefinition,
         committee: &Committee<TSpecification::Addr>,
@@ -215,7 +216,7 @@ impl<TSpecification: ServiceSpecification> Prepare<TSpecification> {
 
     async fn process_replica_message<TChainDbUnitOfWork: ChainDbUnitOfWork, TStateDbUnitOfWork: StateDbUnitOfWork>(
         &self,
-        message: &HotStuffMessage<TSpecification::Payload>,
+        message: &HotStuffMessage<TSpecification::Payload, TSpecification::Addr>,
         current_view: &View,
         from: &TSpecification::Addr,
         view_leader: &TSpecification::Addr,
@@ -329,7 +330,7 @@ impl<TSpecification: ServiceSpecification> Prepare<TSpecification> {
         payload_processor: &mut TSpecification::PayloadProcessor,
         view_id: ViewId,
         state_db: TStateDbUnitOfWork,
-    ) -> Result<HotStuffTreeNode<TSpecification::Payload>, DigitalAssetError> {
+    ) -> Result<HotStuffTreeNode<TSpecification::Payload, TSpecification::Addr>, DigitalAssetError> {
         debug!(target: LOG_TARGET, "Creating new proposal for {}", view_id);
 
         // TODO: Artificial delay here to set the block time
@@ -358,7 +359,7 @@ impl<TSpecification: ServiceSpecification> Prepare<TSpecification> {
         &self,
         outbound: &mut TSpecification::OutboundService,
         committee: &Committee<TSpecification::Addr>,
-        proposal: HotStuffTreeNode<TSpecification::Payload>,
+        proposal: HotStuffTreeNode<TSpecification::Payload, TSpecification::Addr>,
         high_qc: QuorumCertificate,
         view_number: ViewId,
     ) -> Result<(), DigitalAssetError> {
@@ -368,13 +369,17 @@ impl<TSpecification: ServiceSpecification> Prepare<TSpecification> {
             .await
     }
 
-    fn does_extend(&self, node: &HotStuffTreeNode<TSpecification::Payload>, from: &TreeNodeHash) -> bool {
+    fn does_extend(
+        &self,
+        node: &HotStuffTreeNode<TSpecification::Payload, TSpecification::Addr>,
+        from: &TreeNodeHash,
+    ) -> bool {
         from == node.parent()
     }
 
     fn is_safe_node<TUnitOfWork: ChainDbUnitOfWork>(
         &self,
-        node: &HotStuffTreeNode<TSpecification::Payload>,
+        node: &HotStuffTreeNode<TSpecification::Payload, TSpecification::Addr>,
         quorum_certificate: &QuorumCertificate,
         chain_tx: &mut TUnitOfWork,
     ) -> Result<bool, StorageError> {

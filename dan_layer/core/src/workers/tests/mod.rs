@@ -1,6 +1,11 @@
-use std::{collections::HashMap, time::Duration};
+use std::{
+    collections::HashMap,
+    ops::{Index, Range},
+    time::Duration,
+};
 
 use async_recursion::async_recursion;
+use clap::command;
 use tari_common_types::types::FixedHash;
 use tari_dan_engine::instruction::Instruction;
 use tokio::{
@@ -34,7 +39,7 @@ pub struct ShardDb<TAddr: NodeAddressable, TPayload: Payload> {
     last_voted_heights: HashMap<u32, u32>,
     lock_node_and_heights: HashMap<u32, (TreeNodeHash, u32)>,
     votes: HashMap<(TreeNodeHash, u32), Vec<(TAddr, ValidatorSignature)>>,
-    nodes: HashMap<TreeNodeHash, HotStuffTreeNode<TPayload>>,
+    nodes: HashMap<TreeNodeHash, HotStuffTreeNode<TPayload, TAddr>>,
     last_executed_height: HashMap<u32, u32>,
 }
 
@@ -134,11 +139,11 @@ impl<TAddr: NodeAddressable, TPayload: Payload> ShardDb<TAddr, TPayload> {
         }
     }
 
-    pub fn save_node(&mut self, node: HotStuffTreeNode<TPayload>) {
+    pub fn save_node(&mut self, node: HotStuffTreeNode<TPayload, TAddr>) {
         self.nodes.entry(node.hash().clone()).or_insert(node.clone());
     }
 
-    pub fn node(&self, node_hash: &TreeNodeHash) -> Option<&HotStuffTreeNode<TPayload>> {
+    pub fn node(&self, node_hash: &TreeNodeHash) -> Option<&HotStuffTreeNode<TPayload, TAddr>> {
         self.nodes.get(node_hash)
     }
 
@@ -153,43 +158,136 @@ impl<TAddr: NodeAddressable, TPayload: Payload> ShardDb<TAddr, TPayload> {
 
 #[derive(Debug, Clone)]
 pub struct VoteMessage {
-    pub node_hash: TreeNodeHash,
+    pub main_node_hash: TreeNodeHash,
     pub shard: u32,
+    pub other_shard_nodes: HashMap<u32, TreeNodeHash>,
     pub signature: ValidatorSignature,
 }
 
-pub struct HotStuffWaiter<TPayload: Payload, TAddr: NodeAddressable> {
+pub trait LeaderStrategy<TAddr: NodeAddressable, TPayload> {
+    fn calculate_leader(&self, committee: &Committee<TAddr>, payload: Option<&TPayload>, shard: u32) -> usize;
+    fn is_leader(&self, node: &TAddr, committee: &Committee<TAddr>, payload: Option<&TPayload>, shard: u32) -> bool {
+        let position = self.calculate_leader(committee, payload, shard);
+        if let Some(index) = committee.members.iter().position(|m| m == node) {
+            position == index
+        } else {
+            false
+        }
+    }
+
+    fn get_leader<'a, 'b>(
+        &'a self,
+        committee: &'b Committee<TAddr>,
+        payload: Option<&TPayload>,
+        shard: u32,
+    ) -> &'b TAddr {
+        let index = self.calculate_leader(committee, payload, shard);
+        committee.members.get(index).unwrap()
+    }
+}
+
+pub struct AlwaysFirstLeader {}
+
+impl<TAddr: NodeAddressable, TPayload> LeaderStrategy<TAddr, TPayload> for AlwaysFirstLeader {
+    fn calculate_leader(&self, committee: &Committee<TAddr>, payload: Option<&TPayload>, shard: u32) -> usize {
+        0
+    }
+}
+
+pub trait EpochManager<TAddr: NodeAddressable> {
+    fn current_epoch(&self) -> u32;
+    fn is_epoch_valid(&self, epoch: u32) -> bool;
+    fn get_committees(&self, epoch: u32, shards: &[u32]) -> Result<Vec<(u32, Option<Committee<TAddr>>)>, String>;
+    fn get_committee(&self, epoch: u32, shard: u32) -> Result<Committee<TAddr>, String>;
+}
+
+pub struct RangeEpochManager<TAddr: NodeAddressable> {
+    current_epoch: u32,
+    epochs: HashMap<u32, Vec<(Range<u32>, Committee<TAddr>)>>,
+}
+
+impl<TAddr: NodeAddressable> EpochManager<TAddr> for RangeEpochManager<TAddr> {
+    fn current_epoch(&self) -> u32 {
+        self.current_epoch
+    }
+
+    fn is_epoch_valid(&self, epoch: u32) -> bool {
+        self.current_epoch == epoch
+    }
+
+    fn get_committees(&self, epoch: u32, shards: &[u32]) -> Result<Vec<(u32, Option<Committee<TAddr>>)>, String> {
+        let epoch = self.epochs.get(&epoch).ok_or("No value for that epoch".to_string())?;
+        let mut result = vec![];
+        for shard in shards {
+            let mut found_committee = None;
+            for (range, committee) in epoch {
+                if range.includes(shard) {
+                    found_committee = Some(committee.clone());
+                    break;
+                }
+                result.push((shard, found_committee));
+            }
+        }
+
+        Ok(result)
+    }
+
+    fn get_committee(&self, epoch: u32, shard: u32) -> Result<Committee<TAddr>, String> {
+        let epoch = self.epochs.get(&epoch).ok_or("No value for that epoch".to_string())?;
+        for (range, committee) in epoch {
+            if range.includes(shard) {
+                return Ok(committee.clone());
+            }
+        }
+        Err("Could not find a committee for that shard".to_string())
+    }
+}
+
+pub struct HotStuffWaiter<
+    TPayload: Payload,
+    TAddr: NodeAddressable,
+    TLeaderStrategy: LeaderStrategy<TAddr, TPayload>,
+    TEpochManager: EpochManager<TAddr>,
+> {
     identity: TAddr,
+    leader_strategy: TLeaderStrategy,
+    epoch_manager: TEpochManager,
     rx_new: Receiver<TPayload>,
-    rx_hs_message: Receiver<(TAddr, HotStuffMessage<TPayload>)>,
+    rx_hs_message: Receiver<(TAddr, HotStuffMessage<TPayload, TAddr>)>,
     rx_votes: Receiver<(TAddr, VoteMessage)>,
-    tx_leader: Sender<HotStuffMessage<TPayload>>,
-    tx_broadcast: Sender<(HotStuffMessage<TPayload>, Vec<TAddr>)>,
+    tx_leader: Sender<HotStuffMessage<TPayload, TAddr>>,
+    tx_broadcast: Sender<(HotStuffMessage<TPayload, TAddr>, Vec<TAddr>)>,
     tx_vote_message: Sender<(VoteMessage, TAddr)>,
     // TODO: perhaps change to a service like Payload processor?
     tx_execute: Sender<TPayload>,
-    committee: Committee<TAddr>,
     shard_db: ShardDb<TAddr, TPayload>,
-    current_payload: Option<TPayload>,
 }
 
-impl<TPayload: Payload + 'static, TAddr: NodeAddressable + 'static> HotStuffWaiter<TPayload, TAddr> {
+impl<
+        TPayload: Payload + 'static,
+        TAddr: NodeAddressable + 'static,
+        TLeaderStrategy: LeaderStrategy<TAddr, TPayload> + 'static + Send,
+        TEpochManager: EpochManager<TAddr> + 'static,
+    > HotStuffWaiter<TPayload, TAddr, TLeaderStrategy, TEpochManager>
+{
     pub fn spawn(
         identity: TAddr,
-        initial_committee: Committee<TAddr>,
+        epoch_manager: TEpochManager,
+        leader_strategy: TLeaderStrategy,
         rx_new: Receiver<TPayload>,
-        rx_hs_message: Receiver<(TAddr, HotStuffMessage<TPayload>)>,
+        rx_hs_message: Receiver<(TAddr, HotStuffMessage<TPayload, TAddr>)>,
         rx_votes: Receiver<(TAddr, VoteMessage)>,
-        tx_leader: Sender<HotStuffMessage<TPayload>>,
-        tx_broadcast: Sender<(HotStuffMessage<TPayload>, Vec<TAddr>)>,
+        tx_leader: Sender<HotStuffMessage<TPayload, TAddr>>,
+        tx_broadcast: Sender<(HotStuffMessage<TPayload, TAddr>, Vec<TAddr>)>,
         tx_vote_message: Sender<(VoteMessage, TAddr)>,
         tx_execute: Sender<TPayload>,
         rx_shutdown: Receiver<()>,
     ) -> JoinHandle<Result<(), String>> {
         tokio::spawn(async move {
-            HotStuffWaiter::<TPayload, TAddr>::new(
+            HotStuffWaiter::new(
                 identity,
-                initial_committee,
+                epoch_manager,
+                leader_strategy,
                 rx_new,
                 rx_hs_message,
                 rx_votes,
@@ -205,18 +303,20 @@ impl<TPayload: Payload + 'static, TAddr: NodeAddressable + 'static> HotStuffWait
 
     pub fn new(
         identity: TAddr,
-        initial_committee: Committee<TAddr>,
+        epoch_manager: TEpochManager,
+        leader_strategy: TLeaderStrategy,
         rx_new: Receiver<TPayload>,
-        rx_hs_message: Receiver<(TAddr, HotStuffMessage<TPayload>)>,
+        rx_hs_message: Receiver<(TAddr, HotStuffMessage<TPayload, TAddr>)>,
         rx_votes: Receiver<(TAddr, VoteMessage)>,
-        tx_leader: Sender<HotStuffMessage<TPayload>>,
-        tx_broadcast: Sender<(HotStuffMessage<TPayload>, Vec<TAddr>)>,
+        tx_leader: Sender<HotStuffMessage<TPayload, TAddr>>,
+        tx_broadcast: Sender<(HotStuffMessage<TPayload, TAddr>, Vec<TAddr>)>,
         tx_vote_message: Sender<(VoteMessage, TAddr)>,
         tx_execute: Sender<TPayload>,
     ) -> Self {
         Self {
             identity,
-            committee: initial_committee,
+            epoch_manager,
+            leader_strategy,
             rx_new,
             rx_hs_message,
             rx_votes,
@@ -225,7 +325,6 @@ impl<TPayload: Payload + 'static, TAddr: NodeAddressable + 'static> HotStuffWait
             tx_vote_message,
             tx_execute,
             shard_db: ShardDb::new(),
-            current_payload: None,
         }
     }
 
@@ -245,9 +344,11 @@ impl<TPayload: Payload + 'static, TAddr: NodeAddressable + 'static> HotStuffWait
 
     // pacemaker
     async fn on_beat(&mut self, shard: u32, payload: Option<TPayload>) -> Result<(), String> {
-        if self.is_leader(payload.as_ref()) {
+        // TODO: the leader is only known after the leaf is determines
+
+        if self.is_leader(payload.as_ref(), shard) {
             // if self.current_payload.is_none() {
-            self.current_payload = payload.clone();
+            // self.current_payload = payload.clone();
             let leaf = self.shard_db.get_leaf_node(shard);
             let node = self.on_propose(leaf.0, leaf.1, shard, payload).await?;
             self.shard_db
@@ -263,18 +364,51 @@ impl<TPayload: Payload + 'static, TAddr: NodeAddressable + 'static> HotStuffWait
         leaf_height: u32,
         shard: u32,
         payload: Option<TPayload>,
-    ) -> Result<HotStuffTreeNode<TPayload>, String> {
+    ) -> Result<HotStuffTreeNode<TPayload, TAddr>, String> {
         dbg!("on propose");
         let qc = self.shard_db.get_high_qc_for(shard);
+        // TODO: Should the committee members carry on being included until 4 deep? so that they are committed?
+        let members;
+        let epoch;
+        let involved_shards;
 
-        let leaf_node = self.create_leaf(leaf, payload, qc, leaf_height + 1);
+        if let Some(payload) = &payload {
+            epoch = self.epoch_manager.current_epoch();
+            involved_shards = payload.involved_shards().to_vec();
+            members = self
+                .epoch_manager
+                .get_committees(epoch, payload.involved_shards())?
+                .into_iter()
+                .map(|(shard, committee)| committee.map(|c| c.members).unwrap_or_default())
+                .flatten()
+                .collect();
+        } else {
+            epoch = qc.epoch();
+            involved_shards = qc.involved_shards().to_vec();
+            // Continue the epoch and committee from the QC.
+            members = self
+                .epoch_manager
+                .get_committees(qc.epoch(), qc.involved_shards())?
+                .into_iter()
+                .map(|(shard, committee)| committee.map(|c| c.members).unwrap_or_default())
+                .flatten()
+                .collect();
+        }
+
+        let leaf_node = self.create_leaf(
+            leaf,
+            payload,
+            qc,
+            epoch,
+            self.identity.clone(),
+            involved_shards,
+            leaf_height + 1,
+        );
         self.shard_db.save_node(leaf_node.clone());
         dbg!(&leaf_node);
+
         self.tx_broadcast
-            .send((
-                HotStuffMessage::generic(leaf_node.clone(), shard),
-                self.committee.members.clone(),
-            ))
+            .send((HotStuffMessage::generic(leaf_node.clone(), shard), members))
             .await
             .unwrap();
         Ok(leaf_node)
@@ -285,14 +419,17 @@ impl<TPayload: Payload + 'static, TAddr: NodeAddressable + 'static> HotStuffWait
         parent: TreeNodeHash,
         payload: Option<TPayload>,
         qc: QuorumCertificate,
+        epoch: u32,
+        leader: TAddr,
+        involved_shards: Vec<u32>,
         height: u32,
-    ) -> HotStuffTreeNode<TPayload> {
-        HotStuffTreeNode::new(parent, payload, height, qc)
+    ) -> HotStuffTreeNode<TPayload, TAddr> {
+        HotStuffTreeNode::new(parent, payload, height, qc.shard(), leader, involved_shards, epoch, qc)
     }
 
-    fn is_leader(&self, payload: Option<&TPayload>) -> bool {
-        // TODO: determine actual leader
-        true
+    fn is_leader(&self, payload: Option<&TPayload>, shard: u32) -> bool {
+        self.leader_strategy
+            .is_leader(&self.identity, &self.committee, payload, shard)
     }
 
     fn validate_from_committee(&self, from: &TAddr) -> Result<(), String> {
@@ -323,7 +460,7 @@ impl<TPayload: Payload + 'static, TAddr: NodeAddressable + 'static> HotStuffWait
         Ok(())
     }
 
-    async fn update_nodes(&mut self, node: HotStuffTreeNode<TPayload>, shard: u32) -> Result<(), String> {
+    async fn update_nodes(&mut self, node: HotStuffTreeNode<TPayload, TAddr>, shard: u32) -> Result<(), String> {
         dbg!("Update nodes");
         if node.justify().node_hash() == &TreeNodeHash::zero() {
             dbg!("Node is parented to genesis, no need to update");
@@ -374,7 +511,7 @@ impl<TPayload: Payload + 'static, TAddr: NodeAddressable + 'static> HotStuffWait
     }
 
     #[async_recursion]
-    async fn on_commit(&mut self, node: HotStuffTreeNode<TPayload>, shard: u32) -> Result<(), String> {
+    async fn on_commit(&mut self, node: HotStuffTreeNode<TPayload, TAddr>, shard: u32) -> Result<(), String> {
         if self.shard_db.get_last_executed_height(shard) < node.height() {
             if node.parent() != &TreeNodeHash::zero() {
                 let parent = self.shard_db.node(node.parent()).ok_or("No parent node")?;
@@ -395,7 +532,11 @@ impl<TPayload: Payload + 'static, TAddr: NodeAddressable + 'static> HotStuffWait
             .map_err(|e| format!("Could not send execute cmd:{}", e))
     }
 
-    async fn on_receive_proposal(&mut self, from: TAddr, message: HotStuffMessage<TPayload>) -> Result<(), String> {
+    async fn on_receive_proposal(
+        &mut self,
+        from: TAddr,
+        message: HotStuffMessage<TPayload, TAddr>,
+    ) -> Result<(), String> {
         if let Some(node) = message.node() {
             // TODO: validate message from leader
             let shard = message.shard();
@@ -408,14 +549,17 @@ impl<TPayload: Payload + 'static, TAddr: NodeAddressable + 'static> HotStuffWait
             {
                 dbg!("Can vote on the message");
                 self.shard_db.set_last_voted_height(shard, node.height());
+                let signature = ValidatorSignature::from_bytes(&self.sign(node.hash(), shard));
                 self.tx_vote_message
                     .send((
                         VoteMessage {
-                            node_hash: node.hash().clone(),
+                            main_node_hash: node.hash().clone(),
                             shard,
-                            signature: ValidatorSignature::from_bytes(&self.sign(node.hash(), shard)),
+                            other_shard_nodes: Default::default(),
+                            signature,
                         },
-                        self.get_leader(),
+                        // TODO: validate the leader instead of sending to from
+                        from, // self.get_leader(),
                     ))
                     .await
                     .map_err(|e| e.to_string())?;
@@ -436,30 +580,44 @@ impl<TPayload: Payload + 'static, TAddr: NodeAddressable + 'static> HotStuffWait
         vec![]
     }
 
+    // The leader receives votes from his local shard, and forwards it to all other shards
     async fn on_receive_vote(&mut self, from: TAddr, msg: VoteMessage) -> Result<(), String> {
         // TODO: Only do this if you're the leader
         if self.shard_db.has_vote_for(&from, msg.node_hash.clone(), msg.shard) {
             return Ok(());
         }
+
+        let node = self
+            .shard_db
+            .node(&msg.main_node_hash)
+            .ok_or("Could not find node, was it saved previously?".to_string())
+            .expect("should have been saved?");
+
+        if node.leader() != self.identity {
+            return Err("I am not the leader for this node".to_string());
+        }
+
+        let valid_committee = self.epoch_manager.get_committee(node.epoch(), node.shard())?;
+
+        if !valid_committee.contains(&from) {
+            return Err("Not a valid committee member".to_string());
+        }
+
         let total_votes = self
             .shard_db
             .save_vote_for(from, msg.node_hash.clone(), msg.shard, msg.signature);
         // Check for consensus
         dbg!(total_votes);
-        dbg!(self.committee.consensus_threshold());
-        if total_votes >= self.committee.consensus_threshold() {
+        if total_votes >= valid_committee.consensus_threshold() {
             let signatures = self.shard_db.get_signatures_for(msg.node_hash.clone(), msg.shard);
-            let node = self
-                .shard_db
-                .node(&msg.node_hash)
-                .ok_or("Could not find node, was it saved previously?".to_string())
-                .expect("should have been saved?");
 
             let qc = QuorumCertificate::new(
                 HotStuffMessageType::Generic,
                 node.height(),
                 msg.node_hash,
                 msg.shard,
+                node.epoch(),
+                node.involved_shards(),
                 signatures.iter().map(|(_, sig)| sig.clone()).collect(),
             );
             self.shard_db.update_high_qc(qc);
@@ -469,9 +627,8 @@ impl<TPayload: Payload + 'static, TAddr: NodeAddressable + 'static> HotStuffWait
         Ok(())
     }
 
-    fn get_leader(&self) -> TAddr {
-        // currently I am the leader
-        self.identity.clone()
+    fn get_leader(&self, payload: Option<&TPayload>, shard: u32) -> &TAddr {
+        self.leader_strategy.get_leader(&self.committee, payload, shard)
     }
 
     pub async fn run(mut self, mut rx_shutdown: Receiver<()>) -> Result<(), String> {
@@ -530,9 +687,10 @@ async fn test_receives_new_payload_starts_new_chain() {
     let (tx_vote_message, rx_vote_message) = channel(1);
     let (tx_votes, rx_votes) = channel(1);
     let (tx_execute, rx_execute) = channel(1);
-    let instance = HotStuffWaiter::<String, String>::spawn(
+    let instance = HotStuffWaiter::<String, String, _>::spawn(
         "leader".to_string(),
         Committee::empty(),
+        AlwaysFirstLeader {},
         rx_new,
         rx_hs_messages,
         rx_votes,
@@ -567,9 +725,10 @@ async fn test_hs_waiter_leader_proposes() {
     let node2 = "node2".to_string();
     let committee = Committee::new(vec![node1.clone(), node2.clone()]);
 
-    let instance = HotStuffWaiter::<String, String>::spawn(
+    let instance = HotStuffWaiter::<String, String, _>::spawn(
         node1.clone(),
         committee,
+        AlwaysFirstLeader {},
         rx_new,
         rx_hs_messages,
         rx_votes,
@@ -612,9 +771,10 @@ async fn test_hs_waiter_replica_sends_vote_for_proposal() {
     let node2 = "node2".to_string();
     let committee = Committee::new(vec![node1.clone(), node2.clone()]);
 
-    let instance = HotStuffWaiter::<String, String>::spawn(
+    let instance = HotStuffWaiter::<String, String, _>::spawn(
         node1.clone(),
         committee,
+        AlwaysFirstLeader {},
         rx_new,
         rx_hs_messages,
         rx_votes,
@@ -665,9 +825,10 @@ async fn test_hs_waiter_leader_sends_new_proposal_when_enough_votes_are_received
     let node2 = "node2".to_string();
     let committee = Committee::new(vec![node1.clone(), node2.clone()]);
 
-    let instance = HotStuffWaiter::<String, String>::spawn(
+    let instance = HotStuffWaiter::<String, String, _>::spawn(
         node1.clone(),
         committee,
+        AlwaysFirstLeader {},
         rx_new,
         rx_hs_messages,
         rx_votes,
@@ -753,9 +914,10 @@ async fn test_hs_waiter_execute_called_when_consensus_reached() {
     let node1 = "node1".to_string();
     let committee = Committee::new(vec![node1.clone()]);
 
-    let instance = HotStuffWaiter::<String, String>::spawn(
+    let instance = HotStuffWaiter::<String, String, _>::spawn(
         node1.clone(),
         committee,
+        AlwaysFirstLeader {},
         rx_new,
         rx_hs_messages,
         rx_votes,
@@ -857,6 +1019,39 @@ async fn test_hs_waiter_execute_called_when_consensus_reached() {
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn test_hs_waiter_multishard_votes() {
+    let (tx_new, rx_new) = channel(1);
+    let (tx_hs_messages, rx_hs_messages) = channel(1);
+    let (tx_leader, mut rx_leader) = channel(1);
+    let (tx_broadcast, mut rx_broadcast) = channel(1);
+    let (tx_votes, rx_votes) = channel(1);
+    let (tx_vote_message, mut rx_vote_message) = channel(1);
+    let (tx_execute, mut rx_execute) = channel(1);
+    let (tx_shutdown, rx_shutdown) = channel(1);
+    let node1 = "node1".to_string();
+    let node2 = "node2".to_string();
+    let node3 = "node3".to_string();
+    let node4 = "node4".to_string();
+    let shard0_committee = Committee::new(vec![node1.clone(), node2.clone()]);
+    let shard1_committee = Committee::new(vec![node3.clone(), node4.clone()]);
+    let epoch_manager = RangeEpochManager::new(0, vec![(0..1, shard0_committee), (1..2, shard1_committee)]);
+
+    let instance = HotStuffWaiter::<String, String, _>::spawn(
+        node1.clone(),
+        shard0_committee,
+        AlwaysFirstLeader {},
+        rx_new,
+        rx_hs_messages,
+        rx_votes,
+        tx_leader,
+        tx_broadcast,
+        tx_vote_message,
+        tx_execute,
+        rx_shutdown,
+    );
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn test_hs_waiter_leader_starts_view_with_n_minus_f_new_view() {
     // TODO: I don't know if this is a requirement, the prepare step might actually be fine
     // let (tx_new, rx_new) = channel(1);
@@ -928,3 +1123,9 @@ async fn test_hs_waiter_validate_qc_for_incorrect_committee_fails() {
 //         }
 //     }
 // }
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn test_hs_waiter_cannot_spend_until_it_is_proven_committed() {
+    // You must provide a valid 4 chain proof in order to spend or exist an output
+    todo!()
+}

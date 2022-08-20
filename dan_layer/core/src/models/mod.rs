@@ -61,8 +61,6 @@ pub use tree_node_hash::TreeNodeHash;
 pub use view::View;
 pub use view_id::ViewId;
 
-use crate::services::infrastructure_services::NodeAddressable;
-
 // TODO: encapsulate
 pub struct InstructionCaller {
     pub owner_token_id: TokenId,

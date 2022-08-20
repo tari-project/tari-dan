@@ -21,6 +21,7 @@
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 use prost::DecodeError;
+use tari_comms::types::CommsPublicKey;
 use tari_comms_dht::outbound::DhtOutboundError;
 use tari_crypto::ristretto::RistrettoPublicKey;
 use tari_dan_engine::state::error::StateStorageError;
@@ -103,7 +104,7 @@ pub enum DigitalAssetError {
     #[error("Failed to decode message: {0}")]
     DecodeError(#[from] DecodeError),
     #[error("Failed to send message: {0}")]
-    SendError(#[from] Box<SendError<(RistrettoPublicKey, HotStuffMessage<TariDanPayload>)>>),
+    SendError(#[from] Box<SendError<(RistrettoPublicKey, HotStuffMessage<TariDanPayload, CommsPublicKey>)>>),
     #[error("Invalid committee public key hex")]
     InvalidCommitteePublicKeyHex,
     #[error("State storage error:{0}")]

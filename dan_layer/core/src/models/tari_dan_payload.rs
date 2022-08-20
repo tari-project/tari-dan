@@ -78,7 +78,11 @@ impl ConsensusHash for TariDanPayload {
     }
 }
 
-impl Payload for TariDanPayload {}
+impl Payload for TariDanPayload {
+    fn involved_shards(&self) -> &[u32] {
+        todo!()
+    }
+}
 
 #[derive(Debug, Clone, Default)]
 pub struct CheckpointData {

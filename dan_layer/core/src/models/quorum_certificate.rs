@@ -36,6 +36,8 @@ pub struct QuorumCertificate {
     // cache the node height
     node_height: u32,
     shard: u32,
+    epoch: u32,
+    involved_shards: Vec<u32>,
     signatures: Vec<ValidatorSignature>,
 }
 
@@ -45,29 +47,43 @@ impl QuorumCertificate {
         node_height: u32,
         node_hash: TreeNodeHash,
         shard: u32,
+        epoch: u32,
+        involved_shards: Vec<u32>,
         signatures: Vec<ValidatorSignature>,
     ) -> Self {
         Self {
             message_type,
             node_hash,
             shard,
+            epoch,
+            involved_shards,
             node_height,
             signatures,
         }
     }
 
-    pub fn genesis(shard: u32) -> Self {
+    pub fn genesis() -> Self {
         Self {
             message_type: HotStuffMessageType::Genesis,
             node_hash: TreeNodeHash::zero(),
-            shard,
+            shard: 0,
+            epoch: 0,
             node_height: 0,
+            involved_shards: vec![],
             signatures: vec![],
         }
     }
 
     pub fn shard(&self) -> u32 {
         self.shard
+    }
+
+    pub fn involved_shards(&self) -> &[u32] {
+        self.involved_shards.as_slice()
+    }
+
+    pub fn epoch(&self) -> u32 {
+        self.epoch
     }
 
     pub fn node_hash(&self) -> &TreeNodeHash {
@@ -109,6 +125,10 @@ impl QuorumCertificate {
 
         for sig in &self.signatures {
             result = result.chain(sig.to_bytes());
+        }
+        result = result.chain((self.involved_shards.len() as u32).to_le_bytes());
+        for shard in &self.involved_shards {
+            result = result.chain((*shard).to_le_bytes());
         }
         result.finalize().to_vec()
     }

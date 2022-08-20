@@ -61,7 +61,7 @@ impl AtomicDb for MockChainDbBackupAdapter {
 
 impl ChainDbBackendAdapter for MockChainDbBackupAdapter {
     type Id = usize;
-    type Payload = String;
+    type Payload = (String, Vec<u32>);
 
     fn is_empty(&self) -> Result<bool, Self::Error> {
         let lock = self.db.read()?;
