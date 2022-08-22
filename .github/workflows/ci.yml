@@ -131,7 +131,7 @@ jobs:
           patchelf \
           librsvg2-dev \
           libprotobuf-dev \
-          protobuf-compiler\
+          protobuf-compiler \
           pkg-config \
           libssl-dev \
           sqlite3 \
