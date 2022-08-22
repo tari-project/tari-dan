@@ -21,7 +21,7 @@
 // USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 syntax = "proto3";
 
-package tari.vn.rpc;
+package tari.validator_node.rpc;
 
 service ValidatorNode {
     rpc GetIdentity(GetIdentityRequest) returns (GetIdentityResponse);

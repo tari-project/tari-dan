@@ -9,7 +9,7 @@ use tari_dan_engine::instruction::{Instruction, Transaction};
 use tari_template_lib::Hash;
 use tari_utilities::ByteArray;
 
-use crate::tari_vn_rpc::{self as grpc, SubmitTransactionRequest};
+use crate::rpc::{self as grpc, SubmitTransactionRequest};
 
 impl TryFrom<grpc::Signature> for Signature {
     type Error = String;

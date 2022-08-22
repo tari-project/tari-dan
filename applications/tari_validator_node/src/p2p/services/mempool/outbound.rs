@@ -30,7 +30,7 @@ use tari_comms_dht::{
 use tari_dan_core::{services::mempool::outbound::MempoolOutboundService, DigitalAssetError};
 use tari_dan_engine::instruction::Transaction;
 use tari_p2p::tari_message::TariMessageType;
-use tari_vn_grpc::tari_vn_rpc::SubmitTransactionRequest;
+use tari_validator_node_grpc::rpc::SubmitTransactionRequest;
 
 const LOG_TARGET: &str = "tari::validator_node::p2p::services::mempool::outbound";
 

@@ -1,5 +1,5 @@
 [package]
-name = "tari_vn_grpc"
+name = "tari_validator_node_grpc"
 authors = ["The Tari Development Community"]
 repository = "https://github.com/tari-project/tari"
 license = "BSD-3-Clause"

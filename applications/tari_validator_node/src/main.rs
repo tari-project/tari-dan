@@ -63,7 +63,7 @@ use tari_dan_storage_sqlite::{global::SqliteGlobalDbBackendAdapter, SqliteDbFact
 use tari_p2p::comms_connector::SubscriptionFactory;
 use tari_service_framework::ServiceHandles;
 use tari_shutdown::{Shutdown, ShutdownSignal};
-use tari_vn_grpc::tari_vn_rpc::validator_node_server::ValidatorNodeServer;
+use tari_validator_node_grpc::rpc::validator_node_server::ValidatorNodeServer;
 use tokio::{runtime, runtime::Runtime, task};
 use tonic::transport::Server;
 

@@ -25,7 +25,7 @@ use std::convert::TryInto;
 use tari_comms::NodeIdentity;
 use tari_crypto::tari_utilities::ByteArray;
 use tari_dan_core::services::{AssetProxy, ServiceSpecification};
-use tari_vn_grpc::tari_vn_rpc::{
+use tari_validator_node_grpc::rpc::{
     validator_node_server::ValidatorNode,
     GetIdentityRequest,
     GetIdentityResponse,

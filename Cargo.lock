@@ -4550,7 +4550,7 @@ dependencies = [
  "tari_storage",
  "tari_template_lib",
  "tari_test_utils",
- "tari_vn_grpc",
+ "tari_validator_node_grpc",
  "thiserror",
  "tokio",
  "tokio-stream",
@@ -4558,7 +4558,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "tari_vn_grpc"
+name = "tari_validator_node_grpc"
 version = "0.35.0"
 dependencies = [
  "borsh",

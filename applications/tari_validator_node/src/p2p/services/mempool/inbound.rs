@@ -31,7 +31,7 @@ use tari_p2p::{
     domain_message::DomainMessage,
     tari_message::TariMessageType,
 };
-use tari_vn_grpc::tari_vn_rpc::SubmitTransactionRequest;
+use tari_validator_node_grpc::rpc::SubmitTransactionRequest;
 
 const LOG_TARGET: &str = "tari::validator_node::p2p::services::mempool::inbound";
 

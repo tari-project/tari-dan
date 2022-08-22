@@ -21,6 +21,6 @@
 // USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 pub mod conversions;
 
-pub mod tari_vn_rpc {
-    tonic::include_proto!("tari.vn.rpc");
+pub mod rpc {
+    tonic::include_proto!("tari.validator_node.rpc");
 }
