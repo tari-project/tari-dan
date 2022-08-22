@@ -21,7 +21,9 @@
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 mod builder;
+
 pub use builder::TransactionBuilder;
+use tari_common_types::types::PublicKey;
 
 mod error;
 
@@ -34,8 +36,6 @@ use tari_template_lib::{
     args::Arg,
     models::{ComponentAddress, PackageAddress},
 };
-use tari_common_types::types::PublicKey;
-
 
 #[derive(Debug, Clone)]
 pub enum Instruction {

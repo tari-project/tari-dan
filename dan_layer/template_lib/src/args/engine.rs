@@ -20,7 +20,13 @@
 //   WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //   USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use tari_template_abi::{decode, encode, rust::io, Decode, Encode};
+use tari_template_abi::{
+    decode,
+    encode,
+    rust::{fmt::Display, io},
+    Decode,
+    Encode,
+};
 
 use crate::{
     models::{Amount, BucketId, ComponentAddress, Metadata, ResourceAddress, VaultRef},
@@ -39,6 +45,17 @@ pub enum LogLevel {
     Warn,
     Info,
     Debug,
+}
+
+impl Display for LogLevel {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            LogLevel::Error => write!(f, "ERROR"),
+            LogLevel::Warn => write!(f, "WARN"),
+            LogLevel::Info => write!(f, "INFO"),
+            LogLevel::Debug => write!(f, "DEBUG"),
+        }
+    }
 }
 
 #[derive(Debug, Clone, Encode, Decode)]

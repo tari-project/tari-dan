@@ -20,37 +20,28 @@
 //   WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //   USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use std::{
-    fmt::Display,
-    time::{Duration, SystemTime, UNIX_EPOCH},
+use tari_template_lib::Hash;
+
+use crate::{
+    runtime::{logs::LogEntry, TransactionCommitError},
+    wasm::ExecutionResult,
 };
 
-use tari_template_lib::args::LogLevel;
-
-#[derive(Debug, Clone)]
-pub struct LogEntry {
-    pub timestamp: u64,
-    pub message: String,
-    pub level: LogLevel,
+#[derive(Debug)]
+pub struct CommitResult {
+    pub transaction_hash: Hash,
+    pub logs: Vec<LogEntry>,
+    pub execution_results: Vec<ExecutionResult>,
+    pub result: Result<(), TransactionCommitError>,
 }
 
-impl LogEntry {
-    pub fn new(level: LogLevel, message: String) -> Self {
-        let now = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            // If the errors, the clock has been set before the UNIX_EPOCH
-            .unwrap_or_else(|_| Duration::from_secs(0))
-            .as_secs();
+impl CommitResult {
+    pub fn new(transaction_hash: Hash, logs: Vec<LogEntry>, result: Result<(), TransactionCommitError>) -> Self {
         Self {
-            timestamp: now,
-            message,
-            level,
+            transaction_hash,
+            logs,
+            execution_results: Vec::new(),
+            result,
         }
-    }
-}
-
-impl Display for LogEntry {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{} {} {}", self.timestamp, self.level, self.message)
     }
 }

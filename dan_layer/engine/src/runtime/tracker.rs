@@ -22,6 +22,7 @@
 
 use std::{
     collections::HashMap,
+    mem,
     sync::{Arc, RwLock},
 };
 
@@ -45,8 +46,8 @@ use tari_template_lib::{
 
 use crate::{
     models::{Bucket, Resource, Vault},
-    runtime::{id_provider::IdProvider, logs::LogEntry, RuntimeError},
-    state_store::{memory::MemoryStateStore, AtomicDb, StateReader},
+    runtime::{id_provider::IdProvider, logs::LogEntry, RuntimeError, TransactionCommitError},
+    state_store::{memory::MemoryStateStore, AtomicDb, StateReader, StateWriter},
 };
 
 #[derive(Debug, Clone)]
@@ -94,6 +95,10 @@ impl StateTracker {
 
     pub fn add_log(&self, log: LogEntry) {
         self.write_with(|state| state.logs.push(log));
+    }
+
+    pub fn take_logs(&self) -> Vec<LogEntry> {
+        self.write_with(|state| mem::take(&mut state.logs))
     }
 
     fn check_amount(&self, amount: &Amount) -> Result<(), RuntimeError> {
@@ -174,22 +179,6 @@ impl StateTracker {
         })
     }
 
-    pub fn new_vault(&self, resource_address: ResourceAddress, resource_type: ResourceType) -> VaultId {
-        let vault_id = self.id_provider.new_vault_id();
-        let resource = match resource_type {
-            ResourceType::Fungible => Resource::fungible(resource_address, 0.into(), Metadata::new()),
-            ResourceType::NonFungible => Resource::non_fungible(resource_address, vec![], Metadata::new()),
-            ResourceType::Confidential => todo!("thaum resource"),
-        };
-        let vault = Vault::new(resource);
-
-        self.write_with(|state| {
-            state.new_vaults.insert(vault_id, vault);
-        });
-
-        vault_id
-    }
-
     pub fn new_component(&self, new_component: CreateComponentArg) -> Result<ComponentAddress, RuntimeError> {
         let runtime_state = self.runtime_state()?;
         let component = Component {
@@ -240,24 +229,41 @@ impl StateTracker {
         self.write_with(|s| s.runtime_state = Some(state));
     }
 
-    pub fn get_vault(&self, vault_id: &VaultId) -> Result<Vault, RuntimeError> {
-        self.read_with(|state| {
-            state
-                .new_vaults
-                .get(vault_id)
-                .cloned()
-                .ok_or(RuntimeError::VaultNotFound { vault_id: *vault_id })
-        })
+    pub fn new_vault(&self, resource_address: ResourceAddress, resource_type: ResourceType) -> VaultId {
+        let vault_id = self.id_provider.new_vault_id();
+        let resource = match resource_type {
+            ResourceType::Fungible => Resource::fungible(resource_address, 0.into(), Metadata::new()),
+            ResourceType::NonFungible => Resource::non_fungible(resource_address, vec![], Metadata::new()),
+            ResourceType::Confidential => todo!("thaum resource"),
+        };
+        let vault = Vault::new(resource);
+
+        self.write_with(|state| {
+            state.new_vaults.insert(vault_id, vault);
+        });
+
+        vault_id
     }
 
-    pub fn set_vault(&self, vault_id: &VaultId, vault: Vault) -> Result<(), RuntimeError> {
+    pub fn borrow_vault_mut<R, F: FnOnce(&mut Vault) -> R>(&self, vault_id: &VaultId, f: F) -> Result<R, RuntimeError> {
         self.write_with(|state| {
-            let vault_mut = state
-                .new_vaults
-                .get_mut(vault_id)
-                .ok_or(RuntimeError::VaultNotFound { vault_id: *vault_id })?;
-            *vault_mut = vault;
-            Ok(())
+            let vault_mut = state.new_vaults.get_mut(vault_id);
+            match vault_mut {
+                Some(vault_mut) => Ok(f(vault_mut)),
+                None => {
+                    // TODO: This is not correct
+                    let mut vault = self
+                        .state_store
+                        .read_access()
+                        .unwrap()
+                        .get_state(vault_id)?
+                        .ok_or(RuntimeError::VaultNotFound { vault_id: *vault_id })?;
+
+                    let ret = f(&mut vault);
+                    state.new_vaults.insert(*vault_id, vault);
+                    Ok(ret)
+                },
+            }
         })
     }
 
@@ -294,12 +300,63 @@ impl StateTracker {
         })
     }
 
+    fn validate_finalized(&self) -> Result<(), TransactionCommitError> {
+        self.read_with(|state| {
+            if !state.buckets.is_empty() {
+                return Err(TransactionCommitError::DanglingBuckets {
+                    count: state.buckets.len(),
+                });
+            }
+
+            if !state.workspace.is_empty() {
+                return Err(TransactionCommitError::WorkspaceNotEmpty {
+                    count: state.workspace.len(),
+                });
+            }
+
+            Ok(())
+        })
+    }
+
+    pub fn commit(&self) -> Result<(), TransactionCommitError> {
+        self.validate_finalized()?;
+
+        let mut tx = self
+            .state_store
+            .write_access()
+            .map_err(TransactionCommitError::StateStoreTransactionError)?;
+
+        self.write_with(|state| -> Result<(), TransactionCommitError> {
+            for (component_addr, component) in state.new_components.drain() {
+                tx.set_state(&component_addr, component)?;
+            }
+
+            for (vault_id, vault) in state.new_vaults.drain() {
+                tx.set_state(&vault_id, vault)?;
+            }
+
+            for (resource_addr, resource) in state.new_resources.drain() {
+                tx.set_state(&resource_addr, resource)?;
+            }
+
+            Ok(())
+        })?;
+
+        tx.commit()?;
+
+        Ok(())
+    }
+
     fn read_with<R, F: FnOnce(&WorkingState) -> R>(&self, f: F) -> R {
         f(&*self.working_state.read().unwrap())
     }
 
     fn write_with<R, F: FnOnce(&mut WorkingState) -> R>(&self, f: F) -> R {
         f(&mut *self.working_state.write().unwrap())
+    }
+
+    pub fn transaction_hash(&self) -> Hash {
+        self.id_provider.transaction_hash()
     }
 
     pub(crate) fn id_provider(&self) -> &IdProvider {

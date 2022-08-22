@@ -166,7 +166,10 @@ fn test_erc20() {
             args: args![Workspace(b"foo_bucket")],
         },
     ]);
-    eprintln!("{:?}", result);
+    for log in result.logs {
+        eprintln!("LOG: {}", log);
+    }
+    eprintln!("{:?}", result.execution_results);
 
     // TODO: commit and test the final state
 }

@@ -28,7 +28,7 @@ use std::{
 use borsh::de::BorshDeserialize;
 use tari_common_types::types::{PrivateKey, PublicKey, Signature};
 use tari_dan_engine::instruction::{Instruction, Transaction};
-use tari_template_lib::Hash;
+use tari_template_lib::{args::Arg, Hash};
 use tari_utilities::ByteArray;
 
 use crate::rpc::{self as grpc, SubmitTransactionRequest};
@@ -83,7 +83,12 @@ impl TryFrom<grpc::Instruction> for Instruction {
     fn try_from(request: grpc::Instruction) -> Result<Self, Self::Error> {
         let package_address =
             Hash::deserialize(&mut &request.package_address[..]).map_err(|_| "invalid package_addresss")?;
-        let args = request.args.clone();
+        let args = request
+            .args
+            .iter()
+            .map(|b| Arg::from_bytes(b))
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(|e| e.to_string())?;
         let instruction = match request.instruction_type {
             // function
             0 => {
@@ -144,7 +149,7 @@ impl From<Instruction> for grpc::Instruction {
                 result.package_address = package_address.to_vec();
                 result.template = template;
                 result.function = function;
-                result.args = args;
+                result.args = args.into_iter().map(|a| a.to_bytes()).collect();
             },
             Instruction::CallMethod {
                 method,
@@ -156,8 +161,9 @@ impl From<Instruction> for grpc::Instruction {
                 result.package_address = package_address.to_vec();
                 result.component_address = component_address.to_vec();
                 result.method = method;
-                result.args = args;
+                result.args = args.into_iter().map(|a| a.to_bytes()).collect();
             },
+            _ => todo!(),
         }
 
         result

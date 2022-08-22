@@ -9,7 +9,7 @@ pub mod state;
 pub mod wasm;
 
 pub mod crypto;
-mod hashing;
+pub mod hashing;
 pub mod instruction;
 pub mod packager;
 // mod resource;
