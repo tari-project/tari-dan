@@ -48,7 +48,11 @@ jobs:
           patchelf \
           librsvg2-dev \
           libprotobuf-dev \
-          protobuf-compiler
+          protobuf-compiler \
+          pkg-config \
+          libssl-dev \
+          sqlite3 \
+          libsqlite3-dev
       - name: cargo fmt
         uses: actions-rs/cargo@v1
         with:
@@ -90,17 +94,16 @@ jobs:
           patchelf \
           librsvg2-dev \
           libprotobuf-dev \
-          protobuf-compiler
+          protobuf-compiler \
+          pkg-config \
+          libssl-dev \
+          sqlite3 \
+          libsqlite3-dev
       - name: cargo check
         uses: actions-rs/cargo@v1
         with:
           command: check
           args: --release --all-targets
-      - name: cargo check ffi separately
-        uses: actions-rs/cargo@v1
-        with:
-          command: check
-          args: --release --package tari_wallet_ffi
   build-stable:
     name: check stable
     runs-on: [ self-hosted, ubuntu18.04-high-cpu ]
@@ -128,7 +131,11 @@ jobs:
           patchelf \
           librsvg2-dev \
           libprotobuf-dev \
-          protobuf-compiler
+          protobuf-compiler\
+          pkg-config \
+          libssl-dev \
+          sqlite3 \
+          libsqlite3-dev
       - name: rustup show
         run: |
           rustup show
@@ -181,7 +188,11 @@ jobs:
           libprotobuf-dev \
           protobuf-compiler \
           pkg-config \
-          libssl-dev
+          libssl-dev \
+          sqlite3 \
+          libsqlite3-dev
+      - name: wasm target install
+        run: rustup target add wasm32-unknown-unknown
       - name: cargo test compile
         uses: actions-rs/cargo@v1
         with:
