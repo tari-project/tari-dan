@@ -31,11 +31,11 @@ use crate::{
 // TODO: perhaps rename to ChainBusinessLogic
 // One per asset, per network
 #[async_trait]
-pub trait ChainStorageService<TPayload: Payload, TAddr: NodeAddressable> {
+pub trait ChainStorageService<TAddr: NodeAddressable> {
     async fn get_metadata(&self) -> Result<SidechainMetadata, StorageError>;
     async fn add_node<TUnitOfWork: ChainDbUnitOfWork>(
         &self,
-        node: &HotStuffTreeNode<TPayload, TAddr>,
+        node: &HotStuffTreeNode<TAddr>,
         db: TUnitOfWork,
     ) -> Result<(), StorageError>;
 }

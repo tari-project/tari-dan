@@ -20,7 +20,9 @@
 // WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 // USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use std::{convert::TryFrom, fmt::Debug, hash::Hash};
+use std::{cmp::Ordering, convert::TryFrom, fmt::Debug, hash::Hash, ops::Add};
+
+use tari_common_types::types::FixedHash;
 
 mod asset_definition;
 mod base_layer_metadata;
@@ -52,7 +54,7 @@ pub use hot_stuff_message::HotStuffMessage;
 pub use hot_stuff_tree_node::HotStuffTreeNode;
 pub use instruction_set::InstructionSet;
 pub use node::Node;
-pub use payload::Payload;
+pub use payload::{Payload, PayloadId};
 pub use quorum_certificate::QuorumCertificate;
 pub use sidechain_block::SideChainBlock;
 pub use sidechain_metadata::SidechainMetadata;
@@ -60,6 +62,59 @@ pub use tari_dan_payload::{CheckpointData, TariDanPayload};
 pub use tree_node_hash::TreeNodeHash;
 pub use view::View;
 pub use view_id::ViewId;
+
+#[derive(Copy, Clone, Debug, Eq, PartialEq, Hash)]
+pub struct ShardId(pub u64);
+
+impl ShardId {
+    fn to_le_bytes(&self) -> [u8; 8] {
+        self.0.to_le_bytes()
+    }
+}
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
+pub struct NodeHeight(pub u64);
+
+impl NodeHeight {
+    fn to_le_bytes(&self) -> [u8; 8] {
+        self.0.to_le_bytes()
+    }
+}
+
+impl Add for NodeHeight {
+    type Output = NodeHeight;
+
+    fn add(self, rhs: Self) -> Self::Output {
+        self.0 + rhs.0
+    }
+}
+
+impl PartialOrd for NodeHeight {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        self.0.partial_cmp(&other.0)
+    }
+}
+
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
+pub struct Epoch(pub u64);
+
+impl Epoch {
+    fn to_le_bytes(&self) -> [u8; 8] {
+        self.0.to_le_bytes()
+    }
+}
+
+pub enum SubstateAvailablity {
+    DoesNotExist,
+    Created { data_hash: FixedHash },
+    Destroyed { data_hash: FixedHash },
+}
+
+pub struct ObjectId(u32);
+
+pub struct ObjectPledge {
+    object_id: ObjectId,
+    availability: SubstateAvailablity,
+}
 
 // TODO: encapsulate
 pub struct InstructionCaller {

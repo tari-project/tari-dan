@@ -20,7 +20,7 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use std::fmt::Debug;
+use std::{convert::TryFrom, fmt::Debug};
 
 use tari_common_types::types::FixedHash;
 
@@ -29,10 +29,28 @@ use crate::models::ConsensusHash;
 // TODO: Rename to Command - most of the hotstuff docs refers to this as command
 pub trait Payload: Debug + Clone + Send + Sync + ConsensusHash {
     fn involved_shards(&self) -> &[u32];
+    fn to_id(&self) -> PayloadId {
+        PayloadId::new(FixedHash::try_from(self.consensus_hash().to_vec()).unwrap())
+    }
 }
 
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
 pub struct PayloadId {
     id: FixedHash,
+}
+
+impl PayloadId {
+    pub fn new(id: FixedHash) -> Self {
+        Self { id }
+    }
+
+    pub fn zero() -> Self {
+        Self { id: FixedHash::zero() }
+    }
+
+    pub fn as_slice(&self) -> &[u8] {
+        self.id.as_slice()
+    }
 }
 
 // impl Payload for &str {

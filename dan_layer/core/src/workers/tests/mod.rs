@@ -17,12 +17,17 @@ use tokio::{
 use crate::{
     models::{
         Committee,
+        Epoch,
         HotStuffMessage,
         HotStuffMessageType,
         HotStuffMessageType::Commit,
         HotStuffTreeNode,
+        NodeHeight,
+        ObjectPledge,
         Payload,
+        PayloadId,
         QuorumCertificate,
+        ShardId,
         TariDanPayload,
         TreeNodeHash,
         ValidatorSignature,
@@ -31,16 +36,26 @@ use crate::{
     services::infrastructure_services::NodeAddressable,
 };
 
+pub trait Consensus<TPayload: Payload> {
+    fn execute_transaction(
+        &mut self,
+        payload: TPayload,
+        inputs: Vec<ObjectPledge>,
+        outputs: Vec<ObjectPledge>,
+    ) -> Result<(), String>;
+}
+
 pub struct ShardDb<TAddr: NodeAddressable, TPayload: Payload> {
     // replica data
-    shard_high_qcs: HashMap<u32, QuorumCertificate>,
+    shard_high_qcs: HashMap<ShardId, QuorumCertificate>,
     // pace maker data
-    shard_leaf_nodes: HashMap<u32, (TreeNodeHash, u32)>,
-    last_voted_heights: HashMap<u32, u32>,
-    lock_node_and_heights: HashMap<u32, (TreeNodeHash, u32)>,
-    votes: HashMap<(TreeNodeHash, u32), Vec<(TAddr, ValidatorSignature)>>,
-    nodes: HashMap<TreeNodeHash, HotStuffTreeNode<TPayload, TAddr>>,
-    last_executed_height: HashMap<u32, u32>,
+    shard_leaf_nodes: HashMap<ShardId, (TreeNodeHash, NodeHeight)>,
+    last_voted_heights: HashMap<ShardId, NodeHeight>,
+    lock_node_and_heights: HashMap<ShardId, (TreeNodeHash, NodeHeight)>,
+    votes: HashMap<(TreeNodeHash, ShardId), Vec<(TAddr, ValidatorSignature)>>,
+    nodes: HashMap<TreeNodeHash, HotStuffTreeNode<TAddr>>,
+    last_executed_height: HashMap<ShardId, NodeHeight>,
+    payloads: HashMap<PayloadId, TPayload>,
 }
 
 impl<TAddr: NodeAddressable, TPayload: Payload> ShardDb<TAddr, TPayload> {
@@ -53,14 +68,15 @@ impl<TAddr: NodeAddressable, TPayload: Payload> ShardDb<TAddr, TPayload> {
             votes: HashMap::new(),
             nodes: HashMap::new(),
             last_executed_height: HashMap::new(),
+            payloads: HashMap::new(),
         }
     }
 
-    pub fn get_high_qc_for(&self, shard: u32) -> QuorumCertificate {
+    pub fn get_high_qc_for(&self, shard: ShardId) -> QuorumCertificate {
         if let Some(qc) = self.shard_high_qcs.get(&shard) {
             qc.clone()
         } else {
-            QuorumCertificate::genesis(shard)
+            QuorumCertificate::genesis()
         }
     }
 
@@ -75,7 +91,7 @@ impl<TAddr: NodeAddressable, TPayload: Payload> ShardDb<TAddr, TPayload> {
         }
     }
 
-    pub fn get_leaf_node(&self, shard: u32) -> (TreeNodeHash, u32) {
+    pub fn get_leaf_node(&self, shard: ShardId) -> (TreeNodeHash, NodeHeight) {
         if let Some(leaf) = self.shard_leaf_nodes.get(&shard) {
             leaf.clone()
         } else {
@@ -83,35 +99,35 @@ impl<TAddr: NodeAddressable, TPayload: Payload> ShardDb<TAddr, TPayload> {
         }
     }
 
-    pub fn update_leaf_node(&mut self, shard: u32, node: TreeNodeHash, height: u32) -> Result<(), String> {
+    pub fn update_leaf_node(&mut self, shard: ShardId, node: TreeNodeHash, height: NodeHeight) -> Result<(), String> {
         let leaf = self.shard_leaf_nodes.entry(shard).or_insert((node, height));
         *leaf = (node, height);
         Ok(())
     }
 
-    pub fn get_last_voted_height(&self, shard: u32) -> u32 {
-        *self.last_voted_heights.get(&shard).unwrap_or(&0)
+    pub fn get_last_voted_height(&self, shard: ShardId) -> NodeHeight {
+        self.last_voted_heights.get(&shard).map(|e| *e).unwrap_or(NodeHeight(0))
     }
 
-    pub fn set_last_voted_height(&mut self, shard: u32, height: u32) {
+    pub fn set_last_voted_height(&mut self, shard: ShardId, height: NodeHeight) {
         let entry = self.last_voted_heights.entry(shard).or_insert(height);
         *entry = height;
     }
 
-    pub fn get_locked_node_hash_and_height(&self, shard: u32) -> (TreeNodeHash, u32) {
+    pub fn get_locked_node_hash_and_height(&self, shard: ShardId) -> (TreeNodeHash, NodeHeight) {
         self.lock_node_and_heights
             .get(&shard)
-            .unwrap_or(&(TreeNodeHash::zero(), 0))
+            .unwrap_or(&(TreeNodeHash::zero(), NodeHeight(0)))
             .clone()
     }
 
-    pub fn set_locked(&mut self, shard: u32, node_hash: TreeNodeHash, node_height: u32) {
+    pub fn set_locked(&mut self, shard: ShardId, node_hash: TreeNodeHash, node_height: NodeHeight) {
         self.lock_node_and_heights
             .entry(shard)
             .and_modify(|e| *e = (node_hash, node_height));
     }
 
-    pub fn has_vote_for(&self, from: &TAddr, node_hash: TreeNodeHash, shard: u32) -> bool {
+    pub fn has_vote_for(&self, from: &TAddr, node_hash: TreeNodeHash, shard: ShardId) -> bool {
         if let Some(sigs) = self.votes.get(&(node_hash, shard)) {
             sigs.iter().any(|(f, _)| f == from)
         } else {
@@ -123,7 +139,7 @@ impl<TAddr: NodeAddressable, TPayload: Payload> ShardDb<TAddr, TPayload> {
         &mut self,
         from: TAddr,
         node_hash: TreeNodeHash,
-        shard: u32,
+        shard: ShardId,
         signature: ValidatorSignature,
     ) -> usize {
         let entry = self.votes.entry((node_hash, shard)).or_insert(vec![]);
@@ -131,7 +147,7 @@ impl<TAddr: NodeAddressable, TPayload: Payload> ShardDb<TAddr, TPayload> {
         entry.len()
     }
 
-    pub fn get_signatures_for(&self, node_hash: TreeNodeHash, shard: u32) -> Vec<(TAddr, ValidatorSignature)> {
+    pub fn get_signatures_for(&self, node_hash: TreeNodeHash, shard: ShardId) -> Vec<(TAddr, ValidatorSignature)> {
         if let Some(sigs) = self.votes.get(&(node_hash, shard)) {
             sigs.clone()
         } else {
@@ -139,34 +155,44 @@ impl<TAddr: NodeAddressable, TPayload: Payload> ShardDb<TAddr, TPayload> {
         }
     }
 
-    pub fn save_node(&mut self, node: HotStuffTreeNode<TPayload, TAddr>) {
+    pub fn save_node(&mut self, node: HotStuffTreeNode<TAddr>) {
         self.nodes.entry(node.hash().clone()).or_insert(node.clone());
     }
 
-    pub fn node(&self, node_hash: &TreeNodeHash) -> Option<&HotStuffTreeNode<TPayload, TAddr>> {
+    pub fn node(&self, node_hash: &TreeNodeHash) -> Option<&HotStuffTreeNode<TAddr>> {
         self.nodes.get(node_hash)
     }
 
-    pub fn set_last_executed_height(&mut self, shard: u32, height: u32) {
+    pub fn set_last_executed_height(&mut self, shard: ShardId, height: NodeHeight) {
         self.last_executed_height.entry(shard).and_modify(|e| *e = height);
     }
 
-    pub fn get_last_executed_height(&self, shard: u32) -> u32 {
-        *self.last_executed_height.get(&shard).unwrap_or(&0)
+    pub fn get_last_executed_height(&self, shard: ShardId) -> NodeHeight {
+        self.last_executed_height
+            .get(&shard)
+            .map(|s| *s)
+            .unwrap_or(NodeHeight(0))
     }
 }
 
 #[derive(Debug, Clone)]
 pub struct VoteMessage {
-    pub main_node_hash: TreeNodeHash,
-    pub shard: u32,
-    pub other_shard_nodes: HashMap<u32, TreeNodeHash>,
+    pub local_node_hash: TreeNodeHash,
+    pub shard: ShardId,
+    pub other_shard_nodes: HashMap<ShardId, TreeNodeHash>,
     pub signature: ValidatorSignature,
 }
 
 pub trait LeaderStrategy<TAddr: NodeAddressable, TPayload> {
-    fn calculate_leader(&self, committee: &Committee<TAddr>, payload: Option<&TPayload>, shard: u32) -> usize;
-    fn is_leader(&self, node: &TAddr, committee: &Committee<TAddr>, payload: Option<&TPayload>, shard: u32) -> bool {
+    fn calculate_leader(&self, committee: &Committee<TAddr>, payload: PayloadId, shard: ShardId, round: u32) -> u32;
+    fn is_leader(
+        &self,
+        node: &TAddr,
+        committee: &Committee<TAddr>,
+        payload: PayloadId,
+        shard: ShardId,
+        round: u32,
+    ) -> bool {
         let position = self.calculate_leader(committee, payload, shard);
         if let Some(index) = committee.members.iter().position(|m| m == node) {
             position == index
@@ -178,10 +204,11 @@ pub trait LeaderStrategy<TAddr: NodeAddressable, TPayload> {
     fn get_leader<'a, 'b>(
         &'a self,
         committee: &'b Committee<TAddr>,
-        payload: Option<&TPayload>,
-        shard: u32,
+        payload: PayloadId,
+        shard: ShardId,
+        round: u32,
     ) -> &'b TAddr {
-        let index = self.calculate_leader(committee, payload, shard);
+        let index = self.calculate_leader(committee, payload, shard, round);
         committee.members.get(index).unwrap()
     }
 }
@@ -189,33 +216,41 @@ pub trait LeaderStrategy<TAddr: NodeAddressable, TPayload> {
 pub struct AlwaysFirstLeader {}
 
 impl<TAddr: NodeAddressable, TPayload> LeaderStrategy<TAddr, TPayload> for AlwaysFirstLeader {
-    fn calculate_leader(&self, committee: &Committee<TAddr>, payload: Option<&TPayload>, shard: u32) -> usize {
+    fn calculate_leader(&self, committee: &Committee<TAddr>, payload: PayloadId, shard: ShardId, round: u32) -> u32 {
         0
     }
 }
 
 pub trait EpochManager<TAddr: NodeAddressable> {
-    fn current_epoch(&self) -> u32;
-    fn is_epoch_valid(&self, epoch: u32) -> bool;
-    fn get_committees(&self, epoch: u32, shards: &[u32]) -> Result<Vec<(u32, Option<Committee<TAddr>>)>, String>;
-    fn get_committee(&self, epoch: u32, shard: u32) -> Result<Committee<TAddr>, String>;
+    fn current_epoch(&self) -> Epoch;
+    fn is_epoch_valid(&self, epoch: Epoch) -> bool;
+    fn get_committees(
+        &self,
+        epoch: Epoch,
+        shards: &[ShardId],
+    ) -> Result<Vec<(ShardId, Option<Committee<TAddr>>)>, String>;
+    fn get_committee(&self, epoch: Epoch, shard: ShardId) -> Result<Committee<TAddr>, String>;
 }
 
 pub struct RangeEpochManager<TAddr: NodeAddressable> {
-    current_epoch: u32,
-    epochs: HashMap<u32, Vec<(Range<u32>, Committee<TAddr>)>>,
+    current_epoch: Epoch,
+    epochs: HashMap<Epoch, Vec<(Range<ShardId>, Committee<TAddr>)>>,
 }
 
 impl<TAddr: NodeAddressable> EpochManager<TAddr> for RangeEpochManager<TAddr> {
-    fn current_epoch(&self) -> u32 {
+    fn current_epoch(&self) -> Epoch {
         self.current_epoch
     }
 
-    fn is_epoch_valid(&self, epoch: u32) -> bool {
+    fn is_epoch_valid(&self, epoch: Epoch) -> bool {
         self.current_epoch == epoch
     }
 
-    fn get_committees(&self, epoch: u32, shards: &[u32]) -> Result<Vec<(u32, Option<Committee<TAddr>>)>, String> {
+    fn get_committees(
+        &self,
+        epoch: Epoch,
+        shards: &[ShardId],
+    ) -> Result<Vec<(ShardId, Option<Committee<TAddr>>)>, String> {
         let epoch = self.epochs.get(&epoch).ok_or("No value for that epoch".to_string())?;
         let mut result = vec![];
         for shard in shards {
@@ -232,7 +267,7 @@ impl<TAddr: NodeAddressable> EpochManager<TAddr> for RangeEpochManager<TAddr> {
         Ok(result)
     }
 
-    fn get_committee(&self, epoch: u32, shard: u32) -> Result<Committee<TAddr>, String> {
+    fn get_committee(&self, epoch: Epoch, shard: ShardId) -> Result<Committee<TAddr>, String> {
         let epoch = self.epochs.get(&epoch).ok_or("No value for that epoch".to_string())?;
         for (range, committee) in epoch {
             if range.includes(shard) {
@@ -252,7 +287,7 @@ pub struct HotStuffWaiter<
     identity: TAddr,
     leader_strategy: TLeaderStrategy,
     epoch_manager: TEpochManager,
-    rx_new: Receiver<TPayload>,
+    rx_new: Receiver<(TPayload, ShardId)>,
     rx_hs_message: Receiver<(TAddr, HotStuffMessage<TPayload, TAddr>)>,
     rx_votes: Receiver<(TAddr, VoteMessage)>,
     tx_leader: Sender<HotStuffMessage<TPayload, TAddr>>,
@@ -343,10 +378,10 @@ impl<
     }
 
     // pacemaker
-    async fn on_beat(&mut self, shard: u32, payload: Option<TPayload>) -> Result<(), String> {
+    async fn on_beat(&mut self, shard: ShardId, payload: PayloadId) -> Result<(), String> {
         // TODO: the leader is only known after the leaf is determines
 
-        if self.is_leader(payload.as_ref(), shard) {
+        if self.is_leader(payload, shard) {
             // if self.current_payload.is_none() {
             // self.current_payload = payload.clone();
             let leaf = self.shard_db.get_leaf_node(shard);
@@ -361,75 +396,89 @@ impl<
     async fn on_propose(
         &mut self,
         leaf: TreeNodeHash,
-        leaf_height: u32,
-        shard: u32,
-        payload: Option<TPayload>,
-    ) -> Result<HotStuffTreeNode<TPayload, TAddr>, String> {
+        leaf_height: NodeHeight,
+        shard: ShardId,
+        payload: PayloadId,
+    ) -> Result<HotStuffTreeNode<TAddr>, String> {
         dbg!("on propose");
         let qc = self.shard_db.get_high_qc_for(shard);
         // TODO: Should the committee members carry on being included until 4 deep? so that they are committed?
-        let members;
-        let epoch;
-        let involved_shards;
+        // let members;
+        // let epoch;
+        // let involved_shards;
 
-        if let Some(payload) = &payload {
-            epoch = self.epoch_manager.current_epoch();
-            involved_shards = payload.involved_shards().to_vec();
-            members = self
-                .epoch_manager
-                .get_committees(epoch, payload.involved_shards())?
-                .into_iter()
-                .map(|(shard, committee)| committee.map(|c| c.members).unwrap_or_default())
-                .flatten()
-                .collect();
-        } else {
-            epoch = qc.epoch();
-            involved_shards = qc.involved_shards().to_vec();
-            // Continue the epoch and committee from the QC.
-            members = self
-                .epoch_manager
-                .get_committees(qc.epoch(), qc.involved_shards())?
-                .into_iter()
-                .map(|(shard, committee)| committee.map(|c| c.members).unwrap_or_default())
-                .flatten()
-                .collect();
-        }
+        todo!("Need to put the correct payload in here")
 
-        let leaf_node = self.create_leaf(
-            leaf,
-            payload,
-            qc,
-            epoch,
-            self.identity.clone(),
-            involved_shards,
-            leaf_height + 1,
-        );
-        self.shard_db.save_node(leaf_node.clone());
-        dbg!(&leaf_node);
+        // if let Some(payload) = &payload {
+        //     epoch = self.epoch_manager.current_epoch();
+        //     involved_shards = payload.involved_shards().to_vec();
+        //     members = self
+        //         .epoch_manager
+        //         .get_committees(epoch, payload.involved_shards())?
+        //         .into_iter()
+        //         .map(|(shard, committee)| committee.map(|c| c.members).unwrap_or_default())
+        //         .flatten()
+        //         .collect();
+        // } else {
+        //     epoch = qc.epoch();
+        //     involved_shards = qc.involved_shards().to_vec();
+        //     Continue the epoch and committee from the QC.
+        // members = self
+        //     .epoch_manager
+        //     .get_committees(qc.epoch(), qc.involved_shards())?
+        //     .into_iter()
+        //     .map(|(shard, committee)| committee.map(|c| c.members).unwrap_or_default())
+        //     .flatten()
+        //     .collect();
+        // }
 
-        self.tx_broadcast
-            .send((HotStuffMessage::generic(leaf_node.clone(), shard), members))
-            .await
-            .unwrap();
-        Ok(leaf_node)
+        // let leaf_node = self.create_leaf(
+        //     leaf,
+        //     payload,
+        //     qc,
+        //     epoch,
+        //     self.identity.clone(),
+        //     involved_shards,
+        //     NodeHeight(leaf_height.0 + 1),
+        // );
+        // self.shard_db.save_node(leaf_node.clone());
+        // dbg!(&leaf_node);
+        //
+        // self.tx_broadcast
+        //     .send((HotStuffMessage::generic(leaf_node.clone(), shard), members))
+        //     .await
+        //     .unwrap();
+        // Ok(leaf_node)
     }
 
     fn create_leaf(
         &self,
         parent: TreeNodeHash,
-        payload: Option<TPayload>,
+        shard: ShardId,
+        payload: PayloadId,
         qc: QuorumCertificate,
-        epoch: u32,
+        epoch: Epoch,
         leader: TAddr,
-        involved_shards: Vec<u32>,
-        height: u32,
-    ) -> HotStuffTreeNode<TPayload, TAddr> {
-        HotStuffTreeNode::new(parent, payload, height, qc.shard(), leader, involved_shards, epoch, qc)
+        height: NodeHeight,
+        payload_height: NodeHeight,
+        local_pledges: Vec<ObjectPledge>,
+    ) -> HotStuffTreeNode<TAddr> {
+        HotStuffTreeNode::new(
+            parent,
+            shard,
+            height,
+            payload,
+            payload_height,
+            local_pledges,
+            epoch,
+            leader,
+            qc,
+        )
     }
 
-    fn is_leader(&self, payload: Option<&TPayload>, shard: u32) -> bool {
+    fn is_leader(&self, payload: PayloadId, shard: ShardId) -> bool {
         self.leader_strategy
-            .is_leader(&self.identity, &self.committee, payload, shard)
+            .is_leader(&self.identity, &self.committee, payload, shard, 0)
     }
 
     fn validate_from_committee(&self, from: &TAddr) -> Result<(), String> {
@@ -447,80 +496,84 @@ impl<
         Ok(())
     }
 
-    async fn on_next_sync_view(&mut self, payload: TPayload) -> Result<(), String> {
+    async fn on_next_sync_view(&mut self, payload: TPayload, shard: ShardId) -> Result<(), String> {
         dbg!("new payload received");
 
         // get state
         let high_qc = self.get_highest_qc(0);
         // send to leader
 
-        let new_view = HotStuffMessage::new_view(high_qc, 1, Some(payload));
+        let new_view = HotStuffMessage::new_view(high_qc, shard, Some(payload));
 
         self.tx_leader.send(new_view).await.map_err(|e| e.to_string())?;
         Ok(())
     }
 
-    async fn update_nodes(&mut self, node: HotStuffTreeNode<TPayload, TAddr>, shard: u32) -> Result<(), String> {
+    async fn update_nodes(&mut self, node: HotStuffTreeNode<TAddr>, shard: ShardId) -> Result<(), String> {
         dbg!("Update nodes");
-        if node.justify().node_hash() == &TreeNodeHash::zero() {
+        if node.justify().local_node_hash() == &TreeNodeHash::zero() {
             dbg!("Node is parented to genesis, no need to update");
             return Ok(());
         }
         self.shard_db.update_high_qc(node.justify().clone());
         let b_two = self
             .shard_db
-            .node(node.justify().node_hash())
+            .node(&node.justify().local_node_hash())
             .ok_or("No node b2")?
             .clone();
 
-        if b_two.justify().node_hash() == &TreeNodeHash::zero() {
+        if b_two.justify().local_node_hash() == &TreeNodeHash::zero() {
             dbg!("b one is genesis, nothing to do");
             return Ok(());
         }
         dbg!(&b_two);
         let b_one = self
             .shard_db
-            .node(b_two.justify().node_hash())
+            .node(&b_two.justify().local_node_hash())
             .ok_or("No node b1")?
             .clone();
 
         dbg!(&b_one);
         let (b_lock, b_lock_height) = self.shard_db.get_locked_node_hash_and_height(shard);
-        if b_one.height() > b_lock_height {
+        if b_one.height().0 > b_lock_height.0 {
             // commit
             dbg!("Commiting height", b_one.height());
             self.shard_db.set_locked(shard, b_one.hash().clone(), b_one.height());
         }
-        if b_one.justify().node_hash() == &TreeNodeHash::zero() {
-            dbg!("b is genesis, nothing to do");
-            return Ok(());
-        }
-        let b = self
-            .shard_db
-            .node(b_one.justify().node_hash())
-            .ok_or("No node b")?
-            .clone();
-        dbg!(&b);
-        if b_two.parent() == b_one.hash() && b_one.parent() == b.hash() {
+        // if b_one.justify().local_node_hash() == &TreeNodeHash::zero() {
+        //     dbg!("b is genesis, nothing to do");
+        //     return Ok(());
+        // }
+        // let b = self
+        //     .shard_db
+        //     .node(b_one.justify().node_hash())
+        //     .ok_or("No node b")?
+        //     .clone();
+        // dbg!(&b);
+        if node.justify().payload_height() == 4 {
             // decide
-            dbg!("Deciding height:", b.height());
-            self.on_commit(b.clone(), shard).await?;
-            self.shard_db.set_last_executed_height(shard, b.height());
+            dbg!("Deciding height:", node.height());
+            self.on_commit(node, shard).await?;
         }
         Ok(())
     }
 
     #[async_recursion]
-    async fn on_commit(&mut self, node: HotStuffTreeNode<TPayload, TAddr>, shard: u32) -> Result<(), String> {
+    async fn on_commit(&mut self, node: HotStuffTreeNode<TAddr>, shard: ShardId) -> Result<(), String> {
         if self.shard_db.get_last_executed_height(shard) < node.height() {
             if node.parent() != &TreeNodeHash::zero() {
                 let parent = self.shard_db.node(node.parent()).ok_or("No parent node")?;
                 dbg!("Committing parent");
                 self.on_commit(parent.clone(), shard).await?;
             }
-            if let Some(payload) = node.payload() {
+            if node.justify().payload_height() == 4 {
+                let payload = self
+                    .shard_db
+                    .get_payload(node.justify().payload_id())
+                    .ok_or("No payload")?;
                 self.execute(payload.clone()).await?;
             }
+            self.shard_db.set_last_executed_height(shard, node.height());
         }
         Ok(())
     }
@@ -537,45 +590,46 @@ impl<
         from: TAddr,
         message: HotStuffMessage<TPayload, TAddr>,
     ) -> Result<(), String> {
-        if let Some(node) = message.node() {
-            // TODO: validate message from leader
-            let shard = message.shard();
-            self.shard_db.save_node(node.clone());
-            let v_height = self.shard_db.get_last_voted_height(shard);
-            let (locked_node, locked_height) = self.shard_db.get_locked_node_hash_and_height(shard);
-            // TODO: Change parent check to allow a chain?
-            if node.height() > v_height &&
-                (node.parent() == &locked_node || node.justify().node_height() > locked_height)
-            {
-                dbg!("Can vote on the message");
-                self.shard_db.set_last_voted_height(shard, node.height());
-                let signature = ValidatorSignature::from_bytes(&self.sign(node.hash(), shard));
-                self.tx_vote_message
-                    .send((
-                        VoteMessage {
-                            main_node_hash: node.hash().clone(),
-                            shard,
-                            other_shard_nodes: Default::default(),
-                            signature,
-                        },
-                        // TODO: validate the leader instead of sending to from
-                        from, // self.get_leader(),
-                    ))
-                    .await
-                    .map_err(|e| e.to_string())?;
-            } else {
-                dbg!("Invalid proposal");
-                dbg!("ignoring");
-            }
-            self.update_nodes(node.clone(), shard).await?;
-        } else {
-            dbg!("No node attached");
-        }
-        // self.update(message);
-        Ok(())
+        todo!("Need to correct votes")
+        // if let Some(node) = message.node() {
+        //     // TODO: validate message from leader
+        //     let shard = message.shard();
+        //     self.shard_db.save_node(node.clone());
+        //     let v_height = self.shard_db.get_last_voted_height(shard);
+        //     let (locked_node, locked_height) = self.shard_db.get_locked_node_hash_and_height(shard);
+        //     // TODO: Change parent check to allow a chain?
+        //     if node.height() > v_height &&
+        //         (node.parent() == &locked_node || node.justify().node_height() > locked_height)
+        //     {
+        //         dbg!("Can vote on the message");
+        //         self.shard_db.set_last_voted_height(shard, node.height());
+        //         let signature = ValidatorSignature::from_bytes(&self.sign(node.hash(), shard));
+        //         self.tx_vote_message
+        //             .send((
+        //                 VoteMessage {
+        //                     main_node_hash: node.hash().clone(),
+        //                     shard,
+        //                     other_shard_nodes: Default::default(),
+        //                     signature,
+        //                 },
+        //                 // TODO: validate the leader instead of sending to from
+        //                 from, // self.get_leader(),
+        //             ))
+        //             .await
+        //             .map_err(|e| e.to_string())?;
+        //     } else {
+        //         dbg!("Invalid proposal");
+        //         dbg!("ignoring");
+        //     }
+        //     self.update_nodes(node.clone(), shard).await?;
+        // } else {
+        //     dbg!("No node attached");
+        // }
+        // // self.update(message);
+        // Ok(())
     }
 
-    fn sign(&self, node_hash: &TreeNodeHash, shard: u32) -> Vec<u8> {
+    fn sign(&self, node_hash: &TreeNodeHash, shard: ShardId) -> Vec<u8> {
         // todo!();
         vec![]
     }
@@ -583,17 +637,20 @@ impl<
     // The leader receives votes from his local shard, and forwards it to all other shards
     async fn on_receive_vote(&mut self, from: TAddr, msg: VoteMessage) -> Result<(), String> {
         // TODO: Only do this if you're the leader
-        if self.shard_db.has_vote_for(&from, msg.node_hash.clone(), msg.shard) {
+        if self
+            .shard_db
+            .has_vote_for(&from, msg.local_node_hash.clone(), msg.shard)
+        {
             return Ok(());
         }
 
         let node = self
             .shard_db
-            .node(&msg.main_node_hash)
+            .node(&msg.local_node_hash)
             .ok_or("Could not find node, was it saved previously?".to_string())
             .expect("should have been saved?");
 
-        if node.leader() != self.identity {
+        if node.proposed_by() != &self.identity {
             return Err("I am not the leader for this node".to_string());
         }
 
@@ -605,24 +662,26 @@ impl<
 
         let total_votes = self
             .shard_db
-            .save_vote_for(from, msg.node_hash.clone(), msg.shard, msg.signature);
+            .save_vote_for(from, msg.local_node_hash.clone(), msg.shard, msg.signature);
         // Check for consensus
         dbg!(total_votes);
         if total_votes >= valid_committee.consensus_threshold() {
-            let signatures = self.shard_db.get_signatures_for(msg.node_hash.clone(), msg.shard);
-
-            let qc = QuorumCertificate::new(
-                HotStuffMessageType::Generic,
-                node.height(),
-                msg.node_hash,
-                msg.shard,
-                node.epoch(),
-                node.involved_shards(),
-                signatures.iter().map(|(_, sig)| sig.clone()).collect(),
-            );
-            self.shard_db.update_high_qc(qc);
-            // Should be the pace maker actually
-            self.on_beat(msg.shard, None).await?;
+            todo!("Need to check that they all voted for the same other nodes");
+            // let signatures = self.shard_db.get_signatures_for(msg.node_hash.clone(), msg.shard);
+            //
+            // let qc = QuorumCertificate::new(
+            //     node.payload(),
+            //     node.payload_height(),
+            //     node.hash(),
+            //     node.height(),
+            //     node.shard(),
+            //     node.epoch(),
+            //     node.involved_shards(),
+            //     signatures.iter().map(|(_, sig)| sig.clone()).collect(),
+            // );
+            // self.shard_db.update_high_qc(qc);
+            // // Should be the pace maker actually
+            // self.on_beat(msg.shard, None).await?;
         }
         Ok(())
     }
@@ -635,8 +694,8 @@ impl<
         loop {
             tokio::select! {
                 msg = self.rx_new.recv() => {
-                    if let Some(p) = msg {
-                        self.on_next_sync_view(p.clone()).await?;
+                    if let Some((p, shard)) = msg {
+                        self.on_next_sync_view(p.clone(), shard).await?;
                         // self.on_beat(0, msg);
                         // TODO: Start timer for receiving proposal
                     } else {
@@ -651,7 +710,7 @@ impl<
                                 if let Some(payload) = msg.new_view_payload() {
                                     // There should always be a payload, otherwise the leader
                                     // can't be determined
-                                    self.on_beat(0, Some(payload.clone())).await;
+                                    self.on_beat(msg.shard(), payload.to_id()).await;
                                 }
                             },
                             HotStuffMessageType::Generic => {

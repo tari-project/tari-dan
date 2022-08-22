@@ -442,14 +442,14 @@ impl ValidatorNodeClientFactory for MockValidatorNodeClientFactory {
 pub struct MockChainStorageService;
 
 #[async_trait]
-impl ChainStorageService<TariDanPayload, CommsPublicKey> for MockChainStorageService {
+impl ChainStorageService<CommsPublicKey> for MockChainStorageService {
     async fn get_metadata(&self) -> Result<SidechainMetadata, StorageError> {
         todo!()
     }
 
     async fn add_node<TUnitOfWork: ChainDbUnitOfWork>(
         &self,
-        _node: &HotStuffTreeNode<TariDanPayload, CommsPublicKey>,
+        _node: &HotStuffTreeNode<CommsPublicKey>,
         _db: TUnitOfWork,
     ) -> Result<(), StorageError> {
         Ok(())

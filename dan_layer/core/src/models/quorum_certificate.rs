@@ -24,78 +24,85 @@ use digest::Digest;
 use tari_crypto::hash::blake2::Blake256;
 
 use crate::{
-    models::{HotStuffMessageType, TreeNodeHash, ValidatorSignature, ViewId},
+    models::{
+        payload::PayloadId,
+        Epoch,
+        HotStuffMessageType,
+        NodeHeight,
+        ObjectPledge,
+        ShardId,
+        TreeNodeHash,
+        ValidatorSignature,
+        ViewId,
+    },
     storage::chain::DbQc,
 };
 
+pub enum QuorumDecision {
+    Accept,
+    Reject,
+}
+
 #[derive(Debug, Clone)]
 pub struct QuorumCertificate {
-    message_type: HotStuffMessageType,
+    payload: PayloadId,
+    payload_height: NodeHeight,
     // Cache the node hash
-    node_hash: TreeNodeHash,
+    local_node_hash: TreeNodeHash,
     // cache the node height
-    node_height: u32,
-    shard: u32,
-    epoch: u32,
-    involved_shards: Vec<u32>,
+    local_node_height: NodeHeight,
+    shard: ShardId,
+    epoch: Epoch,
+    decision: QuorumDecision,
+    other_shard_nodes: Vec<(ShardId, TreeNodeHash, Vec<ObjectPledge>)>,
     signatures: Vec<ValidatorSignature>,
 }
 
 impl QuorumCertificate {
     pub fn new(
-        message_type: HotStuffMessageType,
-        node_height: u32,
-        node_hash: TreeNodeHash,
-        shard: u32,
-        epoch: u32,
-        involved_shards: Vec<u32>,
+        payload: PayloadId,
+        payload_height: NodeHeight,
+        local_node_hash: TreeNodeHash,
+        local_node_height: NodeHeight,
+        shard: ShardId,
+        epoch: Epoch,
+        decision: QuorumDecision,
+        other_shard_nodes: Vec<(ShardId, TreeNodeHash, Vec<ObjectPledge>)>,
         signatures: Vec<ValidatorSignature>,
     ) -> Self {
         Self {
-            message_type,
-            node_hash,
+            payload,
+            payload_height,
+            local_node_hash,
+            local_node_height,
             shard,
             epoch,
-            involved_shards,
-            node_height,
+            decision,
+            other_shard_nodes,
             signatures,
         }
     }
 
     pub fn genesis() -> Self {
         Self {
-            message_type: HotStuffMessageType::Genesis,
-            node_hash: TreeNodeHash::zero(),
-            shard: 0,
-            epoch: 0,
-            node_height: 0,
-            involved_shards: vec![],
+            payload: PayloadId::zero(),
+            payload_height: NodeHeight(0),
+            local_node_hash: TreeNodeHash::zero(),
+            local_node_height: NodeHeight(0),
+            shard: ShardId(0),
+            epoch: Epoch(0),
+            decision: QuorumDecision::Accept,
+            other_shard_nodes: vec![],
             signatures: vec![],
         }
     }
 
-    pub fn shard(&self) -> u32 {
+    pub fn shard(&self) -> ShardId {
         self.shard
     }
 
-    pub fn involved_shards(&self) -> &[u32] {
-        self.involved_shards.as_slice()
-    }
-
-    pub fn epoch(&self) -> u32 {
+    pub fn epoch(&self) -> Epoch {
         self.epoch
-    }
-
-    pub fn node_hash(&self) -> &TreeNodeHash {
-        &self.node_hash
-    }
-
-    pub fn node_height(&self) -> u32 {
-        self.node_height
-    }
-
-    pub fn message_type(&self) -> HotStuffMessageType {
-        self.message_type
     }
 
     pub fn signature(&self) -> &[ValidatorSignature] {
@@ -131,6 +138,34 @@ impl QuorumCertificate {
             result = result.chain((*shard).to_le_bytes());
         }
         result.finalize().to_vec()
+    }
+
+    pub fn payload(&self) -> PayloadId {
+        self.payload
+    }
+
+    pub fn payload_height(&self) -> NodeHeight {
+        self.payload_height
+    }
+
+    pub fn local_node_hash(&self) -> TreeNodeHash {
+        self.local_node_hash
+    }
+
+    pub fn local_node_height(&self) -> NodeHeight {
+        self.local_node_height
+    }
+
+    pub fn decision(&self) -> &QuorumDecision {
+        &self.decision
+    }
+
+    pub fn other_shard_nodes(&self) -> &[(ShardId, TreeNodeHash, Vec<ObjectPledge>)] {
+        &self.other_shard_nodes
+    }
+
+    pub fn signatures(&self) -> &[ValidatorSignature] {
+        &self.signatures
     }
 }
 
