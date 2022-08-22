@@ -32,6 +32,8 @@ use crate::{
 
 pub type BucketId = u32;
 
+pub type AnyBucket = Bucket<()>;
+
 #[derive(Debug, Clone, Decode, Encode)]
 pub struct Bucket<T> {
     id: BucketId,
@@ -43,7 +45,7 @@ impl<T: ResourceDefinition> Bucket<T> {
         let resp: InvokeResult = call_engine(EngineOp::BucketInvoke, &BucketInvokeArg {
             bucket_ref: BucketRef::Bucket(resource_addr),
             action: BucketAction::Create,
-            args: args![],
+            args: invoke_args![],
         })
         .expect("Create bucket returned null");
 
@@ -62,7 +64,7 @@ impl<T: ResourceDefinition> Bucket<T> {
         let resp: InvokeResult = call_engine(EngineOp::BucketInvoke, &BucketInvokeArg {
             bucket_ref: BucketRef::Ref(self.id),
             action: BucketAction::GetResourceAddress,
-            args: args![],
+            args: invoke_args![],
         })
         .expect("Bucket GetResource returned null");
 
@@ -70,7 +72,20 @@ impl<T: ResourceDefinition> Bucket<T> {
             .expect("Bucket GetResource returned invalid resource address")
     }
 
-    pub fn split(self, _amount: Amount) -> (Self, Self) {
-        todo!()
+    pub fn take(&mut self, amount: Amount) -> Self {
+        assert!(!amount.is_zero() && amount.is_positive());
+        let resp: InvokeResult = call_engine(EngineOp::BucketInvoke, &BucketInvokeArg {
+            bucket_ref: BucketRef::Ref(self.id),
+            action: BucketAction::Take,
+            args: invoke_args![amount],
+        })
+        .expect("Bucket Take returned null");
+
+        resp.decode().expect("Bucket Take returned invalid bucket")
+    }
+
+    pub fn split(mut self, amount: Amount) -> (Self, Self) {
+        let new_bucket = self.take(amount);
+        (new_bucket, self)
     }
 }

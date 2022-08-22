@@ -24,7 +24,7 @@ mod amount;
 pub use amount::Amount;
 
 mod bucket;
-pub use bucket::{Bucket, BucketId};
+pub use bucket::{AnyBucket, Bucket, BucketId};
 
 mod component;
 pub use component::*;

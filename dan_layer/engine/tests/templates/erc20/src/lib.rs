@@ -36,6 +36,9 @@ impl ResourceDefinition for Koin {
 
 #[template]
 mod koin_template {
+
+    use super::*;
+
     pub struct KoinVault {
         koins: Vault<Koin>,
     }
@@ -54,21 +57,11 @@ mod koin_template {
         }
 
         pub fn take_koins(&mut self, amount: Amount) -> Bucket<Koin> {
-            assert!(!amount.is_zero());
             self.koins.withdraw(amount)
         }
 
-        // This doesnt work because of the generic on bucket in the input position
-        // Rust bug? generic works in the struct and output tuple....
-        // help: add missing generic argument
-        // 62 |         pub fn deposit(&mut self, bucket: Bucket<T><Koin>) {
-        //    |                                           ~~~~~~~~~
-        // pub fn deposit(&mut self, bucket: Bucket<Koin>) {
-        //     self.koins.deposit(bucket);
-        // }
+        pub fn deposit(&mut self, bucket: Bucket<Koin>) {
+            self.koins.deposit(bucket);
+        }
     }
-
-    // TODO: We have to put this here for now to not break the macro, this is actually ignored anyway and works because
-    // of super::*
-    use super::Koin;
 }

@@ -32,6 +32,7 @@ use tari_template_lib::{
         ResourceAction,
         ResourceRef,
         VaultAction,
+        WorkspaceAction,
     },
     models::{Amount, BucketId, ComponentAddress, ComponentInstance, VaultRef},
 };
@@ -99,7 +100,7 @@ impl RuntimeInterface for RuntimeInterfaceImpl {
         match action {
             ResourceAction::Mint => {
                 let mint_resource: MintResourceArg =
-                    args.first()
+                    args.get(0)
                         .and_then(|r| decode(r).ok())
                         .ok_or_else(|| RuntimeError::InvalidArgument {
                             argument: "MintResourceArg",
@@ -144,21 +145,18 @@ impl RuntimeInterface for RuntimeInterfaceImpl {
                     reason: "Put vault action requires a vault id".to_string(),
                 })?;
                 let bucket_id: BucketId =
-                    args.first()
+                    args.get(0)
                         .and_then(|r| decode(r).ok())
                         .ok_or_else(|| RuntimeError::InvalidArgument {
                             argument: "bucket_id",
                             reason: "Argument not provided or failed to decode".to_string(),
                         })?;
 
-                let bucket = self
-                    .tracker
-                    .take_bucket(&bucket_id)
-                    .ok_or(RuntimeError::BucketNotFound { bucket_id })?;
+                let bucket = self.tracker.take_bucket(bucket_id)?;
                 let mut vault = self.tracker.get_vault(&vault_id)?;
                 vault.deposit(bucket)?;
                 self.tracker.set_vault(&vault_id, vault)?;
-                Ok(InvokeResult::encode(&())?)
+                Ok(InvokeResult::empty())
             },
             VaultAction::WithdrawFungible => {
                 let vault_id = vault_ref.vault_id().ok_or_else(|| RuntimeError::InvalidArgument {
@@ -173,7 +171,7 @@ impl RuntimeInterface for RuntimeInterfaceImpl {
                             reason: "Argument not provided or failed to decode".to_string(),
                         })?;
                 let mut vault = self.tracker.get_vault(&vault_id)?;
-                let resource = vault.withdraw_fungible(amount);
+                let resource = vault.withdraw(amount)?;
                 let bucket = self.tracker.new_bucket(resource);
                 self.tracker.set_vault(&vault_id, vault)?;
                 Ok(InvokeResult::encode(&bucket)?)
@@ -185,7 +183,7 @@ impl RuntimeInterface for RuntimeInterfaceImpl {
         &self,
         bucket_ref: BucketRef,
         action: BucketAction,
-        _args: Vec<Vec<u8>>,
+        args: Vec<Vec<u8>>,
     ) -> Result<InvokeResult, RuntimeError> {
         match action {
             BucketAction::Create => {
@@ -207,12 +205,74 @@ impl RuntimeInterface for RuntimeInterfaceImpl {
                     argument: "bucket_ref",
                     reason: "Create bucket action requires a bucket id".to_string(),
                 })?;
-                let bucket = self
+                let bucket = self.tracker.get_bucket(bucket_id)?;
+                Ok(InvokeResult::encode(&bucket.resource_address())?)
+            },
+            BucketAction::Take => {
+                let bucket_id = bucket_ref.bucket_id().ok_or_else(|| RuntimeError::InvalidArgument {
+                    argument: "bucket_ref",
+                    reason: "Take bucket action requires a bucket id".to_string(),
+                })?;
+                let amount = args
+                    .get(0)
+                    .and_then(|r| decode(r).ok())
+                    .ok_or_else(|| RuntimeError::InvalidArgument {
+                        argument: "amount",
+                        reason: "Argument not provided or failed to decode".to_string(),
+                    })?;
+                let resource = self
                     .tracker
-                    .get_bucket(bucket_id)
-                    .ok_or(RuntimeError::BucketNotFound { bucket_id })?;
+                    .with_bucket_mut(bucket_id, |bucket| bucket.take(amount))??;
+                let bucket_id = self.tracker.new_bucket(resource);
+                Ok(InvokeResult::encode(&bucket_id)?)
+            },
+            BucketAction::Drop => {
+                let bucket_id = bucket_ref.bucket_id().ok_or_else(|| RuntimeError::InvalidArgument {
+                    argument: "bucket_ref",
+                    reason: "Create bucket action requires a bucket id".to_string(),
+                })?;
+                let bucket = self.tracker.take_bucket(bucket_id)?;
+                if !bucket.amount().is_zero() {
+                    return Err(RuntimeError::BucketNotEmpty { bucket_id });
+                }
                 Ok(InvokeResult::encode(&bucket.resource_address())?)
             },
         }
+    }
+
+    fn workspace_invoke(&self, action: WorkspaceAction, args: Vec<Vec<u8>>) -> Result<InvokeResult, RuntimeError> {
+        match action {
+            WorkspaceAction::Put => todo!(),
+            WorkspaceAction::PutLastInstructionOutput => {
+                let key = args.get(0).and_then(|r| decode::<Vec<u8>>(r).ok()).ok_or_else(|| {
+                    RuntimeError::InvalidArgument {
+                        argument: "key",
+                        reason: "Argument not provided or failed to decode".to_string(),
+                    }
+                })?;
+                let last_output = self
+                    .tracker
+                    .take_last_instruction_output()
+                    .ok_or(RuntimeError::NoLastInstructionOutput)?;
+                self.tracker.put_in_workspace(key, last_output)?;
+                Ok(InvokeResult::empty())
+            },
+            WorkspaceAction::Take => {
+                let key = args.get(0).and_then(|r| decode::<Vec<u8>>(r).ok()).ok_or_else(|| {
+                    RuntimeError::InvalidArgument {
+                        argument: "key",
+                        reason: "Argument not provided or failed to decode".to_string(),
+                    }
+                })?;
+                let value = self.tracker.take_from_workspace(&key)?;
+
+                Ok(InvokeResult::encode(&value)?)
+            },
+        }
+    }
+
+    fn set_last_instruction_output(&self, value: Option<Vec<u8>>) -> Result<(), RuntimeError> {
+        self.tracker.set_last_instruction_output(value);
+        Ok(())
     }
 }

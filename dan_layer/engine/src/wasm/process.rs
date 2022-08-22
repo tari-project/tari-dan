@@ -27,6 +27,7 @@ use tari_template_abi::{decode, encode, encode_into, encode_with_len, CallInfo, 
 use tari_template_lib::{
     abi_context::AbiContext,
     args::{
+        Arg,
         BucketInvokeArg,
         CreateComponentArg,
         EmitLogArg,
@@ -188,11 +189,13 @@ impl Process {
 impl Invokable for Process {
     type Error = WasmExecutionError;
 
-    fn invoke_by_name(&self, name: &str, args: Vec<Vec<u8>>) -> Result<ExecutionResult, Self::Error> {
+    fn invoke_by_name(&self, name: &str, args: Vec<Arg>) -> Result<ExecutionResult, Self::Error> {
         let func_def = self
             .module
             .find_func_by_name(name)
             .ok_or_else(|| WasmExecutionError::FunctionNotFound { name: name.into() })?;
+
+        let args = self.env.state().resolve_args(args)?;
 
         let call_info = CallInfo {
             abi_context: self.encoded_abi_context(),
@@ -214,17 +217,25 @@ impl Invokable for Process {
         // Read response from memory
         let raw = self.env.read_memory_with_embedded_len(ptr as u32)?;
 
+        if raw.is_empty() {
+            self.env.state().interface().set_last_instruction_output(None)?;
+        } else {
+            self.env
+                .state()
+                .interface()
+                .set_last_instruction_output(Some(raw.clone()))?;
+        }
+
         // TODO: decode raw as per function def
         Ok(ExecutionResult {
-            value: wasmer::Value::I32(ptr),
             raw,
             return_type: func_def.output.clone(),
         })
     }
 }
 
+#[derive(Debug, Clone)]
 pub struct ExecutionResult {
-    pub value: wasmer::Value,
     pub raw: Vec<u8>,
     pub return_type: Type,
 }
@@ -232,5 +243,12 @@ pub struct ExecutionResult {
 impl ExecutionResult {
     pub fn decode<T: BorshDeserialize>(&self) -> io::Result<T> {
         tari_template_abi::decode(&self.raw)
+    }
+
+    pub fn empty() -> Self {
+        ExecutionResult {
+            raw: Vec::new(),
+            return_type: Type::Unit,
+        }
     }
 }

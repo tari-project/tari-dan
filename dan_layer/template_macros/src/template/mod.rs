@@ -55,6 +55,8 @@ pub fn generate_template(input: TokenStream) -> Result<TokenStream> {
         #dispatcher
     };
 
+    // eprintln!("output = {}", output.to_string());
+
     Ok(output)
 }
 
@@ -98,9 +100,9 @@ mod tests {
 
             #[allow(non_snake_case)]
             pub mod State_template {
-                use super::*;
+                use tari_template_lib::template_dependencies::*;
 
-                #[derive(Decode, Encode)]
+                #[derive(Debug, Decode, Encode)]
                 pub struct State {
                     value: u32
                 }

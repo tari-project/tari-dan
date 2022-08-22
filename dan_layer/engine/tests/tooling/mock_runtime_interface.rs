@@ -36,6 +36,7 @@ use tari_template_lib::{
         ResourceAction,
         ResourceRef,
         VaultAction,
+        WorkspaceAction,
     },
     models::{Component, ComponentAddress, ComponentInstance, VaultRef},
     Hash,
@@ -46,7 +47,7 @@ pub struct MockRuntimeInterface {
     state: MemoryStateStore,
     calls: Arc<RwLock<Vec<&'static str>>>,
     id_provider: IdProvider,
-    resource_invoke_result: Arc<RwLock<Option<InvokeResult>>>,
+    invoke_result: Arc<RwLock<Option<InvokeResult>>>,
     runtime_state: Arc<RwLock<Option<RuntimeState>>>,
 }
 
@@ -56,7 +57,7 @@ impl MockRuntimeInterface {
             state: MemoryStateStore::default(),
             calls: Arc::new(RwLock::new(vec![])),
             id_provider: IdProvider::new(Hash::default()),
-            resource_invoke_result: Arc::new(RwLock::new(None)),
+            invoke_result: Arc::new(RwLock::new(None)),
             runtime_state: Arc::new(RwLock::new(None)),
         }
     }
@@ -74,7 +75,7 @@ impl MockRuntimeInterface {
     }
 
     // pub fn set_resource_invoke_result(&self, result: InvokeResult) {
-    //     *self.resource_invoke_result.write().unwrap() = Some(result);
+    //     *self.invoke_result.write().unwrap() = Some(result);
     // }
 
     fn add_call(&self, call: &'static str) {
@@ -152,7 +153,7 @@ impl RuntimeInterface for MockRuntimeInterface {
         _args: Vec<Vec<u8>>,
     ) -> Result<InvokeResult, RuntimeError> {
         self.add_call("resource_invoke");
-        Ok(self.resource_invoke_result.read().unwrap().as_ref().unwrap().clone())
+        Ok(self.invoke_result.read().unwrap().as_ref().unwrap().clone())
     }
 
     fn vault_invoke(
@@ -162,7 +163,7 @@ impl RuntimeInterface for MockRuntimeInterface {
         _args: Vec<Vec<u8>>,
     ) -> Result<InvokeResult, RuntimeError> {
         self.add_call("vault_invoke");
-        Ok(self.resource_invoke_result.read().unwrap().as_ref().unwrap().clone())
+        Ok(self.invoke_result.read().unwrap().as_ref().unwrap().clone())
     }
 
     fn bucket_invoke(
@@ -172,5 +173,15 @@ impl RuntimeInterface for MockRuntimeInterface {
         _args: Vec<Vec<u8>>,
     ) -> Result<InvokeResult, RuntimeError> {
         todo!()
+    }
+
+    fn workspace_invoke(&self, _action: WorkspaceAction, _args: Vec<Vec<u8>>) -> Result<InvokeResult, RuntimeError> {
+        self.add_call("workspace_invoke");
+        Ok(self.invoke_result.read().unwrap().as_ref().unwrap().clone())
+    }
+
+    fn set_last_instruction_output(&self, _value: Option<Vec<u8>>) -> Result<(), RuntimeError> {
+        self.add_call("set_last_instruction_output");
+        Ok(())
     }
 }
