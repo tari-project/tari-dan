@@ -144,11 +144,6 @@ jobs:
         with:
           command: check
           args: --release --all-targets --locked
-      - name: cargo check ffi separately
-        uses: actions-rs/cargo@v1
-        with:
-          command: check
-          args: --release --package tari_wallet_ffi
   licenses:
     name: file licenses
     runs-on: [ ubuntu-20.04 ]
