@@ -168,129 +168,133 @@ impl<TBackendAdapter: ChainDbBackendAdapter> ChainDbUnitOfWork for ChainDbUnitOf
     }
 
     fn get_locked_qc(&mut self) -> Result<QuorumCertificate, StorageError> {
-        let mut inner = self.inner.write()?;
-
-        if let Some(locked_qc) = &inner.locked_qc {
-            let locked_qc = locked_qc.get();
-            return Ok(QuorumCertificate::new(
-                locked_qc.message_type,
-                todo!(),
-                locked_qc.node_hash,
-                todo!(),
-                todo!(), // locked_qc.signature.clone(),
-            ));
-        }
-
-        // finally hit the db
-        let qc = inner
-            .backend_adapter
-            .get_locked_qc()
-            .map_err(TBackendAdapter::Error::into)?;
-        inner.locked_qc = Some(UnitOfWorkTracker::new(
-            DbQc {
-                message_type: qc.message_type(),
-                node_hash: *qc.node_hash(),
-                signature: todo!(), // qc.signature().cloned(),
-            },
-            false,
-        ));
-        Ok(qc)
+        todo!()
+        // let mut inner = self.inner.write()?;
+        //
+        // if let Some(locked_qc) = &inner.locked_qc {
+        //     let locked_qc = locked_qc.get();
+        //     return Ok(QuorumCertificate::new(
+        //         locked_qc.message_type,
+        //         todo!(),
+        //         locked_qc.node_hash,
+        //         todo!(),
+        //         todo!(), // locked_qc.signature.clone(),
+        //     ));
+        // }
+        //
+        // // finally hit the db
+        // let qc = inner
+        //     .backend_adapter
+        //     .get_locked_qc()
+        //     .map_err(TBackendAdapter::Error::into)?;
+        // inner.locked_qc = Some(UnitOfWorkTracker::new(
+        //     DbQc {
+        //         message_type: qc.message_type(),
+        //         node_hash: *qc.node_hash(),
+        //         signature: todo!(), // qc.signature().cloned(),
+        //     },
+        //     false,
+        // ));
+        // Ok(qc)
     }
 
     fn set_locked_qc(&mut self, qc: &QuorumCertificate) -> Result<(), StorageError> {
-        let mut inner = self.inner.write()?;
-
-        if let Some(locked_qc) = &inner.locked_qc.as_ref() {
-            let mut locked_qc = locked_qc.get_mut();
-            locked_qc.message_type = qc.message_type();
-            // locked_qc.view_number = qc.view_number();
-            locked_qc.node_hash = *qc.node_hash();
-            locked_qc.signature = todo!() // qc.signature().cloned();
-        } else {
-            inner.locked_qc = Some(UnitOfWorkTracker::new(
-                DbQc {
-                    message_type: qc.message_type(),
-                    // view_number: qc.view_number(),
-                    node_hash: *qc.node_hash(),
-                    signature: todo!(), // qc.signature().cloned(),
-                },
-                true,
-            ));
-        }
-
-        debug!(
-            target: LOG_TARGET,
-            "Marking proposed node '{}' as committed",
-            qc.node_hash()
-        );
-        let found_node = inner.find_proposed_node(qc.node_hash())?;
-        let mut node = found_node.1.get_mut();
-        let mut n = node.deref_mut();
-        n.is_committed = true;
-        Ok(())
+        todo!()
+        // let mut inner = self.inner.write()?;
+        //
+        // if let Some(locked_qc) = &inner.locked_qc.as_ref() {
+        //     let mut locked_qc = locked_qc.get_mut();
+        //     locked_qc.message_type = qc.message_type();
+        //     locked_qc.view_number = qc.view_number();
+        // locked_qc.node_hash = *qc.node_hash();
+        // locked_qc.signature = todo!() // qc.signature().cloned();
+        // } else {
+        //     inner.locked_qc = Some(UnitOfWorkTracker::new(
+        //         DbQc {
+        //             message_type: qc.message_type(),
+        //             view_number: qc.view_number(),
+        // node_hash: *qc.node_hash(),
+        // signature: todo!(), // qc.signature().cloned(),
+        // },
+        // true,
+        // ));
+        // }
+        //
+        // debug!(
+        //     target: LOG_TARGET,
+        //     "Marking proposed node '{}' as committed",
+        //     qc.node_hash()
+        // );
+        // let found_node = inner.find_proposed_node(qc.node_hash())?;
+        // let mut node = found_node.1.get_mut();
+        // let mut n = node.deref_mut();
+        // n.is_committed = true;
+        // Ok(())
     }
 
     fn get_prepare_qc(&mut self) -> Result<Option<QuorumCertificate>, StorageError> {
-        let mut inner = self.inner.write()?;
-
-        if let Some(prepare_qc) = &inner.prepare_qc {
-            let prepare_qc = prepare_qc.get();
-            return Ok(Some(QuorumCertificate::new(
-                prepare_qc.message_type,
-                todo!(),
-                // prepare_qc.view_number,
-                prepare_qc.node_hash,
-                todo!(),
-                todo!(), // prepare_qc.signature.clone(),
-            )));
-        }
-
+        // let mut inner = self.inner.write()?;
+        //
+        // if let Some(prepare_qc) = &inner.prepare_qc {
+        //     let prepare_qc = prepare_qc.get();
+        //     return Ok(Some(QuorumCertificate::new(
+        //         prepare_qc.message_type,
+        //         todo!(),
+        //         prepare_qc.view_number,
+        // prepare_qc.node_hash,
+        // todo!(),
+        // todo!(), // prepare_qc.signature.clone(),
+        // )));
+        // }
+        //
         // finally hit the db
-        let qc = inner
-            .backend_adapter
-            .get_prepare_qc()
-            .map_err(TBackendAdapter::Error::into)?;
-
-        inner.prepare_qc = qc.as_ref().map(|qc| {
-            UnitOfWorkTracker::new(
-                DbQc {
-                    message_type: qc.message_type(),
-                    // view_number: qc.view_number(),
-                    node_hash: *qc.node_hash(),
-                    signature: todo!(), // qc.signature().cloned(),
-                },
-                false,
-            )
-        });
-        Ok(qc)
+        // let qc = inner
+        //     .backend_adapter
+        //     .get_prepare_qc()
+        //     .map_err(TBackendAdapter::Error::into)?;
+        //
+        // inner.prepare_qc = qc.as_ref().map(|qc| {
+        //     UnitOfWorkTracker::new(
+        //         DbQc {
+        //             message_type: qc.message_type(),
+        //             view_number: qc.view_number(),
+        // node_hash: *qc.node_hash(),
+        // signature: todo!(), // qc.signature().cloned(),
+        // },
+        // false,
+        // )
+        // });
+        // Ok(qc)
+        todo!()
     }
 
     fn set_prepare_qc(&mut self, qc: &QuorumCertificate) -> Result<(), StorageError> {
         // put it in the tracker
-        let _ = self.get_prepare_qc()?;
-        let mut inner = self.inner.write()?;
-        match inner.prepare_qc.as_mut() {
-            None => {
-                inner.prepare_qc = Some(UnitOfWorkTracker::new(
-                    DbQc {
-                        message_type: qc.message_type(),
-                        // view_number: qc.view_number(),
-                        node_hash: *qc.node_hash(),
-                        signature: todo!(), // qc.signature().cloned(),
-                    },
-                    true,
-                ));
-            },
-            Some(db_qc) => {
-                let mut db_qc = db_qc.get_mut();
-                db_qc.message_type = qc.message_type();
-                // db_qc.view_number = qc.view_number();
-                db_qc.node_hash = *qc.node_hash();
-                db_qc.signature = todo!() // qc.signature().cloned();
-            },
-        }
-
-        Ok(())
+        // let _ = self.get_prepare_qc()?;
+        // let mut inner = self.inner.write()?;
+        // match inner.prepare_qc.as_mut() {
+        //     None => {
+        //         inner.prepare_qc = Some(UnitOfWorkTracker::new(
+        //             DbQc {
+        //                 message_type: qc.message_type(),
+        // view_number: qc.view_number(),
+        // node_hash: *qc.node_hash(),
+        // signature: todo!(), // qc.signature().cloned(),
+        // },
+        // true,
+        // ));
+        // },
+        // Some(db_qc) => {
+        //     let mut db_qc = db_qc.get_mut();
+        //     db_qc.message_type = qc.message_type();
+        // db_qc.view_number = qc.view_number();
+        // db_qc.node_hash = *qc.node_hash();
+        // db_qc.signature = todo!() // qc.signature().cloned();
+        // },
+        // }
+        //
+        // Ok(())
+        todo!()
     }
 
     fn commit_node(&mut self, node_hash: &TreeNodeHash) -> Result<(), StorageError> {

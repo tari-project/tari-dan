@@ -61,6 +61,6 @@ impl NodeAddressable for CommsPublicKey {
     }
 
     fn as_bytes(&self) -> &[u8] {
-        self.as_bytes()
+        <CommsPublicKey as ByteArray>::as_bytes(&self)
     }
 }

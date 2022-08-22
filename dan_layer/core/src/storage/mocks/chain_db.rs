@@ -26,7 +26,7 @@ use tari_utilities::message_format::MessageFormat;
 
 use super::MemoryChainDb;
 use crate::{
-    models::{QuorumCertificate, TreeNodeHash},
+    models::{QuorumCertificate, ShardId, TreeNodeHash},
     storage::{
         chain::{ChainDbBackendAdapter, ChainDbMetadataKey, DbInstruction, DbNode, DbQc},
         AtomicDb,
@@ -61,7 +61,7 @@ impl AtomicDb for MockChainDbBackupAdapter {
 
 impl ChainDbBackendAdapter for MockChainDbBackupAdapter {
     type Id = usize;
-    type Payload = (String, Vec<u32>);
+    type Payload = (String, Vec<ShardId>);
 
     fn is_empty(&self) -> Result<bool, Self::Error> {
         let lock = self.db.read()?;

@@ -38,6 +38,7 @@ use crate::{
     storage::chain::DbQc,
 };
 
+#[derive(Debug, Clone)]
 pub enum QuorumDecision {
     Accept,
     Reject,
@@ -124,19 +125,19 @@ impl QuorumCertificate {
 
     pub fn as_bytes(&self) -> Vec<u8> {
         let mut result = Blake256::new()
-            .chain([self.message_type.as_u8()])
-            .chain(self.node_hash.as_bytes())
-            .chain(self.node_height.to_le_bytes())
+            .chain(self.local_node_hash.as_bytes())
+            .chain(self.local_node_height.to_le_bytes())
             .chain(self.shard.to_le_bytes())
             .chain((self.signatures.len() as u64).to_le_bytes());
+        // TODO: add all fields
 
         for sig in &self.signatures {
             result = result.chain(sig.to_bytes());
         }
-        result = result.chain((self.involved_shards.len() as u32).to_le_bytes());
-        for shard in &self.involved_shards {
-            result = result.chain((*shard).to_le_bytes());
-        }
+        // result = result.chain((self.involved_shards.len() as u32).to_le_bytes());
+        // for shard in &self.involved_shards {
+        //     result = result.chain((*shard).to_le_bytes());
+        // }
         result.finalize().to_vec()
     }
 

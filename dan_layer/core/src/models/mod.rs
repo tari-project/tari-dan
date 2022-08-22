@@ -71,6 +71,13 @@ impl ShardId {
         self.0.to_le_bytes()
     }
 }
+
+impl PartialOrd for ShardId {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        self.0.partial_cmp(&other.0)
+    }
+}
+
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
 pub struct NodeHeight(pub u64);
 
@@ -84,7 +91,7 @@ impl Add for NodeHeight {
     type Output = NodeHeight;
 
     fn add(self, rhs: Self) -> Self::Output {
-        self.0 + rhs.0
+        NodeHeight(self.0 + rhs.0)
     }
 }
 
@@ -103,14 +110,17 @@ impl Epoch {
     }
 }
 
+#[derive(Debug, Clone)]
 pub enum SubstateAvailablity {
     DoesNotExist,
     Created { data_hash: FixedHash },
     Destroyed { data_hash: FixedHash },
 }
 
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
 pub struct ObjectId(u32);
 
+#[derive(Debug, Clone)]
 pub struct ObjectPledge {
     object_id: ObjectId,
     availability: SubstateAvailablity,

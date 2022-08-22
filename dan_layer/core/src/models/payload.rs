@@ -24,11 +24,11 @@ use std::{convert::TryFrom, fmt::Debug};
 
 use tari_common_types::types::FixedHash;
 
-use crate::models::ConsensusHash;
+use crate::models::{ConsensusHash, ShardId};
 
 // TODO: Rename to Command - most of the hotstuff docs refers to this as command
 pub trait Payload: Debug + Clone + Send + Sync + ConsensusHash {
-    fn involved_shards(&self) -> &[u32];
+    fn involved_shards(&self) -> &[ShardId];
     fn to_id(&self) -> PayloadId {
         PayloadId::new(FixedHash::try_from(self.consensus_hash().to_vec()).unwrap())
     }
@@ -65,14 +65,14 @@ impl PayloadId {
 //     }
 // }
 
-impl ConsensusHash for (String, Vec<u32>) {
+impl ConsensusHash for (String, Vec<ShardId>) {
     fn consensus_hash(&self) -> &[u8] {
         self.0.consensus_hash()
     }
 }
 
-impl Payload for (String, Vec<u32>) {
-    fn involved_shards(&self) -> &[u32] {
+impl Payload for (String, Vec<ShardId>) {
+    fn involved_shards(&self) -> &[ShardId] {
         &self.1
     }
 }
