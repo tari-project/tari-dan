@@ -22,23 +22,13 @@
 
 use std::convert::TryInto;
 
-use tari_common_types::types::PublicKey;
 use tari_comms::NodeIdentity;
 use tari_crypto::tari_utilities::ByteArray;
-use tari_dan_core::{
-    services::{AssetProcessor, AssetProxy, ServiceSpecification},
-    storage::DbFactory,
-};
-use tari_dan_engine::instructions::Instruction;
+use tari_dan_core::services::{AssetProxy, ServiceSpecification};
 use tari_vn_grpc::tari_vn_rpc::{
     validator_node_server::ValidatorNode,
-    Authority,
     GetIdentityRequest,
     GetIdentityResponse,
-    InvokeMethodRequest,
-    InvokeMethodResponse,
-    InvokeReadMethodRequest,
-    InvokeReadMethodResponse,
     SubmitTransactionRequest,
     SubmitTransactionResponse,
 };
@@ -46,22 +36,22 @@ use tonic::{Request, Response, Status};
 
 pub struct ValidatorNodeGrpcServer<TServiceSpecification: ServiceSpecification> {
     node_identity: NodeIdentity,
-    db_factory: TServiceSpecification::DbFactory,
-    asset_processor: TServiceSpecification::AssetProcessor,
+    _db_factory: TServiceSpecification::DbFactory,
+    _asset_processor: TServiceSpecification::AssetProcessor,
     asset_proxy: TServiceSpecification::AssetProxy,
 }
 
 impl<TServiceSpecification: ServiceSpecification> ValidatorNodeGrpcServer<TServiceSpecification> {
     pub fn new(
         node_identity: NodeIdentity,
-        db_factory: TServiceSpecification::DbFactory,
-        asset_processor: TServiceSpecification::AssetProcessor,
+        _db_factory: TServiceSpecification::DbFactory,
+        _asset_processor: TServiceSpecification::AssetProcessor,
         asset_proxy: TServiceSpecification::AssetProxy,
     ) -> Self {
         Self {
             node_identity,
-            db_factory,
-            asset_processor,
+            _db_factory,
+            _asset_processor,
             asset_proxy,
         }
     }
@@ -101,105 +91,6 @@ impl<TServiceSpecification: ServiceSpecification + 'static> ValidatorNode
                 status: format!("Errored: {}", err),
                 result: vec![],
             })),
-        }
-    }
-
-    async fn invoke_method(
-        &self,
-        request: Request<InvokeMethodRequest>,
-    ) -> Result<Response<InvokeMethodResponse>, Status> {
-        let request = request.into_inner();
-        let contract_id = request
-            .contract_id
-            .try_into()
-            .map_err(|_err| Status::invalid_argument("contract_id was not valid"))?;
-
-        match self
-            .asset_proxy
-            .invoke_method(
-                &contract_id,
-                request
-                    .template_id
-                    .try_into()
-                    .map_err(|_| Status::invalid_argument("invalid template_id"))?,
-                request.method.clone(),
-                request.args.clone(),
-                PublicKey::from_bytes(&request.sender).map_err(|_| Status::invalid_argument("invalid sender"))?,
-            )
-            .await
-        {
-            Ok(_) => Ok(Response::new(InvokeMethodResponse {
-                status: "Accepted".to_string(),
-                result: vec![],
-            })),
-            Err(_) => Ok(Response::new(InvokeMethodResponse {
-                status: "Errored".to_string(),
-                result: vec![],
-            })),
-        }
-    }
-
-    async fn invoke_read_method(
-        &self,
-        request: Request<InvokeReadMethodRequest>,
-    ) -> Result<Response<InvokeReadMethodResponse>, Status> {
-        println!("invoke_read_method grpc call");
-        println!("{:?}", request);
-        let request = request.into_inner();
-        let contract_id = request
-            .contract_id
-            .try_into()
-            .map_err(|err| Status::invalid_argument(format!("Contract ID was not valid: {}", err)))?;
-        let template_id = request
-            .template_id
-            .try_into()
-            .map_err(|_| Status::invalid_argument("Invalid template_id"))?;
-        if let Some(state) = self
-            .db_factory
-            .get_state_db(&contract_id)
-            .map_err(|e| Status::internal(format!("Could not create state db: {}", e)))?
-        {
-            let state_db_reader = state.reader();
-            let instruction = Instruction::new(
-                template_id,
-                request.method,
-                request.args,
-                PublicKey::from_bytes(&request.sender).map_err(|_| Status::invalid_argument("invalid sender"))?,
-            );
-            let response_bytes = self
-                .asset_processor
-                .invoke_read_method(&instruction, &state_db_reader)
-                .map_err(|e| Status::internal(format!("Could not invoke read method: {}", e)))?;
-            Ok(Response::new(InvokeReadMethodResponse {
-                result: response_bytes.unwrap_or_default(),
-                authority: Some(Authority {
-                    node_public_key: vec![],
-                    signature: vec![],
-                    proxied_by: vec![],
-                }),
-            }))
-        } else {
-            // Forward to proxy
-            let response_bytes = self
-                .asset_proxy
-                .invoke_read_method(
-                    &contract_id,
-                    template_id,
-                    request.method,
-                    request.args,
-                    PublicKey::from_bytes(&request.sender).map_err(|_| Status::invalid_argument("invalid sender"))?,
-                )
-                .await
-                .map_err(|err| Status::internal(format!("Error calling proxied method:{}", err)))?;
-            // TODO: Populate authority
-            Ok(Response::new(InvokeReadMethodResponse {
-                result: response_bytes.unwrap_or_default(),
-                authority: Some(Authority {
-                    node_public_key: vec![],
-                    signature: vec![],
-                    proxied_by: vec![],
-                }),
-            }))
         }
     }
 }

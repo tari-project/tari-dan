@@ -26,8 +26,6 @@ package tari.vn.rpc;
 service ValidatorNode {
     rpc GetIdentity(GetIdentityRequest) returns (GetIdentityResponse);
     rpc SubmitTransaction(SubmitTransactionRequest) returns (SubmitTransactionResponse);
-    rpc InvokeReadMethod(InvokeReadMethodRequest) returns (InvokeReadMethodResponse);
-    rpc InvokeMethod(InvokeMethodRequest) returns (InvokeMethodResponse);
 }
 
 message GetIdentityRequest { }

@@ -32,8 +32,7 @@ use crate::{digital_assets_error::DigitalAssetError, models::TreeNodeHash};
 
 #[async_trait]
 pub trait MempoolService: Sync + Send + 'static {
-    async fn submit_transaction(&mut self, transaction: Transaction) -> Result<(), DigitalAssetError>;
-    async fn submit_instruction(&mut self, instruction: Instruction) -> Result<(), DigitalAssetError>;
+    async fn submit_transaction(&mut self, transaction: &Transaction) -> Result<(), DigitalAssetError>;
     async fn read_block(&self, limit: usize) -> Result<Vec<Instruction>, DigitalAssetError>;
     async fn reserve_instruction_in_block(
         &mut self,
@@ -69,23 +68,12 @@ impl Default for ConcreteMempoolService {
 
 #[async_trait]
 impl MempoolService for ConcreteMempoolService {
-    async fn submit_transaction(&mut self, transaction: Transaction) -> Result<(), DigitalAssetError> {
+    async fn submit_transaction(&mut self, transaction: &Transaction) -> Result<(), DigitalAssetError> {
         // TODO: validate the transaction
         self.transactions.push((transaction.clone(), None));
 
         if let Some(outbound_service) = &mut self.outbound_service {
-            outbound_service.propagate_transaction(transaction).await?;
-        }
-
-        Ok(())
-    }
-
-    async fn submit_instruction(&mut self, instruction: Instruction) -> Result<(), DigitalAssetError> {
-        // TODO: validate the instruction
-        self.instructions.push((instruction.clone(), None));
-
-        if let Some(outbound_service) = &mut self.outbound_service {
-            outbound_service.propagate_instruction(instruction).await?;
+            outbound_service.propagate_transaction(transaction.clone()).await?;
         }
 
         Ok(())
@@ -182,12 +170,8 @@ impl Default for MempoolServiceHandle {
 
 #[async_trait]
 impl MempoolService for MempoolServiceHandle {
-    async fn submit_transaction(&mut self, transaction: Transaction) -> Result<(), DigitalAssetError> {
+    async fn submit_transaction(&mut self, transaction: &Transaction) -> Result<(), DigitalAssetError> {
         self.mempool.lock().await.submit_transaction(transaction).await
-    }
-
-    async fn submit_instruction(&mut self, instruction: Instruction) -> Result<(), DigitalAssetError> {
-        self.mempool.lock().await.submit_instruction(instruction).await
     }
 
     async fn read_block(&self, limit: usize) -> Result<Vec<Instruction>, DigitalAssetError> {

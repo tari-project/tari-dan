@@ -32,21 +32,17 @@ use tari_dan_core::{
     services::{mempool::service::MempoolService, AssetProcessor},
     storage::DbFactory,
 };
-use tari_dan_engine::state::StateDbUnitOfWorkReader;
+use tari_dan_engine::{instruction::Transaction, state::StateDbUnitOfWorkReader};
 use tokio::{sync::mpsc, task};
 
 const LOG_TARGET: &str = "vn::p2p::rpc";
-
-use tari_common_types::types::PublicKey;
-use tari_crypto::tari_utilities::ByteArray;
-use tari_dan_engine::instructions::Instruction;
 
 use crate::p2p::{proto::validator_node as proto, rpc::ValidatorNodeRpcService};
 
 pub struct ValidatorNodeRpcServiceImpl<TMempoolService, TDbFactory: DbFactory, TAssetProcessor> {
     mempool_service: TMempoolService,
     db_factory: TDbFactory,
-    asset_processor: TAssetProcessor,
+    _asset_processor: TAssetProcessor,
 }
 
 impl<
@@ -55,11 +51,11 @@ impl<
         TAssetProcessor: AssetProcessor + Clone,
     > ValidatorNodeRpcServiceImpl<TMempoolService, TDbFactory, TAssetProcessor>
 {
-    pub fn new(mempool_service: TMempoolService, db_factory: TDbFactory, asset_processor: TAssetProcessor) -> Self {
+    pub fn new(mempool_service: TMempoolService, db_factory: TDbFactory, _asset_processor: TAssetProcessor) -> Self {
         Self {
             mempool_service,
             db_factory,
-            asset_processor,
+            _asset_processor,
         }
     }
 }
@@ -79,79 +75,33 @@ where
         Err(RpcStatus::general("Not implemented"))
     }
 
-    async fn invoke_read_method(
+    async fn submit_transaction(
         &self,
-        request: Request<proto::InvokeReadMethodRequest>,
-    ) -> Result<Response<proto::InvokeReadMethodResponse>, RpcStatus> {
+        request: Request<proto::SubmitTransactionRequest>,
+    ) -> Result<Response<proto::SubmitTransactionResponse>, RpcStatus> {
         println!("{:?}", request);
         let request = request.into_message();
-        let contract_id = request
-            .contract_id
-            .try_into()
-            .map_err(|err| RpcStatus::bad_request(&format!("Asset public key was not a valid public key:{}", err)))?;
+        let transaction: Transaction = match request.try_into() {
+            Ok(value) => value,
+            Err(e) => {
+                return Err(RpcStatus::not_found(&format!("Could not convert transaaction: {}", e)));
+            },
+        };
 
-        let state = self
-            .db_factory
-            .get_state_db(&contract_id)
-            .map_err(|e| RpcStatus::general(&format!("Could not create state db: {}", e)))?
-            .ok_or_else(|| RpcStatus::not_found(&"This node does not process this asset".to_string()))?;
-
-        let unit_of_work = state.reader();
-
-        let instruction = Instruction::new(
-            request
-                .template_id
-                .try_into()
-                .map_err(|_| RpcStatus::bad_request("Invalid template_id"))?,
-            request.method,
-            request.args,
-            PublicKey::from_bytes(&request.sender)
-                .map_err(|_| RpcStatus::bad_request("Invalid public key for sender"))?,
-        );
-        let response_bytes = self
-            .asset_processor
-            .invoke_read_method(&instruction, &unit_of_work)
-            .map_err(|e| RpcStatus::general(&format!("Could not invoke read method: {}", e)))?;
-
-        Ok(Response::new(proto::InvokeReadMethodResponse {
-            result: response_bytes.unwrap_or_default(),
-        }))
-    }
-
-    async fn invoke_method(
-        &self,
-        request: Request<proto::InvokeMethodRequest>,
-    ) -> Result<Response<proto::InvokeMethodResponse>, RpcStatus> {
-        println!("{:?}", request);
-        let request = request.into_message();
-        let instruction = Instruction::new(
-            request
-                .template_id
-                .try_into()
-                .map_err(|_| RpcStatus::bad_request("Invalid template_id"))?,
-            request.method.clone(),
-            request.args.clone(),
-            PublicKey::from_bytes(&request.sender).map_err(|_| RpcStatus::bad_request("invalid sender"))?, /* TokenId(request.token_id.clone()),
-                                                                                                            * TODO: put signature in here
-                                                                                                            * ComSig::default()
-                                                                                                            * create_com_sig_from_bytes(&request.signature)
-                                                                                                            *     .map_err(|err| Status::invalid_argument("signature was not a valid comsig"))?, */
-        );
-        debug!(target: LOG_TARGET, "Submitting instruction {} to mempool", instruction);
         let mut mempool_service = self.mempool_service.clone();
-        match mempool_service.submit_instruction(instruction).await {
+        match mempool_service.submit_transaction(&transaction).await {
             Ok(_) => {
                 debug!(target: LOG_TARGET, "Accepted instruction into mempool");
-                return Ok(Response::new(proto::InvokeMethodResponse {
+                return Ok(Response::new(proto::SubmitTransactionResponse {
                     result: vec![],
-                    status: proto::Status::Accepted as i32,
+                    status: "Accepted".to_string(),
                 }));
             },
             Err(err) => {
                 debug!(target: LOG_TARGET, "Mempool rejected instruction: {}", err);
-                return Ok(Response::new(proto::InvokeMethodResponse {
+                return Ok(Response::new(proto::SubmitTransactionResponse {
                     result: vec![],
-                    status: proto::Status::Errored as i32,
+                    status: format!("Errored: {}", err),
                 }));
             },
         }

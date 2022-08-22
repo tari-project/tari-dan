@@ -78,7 +78,7 @@ async fn handle_incoming_transaction(
 ) {
     let (_, transaction) = domain_request_msg.into_origin_and_inner();
 
-    let result = mempool.submit_transaction(transaction).await;
+    let result = mempool.submit_transaction(&transaction).await;
 
     if let Err(e) = result {
         error!(
