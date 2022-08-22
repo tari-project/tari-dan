@@ -29,8 +29,9 @@ use tari_comms_dht::{
 };
 use tari_crypto::tari_utilities::ByteArray;
 use tari_dan_core::{services::mempool::outbound::MempoolOutboundService, DigitalAssetError};
-use tari_dan_engine::instructions::Instruction;
+use tari_dan_engine::{instruction::Transaction, instructions::Instruction};
 use tari_p2p::tari_message::TariMessageType;
+use tari_vn_grpc::tari_vn_rpc::SubmitTransactionRequest;
 
 use crate::p2p::proto::validator_node::InvokeMethodRequest;
 
@@ -50,6 +51,32 @@ impl TariCommsMempoolOutboundService {
 
 #[async_trait]
 impl MempoolOutboundService for TariCommsMempoolOutboundService {
+    async fn propagate_transaction(&mut self, transaction: Transaction) -> Result<(), DigitalAssetError> {
+        let destination = NodeDestination::Unknown;
+        let encryption = OutboundEncryption::ClearText;
+        let exclude_peers = vec![];
+
+        let request: SubmitTransactionRequest = transaction.into();
+        let message = OutboundDomainMessage::new(&TariMessageType::DanConsensusMessage, request);
+
+        let result = self
+            .outbound_message_requester
+            .flood(destination, encryption, exclude_peers, message)
+            .await;
+
+        if let Err(e) = result {
+            return match e {
+                DhtOutboundError::NoMessagesQueued => Ok(()),
+                _ => {
+                    error!(target: LOG_TARGET, "propagate_transaction failure. {:?}", e);
+                    Err(DigitalAssetError::DhtOutboundError(e))
+                },
+            };
+        }
+
+        Ok(())
+    }
+
     async fn propagate_instruction(&mut self, instruction: Instruction) -> Result<(), DigitalAssetError> {
         let destination = NodeDestination::Unknown;
         let encryption = OutboundEncryption::ClearText;

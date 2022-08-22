@@ -36,6 +36,10 @@ impl InstructionSignature {
         let challenge = [0u8; 32];
         Self(Signature::sign(secret_key.clone(), nonce, &challenge).unwrap())
     }
+
+    pub fn signature(&self) -> Signature {
+        self.0.clone()
+    }
 }
 
 impl TryFrom<Signature> for InstructionSignature {

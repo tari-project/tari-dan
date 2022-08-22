@@ -24,16 +24,14 @@ use std::{convert::TryInto, sync::Arc};
 
 use futures::{pin_mut, Stream, StreamExt};
 use log::{error, warn};
-use tari_crypto::{ristretto::RistrettoPublicKey, tari_utilities::ByteArray};
 use tari_dan_core::services::mempool::service::{MempoolService, MempoolServiceHandle};
-use tari_dan_engine::instructions::Instruction;
+use tari_dan_engine::instruction::Transaction;
 use tari_p2p::{
     comms_connector::{PeerMessage, SubscriptionFactory},
     domain_message::DomainMessage,
     tari_message::TariMessageType,
 };
-
-use crate::p2p::proto::validator_node::InvokeMethodRequest;
+use tari_vn_grpc::tari_vn_rpc::SubmitTransactionRequest;
 
 const LOG_TARGET: &str = "tari::validator_node::p2p::services::mempool::inbound";
 
@@ -53,7 +51,7 @@ impl TariCommsMempoolInboundHandle {
         }
     }
 
-    fn inbound_transaction_stream(&self) -> impl Stream<Item = DomainMessage<Instruction>> {
+    fn inbound_transaction_stream(&self) -> impl Stream<Item = DomainMessage<Transaction>> {
         self.inbound_message_subscription_factory
             .get_subscription(TariMessageType::DanConsensusMessage, SUBSCRIPTION_LABEL)
             .filter_map(extract_transaction)
@@ -76,11 +74,11 @@ impl TariCommsMempoolInboundHandle {
 
 async fn handle_incoming_transaction(
     mut mempool: MempoolServiceHandle,
-    domain_request_msg: DomainMessage<Instruction>,
+    domain_request_msg: DomainMessage<Transaction>,
 ) {
-    let (_, instruction) = domain_request_msg.into_origin_and_inner();
+    let (_, transaction) = domain_request_msg.into_origin_and_inner();
 
-    let result = mempool.submit_instruction(instruction).await;
+    let result = mempool.submit_transaction(transaction).await;
 
     if let Err(e) = result {
         error!(
@@ -91,8 +89,8 @@ async fn handle_incoming_transaction(
     }
 }
 
-async fn extract_transaction(msg: Arc<PeerMessage>) -> Option<DomainMessage<Instruction>> {
-    match msg.decode_message::<InvokeMethodRequest>() {
+async fn extract_transaction(msg: Arc<PeerMessage>) -> Option<DomainMessage<Transaction>> {
+    match msg.decode_message::<SubmitTransactionRequest>() {
         Err(e) => {
             warn!(
                 target: LOG_TARGET,
@@ -101,19 +99,23 @@ async fn extract_transaction(msg: Arc<PeerMessage>) -> Option<DomainMessage<Inst
             );
             None
         },
-        Ok(tx) => {
-            // TODO: implement TryFrom and handle conversion errors
-            let template_id = tx.template_id.try_into().unwrap();
-            let method = tx.method;
-            let args = tx.args;
-            let sender = RistrettoPublicKey::from_bytes(&tx.sender).unwrap();
-            let instruction = Instruction::new(template_id, method, args, sender);
+        Ok(request) => {
+            let transaction: Transaction = match request.try_into() {
+                Ok(value) => value,
+                Err(e) => {
+                    warn!(
+                        target: LOG_TARGET,
+                        "Could not convert inbound transaction message. {}", e
+                    );
+                    return None;
+                },
+            };
 
             Some(DomainMessage {
                 source_peer: msg.source_peer.clone(),
                 dht_header: msg.dht_header.clone(),
                 authenticated_origin: msg.authenticated_origin.clone(),
-                inner: instruction,
+                inner: transaction,
             })
         },
     }

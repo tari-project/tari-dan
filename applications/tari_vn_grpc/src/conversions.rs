@@ -9,7 +9,7 @@ use tari_dan_engine::instruction::{Instruction, Transaction};
 use tari_template_lib::Hash;
 use tari_utilities::ByteArray;
 
-use crate::tari_vn_rpc as grpc;
+use crate::tari_vn_rpc::{self as grpc, SubmitTransactionRequest};
 
 impl TryFrom<grpc::Signature> for Signature {
     type Error = String;
@@ -89,5 +89,54 @@ impl TryFrom<grpc::Instruction> for Instruction {
         };
 
         Ok(instruction)
+    }
+}
+
+impl From<Transaction> for SubmitTransactionRequest {
+    fn from(transaction: Transaction) -> Self {
+        let instructions = transaction.instructions.into_iter().map(Into::into).collect();
+        let signature = transaction.signature.signature();
+        let sender_public_key = transaction.sender_public_key.to_vec();
+
+        SubmitTransactionRequest {
+            instructions,
+            signature: Some(signature.into()),
+            sender_public_key,
+        }
+    }
+}
+
+impl From<Instruction> for grpc::Instruction {
+    fn from(instruction: Instruction) -> Self {
+        let mut result = grpc::Instruction::default();
+
+        match instruction {
+            Instruction::CallFunction {
+                package_id,
+                template,
+                function,
+                args,
+            } => {
+                result.instruction_type = 0;
+                result.package_id = package_id.to_vec();
+                result.template = template;
+                result.function = function;
+                result.args = args;
+            },
+            Instruction::CallMethod {
+                package_id,
+                component_id,
+                method,
+                args,
+            } => {
+                result.instruction_type = 1;
+                result.package_id = package_id.to_vec();
+                result.component_id = component_id.to_vec();
+                result.method = method;
+                result.args = args;
+            },
+        }
+
+        result
     }
 }

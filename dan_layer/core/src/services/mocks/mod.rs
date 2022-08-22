@@ -36,6 +36,7 @@ use tari_dan_common_types::TemplateId;
 #[cfg(test)]
 use tari_dan_engine::state::mocks::state_db::MockStateDbBackupAdapter;
 use tari_dan_engine::{
+    instruction::Transaction,
     instructions::Instruction,
     state::{
         models::{SchemaState, StateOpLogEntry, StateRoot},
@@ -93,6 +94,10 @@ pub struct MockMempoolService;
 
 #[async_trait]
 impl MempoolService for MockMempoolService {
+    async fn submit_transaction(&mut self, _transaction: Transaction) -> Result<(), DigitalAssetError> {
+        Ok(())
+    }
+
     async fn submit_instruction(&mut self, _instruction: Instruction) -> Result<(), DigitalAssetError> {
         Ok(())
     }
