@@ -27,7 +27,7 @@ use tari_crypto::hash::blake2::Blake256;
 use tari_dan_engine::instructions::Instruction;
 
 use super::{dan_layer_models_hasher, hashing::TARI_DAN_PAYLOAD_LABEL};
-use crate::models::{ConsensusHash, InstructionSet, Payload, ShardId};
+use crate::models::{ConsensusHash, InstructionSet, ObjectClaim, ObjectId, Payload, ShardId, SubstateChange};
 
 #[derive(Debug, Clone)]
 pub struct TariDanPayload {
@@ -80,6 +80,10 @@ impl ConsensusHash for TariDanPayload {
 
 impl Payload for TariDanPayload {
     fn involved_shards(&self) -> &[ShardId] {
+        todo!()
+    }
+
+    fn objects_for_shard(&self, shard: ShardId) -> Vec<(ObjectId, SubstateChange, ObjectClaim)> {
         todo!()
     }
 }

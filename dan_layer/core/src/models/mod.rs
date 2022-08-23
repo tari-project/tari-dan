@@ -111,21 +111,37 @@ impl Epoch {
 }
 
 #[derive(Debug, Clone)]
-pub enum SubstateAvailablity {
+pub enum SubstateState {
     DoesNotExist,
-    Created { data_hash: FixedHash },
-    Destroyed { data_hash: FixedHash },
+    Created { created_by: PayloadId },
+    Destroyed { deleted_by: PayloadId },
 }
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
-pub struct ObjectId(u32);
+pub struct ObjectId(pub u64);
 
 #[derive(Debug, Clone)]
 pub struct ObjectPledge {
-    object_id: ObjectId,
-    availability: SubstateAvailablity,
+    pub object_id: ObjectId,
+    pub current_state: SubstateState,
+    pub pledged_to_payload: PayloadId,
+    pub pledged_until: NodeHeight,
 }
 
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
+pub enum SubstateChange {
+    Create,
+    Destroy,
+}
+
+#[derive(Debug, Clone)]
+pub struct ObjectClaim {}
+
+impl ObjectClaim {
+    pub fn is_valid(&self, payload: PayloadId) -> bool {
+        true
+    }
+}
 // TODO: encapsulate
 pub struct InstructionCaller {
     pub owner_token_id: TokenId,

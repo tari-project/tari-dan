@@ -22,16 +22,21 @@
 
 use std::{convert::TryFrom, fmt::Debug};
 
+use digest::Digest;
 use tari_common_types::types::FixedHash;
+use tari_crypto::hash::blake2::Blake256;
 
-use crate::models::{ConsensusHash, ShardId};
+use crate::models::{ConsensusHash, ObjectClaim, ObjectId, ShardId, SubstateChange};
 
 // TODO: Rename to Command - most of the hotstuff docs refers to this as command
 pub trait Payload: Debug + Clone + Send + Sync + ConsensusHash {
     fn involved_shards(&self) -> &[ShardId];
     fn to_id(&self) -> PayloadId {
-        PayloadId::new(FixedHash::try_from(self.consensus_hash().to_vec()).unwrap())
+        let s = self.consensus_hash();
+        let x = Blake256::new().chain(s);
+        PayloadId::new(FixedHash::try_from(x.finalize()).unwrap())
     }
+    fn objects_for_shard(&self, shard: ShardId) -> Vec<(ObjectId, SubstateChange, ObjectClaim)>;
 }
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
@@ -74,5 +79,13 @@ impl ConsensusHash for (String, Vec<ShardId>) {
 impl Payload for (String, Vec<ShardId>) {
     fn involved_shards(&self) -> &[ShardId] {
         &self.1
+    }
+
+    fn objects_for_shard(&self, shard: ShardId) -> Vec<(ObjectId, SubstateChange, ObjectClaim)> {
+        if self.1.contains(&shard) {
+            vec![(ObjectId(shard.0), SubstateChange::Create, ObjectClaim {})]
+        } else {
+            vec![]
+        }
     }
 }

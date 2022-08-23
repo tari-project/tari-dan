@@ -23,11 +23,14 @@ use crate::{
         HotStuffMessageType::Commit,
         HotStuffTreeNode,
         NodeHeight,
+        ObjectId,
         ObjectPledge,
         Payload,
         PayloadId,
         QuorumCertificate,
         ShardId,
+        SubstateChange,
+        SubstateState,
         TariDanPayload,
         TreeNodeHash,
         ValidatorSignature,
@@ -56,6 +59,7 @@ pub struct ShardDb<TAddr: NodeAddressable, TPayload: Payload> {
     nodes: HashMap<TreeNodeHash, HotStuffTreeNode<TAddr>>,
     last_executed_height: HashMap<ShardId, NodeHeight>,
     payloads: HashMap<PayloadId, TPayload>,
+    objects: HashMap<ShardId, HashMap<ObjectId, (SubstateState, Option<ObjectPledge>)>>,
 }
 
 impl<TAddr: NodeAddressable, TPayload: Payload> ShardDb<TAddr, TPayload> {
@@ -69,6 +73,7 @@ impl<TAddr: NodeAddressable, TPayload: Payload> ShardDb<TAddr, TPayload> {
             nodes: HashMap::new(),
             last_executed_height: HashMap::new(),
             payloads: HashMap::new(),
+            objects: HashMap::new(),
         }
     }
 
@@ -159,8 +164,12 @@ impl<TAddr: NodeAddressable, TPayload: Payload> ShardDb<TAddr, TPayload> {
         self.nodes.entry(node.hash().clone()).or_insert(node.clone());
     }
 
-    pub fn node(&self, node_hash: &TreeNodeHash) -> Option<&HotStuffTreeNode<TAddr>> {
-        self.nodes.get(node_hash)
+    pub fn node(&self, node_hash: &TreeNodeHash) -> Option<HotStuffTreeNode<TAddr>> {
+        if node_hash == &TreeNodeHash::zero() {
+            Some(HotStuffTreeNode::genesis())
+        } else {
+            self.nodes.get(node_hash).cloned()
+        }
     }
 
     pub fn set_last_executed_height(&mut self, shard: ShardId, height: NodeHeight) {
@@ -181,6 +190,32 @@ impl<TAddr: NodeAddressable, TPayload: Payload> ShardDb<TAddr, TPayload> {
     pub fn set_payload(&mut self, payload: TPayload) {
         let payload_id = payload.to_id();
         self.payloads.entry(payload_id).or_insert(payload);
+    }
+
+    pub fn pledge_object(
+        &mut self,
+        shard: ShardId,
+        object: ObjectId,
+        change: SubstateChange,
+        payload: PayloadId,
+        current_height: NodeHeight,
+    ) -> ObjectPledge {
+        let shard_data = self.objects.entry(shard).or_insert(HashMap::new());
+        let entry = shard_data.entry(object).or_insert((SubstateState::DoesNotExist, None));
+        if let Some(existing_pledge) = &entry.1 {
+            if existing_pledge.pledged_until < current_height {
+                return existing_pledge.clone();
+            }
+        }
+
+        let pledge = ObjectPledge {
+            object_id: object,
+            current_state: entry.0.clone(),
+            pledged_to_payload: payload,
+            pledged_until: current_height + NodeHeight(4),
+        };
+        entry.1 = Some(pledge.clone());
+        pledge
     }
 }
 
@@ -292,12 +327,14 @@ impl<TAddr: NodeAddressable> EpochManager<TAddr> for RangeEpochManager<TAddr> {
         for shard in shards {
             let mut found_committee = None;
             for (range, committee) in epoch {
+                dbg!(range, committee);
+                dbg!(shard);
                 if range.contains(shard) {
                     found_committee = Some(committee.clone());
                     break;
                 }
-                result.push((*shard, found_committee.clone()));
             }
+            result.push((*shard, found_committee.clone()));
         }
 
         Ok(result)
@@ -404,12 +441,19 @@ impl<
     }
 
     // pacemaker
-    fn on_receive_new_view(&mut self, from: TAddr, qc: QuorumCertificate) -> Result<(), String> {
+    fn on_receive_new_view(
+        &mut self,
+        from: TAddr,
+        shard: ShardId,
+        qc: QuorumCertificate,
+        payload: TPayload,
+    ) -> Result<(), String> {
         // TODO: Validate who message is from
-        self.validate_from_committee(&from);
+        self.validate_from_committee(&from, self.epoch_manager.current_epoch(), shard)?;
         self.validate_qc(&qc);
         dbg!("update qc");
         self.shard_db.update_high_qc(qc);
+        self.shard_db.set_payload(payload);
         Ok(())
     }
 
@@ -418,6 +462,7 @@ impl<
         // TODO: the leader is only known after the leaf is determines
         // TODO: Review if this is correct. The epoch should stay the same for all epochs
         if self.is_leader(payload, shard, self.epoch_manager.current_epoch())? {
+            dbg!("I am the leader");
             // if self.current_payload.is_none() {
             // self.current_payload = payload.clone();
             let leaf = self.shard_db.get_leaf_node(shard);
@@ -438,53 +483,56 @@ impl<
     ) -> Result<HotStuffTreeNode<TAddr>, String> {
         dbg!("on propose");
         let qc = self.shard_db.get_high_qc_for(shard);
-        // TODO: Should the committee members carry on being included until 4 deep? so that they are committed?
-        // let members;
-        // let epoch;
-        // let involved_shards;
+        let epoch = self.epoch_manager.current_epoch();
+        let actual_payload = self
+            .shard_db
+            .get_payload(&payload)
+            .ok_or("Could not find payload".to_string())?;
+        let involved_shards = actual_payload.involved_shards().to_vec();
+        dbg!(&involved_shards);
+        let members = self
+            .epoch_manager
+            .get_committees(epoch, &involved_shards)?
+            .into_iter()
+            .map(|(shard, committee)| committee.map(|c| c.members).unwrap_or_default())
+            .flatten()
+            .collect();
+        dbg!(&members);
 
-        todo!("Need to put the correct payload in here")
+        let parent = self.shard_db.node(&leaf).ok_or("Could not find leaf".to_string())?;
 
-        // if let Some(payload) = &payload {
-        //     epoch = self.epoch_manager.current_epoch();
-        //     involved_shards = payload.involved_shards().to_vec();
-        //     members = self
-        //         .epoch_manager
-        //         .get_committees(epoch, payload.involved_shards())?
-        //         .into_iter()
-        //         .map(|(shard, committee)| committee.map(|c| c.members).unwrap_or_default())
-        //         .flatten()
-        //         .collect();
-        // } else {
-        //     epoch = qc.epoch();
-        //     involved_shards = qc.involved_shards().to_vec();
-        //     Continue the epoch and committee from the QC.
-        // members = self
-        //     .epoch_manager
-        //     .get_committees(qc.epoch(), qc.involved_shards())?
-        //     .into_iter()
-        //     .map(|(shard, committee)| committee.map(|c| c.members).unwrap_or_default())
-        //     .flatten()
-        //     .collect();
-        // }
+        let payload_height = if parent.payload() == payload {
+            parent.payload_height() + NodeHeight(1)
+        } else {
+            NodeHeight(1)
+        };
+        let objects = actual_payload.objects_for_shard(shard);
 
-        // let leaf_node = self.create_leaf(
-        //     leaf,
-        //     payload,
-        //     qc,
-        //     epoch,
-        //     self.identity.clone(),
-        //     involved_shards,
-        //     NodeHeight(leaf_height.0 + 1),
-        // );
-        // self.shard_db.save_node(leaf_node.clone());
-        // dbg!(&leaf_node);
-        //
-        // self.tx_broadcast
-        //     .send((HotStuffMessage::generic(leaf_node.clone(), shard), members))
-        //     .await
-        //     .unwrap();
-        // Ok(leaf_node)
+        let mut local_pledges = vec![];
+        for (object, change, claim) in objects {
+            if !claim.is_valid(payload) {
+                return Err("Claim is not valid".to_string());
+            }
+            local_pledges.push(self.shard_db.pledge_object(shard, object, change, payload, leaf_height));
+        }
+        let leaf_node = self.create_leaf(
+            leaf,
+            shard,
+            payload,
+            qc,
+            epoch,
+            self.identity.clone(),
+            NodeHeight(leaf_height.0 + 1),
+            payload_height,
+            local_pledges,
+        );
+        self.shard_db.save_node(leaf_node.clone());
+
+        self.tx_broadcast
+            .send((HotStuffMessage::generic(leaf_node.clone(), shard), members))
+            .await
+            .unwrap();
+        Ok(leaf_node)
     }
 
     fn create_leaf(
@@ -522,14 +570,12 @@ impl<
         ))
     }
 
-    fn validate_from_committee(&self, from: &TAddr) -> Result<(), String> {
-        // Validate that from is in the correct committee
-        // if !self.committee.contains(from) {
-        //     Err("Not from committee member".to_string())
-        // } else {
-        //     Ok(())
-        // }
-        todo!("check committee proof")
+    fn validate_from_committee(&self, from: &TAddr, epoch: Epoch, shard: ShardId) -> Result<(), String> {
+        if self.epoch_manager.get_committee(epoch, shard)?.contains(from) {
+            Ok(())
+        } else {
+            Err("From is not part of this committee".to_string())
+        }
     }
 
     fn validate_qc(&self, qc: &QuorumCertificate) -> Result<(), String> {
@@ -748,11 +794,16 @@ impl<
                     if let Some((from, msg) ) = msg {
                         match msg.message_type() {
                             HotStuffMessageType::NewView => {
-                                self.on_receive_new_view(from, msg.high_qc().unwrap());
                                 if let Some(payload) = msg.new_view_payload() {
+                                    self.on_receive_new_view(from, msg.shard(), msg.high_qc().unwrap(), payload.clone());
                                     // There should always be a payload, otherwise the leader
                                     // can't be determined
-                                    self.on_beat(msg.shard(), payload.to_id()).await;
+                                    match self.on_beat(msg.shard(), payload.to_id()).await {
+                                        Ok(()) => {},
+                                        Err(e) => {
+                                            dbg!(e);
+                                        }
+                                    }
                                 }
                             },
                             HotStuffMessageType::Generic => {
@@ -787,7 +838,7 @@ pub struct HsTestHarness<TPayload: Payload + 'static, TAddr: NodeAddressable + '
     rx_vote_message: Receiver<(VoteMessage, TAddr)>,
     tx_votes: Sender<(TAddr, VoteMessage)>,
     rx_execute: Receiver<TPayload>,
-    hs_waiter: JoinHandle<Result<(), String>>,
+    hs_waiter: Option<JoinHandle<Result<(), String>>>,
 }
 impl<TPayload: Payload, TAddr: NodeAddressable> HsTestHarness<TPayload, TAddr> {
     pub fn new<
@@ -807,7 +858,7 @@ impl<TPayload: Payload, TAddr: NodeAddressable> HsTestHarness<TPayload, TAddr> {
         let (tx_votes, rx_votes) = channel(1);
         let (tx_execute, rx_execute) = channel(1);
 
-        let hs_waiter = HotStuffWaiter::<_, _, _, _>::spawn(
+        let hs_waiter = Some(HotStuffWaiter::<_, _, _, _>::spawn(
             identity,
             epoch_manager,
             leader,
@@ -819,7 +870,7 @@ impl<TPayload: Payload, TAddr: NodeAddressable> HsTestHarness<TPayload, TAddr> {
             tx_vote_message,
             tx_execute,
             rx_shutdown,
-        );
+        ));
         Self {
             tx_new,
             tx_hs_messages,
@@ -833,9 +884,24 @@ impl<TPayload: Payload, TAddr: NodeAddressable> HsTestHarness<TPayload, TAddr> {
         }
     }
 
-    async fn assert_shuts_down_safely(self) {
-        self.tx_shutdown.send(()).await.unwrap();
-        self.hs_waiter.await.expect("did not end cleanly");
+    async fn assert_shuts_down_safely(&mut self) {
+        // send might fail if it's already shutdown
+        let _ = self.tx_shutdown.send(()).await;
+        self.hs_waiter.take().unwrap().await.expect("did not end cleanly");
+    }
+
+    async fn recv_broadcast(&mut self) -> (HotStuffMessage<TPayload, TAddr>, Vec<TAddr>) {
+        if let Some(msg) = timeout(Duration::from_secs(10), self.rx_broadcast.recv())
+            .await
+            .expect("timed out")
+        {
+            msg
+        } else {
+            // Otherwise there are no senders, meaning the main loop has shut down,
+            // so try shutdown to get the actual error
+            self.assert_shuts_down_safely().await;
+            panic!("Shut down safely, but still received none");
+        }
     }
 }
 
@@ -860,6 +926,7 @@ async fn test_hs_waiter_leader_proposes() {
     let mut instance = HsTestHarness::new(node1.clone(), epoch_manager, AlwaysFirstLeader {});
     let payload = ("Hello World".to_string(), vec![ShardId(0)]);
 
+    dbg!(payload.to_id());
     // Send a new view message
     let new_view_message = HotStuffMessage::new_view(QuorumCertificate::genesis(), ShardId(0), Some(payload));
 
@@ -871,10 +938,7 @@ async fn test_hs_waiter_leader_proposes() {
 
     // should receive a broadcast proposal
     // let proposal_message = rx_broadcast.try_recv().expect("Did not receive proposal");
-    let (proposal_message, broadcast_group) = timeout(Duration::from_secs(10), instance.rx_broadcast.recv())
-        .await
-        .expect("timed out")
-        .expect("Should not be none");
+    let (proposal_message, broadcast_group) = instance.recv_broadcast().await;
 
     assert_eq!(broadcast_group, vec![node1, node2]);
     instance.assert_shuts_down_safely().await
