@@ -109,26 +109,55 @@ fn get_function_block(template_ident: &Ident, ast: FunctionAst) -> Expr {
                         .unwrap();
                 }]
             },
+            TypeAst::Tuple(tuple) => {
+                args.push(parse_quote! { #arg_ident });
+                vec![parse_quote! {
+                    let #arg_ident =
+                        decode::<#tuple>(&call_info.args[#i])
+                        .unwrap();
+                }]
+            },
         };
         stmts.extend(stmt);
     }
 
     // call the user defined function in the template
     let function_ident = Ident::new(&ast.name, Span::call_site());
-    if ast.is_constructor {
-        stmts.push(parse_quote! {
-            let state = template::#template_ident::#function_ident(#(#args),*);
-        });
+    stmts.push(parse_quote! {
+        let rtn = template::#template_ident::#function_ident(#(#args),*);
+    });
 
-        let template_name_str = template_ident.to_string();
-        stmts.push(parse_quote! {
-            let rtn = engine().instantiate(#template_name_str.to_string(), state);
-        });
-    } else {
-        stmts.push(parse_quote! {
-            let rtn = template::#template_ident::#function_ident(#(#args),*);
-        });
+    // replace "Self" if present in the return value
+    match ast.output_type {
+        Some(output_type) => match output_type {
+            TypeAst::Typed(ident) => {
+                if ident == "Self" {
+                    let template_name_str = template_ident.to_string();
+                    stmts.push(parse_quote! {
+                        let rtn = engine().instantiate(#template_name_str.to_string(), rtn);
+                    });
+                }
+            },
+            TypeAst::Tuple(_type_tuple) => {},
+            _ => todo!(),
+        },
+        None => {},
     }
+
+    // if ast.is_constructor {
+    // stmts.push(parse_quote! {
+    // let state = template::#template_ident::#function_ident(#(#args),*);
+    // });
+    //
+    // let template_name_str = template_ident.to_string();
+    // stmts.push(parse_quote! {
+    // let rtn = engine().instantiate(#template_name_str.to_string(), state);
+    // });
+    // } else {
+    // stmts.push(parse_quote! {
+    // let rtn = template::#template_ident::#function_ident(#(#args),*);
+    // });
+    // }
 
     // encode the result value
     stmts.push(parse_quote! {

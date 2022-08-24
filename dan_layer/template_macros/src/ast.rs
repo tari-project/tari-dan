@@ -36,6 +36,7 @@ use syn::{
     ReturnType,
     Signature,
     Stmt,
+    TypeTuple,
 };
 
 #[allow(dead_code)]
@@ -135,6 +136,7 @@ impl TemplateAst {
                 // TODO: detect more complex types
                 TypeAst::Typed(type_path.path.segments[0].ident.clone())
             },
+            syn::Type::Tuple(tuple) => TypeAst::Tuple(tuple.clone()),
             _ => todo!(),
         }
     }
@@ -165,4 +167,5 @@ pub struct FunctionAst {
 pub enum TypeAst {
     Receiver { mutability: bool },
     Typed(Ident),
+    Tuple(TypeTuple),
 }

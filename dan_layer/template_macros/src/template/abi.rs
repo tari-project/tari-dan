@@ -89,7 +89,13 @@ fn generate_abi_type(rust_type: &TypeAst) -> Expr {
             "u128" => parse_quote!(Type::U128),
             "String" => parse_quote!(Type::String),
             "Self" => get_component_id_type(),
-            _ => todo!(),
+            name => parse_quote!(Type::Other{ name: #name.to_string() }),
+        },
+        TypeAst::Tuple(_) => {
+            // TODO: Handle tuples properly
+            parse_quote!(Type::Other {
+                name: "tuple".to_string()
+            })
         },
     }
 }

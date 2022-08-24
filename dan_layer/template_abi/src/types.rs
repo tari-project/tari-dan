@@ -60,6 +60,7 @@ pub enum Type {
     U64,
     U128,
     String,
+    Other { name: String },
 }
 
 #[derive(Debug, Clone, Encode, Decode)]

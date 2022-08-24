@@ -164,8 +164,8 @@ mod tests {
                 let result;
                 match call_info.func_name.as_str() {
                     "new" => {
-                        let state = template::State::new();
-                        let rtn = engine().instantiate("State".to_string(), state);
+                        let rtn = template::State::new();
+                        let rtn = engine().instantiate("State".to_string(), rtn);
                         result = encode_with_len(&rtn);
                     },
                     "get" => {

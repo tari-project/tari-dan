@@ -142,8 +142,14 @@ fn test_dodgy_template() {
 fn test_tuples() {
     let template_test = TemplateTest::new(vec!["tests/templates/tuples"]);
 
-    let (_, message): (ComponentId, String) = template_test.call_function("Tuple", "new", args![]);
+    // tuples as a regular function output
+    let (message, number): (String, u32) = template_test.call_function("Tuple", "tuple_output", args![]);
     assert_eq!(message, "Hello World!");
-    template_test.assert_calls(&["emit_log", "create_component"]);
-    template_test.clear_calls();
+    assert_eq!(number, 100);
+
+    // tuples as a constructor output
+    // let (_, message): (ComponentId, String) = template_test.call_function("Tuple", "new", args![]);
+    // assert_eq!(message, "Hello World!");
+    // template_test.assert_calls(&["emit_log", "create_component"]);
+    // template_test.clear_calls();
 }
