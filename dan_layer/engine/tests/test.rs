@@ -137,3 +137,13 @@ fn test_dodgy_template() {
         PackageError::WasmModuleError(WasmExecutionError::UnexpectedAbiFunction { .. })
     ));
 }
+
+#[test]
+fn test_tuples() {
+    let template_test = TemplateTest::new(vec!["tests/templates/tuples"]);
+
+    let (_, message): (ComponentId, String) = template_test.call_function("Tuple", "new", args![]);
+    assert_eq!(message, "Hello World!");
+    template_test.assert_calls(&["emit_log", "create_component"]);
+    template_test.clear_calls();
+}
