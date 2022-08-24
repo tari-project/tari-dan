@@ -89,6 +89,7 @@ impl TemplateAst {
             .items
             .iter()
             .map(Self::get_function_from_item)
+            .filter(|f| f.is_public)
             .collect()
     }
 
@@ -100,6 +101,7 @@ impl TemplateAst {
                 output_type: Self::get_output_type_token(&m.sig.output),
                 statements: Self::get_statements(m),
                 is_constructor: Self::is_constructor(&m.sig),
+                is_public: Self::is_public_function(m),
             },
             _ => todo!(),
         }
@@ -152,6 +154,10 @@ impl TemplateAst {
             },
         }
     }
+
+    fn is_public_function(item: &ImplItemMethod) -> bool {
+        matches!(item.vis, syn::Visibility::Public(_))
+    }
 }
 
 pub struct FunctionAst {
@@ -160,6 +166,7 @@ pub struct FunctionAst {
     pub output_type: Option<TypeAst>,
     pub statements: Vec<Stmt>,
     pub is_constructor: bool,
+    pub is_public: bool,
 }
 
 pub enum TypeAst {
