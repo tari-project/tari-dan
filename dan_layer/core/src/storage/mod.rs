@@ -37,3 +37,4 @@ pub use metadata_backend_adapter::{AsKeyBytes, MetadataBackendAdapter};
 
 mod atomic_db;
 pub mod mocks;
+pub mod shard_db;

@@ -25,5 +25,6 @@ pub mod states;
 mod state_sync;
 pub use state_sync::StateSyncError;
 
+pub mod hotstuff_waiter;
 #[cfg(test)]
 mod tests;

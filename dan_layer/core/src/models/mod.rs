@@ -43,6 +43,7 @@ mod tari_dan_payload;
 mod tree_node_hash;
 mod view;
 mod view_id;
+pub mod vote_message;
 
 pub use asset_definition::{AssetDefinition, InitialState};
 pub use base_layer_metadata::BaseLayerMetadata;
