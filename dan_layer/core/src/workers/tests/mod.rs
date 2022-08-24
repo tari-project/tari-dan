@@ -185,7 +185,6 @@ impl<TAddr: NodeAddressable, TPayload: Payload> ShardDb<TAddr, TPayload> {
         payload_height: NodeHeight,
         shard: ShardId,
     ) -> Option<HotStuffTreeNode<TAddr>> {
-        dbg!(&self.payload_votes);
         self.payload_votes
             .get(&payload)
             .and_then(|pv| pv.get(&payload_height))
@@ -703,14 +702,12 @@ impl<
             dbg!("b one is genesis, nothing to do");
             return Ok(());
         }
-        dbg!(&b_two);
         let b_one = self
             .shard_db
             .node(&b_two.justify().local_node_hash())
             .ok_or("No node b1")?
             .clone();
 
-        dbg!(&b_one);
         let (b_lock, b_lock_height) = self.shard_db.get_locked_node_hash_and_height(shard);
         if b_one.height().0 > b_lock_height.0 {
             // commit
@@ -727,7 +724,7 @@ impl<
         //     .ok_or("No node b")?
         //     .clone();
         // dbg!(&b);
-        if node.justify().payload_height() == NodeHeight(4) {
+        if node.justify().payload_height() == NodeHeight(2) {
             // decide
             dbg!("Deciding height:", node.height());
             self.on_commit(node, shard).await?;
@@ -743,7 +740,7 @@ impl<
                 dbg!("Committing parent");
                 self.on_commit(parent.clone(), shard).await?;
             }
-            if node.justify().payload_height() == NodeHeight(4) {
+            if node.justify().payload_height() == NodeHeight(2) {
                 let payload = self
                     .shard_db
                     .get_payload(&node.justify().payload())
@@ -797,7 +794,6 @@ impl<
                 .ok_or("No payload found".to_string())?;
             let involved_shards = payload.involved_shards();
             let mut votes = vec![];
-            dbg!(involved_shards);
             for s in involved_shards {
                 if let Some(vote) = self
                     .shard_db
@@ -808,8 +804,6 @@ impl<
                     break;
                 }
             }
-            dbg!(&votes);
-
             if votes.len() == involved_shards.len() {
                 let local_shards = self
                     .epoch_manager
@@ -1077,6 +1071,27 @@ impl<TPayload: Payload, TAddr: NodeAddressable> HsTestHarness<TPayload, TAddr> {
             panic!("Shut down safely, but still received none");
         }
     }
+
+    async fn recv_execute(&mut self) -> TPayload {
+        if let Some(msg) = timeout(Duration::from_secs(10), self.rx_execute.recv())
+            .await
+            .expect("timed out")
+        {
+            msg
+        } else {
+            // Otherwise there are no senders, meaning the main loop has shut down,
+            // so try shutdown to get the actual error
+            self.assert_shuts_down_safely().await;
+            panic!("Shut down safely, but still received none");
+        }
+    }
+
+    async fn assert_no_execute(&mut self) {
+        assert!(
+            timeout(Duration::from_secs(1), self.rx_execute.recv()).await.is_err(),
+            "received an execute when we weren't expecting it"
+        )
+    }
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
@@ -1235,28 +1250,17 @@ async fn test_hs_waiter_execute_called_when_consensus_reached() {
 
     // loopback the proposal
     instance.tx_hs_messages.send((node1.clone(), proposal1)).await.unwrap();
-    let (vote, _) = timeout(Duration::from_secs(10), instance.rx_vote_message.recv())
-        .await
-        .expect("timedout")
-        .expect("should not be none");
+    let (vote, _) = instance.recv_vote_message().await;
     // loopback the vote
     instance.tx_votes.send((node1.clone(), vote.clone())).await.unwrap();
     let (proposal2, broadcast_group) = instance.recv_broadcast().await;
 
     // loopback the proposal
     instance.tx_hs_messages.send((node1.clone(), proposal2)).await.unwrap();
-    let (vote, _) = timeout(Duration::from_secs(10), instance.rx_vote_message.recv())
-        .await
-        .expect("timedout")
-        .expect("should not be none");
+    let (vote, _) = instance.recv_vote_message().await;
 
     // No execute yet
-    assert!(
-        timeout(Duration::from_secs(1), instance.rx_execute.recv())
-            .await
-            .is_err(),
-        "received an execute when we weren't expecting it"
-    );
+    instance.assert_no_execute().await;
 
     instance.tx_votes.send((node1.clone(), vote.clone())).await.unwrap();
 
@@ -1264,28 +1268,19 @@ async fn test_hs_waiter_execute_called_when_consensus_reached() {
 
     // loopback the proposal
     instance.tx_hs_messages.send((node1.clone(), proposal3)).await.unwrap();
-    let (vote, _) = timeout(Duration::from_secs(10), instance.rx_vote_message.recv())
-        .await
-        .expect("timedout")
-        .expect("should not be none");
+    let (vote, _) = instance.recv_vote_message().await;
 
     // No execute yet
-    assert!(
-        timeout(Duration::from_secs(1), instance.rx_execute.recv())
-            .await
-            .is_err(),
-        "received an execute when we weren't expecting it"
-    );
+    instance.assert_no_execute().await;
     // loopback the vote
     instance.tx_votes.send((node1.clone(), vote.clone())).await.unwrap();
 
     let (proposal4, broadcast_group) = instance.recv_broadcast().await;
 
+    dbg!(&proposal4);
     instance.tx_hs_messages.send((node1.clone(), proposal4)).await.unwrap();
-    let (vote, _) = timeout(Duration::from_secs(10), instance.rx_vote_message.recv())
-        .await
-        .expect("timedout")
-        .expect("should not be none");
+    let (vote, _) = instance.recv_vote_message().await;
+    dbg!(&vote);
 
     // // No execute yet
     // assert!(
