@@ -20,37 +20,102 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use tari_template_abi::{Decode, Encode};
+use std::marker::PhantomData;
 
-use crate::models::{Bucket, ResourceAddress};
+use tari_template_abi::{call_engine, Decode, Encode, EngineOp};
+
+use crate::{
+    args::{InvokeResult, VaultAction, VaultInvokeArg},
+    models::{Amount, Bucket, ResourceAddress},
+    resource::{ResourceDefinition, ResourceType},
+    Hash,
+};
+
+pub type VaultId = (Hash, u32);
+
+#[derive(Clone, Debug, Decode, Encode)]
+pub enum VaultRef {
+    Vault {
+        address: ResourceAddress,
+        resource_type: ResourceType,
+    },
+    Ref(VaultId),
+}
+
+impl VaultRef {
+    pub fn resource_address(&self) -> Option<&ResourceAddress> {
+        match self {
+            VaultRef::Vault { address, .. } => Some(address),
+            VaultRef::Ref(_) => None,
+        }
+    }
+
+    pub fn resource_type(&self) -> Option<ResourceType> {
+        match self {
+            VaultRef::Vault { resource_type, .. } => Some(*resource_type),
+            VaultRef::Ref(_) => None,
+        }
+    }
+
+    pub fn vault_id(&self) -> Option<VaultId> {
+        match self {
+            VaultRef::Vault { .. } => None,
+            VaultRef::Ref(id) => Some(*id),
+        }
+    }
+}
 
 #[derive(Clone, Debug, Decode, Encode)]
 pub struct Vault<T> {
-    resource_address: ResourceAddress<T>,
+    vault_id: VaultId,
+    _t: PhantomData<T>,
 }
 
-impl<T> Vault<T> {
-    pub fn new(resource_address: ResourceAddress<T>) -> Self {
-        // Call to call_engine will rather be in the ResourceBuilder/VaultBuilder, and the resulting address passed in
-        // here. let resource_address = call_engine(OP_RESOURCE_INVOKE, ResourceInvoke {
-        //     resource_ref: ResourceRef::Vault,
-        //     action: ResourceAction::Create,
-        //     args: args![],
-        // });
+impl<T: ResourceDefinition> Vault<T> {
+    pub fn new_empty(resource_address: ResourceAddress) -> Self {
+        let resp: InvokeResult = call_engine(EngineOp::VaultInvoke, &VaultInvokeArg {
+            vault_ref: VaultRef::Vault {
+                address: resource_address,
+                resource_type: T::resource_type(),
+            },
+            action: VaultAction::Create,
+            args: args![],
+        })
+        .expect("OP_CREATE_VAULT returned null");
 
-        Self { resource_address }
+        Self {
+            vault_id: resp.decode().unwrap(),
+            _t: PhantomData,
+        }
     }
 
-    pub fn put(&mut self, _bucket: Bucket<T>) {
-        // let _ok: () = call_engine(OP_RESOURCE_INVOKE, ResourceInvoke {
-        //     resource_ref: ResourceRef::VaultRef(self.resource_address()),
-        //     action: ResourceAction::Put,
-        //     args: args![bucket],
-        // });
-        todo!()
+    pub fn from_bucket(bucket: Bucket<T>) -> Self {
+        let mut vault = Self::new_empty(bucket.resource_address());
+        vault.deposit(bucket);
+        vault
     }
 
-    pub fn resource_address(&self) -> ResourceAddress<T> {
-        self.resource_address
+    pub fn deposit(&mut self, bucket: Bucket<T>) {
+        call_engine::<_, ()>(EngineOp::VaultInvoke, &VaultInvokeArg {
+            vault_ref: VaultRef::Ref(self.vault_id()),
+            action: VaultAction::Deposit,
+            args: args![bucket.id()],
+        })
+        .expect("VaultInvoke returned null");
+    }
+
+    pub fn withdraw(&mut self, amount: Amount) -> Bucket<T> {
+        let resp: InvokeResult = call_engine(EngineOp::VaultInvoke, &VaultInvokeArg {
+            vault_ref: VaultRef::Ref(self.vault_id()),
+            action: VaultAction::WithdrawFungible,
+            args: args![amount],
+        })
+        .expect("VaultInvoke returned null");
+
+        resp.decode().expect("failed to decode Bucket")
+    }
+
+    pub fn vault_id(&self) -> VaultId {
+        self.vault_id
     }
 }

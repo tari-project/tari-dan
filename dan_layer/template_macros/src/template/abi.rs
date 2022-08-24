@@ -71,7 +71,7 @@ fn generate_function_def(f: &FunctionAst) -> Expr {
 fn generate_abi_type(rust_type: &TypeAst) -> Expr {
     match rust_type {
         // on "&self" we want to pass the component id
-        TypeAst::Receiver { .. } => get_component_id_type(),
+        TypeAst::Receiver { .. } => get_component_address_type(),
         // basic type
         // TODO: there may be a better way of handling this
         TypeAst::Typed(ident) => match ident.to_string().as_str() {
@@ -88,13 +88,20 @@ fn generate_abi_type(rust_type: &TypeAst) -> Expr {
             "u64" => parse_quote!(Type::U64),
             "u128" => parse_quote!(Type::U128),
             "String" => parse_quote!(Type::String),
-            "Self" => get_component_id_type(),
-            _ => todo!(),
+            "Self" => get_component_address_type(),
+            name => parse_quote!(Type::Other{ name: #name.to_string() }),
+        },
+
+        TypeAst::Tuple(_) => {
+            // TODO: Handle tuples properly
+            parse_quote!(Type::Other {
+                name: "tuple".to_string()
+            })
         },
     }
 }
 
-fn get_component_id_type() -> Expr {
+fn get_component_address_type() -> Expr {
     parse_quote!(Type::U32)
 }
 

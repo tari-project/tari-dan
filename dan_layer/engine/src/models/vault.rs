@@ -21,8 +21,9 @@
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 use tari_template_abi::{Decode, Encode};
+use tari_template_lib::models::{Amount, ResourceAddress};
 
-use crate::models::Resource;
+use crate::models::{resource::ResourceError, Bucket, Resource};
 
 #[derive(Debug, Clone, Encode, Decode)]
 pub struct Vault {
@@ -32,5 +33,22 @@ pub struct Vault {
 impl Vault {
     pub fn new(resource: Resource) -> Self {
         Self { resource }
+    }
+
+    pub fn deposit(&mut self, bucket: Bucket) -> Result<(), ResourceError> {
+        self.resource.deposit(bucket.into_resource())?;
+        Ok(())
+    }
+
+    pub fn withdraw_fungible(&mut self, amount: Amount) -> Resource {
+        self.resource.withdraw_fungible(amount)
+    }
+
+    pub fn resource_address(&self) -> ResourceAddress {
+        self.resource.address()
+    }
+
+    pub fn resource(&self) -> &Resource {
+        &self.resource
     }
 }
