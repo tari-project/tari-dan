@@ -76,10 +76,6 @@ impl<'a> AtomicDb<'a> for LmdbStateStore {
             tx,
         })
     }
-
-    fn commit(&self, tx: Self::WriteAccess) -> Result<(), Self::Error> {
-        tx.tx.commit()
-    }
 }
 
 impl<'a, T: Deref<Target = ConstTransaction<'a>>> StateReader for LmdbTransaction<T> {
@@ -103,6 +99,11 @@ impl<'a> StateWriter for LmdbTransaction<WriteTransaction<'a>> {
         access
             .put(&*self.db, key, &value, put::Flags::empty())
             .map_err(StateStoreError::custom)
+    }
+
+    fn commit(self) -> Result<(), StateStoreError> {
+        self.tx.commit().map_err(StateStoreError::custom)?;
+        Ok(())
     }
 }
 
@@ -150,7 +151,7 @@ mod tests {
         {
             let mut access = store.write_access().unwrap();
             access.set_state(b"abc", user_data.clone()).unwrap();
-            store.commit(access).unwrap();
+            access.commit().unwrap();
         }
 
         let access = store.read_access().unwrap();

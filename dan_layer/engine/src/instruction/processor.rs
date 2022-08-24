@@ -25,9 +25,9 @@ use std::sync::Arc;
 use tari_template_abi::encode;
 
 use crate::{
-    instruction::{error::InstructionError, Instruction, InstructionSet},
+    instruction::{error::InstructionError, Instruction, Transaction},
     packager::Package,
-    runtime::{Runtime, RuntimeInterface},
+    runtime::{Runtime, RuntimeInterface, RuntimeState},
     traits::Invokable,
     wasm::{ExecutionResult, Process},
 };
@@ -48,22 +48,28 @@ where TRuntimeInterface: RuntimeInterface + Clone + 'static
         }
     }
 
-    pub fn execute(&self, instruction_set: InstructionSet) -> Result<Vec<ExecutionResult>, InstructionError> {
-        let mut results = Vec::with_capacity(instruction_set.instructions.len());
+    pub fn execute(&self, transaction: Transaction) -> Result<Vec<ExecutionResult>, InstructionError> {
+        let mut results = Vec::with_capacity(transaction.instructions.len());
 
-        // TODO: implement engine
         let state = Runtime::new(Arc::new(self.runtime_interface.clone()));
-        for instruction in instruction_set.instructions {
+
+        for instruction in transaction.instructions {
             let result = match instruction {
                 Instruction::CallFunction {
-                    package_id,
+                    package_address,
                     template,
                     function,
                     args,
                 } => {
-                    if package_id != self.package.id() {
-                        return Err(InstructionError::PackageNotFound { package_id });
+                    if package_address != self.package.id() {
+                        return Err(InstructionError::PackageNotFound { package_address });
                     }
+
+                    state.interface().set_current_runtime_state(RuntimeState {
+                        package_address,
+                        // TODO: Get contract address
+                        contract_address: Default::default(),
+                    });
 
                     let module = self
                         .package
@@ -71,31 +77,37 @@ where TRuntimeInterface: RuntimeInterface + Clone + 'static
                         .ok_or(InstructionError::TemplateNameNotFound { name: template })?;
 
                     // TODO: implement intelligent instance caching
-                    let process = Process::start(module.clone(), state.clone(), package_id)?;
+                    let process = Process::start(module.clone(), state.clone(), package_address)?;
                     process.invoke_by_name(&function, args)?
                 },
                 Instruction::CallMethod {
-                    package_id,
-                    component_id,
+                    package_address,
+                    component_address,
                     method,
                     args,
                 } => {
-                    if package_id != self.package.id() {
-                        return Err(InstructionError::PackageNotFound { package_id });
+                    if package_address != self.package.id() {
+                        return Err(InstructionError::PackageNotFound { package_address });
                     }
-                    let component = self.runtime_interface.get_component(&component_id)?;
+                    let component = self.runtime_interface.get_component(&component_address)?;
                     let module = self.package.get_module_by_name(&component.module_name).ok_or_else(|| {
                         InstructionError::TemplateNameNotFound {
                             name: component.module_name.clone(),
                         }
                     })?;
 
+                    state.interface().set_current_runtime_state(RuntimeState {
+                        package_address,
+                        // TODO: Get contract address
+                        contract_address: Default::default(),
+                    });
+
                     let mut final_args = Vec::with_capacity(args.len() + 1);
                     final_args.push(encode(&component).unwrap());
                     final_args.extend(args);
 
                     // TODO: implement intelligent instance caching
-                    let process = Process::start(module.clone(), state.clone(), package_id)?;
+                    let process = Process::start(module.clone(), state.clone(), package_address)?;
                     process.invoke_by_name(&method, final_args)?
                 },
             };

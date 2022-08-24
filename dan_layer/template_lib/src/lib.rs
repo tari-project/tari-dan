@@ -27,7 +27,11 @@ pub use hash::Hash;
 #[macro_use]
 pub mod args;
 pub mod models;
-pub mod ops;
+
+mod context;
+pub use context::{get_context, init_context};
+
+pub mod resource;
 
 // ---------------------------------------- WASM target exports ------------------------------------------------
 
@@ -35,12 +39,9 @@ pub mod ops;
 pub mod template_dependencies;
 
 #[cfg(target_arch = "wasm32")]
-mod context;
-#[cfg(target_arch = "wasm32")]
-pub use context::{get_context, set_context_from_call_info};
-
-#[cfg(target_arch = "wasm32")]
 mod engine;
-
 #[cfg(target_arch = "wasm32")]
 pub use engine::engine;
+
+#[cfg(target_arch = "wasm32")]
+pub mod prelude;

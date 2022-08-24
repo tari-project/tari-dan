@@ -69,18 +69,6 @@ impl<'a> AtomicDb<'a> for SqliteStateStore {
     fn write_access(&'a self) -> Result<Self::WriteAccess, Self::Error> {
         self.access()
     }
-
-    fn commit(&self, tx: Self::WriteAccess) -> Result<(), Self::Error> {
-        self.conn
-            .transaction_manager()
-            .commit_transaction(tx.conn)
-            .map_err(|err| SqliteStorageError::DieselError {
-                source: err,
-                operation: "commit transaction".to_string(),
-            })?;
-
-        Ok(())
-    }
 }
 
 pub struct SqliteTransaction<'a> {
@@ -158,6 +146,19 @@ impl<'a> StateWriter for SqliteTransaction<'a> {
 
         Ok(())
     }
+
+    fn commit(self) -> Result<(), StateStoreError> {
+        self.conn
+            .transaction_manager()
+            .commit_transaction(self.conn)
+            .map_err(|err| SqliteStorageError::DieselError {
+                source: err,
+                operation: "commit transaction".to_string(),
+            })
+            .map_err(StateStoreError::custom)?;
+
+        Ok(())
+    }
 }
 
 impl Drop for SqliteTransaction<'_> {
@@ -210,7 +211,7 @@ mod tests {
         {
             let mut access = store.write_access().unwrap();
             access.set_state(b"abc", user_data.clone()).unwrap();
-            store.commit(access).unwrap();
+            access.commit().unwrap();
         }
 
         let access = store.read_access().unwrap();
