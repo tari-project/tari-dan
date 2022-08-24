@@ -148,8 +148,13 @@ fn test_tuples() {
     assert_eq!(number, 100);
 
     // tuples as a constructor output
-    // let (_, message): (ComponentId, String) = template_test.call_function("Tuple", "new", args![]);
-    // assert_eq!(message, "Hello World!");
-    // template_test.assert_calls(&["emit_log", "create_component"]);
-    // template_test.clear_calls();
+    template_test.clear_calls();
+    let (component_id, message): (ComponentId, String) = template_test.call_function("Tuple", "new", args![]);
+    assert_eq!(message, "Hello World!");
+
+    // the component id returned in the tuple must be valid and usable
+    let new_value = 20_u32;
+    template_test.call_method::<()>(component_id, "set", args![new_value]);
+    let value: u32 = template_test.call_method(component_id, "get", args![]);
+    assert_eq!(value, new_value);
 }

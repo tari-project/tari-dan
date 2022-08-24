@@ -22,7 +22,7 @@
 
 use proc_macro2::{Ident, Span, TokenStream};
 use quote::{format_ident, quote};
-use syn::{parse_quote, token::Brace, Block, Expr, ExprBlock, Result};
+use syn::{parse_quote, token::Brace, Block, Expr, ExprBlock, ExprField, Result};
 
 use crate::ast::{FunctionAst, TemplateAst, TypeAst};
 
@@ -128,17 +128,43 @@ fn get_function_block(template_ident: &Ident, ast: FunctionAst) -> Expr {
     });
 
     // replace "Self" if present in the return value
+    let template_name_str = template_ident.to_string();
     match ast.output_type {
         Some(output_type) => match output_type {
             TypeAst::Typed(ident) => {
                 if ident == "Self" {
-                    let template_name_str = template_ident.to_string();
                     stmts.push(parse_quote! {
                         let rtn = engine().instantiate(#template_name_str.to_string(), rtn);
                     });
                 }
             },
-            TypeAst::Tuple(_type_tuple) => {},
+            TypeAst::Tuple(type_tuple) => {
+                // build the expresions for each element in the tuple
+                let elems: Vec<Expr> = type_tuple
+                    .elems
+                    .iter()
+                    .enumerate()
+                    .map(|(i, t)| match t {
+                        syn::Type::Path(path) => {
+                            let ident = path.path.segments[0].ident.clone();
+                            let field_expr = build_tuple_field_expr("rtn".to_string(), i as u32);
+                            if ident == "Self" {
+                                parse_quote! {
+                                    engine().instantiate(#template_name_str.to_string(), #field_expr)
+                                }
+                            } else {
+                                field_expr
+                            }
+                        },
+                        _ => todo!(),
+                    })
+                    .collect();
+
+                // build the new tuple with
+                stmts.push(parse_quote! {
+                    let rtn = (#(#elems),*);
+                });
+            },
             _ => todo!(),
         },
         None => {},
@@ -182,4 +208,21 @@ fn get_function_block(template_ident: &Ident, ast: FunctionAst) -> Expr {
             stmts,
         },
     })
+}
+
+fn build_tuple_field_expr(name: String, i: u32) -> Expr {
+    let name = Ident::new(&name, Span::call_site());
+
+    let mut field_expr: ExprField = parse_quote! {
+        #name.0
+    };
+
+    match field_expr.member {
+        syn::Member::Unnamed(ref mut unnamed) => {
+            unnamed.index = i as u32;
+        },
+        _ => todo!(),
+    }
+
+    Expr::Field(field_expr)
 }

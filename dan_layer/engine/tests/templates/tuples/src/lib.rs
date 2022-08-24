@@ -36,5 +36,13 @@ mod tuple_template {
         pub fn tuple_output() -> (String, u32) {
             ("Hello World!".to_string(), 100)
         }
+
+        pub fn set(&mut self, value: u32) {
+            self.value = value;
+        }
+
+        pub fn get(&self) -> u32 {
+            self.value
+        }
     }
 }
