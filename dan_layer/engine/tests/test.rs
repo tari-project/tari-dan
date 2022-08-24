@@ -151,3 +151,25 @@ fn test_erc20() {
     let bucket: Bucket<()> = template_test.call_method(component_addr, "take_koins", args![Amount(100)]);
     eprintln!("{:?}", bucket);
 }
+
+#[test]
+fn test_private_function() {
+    // instantiate the counter
+    let template_test = TemplateTest::new(vec!["tests/templates/private_function"]);
+
+    // check that the private method and function are not exported
+    let functions = template_test
+        .get_module("PrivateCounter")
+        .template_def()
+        .functions
+        .iter()
+        .map(|f| f.name.as_str())
+        .collect::<Vec<_>>();
+    assert_eq!(functions, vec!["new", "get", "increase"]);
+
+    // check that public methods can still internally call private ones
+    let component: ComponentId = template_test.call_function("PrivateCounter", "new", args![]);
+    template_test.call_method::<()>(component, "increase", args![]);
+    let value: u32 = template_test.call_method(component, "get", args![]);
+    assert_eq!(value, 1);
+}
