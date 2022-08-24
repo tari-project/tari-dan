@@ -22,39 +22,39 @@
 
 use tari_template_abi::{Decode, Encode};
 
-use crate::models::{ContractAddress, PackageId};
+use crate::models::{ContractAddress, PackageAddress};
 
-pub type ComponentId = crate::Hash;
+pub type ComponentAddress = crate::Hash;
 
 #[derive(Debug, Clone, Encode, Decode)]
 pub struct ComponentInstance {
-    pub component_id: ComponentId,
+    pub component_address: ComponentAddress,
     pub contract_address: ContractAddress,
-    pub package_id: PackageId,
+    pub package_address: PackageAddress,
     pub module_name: String,
     pub state: Vec<u8>,
 }
 
 impl ComponentInstance {
-    pub fn new(component_id: ComponentId, component: Component) -> Self {
+    pub fn new(component_address: ComponentAddress, component: Component) -> Self {
         Self {
-            component_id,
+            component_address,
             contract_address: component.contract_address,
-            package_id: component.package_id,
+            package_address: component.package_address,
             module_name: component.module_name,
             state: component.state,
         }
     }
 
-    pub fn id(&self) -> ComponentId {
-        self.component_id
+    pub fn id(&self) -> ComponentAddress {
+        self.component_address
     }
 }
 
 #[derive(Debug, Clone, Encode, Decode)]
 pub struct Component {
     pub contract_address: ContractAddress,
-    pub package_id: PackageId,
+    pub package_address: PackageAddress,
     pub module_name: String,
     pub state: Vec<u8>,
 }

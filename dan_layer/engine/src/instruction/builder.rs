@@ -22,7 +22,7 @@
 
 use tari_common_types::types::PrivateKey;
 
-use super::{Instruction, InstructionSet};
+use super::{Instruction, Transaction};
 use crate::instruction::signature::InstructionSignature;
 
 #[derive(Debug, Clone, Default)]
@@ -51,8 +51,8 @@ impl InstructionBuilder {
         self
     }
 
-    pub fn build(&mut self) -> InstructionSet {
-        InstructionSet {
+    pub fn build(&mut self) -> Transaction {
+        Transaction {
             instructions: self.instructions.drain(..).collect(),
             signature: self.signature.take().expect("not signed"),
         }

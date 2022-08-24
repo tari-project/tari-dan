@@ -21,32 +21,102 @@
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 use tari_template_abi::{Decode, Encode};
-use tari_template_lib::Hash;
+use tari_template_lib::models::{Amount, Metadata, ResourceAddress};
 
-pub type ResourceAddress = Hash;
-
-#[derive(Debug, Clone, Encode, Decode, serde::Deserialize)]
-pub enum Resource {
-    Coin {
-        address: ResourceAddress,
-        // type_descriptor: TypeDescriptor,
-        amount: u64,
-    },
-    Token {
-        address: ResourceAddress,
-        // type_descriptor: TypeDescriptor,
-        token_ids: Vec<u64>,
-    },
+#[derive(Debug, Clone, Encode, Decode)]
+pub struct Resource {
+    resource_address: ResourceAddress,
+    state: ResourceState,
+    metadata: Metadata,
 }
 
-pub trait ResourceTypeDescriptor {
-    fn type_descriptor(&self) -> TypeDescriptor;
+impl Resource {
+    pub fn fungible(resource_address: ResourceAddress, amount: Amount, metadata: Metadata) -> Self {
+        Self {
+            resource_address,
+            state: ResourceState::Fungible { amount },
+            metadata,
+        }
+    }
+
+    pub fn non_fungible(resource_address: ResourceAddress, token_ids: Vec<u64>, metadata: Metadata) -> Self {
+        Self {
+            resource_address,
+            state: ResourceState::NonFungible { token_ids },
+            metadata,
+        }
+    }
+
+    pub fn amount(&self) -> Amount {
+        match &self.state {
+            ResourceState::Fungible { amount } => *amount,
+            ResourceState::NonFungible { token_ids } => token_ids.len().into(),
+        }
+    }
+
+    pub fn address(&self) -> ResourceAddress {
+        self.resource_address
+    }
+
+    pub fn non_fungible_token_ids(&self) -> Vec<u64> {
+        match &self.state {
+            ResourceState::NonFungible { token_ids } => token_ids.clone(),
+            _ => Vec::new(),
+        }
+    }
+
+    pub fn deposit(&mut self, other: Resource) -> Result<(), ResourceError> {
+        if self.resource_address != other.resource_address {
+            return Err(ResourceError::ResourceAddressMismatch);
+        }
+
+        #[allow(clippy::enum_glob_use)]
+        use ResourceState::*;
+        match (&mut self.state, other.state) {
+            (Fungible { amount }, Fungible { amount: other_amount }) => {
+                *amount += other_amount;
+            },
+            (
+                NonFungible { token_ids },
+                NonFungible {
+                    token_ids: other_token_ids,
+                },
+            ) => {
+                token_ids.extend(other_token_ids);
+            },
+            _ => return Err(ResourceError::FungibilityMismatch),
+        }
+        Ok(())
+    }
+
+    pub fn withdraw_fungible(&mut self, amt: Amount) -> Resource {
+        match &mut self.state {
+            ResourceState::Fungible { amount } => {
+                // TODO: check
+                *amount -= amt;
+                Resource::fungible(self.resource_address, amt, Metadata::default())
+            },
+            // TODO: errors
+            ResourceState::NonFungible { .. } => panic!("invalid"),
+        }
+    }
 }
 
-// The thinking here, that a resource address + a "local" type id together can used to validate type safety of the
-// resources at runtime. The local type id can be defined as a unique id within the scope of the contract. We'll have to
-// get further to see if this can work or is even needed.
-#[derive(Debug, Clone, Encode, Decode, serde::Deserialize)]
-pub struct TypeDescriptor {
-    type_id: u16,
+#[derive(Debug, Clone, Encode, Decode)]
+pub enum ResourceState {
+    Fungible { amount: Amount },
+    NonFungible { token_ids: Vec<u64> },
+    // Confidential {
+    //     inputs: Vec<Commitment>,
+    //     outputs: Vec<Commitment>,
+    //     kernels: Vec<Kernel>,
+    // },
+}
+
+#[derive(Debug, thiserror::Error)]
+pub enum ResourceError {
+    #[error("Resource fungibility does not match")]
+    FungibilityMismatch,
+    #[error("Resource addresses do not match")]
+    ResourceAddressMismatch,
 }

@@ -31,10 +31,16 @@ mod abi;
 pub use abi::*;
 pub use borsh::{BorshDeserialize as Decode, BorshSerialize as Encode};
 
+mod call_info;
+pub use call_info::CallInfo;
+
 mod encoding;
 pub use encoding::{decode, decode_len, encode, encode_into, encode_with_len};
 
-mod rust;
+mod ops;
+pub use ops::EngineOp;
+
+pub mod rust;
 
 mod types;
 pub use types::*;

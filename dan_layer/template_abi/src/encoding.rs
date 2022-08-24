@@ -40,8 +40,8 @@ pub fn encode_with_len<T: Encode>(val: &T) -> Vec<u8> {
     buf
 }
 
-pub fn encode_into<T: Encode>(val: &T, buf: &mut Vec<u8>) -> io::Result<()> {
-    val.serialize(buf)
+pub fn encode_into<T: Encode + ?Sized, W: io::Write>(val: &T, writer: &mut W) -> io::Result<()> {
+    val.serialize(writer)
 }
 
 pub fn encode<T: Encode>(val: &T) -> io::Result<Vec<u8>> {
@@ -51,7 +51,9 @@ pub fn encode<T: Encode>(val: &T) -> io::Result<Vec<u8>> {
 }
 
 pub fn decode<T: Decode>(mut input: &[u8]) -> io::Result<T> {
-    T::deserialize(&mut input)
+    let result = T::deserialize(&mut input)?;
+    // assert!(input.is_empty());
+    Ok(result)
 }
 
 pub fn decode_len(input: &[u8]) -> io::Result<usize> {

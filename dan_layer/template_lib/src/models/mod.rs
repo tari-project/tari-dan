@@ -20,6 +20,9 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+mod amount;
+pub use amount::Amount;
+
 mod bucket;
 pub use bucket::{Bucket, BucketId};
 
@@ -29,11 +32,15 @@ pub use component::*;
 mod contract;
 pub use contract::{Contract, ContractAddress};
 
+mod metadata;
+pub use metadata::Metadata;
+
 mod resource;
 pub use resource::ResourceAddress;
 
 mod package;
-pub use package::{Package, PackageId};
+pub use package::{Package, PackageAddress};
 
 mod vault;
-pub use vault::Vault;
+
+pub use vault::{Vault, VaultId, VaultRef};

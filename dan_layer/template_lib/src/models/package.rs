@@ -24,19 +24,19 @@ use tari_template_abi::{Decode, Encode};
 
 use crate::Hash;
 
-pub type PackageId = Hash;
+pub type PackageAddress = Hash;
 
 #[derive(Debug, Clone, Encode, Decode)]
 pub struct Package {
-    pub id: PackageId,
+    pub id: PackageAddress,
 }
 
 impl Package {
-    pub fn new(id: PackageId) -> Self {
+    pub fn new(id: PackageAddress) -> Self {
         Self { id }
     }
 
-    pub fn id(&self) -> &PackageId {
+    pub fn id(&self) -> &PackageAddress {
         &self.id
     }
 }
