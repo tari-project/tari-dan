@@ -55,7 +55,7 @@ pub use hot_stuff_tree_node::HotStuffTreeNode;
 pub use instruction_set::InstructionSet;
 pub use node::Node;
 pub use payload::{Payload, PayloadId};
-pub use quorum_certificate::QuorumCertificate;
+pub use quorum_certificate::{QuorumCertificate, QuorumDecision};
 pub use sidechain_block::SideChainBlock;
 pub use sidechain_metadata::SidechainMetadata;
 pub use tari_dan_payload::{CheckpointData, TariDanPayload};
@@ -75,6 +75,12 @@ impl ShardId {
 impl PartialOrd for ShardId {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
         self.0.partial_cmp(&other.0)
+    }
+}
+
+impl Ord for ShardId {
+    fn cmp(&self, other: &Self) -> Ordering {
+        self.0.cmp(&other.0)
     }
 }
 

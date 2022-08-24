@@ -38,10 +38,19 @@ use crate::{
     storage::chain::DbQc,
 };
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Copy)]
 pub enum QuorumDecision {
     Accept,
     Reject,
+}
+
+impl QuorumDecision {
+    pub fn as_u8(&self) -> u8 {
+        match self {
+            QuorumDecision::Accept => 1,
+            QuorumDecision::Reject => 0,
+        }
+    }
 }
 
 #[derive(Debug, Clone)]

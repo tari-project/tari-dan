@@ -6,7 +6,9 @@ use std::{
 
 use async_recursion::async_recursion;
 use clap::command;
+use digest::{Digest, FixedOutput};
 use tari_common_types::types::FixedHash;
+use tari_crypto::hash::blake2::Blake256;
 use tari_dan_engine::instruction::Instruction;
 use tokio::{
     sync::mpsc::{channel, Receiver, Sender},
@@ -28,6 +30,7 @@ use crate::{
         Payload,
         PayloadId,
         QuorumCertificate,
+        QuorumDecision,
         ShardId,
         SubstateChange,
         SubstateState,
@@ -55,7 +58,7 @@ pub struct ShardDb<TAddr: NodeAddressable, TPayload: Payload> {
     shard_leaf_nodes: HashMap<ShardId, (TreeNodeHash, NodeHeight)>,
     last_voted_heights: HashMap<ShardId, NodeHeight>,
     lock_node_and_heights: HashMap<ShardId, (TreeNodeHash, NodeHeight)>,
-    votes: HashMap<(TreeNodeHash, ShardId), Vec<(TAddr, ValidatorSignature)>>,
+    votes: HashMap<(TreeNodeHash, ShardId), Vec<(TAddr, VoteMessage)>>,
     nodes: HashMap<TreeNodeHash, HotStuffTreeNode<TAddr>>,
     last_executed_height: HashMap<ShardId, NodeHeight>,
     payloads: HashMap<PayloadId, TPayload>,
@@ -142,16 +145,23 @@ impl<TAddr: NodeAddressable, TPayload: Payload> ShardDb<TAddr, TPayload> {
         }
     }
 
-    pub fn save_vote_for(
+    pub fn save_received_vote_for(
         &mut self,
         from: TAddr,
         node_hash: TreeNodeHash,
         shard: ShardId,
-        signature: ValidatorSignature,
+        vote_message: VoteMessage,
     ) -> usize {
         let entry = self.votes.entry((node_hash, shard)).or_insert(vec![]);
-        entry.push((from, signature));
+        entry.push((from, vote_message));
         entry.len()
+    }
+
+    pub fn get_received_votes_for(&self, node_hash: TreeNodeHash, shard: ShardId) -> Vec<VoteMessage> {
+        self.votes
+            .get(&(node_hash, shard))
+            .map(|v| v.iter().map(|s| s.1.clone()).collect())
+            .unwrap_or(vec![])
     }
 
     pub fn save_payload_vote(
@@ -180,14 +190,6 @@ impl<TAddr: NodeAddressable, TPayload: Payload> ShardDb<TAddr, TPayload> {
             .get(&payload)
             .and_then(|pv| pv.get(&payload_height))
             .and_then(|ph| ph.get(&shard).cloned())
-    }
-
-    pub fn get_signatures_for(&self, node_hash: TreeNodeHash, shard: ShardId) -> Vec<(TAddr, ValidatorSignature)> {
-        if let Some(sigs) = self.votes.get(&(node_hash, shard)) {
-            sigs.clone()
-        } else {
-            vec![]
-        }
     }
 
     pub fn save_node(&mut self, node: HotStuffTreeNode<TAddr>) {
@@ -251,10 +253,55 @@ impl<TAddr: NodeAddressable, TPayload: Payload> ShardDb<TAddr, TPayload> {
 
 #[derive(Debug, Clone)]
 pub struct VoteMessage {
-    pub local_node_hash: TreeNodeHash,
-    pub shard: ShardId,
-    pub other_shard_nodes: Vec<(ShardId, TreeNodeHash)>,
-    pub signature: ValidatorSignature,
+    local_node_hash: TreeNodeHash,
+    shard: ShardId,
+    decision: QuorumDecision,
+    other_shard_nodes: Vec<(ShardId, TreeNodeHash, Vec<ObjectPledge>)>,
+    signature: Option<ValidatorSignature>,
+}
+
+impl VoteMessage {
+    pub fn new(
+        local_node_hash: TreeNodeHash,
+        shard: ShardId,
+        decision: QuorumDecision,
+        mut other_shard_nodes: Vec<(ShardId, TreeNodeHash, Vec<ObjectPledge>)>,
+    ) -> Self {
+        other_shard_nodes.sort_by(|a, b| a.0.cmp(&b.0));
+
+        Self {
+            local_node_hash,
+            shard,
+            decision,
+            other_shard_nodes,
+            signature: None,
+        }
+    }
+
+    pub fn sign(&mut self) {
+        // TODO: better signature
+        self.signature = Some(ValidatorSignature::from_bytes(&[9u8; 32]))
+    }
+
+    pub fn signature(&self) -> &ValidatorSignature {
+        self.signature.as_ref().unwrap()
+    }
+
+    pub fn get_all_nodes_hash(&self) -> FixedHash {
+        let mut result = Blake256::new().chain(&[self.decision.as_u8()]);
+        // data must already be sorted
+        for (shard, hash, pledges) in &self.other_shard_nodes {
+            result = result
+                .chain(shard.0.to_le_bytes())
+                .chain(hash.as_bytes())
+                .chain((pledges.len() as u32).to_le_bytes());
+
+            for p in pledges {
+                result = result.chain(p.object_id.0.to_le_bytes())
+            }
+        }
+        result.finalize_fixed().into()
+    }
 }
 
 pub trait LeaderStrategy<TAddr: NodeAddressable, TPayload> {
@@ -756,7 +803,7 @@ impl<
                     .shard_db
                     .get_payload_vote(node.payload(), node.payload_height(), *s)
                 {
-                    votes.push((shard, vote.hash().clone()));
+                    votes.push((shard, vote.hash().clone(), vote.local_pledges().to_vec()));
                 } else {
                     break;
                 }
@@ -779,12 +826,11 @@ impl<
                     self.shard_db.set_last_voted_height(local_shard, local_node.height());
 
                     let signature = ValidatorSignature::from_bytes(&self.sign(node.hash(), shard));
-                    let vote_msg = VoteMessage {
-                        local_node_hash: local_node.hash().clone(),
-                        shard: local_shard,
-                        other_shard_nodes: votes.clone(),
-                        signature,
-                    };
+                    // TODO: Actually decide on this
+                    let decision = QuorumDecision::Accept;
+                    let mut vote_msg =
+                        VoteMessage::new(local_node.hash().clone(), local_shard, decision, votes.clone());
+                    vote_msg.sign();
 
                     self.tx_vote_message
                         .send((
@@ -834,28 +880,47 @@ impl<
             return Err("Not a valid committee member".to_string());
         }
 
-        let total_votes = self
-            .shard_db
-            .save_vote_for(from, msg.local_node_hash.clone(), msg.shard, msg.signature);
+        let total_votes =
+            self.shard_db
+                .save_received_vote_for(from, msg.local_node_hash.clone(), msg.shard, msg.clone());
         // Check for consensus
         dbg!(total_votes);
         if total_votes >= valid_committee.consensus_threshold() {
-            todo!("Need to check that they all voted for the same other nodes");
-            // let signatures = self.shard_db.get_signatures_for(msg.node_hash.clone(), msg.shard);
-            //
-            // let qc = QuorumCertificate::new(
-            //     node.payload(),
-            //     node.payload_height(),
-            //     node.hash(),
-            //     node.height(),
-            //     node.shard(),
-            //     node.epoch(),
-            //     node.involved_shards(),
-            //     signatures.iter().map(|(_, sig)| sig.clone()).collect(),
-            // );
-            // self.shard_db.update_high_qc(qc);
-            // // Should be the pace maker actually
-            // self.on_beat(msg.shard, None).await?;
+            let mut different_votes = HashMap::new();
+            for vote in self
+                .shard_db
+                .get_received_votes_for(msg.local_node_hash.clone(), msg.shard)
+            {
+                let mut entry = different_votes.entry(vote.get_all_nodes_hash()).or_insert(vec![]);
+                entry.push(vote);
+            }
+
+            // Check that there is sufficient votes for a single set of nodes that we can use to generate a qc
+            for (hash, votes) in different_votes {
+                if votes.len() >= valid_committee.consensus_threshold() {
+                    let signatures = votes.iter().map(|v| v.signature().clone()).collect();
+
+                    let main_vote = votes.get(0).unwrap();
+
+                    let qc = QuorumCertificate::new(
+                        node.payload(),
+                        node.payload_height(),
+                        main_vote.local_node_hash,
+                        node.height(),
+                        node.shard(),
+                        node.epoch(),
+                        main_vote.decision,
+                        main_vote.other_shard_nodes.clone(),
+                        signatures,
+                    );
+                    self.shard_db.update_high_qc(qc);
+                    // Should be the pace maker actually
+                    self.on_beat(msg.shard, node.payload()).await?;
+                    return Ok(());
+                }
+                dbg!("Not enough votes for this one", votes.len());
+            }
+            dbg!("Enough votes, but not enough for a single node");
         }
         Ok(())
     }
@@ -1112,14 +1177,14 @@ async fn test_hs_waiter_leader_sends_new_proposal_when_enough_votes_are_received
     let vote_hash = proposal_message.node().unwrap().hash().clone();
 
     // Create some votes
-    let vote = VoteMessage {
-        local_node_hash: vote_hash.clone(),
-        shard: ShardId(0),
-        other_shard_nodes: Default::default(),
-        signature: ValidatorSignature {
-            signer: node1.clone().into_bytes(),
-        },
-    };
+    let mut vote = VoteMessage::new(
+        vote_hash.clone(),
+        ShardId(0),
+        QuorumDecision::Accept,
+        Default::default(),
+    );
+
+    vote.sign();
     instance.tx_votes.send((node1, vote.clone())).await.unwrap();
 
     // Should get no proposal
@@ -1131,14 +1196,13 @@ async fn test_hs_waiter_leader_sends_new_proposal_when_enough_votes_are_received
     );
 
     // Send another vote
-    let vote = VoteMessage {
-        local_node_hash: vote_hash.clone(),
-        shard: ShardId(0),
-        other_shard_nodes: Default::default(),
-        signature: ValidatorSignature {
-            signer: node2.clone().into_bytes(),
-        },
-    };
+    let mut vote = VoteMessage::new(
+        vote_hash.clone(),
+        ShardId(0),
+        QuorumDecision::Accept,
+        Default::default(),
+    );
+    vote.sign();
     instance.tx_votes.send((node2, vote)).await.unwrap();
 
     // should get a proposal

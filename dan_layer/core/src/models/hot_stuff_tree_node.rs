@@ -147,6 +147,10 @@ impl<TAddr: NodeAddressable> HotStuffTreeNode<TAddr> {
     pub fn height(&self) -> NodeHeight {
         self.height
     }
+
+    pub fn local_pledges(&self) -> &[ObjectPledge] {
+        self.local_pledges.as_slice()
+    }
 }
 
 impl<TAddr: NodeAddressable> PartialEq for HotStuffTreeNode<TAddr> {
