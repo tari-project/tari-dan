@@ -26,6 +26,7 @@ use crate::{
     decode,
     decode_len,
     encode_into,
+    ops::EngineOp,
     rust::{fmt, mem, ptr::copy, slice, vec::Vec},
     Decode,
     Encode,
@@ -42,12 +43,12 @@ pub fn wrap_ptr(mut v: Vec<u8>) -> *mut u8 {
     ptr
 }
 
-pub fn call_engine<T: Encode, U: Decode + fmt::Debug>(op: i32, input: &T) -> Option<U> {
+pub fn call_engine<T: Encode, U: Decode + fmt::Debug>(op: EngineOp, input: &T) -> Option<U> {
     let mut encoded = Vec::with_capacity(512);
     encode_into(input, &mut encoded).unwrap();
     let len = encoded.len();
     let input_ptr = wrap_ptr(encoded) as *const _;
-    let ptr = unsafe { tari_engine(op, input_ptr, len) };
+    let ptr = unsafe { tari_engine(op.as_i32(), input_ptr, len) };
     if ptr.is_null() {
         return None;
     }

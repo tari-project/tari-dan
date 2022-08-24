@@ -5,7 +5,7 @@ mod bucket;
 pub use bucket::Bucket;
 
 mod resource;
-pub use resource::{Resource, ResourceAddress};
+pub use resource::{Resource, ResourceError};
 
 mod vault;
 pub use vault::Vault;
