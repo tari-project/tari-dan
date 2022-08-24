@@ -20,41 +20,49 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use std::sync::{atomic::AtomicU32, Arc, RwLock};
+use std::sync::{Arc, RwLock};
 
-use digest::Digest;
 use tari_dan_engine::{
-    crypto,
-    runtime::{RuntimeError, RuntimeInterface},
+    runtime::{IdProvider, RuntimeError, RuntimeInterface, RuntimeState},
     state_store::{memory::MemoryStateStore, AtomicDb, StateReader, StateWriter},
 };
 use tari_template_lib::{
-    args::LogLevel,
-    models::{Component, ComponentId, ComponentInstance},
+    args::{
+        BucketAction,
+        BucketRef,
+        CreateComponentArg,
+        InvokeResult,
+        LogLevel,
+        ResourceAction,
+        ResourceRef,
+        VaultAction,
+    },
+    models::{Component, ComponentAddress, ComponentInstance, VaultRef},
+    Hash,
 };
 
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone)]
 pub struct MockRuntimeInterface {
-    ids: Arc<AtomicU32>,
     state: MemoryStateStore,
     calls: Arc<RwLock<Vec<&'static str>>>,
+    id_provider: IdProvider,
+    resource_invoke_result: Arc<RwLock<Option<InvokeResult>>>,
+    runtime_state: Arc<RwLock<Option<RuntimeState>>>,
 }
 
 impl MockRuntimeInterface {
     pub fn new() -> Self {
         Self {
-            ids: Arc::new(AtomicU32::new(0)),
             state: MemoryStateStore::default(),
             calls: Arc::new(RwLock::new(vec![])),
+            id_provider: IdProvider::new(Hash::default()),
+            resource_invoke_result: Arc::new(RwLock::new(None)),
+            runtime_state: Arc::new(RwLock::new(None)),
         }
     }
 
     pub fn state_store(&self) -> MemoryStateStore {
         self.state.clone()
-    }
-
-    pub fn next_id(&self) -> u32 {
-        self.ids.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
     }
 
     pub fn get_calls(&self) -> Vec<&'static str> {
@@ -65,13 +73,21 @@ impl MockRuntimeInterface {
         self.calls.write().unwrap().clear();
     }
 
+    // pub fn set_resource_invoke_result(&self, result: InvokeResult) {
+    //     *self.resource_invoke_result.write().unwrap() = Some(result);
+    // }
+
     fn add_call(&self, call: &'static str) {
         self.calls.write().unwrap().push(call);
     }
 }
 
 impl RuntimeInterface for MockRuntimeInterface {
-    fn emit_log(&self, level: LogLevel, message: &str) {
+    fn set_current_runtime_state(&self, state: RuntimeState) {
+        self.runtime_state.write().unwrap().replace(state);
+    }
+
+    fn emit_log(&self, level: LogLevel, message: String) {
         self.add_call("emit_log");
         let level = match level {
             LogLevel::Error => log::Level::Error,
@@ -83,42 +99,78 @@ impl RuntimeInterface for MockRuntimeInterface {
         log::log!(target: "tari::dan::engine::runtime", level, "{}", message);
     }
 
-    fn create_component(&self, new_component: Component) -> Result<ComponentId, RuntimeError> {
+    fn create_component(&self, arg: CreateComponentArg) -> Result<ComponentAddress, RuntimeError> {
         self.add_call("create_component");
-        let component_id: [u8; 32] = crypto::hasher("component")
-            .chain(self.next_id().to_le_bytes())
-            .finalize()
-            .into();
+        let new_component = Component {
+            contract_address: Default::default(),
+            package_address: Default::default(),
+            module_name: arg.module_name,
+            state: arg.state,
+        };
+        let component_address = self.id_provider.new_component_address(&new_component);
 
-        let component = ComponentInstance::new(component_id.into(), new_component);
+        let component = ComponentInstance::new(component_address, new_component);
         let mut tx = self.state.write_access().map_err(RuntimeError::StateDbError)?;
-        tx.set_state(&component_id, component)?;
-        self.state.commit(tx).map_err(RuntimeError::StateDbError)?;
+        tx.set_state(&component_address, component)?;
+        tx.commit()?;
 
-        Ok(component_id.into())
+        Ok(component_address)
     }
 
-    fn get_component(&self, component_id: &ComponentId) -> Result<ComponentInstance, RuntimeError> {
+    fn get_component(&self, component_address: &ComponentAddress) -> Result<ComponentInstance, RuntimeError> {
         self.add_call("get_component");
         let component = self
             .state
             .read_access()
             .map_err(RuntimeError::StateDbError)?
-            .get_state(component_id)?
-            .ok_or(RuntimeError::ComponentNotFound { id: *component_id })?;
+            .get_state(component_address)?
+            .ok_or(RuntimeError::ComponentNotFound {
+                address: *component_address,
+            })?;
         Ok(component)
     }
 
-    fn set_component_state(&self, component_id: &ComponentId, state: Vec<u8>) -> Result<(), RuntimeError> {
+    fn set_component_state(&self, component_address: &ComponentAddress, state: Vec<u8>) -> Result<(), RuntimeError> {
         self.add_call("set_component_state");
         let mut tx = self.state.write_access().map_err(RuntimeError::StateDbError)?;
-        let mut component: ComponentInstance = tx
-            .get_state(component_id)?
-            .ok_or(RuntimeError::ComponentNotFound { id: *component_id })?;
+        let mut component: ComponentInstance =
+            tx.get_state(component_address)?
+                .ok_or(RuntimeError::ComponentNotFound {
+                    address: *component_address,
+                })?;
         component.state = state;
-        tx.set_state(&component_id, component)?;
-        self.state.commit(tx).map_err(RuntimeError::StateDbError)?;
+        tx.set_state(&component_address, component)?;
+        tx.commit()?;
 
         Ok(())
+    }
+
+    fn resource_invoke(
+        &self,
+        _resource_ref: ResourceRef,
+        _action: ResourceAction,
+        _args: Vec<Vec<u8>>,
+    ) -> Result<InvokeResult, RuntimeError> {
+        self.add_call("resource_invoke");
+        Ok(self.resource_invoke_result.read().unwrap().as_ref().unwrap().clone())
+    }
+
+    fn vault_invoke(
+        &self,
+        _resource_ref: VaultRef,
+        _action: VaultAction,
+        _args: Vec<Vec<u8>>,
+    ) -> Result<InvokeResult, RuntimeError> {
+        self.add_call("vault_invoke");
+        Ok(self.resource_invoke_result.read().unwrap().as_ref().unwrap().clone())
+    }
+
+    fn bucket_invoke(
+        &self,
+        _bucket_ref: BucketRef,
+        _action: BucketAction,
+        _args: Vec<Vec<u8>>,
+    ) -> Result<InvokeResult, RuntimeError> {
+        todo!()
     }
 }

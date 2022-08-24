@@ -23,12 +23,19 @@
 use std::io;
 
 use borsh::{BorshDeserialize, BorshSerialize};
-use tari_template_abi::{decode, encode, encode_into, encode_with_len, CallInfo, Type};
+use tari_template_abi::{decode, encode, encode_into, encode_with_len, CallInfo, EngineOp, Type};
 use tari_template_lib::{
     abi_context::AbiContext,
-    args::{CreateComponentArg, EmitLogArg, GetComponentArg, SetComponentStateArg},
-    models::{Component, Contract, ContractAddress, Package, PackageId},
-    ops,
+    args::{
+        BucketInvokeArg,
+        CreateComponentArg,
+        EmitLogArg,
+        GetComponentArg,
+        ResourceInvokeArg,
+        SetComponentStateArg,
+        VaultInvokeArg,
+    },
+    models::{Contract, ContractAddress, Package, PackageAddress},
 };
 use wasmer::{Function, Instance, Module, Store, Val, WasmerEnv};
 
@@ -49,12 +56,16 @@ pub struct Process {
     module: LoadedWasmModule,
     env: WasmEnv<Runtime>,
     instance: Instance,
-    package_id: PackageId,
+    package_address: PackageAddress,
     contract_address: ContractAddress,
 }
 
 impl Process {
-    pub fn start(module: LoadedWasmModule, state: Runtime, package_id: PackageId) -> Result<Self, WasmExecutionError> {
+    pub fn start(
+        module: LoadedWasmModule,
+        state: Runtime,
+        package_address: PackageAddress,
+    ) -> Result<Self, WasmExecutionError> {
         let store = Store::default();
         let mut env = WasmEnv::new(state);
         let tari_engine = Function::new_native_with_env(&store, env.clone(), Self::tari_engine_entrypoint);
@@ -65,7 +76,7 @@ impl Process {
             module,
             env,
             instance,
-            package_id,
+            package_address,
             // TODO:
             contract_address: ContractAddress::default(),
         })
@@ -93,31 +104,49 @@ impl Process {
             },
         };
 
+        let op = match EngineOp::from_i32(op) {
+            Some(op) => op,
+            None => {
+                log::error!(target: LOG_TARGET, "Invalid opcode: {}", op);
+                return 0;
+            },
+        };
+
         let result = match op {
-            ops::OP_EMIT_LOG => Self::handle(env, arg, |env, arg: EmitLogArg| {
-                env.state().interface().emit_log(arg.level, &arg.message);
+            EngineOp::EmitLog => Self::handle(env, arg, |env, arg: EmitLogArg| {
+                env.state().interface().emit_log(arg.level, arg.message);
                 Result::<_, WasmExecutionError>::Ok(())
             }),
-            ops::OP_CREATE_COMPONENT => Self::handle(env, arg, |env, arg: CreateComponentArg| {
-                env.state().interface().create_component(Component {
-                    contract_address: arg.contract_address,
-                    package_id: arg.package_id,
-                    module_name: arg.module_name,
-                    state: arg.state,
-                })
+            EngineOp::CreateComponent => Self::handle(env, arg, |env, arg: CreateComponentArg| {
+                env.state().interface().create_component(arg)
             }),
-            ops::OP_GET_COMPONENT => Self::handle(env, arg, |env, arg: GetComponentArg| {
-                env.state().interface().get_component(&arg.component_id)
+            EngineOp::GetComponent => Self::handle(env, arg, |env, arg: GetComponentArg| {
+                env.state().interface().get_component(&arg.component_address)
             }),
-            ops::OP_SET_COMPONENT_STATE => Self::handle(env, arg, |env, arg: SetComponentStateArg| {
+            EngineOp::SetComponentState => Self::handle(env, arg, |env, arg: SetComponentStateArg| {
                 env.state()
                     .interface()
-                    .set_component_state(&arg.component_id, arg.state)
+                    .set_component_state(&arg.component_address, arg.state)
             }),
-            _ => Err(WasmExecutionError::InvalidOperation { op }),
+            EngineOp::ResourceInvoke => Self::handle(env, arg, |env, arg: ResourceInvokeArg| {
+                env.state()
+                    .interface()
+                    .resource_invoke(arg.resource_ref, arg.action, arg.args)
+            }),
+            EngineOp::VaultInvoke => Self::handle(env, arg, |env, arg: VaultInvokeArg| {
+                env.state()
+                    .interface()
+                    .vault_invoke(arg.vault_ref, arg.action, arg.args)
+            }),
+            EngineOp::BucketInvoke => Self::handle(env, arg, |env, arg: BucketInvokeArg| {
+                env.state()
+                    .interface()
+                    .bucket_invoke(arg.bucket_ref, arg.action, arg.args)
+            }),
         };
 
         result.unwrap_or_else(|err| {
+            eprintln!("{}", err);
             log::error!(target: LOG_TARGET, "{}", err);
             0
         })
@@ -145,7 +174,9 @@ impl Process {
 
     fn encoded_abi_context(&self) -> Vec<u8> {
         encode(&AbiContext {
-            package: Package { id: self.package_id },
+            package: Package {
+                id: self.package_address,
+            },
             contract: Contract {
                 address: self.contract_address,
             },

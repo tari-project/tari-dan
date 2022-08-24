@@ -62,11 +62,6 @@ impl<'a> AtomicDb<'a> for MemoryStateStore {
             guard,
         })
     }
-
-    fn commit(&self, mut tx: Self::WriteAccess) -> Result<(), Self::Error> {
-        tx.guard.extend(tx.pending.into_iter());
-        Ok(())
-    }
 }
 
 impl<'a> StateReader for MemoryTransaction<RwLockReadGuard<'a, InnerKvMap>> {
@@ -92,6 +87,11 @@ impl<'a> StateReader for MemoryTransaction<RwLockWriteGuard<'a, InnerKvMap>> {
 impl<'a> StateWriter for MemoryTransaction<RwLockWriteGuard<'a, InnerKvMap>> {
     fn set_state_raw(&mut self, key: &[u8], value: Vec<u8>) -> Result<(), StateStoreError> {
         self.pending.insert(key.to_vec(), value);
+        Ok(())
+    }
+
+    fn commit(mut self) -> Result<(), StateStoreError> {
+        self.guard.extend(self.pending.into_iter());
         Ok(())
     }
 }
@@ -146,7 +146,7 @@ mod tests {
         {
             let mut access = store.write_access().unwrap();
             access.set_state(b"abc", user_data.clone()).unwrap();
-            store.commit(access).unwrap();
+            access.commit().unwrap();
         }
 
         let access = store.read_access().unwrap();

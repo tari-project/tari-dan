@@ -20,28 +20,51 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use std::{borrow::Borrow, cell::RefCell};
-
 use tari_template_abi::{decode, CallInfo};
 
 use crate::{
     abi_context::AbiContext,
     models::{Contract, Package},
+    resource::ResourceManager,
 };
 
-thread_local! {
-    static CONTEXT: RefCell<Option<AbiContext>> = RefCell::new(None);
+#[cfg(target_arch = "wasm32")]
+mod with_thread_local {
+    use std::{borrow::Borrow, cell::RefCell};
+
+    use super::*;
+
+    thread_local! {
+        static CONTEXT: RefCell<Option<SystemContext>> = RefCell::new(None);
+    }
+
+    pub fn with_context<R, F: FnOnce(&mut Option<SystemContext>) -> R>(f: F) -> R {
+        CONTEXT.borrow().with(|c| f(&mut c.borrow_mut()))
+    }
 }
 
-pub fn set_context_from_call_info(call_info: &CallInfo) {
+#[cfg(target_arch = "wasm32")]
+use with_thread_local::*;
+
+#[cfg(not(target_arch = "wasm32"))]
+fn with_context<R, F: FnOnce(&mut Option<SystemContext>) -> R>(_f: F) -> R {
+    panic!("System context is not available on non-WASM targets");
+}
+
+#[derive(Debug)]
+pub struct SystemContext {
+    abi_context: AbiContext,
+    resource_manager: ResourceManager,
+}
+
+pub fn init_context(call_info: &CallInfo) {
     let abi_context = decode(&call_info.abi_context).expect("Failed to decode ABI context");
     with_context(|ctx| {
-        *ctx = Some(abi_context);
+        *ctx = Some(SystemContext {
+            abi_context,
+            resource_manager: ResourceManager::new(),
+        });
     });
-}
-
-pub fn with_context<R, F: FnOnce(&mut Option<AbiContext>) -> R>(f: F) -> R {
-    CONTEXT.borrow().with(|c| f(&mut c.borrow_mut()))
 }
 
 pub fn get_context() -> Context {
@@ -52,10 +75,14 @@ pub fn get_context() -> Context {
 pub struct Context;
 impl Context {
     pub fn package(&self) -> Package {
-        with_context(|ctx| ctx.as_ref().unwrap().package.clone())
+        with_context(|ctx| ctx.as_ref().unwrap().abi_context.package.clone())
     }
 
     pub fn contract(&self) -> Contract {
-        with_context(|ctx| ctx.as_ref().unwrap().contract.clone())
+        with_context(|ctx| ctx.as_ref().unwrap().abi_context.contract.clone())
+    }
+
+    pub fn with_resource_manager<R, F: FnOnce(&mut ResourceManager) -> R>(&self, f: F) -> R {
+        with_context(|ctx| f(&mut ctx.as_mut().unwrap().resource_manager))
     }
 }

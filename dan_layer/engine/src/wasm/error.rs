@@ -38,8 +38,6 @@ pub enum WasmExecutionError {
     MemoryAllocationFailed,
     #[error("Memory not initialized")]
     MemoryNotInitialized,
-    #[error("Invalid operation {op}")]
-    InvalidOperation { op: i32 },
     #[error("Missing function {function}")]
     MissingAbiFunction { function: String },
     #[error("Runtime error: {0}")]

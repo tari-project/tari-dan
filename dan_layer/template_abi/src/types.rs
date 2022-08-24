@@ -60,11 +60,5 @@ pub enum Type {
     U64,
     U128,
     String,
-}
-
-#[derive(Debug, Clone, Encode, Decode)]
-pub struct CallInfo {
-    pub func_name: String,
-    pub args: Vec<Vec<u8>>,
-    pub abi_context: Vec<u8>,
+    Other { name: String },
 }

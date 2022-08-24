@@ -1,12 +1,5 @@
 ./CODEOWNERS
 ./LICENSE
-./Makefile
-./base_layer/core/src/proof_of_work/lwma_diff.rs
-./base_layer/key_manager/Makefile
-./base_layer/p2p/src/dns/roots/tls.rs
-./buildtools/docker/torrc
-./docs/src/theme/book.js
-./docs/src/theme/highlight.js
 ./integration_tests/Makefile
 ./integration_tests/cucumber.js
 ./integration_tests/environment

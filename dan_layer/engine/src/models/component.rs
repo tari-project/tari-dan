@@ -31,7 +31,7 @@ pub type ComponentId = Hash;
 #[derive(Debug, Clone, Encode, Decode)]
 pub struct Component {
     pub contract_address: ContractAddress,
-    pub package_id: PackageId,
+    pub package_address: PackageId,
     pub module_name: String,
     pub state: Vec<u8>,
 }
@@ -40,7 +40,7 @@ impl From<CreateComponentArg> for Component {
     fn from(arg: CreateComponentArg) -> Self {
         Self {
             contract_address: arg.contract_address,
-            package_id: arg.package_id,
+            package_address: arg.package_address,
             module_name: arg.component_name,
             state: arg.state,
         }

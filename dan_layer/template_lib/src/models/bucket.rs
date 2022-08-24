@@ -22,15 +22,55 @@
 
 use std::marker::PhantomData;
 
+use tari_template_abi::{call_engine, Decode, Encode, EngineOp};
+
+use crate::{
+    args::{BucketAction, BucketInvokeArg, BucketRef, InvokeResult},
+    models::{Amount, ResourceAddress},
+    resource::ResourceDefinition,
+};
+
 pub type BucketId = u32;
 
+#[derive(Debug, Clone, Decode, Encode)]
 pub struct Bucket<T> {
     id: BucketId,
     _t: PhantomData<T>,
 }
 
-impl<T> Bucket<T> {
+impl<T: ResourceDefinition> Bucket<T> {
+    pub(crate) fn new(resource_addr: ResourceAddress) -> Self {
+        let resp: InvokeResult = call_engine(EngineOp::BucketInvoke, &BucketInvokeArg {
+            bucket_ref: BucketRef::Bucket(resource_addr),
+            action: BucketAction::Create,
+            args: args![],
+        })
+        .expect("Create bucket returned null");
+
+        // TODO: Create bucket with the given resource and get the id
+        Self {
+            id: resp.decode().expect("Create bucket returned invalid bucket id"),
+            _t: PhantomData,
+        }
+    }
+
     pub fn id(&self) -> BucketId {
         self.id
+    }
+
+    pub fn resource_address(&self) -> ResourceAddress {
+        let resp: InvokeResult = call_engine(EngineOp::BucketInvoke, &BucketInvokeArg {
+            bucket_ref: BucketRef::Ref(self.id),
+            action: BucketAction::GetResourceAddress,
+            args: args![],
+        })
+        .expect("Bucket GetResource returned null");
+
+        resp.decode()
+            .expect("Bucket GetResource returned invalid resource address")
+    }
+
+    pub fn split(self, _amount: Amount) -> (Self, Self) {
+        todo!()
     }
 }
