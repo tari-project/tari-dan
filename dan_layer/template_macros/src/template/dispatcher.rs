@@ -22,7 +22,7 @@
 
 use proc_macro2::{Ident, Span, TokenStream};
 use quote::{format_ident, quote};
-use syn::{parse_quote, token::Brace, Block, Expr, ExprBlock, ExprField, Result};
+use syn::{parse_quote, token::Brace, Block, Expr, ExprBlock, ExprField, Result, Stmt, TypeTuple};
 
 use crate::ast::{FunctionAst, TemplateAst, TypeAst};
 
@@ -82,12 +82,12 @@ fn get_function_block(template_ident: &Ident, ast: FunctionAst) -> Expr {
     let mut should_set_state = false;
 
     // encode all arguments of the functions
-    for (i, input_type) in ast.input_types.into_iter().enumerate() {
+    for (i, input_type) in ast.input_types.iter().enumerate() {
         let arg_ident = format_ident!("arg_{}", i);
         let stmt = match input_type {
             // "self" argument
             TypeAst::Receiver { mutability } => {
-                should_set_state = mutability;
+                should_set_state = *mutability;
                 args.push(parse_quote! { &mut state });
                 vec![
                     parse_quote! {
@@ -128,62 +128,7 @@ fn get_function_block(template_ident: &Ident, ast: FunctionAst) -> Expr {
     });
 
     // replace "Self" if present in the return value
-    let template_name_str = template_ident.to_string();
-    match ast.output_type {
-        Some(output_type) => match output_type {
-            TypeAst::Typed(ident) => {
-                if ident == "Self" {
-                    stmts.push(parse_quote! {
-                        let rtn = engine().instantiate(#template_name_str.to_string(), rtn);
-                    });
-                }
-            },
-            TypeAst::Tuple(type_tuple) => {
-                // build the expresions for each element in the tuple
-                let elems: Vec<Expr> = type_tuple
-                    .elems
-                    .iter()
-                    .enumerate()
-                    .map(|(i, t)| match t {
-                        syn::Type::Path(path) => {
-                            let ident = path.path.segments[0].ident.clone();
-                            let field_expr = build_tuple_field_expr("rtn".to_string(), i as u32);
-                            if ident == "Self" {
-                                parse_quote! {
-                                    engine().instantiate(#template_name_str.to_string(), #field_expr)
-                                }
-                            } else {
-                                field_expr
-                            }
-                        },
-                        _ => todo!(),
-                    })
-                    .collect();
-
-                // build the new tuple with
-                stmts.push(parse_quote! {
-                    let rtn = (#(#elems),*);
-                });
-            },
-            _ => todo!(),
-        },
-        None => {},
-    }
-
-    // if ast.is_constructor {
-    // stmts.push(parse_quote! {
-    // let state = template::#template_ident::#function_ident(#(#args),*);
-    // });
-    //
-    // let template_name_str = template_ident.to_string();
-    // stmts.push(parse_quote! {
-    // let rtn = engine().instantiate(#template_name_str.to_string(), state);
-    // });
-    // } else {
-    // stmts.push(parse_quote! {
-    // let rtn = template::#template_ident::#function_ident(#(#args),*);
-    // });
-    // }
+    stmts.append(&mut replace_self_in_output(template_ident, &ast));
 
     // encode the result value
     stmts.push(parse_quote! {
@@ -208,6 +153,67 @@ fn get_function_block(template_ident: &Ident, ast: FunctionAst) -> Expr {
             stmts,
         },
     })
+}
+
+fn replace_self_in_output(template_ident: &Ident, ast: &FunctionAst) -> Vec<Stmt> {
+    let mut stmts: Vec<Stmt> = vec![];
+    match &ast.output_type {
+        Some(output_type) => match output_type {
+            TypeAst::Typed(type_ident) => {
+                if let Some(stmt) = replace_self_in_single_value(template_ident, type_ident) {
+                    stmts.push(stmt);
+                }
+            },
+            TypeAst::Tuple(type_tuple) => {
+                stmts.push(replace_self_in_tuple(template_ident, type_tuple));
+            },
+            _ => todo!(),
+        },
+        None => {},
+    }
+
+    stmts
+}
+
+fn replace_self_in_single_value(template_ident: &Ident, type_ident: &Ident) -> Option<Stmt> {
+    let template_name_str = template_ident.to_string();
+
+    if type_ident == "Self" {
+        return Some(parse_quote! {
+            let rtn = engine().instantiate(#template_name_str.to_string(), rtn);
+        });
+    }
+
+    None
+}
+
+fn replace_self_in_tuple(template_ident: &Ident, type_tuple: &TypeTuple) -> Stmt {
+    let template_name_str = template_ident.to_string();
+
+    // build the expresions for each element in the tuple
+    let elems: Vec<Expr> = type_tuple
+        .elems
+        .iter()
+        .enumerate()
+        .map(|(i, t)| match t {
+            syn::Type::Path(path) => {
+                let ident = path.path.segments[0].ident.clone();
+                let field_expr = build_tuple_field_expr("rtn".to_string(), i as u32);
+                if ident == "Self" {
+                    parse_quote! {
+                        engine().instantiate(#template_name_str.to_string(), #field_expr)
+                    }
+                } else {
+                    field_expr
+                }
+            },
+            _ => todo!(),
+        })
+        .collect();
+
+    parse_quote! {
+        let rtn = (#(#elems),*);
+    }
 }
 
 fn build_tuple_field_expr(name: String, i: u32) -> Expr {
