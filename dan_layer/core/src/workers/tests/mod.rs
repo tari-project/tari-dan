@@ -799,7 +799,7 @@ impl<
                     .shard_db
                     .get_payload_vote(node.payload(), node.payload_height(), *s)
                 {
-                    votes.push((shard, vote.hash().clone(), vote.local_pledges().to_vec()));
+                    votes.push((*s, vote.hash().clone(), vote.local_pledges().to_vec()));
                 } else {
                     break;
                 }
@@ -1303,16 +1303,14 @@ async fn test_hs_waiter_execute_called_when_consensus_reached() {
 async fn test_hs_waiter_multishard_votes() {
     let node1 = "node1".to_string();
     let node2 = "node2".to_string();
-    let node3 = "node3".to_string();
-    let node4 = "node4".to_string();
-    let shard0_committee = vec![node1.clone(), node2.clone()];
-    let shard1_committee = vec![node3.clone(), node4.clone()];
+    let shard0_committee = vec![node1.clone()];
+    let shard1_committee = vec![node2.clone()];
     let epoch_manager = RangeEpochManager::new_with_multiple(&vec![
         (ShardId(0)..ShardId(1), shard0_committee),
         (ShardId(1)..ShardId(2), shard1_committee),
     ]);
     let mut node1_instance = HsTestHarness::new(node1.clone(), epoch_manager.clone(), AlwaysFirstLeader {});
-    let mut node3_instance = HsTestHarness::new(node3.clone(), epoch_manager, AlwaysFirstLeader {});
+    let mut node2_instance = HsTestHarness::new(node2.clone(), epoch_manager, AlwaysFirstLeader {});
 
     let payload = ("Hello World".to_string(), vec![ShardId(0), ShardId(1)]);
 
@@ -1323,23 +1321,62 @@ async fn test_hs_waiter_multishard_votes() {
         .await
         .unwrap();
 
-    node3_instance
+    let new_view_message = HotStuffMessage::new_view(QuorumCertificate::genesis(), ShardId(1), Some(payload.clone()));
+    node2_instance
         .tx_hs_messages
-        .send((node3.clone(), new_view_message.clone()))
+        .send((node2.clone(), new_view_message.clone()))
         .await
         .unwrap();
 
-    // Get the node hash from the proposal
-    let (proposal_message, broadcast_group) = node1_instance.recv_broadcast().await;
-
-    let executed_payload = timeout(Duration::from_secs(10), node1_instance.rx_execute.recv())
+    let (proposal1_n1, broadcast_group) = node1_instance.recv_broadcast().await;
+    // loopback the proposal to all nodes
+    node1_instance
+        .tx_hs_messages
+        .send((node1.clone(), proposal1_n1.clone()))
         .await
-        .expect("timed out")
-        .expect("Should not be None");
+        .unwrap();
+    node2_instance
+        .tx_hs_messages
+        .send((node1.clone(), proposal1_n1))
+        .await
+        .unwrap();
 
-    assert_eq!(executed_payload, payload);
+    // Node 2 also proposes
+    let (proposal1_n2, broadcast_group) = node2_instance.recv_broadcast().await;
+    // loopback the proposal to all nodes
+    node1_instance
+        .tx_hs_messages
+        .send((node1.clone(), proposal1_n2.clone()))
+        .await
+        .unwrap();
+    node2_instance
+        .tx_hs_messages
+        .send((node1.clone(), proposal1_n2))
+        .await
+        .unwrap();
+
+    // Should get a vote from n1 and n2
+    let (vote1_n1, _) = node1_instance.recv_vote_message().await;
+    let (vote1_n2, _) = node2_instance.recv_vote_message().await;
+
+    // Loop back the votes to each leader
+    node1_instance
+        .tx_votes
+        .send((node1.clone(), vote1_n1.clone()))
+        .await
+        .unwrap();
+    node2_instance
+        .tx_votes
+        .send((node2.clone(), vote1_n2.clone()))
+        .await
+        .unwrap();
+
+    // get a proposal from each
+    let (proposal2_n1, broadcast_group) = node1_instance.recv_broadcast().await;
+    let (proposal2_n2, broadcast_group) = node2_instance.recv_broadcast().await;
+
     node1_instance.assert_shuts_down_safely().await;
-    node3_instance.assert_shuts_down_safely().await;
+    node2_instance.assert_shuts_down_safely().await;
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
