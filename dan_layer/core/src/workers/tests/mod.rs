@@ -59,6 +59,7 @@ pub struct ShardDb<TAddr: NodeAddressable, TPayload: Payload> {
     nodes: HashMap<TreeNodeHash, HotStuffTreeNode<TAddr>>,
     last_executed_height: HashMap<ShardId, NodeHeight>,
     payloads: HashMap<PayloadId, TPayload>,
+    payload_votes: HashMap<PayloadId, HashMap<NodeHeight, HashMap<ShardId, HotStuffTreeNode<TAddr>>>>,
     objects: HashMap<ShardId, HashMap<ObjectId, (SubstateState, Option<ObjectPledge>)>>,
 }
 
@@ -73,6 +74,7 @@ impl<TAddr: NodeAddressable, TPayload: Payload> ShardDb<TAddr, TPayload> {
             nodes: HashMap::new(),
             last_executed_height: HashMap::new(),
             payloads: HashMap::new(),
+            payload_votes: HashMap::new(),
             objects: HashMap::new(),
         }
     }
@@ -152,6 +154,34 @@ impl<TAddr: NodeAddressable, TPayload: Payload> ShardDb<TAddr, TPayload> {
         entry.len()
     }
 
+    pub fn save_payload_vote(
+        &mut self,
+        shard: ShardId,
+        payload: PayloadId,
+        payload_height: NodeHeight,
+        node: HotStuffTreeNode<TAddr>,
+    ) {
+        let payload_entry = self.payload_votes.entry(payload).or_insert(HashMap::new());
+        let height_entry = payload_entry.entry(payload_height).or_insert(HashMap::new());
+        height_entry
+            .entry(shard)
+            .and_modify(|e| *e = node.clone())
+            .or_insert(node);
+    }
+
+    pub fn get_payload_vote(
+        &self,
+        payload: PayloadId,
+        payload_height: NodeHeight,
+        shard: ShardId,
+    ) -> Option<HotStuffTreeNode<TAddr>> {
+        dbg!(&self.payload_votes);
+        self.payload_votes
+            .get(&payload)
+            .and_then(|pv| pv.get(&payload_height))
+            .and_then(|ph| ph.get(&shard).cloned())
+    }
+
     pub fn get_signatures_for(&self, node_hash: TreeNodeHash, shard: ShardId) -> Vec<(TAddr, ValidatorSignature)> {
         if let Some(sigs) = self.votes.get(&(node_hash, shard)) {
             sigs.clone()
@@ -223,7 +253,7 @@ impl<TAddr: NodeAddressable, TPayload: Payload> ShardDb<TAddr, TPayload> {
 pub struct VoteMessage {
     pub local_node_hash: TreeNodeHash,
     pub shard: ShardId,
-    pub other_shard_nodes: HashMap<ShardId, TreeNodeHash>,
+    pub other_shard_nodes: Vec<(ShardId, TreeNodeHash)>,
     pub signature: ValidatorSignature,
 }
 
@@ -274,6 +304,7 @@ pub trait EpochManager<TAddr: NodeAddressable>: Clone {
         shards: &[ShardId],
     ) -> Result<Vec<(ShardId, Option<Committee<TAddr>>)>, String>;
     fn get_committee(&self, epoch: Epoch, shard: ShardId) -> Result<Committee<TAddr>, String>;
+    fn get_shards(&self, epoch: Epoch, addr: &TAddr, available_shards: &[ShardId]) -> Result<Vec<ShardId>, String>;
 }
 
 #[derive(Debug, Clone)]
@@ -327,8 +358,6 @@ impl<TAddr: NodeAddressable> EpochManager<TAddr> for RangeEpochManager<TAddr> {
         for shard in shards {
             let mut found_committee = None;
             for (range, committee) in epoch {
-                dbg!(range, committee);
-                dbg!(shard);
                 if range.contains(shard) {
                     found_committee = Some(committee.clone());
                     break;
@@ -348,6 +377,22 @@ impl<TAddr: NodeAddressable> EpochManager<TAddr> for RangeEpochManager<TAddr> {
             }
         }
         Err("Could not find a committee for that shard".to_string())
+    }
+
+    fn get_shards(&self, epoch: Epoch, addr: &TAddr, available_shards: &[ShardId]) -> Result<Vec<ShardId>, String> {
+        let epoch = self.epochs.get(&epoch).ok_or("No value for that epoch".to_string())?;
+        let mut result = vec![];
+        for (range, committee) in epoch {
+            for shard in available_shards {
+                if range.contains(shard) {
+                    if committee.contains(addr) {
+                        result.push(*shard);
+                    }
+                }
+            }
+        }
+
+        Ok(result)
     }
 }
 
@@ -451,7 +496,6 @@ impl<
         // TODO: Validate who message is from
         self.validate_from_committee(&from, self.epoch_manager.current_epoch(), shard)?;
         self.validate_qc(&qc);
-        dbg!("update qc");
         self.shard_db.update_high_qc(qc);
         self.shard_db.set_payload(payload);
         Ok(())
@@ -489,7 +533,6 @@ impl<
             .get_payload(&payload)
             .ok_or("Could not find payload".to_string())?;
         let involved_shards = actual_payload.involved_shards().to_vec();
-        dbg!(&involved_shards);
         let members = self
             .epoch_manager
             .get_committees(epoch, &involved_shards)?
@@ -497,14 +540,13 @@ impl<
             .map(|(shard, committee)| committee.map(|c| c.members).unwrap_or_default())
             .flatten()
             .collect();
-        dbg!(&members);
 
         let parent = self.shard_db.node(&leaf).ok_or("Could not find leaf".to_string())?;
 
         let payload_height = if parent.payload() == payload {
             parent.payload_height() + NodeHeight(1)
         } else {
-            NodeHeight(1)
+            NodeHeight(0)
         };
         let objects = actual_payload.objects_for_shard(shard);
 
@@ -673,48 +715,92 @@ impl<
             .map_err(|e| format!("Could not send execute cmd:{}", e))
     }
 
-    async fn on_receive_proposal(
-        &mut self,
-        from: TAddr,
-        message: HotStuffMessage<TPayload, TAddr>,
-    ) -> Result<(), String> {
-        todo!("Need to correct votes")
-        // if let Some(node) = message.node() {
-        //     // TODO: validate message from leader
-        //     let shard = message.shard();
-        //     self.shard_db.save_node(node.clone());
-        //     let v_height = self.shard_db.get_last_voted_height(shard);
-        //     let (locked_node, locked_height) = self.shard_db.get_locked_node_hash_and_height(shard);
-        //     // TODO: Change parent check to allow a chain?
-        //     if node.height() > v_height &&
-        //         (node.parent() == &locked_node || node.justify().node_height() > locked_height)
-        //     {
-        //         dbg!("Can vote on the message");
-        //         self.shard_db.set_last_voted_height(shard, node.height());
-        //         let signature = ValidatorSignature::from_bytes(&self.sign(node.hash(), shard));
-        //         self.tx_vote_message
-        //             .send((
-        //                 VoteMessage {
-        //                     main_node_hash: node.hash().clone(),
-        //                     shard,
-        //                     other_shard_nodes: Default::default(),
-        //                     signature,
-        //                 },
-        //                 // TODO: validate the leader instead of sending to from
-        //                 from, // self.get_leader(),
-        //             ))
-        //             .await
-        //             .map_err(|e| e.to_string())?;
-        //     } else {
-        //         dbg!("Invalid proposal");
-        //         dbg!("ignoring");
-        //     }
-        //     self.update_nodes(node.clone(), shard).await?;
-        // } else {
-        //     dbg!("No node attached");
-        // }
-        // // self.update(message);
-        // Ok(())
+    fn validate_proposal(&self, node: &HotStuffTreeNode<TAddr>) -> Result<(), String> {
+        if node.payload_height() != NodeHeight(0) &&
+            !(node.payload() == node.justify().payload() &&
+                node.payload_height() == node.justify().payload_height() + NodeHeight(1))
+        {
+            Err("Node payload does not match justify payload".to_string())
+        } else {
+            Ok(())
+        }
+    }
+
+    async fn on_receive_proposal(&mut self, from: TAddr, node: HotStuffTreeNode<TAddr>) -> Result<(), String> {
+        // TODO: validate message from leader
+        // TODO: Validate I am processing this shard
+        // TODO: Validate the epoch is still valid
+        self.validate_proposal(&node)?;
+
+        let shard = node.shard();
+        self.shard_db.save_node(node.clone());
+        let v_height = self.shard_db.get_last_voted_height(shard);
+        // TODO: can also use the QC and committee to justify this....
+        let (locked_node, locked_height) = self.shard_db.get_locked_node_hash_and_height(shard);
+        if node.height() > v_height &&
+            (node.parent() == &locked_node || node.justify().local_node_height() > locked_height)
+        {
+            dbg!("can save payload vote");
+            self.shard_db
+                .save_payload_vote(shard, node.payload(), node.payload_height(), node.clone());
+
+            let payload = self
+                .shard_db
+                .get_payload(&node.payload())
+                .ok_or("No payload found".to_string())?;
+            let involved_shards = payload.involved_shards();
+            let mut votes = vec![];
+            dbg!(involved_shards);
+            for s in involved_shards {
+                if let Some(vote) = self
+                    .shard_db
+                    .get_payload_vote(node.payload(), node.payload_height(), *s)
+                {
+                    votes.push((shard, vote.hash().clone()));
+                } else {
+                    break;
+                }
+            }
+            dbg!(&votes);
+
+            if votes.len() == involved_shards.len() {
+                let local_shards = self
+                    .epoch_manager
+                    .get_shards(node.epoch(), &self.identity, involved_shards)?;
+                // it may happen that we are involved in more than one committee, in which case send the votes to each
+                // leader.
+                for local_shard in local_shards {
+                    dbg!("Can vote on the message");
+                    let local_node = self
+                        .shard_db
+                        .get_payload_vote(node.payload(), node.payload_height(), local_shard)
+                        .unwrap();
+
+                    self.shard_db.set_last_voted_height(local_shard, local_node.height());
+
+                    let signature = ValidatorSignature::from_bytes(&self.sign(node.hash(), shard));
+                    let vote_msg = VoteMessage {
+                        local_node_hash: local_node.hash().clone(),
+                        shard: local_shard,
+                        other_shard_nodes: votes.clone(),
+                        signature,
+                    };
+
+                    self.tx_vote_message
+                        .send((
+                            vote_msg,
+                            local_node.proposed_by().clone(), // self.get_leader(),
+                        ))
+                        .await
+                        .map_err(|e| e.to_string())?;
+                }
+            }
+        } else {
+            dbg!("Invalid proposal");
+            dbg!("ignoring");
+        }
+        self.update_nodes(node.clone(), shard).await?;
+        Ok(())
     }
 
     fn sign(&self, node_hash: &TreeNodeHash, shard: ShardId) -> Vec<u8> {
@@ -807,7 +893,16 @@ impl<
                                 }
                             },
                             HotStuffMessageType::Generic => {
-                                self.on_receive_proposal(from, msg).await?;
+                                if let Some(node) = msg.node() {
+                                    match self.on_receive_proposal(from, node.clone()).await {
+                                        Ok(()) => {},
+                                        Err(e) => {
+                                            dbg!(e);
+                                        }
+                                    }
+                                } else {
+                                    dbg!("No node supplied");
+                                }
                             }
                             _ => todo!()
                         }
@@ -903,6 +998,20 @@ impl<TPayload: Payload, TAddr: NodeAddressable> HsTestHarness<TPayload, TAddr> {
             panic!("Shut down safely, but still received none");
         }
     }
+
+    async fn recv_vote_message(&mut self) -> (VoteMessage, TAddr) {
+        if let Some(msg) = timeout(Duration::from_secs(10), self.rx_vote_message.recv())
+            .await
+            .expect("timed out")
+        {
+            msg
+        } else {
+            // Otherwise there are no senders, meaning the main loop has shut down,
+            // so try shutdown to get the actual error
+            self.assert_shuts_down_safely().await;
+            panic!("Shut down safely, but still received none");
+        }
+    }
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
@@ -936,9 +1045,7 @@ async fn test_hs_waiter_leader_proposes() {
         .await
         .unwrap();
 
-    // should receive a broadcast proposal
-    // let proposal_message = rx_broadcast.try_recv().expect("Did not receive proposal");
-    let (proposal_message, broadcast_group) = instance.recv_broadcast().await;
+    let (_, broadcast_group) = instance.recv_broadcast().await;
 
     assert_eq!(broadcast_group, vec![node1, node2]);
     instance.assert_shuts_down_safely().await
@@ -961,23 +1068,20 @@ async fn test_hs_waiter_replica_sends_vote_for_proposal() {
         .unwrap();
 
     // Should receive a proposal
-    let (proposal_message, broadcast_group) = timeout(Duration::from_secs(10), instance.rx_broadcast.recv())
-        .await
-        .expect("timed out")
-        .expect("Should not be None");
+    let (proposal_message, broadcast_group) = instance.recv_broadcast().await;
 
     // Forward the proposal back to itself
     instance
         .tx_hs_messages
-        .send((node1, proposal_message))
+        .send((node1.clone(), proposal_message))
         .await
         .expect("Should not error");
 
-    let vote = timeout(Duration::from_secs(10), instance.rx_vote_message.recv())
-        .await
-        .expect("timed out")
-        .expect("should not be none");
+    let (vote, from) = instance.recv_vote_message().await;
 
+    dbg!(vote);
+    assert_eq!(from, node1);
+    // todo!("assert values");
     instance.assert_shuts_down_safely().await
 }
 
@@ -998,10 +1102,7 @@ async fn test_hs_waiter_leader_sends_new_proposal_when_enough_votes_are_received
         .unwrap();
 
     // Get the node hash from the proposal
-    let (proposal_message, broadcast_group) = timeout(Duration::from_secs(10), instance.rx_broadcast.recv())
-        .await
-        .expect("timed out")
-        .expect("Should not be None");
+    let (proposal_message, broadcast_group) = instance.recv_broadcast().await;
 
     // tx_hs_messages
     //     .send((node1.clone(), proposal_message))
@@ -1042,10 +1143,7 @@ async fn test_hs_waiter_leader_sends_new_proposal_when_enough_votes_are_received
 
     // should get a proposal
 
-    let (proposal2, broadcast_group) = timeout(Duration::from_secs(10), instance.rx_broadcast.recv())
-        .await
-        .expect("timed out")
-        .expect("Should not be None");
+    let (proposal2, broadcast_group) = instance.recv_broadcast().await;
 
     let proposed_node = proposal2.node().expect("Should have a node attached");
 
@@ -1069,10 +1167,7 @@ async fn test_hs_waiter_execute_called_when_consensus_reached() {
         .unwrap();
 
     // Get the node hash from the proposal
-    let (proposal1, broadcast_group) = timeout(Duration::from_secs(10), instance.rx_broadcast.recv())
-        .await
-        .expect("timed out")
-        .expect("Should not be None");
+    let (proposal1, broadcast_group) = instance.recv_broadcast().await;
 
     // loopback the proposal
     instance.tx_hs_messages.send((node1.clone(), proposal1)).await.unwrap();
@@ -1082,10 +1177,7 @@ async fn test_hs_waiter_execute_called_when_consensus_reached() {
         .expect("should not be none");
     // loopback the vote
     instance.tx_votes.send((node1.clone(), vote.clone())).await.unwrap();
-    let (proposal2, broadcast_group) = timeout(Duration::from_secs(10), instance.rx_broadcast.recv())
-        .await
-        .expect("timed out")
-        .expect("Should not be None");
+    let (proposal2, broadcast_group) = instance.recv_broadcast().await;
 
     // loopback the proposal
     instance.tx_hs_messages.send((node1.clone(), proposal2)).await.unwrap();
@@ -1104,10 +1196,7 @@ async fn test_hs_waiter_execute_called_when_consensus_reached() {
 
     instance.tx_votes.send((node1.clone(), vote.clone())).await.unwrap();
 
-    let (proposal3, broadcast_group) = timeout(Duration::from_secs(10), instance.rx_broadcast.recv())
-        .await
-        .expect("timed out")
-        .expect("Should not be None");
+    let (proposal3, broadcast_group) = instance.recv_broadcast().await;
 
     // loopback the proposal
     instance.tx_hs_messages.send((node1.clone(), proposal3)).await.unwrap();
@@ -1126,10 +1215,7 @@ async fn test_hs_waiter_execute_called_when_consensus_reached() {
     // loopback the vote
     instance.tx_votes.send((node1.clone(), vote.clone())).await.unwrap();
 
-    let (proposal4, broadcast_group) = timeout(Duration::from_secs(10), instance.rx_broadcast.recv())
-        .await
-        .expect("timed out")
-        .expect("Should not be None");
+    let (proposal4, broadcast_group) = instance.recv_broadcast().await;
 
     instance.tx_hs_messages.send((node1.clone(), proposal4)).await.unwrap();
     let (vote, _) = timeout(Duration::from_secs(10), instance.rx_vote_message.recv())
@@ -1185,10 +1271,7 @@ async fn test_hs_waiter_multishard_votes() {
         .unwrap();
 
     // Get the node hash from the proposal
-    let (proposal1, broadcast_group) = timeout(Duration::from_secs(10), node1_instance.rx_broadcast.recv())
-        .await
-        .expect("timed out")
-        .expect("Should not be None");
+    let (proposal_message, broadcast_group) = node1_instance.recv_broadcast().await;
 
     let executed_payload = timeout(Duration::from_secs(10), node1_instance.rx_execute.recv())
         .await
