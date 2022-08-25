@@ -36,7 +36,6 @@ use std::{process, sync::Arc};
 use clap::Parser;
 use futures::FutureExt;
 use log::*;
-use tari_app_grpc::tari_rpc::validator_node_server::ValidatorNodeServer;
 use tari_app_utilities::identity_management::setup_node_identity;
 use tari_common::{
     exit_codes::{ExitCode, ExitError},
@@ -64,6 +63,7 @@ use tari_dan_storage_sqlite::{global::SqliteGlobalDbBackendAdapter, SqliteDbFact
 use tari_p2p::comms_connector::SubscriptionFactory;
 use tari_service_framework::ServiceHandles;
 use tari_shutdown::{Shutdown, ShutdownSignal};
+use tari_validator_node_grpc::rpc::validator_node_server::ValidatorNodeServer;
 use tokio::{runtime, runtime::Runtime, task};
 use tonic::transport::Server;
 
@@ -156,13 +156,12 @@ async fn run_node(config: &ApplicationConfig) -> Result<(), ExitError> {
         db_factory.clone(),
     );
     let wallet_client = GrpcWalletClient::new(config.validator_node.wallet_grpc_address);
-    let acceptance_manager = ConcreteAcceptanceManager::new(wallet_client.clone(), base_node_client);
+    let _acceptance_manager = ConcreteAcceptanceManager::new(wallet_client.clone(), base_node_client);
     let grpc_server: ValidatorNodeGrpcServer<DefaultServiceSpecification> = ValidatorNodeGrpcServer::new(
         node_identity.as_ref().clone(),
         db_factory.clone(),
         asset_processor,
         asset_proxy,
-        acceptance_manager,
     );
 
     if let Some(address) = config.validator_node.grpc_address.clone() {

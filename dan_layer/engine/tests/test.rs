@@ -23,6 +23,7 @@
 mod tooling;
 
 use tari_dan_engine::{
+    instruction::Instruction,
     packager::{Package, PackageError},
     runtime::{RuntimeInterfaceImpl, StateTracker},
     state_store::{memory::MemoryStateStore, AtomicDb, StateReader},
@@ -30,7 +31,7 @@ use tari_dan_engine::{
 };
 use tari_template_lib::{
     args,
-    models::{Amount, Bucket, ComponentAddress, ComponentInstance},
+    models::{Amount, ComponentAddress, ComponentInstance},
 };
 use tooling::TemplateTest;
 
@@ -49,7 +50,7 @@ fn test_state() {
 
     // constructor
     let component_address1: ComponentAddress = template_test.call_function("State", "new", args![]);
-    template_test.assert_calls(&["emit_log", "create_component"]);
+    template_test.assert_calls(&["emit_log", "create_component", "set_last_instruction_output"]);
     template_test.clear_calls();
 
     let component_address2: ComponentAddress = template_test.call_function("State", "new", args![]);
@@ -145,11 +146,29 @@ fn test_erc20() {
     let tracker = StateTracker::new(state_db, Default::default());
     let template_test =
         TemplateTest::with_runtime_interface(vec!["tests/templates/erc20"], RuntimeInterfaceImpl::new(tracker));
-    let component_addr: ComponentAddress =
+    let component_address: ComponentAddress =
         template_test.call_function("KoinVault", "initial_mint", args![Amount(1_000_000_000_000)]);
 
-    let bucket: Bucket<()> = template_test.call_method(component_addr, "take_koins", args![Amount(100)]);
-    eprintln!("{:?}", bucket);
+    let result = template_test.execute(vec![
+        Instruction::CallMethod {
+            package_address: template_test.package_address(),
+            component_address,
+            method: "withdraw".to_string(),
+            args: args![Amount(100)],
+        },
+        Instruction::PutLastInstructionOutputOnWorkspace {
+            key: b"foo_bucket".to_vec(),
+        },
+        Instruction::CallMethod {
+            package_address: template_test.package_address(),
+            component_address,
+            method: "deposit".to_string(),
+            args: args![Workspace(b"foo_bucket")],
+        },
+    ]);
+    eprintln!("{:?}", result);
+
+    // TODO: commit and test the final state
 }
 
 #[test]
@@ -168,7 +187,7 @@ fn test_private_function() {
     assert_eq!(functions, vec!["new", "get", "increase"]);
 
     // check that public methods can still internally call private ones
-    let component: ComponentId = template_test.call_function("PrivateCounter", "new", args![]);
+    let component: ComponentAddress = template_test.call_function("PrivateCounter", "new", args![]);
     template_test.call_method::<()>(component, "increase", args![]);
     let value: u32 = template_test.call_method(component, "get", args![]);
     assert_eq!(value, 1);

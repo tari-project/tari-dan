@@ -25,6 +25,7 @@ use std::{
     convert::{TryFrom, TryInto},
 };
 
+use borsh::de::BorshDeserialize;
 use tari_common_types::types::{PrivateKey, PublicKey, Signature};
 use tari_core::transactions::transaction_components::SignerSignature;
 use tari_crypto::tari_utilities::ByteArray;
@@ -44,12 +45,14 @@ use tari_dan_core::models::{
     ViewId,
 };
 use tari_dan_engine::{
+    instruction::Transaction,
     instructions::Instruction,
     state::{
         models::{KeyValue, StateOpLogEntry, StateRoot},
         DbStateOpLogEntry,
     },
 };
+use tari_template_lib::Hash;
 
 use crate::p2p::proto;
 
@@ -415,5 +418,116 @@ impl<T: Borrow<Signature>> From<T> for proto::common::Signature {
             public_nonce: sig.borrow().get_public_nonce().to_vec(),
             signature: sig.borrow().get_signature().to_vec(),
         }
+    }
+}
+
+//---------------------------------- Transaction --------------------------------------------//
+impl TryFrom<proto::validator_node::SubmitTransactionRequest> for Transaction {
+    type Error = String;
+
+    fn try_from(request: proto::validator_node::SubmitTransactionRequest) -> Result<Self, Self::Error> {
+        let instructions = request
+            .instructions
+            .into_iter()
+            .map(TryInto::try_into)
+            .collect::<Result<Vec<tari_dan_engine::instruction::Instruction>, _>>()?;
+        let signature: Signature = request.signature.ok_or("invalid signature")?.try_into()?;
+        let instruction_signature = signature.try_into()?;
+        let sender_public_key =
+            PublicKey::from_bytes(&request.sender_public_key).map_err(|_| "invalid sender_public_key")?;
+        let transaction = Transaction {
+            instructions,
+            signature: instruction_signature,
+            sender_public_key,
+        };
+
+        Ok(transaction)
+    }
+}
+
+impl TryFrom<proto::validator_node::Instruction> for tari_dan_engine::instruction::Instruction {
+    type Error = String;
+
+    fn try_from(request: proto::validator_node::Instruction) -> Result<Self, Self::Error> {
+        let package_address =
+            Hash::deserialize(&mut &request.package_address[..]).map_err(|_| "invalid package_addresss")?;
+        let args = request.args.clone();
+        let instruction = match request.instruction_type {
+            // function
+            0 => {
+                let template = request.template;
+                let function = request.function;
+                tari_dan_engine::instruction::Instruction::CallFunction {
+                    package_address,
+                    template,
+                    function,
+                    args,
+                }
+            },
+            // method
+            1 => {
+                let component_address =
+                    Hash::deserialize(&mut &request.component_address[..]).map_err(|_| "invalid component_address")?;
+                let method = request.method;
+                tari_dan_engine::instruction::Instruction::CallMethod {
+                    package_address,
+                    component_address,
+                    method,
+                    args,
+                }
+            },
+            _ => return Err("invalid instruction_type".to_string()),
+        };
+
+        Ok(instruction)
+    }
+}
+
+impl From<Transaction> for proto::validator_node::SubmitTransactionRequest {
+    fn from(transaction: Transaction) -> Self {
+        let instructions = transaction.instructions.into_iter().map(Into::into).collect();
+        let signature = transaction.signature.signature();
+        let sender_public_key = transaction.sender_public_key.to_vec();
+
+        proto::validator_node::SubmitTransactionRequest {
+            instructions,
+            signature: Some(signature.into()),
+            sender_public_key,
+        }
+    }
+}
+
+impl From<tari_dan_engine::instruction::Instruction> for proto::validator_node::Instruction {
+    fn from(instruction: tari_dan_engine::instruction::Instruction) -> Self {
+        let mut result = proto::validator_node::Instruction::default();
+
+        match instruction {
+            tari_dan_engine::instruction::Instruction::CallFunction {
+                package_address,
+                template,
+                function,
+                args,
+            } => {
+                result.instruction_type = 0;
+                result.package_address = package_address.to_vec();
+                result.template = template;
+                result.function = function;
+                result.args = args;
+            },
+            tari_dan_engine::instruction::Instruction::CallMethod {
+                component_address,
+                package_address,
+                method,
+                args,
+            } => {
+                result.instruction_type = 1;
+                result.package_address = package_address.to_vec();
+                result.component_address = component_address.to_vec();
+                result.method = method;
+                result.args = args;
+            },
+        }
+
+        result
     }
 }

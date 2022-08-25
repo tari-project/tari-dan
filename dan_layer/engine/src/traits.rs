@@ -20,10 +20,12 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+use tari_template_lib::args::Arg;
+
 use crate::wasm::ExecutionResult;
 
 pub trait Invokable {
     type Error;
 
-    fn invoke_by_name(&self, name: &str, args: Vec<Vec<u8>>) -> Result<ExecutionResult, Self::Error>;
+    fn invoke_by_name(&self, name: &str, args: Vec<Arg>) -> Result<ExecutionResult, Self::Error>;
 }

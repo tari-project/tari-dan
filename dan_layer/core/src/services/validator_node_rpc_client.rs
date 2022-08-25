@@ -21,15 +21,17 @@
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 use async_trait::async_trait;
-use tari_common_types::types::{FixedHash, PublicKey};
+use tari_common_types::types::FixedHash;
 use tari_comms::{
     connectivity::ConnectivityError,
     protocol::rpc::{RpcError, RpcStatus},
     types::CommsPublicKey,
 };
 use tari_comms_dht::DhtActorError;
-use tari_dan_common_types::TemplateId;
-use tari_dan_engine::state::models::{SchemaState, StateOpLogEntry};
+use tari_dan_engine::{
+    instruction::Transaction,
+    state::models::{SchemaState, StateOpLogEntry},
+};
 
 use crate::{
     models::{Node, SideChainBlock, TreeNodeHash},
@@ -44,22 +46,9 @@ pub trait ValidatorNodeClientFactory: Send + Sync {
 
 #[async_trait]
 pub trait ValidatorNodeRpcClient: Send + Sync {
-    async fn invoke_read_method(
+    async fn submit_transaction(
         &mut self,
-        contract_id: &FixedHash,
-        template_id: TemplateId,
-        method: String,
-        args: Vec<u8>,
-        sender: PublicKey,
-    ) -> Result<Option<Vec<u8>>, ValidatorNodeClientError>;
-
-    async fn invoke_method(
-        &mut self,
-        contract_id: &FixedHash,
-        template_id: TemplateId,
-        method: String,
-        args: Vec<u8>,
-        sender: PublicKey,
+        transaction: Transaction,
     ) -> Result<Option<Vec<u8>>, ValidatorNodeClientError>;
 
     async fn get_sidechain_blocks(

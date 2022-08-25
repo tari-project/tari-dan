@@ -46,7 +46,7 @@ impl Package {
         self.wasm_modules.get(name)
     }
 
-    pub fn id(&self) -> PackageAddress {
+    pub fn address(&self) -> PackageAddress {
         self.id
     }
 }

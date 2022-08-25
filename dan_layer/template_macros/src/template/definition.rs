@@ -26,19 +26,15 @@ use quote::{format_ident, quote};
 use crate::ast::TemplateAst;
 
 pub fn generate_definition(ast: &TemplateAst) -> TokenStream {
-    let template_mod_name = format_ident!("{}_template", ast.struct_section.ident);
-    let template_struct = &ast.struct_section;
-    let impl_section = &ast.impl_section;
+    let template_mod_name = format_ident!("{}_template", ast.template_name);
+    let (_, items) = &ast.module.content.as_ref().unwrap();
 
     quote! {
         #[allow(non_snake_case)]
         pub mod #template_mod_name {
-            use super::*;
+            use tari_template_lib::template_dependencies::*;
 
-            #[derive(Decode, Encode)]
-            #template_struct
-
-            #impl_section
+            #(#items)*
         }
     }
 }
