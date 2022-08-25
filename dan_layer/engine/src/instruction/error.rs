@@ -20,7 +20,7 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use tari_template_lib::models::PackageId;
+use tari_template_lib::models::PackageAddress;
 
 use crate::{runtime::RuntimeError, wasm::WasmExecutionError};
 
@@ -28,8 +28,8 @@ use crate::{runtime::RuntimeError, wasm::WasmExecutionError};
 pub enum InstructionError {
     #[error(transparent)]
     WasmExecutionError(#[from] WasmExecutionError),
-    #[error("Package {package_id} not found")]
-    PackageNotFound { package_id: PackageId },
+    #[error("Package {package_address} not found")]
+    PackageNotFound { package_address: PackageAddress },
     #[error("Invalid template")]
     TemplateNameNotFound { name: String },
     #[error(transparent)]

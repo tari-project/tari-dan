@@ -25,7 +25,7 @@ use std::{
     fmt::{Display, Formatter},
     io,
     io::Write,
-    ops::Deref,
+    ops::{Deref, DerefMut},
 };
 
 use tari_template_abi::{Decode, Encode};
@@ -69,6 +69,11 @@ impl Deref for Hash {
 
     fn deref(&self) -> &Self::Target {
         &self.0
+    }
+}
+impl DerefMut for Hash {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.0
     }
 }
 

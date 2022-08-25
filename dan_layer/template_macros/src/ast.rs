@@ -52,18 +52,13 @@ impl Parse for TemplateAst {
         let module: ItemMod = input.parse()?;
 
         // get the contents of the "mod" block
-        let items = match module.content {
+        let mut items = match module.content {
             Some((_, items)) => items,
             None => return Err(Error::new(module.ident.span(), "empty module")),
         };
 
-        // there should be two items: the "struct" and the "impl" blocks
-        if items.len() != 2 {
-            return Err(Error::new(module.ident.span(), "invalid number of module sections"));
-        }
-
         // get the "struct" block
-        let struct_section = match &items[0] {
+        let struct_section = match &mut items[0] {
             syn::Item::Struct(struct_item) => struct_item.clone(),
             _ => return Err(Error::new(module.ident.span(), "the first section is not a 'struct'")),
         };
@@ -90,6 +85,7 @@ impl TemplateAst {
             .items
             .iter()
             .map(Self::get_function_from_item)
+            .filter(|f| f.is_public)
             .collect()
     }
 
@@ -101,6 +97,7 @@ impl TemplateAst {
                 output_type: Self::get_output_type_token(&m.sig.output),
                 statements: Self::get_statements(m),
                 is_constructor: Self::is_constructor(&m.sig),
+                is_public: Self::is_public_function(m),
             },
             _ => todo!(),
         }
@@ -112,7 +109,9 @@ impl TemplateAst {
             .map(|arg| match arg {
                 // TODO: handle the "self" case
                 syn::FnArg::Receiver(r) => {
-                    // TODO: validate that it's indeed a reference ("&") to self
+                    if r.reference.is_none() {
+                        panic!("Consuming methods are not supported")
+                    }
 
                     let mutability = r.mutability.is_some();
                     TypeAst::Receiver { mutability }
@@ -124,8 +123,8 @@ impl TemplateAst {
 
     fn get_output_type_token(ast_type: &ReturnType) -> Option<TypeAst> {
         match ast_type {
-            syn::ReturnType::Default => None, // the function does not return anything
-            syn::ReturnType::Type(_, t) => Some(Self::get_type_ast(t)),
+            ReturnType::Default => None, // the function does not return anything
+            ReturnType::Type(_, t) => Some(Self::get_type_ast(t)),
         }
     }
 
@@ -147,12 +146,16 @@ impl TemplateAst {
 
     fn is_constructor(sig: &Signature) -> bool {
         match &sig.output {
-            syn::ReturnType::Default => false, // the function does not return anything
-            syn::ReturnType::Type(_, t) => match t.as_ref() {
+            ReturnType::Default => false, // the function does not return anything
+            ReturnType::Type(_, t) => match t.as_ref() {
                 syn::Type::Path(type_path) => type_path.path.segments[0].ident == "Self",
                 _ => false,
             },
         }
+    }
+
+    fn is_public_function(item: &ImplItemMethod) -> bool {
+        matches!(item.vis, syn::Visibility::Public(_))
     }
 }
 
@@ -162,6 +165,7 @@ pub struct FunctionAst {
     pub output_type: Option<TypeAst>,
     pub statements: Vec<Stmt>,
     pub is_constructor: bool,
+    pub is_public: bool,
 }
 
 pub enum TypeAst {

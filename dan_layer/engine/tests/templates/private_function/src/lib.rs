@@ -20,8 +20,34 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-pub const OP_EMIT_LOG: i32 = 0x00;
-pub const OP_CREATE_COMPONENT: i32 = 0x01;
-pub const OP_GET_COMPONENT: i32 = 0x02;
-pub const OP_SET_COMPONENT_STATE: i32 = 0x03;
-pub const OP_RESOURCE_INVOKE: i32 = 0x04;
+use tari_template_macros::template;
+
+#[template]
+mod private_function {
+    pub struct PrivateCounter {
+        pub value: u32,
+    }
+
+    impl PrivateCounter {
+        pub fn new() -> Self {
+            Self { value: 0 }
+        }
+
+        pub fn get(&self) -> u32 {
+            self.value
+        }
+
+        pub fn increase(&mut self) {
+            self.some_private_method();
+        }
+
+        fn some_private_method(&mut self) {
+            let new_value = Self::some_private_function(self.value);
+            self.value = new_value;
+        }
+
+        fn some_private_function(value: u32) -> u32 {
+            value + 1
+        }
+    }
+}
