@@ -114,7 +114,7 @@ impl<R: RuntimeInterface + Clone + 'static> TemplateTest<R> {
     }
 
     pub fn execute(&self, instructions: Vec<Instruction>) -> Vec<ExecutionResult> {
-        let mut builder = InstructionBuilder::new();
+        let mut builder = TransactionBuilder::new();
         for instruction in instructions {
             builder.add_instruction(instruction);
         }
