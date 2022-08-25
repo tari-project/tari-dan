@@ -21,7 +21,7 @@
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 mod builder;
-pub use builder::InstructionBuilder;
+pub use builder::TransactionBuilder;
 
 mod error;
 
@@ -34,6 +34,8 @@ use tari_template_lib::{
     args::Arg,
     models::{ComponentAddress, PackageAddress},
 };
+use tari_common_types::types::PublicKey;
+
 
 #[derive(Debug, Clone)]
 pub enum Instruction {
@@ -58,4 +60,5 @@ pub enum Instruction {
 pub struct Transaction {
     pub instructions: Vec<Instruction>,
     pub signature: InstructionSignature,
+    pub sender_public_key: PublicKey,
 }

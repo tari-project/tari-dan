@@ -52,6 +52,7 @@ where TRuntimeInterface: RuntimeInterface + Clone + 'static
         let mut results = Vec::with_capacity(transaction.instructions.len());
 
         let runtime = Runtime::new(Arc::new(self.runtime_interface.clone()));
+
         for instruction in transaction.instructions {
             let result = self.process_instruction(&runtime, instruction)?;
             results.push(result);

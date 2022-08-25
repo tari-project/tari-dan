@@ -4518,6 +4518,7 @@ dependencies = [
  "anyhow",
  "async-trait",
  "blake2 0.9.2",
+ "borsh",
  "bytecodec",
  "clap 3.2.15",
  "config",
@@ -4549,11 +4550,31 @@ dependencies = [
  "tari_service_framework",
  "tari_shutdown",
  "tari_storage",
+ "tari_template_lib",
  "tari_test_utils",
+ "tari_validator_node_grpc",
  "thiserror",
  "tokio",
  "tokio-stream",
  "tonic",
+]
+
+[[package]]
+name = "tari_validator_node_grpc"
+version = "0.35.0"
+dependencies = [
+ "borsh",
+ "chrono",
+ "num-traits",
+ "prost",
+ "prost-types",
+ "tari_common_types",
+ "tari_crypto",
+ "tari_dan_engine",
+ "tari_template_lib",
+ "tari_utilities",
+ "tonic",
+ "tonic-build",
 ]
 
 [[package]]

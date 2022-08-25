@@ -32,10 +32,10 @@ use tari_core::{
     transactions::transaction_components::{CheckpointChallenge, OutputType, SignerSignature},
 };
 use tari_crypto::ristretto::RistrettoPublicKey;
-use tari_dan_common_types::TemplateId;
 #[cfg(test)]
 use tari_dan_engine::state::mocks::state_db::MockStateDbBackupAdapter;
 use tari_dan_engine::{
+    instruction::Transaction,
     instructions::Instruction,
     state::{
         models::{SchemaState, StateOpLogEntry, StateRoot},
@@ -93,7 +93,7 @@ pub struct MockMempoolService;
 
 #[async_trait]
 impl MempoolService for MockMempoolService {
-    async fn submit_instruction(&mut self, _instruction: Instruction) -> Result<(), DigitalAssetError> {
+    async fn submit_transaction(&mut self, _transaction: &Transaction) -> Result<(), DigitalAssetError> {
         Ok(())
     }
 
@@ -383,24 +383,9 @@ pub struct MockValidatorNodeClient;
 
 #[async_trait]
 impl ValidatorNodeRpcClient for MockValidatorNodeClient {
-    async fn invoke_read_method(
+    async fn submit_transaction(
         &mut self,
-        _contract_id: &FixedHash,
-        _template_id: TemplateId,
-        _method: String,
-        _args: Vec<u8>,
-        _sender: PublicKey,
-    ) -> Result<Option<Vec<u8>>, ValidatorNodeClientError> {
-        Ok(None)
-    }
-
-    async fn invoke_method(
-        &mut self,
-        _contract_id: &FixedHash,
-        _template_id: TemplateId,
-        _method: String,
-        _args: Vec<u8>,
-        _sender: PublicKey,
+        _transaction: Transaction,
     ) -> Result<Option<Vec<u8>>, ValidatorNodeClientError> {
         Ok(None)
     }
