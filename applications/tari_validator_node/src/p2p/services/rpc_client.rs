@@ -23,22 +23,24 @@
 use std::convert::TryInto;
 
 use async_trait::async_trait;
-use log::*;
 use tari_common_types::types::{FixedHash, PublicKey};
 use tari_comms::PeerConnection;
 use tari_comms_dht::DhtRequester;
 use tari_crypto::tari_utilities::ByteArray;
-use tari_dan_common_types::TemplateId;
 use tari_dan_core::{
     models::{Node, SideChainBlock, TreeNodeHash},
     services::{ValidatorNodeClientError, ValidatorNodeClientFactory, ValidatorNodeRpcClient},
 };
-use tari_dan_engine::state::models::{SchemaState, StateOpLogEntry};
+use tari_dan_engine::{
+    instruction::Transaction,
+    state::models::{SchemaState, StateOpLogEntry},
+};
 use tokio_stream::StreamExt;
 
-use crate::p2p::{proto::validator_node as proto, rpc};
-
-const LOG_TARGET: &str = "tari::validator_node::p2p::services::rpc_client";
+use crate::p2p::{
+    proto::validator_node::{self as proto, SubmitTransactionRequest},
+    rpc,
+};
 
 pub struct TariCommsValidatorNodeRpcClient {
     dht: DhtRequester,
@@ -54,68 +56,20 @@ impl TariCommsValidatorNodeRpcClient {
 
 #[async_trait]
 impl ValidatorNodeRpcClient for TariCommsValidatorNodeRpcClient {
-    async fn invoke_read_method(
+    async fn submit_transaction(
         &mut self,
-        contract_id: &FixedHash,
-        template_id: TemplateId,
-        method: String,
-        args: Vec<u8>,
-        sender: PublicKey,
+        transaction: Transaction,
     ) -> Result<Option<Vec<u8>>, ValidatorNodeClientError> {
-        debug!(
-            target: LOG_TARGET,
-            r#"Invoking read method "{}" for asset '{}'"#, method, contract_id
-        );
         let mut connection = self.create_connection().await?;
         let mut client = connection.connect_rpc::<rpc::ValidatorNodeRpcClient>().await?;
-        let request = proto::InvokeReadMethodRequest {
-            contract_id: contract_id.to_vec(),
-            template_id: template_id as u32,
-            method,
-            args,
-            sender: sender.to_vec(),
-        };
-        let response = client.invoke_read_method(request).await?;
+        let request: SubmitTransactionRequest = transaction.into();
+        let response = client.submit_transaction(request).await?;
 
         Ok(if response.result.is_empty() {
             None
         } else {
             Some(response.result)
         })
-    }
-
-    async fn invoke_method(
-        &mut self,
-        contract_id: &FixedHash,
-        template_id: TemplateId,
-        method: String,
-        args: Vec<u8>,
-        sender: PublicKey,
-    ) -> Result<Option<Vec<u8>>, ValidatorNodeClientError> {
-        debug!(
-            target: LOG_TARGET,
-            r#"Invoking method "{}" for asset '{}'"#, method, contract_id
-        );
-        let mut connection = self.create_connection().await?;
-        let mut client = connection.connect_rpc::<rpc::ValidatorNodeRpcClient>().await?;
-        let request = proto::InvokeMethodRequest {
-            contract_id: contract_id.to_vec(),
-            template_id: template_id as u32,
-            method,
-            args,
-            sender: sender.to_vec(),
-        };
-        let response = client.invoke_method(request).await?;
-
-        debug!(
-            target: LOG_TARGET,
-            "Validator node '{}' returned status '{}' for asset '{}'", self.address, response.status, contract_id
-        );
-        if response.result.is_empty() {
-            Ok(None)
-        } else {
-            Ok(Some(response.result))
-        }
     }
 
     async fn get_sidechain_blocks(

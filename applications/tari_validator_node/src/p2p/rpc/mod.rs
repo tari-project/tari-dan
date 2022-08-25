@@ -44,36 +44,30 @@ pub trait ValidatorNodeRpcService: Send + Sync + 'static {
     ) -> Result<Response<proto::GetTokenDataResponse>, RpcStatus>;
 
     #[rpc(method = 2)]
-    async fn invoke_read_method(
+    async fn submit_transaction(
         &self,
-        request: Request<proto::InvokeReadMethodRequest>,
-    ) -> Result<Response<proto::InvokeReadMethodResponse>, RpcStatus>;
+        request: Request<proto::SubmitTransactionRequest>,
+    ) -> Result<Response<proto::SubmitTransactionResponse>, RpcStatus>;
 
     #[rpc(method = 3)]
-    async fn invoke_method(
-        &self,
-        request: Request<proto::InvokeMethodRequest>,
-    ) -> Result<Response<proto::InvokeMethodResponse>, RpcStatus>;
-
-    #[rpc(method = 4)]
     async fn get_sidechain_blocks(
         &self,
         request: Request<proto::GetSidechainBlocksRequest>,
     ) -> Result<Streaming<proto::GetSidechainBlocksResponse>, RpcStatus>;
 
-    #[rpc(method = 5)]
+    #[rpc(method = 4)]
     async fn get_sidechain_state(
         &self,
         request: Request<proto::GetSidechainStateRequest>,
     ) -> Result<Streaming<proto::GetSidechainStateResponse>, RpcStatus>;
 
-    #[rpc(method = 6)]
+    #[rpc(method = 5)]
     async fn get_op_logs(
         &self,
         request: Request<proto::GetStateOpLogsRequest>,
     ) -> Result<Response<proto::GetStateOpLogsResponse>, RpcStatus>;
 
-    #[rpc(method = 7)]
+    #[rpc(method = 6)]
     async fn get_tip_node(
         &self,
         request: Request<proto::GetTipNodeRequest>,

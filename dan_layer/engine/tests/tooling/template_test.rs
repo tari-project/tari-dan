@@ -26,7 +26,7 @@ use borsh::BorshDeserialize;
 use tari_crypto::ristretto::RistrettoSecretKey;
 use tari_dan_engine::{
     crypto::create_key_pair,
-    instruction::{Instruction, InstructionBuilder, InstructionProcessor},
+    instruction::{Instruction, InstructionProcessor, TransactionBuilder},
     packager::Package,
     runtime::RuntimeInterface,
     state_store::memory::MemoryStateStore,
@@ -114,7 +114,7 @@ impl<R: RuntimeInterface + Clone + 'static> TemplateTest<R> {
     }
 
     pub fn execute(&self, instructions: Vec<Instruction>) -> Vec<ExecutionResult> {
-        let mut builder = InstructionBuilder::new();
+        let mut builder = TransactionBuilder::new();
         for instruction in instructions {
             builder.add_instruction(instruction);
         }

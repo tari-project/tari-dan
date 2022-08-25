@@ -23,5 +23,6 @@
 mod mock_runtime_interface;
 pub use mock_runtime_interface::*;
 
+#[cfg(test)]
 mod template_test;
 pub use template_test::TemplateTest;

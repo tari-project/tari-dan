@@ -27,12 +27,10 @@ use tari_comms_dht::{
     envelope::NodeDestination,
     outbound::{DhtOutboundError, OutboundEncryption, OutboundMessageRequester},
 };
-use tari_crypto::tari_utilities::ByteArray;
 use tari_dan_core::{services::mempool::outbound::MempoolOutboundService, DigitalAssetError};
-use tari_dan_engine::instructions::Instruction;
+use tari_dan_engine::instruction::Transaction;
 use tari_p2p::tari_message::TariMessageType;
-
-use crate::p2p::proto::validator_node::InvokeMethodRequest;
+use tari_validator_node_grpc::rpc::SubmitTransactionRequest;
 
 const LOG_TARGET: &str = "tari::validator_node::p2p::services::mempool::outbound";
 
@@ -50,21 +48,13 @@ impl TariCommsMempoolOutboundService {
 
 #[async_trait]
 impl MempoolOutboundService for TariCommsMempoolOutboundService {
-    async fn propagate_instruction(&mut self, instruction: Instruction) -> Result<(), DigitalAssetError> {
+    async fn propagate_transaction(&mut self, transaction: Transaction) -> Result<(), DigitalAssetError> {
         let destination = NodeDestination::Unknown;
         let encryption = OutboundEncryption::ClearText;
         let exclude_peers = vec![];
 
-        let req = InvokeMethodRequest {
-            // TODO: contract id ?
-            contract_id: vec![],
-            template_id: instruction.template_id() as u32,
-            method: instruction.method().to_string(),
-            args: instruction.args().to_vec(),
-            sender: instruction.sender().to_vec(),
-        };
-
-        let message = OutboundDomainMessage::new(&TariMessageType::DanConsensusMessage, req);
+        let request: SubmitTransactionRequest = transaction.into();
+        let message = OutboundDomainMessage::new(&TariMessageType::DanConsensusMessage, request);
 
         let result = self
             .outbound_message_requester
@@ -75,7 +65,7 @@ impl MempoolOutboundService for TariCommsMempoolOutboundService {
             return match e {
                 DhtOutboundError::NoMessagesQueued => Ok(()),
                 _ => {
-                    error!(target: LOG_TARGET, "propagate_instruction failure. {:?}", e);
+                    error!(target: LOG_TARGET, "propagate_transaction failure. {:?}", e);
                     Err(DigitalAssetError::DhtOutboundError(e))
                 },
             };

@@ -52,7 +52,6 @@ where TRuntimeInterface: RuntimeInterface + Clone + 'static
         let mut results = Vec::with_capacity(transaction.instructions.len());
 
         let state = Runtime::new(Arc::new(self.runtime_interface.clone()));
-
         for instruction in transaction.instructions {
             let result = match instruction {
                 Instruction::CallFunction {
