@@ -91,7 +91,6 @@ impl<R: RuntimeInterface + Clone + 'static> TemplateTest<R> {
 
     pub fn call_function<T>(&self, template_name: &str, func_name: &str, args: Vec<Vec<u8>>) -> T
     where T: BorshDeserialize {
-
         let result = self.execute(vec![Instruction::CallFunction {
             package_address: self.package.id(),
             template: template_name.to_owned(),

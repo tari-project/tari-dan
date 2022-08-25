@@ -168,7 +168,7 @@ fn test_private_function() {
     assert_eq!(functions, vec!["new", "get", "increase"]);
 
     // check that public methods can still internally call private ones
-    let component: ComponentId = template_test.call_function("PrivateCounter", "new", args![]);
+    let component: ComponentAddress = template_test.call_function("PrivateCounter", "new", args![]);
     template_test.call_method::<()>(component, "increase", args![]);
     let value: u32 = template_test.call_method(component, "get", args![]);
     assert_eq!(value, 1);

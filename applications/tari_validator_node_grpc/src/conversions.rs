@@ -59,7 +59,8 @@ impl TryFrom<grpc::Instruction> for Instruction {
     type Error = String;
 
     fn try_from(request: grpc::Instruction) -> Result<Self, Self::Error> {
-        let package_id = Hash::deserialize(&mut &request.package_id[..]).map_err(|_| "invalid package_id")?;
+        let package_address =
+            Hash::deserialize(&mut &request.package_address[..]).map_err(|_| "invalid package_addresss")?;
         let args = request.args.clone();
         let instruction = match request.instruction_type {
             // function
@@ -67,22 +68,22 @@ impl TryFrom<grpc::Instruction> for Instruction {
                 let template = request.template;
                 let function = request.function;
                 Instruction::CallFunction {
-                    package_id,
                     template,
                     function,
                     args,
+                    package_address,
                 }
             },
             // method
             1 => {
-                let component_id =
-                    Hash::deserialize(&mut &request.component_id[..]).map_err(|_| "invalid component_id")?;
+                let component_address =
+                    Hash::deserialize(&mut &request.component_address[..]).map_err(|_| "invalid component_address")?;
                 let method = request.method;
                 Instruction::CallMethod {
-                    package_id,
-                    component_id,
                     method,
                     args,
+                    package_address,
+                    component_address,
                 }
             },
             _ => return Err("invalid instruction_type".to_string()),
@@ -112,26 +113,26 @@ impl From<Instruction> for grpc::Instruction {
 
         match instruction {
             Instruction::CallFunction {
-                package_id,
                 template,
                 function,
                 args,
+                package_address,
             } => {
                 result.instruction_type = 0;
-                result.package_id = package_id.to_vec();
+                result.package_address = package_address.to_vec();
                 result.template = template;
                 result.function = function;
                 result.args = args;
             },
             Instruction::CallMethod {
-                package_id,
-                component_id,
                 method,
                 args,
+                package_address,
+                component_address,
             } => {
                 result.instruction_type = 1;
-                result.package_id = package_id.to_vec();
-                result.component_id = component_id.to_vec();
+                result.package_address = package_address.to_vec();
+                result.component_address = component_address.to_vec();
                 result.method = method;
                 result.args = args;
             },

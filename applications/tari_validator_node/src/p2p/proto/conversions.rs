@@ -449,7 +449,8 @@ impl TryFrom<proto::validator_node::Instruction> for tari_dan_engine::instructio
     type Error = String;
 
     fn try_from(request: proto::validator_node::Instruction) -> Result<Self, Self::Error> {
-        let package_id = Hash::deserialize(&mut &request.package_id[..]).map_err(|_| "invalid package_id")?;
+        let package_address =
+            Hash::deserialize(&mut &request.package_address[..]).map_err(|_| "invalid package_addresss")?;
         let args = request.args.clone();
         let instruction = match request.instruction_type {
             // function
@@ -457,7 +458,7 @@ impl TryFrom<proto::validator_node::Instruction> for tari_dan_engine::instructio
                 let template = request.template;
                 let function = request.function;
                 tari_dan_engine::instruction::Instruction::CallFunction {
-                    package_id,
+                    package_address,
                     template,
                     function,
                     args,
@@ -465,12 +466,12 @@ impl TryFrom<proto::validator_node::Instruction> for tari_dan_engine::instructio
             },
             // method
             1 => {
-                let component_id =
-                    Hash::deserialize(&mut &request.component_id[..]).map_err(|_| "invalid component_id")?;
+                let component_address =
+                    Hash::deserialize(&mut &request.component_address[..]).map_err(|_| "invalid component_address")?;
                 let method = request.method;
                 tari_dan_engine::instruction::Instruction::CallMethod {
-                    package_id,
-                    component_id,
+                    package_address,
+                    component_address,
                     method,
                     args,
                 }
@@ -502,26 +503,26 @@ impl From<tari_dan_engine::instruction::Instruction> for proto::validator_node::
 
         match instruction {
             tari_dan_engine::instruction::Instruction::CallFunction {
-                package_id,
+                package_address,
                 template,
                 function,
                 args,
             } => {
                 result.instruction_type = 0;
-                result.package_id = package_id.to_vec();
+                result.package_address = package_address.to_vec();
                 result.template = template;
                 result.function = function;
                 result.args = args;
             },
             tari_dan_engine::instruction::Instruction::CallMethod {
-                package_id,
-                component_id,
+                component_address,
+                package_address,
                 method,
                 args,
             } => {
                 result.instruction_type = 1;
-                result.package_id = package_id.to_vec();
-                result.component_id = component_id.to_vec();
+                result.package_address = package_address.to_vec();
+                result.component_address = component_address.to_vec();
                 result.method = method;
                 result.args = args;
             },

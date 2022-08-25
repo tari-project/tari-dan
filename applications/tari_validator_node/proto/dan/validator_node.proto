@@ -136,7 +136,7 @@ message Instruction {
   InstructionType instruction_type = 1;
 
   // common fields
-  bytes package_id = 2;
+  bytes package_address = 2;
   repeated bytes args = 3;
 
   // function only
@@ -144,7 +144,7 @@ message Instruction {
   string function = 5;
 
   // method only
-  bytes component_id = 6;
+  bytes component_address = 6;
   string method = 7;
 }
 
