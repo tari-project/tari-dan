@@ -14,6 +14,7 @@ env:
 
 jobs:
   dan-layer-integration-tests:
+    if: ${{ false }}  # disable for now
     name: integration tests
     runs-on: [ self-hosted, ubuntu18.04-high-cpu ]
     steps:
