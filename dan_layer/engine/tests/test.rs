@@ -153,7 +153,7 @@ fn test_erc20() {
         Instruction::CallMethod {
             package_address: template_test.package_address(),
             component_address,
-            method: "take_koins".to_string(),
+            method: "withdraw".to_string(),
             args: args![Amount(100)],
         },
         Instruction::PutLastInstructionOutputOnWorkspace {
@@ -187,7 +187,7 @@ fn test_private_function() {
     assert_eq!(functions, vec!["new", "get", "increase"]);
 
     // check that public methods can still internally call private ones
-    let component: ComponentId = template_test.call_function("PrivateCounter", "new", args![]);
+    let component: ComponentAddress = template_test.call_function("PrivateCounter", "new", args![]);
     template_test.call_method::<()>(component, "increase", args![]);
     let value: u32 = template_test.call_method(component, "get", args![]);
     assert_eq!(value, 1);

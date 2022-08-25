@@ -36,7 +36,6 @@ impl ResourceDefinition for Koin {
 
 #[template]
 mod koin_template {
-
     use super::*;
 
     pub struct KoinVault {
@@ -56,7 +55,7 @@ mod koin_template {
             }
         }
 
-        pub fn take_koins(&mut self, amount: Amount) -> Bucket<Koin> {
+        pub fn withdraw(&mut self, amount: Amount) -> Bucket<Koin> {
             self.koins.withdraw(amount)
         }
 

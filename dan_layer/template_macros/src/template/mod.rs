@@ -72,7 +72,7 @@ mod tests {
 
     #[test]
     #[allow(clippy::too_many_lines)]
-    fn test_state() {
+    fn check_correct_code_generation() {
         let input = TokenStream::from_str(indoc! {"
             mod test {
                 pub struct State {
@@ -172,14 +172,17 @@ mod tests {
                         result = encode_with_len(&rtn);
                     },
                     "get" => {
+                        assert_eq ! (call_info . args . len () , 1usize , "Call had unexpected number of args. Got = {} expected = {}" , call_info . args . len () , 1usize) ;
                         let component = decode::<::tari_template_lib::models::ComponentInstance>(&call_info.args[0usize]).unwrap();
                         let mut state = decode::<State_template::State>(&component.state).unwrap();
                         let rtn = State_template::State::get(&mut state);
                         result = encode_with_len(&rtn);
                     },
                     "set" => {
+                        assert_eq ! (call_info . args . len () , 2usize , "Call had unexpected number of args. Got = {} expected = {}" , call_info . args . len () , 2usize) ;
                         let component = decode::<::tari_template_lib::models::ComponentInstance>(&call_info.args[0usize]).unwrap();
                         let mut state = decode::<State_template::State>(&component.state).unwrap();
+                        assert_eq ! (call_info . args . len () , 2usize , "Call had unexpected number of args. Got = {} expected = {}" , call_info . args . len () , 2usize) ;
                         let arg_1 = decode::<u32>(&call_info.args[1usize]).unwrap();
                         let rtn = State_template::State::set(&mut state, arg_1);
                         result = encode_with_len(&rtn);

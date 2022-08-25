@@ -35,7 +35,7 @@ pub fn generate_dispatcher(ast: &TemplateAst) -> Result<TokenStream> {
         #[no_mangle]
         pub extern "C" fn #dispatcher_function_name(call_info: *mut u8, call_info_len: usize) -> *mut u8 {
             use ::tari_template_abi::{decode, encode_with_len, CallInfo, wrap_ptr};
-            use ::tari_template_lib::{init_context, prelude::*};
+            use ::tari_template_lib::init_context;
 
             if call_info.is_null() {
                 panic!("call_info is null");
