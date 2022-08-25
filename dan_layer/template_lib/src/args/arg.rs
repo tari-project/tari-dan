@@ -20,31 +20,20 @@
 //   WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //   USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use tari_template_abi::{call_engine, EngineOp};
+use tari_template_abi::{Decode, Encode};
 
-use crate::{
-    args::{InvokeResult, MintResourceArg, ResourceAction, ResourceInvokeArg, ResourceRef},
-    models::Bucket,
-    resource::ResourceDefinition,
-};
+#[derive(Debug, Clone, PartialEq, Eq, Decode, Encode)]
+pub enum Arg {
+    FromWorkspace(Vec<u8>),
+    Literal(Vec<u8>),
+}
 
-#[derive(Debug)]
-pub struct ResourceManager;
-
-impl ResourceManager {
-    pub(crate) fn new() -> Self {
-        ResourceManager
+impl Arg {
+    pub fn literal(data: Vec<u8>) -> Self {
+        Arg::Literal(data)
     }
 
-    pub(super) fn mint_resource<T: ResourceDefinition>(&mut self, arg: MintResourceArg) -> Bucket<T> {
-        let resp: InvokeResult = call_engine(EngineOp::ResourceInvoke, &ResourceInvokeArg {
-            resource_ref: ResourceRef::Resource,
-            action: ResourceAction::Mint,
-            args: invoke_args![arg],
-        })
-        .expect("ResourceInvoke returned null");
-
-        let resource_address = resp.decode().expect("Failed to decode Bucket");
-        Bucket::new(resource_address)
+    pub fn from_workspace<T: Into<Vec<u8>>>(key: T) -> Self {
+        Arg::FromWorkspace(key.into())
     }
 }

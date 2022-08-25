@@ -32,7 +32,10 @@ use tari_dan_engine::{
     state_store::memory::MemoryStateStore,
     wasm::{compile::compile_template, ExecutionResult, LoadedWasmModule},
 };
-use tari_template_lib::models::ComponentAddress;
+use tari_template_lib::{
+    args::Arg,
+    models::{ComponentAddress, PackageAddress},
+};
 
 use super::MockRuntimeInterface;
 
@@ -89,10 +92,14 @@ impl<R: RuntimeInterface + Clone + 'static> TemplateTest<R> {
         self.package.get_module_by_name(module_name).unwrap()
     }
 
-    pub fn call_function<T>(&self, template_name: &str, func_name: &str, args: Vec<Vec<u8>>) -> T
+    pub fn package_address(&self) -> PackageAddress {
+        self.package.address()
+    }
+
+    pub fn call_function<T>(&self, template_name: &str, func_name: &str, args: Vec<Arg>) -> T
     where T: BorshDeserialize {
         let result = self.execute(vec![Instruction::CallFunction {
-            package_address: self.package.id(),
+            package_address: self.package.address(),
             template: template_name.to_owned(),
             function: func_name.to_owned(),
             args,
@@ -101,10 +108,10 @@ impl<R: RuntimeInterface + Clone + 'static> TemplateTest<R> {
         result[0].decode::<T>().unwrap()
     }
 
-    pub fn call_method<T>(&self, component_address: ComponentAddress, method_name: &str, args: Vec<Vec<u8>>) -> T
+    pub fn call_method<T>(&self, component_address: ComponentAddress, method_name: &str, args: Vec<Arg>) -> T
     where T: BorshDeserialize {
         let result = self.execute(vec![Instruction::CallMethod {
-            package_address: self.package.id(),
+            package_address: self.package.address(),
             component_address,
             method: method_name.to_owned(),
             args,

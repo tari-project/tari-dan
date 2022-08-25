@@ -29,61 +29,85 @@ use syn::{
     Ident,
     ImplItem,
     ImplItemMethod,
-    ItemImpl,
+    Item,
     ItemMod,
-    ItemStruct,
     Result,
     ReturnType,
     Signature,
     Stmt,
+    TypePath,
     TypeTuple,
 };
 
 #[allow(dead_code)]
 pub struct TemplateAst {
     pub template_name: Ident,
-    pub struct_section: ItemStruct,
-    pub impl_section: ItemImpl,
+    pub module: ItemMod,
 }
 
 impl Parse for TemplateAst {
     fn parse(input: ParseStream) -> Result<Self> {
         // parse the "mod" block
-        let module: ItemMod = input.parse()?;
+        let mut module: ItemMod = input.parse()?;
 
         // get the contents of the "mod" block
-        let mut items = match module.content {
-            Some((_, items)) => items,
+        let items = match module.content {
+            Some((_, ref mut items)) => items,
             None => return Err(Error::new(module.ident.span(), "empty module")),
         };
 
-        // get the "struct" block
-        let struct_section = match &mut items[0] {
-            syn::Item::Struct(struct_item) => struct_item.clone(),
-            _ => return Err(Error::new(module.ident.span(), "the first section is not a 'struct'")),
-        };
+        // add derive macros to all structs
+        let mut template_name = None;
+        let mut has_impl = false;
 
-        // get the "impl" block
-        let impl_section = match &items[1] {
-            syn::Item::Impl(impl_item) => impl_item.clone(),
-            _ => return Err(Error::new(module.ident.span(), "the second section is not an 'impl'")),
-        };
+        for item in items {
+            match item {
+                Item::Struct(ref mut item) => {
+                    item.attrs.push(syn::parse_quote!(#[derive(Debug, Decode, Encode)]));
+                    // Use the first struct name as the template name
+                    // TODO: remove this assumption in favor of "marking" the struct as a template struct
+                    // #[template(Component)]
+                    if template_name.is_none() {
+                        template_name = Some(item.ident.clone());
+                    }
+                },
+                // TODO: check name matches template name
+                Item::Impl(_) => {
+                    has_impl = true;
+                },
+                _ => {},
+            }
+        }
 
-        let template_name = struct_section.ident.clone();
+        if template_name.is_none() {
+            return Err(Error::new(module.ident.span(), "a template must define a struct"));
+        }
+
+        if !has_impl {
+            return Err(Error::new(
+                module.ident.span(),
+                "a template must have associated functions and/or methods",
+            ));
+        }
 
         Ok(Self {
-            template_name,
-            struct_section,
-            impl_section,
+            template_name: template_name.unwrap(),
+            module,
         })
     }
 }
 
 impl TemplateAst {
     pub fn get_functions(&self) -> Vec<FunctionAst> {
-        self.impl_section
-            .items
+        self.module
+            .content
             .iter()
+            .flat_map(|(_, items)| items)
+            .filter_map(|i| match i {
+                Item::Impl(impl_item) => Some(&impl_item.items),
+                _ => None,
+            })
+            .flatten()
             .map(Self::get_function_from_item)
             .filter(|f| f.is_public)
             .collect()
@@ -133,7 +157,7 @@ impl TemplateAst {
             syn::Type::Path(type_path) => {
                 // TODO: handle "Self"
                 // TODO: detect more complex types
-                TypeAst::Typed(type_path.path.segments[0].ident.clone())
+                TypeAst::Typed(type_path.clone())
             },
             syn::Type::Tuple(tuple) => TypeAst::Tuple(tuple.clone()),
             _ => todo!(),
@@ -170,6 +194,6 @@ pub struct FunctionAst {
 
 pub enum TypeAst {
     Receiver { mutability: bool },
-    Typed(Ident),
+    Typed(TypePath),
     Tuple(TypeTuple),
 }

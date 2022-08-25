@@ -30,8 +30,12 @@ pub use processor::InstructionProcessor;
 
 mod signature;
 pub use signature::InstructionSignature;
+use tari_template_lib::{
+    args::Arg,
+    models::{ComponentAddress, PackageAddress},
+};
 use tari_common_types::types::PublicKey;
-use tari_template_lib::models::{ComponentAddress, PackageAddress};
+
 
 #[derive(Debug, Clone)]
 pub enum Instruction {
@@ -39,13 +43,16 @@ pub enum Instruction {
         package_address: PackageAddress,
         template: String,
         function: String,
-        args: Vec<Vec<u8>>,
+        args: Vec<Arg>,
     },
     CallMethod {
         package_address: PackageAddress,
         component_address: ComponentAddress,
         method: String,
-        args: Vec<Vec<u8>>,
+        args: Vec<Arg>,
+    },
+    PutLastInstructionOutputOnWorkspace {
+        key: Vec<u8>,
     },
 }
 

@@ -40,8 +40,8 @@ impl Vault {
         Ok(())
     }
 
-    pub fn withdraw_fungible(&mut self, amount: Amount) -> Resource {
-        self.resource.withdraw_fungible(amount)
+    pub fn withdraw(&mut self, amount: Amount) -> Result<Resource, ResourceError> {
+        self.resource.withdraw(amount)
     }
 
     pub fn resource_address(&self) -> ResourceAddress {

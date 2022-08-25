@@ -22,7 +22,7 @@
 
 use std::sync::Arc;
 
-use tari_template_abi::encode;
+use tari_template_lib::{arg, args::WorkspaceAction, invoke_args};
 
 use crate::{
     instruction::{error::InstructionError, Instruction, Transaction},
@@ -51,69 +51,85 @@ where TRuntimeInterface: RuntimeInterface + Clone + 'static
     pub fn execute(&self, transaction: Transaction) -> Result<Vec<ExecutionResult>, InstructionError> {
         let mut results = Vec::with_capacity(transaction.instructions.len());
 
-        let state = Runtime::new(Arc::new(self.runtime_interface.clone()));
+        let runtime = Runtime::new(Arc::new(self.runtime_interface.clone()));
+
         for instruction in transaction.instructions {
-            let result = match instruction {
-                Instruction::CallFunction {
-                    package_address,
-                    template,
-                    function,
-                    args,
-                } => {
-                    if package_address != self.package.id() {
-                        return Err(InstructionError::PackageNotFound { package_address });
-                    }
-
-                    state.interface().set_current_runtime_state(RuntimeState {
-                        package_address,
-                        // TODO: Get contract address
-                        contract_address: Default::default(),
-                    });
-
-                    let module = self
-                        .package
-                        .get_module_by_name(&template)
-                        .ok_or(InstructionError::TemplateNameNotFound { name: template })?;
-
-                    // TODO: implement intelligent instance caching
-                    let process = Process::start(module.clone(), state.clone(), package_address)?;
-                    process.invoke_by_name(&function, args)?
-                },
-                Instruction::CallMethod {
-                    package_address,
-                    component_address,
-                    method,
-                    args,
-                } => {
-                    if package_address != self.package.id() {
-                        return Err(InstructionError::PackageNotFound { package_address });
-                    }
-                    let component = self.runtime_interface.get_component(&component_address)?;
-                    let module = self.package.get_module_by_name(&component.module_name).ok_or_else(|| {
-                        InstructionError::TemplateNameNotFound {
-                            name: component.module_name.clone(),
-                        }
-                    })?;
-
-                    state.interface().set_current_runtime_state(RuntimeState {
-                        package_address,
-                        // TODO: Get contract address
-                        contract_address: Default::default(),
-                    });
-
-                    let mut final_args = Vec::with_capacity(args.len() + 1);
-                    final_args.push(encode(&component).unwrap());
-                    final_args.extend(args);
-
-                    // TODO: implement intelligent instance caching
-                    let process = Process::start(module.clone(), state.clone(), package_address)?;
-                    process.invoke_by_name(&method, final_args)?
-                },
-            };
-
+            let result = self.process_instruction(&runtime, instruction)?;
             results.push(result);
         }
 
         Ok(results)
+    }
+
+    fn process_instruction(
+        &self,
+        runtime: &Runtime,
+        instruction: Instruction,
+    ) -> Result<ExecutionResult, InstructionError> {
+        match instruction {
+            Instruction::CallFunction {
+                package_address,
+                template,
+                function,
+                args,
+            } => {
+                if package_address != self.package.address() {
+                    return Err(InstructionError::PackageNotFound { package_address });
+                }
+
+                runtime.interface().set_current_runtime_state(RuntimeState {
+                    package_address,
+                    // TODO: Get contract address
+                    contract_address: Default::default(),
+                });
+
+                let module = self
+                    .package
+                    .get_module_by_name(&template)
+                    .ok_or(InstructionError::TemplateNameNotFound { name: template })?;
+
+                // TODO: implement intelligent instance caching
+                let process = Process::start(module.clone(), runtime.clone(), package_address)?;
+                let result = process.invoke_by_name(&function, args)?;
+                Ok(result)
+            },
+            Instruction::CallMethod {
+                package_address,
+                component_address,
+                method,
+                args,
+            } => {
+                if package_address != self.package.address() {
+                    return Err(InstructionError::PackageNotFound { package_address });
+                }
+                let component = self.runtime_interface.get_component(&component_address)?;
+                let module = self.package.get_module_by_name(&component.module_name).ok_or_else(|| {
+                    InstructionError::TemplateNameNotFound {
+                        name: component.module_name.clone(),
+                    }
+                })?;
+
+                runtime.interface().set_current_runtime_state(RuntimeState {
+                    package_address,
+                    // TODO: Get contract address
+                    contract_address: Default::default(),
+                });
+
+                let mut final_args = Vec::with_capacity(args.len() + 1);
+                final_args.push(arg![component]);
+                final_args.extend(args);
+
+                // TODO: implement intelligent instance caching
+                let process = Process::start(module.clone(), runtime.clone(), package_address)?;
+                let result = process.invoke_by_name(&method, final_args)?;
+                Ok(result)
+            },
+            Instruction::PutLastInstructionOutputOnWorkspace { key } => {
+                let _result = runtime
+                    .interface()
+                    .workspace_invoke(WorkspaceAction::PutLastInstructionOutput, invoke_args![key])?;
+                Ok(ExecutionResult::empty())
+            },
+        }
     }
 }

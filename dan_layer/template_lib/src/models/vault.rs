@@ -99,16 +99,20 @@ impl<T: ResourceDefinition> Vault<T> {
         call_engine::<_, ()>(EngineOp::VaultInvoke, &VaultInvokeArg {
             vault_ref: VaultRef::Ref(self.vault_id()),
             action: VaultAction::Deposit,
-            args: args![bucket.id()],
+            args: invoke_args![bucket.id()],
         })
         .expect("VaultInvoke returned null");
     }
 
     pub fn withdraw(&mut self, amount: Amount) -> Bucket<T> {
+        assert!(
+            amount.is_positive() && !amount.is_zero(),
+            "Amount must be non-zero and positive"
+        );
         let resp: InvokeResult = call_engine(EngineOp::VaultInvoke, &VaultInvokeArg {
             vault_ref: VaultRef::Ref(self.vault_id()),
             action: VaultAction::WithdrawFungible,
-            args: args![amount],
+            args: invoke_args![amount],
         })
         .expect("VaultInvoke returned null");
 

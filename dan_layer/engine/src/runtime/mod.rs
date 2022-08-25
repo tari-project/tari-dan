@@ -38,6 +38,7 @@ use std::{
 use anyhow::anyhow;
 use tari_template_lib::{
     args::{
+        Arg,
         BucketAction,
         BucketRef,
         CreateComponentArg,
@@ -46,7 +47,9 @@ use tari_template_lib::{
         ResourceAction,
         ResourceRef,
         VaultAction,
+        WorkspaceAction,
     },
+    invoke_args,
     models::{Amount, BucketId, ComponentAddress, ComponentInstance, ResourceAddress, VaultId, VaultRef},
 };
 pub use tracker::{RuntimeState, StateTracker};
@@ -84,11 +87,33 @@ pub trait RuntimeInterface: Send + Sync {
         action: BucketAction,
         args: Vec<Vec<u8>>,
     ) -> Result<InvokeResult, RuntimeError>;
+
+    fn workspace_invoke(&self, action: WorkspaceAction, args: Vec<Vec<u8>>) -> Result<InvokeResult, RuntimeError>;
+
+    fn set_last_instruction_output(&self, value: Option<Vec<u8>>) -> Result<(), RuntimeError>;
 }
 
 #[derive(Clone)]
 pub struct Runtime {
     interface: Arc<dyn RuntimeInterface>,
+}
+
+impl Runtime {
+    pub(crate) fn resolve_args(&self, args: Vec<Arg>) -> Result<Vec<Vec<u8>>, RuntimeError> {
+        let mut resolved = Vec::with_capacity(args.len());
+        for arg in args {
+            match arg {
+                Arg::FromWorkspace(key) => {
+                    let value = self
+                        .interface
+                        .workspace_invoke(WorkspaceAction::Take, invoke_args![key])?;
+                    resolved.push(value.decode()?);
+                },
+                Arg::Literal(v) => resolved.push(v),
+            }
+        }
+        Ok(resolved)
+    }
 }
 
 impl Runtime {
@@ -131,6 +156,14 @@ pub enum RuntimeError {
     ResourceNotFound { resource_address: ResourceAddress },
     #[error(transparent)]
     ResourceError(#[from] ResourceError),
+    #[error("Bucket {bucket_id} was dropped but was not empty")]
+    BucketNotEmpty { bucket_id: BucketId },
+    #[error("Named argument {key} was not found")]
+    ItemNotOnWorkspace { key: String },
+    #[error("Attempted to take the last output but there was no previous instruction output")]
+    NoLastInstructionOutput,
+    #[error("Workspace already has an item with key '{key}'")]
+    WorkspaceItemKeyExists { key: String },
 }
 impl RuntimeError {
     pub fn state_db_error<T: Display>(err: T) -> Self {
