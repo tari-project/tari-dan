@@ -37,7 +37,6 @@ use tonic::{Request, Response, Status};
 pub struct ValidatorNodeGrpcServer<TServiceSpecification: ServiceSpecification> {
     node_identity: NodeIdentity,
     _db_factory: TServiceSpecification::DbFactory,
-    _asset_processor: TServiceSpecification::AssetProcessor,
     asset_proxy: TServiceSpecification::AssetProxy,
 }
 
@@ -45,13 +44,11 @@ impl<TServiceSpecification: ServiceSpecification> ValidatorNodeGrpcServer<TServi
     pub fn new(
         node_identity: NodeIdentity,
         _db_factory: TServiceSpecification::DbFactory,
-        _asset_processor: TServiceSpecification::AssetProcessor,
         asset_proxy: TServiceSpecification::AssetProxy,
     ) -> Self {
         Self {
             node_identity,
             _db_factory,
-            _asset_processor,
             asset_proxy,
         }
     }

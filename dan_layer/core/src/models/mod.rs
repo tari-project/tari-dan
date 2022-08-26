@@ -24,7 +24,6 @@ use std::{cmp::Ordering, convert::TryFrom, fmt::Debug, hash::Hash, ops::Add};
 
 use tari_common_types::types::FixedHash;
 
-mod asset_definition;
 mod base_layer_metadata;
 mod base_layer_output;
 mod committee;
@@ -45,9 +44,8 @@ mod view;
 mod view_id;
 pub mod vote_message;
 
-pub use asset_definition::{AssetDefinition, InitialState};
 pub use base_layer_metadata::BaseLayerMetadata;
-pub use base_layer_output::{BaseLayerOutput, CheckpointOutput, CommitteeOutput};
+pub use base_layer_output::BaseLayerOutput;
 pub use committee::Committee;
 pub use error::ModelError;
 pub(crate) use hashing::{dan_layer_models_hasher, HOT_STUFF_MESSAGE_LABEL};

@@ -21,7 +21,6 @@
 // USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 use tari_common_types::types::FixedHash;
-use tari_core::transactions::transaction_components::SignerSignature;
 
 use crate::{
     models::{
@@ -77,7 +76,6 @@ impl<TPayload: Payload, TAddr: NodeAddressable> HotStuffMessage<TPayload, TAddr>
         node: Option<HotStuffTreeNode<TAddr>>,
         node_hash: Option<TreeNodeHash>,
         partial_sig: Option<ValidatorSignature>,
-        checkpoint_signature: Option<SignerSignature>,
         contract_id: FixedHash,
     ) -> Self {
         todo!();
@@ -111,98 +109,6 @@ impl<TPayload: Payload, TAddr: NodeAddressable> HotStuffMessage<TPayload, TAddr>
             message_type: HotStuffMessageType::Generic,
             shard: Some(shard),
             node: Some(node),
-            ..Default::default()
-        }
-    }
-
-    pub fn prepare(
-        proposal: HotStuffTreeNode<TAddr>,
-        high_qc: Option<QuorumCertificate>,
-        view_number: ViewId,
-        contract_id: FixedHash,
-    ) -> Self {
-        todo!();
-        Self {
-            message_type: HotStuffMessageType::Prepare,
-            node: Some(proposal),
-            justify: high_qc,
-            ..Default::default()
-        }
-    }
-
-    pub fn vote_prepare(node_hash: TreeNodeHash, view_number: ViewId, contract_id: FixedHash) -> Self {
-        todo!();
-        Self {
-            message_type: HotStuffMessageType::Prepare,
-            node: None,
-            ..Default::default()
-        }
-    }
-
-    pub fn pre_commit(
-        node: Option<HotStuffTreeNode<TAddr>>,
-        prepare_qc: Option<QuorumCertificate>,
-        view_number: ViewId,
-        contract_id: FixedHash,
-    ) -> Self {
-        todo!();
-        Self {
-            message_type: HotStuffMessageType::PreCommit,
-            node,
-            justify: prepare_qc,
-            ..Default::default()
-        }
-    }
-
-    pub fn vote_pre_commit(node_hash: TreeNodeHash, view_number: ViewId, contract_id: FixedHash) -> Self {
-        todo!();
-        Self {
-            message_type: HotStuffMessageType::PreCommit,
-            node: None,
-            ..Default::default()
-        }
-    }
-
-    pub fn commit(
-        node: Option<HotStuffTreeNode<TAddr>>,
-        pre_commit_qc: Option<QuorumCertificate>,
-        view_number: ViewId,
-        contract_id: FixedHash,
-    ) -> Self {
-        todo!();
-        Self {
-            message_type: HotStuffMessageType::Commit,
-            node,
-            justify: pre_commit_qc,
-            ..Default::default()
-        }
-    }
-
-    pub fn vote_commit(
-        node_hash: TreeNodeHash,
-        view_number: ViewId,
-        contract_id: FixedHash,
-        checkpoint_signature: SignerSignature,
-    ) -> Self {
-        todo!();
-        Self {
-            message_type: HotStuffMessageType::Commit,
-            node: None,
-            ..Default::default()
-        }
-    }
-
-    pub fn decide(
-        node: Option<HotStuffTreeNode<TAddr>>,
-        commit_qc: Option<QuorumCertificate>,
-        view_number: ViewId,
-        contract_id: FixedHash,
-    ) -> Self {
-        todo!();
-        Self {
-            message_type: HotStuffMessageType::Decide,
-            node,
-            justify: commit_qc,
             ..Default::default()
         }
     }
@@ -268,10 +174,6 @@ impl<TPayload: Payload, TAddr: NodeAddressable> HotStuffMessage<TPayload, TAddr>
     }
 
     pub fn partial_sig(&self) -> Option<&ValidatorSignature> {
-        todo!()
-    }
-
-    pub fn checkpoint_signature(&self) -> Option<&SignerSignature> {
         todo!()
     }
 }

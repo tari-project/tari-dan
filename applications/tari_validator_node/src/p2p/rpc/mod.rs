@@ -28,10 +28,7 @@ mod test;
 pub use service_impl::ValidatorNodeRpcServiceImpl;
 use tari_comms::protocol::rpc::{Request, Response, RpcStatus, Streaming};
 use tari_comms_rpc_macros::tari_rpc;
-use tari_dan_core::{
-    services::{mempool::service::MempoolService, AssetProcessor},
-    storage::DbFactory,
-};
+use tari_dan_core::{services::mempool::service::MempoolService, storage::DbFactory};
 
 use crate::p2p::proto::validator_node as proto;
 
@@ -74,18 +71,9 @@ pub trait ValidatorNodeRpcService: Send + Sync + 'static {
     ) -> Result<Response<proto::GetTipNodeResponse>, RpcStatus>;
 }
 
-pub fn create_validator_node_rpc_service<
-    TMempoolService: MempoolService + Clone,
-    TDbFactory: DbFactory + Clone,
-    TAssetProcessor: AssetProcessor + Clone,
->(
+pub fn create_validator_node_rpc_service<TMempoolService: MempoolService + Clone, TDbFactory: DbFactory + Clone>(
     mempool_service: TMempoolService,
     db_factory: TDbFactory,
-    asset_processor: TAssetProcessor,
-) -> ValidatorNodeRpcServer<ValidatorNodeRpcServiceImpl<TMempoolService, TDbFactory, TAssetProcessor>> {
-    ValidatorNodeRpcServer::new(ValidatorNodeRpcServiceImpl::new(
-        mempool_service,
-        db_factory,
-        asset_processor,
-    ))
+) -> ValidatorNodeRpcServer<ValidatorNodeRpcServiceImpl<TMempoolService, TDbFactory>> {
+    ValidatorNodeRpcServer::new(ValidatorNodeRpcServiceImpl::new(mempool_service, db_factory))
 }

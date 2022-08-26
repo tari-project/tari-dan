@@ -92,7 +92,7 @@ impl TryFrom<grpc::Instruction> for Instruction {
                 Instruction::CallFunction {
                     template,
                     function,
-                    args,
+                    args: todo!(),
                     package_address,
                 }
             },
@@ -103,7 +103,7 @@ impl TryFrom<grpc::Instruction> for Instruction {
                 let method = request.method;
                 Instruction::CallMethod {
                     method,
-                    args,
+                    args: todo!(),
                     package_address,
                     component_address,
                 }
@@ -144,7 +144,7 @@ impl From<Instruction> for grpc::Instruction {
                 result.package_address = package_address.to_vec();
                 result.template = template;
                 result.function = function;
-                result.args = args;
+                result.args = todo!(); // args;
             },
             Instruction::CallMethod {
                 method,
@@ -156,7 +156,10 @@ impl From<Instruction> for grpc::Instruction {
                 result.package_address = package_address.to_vec();
                 result.component_address = component_address.to_vec();
                 result.method = method;
-                result.args = args;
+                result.args = todo!(); // args;
+            },
+            Instruction::PutLastInstructionOutputOnWorkspace { .. } => {
+                todo!()
             },
         }
 

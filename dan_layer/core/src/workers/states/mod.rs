@@ -32,12 +32,10 @@ use crate::models::ViewId;
 // }
 
 mod idle_state;
-mod next_view;
 mod starting;
 mod synchronizing;
 
 pub use idle_state::IdleState;
-pub use next_view::NextViewState;
 pub use starting::Starting;
 pub use synchronizing::Synchronizing;
 

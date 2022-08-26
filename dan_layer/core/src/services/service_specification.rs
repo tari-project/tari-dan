@@ -22,20 +22,15 @@
 
 use tari_dan_engine::state::StateDbBackendAdapter;
 
-use super::{acceptance_manager::AcceptanceManager, mempool::service::MempoolService};
+use super::mempool::service::MempoolService;
 use crate::{
     models::{domain_events::ConsensusWorkerDomainEvent, Payload},
     services::{
         infrastructure_services::{InboundConnectionService, NodeAddressable, OutboundService},
-        wallet_client::WalletClient,
-        AssetProcessor,
         AssetProxy,
         BaseNodeClient,
-        CheckpointManager,
-        CommitteeManager,
         EventsPublisher,
         PayloadProcessor,
-        PayloadProvider,
         SigningService,
         ValidatorNodeClientFactory,
     },
@@ -52,15 +47,10 @@ use crate::{
 /// simply reference types.
 /// This trait is intended to only include `types` and no methods.
 pub trait ServiceSpecification: Default + Clone {
-    type AcceptanceManager: AcceptanceManager + Clone;
     type Addr: NodeAddressable;
-    type AssetProcessor: AssetProcessor + Clone;
     type AssetProxy: AssetProxy + Clone;
     type BaseNodeClient: BaseNodeClient + Clone;
-    type ChainDbBackendAdapter: ChainDbBackendAdapter + MetadataBackendAdapter<ChainDbMetadataKey>;
-    type ChainStorageService: ChainStorageService<Self::Addr>;
-    type CheckpointManager: CheckpointManager;
-    type CommitteeManager: CommitteeManager<Self::Addr>;
+    type ChainDbBackendAdapter: ChainDbBackendAdapter;
     type DbFactory: DbFactory<
             StateDbBackendAdapter = Self::StateDbBackendAdapter,
             ChainDbBackendAdapter = Self::ChainDbBackendAdapter,
@@ -73,9 +63,7 @@ pub trait ServiceSpecification: Default + Clone {
     type OutboundService: OutboundService<Addr = Self::Addr, Payload = Self::Payload>;
     type Payload: Payload;
     type PayloadProcessor: PayloadProcessor<Self::Payload>;
-    type PayloadProvider: PayloadProvider<Self::Payload>;
     type SigningService: SigningService;
     type StateDbBackendAdapter: StateDbBackendAdapter;
     type ValidatorNodeClientFactory: ValidatorNodeClientFactory<Addr = Self::Addr> + Clone;
-    type WalletClient: WalletClient + Clone;
 }

@@ -20,18 +20,16 @@
 // WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 // USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-mod asset;
 mod cli;
 mod cmd_args;
 mod comms;
 mod config;
-mod contract_worker_manager;
 mod dan_node;
 mod default_service_specification;
 mod grpc;
 mod p2p;
 
-use std::{process, sync::Arc};
+use std::{fs, process, sync::Arc};
 
 use clap::Parser;
 use futures::FutureExt;
@@ -50,13 +48,7 @@ use tari_comms::{
 };
 use tari_comms_dht::Dht;
 use tari_dan_core::{
-    services::{
-        mempool::service::MempoolServiceHandle,
-        ConcreteAcceptanceManager,
-        ConcreteAssetProcessor,
-        ConcreteAssetProxy,
-        ServiceSpecification,
-    },
+    services::{mempool::service::MempoolServiceHandle, ConcreteAssetProxy, ServiceSpecification},
     storage::{global::GlobalDb, DbFactory},
 };
 use tari_dan_storage_sqlite::{global::SqliteGlobalDbBackendAdapter, SqliteDbFactory};
@@ -72,10 +64,7 @@ use crate::{
     config::{ApplicationConfig, ValidatorNodeConfig},
     dan_node::DanNode,
     default_service_specification::DefaultServiceSpecification,
-    grpc::{
-        services::{base_node_client::GrpcBaseNodeClient, wallet_client::GrpcWalletClient},
-        validator_node_grpc_server::ValidatorNodeGrpcServer,
-    },
+    grpc::{services::base_node_client::GrpcBaseNodeClient, validator_node_grpc_server::ValidatorNodeGrpcServer},
     p2p::services::rpc_client::TariCommsValidatorNodeClientFactory,
 };
 
@@ -121,10 +110,10 @@ async fn run_node(config: &ApplicationConfig) -> Result<(), ExitError> {
         true,
         PeerFeatures::NONE,
     )?;
-    let db_factory = SqliteDbFactory::new(config.validator_node.data_dir.clone());
-    let global_db = db_factory
-        .get_or_create_global_db()
-        .map_err(|e| ExitError::new(ExitCode::DatabaseError, e))?;
+    // let db_factory = SqliteDbFactory::new(config.validator_node.data_dir.clone());
+    // let global_db = db_factory
+    //     .get_or_create_global_db()
+    //     .map_err(|e| ExitError::new(ExitCode::DatabaseError, e))?;
     let mempool_service = MempoolServiceHandle::new();
 
     info!(
@@ -139,51 +128,40 @@ async fn run_node(config: &ApplicationConfig) -> Result<(), ExitError> {
         shutdown.to_signal(),
         node_identity.clone(),
         mempool_service.clone(),
-        db_factory.clone(),
-        ConcreteAssetProcessor::default(),
     )
     .await?;
-
-    let asset_processor = ConcreteAssetProcessor::default();
-    let validator_node_client_factory =
-        TariCommsValidatorNodeClientFactory::new(handles.expect_handle::<Dht>().dht_requester());
-    let base_node_client = GrpcBaseNodeClient::new(config.validator_node.base_node_grpc_address);
-    let asset_proxy: ConcreteAssetProxy<DefaultServiceSpecification> = ConcreteAssetProxy::new(
-        base_node_client.clone(),
-        validator_node_client_factory,
-        5,
-        mempool_service.clone(),
-        db_factory.clone(),
-    );
-    let wallet_client = GrpcWalletClient::new(config.validator_node.wallet_grpc_address);
-    let _acceptance_manager = ConcreteAcceptanceManager::new(wallet_client.clone(), base_node_client);
-    let grpc_server: ValidatorNodeGrpcServer<DefaultServiceSpecification> = ValidatorNodeGrpcServer::new(
-        node_identity.as_ref().clone(),
-        db_factory.clone(),
-        asset_processor,
-        asset_proxy,
-    );
-
-    if let Some(address) = config.validator_node.grpc_address.clone() {
-        println!("Started GRPC server on {}", address);
-        task::spawn(run_grpc(grpc_server, address, shutdown.to_signal()));
-    }
-
-    println!("🚀 Validator node started!");
-    println!("{}", node_identity);
-
-    run_dan_node(
-        shutdown.to_signal(),
-        config.validator_node.clone(),
-        mempool_service,
-        db_factory,
-        handles,
-        subscription_factory,
-        node_identity,
-        global_db,
-    )
-    .await?;
-
+    // let validator_node_client_factory =
+    //     TariCommsValidatorNodeClientFactory::new(handles.expect_handle::<Dht>().dht_requester());
+    // let base_node_client = GrpcBaseNodeClient::new(config.validator_node.base_node_grpc_address);
+    // let asset_proxy: ConcreteAssetProxy<DefaultServiceSpecification> = ConcreteAssetProxy::new(
+    //     base_node_client.clone(),
+    //     validator_node_client_factory,
+    //     5,
+    //     mempool_service.clone(),
+    //     db_factory.clone(),
+    // );
+    // let grpc_server: ValidatorNodeGrpcServer<DefaultServiceSpecification> =
+    //     ValidatorNodeGrpcServer::new(node_identity.as_ref().clone(), db_factory.clone(), asset_proxy);
+    //
+    // if let Some(address) = config.validator_node.grpc_address.clone() {
+    //     println!("Started GRPC server on {}", address);
+    //     task::spawn(run_grpc(grpc_server, address, shutdown.to_signal()));
+    // }
+    //
+    // println!("🚀 Validator node started!");
+    // println!("{}", node_identity);
+    //
+    // run_dan_node(
+    //     shutdown.to_signal(),
+    //     config.validator_node.clone(),
+    //     mempool_service,
+    //     db_factory,
+    //     handles,
+    //     subscription_factory,
+    //     node_identity,
+    // )
+    // .await?;
+    //
     Ok(())
 }
 
@@ -203,9 +181,8 @@ async fn run_dan_node(
     handles: ServiceHandles,
     subscription_factory: Arc<SubscriptionFactory>,
     node_identity: Arc<NodeIdentity>,
-    global_db: GlobalDb<SqliteGlobalDbBackendAdapter>,
 ) -> Result<(), ExitError> {
-    let node = DanNode::new(config, node_identity, global_db);
+    let node = DanNode::new(config, node_identity);
     node.start(
         shutdown_signal,
         mempool_service,

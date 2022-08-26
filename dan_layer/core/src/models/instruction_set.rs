@@ -73,13 +73,14 @@ impl InstructionSet {
     }
 
     pub fn calculate_hash(&self) -> InstructionSetHash {
-        let mut mmr = MerkleMountainRange::<Blake256, _>::new(Vec::default());
-        // assume instructions are sorted
-        for instruction in &self.instructions {
-            mmr.push(instruction.calculate_hash().to_vec()).unwrap();
-        }
-
-        FixedHash::try_from(mmr.get_merkle_root().unwrap()).unwrap().into()
+        todo!()
+        // let mut mmr = MerkleMountainRange::<Blake256, _>::new(Vec::default());
+        // // assume instructions are sorted
+        // for instruction in &self.instructions {
+        //     mmr.push(instruction.calculate_hash().to_vec()).unwrap();
+        // }
+        //
+        // FixedHash::try_from(mmr.get_merkle_root().unwrap()).unwrap().into()
     }
 
     pub fn instructions(&self) -> &[Instruction] {

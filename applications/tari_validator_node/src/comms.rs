@@ -26,7 +26,7 @@ use tari_app_utilities::{identity_management, identity_management::load_from_jso
 use tari_common::exit_codes::{ExitCode, ExitError};
 use tari_comms::{protocol::rpc::RpcServer, NodeIdentity, UnspawnedCommsNode};
 use tari_comms_dht::Dht;
-use tari_dan_core::services::{mempool::service::MempoolServiceHandle, ConcreteAssetProcessor};
+use tari_dan_core::services::mempool::service::MempoolServiceHandle;
 use tari_dan_storage_sqlite::SqliteDbFactory;
 use tari_p2p::{
     comms_connector::{pubsub_connector, SubscriptionFactory},
@@ -45,8 +45,6 @@ pub async fn build_service_and_comms_stack(
     shutdown: ShutdownSignal,
     node_identity: Arc<NodeIdentity>,
     mempool: MempoolServiceHandle,
-    db_factory: SqliteDbFactory,
-    asset_processor: ConcreteAssetProcessor,
 ) -> Result<(ServiceHandles, Arc<SubscriptionFactory>), ExitError> {
     let (publisher, peer_message_subscriptions) = pubsub_connector(100, 50);
     let peer_message_subscriptions = Arc::new(peer_message_subscriptions);
@@ -75,7 +73,7 @@ pub async fn build_service_and_comms_stack(
         .take_handle::<UnspawnedCommsNode>()
         .expect("P2pInitializer was not added to the stack or did not add UnspawnedCommsNode");
 
-    let comms = setup_p2p_rpc(config, comms, &handles, mempool, db_factory, asset_processor);
+    let comms = setup_p2p_rpc(config, comms, &handles, mempool);
 
     let comms = spawn_comms_using_transport(comms, p2p_config.transport.clone())
         .await
@@ -99,20 +97,13 @@ fn setup_p2p_rpc(
     comms: UnspawnedCommsNode,
     handles: &ServiceHandles,
     mempool: MempoolServiceHandle,
-    db_factory: SqliteDbFactory,
-    asset_processor: ConcreteAssetProcessor,
 ) -> UnspawnedCommsNode {
     let dht = handles.expect_handle::<Dht>();
     let rpc_server = RpcServer::builder()
-
-    .with_maximum_simultaneous_sessions(
-config.validator_node.p2p.rpc_max_simultaneous_sessions
-    )
-    .finish()
-
-    // Add your RPC services here ‍🏴‍☠️️☮️🌊
-        .add_service(dht.rpc_service())
-        .add_service(create_validator_node_rpc_service(mempool, db_factory, asset_processor));
+        .with_maximum_simultaneous_sessions(config.validator_node.p2p.rpc_max_simultaneous_sessions)
+        .finish()
+        .add_service(dht.rpc_service());
+    // .add_service(create_validator_node_rpc_service(mempool, db_factory));
 
     comms.add_protocol_extension(rpc_server)
 }
