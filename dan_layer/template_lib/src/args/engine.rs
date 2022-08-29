@@ -154,6 +154,8 @@ pub enum VaultAction {
     Create,
     Deposit,
     WithdrawFungible,
+    GetBalance,
+    GetResourceAddress,
 }
 
 #[derive(Clone, Debug, Decode, Encode)]

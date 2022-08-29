@@ -38,6 +38,13 @@ use tari_template_lib::{
 };
 
 #[derive(Debug, Clone)]
+pub struct Transaction {
+    pub instructions: Vec<Instruction>,
+    pub signature: InstructionSignature,
+    pub sender_public_key: PublicKey,
+}
+
+#[derive(Debug, Clone)]
 pub enum Instruction {
     CallFunction {
         package_address: PackageAddress,
@@ -54,11 +61,4 @@ pub enum Instruction {
     PutLastInstructionOutputOnWorkspace {
         key: Vec<u8>,
     },
-}
-
-#[derive(Debug, Clone)]
-pub struct Transaction {
-    pub instructions: Vec<Instruction>,
-    pub signature: InstructionSignature,
-    pub sender_public_key: PublicKey,
 }

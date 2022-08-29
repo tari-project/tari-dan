@@ -63,8 +63,8 @@ impl<T: ResourceDefinition> FungibleResourceBuilder<T> {
         self
     }
 
-    pub fn initial_supply(mut self, initial_supply: Amount) -> Self {
-        self.initial_supply = initial_supply;
+    pub fn initial_supply<A: Into<Amount>>(mut self, initial_supply: A) -> Self {
+        self.initial_supply = initial_supply.into();
         self
     }
 

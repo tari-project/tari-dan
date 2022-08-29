@@ -146,13 +146,17 @@ fn test_erc20() {
     let tracker = StateTracker::new(state_db, Default::default());
     let template_test =
         TemplateTest::with_runtime_interface(vec!["tests/templates/erc20"], RuntimeInterfaceImpl::new(tracker));
-    let component_address: ComponentAddress =
-        template_test.call_function("KoinVault", "initial_mint", args![Amount(1_000_000_000_000)]);
+
+    let initial_supply = Amount(1_000_000_000_000);
+    let owner_address: ComponentAddress =
+        template_test.call_function("FungibleAccount", "initial_mint", args![initial_supply]);
+
+    let receiver_address: ComponentAddress = template_test.call_method(owner_address, "new_account", args![]);
 
     let result = template_test.execute(vec![
         Instruction::CallMethod {
             package_address: template_test.package_address(),
-            component_address,
+            component_address: owner_address,
             method: "withdraw".to_string(),
             args: args![Amount(100)],
         },
@@ -161,17 +165,32 @@ fn test_erc20() {
         },
         Instruction::CallMethod {
             package_address: template_test.package_address(),
-            component_address,
+            component_address: receiver_address,
             method: "deposit".to_string(),
             args: args![Workspace(b"foo_bucket")],
+        },
+        Instruction::CallMethod {
+            package_address: template_test.package_address(),
+            component_address: owner_address,
+            method: "balance".to_string(),
+            args: args![],
+        },
+        Instruction::CallMethod {
+            package_address: template_test.package_address(),
+            component_address: receiver_address,
+            method: "balance".to_string(),
+            args: args![],
         },
     ]);
     for log in result.logs {
         eprintln!("LOG: {}", log);
     }
     eprintln!("{:?}", result.execution_results);
-
-    // TODO: commit and test the final state
+    assert_eq!(
+        result.execution_results[3].decode::<Amount>().unwrap(),
+        initial_supply - 100
+    );
+    assert_eq!(result.execution_results[4].decode::<Amount>().unwrap(), 100);
 }
 
 #[test]

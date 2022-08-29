@@ -21,7 +21,7 @@
 //   USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 use std::{
-    collections::HashMap,
+    collections::{hash_map::Entry, HashMap},
     mem,
     sync::{Arc, RwLock},
 };
@@ -213,14 +213,14 @@ impl StateTracker {
 
     pub fn set_component(&self, updated_component: ComponentInstance) -> Result<(), RuntimeError> {
         self.write_with(|state| {
-            // TODO: Load from state store?
-            let component = state
-                .new_components
-                .get_mut(&updated_component.component_address)
-                .ok_or(RuntimeError::ComponentNotFound {
-                    address: updated_component.component_address,
-                })?;
-            *component = updated_component;
+            match state.new_components.entry(updated_component.component_address) {
+                Entry::Occupied(mut entry) => {
+                    entry.insert(updated_component);
+                },
+                Entry::Vacant(entry) => {
+                    entry.insert(updated_component);
+                },
+            }
             Ok(())
         })
     }

@@ -177,6 +177,26 @@ impl RuntimeInterface for RuntimeInterfaceImpl {
                 let bucket = self.tracker.new_bucket(resource);
                 Ok(InvokeResult::encode(&bucket)?)
             },
+            VaultAction::GetBalance => {
+                let vault_id = vault_ref.vault_id().ok_or_else(|| RuntimeError::InvalidArgument {
+                    argument: "vault_ref",
+                    reason: "GetBalance vault action requires a vault id".to_string(),
+                })?;
+
+                let balance = self.tracker.borrow_vault_mut(&vault_id, |vault| vault.balance())?;
+                Ok(InvokeResult::encode(&balance)?)
+            },
+            VaultAction::GetResourceAddress => {
+                let vault_id = vault_ref.vault_id().ok_or_else(|| RuntimeError::InvalidArgument {
+                    argument: "vault_ref",
+                    reason: "vault action requires a vault id".to_string(),
+                })?;
+
+                let address = self
+                    .tracker
+                    .borrow_vault_mut(&vault_id, |vault| vault.resource_address())?;
+                Ok(InvokeResult::encode(&address)?)
+            },
         }
     }
 
