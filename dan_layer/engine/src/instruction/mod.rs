@@ -21,7 +21,9 @@
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 mod builder;
+
 pub use builder::TransactionBuilder;
+use digest::{Digest, FixedOutput};
 
 mod error;
 
@@ -30,11 +32,13 @@ pub use processor::InstructionProcessor;
 
 mod signature;
 pub use signature::InstructionSignature;
-use tari_common_types::types::PublicKey;
+use tari_common_types::types::{FixedHash, PublicKey};
+use tari_crypto::hash::blake2::Blake256;
 use tari_template_lib::{
     args::Arg,
     models::{ComponentAddress, PackageAddress},
 };
+use tari_utilities::ByteArray;
 
 #[derive(Debug, Clone)]
 pub enum Instruction {
@@ -55,9 +59,65 @@ pub enum Instruction {
     },
 }
 
+impl Instruction {
+    pub fn hash(&self) -> FixedHash {
+        // TODO: put in actual hashes
+        match self {
+            Instruction::CallFunction { .. } => FixedHash::zero(),
+            Instruction::CallMethod { .. } => FixedHash::zero(),
+            Instruction::PutLastInstructionOutputOnWorkspace { .. } => FixedHash::zero(),
+        }
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct Transaction {
-    pub instructions: Vec<Instruction>,
-    pub signature: InstructionSignature,
-    pub sender_public_key: PublicKey,
+    hash: FixedHash,
+    instructions: Vec<Instruction>,
+    signature: InstructionSignature,
+    sender_public_key: PublicKey,
+}
+
+impl Transaction {
+    pub fn new(instructions: Vec<Instruction>, signature: InstructionSignature, sender_public_key: PublicKey) -> Self {
+        let mut s = Self {
+            hash: FixedHash::zero(),
+            instructions,
+            signature,
+            sender_public_key,
+        };
+        s.calculate_hash();
+        s
+    }
+
+    pub fn hash(&self) -> &FixedHash {
+        &self.hash
+    }
+
+    fn calculate_hash(&mut self) {
+        let mut res = Blake256::new()
+            .chain(self.sender_public_key.as_bytes())
+            .chain(self.signature.signature().get_public_nonce().as_bytes())
+            .chain(self.signature.signature().get_signature().as_bytes());
+        for instruction in &self.instructions {
+            res = res.chain(instruction.hash())
+        }
+        self.hash = res.finalize_fixed().into();
+    }
+
+    pub fn instructions(&self) -> &[Instruction] {
+        &self.instructions
+    }
+
+    pub fn signature(&self) -> &InstructionSignature {
+        &self.signature
+    }
+
+    pub fn sender_public_key(&self) -> &PublicKey {
+        &self.sender_public_key
+    }
+
+    pub fn destruct(self) -> (Vec<Instruction>, InstructionSignature, PublicKey) {
+        (self.instructions, self.signature, self.sender_public_key)
+    }
 }

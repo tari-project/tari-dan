@@ -46,12 +46,6 @@ pub trait ValidatorNodeRpcService: Send + Sync + 'static {
         request: Request<proto::SubmitTransactionRequest>,
     ) -> Result<Response<proto::SubmitTransactionResponse>, RpcStatus>;
 
-    #[rpc(method = 3)]
-    async fn get_sidechain_blocks(
-        &self,
-        request: Request<proto::GetSidechainBlocksRequest>,
-    ) -> Result<Streaming<proto::GetSidechainBlocksResponse>, RpcStatus>;
-
     #[rpc(method = 4)]
     async fn get_sidechain_state(
         &self,

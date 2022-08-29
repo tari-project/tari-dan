@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 
 use async_recursion::async_recursion;
+use tari_shutdown::ShutdownSignal;
 use tokio::{
     sync::mpsc::{Receiver, Sender},
     task::JoinHandle,
@@ -54,8 +55,8 @@ pub struct HotStuffWaiter<
 impl<
         TPayload: Payload + 'static,
         TAddr: NodeAddressable + 'static,
-        TLeaderStrategy: LeaderStrategy<TAddr, TPayload> + 'static + Send,
-        TEpochManager: EpochManager<TAddr> + 'static + Send,
+        TLeaderStrategy: LeaderStrategy<TAddr, TPayload> + 'static + Send + Sync,
+        TEpochManager: EpochManager<TAddr> + 'static + Send + Sync,
     > HotStuffWaiter<TPayload, TAddr, TLeaderStrategy, TEpochManager>
 {
     pub fn spawn(
@@ -69,7 +70,7 @@ impl<
         tx_broadcast: Sender<(HotStuffMessage<TPayload, TAddr>, Vec<TAddr>)>,
         tx_vote_message: Sender<(VoteMessage, TAddr)>,
         tx_execute: Sender<TPayload>,
-        rx_shutdown: Receiver<()>,
+        shutdown: ShutdownSignal,
     ) -> JoinHandle<Result<(), String>> {
         tokio::spawn(async move {
             HotStuffWaiter::new(
@@ -84,7 +85,7 @@ impl<
                 tx_vote_message,
                 tx_execute,
             )
-            .run(rx_shutdown)
+            .run(shutdown)
             .await
         })
     }
@@ -121,7 +122,7 @@ impl<
     }
 
     // pacemaker
-    fn on_receive_new_view(
+    async fn on_receive_new_view(
         &mut self,
         from: TAddr,
         shard: ShardId,
@@ -129,7 +130,8 @@ impl<
         payload: TPayload,
     ) -> Result<(), String> {
         // TODO: Validate who message is from
-        self.validate_from_committee(&from, self.epoch_manager.current_epoch(), shard)?;
+        self.validate_from_committee(&from, self.epoch_manager.current_epoch().await, shard)
+            .await?;
         self.validate_qc(&qc);
         self.shard_db.update_high_qc(qc);
         self.shard_db.set_payload(payload);
@@ -140,7 +142,10 @@ impl<
     async fn on_beat(&mut self, shard: ShardId, payload: PayloadId) -> Result<(), String> {
         // TODO: the leader is only known after the leaf is determines
         // TODO: Review if this is correct. The epoch should stay the same for all epochs
-        if self.is_leader(payload, shard, self.epoch_manager.current_epoch())? {
+        if self
+            .is_leader(payload, shard, self.epoch_manager.current_epoch().await)
+            .await?
+        {
             dbg!("I am the leader");
             // if self.current_payload.is_none() {
             // self.current_payload = payload.clone();
@@ -162,7 +167,7 @@ impl<
     ) -> Result<HotStuffTreeNode<TAddr>, String> {
         dbg!("on propose");
         let qc = self.shard_db.get_high_qc_for(shard);
-        let epoch = self.epoch_manager.current_epoch();
+        let epoch = self.epoch_manager.current_epoch().await;
         let actual_payload = self
             .shard_db
             .get_payload(&payload)
@@ -170,7 +175,8 @@ impl<
         let involved_shards = actual_payload.involved_shards().to_vec();
         let members = self
             .epoch_manager
-            .get_committees(epoch, &involved_shards)?
+            .get_committees(epoch, &involved_shards)
+            .await?
             .into_iter()
             .map(|(shard, committee)| committee.map(|c| c.members).unwrap_or_default())
             .flatten()
@@ -237,18 +243,18 @@ impl<
         )
     }
 
-    fn is_leader(&self, payload: PayloadId, shard: ShardId, epoch: Epoch) -> Result<bool, String> {
+    async fn is_leader(&self, payload: PayloadId, shard: ShardId, epoch: Epoch) -> Result<bool, String> {
         Ok(self.leader_strategy.is_leader(
             &self.identity,
-            &self.epoch_manager.get_committee(epoch, shard)?,
+            &self.epoch_manager.get_committee(epoch, shard).await?,
             payload,
             shard,
             0,
         ))
     }
 
-    fn validate_from_committee(&self, from: &TAddr, epoch: Epoch, shard: ShardId) -> Result<(), String> {
-        if self.epoch_manager.get_committee(epoch, shard)?.contains(from) {
+    async fn validate_from_committee(&self, from: &TAddr, epoch: Epoch, shard: ShardId) -> Result<(), String> {
+        if self.epoch_manager.get_committee(epoch, shard).await?.contains(from) {
             Ok(())
         } else {
             Err("From is not part of this committee".to_string())
@@ -396,7 +402,8 @@ impl<
             if votes.len() == involved_shards.len() {
                 let local_shards = self
                     .epoch_manager
-                    .get_shards(node.epoch(), &self.identity, involved_shards)?;
+                    .get_shards(node.epoch(), &self.identity, involved_shards)
+                    .await?;
                 // it may happen that we are involved in more than one committee, in which case send the votes to each
                 // leader.
                 for local_shard in local_shards {
@@ -457,7 +464,7 @@ impl<
             return Err("I am not the leader for this node".to_string());
         }
 
-        let valid_committee = self.epoch_manager.get_committee(node.epoch(), node.shard())?;
+        let valid_committee = self.epoch_manager.get_committee(node.epoch(), node.shard()).await?;
 
         if !valid_committee.contains(&from) {
             return Err("Not a valid committee member".to_string());
@@ -512,7 +519,7 @@ impl<
     //     self.leader_strategy.get_leader(&self.committee, payload, shard)
     // }
 
-    pub async fn run(mut self, mut rx_shutdown: Receiver<()>) -> Result<(), String> {
+    pub async fn run(mut self, mut shutdown: ShutdownSignal) -> Result<(), String> {
         loop {
             tokio::select! {
                 msg = self.rx_new.recv() => {
@@ -529,7 +536,7 @@ impl<
                         match msg.message_type() {
                             HotStuffMessageType::NewView => {
                                 if let Some(payload) = msg.new_view_payload() {
-                                    self.on_receive_new_view(from, msg.shard(), msg.high_qc().unwrap(), payload.clone());
+                                    self.on_receive_new_view(from, msg.shard(), msg.high_qc().unwrap(), payload.clone()).await;
                                     // There should always be a payload, otherwise the leader
                                     // can't be determined
                                     match self.on_beat(msg.shard(), payload.to_id()).await {
@@ -562,7 +569,7 @@ impl<
                         self.on_receive_vote(from, msg).await?;
                     }
                 },
-                _ = rx_shutdown.recv() => {
+                _ = shutdown.wait() => {
                     dbg!("Exiting");
                     break;
                 }

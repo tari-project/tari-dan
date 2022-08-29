@@ -103,8 +103,8 @@ pub enum DigitalAssetError {
     DhtOutboundError(#[from] DhtOutboundError),
     #[error("Failed to decode message: {0}")]
     DecodeError(#[from] DecodeError),
-    #[error("Failed to send message: {0}")]
-    SendError(#[from] Box<SendError<(RistrettoPublicKey, HotStuffMessage<TariDanPayload, CommsPublicKey>)>>),
+    #[error("Failed to send message: {context}")]
+    SendError { context: String },
     #[error("Invalid committee public key hex")]
     InvalidCommitteePublicKeyHex,
     #[error("State storage error:{0}")]

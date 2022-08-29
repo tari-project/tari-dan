@@ -1,20 +1,28 @@
 use std::{collections::HashMap, ops::Range};
 
+use async_trait::async_trait;
+
 use crate::{
     models::{Committee, Epoch, ShardId},
     services::infrastructure_services::NodeAddressable,
 };
 
+#[async_trait]
 pub trait EpochManager<TAddr: NodeAddressable>: Clone {
-    fn current_epoch(&self) -> Epoch;
-    fn is_epoch_valid(&self, epoch: Epoch) -> bool;
-    fn get_committees(
+    async fn current_epoch(&self) -> Epoch;
+    async fn is_epoch_valid(&self, epoch: Epoch) -> bool;
+    async fn get_committees(
         &self,
         epoch: Epoch,
         shards: &[ShardId],
     ) -> Result<Vec<(ShardId, Option<Committee<TAddr>>)>, String>;
-    fn get_committee(&self, epoch: Epoch, shard: ShardId) -> Result<Committee<TAddr>, String>;
-    fn get_shards(&self, epoch: Epoch, addr: &TAddr, available_shards: &[ShardId]) -> Result<Vec<ShardId>, String>;
+    async fn get_committee(&self, epoch: Epoch, shard: ShardId) -> Result<Committee<TAddr>, String>;
+    async fn get_shards(
+        &self,
+        epoch: Epoch,
+        addr: &TAddr,
+        available_shards: &[ShardId],
+    ) -> Result<Vec<ShardId>, String>;
 }
 
 #[derive(Debug, Clone)]
@@ -49,16 +57,17 @@ impl<TAddr: NodeAddressable> RangeEpochManager<TAddr> {
     }
 }
 
+#[async_trait]
 impl<TAddr: NodeAddressable> EpochManager<TAddr> for RangeEpochManager<TAddr> {
-    fn current_epoch(&self) -> Epoch {
+    async fn current_epoch(&self) -> Epoch {
         self.current_epoch
     }
 
-    fn is_epoch_valid(&self, epoch: Epoch) -> bool {
+    async fn is_epoch_valid(&self, epoch: Epoch) -> bool {
         self.current_epoch == epoch
     }
 
-    fn get_committees(
+    async fn get_committees(
         &self,
         epoch: Epoch,
         shards: &[ShardId],
@@ -79,7 +88,7 @@ impl<TAddr: NodeAddressable> EpochManager<TAddr> for RangeEpochManager<TAddr> {
         Ok(result)
     }
 
-    fn get_committee(&self, epoch: Epoch, shard: ShardId) -> Result<Committee<TAddr>, String> {
+    async fn get_committee(&self, epoch: Epoch, shard: ShardId) -> Result<Committee<TAddr>, String> {
         let epoch = self.epochs.get(&epoch).ok_or("No value for that epoch".to_string())?;
         for (range, committee) in epoch {
             if range.contains(&shard) {
@@ -89,7 +98,12 @@ impl<TAddr: NodeAddressable> EpochManager<TAddr> for RangeEpochManager<TAddr> {
         Err("Could not find a committee for that shard".to_string())
     }
 
-    fn get_shards(&self, epoch: Epoch, addr: &TAddr, available_shards: &[ShardId]) -> Result<Vec<ShardId>, String> {
+    async fn get_shards(
+        &self,
+        epoch: Epoch,
+        addr: &TAddr,
+        available_shards: &[ShardId],
+    ) -> Result<Vec<ShardId>, String> {
         let epoch = self.epochs.get(&epoch).ok_or("No value for that epoch".to_string())?;
         let mut result = vec![];
         for (range, committee) in epoch {

@@ -110,7 +110,7 @@ async fn run_node(config: &ApplicationConfig) -> Result<(), ExitError> {
         true,
         PeerFeatures::NONE,
     )?;
-    // let db_factory = SqliteDbFactory::new(config.validator_node.data_dir.clone());
+    let db_factory = SqliteDbFactory::new(config.validator_node.data_dir.clone());
     // let global_db = db_factory
     //     .get_or_create_global_db()
     //     .map_err(|e| ExitError::new(ExitCode::DatabaseError, e))?;
@@ -130,38 +130,38 @@ async fn run_node(config: &ApplicationConfig) -> Result<(), ExitError> {
         mempool_service.clone(),
     )
     .await?;
-    // let validator_node_client_factory =
-    //     TariCommsValidatorNodeClientFactory::new(handles.expect_handle::<Dht>().dht_requester());
-    // let base_node_client = GrpcBaseNodeClient::new(config.validator_node.base_node_grpc_address);
-    // let asset_proxy: ConcreteAssetProxy<DefaultServiceSpecification> = ConcreteAssetProxy::new(
-    //     base_node_client.clone(),
-    //     validator_node_client_factory,
-    //     5,
-    //     mempool_service.clone(),
-    //     db_factory.clone(),
-    // );
-    // let grpc_server: ValidatorNodeGrpcServer<DefaultServiceSpecification> =
-    //     ValidatorNodeGrpcServer::new(node_identity.as_ref().clone(), db_factory.clone(), asset_proxy);
-    //
-    // if let Some(address) = config.validator_node.grpc_address.clone() {
-    //     println!("Started GRPC server on {}", address);
-    //     task::spawn(run_grpc(grpc_server, address, shutdown.to_signal()));
-    // }
-    //
-    // println!("🚀 Validator node started!");
-    // println!("{}", node_identity);
-    //
-    // run_dan_node(
-    //     shutdown.to_signal(),
-    //     config.validator_node.clone(),
-    //     mempool_service,
-    //     db_factory,
-    //     handles,
-    //     subscription_factory,
-    //     node_identity,
-    // )
-    // .await?;
-    //
+    let validator_node_client_factory =
+        TariCommsValidatorNodeClientFactory::new(handles.expect_handle::<Dht>().dht_requester());
+    let base_node_client = GrpcBaseNodeClient::new(config.validator_node.base_node_grpc_address);
+    let asset_proxy: ConcreteAssetProxy<DefaultServiceSpecification> = ConcreteAssetProxy::new(
+        base_node_client.clone(),
+        validator_node_client_factory,
+        5,
+        mempool_service.clone(),
+        db_factory.clone(),
+    );
+    let grpc_server: ValidatorNodeGrpcServer<DefaultServiceSpecification> =
+        ValidatorNodeGrpcServer::new(node_identity.as_ref().clone(), db_factory.clone(), asset_proxy);
+
+    if let Some(address) = config.validator_node.grpc_address.clone() {
+        println!("Started GRPC server on {}", address);
+        task::spawn(run_grpc(grpc_server, address, shutdown.to_signal()));
+    }
+
+    println!("🚀 Validator node started!");
+    println!("{}", node_identity);
+
+    run_dan_node(
+        shutdown.to_signal(),
+        config.validator_node.clone(),
+        mempool_service,
+        db_factory,
+        handles,
+        subscription_factory,
+        node_identity,
+    )
+    .await?;
+
     Ok(())
 }
 

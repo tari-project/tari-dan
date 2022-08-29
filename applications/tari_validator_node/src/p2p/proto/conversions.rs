@@ -35,10 +35,8 @@ use tari_dan_core::models::{
     HotStuffMessage,
     HotStuffMessageType,
     HotStuffTreeNode,
-    InstructionSet,
     Node,
     QuorumCertificate,
-    SideChainBlock,
     TariDanPayload,
     TreeNodeHash,
     ValidatorSignature,
@@ -46,7 +44,6 @@ use tari_dan_core::models::{
 };
 use tari_dan_engine::{
     instruction::Transaction,
-    instructions::Instruction,
     state::{
         models::{KeyValue, StateOpLogEntry, StateRoot},
         DbStateOpLogEntry,
@@ -109,27 +106,8 @@ impl From<ValidatorSignature> for proto::consensus::ValidatorSignature {
 
 impl From<TariDanPayload> for proto::consensus::TariDanPayload {
     fn from(source: TariDanPayload) -> Self {
-        let (instruction_set, checkpoint) = source.destruct();
         Self {
-            checkpoint: checkpoint.map(|c| c.into()),
-            instruction_set: Some(instruction_set.into()),
-        }
-    }
-}
-
-impl From<CheckpointData> for proto::consensus::CheckpointData {
-    fn from(_source: CheckpointData) -> Self {
-        Self {}
-    }
-}
-
-impl From<&Instruction> for proto::common::Instruction {
-    fn from(source: &Instruction) -> Self {
-        Self {
-            template_id: source.template_id() as u32,
-            method: source.method().to_string(),
-            args: Vec::from(source.args()),
-            sender: source.sender().to_vec(),
+            transaction: Some(source.transaction().clone().into()),
         }
     }
 }
@@ -209,86 +187,18 @@ impl TryFrom<proto::consensus::ValidatorSignature> for ValidatorSignature {
     }
 }
 
-impl TryFrom<proto::common::InstructionSet> for InstructionSet {
-    type Error = String;
-
-    fn try_from(value: proto::common::InstructionSet) -> Result<Self, Self::Error> {
-        let instructions: Vec<Instruction> = value
-            .instructions
-            .into_iter()
-            .map(|i| i.try_into())
-            .collect::<Result<_, String>>()?;
-        Ok(Self::from_vec(instructions))
-    }
-}
-
-impl From<InstructionSet> for proto::common::InstructionSet {
-    fn from(value: InstructionSet) -> Self {
-        Self {
-            instructions: value.instructions().iter().map(Into::into).collect(),
-        }
-    }
-}
-
-impl TryFrom<proto::common::Instruction> for Instruction {
-    type Error = String;
-
-    fn try_from(value: proto::common::Instruction) -> Result<Self, Self::Error> {
-        let template_id = TemplateId::try_from(value.template_id)?;
-        Ok(Self::new(
-            template_id,
-            value.method,
-            value.args,
-            PublicKey::from_bytes(&value.sender).map_err(|e| format!("Invalid public key:{}", e))?,
-        ))
-    }
-}
-
 impl TryFrom<proto::consensus::TariDanPayload> for TariDanPayload {
     type Error = String;
 
     fn try_from(value: proto::consensus::TariDanPayload) -> Result<Self, Self::Error> {
-        let instruction_set = value
-            .instruction_set
-            .ok_or_else(|| "Instructions were not present".to_string())?
-            .try_into()?;
-        let checkpoint = value.checkpoint.map(|c| c.try_into()).transpose()?;
-
-        Ok(Self::new(instruction_set, checkpoint))
-    }
-}
-
-impl TryFrom<proto::consensus::CheckpointData> for CheckpointData {
-    type Error = String;
-
-    fn try_from(_value: proto::consensus::CheckpointData) -> Result<Self, Self::Error> {
-        Ok(Self::default())
-    }
-}
-
-impl From<SideChainBlock> for proto::common::SideChainBlock {
-    fn from(block: SideChainBlock) -> Self {
-        let (node, instructions) = block.destruct();
-        Self {
-            node: Some(node.into()),
-            instructions: Some(instructions.into()),
-        }
-    }
-}
-
-impl TryFrom<proto::common::SideChainBlock> for SideChainBlock {
-    type Error = String;
-
-    fn try_from(block: proto::common::SideChainBlock) -> Result<Self, Self::Error> {
-        let node = block
-            .node
-            .map(TryInto::try_into)
-            .ok_or_else(|| "No node provided in sidechain block".to_string())??;
-        let instructions = block
-            .instructions
-            .map(TryInto::try_into)
-            .ok_or_else(|| "No InstructionSet provided in sidechain block".to_string())??;
-        Ok(Self::new(node, instructions))
+        // let instruction_set = value
+        //     .instruction_set
+        //     .ok_or_else(|| "Instructions were not present".to_string())?
+        //     .try_into()?;
+        // let checkpoint = value.checkpoint.map(|c| c.try_into()).transpose()?;
+        //
+        // Ok(Self::new(instruction_set, checkpoint))
+        todo!()
     }
 }
 
@@ -405,10 +315,10 @@ impl<T: Borrow<Signature>> From<T> for proto::common::Signature {
 }
 
 //---------------------------------- Transaction --------------------------------------------//
-impl TryFrom<proto::validator_node::SubmitTransactionRequest> for Transaction {
+impl TryFrom<proto::common::Transaction> for Transaction {
     type Error = String;
 
-    fn try_from(request: proto::validator_node::SubmitTransactionRequest) -> Result<Self, Self::Error> {
+    fn try_from(request: proto::common::Transaction) -> Result<Self, Self::Error> {
         let instructions = request
             .instructions
             .into_iter()
@@ -418,20 +328,16 @@ impl TryFrom<proto::validator_node::SubmitTransactionRequest> for Transaction {
         let instruction_signature = signature.try_into()?;
         let sender_public_key =
             PublicKey::from_bytes(&request.sender_public_key).map_err(|_| "invalid sender_public_key")?;
-        let transaction = Transaction {
-            instructions,
-            signature: instruction_signature,
-            sender_public_key,
-        };
+        let transaction = Transaction::new(instructions, instruction_signature, sender_public_key);
 
         Ok(transaction)
     }
 }
 
-impl TryFrom<proto::validator_node::Instruction> for tari_dan_engine::instruction::Instruction {
+impl TryFrom<proto::common::Instruction> for tari_dan_engine::instruction::Instruction {
     type Error = String;
 
-    fn try_from(request: proto::validator_node::Instruction) -> Result<Self, Self::Error> {
+    fn try_from(request: proto::common::Instruction) -> Result<Self, Self::Error> {
         let package_address =
             Hash::deserialize(&mut &request.package_address[..]).map_err(|_| "invalid package_addresss")?;
         let args = request.args.clone();
@@ -466,21 +372,19 @@ impl TryFrom<proto::validator_node::Instruction> for tari_dan_engine::instructio
     }
 }
 
-impl From<Transaction> for proto::validator_node::SubmitTransactionRequest {
+impl From<Transaction> for proto::common::Transaction {
     fn from(transaction: Transaction) -> Self {
-        let instructions = transaction.instructions.into_iter().map(Into::into).collect();
-        let signature = transaction.signature.signature();
-        let sender_public_key = transaction.sender_public_key.to_vec();
+        let (instructions, signature, sender_public_key) = transaction.destruct();
 
-        proto::validator_node::SubmitTransactionRequest {
-            instructions,
-            signature: Some(signature.into()),
-            sender_public_key,
+        proto::common::Transaction {
+            instructions: instructions.into_iter().map(Into::into).collect(),
+            signature: Some(signature.signature().into()),
+            sender_public_key: sender_public_key.to_vec(),
         }
     }
 }
 
-impl From<tari_dan_engine::instruction::Instruction> for proto::validator_node::Instruction {
+impl From<tari_dan_engine::instruction::Instruction> for proto::common::Instruction {
     fn from(instruction: tari_dan_engine::instruction::Instruction) -> Self {
         // let mut result = proto::validator_node::Instruction::default();
         //

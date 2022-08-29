@@ -28,7 +28,6 @@ use std::{
 
 use log::*;
 use tari_dan_common_types::storage::UnitOfWorkTracker;
-use tari_dan_engine::instructions::Instruction;
 
 use crate::{
     models::{Node, QuorumCertificate, TreeNodeHash},

@@ -34,7 +34,6 @@ use tari_crypto::ristretto::RistrettoPublicKey;
 use tari_dan_engine::state::mocks::state_db::MockStateDbBackupAdapter;
 use tari_dan_engine::{
     instruction::Transaction,
-    instructions::Instruction,
     state::{
         models::{SchemaState, StateOpLogEntry, StateRoot},
         StateDbUnitOfWork,
@@ -51,10 +50,8 @@ use crate::{
         Committee,
         Event,
         HotStuffTreeNode,
-        InstructionSet,
         Node,
         Payload,
-        SideChainBlock,
         SidechainMetadata,
         TariDanPayload,
         TreeNodeHash,
@@ -87,26 +84,6 @@ pub struct MockMempoolService;
 impl MempoolService for MockMempoolService {
     async fn submit_transaction(&mut self, _transaction: &Transaction) -> Result<(), DigitalAssetError> {
         Ok(())
-    }
-
-    async fn read_block(&self, _limit: usize) -> Result<Vec<Instruction>, DigitalAssetError> {
-        Ok(vec![])
-    }
-
-    async fn reserve_instruction_in_block(
-        &mut self,
-        _instruction_hash: &FixedHash,
-        _block_hash: TreeNodeHash,
-    ) -> Result<(), DigitalAssetError> {
-        todo!()
-    }
-
-    async fn remove_all_in_block(&mut self, _block_hash: &TreeNodeHash) -> Result<(), DigitalAssetError> {
-        todo!()
-    }
-
-    async fn release_reservations(&mut self, _block_hash: &TreeNodeHash) -> Result<(), DigitalAssetError> {
-        todo!()
     }
 
     async fn size(&self) -> usize {
@@ -217,15 +194,6 @@ impl ValidatorNodeRpcClient for MockValidatorNodeClient {
         _transaction: Transaction,
     ) -> Result<Option<Vec<u8>>, ValidatorNodeClientError> {
         Ok(None)
-    }
-
-    async fn get_sidechain_blocks(
-        &mut self,
-        _contract_id: &FixedHash,
-        _start_hash: TreeNodeHash,
-        _end_hash: Option<TreeNodeHash>,
-    ) -> Result<Vec<SideChainBlock>, ValidatorNodeClientError> {
-        Ok(vec![])
     }
 
     async fn get_sidechain_state(

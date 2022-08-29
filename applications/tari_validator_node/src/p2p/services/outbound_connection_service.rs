@@ -83,7 +83,12 @@ impl OutboundService for TariCommsOutboundService<TariDanPayload, CommsPublicKey
                 message.message_type(),
                 message.contract_id()
             );
-            self.loopback_service.send((from, message)).await.map_err(Box::new)?;
+            self.loopback_service
+                .send((from, message))
+                .await
+                .map_err(|e| DigitalAssetError::SendError {
+                    context: "Sending to loopback".to_string(),
+                })?;
             return Ok(());
         }
 

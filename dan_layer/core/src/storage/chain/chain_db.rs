@@ -22,7 +22,7 @@
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 use crate::{
-    models::{Node, QuorumCertificate, SideChainBlock, TreeNodeHash},
+    models::{Node, QuorumCertificate, TreeNodeHash},
     storage::{
         chain::{chain_db_unit_of_work::ChainDbUnitOfWorkImpl, ChainDbBackendAdapter, ChainDbMetadataKey},
         MetadataBackendAdapter,

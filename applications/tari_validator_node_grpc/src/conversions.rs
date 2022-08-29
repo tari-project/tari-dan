@@ -67,11 +67,7 @@ impl TryFrom<grpc::SubmitTransactionRequest> for Transaction {
         let instruction_signature = signature.try_into()?;
         let sender_public_key =
             PublicKey::from_bytes(&request.sender_public_key).map_err(|_| "invalid sender_public_key")?;
-        let transaction = Transaction {
-            instructions,
-            signature: instruction_signature,
-            sender_public_key,
-        };
+        let transaction = Transaction::new(instructions, instruction_signature, sender_public_key);
 
         Ok(transaction)
     }
@@ -117,9 +113,9 @@ impl TryFrom<grpc::Instruction> for Instruction {
 
 impl From<Transaction> for SubmitTransactionRequest {
     fn from(transaction: Transaction) -> Self {
-        let instructions = transaction.instructions.into_iter().map(Into::into).collect();
-        let signature = transaction.signature.signature();
-        let sender_public_key = transaction.sender_public_key.to_vec();
+        let instructions = transaction.instructions().into_iter().map(Into::into).collect();
+        let signature = transaction.signature().signature();
+        let sender_public_key = transaction.sender_public_key().to_vec();
 
         SubmitTransactionRequest {
             instructions,
@@ -129,8 +125,8 @@ impl From<Transaction> for SubmitTransactionRequest {
     }
 }
 
-impl From<Instruction> for grpc::Instruction {
-    fn from(instruction: Instruction) -> Self {
+impl From<&Instruction> for grpc::Instruction {
+    fn from(instruction: &Instruction) -> Self {
         let mut result = grpc::Instruction::default();
 
         match instruction {
@@ -142,8 +138,8 @@ impl From<Instruction> for grpc::Instruction {
             } => {
                 result.instruction_type = 0;
                 result.package_address = package_address.to_vec();
-                result.template = template;
-                result.function = function;
+                result.template = template.clone();
+                result.function = function.clone();
                 result.args = todo!(); // args;
             },
             Instruction::CallMethod {
@@ -155,7 +151,7 @@ impl From<Instruction> for grpc::Instruction {
                 result.instruction_type = 1;
                 result.package_address = package_address.to_vec();
                 result.component_address = component_address.to_vec();
-                result.method = method;
+                result.method = method.clone();
                 result.args = todo!(); // args;
             },
             Instruction::PutLastInstructionOutputOnWorkspace { .. } => {

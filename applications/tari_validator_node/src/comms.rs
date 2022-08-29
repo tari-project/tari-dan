@@ -37,7 +37,14 @@ use tari_shutdown::ShutdownSignal;
 
 use crate::{
     config::ApplicationConfig,
-    p2p::{create_validator_node_rpc_service, services::mempool::initializer::MempoolInitializer},
+    p2p::{
+        create_validator_node_rpc_service,
+        services::{
+            epoch_manager::initializer::EpochManagerInitializer,
+            hotstuff::initializer::HotstuffServiceInitializer,
+            mempool::initializer::MempoolInitializer,
+        },
+    },
 };
 
 pub async fn build_service_and_comms_stack(
@@ -61,6 +68,10 @@ pub async fn build_service_and_comms_stack(
             node_identity.clone(),
             publisher,
         ))
+        .add_initializer(EpochManagerInitializer {})
+        .add_initializer(HotstuffServiceInitializer {
+            node_identity: node_identity.clone(),
+        })
         .add_initializer(MempoolInitializer::new(
             mempool.clone(),
             peer_message_subscriptions.clone(),

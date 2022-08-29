@@ -70,7 +70,11 @@ where
     ) -> Result<Response<proto::SubmitTransactionResponse>, RpcStatus> {
         println!("{:?}", request);
         let request = request.into_message();
-        let transaction: Transaction = match request.try_into() {
+        let transaction: Transaction = match request
+            .transaction
+            .ok_or_else(|| RpcStatus::bad_request("Missing transaction"))?
+            .try_into()
+        {
             Ok(value) => value,
             Err(e) => {
                 return Err(RpcStatus::not_found(&format!("Could not convert transaaction: {}", e)));
@@ -94,93 +98,6 @@ where
                 }));
             },
         }
-    }
-
-    async fn get_sidechain_blocks(
-        &self,
-        request: Request<proto::GetSidechainBlocksRequest>,
-    ) -> Result<Streaming<proto::GetSidechainBlocksResponse>, RpcStatus> {
-        // let msg = request.into_message();
-        //
-        // let contract_id = msg
-        //     .contract_id
-        //     .try_into()
-        //     .map_err(|_| RpcStatus::bad_request("Invalid contract_id"))?;
-        // let start_hash =
-        //     TreeNodeHash::try_from(msg.start_hash).map_err(|_| RpcStatus::bad_request("Invalid start hash"))?;
-        //
-        // let end_hash = Some(msg.end_hash)
-        //     .filter(|h| !h.is_empty())
-        //     .map(TreeNodeHash::try_from)
-        //     .transpose()
-        //     .map_err(|_| RpcStatus::bad_request("Invalid end_hash"))?;
-        //
-        // let db = self
-        //     .db_factory
-        //     .get_chain_db(&contract_id)
-        //     .map_err(RpcStatus::log_internal_error(LOG_TARGET))?
-        //     .ok_or_else(|| RpcStatus::not_found("Asset not found"))?;
-        //
-        // let start_block = db
-        //     .find_sidechain_block_by_node_hash(&start_hash)
-        //     .map_err(RpcStatus::log_internal_error(LOG_TARGET))?
-        //     .ok_or_else(|| RpcStatus::not_found(&format!("Block not found with start_hash '{}'", start_hash)))?;
-        //
-        // let end_block_exists = end_hash
-        //     .as_ref()
-        //     .map(|end_hash| db.sidechain_block_exists(end_hash))
-        //     .transpose()
-        //     .map_err(RpcStatus::log_internal_error(LOG_TARGET))?;
-        //
-        // if !end_block_exists.unwrap_or(true) {
-        //     return Err(RpcStatus::not_found(&format!(
-        //         "Block not found with end_hash '{}'",
-        //         end_hash.unwrap_or_else(TreeNodeHash::zero)
-        //     )));
-        // }
-        //
-        // let (tx, rx) = mpsc::channel(2);
-        //
-        // task::spawn(async move {
-        //     let mut current_block_hash = *start_block.node().hash();
-        //     if tx
-        //         .send(Ok(proto::GetSidechainBlocksResponse {
-        //             block: Some(start_block.into()),
-        //         }))
-        //         .await
-        //         .is_err()
-        //     {
-        //         return;
-        //     }
-        //     loop {
-        //         match db.find_sidechain_block_by_parent_node_hash(&current_block_hash) {
-        //             Ok(Some(block)) => {
-        //                 current_block_hash = *block.node().hash();
-        //                 if tx
-        //                     .send(Ok(proto::GetSidechainBlocksResponse {
-        //                         block: Some(block.into()),
-        //                     }))
-        //                     .await
-        //                     .is_err()
-        //                 {
-        //                     return;
-        //                 }
-        //                 if end_hash.map(|h| h == current_block_hash).unwrap_or(false) {
-        //                     return;
-        //                 }
-        //             },
-        //             Ok(None) => return,
-        //             Err(err) => {
-        //                 error!(target: LOG_TARGET, "Failure while streaming blocks: {}", err);
-        //                 let _result = tx.send(Err(RpcStatus::general("Internal database failure"))).await;
-        //                 return;
-        //             },
-        //         }
-        //     }
-        // });
-        //
-        // Ok(Streaming::new(rx))
-        todo!()
     }
 
     async fn get_sidechain_state(

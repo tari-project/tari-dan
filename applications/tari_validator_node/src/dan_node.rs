@@ -25,7 +25,12 @@ use std::sync::Arc;
 use tari_common::exit_codes::{ExitCode, ExitError};
 use tari_comms::NodeIdentity;
 use tari_dan_core::{
-    services::mempool::service::MempoolServiceHandle,
+    models::{Epoch, ShardId, TariDanPayload},
+    services::{
+        epoch_manager::RangeEpochManager,
+        leader_strategy::AlwaysFirstLeader,
+        mempool::service::MempoolServiceHandle,
+    },
     storage::global::GlobalDb,
     workers::hotstuff_waiter::HotStuffWaiter,
 };
@@ -33,6 +38,7 @@ use tari_dan_storage_sqlite::{global::SqliteGlobalDbBackendAdapter, SqliteDbFact
 use tari_p2p::comms_connector::SubscriptionFactory;
 use tari_service_framework::ServiceHandles;
 use tari_shutdown::ShutdownSignal;
+use tokio::sync::mpsc::channel;
 
 use crate::{config::ValidatorNodeConfig, grpc::services::base_node_client::GrpcBaseNodeClient};
 
@@ -51,7 +57,7 @@ impl DanNode {
 
     pub async fn start(
         &self,
-        shutdown: ShutdownSignal,
+        mut shutdown: ShutdownSignal,
         mempool_service: MempoolServiceHandle,
         db_factory: SqliteDbFactory,
         handles: ServiceHandles,
@@ -78,7 +84,10 @@ impl DanNode {
         //     .await
         //     .map_err(|err| ExitError::new(ExitCode::DigitalAssetError, err))?;
 
-        todo!();
+        // todo!();
+
+        shutdown.wait().await;
+
         Ok(())
     }
 }

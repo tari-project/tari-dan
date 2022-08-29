@@ -56,10 +56,10 @@ impl TransactionBuilder {
     }
 
     pub fn build(&mut self) -> Transaction {
-        Transaction {
-            instructions: self.instructions.drain(..).collect(),
-            signature: self.signature.take().expect("not signed"),
-            sender_public_key: self.sender_public_key.take().expect("not signed"),
-        }
+        Transaction::new(
+            self.instructions.drain(..).collect(),
+            self.signature.take().expect("not signed"),
+            self.sender_public_key.take().expect("not signed"),
+        )
     }
 }

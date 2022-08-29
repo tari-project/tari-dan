@@ -24,45 +24,38 @@ use std::sync::Arc;
 
 use async_trait::async_trait;
 use tari_common_types::types::FixedHash;
-use tari_dan_engine::{instruction::Transaction, instructions::Instruction};
-use tokio::sync::Mutex;
+use tari_dan_engine::instruction::Transaction;
+use tokio::sync::{
+    broadcast,
+    broadcast::{channel, Receiver, Sender},
+    Mutex,
+};
 
 use super::outbound::MempoolOutboundService;
-use crate::{digital_assets_error::DigitalAssetError, models::TreeNodeHash};
+use crate::{
+    digital_assets_error::DigitalAssetError,
+    models::{Payload, ShardId, TariDanPayload, TreeNodeHash},
+};
 
 #[async_trait]
 pub trait MempoolService: Sync + Send + 'static {
     async fn submit_transaction(&mut self, transaction: &Transaction) -> Result<(), DigitalAssetError>;
-    async fn read_block(&self, limit: usize) -> Result<Vec<Instruction>, DigitalAssetError>;
-    async fn reserve_instruction_in_block(
-        &mut self,
-        instruction_hash: &FixedHash,
-        block_hash: TreeNodeHash,
-    ) -> Result<(), DigitalAssetError>;
-    async fn remove_all_in_block(&mut self, block_hash: &TreeNodeHash) -> Result<(), DigitalAssetError>;
-    async fn release_reservations(&mut self, block_hash: &TreeNodeHash) -> Result<(), DigitalAssetError>;
     async fn size(&self) -> usize;
 }
 
 pub struct ConcreteMempoolService {
+    tx_new: Sender<(TariDanPayload, ShardId)>,
     transactions: Vec<(Transaction, Option<TreeNodeHash>)>,
-    instructions: Vec<(Instruction, Option<TreeNodeHash>)>,
     outbound_service: Option<Box<dyn MempoolOutboundService>>,
 }
 
 impl ConcreteMempoolService {
-    pub fn new() -> Self {
+    pub fn new(tx_new: Sender<(TariDanPayload, ShardId)>) -> Self {
         Self {
+            tx_new,
             transactions: vec![],
-            instructions: vec![],
             outbound_service: None,
         }
-    }
-}
-
-impl Default for ConcreteMempoolService {
-    fn default() -> Self {
-        Self::new()
     }
 }
 
@@ -76,52 +69,15 @@ impl MempoolService for ConcreteMempoolService {
             outbound_service.propagate_transaction(transaction.clone()).await?;
         }
 
-        Ok(())
-    }
-
-    async fn read_block(&self, limit: usize) -> Result<Vec<Instruction>, DigitalAssetError> {
-        let mut result = vec![];
-        for (i, (instruction, block_hash)) in self.instructions.iter().enumerate() {
-            if i > limit {
-                break;
-            }
-            if block_hash.is_none() {
-                result.push(instruction.clone());
-            }
-        }
-        Ok(result)
-    }
-
-    async fn reserve_instruction_in_block(
-        &mut self,
-        instruction_hash: &FixedHash,
-        node_hash: TreeNodeHash,
-    ) -> Result<(), DigitalAssetError> {
-        for (instruction, node_hash_mut) in &mut self.instructions {
-            if instruction.hash() == instruction_hash {
-                *node_hash_mut = Some(node_hash);
-                break;
-            }
+        let payload = TariDanPayload::new(transaction.clone());
+        for shard in payload.involved_shards() {
+            self.tx_new
+                .send((payload.clone(), *shard))
+                .map_err(|se| DigitalAssetError::SendError {
+                    context: "Sending from mempool".to_string(),
+                })?;
         }
 
-        Ok(())
-    }
-
-    async fn remove_all_in_block(&mut self, block_hash: &TreeNodeHash) -> Result<(), DigitalAssetError> {
-        self.instructions = self
-            .instructions
-            .drain(..)
-            .filter(|(_, node_hash)| node_hash.as_ref() != Some(block_hash))
-            .collect();
-        Ok(())
-    }
-
-    async fn release_reservations(&mut self, block_hash: &TreeNodeHash) -> Result<(), DigitalAssetError> {
-        for (_, block_hash_mut) in &mut self.instructions {
-            if block_hash_mut.as_ref() == Some(block_hash) {
-                *block_hash_mut = None;
-            }
-        }
         Ok(())
     }
 
@@ -137,28 +93,43 @@ impl MempoolService for ConcreteMempoolService {
     // }
 
     async fn size(&self) -> usize {
-        self.instructions
+        self.transactions
             .iter()
             .fold(0, |a, b| if b.1.is_none() { a + 1 } else { a })
     }
 }
 
-#[derive(Clone)]
 pub struct MempoolServiceHandle {
     mempool: Arc<Mutex<ConcreteMempoolService>>,
+    rx_new: Receiver<(TariDanPayload, ShardId)>,
+}
+
+impl Clone for MempoolServiceHandle {
+    fn clone(&self) -> Self {
+        Self {
+            mempool: self.mempool.clone(),
+            rx_new: self.rx_new.resubscribe(),
+        }
+    }
 }
 
 impl MempoolServiceHandle {
     pub fn new() -> Self {
-        let mempool_service = ConcreteMempoolService::new();
+        let (tx_new, rx_new) = channel(1);
+        let mempool_service = ConcreteMempoolService::new(tx_new);
 
         Self {
             mempool: Arc::new(Mutex::new(mempool_service)),
+            rx_new,
         }
     }
 
     pub async fn set_outbound_service(&mut self, outbound_service: Box<dyn MempoolOutboundService>) {
         self.mempool.lock().await.outbound_service = Some(outbound_service);
+    }
+
+    pub fn new_payload(&mut self) -> &mut broadcast::Receiver<(TariDanPayload, ShardId)> {
+        &mut self.rx_new
     }
 }
 
@@ -172,30 +143,6 @@ impl Default for MempoolServiceHandle {
 impl MempoolService for MempoolServiceHandle {
     async fn submit_transaction(&mut self, transaction: &Transaction) -> Result<(), DigitalAssetError> {
         self.mempool.lock().await.submit_transaction(transaction).await
-    }
-
-    async fn read_block(&self, limit: usize) -> Result<Vec<Instruction>, DigitalAssetError> {
-        self.mempool.lock().await.read_block(limit).await
-    }
-
-    async fn reserve_instruction_in_block(
-        &mut self,
-        instruction_hash: &FixedHash,
-        node_hash: TreeNodeHash,
-    ) -> Result<(), DigitalAssetError> {
-        self.mempool
-            .lock()
-            .await
-            .reserve_instruction_in_block(instruction_hash, node_hash)
-            .await
-    }
-
-    async fn remove_all_in_block(&mut self, block_hash: &TreeNodeHash) -> Result<(), DigitalAssetError> {
-        self.mempool.lock().await.remove_all_in_block(block_hash).await
-    }
-
-    async fn release_reservations(&mut self, block_hash: &TreeNodeHash) -> Result<(), DigitalAssetError> {
-        self.mempool.lock().await.release_reservations(block_hash).await
     }
 
     async fn size(&self) -> usize {

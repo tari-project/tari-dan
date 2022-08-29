@@ -68,15 +68,7 @@ message InvokeMethodResponse {
   Status status = 2;
 }
 
-message GetSidechainBlocksRequest {
-  bytes contract_id = 1;
-  bytes start_hash = 2;
-  bytes end_hash = 3;
-}
 
-message GetSidechainBlocksResponse {
-  tari.dan.common.SideChainBlock block = 1;
-}
 
 message GetSidechainStateRequest {
   bytes contract_id = 1;
@@ -128,31 +120,12 @@ message GetIdentityResponse {
     bytes node_id = 3;
 }
 
-message Instruction {
-  enum InstructionType {
-      FUNCTION = 0;
-      METHOD = 1;
-  }
-  InstructionType instruction_type = 1;
 
-  // common fields
-  bytes package_address = 2;
-  repeated bytes args = 3;
-
-  // function only
-  string template = 4;
-  string function = 5;
-
-  // method only
-  bytes component_address = 6;
-  string method = 7;
-}
 
 message SubmitTransactionRequest{
-  repeated Instruction instructions = 1;
-  tari.dan.common.Signature signature = 2;
-  bytes sender_public_key = 3;
+  tari.dan.common.Transaction transaction = 1;
 }
+
 
 message SubmitTransactionResponse {
   string status = 1;
