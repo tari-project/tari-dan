@@ -23,7 +23,7 @@
 use proc_macro2::TokenStream;
 use quote::{format_ident, quote};
 
-use crate::ast::TemplateAst;
+use crate::template::ast::TemplateAst;
 
 pub fn generate_definition(ast: &TemplateAst) -> TokenStream {
     let template_mod_name = format_ident!("{}_template", ast.template_name);
