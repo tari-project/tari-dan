@@ -52,7 +52,7 @@ use tari_dan_engine::{
         DbStateOpLogEntry,
     },
 };
-use tari_template_lib::Hash;
+use tari_template_lib::{args::Arg, Hash};
 
 use crate::p2p::proto;
 
@@ -451,7 +451,11 @@ impl TryFrom<proto::validator_node::Instruction> for tari_dan_engine::instructio
     fn try_from(request: proto::validator_node::Instruction) -> Result<Self, Self::Error> {
         let package_address =
             Hash::deserialize(&mut &request.package_address[..]).map_err(|_| "invalid package_addresss")?;
-        let args = request.args.clone();
+        let args = request
+            .args
+            .into_iter()
+            .map(TryInto::try_into)
+            .collect::<Result<Vec<Arg>, _>>()?;
         let instruction = match request.instruction_type {
             // function
             0 => {
@@ -476,6 +480,7 @@ impl TryFrom<proto::validator_node::Instruction> for tari_dan_engine::instructio
                     args,
                 }
             },
+            2 => tari_dan_engine::instruction::Instruction::PutLastInstructionOutputOnWorkspace { key: request.key },
             _ => return Err("invalid instruction_type".to_string()),
         };
 
@@ -512,7 +517,7 @@ impl From<tari_dan_engine::instruction::Instruction> for proto::validator_node::
                 result.package_address = package_address.to_vec();
                 result.template = template;
                 result.function = function;
-                result.args = args;
+                result.args = args.into_iter().map(Into::into).collect();
             },
             tari_dan_engine::instruction::Instruction::CallMethod {
                 component_address,
@@ -524,7 +529,45 @@ impl From<tari_dan_engine::instruction::Instruction> for proto::validator_node::
                 result.package_address = package_address.to_vec();
                 result.component_address = component_address.to_vec();
                 result.method = method;
-                result.args = args;
+                result.args = args.into_iter().map(Into::into).collect();
+            },
+            tari_dan_engine::instruction::Instruction::PutLastInstructionOutputOnWorkspace { key } => {
+                result.instruction_type = 2;
+                result.key = key;
+            },
+        }
+
+        result
+    }
+}
+
+impl TryFrom<proto::validator_node::Arg> for Arg {
+    type Error = String;
+
+    fn try_from(request: proto::validator_node::Arg) -> Result<Self, Self::Error> {
+        let data = request.data.clone();
+        let arg = match request.arg_type {
+            0 => Arg::Literal(data),
+            1 => Arg::FromWorkspace(data),
+            _ => return Err("invalid arg_type".to_string()),
+        };
+
+        Ok(arg)
+    }
+}
+
+impl From<Arg> for proto::validator_node::Arg {
+    fn from(arg: Arg) -> Self {
+        let mut result = proto::validator_node::Arg::default();
+
+        match arg {
+            Arg::Literal(data) => {
+                result.arg_type = 0;
+                result.data = data;
+            },
+            Arg::FromWorkspace(data) => {
+                result.arg_type = 1;
+                result.data = data;
             },
         }
 

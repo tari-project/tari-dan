@@ -30,12 +30,11 @@ pub use processor::InstructionProcessor;
 
 mod signature;
 pub use signature::InstructionSignature;
+use tari_common_types::types::PublicKey;
 use tari_template_lib::{
     args::Arg,
     models::{ComponentAddress, PackageAddress},
 };
-use tari_common_types::types::PublicKey;
-
 
 #[derive(Debug, Clone)]
 pub enum Instruction {

@@ -22,7 +22,7 @@
 
 use proc_macro2::{Ident, Span, TokenStream};
 use quote::{format_ident, quote};
-use syn::{parse_quote, token::Brace, Block, Expr, ExprBlock, ExprField, Result, Stmt, TypeTuple};
+use syn::{parse_quote, token::Brace, Block, Expr, ExprBlock, ExprField, Result, Stmt, TypePath, TypeTuple};
 
 use crate::ast::{FunctionAst, TemplateAst, TypeAst};
 
@@ -164,8 +164,8 @@ fn replace_self_in_output(template_ident: &Ident, ast: &FunctionAst) -> Vec<Stmt
     let mut stmts: Vec<Stmt> = vec![];
     match &ast.output_type {
         Some(output_type) => match output_type {
-            TypeAst::Typed(type_ident) => {
-                if let Some(stmt) = replace_self_in_single_value(template_ident, type_ident) {
+            TypeAst::Typed(type_path) => {
+                if let Some(stmt) = replace_self_in_single_value(template_ident, type_path) {
                     stmts.push(stmt);
                 }
             },
@@ -180,8 +180,9 @@ fn replace_self_in_output(template_ident: &Ident, ast: &FunctionAst) -> Vec<Stmt
     stmts
 }
 
-fn replace_self_in_single_value(template_ident: &Ident, type_ident: &Ident) -> Option<Stmt> {
+fn replace_self_in_single_value(template_ident: &Ident, type_path: &TypePath) -> Option<Stmt> {
     let template_name_str = template_ident.to_string();
+    let type_ident = &type_path.path.segments[0].ident;
 
     if type_ident == "Self" {
         return Some(parse_quote! {
