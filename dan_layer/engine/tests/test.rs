@@ -178,12 +178,12 @@ fn test_private_function() {
 fn test_tuples() {
     let template_test = TemplateTest::new(vec!["tests/templates/tuples"]);
 
-    // tuples as a regular function output
+    // tuples returned in a regular function
     let (message, number): (String, u32) = template_test.call_function("Tuple", "tuple_output", args![]);
     assert_eq!(message, "Hello World!");
     assert_eq!(number, 100);
 
-    // tuples as a constructor output
+    // tuples returned in a constructor
     template_test.clear_calls();
     let (component_id, message): (ComponentAddress, String) = template_test.call_function("Tuple", "new", args![]);
     assert_eq!(message, "Hello World!");
