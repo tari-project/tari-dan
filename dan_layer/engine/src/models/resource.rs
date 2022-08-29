@@ -89,15 +89,19 @@ impl Resource {
         Ok(())
     }
 
-    pub fn withdraw_fungible(&mut self, amt: Amount) -> Resource {
+    pub fn withdraw(&mut self, amt: Amount) -> Result<Resource, ResourceError> {
         match &mut self.state {
             ResourceState::Fungible { amount } => {
-                // TODO: check
+                if amt > *amount {
+                    return Err(ResourceError::InsufficientBalance {
+                        details: "Bucket contained insufficient funds".to_string(),
+                    });
+                }
                 *amount -= amt;
-                Resource::fungible(self.resource_address, amt, Metadata::default())
+                Ok(Resource::fungible(self.resource_address, amt, Metadata::default()))
             },
-            // TODO: errors
-            ResourceState::NonFungible { .. } => panic!("invalid"),
+            // TODO: implement an amount type that can apply to both fungible and non fungible resources
+            ResourceState::NonFungible { .. } => todo!(),
         }
     }
 }
@@ -119,4 +123,6 @@ pub enum ResourceError {
     FungibilityMismatch,
     #[error("Resource addresses do not match")]
     ResourceAddressMismatch,
+    #[error("Resource did not contain sufficient balance: {details}")]
+    InsufficientBalance { details: String },
 }

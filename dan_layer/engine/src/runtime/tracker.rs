@@ -70,6 +70,8 @@ struct WorkingState {
     new_components: HashMap<ComponentAddress, ComponentInstance>,
     new_vaults: HashMap<VaultId, Vault>,
     runtime_state: Option<RuntimeState>,
+    last_instruction_output: Option<Vec<u8>>,
+    workspace: HashMap<Vec<u8>, Vec<u8>>,
 }
 
 impl StateTracker {
@@ -83,6 +85,8 @@ impl StateTracker {
                 new_components: HashMap::new(),
                 new_vaults: HashMap::new(),
                 runtime_state: None,
+                last_instruction_output: None,
+                workspace: HashMap::new(),
             })),
             id_provider: IdProvider::new(transaction_hash),
         }
@@ -137,12 +141,37 @@ impl StateTracker {
         })
     }
 
-    pub fn take_bucket(&self, bucket_id: &BucketId) -> Option<Bucket> {
-        self.write_with(|state| state.buckets.remove(bucket_id))
+    pub fn take_bucket(&self, bucket_id: BucketId) -> Result<Bucket, RuntimeError> {
+        self.write_with(|state| {
+            state
+                .buckets
+                .remove(&bucket_id)
+                .ok_or(RuntimeError::BucketNotFound { bucket_id })
+        })
     }
 
-    pub fn get_bucket(&self, id: BucketId) -> Option<Bucket> {
-        self.read_with(|state| state.buckets.get(&id).cloned())
+    pub fn get_bucket(&self, bucket_id: BucketId) -> Result<Bucket, RuntimeError> {
+        self.read_with(|state| {
+            state
+                .buckets
+                .get(&bucket_id)
+                .cloned()
+                .ok_or(RuntimeError::BucketNotFound { bucket_id })
+        })
+    }
+
+    pub fn with_bucket_mut<R, F: FnMut(&mut Bucket) -> R>(
+        &self,
+        bucket_id: BucketId,
+        mut callback: F,
+    ) -> Result<R, RuntimeError> {
+        self.write_with(|state| {
+            let bucket = state
+                .buckets
+                .get_mut(&bucket_id)
+                .ok_or(RuntimeError::BucketNotFound { bucket_id })?;
+            Ok(callback(bucket))
+        })
     }
 
     pub fn new_vault(&self, resource_address: ResourceAddress, resource_type: ResourceType) -> VaultId {
@@ -234,6 +263,35 @@ impl StateTracker {
 
     fn runtime_state(&self) -> Result<RuntimeState, RuntimeError> {
         self.read_with(|state| state.runtime_state.clone().ok_or(RuntimeError::IllegalRuntimeState))
+    }
+
+    pub fn set_last_instruction_output(&self, output: Option<Vec<u8>>) {
+        self.write_with(|state| {
+            state.last_instruction_output = output;
+        });
+    }
+
+    pub fn take_last_instruction_output(&self) -> Option<Vec<u8>> {
+        self.write_with(|state| state.last_instruction_output.take())
+    }
+
+    pub fn take_from_workspace(&self, key: &[u8]) -> Result<Vec<u8>, RuntimeError> {
+        self.write_with(|state| {
+            state.workspace.remove(key).ok_or(RuntimeError::ItemNotOnWorkspace {
+                key: String::from_utf8_lossy(key).to_string(),
+            })
+        })
+    }
+
+    pub fn put_in_workspace(&self, key: Vec<u8>, value: Vec<u8>) -> Result<(), RuntimeError> {
+        self.write_with(|state| {
+            if state.workspace.insert(key.clone(), value).is_some() {
+                return Err(RuntimeError::WorkspaceItemKeyExists {
+                    key: String::from_utf8_lossy(&key).to_string(),
+                });
+            }
+            Ok(())
+        })
     }
 
     fn read_with<R, F: FnOnce(&WorkingState) -> R>(&self, f: F) -> R {

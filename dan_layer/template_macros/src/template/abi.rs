@@ -27,7 +27,7 @@ use syn::{parse_quote, Expr, Result};
 use crate::ast::{FunctionAst, TemplateAst, TypeAst};
 
 pub fn generate_abi(ast: &TemplateAst) -> Result<TokenStream> {
-    let abi_function_name = format_ident!("{}_abi", ast.struct_section.ident);
+    let abi_function_name = format_ident!("{}_abi", ast.template_name);
     let template_name_as_str = ast.template_name.to_string();
     let function_defs: Vec<Expr> = ast.get_functions().iter().map(generate_function_def).collect();
 
@@ -74,7 +74,7 @@ fn generate_abi_type(rust_type: &TypeAst) -> Expr {
         TypeAst::Receiver { .. } => get_component_address_type(),
         // basic type
         // TODO: there may be a better way of handling this
-        TypeAst::Typed(ident) => match ident.to_string().as_str() {
+        TypeAst::Typed(path) => match path.path.segments[0].ident.to_string().as_str() {
             "" => parse_quote!(Type::Unit),
             "bool" => parse_quote!(Type::Bool),
             "i8" => parse_quote!(Type::I8),

@@ -27,8 +27,7 @@ import "common.proto";
 
 service ValidatorNode {
   rpc GetTokenData(GetTokenDataRequest) returns (GetTokenDataResponse);
-  rpc InvokeReadMethod(InvokeReadMethodRequest) returns (InvokeReadMethodResponse);
-  rpc InvokeMethod(InvokeMethodRequest) returns (InvokeMethodResponse);
+  rpc SubmitTransaction(SubmitTransactionRequest) returns (SubmitTransactionResponse);
 }
 
 message GetTokenDataRequest {
@@ -55,7 +54,6 @@ message InvokeReadMethodRequest{
 message InvokeReadMethodResponse {
   bytes result = 1;
 }
-
 
 message InvokeMethodRequest{
   bytes contract_id = 1;
@@ -120,4 +118,43 @@ message GetTipNodeRequest{
 
 message GetTipNodeResponse {
   tari.dan.common.Node tip_node = 1;
+}
+
+message GetIdentityRequest { }
+
+message GetIdentityResponse {
+    bytes public_key = 1;
+    string public_address = 2;
+    bytes node_id = 3;
+}
+
+message Instruction {
+  enum InstructionType {
+      FUNCTION = 0;
+      METHOD = 1;
+  }
+  InstructionType instruction_type = 1;
+
+  // common fields
+  bytes package_address = 2;
+  repeated bytes args = 3;
+
+  // function only
+  string template = 4;
+  string function = 5;
+
+  // method only
+  bytes component_address = 6;
+  string method = 7;
+}
+
+message SubmitTransactionRequest{
+  repeated Instruction instructions = 1;
+  tari.dan.common.Signature signature = 2;
+  bytes sender_public_key = 3;
+}
+
+message SubmitTransactionResponse {
+  string status = 1;
+  bytes result = 2;
 }
