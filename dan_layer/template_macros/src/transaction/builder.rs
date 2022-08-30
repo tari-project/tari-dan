@@ -8,9 +8,7 @@ pub struct TransactionBuilder {
 impl TransactionBuilder {
     pub fn new() -> Self {
         // TODO: pass the runtime as an arg
-        Self {
-            instructions: vec![],
-        }
+        Self { instructions: vec![] }
     }
 
     pub fn add_instruction(&mut self, instruction: Instruction) {
@@ -29,7 +27,7 @@ pub enum Instruction {
         function: String,
         proofs: Vec<String>, // variables with the badge_proofs
         args: Vec<Arg>,
-        return_variables: Vec<VariableName>,
+        return_variables: Vec<VariableIdent>,
     },
     CallMethod {
         package_address: String,
@@ -37,21 +35,21 @@ pub enum Instruction {
         method: String,
         proofs: Vec<String>, // variables with the badge_proofs
         args: Vec<Arg>,
-        return_variables: Vec<VariableName>,
+        return_variables: Vec<VariableIdent>,
     },
     BucketSplit {
-        input: VariableName,
-        amount: u32, // TODO: use an amount type
-        output_amount: VariableName, // name of the new variable with the specified amount
-        output_change: VariableName, // name of the new variable that will hold the change
+        input: VariableIdent,
+        amount: u32,                  // TODO: use an amount type
+        output_main: VariableIdent,   // name of the new variable with the specified amount
+        output_change: VariableIdent, // name of the new variable that will hold the change
     },
     BucketJoin {
-        inputs: Vec<VariableName>, // names of all the bucket variables to join
-        output: VariableName, // name of the new output variable
+        inputs: Vec<VariableIdent>, // names of all the bucket variables to join
+        output: VariableIdent,      // name of the new output variable
     },
     GenerateBadgeProof {
-        input: VariableName,  // must be a bucket variable
-        output: VariableName,
+        input: VariableIdent, // must be a bucket variable
+        output: VariableIdent,
     },
     AssertEq {
         input_a: Arg,
@@ -71,12 +69,12 @@ pub enum Instruction {
     },
 }
 
-type VariableName = String;
+type VariableIdent = String;
 
 #[derive(Debug, Clone)]
 pub enum Arg {
     Literal(Value),
-    Variable(VariableName),
+    Variable(VariableIdent),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -98,15 +96,7 @@ pub enum Value {
 
     // Complex values
     Tuple(Vec<Value>),
-    ComponentAddress(String), // TODO: address type 
-    Bucket(String), // TODO: resource address
-    Proof(String), // TODO: resource addess
+    ComponentAddress(String), // TODO: address type
+    Bucket(String),           // TODO: resource address
+    Proof(String),            // TODO: resource addess
 }
-
-
-
-
-
-
-
-

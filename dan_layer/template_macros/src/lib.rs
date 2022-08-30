@@ -31,3 +31,10 @@ pub fn template(_attr: TokenStream, item: TokenStream) -> TokenStream {
         .unwrap_or_else(|err| err.to_compile_error())
         .into()
 }
+
+#[proc_macro]
+pub fn transaction(item: TokenStream) -> TokenStream {
+    transaction::generate_transaction(proc_macro2::TokenStream::from(item))
+        .unwrap_or_else(|err| err.to_compile_error())
+        .into()
+}
