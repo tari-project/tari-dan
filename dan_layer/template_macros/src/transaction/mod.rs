@@ -1,6 +1,6 @@
 use proc_macro2::TokenStream;
 use quote::quote;
-use syn::{parse2, Result};
+use syn::{parse2, parse_quote, Expr, Local, Result, Stmt};
 
 use self::ast::TransactionAst;
 
@@ -9,13 +9,44 @@ mod builder;
 
 pub fn generate_transaction(input: TokenStream) -> Result<TokenStream> {
     let ast = parse2::<TransactionAst>(input).unwrap();
-    let stmts = ast.stmts;
+    let input_stmts = ast.stmts;
 
-    let output = quote! {
-        #(#stmts)*
+    let mut output_stmts: Vec<Stmt> = vec![];
+    output_stmts.push(parse_quote! {
+        let mut builder = TransactionBuilder::new();
+    });
+
+    for stmt in input_stmts {
+        let mut instruction_stmts: Vec<Stmt> = match stmt {
+            syn::Stmt::Local(binding) => instruction_from_local(binding),
+            syn::Stmt::Expr(expr) => instruction_from_expr(expr),
+            syn::Stmt::Semi(expr, _) => instruction_from_expr(expr),
+            syn::Stmt::Item(_) => todo!(),
+        };
+
+        output_stmts.append(&mut instruction_stmts);
+    }
+
+    // we return the transaction builder
+    output_stmts.push(parse_quote! {
+        return builder;
+    });
+
+    let output_tokens = quote! {
+        {
+            #(#output_stmts)*
+        }
     };
 
-    Ok(output)
+    Ok(output_tokens)
+}
+
+pub fn instruction_from_local(binding: Local) -> Vec<Stmt> {
+    vec![]
+}
+
+pub fn instruction_from_expr(expr: Expr) -> Vec<Stmt> {
+    vec![]
 }
 
 #[cfg(test)]
@@ -52,16 +83,10 @@ mod tests {
         let output = generate_transaction(input).unwrap();
 
         assert_code_eq(output, quote! {
-            let price = Amount(1_000);
-            let mut picture_seller = PictureSeller::new(price);
-
-            let mut account = Account::new();
-            account.add_fungible(ThaumFaucet::take(price));
-
-            let payment: Bucket<Thaum> = account.take_fungible(price);
-            let (picture, _) = picture_seller.buy(payment).unwrap();
-
-            account.add_non_fungible(picture);
+            {
+                let mut builder = TransactionBuilder::new();
+                return builder;
+            }
         });
     }
 
