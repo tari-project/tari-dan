@@ -152,7 +152,8 @@ mod tests {
             #[no_mangle]
             pub extern "C" fn State_main(call_info: *mut u8, call_info_len: usize) -> *mut u8 {
                 use ::tari_template_abi::{decode, encode_with_len, CallInfo, wrap_ptr};
-                use ::tari_template_lib::init_context;
+                use ::tari_template_lib::{init_context, panic_hook::register_panic_hook};
+                register_panic_hook();
 
                 if call_info.is_null() {
                     panic!("call_info is null");
