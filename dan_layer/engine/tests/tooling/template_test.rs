@@ -28,9 +28,9 @@ use tari_dan_engine::{
     crypto::create_key_pair,
     instruction::{Instruction, InstructionProcessor, TransactionBuilder},
     packager::Package,
-    runtime::RuntimeInterface,
+    runtime::{CommitResult, RuntimeInterface},
     state_store::memory::MemoryStateStore,
-    wasm::{compile::compile_template, ExecutionResult, LoadedWasmModule},
+    wasm::{compile::compile_template, LoadedWasmModule},
 };
 use tari_template_lib::{
     args::Arg,
@@ -105,7 +105,7 @@ impl<R: RuntimeInterface + Clone + 'static> TemplateTest<R> {
             args,
         }]);
 
-        result[0].decode::<T>().unwrap()
+        result.execution_results[0].decode::<T>().unwrap()
     }
 
     pub fn call_method<T>(&self, component_address: ComponentAddress, method_name: &str, args: Vec<Arg>) -> T
@@ -117,10 +117,10 @@ impl<R: RuntimeInterface + Clone + 'static> TemplateTest<R> {
             args,
         }]);
 
-        result[0].decode::<T>().unwrap()
+        result.execution_results[0].decode::<T>().unwrap()
     }
 
-    pub fn execute(&self, instructions: Vec<Instruction>) -> Vec<ExecutionResult> {
+    pub fn execute(&self, instructions: Vec<Instruction>) -> CommitResult {
         let mut builder = TransactionBuilder::new();
         for instruction in instructions {
             builder.add_instruction(instruction);

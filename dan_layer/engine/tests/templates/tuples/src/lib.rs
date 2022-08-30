@@ -20,45 +20,29 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-mod builder;
+use tari_template_macros::template;
 
-pub use builder::TransactionBuilder;
+#[template]
+mod tuple_template {
+    pub struct Tuple {
+        pub value: u32,
+    }
 
-mod error;
+    impl Tuple {
+        pub fn new() -> (Self, String) {
+            (Self { value: 0 }, "Hello World!".to_string())
+        }
 
-mod processor;
-pub use processor::InstructionProcessor;
+        pub fn tuple_output() -> (String, u32) {
+            ("Hello World!".to_string(), 100)
+        }
 
-mod signature;
-pub use signature::InstructionSignature;
-use tari_common_types::types::PublicKey;
-use tari_template_lib::{
-    args::Arg,
-    models::{ComponentAddress, PackageAddress},
-};
+        pub fn set(&mut self, value: u32) {
+            self.value = value;
+        }
 
-#[derive(Debug, Clone)]
-pub struct Transaction {
-    pub instructions: Vec<Instruction>,
-    pub signature: InstructionSignature,
-    pub sender_public_key: PublicKey,
-}
-
-#[derive(Debug, Clone)]
-pub enum Instruction {
-    CallFunction {
-        package_address: PackageAddress,
-        template: String,
-        function: String,
-        args: Vec<Arg>,
-    },
-    CallMethod {
-        package_address: PackageAddress,
-        component_address: ComponentAddress,
-        method: String,
-        args: Vec<Arg>,
-    },
-    PutLastInstructionOutputOnWorkspace {
-        key: Vec<u8>,
-    },
+        pub fn get(&self) -> u32 {
+            self.value
+        }
+    }
 }

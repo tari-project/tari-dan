@@ -146,13 +146,17 @@ fn test_erc20() {
     let tracker = StateTracker::new(state_db, Default::default());
     let template_test =
         TemplateTest::with_runtime_interface(vec!["tests/templates/erc20"], RuntimeInterfaceImpl::new(tracker));
-    let component_address: ComponentAddress =
-        template_test.call_function("KoinVault", "initial_mint", args![Amount(1_000_000_000_000)]);
+
+    let initial_supply = Amount(1_000_000_000_000);
+    let owner_address: ComponentAddress =
+        template_test.call_function("FungibleAccount", "initial_mint", args![initial_supply]);
+
+    let receiver_address: ComponentAddress = template_test.call_method(owner_address, "new_account", args![]);
 
     let result = template_test.execute(vec![
         Instruction::CallMethod {
             package_address: template_test.package_address(),
-            component_address,
+            component_address: owner_address,
             method: "withdraw".to_string(),
             args: args![Amount(100)],
         },
@@ -161,14 +165,32 @@ fn test_erc20() {
         },
         Instruction::CallMethod {
             package_address: template_test.package_address(),
-            component_address,
+            component_address: receiver_address,
             method: "deposit".to_string(),
             args: args![Workspace(b"foo_bucket")],
         },
+        Instruction::CallMethod {
+            package_address: template_test.package_address(),
+            component_address: owner_address,
+            method: "balance".to_string(),
+            args: args![],
+        },
+        Instruction::CallMethod {
+            package_address: template_test.package_address(),
+            component_address: receiver_address,
+            method: "balance".to_string(),
+            args: args![],
+        },
     ]);
-    eprintln!("{:?}", result);
-
-    // TODO: commit and test the final state
+    for log in result.logs {
+        eprintln!("LOG: {}", log);
+    }
+    eprintln!("{:?}", result.execution_results);
+    assert_eq!(
+        result.execution_results[3].decode::<Amount>().unwrap(),
+        initial_supply - 100
+    );
+    assert_eq!(result.execution_results[4].decode::<Amount>().unwrap(), 100);
 }
 
 #[test]
@@ -191,4 +213,25 @@ fn test_private_function() {
     template_test.call_method::<()>(component, "increase", args![]);
     let value: u32 = template_test.call_method(component, "get", args![]);
     assert_eq!(value, 1);
+}
+
+#[test]
+fn test_tuples() {
+    let template_test = TemplateTest::new(vec!["tests/templates/tuples"]);
+
+    // tuples returned in a regular function
+    let (message, number): (String, u32) = template_test.call_function("Tuple", "tuple_output", args![]);
+    assert_eq!(message, "Hello World!");
+    assert_eq!(number, 100);
+
+    // tuples returned in a constructor
+    template_test.clear_calls();
+    let (component_id, message): (ComponentAddress, String) = template_test.call_function("Tuple", "new", args![]);
+    assert_eq!(message, "Hello World!");
+
+    // the component id returned in the tuple must be valid and usable
+    let new_value = 20_u32;
+    template_test.call_method::<()>(component_id, "set", args![new_value]);
+    let value: u32 = template_test.call_method(component_id, "get", args![]);
+    assert_eq!(value, new_value);
 }
