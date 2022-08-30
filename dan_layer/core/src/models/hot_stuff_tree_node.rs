@@ -23,10 +23,11 @@
 use digest::{Digest, FixedOutput};
 use tari_common_types::types::FixedHash;
 use tari_crypto::hash::blake2::Blake256;
+use tari_dan_common_types::{PayloadId, ShardId};
 use tari_dan_engine::state::models::StateRoot;
 
 use crate::{
-    models::{payload::PayloadId, Epoch, NodeHeight, ObjectPledge, Payload, QuorumCertificate, ShardId, TreeNodeHash},
+    models::{Epoch, NodeHeight, ObjectPledge, Payload, QuorumCertificate, TreeNodeHash},
     services::infrastructure_services::NodeAddressable,
 };
 

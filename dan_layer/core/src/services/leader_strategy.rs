@@ -1,7 +1,6 @@
-use crate::{
-    models::{Committee, PayloadId, ShardId},
-    services::infrastructure_services::NodeAddressable,
-};
+use tari_dan_common_types::{PayloadId, ShardId};
+
+use crate::{models::Committee, services::infrastructure_services::NodeAddressable};
 
 pub trait LeaderStrategy<TAddr: NodeAddressable, TPayload> {
     fn calculate_leader(&self, committee: &Committee<TAddr>, payload: PayloadId, shard: ShardId, round: u32) -> u32;

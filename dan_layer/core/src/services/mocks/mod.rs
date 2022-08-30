@@ -258,8 +258,6 @@ impl ServiceSpecification for MockServiceSpecification {
     type AssetProxy = ConcreteAssetProxy<Self>;
     type BaseNodeClient = MockBaseNodeClient;
     type ChainDbBackendAdapter = MockChainDbBackupAdapter;
-    type CheckpointManager = ConcreteCheckpointManager<Self::WalletClient>;
-    type CommitteeManager = MockCommitteeManager;
     type DbFactory = MockDbFactory;
     type EventsPublisher = MockEventsPublisher<ConsensusWorkerDomainEvent>;
     type GlobalDbAdapter = crate::storage::mocks::global_db::MockGlobalDbBackupAdapter;
@@ -268,9 +266,7 @@ impl ServiceSpecification for MockServiceSpecification {
     type OutboundService = MockOutboundService<Self::Addr, Self::Payload>;
     type Payload = TariDanPayload;
     type PayloadProcessor = MockPayloadProcessor;
-    type PayloadProvider = MockStaticPayloadProvider<Self::Payload>;
     type SigningService = MockSigningService;
     type StateDbBackendAdapter = MockStateDbBackupAdapter;
     type ValidatorNodeClientFactory = MockValidatorNodeClientFactory;
-    type WalletClient = MockWalletClient;
 }

@@ -7,9 +7,16 @@ use std::{
 use async_recursion::async_recursion;
 use clap::command;
 use digest::{Digest, FixedOutput};
-use tari_common_types::types::FixedHash;
-use tari_crypto::hash::blake2::Blake256;
-use tari_dan_engine::instruction::Instruction;
+use tari_common_types::types::{FixedHash, PrivateKey};
+use tari_crypto::{hash::blake2::Blake256, keys::SecretKey};
+use tari_dan_common_types::ShardId;
+use tari_dan_engine::{
+    instruction::{Instruction, Transaction, TransactionBuilder},
+    packager::PackageBuilder,
+    wasm::{compile::compile_str, WasmModule},
+};
+use tari_shutdown::{Shutdown, ShutdownSignal};
+use tari_utilities::ByteArray;
 use tokio::{
     sync::mpsc::{channel, Receiver, Sender},
     task::JoinHandle,
@@ -26,14 +33,10 @@ use crate::{
         HotStuffMessageType::Commit,
         HotStuffTreeNode,
         NodeHeight,
-        ObjectId,
         ObjectPledge,
         Payload,
-        PayloadId,
         QuorumCertificate,
         QuorumDecision,
-        ShardId,
-        SubstateChange,
         SubstateState,
         TariDanPayload,
         TreeNodeHash,
@@ -61,7 +64,7 @@ pub struct HsTestHarness<TPayload: Payload + 'static, TAddr: NodeAddressable + '
     tx_new: Sender<(TPayload, ShardId)>,
     tx_hs_messages: Sender<(TAddr, HotStuffMessage<TPayload, TAddr>)>,
     rx_leader: Receiver<HotStuffMessage<TPayload, TAddr>>,
-    tx_shutdown: Sender<()>,
+    shutdown: Shutdown,
     rx_broadcast: Receiver<(HotStuffMessage<TPayload, TAddr>, Vec<TAddr>)>,
     rx_vote_message: Receiver<(VoteMessage, TAddr)>,
     tx_votes: Sender<(TAddr, VoteMessage)>,
@@ -70,8 +73,8 @@ pub struct HsTestHarness<TPayload: Payload + 'static, TAddr: NodeAddressable + '
 }
 impl<TPayload: Payload, TAddr: NodeAddressable> HsTestHarness<TPayload, TAddr> {
     pub fn new<
-        TEpochManager: EpochManager<TAddr> + Send + 'static,
-        TLeader: LeaderStrategy<TAddr, TPayload> + Send + 'static,
+        TEpochManager: EpochManager<TAddr> + Send + Sync + 'static,
+        TLeader: LeaderStrategy<TAddr, TPayload> + Send + Sync + 'static,
     >(
         identity: TAddr,
         epoch_manager: TEpochManager,
@@ -80,11 +83,11 @@ impl<TPayload: Payload, TAddr: NodeAddressable> HsTestHarness<TPayload, TAddr> {
         let (tx_new, rx_new) = channel(1);
         let (tx_hs_messages, rx_hs_messages) = channel(1);
         let (tx_leader, mut rx_leader) = channel(1);
-        let (tx_shutdown, rx_shutdown) = channel(1);
         let (tx_broadcast, rx_broadcast) = channel(1);
         let (tx_vote_message, rx_vote_message) = channel(1);
         let (tx_votes, rx_votes) = channel(1);
         let (tx_execute, rx_execute) = channel(1);
+        let shutdown = Shutdown::new();
 
         let hs_waiter = Some(HotStuffWaiter::<_, _, _, _>::spawn(
             identity,
@@ -97,13 +100,13 @@ impl<TPayload: Payload, TAddr: NodeAddressable> HsTestHarness<TPayload, TAddr> {
             tx_broadcast,
             tx_vote_message,
             tx_execute,
-            rx_shutdown,
+            shutdown.to_signal(),
         ));
         Self {
             tx_new,
             tx_hs_messages,
             rx_leader,
-            tx_shutdown,
+            shutdown,
             rx_broadcast,
             rx_vote_message,
             tx_votes,
@@ -114,7 +117,7 @@ impl<TPayload: Payload, TAddr: NodeAddressable> HsTestHarness<TPayload, TAddr> {
 
     async fn assert_shuts_down_safely(&mut self) {
         // send might fail if it's already shutdown
-        let _ = self.tx_shutdown.send(()).await;
+        let _ = self.shutdown.trigger();
         self.hs_waiter.take().unwrap().await.expect("did not end cleanly");
     }
 
@@ -530,4 +533,88 @@ async fn test_hs_waiter_validate_qc_for_incorrect_committee_fails() {
 async fn test_hs_waiter_cannot_spend_until_it_is_proven_committed() {
     // You must provide a valid 4 chain proof in order to spend or exist an output
     todo!()
+}
+
+use tari_template_lib::args::Arg;
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn test_kitchen_sink() {
+    let node1 = "node1".to_string();
+    let node2 = "node2".to_string();
+    let shard0_committee = vec![node1.clone()];
+    let shard1_committee = vec![node2.clone()];
+    let epoch_manager = RangeEpochManager::new_with_multiple(&vec![
+        (ShardId(0)..ShardId(1), shard0_committee),
+        (ShardId(1)..ShardId(2), shard1_committee),
+    ]);
+    let mut node1_instance = HsTestHarness::new(node1.clone(), epoch_manager.clone(), AlwaysFirstLeader {});
+    let mut node2_instance = HsTestHarness::new(node2.clone(), epoch_manager, AlwaysFirstLeader {});
+
+    let package = PackageBuilder::new()
+        .add_wasm_module(
+            compile_str(
+                r#"
+    use tari_template_lib::prelude::*;
+
+#[template]
+mod hello_world {
+    pub struct HelloWorld {
+        greeting: String,
+    }
+
+    impl HelloWorld {
+
+        pub fn new(greeting: String) -> Self {
+            Self { greeting }
+        }
+
+        pub fn custom_greeting(&self, name: String) -> String {
+            format!("{} {}!", self.greeting, name)
+        }
+    }
+}
+
+    "#,
+                &[],
+            )
+            .unwrap(),
+        )
+        .build()
+        .unwrap();
+
+    let instruction = Instruction::CallFunction {
+        package_address: package.address(),
+        template: "HelloWorld".to_string(),
+        function: "new".to_string(),
+        args: vec![Arg::Literal(b"Kitchen Sink".to_vec())],
+    };
+    let secret_key = PrivateKey::from_bytes(&[1; 32]).unwrap();
+
+    let mut builder = TransactionBuilder::new();
+    builder.add_instruction(instruction);
+    // Only creating a single component
+    builder.max_outputs(1);
+    let transaction = builder.sign(&secret_key).build();
+
+    let payload = TariDanPayload::new(transaction);
+
+    let new_view_message = HotStuffMessage::new_view(QuorumCertificate::genesis(), ShardId(0), Some(payload.clone()));
+    node1_instance
+        .tx_hs_messages
+        .send((node1.clone(), new_view_message.clone()))
+        .await
+        .unwrap();
+
+    let new_view_message = HotStuffMessage::new_view(QuorumCertificate::genesis(), ShardId(1), Some(payload.clone()));
+    node2_instance
+        .tx_hs_messages
+        .send((node2.clone(), new_view_message.clone()))
+        .await
+        .unwrap();
+
+    node1_instance.assert_shuts_down_safely().await;
+    node2_instance.assert_shuts_down_safely().await;
+    // let executor = ConsensusExecutor::new();
+    //
+    // let execute_msg = node1_instance.recv_execute().await;
 }

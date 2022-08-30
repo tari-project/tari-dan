@@ -1,9 +1,10 @@
 use std::{collections::HashMap, ops::Range};
 
 use async_trait::async_trait;
+use tari_dan_common_types::ShardId;
 
 use crate::{
-    models::{Committee, Epoch, ShardId},
+    models::{Committee, Epoch},
     services::infrastructure_services::NodeAddressable,
 };
 

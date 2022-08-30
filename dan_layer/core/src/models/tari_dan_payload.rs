@@ -24,11 +24,11 @@ use std::fmt::Debug;
 
 use tari_common_types::types::FixedHash;
 use tari_crypto::hash::blake2::Blake256;
-use tari_dan_common_types::ObjectId;
+use tari_dan_common_types::{ObjectClaim, ObjectId, ShardId, SubstateChange};
 use tari_dan_engine::instruction::Transaction;
 
 use super::{dan_layer_models_hasher, hashing::TARI_DAN_PAYLOAD_LABEL};
-use crate::models::{ConsensusHash, ObjectClaim, Payload, ShardId, SubstateChange};
+use crate::models::{ConsensusHash, Payload};
 
 #[derive(Debug, Clone)]
 pub struct TariDanPayload {
@@ -53,12 +53,12 @@ impl ConsensusHash for TariDanPayload {
 }
 
 impl Payload for TariDanPayload {
-    fn involved_shards(&self) -> &[ShardId] {
-        todo!()
+    fn involved_shards(&self) -> Vec<ShardId> {
+        self.transaction.meta().involved_shards()
     }
 
     fn objects_for_shard(&self, shard: ShardId) -> Vec<(ObjectId, SubstateChange, ObjectClaim)> {
-        todo!()
+        self.transaction.meta().objects_for_shard(shard)
     }
 }
 

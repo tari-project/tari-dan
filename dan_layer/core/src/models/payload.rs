@@ -25,38 +25,19 @@ use std::{convert::TryFrom, fmt::Debug};
 use digest::Digest;
 use tari_common_types::types::FixedHash;
 use tari_crypto::hash::blake2::Blake256;
-use tari_dan_common_types::ObjectId;
+use tari_dan_common_types::{ObjectClaim, ObjectId, PayloadId, ShardId, SubstateChange};
 
-use crate::models::{ConsensusHash, ObjectClaim, ShardId, SubstateChange};
+use crate::models::ConsensusHash;
 
 // TODO: Rename to Command - most of the hotstuff docs refers to this as command
 pub trait Payload: Debug + Clone + Send + Sync + ConsensusHash {
-    fn involved_shards(&self) -> &[ShardId];
+    fn involved_shards(&self) -> Vec<ShardId>;
     fn to_id(&self) -> PayloadId {
         let s = self.consensus_hash();
         let x = Blake256::new().chain(s);
         PayloadId::new(FixedHash::try_from(x.finalize()).unwrap())
     }
     fn objects_for_shard(&self, shard: ShardId) -> Vec<(ObjectId, SubstateChange, ObjectClaim)>;
-}
-
-#[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
-pub struct PayloadId {
-    id: FixedHash,
-}
-
-impl PayloadId {
-    pub fn new(id: FixedHash) -> Self {
-        Self { id }
-    }
-
-    pub fn zero() -> Self {
-        Self { id: FixedHash::zero() }
-    }
-
-    pub fn as_slice(&self) -> &[u8] {
-        self.id.as_slice()
-    }
 }
 
 // impl Payload for &str {
@@ -78,8 +59,8 @@ impl ConsensusHash for (String, Vec<ShardId>) {
 }
 
 impl Payload for (String, Vec<ShardId>) {
-    fn involved_shards(&self) -> &[ShardId] {
-        &self.1
+    fn involved_shards(&self) -> Vec<ShardId> {
+        self.1.clone()
     }
 
     fn objects_for_shard(&self, shard: ShardId) -> Vec<(ObjectId, SubstateChange, ObjectClaim)> {

@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 
 use async_recursion::async_recursion;
+use tari_dan_common_types::{PayloadId, ShardId};
 use tari_shutdown::ShutdownSignal;
 use tokio::{
     sync::mpsc::{Receiver, Sender},
@@ -17,10 +18,8 @@ use crate::{
         NodeHeight,
         ObjectPledge,
         Payload,
-        PayloadId,
         QuorumCertificate,
         QuorumDecision,
-        ShardId,
         TreeNodeHash,
         ValidatorSignature,
     },
@@ -389,7 +388,7 @@ impl<
                 .ok_or("No payload found".to_string())?;
             let involved_shards = payload.involved_shards();
             let mut votes = vec![];
-            for s in involved_shards {
+            for s in &involved_shards {
                 if let Some(vote) = self
                     .shard_db
                     .get_payload_vote(node.payload(), node.payload_height(), *s)
@@ -402,7 +401,7 @@ impl<
             if votes.len() == involved_shards.len() {
                 let local_shards = self
                     .epoch_manager
-                    .get_shards(node.epoch(), &self.identity, involved_shards)
+                    .get_shards(node.epoch(), &self.identity, &involved_shards)
                     .await?;
                 // it may happen that we are involved in more than one committee, in which case send the votes to each
                 // leader.
