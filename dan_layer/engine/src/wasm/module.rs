@@ -26,11 +26,25 @@ use std::sync::{
 };
 
 use tari_template_abi::{FunctionDef, TemplateDef};
-use wasmer::{Extern, Function, Instance, Module, Store, Val, WasmerEnv};
+use wasmer::{
+    BaseTunables,
+    CompilerConfig,
+    Cranelift,
+    CraneliftOptLevel,
+    Engine,
+    Extern,
+    Function,
+    Instance,
+    Module,
+    Store,
+    Universal,
+    Val,
+    WasmerEnv,
+};
 
 use crate::{
     packager::{PackageError, PackageModuleLoader},
-    wasm::{environment::WasmEnv, WasmExecutionError},
+    wasm::{environment::WasmEnv, metering, WasmExecutionError},
 };
 
 #[derive(Debug, Clone)]
@@ -46,6 +60,16 @@ impl WasmModule {
     pub fn code(&self) -> &[u8] {
         &self.code
     }
+
+    fn create_store(&self) -> Store {
+        let mut cranelift = Cranelift::new();
+        cranelift.opt_level(CraneliftOptLevel::Speed).canonicalize_nans(true);
+        // TODO: Configure metering limit
+        cranelift.push_middleware(Arc::new(metering::middleware(1_000_000)));
+        let engine = Universal::new(cranelift).engine();
+        let tunables = BaseTunables::for_target(engine.target());
+        Store::new_with_tunables(&engine, tunables)
+    }
 }
 
 impl PackageModuleLoader for WasmModule {
@@ -53,7 +77,7 @@ impl PackageModuleLoader for WasmModule {
     type Loaded = LoadedWasmModule;
 
     fn load_module(&self) -> Result<Self::Loaded, Self::Error> {
-        let store = Store::default();
+        let store = self.create_store();
         let module = Module::new(&store, &self.code)?;
         let violation_flag = Arc::new(AtomicBool::new(false));
         let mut env = WasmEnv::new(violation_flag.clone());

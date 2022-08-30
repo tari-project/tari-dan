@@ -38,7 +38,7 @@ use tari_template_lib::{
     },
     models::{Contract, ContractAddress, Package, PackageAddress},
 };
-use wasmer::{Function, Instance, Module, Store, Val, WasmerEnv};
+use wasmer::{Function, Instance, Module, Val, WasmerEnv};
 
 use crate::{
     runtime::Runtime,
@@ -67,10 +67,10 @@ impl Process {
         state: Runtime,
         package_address: PackageAddress,
     ) -> Result<Self, WasmExecutionError> {
-        let store = Store::default();
         let mut env = WasmEnv::new(state);
-        let tari_engine = Function::new_native_with_env(&store, env.clone(), Self::tari_engine_entrypoint);
-        let resolver = env.create_resolver(&store, tari_engine);
+        let store = module.wasm_module().store();
+        let tari_engine = Function::new_native_with_env(store, env.clone(), Self::tari_engine_entrypoint);
+        let resolver = env.create_resolver(store, tari_engine);
         let instance = Instance::new(module.wasm_module(), &resolver)?;
         env.init_with_instance(&instance)?;
         Ok(Self {
