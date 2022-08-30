@@ -28,14 +28,16 @@ pub use r#impl::RuntimeInterfaceImpl;
 
 mod logs;
 
-mod tracker;
-use std::{
-    fmt::{Debug, Display},
-    io,
-    sync::Arc,
-};
+mod commit_result;
+pub use commit_result::CommitResult;
 
-use anyhow::anyhow;
+mod error;
+pub use error::{RuntimeError, TransactionCommitError};
+
+mod tracker;
+
+use std::{fmt::Debug, sync::Arc};
+
 use tari_template_lib::{
     args::{
         Arg,
@@ -50,11 +52,9 @@ use tari_template_lib::{
         WorkspaceAction,
     },
     invoke_args,
-    models::{Amount, BucketId, ComponentAddress, ComponentInstance, ResourceAddress, VaultId, VaultRef},
+    models::{ComponentAddress, ComponentInstance, VaultRef},
 };
 pub use tracker::{RuntimeState, StateTracker};
-
-use crate::{models::ResourceError, state_store::StateStoreError};
 
 pub trait RuntimeInterface: Send + Sync {
     fn set_current_runtime_state(&self, state: RuntimeState);
@@ -91,6 +91,8 @@ pub trait RuntimeInterface: Send + Sync {
     fn workspace_invoke(&self, action: WorkspaceAction, args: Vec<Vec<u8>>) -> Result<InvokeResult, RuntimeError>;
 
     fn set_last_instruction_output(&self, value: Option<Vec<u8>>) -> Result<(), RuntimeError>;
+
+    fn commit(&self) -> Result<CommitResult, RuntimeError>;
 }
 
 #[derive(Clone)]
@@ -129,44 +131,5 @@ impl Runtime {
 impl Debug for Runtime {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("Runtime").field("engine", &"dyn RuntimeEngine").finish()
-    }
-}
-
-#[derive(Debug, thiserror::Error)]
-pub enum RuntimeError {
-    #[error("Encoding error: {0}")]
-    EncodingError(#[from] io::Error),
-    #[error("State DB error: {0}")]
-    StateDbError(#[from] anyhow::Error),
-    #[error("State storage error: {0}")]
-    StateStoreError(#[from] StateStoreError),
-    #[error("Component not found with address '{address}'")]
-    ComponentNotFound { address: ComponentAddress },
-    #[error("Invalid argument {argument}: {reason}")]
-    InvalidArgument { argument: &'static str, reason: String },
-    #[error("Invalid amount '{amount}': {reason}")]
-    InvalidAmount { amount: Amount, reason: String },
-    #[error("Illegal runtime state")]
-    IllegalRuntimeState,
-    #[error("Vault not found with id ({}, {})", vault_id.0, vault_id.1)]
-    VaultNotFound { vault_id: VaultId },
-    #[error("Bucket not found with id {bucket_id}")]
-    BucketNotFound { bucket_id: BucketId },
-    #[error("Resource not found with address {resource_address}")]
-    ResourceNotFound { resource_address: ResourceAddress },
-    #[error(transparent)]
-    ResourceError(#[from] ResourceError),
-    #[error("Bucket {bucket_id} was dropped but was not empty")]
-    BucketNotEmpty { bucket_id: BucketId },
-    #[error("Named argument {key} was not found")]
-    ItemNotOnWorkspace { key: String },
-    #[error("Attempted to take the last output but there was no previous instruction output")]
-    NoLastInstructionOutput,
-    #[error("Workspace already has an item with key '{key}'")]
-    WorkspaceItemKeyExists { key: String },
-}
-impl RuntimeError {
-    pub fn state_db_error<T: Display>(err: T) -> Self {
-        RuntimeError::StateDbError(anyhow!("{}", err))
     }
 }

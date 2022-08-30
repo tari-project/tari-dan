@@ -38,6 +38,7 @@ use tari_template_lib::{
 };
 
 use crate::runtime::{
+    commit_result::CommitResult,
     logs::LogEntry,
     tracker::{RuntimeState, StateTracker},
     RuntimeError,
@@ -153,9 +154,8 @@ impl RuntimeInterface for RuntimeInterfaceImpl {
                         })?;
 
                 let bucket = self.tracker.take_bucket(bucket_id)?;
-                let mut vault = self.tracker.get_vault(&vault_id)?;
-                vault.deposit(bucket)?;
-                self.tracker.set_vault(&vault_id, vault)?;
+                self.tracker
+                    .borrow_vault_mut(&vault_id, |vault| vault.deposit(bucket))??;
                 Ok(InvokeResult::empty())
             },
             VaultAction::WithdrawFungible => {
@@ -170,11 +170,32 @@ impl RuntimeInterface for RuntimeInterfaceImpl {
                             argument: "amount",
                             reason: "Argument not provided or failed to decode".to_string(),
                         })?;
-                let mut vault = self.tracker.get_vault(&vault_id)?;
-                let resource = vault.withdraw(amount)?;
+
+                let resource = self
+                    .tracker
+                    .borrow_vault_mut(&vault_id, |vault| vault.withdraw(amount))??;
                 let bucket = self.tracker.new_bucket(resource);
-                self.tracker.set_vault(&vault_id, vault)?;
                 Ok(InvokeResult::encode(&bucket)?)
+            },
+            VaultAction::GetBalance => {
+                let vault_id = vault_ref.vault_id().ok_or_else(|| RuntimeError::InvalidArgument {
+                    argument: "vault_ref",
+                    reason: "GetBalance vault action requires a vault id".to_string(),
+                })?;
+
+                let balance = self.tracker.borrow_vault_mut(&vault_id, |vault| vault.balance())?;
+                Ok(InvokeResult::encode(&balance)?)
+            },
+            VaultAction::GetResourceAddress => {
+                let vault_id = vault_ref.vault_id().ok_or_else(|| RuntimeError::InvalidArgument {
+                    argument: "vault_ref",
+                    reason: "vault action requires a vault id".to_string(),
+                })?;
+
+                let address = self
+                    .tracker
+                    .borrow_vault_mut(&vault_id, |vault| vault.resource_address())?;
+                Ok(InvokeResult::encode(&address)?)
             },
         }
     }
@@ -274,5 +295,13 @@ impl RuntimeInterface for RuntimeInterfaceImpl {
     fn set_last_instruction_output(&self, value: Option<Vec<u8>>) -> Result<(), RuntimeError> {
         self.tracker.set_last_instruction_output(value);
         Ok(())
+    }
+
+    fn commit(&self) -> Result<CommitResult, RuntimeError> {
+        let result = self.tracker.commit();
+        let logs = self.tracker.take_logs();
+        let commit = CommitResult::new(self.tracker.transaction_hash(), logs, result);
+
+        Ok(commit)
     }
 }

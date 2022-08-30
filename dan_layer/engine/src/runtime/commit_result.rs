@@ -20,60 +20,28 @@
 //   WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //   USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use std::marker::PhantomData;
-
-use tari_template_abi::{encode, Encode};
+use tari_template_lib::Hash;
 
 use crate::{
-    args::MintResourceArg,
-    models::{Amount, Bucket, Metadata},
-    resource::ResourceDefinition,
+    runtime::{logs::LogEntry, TransactionCommitError},
+    wasm::ExecutionResult,
 };
 
-pub struct ResourceBuilder;
-
-impl ResourceBuilder {
-    pub fn fungible<T: ResourceDefinition>() -> FungibleResourceBuilder<T> {
-        FungibleResourceBuilder::new()
-    }
+#[derive(Debug)]
+pub struct CommitResult {
+    pub transaction_hash: Hash,
+    pub logs: Vec<LogEntry>,
+    pub execution_results: Vec<ExecutionResult>,
+    pub result: Result<(), TransactionCommitError>,
 }
 
-pub struct FungibleResourceBuilder<T> {
-    initial_supply: Amount,
-    metadata: Metadata,
-    _t: PhantomData<T>,
-}
-
-impl<T: ResourceDefinition> FungibleResourceBuilder<T> {
-    fn new() -> Self {
+impl CommitResult {
+    pub fn new(transaction_hash: Hash, logs: Vec<LogEntry>, result: Result<(), TransactionCommitError>) -> Self {
         Self {
-            _t: PhantomData,
-            initial_supply: Amount::zero(),
-            metadata: Metadata::new(),
+            transaction_hash,
+            logs,
+            execution_results: Vec::new(),
+            result,
         }
-    }
-
-    pub fn with_token_symbol<S: Into<String>>(mut self, symbol: S) -> Self {
-        self.metadata.insert(b"SYMBOL".to_vec(), symbol.into().into_bytes());
-        self
-    }
-
-    pub fn with_metadata<K: Encode, V: Encode>(mut self, key: K, value: V) -> Self {
-        self.metadata.insert(encode(&key).unwrap(), encode(&value).unwrap());
-        self
-    }
-
-    pub fn initial_supply<A: Into<Amount>>(mut self, initial_supply: A) -> Self {
-        self.initial_supply = initial_supply.into();
-        self
-    }
-
-    pub fn build_bucket(self) -> Bucket<T> {
-        crate::get_context().with_resource_manager(|manager| {
-            manager.mint_resource(MintResourceArg::Fungible {
-                amount: self.initial_supply,
-                metadata: self.metadata,
-            })
-        })
     }
 }

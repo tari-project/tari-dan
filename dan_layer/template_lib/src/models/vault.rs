@@ -104,7 +104,8 @@ impl<T: ResourceDefinition> Vault<T> {
         .expect("VaultInvoke returned null");
     }
 
-    pub fn withdraw(&mut self, amount: Amount) -> Bucket<T> {
+    pub fn withdraw<A: Into<Amount>>(&mut self, amount: A) -> Bucket<T> {
+        let amount = amount.into();
         assert!(
             amount.is_positive() && !amount.is_zero(),
             "Amount must be non-zero and positive"
@@ -117,6 +118,29 @@ impl<T: ResourceDefinition> Vault<T> {
         .expect("VaultInvoke returned null");
 
         resp.decode().expect("failed to decode Bucket")
+    }
+
+    pub fn balance(&self) -> Amount {
+        let resp: InvokeResult = call_engine(EngineOp::VaultInvoke, &VaultInvokeArg {
+            vault_ref: VaultRef::Ref(self.vault_id()),
+            action: VaultAction::GetBalance,
+            args: args![],
+        })
+        .expect("VaultInvoke returned null");
+
+        resp.decode().expect("failed to decode Amount")
+    }
+
+    pub fn resource_address(&self) -> ResourceAddress {
+        let resp: InvokeResult = call_engine(EngineOp::VaultInvoke, &VaultInvokeArg {
+            vault_ref: VaultRef::Ref(self.vault_id()),
+            action: VaultAction::GetResourceAddress,
+            args: invoke_args![],
+        })
+        .expect("GetResourceAddress returned null");
+
+        resp.decode()
+            .expect("GetResourceAddress returned invalid resource address")
     }
 
     pub fn vault_id(&self) -> VaultId {
