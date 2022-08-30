@@ -168,6 +168,7 @@ mod tests {
                 let result;
                 match call_info.func_name.as_str() {
                     "new" => {
+                        assert_eq ! (call_info . args . len () , 0usize , "Call had unexpected number of args. Got = {} expected = {}" , call_info . args . len () , 0usize) ;
                         let state = State_template::State::new();
                         let rtn = engine().instantiate("State".to_string(), state);
                         result = encode_with_len(&rtn);
@@ -183,7 +184,6 @@ mod tests {
                         assert_eq ! (call_info . args . len () , 2usize , "Call had unexpected number of args. Got = {} expected = {}" , call_info . args . len () , 2usize) ;
                         let component = decode::<::tari_template_lib::models::ComponentInstance>(&call_info.args[0usize]).unwrap();
                         let mut state = decode::<State_template::State>(&component.state).unwrap();
-                        assert_eq ! (call_info . args . len () , 2usize , "Call had unexpected number of args. Got = {} expected = {}" , call_info . args . len () , 2usize) ;
                         let arg_1 = decode::<u32>(&call_info.args[1usize]).unwrap();
                         let rtn = State_template::State::set(&mut state, arg_1);
                         result = encode_with_len(&rtn);
