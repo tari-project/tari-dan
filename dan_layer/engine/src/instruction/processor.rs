@@ -22,15 +22,18 @@
 
 use std::sync::Arc;
 
+use log::*;
 use tari_template_lib::{arg, args::WorkspaceAction, invoke_args};
 
 use crate::{
     instruction::{error::InstructionError, Instruction, Transaction},
     packager::Package,
-    runtime::{Runtime, RuntimeInterface, RuntimeState},
+    runtime::{CommitResult, Runtime, RuntimeInterface, RuntimeState},
     traits::Invokable,
     wasm::{ExecutionResult, Process},
 };
+
+const LOG_TARGET: &str = "dan::engine::instruction_processor";
 
 #[derive(Debug, Clone)]
 pub struct InstructionProcessor<TRuntimeInterface> {
@@ -48,17 +51,20 @@ where TRuntimeInterface: RuntimeInterface + Clone + 'static
         }
     }
 
-    pub fn execute(&self, transaction: Transaction) -> Result<Vec<ExecutionResult>, InstructionError> {
-        let mut results = Vec::with_capacity(transaction.instructions.len());
+    pub fn execute(&self, transaction: Transaction) -> Result<CommitResult, InstructionError> {
+        let mut exec_results = Vec::with_capacity(transaction.instructions.len());
 
         let runtime = Runtime::new(Arc::new(self.runtime_interface.clone()));
-
         for instruction in transaction.instructions {
             let result = self.process_instruction(&runtime, instruction)?;
-            results.push(result);
+            exec_results.push(result);
         }
 
-        Ok(results)
+        let mut commit_results = runtime.interface().commit()?;
+        // TODO: We probably dont need this
+        commit_results.execution_results = exec_results;
+
+        Ok(commit_results)
     }
 
     fn process_instruction(
@@ -66,6 +72,7 @@ where TRuntimeInterface: RuntimeInterface + Clone + 'static
         runtime: &Runtime,
         instruction: Instruction,
     ) -> Result<ExecutionResult, InstructionError> {
+        debug!(target: LOG_TARGET, "instruction = {:?}", instruction);
         match instruction {
             Instruction::CallFunction {
                 package_address,

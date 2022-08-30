@@ -24,6 +24,7 @@ mod builder;
 
 pub use builder::TransactionBuilder;
 use digest::{Digest, FixedOutput};
+use tari_common_types::types::PublicKey;
 
 mod error;
 
@@ -40,7 +41,6 @@ use tari_template_lib::{
     args::Arg,
     models::{ComponentAddress, PackageAddress},
 };
-use tari_utilities::ByteArray;
 
 #[derive(Debug, Clone)]
 pub enum Instruction {

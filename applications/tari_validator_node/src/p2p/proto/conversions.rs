@@ -49,7 +49,7 @@ use tari_dan_engine::{
         DbStateOpLogEntry,
     },
 };
-use tari_template_lib::Hash;
+use tari_template_lib::{args::Arg, Hash};
 
 use crate::p2p::proto;
 
@@ -341,7 +341,12 @@ impl TryFrom<proto::common::Instruction> for tari_dan_engine::instruction::Instr
     fn try_from(request: proto::common::Instruction) -> Result<Self, Self::Error> {
         let package_address =
             Hash::deserialize(&mut &request.package_address[..]).map_err(|_| "invalid package_addresss")?;
-        let args = request.args.clone();
+        let args = request
+            .args
+            .into_iter()
+            .map(|b| Arg::from_bytes(&b))
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(|e| e.to_string())?;
         let instruction = match request.instruction_type {
             // function
             0 => {
@@ -405,7 +410,7 @@ impl From<tari_dan_engine::instruction::Instruction> for proto::common::Instruct
         //         result.package_address = package_address.to_vec();
         //         result.template = template;
         //         result.function = function;
-        //         result.args = args;
+        //         result.args = args.into_iter().map(|a| a.to_bytes()).collect();
         //     },
         //     tari_dan_engine::instruction::Instruction::CallMethod {
         //         component_address,
@@ -417,8 +422,9 @@ impl From<tari_dan_engine::instruction::Instruction> for proto::common::Instruct
         //         result.package_address = package_address.to_vec();
         //         result.component_address = component_address.to_vec();
         //         result.method = method;
-        //         result.args = args;
+        //         result.args = args.into_iter().map(|a| a.to_bytes()).collect();
         //     },
+            _ => todo!(),
         // }
         //
         // result
