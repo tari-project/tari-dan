@@ -76,6 +76,8 @@ impl<TServiceSpecification: ServiceSpecification + 'static> ValidatorNode
     ) -> Result<Response<SubmitTransactionResponse>, Status> {
         let transaction = request
             .into_inner()
+            .transaction
+            .unwrap()
             .try_into()
             .map_err(|err| Status::invalid_argument(format!("Transaction was not valid: {}", err)))?;
 

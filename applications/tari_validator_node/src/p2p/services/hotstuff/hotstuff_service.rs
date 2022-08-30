@@ -87,6 +87,8 @@ impl HotstuffService {
                         }
                     }
                 },
+
+
                 _ = self.shutdown.wait() => {
                     dbg!("Shutting down hs service");
                     break;

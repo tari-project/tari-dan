@@ -1,11 +1,12 @@
 use std::collections::HashMap;
 
+use tari_dan_common_types::ObjectId;
+
 use crate::{
     models::{
         vote_message::VoteMessage,
         HotStuffTreeNode,
         NodeHeight,
-        ObjectId,
         ObjectPledge,
         Payload,
         PayloadId,

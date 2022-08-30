@@ -53,6 +53,7 @@ pub use node::Node;
 pub use payload::{Payload, PayloadId};
 pub use quorum_certificate::{QuorumCertificate, QuorumDecision};
 pub use sidechain_metadata::SidechainMetadata;
+use tari_dan_common_types::ObjectId;
 pub use tari_dan_payload::{CheckpointData, TariDanPayload};
 pub use tree_node_hash::TreeNodeHash;
 pub use view::View;
@@ -117,9 +118,6 @@ pub enum SubstateState {
     Created { created_by: PayloadId },
     Destroyed { deleted_by: PayloadId },
 }
-
-#[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
-pub struct ObjectId(pub u64);
 
 #[derive(Debug, Clone)]
 pub struct ObjectPledge {

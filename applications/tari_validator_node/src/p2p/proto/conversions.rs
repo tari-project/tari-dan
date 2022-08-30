@@ -319,18 +319,19 @@ impl TryFrom<proto::common::Transaction> for Transaction {
     type Error = String;
 
     fn try_from(request: proto::common::Transaction) -> Result<Self, Self::Error> {
-        let instructions = request
-            .instructions
-            .into_iter()
-            .map(TryInto::try_into)
-            .collect::<Result<Vec<tari_dan_engine::instruction::Instruction>, _>>()?;
-        let signature: Signature = request.signature.ok_or("invalid signature")?.try_into()?;
-        let instruction_signature = signature.try_into()?;
-        let sender_public_key =
-            PublicKey::from_bytes(&request.sender_public_key).map_err(|_| "invalid sender_public_key")?;
-        let transaction = Transaction::new(instructions, instruction_signature, sender_public_key);
-
-        Ok(transaction)
+        // let instructions = request
+        //     .instructions
+        //     .into_iter()
+        //     .map(TryInto::try_into)
+        //     .collect::<Result<Vec<tari_dan_engine::instruction::Instruction>, _>>()?;
+        // let signature: Signature = request.signature.ok_or("invalid signature")?.try_into()?;
+        // let instruction_signature = signature.try_into()?;
+        // let sender_public_key =
+        //     PublicKey::from_bytes(&request.sender_public_key).map_err(|_| "invalid sender_public_key")?;
+        // let transaction = Transaction::new(instructions, instruction_signature, sender_public_key);
+        //
+        // Ok(transaction)
+        todo!()
     }
 }
 
@@ -380,6 +381,11 @@ impl From<Transaction> for proto::common::Transaction {
             instructions: instructions.into_iter().map(Into::into).collect(),
             signature: Some(signature.signature().into()),
             sender_public_key: sender_public_key.to_vec(),
+            balance_proof: todo!(),
+            inputs: todo!(),
+            max_instruction_outputs: todo!(),
+            outputs: todo!(),
+            fee: todo!(),
         }
     }
 }

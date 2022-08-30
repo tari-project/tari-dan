@@ -32,8 +32,10 @@ pub use processor::InstructionProcessor;
 
 mod signature;
 pub use signature::InstructionSignature;
-use tari_common_types::types::{FixedHash, PublicKey};
+use tari_common_types::types::{BulletRangeProof, ComSignature, Commitment, FixedHash, PublicKey};
 use tari_crypto::hash::blake2::Blake256;
+use tari_dan_common_types::ObjectId;
+use tari_mmr::MerkleProof;
 use tari_template_lib::{
     args::Arg,
     models::{ComponentAddress, PackageAddress},
@@ -71,19 +73,67 @@ impl Instruction {
 }
 
 #[derive(Debug, Clone)]
+pub enum ThaumInput {
+    Standard {
+        object_id: ObjectId,
+    },
+    PegIn {
+        commitment: Commitment,
+        burn_proof: MerkleProof,
+        spending_key: StealthAddress,
+        owner_proof: ComSignature,
+    },
+}
+
+#[derive(Debug, Clone)]
+pub struct ThaumOutput {
+    commitment: Commitment,
+    owner: StealthAddress,
+    rangeproof: BulletRangeProof,
+}
+
+#[derive(Debug, Clone)]
+pub struct StealthAddress {
+    nonce: PublicKey,
+    address: PublicKey,
+}
+
+#[derive(Debug, Clone)]
+pub struct BalanceProof {}
+
+#[derive(Debug, Clone)]
 pub struct Transaction {
     hash: FixedHash,
+    inputs: Vec<ThaumInput>,
+    outputs: Vec<ThaumOutput>,
     instructions: Vec<Instruction>,
     signature: InstructionSignature,
+    max_instruction_outputs: u32,
+    fee: u64,
+    balance_proof: BalanceProof,
     sender_public_key: PublicKey,
 }
 
 impl Transaction {
-    pub fn new(instructions: Vec<Instruction>, signature: InstructionSignature, sender_public_key: PublicKey) -> Self {
+    pub fn new(
+        inputs: Vec<ThaumInput>,
+        outputs: Vec<ThaumOutput>,
+        max_instruction_outputs: u32,
+        fee: u64,
+        balance_proof: BalanceProof,
+        instructions: Vec<Instruction>,
+        signature: InstructionSignature,
+        sender_public_key: PublicKey,
+    ) -> Self {
         let mut s = Self {
             hash: FixedHash::zero(),
+            inputs,
+            outputs,
             instructions,
             signature,
+            max_instruction_outputs,
+            fee,
+            balance_proof,
             sender_public_key,
         };
         s.calculate_hash();

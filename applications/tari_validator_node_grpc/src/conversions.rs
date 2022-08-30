@@ -54,22 +54,23 @@ impl<T: Borrow<Signature>> From<T> for grpc::Signature {
     }
 }
 
-impl TryFrom<grpc::SubmitTransactionRequest> for Transaction {
+impl TryFrom<grpc::Transaction> for Transaction {
     type Error = String;
 
-    fn try_from(request: grpc::SubmitTransactionRequest) -> Result<Self, Self::Error> {
-        let instructions = request
-            .instructions
-            .into_iter()
-            .map(TryInto::try_into)
-            .collect::<Result<Vec<Instruction>, _>>()?;
-        let signature: Signature = request.signature.ok_or("invalid signature")?.try_into()?;
-        let instruction_signature = signature.try_into()?;
-        let sender_public_key =
-            PublicKey::from_bytes(&request.sender_public_key).map_err(|_| "invalid sender_public_key")?;
-        let transaction = Transaction::new(instructions, instruction_signature, sender_public_key);
-
-        Ok(transaction)
+    fn try_from(request: grpc::Transaction) -> Result<Self, Self::Error> {
+        // let instructions = request
+        //     .instructions
+        //     .into_iter()
+        //     .map(TryInto::try_into)
+        //     .collect::<Result<Vec<Instruction>, _>>()?;
+        // let signature: Signature = request.signature.ok_or("invalid signature")?.try_into()?;
+        // let instruction_signature = signature.try_into()?;
+        // let sender_public_key =
+        //     PublicKey::from_bytes(&request.sender_public_key).map_err(|_| "invalid sender_public_key")?;
+        // let transaction = Transaction::new(instructions, instruction_signature, sender_public_key);
+        //
+        // Ok(transaction)
+        todo!()
     }
 }
 
@@ -111,17 +112,18 @@ impl TryFrom<grpc::Instruction> for Instruction {
     }
 }
 
-impl From<Transaction> for SubmitTransactionRequest {
+impl From<Transaction> for grpc::Transaction {
     fn from(transaction: Transaction) -> Self {
-        let instructions = transaction.instructions().into_iter().map(Into::into).collect();
-        let signature = transaction.signature().signature();
-        let sender_public_key = transaction.sender_public_key().to_vec();
-
-        SubmitTransactionRequest {
-            instructions,
-            signature: Some(signature.into()),
-            sender_public_key,
-        }
+        // let instructions = transaction.instructions().into_iter().map(Into::into).collect();
+        // let signature = transaction.signature().signature();
+        // let sender_public_key = transaction.sender_public_key().to_vec();
+        //
+        // SubmitTransactionRequest {
+        //     instructions,
+        //     signature: Some(signature.into()),
+        //     sender_public_key,
+        // }
+        todo!()
     }
 }
 

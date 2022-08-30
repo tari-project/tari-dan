@@ -24,10 +24,11 @@ use std::fmt::Debug;
 
 use tari_common_types::types::FixedHash;
 use tari_crypto::hash::blake2::Blake256;
+use tari_dan_common_types::ObjectId;
 use tari_dan_engine::instruction::Transaction;
 
 use super::{dan_layer_models_hasher, hashing::TARI_DAN_PAYLOAD_LABEL};
-use crate::models::{ConsensusHash, ObjectClaim, ObjectId, Payload, ShardId, SubstateChange};
+use crate::models::{ConsensusHash, ObjectClaim, Payload, ShardId, SubstateChange};
 
 #[derive(Debug, Clone)]
 pub struct TariDanPayload {

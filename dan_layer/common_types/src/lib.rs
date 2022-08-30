@@ -7,3 +7,6 @@ pub mod storage;
 mod template_id;
 
 pub use template_id::TemplateId;
+
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
+pub struct ObjectId(pub u64);
