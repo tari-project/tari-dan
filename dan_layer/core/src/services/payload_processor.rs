@@ -26,7 +26,6 @@ use tari_dan_engine::state::{models::StateRoot, StateDbUnitOfWork};
 use crate::{
     digital_assets_error::DigitalAssetError,
     models::{Payload, TariDanPayload},
-    services::AssetProcessor,
 };
 
 #[async_trait]
@@ -38,35 +37,21 @@ pub trait PayloadProcessor<TPayload: Payload> {
     ) -> Result<StateRoot, DigitalAssetError>;
 }
 
-pub struct TariDanPayloadProcessor<TAssetProcessor>
-where TAssetProcessor: AssetProcessor
-{
-    asset_processor: TAssetProcessor,
-}
+pub struct TariDanPayloadProcessor {}
 
-impl<TAssetProcessor: AssetProcessor> TariDanPayloadProcessor<TAssetProcessor> {
-    pub fn new(asset_processor: TAssetProcessor) -> Self {
-        Self { asset_processor }
+impl TariDanPayloadProcessor {
+    pub fn new() -> Self {
+        Self {}
     }
 }
 
 #[async_trait]
-impl<TAssetProcessor: AssetProcessor + Send + Sync> PayloadProcessor<TariDanPayload>
-    for TariDanPayloadProcessor<TAssetProcessor>
-{
+impl PayloadProcessor<TariDanPayload> for TariDanPayloadProcessor {
     async fn process_payload<TUnitOfWork: StateDbUnitOfWork>(
         &self,
         payload: &TariDanPayload,
         state_tx: TUnitOfWork,
     ) -> Result<StateRoot, DigitalAssetError> {
-        let mut state_tx = state_tx;
-        for instruction in payload.instructions() {
-            println!("Executing instruction");
-            println!("{:?}", instruction);
-            // TODO: Should we swallow + log the error instead of propagating it?
-            self.asset_processor.execute_instruction(instruction, &mut state_tx)?;
-        }
-
-        Ok(state_tx.calculate_root()?)
+        todo!()
     }
 }

@@ -7,7 +7,7 @@ edition = "2021"
 
 [dependencies]
 tari_dan_engine = { path = "../engine" }
-tari_storage = {  git = "https://github.com/tari-project/tari.git", tag = "v0.35.0", package = "tari_storage" }
+tari_storage = {  git = "https://github.com/tari-project/tari.git", tag = "v0.37.0", package = "tari_storage" }
 
 borsh = "0.9.3"
 lmdb-zero = "0.4.4"

@@ -100,7 +100,7 @@ async fn extract_transaction(msg: Arc<PeerMessage>) -> Option<DomainMessage<Tran
             None
         },
         Ok(request) => {
-            let transaction: Transaction = match request.try_into() {
+            let transaction: Transaction = match request.transaction.unwrap().try_into() {
                 Ok(value) => value,
                 Err(e) => {
                     warn!(

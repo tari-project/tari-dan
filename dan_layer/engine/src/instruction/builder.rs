@@ -24,13 +24,18 @@ use tari_common_types::types::{PrivateKey, PublicKey};
 use tari_crypto::{keys::PublicKey as PublicKeyTrait, ristretto::RistrettoPublicKey};
 
 use super::{Instruction, Transaction};
-use crate::instruction::signature::InstructionSignature;
+use crate::instruction::{signature::InstructionSignature, BalanceProof, ThaumInput, ThaumOutput};
 
 #[derive(Debug, Clone, Default)]
 pub struct TransactionBuilder {
     instructions: Vec<Instruction>,
     signature: Option<InstructionSignature>,
     sender_public_key: Option<RistrettoPublicKey>,
+    inputs: Vec<ThaumInput>,
+    outputs: Vec<ThaumOutput>,
+    max_instruction_outputs: Option<u32>,
+    fee: u64,
+    balance_proof: Option<BalanceProof>,
 }
 
 impl TransactionBuilder {
@@ -39,7 +44,32 @@ impl TransactionBuilder {
             instructions: Vec::new(),
             signature: None,
             sender_public_key: None,
+            inputs: vec![],
+            outputs: vec![],
+            max_instruction_outputs: None,
+            fee: 0,
+            balance_proof: None,
         }
+    }
+
+    pub fn add_input(&mut self, input: ThaumInput) {
+        self.inputs.push(input);
+    }
+
+    pub fn add_output(&mut self, output: ThaumOutput) {
+        self.outputs.push(output);
+    }
+
+    pub fn fee(&mut self, fee: u64) {
+        self.fee = fee;
+    }
+
+    pub fn balance_proof(&mut self, balance_proof: BalanceProof) {
+        self.balance_proof = Some(balance_proof);
+    }
+
+    pub fn max_instruction_outputs(&mut self, max_instruction_outputs: u32) {
+        self.max_instruction_outputs = Some(max_instruction_outputs);
     }
 
     pub fn add_instruction(&mut self, instruction: Instruction) -> &mut Self {
@@ -55,11 +85,16 @@ impl TransactionBuilder {
         self
     }
 
-    pub fn build(&mut self) -> Transaction {
-        Transaction {
-            instructions: self.instructions.drain(..).collect(),
-            signature: self.signature.take().expect("not signed"),
-            sender_public_key: self.sender_public_key.take().expect("not signed"),
-        }
+    pub fn build(mut self) -> Transaction {
+        Transaction::new(
+            self.inputs,
+            self.outputs,
+            self.max_instruction_outputs.unwrap_or(0),
+            self.fee,
+            self.balance_proof.unwrap(),
+            self.instructions.drain(..).collect(),
+            self.signature.take().expect("not signed"),
+            self.sender_public_key.take().expect("not signed"),
+        )
     }
 }

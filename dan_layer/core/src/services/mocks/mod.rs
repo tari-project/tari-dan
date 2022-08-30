@@ -27,16 +27,13 @@ use std::{
 
 use async_trait::async_trait;
 use tari_common_types::types::{FixedHash, PublicKey};
-use tari_core::{
-    chain_storage::UtxoMinedInfo,
-    transactions::transaction_components::{CheckpointChallenge, OutputType, SignerSignature},
-};
+use tari_comms::types::CommsPublicKey;
+use tari_core::{chain_storage::UtxoMinedInfo, transactions::transaction_components::OutputType};
 use tari_crypto::ristretto::RistrettoPublicKey;
 #[cfg(test)]
 use tari_dan_engine::state::mocks::state_db::MockStateDbBackupAdapter;
 use tari_dan_engine::{
     instruction::Transaction,
-    instructions::Instruction,
     state::{
         models::{SchemaState, StateOpLogEntry, StateRoot},
         StateDbUnitOfWork,
@@ -48,16 +45,13 @@ use super::mempool::service::MempoolService;
 use crate::{
     digital_assets_error::DigitalAssetError,
     models::{
-        AssetDefinition,
         BaseLayerMetadata,
         BaseLayerOutput,
         Committee,
         Event,
         HotStuffTreeNode,
-        InstructionSet,
         Node,
         Payload,
-        SideChainBlock,
         SidechainMetadata,
         TariDanPayload,
         TreeNodeHash,
@@ -66,17 +60,12 @@ use crate::{
     services::{
         base_node_client::BaseNodeClient,
         infrastructure_services::NodeAddressable,
-        AssetProcessor,
-        CommitteeManager,
-        ConcreteCheckpointManager,
         EventsPublisher,
         PayloadProcessor,
-        PayloadProvider,
         SigningService,
         ValidatorNodeClientError,
         ValidatorNodeClientFactory,
         ValidatorNodeRpcClient,
-        WalletClient,
     },
     storage::{chain::ChainDbUnitOfWork, ChainStorageService, StorageError},
 };
@@ -97,26 +86,6 @@ impl MempoolService for MockMempoolService {
         Ok(())
     }
 
-    async fn read_block(&self, _limit: usize) -> Result<Vec<Instruction>, DigitalAssetError> {
-        Ok(vec![])
-    }
-
-    async fn reserve_instruction_in_block(
-        &mut self,
-        _instruction_hash: &FixedHash,
-        _block_hash: TreeNodeHash,
-    ) -> Result<(), DigitalAssetError> {
-        todo!()
-    }
-
-    async fn remove_all_in_block(&mut self, _block_hash: &TreeNodeHash) -> Result<(), DigitalAssetError> {
-        todo!()
-    }
-
-    async fn release_reservations(&mut self, _block_hash: &TreeNodeHash) -> Result<(), DigitalAssetError> {
-        todo!()
-    }
-
     async fn size(&self) -> usize {
         0
     }
@@ -124,51 +93,6 @@ impl MempoolService for MockMempoolService {
 
 pub fn create_mempool_mock() -> MockMempoolService {
     MockMempoolService
-}
-
-pub fn mock_static_payload_provider() -> MockStaticPayloadProvider<TariDanPayload> {
-    let instruction_set = InstructionSet::empty();
-    let payload = TariDanPayload::new(instruction_set, None);
-    MockStaticPayloadProvider {
-        static_payload: payload,
-    }
-}
-
-pub struct MockStaticPayloadProvider<TPayload: Payload> {
-    static_payload: TPayload,
-}
-
-#[async_trait]
-impl<TPayload: Payload> PayloadProvider<TPayload> for MockStaticPayloadProvider<TPayload> {
-    async fn create_payload(&self) -> Result<TPayload, DigitalAssetError> {
-        Ok(self.static_payload.clone())
-    }
-
-    fn create_genesis_payload(&self, _: &AssetDefinition) -> TPayload {
-        self.static_payload.clone()
-    }
-
-    async fn get_payload_queue(&self) -> usize {
-        1
-    }
-
-    async fn reserve_payload(
-        &mut self,
-        _payload: &TPayload,
-        _reservation_key: &TreeNodeHash,
-    ) -> Result<(), DigitalAssetError> {
-        todo!()
-    }
-
-    async fn remove_payload(&mut self, _reservation_key: &TreeNodeHash) -> Result<(), DigitalAssetError> {
-        todo!()
-    }
-}
-
-pub fn mock_payload_provider() -> MockStaticPayloadProvider<&'static str> {
-    MockStaticPayloadProvider {
-        static_payload: "<Empty>",
-    }
 }
 
 pub fn mock_events_publisher<TEvent: Event>() -> MockEventsPublisher<TEvent> {
@@ -208,11 +132,7 @@ pub struct MockSigningService;
 
 impl SigningService for MockSigningService {
     fn sign(&self, _challenge: &[u8]) -> Result<ValidatorSignature, DigitalAssetError> {
-        Ok(ValidatorSignature {})
-    }
-
-    fn sign_checkpoint(&self, _challenge: &CheckpointChallenge) -> Result<SignerSignature, DigitalAssetError> {
-        todo!()
+        Ok(ValidatorSignature { signer: vec![8u8; 32] })
     }
 }
 
@@ -224,64 +144,10 @@ impl BaseNodeClient for MockBaseNodeClient {
     async fn get_tip_info(&mut self) -> Result<BaseLayerMetadata, DigitalAssetError> {
         todo!();
     }
-
-    async fn get_constitutions(
-        &mut self,
-        _start_block_hash: Option<FixedHash>,
-        _dan_node_public_key: &PublicKey,
-    ) -> Result<Vec<UtxoMinedInfo>, DigitalAssetError> {
-        todo!()
-    }
-
-    async fn check_if_in_committee(
-        &mut self,
-        _asset_public_key: PublicKey,
-        _dan_node_public_key: PublicKey,
-    ) -> Result<(bool, u64), DigitalAssetError> {
-        todo!();
-    }
-
-    // async fn get_assets_for_dan_node(
-    //     &mut self,
-    //     _dan_node_public_key: PublicKey,
-    // ) -> Result<Vec<(AssetDefinition, u64)>, DigitalAssetError> {
-    //     todo!();
-    // }
-
-    async fn get_asset_registration(
-        &mut self,
-        _asset_public_key: PublicKey,
-    ) -> Result<Option<BaseLayerOutput>, DigitalAssetError> {
-        todo!()
-    }
-
-    async fn get_current_contract_outputs(
-        &mut self,
-        _height: u64,
-        _contract_id: FixedHash,
-        _output_type: OutputType,
-    ) -> Result<Vec<UtxoMinedInfo>, DigitalAssetError> {
-        todo!()
-    }
 }
 
 pub fn mock_base_node_client() -> MockBaseNodeClient {
     MockBaseNodeClient {}
-}
-
-#[derive(Clone)]
-pub struct MockCommitteeManager {
-    pub committee: Committee<RistrettoPublicKey>,
-}
-
-impl<TAddr: NodeAddressable> CommitteeManager<TAddr> for MockCommitteeManager {
-    fn current_committee(&self) -> Result<&Committee<TAddr>, DigitalAssetError> {
-        todo!();
-    }
-
-    fn read_from_constitution(&mut self, _output: BaseLayerOutput) -> Result<(), DigitalAssetError> {
-        todo!();
-    }
 }
 
 // pub fn _mock_template_service() -> MockTemplateService {
@@ -315,66 +181,6 @@ impl<TPayload: Payload> PayloadProcessor<TPayload> for MockPayloadProcessor {
     }
 }
 
-#[derive(Debug, Clone)]
-pub struct MockAssetProcessor;
-
-impl AssetProcessor for MockAssetProcessor {
-    fn execute_instruction<TUnitOfWork: StateDbUnitOfWork>(
-        &self,
-        _instruction: &Instruction,
-        _db: &mut TUnitOfWork,
-    ) -> Result<(), DigitalAssetError> {
-        todo!()
-    }
-
-    fn invoke_read_method<TUnifOfWork: StateDbUnitOfWorkReader>(
-        &self,
-        _instruction: &Instruction,
-        _state_db: &TUnifOfWork,
-    ) -> Result<Option<Vec<u8>>, DigitalAssetError> {
-        todo!()
-    }
-}
-
-#[derive(Default, Clone)]
-pub struct MockWalletClient;
-
-#[async_trait]
-impl WalletClient for MockWalletClient {
-    async fn create_new_checkpoint(
-        &mut self,
-        _contract_id: &FixedHash,
-        _state_root: &StateRoot,
-        _checkpoint_number: u64,
-        _checkpoint_signatures: &[SignerSignature],
-    ) -> Result<(), DigitalAssetError> {
-        Ok(())
-    }
-
-    async fn submit_contract_acceptance(
-        &mut self,
-        _contract_id: &FixedHash,
-        _validator_node_public_key: &PublicKey,
-        _signature: &tari_common_types::types::Signature,
-    ) -> Result<u64, DigitalAssetError> {
-        Ok(0_u64)
-    }
-
-    async fn submit_contract_update_proposal_acceptance(
-        &mut self,
-        _contract_id: &FixedHash,
-        _proposal_id: u64,
-        _validator_node_public_key: &PublicKey,
-        _signature: &tari_common_types::types::Signature,
-    ) -> Result<u64, DigitalAssetError> {
-        Ok(0_u64)
-    }
-}
-
-pub fn mock_wallet_client() -> MockWalletClient {
-    MockWalletClient {}
-}
-
 #[derive(Default, Clone)]
 pub struct MockValidatorNodeClientFactory;
 
@@ -388,15 +194,6 @@ impl ValidatorNodeRpcClient for MockValidatorNodeClient {
         _transaction: Transaction,
     ) -> Result<Option<Vec<u8>>, ValidatorNodeClientError> {
         Ok(None)
-    }
-
-    async fn get_sidechain_blocks(
-        &mut self,
-        _contract_id: &FixedHash,
-        _start_hash: TreeNodeHash,
-        _end_hash: Option<TreeNodeHash>,
-    ) -> Result<Vec<SideChainBlock>, ValidatorNodeClientError> {
-        Ok(vec![])
     }
 
     async fn get_sidechain_state(
@@ -432,22 +229,18 @@ impl ValidatorNodeClientFactory for MockValidatorNodeClientFactory {
 pub struct MockChainStorageService;
 
 #[async_trait]
-impl ChainStorageService<TariDanPayload> for MockChainStorageService {
+impl ChainStorageService<CommsPublicKey> for MockChainStorageService {
     async fn get_metadata(&self) -> Result<SidechainMetadata, StorageError> {
         todo!()
     }
 
     async fn add_node<TUnitOfWork: ChainDbUnitOfWork>(
         &self,
-        _node: &HotStuffTreeNode<TariDanPayload>,
+        _node: &HotStuffTreeNode<CommsPublicKey>,
         _db: TUnitOfWork,
     ) -> Result<(), StorageError> {
         Ok(())
     }
-}
-
-pub fn mock_checkpoint_manager() -> ConcreteCheckpointManager<MockWalletClient> {
-    ConcreteCheckpointManager::<MockWalletClient>::new(AssetDefinition::default(), MockWalletClient::default())
 }
 
 pub fn create_public_key() -> RistrettoPublicKey {
@@ -461,13 +254,10 @@ pub struct MockServiceSpecification;
 
 #[cfg(test)]
 impl ServiceSpecification for MockServiceSpecification {
-    type AcceptanceManager = super::ConcreteAcceptanceManager<Self::WalletClient, Self::BaseNodeClient>;
     type Addr = RistrettoPublicKey;
-    type AssetProcessor = MockAssetProcessor;
     type AssetProxy = ConcreteAssetProxy<Self>;
     type BaseNodeClient = MockBaseNodeClient;
     type ChainDbBackendAdapter = MockChainDbBackupAdapter;
-    type ChainStorageService = MockChainStorageService;
     type CheckpointManager = ConcreteCheckpointManager<Self::WalletClient>;
     type CommitteeManager = MockCommitteeManager;
     type DbFactory = MockDbFactory;

@@ -32,28 +32,4 @@ use crate::{
 #[async_trait]
 pub trait BaseNodeClient: Send + Sync {
     async fn get_tip_info(&mut self) -> Result<BaseLayerMetadata, DigitalAssetError>;
-
-    async fn get_current_contract_outputs(
-        &mut self,
-        height: u64,
-        contract_id: FixedHash,
-        output_type: OutputType,
-    ) -> Result<Vec<UtxoMinedInfo>, DigitalAssetError>;
-
-    async fn get_constitutions(
-        &mut self,
-        start_block_hash: Option<FixedHash>,
-        dan_node_public_key: &PublicKey,
-    ) -> Result<Vec<UtxoMinedInfo>, DigitalAssetError>;
-
-    async fn check_if_in_committee(
-        &mut self,
-        asset_public_key: PublicKey,
-        dan_node_public_key: PublicKey,
-    ) -> Result<(bool, u64), DigitalAssetError>;
-
-    async fn get_asset_registration(
-        &mut self,
-        asset_public_key: PublicKey,
-    ) -> Result<Option<BaseLayerOutput>, DigitalAssetError>;
 }

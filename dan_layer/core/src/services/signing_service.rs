@@ -23,14 +23,12 @@
 use std::sync::Arc;
 
 use tari_comms::NodeIdentity;
-use tari_core::transactions::transaction_components::{CheckpointChallenge, SignerSignature};
+use tari_utilities::ByteArray;
 
 use crate::{digital_assets_error::DigitalAssetError, models::ValidatorSignature};
 
 pub trait SigningService {
     fn sign(&self, challenge: &[u8]) -> Result<ValidatorSignature, DigitalAssetError>;
-
-    fn sign_checkpoint(&self, challenge: &CheckpointChallenge) -> Result<SignerSignature, DigitalAssetError>;
 }
 
 pub struct NodeIdentitySigningService {
@@ -44,12 +42,10 @@ impl NodeIdentitySigningService {
 }
 
 impl SigningService for NodeIdentitySigningService {
-    fn sign(&self, _challenge: &[u8]) -> Result<ValidatorSignature, DigitalAssetError> {
+    fn sign(&self, challenge: &[u8]) -> Result<ValidatorSignature, DigitalAssetError> {
         // TODO better sig
-        Ok(ValidatorSignature {})
-    }
-
-    fn sign_checkpoint(&self, challenge: &CheckpointChallenge) -> Result<SignerSignature, DigitalAssetError> {
-        Ok(SignerSignature::sign(self.node_identity.secret_key(), challenge))
+        Ok(ValidatorSignature {
+            signer: Vec::from(self.node_identity.public_key().as_bytes()),
+        })
     }
 }
