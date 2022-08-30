@@ -22,8 +22,10 @@
 
 use std::collections::HashMap;
 
-use tari_common_types::types::{PrivateKey, PublicKey};
-use tari_crypto::{keys::PublicKey as PublicKeyTrait, ristretto::RistrettoPublicKey};
+use digest::{Digest, FixedOutput};
+use primitive_types::H256;
+use tari_common_types::types::{FixedHash, PrivateKey, PublicKey};
+use tari_crypto::{hash::blake2::Blake256, keys::PublicKey as PublicKeyTrait, ristretto::RistrettoPublicKey};
 use tari_dan_common_types::{ObjectClaim, ObjectId, ShardId, SubstateChange};
 
 use super::{Instruction, Transaction};
@@ -36,6 +38,7 @@ pub struct TransactionBuilder {
     sender_public_key: Option<RistrettoPublicKey>,
     fee: u64,
     meta: TransactionMeta,
+    max_outputs: u8,
 }
 
 impl TransactionBuilder {
@@ -47,8 +50,8 @@ impl TransactionBuilder {
             fee: 0,
             meta: TransactionMeta {
                 involved_objects: HashMap::new(),
-                max_outputs: 0,
             },
+            max_outputs: 0,
         }
     }
 
@@ -75,18 +78,32 @@ impl TransactionBuilder {
         self
     }
 
-    pub fn max_outputs(&mut self, max_outputs: u64) -> &mut Self {
-        self.meta.max_outputs = max_outputs;
+    pub fn add_outputs(&mut self, max_outputs: u8) -> &mut Self {
+        self.max_outputs += max_outputs;
         self
     }
 
     pub fn build(mut self) -> Transaction {
-        Transaction::new(
+        let mut t = Transaction::new(
             self.fee,
             self.instructions.drain(..).collect(),
             self.signature.take().expect("not signed"),
             self.sender_public_key.take().expect("not signed"),
             self.meta,
-        )
+        );
+
+        let base_hash = &t.hash;
+
+        for o in 0..self.max_outputs {
+            let value: FixedHash = Blake256::new().chain(base_hash).chain(&[o]).finalize_fixed().into();
+            let object_id = ObjectId(value);
+            let shard_id = ShardId(value);
+            t.meta.involved_objects.entry(shard_id).or_insert(vec![]).push((
+                object_id,
+                SubstateChange::Create,
+                ObjectClaim {},
+            ));
+        }
+        t
     }
 }

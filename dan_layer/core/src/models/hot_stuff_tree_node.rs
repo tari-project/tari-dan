@@ -21,6 +21,7 @@
 // USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 use digest::{Digest, FixedOutput};
+use primitive_types::U256;
 use tari_common_types::types::FixedHash;
 use tari_crypto::hash::blake2::Blake256;
 use tari_dan_common_types::{PayloadId, ShardId};
@@ -82,7 +83,7 @@ impl<TAddr: NodeAddressable> HotStuffTreeNode<TAddr> {
             payload: PayloadId::zero(),
             payload_height: NodeHeight(0),
             hash: TreeNodeHash::zero(),
-            shard: ShardId(0),
+            shard: ShardId(FixedHash::zero()),
             height: NodeHeight(0),
             epoch: Epoch(0),
             proposed_by: TAddr::zero(),

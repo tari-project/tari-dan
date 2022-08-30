@@ -46,12 +46,12 @@ impl VoteMessage {
         // data must already be sorted
         for (shard, hash, pledges) in &self.other_shard_nodes {
             result = result
-                .chain(shard.0.to_le_bytes())
+                .chain(shard.0)
                 .chain(hash.as_bytes())
                 .chain((pledges.len() as u32).to_le_bytes());
 
             for p in pledges {
-                result = result.chain(p.object_id.0.to_le_bytes())
+                result = result.chain(p.object_id.0)
             }
         }
         result.finalize_fixed().into()

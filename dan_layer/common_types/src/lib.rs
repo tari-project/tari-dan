@@ -8,18 +8,20 @@ mod template_id;
 
 use std::cmp::Ordering;
 
+use primitive_types::H256;
 use tari_common_types::types::FixedHash;
+use tari_utilities::byte_array::ByteArray;
 pub use template_id::TemplateId;
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
-pub struct ObjectId(pub u64);
+pub struct ObjectId(pub FixedHash);
 
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Hash)]
-pub struct ShardId(pub u64);
+pub struct ShardId(pub FixedHash);
 
 impl ShardId {
-    pub fn to_le_bytes(&self) -> [u8; 8] {
-        self.0.to_le_bytes()
+    pub fn to_le_bytes(&self) -> &[u8] {
+        self.0.as_bytes()
     }
 }
 

@@ -118,7 +118,6 @@ pub struct Transaction {
 #[derive(Debug, Clone, Default)]
 pub struct TransactionMeta {
     involved_objects: HashMap<ShardId, Vec<(ObjectId, SubstateChange, ObjectClaim)>>,
-    max_outputs: u64,
 }
 
 impl TransactionMeta {
