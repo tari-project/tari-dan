@@ -21,7 +21,9 @@
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 mod builder;
+
 pub use builder::TransactionBuilder;
+use tari_common_types::types::PublicKey;
 
 mod error;
 
@@ -34,8 +36,13 @@ use tari_template_lib::{
     args::Arg,
     models::{ComponentAddress, PackageAddress},
 };
-use tari_common_types::types::PublicKey;
 
+#[derive(Debug, Clone)]
+pub struct Transaction {
+    pub instructions: Vec<Instruction>,
+    pub signature: InstructionSignature,
+    pub sender_public_key: PublicKey,
+}
 
 #[derive(Debug, Clone)]
 pub enum Instruction {
@@ -54,11 +61,4 @@ pub enum Instruction {
     PutLastInstructionOutputOnWorkspace {
         key: Vec<u8>,
     },
-}
-
-#[derive(Debug, Clone)]
-pub struct Transaction {
-    pub instructions: Vec<Instruction>,
-    pub signature: InstructionSignature,
-    pub sender_public_key: PublicKey,
 }
