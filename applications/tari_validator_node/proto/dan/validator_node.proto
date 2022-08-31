@@ -128,16 +128,26 @@ message GetIdentityResponse {
     bytes node_id = 3;
 }
 
+message Arg {
+  enum ArgType {
+      LITERAL = 0;
+      FROM_WORKSPACE = 1;
+  }
+  ArgType arg_type = 1;
+  bytes data = 2;
+}
+
 message Instruction {
   enum InstructionType {
       FUNCTION = 0;
       METHOD = 1;
+      PUT_OUTPUT_IN_WORKSPACE = 2;
   }
   InstructionType instruction_type = 1;
 
   // common fields
   bytes package_address = 2;
-  repeated bytes args = 3;
+  repeated Arg args = 3;
 
   // function only
   string template = 4;
@@ -146,6 +156,9 @@ message Instruction {
   // method only
   bytes component_address = 6;
   string method = 7;
+
+  // PutLastInstructionOutputOnWorkspace
+  bytes key = 8;
 }
 
 message SubmitTransactionRequest{

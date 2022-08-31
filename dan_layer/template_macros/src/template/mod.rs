@@ -169,8 +169,8 @@ mod tests {
                 match call_info.func_name.as_str() {
                     "new" => {
                         assert_eq ! (call_info . args . len () , 0usize , "Call had unexpected number of args. Got = {} expected = {}" , call_info . args . len () , 0usize) ;
-                        let state = State_template::State::new();
-                        let rtn = engine().instantiate("State".to_string(), state);
+                        let rtn = State_template::State::new();
+                        let rtn = engine().instantiate("State".to_string(), rtn);
                         result = encode_with_len(&rtn);
                     },
                     "get" => {
