@@ -159,6 +159,7 @@ impl<T: Clone + Sync + Send + 'static> WasmEnv<T> {
             "env" => {
                 "tari_engine" => tari_engine,
                 "debug" => Function::new_native_with_env(store, self.clone(), Self::debug_handler),
+                "on_panic" => Function::new_native_with_env(store, self.clone(), Self::on_panic_handler),
             }
         }
     }
@@ -168,6 +169,18 @@ impl<T: Clone + Sync + Send + 'static> WasmEnv<T> {
         match env.read_from_memory(arg_ptr as u32, arg_len as u32) {
             Ok(arg) => {
                 eprintln!("DEBUG: {}", String::from_utf8_lossy(&arg));
+            },
+            Err(err) => {
+                log::error!(target: WASM_DEBUG_LOG_TARGET, "Failed to read from memory: {}", err);
+            },
+        }
+    }
+
+    fn on_panic_handler(env: &Self, msg_ptr: i32, msg_len: i32, line: i32, col: i32) {
+        const WASM_DEBUG_LOG_TARGET: &str = "tari::dan::wasm";
+        match env.read_from_memory(msg_ptr as u32, msg_len as u32) {
+            Ok(msg) => {
+                eprintln!("📣 PANIC: ({}:{}) {}", line, col, String::from_utf8_lossy(&msg));
             },
             Err(err) => {
                 log::error!(target: WASM_DEBUG_LOG_TARGET, "Failed to read from memory: {}", err);

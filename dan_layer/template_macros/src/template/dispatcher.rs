@@ -35,7 +35,9 @@ pub fn generate_dispatcher(ast: &TemplateAst) -> Result<TokenStream> {
         #[no_mangle]
         pub extern "C" fn #dispatcher_function_name(call_info: *mut u8, call_info_len: usize) -> *mut u8 {
             use ::tari_template_abi::{decode, encode_with_len, CallInfo, wrap_ptr};
-            use ::tari_template_lib::init_context;
+            use ::tari_template_lib::{init_context, panic_hook::register_panic_hook};
+
+            register_panic_hook();
 
             if call_info.is_null() {
                 panic!("call_info is null");
@@ -82,13 +84,13 @@ fn get_function_block(template_ident: &Ident, ast: FunctionAst) -> Expr {
     let expected_num_args = ast.input_types.len();
     let mut stmts = vec![];
     let mut should_set_state = false;
-
+    stmts.push(parse_quote! {
+            assert_eq!(call_info.args.len(), #expected_num_args, "Call had unexpected number of args. Got = {} expected = {}", call_info.args.len(), #expected_num_args); 
+        });
     // encode all arguments of the functions
     for (i, input_type) in ast.input_types.iter().enumerate() {
         let arg_ident = format_ident!("arg_{}", i);
-        stmts.push(parse_quote! {
-            assert_eq!(call_info.args.len(), #expected_num_args, "Call had unexpected number of args. Got = {} expected = {}", call_info.args.len(), #expected_num_args); 
-        });
+
         let stmt = match input_type {
             // "self" argument
             TypeAst::Receiver { mutability } => {

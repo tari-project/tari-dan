@@ -17,5 +17,7 @@ mod environment;
 mod module;
 pub use module::{LoadedWasmModule, WasmModule};
 
+mod metering;
 mod process;
+
 pub use process::{ExecutionResult, Process};

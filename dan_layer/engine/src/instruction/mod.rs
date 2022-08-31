@@ -21,7 +21,6 @@
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 mod builder;
-
 pub use builder::TransactionBuilder;
 
 mod error;
@@ -30,6 +29,7 @@ mod processor;
 pub use processor::InstructionProcessor;
 
 mod signature;
+
 pub use signature::InstructionSignature;
 use tari_common_types::types::PublicKey;
 use tari_template_lib::{
