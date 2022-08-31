@@ -69,7 +69,7 @@ pub enum Instruction {
     },
 }
 
-type VariableIdent = String;
+pub type VariableIdent = String;
 
 #[derive(Debug, Clone)]
 pub enum Arg {
@@ -95,6 +95,7 @@ pub enum Value {
     String(String),
 
     // Complex values
+    Amount(u64),
     Tuple(Vec<Value>),
     ComponentAddress(String), // TODO: address type
     Bucket(String),           // TODO: resource address
