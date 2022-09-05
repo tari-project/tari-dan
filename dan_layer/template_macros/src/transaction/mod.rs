@@ -135,7 +135,7 @@ pub fn instruction_from_expr(expr: Expr) -> Vec<Stmt> {
 }
 
 fn build_call_method(expr: ExprMethodCall) -> Stmt {
-    let method = expr.method;
+    let method = expr.method.to_string();
 
     // TODO: component address, etc
 
@@ -161,8 +161,8 @@ mod tests {
 
     use indoc::indoc;
     use proc_macro2::TokenStream;
+    use quote::quote;
 
-    // use quote::quote;
     use super::generate_transaction;
 
     #[test]
@@ -187,14 +187,60 @@ mod tests {
 
         let output = generate_transaction(input).unwrap();
 
-        println!("{}", output);
-
-        // assert_code_eq(output, quote! {
-        // {
-        // let mut builder = TransactionBuilder::new();
-        // return builder;
-        // }
-        // });
+        assert_code_eq(output, quote! {
+            {
+                let mut builder = TransactionBuilder::new();
+                builder.add_instruction(Instruction::CallFunction {
+                    package_address: String::new(),
+                    template: "PictureSeller",
+                    function: "new",
+                    proofs: vec![],
+                    args: vec![],
+                    return_variables: vec!["picture_seller"],
+                });
+                builder.add_instruction(Instruction::CallFunction {
+                    package_address : String::new (),
+                    template: "Account",
+                    function: "new",
+                    proofs: vec![],
+                    args: vec![],
+                    return_variables: vec!["account"],
+                });
+                builder.add_instruction(Instruction::CallMethod {
+                    package_address: String::new(),
+                    component_address: String::new(),
+                    method: "add_fungible",
+                    proofs: vec![],
+                    args: vec![],
+                    return_variables: vec![],
+                });
+                builder.add_instruction(Instruction::CallMethod {
+                    package_address: String::new(),
+                    component_address: String::new(),
+                    method: "take_fungible",
+                    proofs: vec![],
+                    args: vec![],
+                    return_variables: vec![],
+                });
+                builder.add_instruction(Instruction::CallMethod {
+                    package_address: String::new(),
+                    component_address: String::new(),
+                    method: "buy",
+                    proofs: vec![],
+                    args: vec![],
+                    return_variables: vec![],
+                });
+                builder.add_instruction(Instruction::CallMethod {
+                    package_address: String::new(),
+                    component_address: String::new(),
+                    method: "add_non_fungible",
+                    proofs: vec![],
+                    args: vec![],
+                    return_variables: vec![],
+                });
+                return builder;
+            }
+        });
     }
 
     #[allow(dead_code)]
