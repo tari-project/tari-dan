@@ -63,7 +63,7 @@ pub fn generate_manifest(input: TokenStream) -> Result<TokenStream> {
     Ok(output_tokens)
 }
 
-pub fn instruction_from_local(local: Local) -> Vec<Expr> {
+fn instruction_from_local(local: Local) -> Vec<Expr> {
     let variable_name = match local.pat {
         syn::Pat::Ident(ident) => ident.ident.to_string(),
         syn::Pat::Type(pt) => {
@@ -139,7 +139,7 @@ fn path_segments(path: Path) -> Vec<String> {
     path.segments.iter().map(|s| s.ident.to_string()).collect()
 }
 
-pub fn instruction_from_expr(expr: Expr) -> Vec<Expr> {
+fn instruction_from_expr(expr: Expr) -> Vec<Expr> {
     let result = match expr {
         Expr::Assign(_) => todo!(),
         Expr::Call(_) => todo!(),

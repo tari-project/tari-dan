@@ -4497,6 +4497,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "tari_transaction_manifest"
+version = "0.35.1"
+dependencies = [
+ "indoc",
+ "proc-macro2",
+ "quote",
+ "syn",
+]
+
+[[package]]
 name = "tari_utilities"
 version = "0.4.5"
 source = "git+https://github.com/tari-project/tari_utilities.git?tag=v0.4.5#a9e059ba84f8d931aeaa2b88a52a1ce6503b2deb"

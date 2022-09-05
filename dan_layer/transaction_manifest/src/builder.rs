@@ -20,27 +20,6 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-// TODO: remove this
-#![allow(dead_code)]
-
-pub struct TransactionBuilder {
-    instructions: Vec<Instruction>,
-}
-
-impl TransactionBuilder {
-    pub fn new() -> Self {
-        // TODO: pass the runtime as an arg
-        Self { instructions: vec![] }
-    }
-
-    pub fn add_instruction(&mut self, instruction: Instruction) {
-        self.instructions.push(instruction);
-    }
-
-    // TODO: add "build" method (serialize, sign, etc)
-    // TODO: add "run" method (to run in an engine)
-}
-
 #[derive(Debug, Clone)]
 pub enum Instruction {
     CallFunction {

@@ -1,0 +1,12 @@
+[package]
+name = "tari_transaction_manifest"
+version = "0.35.1"
+edition = "2021"
+
+[dependencies]
+proc-macro2 = "1.0.42"
+quote = "1.0.20"
+syn = { version = "1.0.98", features = ["full", "extra-traits"] }
+
+[dev-dependencies]
+indoc = "1.0.6"
