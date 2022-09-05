@@ -27,11 +27,11 @@ use syn::{
     Stmt,
 };
 
-pub struct TransactionAst {
+pub struct ManifestAst {
     pub stmts: Vec<Stmt>,
 }
 
-impl Parse for TransactionAst {
+impl Parse for ManifestAst {
     fn parse(input: ParseStream) -> Result<Self> {
         let stmts = Block::parse_within(input)?;
 

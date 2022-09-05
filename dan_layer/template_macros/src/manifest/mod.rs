@@ -22,48 +22,48 @@
 
 use proc_macro2::TokenStream;
 use quote::quote;
-use syn::{parse2, parse_quote, Expr, ExprCall, ExprMethodCall, Local, Path, Result, Stmt, punctuated::Punctuated, token::Comma};
+use syn::{
+    parse2,
+    parse_quote,
+    punctuated::Punctuated,
+    token::Comma,
+    Expr,
+    ExprCall,
+    ExprMethodCall,
+    Local,
+    Path,
+    Result,
+};
 
-use self::{ast::TransactionAst, builder::VariableIdent};
+use self::{ast::ManifestAst, builder::VariableIdent};
 
 mod ast;
 pub mod builder;
 
-pub fn generate_transaction(input: TokenStream) -> Result<TokenStream> {
-    let ast = parse2::<TransactionAst>(input).unwrap();
+pub fn generate_manifest(input: TokenStream) -> Result<TokenStream> {
+    let ast = parse2::<ManifestAst>(input).unwrap();
     let input_stmts = ast.stmts;
 
-    let mut output_stmts: Vec<Stmt> = vec![];
-    output_stmts.push(parse_quote! {
-        let mut builder = TransactionBuilder::new();
-    });
-
+    let mut output_exprs: Vec<Expr> = vec![];
     for stmt in input_stmts {
-        let mut instruction_stmts: Vec<Stmt> = match stmt {
+        let mut instruction_exprs: Vec<Expr> = match stmt {
             syn::Stmt::Local(binding) => instruction_from_local(binding),
             syn::Stmt::Expr(expr) => instruction_from_expr(expr),
             syn::Stmt::Semi(expr, _) => instruction_from_expr(expr),
             syn::Stmt::Item(_) => todo!(),
         };
 
-        output_stmts.append(&mut instruction_stmts);
+        output_exprs.append(&mut instruction_exprs);
     }
 
-    // we return the transaction builder
-    output_stmts.push(parse_quote! {
-        return builder;
-    });
-
     let output_tokens = quote! {
-        {
-            #(#output_stmts)*
-        }
+        vec![#(#output_exprs),*]
     };
 
     Ok(output_tokens)
 }
 
-pub fn instruction_from_local(local: Local) -> Vec<Stmt> {
+pub fn instruction_from_local(local: Local) -> Vec<Expr> {
     let variable_name = match local.pat {
         syn::Pat::Ident(ident) => ident.ident.to_string(),
         syn::Pat::Type(pt) => {
@@ -98,14 +98,14 @@ pub fn instruction_from_local(local: Local) -> Vec<Stmt> {
     };
 
     // TODO: handle literal assigments ("let x = Amount(1_000)")
-    if let Some(stmt) = result {
-        return vec![stmt];
+    if let Some(expr) = result {
+        return vec![expr];
     }
 
     vec![]
 }
 
-fn build_call_function(expr: ExprCall, variable_name: VariableIdent) -> Option<Stmt> {
+fn build_call_function(expr: ExprCall, variable_name: VariableIdent) -> Option<Expr> {
     let segments = match *expr.func {
         Expr::Path(expr_path) => path_segments(expr_path.path),
         _ => todo!(),
@@ -122,14 +122,14 @@ fn build_call_function(expr: ExprCall, variable_name: VariableIdent) -> Option<S
     let arg_exprs = build_call_args(expr.args);
 
     let expr = parse_quote! {
-        builder.add_instruction(Instruction::CallFunction {
+        Instruction::CallFunction {
             package_address: String::new(),
             template: #template,
             function: #function,
             proofs: vec![],
             args: vec![#(#arg_exprs),*],
             return_variables: vec![#variable_name],
-        });
+        }
     };
 
     Some(expr)
@@ -139,8 +139,8 @@ fn path_segments(path: Path) -> Vec<String> {
     path.segments.iter().map(|s| s.ident.to_string()).collect()
 }
 
-pub fn instruction_from_expr(expr: Expr) -> Vec<Stmt> {
-    let stmt = match expr {
+pub fn instruction_from_expr(expr: Expr) -> Vec<Expr> {
+    let result = match expr {
         Expr::Assign(_) => todo!(),
         Expr::Call(_) => todo!(),
         Expr::Field(_) => todo!(),
@@ -153,10 +153,10 @@ pub fn instruction_from_expr(expr: Expr) -> Vec<Stmt> {
         _ => todo!(),
     };
 
-    vec![stmt]
+    vec![result]
 }
 
-fn build_call_method(expr: ExprMethodCall) -> Stmt {
+fn build_call_method(expr: ExprMethodCall) -> Expr {
     let method = expr.method.to_string();
 
     // TODO: component address, etc
@@ -164,31 +164,33 @@ fn build_call_method(expr: ExprMethodCall) -> Stmt {
     let arg_exprs = build_call_args(expr.args);
 
     parse_quote! {
-        builder.add_instruction(Instruction::CallMethod {
+        Instruction::CallMethod {
             package_address: String::new(),
             component_address: String::new(),
             method: #method,
             proofs: vec![],
             args: vec![#(#arg_exprs),*],
             return_variables: vec![],
-        });
+        }
     }
 }
 
 fn build_call_args(args: Punctuated<Expr, Comma>) -> Vec<Expr> {
-    args.iter().map(|arg| {
-        match arg {
-            Expr::Lit(lit) => {
-                parse_quote! { #lit }
-            },
-            Expr::Path(expr_path) => {
-                // variable names should only have one segment
-                let variable_name = &expr_path.path.segments[0].ident.to_string();
-                parse_quote! { Variable(#variable_name) }
-            },
-            _ => todo!(),
-        }
-    }).collect()
+    args.iter()
+        .map(|arg| {
+            match arg {
+                Expr::Lit(lit) => {
+                    parse_quote! { #lit }
+                },
+                Expr::Path(expr_path) => {
+                    // variable names should only have one segment
+                    let variable_name = &expr_path.path.segments[0].ident.to_string();
+                    parse_quote! { Variable(#variable_name) }
+                },
+                _ => todo!(),
+            }
+        })
+        .collect()
 }
 
 #[cfg(test)]
@@ -199,7 +201,7 @@ mod tests {
     use proc_macro2::TokenStream;
     use quote::quote;
 
-    use super::generate_transaction;
+    use super::generate_manifest;
 
     #[test]
     #[allow(clippy::too_many_lines)]
@@ -222,69 +224,67 @@ mod tests {
         "})
         .unwrap();
 
-        let output = generate_transaction(input).unwrap();
+        let output = generate_manifest(input).unwrap();
 
         assert_code_eq(output, quote! {
-            {
-                let mut builder = TransactionBuilder::new();
-                builder.add_instruction(Instruction::CallFunction {
+            vec![
+                Instruction::CallFunction {
                     package_address: String::new(),
                     template: "PictureSeller",
                     function: "new",
                     proofs: vec![],
                     args: vec![1_000],
                     return_variables: vec!["picture_seller"],
-                });
-                builder.add_instruction(Instruction::CallFunction {
+                },
+                Instruction::CallFunction {
                     package_address : String::new(),
                     template: "Account",
                     function: "new",
                     proofs: vec![],
                     args: vec![],
                     return_variables: vec!["account"],
-                });
-                builder.add_instruction(Instruction :: CallFunction {
+                },
+                Instruction::CallFunction {
                     package_address: String::new(),
                     template: "ThaumFaucet",
                     function: "take",
                     proofs: vec![],
                     args: vec![1_000],
                     return_variables: vec!["funds"],
-                });
-                builder.add_instruction(Instruction::CallMethod {
+                },
+                Instruction::CallMethod {
                     package_address: String::new(),
                     component_address: String::new(),
                     method: "add_fungible",
                     proofs: vec![],
                     args: vec![Variable("funds")],
                     return_variables: vec![],
-                });
-                builder.add_instruction(Instruction::CallMethod {
+                },
+                Instruction::CallMethod {
                     package_address: String::new(),
                     component_address: String::new(),
                     method: "take_fungible",
                     proofs: vec![],
                     args: vec![1_000],
                     return_variables: vec![],
-                });
-                builder.add_instruction(Instruction::CallMethod {
+                },
+                Instruction::CallMethod {
                     package_address: String::new(),
                     component_address: String::new(),
                     method: "buy",
                     proofs: vec![],
                     args: vec![Variable("payment")],
                     return_variables: vec![],
-                });
-                builder.add_instruction(Instruction::CallMethod {
+                },
+                Instruction::CallMethod {
                     package_address: String::new(),
                     component_address: String::new(),
                     method: "add_non_fungible",
                     proofs: vec![],
                     args: vec![Variable("picture")],
                     return_variables: vec![],
-                });
-                return builder;
-            }
+                }
+            ]
         });
     }
 

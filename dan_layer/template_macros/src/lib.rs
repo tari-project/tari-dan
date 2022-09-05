@@ -20,8 +20,8 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+mod manifest;
 mod template;
-mod transaction;
 
 use proc_macro::TokenStream;
 
@@ -33,8 +33,8 @@ pub fn template(_attr: TokenStream, item: TokenStream) -> TokenStream {
 }
 
 #[proc_macro]
-pub fn transaction(item: TokenStream) -> TokenStream {
-    transaction::generate_transaction(proc_macro2::TokenStream::from(item))
+pub fn manifest(item: TokenStream) -> TokenStream {
+    manifest::generate_manifest(proc_macro2::TokenStream::from(item))
         .unwrap_or_else(|err| err.to_compile_error())
         .into()
 }
