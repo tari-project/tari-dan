@@ -145,7 +145,7 @@ impl<
             .is_leader(payload, shard, self.epoch_manager.current_epoch().await)
             .await?
         {
-            dbg!("I am the leader");
+            dbg!(&self.identity, "I am the leader");
             // if self.current_payload.is_none() {
             // self.current_payload = payload.clone();
             let leaf = self.shard_db.get_leaf_node(shard);
@@ -164,7 +164,7 @@ impl<
         shard: ShardId,
         payload: PayloadId,
     ) -> Result<HotStuffTreeNode<TAddr>, String> {
-        dbg!("on propose");
+        dbg!(&self.identity, "on propose");
         let qc = self.shard_db.get_high_qc_for(shard);
         let epoch = self.epoch_manager.current_epoch().await;
         let actual_payload = self
@@ -267,7 +267,7 @@ impl<
     }
 
     async fn on_next_sync_view(&mut self, payload: TPayload, shard: ShardId) -> Result<(), String> {
-        dbg!("new payload received");
+        dbg!("new payload received", &shard);
 
         // get state
         let high_qc = self.get_highest_qc(shard);
@@ -280,7 +280,6 @@ impl<
     }
 
     async fn update_nodes(&mut self, node: HotStuffTreeNode<TAddr>, shard: ShardId) -> Result<(), String> {
-        dbg!("Update nodes");
         if node.justify().local_node_hash() == TreeNodeHash::zero() {
             dbg!("Node is parented to genesis, no need to update");
             return Ok(());
@@ -365,6 +364,7 @@ impl<
     }
 
     async fn on_receive_proposal(&mut self, from: TAddr, node: HotStuffTreeNode<TAddr>) -> Result<(), String> {
+        dbg!("Received proposal", &self.identity, &from);
         // TODO: validate message from leader
         // TODO: Validate I am processing this shard
         // TODO: Validate the epoch is still valid
@@ -378,7 +378,6 @@ impl<
         if node.height() > v_height &&
             (node.parent() == &locked_node || node.justify().local_node_height() > locked_height)
         {
-            dbg!("can save payload vote");
             self.shard_db
                 .save_payload_vote(shard, node.payload(), node.payload_height(), node.clone());
 
@@ -398,6 +397,7 @@ impl<
                     break;
                 }
             }
+            dbg!(&self.identity, "Votes recieved", votes.len());
             if votes.len() == involved_shards.len() {
                 let local_shards = self
                     .epoch_manager
