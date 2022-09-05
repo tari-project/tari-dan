@@ -1,6 +1,28 @@
+//  Copyright 2022. The Tari Project
+//
+//  Redistribution and use in source and binary forms, with or without modification, are permitted provided that the
+//  following conditions are met:
+//
+//  1. Redistributions of source code must retain the above copyright notice, this list of conditions and the following
+//  disclaimer.
+//
+//  2. Redistributions in binary form must reproduce the above copyright notice, this list of conditions and the
+//  following disclaimer in the documentation and/or other materials provided with the distribution.
+//
+//  3. Neither the name of the copyright holder nor the names of its contributors may be used to endorse or promote
+//  products derived from this software without specific prior written permission.
+//
+//  THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES,
+//  INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+//  DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
+//  SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
+//  SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY,
+//  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
+//  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+
 use proc_macro2::TokenStream;
 use quote::quote;
-use syn::{parse2, parse_quote, Expr, ExprCall, ExprMethodCall, Local, Path, Result, Stmt};
+use syn::{parse2, parse_quote, Expr, ExprCall, ExprMethodCall, Local, Path, Result, Stmt, punctuated::Punctuated, token::Comma};
 
 use self::{ast::TransactionAst, builder::VariableIdent};
 
@@ -97,18 +119,18 @@ fn build_call_function(expr: ExprCall, variable_name: VariableIdent) -> Option<S
     let template = segments[0].clone();
     let function = segments[1].clone();
 
+    let arg_exprs = build_call_args(expr.args);
+
     let expr = parse_quote! {
         builder.add_instruction(Instruction::CallFunction {
             package_address: String::new(),
             template: #template,
             function: #function,
             proofs: vec![],
-            args: vec![],
+            args: vec![#(#arg_exprs),*],
             return_variables: vec![#variable_name],
         });
     };
-
-    println!("build_call_function: {} {}", template, function);
 
     Some(expr)
 }
@@ -139,9 +161,7 @@ fn build_call_method(expr: ExprMethodCall) -> Stmt {
 
     // TODO: component address, etc
 
-    // TODO: args
-
-    println!("build_call_method: {}", method);
+    let arg_exprs = build_call_args(expr.args);
 
     parse_quote! {
         builder.add_instruction(Instruction::CallMethod {
@@ -149,10 +169,26 @@ fn build_call_method(expr: ExprMethodCall) -> Stmt {
             component_address: String::new(),
             method: #method,
             proofs: vec![],
-            args: vec![],
+            args: vec![#(#arg_exprs),*],
             return_variables: vec![],
         });
     }
+}
+
+fn build_call_args(args: Punctuated<Expr, Comma>) -> Vec<Expr> {
+    args.iter().map(|arg| {
+        match arg {
+            Expr::Lit(lit) => {
+                parse_quote! { #lit }
+            },
+            Expr::Path(expr_path) => {
+                // variable names should only have one segment
+                let variable_name = &expr_path.path.segments[0].ident.to_string();
+                parse_quote! { Variable(#variable_name) }
+            },
+            _ => todo!(),
+        }
+    }).collect()
 }
 
 #[cfg(test)]
@@ -174,7 +210,8 @@ mod tests {
 
             // initialize a user account with enough funds
             let mut account = Account::new();
-            account.add_fungible(ThaumFaucet::take(1_000));
+            let funds = ThaumFaucet::take(1_000);
+            account.add_fungible(funds);
 
             // buy a picture
             let payment: Bucket<Thaum> = account.take_fungible(1_000);
@@ -195,23 +232,31 @@ mod tests {
                     template: "PictureSeller",
                     function: "new",
                     proofs: vec![],
-                    args: vec![],
+                    args: vec![1_000],
                     return_variables: vec!["picture_seller"],
                 });
                 builder.add_instruction(Instruction::CallFunction {
-                    package_address : String::new (),
+                    package_address : String::new(),
                     template: "Account",
                     function: "new",
                     proofs: vec![],
                     args: vec![],
                     return_variables: vec!["account"],
                 });
+                builder.add_instruction(Instruction :: CallFunction {
+                    package_address: String::new(),
+                    template: "ThaumFaucet",
+                    function: "take",
+                    proofs: vec![],
+                    args: vec![1_000],
+                    return_variables: vec!["funds"],
+                });
                 builder.add_instruction(Instruction::CallMethod {
                     package_address: String::new(),
                     component_address: String::new(),
                     method: "add_fungible",
                     proofs: vec![],
-                    args: vec![],
+                    args: vec![Variable("funds")],
                     return_variables: vec![],
                 });
                 builder.add_instruction(Instruction::CallMethod {
@@ -219,7 +264,7 @@ mod tests {
                     component_address: String::new(),
                     method: "take_fungible",
                     proofs: vec![],
-                    args: vec![],
+                    args: vec![1_000],
                     return_variables: vec![],
                 });
                 builder.add_instruction(Instruction::CallMethod {
@@ -227,7 +272,7 @@ mod tests {
                     component_address: String::new(),
                     method: "buy",
                     proofs: vec![],
-                    args: vec![],
+                    args: vec![Variable("payment")],
                     return_variables: vec![],
                 });
                 builder.add_instruction(Instruction::CallMethod {
@@ -235,7 +280,7 @@ mod tests {
                     component_address: String::new(),
                     method: "add_non_fungible",
                     proofs: vec![],
-                    args: vec![],
+                    args: vec![Variable("picture")],
                     return_variables: vec![],
                 });
                 return builder;
