@@ -20,50 +20,36 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+use instruction::{Arg, Instruction, Value};
 use proc_macro2::TokenStream;
-use quote::quote;
-use syn::{
-    parse2,
-    parse_quote,
-    punctuated::Punctuated,
-    token::Comma,
-    Expr,
-    ExprCall,
-    ExprMethodCall,
-    Local,
-    Path,
-    Result,
-};
+use syn::{parse2, punctuated::Punctuated, token::Comma, Expr, ExprCall, ExprMethodCall, Local, Path};
 
-use self::{ast::ManifestAst, builder::VariableIdent};
+use self::{ast::ManifestAst, instruction::VariableIdent};
 
 mod ast;
-pub mod builder;
+pub mod instruction;
 
-pub fn generate_manifest(input: TokenStream) -> Result<TokenStream> {
-    let ast = parse2::<ManifestAst>(input).unwrap();
+pub fn parse_manifest(input: String) -> Vec<Instruction> {
+    let tokens: TokenStream = input.parse().unwrap();
+    let ast = parse2::<ManifestAst>(tokens).unwrap();
     let input_stmts = ast.stmts;
 
-    let mut output_exprs: Vec<Expr> = vec![];
+    let mut instructions: Vec<Instruction> = vec![];
     for stmt in input_stmts {
-        let mut instruction_exprs: Vec<Expr> = match stmt {
+        let mut expr_instructions: Vec<Instruction> = match stmt {
             syn::Stmt::Local(binding) => instruction_from_local(binding),
             syn::Stmt::Expr(expr) => instruction_from_expr(expr),
             syn::Stmt::Semi(expr, _) => instruction_from_expr(expr),
             syn::Stmt::Item(_) => todo!(),
         };
 
-        output_exprs.append(&mut instruction_exprs);
+        instructions.append(&mut expr_instructions);
     }
 
-    let output_tokens = quote! {
-        vec![#(#output_exprs),*]
-    };
-
-    Ok(output_tokens)
+    instructions
 }
 
-fn instruction_from_local(local: Local) -> Vec<Expr> {
+fn instruction_from_local(local: Local) -> Vec<Instruction> {
     let variable_name = match local.pat {
         syn::Pat::Ident(ident) => ident.ident.to_string(),
         syn::Pat::Type(pt) => {
@@ -105,7 +91,7 @@ fn instruction_from_local(local: Local) -> Vec<Expr> {
     vec![]
 }
 
-fn build_call_function(expr: ExprCall, variable_name: VariableIdent) -> Option<Expr> {
+fn build_call_function(expr: ExprCall, variable_name: VariableIdent) -> Option<Instruction> {
     let segments = match *expr.func {
         Expr::Path(expr_path) => path_segments(expr_path.path),
         _ => todo!(),
@@ -119,27 +105,25 @@ fn build_call_function(expr: ExprCall, variable_name: VariableIdent) -> Option<E
     let template = segments[0].clone();
     let function = segments[1].clone();
 
-    let arg_exprs = build_call_args(expr.args);
+    let args = build_call_args(expr.args);
 
-    let expr = parse_quote! {
-        Instruction::CallFunction {
-            package_address: String::new(),
-            template: #template,
-            function: #function,
-            proofs: vec![],
-            args: vec![#(#arg_exprs),*],
-            return_variables: vec![#variable_name],
-        }
+    let instruction = Instruction::CallFunction {
+        package_address: String::new(),
+        template,
+        function,
+        proofs: vec![],
+        args,
+        return_variables: vec![variable_name],
     };
 
-    Some(expr)
+    Some(instruction)
 }
 
 fn path_segments(path: Path) -> Vec<String> {
     path.segments.iter().map(|s| s.ident.to_string()).collect()
 }
 
-fn instruction_from_expr(expr: Expr) -> Vec<Expr> {
+fn instruction_from_expr(expr: Expr) -> Vec<Instruction> {
     let result = match expr {
         Expr::Assign(_) => todo!(),
         Expr::Call(_) => todo!(),
@@ -156,36 +140,37 @@ fn instruction_from_expr(expr: Expr) -> Vec<Expr> {
     vec![result]
 }
 
-fn build_call_method(expr: ExprMethodCall) -> Expr {
+fn build_call_method(expr: ExprMethodCall) -> Instruction {
     let method = expr.method.to_string();
 
     // TODO: component address, etc
 
-    let arg_exprs = build_call_args(expr.args);
+    let args = build_call_args(expr.args);
 
-    parse_quote! {
-        Instruction::CallMethod {
-            package_address: String::new(),
-            component_address: String::new(),
-            method: #method,
-            proofs: vec![],
-            args: vec![#(#arg_exprs),*],
-            return_variables: vec![],
-        }
+    Instruction::CallMethod {
+        package_address: String::new(),
+        component_address: String::new(),
+        method,
+        proofs: vec![],
+        args,
+        return_variables: vec![],
     }
 }
 
-fn build_call_args(args: Punctuated<Expr, Comma>) -> Vec<Expr> {
+fn build_call_args(args: Punctuated<Expr, Comma>) -> Vec<Arg> {
     args.iter()
         .map(|arg| {
             match arg {
-                Expr::Lit(lit) => {
-                    parse_quote! { #lit }
+                Expr::Lit(lit) => match &lit.lit {
+                    syn::Lit::Str(s) => Arg::Literal(Value::String(s.value())),
+                    syn::Lit::Int(i) => Arg::Literal(Value::U64(i.base10_parse().unwrap())),
+                    syn::Lit::Bool(b) => Arg::Literal(Value::Bool(b.value())),
+                    _ => todo!(),
                 },
                 Expr::Path(expr_path) => {
                     // variable names should only have one segment
-                    let variable_name = &expr_path.path.segments[0].ident.to_string();
-                    parse_quote! { Variable(#variable_name) }
+                    let variable_name = expr_path.path.segments[0].ident.to_string();
+                    Arg::Variable(variable_name)
                 },
                 _ => todo!(),
             }
@@ -195,18 +180,15 @@ fn build_call_args(args: Punctuated<Expr, Comma>) -> Vec<Expr> {
 
 #[cfg(test)]
 mod tests {
-    use std::str::FromStr;
-
     use indoc::indoc;
-    use proc_macro2::TokenStream;
-    use quote::quote;
 
-    use super::generate_manifest;
+    use super::parse_manifest;
+    use crate::instruction::{Arg, Instruction, Value};
 
     #[test]
     #[allow(clippy::too_many_lines)]
-    fn check_correct_code_generation() {
-        let input = TokenStream::from_str(indoc! {"
+    fn buy_nft() {
+        let input = indoc! {"
             // initialize the component
             let mut picture_seller = PictureSeller::new(1_000);
 
@@ -221,75 +203,68 @@ mod tests {
 
             // store our brand new picture in our account
             account.add_non_fungible(picture);
-        "})
-        .unwrap();
+        "};
+        let instructions = parse_manifest(input.to_string());
 
-        let output = generate_manifest(input).unwrap();
+        let expected = vec![
+            Instruction::CallFunction {
+                package_address: String::new(),
+                template: "PictureSeller".to_string(),
+                function: "new".to_string(),
+                proofs: vec![],
+                args: vec![Arg::Literal(Value::U64(1_000))],
+                return_variables: vec!["picture_seller".to_string()],
+            },
+            Instruction::CallFunction {
+                package_address: String::new(),
+                template: "Account".to_string(),
+                function: "new".to_string(),
+                proofs: vec![],
+                args: vec![],
+                return_variables: vec!["account".to_string()],
+            },
+            Instruction::CallFunction {
+                package_address: String::new(),
+                template: "ThaumFaucet".to_string(),
+                function: "take".to_string(),
+                proofs: vec![],
+                args: vec![Arg::Literal(Value::U64(1_000))],
+                return_variables: vec!["funds".to_string()],
+            },
+            Instruction::CallMethod {
+                package_address: String::new(),
+                component_address: String::new(),
+                method: "add_fungible".to_string(),
+                proofs: vec![],
+                args: vec![Arg::Variable("funds".to_string())],
+                return_variables: vec![],
+            },
+            Instruction::CallMethod {
+                package_address: String::new(),
+                component_address: String::new(),
+                method: "take_fungible".to_string(),
+                proofs: vec![],
+                args: vec![Arg::Literal(Value::U64(1_000))],
+                return_variables: vec![],
+            },
+            Instruction::CallMethod {
+                package_address: String::new(),
+                component_address: String::new(),
+                method: "buy".to_string(),
+                proofs: vec![],
+                args: vec![Arg::Variable("payment".to_string())],
+                return_variables: vec![],
+            },
+            Instruction::CallMethod {
+                package_address: String::new(),
+                component_address: String::new(),
+                method: "add_non_fungible".to_string(),
+                proofs: vec![],
+                args: vec![Arg::Variable("picture".to_string())],
+                return_variables: vec![],
+            },
+        ];
 
-        assert_code_eq(output, quote! {
-            vec![
-                Instruction::CallFunction {
-                    package_address: String::new(),
-                    template: "PictureSeller",
-                    function: "new",
-                    proofs: vec![],
-                    args: vec![1_000],
-                    return_variables: vec!["picture_seller"],
-                },
-                Instruction::CallFunction {
-                    package_address : String::new(),
-                    template: "Account",
-                    function: "new",
-                    proofs: vec![],
-                    args: vec![],
-                    return_variables: vec!["account"],
-                },
-                Instruction::CallFunction {
-                    package_address: String::new(),
-                    template: "ThaumFaucet",
-                    function: "take",
-                    proofs: vec![],
-                    args: vec![1_000],
-                    return_variables: vec!["funds"],
-                },
-                Instruction::CallMethod {
-                    package_address: String::new(),
-                    component_address: String::new(),
-                    method: "add_fungible",
-                    proofs: vec![],
-                    args: vec![Variable("funds")],
-                    return_variables: vec![],
-                },
-                Instruction::CallMethod {
-                    package_address: String::new(),
-                    component_address: String::new(),
-                    method: "take_fungible",
-                    proofs: vec![],
-                    args: vec![1_000],
-                    return_variables: vec![],
-                },
-                Instruction::CallMethod {
-                    package_address: String::new(),
-                    component_address: String::new(),
-                    method: "buy",
-                    proofs: vec![],
-                    args: vec![Variable("payment")],
-                    return_variables: vec![],
-                },
-                Instruction::CallMethod {
-                    package_address: String::new(),
-                    component_address: String::new(),
-                    method: "add_non_fungible",
-                    proofs: vec![],
-                    args: vec![Variable("picture")],
-                    return_variables: vec![],
-                }
-            ]
-        });
-    }
-
-    #[allow(dead_code)]
-    fn assert_code_eq(a: TokenStream, b: TokenStream) {
-        assert_eq!(a.to_string(), b.to_string());
+        assert_eq!(instructions, expected);
     }
 }
