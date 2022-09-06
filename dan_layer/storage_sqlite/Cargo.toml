@@ -6,8 +6,8 @@ license = "BSD-3-Clause"
 
 [dependencies]
 tari_dan_core = { path = "../core" }
-tari_common = { git = "https://github.com/tari-project/tari.git", tag = "v0.35.0", package = "tari_common" }
-tari_common_types = { git = "https://github.com/tari-project/tari.git", tag = "v0.35.0", package = "tari_common_types" }
+tari_common = { git = "https://github.com/tari-project/tari.git", tag = "v0.37.0", package = "tari_common" }
+tari_common_types = { git = "https://github.com/tari-project/tari.git", tag = "v0.37.0", package = "tari_common_types" }
 tari_utilities = { git = "https://github.com/tari-project/tari_utilities.git", tag = "v0.4.5" }
 tari_dan_engine = { path = "../engine" }
 

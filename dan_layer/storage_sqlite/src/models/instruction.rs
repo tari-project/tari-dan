@@ -21,10 +21,7 @@
 // OTHERWISE) ARISING IN ANY WAY OUT OF THE  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH
 // DAMAGE.
 
-use std::convert::{TryFrom, TryInto};
-
-use tari_common_types::types::PublicKey;
-use tari_utilities::ByteArray;
+use std::convert::TryFrom;
 
 use crate::{error::SqliteStorageError, schema::*};
 
@@ -39,20 +36,16 @@ pub struct Instruction {
     pub sender: Vec<u8>,
 }
 
-impl TryFrom<Instruction> for tari_dan_engine::instructions::Instruction {
+impl TryFrom<Instruction> for tari_dan_engine::instruction::Instruction {
     type Error = SqliteStorageError;
 
-    fn try_from(instruction: Instruction) -> Result<Self, Self::Error> {
-        let template_id = instruction
-            .template_id
-            .try_into()
-            .map_err(|s| SqliteStorageError::ConversionError { reason: s })?;
-        Ok(Self::new(
-            template_id,
-            instruction.method,
-            instruction.args,
-            PublicKey::from_bytes(&instruction.sender).expect("invalid public key"),
-        ))
+    fn try_from(_instruction: Instruction) -> Result<Self, Self::Error> {
+        todo!()
+        // Ok(Self::new(
+        //     instruction.method,
+        //     instruction.args,
+        //     PublicKey::from_bytes(&instruction.sender).expect("invalid public key"),
+        // ))
     }
 }
 

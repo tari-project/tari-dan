@@ -53,7 +53,9 @@ impl MempoolOutboundService for TariCommsMempoolOutboundService {
         let encryption = OutboundEncryption::ClearText;
         let exclude_peers = vec![];
 
-        let request: SubmitTransactionRequest = transaction.into();
+        let request: SubmitTransactionRequest = SubmitTransactionRequest {
+            transaction: Some(transaction.into()),
+        };
         let message = OutboundDomainMessage::new(&TariMessageType::DanConsensusMessage, request);
 
         let result = self
