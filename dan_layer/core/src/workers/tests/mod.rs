@@ -447,6 +447,7 @@ async fn test_hs_waiter_multishard_votes() {
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[ignore = "Test may be implemented in future"]
 async fn test_hs_waiter_leader_starts_view_with_n_minus_f_new_view() {
     // TODO: I don't know if this is a requirement, the prepare step might actually be fine
     // let (tx_new, rx_new) = channel(1);
@@ -498,11 +499,13 @@ async fn test_hs_waiter_leader_starts_view_with_n_minus_f_new_view() {
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[ignore = "Test may be implemented in future"]
 async fn test_hs_waiter_non_committee_member_does_not_start_new_view() {
     todo!()
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[ignore = "Test may be implemented in future"]
 async fn test_hs_waiter_validate_qc_for_incorrect_committee_fails() {
     todo!()
 }
@@ -520,6 +523,7 @@ async fn test_hs_waiter_validate_qc_for_incorrect_committee_fails() {
 // }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[ignore = "Test may be implemented in future"]
 async fn test_hs_waiter_cannot_spend_until_it_is_proven_committed() {
     // You must provide a valid 4 chain proof in order to spend or exist an output
     todo!()
