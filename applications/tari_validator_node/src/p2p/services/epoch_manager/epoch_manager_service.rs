@@ -1,4 +1,3 @@
-use log::*;
 use tari_dan_core::{models::Epoch, services::epoch_manager::EpochManager};
 use tari_shutdown::ShutdownSignal;
 use tokio::{
@@ -7,7 +6,7 @@ use tokio::{
 };
 
 use crate::p2p::services::epoch_manager::base_layer_epoch_manager::BaseLayerEpochManager;
-const LOG_TARGET: &str = "tari::validator_node::epoch_manager";
+// const LOG_TARGET: &str = "tari::validator_node::epoch_manager";
 
 pub struct EpochManagerService {
     rx_request: Receiver<(
@@ -47,8 +46,8 @@ impl EpochManagerService {
     pub async fn run(&mut self, mut shutdown: ShutdownSignal) -> Result<(), String> {
         loop {
             tokio::select! {
-                Some(req) = self.rx_request.recv() => {
-                    let _ = req.1.send(self.handle_request(req.0.clone()).await);
+                Some((req, reply)) = self.rx_request.recv() => {
+                    let _ignore = reply.send(self.handle_request(req).await);
                 },
                 _ = shutdown.wait() => {
                     dbg!("Shutting down epoch manager");

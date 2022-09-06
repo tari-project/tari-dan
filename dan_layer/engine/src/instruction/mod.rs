@@ -41,6 +41,7 @@ use tari_template_lib::{
     args::Arg,
     models::{ComponentAddress, PackageAddress},
 };
+use tari_utilities::ByteArray;
 
 #[derive(Debug, Clone)]
 pub enum Instruction {
@@ -72,6 +73,8 @@ impl Instruction {
     }
 }
 
+// FIXME: fix clippy
+#[allow(clippy::large_enum_variant)]
 #[derive(Debug, Clone)]
 pub enum ThaumInput {
     Standard {
@@ -87,15 +90,15 @@ pub enum ThaumInput {
 
 #[derive(Debug, Clone)]
 pub struct ThaumOutput {
-    commitment: Commitment,
-    owner: StealthAddress,
-    rangeproof: BulletRangeProof,
+    _commitment: Commitment,
+    _owner: StealthAddress,
+    _rangeproof: BulletRangeProof,
 }
 
 #[derive(Debug, Clone)]
 pub struct StealthAddress {
-    nonce: PublicKey,
-    address: PublicKey,
+    _nonce: PublicKey,
+    _address: PublicKey,
 }
 
 #[derive(Debug, Clone)]
@@ -106,7 +109,7 @@ pub struct Transaction {
     hash: FixedHash,
     instructions: Vec<Instruction>,
     signature: InstructionSignature,
-    fee: u64,
+    _fee: u64,
     sender_public_key: PublicKey,
     // Not part of signature. TODO: Should it be?
     meta: TransactionMeta,
@@ -119,7 +122,7 @@ pub struct TransactionMeta {
 
 impl TransactionMeta {
     pub fn involved_shards(&self) -> Vec<ShardId> {
-        self.involved_objects.keys().cloned().collect()
+        self.involved_objects.keys().copied().collect()
     }
 
     pub fn objects_for_shard(&self, shard_id: ShardId) -> Vec<(ObjectId, SubstateChange, ObjectClaim)> {
@@ -139,7 +142,7 @@ impl Transaction {
             hash: FixedHash::zero(),
             instructions,
             signature,
-            fee,
+            _fee: fee,
             sender_public_key,
             meta,
         };

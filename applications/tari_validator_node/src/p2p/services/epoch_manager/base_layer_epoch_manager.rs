@@ -15,27 +15,27 @@ impl EpochManager<CommsPublicKey> for BaseLayerEpochManager {
         todo!()
     }
 
-    async fn is_epoch_valid(&self, epoch: Epoch) -> bool {
+    async fn is_epoch_valid(&self, _epoch: Epoch) -> bool {
         todo!()
     }
 
     async fn get_committees(
         &self,
-        epoch: Epoch,
-        shards: &[ShardId],
+        _epoch: Epoch,
+        _shards: &[ShardId],
     ) -> Result<Vec<(ShardId, Option<Committee<CommsPublicKey>>)>, String> {
         todo!()
     }
 
-    async fn get_committee(&self, epoch: Epoch, shard: ShardId) -> Result<Committee<CommsPublicKey>, String> {
+    async fn get_committee(&self, _epoch: Epoch, _shard: ShardId) -> Result<Committee<CommsPublicKey>, String> {
         todo!()
     }
 
     async fn get_shards(
         &self,
-        epoch: Epoch,
-        addr: &CommsPublicKey,
-        available_shards: &[ShardId],
+        _epoch: Epoch,
+        _addr: &CommsPublicKey,
+        _available_shards: &[ShardId],
     ) -> Result<Vec<ShardId>, String> {
         todo!()
     }

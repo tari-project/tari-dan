@@ -14,7 +14,7 @@ use crate::{
 
 #[derive(Clone, Default)]
 pub struct FlowFactory {
-    flows: HashMap<String, (Vec<FunctionArgDefinition>, FlowInstance)>,
+    _flows: HashMap<String, (Vec<FunctionArgDefinition>, FlowInstance)>,
 }
 impl FlowFactory {
     pub fn new(flow_functions: &[FlowFunctionDefinition]) -> Self {
@@ -30,14 +30,14 @@ impl FlowFactory {
                 ),
             );
         }
-        Self { flows }
+        Self { _flows: flows }
     }
 
     pub fn invoke_write_method<TUnitOfWork: StateDbUnitOfWork + 'static>(
         &self,
-        name: String,
-        instruction: &Instruction,
-        state_db: TUnitOfWork,
+        _name: String,
+        _instruction: &Instruction,
+        _state_db: TUnitOfWork,
     ) -> Result<TUnitOfWork, FlowEngineError> {
         todo!()
         // if let Some((args, engine)) = self.flows.get(&name) {

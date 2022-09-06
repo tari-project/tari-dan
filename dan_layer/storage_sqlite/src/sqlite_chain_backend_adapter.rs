@@ -20,36 +20,14 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use std::{
-    convert::{TryFrom, TryInto},
-    fmt::Display,
-};
-
 use diesel::{prelude::*, Connection, SqliteConnection};
 use log::*;
 use tari_dan_core::{
-    models::{HotStuffMessageType, QuorumCertificate, TariDanPayload, TreeNodeHash, ValidatorSignature, ViewId},
-    storage::{
-        chain::{ChainDbBackendAdapter, DbInstruction, DbNode, DbQc},
-        AsKeyBytes,
-        AtomicDb,
-        MetadataBackendAdapter,
-    },
+    models::TariDanPayload,
+    storage::{chain::ChainDbBackendAdapter, AtomicDb},
 };
-use tari_utilities::{message_format::MessageFormat, ByteArray};
 
-use crate::{
-    error::SqliteStorageError,
-    models::{
-        instruction::{Instruction, NewInstruction},
-        locked_qc::LockedQc,
-        metadata::Metadata,
-        node::{NewNode, Node},
-        prepare_qc::PrepareQc,
-    },
-    schema::*,
-    SqliteTransaction,
-};
+use crate::{error::SqliteStorageError, SqliteTransaction};
 
 const LOG_TARGET: &str = "tari::dan_layer::storage_sqlite::sqlite_chain_backend_adapter";
 

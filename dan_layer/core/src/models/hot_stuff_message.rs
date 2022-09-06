@@ -25,7 +25,6 @@ use tari_dan_common_types::ShardId;
 
 use crate::{
     models::{
-        dan_layer_models_hasher,
         HotStuffMessageType,
         HotStuffTreeNode,
         Payload,
@@ -50,7 +49,7 @@ pub struct HotStuffMessage<TPayload: Payload, TAddr: NodeAddressable> {
     // checkpoint_signature: Option<SignerSignature>,
     // contract_id: Option<FixedHash>,
     shard: Option<ShardId>,
-    epoch: Option<u32>,
+    _epoch: Option<u32>,
     // Used for broadcasting the payload in new view
     new_view_payload: Option<TPayload>,
 }
@@ -63,7 +62,7 @@ impl<TPayload: Payload, TAddr: NodeAddressable> Default for HotStuffMessage<TPay
             high_qc: Default::default(),
             node: Default::default(),
             shard: Default::default(),
-            epoch: None,
+            _epoch: None,
             new_view_payload: None,
         }
     }
@@ -71,12 +70,12 @@ impl<TPayload: Payload, TAddr: NodeAddressable> Default for HotStuffMessage<TPay
 
 impl<TPayload: Payload, TAddr: NodeAddressable> HotStuffMessage<TPayload, TAddr> {
     pub fn new(
-        message_type: HotStuffMessageType,
-        justify: Option<QuorumCertificate>,
-        node: Option<HotStuffTreeNode<TAddr>>,
-        node_hash: Option<TreeNodeHash>,
-        partial_sig: Option<ValidatorSignature>,
-        contract_id: FixedHash,
+        _message_type: HotStuffMessageType,
+        _justify: Option<QuorumCertificate>,
+        _node: Option<HotStuffTreeNode<TAddr>>,
+        _node_hash: Option<TreeNodeHash>,
+        _partial_sig: Option<ValidatorSignature>,
+        _contract_id: FixedHash,
     ) -> Self {
         todo!();
         // Self {
@@ -96,7 +95,7 @@ impl<TPayload: Payload, TAddr: NodeAddressable> HotStuffMessage<TPayload, TAddr>
             shard: Some(shard),
             justify: None,
             node: None,
-            epoch: None,
+            _epoch: None,
             // Traditional hotstuff does not include broadcasting a payload at the same time,
             // but if this is a view for a specific payload, then it can be sent to the leader as
             // an attachment
@@ -169,7 +168,7 @@ impl<TPayload: Payload, TAddr: NodeAddressable> HotStuffMessage<TPayload, TAddr>
         self.message_type() == message_type && view_id == self.view_number()
     }
 
-    pub fn add_partial_sig(&mut self, signature: ValidatorSignature) {
+    pub fn add_partial_sig(&mut self, _signature: ValidatorSignature) {
         todo!()
     }
 

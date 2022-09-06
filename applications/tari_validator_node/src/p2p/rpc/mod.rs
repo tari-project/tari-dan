@@ -62,6 +62,7 @@ pub trait ValidatorNodeRpcService: Send + Sync + 'static {
     ) -> Result<Response<proto::GetTipNodeResponse>, RpcStatus>;
 }
 
+#[allow(dead_code)]
 pub fn create_validator_node_rpc_service<TMempoolService: MempoolService + Clone, TDbFactory: DbFactory + Clone>(
     mempool_service: TMempoolService,
     db_factory: TDbFactory,

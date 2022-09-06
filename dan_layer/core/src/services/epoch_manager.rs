@@ -29,6 +29,7 @@ pub trait EpochManager<TAddr: NodeAddressable>: Clone {
 #[derive(Debug, Clone)]
 pub struct RangeEpochManager<TAddr: NodeAddressable> {
     current_epoch: Epoch,
+    #[allow(clippy::type_complexity)]
     epochs: HashMap<Epoch, Vec<(Range<ShardId>, Committee<TAddr>)>>,
 }
 
@@ -73,7 +74,7 @@ impl<TAddr: NodeAddressable> EpochManager<TAddr> for RangeEpochManager<TAddr> {
         epoch: Epoch,
         shards: &[ShardId],
     ) -> Result<Vec<(ShardId, Option<Committee<TAddr>>)>, String> {
-        let epoch = self.epochs.get(&epoch).ok_or("No value for that epoch".to_string())?;
+        let epoch = self.epochs.get(&epoch).ok_or("No value for that epoch")?;
         let mut result = vec![];
         for shard in shards {
             let mut found_committee = None;
@@ -90,7 +91,7 @@ impl<TAddr: NodeAddressable> EpochManager<TAddr> for RangeEpochManager<TAddr> {
     }
 
     async fn get_committee(&self, epoch: Epoch, shard: ShardId) -> Result<Committee<TAddr>, String> {
-        let epoch = self.epochs.get(&epoch).ok_or("No value for that epoch".to_string())?;
+        let epoch = self.epochs.get(&epoch).ok_or("No value for that epoch")?;
         for (range, committee) in epoch {
             if range.contains(&shard) {
                 return Ok(committee.clone());
@@ -105,14 +106,12 @@ impl<TAddr: NodeAddressable> EpochManager<TAddr> for RangeEpochManager<TAddr> {
         addr: &TAddr,
         available_shards: &[ShardId],
     ) -> Result<Vec<ShardId>, String> {
-        let epoch = self.epochs.get(&epoch).ok_or("No value for that epoch".to_string())?;
+        let epoch = self.epochs.get(&epoch).ok_or("No value for that epoch")?;
         let mut result = vec![];
         for (range, committee) in epoch {
             for shard in available_shards {
-                if range.contains(shard) {
-                    if committee.contains(addr) {
-                        result.push(*shard);
-                    }
+                if range.contains(shard) && committee.contains(addr) {
+                    result.push(*shard);
                 }
             }
         }

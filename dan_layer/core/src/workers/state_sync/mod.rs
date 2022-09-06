@@ -25,18 +25,11 @@ pub use error::StateSyncError;
 use log::*;
 use rand::{rngs::OsRng, seq::SliceRandom};
 use tari_common_types::types::PublicKey;
-use tari_dan_engine::state::{
-    error::StateStorageError,
-    StateDb,
-    StateDbBackendAdapter,
-    StateDbUnitOfWork,
-    StateDbUnitOfWorkReader,
-};
-use tari_utilities::hex::Hex;
+use tari_dan_engine::state::{StateDb, StateDbBackendAdapter};
 
-use crate::services::{ValidatorNodeClientFactory, ValidatorNodeRpcClient};
+use crate::services::ValidatorNodeClientFactory;
 
-const LOG_TARGET: &str = "tari::dan::workers::state_sync";
+// const LOG_TARGET: &str = "tari::dan::workers::state_sync";
 
 pub struct StateSynchronizer<'a, TStateDbBackendAdapter, TValidatorNodeClientFactory: ValidatorNodeClientFactory> {
     state_db: &'a mut StateDb<TStateDbBackendAdapter>,
@@ -94,7 +87,7 @@ where
         Ok(())
     }
 
-    async fn try_sync_from(&self, member: &TValidatorNodeClientFactory::Addr) -> Result<(), StateSyncError> {
+    async fn try_sync_from(&self, _member: &TValidatorNodeClientFactory::Addr) -> Result<(), StateSyncError> {
         // info!(
         //     target: LOG_TARGET,
         //     "Attempting to sync asset '{}' from peer '{}'", self.last_checkpoint.contract_id, member

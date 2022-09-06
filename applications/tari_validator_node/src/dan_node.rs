@@ -24,44 +24,37 @@ use std::sync::Arc;
 
 use tari_common::exit_codes::ExitError;
 use tari_comms::NodeIdentity;
-use tari_dan_core::{
-    models::{Epoch, TariDanPayload},
-    services::{
-        epoch_manager::RangeEpochManager,
-        leader_strategy::AlwaysFirstLeader,
-        mempool::service::MempoolServiceHandle,
-    },
-    storage::global::GlobalDb,
-    workers::hotstuff_waiter::HotStuffWaiter,
-};
-use tari_dan_storage_sqlite::{global::SqliteGlobalDbBackendAdapter, SqliteDbFactory};
+use tari_dan_core::services::mempool::service::MempoolServiceHandle;
+use tari_dan_storage_sqlite::SqliteDbFactory;
 use tari_p2p::comms_connector::SubscriptionFactory;
 use tari_service_framework::ServiceHandles;
 use tari_shutdown::ShutdownSignal;
-use tokio::sync::mpsc::channel;
 
-use crate::{config::ValidatorNodeConfig, grpc::services::base_node_client::GrpcBaseNodeClient};
+use crate::config::ValidatorNodeConfig;
 
 const _LOG_TARGET: &str = "tari::validator_node::app";
 
 #[derive(Clone)]
 pub struct DanNode {
-    config: ValidatorNodeConfig,
-    identity: Arc<NodeIdentity>,
+    _config: ValidatorNodeConfig,
+    _identity: Arc<NodeIdentity>,
 }
 
 impl DanNode {
     pub fn new(config: ValidatorNodeConfig, identity: Arc<NodeIdentity>) -> Self {
-        Self { config, identity }
+        Self {
+            _config: config,
+            _identity: identity,
+        }
     }
 
     pub async fn start(
         &self,
         mut shutdown: ShutdownSignal,
-        mempool_service: MempoolServiceHandle,
-        db_factory: SqliteDbFactory,
-        handles: ServiceHandles,
-        subscription_factory: Arc<SubscriptionFactory>,
+        _mempool_service: MempoolServiceHandle,
+        _db_factory: SqliteDbFactory,
+        _handles: ServiceHandles,
+        _subscription_factory: Arc<SubscriptionFactory>,
     ) -> Result<(), ExitError> {
         // let base_node_client = GrpcBaseNodeClient::new(self.config.base_node_grpc_address);
         // let wallet_client = GrpcWalletClient::new(self.config.wallet_grpc_address);

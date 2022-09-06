@@ -33,10 +33,7 @@ use tari_dan_engine::{
     state::models::{SchemaState, StateOpLogEntry},
 };
 
-use crate::{
-    models::{Node, TreeNodeHash},
-    services::infrastructure_services::NodeAddressable,
-};
+use crate::{models::Node, services::infrastructure_services::NodeAddressable};
 
 pub trait ValidatorNodeClientFactory: Send + Sync {
     type Addr: NodeAddressable;

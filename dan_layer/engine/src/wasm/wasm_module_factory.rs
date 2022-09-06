@@ -3,7 +3,7 @@
 
 use std::{collections::HashMap, fs};
 
-use wasmer::{imports, Instance, Module, Store, Val, Value};
+use wasmer::{imports, Instance, Module, Store};
 
 use crate::{
     function_definitions::{ArgType, WasmFunctionDefinition},
@@ -14,8 +14,8 @@ use crate::{
 
 #[derive(Clone, Default)]
 pub struct WasmModuleFactory {
-    modules: HashMap<String, Instance>,
-    functions: HashMap<String, (Vec<ArgType>, String)>,
+    _modules: HashMap<String, Instance>,
+    _functions: HashMap<String, (Vec<ArgType>, String)>,
 }
 
 impl WasmModuleFactory {
@@ -48,14 +48,17 @@ impl WasmModuleFactory {
                 panic!("module {} does not exist", func_def.in_module)
             }
         }
-        Self { modules, functions }
+        Self {
+            _modules: modules,
+            _functions: functions,
+        }
     }
 
     pub fn invoke_write_method<TUnitOfWork: StateDbUnitOfWork>(
         &self,
-        name: String,
-        instruction: &Instruction,
-        state_db: TUnitOfWork,
+        _name: String,
+        _instruction: &Instruction,
+        _state_db: TUnitOfWork,
     ) -> Result<TUnitOfWork, WasmError> {
         // TODO: We should probably create a new instance each time, so that
         // there's no stale memory

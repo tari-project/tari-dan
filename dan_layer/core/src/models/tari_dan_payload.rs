@@ -23,11 +23,9 @@
 use std::fmt::Debug;
 
 use tari_common_types::types::FixedHash;
-use tari_crypto::hash::blake2::Blake256;
 use tari_dan_common_types::{ObjectClaim, ObjectId, ShardId, SubstateChange};
 use tari_dan_engine::instruction::Transaction;
 
-use super::{dan_layer_models_hasher, hashing::TARI_DAN_PAYLOAD_LABEL};
 use crate::models::{ConsensusHash, Payload};
 
 #[derive(Debug, Clone)]
@@ -37,8 +35,7 @@ pub struct TariDanPayload {
 
 impl TariDanPayload {
     pub fn new(transaction: Transaction) -> Self {
-        let mut result = Self { transaction };
-        result
+        Self { transaction }
     }
 
     pub fn transaction(&self) -> &Transaction {

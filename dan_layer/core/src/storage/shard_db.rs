@@ -16,6 +16,7 @@ use crate::{
     services::infrastructure_services::NodeAddressable,
 };
 
+#[derive(Debug, Default)]
 pub struct ShardDb<TAddr: NodeAddressable, TPayload: Payload> {
     // replica data
     shard_high_qcs: HashMap<ShardId, QuorumCertificate>,
@@ -56,19 +57,19 @@ impl<TAddr: NodeAddressable, TPayload: Payload> ShardDb<TAddr, TPayload> {
     }
 
     pub fn update_high_qc(&mut self, qc: QuorumCertificate) {
-        let entry = self.shard_high_qcs.entry(qc.shard()).or_insert(qc.clone());
+        let entry = self.shard_high_qcs.entry(qc.shard()).or_insert_with(|| qc.clone());
         if qc.local_node_height() > entry.local_node_height() {
             *entry = qc.clone();
             self.shard_leaf_nodes
                 .entry(qc.shard())
-                .and_modify(|e| *e = (qc.local_node_hash().clone(), qc.local_node_height()))
-                .or_insert((qc.local_node_hash().clone(), qc.local_node_height()));
+                .and_modify(|e| *e = (qc.local_node_hash(), qc.local_node_height()))
+                .or_insert((qc.local_node_hash(), qc.local_node_height()));
         }
     }
 
     pub fn get_leaf_node(&self, shard: ShardId) -> (TreeNodeHash, NodeHeight) {
         if let Some(leaf) = self.shard_leaf_nodes.get(&shard) {
-            leaf.clone()
+            *leaf
         } else {
             (TreeNodeHash::zero(), NodeHeight(0))
         }
@@ -81,7 +82,7 @@ impl<TAddr: NodeAddressable, TPayload: Payload> ShardDb<TAddr, TPayload> {
     }
 
     pub fn get_last_voted_height(&self, shard: ShardId) -> NodeHeight {
-        self.last_voted_heights.get(&shard).map(|e| *e).unwrap_or(NodeHeight(0))
+        self.last_voted_heights.get(&shard).copied().unwrap_or(NodeHeight(0))
     }
 
     pub fn set_last_voted_height(&mut self, shard: ShardId, height: NodeHeight) {
@@ -92,8 +93,8 @@ impl<TAddr: NodeAddressable, TPayload: Payload> ShardDb<TAddr, TPayload> {
     pub fn get_locked_node_hash_and_height(&self, shard: ShardId) -> (TreeNodeHash, NodeHeight) {
         self.lock_node_and_heights
             .get(&shard)
-            .unwrap_or(&(TreeNodeHash::zero(), NodeHeight(0)))
-            .clone()
+            .copied()
+            .unwrap_or((TreeNodeHash::zero(), NodeHeight(0)))
     }
 
     pub fn set_locked(&mut self, shard: ShardId, node_hash: TreeNodeHash, node_height: NodeHeight) {
@@ -126,7 +127,7 @@ impl<TAddr: NodeAddressable, TPayload: Payload> ShardDb<TAddr, TPayload> {
         self.votes
             .get(&(node_hash, shard))
             .map(|v| v.iter().map(|s| s.1.clone()).collect())
-            .unwrap_or(vec![])
+            .unwrap_or_default()
     }
 
     pub fn save_payload_vote(
@@ -136,12 +137,9 @@ impl<TAddr: NodeAddressable, TPayload: Payload> ShardDb<TAddr, TPayload> {
         payload_height: NodeHeight,
         node: HotStuffTreeNode<TAddr>,
     ) {
-        let payload_entry = self.payload_votes.entry(payload).or_insert(HashMap::new());
-        let height_entry = payload_entry.entry(payload_height).or_insert(HashMap::new());
-        height_entry
-            .entry(shard)
-            .and_modify(|e| *e = node.clone())
-            .or_insert(node);
+        let payload_entry = self.payload_votes.entry(payload).or_insert_with(HashMap::new);
+        let height_entry = payload_entry.entry(payload_height).or_insert_with(HashMap::new);
+        height_entry.insert(shard, node);
     }
 
     pub fn get_payload_vote(
@@ -157,7 +155,7 @@ impl<TAddr: NodeAddressable, TPayload: Payload> ShardDb<TAddr, TPayload> {
     }
 
     pub fn save_node(&mut self, node: HotStuffTreeNode<TAddr>) {
-        self.nodes.entry(node.hash().clone()).or_insert(node.clone());
+        self.nodes.insert(*node.hash(), node);
     }
 
     pub fn node(&self, node_hash: &TreeNodeHash) -> Option<HotStuffTreeNode<TAddr>> {
@@ -173,10 +171,7 @@ impl<TAddr: NodeAddressable, TPayload: Payload> ShardDb<TAddr, TPayload> {
     }
 
     pub fn get_last_executed_height(&self, shard: ShardId) -> NodeHeight {
-        self.last_executed_height
-            .get(&shard)
-            .map(|s| *s)
-            .unwrap_or(NodeHeight(0))
+        self.last_executed_height.get(&shard).copied().unwrap_or(NodeHeight(0))
     }
 
     pub fn get_payload(&self, payload_id: &PayloadId) -> Option<&TPayload> {
@@ -192,11 +187,11 @@ impl<TAddr: NodeAddressable, TPayload: Payload> ShardDb<TAddr, TPayload> {
         &mut self,
         shard: ShardId,
         object: ObjectId,
-        change: SubstateChange,
+        _change: SubstateChange,
         payload: PayloadId,
         current_height: NodeHeight,
     ) -> ObjectPledge {
-        let shard_data = self.objects.entry(shard).or_insert(HashMap::new());
+        let shard_data = self.objects.entry(shard).or_insert_with(HashMap::new);
         let entry = shard_data.entry(object).or_insert((SubstateState::DoesNotExist, None));
         if let Some(existing_pledge) = &entry.1 {
             if existing_pledge.pledged_until < current_height {

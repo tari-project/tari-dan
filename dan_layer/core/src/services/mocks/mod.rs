@@ -28,7 +28,6 @@ use std::{
 use async_trait::async_trait;
 use tari_common_types::types::{FixedHash, PublicKey};
 use tari_comms::types::CommsPublicKey;
-use tari_core::{chain_storage::UtxoMinedInfo, transactions::transaction_components::OutputType};
 use tari_crypto::ristretto::RistrettoPublicKey;
 #[cfg(test)]
 use tari_dan_engine::state::mocks::state_db::MockStateDbBackupAdapter;
@@ -37,29 +36,15 @@ use tari_dan_engine::{
     state::{
         models::{SchemaState, StateOpLogEntry, StateRoot},
         StateDbUnitOfWork,
-        StateDbUnitOfWorkReader,
     },
 };
 
 use super::mempool::service::MempoolService;
 use crate::{
     digital_assets_error::DigitalAssetError,
-    models::{
-        BaseLayerMetadata,
-        BaseLayerOutput,
-        Committee,
-        Event,
-        HotStuffTreeNode,
-        Node,
-        Payload,
-        SidechainMetadata,
-        TariDanPayload,
-        TreeNodeHash,
-        ValidatorSignature,
-    },
+    models::{BaseLayerMetadata, Event, HotStuffTreeNode, Node, Payload, SidechainMetadata, ValidatorSignature},
     services::{
         base_node_client::BaseNodeClient,
-        infrastructure_services::NodeAddressable,
         EventsPublisher,
         PayloadProcessor,
         SigningService,
@@ -253,20 +238,25 @@ pub fn create_public_key() -> RistrettoPublicKey {
 pub struct MockServiceSpecification;
 
 #[cfg(test)]
-impl ServiceSpecification for MockServiceSpecification {
-    type Addr = RistrettoPublicKey;
-    type AssetProxy = ConcreteAssetProxy<Self>;
-    type BaseNodeClient = MockBaseNodeClient;
-    type ChainDbBackendAdapter = MockChainDbBackupAdapter;
-    type DbFactory = MockDbFactory;
-    type EventsPublisher = MockEventsPublisher<ConsensusWorkerDomainEvent>;
-    type GlobalDbAdapter = crate::storage::mocks::global_db::MockGlobalDbBackupAdapter;
-    type InboundConnectionService = MockInboundConnectionService<Self::Addr, Self::Payload>;
-    type MempoolService = MockMempoolService;
-    type OutboundService = MockOutboundService<Self::Addr, Self::Payload>;
-    type Payload = TariDanPayload;
-    type PayloadProcessor = MockPayloadProcessor;
-    type SigningService = MockSigningService;
-    type StateDbBackendAdapter = MockStateDbBackupAdapter;
-    type ValidatorNodeClientFactory = MockValidatorNodeClientFactory;
+mod test {
+    use super::*;
+    use crate::models::TariDanPayload;
+
+    impl ServiceSpecification for MockServiceSpecification {
+        type Addr = RistrettoPublicKey;
+        type AssetProxy = ConcreteAssetProxy<Self>;
+        type BaseNodeClient = MockBaseNodeClient;
+        type ChainDbBackendAdapter = MockChainDbBackupAdapter;
+        type DbFactory = MockDbFactory;
+        type EventsPublisher = MockEventsPublisher<ConsensusWorkerDomainEvent>;
+        type GlobalDbAdapter = crate::storage::mocks::global_db::MockGlobalDbBackupAdapter;
+        type InboundConnectionService = MockInboundConnectionService<Self::Addr, Self::Payload>;
+        type MempoolService = MockMempoolService;
+        type OutboundService = MockOutboundService<Self::Addr, Self::Payload>;
+        type Payload = TariDanPayload;
+        type PayloadProcessor = MockPayloadProcessor;
+        type SigningService = MockSigningService;
+        type StateDbBackendAdapter = MockStateDbBackupAdapter;
+        type ValidatorNodeClientFactory = MockValidatorNodeClientFactory;
+    }
 }

@@ -20,15 +20,13 @@
 // WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 // USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use std::{convert::TryInto, marker::PhantomData};
+use std::marker::PhantomData;
 
 use log::*;
-use tari_core::transactions::transaction_components::OutputType;
 
 use crate::{
     digital_assets_error::DigitalAssetError,
-    services::{BaseNodeClient, ServiceSpecification},
-    storage::DbFactory,
+    services::ServiceSpecification,
     workers::states::ConsensusWorkerStateEvent,
 };
 
@@ -46,9 +44,9 @@ impl<TSpecification: ServiceSpecification> Starting<TSpecification> {
 
     pub async fn next_event(
         &self,
-        base_node_client: &mut TSpecification::BaseNodeClient,
-        db_factory: &TSpecification::DbFactory,
-        node_id: &TSpecification::Addr,
+        _base_node_client: &mut TSpecification::BaseNodeClient,
+        _db_factory: &TSpecification::DbFactory,
+        _node_id: &TSpecification::Addr,
     ) -> Result<ConsensusWorkerStateEvent, DigitalAssetError>
     where
         TSpecification: ServiceSpecification,

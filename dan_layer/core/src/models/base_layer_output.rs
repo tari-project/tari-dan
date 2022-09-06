@@ -21,15 +21,8 @@
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 //! A trait to allow abstraction from a specific base layer output
-use std::convert::TryFrom;
 
-use tari_common_types::types::{FixedHash, PublicKey};
-use tari_core::{
-    chain_storage::UtxoMinedInfo,
-    transactions::transaction_components::{OutputFeatures, OutputType},
-};
-
-use crate::{models::ModelError, DigitalAssetError};
+use tari_core::transactions::transaction_components::OutputFeatures;
 
 #[derive(Debug)]
 pub struct BaseLayerOutput {

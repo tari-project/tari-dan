@@ -131,7 +131,7 @@ impl<
         // TODO: Validate who message is from
         self.validate_from_committee(&from, self.epoch_manager.current_epoch().await, shard)
             .await?;
-        self.validate_qc(&qc);
+        self.validate_qc(&qc)?;
         self.shard_db.update_high_qc(qc);
         self.shard_db.set_payload(payload);
         Ok(())
@@ -150,8 +150,7 @@ impl<
             // self.current_payload = payload.clone();
             let leaf = self.shard_db.get_leaf_node(shard);
             let node = self.on_propose(leaf.0, leaf.1, shard, payload).await?;
-            self.shard_db
-                .update_leaf_node(shard, node.hash().clone(), node.height())?;
+            self.shard_db.update_leaf_node(shard, *node.hash(), node.height())?;
             // }
         }
         Ok(())
@@ -167,21 +166,17 @@ impl<
         dbg!(&self.identity, "on propose");
         let qc = self.shard_db.get_high_qc_for(shard);
         let epoch = self.epoch_manager.current_epoch().await;
-        let actual_payload = self
-            .shard_db
-            .get_payload(&payload)
-            .ok_or("Could not find payload".to_string())?;
-        let involved_shards = actual_payload.involved_shards().to_vec();
+        let actual_payload = self.shard_db.get_payload(&payload).ok_or("Could not find payload")?;
+        let involved_shards = actual_payload.involved_shards();
         let members = self
             .epoch_manager
             .get_committees(epoch, &involved_shards)
             .await?
             .into_iter()
-            .map(|(shard, committee)| committee.map(|c| c.members).unwrap_or_default())
-            .flatten()
+            .flat_map(|(_shard, committee)| committee.map(|c| c.members).unwrap_or_default())
             .collect();
 
-        let parent = self.shard_db.node(&leaf).ok_or("Could not find leaf".to_string())?;
+        let parent = self.shard_db.node(&leaf).ok_or("Could not find leaf")?;
 
         let payload_height = if parent.payload() == payload {
             parent.payload_height() + NodeHeight(1)
@@ -260,7 +255,7 @@ impl<
         }
     }
 
-    fn validate_qc(&self, qc: &QuorumCertificate) -> Result<(), String> {
+    fn validate_qc(&self, _qc: &QuorumCertificate) -> Result<(), String> {
         // TODO: get committee at epoch
         // TODO: Validate committee signatures
         Ok(())
@@ -301,11 +296,11 @@ impl<
             .ok_or("No node b1")?
             .clone();
 
-        let (b_lock, b_lock_height) = self.shard_db.get_locked_node_hash_and_height(shard);
+        let (_b_lock, b_lock_height) = self.shard_db.get_locked_node_hash_and_height(shard);
         if b_one.height().0 > b_lock_height.0 {
             // commit
             dbg!("Commiting height", b_one.height());
-            self.shard_db.set_locked(shard, b_one.hash().clone(), b_one.height());
+            self.shard_db.set_locked(shard, *b_one.hash(), b_one.height());
         }
         // if b_one.justify().local_node_hash() == &TreeNodeHash::zero() {
         //     dbg!("b is genesis, nothing to do");
@@ -337,8 +332,9 @@ impl<
                 let payload = self
                     .shard_db
                     .get_payload(&node.justify().payload())
-                    .ok_or("No payload")?;
-                self.execute(payload.clone()).await?;
+                    .ok_or("No payload")?
+                    .clone();
+                self.execute(payload).await?;
             }
             self.shard_db.set_last_executed_height(shard, node.height());
         }
@@ -381,10 +377,7 @@ impl<
             self.shard_db
                 .save_payload_vote(shard, node.payload(), node.payload_height(), node.clone());
 
-            let payload = self
-                .shard_db
-                .get_payload(&node.payload())
-                .ok_or("No payload found".to_string())?;
+            let payload = self.shard_db.get_payload(&node.payload()).ok_or("No payload found")?;
             let involved_shards = payload.involved_shards();
             let mut votes = vec![];
             for s in &involved_shards {
@@ -392,7 +385,7 @@ impl<
                     .shard_db
                     .get_payload_vote(node.payload(), node.payload_height(), *s)
                 {
-                    votes.push((*s, vote.hash().clone(), vote.local_pledges().to_vec()));
+                    votes.push((*s, *vote.hash(), vote.local_pledges().to_vec()));
                 } else {
                     break;
                 }
@@ -414,11 +407,10 @@ impl<
 
                     self.shard_db.set_last_voted_height(local_shard, local_node.height());
 
-                    let signature = ValidatorSignature::from_bytes(&self.sign(node.hash(), shard));
+                    let _signature = ValidatorSignature::from_bytes(&self.sign(node.hash(), shard));
                     // TODO: Actually decide on this
                     let decision = QuorumDecision::Accept;
-                    let mut vote_msg =
-                        VoteMessage::new(local_node.hash().clone(), local_shard, decision, votes.clone());
+                    let mut vote_msg = VoteMessage::new(*local_node.hash(), local_shard, decision, votes.clone());
                     vote_msg.sign();
 
                     self.tx_vote_message
@@ -438,7 +430,7 @@ impl<
         Ok(())
     }
 
-    fn sign(&self, node_hash: &TreeNodeHash, shard: ShardId) -> Vec<u8> {
+    fn sign(&self, _node_hash: &TreeNodeHash, _shard: ShardId) -> Vec<u8> {
         // todo!();
         vec![]
     }
@@ -446,17 +438,14 @@ impl<
     // The leader receives votes from his local shard, and forwards it to all other shards
     async fn on_receive_vote(&mut self, from: TAddr, msg: VoteMessage) -> Result<(), String> {
         // TODO: Only do this if you're the leader
-        if self
-            .shard_db
-            .has_vote_for(&from, msg.local_node_hash().clone(), msg.shard())
-        {
+        if self.shard_db.has_vote_for(&from, msg.local_node_hash(), msg.shard()) {
             return Ok(());
         }
 
         let node = self
             .shard_db
             .node(&msg.local_node_hash())
-            .ok_or("Could not find node, was it saved previously?".to_string())
+            .ok_or("Could not find node, was it saved previously?")
             .expect("should have been saved?");
 
         if node.proposed_by() != &self.identity {
@@ -469,23 +458,20 @@ impl<
             return Err("Not a valid committee member".to_string());
         }
 
-        let total_votes =
-            self.shard_db
-                .save_received_vote_for(from, msg.local_node_hash().clone(), msg.shard(), msg.clone());
+        let total_votes = self
+            .shard_db
+            .save_received_vote_for(from, msg.local_node_hash(), msg.shard(), msg.clone());
         // Check for consensus
         dbg!(total_votes);
         if total_votes >= valid_committee.consensus_threshold() {
             let mut different_votes = HashMap::new();
-            for vote in self
-                .shard_db
-                .get_received_votes_for(msg.local_node_hash().clone(), msg.shard())
-            {
-                let mut entry = different_votes.entry(vote.get_all_nodes_hash()).or_insert(vec![]);
+            for vote in self.shard_db.get_received_votes_for(msg.local_node_hash(), msg.shard()) {
+                let entry = different_votes.entry(vote.get_all_nodes_hash()).or_insert(vec![]);
                 entry.push(vote);
             }
 
             // Check that there is sufficient votes for a single set of nodes that we can use to generate a qc
-            for (hash, votes) in different_votes {
+            for (_hash, votes) in different_votes {
                 if votes.len() >= valid_committee.consensus_threshold() {
                     let signatures = votes.iter().map(|v| v.signature().clone()).collect();
 
@@ -535,7 +521,7 @@ impl<
                         match msg.message_type() {
                             HotStuffMessageType::NewView => {
                                 if let Some(payload) = msg.new_view_payload() {
-                                    self.on_receive_new_view(from, msg.shard(), msg.high_qc().unwrap(), payload.clone()).await;
+                                    self.on_receive_new_view(from, msg.shard(), msg.high_qc().unwrap(), payload.clone()).await?;
                                     // There should always be a payload, otherwise the leader
                                     // can't be determined
                                     match self.on_beat(msg.shard(), payload.to_id()).await {

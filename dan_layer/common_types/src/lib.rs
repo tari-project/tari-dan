@@ -8,7 +8,6 @@ mod template_id;
 
 use std::cmp::Ordering;
 
-use primitive_types::H256;
 use tari_common_types::types::FixedHash;
 use tari_utilities::byte_array::ByteArray;
 pub use template_id::TemplateId;
@@ -47,7 +46,7 @@ pub enum SubstateChange {
 pub struct ObjectClaim {}
 
 impl ObjectClaim {
-    pub fn is_valid(&self, payload: PayloadId) -> bool {
+    pub fn is_valid(&self, _payload: PayloadId) -> bool {
         true
     }
 }

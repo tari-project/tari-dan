@@ -13,7 +13,7 @@ impl ServiceInitializer for EpochManagerInitializer {
         let handle = EpochManagerHandle::new(tx_request);
         context.register_handle(handle);
         let shutdown = context.get_shutdown_signal();
-        context.spawn_when_ready(|handles| EpochManagerService::spawn(rx_request, shutdown));
+        context.spawn_when_ready(|_handles| EpochManagerService::spawn(rx_request, shutdown));
 
         Ok(())
     }

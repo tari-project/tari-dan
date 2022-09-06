@@ -2,18 +2,8 @@ use std::sync::Arc;
 
 use async_trait::async_trait;
 use tari_comms::NodeIdentity;
-use tari_core::mempool::service::MempoolHandle;
-use tari_dan_core::{
-    models::TariDanPayload,
-    services::{
-        epoch_manager::RangeEpochManager,
-        leader_strategy::AlwaysFirstLeader,
-        mempool::service::MempoolServiceHandle,
-    },
-    workers::hotstuff_waiter::HotStuffWaiter,
-};
+use tari_dan_core::services::mempool::service::MempoolServiceHandle;
 use tari_service_framework::{ServiceInitializationError, ServiceInitializer, ServiceInitializerContext};
-use tokio::sync::mpsc::channel;
 
 use crate::p2p::services::{epoch_manager::handle::EpochManagerHandle, hotstuff::hotstuff_service::HotstuffService};
 

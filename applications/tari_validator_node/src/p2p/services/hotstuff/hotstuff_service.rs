@@ -16,6 +16,7 @@ use crate::p2p::services::epoch_manager::handle::EpochManagerHandle;
 
 const LOG_TARGET: &str = "tari::validator_node::hotstuff_service";
 
+#[allow(dead_code)]
 pub struct HotstuffService {
     mempool: MempoolServiceHandle,
     tx_new: Sender<(TariDanPayload, ShardId)>,
@@ -59,7 +60,7 @@ impl HotstuffService {
                 shutdown.clone(),
             );
 
-            let s = Self {
+            Self {
                 mempool,
                 tx_new,
                 tx_hs_messages,
@@ -71,7 +72,7 @@ impl HotstuffService {
                 shutdown,
             }
             .run()
-            .await;
+            .await?;
             Ok(())
         })
     }

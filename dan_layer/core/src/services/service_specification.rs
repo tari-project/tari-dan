@@ -34,13 +34,7 @@ use crate::{
         SigningService,
         ValidatorNodeClientFactory,
     },
-    storage::{
-        chain::{ChainDbBackendAdapter, ChainDbMetadataKey},
-        global::GlobalDbBackendAdapter,
-        ChainStorageService,
-        DbFactory,
-        MetadataBackendAdapter,
-    },
+    storage::{chain::ChainDbBackendAdapter, global::GlobalDbBackendAdapter, DbFactory},
 };
 
 /// A trait to describe a specific configuration of services. This type allows other services to

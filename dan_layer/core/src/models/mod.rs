@@ -22,14 +22,12 @@
 
 use std::{cmp::Ordering, convert::TryFrom, fmt::Debug, hash::Hash, ops::Add};
 
-use tari_common_types::types::FixedHash;
-
 mod base_layer_metadata;
 mod base_layer_output;
 mod committee;
 pub mod domain_events;
 mod error;
-mod hashing;
+// mod hashing;
 mod hot_stuff_message;
 mod hot_stuff_tree_node;
 mod node;
@@ -46,7 +44,6 @@ pub use base_layer_metadata::BaseLayerMetadata;
 pub use base_layer_output::BaseLayerOutput;
 pub use committee::Committee;
 pub use error::ModelError;
-pub(crate) use hashing::{dan_layer_models_hasher, HOT_STUFF_MESSAGE_LABEL};
 pub use hot_stuff_message::HotStuffMessage;
 pub use hot_stuff_tree_node::HotStuffTreeNode;
 pub use node::Node;
@@ -63,7 +60,7 @@ pub use view_id::ViewId;
 pub struct NodeHeight(pub u64);
 
 impl NodeHeight {
-    fn to_le_bytes(&self) -> [u8; 8] {
+    fn to_le_bytes(self) -> [u8; 8] {
         self.0.to_le_bytes()
     }
 }
@@ -86,7 +83,7 @@ impl PartialOrd for NodeHeight {
 pub struct Epoch(pub u64);
 
 impl Epoch {
-    fn to_le_bytes(&self) -> [u8; 8] {
+    fn to_le_bytes(self) -> [u8; 8] {
         self.0.to_le_bytes()
     }
 }

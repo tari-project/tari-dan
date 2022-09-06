@@ -20,7 +20,10 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use std::{borrow::Borrow, convert::TryFrom};
+use std::{
+    borrow::Borrow,
+    convert::{TryFrom, TryInto},
+};
 
 use borsh::de::BorshDeserialize;
 use tari_common_types::types::{PrivateKey, PublicKey, Signature};
@@ -54,7 +57,7 @@ impl<T: Borrow<Signature>> From<T> for grpc::Signature {
 impl TryFrom<grpc::Transaction> for Transaction {
     type Error = String;
 
-    fn try_from(request: grpc::Transaction) -> Result<Self, Self::Error> {
+    fn try_from(_request: grpc::Transaction) -> Result<Self, Self::Error> {
         // let instructions = request
         //     .instructions
         //     .into_iter()
@@ -90,7 +93,7 @@ impl TryFrom<grpc::Instruction> for Instruction {
                 Instruction::CallFunction {
                     template,
                     function,
-                    args: todo!(),
+                    args,
                     package_address,
                 }
             },
@@ -101,7 +104,7 @@ impl TryFrom<grpc::Instruction> for Instruction {
                 let method = request.method;
                 Instruction::CallMethod {
                     method,
-                    args: todo!(),
+                    args,
                     package_address,
                     component_address,
                 }
@@ -115,7 +118,7 @@ impl TryFrom<grpc::Instruction> for Instruction {
 }
 
 impl From<Transaction> for grpc::Transaction {
-    fn from(transaction: Transaction) -> Self {
+    fn from(_transaction: Transaction) -> Self {
         // let instructions = transaction.instructions().into_iter().map(Into::into).collect();
         // let signature = transaction.signature().signature();
         // let sender_public_key = transaction.sender_public_key().to_vec();
@@ -129,8 +132,8 @@ impl From<Transaction> for grpc::Transaction {
     }
 }
 
-impl From<&Instruction> for grpc::Instruction {
-    fn from(instruction: &Instruction) -> Self {
+impl From<Instruction> for grpc::Instruction {
+    fn from(instruction: Instruction) -> Self {
         let mut result = grpc::Instruction::default();
 
         match instruction {
@@ -142,9 +145,9 @@ impl From<&Instruction> for grpc::Instruction {
             } => {
                 result.instruction_type = 0;
                 result.package_address = package_address.to_vec();
-                result.template = template.clone();
-                result.function = function.clone();
-                result.args = args.into_iter().map(|a| a.to_bytes()).collect();
+                result.template = template;
+                result.function = function;
+                result.args = args.into_iter().map(Into::into).collect();
             },
             Instruction::CallMethod {
                 method,
@@ -156,7 +159,7 @@ impl From<&Instruction> for grpc::Instruction {
                 result.package_address = package_address.to_vec();
                 result.component_address = component_address.to_vec();
                 result.method = method;
-                result.args = args.into_iter().map(|a| a.to_bytes()).collect();
+                result.args = args.into_iter().map(Into::into).collect();
             },
             Instruction::PutLastInstructionOutputOnWorkspace { key } => {
                 result.instruction_type = 2;

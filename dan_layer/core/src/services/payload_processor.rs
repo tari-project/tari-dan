@@ -37,6 +37,7 @@ pub trait PayloadProcessor<TPayload: Payload> {
     ) -> Result<StateRoot, DigitalAssetError>;
 }
 
+#[derive(Debug, Default)]
 pub struct TariDanPayloadProcessor {}
 
 impl TariDanPayloadProcessor {
@@ -49,8 +50,8 @@ impl TariDanPayloadProcessor {
 impl PayloadProcessor<TariDanPayload> for TariDanPayloadProcessor {
     async fn process_payload<TUnitOfWork: StateDbUnitOfWork>(
         &self,
-        payload: &TariDanPayload,
-        state_tx: TUnitOfWork,
+        _payload: &TariDanPayload,
+        _state_tx: TUnitOfWork,
     ) -> Result<StateRoot, DigitalAssetError> {
         todo!()
     }

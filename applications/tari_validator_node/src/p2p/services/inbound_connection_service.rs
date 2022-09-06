@@ -21,7 +21,6 @@
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 use std::{
     collections::VecDeque,
-    convert::TryInto,
     sync::Arc,
     time::{Duration, Instant},
 };
@@ -42,8 +41,6 @@ use tokio::sync::{
     mpsc::{channel, Receiver, Sender},
     oneshot,
 };
-
-use crate::p2p::proto;
 
 const LOG_TARGET: &str = "tari::validator_node::p2p::services::inbound_connection_service";
 
@@ -146,7 +143,7 @@ impl TariCommsInboundConnectionService {
         }
     }
 
-    async fn handle_request(&mut self, request: TariCommsInboundRequest) -> Result<(), DigitalAssetError> {
+    async fn handle_request(&mut self, _request: TariCommsInboundRequest) -> Result<(), DigitalAssetError> {
         todo!()
         // debug!(target: LOG_TARGET, "Received request: {:?}", request);
         // match request {
@@ -208,7 +205,7 @@ impl TariCommsInboundConnectionService {
         // Ok(())
     }
 
-    async fn forward_message(&mut self, message: Arc<PeerMessage>) -> Result<(), DigitalAssetError> {
+    async fn forward_message(&mut self, _message: Arc<PeerMessage>) -> Result<(), DigitalAssetError> {
         // // let from = message.authenticated_origin.as_ref().unwrap().clone();
         // let from = message.source_peer.public_key.clone();
         // let proto_message: proto::consensus::HotStuffMessage = message.decode_message()?;
@@ -228,8 +225,8 @@ impl TariCommsInboundConnectionService {
 
     async fn process_message(
         &mut self,
-        from: CommsPublicKey,
-        message: HotStuffMessage<TariDanPayload, CommsPublicKey>,
+        _from: CommsPublicKey,
+        _message: HotStuffMessage<TariDanPayload, CommsPublicKey>,
     ) -> Result<(), DigitalAssetError> {
         todo!()
         // debug!(target: "messages::inbound::validator_node", "Inbound message received:{} {:?}", from, message);

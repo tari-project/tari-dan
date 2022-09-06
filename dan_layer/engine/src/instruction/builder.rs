@@ -23,13 +23,12 @@
 use std::collections::HashMap;
 
 use digest::{Digest, FixedOutput};
-use primitive_types::H256;
 use tari_common_types::types::{FixedHash, PrivateKey, PublicKey};
 use tari_crypto::{hash::blake2::Blake256, keys::PublicKey as PublicKeyTrait, ristretto::RistrettoPublicKey};
 use tari_dan_common_types::{ObjectClaim, ObjectId, ShardId, SubstateChange};
 
 use super::{Instruction, Transaction};
-use crate::instruction::{signature::InstructionSignature, BalanceProof, ThaumInput, ThaumOutput, TransactionMeta};
+use crate::instruction::{signature::InstructionSignature, TransactionMeta};
 
 #[derive(Debug, Clone, Default)]
 pub struct TransactionBuilder {

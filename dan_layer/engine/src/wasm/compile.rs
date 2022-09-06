@@ -43,8 +43,7 @@ pub fn compile_str<S: AsRef<str>>(source: S, features: &[&str]) -> Result<WasmMo
     File::create(temp_dir.path().join("src/lib.rs"))?.write_all(source.as_bytes())?;
     // super hacky
     File::create(temp_dir.path().join("Cargo.toml"))?.write_all(
-        format!(
-            r#"
+            br#"
         [workspace]
 [package]
 name = "temp_crate_lib"
@@ -65,9 +64,7 @@ strip = "debuginfo" # Strip debug info.
 
 [lib]
 crate-type = ["cdylib", "lib"]
-        "#,
-        )
-        .as_bytes(),
+        "#
     )?;
 
     compile_template(temp_dir.path(), features)

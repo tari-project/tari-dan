@@ -35,7 +35,13 @@ pub trait LeaderStrategy<TAddr: NodeAddressable, TPayload> {
 pub struct AlwaysFirstLeader {}
 
 impl<TAddr: NodeAddressable, TPayload> LeaderStrategy<TAddr, TPayload> for AlwaysFirstLeader {
-    fn calculate_leader(&self, committee: &Committee<TAddr>, payload: PayloadId, shard: ShardId, round: u32) -> u32 {
+    fn calculate_leader(
+        &self,
+        _committee: &Committee<TAddr>,
+        _payload: PayloadId,
+        _shard: ShardId,
+        _round: u32,
+    ) -> u32 {
         0
     }
 }

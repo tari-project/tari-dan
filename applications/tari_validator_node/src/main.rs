@@ -29,7 +29,7 @@ mod default_service_specification;
 mod grpc;
 mod p2p;
 
-use std::{fs, process, sync::Arc};
+use std::{process, sync::Arc};
 
 use clap::Parser;
 use futures::FutureExt;
@@ -47,11 +47,8 @@ use tari_comms::{
     NodeIdentity,
 };
 use tari_comms_dht::Dht;
-use tari_dan_core::{
-    services::{mempool::service::MempoolServiceHandle, ConcreteAssetProxy, ServiceSpecification},
-    storage::{global::GlobalDb, DbFactory},
-};
-use tari_dan_storage_sqlite::{global::SqliteGlobalDbBackendAdapter, SqliteDbFactory};
+use tari_dan_core::services::{mempool::service::MempoolServiceHandle, ConcreteAssetProxy, ServiceSpecification};
+use tari_dan_storage_sqlite::SqliteDbFactory;
 use tari_p2p::comms_connector::SubscriptionFactory;
 use tari_service_framework::ServiceHandles;
 use tari_shutdown::{Shutdown, ShutdownSignal};

@@ -2,18 +2,13 @@
 // SPDX-License-Identifier: BSD-3-Clause
 
 use std::{
-    convert::TryInto,
     ops::Deref,
     sync::{Arc, RwLock, RwLockReadGuard},
 };
 
-use digest::Digest;
 use log::*;
 use tari_common_types::types::FixedHash;
-use tari_crypto::hash::blake2::Blake256;
 use tari_dan_common_types::storage::UnitOfWorkTracker;
-use tari_mmr::{MemBackendVec, MerkleMountainRange};
-use tari_utilities::hex::Hex;
 
 use crate::state::{
     db_key_value::DbKeyValue,

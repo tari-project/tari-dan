@@ -26,10 +26,9 @@ use async_trait::async_trait;
 use tari_common_types::types::{FixedHash, PublicKey};
 use tari_comms::PeerConnection;
 use tari_comms_dht::DhtRequester;
-use tari_core::mempool::service::MempoolRequest::SubmitTransaction;
 use tari_crypto::tari_utilities::ByteArray;
 use tari_dan_core::{
-    models::{Node, TreeNodeHash},
+    models::Node,
     services::{ValidatorNodeClientError, ValidatorNodeClientFactory, ValidatorNodeRpcClient},
 };
 use tari_dan_engine::{
