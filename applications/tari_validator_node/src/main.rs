@@ -29,6 +29,7 @@ mod contract_worker_manager;
 mod dan_node;
 mod default_service_specification;
 mod grpc;
+mod json_rpc;
 mod p2p;
 
 use std::{process, sync::Arc};
@@ -76,6 +77,7 @@ use crate::{
         services::{base_node_client::GrpcBaseNodeClient, wallet_client::GrpcWalletClient},
         validator_node_grpc_server::ValidatorNodeGrpcServer,
     },
+    json_rpc::run_json_rpc,
     p2p::services::rpc_client::TariCommsValidatorNodeClientFactory,
 };
 
@@ -168,6 +170,9 @@ async fn run_node(config: &ApplicationConfig) -> Result<(), ExitError> {
         println!("Started GRPC server on {}", address);
         task::spawn(run_grpc(grpc_server, address, shutdown.to_signal()));
     }
+
+    task::spawn(run_json_rpc());
+    println!("Started JSON-RPC server");
 
     println!("🚀 Validator node started!");
     println!("{}", node_identity);

@@ -32,6 +32,7 @@ tari_template_lib = { path = "../../dan_layer/template_lib"}
 
 anyhow = "1.0.53"
 async-trait = "0.1.50"
+axum = "0.5.15"
 blake2 = "0.9.2"
 borsh = { version ="0.9.3", default-features = false }
 clap = { version = "3.2.5", features = ["env"] }
