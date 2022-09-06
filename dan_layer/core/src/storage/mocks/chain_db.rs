@@ -22,11 +22,12 @@
 
 use std::sync::{Arc, RwLock};
 
+use tari_dan_common_types::ShardId;
 use tari_utilities::message_format::MessageFormat;
 
 use super::MemoryChainDb;
 use crate::{
-    models::{QuorumCertificate, ShardId, TreeNodeHash},
+    models::{QuorumCertificate, TreeNodeHash},
     storage::{
         chain::{ChainDbBackendAdapter, ChainDbMetadataKey, DbInstruction, DbNode, DbQc},
         AtomicDb,

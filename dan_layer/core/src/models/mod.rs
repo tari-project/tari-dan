@@ -50,35 +50,14 @@ pub(crate) use hashing::{dan_layer_models_hasher, HOT_STUFF_MESSAGE_LABEL};
 pub use hot_stuff_message::HotStuffMessage;
 pub use hot_stuff_tree_node::HotStuffTreeNode;
 pub use node::Node;
-pub use payload::{Payload, PayloadId};
+pub use payload::Payload;
 pub use quorum_certificate::{QuorumCertificate, QuorumDecision};
 pub use sidechain_metadata::SidechainMetadata;
-use tari_dan_common_types::ObjectId;
+use tari_dan_common_types::{ObjectId, PayloadId};
 pub use tari_dan_payload::{CheckpointData, TariDanPayload};
 pub use tree_node_hash::TreeNodeHash;
 pub use view::View;
 pub use view_id::ViewId;
-
-#[derive(Copy, Clone, Debug, Eq, PartialEq, Hash)]
-pub struct ShardId(pub u64);
-
-impl ShardId {
-    fn to_le_bytes(&self) -> [u8; 8] {
-        self.0.to_le_bytes()
-    }
-}
-
-impl PartialOrd for ShardId {
-    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-        self.0.partial_cmp(&other.0)
-    }
-}
-
-impl Ord for ShardId {
-    fn cmp(&self, other: &Self) -> Ordering {
-        self.0.cmp(&other.0)
-    }
-}
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
 pub struct NodeHeight(pub u64);
@@ -127,20 +106,6 @@ pub struct ObjectPledge {
     pub pledged_until: NodeHeight,
 }
 
-#[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
-pub enum SubstateChange {
-    Create,
-    Destroy,
-}
-
-#[derive(Debug, Clone)]
-pub struct ObjectClaim {}
-
-impl ObjectClaim {
-    pub fn is_valid(&self, payload: PayloadId) -> bool {
-        true
-    }
-}
 // TODO: encapsulate
 pub struct InstructionCaller {
     pub owner_token_id: TokenId,

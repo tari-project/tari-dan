@@ -24,6 +24,7 @@ use std::sync::Arc;
 
 use async_trait::async_trait;
 use tari_common_types::types::FixedHash;
+use tari_dan_common_types::ShardId;
 use tari_dan_engine::instruction::Transaction;
 use tokio::sync::{
     broadcast,
@@ -34,7 +35,7 @@ use tokio::sync::{
 use super::outbound::MempoolOutboundService;
 use crate::{
     digital_assets_error::DigitalAssetError,
-    models::{Payload, ShardId, TariDanPayload, TreeNodeHash},
+    models::{Payload, TariDanPayload, TreeNodeHash},
 };
 
 #[async_trait]
@@ -70,7 +71,7 @@ impl MempoolService for ConcreteMempoolService {
         }
 
         let payload = TariDanPayload::new(transaction.clone());
-        for shard in payload.involved_shards() {
+        for shard in &payload.involved_shards() {
             self.tx_new
                 .send((payload.clone(), *shard))
                 .map_err(|se| DigitalAssetError::SendError {

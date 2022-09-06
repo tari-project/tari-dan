@@ -21,20 +21,13 @@
 // USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 use digest::Digest;
+use primitive_types::U256;
+use tari_common_types::types::FixedHash;
 use tari_crypto::hash::blake2::Blake256;
+use tari_dan_common_types::{PayloadId, ShardId};
 
 use crate::{
-    models::{
-        payload::PayloadId,
-        Epoch,
-        HotStuffMessageType,
-        NodeHeight,
-        ObjectPledge,
-        ShardId,
-        TreeNodeHash,
-        ValidatorSignature,
-        ViewId,
-    },
+    models::{Epoch, HotStuffMessageType, NodeHeight, ObjectPledge, TreeNodeHash, ValidatorSignature, ViewId},
     storage::chain::DbQc,
 };
 
@@ -99,7 +92,7 @@ impl QuorumCertificate {
             payload_height: NodeHeight(0),
             local_node_hash: TreeNodeHash::zero(),
             local_node_height: NodeHeight(0),
-            shard: ShardId(0),
+            shard: ShardId(FixedHash::zero()),
             epoch: Epoch(0),
             decision: QuorumDecision::Accept,
             other_shard_nodes: vec![],

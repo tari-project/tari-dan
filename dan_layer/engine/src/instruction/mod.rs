@@ -22,6 +22,8 @@
 
 mod builder;
 
+use std::collections::HashMap;
+
 pub use builder::TransactionBuilder;
 use digest::{Digest, FixedOutput};
 use tari_common_types::types::PublicKey;
@@ -33,9 +35,9 @@ pub use processor::InstructionProcessor;
 
 mod signature;
 pub use signature::InstructionSignature;
-use tari_common_types::types::{BulletRangeProof, ComSignature, Commitment, FixedHash, PublicKey};
+use tari_common_types::types::{BulletRangeProof, ComSignature, Commitment, FixedHash};
 use tari_crypto::hash::blake2::Blake256;
-use tari_dan_common_types::ObjectId;
+use tari_dan_common_types::{ObjectClaim, ObjectId, ShardId, SubstateChange};
 use tari_mmr::MerkleProof;
 use tari_template_lib::{
     args::Arg,
@@ -104,37 +106,44 @@ pub struct BalanceProof {}
 #[derive(Debug, Clone)]
 pub struct Transaction {
     hash: FixedHash,
-    inputs: Vec<ThaumInput>,
-    outputs: Vec<ThaumOutput>,
     instructions: Vec<Instruction>,
     signature: InstructionSignature,
-    max_instruction_outputs: u32,
     fee: u64,
-    balance_proof: BalanceProof,
     sender_public_key: PublicKey,
+    // Not part of signature. TODO: Should it be?
+    meta: TransactionMeta,
+}
+
+#[derive(Debug, Clone, Default)]
+pub struct TransactionMeta {
+    involved_objects: HashMap<ShardId, Vec<(ObjectId, SubstateChange, ObjectClaim)>>,
+}
+
+impl TransactionMeta {
+    pub fn involved_shards(&self) -> Vec<ShardId> {
+        self.involved_objects.keys().cloned().collect()
+    }
+
+    pub fn objects_for_shard(&self, shard_id: ShardId) -> Vec<(ObjectId, SubstateChange, ObjectClaim)> {
+        self.involved_objects.get(&shard_id).cloned().unwrap_or_default()
+    }
 }
 
 impl Transaction {
     pub fn new(
-        inputs: Vec<ThaumInput>,
-        outputs: Vec<ThaumOutput>,
-        max_instruction_outputs: u32,
         fee: u64,
-        balance_proof: BalanceProof,
         instructions: Vec<Instruction>,
         signature: InstructionSignature,
         sender_public_key: PublicKey,
+        meta: TransactionMeta,
     ) -> Self {
         let mut s = Self {
             hash: FixedHash::zero(),
-            inputs,
-            outputs,
             instructions,
             signature,
-            max_instruction_outputs,
             fee,
-            balance_proof,
             sender_public_key,
+            meta,
         };
         s.calculate_hash();
         s
@@ -142,6 +151,10 @@ impl Transaction {
 
     pub fn hash(&self) -> &FixedHash {
         &self.hash
+    }
+
+    pub fn meta(&self) -> &TransactionMeta {
+        &self.meta
     }
 
     fn calculate_hash(&mut self) {

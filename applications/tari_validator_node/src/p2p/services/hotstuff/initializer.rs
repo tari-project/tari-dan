@@ -4,7 +4,7 @@ use async_trait::async_trait;
 use tari_comms::NodeIdentity;
 use tari_core::mempool::service::MempoolHandle;
 use tari_dan_core::{
-    models::{ShardId, TariDanPayload},
+    models::TariDanPayload,
     services::{
         epoch_manager::RangeEpochManager,
         leader_strategy::AlwaysFirstLeader,

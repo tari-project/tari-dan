@@ -20,10 +20,7 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use std::{
-    borrow::Borrow,
-    convert::{TryFrom, TryInto},
-};
+use std::{borrow::Borrow, convert::TryFrom};
 
 use borsh::de::BorshDeserialize;
 use tari_common_types::types::{PrivateKey, PublicKey, Signature};
@@ -31,7 +28,7 @@ use tari_dan_engine::instruction::{Instruction, Transaction};
 use tari_template_lib::{args::Arg, Hash};
 use tari_utilities::ByteArray;
 
-use crate::rpc::{self as grpc, SubmitTransactionRequest};
+use crate::rpc::{self as grpc};
 
 impl TryFrom<grpc::Signature> for Signature {
     type Error = String;
