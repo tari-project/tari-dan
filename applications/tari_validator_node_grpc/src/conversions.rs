@@ -20,10 +20,7 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use std::{
-    borrow::Borrow,
-    convert::{TryFrom, TryInto},
-};
+use std::{borrow::Borrow, convert::TryFrom};
 
 use borsh::de::BorshDeserialize;
 use tari_common_types::types::{PrivateKey, PublicKey, Signature};
@@ -31,7 +28,7 @@ use tari_dan_engine::instruction::{Instruction, Transaction};
 use tari_template_lib::{args::Arg, Hash};
 use tari_utilities::ByteArray;
 
-use crate::rpc::{self as grpc, SubmitTransactionRequest};
+use crate::rpc::{self as grpc};
 
 impl TryFrom<grpc::Signature> for Signature {
     type Error = String;
@@ -54,26 +51,23 @@ impl<T: Borrow<Signature>> From<T> for grpc::Signature {
     }
 }
 
-impl TryFrom<grpc::SubmitTransactionRequest> for Transaction {
+impl TryFrom<grpc::Transaction> for Transaction {
     type Error = String;
 
-    fn try_from(request: grpc::SubmitTransactionRequest) -> Result<Self, Self::Error> {
-        let instructions = request
-            .instructions
-            .into_iter()
-            .map(TryInto::try_into)
-            .collect::<Result<Vec<Instruction>, _>>()?;
-        let signature: Signature = request.signature.ok_or("invalid signature")?.try_into()?;
-        let instruction_signature = signature.try_into()?;
-        let sender_public_key =
-            PublicKey::from_bytes(&request.sender_public_key).map_err(|_| "invalid sender_public_key")?;
-        let transaction = Transaction {
-            instructions,
-            signature: instruction_signature,
-            sender_public_key,
-        };
-
-        Ok(transaction)
+    fn try_from(request: grpc::Transaction) -> Result<Self, Self::Error> {
+        // let instructions = request
+        //     .instructions
+        //     .into_iter()
+        //     .map(TryInto::try_into)
+        //     .collect::<Result<Vec<Instruction>, _>>()?;
+        // let signature: Signature = request.signature.ok_or("invalid signature")?.try_into()?;
+        // let instruction_signature = signature.try_into()?;
+        // let sender_public_key =
+        //     PublicKey::from_bytes(&request.sender_public_key).map_err(|_| "invalid sender_public_key")?;
+        // let transaction = Transaction::new(instructions, instruction_signature, sender_public_key);
+        //
+        // Ok(transaction)
+        todo!()
     }
 }
 
@@ -96,7 +90,7 @@ impl TryFrom<grpc::Instruction> for Instruction {
                 Instruction::CallFunction {
                     template,
                     function,
-                    args,
+                    args: todo!(),
                     package_address,
                 }
             },
@@ -107,7 +101,7 @@ impl TryFrom<grpc::Instruction> for Instruction {
                 let method = request.method;
                 Instruction::CallMethod {
                     method,
-                    args,
+                    args: todo!(),
                     package_address,
                     component_address,
                 }
@@ -120,22 +114,23 @@ impl TryFrom<grpc::Instruction> for Instruction {
     }
 }
 
-impl From<Transaction> for SubmitTransactionRequest {
+impl From<Transaction> for grpc::Transaction {
     fn from(transaction: Transaction) -> Self {
-        let instructions = transaction.instructions.into_iter().map(Into::into).collect();
-        let signature = transaction.signature.signature();
-        let sender_public_key = transaction.sender_public_key.to_vec();
-
-        SubmitTransactionRequest {
-            instructions,
-            signature: Some(signature.into()),
-            sender_public_key,
-        }
+        // let instructions = transaction.instructions().into_iter().map(Into::into).collect();
+        // let signature = transaction.signature().signature();
+        // let sender_public_key = transaction.sender_public_key().to_vec();
+        //
+        // SubmitTransactionRequest {
+        //     instructions,
+        //     signature: Some(signature.into()),
+        //     sender_public_key,
+        // }
+        todo!()
     }
 }
 
-impl From<Instruction> for grpc::Instruction {
-    fn from(instruction: Instruction) -> Self {
+impl From<&Instruction> for grpc::Instruction {
+    fn from(instruction: &Instruction) -> Self {
         let mut result = grpc::Instruction::default();
 
         match instruction {
@@ -147,9 +142,9 @@ impl From<Instruction> for grpc::Instruction {
             } => {
                 result.instruction_type = 0;
                 result.package_address = package_address.to_vec();
-                result.template = template;
-                result.function = function;
-                result.args = args.into_iter().map(Into::into).collect();
+                result.template = template.clone();
+                result.function = function.clone();
+                result.args = args.into_iter().map(|a| a.to_bytes()).collect();
             },
             Instruction::CallMethod {
                 method,
@@ -161,7 +156,7 @@ impl From<Instruction> for grpc::Instruction {
                 result.package_address = package_address.to_vec();
                 result.component_address = component_address.to_vec();
                 result.method = method;
-                result.args = args.into_iter().map(Into::into).collect();
+                result.args = args.into_iter().map(|a| a.to_bytes()).collect();
             },
             Instruction::PutLastInstructionOutputOnWorkspace { key } => {
                 result.instruction_type = 2;

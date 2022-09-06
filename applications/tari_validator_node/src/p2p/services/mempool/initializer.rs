@@ -53,6 +53,7 @@ impl ServiceInitializer for MempoolInitializer {
             mempool_service.clone(),
         );
         context.register_handle(mempool_inbound.clone());
+        context.register_handle(mempool_service.clone());
 
         context.spawn_until_shutdown(move |handles| async move {
             let dht = handles.expect_handle::<Dht>();

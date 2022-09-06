@@ -21,212 +21,139 @@
 // USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 use tari_common_types::types::FixedHash;
-use tari_core::transactions::transaction_components::SignerSignature;
-use tari_crypto::hash::blake2::Blake256;
+use tari_dan_common_types::ShardId;
 
-use super::HOT_STUFF_MESSAGE_LABEL;
-use crate::models::{
-    dan_layer_models_hasher,
-    HotStuffMessageType,
-    HotStuffTreeNode,
-    Payload,
-    QuorumCertificate,
-    TreeNodeHash,
-    ValidatorSignature,
-    ViewId,
+use crate::{
+    models::{
+        dan_layer_models_hasher,
+        HotStuffMessageType,
+        HotStuffTreeNode,
+        Payload,
+        QuorumCertificate,
+        TreeNodeHash,
+        ValidatorSignature,
+        ViewId,
+    },
+    services::infrastructure_services::NodeAddressable,
 };
 
+// TODO: convert to enum
 #[derive(Debug, Clone)]
-pub struct HotStuffMessage<TPayload: Payload> {
-    view_number: ViewId,
+pub struct HotStuffMessage<TPayload: Payload, TAddr: NodeAddressable> {
     message_type: HotStuffMessageType,
     justify: Option<QuorumCertificate>,
-    node: Option<HotStuffTreeNode<TPayload>>,
-    node_hash: Option<TreeNodeHash>,
-    partial_sig: Option<ValidatorSignature>,
-    checkpoint_signature: Option<SignerSignature>,
-    contract_id: FixedHash,
+    // The high qc: used for new view messages
+    high_qc: Option<QuorumCertificate>,
+    node: Option<HotStuffTreeNode<TAddr>>,
+    // node_hash: Option<TreeNodeHash>,
+    // partial_sig: Option<ValidatorSignature>,
+    // checkpoint_signature: Option<SignerSignature>,
+    // contract_id: Option<FixedHash>,
+    shard: Option<ShardId>,
+    epoch: Option<u32>,
+    // Used for broadcasting the payload in new view
+    new_view_payload: Option<TPayload>,
 }
 
-impl<TPayload: Payload> HotStuffMessage<TPayload> {
+impl<TPayload: Payload, TAddr: NodeAddressable> Default for HotStuffMessage<TPayload, TAddr> {
+    fn default() -> Self {
+        Self {
+            message_type: Default::default(),
+            justify: Default::default(),
+            high_qc: Default::default(),
+            node: Default::default(),
+            shard: Default::default(),
+            epoch: None,
+            new_view_payload: None,
+        }
+    }
+}
+
+impl<TPayload: Payload, TAddr: NodeAddressable> HotStuffMessage<TPayload, TAddr> {
     pub fn new(
-        view_number: ViewId,
         message_type: HotStuffMessageType,
         justify: Option<QuorumCertificate>,
-        node: Option<HotStuffTreeNode<TPayload>>,
+        node: Option<HotStuffTreeNode<TAddr>>,
         node_hash: Option<TreeNodeHash>,
         partial_sig: Option<ValidatorSignature>,
-        checkpoint_signature: Option<SignerSignature>,
         contract_id: FixedHash,
     ) -> Self {
-        Self {
-            view_number,
-            message_type,
-            justify,
-            node,
-            node_hash,
-            partial_sig,
-            checkpoint_signature,
-            contract_id,
-        }
+        todo!();
+        // Self {
+        //     message_type,
+        //     justify,
+        //     node,
+        //     high_qc: None,
+        //     shard: None,
+        //     new_view_payload: None,
+        // }
     }
 
-    pub fn new_view(prepare_qc: QuorumCertificate, view_number: ViewId, contract_id: FixedHash) -> Self {
+    pub fn new_view(high_qc: QuorumCertificate, shard: ShardId, payload: Option<TPayload>) -> Self {
         Self {
             message_type: HotStuffMessageType::NewView,
-            view_number,
-            justify: Some(prepare_qc),
-            node: None,
-            partial_sig: None,
-            checkpoint_signature: None,
-            node_hash: None,
-            contract_id,
-        }
-    }
-
-    pub fn prepare(
-        proposal: HotStuffTreeNode<TPayload>,
-        high_qc: Option<QuorumCertificate>,
-        view_number: ViewId,
-        contract_id: FixedHash,
-    ) -> Self {
-        Self {
-            message_type: HotStuffMessageType::Prepare,
-            node: Some(proposal),
-            justify: high_qc,
-            view_number,
-            partial_sig: None,
-            checkpoint_signature: None,
-            node_hash: None,
-            contract_id,
-        }
-    }
-
-    pub fn vote_prepare(node_hash: TreeNodeHash, view_number: ViewId, contract_id: FixedHash) -> Self {
-        Self {
-            message_type: HotStuffMessageType::Prepare,
-            node_hash: Some(node_hash),
-            view_number,
-            node: None,
-            partial_sig: None,
-            checkpoint_signature: None,
+            high_qc: Some(high_qc),
+            shard: Some(shard),
             justify: None,
-            contract_id,
-        }
-    }
-
-    pub fn pre_commit(
-        node: Option<HotStuffTreeNode<TPayload>>,
-        prepare_qc: Option<QuorumCertificate>,
-        view_number: ViewId,
-        contract_id: FixedHash,
-    ) -> Self {
-        Self {
-            message_type: HotStuffMessageType::PreCommit,
-            node,
-            justify: prepare_qc,
-            view_number,
-            node_hash: None,
-            checkpoint_signature: None,
-            partial_sig: None,
-            contract_id,
-        }
-    }
-
-    pub fn vote_pre_commit(node_hash: TreeNodeHash, view_number: ViewId, contract_id: FixedHash) -> Self {
-        Self {
-            message_type: HotStuffMessageType::PreCommit,
-            node_hash: Some(node_hash),
-            view_number,
             node: None,
-            partial_sig: None,
-            checkpoint_signature: None,
-            justify: None,
-            contract_id,
+            epoch: None,
+            // Traditional hotstuff does not include broadcasting a payload at the same time,
+            // but if this is a view for a specific payload, then it can be sent to the leader as
+            // an attachment
+            new_view_payload: payload,
         }
     }
 
-    pub fn commit(
-        node: Option<HotStuffTreeNode<TPayload>>,
-        pre_commit_qc: Option<QuorumCertificate>,
-        view_number: ViewId,
-        contract_id: FixedHash,
-    ) -> Self {
+    pub fn generic(node: HotStuffTreeNode<TAddr>, shard: ShardId) -> Self {
         Self {
-            message_type: HotStuffMessageType::Commit,
-            node,
-            justify: pre_commit_qc,
-            view_number,
-            partial_sig: None,
-            checkpoint_signature: None,
-            node_hash: None,
-            contract_id,
-        }
-    }
-
-    pub fn vote_commit(
-        node_hash: TreeNodeHash,
-        view_number: ViewId,
-        contract_id: FixedHash,
-        checkpoint_signature: SignerSignature,
-    ) -> Self {
-        Self {
-            message_type: HotStuffMessageType::Commit,
-            node_hash: Some(node_hash),
-            view_number,
-            node: None,
-            partial_sig: None,
-            checkpoint_signature: Some(checkpoint_signature),
-            justify: None,
-            contract_id,
-        }
-    }
-
-    pub fn decide(
-        node: Option<HotStuffTreeNode<TPayload>>,
-        commit_qc: Option<QuorumCertificate>,
-        view_number: ViewId,
-        contract_id: FixedHash,
-    ) -> Self {
-        Self {
-            message_type: HotStuffMessageType::Decide,
-            node,
-            justify: commit_qc,
-            view_number,
-            partial_sig: None,
-            checkpoint_signature: None,
-            node_hash: None,
-            contract_id,
+            message_type: HotStuffMessageType::Generic,
+            shard: Some(shard),
+            node: Some(node),
+            ..Default::default()
         }
     }
 
     pub fn create_signature_challenge(&self) -> Vec<u8> {
-        let mut b = dan_layer_models_hasher::<Blake256>(HOT_STUFF_MESSAGE_LABEL)
-            .chain(&[self.message_type.as_u8()])
-            .chain(self.view_number.as_u64().to_le_bytes());
-        if let Some(ref node) = self.node {
-            b = b.chain(node.calculate_hash().as_bytes());
-        } else if let Some(ref node_hash) = self.node_hash {
-            b = b.chain(node_hash.as_bytes());
-        } else {
-        }
-        b.finalize().as_ref().to_vec()
+        todo!()
+        // let mut b = dan_layer_models_hasher::<Blake256>(HOT_STUFF_MESSAGE_LABEL)
+        //     .chain(&[self.message_type.as_u8()])
+        //     .chain(self.view_number.as_u64().to_le_bytes());
+        // if let Some(ref node) = self.node {
+        //     b = b.chain(node.calculate_hash().as_bytes());
+        // } else if let Some(ref node_hash) = self.node_hash {
+        //     b = b.chain(node_hash.as_bytes());
+        // } else {
+        // }
+        // b.finalize().as_ref().to_vec()
     }
 
     pub fn view_number(&self) -> ViewId {
-        self.view_number
+        todo!()
+    }
+
+    pub fn high_qc(&self) -> Option<QuorumCertificate> {
+        self.high_qc.clone()
     }
 
     pub fn contract_id(&self) -> &FixedHash {
-        &self.contract_id
+        todo!()
     }
 
-    pub fn node(&self) -> Option<&HotStuffTreeNode<TPayload>> {
+    pub fn new_view_payload(&self) -> Option<&TPayload> {
+        self.new_view_payload.as_ref()
+    }
+
+    pub fn shard(&self) -> ShardId {
+        // TODO: remove unwrap, every message should have a shard
+        self.shard.unwrap()
+    }
+
+    pub fn node(&self) -> Option<&HotStuffTreeNode<TAddr>> {
         self.node.as_ref()
     }
 
     pub fn node_hash(&self) -> Option<&TreeNodeHash> {
-        self.node_hash.as_ref()
+        todo!()
     }
 
     pub fn message_type(&self) -> HotStuffMessageType {
@@ -243,14 +170,10 @@ impl<TPayload: Payload> HotStuffMessage<TPayload> {
     }
 
     pub fn add_partial_sig(&mut self, signature: ValidatorSignature) {
-        self.partial_sig = Some(signature)
+        todo!()
     }
 
     pub fn partial_sig(&self) -> Option<&ValidatorSignature> {
-        self.partial_sig.as_ref()
-    }
-
-    pub fn checkpoint_signature(&self) -> Option<&SignerSignature> {
-        self.checkpoint_signature.as_ref()
+        todo!()
     }
 }

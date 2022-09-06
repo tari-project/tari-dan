@@ -21,61 +21,96 @@
 // USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 use digest::{Digest, FixedOutput};
+use primitive_types::U256;
+use tari_common_types::types::FixedHash;
 use tari_crypto::hash::blake2::Blake256;
+use tari_dan_common_types::{PayloadId, ShardId};
 use tari_dan_engine::state::models::StateRoot;
 
-use crate::models::{Payload, TreeNodeHash};
+use crate::{
+    models::{Epoch, NodeHeight, ObjectPledge, Payload, QuorumCertificate, TreeNodeHash},
+    services::infrastructure_services::NodeAddressable,
+};
 
 #[derive(Debug, Clone)]
-pub struct HotStuffTreeNode<TPayload: Payload> {
-    parent: TreeNodeHash,
-    payload: TPayload,
-    state_root: StateRoot,
+pub struct HotStuffTreeNode<TAddr: NodeAddressable> {
     hash: TreeNodeHash,
-    height: u32,
+    parent: TreeNodeHash,
+    shard: ShardId,
+    height: NodeHeight,
+    // The payload that the node is proposing
+    payload: PayloadId,
+    // How far in the consensus this payload is. It should be 4 in order to be committed.
+    payload_height: NodeHeight,
+    local_pledges: Vec<ObjectPledge>,
+    epoch: Epoch,
+    // Mostly used for debugging
+    proposed_by: TAddr,
+    justify: QuorumCertificate,
 }
 
-impl<TPayload: Payload> HotStuffTreeNode<TPayload> {
-    pub fn new(parent: TreeNodeHash, payload: TPayload, state_root: StateRoot, height: u32) -> Self {
+impl<TAddr: NodeAddressable> HotStuffTreeNode<TAddr> {
+    pub fn new(
+        parent: TreeNodeHash,
+        shard: ShardId,
+        height: NodeHeight,
+        payload: PayloadId,
+        payload_height: NodeHeight,
+        local_pledges: Vec<ObjectPledge>,
+        epoch: Epoch,
+        proposed_by: TAddr,
+        justify: QuorumCertificate,
+    ) -> Self {
         let mut s = HotStuffTreeNode {
-            parent,
-            payload,
-            state_root,
             hash: TreeNodeHash::zero(),
+            parent,
+            shard,
+            payload,
+            epoch,
             height,
+            justify,
+            payload_height,
+            local_pledges,
+            proposed_by,
         };
         s.hash = s.calculate_hash();
         s
     }
 
-    pub fn genesis(payload: TPayload, state_root: StateRoot) -> HotStuffTreeNode<TPayload> {
+    pub fn genesis() -> Self {
         let mut s = Self {
             parent: TreeNodeHash::zero(),
-            payload,
+            payload: PayloadId::zero(),
+            payload_height: NodeHeight(0),
             hash: TreeNodeHash::zero(),
-            state_root,
-            height: 0,
+            shard: ShardId(FixedHash::zero()),
+            height: NodeHeight(0),
+            epoch: Epoch(0),
+            proposed_by: TAddr::zero(),
+            justify: QuorumCertificate::genesis(),
+            local_pledges: vec![],
         };
         s.hash = s.calculate_hash();
         s
-    }
-
-    pub fn from_parent(
-        parent: TreeNodeHash,
-        payload: TPayload,
-        state_root: StateRoot,
-        height: u32,
-    ) -> HotStuffTreeNode<TPayload> {
-        Self::new(parent, payload, state_root, height)
     }
 
     pub fn calculate_hash(&self) -> TreeNodeHash {
-        let result = Blake256::new()
+        let mut result = Blake256::new()
             .chain(self.parent.as_bytes())
-            .chain(self.payload.consensus_hash())
+            .chain(self.epoch.to_le_bytes())
             .chain(self.height.to_le_bytes())
-            .chain(self.state_root.as_bytes())
-            .finalize_fixed();
+            .chain(self.justify.as_bytes())
+            .chain(self.shard.to_le_bytes())
+            .chain(self.payload.as_slice())
+            .chain(self.payload_height.to_le_bytes())
+            .chain(self.proposed_by.as_bytes());
+        // TODO: Add in other fields
+        // .chain((self.local_pledges.len() as u32).to_le_bytes())
+        // .chain(self.local_pledges.iter().fold(Vec::new(), |mut acc, substate| {
+        //     acc.extend_from_slice(substate.as_bytes())
+        // }));
+
+        let result = result.finalize_fixed();
         result.into()
     }
 
@@ -83,24 +118,44 @@ impl<TPayload: Payload> HotStuffTreeNode<TPayload> {
         &self.hash
     }
 
+    pub fn proposed_by(&self) -> &TAddr {
+        &self.proposed_by
+    }
+
     pub fn parent(&self) -> &TreeNodeHash {
         &self.parent
     }
 
-    pub fn payload(&self) -> &TPayload {
-        &self.payload
+    pub fn payload(&self) -> PayloadId {
+        self.payload
     }
 
-    pub fn state_root(&self) -> &StateRoot {
-        &self.state_root
+    pub fn payload_height(&self) -> NodeHeight {
+        self.payload_height
     }
 
-    pub fn height(&self) -> u32 {
+    pub fn justify(&self) -> &QuorumCertificate {
+        &self.justify
+    }
+
+    pub fn epoch(&self) -> Epoch {
+        self.epoch
+    }
+
+    pub fn shard(&self) -> ShardId {
+        self.shard
+    }
+
+    pub fn height(&self) -> NodeHeight {
         self.height
+    }
+
+    pub fn local_pledges(&self) -> &[ObjectPledge] {
+        self.local_pledges.as_slice()
     }
 }
 
-impl<TPayload: Payload> PartialEq for HotStuffTreeNode<TPayload> {
+impl<TAddr: NodeAddressable> PartialEq for HotStuffTreeNode<TAddr> {
     fn eq(&self, other: &Self) -> bool {
         self.hash.eq(&other.hash)
     }

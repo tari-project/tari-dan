@@ -22,13 +22,17 @@
 
 use crate::{models::ViewId, services::infrastructure_services::NodeAddressable};
 
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 pub struct Committee<TAddr: NodeAddressable> {
     // TODO: encapsulate
     pub members: Vec<TAddr>,
 }
 
 impl<TAddr: NodeAddressable> Committee<TAddr> {
+    pub fn empty() -> Self {
+        Self::new(vec![])
+    }
+
     pub fn new(members: Vec<TAddr>) -> Self {
         Self { members }
     }

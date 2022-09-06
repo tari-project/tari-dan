@@ -29,20 +29,18 @@ mod processor;
 pub use processor::InstructionProcessor;
 
 mod signature;
+use std::collections::HashMap;
 
+use digest::{Digest, FixedOutput};
 pub use signature::InstructionSignature;
-use tari_common_types::types::PublicKey;
+use tari_common_types::types::{BulletRangeProof, ComSignature, Commitment, FixedHash, PublicKey};
+use tari_crypto::hash::blake2::Blake256;
+use tari_dan_common_types::{ObjectClaim, ObjectId, ShardId, SubstateChange};
+use tari_mmr::MerkleProof;
 use tari_template_lib::{
     args::Arg,
     models::{ComponentAddress, PackageAddress},
 };
-
-#[derive(Debug, Clone)]
-pub struct Transaction {
-    pub instructions: Vec<Instruction>,
-    pub signature: InstructionSignature,
-    pub sender_public_key: PublicKey,
-}
 
 #[derive(Debug, Clone)]
 pub enum Instruction {
@@ -61,4 +59,126 @@ pub enum Instruction {
     PutLastInstructionOutputOnWorkspace {
         key: Vec<u8>,
     },
+}
+
+impl Instruction {
+    pub fn hash(&self) -> FixedHash {
+        // TODO: put in actual hashes
+        match self {
+            Instruction::CallFunction { .. } => FixedHash::zero(),
+            Instruction::CallMethod { .. } => FixedHash::zero(),
+            Instruction::PutLastInstructionOutputOnWorkspace { .. } => FixedHash::zero(),
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub enum ThaumInput {
+    Standard {
+        object_id: ObjectId,
+    },
+    PegIn {
+        commitment: Commitment,
+        burn_proof: MerkleProof,
+        spending_key: StealthAddress,
+        owner_proof: ComSignature,
+    },
+}
+
+#[derive(Debug, Clone)]
+pub struct ThaumOutput {
+    commitment: Commitment,
+    owner: StealthAddress,
+    rangeproof: BulletRangeProof,
+}
+
+#[derive(Debug, Clone)]
+pub struct StealthAddress {
+    nonce: PublicKey,
+    address: PublicKey,
+}
+
+#[derive(Debug, Clone)]
+pub struct BalanceProof {}
+
+#[derive(Debug, Clone)]
+pub struct Transaction {
+    hash: FixedHash,
+    instructions: Vec<Instruction>,
+    signature: InstructionSignature,
+    fee: u64,
+    sender_public_key: PublicKey,
+    // Not part of signature. TODO: Should it be?
+    meta: TransactionMeta,
+}
+
+#[derive(Debug, Clone, Default)]
+pub struct TransactionMeta {
+    involved_objects: HashMap<ShardId, Vec<(ObjectId, SubstateChange, ObjectClaim)>>,
+}
+
+impl TransactionMeta {
+    pub fn involved_shards(&self) -> Vec<ShardId> {
+        self.involved_objects.keys().cloned().collect()
+    }
+
+    pub fn objects_for_shard(&self, shard_id: ShardId) -> Vec<(ObjectId, SubstateChange, ObjectClaim)> {
+        self.involved_objects.get(&shard_id).cloned().unwrap_or_default()
+    }
+}
+
+impl Transaction {
+    pub fn new(
+        fee: u64,
+        instructions: Vec<Instruction>,
+        signature: InstructionSignature,
+        sender_public_key: PublicKey,
+        meta: TransactionMeta,
+    ) -> Self {
+        let mut s = Self {
+            hash: FixedHash::zero(),
+            instructions,
+            signature,
+            fee,
+            sender_public_key,
+            meta,
+        };
+        s.calculate_hash();
+        s
+    }
+
+    pub fn hash(&self) -> &FixedHash {
+        &self.hash
+    }
+
+    pub fn meta(&self) -> &TransactionMeta {
+        &self.meta
+    }
+
+    fn calculate_hash(&mut self) {
+        let mut res = Blake256::new()
+            .chain(self.sender_public_key.as_bytes())
+            .chain(self.signature.signature().get_public_nonce().as_bytes())
+            .chain(self.signature.signature().get_signature().as_bytes());
+        for instruction in &self.instructions {
+            res = res.chain(instruction.hash())
+        }
+        self.hash = res.finalize_fixed().into();
+    }
+
+    pub fn instructions(&self) -> &[Instruction] {
+        &self.instructions
+    }
+
+    pub fn signature(&self) -> &InstructionSignature {
+        &self.signature
+    }
+
+    pub fn sender_public_key(&self) -> &PublicKey {
+        &self.sender_public_key
+    }
+
+    pub fn destruct(self) -> (Vec<Instruction>, InstructionSignature, PublicKey) {
+        (self.instructions, self.signature, self.sender_public_key)
+    }
 }

@@ -36,8 +36,8 @@ pub fn mock_inbound<TAddr: NodeAddressable, TPayload: Payload>() -> MockInboundC
 }
 
 type Messages<TAddr, TPayload> = (
-    Sender<(TAddr, HotStuffMessage<TPayload>)>,
-    Receiver<(TAddr, HotStuffMessage<TPayload>)>,
+    Sender<(TAddr, HotStuffMessage<TPayload, TAddr>)>,
+    Receiver<(TAddr, HotStuffMessage<TPayload, TAddr>)>,
 );
 
 #[derive()]
@@ -56,7 +56,7 @@ impl<TAddr: NodeAddressable + Send, TPayload: Payload> InboundConnectionService
         &self,
         _message_type: HotStuffMessageType,
         _for_view: ViewId,
-    ) -> Result<(TAddr, HotStuffMessage<TPayload>), DigitalAssetError> {
+    ) -> Result<(TAddr, HotStuffMessage<TPayload, TAddr>), DigitalAssetError> {
         todo!()
     }
 
@@ -64,7 +64,7 @@ impl<TAddr: NodeAddressable + Send, TPayload: Payload> InboundConnectionService
         &self,
         _message_type: HotStuffMessageType,
         _for_view: ViewId,
-    ) -> Result<(TAddr, HotStuffMessage<TPayload>), DigitalAssetError> {
+    ) -> Result<(TAddr, HotStuffMessage<TPayload, TAddr>), DigitalAssetError> {
         todo!()
     }
 }
@@ -75,11 +75,11 @@ impl<TAddr: NodeAddressable, TPayload: Payload> Default for MockInboundConnectio
 }
 
 impl<TAddr: NodeAddressable, TPayload: Payload> MockInboundConnectionService<TAddr, TPayload> {
-    pub fn _push(&mut self, from: TAddr, message: HotStuffMessage<TPayload>) {
+    pub fn _push(&mut self, from: TAddr, message: HotStuffMessage<TPayload, TAddr>) {
         self.messages.0.try_send((from, message)).unwrap()
     }
 
-    pub fn _create_sender(&self) -> Sender<(TAddr, HotStuffMessage<TPayload>)> {
+    pub fn _create_sender(&self) -> Sender<(TAddr, HotStuffMessage<TPayload, TAddr>)> {
         self.messages.0.clone()
     }
 }
@@ -91,7 +91,7 @@ pub fn mock_outbound<TAddr: NodeAddressable, TPayload: Payload>(
 }
 
 pub struct MockOutboundService<TAddr: NodeAddressable, TPayload: Payload> {
-    inbound_senders: HashMap<TAddr, Sender<(TAddr, HotStuffMessage<TPayload>)>>,
+    inbound_senders: HashMap<TAddr, Sender<(TAddr, HotStuffMessage<TPayload, TAddr>)>>,
     inbounds: HashMap<TAddr, MockInboundConnectionService<TAddr, TPayload>>,
 }
 
@@ -138,7 +138,7 @@ impl<TAddr: NodeAddressable + Send + Sync + Debug, TPayload: Payload> OutboundSe
         &mut self,
         from: TAddr,
         to: TAddr,
-        message: HotStuffMessage<TPayload>,
+        message: HotStuffMessage<TPayload, TAddr>,
     ) -> Result<(), DigitalAssetError> {
         let t = &to;
         println!(
@@ -156,7 +156,7 @@ impl<TAddr: NodeAddressable + Send + Sync + Debug, TPayload: Payload> OutboundSe
         &mut self,
         from: TAddr,
         _committee: &[TAddr],
-        message: HotStuffMessage<TPayload>,
+        message: HotStuffMessage<TPayload, TAddr>,
     ) -> Result<(), DigitalAssetError> {
         let receivers: Vec<TAddr> = self.inbound_senders.keys().cloned().collect();
         for receiver in receivers {

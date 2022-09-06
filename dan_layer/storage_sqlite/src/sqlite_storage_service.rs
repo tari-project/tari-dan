@@ -27,25 +27,3 @@ use tari_dan_core::{
 };
 
 pub struct SqliteStorageService {}
-
-// TODO: this has no references to Sqlite, so may be worth moving to dan_layer.core
-
-#[async_trait]
-impl ChainStorageService<TariDanPayload> for SqliteStorageService {
-    async fn get_metadata(&self) -> Result<SidechainMetadata, StorageError> {
-        todo!()
-    }
-
-    async fn add_node<TUnitOfWork: ChainDbUnitOfWork>(
-        &self,
-        node: &HotStuffTreeNode<TariDanPayload>,
-        db: TUnitOfWork,
-    ) -> Result<(), StorageError> {
-        let mut db = db;
-        for instruction in node.payload().instructions() {
-            db.add_instruction(*node.hash(), instruction.clone())?;
-        }
-        db.add_node(*node.hash(), *node.parent(), node.height())?;
-        Ok(())
-    }
-}

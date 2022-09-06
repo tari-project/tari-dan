@@ -3,7 +3,6 @@
 
 pub mod flow;
 pub mod function_definitions;
-pub mod instructions;
 pub mod models;
 pub mod state;
 pub mod wasm;

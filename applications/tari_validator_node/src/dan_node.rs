@@ -22,22 +22,25 @@
 
 use std::sync::Arc;
 
-use tari_common::exit_codes::{ExitCode, ExitError};
+use tari_common::exit_codes::ExitError;
 use tari_comms::NodeIdentity;
 use tari_dan_core::{
-    services::{mempool::service::MempoolServiceHandle, ConcreteAcceptanceManager},
+    models::{Epoch, TariDanPayload},
+    services::{
+        epoch_manager::RangeEpochManager,
+        leader_strategy::AlwaysFirstLeader,
+        mempool::service::MempoolServiceHandle,
+    },
     storage::global::GlobalDb,
+    workers::hotstuff_waiter::HotStuffWaiter,
 };
 use tari_dan_storage_sqlite::{global::SqliteGlobalDbBackendAdapter, SqliteDbFactory};
 use tari_p2p::comms_connector::SubscriptionFactory;
 use tari_service_framework::ServiceHandles;
 use tari_shutdown::ShutdownSignal;
+use tokio::sync::mpsc::channel;
 
-use crate::{
-    config::ValidatorNodeConfig,
-    contract_worker_manager::ContractWorkerManager,
-    grpc::services::{base_node_client::GrpcBaseNodeClient, wallet_client::GrpcWalletClient},
-};
+use crate::{config::ValidatorNodeConfig, grpc::services::base_node_client::GrpcBaseNodeClient};
 
 const _LOG_TARGET: &str = "tari::validator_node::app";
 
@@ -45,50 +48,45 @@ const _LOG_TARGET: &str = "tari::validator_node::app";
 pub struct DanNode {
     config: ValidatorNodeConfig,
     identity: Arc<NodeIdentity>,
-    global_db: GlobalDb<SqliteGlobalDbBackendAdapter>,
 }
 
 impl DanNode {
-    pub fn new(
-        config: ValidatorNodeConfig,
-        identity: Arc<NodeIdentity>,
-        global_db: GlobalDb<SqliteGlobalDbBackendAdapter>,
-    ) -> Self {
-        Self {
-            config,
-            identity,
-            global_db,
-        }
+    pub fn new(config: ValidatorNodeConfig, identity: Arc<NodeIdentity>) -> Self {
+        Self { config, identity }
     }
 
     pub async fn start(
         &self,
-        shutdown: ShutdownSignal,
+        mut shutdown: ShutdownSignal,
         mempool_service: MempoolServiceHandle,
         db_factory: SqliteDbFactory,
         handles: ServiceHandles,
         subscription_factory: Arc<SubscriptionFactory>,
     ) -> Result<(), ExitError> {
-        let base_node_client = GrpcBaseNodeClient::new(self.config.base_node_grpc_address);
-        let wallet_client = GrpcWalletClient::new(self.config.wallet_grpc_address);
-        let acceptance_manager = ConcreteAcceptanceManager::new(wallet_client, base_node_client.clone());
-        let workers = ContractWorkerManager::new(
-            self.config.clone(),
-            self.identity.clone(),
-            self.global_db.clone(),
-            base_node_client,
-            acceptance_manager,
-            mempool_service,
-            handles,
-            subscription_factory,
-            db_factory,
-            shutdown.clone(),
-        );
+        // let base_node_client = GrpcBaseNodeClient::new(self.config.base_node_grpc_address);
+        // let wallet_client = GrpcWalletClient::new(self.config.wallet_grpc_address);
+        // let acceptance_manager = ConcreteAcceptanceManager::new(wallet_client, base_node_client.clone());
+        // let workers = ContractWorkerManager::new(
+        //     self.config.clone(),
+        //     self.identity.clone(),
+        //     self.global_db.clone(),
+        //     base_node_client,
+        //     acceptance_manager,
+        //     mempool_service,
+        //     handles,
+        //     subscription_factory,
+        //     db_factory,
+        //     shutdown.clone(),
+        // );
 
-        workers
-            .start()
-            .await
-            .map_err(|err| ExitError::new(ExitCode::DigitalAssetError, err))?;
+        // workers
+        //     .start()
+        //     .await
+        //     .map_err(|err| ExitError::new(ExitCode::DigitalAssetError, err))?;
+
+        // todo!();
+
+        shutdown.wait().await;
 
         Ok(())
     }

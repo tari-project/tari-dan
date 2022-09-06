@@ -24,17 +24,18 @@ use async_trait::async_trait;
 
 use crate::{
     models::{HotStuffTreeNode, Payload, SidechainMetadata},
+    services::infrastructure_services::NodeAddressable,
     storage::{chain::ChainDbUnitOfWork, StorageError},
 };
 
 // TODO: perhaps rename to ChainBusinessLogic
 // One per asset, per network
 #[async_trait]
-pub trait ChainStorageService<TPayload: Payload> {
+pub trait ChainStorageService<TAddr: NodeAddressable> {
     async fn get_metadata(&self) -> Result<SidechainMetadata, StorageError>;
     async fn add_node<TUnitOfWork: ChainDbUnitOfWork>(
         &self,
-        node: &HotStuffTreeNode<TPayload>,
+        node: &HotStuffTreeNode<TAddr>,
         db: TUnitOfWork,
     ) -> Result<(), StorageError>;
 }
