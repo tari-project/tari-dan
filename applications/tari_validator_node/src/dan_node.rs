@@ -25,7 +25,7 @@ use std::sync::Arc;
 use tari_common::exit_codes::{ExitCode, ExitError};
 use tari_comms::NodeIdentity;
 use tari_dan_core::{
-    models::{Epoch, ShardId, TariDanPayload},
+    models::{Epoch, TariDanPayload},
     services::{
         epoch_manager::RangeEpochManager,
         leader_strategy::AlwaysFirstLeader,

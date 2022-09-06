@@ -424,7 +424,7 @@ impl From<tari_dan_engine::instruction::Instruction> for proto::common::Instruct
         //         result.method = method;
         //         result.args = args.into_iter().map(|a| a.to_bytes()).collect();
         //     },
-            _ => todo!(),
+        //     _ => todo!(),
         // }
         //
         // result
