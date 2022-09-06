@@ -1,7 +1,8 @@
 use log::*;
 use tari_comms::types::CommsPublicKey;
+use tari_dan_common_types::ShardId;
 use tari_dan_core::{
-    models::{vote_message::VoteMessage, HotStuffMessage, ShardId, TariDanPayload},
+    models::{vote_message::VoteMessage, HotStuffMessage, TariDanPayload},
     services::{leader_strategy::AlwaysFirstLeader, mempool::service::MempoolServiceHandle},
     workers::hotstuff_waiter::HotStuffWaiter,
 };

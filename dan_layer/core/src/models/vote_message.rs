@@ -1,8 +1,9 @@
 use digest::{Digest, FixedOutput};
 use tari_common_types::types::FixedHash;
 use tari_crypto::hash::blake2::Blake256;
+use tari_dan_common_types::ShardId;
 
-use crate::models::{ObjectPledge, QuorumDecision, ShardId, TreeNodeHash, ValidatorSignature};
+use crate::models::{ObjectPledge, QuorumDecision, TreeNodeHash, ValidatorSignature};
 
 #[derive(Debug, Clone)]
 pub struct VoteMessage {
@@ -45,12 +46,12 @@ impl VoteMessage {
         // data must already be sorted
         for (shard, hash, pledges) in &self.other_shard_nodes {
             result = result
-                .chain(shard.0.to_le_bytes())
+                .chain(shard.0)
                 .chain(hash.as_bytes())
                 .chain((pledges.len() as u32).to_le_bytes());
 
             for p in pledges {
-                result = result.chain(p.object_id.0.to_le_bytes())
+                result = result.chain(p.object_id.0)
             }
         }
         result.finalize_fixed().into()

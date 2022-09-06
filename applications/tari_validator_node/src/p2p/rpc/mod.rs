@@ -22,9 +22,6 @@
 
 mod service_impl;
 
-#[cfg(test)]
-mod test;
-
 pub use service_impl::ValidatorNodeRpcServiceImpl;
 use tari_comms::protocol::rpc::{Request, Response, RpcStatus, Streaming};
 use tari_comms_rpc_macros::tari_rpc;

@@ -20,7 +20,7 @@
 //   WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //   USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use tari_template_abi::{Decode, Encode};
+use tari_template_abi::{decode, encode, rust::io, Decode, Encode};
 
 #[derive(Debug, Clone, PartialEq, Eq, Decode, Encode)]
 pub enum Arg {
@@ -35,5 +35,13 @@ impl Arg {
 
     pub fn from_workspace<T: Into<Vec<u8>>>(key: T) -> Self {
         Arg::FromWorkspace(key.into())
+    }
+
+    pub fn from_bytes(bytes: &[u8]) -> io::Result<Self> {
+        decode(bytes)
+    }
+
+    pub fn to_bytes(&self) -> Vec<u8> {
+        encode(self).unwrap()
     }
 }

@@ -21,6 +21,7 @@
 // USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 use tari_common_types::types::FixedHash;
+use tari_dan_common_types::ShardId;
 
 use crate::{
     models::{
@@ -29,7 +30,6 @@ use crate::{
         HotStuffTreeNode,
         Payload,
         QuorumCertificate,
-        ShardId,
         TreeNodeHash,
         ValidatorSignature,
         ViewId,

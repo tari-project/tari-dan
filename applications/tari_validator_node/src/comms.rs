@@ -27,7 +27,6 @@ use tari_common::exit_codes::{ExitCode, ExitError};
 use tari_comms::{protocol::rpc::RpcServer, NodeIdentity, UnspawnedCommsNode};
 use tari_comms_dht::Dht;
 use tari_dan_core::services::mempool::service::MempoolServiceHandle;
-use tari_dan_storage_sqlite::SqliteDbFactory;
 use tari_p2p::{
     comms_connector::{pubsub_connector, SubscriptionFactory},
     initialization::{spawn_comms_using_transport, P2pInitializer},
@@ -37,13 +36,10 @@ use tari_shutdown::ShutdownSignal;
 
 use crate::{
     config::ApplicationConfig,
-    p2p::{
-        create_validator_node_rpc_service,
-        services::{
-            epoch_manager::initializer::EpochManagerInitializer,
-            hotstuff::initializer::HotstuffServiceInitializer,
-            mempool::initializer::MempoolInitializer,
-        },
+    p2p::services::{
+        epoch_manager::initializer::EpochManagerInitializer,
+        hotstuff::initializer::HotstuffServiceInitializer,
+        mempool::initializer::MempoolInitializer,
     },
 };
 
@@ -107,7 +103,7 @@ fn setup_p2p_rpc(
     config: &ApplicationConfig,
     comms: UnspawnedCommsNode,
     handles: &ServiceHandles,
-    mempool: MempoolServiceHandle,
+    _mempool: MempoolServiceHandle,
 ) -> UnspawnedCommsNode {
     let dht = handles.expect_handle::<Dht>();
     let rpc_server = RpcServer::builder()

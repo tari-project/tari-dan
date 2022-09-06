@@ -23,7 +23,8 @@
 use std::sync::{Arc, RwLock};
 
 use tari_dan_engine::{
-    runtime::{IdProvider, RuntimeError, RuntimeInterface, RuntimeState},
+    hashing::hasher,
+    runtime::{CommitResult, IdProvider, RuntimeError, RuntimeInterface, RuntimeState},
     state_store::{memory::MemoryStateStore, AtomicDb, StateReader, StateWriter},
 };
 use tari_template_lib::{
@@ -183,5 +184,9 @@ impl RuntimeInterface for MockRuntimeInterface {
     fn set_last_instruction_output(&self, _value: Option<Vec<u8>>) -> Result<(), RuntimeError> {
         self.add_call("set_last_instruction_output");
         Ok(())
+    }
+
+    fn commit(&self) -> Result<CommitResult, RuntimeError> {
+        Ok(CommitResult::new(hasher("tx").result(), vec![], Ok(())))
     }
 }

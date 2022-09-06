@@ -44,6 +44,10 @@ impl Vault {
         self.resource.withdraw(amount)
     }
 
+    pub fn balance(&self) -> Amount {
+        self.resource.amount()
+    }
+
     pub fn resource_address(&self) -> ResourceAddress {
         self.resource.address()
     }

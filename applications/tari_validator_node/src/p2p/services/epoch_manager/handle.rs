@@ -1,7 +1,8 @@
 use async_trait::async_trait;
 use tari_comms::types::CommsPublicKey;
+use tari_dan_common_types::ShardId;
 use tari_dan_core::{
-    models::{Committee, Epoch, ShardId},
+    models::{Committee, Epoch},
     services::epoch_manager::EpochManager,
 };
 use tokio::sync::{mpsc::Sender, oneshot, oneshot::channel};
