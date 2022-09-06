@@ -171,11 +171,15 @@ async fn run_node(config: &ApplicationConfig) -> Result<(), ExitError> {
         task::spawn(run_grpc(grpc_server, address, shutdown.to_signal()));
     }
 
-    task::spawn(run_json_rpc());
-    println!("Started JSON-RPC server");
-
     println!("🚀 Validator node started!");
     println!("{}", node_identity);
+
+    // Run the JSON-RPC server
+    // TODO: read port as a config parameter
+    let json_rpc_handle = task::spawn(run_json_rpc());
+    println!("Started JSON-RPC server");
+    json_rpc_handle.await.expect("The JSON-RPC task has panicked"); // Currently the execution will be blocked from here
+                                                                    // TODO: integrate the json_rpc server into the "handles" to avoid blocking
 
     run_dan_node(
         shutdown.to_signal(),
