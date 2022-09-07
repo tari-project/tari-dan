@@ -23,10 +23,11 @@
 #[cfg(feature = "serde")]
 use std::fmt::Write;
 
+use serde::de::VariantAccess;
 use tari_template_abi::{decode, encode, rust::io, Decode, Encode};
 
 #[derive(Debug, Clone, PartialEq, Eq, Decode, Encode)]
-#[cfg_attr(feature = "serde", derive(serde::Deserialize))]
+// #[cfg_attr(feature = "serde", derive(serde::Deserialize))]
 pub enum Arg {
     FromWorkspace(Vec<u8>),
     Literal(Vec<u8>),
@@ -66,6 +67,42 @@ impl serde::Serialize for Arg {
 }
 
 #[cfg(feature = "serde")]
+impl<'de> serde::Deserialize<'de> for Arg {
+    fn deserialize<D>(deserializer: D) -> Result<Arg, D::Error>
+    where D: serde::Deserializer<'de> {
+        struct ArgVisitor;
+
+        impl<'de> serde::de::Visitor<'de> for ArgVisitor {
+            type Value = Arg;
+
+            fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
+                formatter.write_str("Arg")
+            }
+
+            fn visit_enum<A>(self, data: A) -> Result<Self::Value, A::Error>
+            where A: serde::de::EnumAccess<'de> {
+                if let Ok((variant_name, variant_value)) = data.variant::<String>() {
+                    let value = variant_value
+                        .newtype_variant::<String>()
+                        .map_err(|_| serde::de::Error::custom("Missing variant data"))?;
+                    let bytes = hex_to_bytes(&value).map_err(|_| serde::de::Error::custom("Invalid variant data"))?;
+                    let arg = match variant_name.as_str() {
+                        "FromWorkspace" => Arg::FromWorkspace(bytes),
+                        "Literal" => Arg::Literal(bytes),
+                        &_ => return Err(serde::de::Error::custom("Invalid variant")),
+                    };
+
+                    Ok(arg)
+                } else {
+                    Err(serde::de::Error::custom("Invalid data type"))
+                }
+            }
+        }
+        deserializer.deserialize_enum("Arg", &["FromWorkspace", "Literal"], ArgVisitor {})
+    }
+}
+
+#[cfg(feature = "serde")]
 fn bytes_to_hex(bytes: &Vec<u8>) -> Result<String, std::fmt::Error> {
     let mut hex = String::with_capacity(bytes.len() * 2);
 
@@ -74,4 +111,21 @@ fn bytes_to_hex(bytes: &Vec<u8>) -> Result<String, std::fmt::Error> {
     }
 
     Ok(hex)
+}
+
+#[cfg(feature = "serde")]
+pub fn hex_to_bytes(s: &str) -> Result<Vec<u8>, String> {
+    // hex string MUST have an even number of charactes (1 byte == 2 hex chars)
+    if s.len() & 1 == 1 {
+        return Err("Invalid hex len, it must be even".to_string());
+    }
+
+    let num_bytes = s.len() / 2;
+    let mut bytes = Vec::with_capacity(num_bytes);
+    for i in 0..num_bytes {
+        let byte = u8::from_str_radix(&s[2 * i..2 * (i + 1)], 16).map_err(|_| "Invalid hex value")?;
+        bytes.push(byte);
+    }
+
+    Ok(bytes)
 }
