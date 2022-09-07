@@ -208,6 +208,7 @@ version = "0.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "78c25e4ed9167c8683284c41cb60de9965c038753960c26408f5f901c0641d16"
 dependencies = [
+ "anyhow",
  "async-trait",
  "axum",
  "serde",

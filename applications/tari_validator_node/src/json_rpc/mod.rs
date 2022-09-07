@@ -1,64 +1,83 @@
-use std::net::SocketAddr;
-
-use axum::{
-    extract,
-    http::StatusCode,
-    response::IntoResponse,
-    routing::{get, post},
-    Json,
-    Router,
+use axum::{extract::ContentLengthLimit, routing::post, Router};
+use axum_jrpc::{
+    error::{JsonRpcError, JsonRpcErrorReason},
+    JrpcResult,
+    JsonRpcExtractor,
+    JsonRpcResponse,
 };
-use serde::{Deserialize, Serialize};
+use serde::Deserialize;
+
+// curl 'http://127.0.0.1:13000/' -POST -d '{"jsonrpc": "2.0", "method": "div", "params": [7,0], "id": 1}' -H 'Content-Type: application/json'
 
 pub async fn run_json_rpc() {
-    let app = Router::new()
-        .route("/", get(root))
-        .route("/users", post(create_user))
-        .route("/users/:id", get(get_user));
-
-    let addr = SocketAddr::from(([127, 0, 0, 1], 13000));
-    println!("listening on {}", addr);
-    axum::Server::bind(&addr).serve(app.into_make_service()).await.unwrap();
+    let router = Router::new().route("/", post(handler));
+    axum::Server::bind(&"127.0.0.1:13000".parse().unwrap())
+        .serve(router.into_make_service())
+        .await
+        .unwrap();
 }
 
-async fn root() -> &'static str {
-    "Hello, World!"
+async fn handler(ContentLengthLimit(value): ContentLengthLimit<JsonRpcExtractor, 1024>) -> JrpcResult {
+    let answer_id = value.get_answer_id();
+    println!("{:?}", value);
+    match value.method.as_str() {
+        "add" => {
+            let request: Test = value.parse_params()?;
+            let result = request.a + request.b;
+            Ok(JsonRpcResponse::success(answer_id, result))
+        },
+        "sub" => {
+            let result: [i32; 2] = value.parse_params()?;
+            let result = match failing_sub(result[0], result[1]).await {
+                Ok(result) => result,
+                Err(e) => return Err(JsonRpcResponse::error(answer_id, e.into())),
+            };
+            Ok(JsonRpcResponse::success(answer_id, result))
+        },
+        "div" => {
+            let result: [i32; 2] = value.parse_params()?;
+            let result = match failing_div(result[0], result[1]).await {
+                Ok(result) => result,
+                Err(e) => return Err(JsonRpcResponse::error(answer_id, e.into())),
+            };
+
+            Ok(JsonRpcResponse::success(answer_id, result))
+        },
+        method => Ok(value.method_not_found(method)),
+    }
 }
 
-async fn get_user(extract::Path(id): extract::Path<u64>) -> impl IntoResponse {
-    let user = User {
-        id,
-        username: "John".to_string(),
-    };
-
-    (StatusCode::OK, Json(user))
+async fn failing_sub(a: i32, b: i32) -> anyhow::Result<i32> {
+    anyhow::ensure!(a > b, "a must be greater than b");
+    Ok(a - b)
 }
 
-async fn create_user(
-    // this argument tells axum to parse the request body
-    // as JSON into a `CreateUser` type
-    Json(payload): Json<CreateUser>,
-) -> impl IntoResponse {
-    // insert your application logic here
-    let user = User {
-        id: 1337,
-        username: payload.username,
-    };
-
-    // this will be converted into a JSON response
-    // with a status code of `201 Created`
-    (StatusCode::CREATED, Json(user))
+async fn failing_div(a: i32, b: i32) -> Result<i32, CustomError> {
+    if b == 0 {
+        Err(CustomError::DivideByZero)
+    } else {
+        Ok(a / b)
+    }
 }
 
-// the input to our `create_user` handler
-#[derive(Deserialize)]
-struct CreateUser {
-    username: String,
+#[derive(Deserialize, Debug)]
+struct Test {
+    a: i32,
+    b: i32,
 }
 
-// the output to our `create_user` handler
-#[derive(Serialize)]
-struct User {
-    id: u64,
-    username: String,
+#[derive(Debug, thiserror::Error)]
+enum CustomError {
+    #[error("Divisor must not be equal to 0")]
+    DivideByZero,
+}
+
+impl From<CustomError> for JsonRpcError {
+    fn from(error: CustomError) -> Self {
+        JsonRpcError::new(
+            JsonRpcErrorReason::ServerError(-32099),
+            error.to_string(),
+            serde_json::Value::Null,
+        )
+    }
 }
