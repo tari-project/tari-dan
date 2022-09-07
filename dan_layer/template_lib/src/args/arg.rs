@@ -20,9 +20,13 @@
 //   WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //   USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+#[cfg(feature = "serde")]
+use std::fmt::Write;
+
 use tari_template_abi::{decode, encode, rust::io, Decode, Encode};
 
 #[derive(Debug, Clone, PartialEq, Eq, Decode, Encode)]
+#[cfg_attr(feature = "serde", derive(serde::Deserialize))]
 pub enum Arg {
     FromWorkspace(Vec<u8>),
     Literal(Vec<u8>),
@@ -44,4 +48,30 @@ impl Arg {
     pub fn to_bytes(&self) -> Vec<u8> {
         encode(self).unwrap()
     }
+}
+
+#[cfg(feature = "serde")]
+impl serde::Serialize for Arg {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where S: serde::Serializer {
+        match *self {
+            Arg::FromWorkspace(ref s) => {
+                serializer.serialize_newtype_variant("FromWorkspace", 0, "FromWorkspace", &bytes_to_hex(s).unwrap())
+            },
+            Arg::Literal(ref s) => {
+                serializer.serialize_newtype_variant("Literal", 1, "Literal", &bytes_to_hex(s).unwrap())
+            },
+        }
+    }
+}
+
+#[cfg(feature = "serde")]
+fn bytes_to_hex(bytes: &Vec<u8>) -> Result<String, std::fmt::Error> {
+    let mut hex = String::with_capacity(bytes.len() * 2);
+
+    for byte in bytes {
+        write!(hex, "{:02x?}", byte)?;
+    }
+
+    Ok(hex)
 }

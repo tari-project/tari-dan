@@ -5,9 +5,13 @@ use axum_jrpc::{
     JsonRpcExtractor,
     JsonRpcResponse,
 };
+use rand::rngs::OsRng;
 use serde::{Deserialize, Serialize};
+use tari_common_types::types::PrivateKey;
 use tari_comms::{multiaddr::Multiaddr, peer_manager::NodeId, types::CommsPublicKey};
-use tari_crypto::tari_utilities::hex::serialize_to_hex;
+use tari_crypto::{keys::SecretKey, tari_utilities::hex::serialize_to_hex};
+use tari_dan_engine::instruction::{Instruction, Transaction, TransactionBuilder};
+use tari_template_lib::{args::Arg, Hash};
 
 // curl 'http://127.0.0.1:13000/' -POST -d '{"jsonrpc": "2.0", "method": "div", "params": [7,0], "id": 1}' -H 'Content-Type: application/json'
 
@@ -55,6 +59,26 @@ async fn handler(ContentLengthLimit(value): ContentLengthLimit<JsonRpcExtractor,
             };
 
             Ok(JsonRpcResponse::success(answer_id, identity))
+        },
+        "get_transaction" => {
+            let mut builder = TransactionBuilder::new();
+            builder.add_instruction(Instruction::CallFunction {
+                template: "template".to_string(),
+                function: "function".to_string(),
+                args: vec![Arg::Literal(vec![0, 1, 2])],
+                package_address: Hash::default(),
+            });
+            builder.sign(&PrivateKey::random(&mut OsRng));
+            let transaction = builder.build();
+
+            Ok(JsonRpcResponse::success(answer_id, transaction))
+        },
+        "submit_transaction" => {
+            // TODO: submit the transaction to the wasm engine
+            let transaction: Transaction = value.parse_params()?;
+            println!("Transaction: {:?}", transaction);
+
+            Ok(JsonRpcResponse::success(answer_id, ()))
         },
         method => Ok(value.method_not_found(method)),
     }

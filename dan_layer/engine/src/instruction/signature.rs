@@ -22,11 +22,12 @@
 
 use std::convert::TryFrom;
 
+use serde::{Deserialize, Serialize};
 use tari_common_types::types::{PrivateKey, Signature};
 
 use crate::{crypto::create_key_pair, instruction::Instruction};
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct InstructionSignature(Signature);
 
 impl InstructionSignature {
