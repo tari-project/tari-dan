@@ -203,6 +203,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "axum-jrpc"
+version = "0.2.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "78c25e4ed9167c8683284c41cb60de9965c038753960c26408f5f901c0641d16"
+dependencies = [
+ "async-trait",
+ "axum",
+ "serde",
+ "serde_json",
+ "thiserror",
+]
+
+[[package]]
 name = "backtrace"
 version = "0.3.65"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4582,6 +4595,7 @@ dependencies = [
  "anyhow",
  "async-trait",
  "axum",
+ "axum-jrpc",
  "blake2 0.9.2",
  "borsh",
  "bytecodec",
