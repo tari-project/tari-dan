@@ -5,7 +5,9 @@ use axum_jrpc::{
     JsonRpcExtractor,
     JsonRpcResponse,
 };
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
+use tari_comms::{multiaddr::Multiaddr, peer_manager::NodeId, types::CommsPublicKey};
+use tari_crypto::tari_utilities::hex::serialize_to_hex;
 
 // curl 'http://127.0.0.1:13000/' -POST -d '{"jsonrpc": "2.0", "method": "div", "params": [7,0], "id": 1}' -H 'Content-Type: application/json'
 
@@ -42,6 +44,17 @@ async fn handler(ContentLengthLimit(value): ContentLengthLimit<JsonRpcExtractor,
             };
 
             Ok(JsonRpcResponse::success(answer_id, result))
+        },
+        "get_identity" => {
+            // TODO: retrieve the real identity
+            let public_address: Multiaddr = "/ip4/127.0.0.1/udt/sctp/5678".parse().unwrap();
+            let identity = NodeIdentity {
+                node_id: NodeId::default(),
+                public_key: CommsPublicKey::default(),
+                public_address,
+            };
+
+            Ok(JsonRpcResponse::success(answer_id, identity))
         },
         method => Ok(value.method_not_found(method)),
     }
@@ -80,4 +93,12 @@ impl From<CustomError> for JsonRpcError {
             serde_json::Value::Null,
         )
     }
+}
+
+#[derive(Serialize, Debug)]
+struct NodeIdentity {
+    #[serde(serialize_with = "serialize_to_hex")]
+    node_id: NodeId,
+    public_key: CommsPublicKey,
+    public_address: Multiaddr,
 }
