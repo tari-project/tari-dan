@@ -32,7 +32,7 @@ async fn handler(ContentLengthLimit(value): ContentLengthLimit<JsonRpcExtractor,
             let transaction: Transaction = value.parse_params()?;
             println!("Transaction: {:?}", transaction);
 
-            Ok(JsonRpcResponse::success(answer_id, transaction))
+            Ok(JsonRpcResponse::success(answer_id, ()))
         },
         method => Ok(value.method_not_found(method)),
     }

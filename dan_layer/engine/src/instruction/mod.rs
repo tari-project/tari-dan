@@ -30,7 +30,7 @@ pub use processor::InstructionProcessor;
 
 mod signature;
 
-use serde::{Deserialize, Serialize};
+use serde::Deserialize;
 pub use signature::InstructionSignature;
 use tari_common_types::types::PublicKey;
 use tari_template_lib::{
@@ -38,14 +38,14 @@ use tari_template_lib::{
     models::{ComponentAddress, PackageAddress},
 };
 
-#[derive(Debug, Clone, Deserialize, Serialize)]
+#[derive(Debug, Clone, Deserialize)]
 pub struct Transaction {
     pub instructions: Vec<Instruction>,
     pub signature: InstructionSignature,
     pub sender_public_key: PublicKey,
 }
 
-#[derive(Debug, Clone, Deserialize, Serialize)]
+#[derive(Debug, Clone, Deserialize)]
 pub enum Instruction {
     CallFunction {
         package_address: PackageAddress,

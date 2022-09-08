@@ -99,14 +99,6 @@ impl Display for Hash {
 }
 
 #[cfg(feature = "serde")]
-impl serde::Serialize for Hash {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where S: serde::Serializer {
-        serializer.serialize_str(self.to_string().as_str())
-    }
-}
-
-#[cfg(feature = "serde")]
 impl<'de> serde::Deserialize<'de> for Hash {
     fn deserialize<D>(deserializer: D) -> Result<Hash, D::Error>
     where D: serde::Deserializer<'de> {
