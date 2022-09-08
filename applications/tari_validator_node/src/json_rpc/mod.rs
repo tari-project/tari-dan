@@ -6,16 +6,19 @@ use axum::{
     Router,
 };
 use axum_jrpc::{JrpcResult, JsonRpcExtractor, JsonRpcResponse};
+use log::*;
 use serde::Serialize;
 use tari_comms::{multiaddr::Multiaddr, peer_manager::NodeId, types::CommsPublicKey, NodeIdentity};
 use tari_crypto::tari_utilities::hex::serialize_to_hex;
 use tari_dan_engine::instruction::Transaction;
 
+const LOG_TARGET: &str = "tari::validator_node::json-rpc";
+
 struct State {
     node_identity: Arc<NodeIdentity>,
 }
 
-pub async fn run_json_rpc(node_identity: Arc<NodeIdentity>) {
+pub async fn run_json_rpc(node_identity: Arc<NodeIdentity>) -> Result<(), anyhow::Error> {
     let shared_state = Arc::new(State { node_identity });
 
     let router = Router::new().route("/", post(handler)).layer(Extension(shared_state));
@@ -23,7 +26,14 @@ pub async fn run_json_rpc(node_identity: Arc<NodeIdentity>) {
     axum::Server::bind(&"127.0.0.1:13000".parse().unwrap())
         .serve(router.into_make_service())
         .await
-        .unwrap();
+        .map_err(|err| {
+            error!(target: LOG_TARGET, "JSON-RPC encountered an error: {}", err);
+            err
+        })?;
+
+    info!("Stopping JSON-RPC");
+    info!(target: LOG_TARGET, "Stopping JSON-RPC");
+    Ok(())
 }
 
 async fn handler(
