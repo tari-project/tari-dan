@@ -37,13 +37,13 @@ pub trait OutboundService {
         &mut self,
         from: Self::Addr,
         to: Self::Addr,
-        message: HotStuffMessage<Self::Payload>,
+        message: HotStuffMessage<Self::Payload, Self::Addr>,
     ) -> Result<(), DigitalAssetError>;
 
     async fn broadcast(
         &mut self,
         from: Self::Addr,
         committee: &[Self::Addr],
-        message: HotStuffMessage<Self::Payload>,
+        message: HotStuffMessage<Self::Payload, Self::Addr>,
     ) -> Result<(), DigitalAssetError>;
 }

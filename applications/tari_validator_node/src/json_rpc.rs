@@ -13,6 +13,8 @@ use tari_crypto::tari_utilities::hex::serialize_to_hex;
 use tari_dan_engine::instruction::Transaction;
 
 const LOG_TARGET: &str = "tari::validator_node::json_rpc";
+const JSON_SIZE_LIMIT_BYTES: u64 = 25 * 1024; // 25 kb
+
 struct State {
     node_identity: NodeIdentity,
 }
@@ -37,7 +39,7 @@ pub async fn run_json_rpc(address: SocketAddr, node_identity: NodeIdentity) -> R
 
 async fn handler(
     Extension(state): Extension<Arc<State>>,
-    ContentLengthLimit(value): ContentLengthLimit<JsonRpcExtractor, 1024>,
+    ContentLengthLimit(value): ContentLengthLimit<JsonRpcExtractor, JSON_SIZE_LIMIT_BYTES>,
 ) -> JrpcResult {
     let answer_id = value.get_answer_id();
     match value.method.as_str() {

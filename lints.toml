@@ -22,7 +22,8 @@ deny = [
     'unreachable_patterns',
     'clippy::cloned_instead_of_copied',
     'clippy::create_dir',
-    'clippy::dbg_macro',
+    # TODO: re-add this and remove dbg!
+#    'clippy::dbg_macro',
     'clippy::else_if_without_else',
     'clippy::inline_always',
     'clippy::let_underscore_drop',

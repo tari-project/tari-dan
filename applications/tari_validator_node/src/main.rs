@@ -20,12 +20,10 @@
 // WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 // USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-mod asset;
 mod cli;
 mod cmd_args;
 mod comms;
 mod config;
-mod contract_worker_manager;
 mod dan_node;
 mod default_service_specification;
 mod grpc;
@@ -50,17 +48,8 @@ use tari_comms::{
     NodeIdentity,
 };
 use tari_comms_dht::Dht;
-use tari_dan_core::{
-    services::{
-        mempool::service::MempoolServiceHandle,
-        ConcreteAcceptanceManager,
-        ConcreteAssetProcessor,
-        ConcreteAssetProxy,
-        ServiceSpecification,
-    },
-    storage::{global::GlobalDb, DbFactory},
-};
-use tari_dan_storage_sqlite::{global::SqliteGlobalDbBackendAdapter, SqliteDbFactory};
+use tari_dan_core::services::{mempool::service::MempoolServiceHandle, ConcreteAssetProxy, ServiceSpecification};
+use tari_dan_storage_sqlite::SqliteDbFactory;
 use tari_p2p::comms_connector::SubscriptionFactory;
 use tari_service_framework::ServiceHandles;
 use tari_shutdown::{Shutdown, ShutdownSignal};
@@ -73,10 +62,7 @@ use crate::{
     config::{ApplicationConfig, ValidatorNodeConfig},
     dan_node::DanNode,
     default_service_specification::DefaultServiceSpecification,
-    grpc::{
-        services::{base_node_client::GrpcBaseNodeClient, wallet_client::GrpcWalletClient},
-        validator_node_grpc_server::ValidatorNodeGrpcServer,
-    },
+    grpc::{services::base_node_client::GrpcBaseNodeClient, validator_node_grpc_server::ValidatorNodeGrpcServer},
     json_rpc::run_json_rpc,
     p2p::services::rpc_client::TariCommsValidatorNodeClientFactory,
 };
@@ -124,9 +110,9 @@ async fn run_node(config: &ApplicationConfig) -> Result<(), ExitError> {
         PeerFeatures::NONE,
     )?;
     let db_factory = SqliteDbFactory::new(config.validator_node.data_dir.clone());
-    let global_db = db_factory
-        .get_or_create_global_db()
-        .map_err(|e| ExitError::new(ExitCode::DatabaseError, e))?;
+    // let global_db = db_factory
+    //     .get_or_create_global_db()
+    //     .map_err(|e| ExitError::new(ExitCode::DatabaseError, e))?;
     let mempool_service = MempoolServiceHandle::new();
 
     info!(
@@ -141,12 +127,8 @@ async fn run_node(config: &ApplicationConfig) -> Result<(), ExitError> {
         shutdown.to_signal(),
         node_identity.clone(),
         mempool_service.clone(),
-        db_factory.clone(),
-        ConcreteAssetProcessor::default(),
     )
     .await?;
-
-    let asset_processor = ConcreteAssetProcessor::default();
     let validator_node_client_factory =
         TariCommsValidatorNodeClientFactory::new(handles.expect_handle::<Dht>().dht_requester());
     let base_node_client = GrpcBaseNodeClient::new(config.validator_node.base_node_grpc_address);
@@ -157,14 +139,8 @@ async fn run_node(config: &ApplicationConfig) -> Result<(), ExitError> {
         mempool_service.clone(),
         db_factory.clone(),
     );
-    let wallet_client = GrpcWalletClient::new(config.validator_node.wallet_grpc_address);
-    let _acceptance_manager = ConcreteAcceptanceManager::new(wallet_client.clone(), base_node_client);
-    let grpc_server: ValidatorNodeGrpcServer<DefaultServiceSpecification> = ValidatorNodeGrpcServer::new(
-        node_identity.as_ref().clone(),
-        db_factory.clone(),
-        asset_processor,
-        asset_proxy,
-    );
+    let grpc_server: ValidatorNodeGrpcServer<DefaultServiceSpecification> =
+        ValidatorNodeGrpcServer::new(node_identity.as_ref().clone(), db_factory.clone(), asset_proxy);
 
     // Run the gRPC API
     if let Some(address) = config.validator_node.grpc_address.clone() {
@@ -190,7 +166,6 @@ async fn run_node(config: &ApplicationConfig) -> Result<(), ExitError> {
         handles,
         subscription_factory,
         node_identity,
-        global_db,
     )
     .await?;
 
@@ -213,9 +188,8 @@ async fn run_dan_node(
     handles: ServiceHandles,
     subscription_factory: Arc<SubscriptionFactory>,
     node_identity: Arc<NodeIdentity>,
-    global_db: GlobalDb<SqliteGlobalDbBackendAdapter>,
 ) -> Result<(), ExitError> {
-    let node = DanNode::new(config, node_identity, global_db);
+    let node = DanNode::new(config, node_identity);
     node.start(
         shutdown_signal,
         mempool_service,

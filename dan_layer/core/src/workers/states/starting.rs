@@ -20,16 +20,13 @@
 // WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 // USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use std::{convert::TryInto, marker::PhantomData};
+use std::marker::PhantomData;
 
 use log::*;
-use tari_core::transactions::transaction_components::OutputType;
 
 use crate::{
     digital_assets_error::DigitalAssetError,
-    models::AssetDefinition,
-    services::{BaseNodeClient, CommitteeManager, ServiceSpecification},
-    storage::DbFactory,
+    services::ServiceSpecification,
     workers::states::ConsensusWorkerStateEvent,
 };
 
@@ -47,11 +44,9 @@ impl<TSpecification: ServiceSpecification> Starting<TSpecification> {
 
     pub async fn next_event(
         &self,
-        base_node_client: &mut TSpecification::BaseNodeClient,
-        asset_definition: &AssetDefinition,
-        committee_manager: &mut TSpecification::CommitteeManager,
-        db_factory: &TSpecification::DbFactory,
-        node_id: &TSpecification::Addr,
+        _base_node_client: &mut TSpecification::BaseNodeClient,
+        _db_factory: &TSpecification::DbFactory,
+        _node_id: &TSpecification::Addr,
     ) -> Result<ConsensusWorkerStateEvent, DigitalAssetError>
     where
         TSpecification: ServiceSpecification,
@@ -60,40 +55,41 @@ impl<TSpecification: ServiceSpecification> Starting<TSpecification> {
             target: LOG_TARGET,
             "Checking base layer to see if we are part of the committee"
         );
-        let tip = base_node_client.get_tip_info().await?;
-        // get latest checkpoint on the base layer
-        let mut outputs = base_node_client
-            .get_current_contract_outputs(
-                tip.height_of_longest_chain
-                    .saturating_sub(asset_definition.base_layer_confirmation_time),
-                asset_definition.contract_id,
-                OutputType::ContractConstitution,
-            )
-            .await?;
-
-        let output = match outputs.pop() {
-            Some(chk) => chk.try_into()?,
-            None => return Ok(ConsensusWorkerStateEvent::BaseLayerCheckopintNotFound),
-        };
-
-        committee_manager.read_from_constitution(output)?;
-
-        if !committee_manager.current_committee()?.contains(node_id) {
-            info!(
-                target: LOG_TARGET,
-                "Validator node not part of committee for asset public key '{}'", asset_definition.contract_id
-            );
-            return Ok(ConsensusWorkerStateEvent::NotPartOfCommittee);
-        }
-
-        info!(
-            target: LOG_TARGET,
-            "Validator node is a committee member for asset public key '{}'", asset_definition.contract_id
-        );
-        // read and create the genesis block
-        info!(target: LOG_TARGET, "Creating DB");
-        let _chain_db = db_factory.get_or_create_chain_db(&asset_definition.contract_id)?;
-
-        Ok(ConsensusWorkerStateEvent::Initialized)
+        todo!()
+        // let tip = base_node_client.get_tip_info().await?;
+        // // get latest checkpoint on the base layer
+        // let mut outputs = base_node_client
+        //     .get_current_contract_outputs(
+        //         tip.height_of_longest_chain
+        //             .saturating_sub(asset_definition.base_layer_confirmation_time),
+        //         asset_definition.contract_id,
+        //         OutputType::ContractConstitution,
+        //     )
+        //     .await?;
+        //
+        // let output = match outputs.pop() {
+        //     Some(chk) => chk.try_into()?,
+        //     None => return Ok(ConsensusWorkerStateEvent::BaseLayerCheckopintNotFound),
+        // };
+        //
+        // committee_manager.read_from_constitution(output)?;
+        //
+        // if !committee_manager.current_committee()?.contains(node_id) {
+        //     info!(
+        //         target: LOG_TARGET,
+        //         "Validator node not part of committee for asset public key '{}'", asset_definition.contract_id
+        //     );
+        //     return Ok(ConsensusWorkerStateEvent::NotPartOfCommittee);
+        // }
+        //
+        // info!(
+        //     target: LOG_TARGET,
+        //     "Validator node is a committee member for asset public key '{}'", asset_definition.contract_id
+        // );
+        // // read and create the genesis block
+        // info!(target: LOG_TARGET, "Creating DB");
+        // let _chain_db = db_factory.get_or_create_chain_db(&asset_definition.contract_id)?;
+        //
+        // Ok(ConsensusWorkerStateEvent::Initialized)
     }
 }

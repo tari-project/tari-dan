@@ -3,19 +3,19 @@
 
 use std::{collections::HashMap, fs};
 
-use wasmer::{imports, Instance, Module, Store, Val, Value};
+use wasmer::{imports, Instance, Module, Store};
 
 use crate::{
     function_definitions::{ArgType, WasmFunctionDefinition},
-    instructions::Instruction,
+    instruction::Instruction,
     state::StateDbUnitOfWork,
     wasm::{WasmError, WasmModuleDefinition},
 };
 
 #[derive(Clone, Default)]
 pub struct WasmModuleFactory {
-    modules: HashMap<String, Instance>,
-    functions: HashMap<String, (Vec<ArgType>, String)>,
+    _modules: HashMap<String, Instance>,
+    _functions: HashMap<String, (Vec<ArgType>, String)>,
 }
 
 impl WasmModuleFactory {
@@ -48,101 +48,105 @@ impl WasmModuleFactory {
                 panic!("module {} does not exist", func_def.in_module)
             }
         }
-        Self { modules, functions }
+        Self {
+            _modules: modules,
+            _functions: functions,
+        }
     }
 
     pub fn invoke_write_method<TUnitOfWork: StateDbUnitOfWork>(
         &self,
-        name: String,
-        instruction: &Instruction,
-        state_db: TUnitOfWork,
+        _name: String,
+        _instruction: &Instruction,
+        _state_db: TUnitOfWork,
     ) -> Result<TUnitOfWork, WasmError> {
         // TODO: We should probably create a new instance each time, so that
         // there's no stale memory
-        if let Some((arg_types, module_name)) = self.functions.get(&name) {
-            if let Some(instance) = self.modules.get(module_name) {
-                let func_pointer = instance.exports.get_function(&name).expect("Could not find function");
-                let _type_params = func_pointer.ty().params();
-                let _remaining_args = Vec::from(instruction.args());
-                // dbg!(&remaining_args);
-                // let memory = instance.get_memory("mem");
-                let _offset = 0;
-                // TODO: better iteration
-                let mut remaining_instruction_args = Vec::from(instruction.args());
-                let args: Vec<Vec<Val>> = arg_types
-                    .iter()
-                    .enumerate()
-                    .map(|(position, param)| {
-                        match param {
-                            ArgType::String => {
-                                // if remaining_args.len() < 3 {
-                                //     return Err(DigitalAssetError::MissingArgument {
-                                //         position,
-                                //         argument_name: "Wasm string".to_string(),
-                                //     });
-                                // }
-                                //
-                                // let len = remaining_instruction_args.pop().expect("can't take length") as usize;
-                                // let instruction_arg =
-                                //     String::from_utf8(remaining_instruction_args.drain(len)).expect("invalid utf8");
-                                // let ptr = WasmPtr::<String>::new(offset);
-                                // let derefed = ptr.deref(&memory).expect("could not get derefed pointer");
-                                // derefed.set(instruction_arg);
-                                //
-                                // Ok(vec![Value::I32()])
-                                todo!()
-                            },
-                            ArgType::Byte => {
-                                if remaining_instruction_args.is_empty() {
-                                    return Err(WasmError::MissingArgument {
-                                        position,
-                                        argument_name: "Wasm byte".to_string(),
-                                    });
-                                }
-                                let byte = remaining_instruction_args.pop().expect("not enough length");
-                                Ok(vec![Value::I32(i32::from(byte))])
-                            },
-                            ArgType::PublicKey => {
-                                if remaining_instruction_args.len() < 32 {
-                                    return Err(WasmError::MissingArgument {
-                                        position,
-                                        argument_name: "Wasm public key".to_string(),
-                                    });
-                                }
-                                let bytes: Vec<u8> = remaining_instruction_args.drain(..32).collect();
-                                let mut result = Vec::with_capacity(8);
-                                for i in 0..8 {
-                                    let mut data = [0u8; 4];
-                                    data.copy_from_slice(&bytes[i * 4..i * 4 + 4]);
-                                    result.push(Value::I32(i32::from_le_bytes(data)));
-                                }
-                                // write as 8 * bytes
-                                Ok(result)
-                            },
-                            // F32,
-                            // F64,
-                            // V128,
-                            // ExternRef,
-                            // FuncRef,
-                            _ => {
-                                todo!()
-                            },
-                        }
-                    })
-                    .collect::<Result<_, _>>()?;
+        // if let Some((arg_types, module_name)) = self.functions.get(&name) {
+        //     if let Some(instance) = self.modules.get(module_name) {
+        //         let func_pointer = instance.exports.get_function(&name).expect("Could not find function");
+        //         let _type_params = func_pointer.ty().params();
+        //         let _remaining_args = Vec::from(instruction.args());
+        //         dbg!(&remaining_args);
+        //         let memory = instance.get_memory("mem");
+        // let _offset = 0;
+        // TODO: better iteration
+        // let mut remaining_instruction_args = Vec::from(instruction.args());
+        // let args: Vec<Vec<Val>> = arg_types
+        //     .iter()
+        //     .enumerate()
+        //     .map(|(position, param)| {
+        //         match param {
+        //             ArgType::String => {
+        //                 if remaining_args.len() < 3 {
+        //                     return Err(DigitalAssetError::MissingArgument {
+        //         position,
+        //         argument_name: "Wasm string".to_string(),
+        //     });
+        // }
+        //
+        // let len = remaining_instruction_args.pop().expect("can't take length") as usize;
+        // let instruction_arg =
+        //     String::from_utf8(remaining_instruction_args.drain(len)).expect("invalid utf8");
+        // let ptr = WasmPtr::<String>::new(offset);
+        // let derefed = ptr.deref(&memory).expect("could not get derefed pointer");
+        // derefed.set(instruction_arg);
+        //
+        // Ok(vec![Value::I32()])
+        // todo!()
+        // },
+        // ArgType::Byte => {
+        //     if remaining_instruction_args.is_empty() {
+        //         return Err(WasmError::MissingArgument {
+        //             position,
+        //             argument_name: "Wasm byte".to_string(),
+        //         });
+        //     }
+        //     let byte = remaining_instruction_args.pop().expect("not enough length");
+        //     Ok(vec![Value::I32(i32::from(byte))])
+        // },
+        // ArgType::PublicKey => {
+        //     if remaining_instruction_args.len() < 32 {
+        //         return Err(WasmError::MissingArgument {
+        //             position,
+        //             argument_name: "Wasm public key".to_string(),
+        //         });
+        //     }
+        //     let bytes: Vec<u8> = remaining_instruction_args.drain(..32).collect();
+        //     let mut result = Vec::with_capacity(8);
+        //     for i in 0..8 {
+        //         let mut data = [0u8; 4];
+        //         data.copy_from_slice(&bytes[i * 4..i * 4 + 4]);
+        //         result.push(Value::I32(i32::from_le_bytes(data)));
+        //     }
+        //     write as 8 * bytes
+        //     Ok(result)
+        // },
+        // F32,
+        // F64,
+        // V128,
+        // ExternRef,
+        // FuncRef,
+        // _ => {
+        //     todo!()
+        // },
+        // }
+        // })
+        // .collect::<Result<_, _>>()?;
 
-                let args: Vec<Val> = args.into_iter().flatten().collect();
-                let _result = func_pointer.call(args.as_slice()).expect("invokation error");
-                Ok(state_db)
-            } else {
-                todo!("No module found")
-            }
-        } else {
-            todo!("function not found")
-        }
+        // let args: Vec<Val> = args.into_iter().flatten().collect();
+        // let _result = func_pointer.call(args.as_slice()).expect("invokation error");
+        // Ok(state_db)
+        // } else {
+        //     todo!("No module found")
+        // }
+        // } else {
+        //     todo!("function not found")
+        // }
         // let store = Store::default();
         // let module = Module::new(&store, wat_file.as_str());
         // let import_object = imports! {};
         // let instance = Instance::new(&module, &import_object)?;
+        todo!()
     }
 }

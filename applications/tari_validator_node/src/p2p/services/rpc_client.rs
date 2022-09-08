@@ -28,7 +28,7 @@ use tari_comms::PeerConnection;
 use tari_comms_dht::DhtRequester;
 use tari_crypto::tari_utilities::ByteArray;
 use tari_dan_core::{
-    models::{Node, SideChainBlock, TreeNodeHash},
+    models::Node,
     services::{ValidatorNodeClientError, ValidatorNodeClientFactory, ValidatorNodeRpcClient},
 };
 use tari_dan_engine::{
@@ -62,7 +62,9 @@ impl ValidatorNodeRpcClient for TariCommsValidatorNodeRpcClient {
     ) -> Result<Option<Vec<u8>>, ValidatorNodeClientError> {
         let mut connection = self.create_connection().await?;
         let mut client = connection.connect_rpc::<rpc::ValidatorNodeRpcClient>().await?;
-        let request: SubmitTransactionRequest = transaction.into();
+        let request: SubmitTransactionRequest = SubmitTransactionRequest {
+            transaction: Some(transaction.into()),
+        };
         let response = client.submit_transaction(request).await?;
 
         Ok(if response.result.is_empty() {
@@ -70,44 +72,6 @@ impl ValidatorNodeRpcClient for TariCommsValidatorNodeRpcClient {
         } else {
             Some(response.result)
         })
-    }
-
-    async fn get_sidechain_blocks(
-        &mut self,
-        contract_id: &FixedHash,
-        start_hash: TreeNodeHash,
-        end_hash: Option<TreeNodeHash>,
-    ) -> Result<Vec<SideChainBlock>, ValidatorNodeClientError> {
-        let mut connection = self.create_connection().await?;
-        let mut client = connection.connect_rpc::<rpc::ValidatorNodeRpcClient>().await?;
-        let request = proto::GetSidechainBlocksRequest {
-            contract_id: contract_id.to_vec(),
-            start_hash: start_hash.as_bytes().to_vec(),
-            end_hash: end_hash.map(|h| h.as_bytes().to_vec()).unwrap_or_default(),
-        };
-
-        let stream = client.get_sidechain_blocks(request).await?;
-        // TODO: By first collecting all the blocks, we lose the advantage of streaming. Since you cannot return
-        //       `Result<impl Stream<..>, _>`, and the Map type is private in tokio-stream, its a little tricky to
-        //       return the stream and not leak the RPC response type out of the client.
-        //       Copying the tokio_stream::Map stream into our code / creating a custom conversion stream wrapper would
-        // solve this.
-        let blocks = stream
-            .map(|result| {
-                let resp = result?;
-                let block: SideChainBlock = resp
-                    .block
-                    .ok_or_else(|| {
-                        ValidatorNodeClientError::InvalidPeerMessage("Node returned empty block".to_string())
-                    })?
-                    .try_into()
-                    .map_err(ValidatorNodeClientError::InvalidPeerMessage)?;
-                Ok(block)
-            })
-            .collect::<Result<_, ValidatorNodeClientError>>()
-            .await?;
-
-        Ok(blocks)
     }
 
     async fn get_sidechain_state(

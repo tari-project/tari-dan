@@ -20,79 +20,165 @@
 // WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 // USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+use digest::Digest;
+use tari_common_types::types::FixedHash;
+use tari_crypto::hash::blake2::Blake256;
+use tari_dan_common_types::{PayloadId, ShardId};
+
 use crate::{
-    models::{HotStuffMessageType, TreeNodeHash, ValidatorSignature, ViewId},
+    models::{Epoch, HotStuffMessageType, NodeHeight, ObjectPledge, TreeNodeHash, ValidatorSignature, ViewId},
     storage::chain::DbQc,
 };
 
+#[derive(Debug, Clone, Copy)]
+pub enum QuorumDecision {
+    Accept,
+    Reject,
+}
+
+impl QuorumDecision {
+    pub fn as_u8(&self) -> u8 {
+        match self {
+            QuorumDecision::Accept => 1,
+            QuorumDecision::Reject => 0,
+        }
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct QuorumCertificate {
-    message_type: HotStuffMessageType,
-    node_hash: TreeNodeHash,
-    view_number: ViewId,
-    signatures: Option<ValidatorSignature>,
+    payload: PayloadId,
+    payload_height: NodeHeight,
+    // Cache the node hash
+    local_node_hash: TreeNodeHash,
+    // cache the node height
+    local_node_height: NodeHeight,
+    shard: ShardId,
+    epoch: Epoch,
+    decision: QuorumDecision,
+    other_shard_nodes: Vec<(ShardId, TreeNodeHash, Vec<ObjectPledge>)>,
+    signatures: Vec<ValidatorSignature>,
 }
 
 impl QuorumCertificate {
     pub fn new(
-        message_type: HotStuffMessageType,
-        view_number: ViewId,
-        node_hash: TreeNodeHash,
-        signature: Option<ValidatorSignature>,
+        payload: PayloadId,
+        payload_height: NodeHeight,
+        local_node_hash: TreeNodeHash,
+        local_node_height: NodeHeight,
+        shard: ShardId,
+        epoch: Epoch,
+        decision: QuorumDecision,
+        other_shard_nodes: Vec<(ShardId, TreeNodeHash, Vec<ObjectPledge>)>,
+        signatures: Vec<ValidatorSignature>,
     ) -> Self {
         Self {
-            message_type,
-            node_hash,
-            view_number,
-            signatures: signature,
+            payload,
+            payload_height,
+            local_node_hash,
+            local_node_height,
+            shard,
+            epoch,
+            decision,
+            other_shard_nodes,
+            signatures,
         }
     }
 
-    pub fn genesis(node_hash: TreeNodeHash) -> Self {
+    pub fn genesis() -> Self {
         Self {
-            message_type: HotStuffMessageType::Genesis,
-            node_hash,
-            view_number: 0.into(),
-            signatures: None,
+            payload: PayloadId::zero(),
+            payload_height: NodeHeight(0),
+            local_node_hash: TreeNodeHash::zero(),
+            local_node_height: NodeHeight(0),
+            shard: ShardId(FixedHash::zero()),
+            epoch: Epoch(0),
+            decision: QuorumDecision::Accept,
+            other_shard_nodes: vec![],
+            signatures: vec![],
         }
     }
 
-    pub fn node_hash(&self) -> &TreeNodeHash {
-        &self.node_hash
+    pub fn shard(&self) -> ShardId {
+        self.shard
     }
 
-    pub fn view_number(&self) -> ViewId {
-        self.view_number
+    pub fn epoch(&self) -> Epoch {
+        self.epoch
     }
 
-    pub fn message_type(&self) -> HotStuffMessageType {
-        self.message_type
+    pub fn signature(&self) -> &[ValidatorSignature] {
+        self.signatures.as_slice()
     }
 
-    pub fn signature(&self) -> Option<&ValidatorSignature> {
-        self.signatures.as_ref()
-    }
+    // pub fn combine_sig(&mut self, partial_sig: &ValidatorSignature) {
+    //     self.signatures = match &self.signatures {
+    //         None => Some(partial_sig.clone()),
+    //         Some(s) => Some(s.combine(partial_sig)),
+    //     };
+    // }
 
-    pub fn combine_sig(&mut self, partial_sig: &ValidatorSignature) {
-        self.signatures = match &self.signatures {
-            None => Some(partial_sig.clone()),
-            Some(s) => Some(s.combine(partial_sig)),
-        };
-    }
-
-    pub fn matches(&self, message_type: HotStuffMessageType, view_id: ViewId) -> bool {
+    pub fn matches(&self, _message_type: HotStuffMessageType, _view_id: ViewId) -> bool {
+        todo!("Update as this has changed from view number to height")
         // from hotstuf spec
-        self.message_type() == message_type && view_id == self.view_number()
+        // self.message_type() == message_type && view_id == self.view_number()
+    }
+
+    pub fn as_bytes(&self) -> Vec<u8> {
+        let mut result = Blake256::new()
+            .chain(self.local_node_hash.as_bytes())
+            .chain(self.local_node_height.to_le_bytes())
+            .chain(self.shard.to_le_bytes())
+            .chain((self.signatures.len() as u64).to_le_bytes());
+        // TODO: add all fields
+
+        for sig in &self.signatures {
+            result = result.chain(sig.to_bytes());
+        }
+        // result = result.chain((self.involved_shards.len() as u32).to_le_bytes());
+        // for shard in &self.involved_shards {
+        //     result = result.chain((*shard).to_le_bytes());
+        // }
+        result.finalize().to_vec()
+    }
+
+    pub fn payload(&self) -> PayloadId {
+        self.payload
+    }
+
+    pub fn payload_height(&self) -> NodeHeight {
+        self.payload_height
+    }
+
+    pub fn local_node_hash(&self) -> TreeNodeHash {
+        self.local_node_hash
+    }
+
+    pub fn local_node_height(&self) -> NodeHeight {
+        self.local_node_height
+    }
+
+    pub fn decision(&self) -> &QuorumDecision {
+        &self.decision
+    }
+
+    pub fn other_shard_nodes(&self) -> &[(ShardId, TreeNodeHash, Vec<ObjectPledge>)] {
+        &self.other_shard_nodes
+    }
+
+    pub fn signatures(&self) -> &[ValidatorSignature] {
+        &self.signatures
     }
 }
 
 impl From<DbQc> for QuorumCertificate {
-    fn from(rec: DbQc) -> Self {
-        Self {
-            message_type: rec.message_type,
-            node_hash: rec.node_hash,
-            view_number: rec.view_number,
-            signatures: rec.signature,
-        }
+    fn from(_rec: DbQc) -> Self {
+        // Self {
+        //     message_type: rec.message_type,
+        //     node_hash: rec.node_hash,
+        //     view_number: rec.view_number,
+        //     signatures: rec.signature,
+        // }
+        todo!()
     }
 }

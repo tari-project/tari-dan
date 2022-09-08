@@ -33,10 +33,7 @@ use tari_dan_engine::{
     state::models::{SchemaState, StateOpLogEntry},
 };
 
-use crate::{
-    models::{Node, SideChainBlock, TreeNodeHash},
-    services::infrastructure_services::NodeAddressable,
-};
+use crate::{models::Node, services::infrastructure_services::NodeAddressable};
 
 pub trait ValidatorNodeClientFactory: Send + Sync {
     type Addr: NodeAddressable;
@@ -50,13 +47,6 @@ pub trait ValidatorNodeRpcClient: Send + Sync {
         &mut self,
         transaction: Transaction,
     ) -> Result<Option<Vec<u8>>, ValidatorNodeClientError>;
-
-    async fn get_sidechain_blocks(
-        &mut self,
-        contract_id: &FixedHash,
-        start_hash: TreeNodeHash,
-        end_hash: Option<TreeNodeHash>,
-    ) -> Result<Vec<SideChainBlock>, ValidatorNodeClientError>;
 
     async fn get_sidechain_state(
         &mut self,

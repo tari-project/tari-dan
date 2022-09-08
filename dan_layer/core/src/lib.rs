@@ -23,11 +23,10 @@
 mod digital_assets_error;
 pub use digital_assets_error::DigitalAssetError;
 
-mod helpers;
+// mod helpers;
 pub mod models;
 pub mod services;
 pub mod storage;
 pub mod template_command;
-pub mod templates;
 pub mod types;
 pub mod workers;

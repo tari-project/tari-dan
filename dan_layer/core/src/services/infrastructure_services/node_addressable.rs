@@ -26,11 +26,39 @@ use std::{
 };
 
 use tari_comms::types::CommsPublicKey;
+use tari_utilities::ByteArray;
 
-pub trait NodeAddressable: Eq + Hash + Clone + Debug + Send + Sync + Display {}
+pub trait NodeAddressable: Eq + Hash + Clone + Debug + Send + Sync + Display {
+    fn zero() -> Self;
+    fn as_bytes(&self) -> &[u8];
+}
 
-impl NodeAddressable for String {}
+impl NodeAddressable for String {
+    fn zero() -> Self {
+        "".to_string()
+    }
 
-impl NodeAddressable for &str {}
+    fn as_bytes(&self) -> &[u8] {
+        self.as_bytes()
+    }
+}
 
-impl NodeAddressable for CommsPublicKey {}
+impl NodeAddressable for &str {
+    fn zero() -> Self {
+        ""
+    }
+
+    fn as_bytes(&self) -> &[u8] {
+        str::as_bytes(self)
+    }
+}
+
+impl NodeAddressable for CommsPublicKey {
+    fn zero() -> Self {
+        CommsPublicKey::default()
+    }
+
+    fn as_bytes(&self) -> &[u8] {
+        <CommsPublicKey as ByteArray>::as_bytes(self)
+    }
+}

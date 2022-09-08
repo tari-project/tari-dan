@@ -21,7 +21,6 @@
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 use std::{
     collections::VecDeque,
-    convert::TryInto,
     sync::Arc,
     time::{Duration, Instant},
 };
@@ -43,8 +42,6 @@ use tokio::sync::{
     oneshot,
 };
 
-use crate::p2p::proto;
-
 const LOG_TARGET: &str = "tari::validator_node::p2p::services::inbound_connection_service";
 
 #[derive(Debug)]
@@ -60,7 +57,7 @@ enum TariCommsInboundRequest {
         wait_for_type: WaitForMessageType,
         message_type: HotStuffMessageType,
         view_number: ViewId,
-        reply_channel: oneshot::Sender<(CommsPublicKey, HotStuffMessage<TariDanPayload>)>,
+        reply_channel: oneshot::Sender<(CommsPublicKey, HotStuffMessage<TariDanPayload, CommsPublicKey>)>,
     },
 }
 
@@ -70,17 +67,17 @@ pub struct TariCommsInboundConnectionService {
     // sender: Sender<(CommsPublicKey, HotStuffMessage<TariDanPayload>)>,
     request_channel: Receiver<TariCommsInboundRequest>,
     contract_id: FixedHash,
-    buffered_messages: VecDeque<(CommsPublicKey, HotStuffMessage<TariDanPayload>, Instant)>,
+    buffered_messages: VecDeque<(CommsPublicKey, HotStuffMessage<TariDanPayload, CommsPublicKey>, Instant)>,
     expiry_time: Duration,
     #[allow(clippy::type_complexity)]
     waiters: VecDeque<(
         HotStuffMessageType,
         ViewId,
         WaitForMessageType,
-        oneshot::Sender<(CommsPublicKey, HotStuffMessage<TariDanPayload>)>,
+        oneshot::Sender<(CommsPublicKey, HotStuffMessage<TariDanPayload, CommsPublicKey>)>,
     )>,
-    loopback_sender: Sender<(CommsPublicKey, HotStuffMessage<TariDanPayload>)>,
-    loopback_receiver: Receiver<(CommsPublicKey, HotStuffMessage<TariDanPayload>)>,
+    loopback_sender: Sender<(CommsPublicKey, HotStuffMessage<TariDanPayload, CommsPublicKey>)>,
+    loopback_receiver: Receiver<(CommsPublicKey, HotStuffMessage<TariDanPayload, CommsPublicKey>)>,
 }
 
 #[allow(dead_code)]
@@ -100,7 +97,7 @@ impl TariCommsInboundConnectionService {
         }
     }
 
-    pub fn clone_sender(&self) -> Sender<(CommsPublicKey, HotStuffMessage<TariDanPayload>)> {
+    pub fn clone_sender(&self) -> Sender<(CommsPublicKey, HotStuffMessage<TariDanPayload, CommsPublicKey>)> {
         self.loopback_sender.clone()
     }
 
@@ -146,142 +143,145 @@ impl TariCommsInboundConnectionService {
         }
     }
 
-    async fn handle_request(&mut self, request: TariCommsInboundRequest) -> Result<(), DigitalAssetError> {
-        debug!(target: LOG_TARGET, "Received request: {:?}", request);
-        match request {
-            TariCommsInboundRequest::WaitForMessage {
-                wait_for_type,
-                message_type,
-                view_number,
-                reply_channel,
-            } => {
-                // Check for already received messages
-                let mut indexes_to_remove = vec![];
-                let mut result_message = None;
-                for (index, (from_pk, message, msg_time)) in self.buffered_messages.iter().enumerate() {
-                    if msg_time.elapsed() > self.expiry_time {
-                        warn!(
-                            target: LOG_TARGET,
-                            "Message has expired: ({:.2?}) {:?}",
-                            msg_time.elapsed(),
-                            message
-                        );
-                        indexes_to_remove.push(index);
-                    } else {
-                        match wait_for_type {
-                            WaitForMessageType::Message => {
-                                if message.message_type() == message_type && message.view_number() == view_number {
-                                    result_message = Some((from_pk.clone(), message.clone()));
-                                    indexes_to_remove.push(index);
-                                    break;
-                                }
-                            },
-                            WaitForMessageType::QuorumCertificate => {
-                                if let Some(qc) = message.justify() {
-                                    if qc.message_type() == message_type && qc.view_number() == view_number {
-                                        result_message = Some((from_pk.clone(), message.clone()));
-                                        indexes_to_remove.push(index);
-                                        break;
-                                    }
-                                }
-                            },
-                        }
-                    }
-                }
-                for i in indexes_to_remove.iter().rev() {
-                    self.buffered_messages.remove(*i);
-                }
-                match result_message {
-                    Some(m) => {
-                        if let Err(m) = reply_channel.send(m) {
-                            error!(target: LOG_TARGET, "Failed to send result message! {:?}", m);
-                        }
-                    },
-                    None => {
-                        self.waiters
-                            .push_back((message_type, view_number, wait_for_type, reply_channel));
-                    },
-                }
-            },
-        }
-        Ok(())
+    async fn handle_request(&mut self, _request: TariCommsInboundRequest) -> Result<(), DigitalAssetError> {
+        todo!()
+        // debug!(target: LOG_TARGET, "Received request: {:?}", request);
+        // match request {
+        //     TariCommsInboundRequest::WaitForMessage {
+        //         wait_for_type,
+        //         message_type,
+        //         view_number,
+        //         reply_channel,
+        //     } => {
+        //         // Check for already received messages
+        //         let mut indexes_to_remove = vec![];
+        //         let mut result_message = None;
+        //         for (index, (from_pk, message, msg_time)) in self.buffered_messages.iter().enumerate() {
+        //             if msg_time.elapsed() > self.expiry_time {
+        //                 warn!(
+        //                     target: LOG_TARGET,
+        //                     "Message has expired: ({:.2?}) {:?}",
+        //                     msg_time.elapsed(),
+        //                     message
+        //                 );
+        //                 indexes_to_remove.push(index);
+        //             } else {
+        //                 match wait_for_type {
+        //                     WaitForMessageType::Message => {
+        //                         if message.message_type() == message_type && message.view_number() == view_number {
+        //                             result_message = Some((from_pk.clone(), message.clone()));
+        //                             indexes_to_remove.push(index);
+        //                             break;
+        //                         }
+        //                     },
+        //                     WaitForMessageType::QuorumCertificate => {
+        //                         if let Some(qc) = message.justify() {
+        //                             if qc.message_type() == message_type && qc.view_number() == view_number {
+        //                                 result_message = Some((from_pk.clone(), message.clone()));
+        //                                 indexes_to_remove.push(index);
+        //                                 break;
+        //                             }
+        //                         }
+        //                     },
+        //                 }
+        //             }
+        //         }
+        //         for i in indexes_to_remove.iter().rev() {
+        //             self.buffered_messages.remove(*i);
+        //         }
+        //         match result_message {
+        //             Some(m) => {
+        //                 if let Err(m) = reply_channel.send(m) {
+        //                     error!(target: LOG_TARGET, "Failed to send result message! {:?}", m);
+        //                 }
+        //             },
+        //             None => {
+        //                 self.waiters
+        //                     .push_back((message_type, view_number, wait_for_type, reply_channel));
+        //             },
+        //         }
+        //     },
+        // }
+        // Ok(())
     }
 
-    async fn forward_message(&mut self, message: Arc<PeerMessage>) -> Result<(), DigitalAssetError> {
-        // let from = message.authenticated_origin.as_ref().unwrap().clone();
-        let from = message.source_peer.public_key.clone();
-        let proto_message: proto::consensus::HotStuffMessage = message.decode_message()?;
-        let hot_stuff_message: HotStuffMessage<TariDanPayload> = proto_message
-            .try_into()
-            .map_err(DigitalAssetError::InvalidPeerMessage)?;
-        if *hot_stuff_message.contract_id() == self.contract_id {
-            println!("{:?}", hot_stuff_message);
-            // self.sender.send((from, hot_stuff_message)).await.unwrap();
-            self.process_message(from, hot_stuff_message).await?;
-        } else {
-            println!("filtered");
-        }
-        Ok(())
+    async fn forward_message(&mut self, _message: Arc<PeerMessage>) -> Result<(), DigitalAssetError> {
+        // // let from = message.authenticated_origin.as_ref().unwrap().clone();
+        // let from = message.source_peer.public_key.clone();
+        // let proto_message: proto::consensus::HotStuffMessage = message.decode_message()?;
+        // let hot_stuff_message: HotStuffMessage<TariDanPayload> = proto_message
+        //     .try_into()
+        //     .map_err(DigitalAssetError::InvalidPeerMessage)?;
+        // if *hot_stuff_message.contract_id() == self.contract_id {
+        //     println!("{:?}", hot_stuff_message);
+        //     // self.sender.send((from, hot_stuff_message)).await.unwrap();
+        //     self.process_message(from, hot_stuff_message).await?;
+        // } else {
+        //     println!("filtered");
+        // }
+        // Ok(())
+        todo!()
     }
 
     async fn process_message(
         &mut self,
-        from: CommsPublicKey,
-        message: HotStuffMessage<TariDanPayload>,
+        _from: CommsPublicKey,
+        _message: HotStuffMessage<TariDanPayload, CommsPublicKey>,
     ) -> Result<(), DigitalAssetError> {
-        debug!(target: "messages::inbound::validator_node", "Inbound message received:{} {:?}", from, message);
-        debug!(target: LOG_TARGET, "Inbound message received:{} {:?}", from, message);
-
-        // Loop until we have sent to a waiting call, or buffer the message
-        loop {
-            // Check for waiters
-            let mut waiter_index = None;
-            for (index, waiter) in self.waiters.iter().enumerate() {
-                let (message_type, view_number, wait_for_type, _) = waiter;
-                match wait_for_type {
-                    WaitForMessageType::Message => {
-                        if message.message_type() == *message_type && message.view_number() == *view_number {
-                            waiter_index = Some(index);
-                            break;
-                        }
-                    },
-                    WaitForMessageType::QuorumCertificate => {
-                        if let Some(qc) = message.justify() {
-                            if qc.message_type() == *message_type && qc.view_number() == *view_number {
-                                waiter_index = Some(index);
-                                break;
-                            }
-                        }
-                    },
-                }
-            }
-
-            if let Some(index) = waiter_index {
-                debug!(
-                    target: LOG_TARGET,
-                    "Found waiter for this message, waking task... {:?}",
-                    message.message_type()
-                );
-                if let Some((_, _, _, reply)) = self.waiters.swap_remove_back(index) {
-                    // The receiver on the other end of this channel may have dropped naturally
-                    // as it moves out of scope and is not longer interested in receiving the message
-                    if reply.send((from.clone(), message.clone())).is_ok() {
-                        return Ok(());
-                    }
-                }
-            } else {
-                break;
-            }
-        }
-
-        debug!(
-            target: LOG_TARGET,
-            "No waiters for this message, buffering message: {:?}",
-            message.message_type()
-        );
-        // Otherwise, buffer it
-        self.buffered_messages.push_back((from, message, Instant::now()));
-        Ok(())
+        todo!()
+        // debug!(target: "messages::inbound::validator_node", "Inbound message received:{} {:?}", from, message);
+        // debug!(target: LOG_TARGET, "Inbound message received:{} {:?}", from, message);
+        //
+        // // Loop until we have sent to a waiting call, or buffer the message
+        // loop {
+        //     // Check for waiters
+        //     let mut waiter_index = None;
+        //     for (index, waiter) in self.waiters.iter().enumerate() {
+        //         let (message_type, view_number, wait_for_type, _) = waiter;
+        //         match wait_for_type {
+        //             WaitForMessageType::Message => {
+        //                 if message.message_type() == *message_type && message.view_number() == *view_number {
+        //                     waiter_index = Some(index);
+        //                     break;
+        //                 }
+        //             },
+        //             WaitForMessageType::QuorumCertificate => {
+        //                 if let Some(qc) = message.justify() {
+        //                     if qc.message_type() == *message_type && qc.view_number() == *view_number {
+        //                         waiter_index = Some(index);
+        //                         break;
+        //                     }
+        //                 }
+        //             },
+        //         }
+        //     }
+        //
+        //     if let Some(index) = waiter_index {
+        //         debug!(
+        //             target: LOG_TARGET,
+        //             "Found waiter for this message, waking task... {:?}",
+        //             message.message_type()
+        //         );
+        //         if let Some((_, _, _, reply)) = self.waiters.swap_remove_back(index) {
+        //             // The receiver on the other end of this channel may have dropped naturally
+        //             // as it moves out of scope and is not longer interested in receiving the message
+        //             if reply.send((from.clone(), message.clone())).is_ok() {
+        //                 return Ok(());
+        //             }
+        //         }
+        //     } else {
+        //         break;
+        //     }
+        // }
+        //
+        // debug!(
+        //     target: LOG_TARGET,
+        //     "No waiters for this message, buffering message: {:?}",
+        //     message.message_type()
+        // );
+        // // Otherwise, buffer it
+        // self.buffered_messages.push_back((from, message, Instant::now()));
+        // Ok(())
     }
 }
 
@@ -305,7 +305,7 @@ impl InboundConnectionService for TariCommsInboundReceiverHandle {
         &self,
         message_type: HotStuffMessageType,
         view_number: ViewId,
-    ) -> Result<(CommsPublicKey, HotStuffMessage<TariDanPayload>), DigitalAssetError> {
+    ) -> Result<(CommsPublicKey, HotStuffMessage<TariDanPayload, CommsPublicKey>), DigitalAssetError> {
         let (tx, rx) = oneshot::channel();
         self.sender
             .send(TariCommsInboundRequest::WaitForMessage {
@@ -324,7 +324,7 @@ impl InboundConnectionService for TariCommsInboundReceiverHandle {
         &self,
         message_type: HotStuffMessageType,
         view_number: ViewId,
-    ) -> Result<(CommsPublicKey, HotStuffMessage<TariDanPayload>), DigitalAssetError> {
+    ) -> Result<(CommsPublicKey, HotStuffMessage<TariDanPayload, CommsPublicKey>), DigitalAssetError> {
         let (tx, rx) = oneshot::channel();
         self.sender
             .send(TariCommsInboundRequest::WaitForMessage {

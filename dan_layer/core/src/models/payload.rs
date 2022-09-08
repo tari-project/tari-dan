@@ -20,12 +20,54 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use std::fmt::Debug;
+use std::{convert::TryFrom, fmt::Debug};
+
+use digest::Digest;
+use tari_common_types::types::FixedHash;
+use tari_crypto::hash::blake2::Blake256;
+use tari_dan_common_types::{ObjectClaim, ObjectId, PayloadId, ShardId, SubstateChange};
 
 use crate::models::ConsensusHash;
 
-pub trait Payload: Debug + Clone + Send + Sync + ConsensusHash {}
+// TODO: Rename to Command - most of the hotstuff docs refers to this as command
+pub trait Payload: Debug + Clone + Send + Sync + ConsensusHash {
+    fn involved_shards(&self) -> Vec<ShardId>;
+    fn to_id(&self) -> PayloadId {
+        let s = self.consensus_hash();
+        let x = Blake256::new().chain(s);
+        PayloadId::new(FixedHash::try_from(x.finalize()).unwrap())
+    }
+    fn objects_for_shard(&self, shard: ShardId) -> Vec<(ObjectId, SubstateChange, ObjectClaim)>;
+}
 
-impl Payload for &str {}
+// impl Payload for &str {
+//     fn involved_shards(&self) -> Vec<u32> {
+//         self.as_bytes()
+//     }
+// }
 
-impl Payload for String {}
+// impl Payload for String {
+//     fn involved_shards(&self) -> Vec<u32> {
+//         vec![0]
+//     }
+// }
+
+impl ConsensusHash for (String, Vec<ShardId>) {
+    fn consensus_hash(&self) -> &[u8] {
+        self.0.consensus_hash()
+    }
+}
+
+impl Payload for (String, Vec<ShardId>) {
+    fn involved_shards(&self) -> Vec<ShardId> {
+        self.1.clone()
+    }
+
+    fn objects_for_shard(&self, shard: ShardId) -> Vec<(ObjectId, SubstateChange, ObjectClaim)> {
+        if self.1.contains(&shard) {
+            vec![(ObjectId(shard.0), SubstateChange::Create, ObjectClaim {})]
+        } else {
+            vec![]
+        }
+    }
+}
