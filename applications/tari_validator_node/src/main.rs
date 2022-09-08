@@ -47,6 +47,7 @@ use tari_comms::{
     NodeIdentity,
 };
 use tari_comms_dht::Dht;
+use tari_core::base_node;
 use tari_dan_core::{
     services::{mempool::service::MempoolServiceHandle, ConcreteAssetProxy, ServiceSpecification},
     storage::{global::GlobalDb, DbFactory},
@@ -64,7 +65,10 @@ use crate::{
     config::{ApplicationConfig, ValidatorNodeConfig},
     dan_node::DanNode,
     default_service_specification::DefaultServiceSpecification,
-    grpc::{services::base_node_client::GrpcBaseNodeClient, validator_node_grpc_server::ValidatorNodeGrpcServer},
+    grpc::{
+        services::{base_node_client::GrpcBaseNodeClient, wallet_client::GrpcWalletClient},
+        validator_node_grpc_server::ValidatorNodeGrpcServer,
+    },
     p2p::services::rpc_client::TariCommsValidatorNodeClientFactory,
 };
 
@@ -123,16 +127,18 @@ async fn run_node(config: &ApplicationConfig) -> Result<(), ExitError> {
         node_identity.node_id()
     );
     // fs::create_dir_all(&global.peer_db_path).map_err(|err| ExitError::new(ExitCode::ConfigError, err))?;
+    let base_node_client = GrpcBaseNodeClient::new(config.validator_node.base_node_grpc_address);
+    let wallet_client = GrpcWalletClient::new(config.validator_node.wallet_grpc_address);
     let (handles, subscription_factory) = comms::build_service_and_comms_stack(
         config,
         shutdown.to_signal(),
         node_identity.clone(),
         mempool_service.clone(),
+        base_node_client.clone(),
     )
     .await?;
     let validator_node_client_factory =
         TariCommsValidatorNodeClientFactory::new(handles.expect_handle::<Dht>().dht_requester());
-    let base_node_client = GrpcBaseNodeClient::new(config.validator_node.base_node_grpc_address);
     let asset_proxy: ConcreteAssetProxy<DefaultServiceSpecification> = ConcreteAssetProxy::new(
         base_node_client.clone(),
         validator_node_client_factory,

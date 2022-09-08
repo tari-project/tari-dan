@@ -55,6 +55,7 @@ use crate::{
         SidechainMetadata,
         TariDanPayload,
         TreeNodeHash,
+        ValidatorNode,
         ValidatorSignature,
     },
     services::{
@@ -144,6 +145,22 @@ impl BaseNodeClient for MockBaseNodeClient {
     async fn get_tip_info(&mut self) -> Result<BaseLayerMetadata, DigitalAssetError> {
         todo!();
     }
+
+    async fn get_validator_nodes(&mut self, height: u64) -> Result<Vec<ValidatorNode>, DigitalAssetError> {
+        todo!();
+    }
+
+    async fn get_committee(
+        &mut self,
+        height: u64,
+        shard_key: &[u8; 32],
+    ) -> Result<Vec<CommsPublicKey>, DigitalAssetError> {
+        todo!();
+    }
+
+    async fn get_shard_key(&mut self, height: u64, public_key: &[u8; 32]) -> Result<&[u8; 32], DigitalAssetError> {
+        todo!();
+    }
 }
 
 pub fn mock_base_node_client() -> MockBaseNodeClient {
@@ -186,6 +203,9 @@ pub struct MockValidatorNodeClientFactory;
 
 #[derive(Default, Clone)]
 pub struct MockValidatorNodeClient;
+
+#[derive(Default, Clone)]
+pub struct MockWalletClient;
 
 #[async_trait]
 impl ValidatorNodeRpcClient for MockValidatorNodeClient {
@@ -269,4 +289,5 @@ impl ServiceSpecification for MockServiceSpecification {
     type SigningService = MockSigningService;
     type StateDbBackendAdapter = MockStateDbBackupAdapter;
     type ValidatorNodeClientFactory = MockValidatorNodeClientFactory;
+    type WalletClient = MockWalletClient;
 }

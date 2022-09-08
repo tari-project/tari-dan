@@ -22,7 +22,7 @@
 
 use tari_dan_engine::state::StateDbBackendAdapter;
 
-use super::mempool::service::MempoolService;
+use super::{mempool::service::MempoolService, WalletClient};
 use crate::{
     models::{domain_events::ConsensusWorkerDomainEvent, Payload},
     services::{
@@ -66,4 +66,5 @@ pub trait ServiceSpecification: Default + Clone {
     type SigningService: SigningService;
     type StateDbBackendAdapter: StateDbBackendAdapter;
     type ValidatorNodeClientFactory: ValidatorNodeClientFactory<Addr = Self::Addr> + Clone;
+    type WalletClient: WalletClient;
 }

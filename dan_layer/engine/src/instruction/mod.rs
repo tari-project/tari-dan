@@ -43,6 +43,7 @@ use tari_template_lib::{
     args::Arg,
     models::{ComponentAddress, PackageAddress},
 };
+use tari_utilities::ByteArray;
 
 #[derive(Debug, Clone)]
 pub enum Instruction {

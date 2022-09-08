@@ -38,6 +38,7 @@ mod quorum_certificate;
 mod sidechain_metadata;
 mod tari_dan_payload;
 mod tree_node_hash;
+mod validator_node;
 mod view;
 mod view_id;
 pub mod vote_message;
@@ -56,6 +57,7 @@ pub use sidechain_metadata::SidechainMetadata;
 use tari_dan_common_types::{ObjectId, PayloadId};
 pub use tari_dan_payload::{CheckpointData, TariDanPayload};
 pub use tree_node_hash::TreeNodeHash;
+pub use validator_node::ValidatorNode;
 pub use view::View;
 pub use view_id::ViewId;
 

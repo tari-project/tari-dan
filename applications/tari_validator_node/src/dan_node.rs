@@ -40,7 +40,10 @@ use tari_service_framework::ServiceHandles;
 use tari_shutdown::ShutdownSignal;
 use tokio::sync::mpsc::channel;
 
-use crate::{config::ValidatorNodeConfig, grpc::services::base_node_client::GrpcBaseNodeClient};
+use crate::{
+    config::ValidatorNodeConfig,
+    grpc::services::{base_node_client::GrpcBaseNodeClient, wallet_client::GrpcWalletClient},
+};
 
 const _LOG_TARGET: &str = "tari::validator_node::app";
 
@@ -63,8 +66,8 @@ impl DanNode {
         handles: ServiceHandles,
         subscription_factory: Arc<SubscriptionFactory>,
     ) -> Result<(), ExitError> {
-        // let base_node_client = GrpcBaseNodeClient::new(self.config.base_node_grpc_address);
-        // let wallet_client = GrpcWalletClient::new(self.config.wallet_grpc_address);
+        let base_node_client = GrpcBaseNodeClient::new(self.config.base_node_grpc_address);
+        let wallet_client = GrpcWalletClient::new(self.config.wallet_grpc_address);
         // let acceptance_manager = ConcreteAcceptanceManager::new(wallet_client, base_node_client.clone());
         // let workers = ContractWorkerManager::new(
         //     self.config.clone(),

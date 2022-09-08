@@ -24,18 +24,20 @@ use std::{convert::TryInto, net::SocketAddr};
 
 use async_trait::async_trait;
 use log::*;
-use tari_app_grpc::tari_rpc as grpc;
+use tari_app_grpc::tari_rpc::{self as grpc, GetCommitteeRequest};
 use tari_common_types::types::{FixedHash, PublicKey};
+use tari_comms::types::CommsPublicKey;
 use tari_core::{
     chain_storage::{PrunedOutput, UtxoMinedInfo},
     transactions::transaction_components::OutputType,
 };
 use tari_crypto::tari_utilities::ByteArray;
 use tari_dan_core::{
-    models::{BaseLayerMetadata, BaseLayerOutput},
+    models::{BaseLayerMetadata, BaseLayerOutput, ValidatorNode},
     services::BaseNodeClient,
     DigitalAssetError,
 };
+use tonic::codegen::http::request;
 
 const LOG_TARGET: &str = "tari::validator_node::app";
 
@@ -78,5 +80,34 @@ impl BaseNodeClient for GrpcBaseNodeClient {
                 DigitalAssetError::InvalidPeerMessage("best_block was not a valid fixed hash".to_string())
             })?,
         })
+    }
+
+    async fn get_validator_nodes(&mut self, height: u64) -> Result<Vec<ValidatorNode>, DigitalAssetError> {
+        let inner = self.connection().await?;
+        let request = grpc::Empty {};
+        let result = inner.get_tip_info(request).await?.into_inner();
+        Ok(vec![])
+    }
+
+    async fn get_committee(
+        &mut self,
+        height: u64,
+        shard_key: &[u8; 32],
+    ) -> Result<Vec<CommsPublicKey>, DigitalAssetError> {
+        let inner = self.connection().await?;
+        let request = GetCommitteeRequest {
+            height,
+            shard_key: shard_key.to_vec(),
+        };
+        let result = inner.get_committee(request).await?.into_inner();
+        Ok(result
+            .public_key
+            .iter()
+            .map(|a| CommsPublicKey::from_vec(a).unwrap())
+            .collect())
+    }
+
+    async fn get_shard_key(&mut self, height: u64, public_key: &[u8; 32]) -> Result<&[u8; 32], DigitalAssetError> {
+        todo!()
     }
 }
