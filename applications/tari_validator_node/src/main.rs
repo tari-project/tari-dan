@@ -173,8 +173,10 @@ async fn run_node(config: &ApplicationConfig) -> Result<(), ExitError> {
     }
 
     // Run the JSON-RPC API
-    task::spawn(run_json_rpc(node_identity.clone()));
-    println!("Started JSON-RPC server");
+    if let Some(address) = config.validator_node.json_rpc_address {
+        println!("Started JSON-RPC server on {}", address);
+        task::spawn(run_json_rpc(address, node_identity.as_ref().clone()));
+    }
 
     // Show the validator node identity
     println!("🚀 Validator node started!");

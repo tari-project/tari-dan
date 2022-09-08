@@ -1,4 +1,4 @@
-use std::sync::Arc;
+use std::{net::SocketAddr, sync::Arc};
 
 use axum::{
     extract::{ContentLengthLimit, Extension},
@@ -12,18 +12,17 @@ use tari_comms::{multiaddr::Multiaddr, peer_manager::NodeId, types::CommsPublicK
 use tari_crypto::tari_utilities::hex::serialize_to_hex;
 use tari_dan_engine::instruction::Transaction;
 
-const LOG_TARGET: &str = "tari::validator_node::json-rpc";
-
+const LOG_TARGET: &str = "tari::validator_node::json_rpc";
 struct State {
-    node_identity: Arc<NodeIdentity>,
+    node_identity: NodeIdentity,
 }
 
-pub async fn run_json_rpc(node_identity: Arc<NodeIdentity>) -> Result<(), anyhow::Error> {
+pub async fn run_json_rpc(address: SocketAddr, node_identity: NodeIdentity) -> Result<(), anyhow::Error> {
     let shared_state = Arc::new(State { node_identity });
 
     let router = Router::new().route("/", post(handler)).layer(Extension(shared_state));
 
-    axum::Server::bind(&"127.0.0.1:13000".parse().unwrap())
+    axum::Server::bind(&address)
         .serve(router.into_make_service())
         .await
         .map_err(|err| {
@@ -52,8 +51,9 @@ async fn handler(
             Ok(JsonRpcResponse::success(answer_id, response))
         },
         "submit_transaction" => {
-            // TODO: submit the transaction to the wasm engine
             let transaction: Transaction = value.parse_params()?;
+
+            // TODO: submit the transaction to the wasm engine and return the result data
             println!("Transaction: {:?}", transaction);
 
             Ok(JsonRpcResponse::success(answer_id, ()))
