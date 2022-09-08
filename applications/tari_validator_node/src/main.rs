@@ -176,7 +176,7 @@ async fn run_node(config: &ApplicationConfig) -> Result<(), ExitError> {
 
     // Run the JSON-RPC server
     // TODO: read port as a config parameter
-    let json_rpc_handle = task::spawn(run_json_rpc());
+    let json_rpc_handle = task::spawn(run_json_rpc(node_identity.clone()));
     println!("Started JSON-RPC server");
     json_rpc_handle.await.expect("The JSON-RPC task has panicked"); // Currently the execution will be blocked from here
                                                                     // TODO: integrate the json_rpc server into the "handles" to avoid blocking
