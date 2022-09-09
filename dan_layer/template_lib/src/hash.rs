@@ -31,7 +31,8 @@ use std::{
 use tari_template_abi::{Decode, Encode};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
-pub struct Hash([u8; 32]);
+#[cfg_attr(feature = "json", derive(serde::Deserialize))]
+pub struct Hash(#[cfg_attr(feature = "json", serde(with = "hex"))] [u8; 32]);
 
 impl Hash {
     pub fn into_inner(self) -> [u8; 32] {
@@ -95,29 +96,6 @@ impl Display for Hash {
             write!(f, "{:02x?}", x)?;
         }
         Ok(())
-    }
-}
-
-#[cfg(feature = "serde")]
-impl<'de> serde::Deserialize<'de> for Hash {
-    fn deserialize<D>(deserializer: D) -> Result<Hash, D::Error>
-    where D: serde::Deserializer<'de> {
-        struct HashHexVisitor;
-
-        impl<'de> serde::de::Visitor<'de> for HashHexVisitor {
-            type Value = Hash;
-
-            fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
-                formatter.write_str("a type in hex format")
-            }
-
-            fn visit_str<E>(self, v: &str) -> Result<Self::Value, E>
-            where E: serde::de::Error {
-                Hash::from_hex(v).map_err(E::custom)
-            }
-        }
-
-        deserializer.deserialize_str(HashHexVisitor {})
     }
 }
 

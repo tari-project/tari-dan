@@ -8,16 +8,16 @@ mod template_id;
 
 use std::cmp::Ordering;
 
-use serde::Deserialize;
+use serde::{Deserialize, Deserializer};
 use tari_common_types::types::FixedHash;
-use tari_utilities::byte_array::ByteArray;
+use tari_utilities::{byte_array::ByteArray, hex::Hex};
 pub use template_id::TemplateId;
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Hash, Deserialize)]
-pub struct ObjectId(pub FixedHash);
+pub struct ObjectId(#[serde(deserialize_with = "deserialize_fixed_hash_from_hex")] pub FixedHash);
 
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Hash, Deserialize)]
-pub struct ShardId(pub FixedHash);
+pub struct ShardId(#[serde(deserialize_with = "deserialize_fixed_hash_from_hex")] pub FixedHash);
 
 impl ShardId {
     pub fn to_le_bytes(&self) -> &[u8] {
@@ -54,6 +54,7 @@ impl ObjectClaim {
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Hash, Deserialize)]
 pub struct PayloadId {
+    #[serde(deserialize_with = "deserialize_fixed_hash_from_hex")]
     id: FixedHash,
 }
 
@@ -69,4 +70,11 @@ impl PayloadId {
     pub fn as_slice(&self) -> &[u8] {
         self.id.as_slice()
     }
+}
+
+/// Use a serde deserializer to serialize the hex string of the given object.
+pub fn deserialize_fixed_hash_from_hex<'de, D>(deserializer: D) -> Result<FixedHash, D::Error>
+where D: Deserializer<'de> {
+    let hex = String::deserialize(deserializer)?;
+    FixedHash::from_hex(&hex).map_err(serde::de::Error::custom)
 }
