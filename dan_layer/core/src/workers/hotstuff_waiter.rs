@@ -24,9 +24,13 @@ use std::collections::HashMap;
 
 use async_recursion::async_recursion;
 use tari_dan_common_types::{PayloadId, ShardId};
+use tari_dan_engine::runtime::CommitResult;
 use tari_shutdown::ShutdownSignal;
 use tokio::{
-    sync::mpsc::{Receiver, Sender},
+    sync::{
+        mpsc::{Receiver, Sender},
+        oneshot,
+    },
     task::JoinHandle,
 };
 
@@ -69,7 +73,11 @@ pub struct HotStuffWaiter<
     tx_broadcast: Sender<(HotStuffMessage<TPayload, TAddr>, Vec<TAddr>)>,
     tx_vote_message: Sender<(VoteMessage, TAddr)>,
     // TODO: perhaps change to a service like Payload processor?
-    tx_execute: Sender<TPayload>,
+    tx_execute: Sender<(
+        TPayload,
+        HashMap<ShardId, Vec<ObjectPledge>>,
+        oneshot::Sender<HashMap<ShardId, Vec<u8>>>,
+    )>,
     shard_db: ShardDb<TAddr, TPayload>,
 }
 
@@ -90,7 +98,11 @@ impl<
         tx_leader: Sender<HotStuffMessage<TPayload, TAddr>>,
         tx_broadcast: Sender<(HotStuffMessage<TPayload, TAddr>, Vec<TAddr>)>,
         tx_vote_message: Sender<(VoteMessage, TAddr)>,
-        tx_execute: Sender<TPayload>,
+        tx_execute: Sender<(
+            TPayload,
+            HashMap<ShardId, Vec<ObjectPledge>>,
+            oneshot::Sender<HashMap<ShardId, Vec<u8>>>,
+        )>,
         shutdown: ShutdownSignal,
     ) -> JoinHandle<Result<(), String>> {
         tokio::spawn(async move {
@@ -121,7 +133,11 @@ impl<
         tx_leader: Sender<HotStuffMessage<TPayload, TAddr>>,
         tx_broadcast: Sender<(HotStuffMessage<TPayload, TAddr>, Vec<TAddr>)>,
         tx_vote_message: Sender<(VoteMessage, TAddr)>,
-        tx_execute: Sender<TPayload>,
+        tx_execute: Sender<(
+            TPayload,
+            HashMap<ShardId, Vec<ObjectPledge>>,
+            oneshot::Sender<HashMap<ShardId, Vec<u8>>>,
+        )>,
     ) -> Self {
         Self {
             identity,
@@ -356,18 +372,33 @@ impl<
                     .get_payload(&node.justify().payload())
                     .ok_or("No payload")?
                     .clone();
-                self.execute(payload).await?;
+
+                let mut all_pledges = HashMap::new();
+                for (pledge_shard, _, pledges) in node.justify().all_shard_nodes() {
+                    all_pledges.insert(*pledge_shard, pledges.clone());
+                }
+                self.execute(all_pledges, payload).await?;
             }
             self.shard_db.set_last_executed_height(shard, node.height());
         }
         Ok(())
     }
 
-    async fn execute(&mut self, payload: TPayload) -> Result<(), String> {
+    async fn execute(
+        &mut self,
+        shard_pledges: HashMap<ShardId, Vec<ObjectPledge>>,
+        payload: TPayload,
+    ) -> Result<HashMap<ShardId, Vec<u8>>, String> {
+        let (reply_tx, reply_rx) = oneshot::channel();
         self.tx_execute
-            .send(payload)
+            .send((payload, shard_pledges, reply_tx))
             .await
-            .map_err(|e| format!("Could not send execute cmd:{}", e))
+            .map_err(|e| format!("Could not send execute cmd:{}", e))?;
+        // TODO: wait on results
+        // let result = reply_rx
+        //     .await
+        //     .map_err(|e| format!("Could not receive execute reply:{}", e))?;
+        Ok(HashMap::new())
     }
 
     fn validate_proposal(&self, node: &HotStuffTreeNode<TAddr>) -> Result<(), String> {
@@ -507,7 +538,7 @@ impl<
                         node.shard(),
                         node.epoch(),
                         main_vote.decision(),
-                        main_vote.other_shard_nodes().clone(),
+                        main_vote.all_shard_nodes().clone(),
                         signatures,
                     );
                     self.shard_db.update_high_qc(qc);

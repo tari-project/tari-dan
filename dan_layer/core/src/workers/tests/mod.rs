@@ -20,20 +20,25 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use std::{collections::HashMap, time::Duration};
+use std::{collections::HashMap, convert::TryFrom, time::Duration};
 
 use lazy_static::lazy_static;
 use tari_common_types::types::{FixedHash, PrivateKey};
 use tari_dan_common_types::ShardId;
 use tari_dan_engine::{
-    instruction::{Instruction, TransactionBuilder},
+    instruction::{Instruction, InstructionProcessor, TransactionBuilder},
     packager::PackageBuilder,
+    runtime::{RuntimeInterfaceImpl, StateTracker},
+    state_store::memory::MemoryStateStore,
     wasm::compile::compile_str,
 };
 use tari_shutdown::Shutdown;
 use tari_utilities::ByteArray;
 use tokio::{
-    sync::mpsc::{channel, Receiver, Sender},
+    sync::{
+        mpsc::{channel, Receiver, Sender},
+        oneshot,
+    },
     task::JoinHandle,
     time::timeout,
 };
@@ -74,7 +79,11 @@ pub struct HsTestHarness<TPayload: Payload + 'static, TAddr: NodeAddressable + '
     rx_broadcast: Receiver<(HotStuffMessage<TPayload, TAddr>, Vec<TAddr>)>,
     rx_vote_message: Receiver<(VoteMessage, TAddr)>,
     tx_votes: Sender<(TAddr, VoteMessage)>,
-    rx_execute: Receiver<TPayload>,
+    rx_execute: Receiver<(
+        TPayload,
+        HashMap<ShardId, Vec<ObjectPledge>>,
+        oneshot::Sender<HashMap<ShardId, Vec<u8>>>,
+    )>,
     hs_waiter: Option<JoinHandle<Result<(), String>>>,
 }
 impl<TPayload: Payload, TAddr: NodeAddressable> HsTestHarness<TPayload, TAddr> {
@@ -165,7 +174,13 @@ impl<TPayload: Payload, TAddr: NodeAddressable> HsTestHarness<TPayload, TAddr> {
         }
     }
 
-    async fn recv_execute(&mut self) -> TPayload {
+    async fn recv_execute(
+        &mut self,
+    ) -> (
+        TPayload,
+        HashMap<ShardId, Vec<ObjectPledge>>,
+        oneshot::Sender<HashMap<ShardId, Vec<u8>>>,
+    ) {
         if let Some(msg) = timeout(Duration::from_secs(10), self.rx_execute.recv())
             .await
             .expect("timed out")
@@ -383,8 +398,9 @@ async fn test_hs_waiter_execute_called_when_consensus_reached() {
         .await
         .expect("timed out")
         .expect("Should not be None");
+    executed_payload.2.send(HashMap::new()).unwrap();
 
-    assert_eq!(executed_payload, payload);
+    assert_eq!(executed_payload.0, payload);
     instance.assert_shuts_down_safely().await
 }
 
@@ -551,7 +567,7 @@ async fn test_hs_waiter_cannot_spend_until_it_is_proven_committed() {
     todo!()
 }
 
-use tari_template_lib::args::Arg;
+use tari_template_lib::{args::Arg, Hash};
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn test_kitchen_sink() {
@@ -608,7 +624,6 @@ mod hello_world {
     let transaction = builder.sign(&secret_key).build();
 
     let involved_shards = transaction.meta().involved_shards();
-    dbg!(&involved_shards);
     let s1;
     let s2;
     if involved_shards[0].0 < involved_shards[1].0 {
@@ -646,8 +661,22 @@ mod hello_world {
 
     // should get an execute message
     for node in &mut nodes {
-        let execute_message = node.recv_execute().await;
-        dbg!(&node.identity, execute_message);
+        let (ex_transaction, shard_pledges, reply_tx) = node.recv_execute().await;
+
+        dbg!(&shard_pledges);
+        let state_db = MemoryStateStore::default();
+        let state_tracker = StateTracker::new(
+            state_db,
+            Hash::try_from(ex_transaction.transaction().hash().as_slice()).unwrap(),
+        );
+        let runtime_interface = RuntimeInterfaceImpl::new(state_tracker);
+        // Process the instruction
+        let mut processor = InstructionProcessor::new(runtime_interface, package.clone());
+        let result = processor.execute(ex_transaction.transaction().clone()).unwrap();
+
+        // reply_tx.send(HashMap::new()).unwrap();
+
+        dbg!(result);
     }
 
     for n in &mut nodes {

@@ -56,7 +56,7 @@ pub struct QuorumCertificate {
     shard: ShardId,
     epoch: Epoch,
     decision: QuorumDecision,
-    other_shard_nodes: Vec<(ShardId, TreeNodeHash, Vec<ObjectPledge>)>,
+    all_shard_nodes: Vec<(ShardId, TreeNodeHash, Vec<ObjectPledge>)>,
     signatures: Vec<ValidatorSignature>,
 }
 
@@ -69,7 +69,7 @@ impl QuorumCertificate {
         shard: ShardId,
         epoch: Epoch,
         decision: QuorumDecision,
-        other_shard_nodes: Vec<(ShardId, TreeNodeHash, Vec<ObjectPledge>)>,
+        all_shard_nodes: Vec<(ShardId, TreeNodeHash, Vec<ObjectPledge>)>,
         signatures: Vec<ValidatorSignature>,
     ) -> Self {
         Self {
@@ -80,7 +80,7 @@ impl QuorumCertificate {
             shard,
             epoch,
             decision,
-            other_shard_nodes,
+            all_shard_nodes,
             signatures,
         }
     }
@@ -94,7 +94,7 @@ impl QuorumCertificate {
             shard: ShardId(FixedHash::zero()),
             epoch: Epoch(0),
             decision: QuorumDecision::Accept,
-            other_shard_nodes: vec![],
+            all_shard_nodes: vec![],
             signatures: vec![],
         }
     }
@@ -162,8 +162,8 @@ impl QuorumCertificate {
         &self.decision
     }
 
-    pub fn other_shard_nodes(&self) -> &[(ShardId, TreeNodeHash, Vec<ObjectPledge>)] {
-        &self.other_shard_nodes
+    pub fn all_shard_nodes(&self) -> &[(ShardId, TreeNodeHash, Vec<ObjectPledge>)] {
+        &self.all_shard_nodes
     }
 
     pub fn signatures(&self) -> &[ValidatorSignature] {
