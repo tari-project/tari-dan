@@ -24,7 +24,6 @@ use std::collections::HashMap;
 
 use async_trait::async_trait;
 use tari_dan_common_types::ShardId;
-use tari_dan_engine::state::{models::StateRoot, StateDbUnitOfWork};
 
 use crate::{
     digital_assets_error::DigitalAssetError,
@@ -54,7 +53,7 @@ impl PayloadProcessor<TariDanPayload> for TariDanPayloadProcessor {
     async fn process_payload(
         &self,
         _payload: &TariDanPayload,
-        pledges: HashMap<ShardId, Vec<ObjectPledge>>,
+        _pledges: HashMap<ShardId, Vec<ObjectPledge>>,
     ) -> Result<(), DigitalAssetError> {
         todo!()
     }

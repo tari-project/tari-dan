@@ -24,13 +24,9 @@ use std::collections::HashMap;
 
 use async_recursion::async_recursion;
 use tari_dan_common_types::{PayloadId, ShardId};
-use tari_dan_engine::runtime::CommitResult;
 use tari_shutdown::ShutdownSignal;
 use tokio::{
-    sync::{
-        mpsc::{Receiver, Sender},
-        oneshot,
-    },
+    sync::mpsc::{Receiver, Sender},
     task::JoinHandle,
 };
 

@@ -50,7 +50,7 @@ pub use node::Node;
 pub use payload::Payload;
 pub use quorum_certificate::{QuorumCertificate, QuorumDecision};
 pub use sidechain_metadata::SidechainMetadata;
-use tari_dan_common_types::{ObjectId, PayloadId};
+use tari_dan_common_types::{ObjectId, PayloadId, SubstateState};
 pub use tari_dan_payload::{CheckpointData, TariDanPayload};
 pub use tree_node_hash::TreeNodeHash;
 pub use view::View;
@@ -86,13 +86,6 @@ impl Epoch {
     fn to_le_bytes(self) -> [u8; 8] {
         self.0.to_le_bytes()
     }
-}
-
-#[derive(Debug, Clone)]
-pub enum SubstateState {
-    DoesNotExist,
-    Created { created_by: PayloadId },
-    Destroyed { deleted_by: PayloadId },
 }
 
 #[derive(Debug, Clone)]

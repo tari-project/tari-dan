@@ -238,8 +238,8 @@ impl<TPayload: Payload, TAddr: NodeAddressable> HsTestHarness<TPayload, TAddr> {
 }
 
 lazy_static! {
-    static ref SHARD0: ShardId = ShardId(FixedHash::zero());
-    static ref SHARD1: ShardId = ShardId(FixedHash::from([1u8; 32]));
+    static ref SHARD0: ShardId = ShardId::zero();
+    static ref SHARD1: ShardId = ShardId([1u8; 32]);
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
@@ -447,7 +447,7 @@ async fn test_hs_waiter_multishard_votes() {
     let shard1_committee = vec![node2.clone()];
     let epoch_manager = RangeEpochManager::new_with_multiple(&[
         (*SHARD0..*SHARD1, shard0_committee),
-        (*SHARD1..ShardId(FixedHash::from([2u8; 32])), shard1_committee),
+        (*SHARD1..ShardId([2u8; 32]), shard1_committee),
     ]);
     let mut node1_instance = HsTestHarness::new(node1.clone(), epoch_manager.clone(), AlwaysFirstLeader {});
     let mut node2_instance = HsTestHarness::new(node2.clone(), epoch_manager, AlwaysFirstLeader {});
@@ -657,7 +657,7 @@ mod hello_world {
     let mut builder = TransactionBuilder::new();
     builder.add_instruction(instruction);
     // Only creating a single component
-    builder.add_outputs(2);
+    builder.with_new_components(2);
     let transaction = builder.sign(&secret_key).build();
 
     let involved_shards = transaction.meta().involved_shards();
@@ -672,7 +672,7 @@ mod hello_world {
     }
     let epoch_manager = RangeEpochManager::new_with_multiple(&[
         (s1..s2, shard0_committee),
-        (s2..ShardId(FixedHash::from([255u8; 32])), shard1_committee),
+        (s2..ShardId([255u8; 32]), shard1_committee),
     ]);
     let node1_instance = HsTestHarness::new(node1.clone(), epoch_manager.clone(), AlwaysFirstLeader {});
     let node2_instance = HsTestHarness::new(node2.clone(), epoch_manager, AlwaysFirstLeader {});
@@ -701,7 +701,12 @@ mod hello_world {
         let (ex_transaction, shard_pledges) = node.recv_execute().await;
 
         dbg!(&shard_pledges);
-        let state_db = MemoryStateStore::default();
+        let mut pre_state = vec![];
+        for (k, v) in shard_pledges {
+            pre_state.push((k.0.to_vec(), v[0].current_state.clone()));
+        }
+        let mut state_db = MemoryStateStore::load(pre_state);
+        // state_db.allow_creation_of_non_existent_shards = false;
         let state_tracker = StateTracker::new(
             state_db,
             Hash::try_from(ex_transaction.transaction().hash().as_slice()).unwrap(),
@@ -711,9 +716,10 @@ mod hello_world {
         let mut processor = InstructionProcessor::new(runtime_interface, package.clone());
         let result = processor.execute(ex_transaction.transaction().clone()).unwrap();
 
-        // reply_tx.send(HashMap::new()).unwrap();
+        // reply_tx.s   end(HashMap::new()).unwrap();
 
-        dbg!(result);
+        dbg!(&result);
+        result.result.expect("Did not execute successfully");
     }
 
     for n in &mut nodes {
