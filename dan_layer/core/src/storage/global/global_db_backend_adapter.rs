@@ -50,6 +50,8 @@ pub trait GlobalDbBackendAdapter: Send + Sync + Clone {
 pub enum GlobalDbMetadataKey {
     LastScannedConstitutionHash,
     LastScannedConstitutionHeight,
+    LastScannedBaseLayerBlockHeight,
+    LastScannedBaseLayerBlockHash,
 }
 
 impl GlobalDbMetadataKey {
@@ -57,6 +59,8 @@ impl GlobalDbMetadataKey {
         match self {
             GlobalDbMetadataKey::LastScannedConstitutionHash => b"last_scanned_constitution_hash",
             GlobalDbMetadataKey::LastScannedConstitutionHeight => b"last_scanned_constitution_height",
+            GlobalDbMetadataKey::LastScannedBaseLayerBlockHash => b"last_scanned_base_layer_block_hash",
+            GlobalDbMetadataKey::LastScannedBaseLayerBlockHeight => b"last_scanned_base_layer_block_height",
         }
     }
 }

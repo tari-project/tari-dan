@@ -21,6 +21,7 @@
 // USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 mod asset;
+mod base_layer_scanner;
 mod cli;
 mod cmd_args;
 mod comms;
@@ -60,8 +61,6 @@ use tari_dan_core::{
     storage::{global::GlobalDb, DbFactory},
 };
 use tari_dan_storage_sqlite::{global::SqliteGlobalDbBackendAdapter, SqliteDbFactory};
-use tari_p2p::comms_connector::SubscriptionFactory;
-use tari_service_framework::ServiceHandles;
 use tari_shutdown::{Shutdown, ShutdownSignal};
 use tari_validator_node_grpc::rpc::validator_node_server::ValidatorNodeServer;
 use tokio::{runtime, runtime::Runtime, task};
@@ -134,7 +133,7 @@ async fn run_node(config: &ApplicationConfig) -> Result<(), ExitError> {
         node_identity.node_id()
     );
     // fs::create_dir_all(&global.peer_db_path).map_err(|err| ExitError::new(ExitCode::ConfigError, err))?;
-    let (handles, subscription_factory) = comms::build_service_and_comms_stack(
+    let (handles, _subscription_factory) = comms::build_service_and_comms_stack(
         config,
         shutdown.to_signal(),
         node_identity.clone(),
@@ -175,10 +174,10 @@ async fn run_node(config: &ApplicationConfig) -> Result<(), ExitError> {
     run_dan_node(
         shutdown.to_signal(),
         config.validator_node.clone(),
-        mempool_service,
-        db_factory,
-        handles,
-        subscription_factory,
+        // mempool_service,
+        // db_factory,
+        // handles,
+        // subscription_factory,
         node_identity,
         global_db,
     )
@@ -198,20 +197,20 @@ fn build_runtime() -> Result<Runtime, ExitError> {
 async fn run_dan_node(
     shutdown_signal: ShutdownSignal,
     config: ValidatorNodeConfig,
-    mempool_service: MempoolServiceHandle,
-    db_factory: SqliteDbFactory,
-    handles: ServiceHandles,
-    subscription_factory: Arc<SubscriptionFactory>,
+    // mempool_service: MempoolServiceHandle,
+    // db_factory: SqliteDbFactory,
+    // handles: ServiceHandles,
+    // subscription_factory: Arc<SubscriptionFactory>,
     node_identity: Arc<NodeIdentity>,
     global_db: GlobalDb<SqliteGlobalDbBackendAdapter>,
 ) -> Result<(), ExitError> {
     let node = DanNode::new(config, node_identity, global_db);
     node.start(
         shutdown_signal,
-        mempool_service,
-        db_factory,
-        handles,
-        subscription_factory,
+        // mempool_service,
+        // db_factory,
+        // handles,
+        // subscription_factory,
     )
     .await
 }

@@ -24,39 +24,33 @@ use std::sync::Arc;
 
 use tari_common::exit_codes::{ExitCode, ExitError};
 use tari_comms::NodeIdentity;
-use tari_dan_core::{
-    services::{mempool::service::MempoolServiceHandle, ConcreteAcceptanceManager},
-    storage::global::GlobalDb,
-};
-use tari_dan_storage_sqlite::{global::SqliteGlobalDbBackendAdapter, SqliteDbFactory};
-use tari_p2p::comms_connector::SubscriptionFactory;
-use tari_service_framework::ServiceHandles;
+use tari_dan_core::storage::global::GlobalDb;
+use tari_dan_storage_sqlite::global::SqliteGlobalDbBackendAdapter;
 use tari_shutdown::ShutdownSignal;
 
 use crate::{
+    base_layer_scanner::BaseLayerScanner,
     config::ValidatorNodeConfig,
-    contract_worker_manager::ContractWorkerManager,
-    grpc::services::{base_node_client::GrpcBaseNodeClient, wallet_client::GrpcWalletClient},
+    grpc::services::base_node_client::GrpcBaseNodeClient,
 };
 
 const _LOG_TARGET: &str = "tari::validator_node::app";
 
-#[derive(Clone)]
 pub struct DanNode {
     config: ValidatorNodeConfig,
-    identity: Arc<NodeIdentity>,
+    _identity: Arc<NodeIdentity>,
     global_db: GlobalDb<SqliteGlobalDbBackendAdapter>,
 }
 
 impl DanNode {
     pub fn new(
         config: ValidatorNodeConfig,
-        identity: Arc<NodeIdentity>,
+        _identity: Arc<NodeIdentity>,
         global_db: GlobalDb<SqliteGlobalDbBackendAdapter>,
     ) -> Self {
         Self {
             config,
-            identity,
+            _identity,
             global_db,
         }
     }
@@ -64,31 +58,45 @@ impl DanNode {
     pub async fn start(
         &self,
         shutdown: ShutdownSignal,
-        mempool_service: MempoolServiceHandle,
-        db_factory: SqliteDbFactory,
-        handles: ServiceHandles,
-        subscription_factory: Arc<SubscriptionFactory>,
+        // mempool_service: MempoolServiceHandle,
+        // db_factory: SqliteDbFactory,
+        // handles: ServiceHandles,
+        // subscription_factory: Arc<SubscriptionFactory>,
     ) -> Result<(), ExitError> {
         let base_node_client = GrpcBaseNodeClient::new(self.config.base_node_grpc_address);
-        let wallet_client = GrpcWalletClient::new(self.config.wallet_grpc_address);
-        let acceptance_manager = ConcreteAcceptanceManager::new(wallet_client, base_node_client.clone());
-        let workers = ContractWorkerManager::new(
+
+        let base_layer_scanner = BaseLayerScanner::new(
             self.config.clone(),
-            self.identity.clone(),
             self.global_db.clone(),
             base_node_client,
-            acceptance_manager,
-            mempool_service,
-            handles,
-            subscription_factory,
-            db_factory,
             shutdown.clone(),
         );
 
-        workers
+        base_layer_scanner
             .start()
             .await
             .map_err(|err| ExitError::new(ExitCode::DigitalAssetError, err))?;
+
+        // TODO: old committee approach, must delete it at some point
+        // let wallet_client = GrpcWalletClient::new(self.config.wallet_grpc_address);
+        // let acceptance_manager = ConcreteAcceptanceManager::new(wallet_client, base_node_client.clone());
+        // let workers = ContractWorkerManager::new(
+        // self.config.clone(),
+        // self.identity.clone(),
+        // self.global_db.clone(),
+        // base_node_client,
+        // acceptance_manager,
+        // mempool_service,
+        // handles,
+        // subscription_factory,
+        // db_factory,
+        // shutdown.clone(),
+        // );
+        //
+        // workers
+        // .start()
+        // .await
+        // .map_err(|err| ExitError::new(ExitCode::DigitalAssetError, err))?;
 
         Ok(())
     }
