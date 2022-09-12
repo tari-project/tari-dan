@@ -12,6 +12,7 @@ tari_common_types = { git = "https://github.com/tari-project/tari.git", tag = "v
 tari_utilities = { git = "https://github.com/tari-project/tari_utilities.git", tag = "v0.4.5" }
 
 borsh = "0.9.3"
+serde = "1.0.126"
 prost = "0.9"
 prost-types = "0.9"
 

@@ -23,8 +23,11 @@
 use tari_template_abi::{decode, encode, rust::io, Decode, Encode};
 
 #[derive(Debug, Clone, PartialEq, Eq, Decode, Encode)]
+#[cfg_attr(feature = "json", derive(serde::Deserialize))]
 pub enum Arg {
+    #[cfg_attr(feature = "json", serde(with = "hex"))]
     FromWorkspace(Vec<u8>),
+    #[cfg_attr(feature = "json", serde(with = "hex"))]
     Literal(Vec<u8>),
 }
 
