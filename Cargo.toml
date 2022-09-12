@@ -11,6 +11,7 @@ members = [
     "applications/tari_validator_node_grpc",
 ]
 #
+resolver = "2"
 
 # Shutdown when panicking so we can see the error, specifically for the wallet
 [profile.release]

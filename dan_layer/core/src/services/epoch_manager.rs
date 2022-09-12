@@ -34,18 +34,13 @@ use crate::{
 pub trait EpochManager<TAddr: NodeAddressable>: Clone {
     async fn current_epoch(&self) -> Epoch;
     async fn is_epoch_valid(&self, epoch: Epoch) -> bool;
-    async fn get_committees(
+    fn get_committees(
         &self,
         epoch: Epoch,
         shards: &[ShardId],
     ) -> Result<Vec<(ShardId, Option<Committee<TAddr>>)>, String>;
-    async fn get_committee(&self, epoch: Epoch, shard: ShardId) -> Result<Committee<TAddr>, String>;
-    async fn get_shards(
-        &self,
-        epoch: Epoch,
-        addr: &TAddr,
-        available_shards: &[ShardId],
-    ) -> Result<Vec<ShardId>, String>;
+    fn get_committee(&self, epoch: Epoch, shard: ShardId) -> Result<Committee<TAddr>, String>;
+    fn get_shards(&self, epoch: Epoch, addr: &TAddr, available_shards: &[ShardId]) -> Result<Vec<ShardId>, String>;
 }
 
 #[derive(Debug, Clone)]
@@ -91,7 +86,7 @@ impl<TAddr: NodeAddressable> EpochManager<TAddr> for RangeEpochManager<TAddr> {
         self.current_epoch == epoch
     }
 
-    async fn get_committees(
+    fn get_committees(
         &self,
         epoch: Epoch,
         shards: &[ShardId],
@@ -112,7 +107,7 @@ impl<TAddr: NodeAddressable> EpochManager<TAddr> for RangeEpochManager<TAddr> {
         Ok(result)
     }
 
-    async fn get_committee(&self, epoch: Epoch, shard: ShardId) -> Result<Committee<TAddr>, String> {
+    fn get_committee(&self, epoch: Epoch, shard: ShardId) -> Result<Committee<TAddr>, String> {
         let epoch = self.epochs.get(&epoch).ok_or("No value for that epoch")?;
         for (range, committee) in epoch {
             if range.contains(&shard) {
@@ -122,12 +117,7 @@ impl<TAddr: NodeAddressable> EpochManager<TAddr> for RangeEpochManager<TAddr> {
         Err("Could not find a committee for that shard".to_string())
     }
 
-    async fn get_shards(
-        &self,
-        epoch: Epoch,
-        addr: &TAddr,
-        available_shards: &[ShardId],
-    ) -> Result<Vec<ShardId>, String> {
+    fn get_shards(&self, epoch: Epoch, addr: &TAddr, available_shards: &[ShardId]) -> Result<Vec<ShardId>, String> {
         let epoch = self.epochs.get(&epoch).ok_or("No value for that epoch")?;
         let mut result = vec![];
         for (range, committee) in epoch {

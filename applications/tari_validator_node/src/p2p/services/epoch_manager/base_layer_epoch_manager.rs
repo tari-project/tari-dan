@@ -41,7 +41,7 @@ impl EpochManager<CommsPublicKey> for BaseLayerEpochManager {
         todo!()
     }
 
-    async fn get_committees(
+    fn get_committees(
         &self,
         _epoch: Epoch,
         _shards: &[ShardId],
@@ -49,11 +49,11 @@ impl EpochManager<CommsPublicKey> for BaseLayerEpochManager {
         todo!()
     }
 
-    async fn get_committee(&self, _epoch: Epoch, _shard: ShardId) -> Result<Committee<CommsPublicKey>, String> {
+    fn get_committee(&self, _epoch: Epoch, _shard: ShardId) -> Result<Committee<CommsPublicKey>, String> {
         todo!()
     }
 
-    async fn get_shards(
+    fn get_shards(
         &self,
         _epoch: Epoch,
         _addr: &CommsPublicKey,
