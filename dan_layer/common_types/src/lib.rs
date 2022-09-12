@@ -61,7 +61,7 @@ pub enum SubstateState {
     Destroyed { deleted_by: PayloadId },
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Deserialize)]
 pub struct ObjectClaim {}
 
 impl ObjectClaim {
@@ -93,8 +93,9 @@ impl PayloadId {
 }
 
 /// Use a serde deserializer to serialize the hex string of the given object.
-pub fn deserialize_fixed_hash_from_hex<'de, D>(deserializer: D) -> Result<FixedHash, D::Error>
+pub fn deserialize_fixed_hash_from_hex<'de, D>(deserializer: D) -> Result<[u8; 32], D::Error>
 where D: Deserializer<'de> {
-    let hex = String::deserialize(deserializer)?;
-    FixedHash::from_hex(&hex).map_err(serde::de::Error::custom)
+    let hex = <String as Deserialize>::deserialize(deserializer)?;
+    let hash = <[u8; 32] as Hex>::from_hex(hex.as_str()).map_err(serde::de::Error::custom)?;
+    Ok(hash)
 }
