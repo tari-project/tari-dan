@@ -53,6 +53,7 @@ use crate::{
         epoch_manager::EpochManager,
         infrastructure_services::NodeAddressable,
         leader_strategy::LeaderStrategy,
+        PayloadProcessor,
     },
     storage::shard_db::ShardDb,
 };
@@ -62,6 +63,7 @@ pub struct HotStuffWaiter<
     TAddr: NodeAddressable,
     TLeaderStrategy: LeaderStrategy<TAddr, TPayload>,
     TEpochManager: EpochManager<TAddr>,
+    TPayloadProcessor: PayloadProcessor<TPayload>,
 > {
     identity: TAddr,
     leader_strategy: TLeaderStrategy,
@@ -72,12 +74,7 @@ pub struct HotStuffWaiter<
     tx_leader: Sender<HotStuffMessage<TPayload, TAddr>>,
     tx_broadcast: Sender<(HotStuffMessage<TPayload, TAddr>, Vec<TAddr>)>,
     tx_vote_message: Sender<(VoteMessage, TAddr)>,
-    // TODO: perhaps change to a service like Payload processor?
-    tx_execute: Sender<(
-        TPayload,
-        HashMap<ShardId, Vec<ObjectPledge>>,
-        oneshot::Sender<HashMap<ShardId, Vec<u8>>>,
-    )>,
+    payload_processor: TPayloadProcessor,
     shard_db: ShardDb<TAddr, TPayload>,
 }
 
@@ -86,7 +83,8 @@ impl<
         TAddr: NodeAddressable + 'static,
         TLeaderStrategy: LeaderStrategy<TAddr, TPayload> + 'static + Send + Sync,
         TEpochManager: EpochManager<TAddr> + 'static + Send + Sync,
-    > HotStuffWaiter<TPayload, TAddr, TLeaderStrategy, TEpochManager>
+        TPayloadProcessor: PayloadProcessor<TPayload> + 'static + Send + Sync,
+    > HotStuffWaiter<TPayload, TAddr, TLeaderStrategy, TEpochManager, TPayloadProcessor>
 {
     pub fn spawn(
         identity: TAddr,
@@ -98,11 +96,7 @@ impl<
         tx_leader: Sender<HotStuffMessage<TPayload, TAddr>>,
         tx_broadcast: Sender<(HotStuffMessage<TPayload, TAddr>, Vec<TAddr>)>,
         tx_vote_message: Sender<(VoteMessage, TAddr)>,
-        tx_execute: Sender<(
-            TPayload,
-            HashMap<ShardId, Vec<ObjectPledge>>,
-            oneshot::Sender<HashMap<ShardId, Vec<u8>>>,
-        )>,
+        payload_processor: TPayloadProcessor,
         shutdown: ShutdownSignal,
     ) -> JoinHandle<Result<(), String>> {
         tokio::spawn(async move {
@@ -116,7 +110,7 @@ impl<
                 tx_leader,
                 tx_broadcast,
                 tx_vote_message,
-                tx_execute,
+                payload_processor,
             )
             .run(shutdown)
             .await
@@ -133,11 +127,7 @@ impl<
         tx_leader: Sender<HotStuffMessage<TPayload, TAddr>>,
         tx_broadcast: Sender<(HotStuffMessage<TPayload, TAddr>, Vec<TAddr>)>,
         tx_vote_message: Sender<(VoteMessage, TAddr)>,
-        tx_execute: Sender<(
-            TPayload,
-            HashMap<ShardId, Vec<ObjectPledge>>,
-            oneshot::Sender<HashMap<ShardId, Vec<u8>>>,
-        )>,
+        payload_processor: TPayloadProcessor,
     ) -> Self {
         Self {
             identity,
@@ -149,7 +139,7 @@ impl<
             tx_leader,
             tx_broadcast,
             tx_vote_message,
-            tx_execute,
+            payload_processor,
             shard_db: ShardDb::new(),
         }
     }
@@ -389,11 +379,15 @@ impl<
         shard_pledges: HashMap<ShardId, Vec<ObjectPledge>>,
         payload: TPayload,
     ) -> Result<HashMap<ShardId, Vec<u8>>, String> {
-        let (reply_tx, reply_rx) = oneshot::channel();
-        self.tx_execute
-            .send((payload, shard_pledges, reply_tx))
+        self.payload_processor
+            .process_payload(&payload, shard_pledges)
             .await
-            .map_err(|e| format!("Could not send execute cmd:{}", e))?;
+            .map_err(|e| e.to_string())?;
+        // let (reply_tx, reply_rx) = oneshot::channel();
+        // self.tx_execute
+        //     .send((payload, shard_pledges, reply_tx))
+        //     .await
+        //     .map_err(|e| format!("Could not send execute cmd:{}", e))?;
         // TODO: wait on results
         // let result = reply_rx
         //     .await

@@ -35,7 +35,6 @@ pub use signing_service::{NodeIdentitySigningService, SigningService};
 mod asset_proxy;
 pub mod epoch_manager;
 pub mod leader_strategy;
-pub mod mocks;
 mod service_specification;
 mod validator_node_rpc_client;
 

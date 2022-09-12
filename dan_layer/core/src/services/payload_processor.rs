@@ -20,21 +20,24 @@
 // WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 // USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+use std::collections::HashMap;
+
 use async_trait::async_trait;
+use tari_dan_common_types::ShardId;
 use tari_dan_engine::state::{models::StateRoot, StateDbUnitOfWork};
 
 use crate::{
     digital_assets_error::DigitalAssetError,
-    models::{Payload, TariDanPayload},
+    models::{ObjectPledge, Payload, TariDanPayload},
 };
 
 #[async_trait]
 pub trait PayloadProcessor<TPayload: Payload> {
-    async fn process_payload<TUnitOfWork: StateDbUnitOfWork>(
+    async fn process_payload(
         &self,
         payload: &TPayload,
-        unit_of_work: TUnitOfWork,
-    ) -> Result<StateRoot, DigitalAssetError>;
+        pledges: HashMap<ShardId, Vec<ObjectPledge>>,
+    ) -> Result<(), DigitalAssetError>;
 }
 
 #[derive(Debug, Default)]
@@ -48,11 +51,11 @@ impl TariDanPayloadProcessor {
 
 #[async_trait]
 impl PayloadProcessor<TariDanPayload> for TariDanPayloadProcessor {
-    async fn process_payload<TUnitOfWork: StateDbUnitOfWork>(
+    async fn process_payload(
         &self,
         _payload: &TariDanPayload,
-        _state_tx: TUnitOfWork,
-    ) -> Result<StateRoot, DigitalAssetError> {
+        pledges: HashMap<ShardId, Vec<ObjectPledge>>,
+    ) -> Result<(), DigitalAssetError> {
         todo!()
     }
 }

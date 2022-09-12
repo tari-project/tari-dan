@@ -22,6 +22,7 @@
 
 use std::{collections::HashMap, convert::TryFrom, time::Duration};
 
+use async_trait::async_trait;
 use lazy_static::lazy_static;
 use tari_common_types::types::{FixedHash, PrivateKey};
 use tari_dan_common_types::ShardId;
@@ -36,6 +37,7 @@ use tari_shutdown::Shutdown;
 use tari_utilities::ByteArray;
 use tokio::{
     sync::{
+        broadcast,
         mpsc::{channel, Receiver, Sender},
         oneshot,
     },
@@ -59,7 +61,49 @@ use crate::{
         leader_strategy::{AlwaysFirstLeader, LeaderStrategy},
     },
     workers::hotstuff_waiter::HotStuffWaiter,
+    DigitalAssetError,
 };
+
+pub struct PayloadProcessorListener<TPayload: Payload> {
+    receiver: broadcast::Receiver<(TPayload, HashMap<ShardId, Vec<ObjectPledge>>)>,
+    sender: broadcast::Sender<(TPayload, HashMap<ShardId, Vec<ObjectPledge>>)>,
+}
+
+impl<TPayload: Payload> PayloadProcessorListener<TPayload> {
+    pub fn new() -> Self {
+        let (sender, receiver) = broadcast::channel(100);
+        Self { receiver, sender }
+    }
+}
+
+#[async_trait]
+impl<TPayload: Payload> PayloadProcessor<TPayload> for PayloadProcessorListener<TPayload> {
+    async fn process_payload(
+        &self,
+        payload: &TPayload,
+        pledges: HashMap<ShardId, Vec<ObjectPledge>>,
+    ) -> Result<(), DigitalAssetError> {
+        self.sender
+            .send((payload.clone(), pledges.clone()))
+            .map_err(|e| DigitalAssetError::SendError {
+                context: "Sending process payload".to_string(),
+            })?;
+        Ok(())
+    }
+}
+
+pub struct NullPayloadProcessor {}
+
+#[async_trait]
+impl<TPayload: Payload> PayloadProcessor<TPayload> for NullPayloadProcessor {
+    async fn process_payload(
+        &self,
+        payload: &TPayload,
+        pledges: HashMap<ShardId, Vec<ObjectPledge>>,
+    ) -> Result<(), DigitalAssetError> {
+        Ok(())
+    }
+}
 
 pub trait Consensus<TPayload: Payload> {
     fn execute_transaction(
@@ -79,11 +123,7 @@ pub struct HsTestHarness<TPayload: Payload + 'static, TAddr: NodeAddressable + '
     rx_broadcast: Receiver<(HotStuffMessage<TPayload, TAddr>, Vec<TAddr>)>,
     rx_vote_message: Receiver<(VoteMessage, TAddr)>,
     tx_votes: Sender<(TAddr, VoteMessage)>,
-    rx_execute: Receiver<(
-        TPayload,
-        HashMap<ShardId, Vec<ObjectPledge>>,
-        oneshot::Sender<HashMap<ShardId, Vec<u8>>>,
-    )>,
+    rx_execute: broadcast::Receiver<(TPayload, HashMap<ShardId, Vec<ObjectPledge>>)>,
     hs_waiter: Option<JoinHandle<Result<(), String>>>,
 }
 impl<TPayload: Payload, TAddr: NodeAddressable> HsTestHarness<TPayload, TAddr> {
@@ -101,10 +141,11 @@ impl<TPayload: Payload, TAddr: NodeAddressable> HsTestHarness<TPayload, TAddr> {
         let (tx_broadcast, rx_broadcast) = channel(1);
         let (tx_vote_message, rx_vote_message) = channel(1);
         let (tx_votes, rx_votes) = channel(1);
-        let (tx_execute, rx_execute) = channel(1);
+        let payload_processor = PayloadProcessorListener::new();
+        let rx_execute = payload_processor.receiver.resubscribe();
         let shutdown = Shutdown::new();
 
-        let hs_waiter = Some(HotStuffWaiter::<_, _, _, _>::spawn(
+        let hs_waiter = Some(HotStuffWaiter::<_, _, _, _, _>::spawn(
             identity.clone(),
             epoch_manager,
             leader,
@@ -114,7 +155,7 @@ impl<TPayload: Payload, TAddr: NodeAddressable> HsTestHarness<TPayload, TAddr> {
             tx_leader,
             tx_broadcast,
             tx_vote_message,
-            tx_execute,
+            payload_processor,
             shutdown.to_signal(),
         ));
         Self {
@@ -174,14 +215,8 @@ impl<TPayload: Payload, TAddr: NodeAddressable> HsTestHarness<TPayload, TAddr> {
         }
     }
 
-    async fn recv_execute(
-        &mut self,
-    ) -> (
-        TPayload,
-        HashMap<ShardId, Vec<ObjectPledge>>,
-        oneshot::Sender<HashMap<ShardId, Vec<u8>>>,
-    ) {
-        if let Some(msg) = timeout(Duration::from_secs(10), self.rx_execute.recv())
+    async fn recv_execute(&mut self) -> (TPayload, HashMap<ShardId, Vec<ObjectPledge>>) {
+        if let Ok(msg) = timeout(Duration::from_secs(10), self.rx_execute.recv())
             .await
             .expect("timed out")
         {
@@ -398,7 +433,7 @@ async fn test_hs_waiter_execute_called_when_consensus_reached() {
         .await
         .expect("timed out")
         .expect("Should not be None");
-    executed_payload.2.send(HashMap::new()).unwrap();
+    // executed_payload.2.send(HashMap::new()).unwrap();
 
     assert_eq!(executed_payload.0, payload);
     instance.assert_shuts_down_safely().await
@@ -569,6 +604,8 @@ async fn test_hs_waiter_cannot_spend_until_it_is_proven_committed() {
 
 use tari_template_lib::{args::Arg, Hash};
 
+use crate::services::PayloadProcessor;
+
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn test_kitchen_sink() {
     let node1 = "node1".to_string();
@@ -661,7 +698,7 @@ mod hello_world {
 
     // should get an execute message
     for node in &mut nodes {
-        let (ex_transaction, shard_pledges, reply_tx) = node.recv_execute().await;
+        let (ex_transaction, shard_pledges) = node.recv_execute().await;
 
         dbg!(&shard_pledges);
         let state_db = MemoryStateStore::default();
