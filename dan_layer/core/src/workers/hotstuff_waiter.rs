@@ -49,6 +49,7 @@ use crate::{
         epoch_manager::EpochManager,
         infrastructure_services::NodeAddressable,
         leader_strategy::LeaderStrategy,
+        PayloadProcessor,
     },
     storage::shard_db::ShardDb,
 };
@@ -58,6 +59,7 @@ pub struct HotStuffWaiter<
     TAddr: NodeAddressable,
     TLeaderStrategy: LeaderStrategy<TAddr, TPayload>,
     TEpochManager: EpochManager<TAddr>,
+    TPayloadProcessor: PayloadProcessor<TPayload>,
 > {
     identity: TAddr,
     leader_strategy: TLeaderStrategy,
@@ -68,8 +70,7 @@ pub struct HotStuffWaiter<
     tx_leader: Sender<HotStuffMessage<TPayload, TAddr>>,
     tx_broadcast: Sender<(HotStuffMessage<TPayload, TAddr>, Vec<TAddr>)>,
     tx_vote_message: Sender<(VoteMessage, TAddr)>,
-    // TODO: perhaps change to a service like Payload processor?
-    tx_execute: Sender<TPayload>,
+    payload_processor: TPayloadProcessor,
     shard_db: ShardDb<TAddr, TPayload>,
 }
 
@@ -78,7 +79,8 @@ impl<
         TAddr: NodeAddressable + 'static,
         TLeaderStrategy: LeaderStrategy<TAddr, TPayload> + 'static + Send + Sync,
         TEpochManager: EpochManager<TAddr> + 'static + Send + Sync,
-    > HotStuffWaiter<TPayload, TAddr, TLeaderStrategy, TEpochManager>
+        TPayloadProcessor: PayloadProcessor<TPayload> + 'static + Send + Sync,
+    > HotStuffWaiter<TPayload, TAddr, TLeaderStrategy, TEpochManager, TPayloadProcessor>
 {
     pub fn spawn(
         identity: TAddr,
@@ -90,7 +92,7 @@ impl<
         tx_leader: Sender<HotStuffMessage<TPayload, TAddr>>,
         tx_broadcast: Sender<(HotStuffMessage<TPayload, TAddr>, Vec<TAddr>)>,
         tx_vote_message: Sender<(VoteMessage, TAddr)>,
-        tx_execute: Sender<TPayload>,
+        payload_processor: TPayloadProcessor,
         shutdown: ShutdownSignal,
     ) -> JoinHandle<Result<(), String>> {
         tokio::spawn(async move {
@@ -104,7 +106,7 @@ impl<
                 tx_leader,
                 tx_broadcast,
                 tx_vote_message,
-                tx_execute,
+                payload_processor,
             )
             .run(shutdown)
             .await
@@ -121,7 +123,7 @@ impl<
         tx_leader: Sender<HotStuffMessage<TPayload, TAddr>>,
         tx_broadcast: Sender<(HotStuffMessage<TPayload, TAddr>, Vec<TAddr>)>,
         tx_vote_message: Sender<(VoteMessage, TAddr)>,
-        tx_execute: Sender<TPayload>,
+        payload_processor: TPayloadProcessor,
     ) -> Self {
         Self {
             identity,
@@ -133,7 +135,7 @@ impl<
             tx_leader,
             tx_broadcast,
             tx_vote_message,
-            tx_execute,
+            payload_processor,
             shard_db: ShardDb::new(),
         }
     }
@@ -356,18 +358,37 @@ impl<
                     .get_payload(&node.justify().payload())
                     .ok_or("No payload")?
                     .clone();
-                self.execute(payload).await?;
+
+                let mut all_pledges = HashMap::new();
+                for (pledge_shard, _, pledges) in node.justify().all_shard_nodes() {
+                    all_pledges.insert(*pledge_shard, pledges.clone());
+                }
+                self.execute(all_pledges, payload).await?;
             }
             self.shard_db.set_last_executed_height(shard, node.height());
         }
         Ok(())
     }
 
-    async fn execute(&mut self, payload: TPayload) -> Result<(), String> {
-        self.tx_execute
-            .send(payload)
+    async fn execute(
+        &mut self,
+        shard_pledges: HashMap<ShardId, Vec<ObjectPledge>>,
+        payload: TPayload,
+    ) -> Result<HashMap<ShardId, Vec<u8>>, String> {
+        self.payload_processor
+            .process_payload(&payload, shard_pledges)
             .await
-            .map_err(|e| format!("Could not send execute cmd:{}", e))
+            .map_err(|e| e.to_string())?;
+        // let (reply_tx, reply_rx) = oneshot::channel();
+        // self.tx_execute
+        //     .send((payload, shard_pledges, reply_tx))
+        //     .await
+        //     .map_err(|e| format!("Could not send execute cmd:{}", e))?;
+        // TODO: wait on results
+        // let result = reply_rx
+        //     .await
+        //     .map_err(|e| format!("Could not receive execute reply:{}", e))?;
+        Ok(HashMap::new())
     }
 
     fn validate_proposal(&self, node: &HotStuffTreeNode<TAddr>) -> Result<(), String> {
@@ -507,7 +528,7 @@ impl<
                         node.shard(),
                         node.epoch(),
                         main_vote.decision(),
-                        main_vote.other_shard_nodes().clone(),
+                        main_vote.all_shard_nodes().clone(),
                         signatures,
                     );
                     self.shard_db.update_high_qc(qc);

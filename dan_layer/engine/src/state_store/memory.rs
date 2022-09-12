@@ -25,18 +25,45 @@ use std::{
 };
 
 use anyhow::anyhow;
+use tari_dan_common_types::SubstateState;
+use tari_template_abi::encode;
 
 use crate::state_store::{AtomicDb, StateReader, StateStoreError, StateWriter};
 
 type InnerKvMap = HashMap<Vec<u8>, Vec<u8>>;
 
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone)]
 pub struct MemoryStateStore {
+    pub allow_creation_of_non_existent_shards: bool,
     state: Arc<RwLock<InnerKvMap>>,
+}
+
+impl Default for MemoryStateStore {
+    fn default() -> Self {
+        Self {
+            allow_creation_of_non_existent_shards: true,
+            state: Arc::new(RwLock::new(HashMap::new())),
+        }
+    }
+}
+
+impl MemoryStateStore {
+    pub fn load<K: Into<Vec<u8>>>(values: Vec<(K, SubstateState)>) -> Self {
+        let mut state = HashMap::new();
+        for (k, v) in values {
+            state.insert(k.into(), encode(&v).expect("Could not encode substate"));
+        }
+        Self {
+            allow_creation_of_non_existent_shards: false,
+            state: Arc::new(RwLock::new(state)),
+        }
+    }
 }
 
 pub struct MemoryTransaction<T> {
     pending: InnerKvMap,
+    // TODO: this is copied from the state store, there's probably a better way
+    allow_creation_of_non_existent_shards: bool,
     guard: T,
 }
 
@@ -50,6 +77,7 @@ impl<'a> AtomicDb<'a> for MemoryStateStore {
 
         Ok(MemoryTransaction {
             pending: HashMap::default(),
+            allow_creation_of_non_existent_shards: self.allow_creation_of_non_existent_shards,
             guard,
         })
     }
@@ -59,6 +87,7 @@ impl<'a> AtomicDb<'a> for MemoryStateStore {
 
         Ok(MemoryTransaction {
             pending: HashMap::default(),
+            allow_creation_of_non_existent_shards: self.allow_creation_of_non_existent_shards,
             guard,
         })
     }
@@ -91,7 +120,18 @@ impl<'a> StateWriter for MemoryTransaction<RwLockWriteGuard<'a, InnerKvMap>> {
     }
 
     fn commit(mut self) -> Result<(), StateStoreError> {
-        self.guard.extend(self.pending.into_iter());
+        if self.allow_creation_of_non_existent_shards {
+            self.guard.extend(self.pending);
+        } else {
+            for (k, v) in self.pending {
+                if self.guard.contains_key(&k) {
+                    self.guard.insert(k, v);
+                } else {
+                    return Err(StateStoreError::NonExistentShard { shard: k });
+                }
+            }
+        }
+        // self.guard.extend(self.pending.into_iter());
         Ok(())
     }
 }

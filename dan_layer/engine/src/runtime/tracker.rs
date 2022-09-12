@@ -187,7 +187,7 @@ impl StateTracker {
             module_name: new_component.module_name,
             state: new_component.state,
         };
-        let component_address = self.id_provider().new_component_address(&component);
+        let component_address = self.id_provider().new_component_address();
         let component = ComponentInstance::new(component_address, component);
         self.write_with(|state| {
             state.new_components.insert(component_address, component);

@@ -21,7 +21,6 @@
 // USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 use digest::Digest;
-use tari_common_types::types::FixedHash;
 use tari_crypto::hash::blake2::Blake256;
 use tari_dan_common_types::{PayloadId, ShardId};
 
@@ -56,7 +55,7 @@ pub struct QuorumCertificate {
     shard: ShardId,
     epoch: Epoch,
     decision: QuorumDecision,
-    other_shard_nodes: Vec<(ShardId, TreeNodeHash, Vec<ObjectPledge>)>,
+    all_shard_nodes: Vec<(ShardId, TreeNodeHash, Vec<ObjectPledge>)>,
     signatures: Vec<ValidatorSignature>,
 }
 
@@ -69,7 +68,7 @@ impl QuorumCertificate {
         shard: ShardId,
         epoch: Epoch,
         decision: QuorumDecision,
-        other_shard_nodes: Vec<(ShardId, TreeNodeHash, Vec<ObjectPledge>)>,
+        all_shard_nodes: Vec<(ShardId, TreeNodeHash, Vec<ObjectPledge>)>,
         signatures: Vec<ValidatorSignature>,
     ) -> Self {
         Self {
@@ -80,7 +79,7 @@ impl QuorumCertificate {
             shard,
             epoch,
             decision,
-            other_shard_nodes,
+            all_shard_nodes,
             signatures,
         }
     }
@@ -91,10 +90,10 @@ impl QuorumCertificate {
             payload_height: NodeHeight(0),
             local_node_hash: TreeNodeHash::zero(),
             local_node_height: NodeHeight(0),
-            shard: ShardId(FixedHash::zero()),
+            shard: ShardId::zero(),
             epoch: Epoch(0),
             decision: QuorumDecision::Accept,
-            other_shard_nodes: vec![],
+            all_shard_nodes: vec![],
             signatures: vec![],
         }
     }
@@ -162,8 +161,8 @@ impl QuorumCertificate {
         &self.decision
     }
 
-    pub fn other_shard_nodes(&self) -> &[(ShardId, TreeNodeHash, Vec<ObjectPledge>)] {
-        &self.other_shard_nodes
+    pub fn all_shard_nodes(&self) -> &[(ShardId, TreeNodeHash, Vec<ObjectPledge>)] {
+        &self.all_shard_nodes
     }
 
     pub fn signatures(&self) -> &[ValidatorSignature] {

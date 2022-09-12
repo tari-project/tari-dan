@@ -32,7 +32,7 @@ pub struct VoteMessage {
     local_node_hash: TreeNodeHash,
     shard: ShardId,
     decision: QuorumDecision,
-    other_shard_nodes: Vec<(ShardId, TreeNodeHash, Vec<ObjectPledge>)>,
+    all_shard_nodes: Vec<(ShardId, TreeNodeHash, Vec<ObjectPledge>)>,
     signature: Option<ValidatorSignature>,
 }
 
@@ -41,15 +41,15 @@ impl VoteMessage {
         local_node_hash: TreeNodeHash,
         shard: ShardId,
         decision: QuorumDecision,
-        mut other_shard_nodes: Vec<(ShardId, TreeNodeHash, Vec<ObjectPledge>)>,
+        mut all_shard_nodes: Vec<(ShardId, TreeNodeHash, Vec<ObjectPledge>)>,
     ) -> Self {
-        other_shard_nodes.sort_by(|a, b| a.0.cmp(&b.0));
+        all_shard_nodes.sort_by(|a, b| a.0.cmp(&b.0));
 
         Self {
             local_node_hash,
             shard,
             decision,
-            other_shard_nodes,
+            all_shard_nodes,
             signature: None,
         }
     }
@@ -66,7 +66,7 @@ impl VoteMessage {
     pub fn get_all_nodes_hash(&self) -> FixedHash {
         let mut result = Blake256::new().chain(&[self.decision.as_u8()]);
         // data must already be sorted
-        for (shard, hash, pledges) in &self.other_shard_nodes {
+        for (shard, hash, pledges) in &self.all_shard_nodes {
             result = result
                 .chain(shard.0)
                 .chain(hash.as_bytes())
@@ -91,7 +91,7 @@ impl VoteMessage {
         self.decision
     }
 
-    pub fn other_shard_nodes(&self) -> &Vec<(ShardId, TreeNodeHash, Vec<ObjectPledge>)> {
-        &self.other_shard_nodes
+    pub fn all_shard_nodes(&self) -> &Vec<(ShardId, TreeNodeHash, Vec<ObjectPledge>)> {
+        &self.all_shard_nodes
     }
 }

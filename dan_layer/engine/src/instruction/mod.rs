@@ -108,7 +108,7 @@ pub struct BalanceProof {}
 #[derive(Debug, Clone, Deserialize)]
 pub struct Transaction {
     #[serde(deserialize_with = "deserialize_fixed_hash_from_hex")]
-    hash: FixedHash,
+    hash: [u8; 32],
     instructions: Vec<Instruction>,
     signature: InstructionSignature,
     _fee: u64,
@@ -141,7 +141,7 @@ impl Transaction {
         meta: TransactionMeta,
     ) -> Self {
         let mut s = Self {
-            hash: FixedHash::zero(),
+            hash: [0u8; 32],
             instructions,
             signature,
             _fee: fee,
@@ -152,7 +152,7 @@ impl Transaction {
         s
     }
 
-    pub fn hash(&self) -> &FixedHash {
+    pub fn hash(&self) -> &[u8; 32] {
         &self.hash
     }
 

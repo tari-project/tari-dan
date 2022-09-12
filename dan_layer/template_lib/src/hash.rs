@@ -64,6 +64,19 @@ impl From<[u8; 32]> for Hash {
     }
 }
 
+impl TryFrom<&[u8]> for Hash {
+    type Error = String;
+
+    fn try_from(value: &[u8]) -> Result<Self, Self::Error> {
+        if value.len() != 32 {
+            return Err("Hash must be 32 bytes".to_string());
+        }
+        let mut hash = [0u8; 32];
+        hash.copy_from_slice(value);
+        Ok(Hash(hash))
+    }
+}
+
 impl Deref for Hash {
     type Target = [u8];
 

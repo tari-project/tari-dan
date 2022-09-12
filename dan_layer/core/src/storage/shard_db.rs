@@ -22,7 +22,7 @@
 
 use std::collections::HashMap;
 
-use tari_dan_common_types::{ObjectId, PayloadId, ShardId, SubstateChange};
+use tari_dan_common_types::{ObjectId, PayloadId, ShardId, SubstateChange, SubstateState};
 
 use crate::{
     models::{
@@ -32,7 +32,6 @@ use crate::{
         ObjectPledge,
         Payload,
         QuorumCertificate,
-        SubstateState,
         TreeNodeHash,
     },
     services::infrastructure_services::NodeAddressable,
