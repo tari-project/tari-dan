@@ -73,7 +73,7 @@ pub struct ValidatorNodeConfig {
     pub base_node_grpc_address: SocketAddr,
     /// The Tari console wallet's GRPC address
     pub wallet_grpc_address: SocketAddr,
-    /// If set to false, there will be no scanning at all
+    /// If set to true, it will constantly scan for new assets on the base layer
     pub scan_for_assets: bool,
     /// How often do we want to scan the base layer for changes
     pub new_asset_scanning_interval: u64,
@@ -93,6 +93,8 @@ pub struct ValidatorNodeConfig {
     pub constitution_management_polling_interval_in_seconds: u64,
     /// GRPC address of the validator node  application
     pub grpc_address: Option<Multiaddr>,
+    /// JSON-RPC address of the validator node  application
+    pub json_rpc_address: Option<SocketAddr>,
 }
 
 impl ValidatorNodeConfig {
@@ -125,7 +127,7 @@ impl Default for ValidatorNodeConfig {
             phase_timeout: 30,
             base_node_grpc_address: SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 18142),
             wallet_grpc_address: SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 18143),
-            scan_for_assets: true,
+            scan_for_assets: false,
             new_asset_scanning_interval: 10,
             assets_allow_list: None,
             data_dir: PathBuf::from("data/validator_node"),
@@ -135,6 +137,7 @@ impl Default for ValidatorNodeConfig {
             constitution_management_polling_interval_in_seconds: 60,
             p2p,
             grpc_address: Some("/ip4/127.0.0.1/tcp/18144".parse().unwrap()),
+            json_rpc_address: Some("127.0.0.1:18145".parse().unwrap()),
         }
     }
 }

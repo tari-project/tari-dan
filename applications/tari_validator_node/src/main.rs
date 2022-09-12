@@ -27,6 +27,7 @@ mod config;
 mod dan_node;
 mod default_service_specification;
 mod grpc;
+mod json_rpc;
 mod p2p;
 
 use std::{process, sync::Arc};
@@ -62,6 +63,7 @@ use crate::{
     dan_node::DanNode,
     default_service_specification::DefaultServiceSpecification,
     grpc::{services::base_node_client::GrpcBaseNodeClient, validator_node_grpc_server::ValidatorNodeGrpcServer},
+    json_rpc::run_json_rpc,
     p2p::services::rpc_client::TariCommsValidatorNodeClientFactory,
 };
 
@@ -140,11 +142,19 @@ async fn run_node(config: &ApplicationConfig) -> Result<(), ExitError> {
     let grpc_server: ValidatorNodeGrpcServer<DefaultServiceSpecification> =
         ValidatorNodeGrpcServer::new(node_identity.as_ref().clone(), db_factory.clone(), asset_proxy);
 
+    // Run the gRPC API
     if let Some(address) = config.validator_node.grpc_address.clone() {
         println!("Started GRPC server on {}", address);
         task::spawn(run_grpc(grpc_server, address, shutdown.to_signal()));
     }
 
+    // Run the JSON-RPC API
+    if let Some(address) = config.validator_node.json_rpc_address {
+        println!("Started JSON-RPC server on {}", address);
+        task::spawn(run_json_rpc(address, node_identity.as_ref().clone()));
+    }
+
+    // Show the validator node identity
     println!("🚀 Validator node started!");
     println!("{}", node_identity);
 
