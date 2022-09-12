@@ -63,13 +63,37 @@ impl EpochManager<CommsPublicKey> for BaseLayerEpochManager {
         addr: &CommsPublicKey,
         available_shards: &[ShardId],
     ) -> Result<Vec<ShardId>, String> {
-        todo!()
-        // I need to implement some function in the base node first.
-        // let x = self
-        //     .base_node_client
-        //     .get_shard_key(epoch.0, addr.as_bytes().try_into().unwrap())
-        //     .await
-        //     .map_err(|s| format!("{:?}", s))?;
-        // Ok(vec![])
+        // If the committee size is bigger than vns.len() then this function is broken.
+        let half_committee_size = 5;
+        let &shard_key = self
+            .base_node_client
+            .get_shard_key(epoch.0, addr.as_bytes().try_into().unwrap())
+            .await
+            .map_err(|s| format!("{:?}", s))?;
+        let mut vns = self
+            .base_node_client
+            .get_validator_nodes(epoch.0)
+            .await
+            .map_err(|s| format!("{:?}", s))?;
+        vns.sort_by(|a, b| a.shard_key.partial_cmp(&b.shard_key).unwrap());
+        let p = vns.iter().position(|x| x.shard_key == shard_key).unwrap();
+        let begin = &vns[(vns.len() + p - half_committee_size) % vns.len()]
+            .shard_key
+            .to_vec();
+        let end = &vns[(p + half_committee_size) % vns.len()].shard_key.to_vec();
+        if p >= half_committee_size || p + half_committee_size >= vns.len() {
+            // This means the committee is wrapped around
+            Ok(available_shards
+                .iter()
+                .filter(|&a| &a.0.to_vec() <= begin || &a.0.to_vec() >= end)
+                .map(|a| a.clone())
+                .collect())
+        } else {
+            Ok(available_shards
+                .iter()
+                .filter(|&a| &a.0.to_vec() >= begin || &a.0.to_vec() <= end)
+                .map(|a| a.clone())
+                .collect())
+        }
     }
 }
