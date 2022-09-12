@@ -109,7 +109,7 @@ impl RuntimeInterface for MockRuntimeInterface {
             module_name: arg.module_name,
             state: arg.state,
         };
-        let component_address = self.id_provider.new_component_address(&new_component);
+        let component_address = self.id_provider.new_component_address();
 
         let component = ComponentInstance::new(component_address, new_component);
         let mut tx = self.state.write_access().map_err(RuntimeError::StateDbError)?;
