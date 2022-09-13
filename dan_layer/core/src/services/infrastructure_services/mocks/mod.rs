@@ -36,8 +36,8 @@ pub fn mock_inbound<TAddr: NodeAddressable, TPayload: Payload>() -> MockInboundC
 }
 
 type Messages<TAddr, TPayload> = (
-    Sender<(TAddr, HotStuffMessage<TPayload, TAddr>)>,
-    Receiver<(TAddr, HotStuffMessage<TPayload, TAddr>)>,
+    Sender<(TAddr, DanMessage<TPayload, TAddr>)>,
+    Receiver<(TAddr, DanMessage<TPayload, TAddr>)>,
 );
 
 #[derive()]
@@ -75,11 +75,11 @@ impl<TAddr: NodeAddressable, TPayload: Payload> Default for MockInboundConnectio
 }
 
 impl<TAddr: NodeAddressable, TPayload: Payload> MockInboundConnectionService<TAddr, TPayload> {
-    pub fn _push(&mut self, from: TAddr, message: HotStuffMessage<TPayload, TAddr>) {
+    pub fn _push(&mut self, from: TAddr, message: DanMessage<TPayload, TAddr>) {
         self.messages.0.try_send((from, message)).unwrap()
     }
 
-    pub fn _create_sender(&self) -> Sender<(TAddr, HotStuffMessage<TPayload, TAddr>)> {
+    pub fn _create_sender(&self) -> Sender<(TAddr, DanMessage<TPayload, TAddr>)> {
         self.messages.0.clone()
     }
 }
@@ -92,7 +92,7 @@ pub fn mock_outbound<TAddr: NodeAddressable, TPayload: Payload>(
 
 pub struct MockOutboundService<TAddr: NodeAddressable, TPayload: Payload> {
     #[allow(clippy::type_complexity)]
-    inbound_senders: HashMap<TAddr, Sender<(TAddr, HotStuffMessage<TPayload, TAddr>)>>,
+    inbound_senders: HashMap<TAddr, Sender<(TAddr, DanMessage<TPayload, TAddr>)>>,
     inbounds: HashMap<TAddr, MockInboundConnectionService<TAddr, TPayload>>,
 }
 
@@ -126,7 +126,10 @@ impl<TAddr: NodeAddressable, TPayload: Payload> MockOutboundService<TAddr, TPayl
 
 use std::fmt::Debug;
 
-use crate::models::{HotStuffMessageType, Payload, ViewId};
+use crate::{
+    message::DanMessage,
+    models::{HotStuffMessageType, Payload, ViewId},
+};
 
 #[async_trait]
 impl<TAddr: NodeAddressable + Send + Sync + Debug, TPayload: Payload> OutboundService
@@ -137,19 +140,12 @@ impl<TAddr: NodeAddressable + Send + Sync + Debug, TPayload: Payload> OutboundSe
 
     async fn send(
         &mut self,
-        from: TAddr,
+        _from: TAddr,
         to: TAddr,
-        message: HotStuffMessage<TPayload, TAddr>,
+        message: DanMessage<Self::Payload, Self::Addr>,
     ) -> Result<(), DigitalAssetError> {
-        let t = &to;
-        println!(
-            "[mock] Sending message: {:?} {:?} sig:{:?}",
-            &to,
-            &message.message_type(),
-            &message.partial_sig()
-        );
         // intentionally swallow error here because the other end can die in tests
-        let _result = self.inbound_senders.get_mut(t).unwrap().send((from, message)).await;
+        let _result = self.inbound_senders.get_mut(&to).unwrap().send((to, message)).await;
         Ok(())
     }
 
@@ -157,7 +153,19 @@ impl<TAddr: NodeAddressable + Send + Sync + Debug, TPayload: Payload> OutboundSe
         &mut self,
         from: TAddr,
         _committee: &[TAddr],
-        message: HotStuffMessage<TPayload, TAddr>,
+        message: DanMessage<Self::Payload, Self::Addr>,
+    ) -> Result<(), DigitalAssetError> {
+        let receivers: Vec<TAddr> = self.inbound_senders.keys().cloned().collect();
+        for receiver in receivers {
+            self.send(from.clone(), receiver.clone(), message.clone()).await?
+        }
+        Ok(())
+    }
+
+    async fn flood(
+        &mut self,
+        from: Self::Addr,
+        message: DanMessage<Self::Payload, Self::Addr>,
     ) -> Result<(), DigitalAssetError> {
         let receivers: Vec<TAddr> = self.inbound_senders.keys().cloned().collect();
         for receiver in receivers {

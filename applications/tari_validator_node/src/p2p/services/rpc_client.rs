@@ -22,6 +22,7 @@
 
 use std::convert::TryInto;
 
+use anyhow::anyhow;
 use async_trait::async_trait;
 use tari_common_types::types::{FixedHash, PublicKey};
 use tari_comms::PeerConnection;
@@ -104,7 +105,7 @@ impl ValidatorNodeRpcClient for TariCommsValidatorNodeRpcClient {
                         schema.push_key_value(kv);
                     },
                     None => {
-                        return Err(ValidatorNodeClientError::InvalidPeerMessage(format!(
+                        return Err(ValidatorNodeClientError::InvalidPeerMessage(anyhow!(
                             "Peer {} sent a key value response without first defining the schema",
                             self.address
                         )))
@@ -169,7 +170,7 @@ pub struct TariCommsValidatorNodeClientFactory {
 }
 
 impl TariCommsValidatorNodeClientFactory {
-    pub fn new(dht: DhtRequester) -> Self {
+    pub fn _new(dht: DhtRequester) -> Self {
         Self { dht }
     }
 }

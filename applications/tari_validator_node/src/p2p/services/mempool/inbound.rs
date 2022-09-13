@@ -33,38 +33,28 @@ use tari_p2p::{
 };
 use tari_validator_node_grpc::rpc::SubmitTransactionRequest;
 
+use crate::p2p::services::inbound_message_service::TariCommsInboundMessageService;
+
 const LOG_TARGET: &str = "tari::validator_node::p2p::services::mempool::inbound";
 
 const SUBSCRIPTION_LABEL: &str = "MempoolInbound";
 
 #[derive(Clone)]
-pub struct TariCommsMempoolInboundHandle {
-    inbound_message_subscription_factory: Arc<SubscriptionFactory>,
+pub struct TariCommsMempoolService {
+    inbound: TariCommsInboundMessageService,
     mempool: MempoolServiceHandle,
 }
 
-impl TariCommsMempoolInboundHandle {
+impl TariCommsMempoolService {
     pub fn new(inbound_message_subscription_factory: Arc<SubscriptionFactory>, mempool: MempoolServiceHandle) -> Self {
-        Self {
-            inbound_message_subscription_factory,
-            mempool,
-        }
-    }
-
-    fn inbound_transaction_stream(&self) -> impl Stream<Item = DomainMessage<Transaction>> {
-        self.inbound_message_subscription_factory
-            .get_subscription(TariMessageType::DanConsensusMessage, SUBSCRIPTION_LABEL)
-            .filter_map(extract_transaction)
+        Self { inbound, mempool }
     }
 
     pub async fn run(&mut self) {
-        let inbound_transaction_stream = self.inbound_transaction_stream().fuse();
-        pin_mut!(inbound_transaction_stream);
-
         loop {
             let mempool_service = self.mempool.clone();
             tokio::select! {
-                Some(domain_msg) = inbound_transaction_stream.next() => {
+                Some(domain_msg) = self.inbound.next() => {
                     handle_incoming_transaction(mempool_service, domain_msg).await;
                 },
             }

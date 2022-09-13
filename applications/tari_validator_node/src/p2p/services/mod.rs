@@ -22,7 +22,6 @@
 
 pub mod epoch_manager;
 pub mod hotstuff;
-pub mod inbound_connection_service;
 pub mod mempool;
-pub mod outbound_connection_service;
+pub mod messaging;
 pub mod rpc_client;

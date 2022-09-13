@@ -22,26 +22,26 @@
 
 use async_trait::async_trait;
 use log::error;
-use tari_comms_dht::{
-    domain_message::OutboundDomainMessage,
-    envelope::NodeDestination,
-    outbound::{DhtOutboundError, OutboundEncryption, OutboundMessageRequester},
-};
-use tari_dan_core::{services::mempool::outbound::MempoolOutboundService, DigitalAssetError};
+use tari_comms::connectivity::ConnectivityRequester;
+use tari_dan_core::{message::DanMessage, services::mempool::outbound::MempoolOutboundService, DigitalAssetError};
 use tari_dan_engine::instruction::Transaction;
 use tari_p2p::tari_message::TariMessageType;
 use tari_validator_node_grpc::rpc::SubmitTransactionRequest;
 
+use crate::p2p::services::outbound::OutboundMessaging;
+
 const LOG_TARGET: &str = "tari::validator_node::p2p::services::mempool::outbound";
 
 pub struct TariCommsMempoolOutboundService {
-    outbound_message_requester: OutboundMessageRequester,
+    connectivity: ConnectivityRequester,
+    outbound_messaging: OutboundMessaging,
 }
 
 impl TariCommsMempoolOutboundService {
-    pub fn new(outbound_message_requester: OutboundMessageRequester) -> Self {
+    pub fn new(connectivity: ConnectivityRequester, outbound_messaging: OutboundMessaging) -> Self {
         Self {
-            outbound_message_requester,
+            connectivity,
+            outbound_messaging,
         }
     }
 }
@@ -49,6 +49,10 @@ impl TariCommsMempoolOutboundService {
 #[async_trait]
 impl MempoolOutboundService for TariCommsMempoolOutboundService {
     async fn propagate_transaction(&mut self, transaction: Transaction) -> Result<(), DigitalAssetError> {
+        let conns = self.connectivity.get_active_connections().await?;
+
+        let msg = DanMessage::new_transaction(transaction);
+        self.outbound_messaging.broadcast(dest, msg).await?;
         let destination = NodeDestination::Unknown;
         let encryption = OutboundEncryption::ClearText;
         let exclude_peers = vec![];
@@ -59,7 +63,7 @@ impl MempoolOutboundService for TariCommsMempoolOutboundService {
         let message = OutboundDomainMessage::new(&TariMessageType::DanConsensusMessage, request);
 
         let result = self
-            .outbound_message_requester
+            .outbound_messaging
             .flood(destination, encryption, exclude_peers, message)
             .await;
 

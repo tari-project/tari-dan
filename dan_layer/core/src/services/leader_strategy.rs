@@ -24,7 +24,7 @@ use tari_dan_common_types::{PayloadId, ShardId};
 
 use crate::{models::Committee, services::infrastructure_services::NodeAddressable};
 
-pub trait LeaderStrategy<TAddr: NodeAddressable, TPayload> {
+pub trait LeaderStrategy<TAddr: NodeAddressable> {
     fn calculate_leader(&self, committee: &Committee<TAddr>, payload: PayloadId, shard: ShardId, round: u32) -> u32;
     fn is_leader(
         &self,
@@ -56,7 +56,7 @@ pub trait LeaderStrategy<TAddr: NodeAddressable, TPayload> {
 
 pub struct AlwaysFirstLeader {}
 
-impl<TAddr: NodeAddressable, TPayload> LeaderStrategy<TAddr, TPayload> for AlwaysFirstLeader {
+impl<TAddr: NodeAddressable> LeaderStrategy<TAddr> for AlwaysFirstLeader {
     fn calculate_leader(
         &self,
         _committee: &Committee<TAddr>,

@@ -20,7 +20,13 @@
 // WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 // USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use std::{cmp::Ordering, convert::TryFrom, fmt::Debug, hash::Hash, ops::Add};
+use std::{
+    cmp::Ordering,
+    convert::{Infallible, TryFrom},
+    fmt::Debug,
+    hash::Hash,
+    ops::Add,
+};
 
 mod base_layer_metadata;
 mod base_layer_output;
@@ -208,10 +214,11 @@ pub struct ValidatorSignature {
 }
 
 impl ValidatorSignature {
-    pub fn from_bytes(source: &[u8]) -> Self {
-        Self {
+    // TODO: implement from bytes with correct error
+    pub fn from_bytes(source: &[u8]) -> Result<Self, Infallible> {
+        Ok(Self {
             signer: Vec::from(source),
-        }
+        })
     }
 
     pub fn combine(&self, other: &ValidatorSignature) -> ValidatorSignature {

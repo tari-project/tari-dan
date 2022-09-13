@@ -57,7 +57,7 @@ use crate::{
 pub struct HotStuffWaiter<
     TPayload: Payload,
     TAddr: NodeAddressable,
-    TLeaderStrategy: LeaderStrategy<TAddr, TPayload>,
+    TLeaderStrategy: LeaderStrategy<TAddr>,
     TEpochManager: EpochManager<TAddr>,
     TPayloadProcessor: PayloadProcessor<TPayload>,
 > {
@@ -77,7 +77,7 @@ pub struct HotStuffWaiter<
 impl<
         TPayload: Payload + 'static,
         TAddr: NodeAddressable + 'static,
-        TLeaderStrategy: LeaderStrategy<TAddr, TPayload> + 'static + Send + Sync,
+        TLeaderStrategy: LeaderStrategy<TAddr> + 'static + Send + Sync,
         TEpochManager: EpochManager<TAddr> + 'static + Send + Sync,
         TPayloadProcessor: PayloadProcessor<TPayload> + 'static + Send + Sync,
     > HotStuffWaiter<TPayload, TAddr, TLeaderStrategy, TEpochManager, TPayloadProcessor>
@@ -95,22 +95,19 @@ impl<
         payload_processor: TPayloadProcessor,
         shutdown: ShutdownSignal,
     ) -> JoinHandle<Result<(), String>> {
-        tokio::spawn(async move {
-            HotStuffWaiter::new(
-                identity,
-                epoch_manager,
-                leader_strategy,
-                rx_new,
-                rx_hs_message,
-                rx_votes,
-                tx_leader,
-                tx_broadcast,
-                tx_vote_message,
-                payload_processor,
-            )
-            .run(shutdown)
-            .await
-        })
+        let waiter = HotStuffWaiter::new(
+            identity,
+            epoch_manager,
+            leader_strategy,
+            rx_new,
+            rx_hs_message,
+            rx_votes,
+            tx_leader,
+            tx_broadcast,
+            tx_vote_message,
+            payload_processor,
+        );
+        tokio::spawn(waiter.run(shutdown))
     }
 
     pub fn new(
@@ -433,7 +430,7 @@ impl<
                     break;
                 }
             }
-            dbg!(&self.identity, "Votes recieved", votes.len());
+            dbg!(&self.identity, "Votes received", votes.len());
             if votes.len() == involved_shards.len() {
                 let local_shards = self
                     .epoch_manager
