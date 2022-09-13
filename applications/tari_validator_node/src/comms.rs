@@ -36,6 +36,7 @@ use tari_shutdown::ShutdownSignal;
 
 use crate::{
     config::ApplicationConfig,
+    grpc::services::base_node_client::GrpcBaseNodeClient,
     p2p::services::{
         epoch_manager::initializer::EpochManagerInitializer,
         hotstuff::initializer::HotstuffServiceInitializer,
@@ -48,6 +49,7 @@ pub async fn build_service_and_comms_stack(
     shutdown: ShutdownSignal,
     node_identity: Arc<NodeIdentity>,
     mempool: MempoolServiceHandle,
+    base_node_client: GrpcBaseNodeClient,
 ) -> Result<(ServiceHandles, Arc<SubscriptionFactory>), ExitError> {
     let (publisher, peer_message_subscriptions) = pubsub_connector(100, 50);
     let peer_message_subscriptions = Arc::new(peer_message_subscriptions);
@@ -64,7 +66,7 @@ pub async fn build_service_and_comms_stack(
             node_identity.clone(),
             publisher,
         ))
-        .add_initializer(EpochManagerInitializer {})
+        .add_initializer(EpochManagerInitializer { base_node_client })
         .add_initializer(HotstuffServiceInitializer {
             node_identity: node_identity.clone(),
         })

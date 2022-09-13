@@ -29,7 +29,7 @@ impl EpochManagerHandle {
 }
 #[async_trait]
 impl EpochManager<CommsPublicKey> for EpochManagerHandle {
-    async fn current_epoch(&self) -> Epoch {
+    async fn current_epoch(&mut self) -> Epoch {
         let (tx, mut rx) = channel();
         let _ = self.tx_request.send((EpochManagerRequest::CurrentEpoch, tx)).await;
         let res = rx.await.expect("Error receiving");
@@ -44,24 +44,24 @@ impl EpochManager<CommsPublicKey> for EpochManagerHandle {
         }
     }
 
-    async fn is_epoch_valid(&self, epoch: Epoch) -> bool {
+    async fn is_epoch_valid(&mut self, epoch: Epoch) -> bool {
         todo!()
     }
 
     async fn get_committees(
-        &self,
+        &mut self,
         epoch: Epoch,
         shards: &[ShardId],
     ) -> Result<Vec<(ShardId, Option<Committee<CommsPublicKey>>)>, String> {
         todo!()
     }
 
-    async fn get_committee(&self, epoch: Epoch, shard: ShardId) -> Result<Committee<CommsPublicKey>, String> {
+    async fn get_committee(&mut self, epoch: Epoch, shard: ShardId) -> Result<Committee<CommsPublicKey>, String> {
         todo!()
     }
 
     async fn get_shards(
-        &self,
+        &mut self,
         epoch: Epoch,
         addr: &CommsPublicKey,
         available_shards: &[ShardId],
