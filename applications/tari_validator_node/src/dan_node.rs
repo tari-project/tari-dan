@@ -31,7 +31,9 @@ use tari_shutdown::ShutdownSignal;
 use crate::{
     base_layer_scanner::BaseLayerScanner,
     config::ValidatorNodeConfig,
+    epoch_manager::EpochManager,
     grpc::services::base_node_client::GrpcBaseNodeClient,
+    TemplateManager,
 };
 
 const _LOG_TARGET: &str = "tari::validator_node::app";
@@ -40,6 +42,8 @@ pub struct DanNode {
     config: ValidatorNodeConfig,
     _identity: Arc<NodeIdentity>,
     global_db: GlobalDb<SqliteGlobalDbBackendAdapter>,
+    epoch_manager: Arc<EpochManager>,
+    template_manager: Arc<TemplateManager>,
 }
 
 impl DanNode {
@@ -47,11 +51,15 @@ impl DanNode {
         config: ValidatorNodeConfig,
         _identity: Arc<NodeIdentity>,
         global_db: GlobalDb<SqliteGlobalDbBackendAdapter>,
+        epoch_manager: Arc<EpochManager>,
+        template_manager: Arc<TemplateManager>,
     ) -> Self {
         Self {
             config,
             _identity,
             global_db,
+            epoch_manager,
+            template_manager,
         }
     }
 
@@ -69,6 +77,8 @@ impl DanNode {
             self.config.clone(),
             self.global_db.clone(),
             base_node_client,
+            self.epoch_manager.clone(),
+            self.template_manager.clone(),
             shutdown.clone(),
         );
 

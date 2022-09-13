@@ -20,7 +20,7 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use std::{convert::TryInto, time::Duration};
+use std::{convert::TryInto, sync::Arc, time::Duration};
 
 use log::*;
 use tari_common_types::types::{FixedHash, FixedHashSizeError};
@@ -38,7 +38,12 @@ use tari_dan_storage_sqlite::global::SqliteGlobalDbBackendAdapter;
 use tari_shutdown::ShutdownSignal;
 use tokio::time;
 
-use crate::{GrpcBaseNodeClient, ValidatorNodeConfig};
+use crate::{
+    epoch_manager::EpochManager,
+    template_manager::{TemplateManager, TemplateMetadata},
+    GrpcBaseNodeClient,
+    ValidatorNodeConfig,
+};
 
 const LOG_TARGET: &str = "tari::validator_node::base_layer_scanner";
 
@@ -48,8 +53,8 @@ pub struct BaseLayerScanner {
     last_scanned_height: u64,
     last_scanned_hash: Option<FixedHash>,
     base_node_client: GrpcBaseNodeClient,
-    // TODO: epoch_manager
-    // TODO: template_manager
+    epoch_manager: Arc<EpochManager>,
+    template_manager: Arc<TemplateManager>,
     shutdown: ShutdownSignal,
 }
 
@@ -58,8 +63,8 @@ impl BaseLayerScanner {
         config: ValidatorNodeConfig,
         global_db: GlobalDb<SqliteGlobalDbBackendAdapter>,
         base_node_client: GrpcBaseNodeClient,
-        // TODO: epoch_manager
-        // TODO: template_manager
+        epoch_manager: Arc<EpochManager>,
+        template_manager: Arc<TemplateManager>,
         shutdown: ShutdownSignal,
     ) -> Self {
         Self {
@@ -68,6 +73,8 @@ impl BaseLayerScanner {
             last_scanned_height: 0,
             last_scanned_hash: None,
             base_node_client,
+            epoch_manager,
+            template_manager,
             shutdown,
         }
     }
@@ -86,10 +93,13 @@ impl BaseLayerScanner {
 
         loop {
             let tip = self.base_node_client.get_tip_info().await?;
-            let _new_templates = self.scan_for_new_templates(&tip).await?;
+            let new_templates_metadata = self.scan_for_new_templates(&tip).await?;
 
-            // self.epoch_manager.update_epoch(tip)
-            // self.template_manager.add_templates(new_templates);
+            // Both epoch and template tasks are I/O bound,
+            // so they can be ran concurrently as they do not block CPU between them
+            let epoch_task = self.epoch_manager.update_epoch(&tip);
+            let template_task = self.template_manager.add_templates(new_templates_metadata);
+            tokio::join!(epoch_task, template_task);
 
             self.set_last_scanned_block(&tip)?;
             tokio::select! {
@@ -132,7 +142,7 @@ impl BaseLayerScanner {
     async fn scan_for_new_templates(
         &mut self,
         tip: &BaseLayerMetadata,
-    ) -> Result<Vec<Template>, BaseLayerScannerError> {
+    ) -> Result<Vec<TemplateMetadata>, BaseLayerScannerError> {
         info!(
             target: LOG_TARGET,
             "🔍 Scanning base layer (tip: {}) for new templates", tip.height_of_longest_chain
@@ -185,13 +195,6 @@ pub enum BaseLayerScannerError {
     DigitalAssetError(#[from] DigitalAssetError),
     #[error("Data corruption: {details}")]
     DataCorruption { details: String },
-}
-
-// TODO: integrate this definition into the engine
-#[allow(dead_code)]
-pub struct Template {
-    address: FixedHash,
-    wasm: Vec<u8>,
 }
 
 // macro_rules! some_or_continue {

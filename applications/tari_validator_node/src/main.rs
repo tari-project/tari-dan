@@ -29,8 +29,10 @@ mod config;
 mod contract_worker_manager;
 mod dan_node;
 mod default_service_specification;
+mod epoch_manager;
 mod grpc;
 mod p2p;
+mod template_manager;
 
 use std::{process, sync::Arc};
 
@@ -63,6 +65,7 @@ use tari_dan_core::{
 use tari_dan_storage_sqlite::{global::SqliteGlobalDbBackendAdapter, SqliteDbFactory};
 use tari_shutdown::{Shutdown, ShutdownSignal};
 use tari_validator_node_grpc::rpc::validator_node_server::ValidatorNodeServer;
+use template_manager::TemplateManager;
 use tokio::{runtime, runtime::Runtime, task};
 use tonic::transport::Server;
 
@@ -71,6 +74,7 @@ use crate::{
     config::{ApplicationConfig, ValidatorNodeConfig},
     dan_node::DanNode,
     default_service_specification::DefaultServiceSpecification,
+    epoch_manager::EpochManager,
     grpc::{
         services::{base_node_client::GrpcBaseNodeClient, wallet_client::GrpcWalletClient},
         validator_node_grpc_server::ValidatorNodeGrpcServer,
@@ -162,6 +166,8 @@ async fn run_node(config: &ApplicationConfig) -> Result<(), ExitError> {
         asset_processor,
         asset_proxy,
     );
+    let epoch_manager = Arc::new(EpochManager::new());
+    let template_manager = Arc::new(TemplateManager::new());
 
     if let Some(address) = config.validator_node.grpc_address.clone() {
         println!("Started GRPC server on {}", address);
@@ -180,6 +186,8 @@ async fn run_node(config: &ApplicationConfig) -> Result<(), ExitError> {
         // subscription_factory,
         node_identity,
         global_db,
+        epoch_manager.clone(),
+        template_manager.clone(),
     )
     .await?;
 
@@ -203,8 +211,10 @@ async fn run_dan_node(
     // subscription_factory: Arc<SubscriptionFactory>,
     node_identity: Arc<NodeIdentity>,
     global_db: GlobalDb<SqliteGlobalDbBackendAdapter>,
+    epoch_manager: Arc<EpochManager>,
+    template_manager: Arc<TemplateManager>,
 ) -> Result<(), ExitError> {
-    let node = DanNode::new(config, node_identity, global_db);
+    let node = DanNode::new(config, node_identity, global_db, epoch_manager, template_manager);
     node.start(
         shutdown_signal,
         // mempool_service,
