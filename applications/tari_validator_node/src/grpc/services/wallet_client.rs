@@ -24,33 +24,31 @@ use std::{convert::TryInto, net::SocketAddr};
 
 use async_trait::async_trait;
 use log::*;
-use tari_app_grpc::tari_rpc::{self as grpc, GetCommitteeRequest};
+use tari_app_grpc::tari_rpc as grpc;
 use tari_common_types::types::{FixedHash, PublicKey};
-use tari_comms::types::CommsPublicKey;
 use tari_core::{
     chain_storage::{PrunedOutput, UtxoMinedInfo},
     transactions::transaction_components::OutputType,
 };
 use tari_crypto::tari_utilities::ByteArray;
 use tari_dan_core::{
-    models::{BaseLayerMetadata, BaseLayerOutput, ValidatorNode},
-    services::BaseNodeClient,
+    models::{BaseLayerMetadata, BaseLayerOutput},
+    services::WalletClient,
     DigitalAssetError,
 };
-use tonic::codegen::http::request;
 
-const _LOG_TARGET: &str = "tari::validator_node::app";
+const LOG_TARGET: &str = "tari::validator_node::app";
 
-type Client = grpc::base_node_client::BaseNodeClient<tonic::transport::Channel>;
+type Client = grpc::wallet_client::WalletClient<tonic::transport::Channel>;
 
 #[derive(Clone)]
-pub struct GrpcBaseNodeClient {
+pub struct GrpcWalletClient {
     endpoint: SocketAddr,
     client: Option<Client>,
 }
 
-impl GrpcBaseNodeClient {
-    pub fn new(endpoint: SocketAddr) -> GrpcBaseNodeClient {
+impl GrpcWalletClient {
+    pub fn new(endpoint: SocketAddr) -> GrpcWalletClient {
         Self { endpoint, client: None }
     }
 
@@ -66,48 +64,4 @@ impl GrpcBaseNodeClient {
     }
 }
 #[async_trait]
-impl BaseNodeClient for GrpcBaseNodeClient {
-    async fn get_tip_info(&mut self) -> Result<BaseLayerMetadata, DigitalAssetError> {
-        let inner = self.connection().await?;
-        let request = grpc::Empty {};
-        let result = inner.get_tip_info(request).await?.into_inner();
-        let metadata = result
-            .metadata
-            .ok_or_else(|| DigitalAssetError::InvalidPeerMessage("Base node returned no metadata".to_string()))?;
-        Ok(BaseLayerMetadata {
-            height_of_longest_chain: metadata.height_of_longest_chain,
-            tip_hash: metadata.best_block.try_into().map_err(|_| {
-                DigitalAssetError::InvalidPeerMessage("best_block was not a valid fixed hash".to_string())
-            })?,
-        })
-    }
-
-    async fn get_validator_nodes(&mut self, height: u64) -> Result<Vec<ValidatorNode>, DigitalAssetError> {
-        let inner = self.connection().await?;
-        let request = grpc::Empty {};
-        let result = inner.get_tip_info(request).await?.into_inner();
-        Ok(vec![])
-    }
-
-    async fn get_committee(
-        &mut self,
-        height: u64,
-        shard_key: &[u8; 32],
-    ) -> Result<Vec<CommsPublicKey>, DigitalAssetError> {
-        let inner = self.connection().await?;
-        let request = GetCommitteeRequest {
-            height,
-            shard_key: shard_key.to_vec(),
-        };
-        let result = inner.get_committee(request).await?.into_inner();
-        Ok(result
-            .public_key
-            .iter()
-            .map(|a| CommsPublicKey::from_vec(a).unwrap())
-            .collect())
-    }
-
-    async fn get_shard_key(&mut self, height: u64, public_key: &[u8; 32]) -> Result<&[u8; 32], DigitalAssetError> {
-        todo!()
-    }
-}
+impl WalletClient for GrpcWalletClient {}

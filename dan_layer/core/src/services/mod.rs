@@ -26,6 +26,7 @@ pub mod infrastructure_services;
 pub mod mempool;
 mod payload_processor;
 mod signing_service;
+mod wallet_client;
 
 pub use asset_proxy::{AssetProxy, ConcreteAssetProxy};
 pub use base_node_client::BaseNodeClient;
@@ -40,3 +41,4 @@ mod validator_node_rpc_client;
 
 pub use service_specification::ServiceSpecification;
 pub use validator_node_rpc_client::{ValidatorNodeClientError, ValidatorNodeClientFactory, ValidatorNodeRpcClient};
+pub use wallet_client::WalletClient;
