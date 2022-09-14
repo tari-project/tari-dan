@@ -99,7 +99,10 @@ impl BaseLayerScanner {
             // so they can be ran concurrently as they do not block CPU between them
             let epoch_task = self.epoch_manager.update_epoch(&tip);
             let template_task = self.template_manager.add_templates(new_templates_metadata);
-            tokio::join!(epoch_task, template_task);
+            let results = tokio::join!(epoch_task, template_task);
+            // TODO: there could be a cleaner way of propagating the errors of the tasks
+            results.0?;
+            results.1?;
 
             self.set_last_scanned_block(&tip)?;
             tokio::select! {
