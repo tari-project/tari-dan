@@ -27,10 +27,11 @@ use std::{
 
 use diesel::{prelude::*, Connection, SqliteConnection};
 use log::*;
+use tari_common_types::types::FixedHash;
 use tari_dan_core::{
     models::{HotStuffMessageType, QuorumCertificate, TariDanPayload, TreeNodeHash, ValidatorSignature, ViewId},
     storage::{
-        chain::{ChainDbBackendAdapter, DbInstruction, DbNode, DbQc},
+        chain::{ChainDbBackendAdapter, DbInstruction, DbNode, DbQc, DbTemplate},
         AsKeyBytes,
         AtomicDb,
         MetadataBackendAdapter,
@@ -46,6 +47,7 @@ use crate::{
         metadata::Metadata,
         node::{NewNode, Node},
         prepare_qc::PrepareQc,
+        template::{NewTemplate, Template},
     },
     schema::*,
     SqliteTransaction,
@@ -470,6 +472,49 @@ impl ChainDbBackendAdapter for SqliteChainBackendAdapter {
             .collect::<Result<_, Self::Error>>()?;
 
         Ok(instructions)
+    }
+
+    fn insert_template(&self, item: &DbTemplate, transaction: &Self::DbTransaction) -> Result<(), Self::Error> {
+        let new_template = NewTemplate {
+            template_address: item.template_address.to_vec(),
+            url: item.url.to_string(),
+            height: item.height as i32,
+            compiled_code: item.compiled_code.clone(),
+        };
+        diesel::insert_into(templates::table)
+            .values(new_template)
+            .execute(transaction.connection())
+            .map_err(|source| SqliteStorageError::DieselError {
+                source,
+                operation: "insert_template".to_string(),
+            })?;
+        Ok(())
+    }
+
+    fn find_template_by_address(
+        &self,
+        template_address: &FixedHash,
+    ) -> Result<Option<(Self::Id, DbTemplate)>, Self::Error> {
+        use crate::schema::templates::dsl;
+        let connection = self.get_connection()?;
+        let template = dsl::templates
+            .filter(templates::template_address.eq(template_address.as_bytes()))
+            .first::<Template>(&connection)
+            .optional()
+            .map_err(|source| SqliteStorageError::DieselError {
+                source,
+                operation: "find_template_by_address".to_string(),
+            })?;
+
+        match template {
+            Some(template) => Ok(Some((template.id, DbTemplate {
+                template_address: template.template_address.try_into()?,
+                url: template.url,
+                height: template.height as u64,
+                compiled_code: template.compiled_code,
+            }))),
+            None => Ok(None),
+        }
     }
 }
 
