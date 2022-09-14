@@ -55,4 +55,6 @@ pub trait DbFactory: Sync + Send + 'static {
     ) -> Result<StateDb<Self::StateDbBackendAdapter>, StorageError>;
 
     fn get_or_create_global_db(&self) -> Result<GlobalDb<Self::GlobalDbBackendAdapter>, StorageError>;
+
+    fn get_or_create_template_db(&self) -> Result<ChainDb<Self::ChainDbBackendAdapter>, StorageError>;
 }

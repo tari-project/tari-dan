@@ -22,16 +22,14 @@
 
 use std::sync::{Arc, RwLock};
 
-use tari_utilities::message_format::MessageFormat;
 use tari_common_types::types::FixedHash;
-
-use crate::storage::chain::DbTemplate;
+use tari_utilities::message_format::MessageFormat;
 
 use super::MemoryChainDb;
 use crate::{
     models::{QuorumCertificate, TreeNodeHash},
     storage::{
-        chain::{ChainDbBackendAdapter, ChainDbMetadataKey, DbInstruction, DbNode, DbQc},
+        chain::{ChainDbBackendAdapter, ChainDbMetadataKey, DbInstruction, DbNode, DbQc, DbTemplate},
         AtomicDb,
         MetadataBackendAdapter,
         StorageError,
@@ -104,13 +102,13 @@ impl ChainDbBackendAdapter for MockChainDbBackupAdapter {
         Ok(())
     }
 
-    fn find_template_by_address(&self, template_address: &FixedHash) -> Result<Option<(Self::Id, DbTemplate)>, Self::Error> {
+    fn find_template_by_address(&self, template_address: &FixedHash) -> Result<Option<DbTemplate>, Self::Error> {
         let lock = self.db.read()?;
         let rec = lock
             .templates
             .records()
             .find(|(_, rec)| rec.template_address == *template_address)
-            .map(|(id, template)| (id, template.clone()));
+            .map(|(_, template)| template.clone());
         Ok(rec)
     }
 

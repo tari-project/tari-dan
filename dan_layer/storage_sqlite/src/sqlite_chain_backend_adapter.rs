@@ -491,10 +491,7 @@ impl ChainDbBackendAdapter for SqliteChainBackendAdapter {
         Ok(())
     }
 
-    fn find_template_by_address(
-        &self,
-        template_address: &FixedHash,
-    ) -> Result<Option<(Self::Id, DbTemplate)>, Self::Error> {
+    fn find_template_by_address(&self, template_address: &FixedHash) -> Result<Option<DbTemplate>, Self::Error> {
         use crate::schema::templates::dsl;
         let connection = self.get_connection()?;
         let template = dsl::templates
@@ -507,12 +504,12 @@ impl ChainDbBackendAdapter for SqliteChainBackendAdapter {
             })?;
 
         match template {
-            Some(template) => Ok(Some((template.id, DbTemplate {
+            Some(template) => Ok(Some(DbTemplate {
                 template_address: template.template_address.try_into()?,
                 url: template.url,
                 height: template.height as u64,
                 compiled_code: template.compiled_code,
-            }))),
+            })),
             None => Ok(None),
         }
     }

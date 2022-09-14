@@ -22,6 +22,9 @@
 
 use std::fmt::Debug;
 
+use tari_common_types::types::FixedHash;
+
+use super::DbTemplate;
 use crate::{
     models::{Payload, QuorumCertificate, TreeNodeHash},
     storage::{
@@ -29,10 +32,6 @@ use crate::{
         AtomicDb,
     },
 };
-
-use tari_common_types::types::FixedHash;
-
-use super::DbTemplate;
 
 pub trait ChainDbBackendAdapter: AtomicDb + Send + Sync + Clone {
     type Id: Copy + Send + Sync + Debug + PartialEq;
@@ -45,7 +44,7 @@ pub trait ChainDbBackendAdapter: AtomicDb + Send + Sync + Clone {
     fn update_node(&self, id: &Self::Id, item: &DbNode, transaction: &Self::DbTransaction) -> Result<(), Self::Error>;
     fn insert_instruction(&self, item: &DbInstruction, transaction: &Self::DbTransaction) -> Result<(), Self::Error>;
     fn insert_template(&self, item: &DbTemplate, transaction: &Self::DbTransaction) -> Result<(), Self::Error>;
-    fn find_template_by_address(&self, template_address: &FixedHash) -> Result<Option<(Self::Id, DbTemplate)>, Self::Error>;
+    fn find_template_by_address(&self, template_address: &FixedHash) -> Result<Option<DbTemplate>, Self::Error>;
     fn locked_qc_id(&self) -> Self::Id;
     fn prepare_qc_id(&self) -> Self::Id;
     fn find_highest_prepared_qc(&self) -> Result<QuorumCertificate, Self::Error>;

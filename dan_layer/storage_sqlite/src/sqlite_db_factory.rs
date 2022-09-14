@@ -179,4 +179,28 @@ impl DbFactory for SqliteDbFactory {
         embedded_migrations::run_with_output(&connection, &mut std::io::stdout()).expect("Migration failed");
         Ok(GlobalDb::new(SqliteGlobalDbBackendAdapter::new(database_url)))
     }
+
+    fn get_or_create_template_db(&self) -> Result<ChainDb<Self::ChainDbBackendAdapter>, StorageError> {
+        let database_url = self
+            .data_dir
+            .join("templates.sqlite")
+            .into_os_string()
+            .into_string()
+            .expect("Should not fail");
+
+        create_dir_all(&PathBuf::from(&database_url).parent().unwrap())
+            .map_err(|_| StorageError::FileSystemPathDoesNotExist)?;
+
+        let connection = SqliteConnection::establish(database_url.as_str()).map_err(SqliteStorageError::from)?;
+        connection
+            .execute("PRAGMA foreign_keys = ON;")
+            .map_err(|source| SqliteStorageError::DieselError {
+                source,
+                operation: "set pragma".to_string(),
+            })?;
+        embed_migrations!("./migrations");
+        // embedded_migrations::run(&connection).map_err(SqliteStorageError::from)?;
+        embedded_migrations::run_with_output(&connection, &mut std::io::stdout()).expect("Migration failed");
+        Ok(ChainDb::new(Self::ChainDbBackendAdapter::new(database_url)))
+    }
 }

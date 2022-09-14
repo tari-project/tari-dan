@@ -167,7 +167,7 @@ async fn run_node(config: &ApplicationConfig) -> Result<(), ExitError> {
         asset_proxy,
     );
     let epoch_manager = Arc::new(EpochManager::new());
-    let template_manager = Arc::new(TemplateManager::new());
+    let template_manager = Arc::new(TemplateManager::new(db_factory.clone()));
 
     if let Some(address) = config.validator_node.grpc_address.clone() {
         println!("Started GRPC server on {}", address);
