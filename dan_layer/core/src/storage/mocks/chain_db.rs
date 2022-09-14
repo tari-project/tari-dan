@@ -26,14 +26,11 @@ use tari_dan_common_types::ShardId;
 use tari_utilities::message_format::MessageFormat;
 
 use super::MemoryChainDb;
-use crate::{
-    models::{QuorumCertificate, TreeNodeHash},
-    storage::{
-        chain::{ChainDbBackendAdapter, ChainDbMetadataKey, DbInstruction, DbNode, DbQc},
-        AtomicDb,
-        MetadataBackendAdapter,
-        StorageError,
-    },
+use crate::storage::{
+    chain::{ChainDbBackendAdapter, ChainDbMetadataKey},
+    AtomicDb,
+    MetadataBackendAdapter,
+    StorageError,
 };
 
 #[derive(Debug, Clone, Default)]

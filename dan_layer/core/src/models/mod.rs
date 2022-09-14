@@ -22,14 +22,12 @@
 
 use std::{cmp::Ordering, convert::TryFrom, fmt::Debug, hash::Hash, ops::Add};
 
-use tari_common_types::types::FixedHash;
-
 mod base_layer_metadata;
 mod base_layer_output;
 mod committee;
 pub mod domain_events;
 mod error;
-mod hashing;
+// mod hashing;
 mod hot_stuff_message;
 mod hot_stuff_tree_node;
 mod node;
@@ -47,14 +45,13 @@ pub use base_layer_metadata::BaseLayerMetadata;
 pub use base_layer_output::BaseLayerOutput;
 pub use committee::Committee;
 pub use error::ModelError;
-pub(crate) use hashing::{dan_layer_models_hasher, HOT_STUFF_MESSAGE_LABEL};
 pub use hot_stuff_message::HotStuffMessage;
 pub use hot_stuff_tree_node::HotStuffTreeNode;
 pub use node::Node;
 pub use payload::Payload;
 pub use quorum_certificate::{QuorumCertificate, QuorumDecision};
 pub use sidechain_metadata::SidechainMetadata;
-use tari_dan_common_types::{ObjectId, PayloadId};
+use tari_dan_common_types::{ObjectId, PayloadId, SubstateState};
 pub use tari_dan_payload::{CheckpointData, TariDanPayload};
 pub use tree_node_hash::TreeNodeHash;
 pub use validator_node::ValidatorNode;
@@ -91,13 +88,6 @@ impl Epoch {
     fn to_le_bytes(&self) -> [u8; 8] {
         self.0.to_le_bytes()
     }
-}
-
-#[derive(Debug, Clone)]
-pub enum SubstateState {
-    DoesNotExist,
-    Created { created_by: PayloadId },
-    Destroyed { deleted_by: PayloadId },
 }
 
 #[derive(Debug, Clone)]

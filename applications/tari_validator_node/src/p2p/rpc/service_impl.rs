@@ -20,14 +20,14 @@
 // CAUSED AND ON ANY THEORY OF LIABILITY,  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR
 // OTHERWISE) ARISING IN ANY WAY OUT OF THE  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH
 // DAMAGE.
-use std::convert::{TryFrom, TryInto};
+use std::convert::TryInto;
 
 use log::*;
 use tari_comms::{
     protocol::rpc::{Request, Response, RpcStatus, Streaming},
     utils,
 };
-use tari_dan_core::{models::TreeNodeHash, services::mempool::service::MempoolService, storage::DbFactory};
+use tari_dan_core::{services::mempool::service::MempoolService, storage::DbFactory};
 use tari_dan_engine::{instruction::Transaction, state::StateDbUnitOfWorkReader};
 use tokio::{sync::mpsc, task};
 
@@ -177,7 +177,7 @@ where
 
     async fn get_tip_node(
         &self,
-        request: Request<proto::GetTipNodeRequest>,
+        _request: Request<proto::GetTipNodeRequest>,
     ) -> Result<Response<proto::GetTipNodeResponse>, RpcStatus> {
         // let msg = request.into_message();
         //

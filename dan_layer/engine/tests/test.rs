@@ -214,3 +214,24 @@ fn test_private_function() {
     let value: u32 = template_test.call_method(component, "get", args![]);
     assert_eq!(value, 1);
 }
+
+#[test]
+fn test_tuples() {
+    let template_test = TemplateTest::new(vec!["tests/templates/tuples"]);
+
+    // tuples returned in a regular function
+    let (message, number): (String, u32) = template_test.call_function("Tuple", "tuple_output", args![]);
+    assert_eq!(message, "Hello World!");
+    assert_eq!(number, 100);
+
+    // tuples returned in a constructor
+    template_test.clear_calls();
+    let (component_id, message): (ComponentAddress, String) = template_test.call_function("Tuple", "new", args![]);
+    assert_eq!(message, "Hello World!");
+
+    // the component id returned in the tuple must be valid and usable
+    let new_value = 20_u32;
+    template_test.call_method::<()>(component_id, "set", args![new_value]);
+    let value: u32 = template_test.call_method(component_id, "get", args![]);
+    assert_eq!(value, new_value);
+}

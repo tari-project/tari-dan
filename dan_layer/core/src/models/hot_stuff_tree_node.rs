@@ -21,14 +21,11 @@
 // USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 use digest::{Digest, FixedOutput};
-use primitive_types::U256;
-use tari_common_types::types::FixedHash;
 use tari_crypto::hash::blake2::Blake256;
 use tari_dan_common_types::{PayloadId, ShardId};
-use tari_dan_engine::state::models::StateRoot;
 
 use crate::{
-    models::{Epoch, NodeHeight, ObjectPledge, Payload, QuorumCertificate, TreeNodeHash},
+    models::{Epoch, NodeHeight, ObjectPledge, QuorumCertificate, TreeNodeHash},
     services::infrastructure_services::NodeAddressable,
 };
 
@@ -83,7 +80,7 @@ impl<TAddr: NodeAddressable> HotStuffTreeNode<TAddr> {
             payload: PayloadId::zero(),
             payload_height: NodeHeight(0),
             hash: TreeNodeHash::zero(),
-            shard: ShardId(FixedHash::zero()),
+            shard: ShardId::zero(),
             height: NodeHeight(0),
             epoch: Epoch(0),
             proposed_by: TAddr::zero(),
@@ -95,7 +92,7 @@ impl<TAddr: NodeAddressable> HotStuffTreeNode<TAddr> {
     }
 
     pub fn calculate_hash(&self) -> TreeNodeHash {
-        let mut result = Blake256::new()
+        let result = Blake256::new()
             .chain(self.parent.as_bytes())
             .chain(self.epoch.to_le_bytes())
             .chain(self.height.to_le_bytes())

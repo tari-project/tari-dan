@@ -37,6 +37,10 @@ pub enum RuntimeError {
     StateStoreError(#[from] StateStoreError),
     #[error("Component not found with address '{address}'")]
     ComponentNotFound { address: ComponentAddress },
+    // #[error("Component does not yet exist at address '{address}'")]
+    // ComponentDoesNotExistYet { address: ComponentAddress },
+    // #[error("Component has been destroyed at address: {address}")]
+    // ComponentDestroyed { address: ComponentAddress },
     #[error("Invalid argument {argument}: {reason}")]
     InvalidArgument { argument: &'static str, reason: String },
     #[error("Invalid amount '{amount}': {reason}")]

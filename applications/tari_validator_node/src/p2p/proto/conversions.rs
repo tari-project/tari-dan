@@ -29,23 +29,19 @@ use borsh::de::BorshDeserialize;
 use tari_common_types::types::{PrivateKey, PublicKey, Signature};
 use tari_comms::types::CommsPublicKey;
 use tari_crypto::tari_utilities::ByteArray;
-use tari_dan_common_types::TemplateId;
 use tari_dan_core::models::{
-    CheckpointData,
     HotStuffMessage,
-    HotStuffMessageType,
     HotStuffTreeNode,
     Node,
     QuorumCertificate,
     TariDanPayload,
     TreeNodeHash,
     ValidatorSignature,
-    ViewId,
 };
 use tari_dan_engine::{
     instruction::Transaction,
     state::{
-        models::{KeyValue, StateOpLogEntry, StateRoot},
+        models::{KeyValue, StateOpLogEntry},
         DbStateOpLogEntry,
     },
 };
@@ -54,7 +50,7 @@ use tari_template_lib::{args::Arg, Hash};
 use crate::p2p::proto;
 
 impl From<HotStuffMessage<TariDanPayload, CommsPublicKey>> for proto::consensus::HotStuffMessage {
-    fn from(source: HotStuffMessage<TariDanPayload, CommsPublicKey>) -> Self {
+    fn from(_source: HotStuffMessage<TariDanPayload, CommsPublicKey>) -> Self {
         todo!()
         // Self {
         //     message_type: i32::from(source.message_type().as_u8()),
@@ -75,7 +71,7 @@ impl From<HotStuffMessage<TariDanPayload, CommsPublicKey>> for proto::consensus:
 }
 
 impl From<HotStuffTreeNode<CommsPublicKey>> for proto::consensus::HotStuffTreeNode {
-    fn from(source: HotStuffTreeNode<CommsPublicKey>) -> Self {
+    fn from(_source: HotStuffTreeNode<CommsPublicKey>) -> Self {
         todo!()
         // Self {
         //     parent: Vec::from(source.parent().as_bytes()),
@@ -87,7 +83,7 @@ impl From<HotStuffTreeNode<CommsPublicKey>> for proto::consensus::HotStuffTreeNo
 }
 
 impl From<QuorumCertificate> for proto::consensus::QuorumCertificate {
-    fn from(source: QuorumCertificate) -> Self {
+    fn from(_source: QuorumCertificate) -> Self {
         todo!()
         // Self {
         //     message_type: i32::from(source.message_type().as_u8()),
@@ -115,7 +111,7 @@ impl From<TariDanPayload> for proto::consensus::TariDanPayload {
 impl TryFrom<proto::consensus::HotStuffMessage> for HotStuffMessage<TariDanPayload, CommsPublicKey> {
     type Error = String;
 
-    fn try_from(value: proto::consensus::HotStuffMessage) -> Result<Self, Self::Error> {
+    fn try_from(_value: proto::consensus::HotStuffMessage) -> Result<Self, Self::Error> {
         todo!()
         // let node_hash = if value.node_hash.is_empty() {
         //     None
@@ -141,7 +137,7 @@ impl TryFrom<proto::consensus::HotStuffMessage> for HotStuffMessage<TariDanPaylo
 impl TryFrom<proto::consensus::QuorumCertificate> for QuorumCertificate {
     type Error = String;
 
-    fn try_from(value: proto::consensus::QuorumCertificate) -> Result<Self, Self::Error> {
+    fn try_from(_value: proto::consensus::QuorumCertificate) -> Result<Self, Self::Error> {
         // Ok(Self::new(
         //     HotStuffMessageType::try_from(u8::try_from(value.message_type).unwrap())?,
         //     ViewId(value.view_number),
@@ -155,7 +151,7 @@ impl TryFrom<proto::consensus::QuorumCertificate> for QuorumCertificate {
 impl TryFrom<proto::consensus::HotStuffTreeNode> for HotStuffTreeNode<CommsPublicKey> {
     type Error = String;
 
-    fn try_from(value: proto::consensus::HotStuffTreeNode) -> Result<Self, Self::Error> {
+    fn try_from(_value: proto::consensus::HotStuffTreeNode) -> Result<Self, Self::Error> {
         todo!()
         // if value.parent.is_empty() {
         //     return Err("parent not provided".to_string());
@@ -190,7 +186,7 @@ impl TryFrom<proto::consensus::ValidatorSignature> for ValidatorSignature {
 impl TryFrom<proto::consensus::TariDanPayload> for TariDanPayload {
     type Error = String;
 
-    fn try_from(value: proto::consensus::TariDanPayload) -> Result<Self, Self::Error> {
+    fn try_from(_value: proto::consensus::TariDanPayload) -> Result<Self, Self::Error> {
         // let instruction_set = value
         //     .instruction_set
         //     .ok_or_else(|| "Instructions were not present".to_string())?
@@ -318,7 +314,7 @@ impl<T: Borrow<Signature>> From<T> for proto::common::Signature {
 impl TryFrom<proto::common::Transaction> for Transaction {
     type Error = String;
 
-    fn try_from(request: proto::common::Transaction) -> Result<Self, Self::Error> {
+    fn try_from(_request: proto::common::Transaction) -> Result<Self, Self::Error> {
         // let instructions = request
         //     .instructions
         //     .into_iter()
@@ -344,9 +340,9 @@ impl TryFrom<proto::common::Instruction> for tari_dan_engine::instruction::Instr
         let args = request
             .args
             .into_iter()
-            .map(|b| Arg::from_bytes(&b))
-            .collect::<Result<Vec<_>, _>>()
-            .map_err(|e| e.to_string())?;
+            .map(|a| Arg::from_bytes(&a))
+            .collect::<Result<Vec<Arg>, _>>()
+            .unwrap();
         let instruction = match request.instruction_type {
             // function
             0 => {
@@ -371,6 +367,7 @@ impl TryFrom<proto::common::Instruction> for tari_dan_engine::instruction::Instr
                     args: todo!(),
                 }
             },
+            // 2 => tari_dan_engine::instruction::Instruction::PutLastInstructionOutputOnWorkspace { key: request.key },
             _ => return Err("invalid instruction_type".to_string()),
         };
 
@@ -386,17 +383,18 @@ impl From<Transaction> for proto::common::Transaction {
             instructions: instructions.into_iter().map(Into::into).collect(),
             signature: Some(signature.signature().into()),
             sender_public_key: sender_public_key.to_vec(),
-            balance_proof: todo!(),
-            inputs: todo!(),
-            max_instruction_outputs: todo!(),
-            outputs: todo!(),
-            fee: todo!(),
+            // balance_proof: todo!(),
+            // inputs: todo!(),
+            // max_instruction_outputs: todo!(),
+            // outputs: todo!(),
+            // fee: todo!(),
+            ..Default::default()
         }
     }
 }
 
 impl From<tari_dan_engine::instruction::Instruction> for proto::common::Instruction {
-    fn from(instruction: tari_dan_engine::instruction::Instruction) -> Self {
+    fn from(_instruction: tari_dan_engine::instruction::Instruction) -> Self {
         // let mut result = proto::validator_node::Instruction::default();
         //
         // match instruction {
@@ -429,5 +427,39 @@ impl From<tari_dan_engine::instruction::Instruction> for proto::common::Instruct
         //
         // result
         todo!()
+    }
+}
+
+impl TryFrom<proto::validator_node::Arg> for Arg {
+    type Error = String;
+
+    fn try_from(request: proto::validator_node::Arg) -> Result<Self, Self::Error> {
+        let data = request.data.clone();
+        let arg = match request.arg_type {
+            0 => Arg::Literal(data),
+            1 => Arg::FromWorkspace(data),
+            _ => return Err("invalid arg_type".to_string()),
+        };
+
+        Ok(arg)
+    }
+}
+
+impl From<Arg> for proto::validator_node::Arg {
+    fn from(arg: Arg) -> Self {
+        let mut result = proto::validator_node::Arg::default();
+
+        match arg {
+            Arg::Literal(data) => {
+                result.arg_type = 0;
+                result.data = data;
+            },
+            Arg::FromWorkspace(data) => {
+                result.arg_type = 1;
+                result.data = data;
+            },
+        }
+
+        result
     }
 }

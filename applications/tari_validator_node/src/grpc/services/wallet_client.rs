@@ -20,22 +20,11 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use std::{convert::TryInto, net::SocketAddr};
+use std::net::SocketAddr;
 
 use async_trait::async_trait;
-use log::*;
 use tari_app_grpc::tari_rpc as grpc;
-use tari_common_types::types::{FixedHash, PublicKey};
-use tari_core::{
-    chain_storage::{PrunedOutput, UtxoMinedInfo},
-    transactions::transaction_components::OutputType,
-};
-use tari_crypto::tari_utilities::ByteArray;
-use tari_dan_core::{
-    models::{BaseLayerMetadata, BaseLayerOutput},
-    services::WalletClient,
-    DigitalAssetError,
-};
+use tari_dan_core::{services::WalletClient, DigitalAssetError};
 
 const LOG_TARGET: &str = "tari::validator_node::app";
 

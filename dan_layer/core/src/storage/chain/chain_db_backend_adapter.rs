@@ -22,13 +22,7 @@
 
 use std::fmt::Debug;
 
-use crate::{
-    models::{Payload, QuorumCertificate, TreeNodeHash},
-    storage::{
-        chain::{DbInstruction, DbNode, DbQc},
-        AtomicDb,
-    },
-};
+use crate::{models::Payload, storage::AtomicDb};
 
 pub trait ChainDbBackendAdapter: AtomicDb + Send + Sync + Clone {
     type Id: Copy + Send + Sync + Debug + PartialEq;

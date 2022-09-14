@@ -22,22 +22,14 @@
 
 use std::{
     fmt::{Debug, Formatter},
-    ops::DerefMut,
     sync::{Arc, RwLock},
 };
 
-use log::*;
 use tari_dan_common_types::storage::UnitOfWorkTracker;
 
-use crate::{
-    models::{Node, QuorumCertificate, TreeNodeHash},
-    storage::{
-        chain::{db_node::DbNode, ChainDbBackendAdapter, DbInstruction, DbQc},
-        StorageError,
-    },
-};
+use crate::storage::chain::{db_node::DbNode, ChainDbBackendAdapter, DbInstruction, DbQc};
 
-const LOG_TARGET: &str = "tari::dan::chain_db::unit_of_work";
+// const LOG_TARGET: &str = "tari::dan::chain_db::unit_of_work";
 
 pub trait ChainDbUnitOfWork: Clone + Send + Sync {
     // fn commit(&mut self) -> Result<(), StorageError>;
@@ -311,11 +303,11 @@ impl<TBackendAdapter: ChainDbBackendAdapter> Clone for ChainDbUnitOfWorkImpl<TBa
 // }
 
 pub struct ChainDbUnitOfWorkInner<TBackendAdapter: ChainDbBackendAdapter> {
-    backend_adapter: TBackendAdapter,
+    _backend_adapter: TBackendAdapter,
     nodes: Vec<(Option<TBackendAdapter::Id>, UnitOfWorkTracker<DbNode>)>,
-    instructions: Vec<(Option<TBackendAdapter::Id>, UnitOfWorkTracker<DbInstruction>)>,
-    locked_qc: Option<UnitOfWorkTracker<DbQc>>,
-    prepare_qc: Option<UnitOfWorkTracker<DbQc>>,
+    _instructions: Vec<(Option<TBackendAdapter::Id>, UnitOfWorkTracker<DbInstruction>)>,
+    _locked_qc: Option<UnitOfWorkTracker<DbQc>>,
+    _prepare_qc: Option<UnitOfWorkTracker<DbQc>>,
 }
 
 impl<T: ChainDbBackendAdapter> Debug for ChainDbUnitOfWorkInner<T> {
@@ -326,11 +318,11 @@ impl<T: ChainDbBackendAdapter> Debug for ChainDbUnitOfWorkInner<T> {
 impl<TBackendAdapter: ChainDbBackendAdapter> ChainDbUnitOfWorkInner<TBackendAdapter> {
     pub fn new(backend_adapter: TBackendAdapter) -> Self {
         Self {
-            backend_adapter,
+            _backend_adapter: backend_adapter,
             nodes: vec![],
-            instructions: vec![],
-            locked_qc: None,
-            prepare_qc: None,
+            _instructions: vec![],
+            _locked_qc: None,
+            _prepare_qc: None,
         }
     }
 

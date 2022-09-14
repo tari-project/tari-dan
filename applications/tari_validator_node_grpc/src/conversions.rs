@@ -20,7 +20,10 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use std::{borrow::Borrow, convert::TryFrom};
+use std::{
+    borrow::Borrow,
+    convert::{TryFrom, TryInto},
+};
 
 use borsh::de::BorshDeserialize;
 use tari_common_types::types::{PrivateKey, PublicKey, Signature};
@@ -54,7 +57,7 @@ impl<T: Borrow<Signature>> From<T> for grpc::Signature {
 impl TryFrom<grpc::Transaction> for Transaction {
     type Error = String;
 
-    fn try_from(request: grpc::Transaction) -> Result<Self, Self::Error> {
+    fn try_from(_request: grpc::Transaction) -> Result<Self, Self::Error> {
         // let instructions = request
         //     .instructions
         //     .into_iter()
@@ -79,10 +82,9 @@ impl TryFrom<grpc::Instruction> for Instruction {
             Hash::deserialize(&mut &request.package_address[..]).map_err(|_| "invalid package_addresss")?;
         let args = request
             .args
-            .iter()
-            .map(|b| Arg::from_bytes(b))
-            .collect::<Result<Vec<_>, _>>()
-            .map_err(|e| e.to_string())?;
+            .into_iter()
+            .map(TryInto::try_into)
+            .collect::<Result<Vec<Arg>, _>>()?;
         let instruction = match request.instruction_type {
             // function
             0 => {
@@ -107,6 +109,7 @@ impl TryFrom<grpc::Instruction> for Instruction {
                     component_address,
                 }
             },
+            2 => Instruction::PutLastInstructionOutputOnWorkspace { key: request.key },
             _ => return Err("invalid instruction_type".to_string()),
         };
 
@@ -115,7 +118,7 @@ impl TryFrom<grpc::Instruction> for Instruction {
 }
 
 impl From<Transaction> for grpc::Transaction {
-    fn from(transaction: Transaction) -> Self {
+    fn from(_transaction: Transaction) -> Self {
         // let instructions = transaction.instructions().into_iter().map(Into::into).collect();
         // let signature = transaction.signature().signature();
         // let sender_public_key = transaction.sender_public_key().to_vec();
@@ -156,12 +159,46 @@ impl From<&Instruction> for grpc::Instruction {
                 result.package_address = package_address.to_vec();
                 result.component_address = component_address.to_vec();
                 result.method = method.clone();
-                result.args = todo!(); // args.into_iter().map(|a| a.to_bytes()).collect();
+                result.args = todo!(); // args.into_iter().map(Into::into).collect();
             },
-            Instruction::PutLastInstructionOutputOnWorkspace { .. } => {
-                todo!()
+            Instruction::PutLastInstructionOutputOnWorkspace { key } => {
+                result.instruction_type = 2;
+                result.key = key.clone();
             },
-            _ => todo!(),
+        }
+
+        result
+    }
+}
+
+impl TryFrom<grpc::Arg> for Arg {
+    type Error = String;
+
+    fn try_from(request: grpc::Arg) -> Result<Self, Self::Error> {
+        let data = request.data.clone();
+        let arg = match request.arg_type {
+            0 => Arg::Literal(data),
+            1 => Arg::FromWorkspace(data),
+            _ => return Err("invalid arg_type".to_string()),
+        };
+
+        Ok(arg)
+    }
+}
+
+impl From<Arg> for grpc::Arg {
+    fn from(arg: Arg) -> Self {
+        let mut result = grpc::Arg::default();
+
+        match arg {
+            Arg::Literal(data) => {
+                result.arg_type = 0;
+                result.data = data;
+            },
+            Arg::FromWorkspace(data) => {
+                result.arg_type = 1;
+                result.data = data;
+            },
         }
 
         result

@@ -22,7 +22,7 @@
 
 use proc_macro2::{Ident, Span, TokenStream};
 use quote::{format_ident, quote};
-use syn::{parse_quote, token::Brace, Block, Expr, ExprBlock, Result};
+use syn::{parse_quote, token::Brace, Block, Expr, ExprBlock, ExprField, Result, Stmt, TypePath, TypeTuple};
 
 use crate::ast::{FunctionAst, TemplateAst, TypeAst};
 
@@ -35,7 +35,9 @@ pub fn generate_dispatcher(ast: &TemplateAst) -> Result<TokenStream> {
         #[no_mangle]
         pub extern "C" fn #dispatcher_function_name(call_info: *mut u8, call_info_len: usize) -> *mut u8 {
             use ::tari_template_abi::{decode, encode_with_len, CallInfo, wrap_ptr};
-            use ::tari_template_lib::init_context;
+            use ::tari_template_lib::{init_context, panic_hook::register_panic_hook};
+
+            register_panic_hook();
 
             if call_info.is_null() {
                 panic!("call_info is null");
@@ -82,17 +84,17 @@ fn get_function_block(template_ident: &Ident, ast: FunctionAst) -> Expr {
     let expected_num_args = ast.input_types.len();
     let mut stmts = vec![];
     let mut should_set_state = false;
-
-    // encode all arguments of the functions
-    for (i, input_type) in ast.input_types.into_iter().enumerate() {
-        let arg_ident = format_ident!("arg_{}", i);
-        stmts.push(parse_quote! {
+    stmts.push(parse_quote! {
             assert_eq!(call_info.args.len(), #expected_num_args, "Call had unexpected number of args. Got = {} expected = {}", call_info.args.len(), #expected_num_args); 
         });
+    // encode all arguments of the functions
+    for (i, input_type) in ast.input_types.iter().enumerate() {
+        let arg_ident = format_ident!("arg_{}", i);
+
         let stmt = match input_type {
             // "self" argument
             TypeAst::Receiver { mutability } => {
-                should_set_state = mutability;
+                should_set_state = *mutability;
                 args.push(parse_quote! { &mut state });
                 vec![
                     parse_quote! {
@@ -128,20 +130,12 @@ fn get_function_block(template_ident: &Ident, ast: FunctionAst) -> Expr {
 
     // call the user defined function in the template
     let function_ident = Ident::new(&ast.name, Span::call_site());
-    if ast.is_constructor {
-        stmts.push(parse_quote! {
-            let state = #template_mod_name::#template_ident::#function_ident(#(#args),*);
-        });
+    stmts.push(parse_quote! {
+        let rtn = #template_mod_name::#template_ident::#function_ident(#(#args),*);
+    });
 
-        let template_name_str = template_ident.to_string();
-        stmts.push(parse_quote! {
-            let rtn = engine().instantiate(#template_name_str.to_string(), state);
-        });
-    } else {
-        stmts.push(parse_quote! {
-            let rtn = #template_mod_name::#template_ident::#function_ident(#(#args),*);
-        });
-    }
+    // replace "Self" if present in the return value
+    stmts.append(&mut replace_self_in_output(template_ident, &ast));
 
     // encode the result value
     stmts.push(parse_quote! {
@@ -166,4 +160,83 @@ fn get_function_block(template_ident: &Ident, ast: FunctionAst) -> Expr {
             stmts,
         },
     })
+}
+
+fn replace_self_in_output(template_ident: &Ident, ast: &FunctionAst) -> Vec<Stmt> {
+    let mut stmts: Vec<Stmt> = vec![];
+    match &ast.output_type {
+        Some(output_type) => match output_type {
+            TypeAst::Typed(type_path) => {
+                if let Some(stmt) = replace_self_in_single_value(template_ident, type_path) {
+                    stmts.push(stmt);
+                }
+            },
+            TypeAst::Tuple(type_tuple) => {
+                stmts.push(replace_self_in_tuple(template_ident, type_tuple));
+            },
+            _ => todo!(),
+        },
+        None => {},
+    }
+
+    stmts
+}
+
+fn replace_self_in_single_value(template_ident: &Ident, type_path: &TypePath) -> Option<Stmt> {
+    let template_name_str = template_ident.to_string();
+    let type_ident = &type_path.path.segments[0].ident;
+
+    if type_ident == "Self" {
+        return Some(parse_quote! {
+            let rtn = engine().instantiate(#template_name_str.to_string(), rtn);
+        });
+    }
+
+    None
+}
+
+fn replace_self_in_tuple(template_ident: &Ident, type_tuple: &TypeTuple) -> Stmt {
+    let template_name_str = template_ident.to_string();
+
+    // build the expresions for each element in the tuple
+    let elems: Vec<Expr> = type_tuple
+        .elems
+        .iter()
+        .enumerate()
+        .map(|(i, t)| match t {
+            syn::Type::Path(path) => {
+                let ident = path.path.segments[0].ident.clone();
+                let field_expr = build_tuple_field_expr("rtn".to_string(), i as u32);
+                if ident == "Self" {
+                    parse_quote! {
+                        engine().instantiate(#template_name_str.to_string(), #field_expr)
+                    }
+                } else {
+                    field_expr
+                }
+            },
+            _ => todo!(),
+        })
+        .collect();
+
+    parse_quote! {
+        let rtn = (#(#elems),*);
+    }
+}
+
+fn build_tuple_field_expr(name: String, i: u32) -> Expr {
+    let name = Ident::new(&name, Span::call_site());
+
+    let mut field_expr: ExprField = parse_quote! {
+        #name.0
+    };
+
+    match field_expr.member {
+        syn::Member::Unnamed(ref mut unnamed) => {
+            unnamed.index = i as u32;
+        },
+        _ => todo!(),
+    }
+
+    Expr::Field(field_expr)
 }

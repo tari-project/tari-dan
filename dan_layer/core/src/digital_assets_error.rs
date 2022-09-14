@@ -21,19 +21,11 @@
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 use prost::DecodeError;
-use tari_comms::types::CommsPublicKey;
 use tari_comms_dht::outbound::DhtOutboundError;
-use tari_crypto::ristretto::RistrettoPublicKey;
 use tari_dan_engine::state::error::StateStorageError;
 use thiserror::Error;
-use tokio::sync::mpsc::error::SendError;
 
-use crate::{
-    models::{HotStuffMessage, ModelError, TariDanPayload},
-    services::ValidatorNodeClientError,
-    storage::StorageError,
-    workers::StateSyncError,
-};
+use crate::{models::ModelError, services::ValidatorNodeClientError, storage::StorageError};
 
 #[derive(Debug, Error)]
 pub enum DigitalAssetError {
@@ -83,8 +75,8 @@ pub enum DigitalAssetError {
     ModelError(#[from] ModelError),
     #[error("UTXO missing checkpoint data")]
     UtxoNoCheckpointData,
-    #[error("Failed to synchronize state: {0}")]
-    StateSyncError(#[from] StateSyncError),
+    // #[error("Failed to synchronize state: {0}")]
+    // StateSyncError(#[from] StateSyncError),
     #[error("Validator node client error: {0}")]
     ValidatorNodeClientError(#[from] ValidatorNodeClientError),
     #[error("Peer did not send a quorum certificate in prepare phase")]

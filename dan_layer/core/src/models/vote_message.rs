@@ -1,3 +1,25 @@
+//  Copyright 2022. The Tari Project
+//
+//  Redistribution and use in source and binary forms, with or without modification, are permitted provided that the
+//  following conditions are met:
+//
+//  1. Redistributions of source code must retain the above copyright notice, this list of conditions and the following
+//  disclaimer.
+//
+//  2. Redistributions in binary form must reproduce the above copyright notice, this list of conditions and the
+//  following disclaimer in the documentation and/or other materials provided with the distribution.
+//
+//  3. Neither the name of the copyright holder nor the names of its contributors may be used to endorse or promote
+//  products derived from this software without specific prior written permission.
+//
+//  THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES,
+//  INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+//  DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
+//  SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
+//  SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY,
+//  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
+//  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+
 use digest::{Digest, FixedOutput};
 use tari_common_types::types::FixedHash;
 use tari_crypto::hash::blake2::Blake256;
@@ -10,7 +32,7 @@ pub struct VoteMessage {
     local_node_hash: TreeNodeHash,
     shard: ShardId,
     decision: QuorumDecision,
-    other_shard_nodes: Vec<(ShardId, TreeNodeHash, Vec<ObjectPledge>)>,
+    all_shard_nodes: Vec<(ShardId, TreeNodeHash, Vec<ObjectPledge>)>,
     signature: Option<ValidatorSignature>,
 }
 
@@ -19,15 +41,15 @@ impl VoteMessage {
         local_node_hash: TreeNodeHash,
         shard: ShardId,
         decision: QuorumDecision,
-        mut other_shard_nodes: Vec<(ShardId, TreeNodeHash, Vec<ObjectPledge>)>,
+        mut all_shard_nodes: Vec<(ShardId, TreeNodeHash, Vec<ObjectPledge>)>,
     ) -> Self {
-        other_shard_nodes.sort_by(|a, b| a.0.cmp(&b.0));
+        all_shard_nodes.sort_by(|a, b| a.0.cmp(&b.0));
 
         Self {
             local_node_hash,
             shard,
             decision,
-            other_shard_nodes,
+            all_shard_nodes,
             signature: None,
         }
     }
@@ -44,7 +66,7 @@ impl VoteMessage {
     pub fn get_all_nodes_hash(&self) -> FixedHash {
         let mut result = Blake256::new().chain(&[self.decision.as_u8()]);
         // data must already be sorted
-        for (shard, hash, pledges) in &self.other_shard_nodes {
+        for (shard, hash, pledges) in &self.all_shard_nodes {
             result = result
                 .chain(shard.0)
                 .chain(hash.as_bytes())
@@ -69,7 +91,7 @@ impl VoteMessage {
         self.decision
     }
 
-    pub fn other_shard_nodes(&self) -> &Vec<(ShardId, TreeNodeHash, Vec<ObjectPledge>)> {
-        &self.other_shard_nodes
+    pub fn all_shard_nodes(&self) -> &Vec<(ShardId, TreeNodeHash, Vec<ObjectPledge>)> {
+        &self.all_shard_nodes
     }
 }

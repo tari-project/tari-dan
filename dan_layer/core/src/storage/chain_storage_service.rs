@@ -23,7 +23,7 @@
 use async_trait::async_trait;
 
 use crate::{
-    models::{HotStuffTreeNode, Payload, SidechainMetadata},
+    models::{HotStuffTreeNode, SidechainMetadata},
     services::infrastructure_services::NodeAddressable,
     storage::{chain::ChainDbUnitOfWork, StorageError},
 };

@@ -43,8 +43,7 @@ pub fn compile_str<S: AsRef<str>>(source: S, features: &[&str]) -> Result<WasmMo
     File::create(temp_dir.path().join("src/lib.rs"))?.write_all(source.as_bytes())?;
     // super hacky
     File::create(temp_dir.path().join("Cargo.toml"))?.write_all(
-        format!(
-            r#"
+            br#"
         [workspace]
 [package]
 name = "temp_crate_lib"
@@ -52,9 +51,9 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-tari_template_abi = {{ git="https://github.com/tari-project/tari-dan.git", package="tari_template_abi", default-features = false, rev="9ef9cccfed5390f61b1a28aa3e04cde6813016ef" }}
-tari_template_lib = {{ git="https://github.com/tari-project/tari-dan.git", package="tari_template_lib", rev = "9ef9cccfed5390f61b1a28aa3e04cde6813016ef" }}
-tari_template_macros = {{ git="https://github.com/tari-project/tari-dan.git", package="tari_template_macros", rev = "9ef9cccfed5390f61b1a28aa3e04cde6813016ef" }}
+tari_template_abi = { git="https://github.com/tari-project/tari-dan.git", package="tari_template_abi", default-features = false, rev="9ef9cccfed5390f61b1a28aa3e04cde6813016ef" }
+tari_template_lib = { git="https://github.com/tari-project/tari-dan.git", package="tari_template_lib", rev = "9ef9cccfed5390f61b1a28aa3e04cde6813016ef" }
+tari_template_macros = { git="https://github.com/tari-project/tari-dan.git", package="tari_template_macros", rev = "9ef9cccfed5390f61b1a28aa3e04cde6813016ef" }
 
 [profile.release]
 opt-level = 's'     # Optimize for size.
@@ -65,9 +64,7 @@ strip = "debuginfo" # Strip debug info.
 
 [lib]
 crate-type = ["cdylib", "lib"]
-        "#,
-        )
-        .as_bytes(),
+        "#
     )?;
 
     compile_template(temp_dir.path(), features)

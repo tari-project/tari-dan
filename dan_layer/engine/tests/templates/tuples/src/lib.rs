@@ -1,4 +1,4 @@
-//  Copyright 2021. The Tari Project
+//  Copyright 2022. The Tari Project
 //
 //  Redistribution and use in source and binary forms, with or without modification, are permitted provided that the
 //  following conditions are met:
@@ -20,52 +20,29 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use std::fmt::Debug;
+use tari_template_macros::template;
 
-use tari_common_types::types::FixedHash;
-use tari_dan_common_types::{ObjectClaim, ObjectId, ShardId, SubstateChange};
-use tari_dan_engine::instruction::Transaction;
-
-use crate::models::{ConsensusHash, Payload};
-
-#[derive(Debug, Clone)]
-pub struct TariDanPayload {
-    transaction: Transaction,
-}
-
-impl TariDanPayload {
-    pub fn new(transaction: Transaction) -> Self {
-        Self { transaction }
+#[template]
+mod tuple_template {
+    pub struct Tuple {
+        pub value: u32,
     }
 
-    pub fn transaction(&self) -> &Transaction {
-        &self.transaction
-    }
-}
+    impl Tuple {
+        pub fn new() -> (Self, String) {
+            (Self { value: 0 }, "Hello World!".to_string())
+        }
 
-impl ConsensusHash for TariDanPayload {
-    fn consensus_hash(&self) -> &[u8] {
-        self.transaction.hash().as_slice()
-    }
-}
+        pub fn tuple_output() -> (String, u32) {
+            ("Hello World!".to_string(), 100)
+        }
 
-impl Payload for TariDanPayload {
-    fn involved_shards(&self) -> Vec<ShardId> {
-        self.transaction.meta().involved_shards()
-    }
+        pub fn set(&mut self, value: u32) {
+            self.value = value;
+        }
 
-    fn objects_for_shard(&self, shard: ShardId) -> Vec<(ObjectId, SubstateChange, ObjectClaim)> {
-        self.transaction.meta().objects_for_shard(shard)
-    }
-}
-
-#[derive(Debug, Clone, Default)]
-pub struct CheckpointData {
-    hash: FixedHash,
-}
-
-impl ConsensusHash for CheckpointData {
-    fn consensus_hash(&self) -> &[u8] {
-        self.hash.as_slice()
+        pub fn get(&self) -> u32 {
+            self.value
+        }
     }
 }

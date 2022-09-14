@@ -23,23 +23,16 @@
 use std::{convert::TryInto, net::SocketAddr};
 
 use async_trait::async_trait;
-use log::*;
 use tari_app_grpc::tari_rpc::{self as grpc, GetCommitteeRequest};
-use tari_common_types::types::{FixedHash, PublicKey};
 use tari_comms::types::CommsPublicKey;
-use tari_core::{
-    chain_storage::{PrunedOutput, UtxoMinedInfo},
-    transactions::transaction_components::OutputType,
-};
 use tari_crypto::tari_utilities::ByteArray;
 use tari_dan_core::{
-    models::{BaseLayerMetadata, BaseLayerOutput, ValidatorNode},
+    models::{BaseLayerMetadata, ValidatorNode},
     services::BaseNodeClient,
     DigitalAssetError,
 };
-use tonic::codegen::http::request;
 
-const LOG_TARGET: &str = "tari::validator_node::app";
+// const LOG_TARGET: &str = "tari::validator_node::app";
 
 type Client = grpc::base_node_client::BaseNodeClient<tonic::transport::Channel>;
 

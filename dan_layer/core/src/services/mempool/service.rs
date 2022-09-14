@@ -23,7 +23,6 @@
 use std::sync::Arc;
 
 use async_trait::async_trait;
-use tari_common_types::types::FixedHash;
 use tari_dan_common_types::ShardId;
 use tari_dan_engine::instruction::Transaction;
 use tokio::sync::{
@@ -74,7 +73,7 @@ impl MempoolService for ConcreteMempoolService {
         for shard in &payload.involved_shards() {
             self.tx_new
                 .send((payload.clone(), *shard))
-                .map_err(|se| DigitalAssetError::SendError {
+                .map_err(|_| DigitalAssetError::SendError {
                     context: "Sending from mempool".to_string(),
                 })?;
         }

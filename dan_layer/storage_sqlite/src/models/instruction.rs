@@ -21,10 +21,7 @@
 // OTHERWISE) ARISING IN ANY WAY OUT OF THE  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH
 // DAMAGE.
 
-use std::convert::{TryFrom, TryInto};
-
-use tari_common_types::types::PublicKey;
-use tari_utilities::ByteArray;
+use std::convert::TryFrom;
 
 use crate::{error::SqliteStorageError, schema::*};
 
@@ -42,7 +39,7 @@ pub struct Instruction {
 impl TryFrom<Instruction> for tari_dan_engine::instruction::Instruction {
     type Error = SqliteStorageError;
 
-    fn try_from(instruction: Instruction) -> Result<Self, Self::Error> {
+    fn try_from(_instruction: Instruction) -> Result<Self, Self::Error> {
         todo!()
         // Ok(Self::new(
         //     instruction.method,

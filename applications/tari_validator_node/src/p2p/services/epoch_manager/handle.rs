@@ -30,41 +30,38 @@ impl EpochManagerHandle {
 #[async_trait]
 impl EpochManager<CommsPublicKey> for EpochManagerHandle {
     async fn current_epoch(&mut self) -> Epoch {
-        let (tx, mut rx) = channel();
-        let _ = self.tx_request.send((EpochManagerRequest::CurrentEpoch, tx)).await;
+        let (tx, rx) = channel();
+        let _ignore = self.tx_request.send((EpochManagerRequest::CurrentEpoch, tx)).await;
         let res = rx.await.expect("Error receiving");
         match res {
             Ok(EpochManagerResponse::CurrentEpoch { epoch }) => epoch,
             Err(e) => {
                 panic!("erro: {}", e)
             },
-            _ => {
-                panic!("Wrong output type")
-            },
         }
     }
 
-    async fn is_epoch_valid(&mut self, epoch: Epoch) -> bool {
+    async fn is_epoch_valid(&mut self, _epoch: Epoch) -> bool {
         todo!()
     }
 
     async fn get_committees(
         &mut self,
-        epoch: Epoch,
-        shards: &[ShardId],
+        _epoch: Epoch,
+        _shards: &[ShardId],
     ) -> Result<Vec<(ShardId, Option<Committee<CommsPublicKey>>)>, String> {
         todo!()
     }
 
-    async fn get_committee(&mut self, epoch: Epoch, shard: ShardId) -> Result<Committee<CommsPublicKey>, String> {
+    async fn get_committee(&mut self, _epoch: Epoch, _shard: ShardId) -> Result<Committee<CommsPublicKey>, String> {
         todo!()
     }
 
     async fn get_shards(
         &mut self,
-        epoch: Epoch,
-        addr: &CommsPublicKey,
-        available_shards: &[ShardId],
+        _epoch: Epoch,
+        _addr: &CommsPublicKey,
+        _available_shards: &[ShardId],
     ) -> Result<Vec<ShardId>, String> {
         todo!()
     }

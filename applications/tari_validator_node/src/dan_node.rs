@@ -24,21 +24,11 @@ use std::sync::Arc;
 
 use tari_common::exit_codes::ExitError;
 use tari_comms::NodeIdentity;
-use tari_dan_core::{
-    models::{Epoch, TariDanPayload},
-    services::{
-        epoch_manager::RangeEpochManager,
-        leader_strategy::AlwaysFirstLeader,
-        mempool::service::MempoolServiceHandle,
-    },
-    storage::global::GlobalDb,
-    workers::hotstuff_waiter::HotStuffWaiter,
-};
-use tari_dan_storage_sqlite::{global::SqliteGlobalDbBackendAdapter, SqliteDbFactory};
+use tari_dan_core::services::mempool::service::MempoolServiceHandle;
+use tari_dan_storage_sqlite::SqliteDbFactory;
 use tari_p2p::comms_connector::SubscriptionFactory;
 use tari_service_framework::ServiceHandles;
 use tari_shutdown::ShutdownSignal;
-use tokio::sync::mpsc::channel;
 
 use crate::{
     config::ValidatorNodeConfig,

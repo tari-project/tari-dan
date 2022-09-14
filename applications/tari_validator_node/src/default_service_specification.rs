@@ -37,7 +37,6 @@ use tari_dan_storage_sqlite::{
     SqliteChainBackendAdapter,
     SqliteDbFactory,
     SqliteStateDbBackendAdapter,
-    SqliteStorageService,
 };
 
 use crate::{

@@ -21,24 +21,20 @@
 // USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 use std::{
-    collections::VecDeque,
+    collections::{HashMap, VecDeque},
     sync::{Arc, Mutex},
 };
 
 use async_trait::async_trait;
 use tari_common_types::types::{FixedHash, PublicKey};
 use tari_comms::types::CommsPublicKey;
-use tari_core::{chain_storage::UtxoMinedInfo, transactions::transaction_components::OutputType};
 use tari_crypto::ristretto::RistrettoPublicKey;
+use tari_dan_common_types::ShardId;
 #[cfg(test)]
 use tari_dan_engine::state::mocks::state_db::MockStateDbBackupAdapter;
 use tari_dan_engine::{
     instruction::Transaction,
-    state::{
-        models::{SchemaState, StateOpLogEntry, StateRoot},
-        StateDbUnitOfWork,
-        StateDbUnitOfWorkReader,
-    },
+    state::models::{SchemaState, StateOpLogEntry},
 };
 
 use super::mempool::service::MempoolService;
@@ -46,21 +42,17 @@ use crate::{
     digital_assets_error::DigitalAssetError,
     models::{
         BaseLayerMetadata,
-        BaseLayerOutput,
-        Committee,
         Event,
         HotStuffTreeNode,
         Node,
-        Payload,
+        ObjectPledge,
         SidechainMetadata,
         TariDanPayload,
-        TreeNodeHash,
         ValidatorNode,
         ValidatorSignature,
     },
     services::{
         base_node_client::BaseNodeClient,
-        infrastructure_services::NodeAddressable,
         EventsPublisher,
         PayloadProcessor,
         SigningService,
@@ -146,19 +138,19 @@ impl BaseNodeClient for MockBaseNodeClient {
         todo!();
     }
 
-    async fn get_validator_nodes(&mut self, height: u64) -> Result<Vec<ValidatorNode>, DigitalAssetError> {
+    async fn get_validator_nodes(&mut self, _height: u64) -> Result<Vec<ValidatorNode>, DigitalAssetError> {
         todo!();
     }
 
     async fn get_committee(
         &mut self,
-        height: u64,
-        shard_key: &[u8; 32],
+        _height: u64,
+        _shard_key: &[u8; 32],
     ) -> Result<Vec<CommsPublicKey>, DigitalAssetError> {
         todo!();
     }
 
-    async fn get_shard_key(&mut self, height: u64, public_key: &[u8; 32]) -> Result<&[u8; 32], DigitalAssetError> {
+    async fn get_shard_key(&mut self, _height: u64, _public_key: &[u8; 32]) -> Result<&[u8; 32], DigitalAssetError> {
         todo!();
     }
 }
@@ -188,12 +180,12 @@ pub fn mock_payload_processor() -> MockPayloadProcessor {
 pub struct MockPayloadProcessor {}
 
 #[async_trait]
-impl<TPayload: Payload> PayloadProcessor<TPayload> for MockPayloadProcessor {
-    async fn process_payload<TUnitOfWork: StateDbUnitOfWork>(
+impl PayloadProcessor<TariDanPayload> for MockPayloadProcessor {
+    async fn process_payload(
         &self,
-        _payload: &TPayload,
-        _unit_of_work: TUnitOfWork,
-    ) -> Result<StateRoot, DigitalAssetError> {
+        _payload: &TariDanPayload,
+        _pledges: HashMap<ShardId, Vec<ObjectPledge>>,
+    ) -> Result<(), DigitalAssetError> {
         todo!()
     }
 }

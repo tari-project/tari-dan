@@ -20,22 +20,14 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use std::{convert::TryFrom, marker::PhantomData};
+use std::marker::PhantomData;
 
-use log::*;
 use tari_comms::types::CommsPublicKey;
-use tari_core::transactions::transaction_components::OutputType;
-use tari_dan_engine::state::StateDbUnitOfWorkReader;
 
-use crate::{
-    models::BaseLayerOutput,
-    services::{BaseNodeClient, ServiceSpecification},
-    storage::DbFactory,
-    workers::{state_sync::StateSynchronizer, states::ConsensusWorkerStateEvent},
-    DigitalAssetError,
-};
+use super::ConsensusWorkerStateEvent;
+use crate::{services::ServiceSpecification, DigitalAssetError};
 
-const LOG_TARGET: &str = "tari::dan::workers::states::starting";
+// const LOG_TARGET: &str = "tari::dan::workers::states::starting";
 
 #[derive(Debug, Default, Clone)]
 pub struct Synchronizing<TSpecification> {

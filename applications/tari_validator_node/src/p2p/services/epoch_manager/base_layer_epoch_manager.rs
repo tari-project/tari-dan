@@ -1,8 +1,6 @@
 use std::convert::TryInto;
 
 use async_trait::async_trait;
-use futures::TryFutureExt;
-use tari_app_grpc::tari_rpc::GetCommitteeRequest;
 use tari_comms::types::CommsPublicKey;
 use tari_crypto::tari_utilities::ByteArray;
 use tari_dan_common_types::ShardId;

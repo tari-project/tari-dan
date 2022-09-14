@@ -20,57 +20,36 @@
 //   WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //   USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use std::sync::{atomic::AtomicU32, Arc};
+use tari_template_abi::{debug, on_panic};
 
-use tari_template_lib::{
-    models::{BucketId, ComponentAddress, ResourceAddress, VaultId},
-    Hash,
-};
+fn hook(info: &std::panic::PanicInfo<'_>) {
+    unsafe { debug("PANIC!".as_ptr(), 6) };
 
-use crate::hashing::hasher;
+    let error_msg = info
+        .payload()
+        .downcast_ref::<String>()
+        .map(String::as_str)
+        .or_else(|| info.payload().downcast_ref::<&'static str>().copied())
+        .unwrap_or("");
+    let location = info.location();
 
-#[derive(Debug, Clone)]
-pub struct IdProvider {
-    current_id: Arc<AtomicU32>,
-    transaction_hash: Hash,
+    unsafe {
+        match location {
+            Some(loc) => {
+                let line = loc.line();
+                let column = loc.column();
+
+                on_panic(error_msg.as_ptr(), error_msg.len() as u32, line, column)
+            },
+            None => on_panic(error_msg.as_ptr(), error_msg.len() as u32, 0, 0),
+        };
+    }
 }
 
-impl IdProvider {
-    pub fn new(transaction_hash: Hash) -> Self {
-        Self {
-            current_id: Arc::new(AtomicU32::new(0)),
-            transaction_hash,
-        }
-    }
-
-    fn next_id(&self) -> u32 {
-        self.current_id.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
-    }
-
-    pub fn transaction_hash(&self) -> Hash {
-        self.transaction_hash
-    }
-
-    pub fn new_resource_address(&self) -> ResourceAddress {
-        hasher("resource")
-            .chain(&self.transaction_hash)
-            .chain(&self.next_id())
-            .result()
-    }
-
-    pub fn new_component_address(&self) -> ComponentAddress {
-        hasher("component")
-            .chain(&self.transaction_hash)
-            // .chain(&new_component)
-            .chain(&self.next_id())
-            .result()
-    }
-
-    pub fn new_vault_id(&self) -> VaultId {
-        (self.transaction_hash, self.next_id())
-    }
-
-    pub fn new_bucket_id(&self) -> BucketId {
-        self.next_id()
-    }
+pub fn register_panic_hook() {
+    use std::sync::Once;
+    static SET_HOOK: Once = Once::new();
+    SET_HOOK.call_once(|| {
+        std::panic::set_hook(Box::new(hook));
+    });
 }

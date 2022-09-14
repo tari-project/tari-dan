@@ -91,6 +91,7 @@ pub fn mock_outbound<TAddr: NodeAddressable, TPayload: Payload>(
 }
 
 pub struct MockOutboundService<TAddr: NodeAddressable, TPayload: Payload> {
+    #[allow(clippy::type_complexity)]
     inbound_senders: HashMap<TAddr, Sender<(TAddr, HotStuffMessage<TPayload, TAddr>)>>,
     inbounds: HashMap<TAddr, MockInboundConnectionService<TAddr, TPayload>>,
 }

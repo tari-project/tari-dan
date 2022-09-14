@@ -21,13 +21,9 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use crate::{
-    models::{Node, QuorumCertificate, TreeNodeHash},
-    storage::{
-        chain::{chain_db_unit_of_work::ChainDbUnitOfWorkImpl, ChainDbBackendAdapter, ChainDbMetadataKey},
-        MetadataBackendAdapter,
-        StorageError,
-    },
+use crate::storage::{
+    chain::{chain_db_unit_of_work::ChainDbUnitOfWorkImpl, ChainDbBackendAdapter, ChainDbMetadataKey},
+    MetadataBackendAdapter,
 };
 
 pub struct ChainDb<TBackendAdapter> {

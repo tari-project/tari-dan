@@ -28,8 +28,6 @@ use std::{
 use tari_comms::types::CommsPublicKey;
 use tari_utilities::ByteArray;
 
-use crate::models::ConsensusHash;
-
 pub trait NodeAddressable: Eq + Hash + Clone + Debug + Send + Sync + Display {
     fn zero() -> Self;
     fn as_bytes(&self) -> &[u8];

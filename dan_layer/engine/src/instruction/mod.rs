@@ -34,10 +34,11 @@ mod processor;
 pub use processor::InstructionProcessor;
 
 mod signature;
+use serde::Deserialize;
 pub use signature::InstructionSignature;
 use tari_common_types::types::{BulletRangeProof, ComSignature, Commitment, FixedHash};
 use tari_crypto::hash::blake2::Blake256;
-use tari_dan_common_types::{ObjectClaim, ObjectId, ShardId, SubstateChange};
+use tari_dan_common_types::{deserialize_fixed_hash_from_hex, ObjectClaim, ObjectId, ShardId, SubstateChange};
 use tari_mmr::MerkleProof;
 use tari_template_lib::{
     args::Arg,
@@ -45,7 +46,7 @@ use tari_template_lib::{
 };
 use tari_utilities::ByteArray;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Deserialize)]
 pub enum Instruction {
     CallFunction {
         package_address: PackageAddress,
@@ -75,6 +76,8 @@ impl Instruction {
     }
 }
 
+// FIXME: fix clippy
+#[allow(clippy::large_enum_variant)]
 #[derive(Debug, Clone)]
 pub enum ThaumInput {
     Standard {
@@ -90,39 +93,40 @@ pub enum ThaumInput {
 
 #[derive(Debug, Clone)]
 pub struct ThaumOutput {
-    commitment: Commitment,
-    owner: StealthAddress,
-    rangeproof: BulletRangeProof,
+    _commitment: Commitment,
+    _owner: StealthAddress,
+    _rangeproof: BulletRangeProof,
 }
 
 #[derive(Debug, Clone)]
 pub struct StealthAddress {
-    nonce: PublicKey,
-    address: PublicKey,
+    _nonce: PublicKey,
+    _address: PublicKey,
 }
 
 #[derive(Debug, Clone)]
 pub struct BalanceProof {}
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Deserialize)]
 pub struct Transaction {
-    hash: FixedHash,
+    #[serde(deserialize_with = "deserialize_fixed_hash_from_hex")]
+    hash: [u8; 32],
     instructions: Vec<Instruction>,
     signature: InstructionSignature,
-    fee: u64,
+    _fee: u64,
     sender_public_key: PublicKey,
     // Not part of signature. TODO: Should it be?
     meta: TransactionMeta,
 }
 
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone, Default, Deserialize)]
 pub struct TransactionMeta {
     involved_objects: HashMap<ShardId, Vec<(ObjectId, SubstateChange, ObjectClaim)>>,
 }
 
 impl TransactionMeta {
     pub fn involved_shards(&self) -> Vec<ShardId> {
-        self.involved_objects.keys().cloned().collect()
+        self.involved_objects.keys().copied().collect()
     }
 
     pub fn objects_for_shard(&self, shard_id: ShardId) -> Vec<(ObjectId, SubstateChange, ObjectClaim)> {
@@ -139,10 +143,10 @@ impl Transaction {
         meta: TransactionMeta,
     ) -> Self {
         let mut s = Self {
-            hash: FixedHash::zero(),
+            hash: [0u8; 32],
             instructions,
             signature,
-            fee,
+            _fee: fee,
             sender_public_key,
             meta,
         };
@@ -150,7 +154,7 @@ impl Transaction {
         s
     }
 
-    pub fn hash(&self) -> &FixedHash {
+    pub fn hash(&self) -> &[u8; 32] {
         &self.hash
     }
 

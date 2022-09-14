@@ -21,7 +21,6 @@
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 use std::{
     collections::VecDeque,
-    convert::TryInto,
     sync::Arc,
     time::{Duration, Instant},
 };
@@ -42,8 +41,6 @@ use tokio::sync::{
     mpsc::{channel, Receiver, Sender},
     oneshot,
 };
-
-use crate::p2p::proto;
 
 const LOG_TARGET: &str = "tari::validator_node::p2p::services::inbound_connection_service";
 
