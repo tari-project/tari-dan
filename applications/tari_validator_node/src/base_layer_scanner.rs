@@ -100,7 +100,7 @@ impl BaseLayerScanner {
             let epoch_task = self.epoch_manager.update_epoch(&tip);
             let template_task = self.template_manager.add_templates(new_templates_metadata);
             let results = tokio::join!(epoch_task, template_task);
-            // TODO: there could be a cleaner way of propagating the errors of the tasks
+            // TODO: there could be a cleaner way of propagating the errors of the individual tasks
             results.0?;
             results.1?;
 
@@ -153,8 +153,8 @@ impl BaseLayerScanner {
 
         Ok(vec![])
 
-        // TODO:
-        // let outputs = self
+        // TODO: when template publishing is implemented in the base layer, uncomment this code for real base layer
+        // scanning let outputs = self
         // .base_node_client
         // .get_templates(self.last_scanned_hash, self.identity.public_key())
         // .await?;

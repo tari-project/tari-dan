@@ -10,12 +10,29 @@ use crate::SqliteDbFactory;
 
 const LOG_TARGET: &str = "tari::validator_node::epoch_manager";
 
-// TODO: integrate this definition into the engine
-#[allow(dead_code)]
 pub struct TemplateMetadata {
     address: FixedHash,
     // this must be in the form of "https://example.com/my_template.wasm"
     url: String,
+}
+
+#[allow(dead_code)]
+pub struct Template {
+    metadata: TemplateMetadata,
+    compiled_code: Vec<u8>,
+}
+
+// we encapsulate the db row format to not expose it to the caller
+impl From<DbTemplate> for Template {
+    fn from(record: DbTemplate) -> Self {
+        Template {
+            metadata: TemplateMetadata {
+                address: record.template_address,
+                url: record.url,
+            },
+            compiled_code: record.compiled_code,
+        }
+    }
 }
 
 pub struct TemplateManager {
@@ -26,6 +43,18 @@ impl TemplateManager {
     pub fn new(db_factory: SqliteDbFactory) -> Self {
         // TODO: preload some example templates
         Self { db_factory }
+    }
+
+    // to be used in the future by the engine to retrieve the wasm code for transaction execution
+    #[allow(dead_code)]
+    pub async fn get_template(&self, address: &FixedHash) -> Result<Option<Template>, DigitalAssetError> {
+        let db = self.db_factory.get_or_create_template_db()?;
+        let result = db.find_template_by_address(address)?;
+
+        match result {
+            Some(db_template) => Ok(Some(db_template.into())),
+            None => Ok(None),
+        }
     }
 
     pub async fn add_templates(&self, templates_metadata: Vec<TemplateMetadata>) -> Result<(), DigitalAssetError> {
@@ -80,8 +109,8 @@ impl TemplateManager {
             compiled_code: template_wasm,
         };
 
-        let template_db = self.db_factory.get_or_create_template_db()?;
-        template_db.insert_template(&template)?;
+        let db = self.db_factory.get_or_create_template_db()?;
+        db.insert_template(&template)?;
 
         Ok(())
     }

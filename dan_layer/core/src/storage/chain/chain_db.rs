@@ -119,8 +119,7 @@ impl<TBackendAdapter: ChainDbBackendAdapter> ChainDb<TBackendAdapter> {
             .map_err(TBackendAdapter::Error::into)
     }
 
-    #[allow(dead_code)]
-    fn find_template_by_address(&self, template_address: &FixedHash) -> Result<Option<DbTemplate>, StorageError> {
+    pub fn find_template_by_address(&self, template_address: &FixedHash) -> Result<Option<DbTemplate>, StorageError> {
         self.adapter
             .find_template_by_address(template_address)
             .map_err(TBackendAdapter::Error::into)
