@@ -24,7 +24,7 @@ use std::{collections::HashMap, convert::TryFrom, time::Duration};
 
 use async_trait::async_trait;
 use lazy_static::lazy_static;
-use tari_common_types::types::{FixedHash, PrivateKey};
+use tari_common_types::types::PrivateKey;
 use tari_dan_common_types::ShardId;
 use tari_dan_engine::{
     instruction::{Instruction, InstructionProcessor, TransactionBuilder},
@@ -39,7 +39,6 @@ use tokio::{
     sync::{
         broadcast,
         mpsc::{channel, Receiver, Sender},
-        oneshot,
     },
     task::JoinHandle,
     time::timeout,
@@ -84,8 +83,8 @@ impl<TPayload: Payload> PayloadProcessor<TPayload> for PayloadProcessorListener<
         pledges: HashMap<ShardId, Vec<ObjectPledge>>,
     ) -> Result<(), DigitalAssetError> {
         self.sender
-            .send((payload.clone(), pledges.clone()))
-            .map_err(|e| DigitalAssetError::SendError {
+            .send((payload.clone(), pledges))
+            .map_err(|_e| DigitalAssetError::SendError {
                 context: "Sending process payload".to_string(),
             })?;
         Ok(())
@@ -98,8 +97,8 @@ pub struct NullPayloadProcessor {}
 impl<TPayload: Payload> PayloadProcessor<TPayload> for NullPayloadProcessor {
     async fn process_payload(
         &self,
-        payload: &TPayload,
-        pledges: HashMap<ShardId, Vec<ObjectPledge>>,
+        _payload: &TPayload,
+        _pledges: HashMap<ShardId, Vec<ObjectPledge>>,
     ) -> Result<(), DigitalAssetError> {
         Ok(())
     }
@@ -129,7 +128,7 @@ pub struct HsTestHarness<TPayload: Payload + 'static, TAddr: NodeAddressable + '
 impl<TPayload: Payload, TAddr: NodeAddressable> HsTestHarness<TPayload, TAddr> {
     pub fn new<
         TEpochManager: EpochManager<TAddr> + Send + Sync + 'static,
-        TLeader: LeaderStrategy<TAddr, TPayload> + Send + Sync + 'static,
+        TLeader: LeaderStrategy<TAddr> + Send + Sync + 'static,
     >(
         identity: TAddr,
         epoch_manager: TEpochManager,
@@ -177,7 +176,6 @@ impl<TPayload: Payload, TAddr: NodeAddressable> HsTestHarness<TPayload, TAddr> {
     }
 
     async fn assert_shuts_down_safely(&mut self) {
-        // send might fail if it's already shutdown
         self.shutdown.trigger();
         self.hs_waiter
             .take()
@@ -705,7 +703,7 @@ mod hello_world {
         for (k, v) in shard_pledges {
             pre_state.push((k.0.to_vec(), v[0].current_state.clone()));
         }
-        let mut state_db = MemoryStateStore::load(pre_state);
+        let state_db = MemoryStateStore::load(pre_state);
         // state_db.allow_creation_of_non_existent_shards = false;
         let state_tracker = StateTracker::new(
             state_db,
@@ -713,7 +711,7 @@ mod hello_world {
         );
         let runtime_interface = RuntimeInterfaceImpl::new(state_tracker);
         // Process the instruction
-        let mut processor = InstructionProcessor::new(runtime_interface, package.clone());
+        let processor = InstructionProcessor::new(runtime_interface, package.clone());
         let result = processor.execute(ex_transaction.transaction().clone()).unwrap();
 
         // reply_tx.s   end(HashMap::new()).unwrap();

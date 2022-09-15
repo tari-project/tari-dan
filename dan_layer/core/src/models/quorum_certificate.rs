@@ -42,6 +42,15 @@ impl QuorumDecision {
             QuorumDecision::Reject => 0,
         }
     }
+
+    pub fn from_u8(v: u8) -> Result<Self, anyhow::Error> {
+        match v {
+            1 => Ok(QuorumDecision::Accept),
+            0 => Ok(QuorumDecision::Reject),
+            // TODO: Add error type
+            _ => Err(anyhow::anyhow!("Invalid QuorumDecision")),
+        }
+    }
 }
 
 #[derive(Debug, Clone)]

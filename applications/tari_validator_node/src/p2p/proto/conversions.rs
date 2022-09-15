@@ -25,18 +25,25 @@ use std::{
     convert::{TryFrom, TryInto},
 };
 
+use anyhow::anyhow;
 use borsh::de::BorshDeserialize;
 use tari_common_types::types::{PrivateKey, PublicKey, Signature};
 use tari_comms::types::CommsPublicKey;
 use tari_crypto::tari_utilities::ByteArray;
-use tari_dan_core::models::{
-    HotStuffMessage,
-    HotStuffTreeNode,
-    Node,
-    QuorumCertificate,
-    TariDanPayload,
-    TreeNodeHash,
-    ValidatorSignature,
+use tari_dan_common_types::ShardId;
+use tari_dan_core::{
+    message::DanMessage,
+    models::{
+        vote_message::VoteMessage,
+        HotStuffMessage,
+        HotStuffTreeNode,
+        Node,
+        QuorumCertificate,
+        QuorumDecision,
+        TariDanPayload,
+        TreeNodeHash,
+        ValidatorSignature,
+    },
 };
 use tari_dan_engine::{
     instruction::Transaction,
@@ -48,6 +55,69 @@ use tari_dan_engine::{
 use tari_template_lib::{args::Arg, Hash};
 
 use crate::p2p::proto;
+
+impl From<DanMessage<TariDanPayload, CommsPublicKey>> for proto::validator_node::DanMessage {
+    fn from(msg: DanMessage<TariDanPayload, CommsPublicKey>) -> Self {
+        match msg {
+            DanMessage::HotStuffMessage(hot_stuff_msg) => Self {
+                message: Some(proto::validator_node::dan_message::Message::HotStuff(
+                    hot_stuff_msg.into(),
+                )),
+            },
+            DanMessage::VoteMessage(vote_msg) => Self {
+                message: Some(proto::validator_node::dan_message::Message::Vote(vote_msg.into())),
+            },
+            DanMessage::NewTransaction(transaction) => Self {
+                message: Some(proto::validator_node::dan_message::Message::NewTransaction(
+                    transaction.into(),
+                )),
+            },
+        }
+    }
+}
+
+impl TryFrom<proto::validator_node::DanMessage> for DanMessage<TariDanPayload, CommsPublicKey> {
+    type Error = anyhow::Error;
+
+    fn try_from(value: proto::validator_node::DanMessage) -> Result<Self, Self::Error> {
+        let msg_type = value.message.ok_or_else(|| anyhow!("Message type not provided"))?;
+        match msg_type {
+            proto::validator_node::dan_message::Message::HotStuff(msg) => {
+                Ok(DanMessage::HotStuffMessage(msg.try_into()?))
+            },
+            proto::validator_node::dan_message::Message::Vote(msg) => Ok(DanMessage::VoteMessage(msg.try_into()?)),
+            proto::validator_node::dan_message::Message::NewTransaction(msg) => {
+                Ok(DanMessage::NewTransaction(msg.try_into()?))
+            },
+        }
+    }
+}
+
+impl From<VoteMessage> for proto::consensus::VoteMessage {
+    fn from(msg: VoteMessage) -> Self {
+        Self {
+            local_node_hash: msg.local_node_hash().as_bytes().to_vec(),
+            shard_id: msg.shard().as_bytes().to_vec(),
+            decision: i32::from(msg.decision().as_u8()),
+            all_shard_nodes: vec![], // TODO: msg.all_shard_nodes().iter().map(|n| n.into()).collect(),
+            signature: msg.signature().to_bytes(),
+        }
+    }
+}
+
+impl TryFrom<proto::consensus::VoteMessage> for VoteMessage {
+    type Error = anyhow::Error;
+
+    fn try_from(value: proto::consensus::VoteMessage) -> Result<Self, Self::Error> {
+        Ok(VoteMessage::with_signature(
+            TreeNodeHash::try_from(value.local_node_hash)?,
+            ShardId::from_bytes(&value.shard_id)?,
+            QuorumDecision::from_u8(u8::try_from(value.decision)?)?,
+            vec![], // TODO: value.all_shard_nodes,
+            ValidatorSignature::from_bytes(&value.signature)?,
+        ))
+    }
+}
 
 impl From<HotStuffMessage<TariDanPayload, CommsPublicKey>> for proto::consensus::HotStuffMessage {
     fn from(_source: HotStuffMessage<TariDanPayload, CommsPublicKey>) -> Self {
@@ -109,7 +179,7 @@ impl From<TariDanPayload> for proto::consensus::TariDanPayload {
 }
 
 impl TryFrom<proto::consensus::HotStuffMessage> for HotStuffMessage<TariDanPayload, CommsPublicKey> {
-    type Error = String;
+    type Error = anyhow::Error;
 
     fn try_from(_value: proto::consensus::HotStuffMessage) -> Result<Self, Self::Error> {
         todo!()
@@ -135,7 +205,7 @@ impl TryFrom<proto::consensus::HotStuffMessage> for HotStuffMessage<TariDanPaylo
 }
 
 impl TryFrom<proto::consensus::QuorumCertificate> for QuorumCertificate {
-    type Error = String;
+    type Error = anyhow::Error;
 
     fn try_from(_value: proto::consensus::QuorumCertificate) -> Result<Self, Self::Error> {
         // Ok(Self::new(
@@ -149,7 +219,7 @@ impl TryFrom<proto::consensus::QuorumCertificate> for QuorumCertificate {
 }
 
 impl TryFrom<proto::consensus::HotStuffTreeNode> for HotStuffTreeNode<CommsPublicKey> {
-    type Error = String;
+    type Error = anyhow::Error;
 
     fn try_from(_value: proto::consensus::HotStuffTreeNode) -> Result<Self, Self::Error> {
         todo!()
@@ -175,7 +245,7 @@ impl TryFrom<proto::consensus::HotStuffTreeNode> for HotStuffTreeNode<CommsPubli
 }
 
 impl TryFrom<proto::consensus::ValidatorSignature> for ValidatorSignature {
-    type Error = String;
+    type Error = anyhow::Error;
 
     fn try_from(_value: proto::consensus::ValidatorSignature) -> Result<Self, Self::Error> {
         todo!()
@@ -184,7 +254,7 @@ impl TryFrom<proto::consensus::ValidatorSignature> for ValidatorSignature {
 }
 
 impl TryFrom<proto::consensus::TariDanPayload> for TariDanPayload {
-    type Error = String;
+    type Error = anyhow::Error;
 
     fn try_from(_value: proto::consensus::TariDanPayload) -> Result<Self, Self::Error> {
         // let instruction_set = value
@@ -210,11 +280,11 @@ impl From<Node> for proto::common::Node {
 }
 
 impl TryFrom<proto::common::Node> for Node {
-    type Error = String;
+    type Error = anyhow::Error;
 
     fn try_from(node: proto::common::Node) -> Result<Self, Self::Error> {
-        let hash = TreeNodeHash::try_from(node.hash).map_err(|err| err.to_string())?;
-        let parent = TreeNodeHash::try_from(node.parent).map_err(|err| err.to_string())?;
+        let hash = TreeNodeHash::try_from(node.hash)?;
+        let parent = TreeNodeHash::try_from(node.parent)?;
         let height = node.height;
         let is_committed = node.is_committed;
 
@@ -232,11 +302,11 @@ impl From<KeyValue> for proto::validator_node::KeyValue {
 }
 
 impl TryFrom<proto::validator_node::KeyValue> for KeyValue {
-    type Error = String;
+    type Error = anyhow::Error;
 
     fn try_from(kv: proto::validator_node::KeyValue) -> Result<Self, Self::Error> {
         if kv.key.is_empty() {
-            return Err("KeyValue: key cannot be empty".to_string());
+            return Err(anyhow!("KeyValue: key cannot be empty"));
         }
 
         Ok(Self {
@@ -267,7 +337,7 @@ impl From<StateOpLogEntry> for proto::validator_node::StateOpLog {
     }
 }
 impl TryFrom<proto::validator_node::StateOpLog> for StateOpLogEntry {
-    type Error = String;
+    type Error = anyhow::Error;
 
     fn try_from(value: proto::validator_node::StateOpLog) -> Result<Self, Self::Error> {
         Ok(DbStateOpLogEntry {
@@ -276,11 +346,11 @@ impl TryFrom<proto::validator_node::StateOpLog> for StateOpLogEntry {
                 .filter(|r| !r.is_empty())
                 .map(TryInto::try_into)
                 .transpose()
-                .map_err(|_| "Invalid merkle root value".to_string())?,
+                .map_err(|_| anyhow!("Invalid merkle root value"))?,
             operation: value
                 .operation
                 .parse()
-                .map_err(|_| "Invalid oplog operation string".to_string())?,
+                .map_err(|_| anyhow!("Invalid oplog operation string"))?,
             schema: value.schema,
             key: value.key,
             value: Some(value.value).filter(|v| !v.is_empty()),
@@ -291,11 +361,11 @@ impl TryFrom<proto::validator_node::StateOpLog> for StateOpLogEntry {
 
 //---------------------------------- Signature --------------------------------------------//
 impl TryFrom<proto::common::Signature> for Signature {
-    type Error = String;
+    type Error = anyhow::Error;
 
     fn try_from(sig: proto::common::Signature) -> Result<Self, Self::Error> {
-        let public_nonce = PublicKey::from_bytes(&sig.public_nonce).map_err(|e| e.to_string())?;
-        let signature = PrivateKey::from_bytes(&sig.signature).map_err(|e| e.to_string())?;
+        let public_nonce = PublicKey::from_bytes(&sig.public_nonce)?;
+        let signature = PrivateKey::from_bytes(&sig.signature)?;
 
         Ok(Self::new(public_nonce, signature))
     }
@@ -312,7 +382,7 @@ impl<T: Borrow<Signature>> From<T> for proto::common::Signature {
 
 //---------------------------------- Transaction --------------------------------------------//
 impl TryFrom<proto::common::Transaction> for Transaction {
-    type Error = String;
+    type Error = anyhow::Error;
 
     fn try_from(_request: proto::common::Transaction) -> Result<Self, Self::Error> {
         // let instructions = request
@@ -332,11 +402,11 @@ impl TryFrom<proto::common::Transaction> for Transaction {
 }
 
 impl TryFrom<proto::common::Instruction> for tari_dan_engine::instruction::Instruction {
-    type Error = String;
+    type Error = anyhow::Error;
 
     fn try_from(request: proto::common::Instruction) -> Result<Self, Self::Error> {
         let package_address =
-            Hash::deserialize(&mut &request.package_address[..]).map_err(|_| "invalid package_addresss")?;
+            Hash::deserialize(&mut &request.package_address[..]).map_err(|_| anyhow!("invalid package_addresss"))?;
         let args = request
             .args
             .into_iter()
@@ -357,8 +427,8 @@ impl TryFrom<proto::common::Instruction> for tari_dan_engine::instruction::Instr
             },
             // method
             1 => {
-                let component_address =
-                    Hash::deserialize(&mut &request.component_address[..]).map_err(|_| "invalid component_address")?;
+                let component_address = Hash::deserialize(&mut &request.component_address[..])
+                    .map_err(|_| anyhow!("invalid component_address"))?;
                 let method = request.method;
                 tari_dan_engine::instruction::Instruction::CallMethod {
                     package_address,
@@ -368,7 +438,7 @@ impl TryFrom<proto::common::Instruction> for tari_dan_engine::instruction::Instr
                 }
             },
             // 2 => tari_dan_engine::instruction::Instruction::PutLastInstructionOutputOnWorkspace { key: request.key },
-            _ => return Err("invalid instruction_type".to_string()),
+            _ => return Err(anyhow!("invalid instruction_type")),
         };
 
         Ok(instruction)
@@ -431,14 +501,14 @@ impl From<tari_dan_engine::instruction::Instruction> for proto::common::Instruct
 }
 
 impl TryFrom<proto::validator_node::Arg> for Arg {
-    type Error = String;
+    type Error = anyhow::Error;
 
     fn try_from(request: proto::validator_node::Arg) -> Result<Self, Self::Error> {
         let data = request.data.clone();
         let arg = match request.arg_type {
             0 => Arg::Literal(data),
             1 => Arg::FromWorkspace(data),
-            _ => return Err("invalid arg_type".to_string()),
+            _ => return Err(anyhow!("invalid arg_type")),
         };
 
         Ok(arg)

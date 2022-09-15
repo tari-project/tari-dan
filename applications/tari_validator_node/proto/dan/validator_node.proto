@@ -24,6 +24,7 @@ syntax = "proto3";
 package tari.dan.validator_node;
 
 import "common.proto";
+import "consensus.proto";
 
 service ValidatorNode {
   rpc GetTokenData(GetTokenDataRequest) returns (GetTokenDataResponse);
@@ -76,7 +77,7 @@ message GetSidechainStateRequest {
 
 message GetSidechainStateResponse {
   oneof state {
-    string schema  = 1;
+    string schema = 1;
     KeyValue key_value = 2;
   }
 }
@@ -112,18 +113,18 @@ message GetTipNodeResponse {
   tari.dan.common.Node tip_node = 1;
 }
 
-message GetIdentityRequest { }
+message GetIdentityRequest {}
 
 message GetIdentityResponse {
-    bytes public_key = 1;
-    string public_address = 2;
-    bytes node_id = 3;
+  bytes public_key = 1;
+  string public_address = 2;
+  bytes node_id = 3;
 }
 
 message Arg {
   enum ArgType {
-      LITERAL = 0;
-      FROM_WORKSPACE = 1;
+    LITERAL = 0;
+    FROM_WORKSPACE = 1;
   }
   ArgType arg_type = 1;
   bytes data = 2;
@@ -131,9 +132,9 @@ message Arg {
 
 message Instruction {
   enum InstructionType {
-      FUNCTION = 0;
-      METHOD = 1;
-      PUT_OUTPUT_IN_WORKSPACE = 2;
+    FUNCTION = 0;
+    METHOD = 1;
+    PUT_OUTPUT_IN_WORKSPACE = 2;
   }
   InstructionType instruction_type = 1;
 
@@ -161,4 +162,12 @@ message SubmitTransactionRequest{
 message SubmitTransactionResponse {
   string status = 1;
   bytes result = 2;
+}
+
+message DanMessage {
+  oneof message {
+    tari.dan.consensus.HotStuffMessage hot_stuff = 1;
+    tari.dan.consensus.VoteMessage vote = 2;
+    tari.dan.common.Transaction new_transaction = 3;
+  }
 }

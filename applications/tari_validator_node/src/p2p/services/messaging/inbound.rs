@@ -20,14 +20,35 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use tari_shutdown::ShutdownSignal;
+use tari_dan_core::message::DanMessage;
 use tokio::sync::mpsc;
 
-use crate::p2p::services::epoch_manager::{epoch_manager_service::EpochManagerService, handle::EpochManagerHandle};
+const _LOG_TARGET: &str = "tari::validator_node::p2p::services::messaging::inbound";
 
-pub fn spawn(shutdown: ShutdownSignal) -> EpochManagerHandle {
-    let (tx_request, rx_request) = mpsc::channel(10);
-    let handle = EpochManagerHandle::new(tx_request);
-    EpochManagerService::spawn(rx_request, shutdown);
-    handle
+pub struct InboundMessaging<TAddr, TPayload> {
+    our_node_addr: TAddr,
+    inbound_messages: mpsc::Receiver<(TAddr, DanMessage<TPayload, TAddr>)>,
+    loopback_receiver: mpsc::Receiver<DanMessage<TPayload, TAddr>>,
+}
+
+impl<TAddr: Clone, TPayload> InboundMessaging<TAddr, TPayload> {
+    pub fn new(
+        our_node_addr: TAddr,
+        inbound_messages: mpsc::Receiver<(TAddr, DanMessage<TPayload, TAddr>)>,
+        loopback_receiver: mpsc::Receiver<DanMessage<TPayload, TAddr>>,
+    ) -> Self {
+        Self {
+            our_node_addr,
+            inbound_messages,
+            loopback_receiver,
+        }
+    }
+
+    pub async fn next_message(&mut self) -> Option<(TAddr, DanMessage<TPayload, TAddr>)> {
+        tokio::select! {
+           Some(msg) = self.loopback_receiver.recv() => Some((self.our_node_addr.clone(), msg)),
+           Some(msg) = self.inbound_messages.recv() => Some(msg),
+           else =>  None
+        }
+    }
 }

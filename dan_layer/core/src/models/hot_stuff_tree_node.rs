@@ -30,7 +30,7 @@ use crate::{
 };
 
 #[derive(Debug, Clone)]
-pub struct HotStuffTreeNode<TAddr: NodeAddressable> {
+pub struct HotStuffTreeNode<TAddr> {
     hash: TreeNodeHash,
     parent: TreeNodeHash,
     shard: ShardId,

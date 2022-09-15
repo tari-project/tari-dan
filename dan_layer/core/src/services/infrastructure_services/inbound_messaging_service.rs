@@ -45,3 +45,21 @@ pub trait InboundConnectionService {
         for_view: ViewId,
     ) -> Result<(Self::Addr, HotStuffMessage<Self::Payload, Self::Addr>), DigitalAssetError>;
 }
+
+#[async_trait]
+pub trait InboundMessagingService {
+    type Addr: NodeAddressable;
+    type Payload: Payload;
+
+    async fn next_message(
+        &self,
+        message_type: HotStuffMessageType,
+        for_view: ViewId,
+    ) -> Result<(Self::Addr, HotStuffMessage<Self::Payload, Self::Addr>), DigitalAssetError>;
+
+    async fn wait_for_qc(
+        &self,
+        message_type: HotStuffMessageType,
+        for_view: ViewId,
+    ) -> Result<(Self::Addr, HotStuffMessage<Self::Payload, Self::Addr>), DigitalAssetError>;
+}

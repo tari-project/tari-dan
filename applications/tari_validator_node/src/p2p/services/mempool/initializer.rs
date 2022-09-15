@@ -20,50 +20,24 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use std::sync::Arc;
+use tari_comms::types::CommsPublicKey;
+use tari_dan_engine::instruction::Transaction;
+use tokio::{sync::mpsc, task};
 
-use async_trait::async_trait;
-use tari_comms_dht::Dht;
-use tari_dan_core::services::mempool::service::MempoolServiceHandle;
-use tari_p2p::comms_connector::SubscriptionFactory;
-use tari_service_framework::{ServiceInitializationError, ServiceInitializer, ServiceInitializerContext};
+use crate::p2p::services::{
+    mempool::{handle::MempoolHandle, service::MempoolService},
+    messaging::OutboundMessaging,
+};
 
-use super::{inbound::TariCommsMempoolInboundHandle, outbound::TariCommsMempoolOutboundService};
+pub fn spawn(
+    new_transactions: mpsc::Receiver<(CommsPublicKey, Transaction)>,
+    outbound: OutboundMessaging,
+) -> MempoolHandle {
+    let (tx_valid_transactions, rx_valid_transactions) = mpsc::unbounded_channel();
+    let mempool = MempoolService::new(new_transactions, outbound, tx_valid_transactions);
+    let handle = MempoolHandle::new(rx_valid_transactions);
 
-pub struct MempoolInitializer {
-    mempool: MempoolServiceHandle,
-    inbound_message_subscription_factory: Arc<SubscriptionFactory>,
-}
+    task::spawn(mempool.run());
 
-impl MempoolInitializer {
-    pub fn new(mempool: MempoolServiceHandle, inbound_message_subscription_factory: Arc<SubscriptionFactory>) -> Self {
-        Self {
-            mempool,
-            inbound_message_subscription_factory,
-        }
-    }
-}
-
-#[async_trait]
-impl ServiceInitializer for MempoolInitializer {
-    async fn initialize(&mut self, context: ServiceInitializerContext) -> Result<(), ServiceInitializationError> {
-        let mut mempool_service = self.mempool.clone();
-        let mut mempool_inbound = TariCommsMempoolInboundHandle::new(
-            self.inbound_message_subscription_factory.clone(),
-            mempool_service.clone(),
-        );
-        context.register_handle(mempool_inbound.clone());
-        context.register_handle(mempool_service.clone());
-
-        context.spawn_until_shutdown(move |handles| async move {
-            let dht = handles.expect_handle::<Dht>();
-            let outbound_requester = dht.outbound_requester();
-            let mempool_outbound = TariCommsMempoolOutboundService::new(outbound_requester);
-            mempool_service.set_outbound_service(Box::new(mempool_outbound)).await;
-
-            mempool_inbound.run().await;
-        });
-
-        Ok(())
-    }
+    handle
 }

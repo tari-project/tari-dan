@@ -10,7 +10,7 @@ use std::cmp::Ordering;
 
 use borsh::{BorshDeserialize, BorshSerialize};
 use serde::{Deserialize, Deserializer};
-use tari_common_types::types::FixedHash;
+use tari_common_types::types::{FixedHash, FixedHashSizeError};
 use tari_utilities::{byte_array::ByteArray, hex::Hex};
 pub use template_id::TemplateId;
 
@@ -29,6 +29,14 @@ impl ShardId {
         let mut v = [0u8; 32];
         v.copy_from_slice(id.as_slice());
         Self(v)
+    }
+
+    pub fn as_bytes(&self) -> &[u8] {
+        &self.0
+    }
+
+    pub fn from_bytes(bytes: &[u8]) -> Result<Self, FixedHashSizeError> {
+        FixedHash::try_from(bytes).map(Self::new)
     }
 
     pub fn zero() -> Self {
