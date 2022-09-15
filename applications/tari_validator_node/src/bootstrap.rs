@@ -20,7 +20,7 @@
 //   WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //   USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use std::sync::Arc;
+use std::{fs, io, sync::Arc};
 
 use tari_app_utilities::{identity_management, identity_management::load_from_json};
 use tari_common::exit_codes::{ExitCode, ExitError};
@@ -42,6 +42,7 @@ pub async fn spawn_services(
     let mut p2p_config = config.validator_node.p2p.clone();
     p2p_config.transport.tor.identity = load_from_json(&config.validator_node.tor_identity_file)
         .map_err(|e| ExitError::new(ExitCode::ConfigError, e))?;
+    ensure_directories_exist(&config)?;
 
     // Initialize comms
     let (comms, message_channel) = comms::initialize(node_identity.clone(), p2p_config.clone(), shutdown.clone())?;
@@ -88,6 +89,12 @@ pub async fn spawn_services(
     }
 
     Ok(Services { comms })
+}
+
+fn ensure_directories_exist(config: &ApplicationConfig) -> io::Result<()> {
+    fs::create_dir_all(&config.validator_node.data_dir)?;
+    fs::create_dir_all(&config.validator_node.p2p.datastore_path)?;
+    Ok(())
 }
 
 pub struct Services {
