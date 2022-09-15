@@ -124,9 +124,8 @@ impl<'a> StateWriter for MemoryTransaction<RwLockWriteGuard<'a, InnerKvMap>> {
             self.guard.extend(self.pending);
         } else {
             for (k, v) in self.pending {
-                #[allow(clippy::map_entry)]
-                if self.guard.contains_key(&k) {
-                    self.guard.insert(k, v);
+                if let Some(val) = self.guard.get_mut(&k) {
+                    *val = v;
                 } else {
                     return Err(StateStoreError::NonExistentShard { shard: k });
                 }

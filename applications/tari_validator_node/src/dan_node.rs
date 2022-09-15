@@ -24,10 +24,8 @@ use std::sync::Arc;
 
 use tari_common::exit_codes::{ExitCode, ExitError};
 use tari_comms::NodeIdentity;
-use tari_dan_core::{services::mempool::service::MempoolServiceHandle, storage::global::GlobalDb};
+use tari_dan_core::storage::global::GlobalDb;
 use tari_dan_storage_sqlite::{global::SqliteGlobalDbBackendAdapter, SqliteDbFactory};
-use tari_p2p::comms_connector::SubscriptionFactory;
-use tari_service_framework::ServiceHandles;
 use tari_shutdown::ShutdownSignal;
 
 use crate::{
@@ -65,14 +63,7 @@ impl DanNode {
         }
     }
 
-    pub async fn start(
-        &self,
-        mut shutdown: ShutdownSignal,
-        _mempool_service: MempoolServiceHandle,
-        _db_factory: SqliteDbFactory,
-        _handles: ServiceHandles,
-        _subscription_factory: Arc<SubscriptionFactory>,
-    ) -> Result<(), ExitError> {
+    pub async fn start(&self, mut shutdown: ShutdownSignal, _db_factory: SqliteDbFactory) -> Result<(), ExitError> {
         let base_node_client = GrpcBaseNodeClient::new(self.config.base_node_grpc_address);
 
         let base_layer_scanner = BaseLayerScanner::new(

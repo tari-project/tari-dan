@@ -35,7 +35,7 @@ pub trait AssetProxy: Send + Sync {
 #[derive(Clone)]
 pub struct ConcreteAssetProxy<TServiceSpecification: ServiceSpecification> {
     _base_node_client: TServiceSpecification::BaseNodeClient,
-    _validator_node_client_factory: TServiceSpecification::ValidatorNodeClientFactory,
+    // _validator_node_client_factory: TServiceSpecification::ValidatorNodeClientFactory,
     _max_clients_to_ask: usize,
     mempool: TServiceSpecification::MempoolService,
     _db_factory: TServiceSpecification::DbFactory,
@@ -44,14 +44,14 @@ pub struct ConcreteAssetProxy<TServiceSpecification: ServiceSpecification> {
 impl<TServiceSpecification: ServiceSpecification<Addr = PublicKey>> ConcreteAssetProxy<TServiceSpecification> {
     pub fn new(
         _base_node_client: TServiceSpecification::BaseNodeClient,
-        _validator_node_client_factory: TServiceSpecification::ValidatorNodeClientFactory,
+        // _validator_node_client_factory: TServiceSpecification::ValidatorNodeClientFactory,
         _max_clients_to_ask: usize,
         mempool: TServiceSpecification::MempoolService,
         _db_factory: TServiceSpecification::DbFactory,
     ) -> Self {
         Self {
             _base_node_client,
-            _validator_node_client_factory,
+            // _validator_node_client_factory,
             _max_clients_to_ask,
             mempool,
             _db_factory,

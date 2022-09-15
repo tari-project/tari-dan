@@ -54,9 +54,27 @@ impl VoteMessage {
         }
     }
 
+    pub fn with_signature(
+        local_node_hash: TreeNodeHash,
+        shard: ShardId,
+        decision: QuorumDecision,
+        mut all_shard_nodes: Vec<(ShardId, TreeNodeHash, Vec<ObjectPledge>)>,
+        signature: ValidatorSignature,
+    ) -> Self {
+        all_shard_nodes.sort_by(|a, b| a.0.cmp(&b.0));
+
+        Self {
+            local_node_hash,
+            shard,
+            decision,
+            all_shard_nodes,
+            signature: Some(signature),
+        }
+    }
+
     pub fn sign(&mut self) {
         // TODO: better signature
-        self.signature = Some(ValidatorSignature::from_bytes(&[9u8; 32]))
+        self.signature = Some(ValidatorSignature::from_bytes(&[9u8; 32]).unwrap())
     }
 
     pub fn signature(&self) -> &ValidatorSignature {

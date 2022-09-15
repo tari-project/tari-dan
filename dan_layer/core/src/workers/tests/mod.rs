@@ -84,7 +84,7 @@ impl<TPayload: Payload> PayloadProcessor<TPayload> for PayloadProcessorListener<
     ) -> Result<(), DigitalAssetError> {
         self.sender
             .send((payload.clone(), pledges))
-            .map_err(|_| DigitalAssetError::SendError {
+            .map_err(|_e| DigitalAssetError::SendError {
                 context: "Sending process payload".to_string(),
             })?;
         Ok(())
@@ -128,7 +128,7 @@ pub struct HsTestHarness<TPayload: Payload + 'static, TAddr: NodeAddressable + '
 impl<TPayload: Payload, TAddr: NodeAddressable> HsTestHarness<TPayload, TAddr> {
     pub fn new<
         TEpochManager: EpochManager<TAddr> + Send + Sync + 'static,
-        TLeader: LeaderStrategy<TAddr, TPayload> + Send + Sync + 'static,
+        TLeader: LeaderStrategy<TAddr> + Send + Sync + 'static,
     >(
         identity: TAddr,
         epoch_manager: TEpochManager,
@@ -176,7 +176,6 @@ impl<TPayload: Payload, TAddr: NodeAddressable> HsTestHarness<TPayload, TAddr> {
     }
 
     async fn assert_shuts_down_safely(&mut self) {
-        // send might fail if it's already shutdown
         self.shutdown.trigger();
         self.hs_waiter
             .take()

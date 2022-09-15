@@ -20,14 +20,10 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use tari_shutdown::ShutdownSignal;
-use tokio::sync::mpsc;
+mod broadcast;
+mod deserialize;
+mod destination;
+pub use destination::Destination;
 
-use crate::p2p::services::epoch_manager::{epoch_manager_service::EpochManagerService, handle::EpochManagerHandle};
-
-pub fn spawn(shutdown: ShutdownSignal) -> EpochManagerHandle {
-    let (tx_request, rx_request) = mpsc::channel(10);
-    let handle = EpochManagerHandle::new(tx_request);
-    EpochManagerService::spawn(rx_request, shutdown);
-    handle
-}
+mod initializer;
+pub use initializer::{initialize, MessageChannel};

@@ -21,6 +21,7 @@
 // USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 mod base_layer_scanner;
+mod bootstrap;
 mod cli;
 mod cmd_args;
 mod comms;
@@ -36,7 +37,6 @@ mod template_manager;
 use std::{process, sync::Arc};
 
 use clap::Parser;
-use futures::FutureExt;
 use log::*;
 use tari_app_utilities::identity_management::setup_node_identity;
 use tari_common::{
@@ -44,35 +44,21 @@ use tari_common::{
     initialize_logging,
     load_configuration,
 };
-use tari_comms::{
-    multiaddr::Multiaddr,
-    peer_manager::PeerFeatures,
-    utils::multiaddr::multiaddr_to_socketaddr,
-    NodeIdentity,
-};
-use tari_comms_dht::Dht;
-use tari_dan_core::{
-    services::{mempool::service::MempoolServiceHandle, ConcreteAssetProxy, ServiceSpecification},
-    storage::{global::GlobalDb, DbFactory},
-};
+use tari_comms::{peer_manager::PeerFeatures, NodeIdentity};
+use tari_dan_core::storage::{global::GlobalDb, DbFactory};
 use tari_dan_storage_sqlite::{global::SqliteGlobalDbBackendAdapter, SqliteDbFactory};
-use tari_p2p::comms_connector::SubscriptionFactory;
-use tari_service_framework::ServiceHandles;
 use tari_shutdown::{Shutdown, ShutdownSignal};
-use tari_validator_node_grpc::rpc::validator_node_server::ValidatorNodeServer;
 use template_manager::TemplateManager;
 use tokio::{runtime, runtime::Runtime, task};
-use tonic::transport::Server;
 
 use crate::{
+    bootstrap::spawn_services,
     cli::Cli,
     config::{ApplicationConfig, ValidatorNodeConfig},
     dan_node::DanNode,
-    default_service_specification::DefaultServiceSpecification,
     epoch_manager::EpochManager,
-    grpc::{services::base_node_client::GrpcBaseNodeClient, validator_node_grpc_server::ValidatorNodeGrpcServer},
+    grpc::services::base_node_client::GrpcBaseNodeClient,
     json_rpc::run_json_rpc,
-    p2p::services::rpc_client::TariCommsValidatorNodeClientFactory,
 };
 
 const LOG_TARGET: &str = "tari::validator_node::app";
@@ -121,7 +107,6 @@ async fn run_node(config: &ApplicationConfig) -> Result<(), ExitError> {
     let global_db = db_factory
         .get_or_create_global_db()
         .map_err(|e| ExitError::new(ExitCode::DatabaseError, e))?;
-    let mempool_service = MempoolServiceHandle::new();
 
     info!(
         target: LOG_TARGET,
@@ -130,34 +115,28 @@ async fn run_node(config: &ApplicationConfig) -> Result<(), ExitError> {
         node_identity.node_id()
     );
     // fs::create_dir_all(&global.peer_db_path).map_err(|err| ExitError::new(ExitCode::ConfigError, err))?;
-    let (handles, subscription_factory) = comms::build_service_and_comms_stack(
-        config,
-        shutdown.to_signal(),
-        node_identity.clone(),
-        mempool_service.clone(),
-    )
-    .await?;
-    let validator_node_client_factory =
-        TariCommsValidatorNodeClientFactory::new(handles.expect_handle::<Dht>().dht_requester());
-    let base_node_client = GrpcBaseNodeClient::new(config.validator_node.base_node_grpc_address);
-    let asset_proxy: ConcreteAssetProxy<DefaultServiceSpecification> = ConcreteAssetProxy::new(
-        base_node_client.clone(),
-        validator_node_client_factory,
-        5,
-        mempool_service.clone(),
-        db_factory.clone(),
-    );
-    let grpc_server: ValidatorNodeGrpcServer<DefaultServiceSpecification> =
-        ValidatorNodeGrpcServer::new(node_identity.as_ref().clone(), db_factory.clone(), asset_proxy);
+    let _comms = spawn_services(config, shutdown.to_signal(), node_identity.clone()).await?;
+    // let validator_node_client_factory =
+    //     TariCommsValidatorNodeClientFactory::new();
+    // let base_node_client = GrpcBaseNodeClient::new(config.validator_node.base_node_grpc_address);
+    // let asset_proxy: ConcreteAssetProxy<DefaultServiceSpecification> = ConcreteAssetProxy::new(
+    //     base_node_client.clone(),
+    //     validator_node_client_factory,
+    //     5,
+    //     mempool_service.clone(),
+    //     db_factory.clone(),
+    // );
+    // let grpc_server: ValidatorNodeGrpcServer<DefaultServiceSpecification> =
+    //     ValidatorNodeGrpcServer::new(node_identity.as_ref().clone(), db_factory.clone(), asset_proxy);
+
+    // Run the gRPC API
+    // if let Some(address) = config.validator_node.grpc_address.clone() {
+    //     println!("Started GRPC server on {}", address);
+    //     task::spawn(run_grpc(grpc_server, address, shutdown.to_signal()));
+    // }
 
     let epoch_manager = Arc::new(EpochManager::new());
     let template_manager = Arc::new(TemplateManager::new(db_factory.clone()));
-
-    // Run the gRPC API
-    if let Some(address) = config.validator_node.grpc_address.clone() {
-        println!("Started GRPC server on {}", address);
-        task::spawn(run_grpc(grpc_server, address, shutdown.to_signal()));
-    }
 
     // Run the JSON-RPC API
     if let Some(address) = config.validator_node.json_rpc_address {
@@ -172,10 +151,7 @@ async fn run_node(config: &ApplicationConfig) -> Result<(), ExitError> {
     run_dan_node(
         shutdown.to_signal(),
         config.validator_node.clone(),
-        mempool_service,
         db_factory,
-        handles,
-        subscription_factory,
         node_identity,
         global_db,
         epoch_manager.clone(),
@@ -197,46 +173,36 @@ fn build_runtime() -> Result<Runtime, ExitError> {
 async fn run_dan_node(
     shutdown_signal: ShutdownSignal,
     config: ValidatorNodeConfig,
-    mempool_service: MempoolServiceHandle,
     db_factory: SqliteDbFactory,
-    handles: ServiceHandles,
-    subscription_factory: Arc<SubscriptionFactory>,
     node_identity: Arc<NodeIdentity>,
     global_db: GlobalDb<SqliteGlobalDbBackendAdapter>,
     epoch_manager: Arc<EpochManager>,
     template_manager: Arc<TemplateManager>,
 ) -> Result<(), ExitError> {
     let node = DanNode::new(config, node_identity, global_db, epoch_manager, template_manager);
-    node.start(
-        shutdown_signal,
-        mempool_service,
-        db_factory,
-        handles,
-        subscription_factory,
-    )
-    .await
+    node.start(shutdown_signal, db_factory).await
 }
 
-async fn run_grpc<TServiceSpecification: ServiceSpecification + 'static>(
-    grpc_server: ValidatorNodeGrpcServer<TServiceSpecification>,
-    grpc_address: Multiaddr,
-    shutdown_signal: ShutdownSignal,
-) -> Result<(), anyhow::Error> {
-    println!("Starting GRPC on {}", grpc_address);
-    info!(target: LOG_TARGET, "Starting GRPC on {}", grpc_address);
-
-    let grpc_address = multiaddr_to_socketaddr(&grpc_address)?;
-
-    Server::builder()
-        .add_service(ValidatorNodeServer::new(grpc_server))
-        .serve_with_shutdown(grpc_address, shutdown_signal.map(|_| ()))
-        .await
-        .map_err(|err| {
-            error!(target: LOG_TARGET, "GRPC encountered an error: {}", err);
-            err
-        })?;
-
-    info!("Stopping GRPC");
-    info!(target: LOG_TARGET, "Stopping GRPC");
-    Ok(())
-}
+// async fn run_grpc<TServiceSpecification: ServiceSpecification + 'static>(
+//     grpc_server: ValidatorNodeGrpcServer<TServiceSpecification>,
+//     grpc_address: Multiaddr,
+//     shutdown_signal: ShutdownSignal,
+// ) -> Result<(), anyhow::Error> {
+//     println!("Starting GRPC on {}", grpc_address);
+//     info!(target: LOG_TARGET, "Starting GRPC on {}", grpc_address);
+//
+//     let grpc_address = multiaddr_to_socketaddr(&grpc_address)?;
+//
+//     Server::builder()
+//         .add_service(ValidatorNodeServer::new(grpc_server))
+//         .serve_with_shutdown(grpc_address, shutdown_signal.map(|_| ()))
+//         .await
+//         .map_err(|err| {
+//             error!(target: LOG_TARGET, "GRPC encountered an error: {}", err);
+//             err
+//         })?;
+//
+//     info!("Stopping GRPC");
+//     info!(target: LOG_TARGET, "Stopping GRPC");
+//     Ok(())
+// }

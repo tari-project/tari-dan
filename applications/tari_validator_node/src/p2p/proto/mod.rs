@@ -30,5 +30,6 @@ pub mod consensus {
 }
 
 pub mod validator_node {
+    #![allow(clippy::large_enum_variant)]
     include!(concat!(env!("OUT_DIR"), "/tari.dan.validator_node.rs"));
 }

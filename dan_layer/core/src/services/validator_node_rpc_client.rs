@@ -67,7 +67,7 @@ pub enum ValidatorNodeClientError {
     #[error("Protocol violations for peer {peer}: {details}")]
     ProtocolViolation { peer: CommsPublicKey, details: String },
     #[error("Peer sent an invalid message: {0}")]
-    InvalidPeerMessage(String),
+    InvalidPeerMessage(anyhow::Error),
     #[error("Connectivity error:{0}")]
     ConnectivityError(#[from] ConnectivityError),
     #[error("RpcError: {0}")]
