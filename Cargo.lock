@@ -4787,6 +4787,7 @@ dependencies = [
  "prost",
  "prost-types",
  "rand 0.8.5",
+ "reqwest",
  "serde",
  "serde_json",
  "tari_app_grpc",

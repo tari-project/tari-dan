@@ -42,7 +42,7 @@ pub async fn spawn_services(
     let mut p2p_config = config.validator_node.p2p.clone();
     p2p_config.transport.tor.identity = load_from_json(&config.validator_node.tor_identity_file)
         .map_err(|e| ExitError::new(ExitCode::ConfigError, e))?;
-    ensure_directories_exist(&config)?;
+    ensure_directories_exist(config)?;
 
     // Initialize comms
     let (comms, message_channel) = comms::initialize(node_identity.clone(), p2p_config.clone(), shutdown.clone())?;

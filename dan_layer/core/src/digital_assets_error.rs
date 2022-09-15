@@ -85,6 +85,10 @@ pub enum DigitalAssetError {
     PreparePhaseCertificateDoesNotExtendNode,
     #[error("Node not safe")]
     PreparePhaseNodeNotSafe,
+    #[error("Could not fetch the template code from the web")]
+    TemplateCodeFetchError,
+    #[error("The hash of the template code does not match the metadata")]
+    TemplateCodeHashMismatch,
     #[error("Unsupported template method {name}")]
     TemplateUnsupportedMethod { name: String },
     #[error("Connection error: {0}")]

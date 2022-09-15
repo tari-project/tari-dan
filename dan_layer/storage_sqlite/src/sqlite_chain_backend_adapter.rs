@@ -20,14 +20,25 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+use std::convert::TryInto;
+
 use diesel::{prelude::*, Connection, SqliteConnection};
 use log::*;
+use tari_common_types::types::FixedHash;
 use tari_dan_core::{
     models::TariDanPayload,
-    storage::{chain::ChainDbBackendAdapter, AtomicDb},
+    storage::{
+        chain::{ChainDbBackendAdapter, DbTemplate},
+        AtomicDb,
+    },
 };
 
-use crate::{error::SqliteStorageError, SqliteTransaction};
+use crate::{
+    error::SqliteStorageError,
+    models::template::{NewTemplate, Template},
+    schema::*,
+    SqliteTransaction,
+};
 
 const LOG_TARGET: &str = "tari::dan_layer::storage_sqlite::sqlite_chain_backend_adapter";
 
@@ -84,6 +95,46 @@ impl AtomicDb for SqliteChainBackendAdapter {
 impl ChainDbBackendAdapter for SqliteChainBackendAdapter {
     type Id = i32;
     type Payload = TariDanPayload;
+
+    fn insert_template(&self, item: &DbTemplate, transaction: &Self::DbTransaction) -> Result<(), Self::Error> {
+        let new_template = NewTemplate {
+            template_address: item.template_address.to_vec(),
+            url: item.url.to_string(),
+            height: item.height as i32,
+            compiled_code: item.compiled_code.clone(),
+        };
+        diesel::insert_into(templates::table)
+            .values(new_template)
+            .execute(transaction.connection())
+            .map_err(|source| SqliteStorageError::DieselError {
+                source,
+                operation: "insert_template".to_string(),
+            })?;
+        Ok(())
+    }
+
+    fn find_template_by_address(&self, template_address: &FixedHash) -> Result<Option<DbTemplate>, Self::Error> {
+        use crate::schema::templates::dsl;
+        let connection = self.get_connection()?;
+        let template = dsl::templates
+            .filter(templates::template_address.eq(template_address.to_vec()))
+            .first::<Template>(&connection)
+            .optional()
+            .map_err(|source| SqliteStorageError::DieselError {
+                source,
+                operation: "find_template_by_address".to_string(),
+            })?;
+
+        match template {
+            Some(template) => Ok(Some(DbTemplate {
+                template_address: template.template_address.try_into()?,
+                url: template.url,
+                height: template.height as u64,
+                compiled_code: template.compiled_code,
+            })),
+            None => Ok(None),
+        }
+    }
 
     //     fn is_empty(&self) -> Result<bool, Self::Error> {
     //         let connection = self.get_connection()?;

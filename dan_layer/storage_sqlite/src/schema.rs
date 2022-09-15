@@ -21,6 +21,16 @@
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 table! {
+    templates (id) {
+        id -> Integer,
+        template_address -> Binary,
+        url -> Text,
+        height -> Integer,
+        compiled_code -> Binary,
+    }
+}
+
+table! {
     instructions (id) {
         id -> Integer,
         hash -> Binary,
@@ -101,6 +111,7 @@ table! {
 joinable!(instructions -> nodes (node_id));
 
 allow_tables_to_appear_in_same_query!(
+    templates,
     instructions,
     locked_qc,
     metadata,

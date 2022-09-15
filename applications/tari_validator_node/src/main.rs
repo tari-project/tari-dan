@@ -20,6 +20,7 @@
 // WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 // USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+mod base_layer_scanner;
 mod bootstrap;
 mod cli;
 mod cmd_args;
@@ -27,9 +28,11 @@ mod comms;
 mod config;
 mod dan_node;
 mod default_service_specification;
+mod epoch_manager;
 mod grpc;
 mod json_rpc;
 mod p2p;
+mod template_manager;
 
 use std::{process, sync::Arc};
 
@@ -42,8 +45,10 @@ use tari_common::{
     load_configuration,
 };
 use tari_comms::{peer_manager::PeerFeatures, NodeIdentity};
-use tari_dan_storage_sqlite::SqliteDbFactory;
+use tari_dan_core::storage::{global::GlobalDb, DbFactory};
+use tari_dan_storage_sqlite::{global::SqliteGlobalDbBackendAdapter, SqliteDbFactory};
 use tari_shutdown::{Shutdown, ShutdownSignal};
+use template_manager::TemplateManager;
 use tokio::{runtime, runtime::Runtime, task};
 
 use crate::{
@@ -51,6 +56,8 @@ use crate::{
     cli::Cli,
     config::{ApplicationConfig, ValidatorNodeConfig},
     dan_node::DanNode,
+    epoch_manager::EpochManager,
+    grpc::services::base_node_client::GrpcBaseNodeClient,
     json_rpc::run_json_rpc,
 };
 
@@ -97,9 +104,9 @@ async fn run_node(config: &ApplicationConfig) -> Result<(), ExitError> {
         PeerFeatures::NONE,
     )?;
     let db_factory = SqliteDbFactory::new(config.validator_node.data_dir.clone());
-    // let global_db = db_factory
-    //     .get_or_create_global_db()
-    //     .map_err(|e| ExitError::new(ExitCode::DatabaseError, e))?;
+    let global_db = db_factory
+        .get_or_create_global_db()
+        .map_err(|e| ExitError::new(ExitCode::DatabaseError, e))?;
 
     info!(
         target: LOG_TARGET,
@@ -128,6 +135,9 @@ async fn run_node(config: &ApplicationConfig) -> Result<(), ExitError> {
     //     task::spawn(run_grpc(grpc_server, address, shutdown.to_signal()));
     // }
 
+    let epoch_manager = Arc::new(EpochManager::new());
+    let template_manager = Arc::new(TemplateManager::new(db_factory.clone()));
+
     // Run the JSON-RPC API
     if let Some(address) = config.validator_node.json_rpc_address {
         println!("Started JSON-RPC server on {}", address);
@@ -143,6 +153,9 @@ async fn run_node(config: &ApplicationConfig) -> Result<(), ExitError> {
         config.validator_node.clone(),
         db_factory,
         node_identity,
+        global_db,
+        epoch_manager.clone(),
+        template_manager.clone(),
     )
     .await?;
 
@@ -162,8 +175,11 @@ async fn run_dan_node(
     config: ValidatorNodeConfig,
     db_factory: SqliteDbFactory,
     node_identity: Arc<NodeIdentity>,
+    global_db: GlobalDb<SqliteGlobalDbBackendAdapter>,
+    epoch_manager: Arc<EpochManager>,
+    template_manager: Arc<TemplateManager>,
 ) -> Result<(), ExitError> {
-    let node = DanNode::new(config, node_identity);
+    let node = DanNode::new(config, node_identity, global_db, epoch_manager, template_manager);
     node.start(shutdown_signal, db_factory).await
 }
 

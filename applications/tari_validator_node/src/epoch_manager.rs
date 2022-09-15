@@ -1,4 +1,4 @@
-//  Copyright 2021. The Tari Project
+//  Copyright 2022, The Tari Project
 //
 //  Redistribution and use in source and binary forms, with or without modification, are permitted provided that the
 //  following conditions are met:
@@ -20,11 +20,26 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-pub mod instruction;
-pub mod locked_qc;
-pub mod metadata;
-pub mod node;
-pub mod prepare_qc;
-pub mod state_key;
-pub mod state_op_log;
-pub mod template;
+use log::*;
+use tari_dan_core::{models::BaseLayerMetadata, DigitalAssetError};
+
+const LOG_TARGET: &str = "tari::validator_node::epoch_manager";
+
+pub struct EpochManager {}
+
+impl EpochManager {
+    pub fn new() -> Self {
+        Self {}
+    }
+
+    pub async fn update_epoch(&self, tip: &BaseLayerMetadata) -> Result<(), DigitalAssetError> {
+        info!(
+            target: LOG_TARGET,
+            "Updating epoch for base layer tip {} ({})", tip.height_of_longest_chain, tip.tip_hash,
+        );
+
+        // TODO: calculate and store the epoch in the db
+
+        Ok(())
+    }
+}

@@ -45,6 +45,7 @@ libsqlite3-sys = { version = "0.22.2", features = ["bundled"] }
 prost = "0.9"
 prost-types = "0.9"
 rand = "0.8"
+reqwest = "0.11.11"
 serde = { version = "1.0.126", features = ["derive"] }
 thiserror = "^1.0.20"
 tokio = { version = "1.10", features = ["macros", "time", "sync", "rt-multi-thread"] }

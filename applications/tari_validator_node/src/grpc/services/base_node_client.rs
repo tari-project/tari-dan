@@ -37,7 +37,7 @@ pub struct GrpcBaseNodeClient {
 }
 
 impl GrpcBaseNodeClient {
-    pub fn _new(endpoint: SocketAddr) -> GrpcBaseNodeClient {
+    pub fn new(endpoint: SocketAddr) -> GrpcBaseNodeClient {
         Self { endpoint, client: None }
     }
 

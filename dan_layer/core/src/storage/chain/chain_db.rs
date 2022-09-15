@@ -21,9 +21,12 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+use tari_common_types::types::FixedHash;
+
 use crate::storage::{
-    chain::{chain_db_unit_of_work::ChainDbUnitOfWorkImpl, ChainDbBackendAdapter, ChainDbMetadataKey},
+    chain::{chain_db_unit_of_work::ChainDbUnitOfWorkImpl, ChainDbBackendAdapter, ChainDbMetadataKey, DbTemplate},
     MetadataBackendAdapter,
+    StorageError,
 };
 
 pub struct ChainDb<TBackendAdapter> {
@@ -33,6 +36,22 @@ pub struct ChainDb<TBackendAdapter> {
 impl<TBackendAdapter: ChainDbBackendAdapter> ChainDb<TBackendAdapter> {
     pub fn new(adapter: TBackendAdapter) -> ChainDb<TBackendAdapter> {
         ChainDb { adapter }
+    }
+
+    pub fn insert_template(&self, item: &DbTemplate) -> Result<(), StorageError> {
+        let tx = self
+            .adapter
+            .create_transaction()
+            .map_err(TBackendAdapter::Error::into)?;
+        self.adapter
+            .insert_template(item, &tx)
+            .map_err(TBackendAdapter::Error::into)
+    }
+
+    pub fn find_template_by_address(&self, template_address: &FixedHash) -> Result<Option<DbTemplate>, StorageError> {
+        self.adapter
+            .find_template_by_address(template_address)
+            .map_err(TBackendAdapter::Error::into)
     }
 
     // pub fn find_highest_prepared_qc(&self) -> Result<QuorumCertificate, StorageError> {

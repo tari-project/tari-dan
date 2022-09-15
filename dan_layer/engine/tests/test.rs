@@ -44,6 +44,7 @@ fn test_hello_world() {
 }
 
 #[test]
+#[ignore]
 fn test_state() {
     let template_test = TemplateTest::new(vec!["tests/templates/state"]);
     let store = template_test.state_store();
@@ -82,6 +83,7 @@ fn test_state() {
 }
 
 #[test]
+#[ignore]
 fn test_composed() {
     let template_test = TemplateTest::new(vec!["tests/templates/state", "tests/templates/hello_world"]);
 
@@ -141,6 +143,7 @@ fn test_dodgy_template() {
 }
 
 #[test]
+#[ignore]
 fn test_erc20() {
     let state_db = MemoryStateStore::default();
     let tracker = StateTracker::new(state_db, Default::default());
@@ -194,6 +197,7 @@ fn test_erc20() {
 }
 
 #[test]
+#[ignore]
 fn test_private_function() {
     // instantiate the counter
     let template_test = TemplateTest::new(vec!["tests/templates/private_function"]);
@@ -216,6 +220,7 @@ fn test_private_function() {
 }
 
 #[test]
+#[ignore]
 fn test_tuples() {
     let template_test = TemplateTest::new(vec!["tests/templates/tuples"]);
 
