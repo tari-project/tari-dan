@@ -23,11 +23,14 @@
 use tari_shutdown::ShutdownSignal;
 use tokio::sync::mpsc;
 
-use crate::p2p::services::epoch_manager::{epoch_manager_service::EpochManagerService, handle::EpochManagerHandle};
+use crate::{
+    grpc::services::base_node_client::GrpcBaseNodeClient,
+    p2p::services::epoch_manager::{epoch_manager_service::EpochManagerService, handle::EpochManagerHandle},
+};
 
-pub fn spawn(shutdown: ShutdownSignal) -> EpochManagerHandle {
+pub fn spawn(base_node_client: GrpcBaseNodeClient, shutdown: ShutdownSignal) -> EpochManagerHandle {
     let (tx_request, rx_request) = mpsc::channel(10);
     let handle = EpochManagerHandle::new(tx_request);
-    EpochManagerService::spawn(rx_request, shutdown);
+    EpochManagerService::spawn(rx_request, shutdown, base_node_client);
     handle
 }

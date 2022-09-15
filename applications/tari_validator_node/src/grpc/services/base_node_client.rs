@@ -23,21 +23,14 @@
 use std::{convert::TryInto, net::SocketAddr};
 
 use async_trait::async_trait;
-use log::*;
 use tari_app_grpc::tari_rpc::{self as grpc, GetCommitteeRequest};
-use tari_common_types::types::{FixedHash, PublicKey};
 use tari_comms::types::CommsPublicKey;
-use tari_core::{
-    chain_storage::{PrunedOutput, UtxoMinedInfo},
-    transactions::transaction_components::OutputType,
-};
 use tari_crypto::tari_utilities::ByteArray;
 use tari_dan_core::{
-    models::{BaseLayerMetadata, BaseLayerOutput, ValidatorNode},
+    models::{BaseLayerMetadata, ValidatorNode},
     services::BaseNodeClient,
     DigitalAssetError,
 };
-use tonic::codegen::http::request;
 
 const _LOG_TARGET: &str = "tari::validator_node::app";
 
@@ -82,10 +75,10 @@ impl BaseNodeClient for GrpcBaseNodeClient {
         })
     }
 
-    async fn get_validator_nodes(&mut self, height: u64) -> Result<Vec<ValidatorNode>, DigitalAssetError> {
+    async fn get_validator_nodes(&mut self, _height: u64) -> Result<Vec<ValidatorNode>, DigitalAssetError> {
         let inner = self.connection().await?;
         let request = grpc::Empty {};
-        let result = inner.get_tip_info(request).await?.into_inner();
+        let _result = inner.get_tip_info(request).await?.into_inner();
         Ok(vec![])
     }
 
@@ -107,7 +100,7 @@ impl BaseNodeClient for GrpcBaseNodeClient {
             .collect())
     }
 
-    async fn get_shard_key(&mut self, height: u64, public_key: &[u8; 32]) -> Result<&[u8; 32], DigitalAssetError> {
+    async fn get_shard_key(&mut self, _height: u64, _public_key: &[u8; 32]) -> Result<&[u8; 32], DigitalAssetError> {
         todo!()
     }
 }

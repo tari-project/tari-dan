@@ -23,8 +23,6 @@
 use std::convert::TryInto;
 
 use async_trait::async_trait;
-use futures::TryFutureExt;
-use tari_app_grpc::tari_rpc::GetCommitteeRequest;
 use tari_comms::types::CommsPublicKey;
 use tari_crypto::tari_utilities::ByteArray;
 use tari_dan_common_types::ShardId;
@@ -42,9 +40,10 @@ pub struct BaseLayerEpochManager {
 
 #[async_trait]
 impl EpochManager<CommsPublicKey> for BaseLayerEpochManager {
-    async fn current_epoch(&mut self) -> Epoch {
-        let tip = &self
+    async fn current_epoch(&self) -> Epoch {
+        let tip = self
             .base_node_client
+            .clone()
             .get_tip_info()
             .await
             .unwrap()
@@ -52,13 +51,13 @@ impl EpochManager<CommsPublicKey> for BaseLayerEpochManager {
         Epoch(tip - 100)
     }
 
-    async fn is_epoch_valid(&mut self, epoch: Epoch) -> bool {
+    async fn is_epoch_valid(&self, epoch: Epoch) -> bool {
         let current_epoch = self.current_epoch().await;
         current_epoch.0 - 10 <= epoch.0 && epoch.0 <= current_epoch.0 + 10
     }
 
     async fn get_committees(
-        &mut self,
+        &self,
         epoch: Epoch,
         shards: &[ShardId],
     ) -> Result<Vec<(ShardId, Option<Committee<CommsPublicKey>>)>, String> {
@@ -70,9 +69,10 @@ impl EpochManager<CommsPublicKey> for BaseLayerEpochManager {
         Ok(result)
     }
 
-    async fn get_committee(&mut self, epoch: Epoch, shard: ShardId) -> Result<Committee<CommsPublicKey>, String> {
+    async fn get_committee(&self, epoch: Epoch, shard: ShardId) -> Result<Committee<CommsPublicKey>, String> {
         let validator_nodes = self
             .base_node_client
+            .clone()
             .get_committee(epoch.0, shard.to_le_bytes().try_into().unwrap())
             .await
             .map_err(|s| format!("{:?}", s))?;
@@ -80,20 +80,19 @@ impl EpochManager<CommsPublicKey> for BaseLayerEpochManager {
     }
 
     async fn get_shards(
-        &mut self,
+        &self,
         epoch: Epoch,
         addr: &CommsPublicKey,
         available_shards: &[ShardId],
     ) -> Result<Vec<ShardId>, String> {
         // If the committee size is bigger than vns.len() then this function is broken.
         let half_committee_size = 5;
-        let &shard_key = self
-            .base_node_client
+        let mut base_node_client = self.base_node_client.clone();
+        let &shard_key = base_node_client
             .get_shard_key(epoch.0, addr.as_bytes().try_into().unwrap())
             .await
             .map_err(|s| format!("{:?}", s))?;
-        let mut vns = self
-            .base_node_client
+        let mut vns = base_node_client
             .get_validator_nodes(epoch.0)
             .await
             .map_err(|s| format!("{:?}", s))?;
@@ -108,13 +107,13 @@ impl EpochManager<CommsPublicKey> for BaseLayerEpochManager {
             Ok(available_shards
                 .iter()
                 .filter(|&a| &a.0.to_vec() <= begin || &a.0.to_vec() >= end)
-                .map(|a| a.clone())
+                .copied()
                 .collect())
         } else {
             Ok(available_shards
                 .iter()
                 .filter(|&a| &a.0.to_vec() >= begin || &a.0.to_vec() <= end)
-                .map(|a| a.clone())
+                .copied()
                 .collect())
         }
     }

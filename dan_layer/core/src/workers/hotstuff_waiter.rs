@@ -256,7 +256,7 @@ impl<
         )
     }
 
-    async fn is_leader(&mut self, payload: PayloadId, shard: ShardId, epoch: Epoch) -> Result<bool, String> {
+    async fn is_leader(&self, payload: PayloadId, shard: ShardId, epoch: Epoch) -> Result<bool, String> {
         Ok(self.leader_strategy.is_leader(
             &self.identity,
             &self.epoch_manager.get_committee(epoch, shard).await?,

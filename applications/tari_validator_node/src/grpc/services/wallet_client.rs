@@ -20,45 +20,37 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use std::{convert::TryInto, net::SocketAddr};
+use std::net::SocketAddr;
 
 use async_trait::async_trait;
-use log::*;
 use tari_app_grpc::tari_rpc as grpc;
-use tari_common_types::types::{FixedHash, PublicKey};
-use tari_core::{
-    chain_storage::{PrunedOutput, UtxoMinedInfo},
-    transactions::transaction_components::OutputType,
-};
-use tari_crypto::tari_utilities::ByteArray;
-use tari_dan_core::{
-    models::{BaseLayerMetadata, BaseLayerOutput},
-    services::WalletClient,
-    DigitalAssetError,
-};
+use tari_dan_core::{services::WalletClient, DigitalAssetError};
 
-const LOG_TARGET: &str = "tari::validator_node::app";
+const _LOG_TARGET: &str = "tari::validator_node::app";
 
 type Client = grpc::wallet_client::WalletClient<tonic::transport::Channel>;
 
 #[derive(Clone)]
 pub struct GrpcWalletClient {
-    endpoint: SocketAddr,
-    client: Option<Client>,
+    _endpoint: SocketAddr,
+    _client: Option<Client>,
 }
 
 impl GrpcWalletClient {
-    pub fn new(endpoint: SocketAddr) -> GrpcWalletClient {
-        Self { endpoint, client: None }
+    pub fn _new(endpoint: SocketAddr) -> GrpcWalletClient {
+        Self {
+            _endpoint: endpoint,
+            _client: None,
+        }
     }
 
-    pub async fn connection(&mut self) -> Result<&mut Client, DigitalAssetError> {
-        if self.client.is_none() {
-            let url = format!("http://{}", self.endpoint);
+    pub async fn _connection(&mut self) -> Result<&mut Client, DigitalAssetError> {
+        if self._client.is_none() {
+            let url = format!("http://{}", self._endpoint);
             let inner = Client::connect(url).await?;
-            self.client = Some(inner);
+            self._client = Some(inner);
         }
-        self.client
+        self._client
             .as_mut()
             .ok_or_else(|| DigitalAssetError::FatalError("no connection".into()))
     }

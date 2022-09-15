@@ -21,13 +21,6 @@
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 use async_trait::async_trait;
-use tari_common_types::types::{FixedHash, PublicKey};
-use tari_core::{chain_storage::UtxoMinedInfo, transactions::transaction_components::OutputType};
-
-use crate::{
-    digital_assets_error::DigitalAssetError,
-    models::{BaseLayerMetadata, BaseLayerOutput},
-};
 
 #[async_trait]
 pub trait WalletClient: Send + Sync {}
