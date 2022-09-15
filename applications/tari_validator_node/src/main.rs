@@ -20,17 +20,16 @@
 // WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 // USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-mod asset;
 mod base_layer_scanner;
 mod cli;
 mod cmd_args;
 mod comms;
 mod config;
-mod contract_worker_manager;
 mod dan_node;
 mod default_service_specification;
 mod epoch_manager;
 mod grpc;
+mod json_rpc;
 mod p2p;
 mod template_manager;
 
@@ -53,16 +52,12 @@ use tari_comms::{
 };
 use tari_comms_dht::Dht;
 use tari_dan_core::{
-    services::{
-        mempool::service::MempoolServiceHandle,
-        ConcreteAcceptanceManager,
-        ConcreteAssetProcessor,
-        ConcreteAssetProxy,
-        ServiceSpecification,
-    },
+    services::{mempool::service::MempoolServiceHandle, ConcreteAssetProxy, ServiceSpecification},
     storage::{global::GlobalDb, DbFactory},
 };
 use tari_dan_storage_sqlite::{global::SqliteGlobalDbBackendAdapter, SqliteDbFactory};
+use tari_p2p::comms_connector::SubscriptionFactory;
+use tari_service_framework::ServiceHandles;
 use tari_shutdown::{Shutdown, ShutdownSignal};
 use tari_validator_node_grpc::rpc::validator_node_server::ValidatorNodeServer;
 use template_manager::TemplateManager;
@@ -75,10 +70,8 @@ use crate::{
     dan_node::DanNode,
     default_service_specification::DefaultServiceSpecification,
     epoch_manager::EpochManager,
-    grpc::{
-        services::{base_node_client::GrpcBaseNodeClient, wallet_client::GrpcWalletClient},
-        validator_node_grpc_server::ValidatorNodeGrpcServer,
-    },
+    grpc::{services::base_node_client::GrpcBaseNodeClient, validator_node_grpc_server::ValidatorNodeGrpcServer},
+    json_rpc::run_json_rpc,
     p2p::services::rpc_client::TariCommsValidatorNodeClientFactory,
 };
 
@@ -137,17 +130,13 @@ async fn run_node(config: &ApplicationConfig) -> Result<(), ExitError> {
         node_identity.node_id()
     );
     // fs::create_dir_all(&global.peer_db_path).map_err(|err| ExitError::new(ExitCode::ConfigError, err))?;
-    let (handles, _subscription_factory) = comms::build_service_and_comms_stack(
+    let (handles, subscription_factory) = comms::build_service_and_comms_stack(
         config,
         shutdown.to_signal(),
         node_identity.clone(),
         mempool_service.clone(),
-        db_factory.clone(),
-        ConcreteAssetProcessor::default(),
     )
     .await?;
-
-    let asset_processor = ConcreteAssetProcessor::default();
     let validator_node_client_factory =
         TariCommsValidatorNodeClientFactory::new(handles.expect_handle::<Dht>().dht_requester());
     let base_node_client = GrpcBaseNodeClient::new(config.validator_node.base_node_grpc_address);
@@ -158,32 +147,35 @@ async fn run_node(config: &ApplicationConfig) -> Result<(), ExitError> {
         mempool_service.clone(),
         db_factory.clone(),
     );
-    let wallet_client = GrpcWalletClient::new(config.validator_node.wallet_grpc_address);
-    let _acceptance_manager = ConcreteAcceptanceManager::new(wallet_client.clone(), base_node_client);
-    let grpc_server: ValidatorNodeGrpcServer<DefaultServiceSpecification> = ValidatorNodeGrpcServer::new(
-        node_identity.as_ref().clone(),
-        db_factory.clone(),
-        asset_processor,
-        asset_proxy,
-    );
+    let grpc_server: ValidatorNodeGrpcServer<DefaultServiceSpecification> =
+        ValidatorNodeGrpcServer::new(node_identity.as_ref().clone(), db_factory.clone(), asset_proxy);
+
     let epoch_manager = Arc::new(EpochManager::new());
     let template_manager = Arc::new(TemplateManager::new(db_factory.clone()));
 
+    // Run the gRPC API
     if let Some(address) = config.validator_node.grpc_address.clone() {
         println!("Started GRPC server on {}", address);
         task::spawn(run_grpc(grpc_server, address, shutdown.to_signal()));
     }
 
+    // Run the JSON-RPC API
+    if let Some(address) = config.validator_node.json_rpc_address {
+        println!("Started JSON-RPC server on {}", address);
+        task::spawn(run_json_rpc(address, node_identity.as_ref().clone()));
+    }
+
+    // Show the validator node identity
     println!("🚀 Validator node started!");
     println!("{}", node_identity);
 
     run_dan_node(
         shutdown.to_signal(),
         config.validator_node.clone(),
-        // mempool_service,
-        // db_factory,
-        // handles,
-        // subscription_factory,
+        mempool_service,
+        db_factory,
+        handles,
+        subscription_factory,
         node_identity,
         global_db,
         epoch_manager.clone(),
@@ -205,10 +197,10 @@ fn build_runtime() -> Result<Runtime, ExitError> {
 async fn run_dan_node(
     shutdown_signal: ShutdownSignal,
     config: ValidatorNodeConfig,
-    // mempool_service: MempoolServiceHandle,
-    // db_factory: SqliteDbFactory,
-    // handles: ServiceHandles,
-    // subscription_factory: Arc<SubscriptionFactory>,
+    mempool_service: MempoolServiceHandle,
+    db_factory: SqliteDbFactory,
+    handles: ServiceHandles,
+    subscription_factory: Arc<SubscriptionFactory>,
     node_identity: Arc<NodeIdentity>,
     global_db: GlobalDb<SqliteGlobalDbBackendAdapter>,
     epoch_manager: Arc<EpochManager>,
@@ -217,10 +209,10 @@ async fn run_dan_node(
     let node = DanNode::new(config, node_identity, global_db, epoch_manager, template_manager);
     node.start(
         shutdown_signal,
-        // mempool_service,
-        // db_factory,
-        // handles,
-        // subscription_factory,
+        mempool_service,
+        db_factory,
+        handles,
+        subscription_factory,
     )
     .await
 }

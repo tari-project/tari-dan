@@ -47,10 +47,6 @@ message ValidatorSignature{
 }
 
 message TariDanPayload {
-    tari.dan.common.InstructionSet instruction_set = 1;
-    CheckpointData checkpoint = 2;
+    tari.dan.common.Transaction transaction = 1;
 }
 
-message CheckpointData {
-    // todo: fill this in
-}

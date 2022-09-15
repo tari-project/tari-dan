@@ -23,7 +23,7 @@
 use std::sync::{atomic::AtomicU32, Arc};
 
 use tari_template_lib::{
-    models::{BucketId, Component, ComponentAddress, ResourceAddress, VaultId},
+    models::{BucketId, ComponentAddress, ResourceAddress, VaultId},
     Hash,
 };
 
@@ -58,9 +58,10 @@ impl IdProvider {
             .result()
     }
 
-    pub fn new_component_address(&self, new_component: &Component) -> ComponentAddress {
+    pub fn new_component_address(&self) -> ComponentAddress {
         hasher("component")
-            .chain(&new_component)
+            .chain(&self.transaction_hash)
+            // .chain(&new_component)
             .chain(&self.next_id())
             .result()
     }

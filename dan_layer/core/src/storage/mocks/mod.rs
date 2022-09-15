@@ -106,11 +106,11 @@ impl DbFactory for MockDbFactory {
 
 #[derive(Debug, Default)]
 pub(self) struct MemoryChainDb {
-    pub nodes: MemoryDbTable<DbNode>,
-    pub instructions: MemoryDbTable<DbInstruction>,
     pub templates: MemoryDbTable<DbTemplate>,
-    pub prepare_qc: MemoryDbTable<DbQc>,
-    pub locked_qc: MemoryDbTable<DbQc>,
+    pub _nodes: MemoryDbTable<DbNode>,
+    pub _instructions: MemoryDbTable<DbInstruction>,
+    pub _prepare_qc: MemoryDbTable<DbQc>,
+    pub _locked_qc: MemoryDbTable<DbQc>,
     pub metadata: MemoryDbTable<(ChainDbMetadataKey, Vec<u8>)>,
 }
 
@@ -145,10 +145,12 @@ impl<V> MemoryDbTable<V> {
         self.records.values()
     }
 
+    #[allow(dead_code)]
     pub fn is_empty(&self) -> bool {
         self.records.is_empty()
     }
 
+    #[allow(dead_code)]
     pub fn get(&self, id: usize) -> Option<&V> {
         self.records.get(&id)
     }

@@ -20,46 +20,81 @@
 // WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 // USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use std::{convert::TryFrom, fmt::Debug, hash::Hash};
+use std::{cmp::Ordering, convert::TryFrom, fmt::Debug, hash::Hash, ops::Add};
 
-mod asset_definition;
 mod base_layer_metadata;
 mod base_layer_output;
 mod committee;
 pub mod domain_events;
 mod error;
-mod hashing;
+// mod hashing;
 mod hot_stuff_message;
 mod hot_stuff_tree_node;
-mod instruction_set;
 mod node;
 mod payload;
 mod quorum_certificate;
-mod sidechain_block;
 mod sidechain_metadata;
 mod tari_dan_payload;
 mod tree_node_hash;
 mod view;
 mod view_id;
+pub mod vote_message;
 
-pub use asset_definition::{AssetDefinition, InitialState};
 pub use base_layer_metadata::BaseLayerMetadata;
-pub use base_layer_output::{BaseLayerOutput, CheckpointOutput, CommitteeOutput};
+pub use base_layer_output::BaseLayerOutput;
 pub use committee::Committee;
 pub use error::ModelError;
-pub(crate) use hashing::{dan_layer_models_hasher, HOT_STUFF_MESSAGE_LABEL};
 pub use hot_stuff_message::HotStuffMessage;
 pub use hot_stuff_tree_node::HotStuffTreeNode;
-pub use instruction_set::InstructionSet;
 pub use node::Node;
 pub use payload::Payload;
-pub use quorum_certificate::QuorumCertificate;
-pub use sidechain_block::SideChainBlock;
+pub use quorum_certificate::{QuorumCertificate, QuorumDecision};
 pub use sidechain_metadata::SidechainMetadata;
+use tari_dan_common_types::{ObjectId, PayloadId, SubstateState};
 pub use tari_dan_payload::{CheckpointData, TariDanPayload};
 pub use tree_node_hash::TreeNodeHash;
 pub use view::View;
 pub use view_id::ViewId;
+
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
+pub struct NodeHeight(pub u64);
+
+impl NodeHeight {
+    fn to_le_bytes(self) -> [u8; 8] {
+        self.0.to_le_bytes()
+    }
+}
+
+impl Add for NodeHeight {
+    type Output = NodeHeight;
+
+    fn add(self, rhs: Self) -> Self::Output {
+        NodeHeight(self.0 + rhs.0)
+    }
+}
+
+impl PartialOrd for NodeHeight {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        self.0.partial_cmp(&other.0)
+    }
+}
+
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
+pub struct Epoch(pub u64);
+
+impl Epoch {
+    fn to_le_bytes(self) -> [u8; 8] {
+        self.0.to_le_bytes()
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct ObjectPledge {
+    pub object_id: ObjectId,
+    pub current_state: SubstateState,
+    pub pledged_to_payload: PayloadId,
+    pub pledged_until: NodeHeight,
+}
 
 // TODO: encapsulate
 pub struct InstructionCaller {
@@ -90,12 +125,20 @@ impl AsRef<[u8]> for TokenId {
 #[derive(Debug, Copy, Clone, Eq, PartialEq)]
 pub enum HotStuffMessageType {
     NewView,
+    Generic,
+    // TODO: remove
     Prepare,
     PreCommit,
     Commit,
     Decide,
     // Special type
     Genesis,
+}
+
+impl Default for HotStuffMessageType {
+    fn default() -> Self {
+        Self::NewView
+    }
 }
 
 impl HotStuffMessageType {
@@ -107,6 +150,7 @@ impl HotStuffMessageType {
             HotStuffMessageType::Commit => 4,
             HotStuffMessageType::Decide => 5,
             HotStuffMessageType::Genesis => 255,
+            HotStuffMessageType::Generic => 102,
         }
     }
 }
@@ -121,6 +165,7 @@ impl TryFrom<u8> for HotStuffMessageType {
             3 => Ok(HotStuffMessageType::PreCommit),
             4 => Ok(HotStuffMessageType::Commit),
             5 => Ok(HotStuffMessageType::Decide),
+            102 => Ok(HotStuffMessageType::Generic),
             255 => Ok(HotStuffMessageType::Genesis),
             _ => Err("Not a value message type".to_string()),
         }
@@ -158,11 +203,15 @@ pub enum ConsensusWorkerState {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct ValidatorSignature {}
+pub struct ValidatorSignature {
+    pub signer: Vec<u8>,
+}
 
 impl ValidatorSignature {
-    pub fn from_bytes(_source: &[u8]) -> Self {
-        Self {}
+    pub fn from_bytes(source: &[u8]) -> Self {
+        Self {
+            signer: Vec::from(source),
+        }
     }
 
     pub fn combine(&self, other: &ValidatorSignature) -> ValidatorSignature {

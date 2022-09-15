@@ -29,7 +29,7 @@ use tari_comms::types::CommsPublicKey;
 use tari_comms_dht::{domain_message::OutboundDomainMessage, outbound::OutboundMessageRequester};
 use tari_dan_core::{
     models::{HotStuffMessage, Payload, TariDanPayload},
-    services::infrastructure_services::OutboundService,
+    services::infrastructure_services::{NodeAddressable, OutboundService},
     DigitalAssetError,
 };
 use tari_p2p::tari_message::TariMessageType;
@@ -39,19 +39,19 @@ use crate::p2p::proto;
 
 const LOG_TARGET: &str = "tari::validator_node::messages::outbound::validator_node";
 
-pub struct TariCommsOutboundService<TPayload: Payload> {
+pub struct TariCommsOutboundService<TPayload: Payload, TAddr: NodeAddressable> {
     outbound_message_requester: OutboundMessageRequester,
-    loopback_service: Sender<(CommsPublicKey, HotStuffMessage<TPayload>)>,
+    loopback_service: Sender<(CommsPublicKey, HotStuffMessage<TPayload, TAddr>)>,
     contract_id: FixedHash,
     // TODO: Remove
     phantom: PhantomData<TPayload>,
 }
 
-impl<TPayload: Payload> TariCommsOutboundService<TPayload> {
+impl<TPayload: Payload, TAddr: NodeAddressable> TariCommsOutboundService<TPayload, TAddr> {
     #[allow(dead_code)]
     pub fn new(
         outbound_message_requester: OutboundMessageRequester,
-        loopback_service: Sender<(CommsPublicKey, HotStuffMessage<TPayload>)>,
+        loopback_service: Sender<(CommsPublicKey, HotStuffMessage<TPayload, TAddr>)>,
         contract_id: FixedHash,
     ) -> Self {
         Self {
@@ -64,7 +64,7 @@ impl<TPayload: Payload> TariCommsOutboundService<TPayload> {
 }
 
 #[async_trait]
-impl OutboundService for TariCommsOutboundService<TariDanPayload> {
+impl OutboundService for TariCommsOutboundService<TariDanPayload, CommsPublicKey> {
     type Addr = CommsPublicKey;
     type Payload = TariDanPayload;
 
@@ -72,7 +72,7 @@ impl OutboundService for TariCommsOutboundService<TariDanPayload> {
         &mut self,
         from: CommsPublicKey,
         to: CommsPublicKey,
-        message: HotStuffMessage<TariDanPayload>,
+        message: HotStuffMessage<TariDanPayload, CommsPublicKey>,
     ) -> Result<(), DigitalAssetError> {
         debug!(target: LOG_TARGET, "Outbound message to be sent:{} {:?}", to, message);
         // Tari comms does allow sending to itself
@@ -83,7 +83,12 @@ impl OutboundService for TariCommsOutboundService<TariDanPayload> {
                 message.message_type(),
                 message.contract_id()
             );
-            self.loopback_service.send((from, message)).await.map_err(Box::new)?;
+            self.loopback_service
+                .send((from, message))
+                .await
+                .map_err(|_| DigitalAssetError::SendError {
+                    context: "Sending to loopback".to_string(),
+                })?;
             return Ok(());
         }
 
@@ -98,7 +103,7 @@ impl OutboundService for TariCommsOutboundService<TariDanPayload> {
         &mut self,
         from: CommsPublicKey,
         committee: &[CommsPublicKey],
-        message: HotStuffMessage<TariDanPayload>,
+        message: HotStuffMessage<TariDanPayload, CommsPublicKey>,
     ) -> Result<(), DigitalAssetError> {
         for committee_member in committee {
             // TODO: send in parallel

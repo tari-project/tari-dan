@@ -20,35 +20,5 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use async_trait::async_trait;
-use tari_common_types::types::{FixedHash, PublicKey, Signature};
-use tari_core::transactions::transaction_components::SignerSignature;
-use tari_dan_engine::state::models::StateRoot;
-
-use crate::DigitalAssetError;
-
-#[async_trait]
-pub trait WalletClient: Send + Sync {
-    async fn create_new_checkpoint(
-        &mut self,
-        contract_id: &FixedHash,
-        state_root: &StateRoot,
-        checkpoint_number: u64,
-        checkpoint_signatures: &[SignerSignature],
-    ) -> Result<(), DigitalAssetError>;
-
-    async fn submit_contract_acceptance(
-        &mut self,
-        contract_id: &FixedHash,
-        validator_node_public_key: &PublicKey,
-        signature: &Signature,
-    ) -> Result<u64, DigitalAssetError>;
-
-    async fn submit_contract_update_proposal_acceptance(
-        &mut self,
-        contract_id: &FixedHash,
-        proposal_id: u64,
-        validator_node_public_key: &PublicKey,
-        signature: &Signature,
-    ) -> Result<u64, DigitalAssetError>;
-}
+pub mod hotstuff_service;
+pub mod initializer;

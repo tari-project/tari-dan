@@ -20,53 +20,41 @@
 // WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 // USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+use std::collections::HashMap;
+
 use async_trait::async_trait;
-use tari_dan_engine::state::{models::StateRoot, StateDbUnitOfWork};
+use tari_dan_common_types::ShardId;
 
 use crate::{
     digital_assets_error::DigitalAssetError,
-    models::{Payload, TariDanPayload},
-    services::AssetProcessor,
+    models::{ObjectPledge, Payload, TariDanPayload},
 };
 
 #[async_trait]
 pub trait PayloadProcessor<TPayload: Payload> {
-    async fn process_payload<TUnitOfWork: StateDbUnitOfWork>(
+    async fn process_payload(
         &self,
         payload: &TPayload,
-        unit_of_work: TUnitOfWork,
-    ) -> Result<StateRoot, DigitalAssetError>;
+        pledges: HashMap<ShardId, Vec<ObjectPledge>>,
+    ) -> Result<(), DigitalAssetError>;
 }
 
-pub struct TariDanPayloadProcessor<TAssetProcessor>
-where TAssetProcessor: AssetProcessor
-{
-    asset_processor: TAssetProcessor,
-}
+#[derive(Debug, Default)]
+pub struct TariDanPayloadProcessor {}
 
-impl<TAssetProcessor: AssetProcessor> TariDanPayloadProcessor<TAssetProcessor> {
-    pub fn new(asset_processor: TAssetProcessor) -> Self {
-        Self { asset_processor }
+impl TariDanPayloadProcessor {
+    pub fn new() -> Self {
+        Self {}
     }
 }
 
 #[async_trait]
-impl<TAssetProcessor: AssetProcessor + Send + Sync> PayloadProcessor<TariDanPayload>
-    for TariDanPayloadProcessor<TAssetProcessor>
-{
-    async fn process_payload<TUnitOfWork: StateDbUnitOfWork>(
+impl PayloadProcessor<TariDanPayload> for TariDanPayloadProcessor {
+    async fn process_payload(
         &self,
-        payload: &TariDanPayload,
-        state_tx: TUnitOfWork,
-    ) -> Result<StateRoot, DigitalAssetError> {
-        let mut state_tx = state_tx;
-        for instruction in payload.instructions() {
-            println!("Executing instruction");
-            println!("{:?}", instruction);
-            // TODO: Should we swallow + log the error instead of propagating it?
-            self.asset_processor.execute_instruction(instruction, &mut state_tx)?;
-        }
-
-        Ok(state_tx.calculate_root()?)
+        _payload: &TariDanPayload,
+        _pledges: HashMap<ShardId, Vec<ObjectPledge>>,
+    ) -> Result<(), DigitalAssetError> {
+        todo!()
     }
 }

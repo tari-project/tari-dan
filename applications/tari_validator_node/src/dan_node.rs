@@ -24,8 +24,10 @@ use std::sync::Arc;
 
 use tari_common::exit_codes::{ExitCode, ExitError};
 use tari_comms::NodeIdentity;
-use tari_dan_core::storage::global::GlobalDb;
-use tari_dan_storage_sqlite::global::SqliteGlobalDbBackendAdapter;
+use tari_dan_core::{services::mempool::service::MempoolServiceHandle, storage::global::GlobalDb};
+use tari_dan_storage_sqlite::{global::SqliteGlobalDbBackendAdapter, SqliteDbFactory};
+use tari_p2p::comms_connector::SubscriptionFactory;
+use tari_service_framework::ServiceHandles;
 use tari_shutdown::ShutdownSignal;
 
 use crate::{
@@ -49,14 +51,14 @@ pub struct DanNode {
 impl DanNode {
     pub fn new(
         config: ValidatorNodeConfig,
-        _identity: Arc<NodeIdentity>,
+        identity: Arc<NodeIdentity>,
         global_db: GlobalDb<SqliteGlobalDbBackendAdapter>,
         epoch_manager: Arc<EpochManager>,
         template_manager: Arc<TemplateManager>,
     ) -> Self {
         Self {
             config,
-            _identity,
+            _identity: identity,
             global_db,
             epoch_manager,
             template_manager,
@@ -65,11 +67,11 @@ impl DanNode {
 
     pub async fn start(
         &self,
-        shutdown: ShutdownSignal,
-        // mempool_service: MempoolServiceHandle,
-        // db_factory: SqliteDbFactory,
-        // handles: ServiceHandles,
-        // subscription_factory: Arc<SubscriptionFactory>,
+        mut shutdown: ShutdownSignal,
+        _mempool_service: MempoolServiceHandle,
+        _db_factory: SqliteDbFactory,
+        _handles: ServiceHandles,
+        _subscription_factory: Arc<SubscriptionFactory>,
     ) -> Result<(), ExitError> {
         let base_node_client = GrpcBaseNodeClient::new(self.config.base_node_grpc_address);
 
@@ -87,26 +89,30 @@ impl DanNode {
             .await
             .map_err(|err| ExitError::new(ExitCode::DigitalAssetError, err))?;
 
-        // TODO: old committee approach, must delete it at some point
+        // let base_node_client = GrpcBaseNodeClient::new(self.config.base_node_grpc_address);
         // let wallet_client = GrpcWalletClient::new(self.config.wallet_grpc_address);
         // let acceptance_manager = ConcreteAcceptanceManager::new(wallet_client, base_node_client.clone());
         // let workers = ContractWorkerManager::new(
-        // self.config.clone(),
-        // self.identity.clone(),
-        // self.global_db.clone(),
-        // base_node_client,
-        // acceptance_manager,
-        // mempool_service,
-        // handles,
-        // subscription_factory,
-        // db_factory,
-        // shutdown.clone(),
+        //     self.config.clone(),
+        //     self.identity.clone(),
+        //     self.global_db.clone(),
+        //     base_node_client,
+        //     acceptance_manager,
+        //     mempool_service,
+        //     handles,
+        //     subscription_factory,
+        //     db_factory,
+        //     shutdown.clone(),
         // );
-        //
+
         // workers
-        // .start()
-        // .await
-        // .map_err(|err| ExitError::new(ExitCode::DigitalAssetError, err))?;
+        //     .start()
+        //     .await
+        //     .map_err(|err| ExitError::new(ExitCode::DigitalAssetError, err))?;
+
+        // todo!();
+
+        shutdown.wait().await;
 
         Ok(())
     }

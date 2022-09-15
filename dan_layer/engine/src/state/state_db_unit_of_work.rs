@@ -2,18 +2,13 @@
 // SPDX-License-Identifier: BSD-3-Clause
 
 use std::{
-    convert::TryInto,
     ops::Deref,
     sync::{Arc, RwLock, RwLockReadGuard},
 };
 
-use digest::Digest;
 use log::*;
 use tari_common_types::types::FixedHash;
-use tari_crypto::hash::blake2::Blake256;
 use tari_dan_common_types::storage::UnitOfWorkTracker;
-use tari_mmr::{MemBackendVec, MerkleMountainRange};
-use tari_utilities::hex::Hex;
 
 use crate::state::{
     db_key_value::DbKeyValue,
@@ -197,57 +192,58 @@ impl<TBackendAdapter: StateDbBackendAdapter> StateDbUnitOfWorkReader for StateDb
     // TODO: Needs to keep a merkle proof of the latest state and append all updates onto that to get the merkle root
     // TODO: This does not include _new_ keys that are to be added in the updates
     fn calculate_root(&self) -> Result<StateRoot, StateStorageError> {
-        let inner = self.inner.read()?;
-        let tx = inner
-            .backend_adapter
-            .create_transaction()
-            .map_err(TBackendAdapter::Error::into)?;
-        // let root_node : Node<Vec<u8>> = inner.backend_adapter.get_current_state_tree(&tx).into();
-
-        // omg it's an MMR of MMRs
-        let mut top_level_mmr = MerkleMountainRange::<Blake256, _>::new(MemBackendVec::new());
-        let schemas = inner
-            .backend_adapter
-            .get_all_schemas(&tx)
-            .map_err(TBackendAdapter::Error::into)?;
-        debug!(
-            target: LOG_TARGET,
-            "calculate_root: {} key value schemas loaded",
-            schemas.len()
-        );
-
-        for schema in schemas {
-            let mut mmr = MerkleMountainRange::<Blake256, _>::new(MemBackendVec::new());
-            for key_value in inner
-                .backend_adapter
-                .get_all_values_for_schema(&schema, &tx)
-                .map_err(TBackendAdapter::Error::into)?
-            {
-                debug!(
-                    target: LOG_TARGET,
-                    "schema = {}, key = {}, value = {}",
-                    schema,
-                    key_value.key.to_hex(),
-                    key_value.value.to_hex()
-                );
-                if let Some(updated_value) = find_update(&inner, &schema, &key_value.key) {
-                    let hasher = Blake256::new();
-                    mmr.push(hasher.chain(&key_value.key).chain(updated_value).finalize().to_vec())?;
-                } else {
-                    let hasher = Blake256::new();
-                    mmr.push(hasher.chain(&key_value.key).chain(&key_value.value).finalize().to_vec())?;
-                }
-            }
-            let hasher = Blake256::new();
-            top_level_mmr.push(hasher.chain(schema).chain(mmr.get_merkle_root()?).finalize().to_vec())?;
-        }
-
-        Ok(StateRoot::new(
-            top_level_mmr
-                .get_merkle_root()?
-                .try_into()
-                .expect("MMR output incorrect size"),
-        ))
+        todo!()
+        // let inner = self.inner.read()?;
+        // let tx = inner
+        //     .backend_adapter
+        //     .create_transaction()
+        //     .map_err(TBackendAdapter::Error::into)?;
+        // // let root_node : Node<Vec<u8>> = inner.backend_adapter.get_current_state_tree(&tx).into();
+        //
+        // // omg it's an MMR of MMRs
+        // let mut top_level_mmr = MerkleMountainRange::<Blake256, _>::new(MemBackendVec::new());
+        // let schemas = inner
+        //     .backend_adapter
+        //     .get_all_schemas(&tx)
+        //     .map_err(TBackendAdapter::Error::into)?;
+        // debug!(
+        //     target: LOG_TARGET,
+        //     "calculate_root: {} key value schemas loaded",
+        //     schemas.len()
+        // );
+        //
+        // for schema in schemas {
+        //     let mut mmr = MerkleMountainRange::<Blake256, _>::new(MemBackendVec::new());
+        //     for key_value in inner
+        //         .backend_adapter
+        //         .get_all_values_for_schema(&schema, &tx)
+        //         .map_err(TBackendAdapter::Error::into)?
+        //     {
+        //         debug!(
+        //             target: LOG_TARGET,
+        //             "schema = {}, key = {}, value = {}",
+        //             schema,
+        //             key_value.key.to_hex(),
+        //             key_value.value.to_hex()
+        //         );
+        //         if let Some(updated_value) = find_update(&inner, &schema, &key_value.key) {
+        //             let hasher = Blake256::new();
+        //             mmr.push(hasher.chain(&key_value.key).chain(updated_value).finalize().to_vec())?;
+        //         } else {
+        //             let hasher = Blake256::new();
+        //             mmr.push(hasher.chain(&key_value.key).chain(&key_value.value).finalize().to_vec())?;
+        //         }
+        //     }
+        //     let hasher = Blake256::new();
+        //     top_level_mmr.push(hasher.chain(schema).chain(mmr.get_merkle_root()?).finalize().to_vec())?;
+        // }
+        //
+        // Ok(StateRoot::new(
+        //     top_level_mmr
+        //         .get_merkle_root()?
+        //         .try_into()
+        //         .expect("MMR output incorrect size"),
+        // ))
     }
 
     fn get_all_state(&self) -> Result<Vec<SchemaState>, StateStorageError> {

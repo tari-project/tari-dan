@@ -27,6 +27,7 @@ use tari_dan_core::{
     storage::{chain::DbTemplate, DbFactory},
     DigitalAssetError,
 };
+use tari_dan_engine::hashing::hasher;
 
 use crate::SqliteDbFactory;
 
@@ -104,8 +105,8 @@ impl TemplateManager {
         let template_wasm = self.fecth_template_wasm(&template_metadata.url).await?;
 
         // check that the code we fetched is valid (the template address is the hash)
-        let hash = FixedHash::hash_bytes(&template_wasm);
-        if template_metadata.address != hash {
+        let hash = hasher("template").chain(&template_wasm).result().to_vec();
+        if template_metadata.address.to_vec() != hash {
             return Err(DigitalAssetError::TemplateCodeHashMismatch);
         }
 

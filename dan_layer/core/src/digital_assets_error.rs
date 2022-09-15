@@ -22,17 +22,10 @@
 
 use prost::DecodeError;
 use tari_comms_dht::outbound::DhtOutboundError;
-use tari_crypto::ristretto::RistrettoPublicKey;
 use tari_dan_engine::state::error::StateStorageError;
 use thiserror::Error;
-use tokio::sync::mpsc::error::SendError;
 
-use crate::{
-    models::{HotStuffMessage, ModelError, TariDanPayload},
-    services::ValidatorNodeClientError,
-    storage::StorageError,
-    workers::StateSyncError,
-};
+use crate::{models::ModelError, services::ValidatorNodeClientError, storage::StorageError};
 
 #[derive(Debug, Error)]
 pub enum DigitalAssetError {
@@ -82,8 +75,8 @@ pub enum DigitalAssetError {
     ModelError(#[from] ModelError),
     #[error("UTXO missing checkpoint data")]
     UtxoNoCheckpointData,
-    #[error("Failed to synchronize state: {0}")]
-    StateSyncError(#[from] StateSyncError),
+    // #[error("Failed to synchronize state: {0}")]
+    // StateSyncError(#[from] StateSyncError),
     #[error("Validator node client error: {0}")]
     ValidatorNodeClientError(#[from] ValidatorNodeClientError),
     #[error("Peer did not send a quorum certificate in prepare phase")]
@@ -106,8 +99,8 @@ pub enum DigitalAssetError {
     DhtOutboundError(#[from] DhtOutboundError),
     #[error("Failed to decode message: {0}")]
     DecodeError(#[from] DecodeError),
-    #[error("Failed to send message: {0}")]
-    SendError(#[from] Box<SendError<(RistrettoPublicKey, HotStuffMessage<TariDanPayload>)>>),
+    #[error("Failed to send message: {context}")]
+    SendError { context: String },
     #[error("Invalid committee public key hex")]
     InvalidCommitteePublicKeyHex,
     #[error("State storage error:{0}")]

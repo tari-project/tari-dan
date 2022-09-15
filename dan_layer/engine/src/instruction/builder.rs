@@ -20,17 +20,28 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+use std::{collections::HashMap, convert::TryFrom};
+
 use tari_common_types::types::{PrivateKey, PublicKey};
 use tari_crypto::{keys::PublicKey as PublicKeyTrait, ristretto::RistrettoPublicKey};
+use tari_dan_common_types::{ObjectClaim, ObjectId, ShardId, SubstateChange};
+use tari_template_lib::Hash;
 
 use super::{Instruction, Transaction};
-use crate::instruction::signature::InstructionSignature;
+use crate::{
+    instruction::{signature::InstructionSignature, TransactionMeta},
+    runtime::IdProvider,
+};
 
 #[derive(Debug, Clone, Default)]
 pub struct TransactionBuilder {
     instructions: Vec<Instruction>,
     signature: Option<InstructionSignature>,
     sender_public_key: Option<RistrettoPublicKey>,
+    fee: u64,
+    meta: TransactionMeta,
+    new_components: u8,
+    // max_outputs: u8,
 }
 
 impl TransactionBuilder {
@@ -39,7 +50,17 @@ impl TransactionBuilder {
             instructions: Vec::new(),
             signature: None,
             sender_public_key: None,
+            fee: 0,
+            meta: TransactionMeta {
+                involved_objects: HashMap::new(),
+            },
+            // max_outputs: 0,
+            new_components: 0,
         }
+    }
+
+    pub fn fee(&mut self, fee: u64) {
+        self.fee = fee;
     }
 
     pub fn add_instruction(&mut self, instruction: Instruction) -> &mut Self {
@@ -49,17 +70,64 @@ impl TransactionBuilder {
         self
     }
 
-    pub fn sign(&mut self, secret_key: &PrivateKey) -> &mut Self {
+    pub fn sign(mut self, secret_key: &PrivateKey) -> Self {
         self.signature = Some(InstructionSignature::sign(secret_key, &self.instructions));
         self.sender_public_key = Some(PublicKey::from_secret_key(secret_key));
         self
     }
 
-    pub fn build(&mut self) -> Transaction {
-        Transaction {
-            instructions: self.instructions.drain(..).collect(),
-            signature: self.signature.take().expect("not signed"),
-            sender_public_key: self.sender_public_key.take().expect("not signed"),
+    pub fn add_input_object(&mut self, input_object: (ShardId, ObjectId)) -> &mut Self {
+        let entry = self.meta.involved_objects.entry(input_object.0).or_insert(vec![]);
+        entry.push((input_object.1, SubstateChange::Destroy, ObjectClaim {}));
+        self
+    }
+
+    // pub fn add_outputs(&mut self, max_outputs: u8) -> &mut Self {
+    //     self.max_outputs += max_outputs;
+    //     self
+    // }
+
+    pub fn with_new_components(&mut self, components: u8) -> &mut Self {
+        self.new_components += components;
+        self
+    }
+
+    pub fn build(mut self) -> Transaction {
+        let mut t = Transaction::new(
+            self.fee,
+            self.instructions.drain(..).collect(),
+            self.signature.take().expect("not signed"),
+            self.sender_public_key.take().expect("not signed"),
+            self.meta,
+        );
+
+        let base_hash = &t.hash;
+
+        let id_provider = IdProvider::new(Hash::try_from(base_hash.as_slice()).expect("Bad hash"));
+        // for o in 0..self.max_outputs {
+        //     let value: [u8; 32] = Blake256::new().chain(base_hash).chain(&[o]).finalize_fixed().into();
+        //     let object_id = ObjectId(value);
+        //     let shard_id = ShardId(value);
+        //     t.meta.involved_objects.entry(shard_id).or_insert(vec![]).push((
+        //         object_id,
+        //         SubstateChange::Create,
+        //         ObjectClaim {},
+        //     ));
+        // }
+
+        for _o in 0..self.new_components {
+            // let value: [u8; 32] = Blake256::chain(Blake256::new(), base_hash).chain(&[o]).finalize_fixed().into();
+            // let object_id = ObjectId(value);
+            // let shard_id = ShardId(value);
+            let id = id_provider.new_component_address();
+            let shard_id = ShardId(id.into_inner());
+            let object_id = ObjectId(id.into_inner());
+            t.meta.involved_objects.entry(shard_id).or_insert(vec![]).push((
+                object_id,
+                SubstateChange::Create,
+                ObjectClaim {},
+            ));
         }
+        t
     }
 }

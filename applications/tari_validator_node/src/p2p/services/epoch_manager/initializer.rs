@@ -20,39 +20,23 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use tari_common_types::types::PublicKey;
+use async_trait::async_trait;
+use tari_service_framework::{ServiceInitializationError, ServiceInitializer, ServiceInitializerContext};
+use tokio::sync::mpsc::channel;
 
-use crate::{
-    digital_assets_error::DigitalAssetError,
-    models::{BaseLayerOutput, Committee},
-    services::infrastructure_services::NodeAddressable,
-};
+use crate::p2p::services::epoch_manager::{epoch_manager_service::EpochManagerService, handle::EpochManagerHandle};
 
-pub trait CommitteeManager<TAddr: NodeAddressable> {
-    fn current_committee(&self) -> Result<&Committee<TAddr>, DigitalAssetError>;
+pub struct EpochManagerInitializer {}
 
-    fn read_from_constitution(&mut self, output: BaseLayerOutput) -> Result<(), DigitalAssetError>;
-}
+#[async_trait]
+impl ServiceInitializer for EpochManagerInitializer {
+    async fn initialize(&mut self, context: ServiceInitializerContext) -> Result<(), ServiceInitializationError> {
+        let (tx_request, rx_request) = channel(10);
+        let handle = EpochManagerHandle::new(tx_request);
+        context.register_handle(handle);
+        let shutdown = context.get_shutdown_signal();
+        context.spawn_when_ready(|_handles| EpochManagerService::spawn(rx_request, shutdown));
 
-pub struct ConcreteCommitteeManager {
-    committee: Committee<PublicKey>,
-}
-
-impl ConcreteCommitteeManager {
-    pub fn new(committee: Committee<PublicKey>) -> Self {
-        Self { committee }
-    }
-}
-
-impl CommitteeManager<PublicKey> for ConcreteCommitteeManager {
-    fn current_committee(&self) -> Result<&Committee<PublicKey>, DigitalAssetError> {
-        Ok(&self.committee)
-    }
-
-    fn read_from_constitution(&mut self, output: BaseLayerOutput) -> Result<(), DigitalAssetError> {
-        // TODO: better error
-        let committee = output.get_side_chain_committee().unwrap();
-        self.committee = Committee::new(committee.to_vec());
         Ok(())
     }
 }
