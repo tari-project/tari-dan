@@ -122,6 +122,7 @@ mod tests {
     }
 
     #[test]
+    #[ignore]
     fn read_write_rollback_commit() {
         let user_data = UserData {
             name: "Foo".to_string(),

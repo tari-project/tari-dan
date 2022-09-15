@@ -32,7 +32,7 @@ use tari_common_types::types::FixedHash;
 use tari_dan_engine::state::{mocks::state_db::MockStateDbBackupAdapter, StateDb};
 
 use crate::storage::{
-    chain::{ChainDb, ChainDbMetadataKey, DbInstruction, DbNode, DbQc},
+    chain::{ChainDb, ChainDbMetadataKey, DbInstruction, DbNode, DbQc, DbTemplate},
     global::GlobalDb,
     mocks::{chain_db::MockChainDbBackupAdapter, global_db::MockGlobalDbBackupAdapter},
     DbFactory,
@@ -98,10 +98,15 @@ impl DbFactory for MockDbFactory {
         // Ok(GlobalDb::new(entry))
         todo!()
     }
+
+    fn get_or_create_template_db(&self) -> Result<ChainDb<Self::ChainDbBackendAdapter>, StorageError> {
+        todo!()
+    }
 }
 
 #[derive(Debug, Default)]
 pub(self) struct MemoryChainDb {
+    pub templates: MemoryDbTable<DbTemplate>,
     pub _nodes: MemoryDbTable<DbNode>,
     pub _instructions: MemoryDbTable<DbInstruction>,
     pub _prepare_qc: MemoryDbTable<DbQc>,

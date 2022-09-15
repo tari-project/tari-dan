@@ -615,7 +615,6 @@ async fn test_kitchen_sink() {
         .add_wasm_module(
             compile_str(
                 r#"
-    use tari_template_lib::prelude::*;
     use tari_template_macros::template;
 
 #[template]

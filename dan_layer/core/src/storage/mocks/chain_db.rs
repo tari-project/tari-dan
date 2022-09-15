@@ -22,12 +22,13 @@
 
 use std::sync::{Arc, RwLock};
 
+use tari_common_types::types::FixedHash;
 use tari_dan_common_types::ShardId;
 use tari_utilities::message_format::MessageFormat;
 
 use super::MemoryChainDb;
 use crate::storage::{
-    chain::{ChainDbBackendAdapter, ChainDbMetadataKey},
+    chain::{ChainDbBackendAdapter, ChainDbMetadataKey, DbTemplate},
     AtomicDb,
     MetadataBackendAdapter,
     StorageError,
@@ -60,6 +61,23 @@ impl AtomicDb for MockChainDbBackupAdapter {
 impl ChainDbBackendAdapter for MockChainDbBackupAdapter {
     type Id = usize;
     type Payload = (String, Vec<ShardId>);
+
+    fn insert_template(&self, item: &DbTemplate, _: &Self::DbTransaction) -> Result<(), Self::Error> {
+        let mut lock = self.db.write()?;
+        lock.templates.insert(item.clone());
+        Ok(())
+    }
+
+    fn find_template_by_address(&self, template_address: &FixedHash) -> Result<Option<DbTemplate>, Self::Error> {
+        let lock = self.db.read()?;
+        let rec = lock
+            .templates
+            .records()
+            .find(|(_, rec)| rec.template_address == *template_address)
+            .map(|(_, template)| template.clone());
+        Ok(rec)
+    }
+
     // fn is_empty(&self) -> Result<bool, Self::Error> {
     //     let lock = self.db.read()?;
     //     Ok(lock.nodes.is_empty())
