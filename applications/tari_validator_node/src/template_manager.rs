@@ -14,6 +14,8 @@ pub struct TemplateMetadata {
     address: FixedHash,
     // this must be in the form of "https://example.com/my_template.wasm"
     url: String,
+    // block height in which the template was published
+    height: u64,
 }
 
 #[allow(dead_code)]
@@ -29,6 +31,7 @@ impl From<DbTemplate> for Template {
             metadata: TemplateMetadata {
                 address: record.template_address,
                 url: record.url,
+                height: record.height,
             },
             compiled_code: record.compiled_code,
         }
@@ -63,7 +66,13 @@ impl TemplateManager {
         // we can add each individual template in parallel
         let tasks: Vec<_> = templates_metadata.iter().map(|md| self.add_template(md)).collect();
 
-        join_all(tasks).await;
+        // wait for all templates to be stores
+        let results = join_all(tasks).await;
+
+        // propagate any error that may happen
+        for result in results {
+            result?
+        }
 
         Ok(())
     }
@@ -105,7 +114,7 @@ impl TemplateManager {
         let template = DbTemplate {
             template_address: template_metadata.address,
             url: template_metadata.url.clone(),
-            height: 0, // TODO: pass the height of the block
+            height: template_metadata.height,
             compiled_code: template_wasm,
         };
 

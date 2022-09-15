@@ -92,18 +92,25 @@ impl BaseLayerScanner {
         }
 
         loop {
+            // fetch the new base layer info since the previous scan
             let tip = self.base_node_client.get_tip_info().await?;
             let new_templates_metadata = self.scan_for_new_templates(&tip).await?;
 
-            // Both epoch and template tasks are I/O bound,
+            // both epoch and template tasks are I/O bound,
             // so they can be ran concurrently as they do not block CPU between them
             let epoch_task = self.epoch_manager.update_epoch(&tip);
             let template_task = self.template_manager.add_templates(new_templates_metadata);
+
+            // wait for all tasks to finish
             let results = tokio::join!(epoch_task, template_task);
+
+            // propagate any error that may happen
             // TODO: there could be a cleaner way of propagating the errors of the individual tasks
+            // TODO: maybe we want to be resilient to invalid data in base layer and just log the error?
             results.0?;
             results.1?;
 
+            // setup the next scan cycle
             self.set_last_scanned_block(&tip)?;
             tokio::select! {
                 _ = time::sleep(Duration::from_secs(self.config.base_layer_scanning_interval_in_seconds)) => {},
