@@ -24,7 +24,7 @@ use std::convert::TryInto;
 
 use tari_comms::NodeIdentity;
 use tari_crypto::tari_utilities::ByteArray;
-use tari_dan_core::services::{AssetProxy, ServiceSpecification};
+use tari_dan_core::services::{mempool::service::MempoolService, AssetProxy, ServiceSpecification};
 use tari_validator_node_grpc::rpc::{
     validator_node_server::ValidatorNode,
     GetIdentityRequest,
@@ -37,19 +37,19 @@ use tonic::{Request, Response, Status};
 pub struct ValidatorNodeGrpcServer<TServiceSpecification: ServiceSpecification> {
     node_identity: NodeIdentity,
     _db_factory: TServiceSpecification::DbFactory,
-    asset_proxy: TServiceSpecification::AssetProxy,
+    mempool: TServiceSpecification::MempoolService,
 }
 
 impl<TServiceSpecification: ServiceSpecification> ValidatorNodeGrpcServer<TServiceSpecification> {
     pub fn new(
         node_identity: NodeIdentity,
         _db_factory: TServiceSpecification::DbFactory,
-        asset_proxy: TServiceSpecification::AssetProxy,
+        mempool: TServiceSpecification::MempoolService,
     ) -> Self {
         Self {
             node_identity,
             _db_factory,
-            asset_proxy,
+            mempool,
         }
     }
 }
@@ -81,7 +81,7 @@ impl<TServiceSpecification: ServiceSpecification + 'static> ValidatorNode
             .try_into()
             .map_err(|err| Status::invalid_argument(format!("Transaction was not valid: {}", err)))?;
 
-        match self.asset_proxy.submit_transaction(&transaction).await {
+        match self.mempool.clone().submit_transaction(&transaction).await {
             Ok(result) => Ok(Response::new(SubmitTransactionResponse {
                 status: "Accepted".to_string(),
                 result,

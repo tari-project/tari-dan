@@ -25,11 +25,7 @@ use std::sync::Arc;
 use async_trait::async_trait;
 use tari_dan_common_types::ShardId;
 use tari_dan_engine::instruction::Transaction;
-use tokio::sync::{
-    broadcast,
-    broadcast::{channel, Receiver, Sender},
-    Mutex,
-};
+use tokio::sync::{broadcast, broadcast::channel, Mutex};
 
 use super::outbound::MempoolOutboundService;
 use crate::{
@@ -44,13 +40,13 @@ pub trait MempoolService: Sync + Send + 'static {
 }
 
 pub struct ConcreteMempoolService {
-    tx_new: Sender<(TariDanPayload, ShardId)>,
+    tx_new: broadcast::Sender<(TariDanPayload, ShardId)>,
     transactions: Vec<(Transaction, Option<TreeNodeHash>)>,
     outbound_service: Option<Box<dyn MempoolOutboundService>>,
 }
 
 impl ConcreteMempoolService {
-    pub fn new(tx_new: Sender<(TariDanPayload, ShardId)>) -> Self {
+    pub fn new(tx_new: broadcast::Sender<(TariDanPayload, ShardId)>) -> Self {
         Self {
             tx_new,
             transactions: vec![],
@@ -93,15 +89,13 @@ impl MempoolService for ConcreteMempoolService {
     // }
 
     async fn size(&self) -> usize {
-        self.transactions
-            .iter()
-            .fold(0, |a, b| if b.1.is_none() { a + 1 } else { a })
+        self.transactions.iter().filter(|(_, node)| node.is_none()).count()
     }
 }
 
 pub struct MempoolServiceHandle {
     mempool: Arc<Mutex<ConcreteMempoolService>>,
-    rx_new: Receiver<(TariDanPayload, ShardId)>,
+    rx_new: broadcast::Receiver<(TariDanPayload, ShardId)>,
 }
 
 impl Clone for MempoolServiceHandle {

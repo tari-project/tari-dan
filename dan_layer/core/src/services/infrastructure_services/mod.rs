@@ -20,11 +20,11 @@
 // WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 // USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-mod inbound_connection_service;
+mod inbound_messaging_service;
 mod node_addressable;
 mod outbound_service;
 
-pub use inbound_connection_service::InboundConnectionService;
+pub use inbound_messaging_service::InboundConnectionService;
 pub use node_addressable::NodeAddressable;
 pub use outbound_service::OutboundService;
 

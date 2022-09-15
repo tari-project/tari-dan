@@ -4804,7 +4804,6 @@ dependencies = [
  "tari_dan_storage_sqlite",
  "tari_mmr",
  "tari_p2p",
- "tari_service_framework",
  "tari_shutdown",
  "tari_storage",
  "tari_template_lib",
@@ -4814,6 +4813,8 @@ dependencies = [
  "tokio",
  "tokio-stream",
  "tonic",
+ "tower",
+ "tower-layer",
 ]
 
 [[package]]

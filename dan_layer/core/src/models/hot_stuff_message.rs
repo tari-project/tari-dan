@@ -38,7 +38,7 @@ use crate::{
 
 // TODO: convert to enum
 #[derive(Debug, Clone)]
-pub struct HotStuffMessage<TPayload: Payload, TAddr: NodeAddressable> {
+pub struct HotStuffMessage<TPayload, TAddr> {
     message_type: HotStuffMessageType,
     justify: Option<QuorumCertificate>,
     // The high qc: used for new view messages

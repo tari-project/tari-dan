@@ -21,4 +21,6 @@
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 pub mod hotstuff_service;
-pub mod initializer;
+mod initializer;
+
+pub use initializer::spawn;

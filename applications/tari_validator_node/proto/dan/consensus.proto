@@ -50,3 +50,26 @@ message TariDanPayload {
     tari.dan.common.Transaction transaction = 1;
 }
 
+message VoteMessage {
+    bytes local_node_hash = 1;
+    bytes shard_id = 2;
+    QuorumDecision decision = 3;
+    repeated ShardNode all_shard_nodes = 4;
+    bytes signature = 5;
+}
+
+enum QuorumDecision {
+    QUORUM_DECISION_UNKNOWN = 0;
+    QUORUM_DECISION_ACCEPT = 1;
+    QUORUM_DECISION_REJECT = 2;
+}
+
+message ShardNode {
+    bytes shard_id  = 1;
+    bytes tree_node_hash = 2;
+    repeated ObjectPledge object_pledges = 3;
+}
+
+message ObjectPledge {
+    // TODO
+    }

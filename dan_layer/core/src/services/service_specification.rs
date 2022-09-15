@@ -26,7 +26,7 @@ use super::mempool::service::MempoolService;
 use crate::{
     models::{domain_events::ConsensusWorkerDomainEvent, Payload},
     services::{
-        infrastructure_services::{InboundConnectionService, NodeAddressable, OutboundService},
+        infrastructure_services::NodeAddressable,
         AssetProxy,
         BaseNodeClient,
         EventsPublisher,
@@ -52,9 +52,9 @@ pub trait ServiceSpecification: Default + Clone {
         > + Clone;
     type EventsPublisher: EventsPublisher<ConsensusWorkerDomainEvent>;
     type GlobalDbAdapter: GlobalDbBackendAdapter;
-    type InboundConnectionService: InboundConnectionService<Addr = Self::Addr, Payload = Self::Payload>;
+    // type InboundConnectionService: InboundConnectionService<Addr = Self::Addr, Payload = Self::Payload>;
     type MempoolService: MempoolService + Clone;
-    type OutboundService: OutboundService<Addr = Self::Addr, Payload = Self::Payload>;
+    // type OutboundService: OutboundService<Addr = Self::Addr, Payload = Self::Payload>;
     type Payload: Payload;
     type PayloadProcessor: PayloadProcessor<Self::Payload>;
     type SigningService: SigningService;

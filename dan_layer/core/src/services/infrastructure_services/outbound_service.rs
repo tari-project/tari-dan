@@ -24,7 +24,8 @@ use async_trait::async_trait;
 
 use crate::{
     digital_assets_error::DigitalAssetError,
-    models::{HotStuffMessage, Payload},
+    message::DanMessage,
+    models::Payload,
     services::infrastructure_services::NodeAddressable,
 };
 
@@ -37,13 +38,19 @@ pub trait OutboundService {
         &mut self,
         from: Self::Addr,
         to: Self::Addr,
-        message: HotStuffMessage<Self::Payload, Self::Addr>,
+        message: DanMessage<Self::Payload, Self::Addr>,
     ) -> Result<(), DigitalAssetError>;
 
     async fn broadcast(
         &mut self,
         from: Self::Addr,
         committee: &[Self::Addr],
-        message: HotStuffMessage<Self::Payload, Self::Addr>,
+        message: DanMessage<Self::Payload, Self::Addr>,
+    ) -> Result<(), DigitalAssetError>;
+
+    async fn flood(
+        &mut self,
+        from: Self::Addr,
+        message: DanMessage<Self::Payload, Self::Addr>,
     ) -> Result<(), DigitalAssetError>;
 }
