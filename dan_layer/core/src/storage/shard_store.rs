@@ -20,14 +20,9 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use std::{
-    collections::HashMap,
-    fmt::Display,
-    sync::{Arc, RwLock, RwLockWriteGuard},
-};
+use std::{collections::HashMap, fmt::Display};
 
 use tari_dan_common_types::{ObjectId, PayloadId, ShardId, SubstateChange, SubstateState};
-use tari_dan_engine::state_store::AtomicDb;
 
 use crate::{
     models::{

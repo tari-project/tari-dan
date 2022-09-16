@@ -654,12 +654,16 @@ mod hello_world {
     let mut builder = TransactionBuilder::new();
     builder.add_instruction(instruction);
     // Only creating a single component
+    // This tells us which shards are involved in the transaction
+    // Because there are no inputs, we need to say that there are 2 components
+    // being created, so that two shards are involved, not just one.
     builder.with_new_components(2);
     let transaction = builder.sign(&secret_key).build();
 
     let involved_shards = transaction.meta().involved_shards();
     let s1;
     let s2;
+    // Sort the shards so that we can create a range epoch manager
     if involved_shards[0].0 < involved_shards[1].0 {
         s1 = involved_shards[0];
         s2 = involved_shards[1];
@@ -671,6 +675,7 @@ mod hello_world {
         (s1..s2, shard0_committee),
         (s2..ShardId([255u8; 32]), shard1_committee),
     ]);
+    // Create 2x hotstuff waiters
     let node1_instance = HsTestHarness::new(node1.clone(), epoch_manager.clone(), AlwaysFirstLeader {});
     let node2_instance = HsTestHarness::new(node2.clone(), epoch_manager, AlwaysFirstLeader {});
 
@@ -693,6 +698,8 @@ mod hello_world {
     let mut nodes = vec![node1_instance, node2_instance];
     do_rounds_of_hotstuff(&mut nodes, 4).await;
 
+    // [n0(prep)]->[n1(pre-commit)]->[n2(commit)]->[n3(decide)] -> [n4] tell everyone that we have decided
+
     // should get an execute message
     for node in &mut nodes {
         let (ex_transaction, shard_pledges) = node.recv_execute().await;
@@ -712,6 +719,8 @@ mod hello_world {
         // Process the instruction
         let processor = InstructionProcessor::new(runtime_interface, package.clone());
         let result = processor.execute(ex_transaction.transaction().clone()).unwrap();
+
+        // TODO: Save the changes substates back to shard db
 
         // reply_tx.s   end(HashMap::new()).unwrap();
 

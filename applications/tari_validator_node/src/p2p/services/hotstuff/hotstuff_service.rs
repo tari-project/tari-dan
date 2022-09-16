@@ -34,6 +34,7 @@ use tari_dan_core::{
     workers::hotstuff_waiter::HotStuffWaiter,
 };
 use tari_dan_engine::instruction::Transaction;
+use tari_dan_storage_sqlite::sqlite_shard_store_factory::SqliteShardStoreFactory;
 use tari_shutdown::ShutdownSignal;
 use tokio::{
     sync::mpsc::{channel, Receiver, Sender},
@@ -71,6 +72,7 @@ impl HotstuffService {
         mempool: MempoolHandle,
         outbound: OutboundMessaging,
         payload_processor: TariDanPayloadProcessor,
+        shard_store_factory: SqliteShardStoreFactory,
         rx_hotstuff_messages: Receiver<(CommsPublicKey, HotStuffMessage<TariDanPayload, CommsPublicKey>)>,
         rx_vote_messages: Receiver<(CommsPublicKey, VoteMessage)>,
         shutdown: ShutdownSignal,
@@ -93,6 +95,7 @@ impl HotstuffService {
             tx_broadcast,
             tx_vote_message,
             payload_processor,
+            shard_store_factory,
             shutdown.clone(),
         );
 

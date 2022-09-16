@@ -22,7 +22,6 @@
 
 use std::collections::HashMap;
 
-use async_recursion::async_recursion;
 use tari_dan_common_types::{PayloadId, ShardId, SubstateState};
 use tari_shutdown::ShutdownSignal;
 use tokio::{
@@ -109,6 +108,7 @@ impl<
             tx_broadcast,
             tx_vote_message,
             payload_processor,
+            shard_store,
         );
         tokio::spawn(waiter.run(shutdown))
     }
@@ -304,19 +304,13 @@ impl<
             return Ok(());
         }
         tx.update_high_qc(shard, node.justify().clone());
-        let b_two = tx
-            .get_node(&node.justify().local_node_hash())
-            .ok_or("No node b2")?
-            .clone();
+        let b_two = tx.get_node(&node.justify().local_node_hash()).ok_or("No node b2")?;
 
         if b_two.justify().local_node_hash() == TreeNodeHash::zero() {
             dbg!("b one is genesis, nothing to do");
             return Ok(());
         }
-        let b_one = tx
-            .get_node(&b_two.justify().local_node_hash())
-            .ok_or("No node b1")?
-            .clone();
+        let b_one = tx.get_node(&b_two.justify().local_node_hash()).ok_or("No node b1")?;
 
         let (_b_lock, b_lock_height) = tx.get_locked_node_hash_and_height(shard);
         if b_one.height().0 > b_lock_height.0 {
@@ -353,17 +347,17 @@ impl<
             if node.parent() != &TreeNodeHash::zero() {
                 let parent = tx.get_node(node.parent()).ok_or("No parent node")?;
                 dbg!("Committing parent");
-                self.on_commit(parent.clone(), shard, tx)?;
+                self.on_commit(parent, shard, tx)?;
             }
             if node.justify().payload_height() == NodeHeight(2) {
-                let payload = tx.get_payload(&node.justify().payload()).ok_or("No payload")?.clone();
+                let payload = tx.get_payload(&node.justify().payload()).ok_or("No payload")?;
 
                 let mut all_pledges = HashMap::new();
                 for (pledge_shard, _, pledges) in node.justify().all_shard_nodes() {
                     all_pledges.insert(*pledge_shard, pledges.clone());
                 }
                 let changes = self.execute(all_pledges, payload)?;
-                tx.save_substate_changes(changes, node.hash().clone());
+                tx.save_substate_changes(changes, *node.hash());
             }
             tx.set_last_executed_height(shard, node.height());
         }

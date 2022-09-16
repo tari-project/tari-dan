@@ -22,7 +22,6 @@
 
 use std::collections::HashMap;
 
-use async_trait::async_trait;
 use tari_dan_common_types::ShardId;
 
 use crate::{
