@@ -21,6 +21,7 @@
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 use prost::DecodeError;
+use tari_common_types::types::FixedHashSizeError;
 use tari_comms_dht::outbound::DhtOutboundError;
 use tari_dan_engine::state::error::StateStorageError;
 use thiserror::Error;
@@ -105,6 +106,8 @@ pub enum DigitalAssetError {
     InvalidCommitteePublicKeyHex,
     #[error("State storage error:{0}")]
     StateStorageError(#[from] StateStorageError),
+    #[error("Hash size error: {0}")]
+    HashSizeError(#[from] FixedHashSizeError),
 }
 
 impl From<lmdb_zero::Error> for DigitalAssetError {

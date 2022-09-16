@@ -21,7 +21,9 @@
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 use async_trait::async_trait;
+use tari_common_types::types::PublicKey;
 use tari_comms::types::CommsPublicKey;
+use tari_dan_common_types::ShardId;
 
 use crate::{
     digital_assets_error::DigitalAssetError,
@@ -37,5 +39,5 @@ pub trait BaseNodeClient: Send + Sync + Clone {
         height: u64,
         shard_key: &[u8; 32],
     ) -> Result<Vec<CommsPublicKey>, DigitalAssetError>;
-    async fn get_shard_key(&mut self, height: u64, public_key: &[u8; 32]) -> Result<&[u8; 32], DigitalAssetError>;
+    async fn get_shard_key(&mut self, height: u64, public_key: &PublicKey) -> Result<ShardId, DigitalAssetError>;
 }

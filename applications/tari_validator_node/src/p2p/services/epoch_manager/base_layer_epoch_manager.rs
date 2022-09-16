@@ -24,7 +24,6 @@ use std::convert::TryInto;
 
 use async_trait::async_trait;
 use tari_comms::types::CommsPublicKey;
-use tari_crypto::tari_utilities::ByteArray;
 use tari_dan_common_types::ShardId;
 use tari_dan_core::{
     models::{Committee, Epoch},
@@ -88,8 +87,9 @@ impl EpochManager<CommsPublicKey> for BaseLayerEpochManager {
         // If the committee size is bigger than vns.len() then this function is broken.
         let half_committee_size = 5;
         let mut base_node_client = self.base_node_client.clone();
-        let &shard_key = base_node_client
-            .get_shard_key(epoch.0, addr.as_bytes().try_into().unwrap())
+        let shard_key = base_node_client
+            .clone()
+            .get_shard_key(epoch.0, addr)
             .await
             .map_err(|s| format!("{:?}", s))?;
         let mut vns = base_node_client
@@ -98,22 +98,20 @@ impl EpochManager<CommsPublicKey> for BaseLayerEpochManager {
             .map_err(|s| format!("{:?}", s))?;
         vns.sort_by(|a, b| a.shard_key.partial_cmp(&b.shard_key).unwrap());
         let p = vns.iter().position(|x| x.shard_key == shard_key).unwrap();
-        let begin = &vns[(vns.len() + p - half_committee_size) % vns.len()]
-            .shard_key
-            .to_vec();
-        let end = &vns[(p + half_committee_size) % vns.len()].shard_key.to_vec();
+        let begin = &vns[(vns.len() + p - half_committee_size) % vns.len()].shard_key;
+        let end = &vns[(p + half_committee_size) % vns.len()].shard_key;
         if p >= half_committee_size || p + half_committee_size >= vns.len() {
             // This means the committee is wrapped around
             Ok(available_shards
                 .iter()
-                .filter(|&a| &a.0.to_vec() <= begin || &a.0.to_vec() >= end)
-                .copied()
+                .filter(|&a| a <= begin || a >= end)
+                .map(|a| a.clone())
                 .collect())
         } else {
             Ok(available_shards
                 .iter()
-                .filter(|&a| &a.0.to_vec() >= begin || &a.0.to_vec() <= end)
-                .copied()
+                .filter(|&a| a >= begin || a <= end)
+                .map(|a| a.clone())
                 .collect())
         }
     }
