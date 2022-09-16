@@ -30,6 +30,7 @@ use tari_shutdown::ShutdownSignal;
 
 use crate::{
     comms,
+    grpc::services::base_node_client::GrpcBaseNodeClient,
     p2p::services::{epoch_manager, hotstuff, mempool, messaging, messaging::DanMessageReceivers},
     ApplicationConfig,
 };
@@ -42,7 +43,11 @@ pub async fn spawn_services(
     let mut p2p_config = config.validator_node.p2p.clone();
     p2p_config.transport.tor.identity = load_from_json(&config.validator_node.tor_identity_file)
         .map_err(|e| ExitError::new(ExitCode::ConfigError, e))?;
+
     ensure_directories_exist(config)?;
+
+    // Connection to base node
+    let base_node_client = GrpcBaseNodeClient::new(config.validator_node.base_node_grpc_address);
 
     // Initialize comms
     let (comms, message_channel) = comms::initialize(node_identity.clone(), p2p_config.clone(), shutdown.clone())?;
@@ -58,7 +63,7 @@ pub async fn spawn_services(
     } = message_receivers;
 
     // Epoch manager
-    let epoch_manager_handle = epoch_manager::spawn(shutdown.clone());
+    let epoch_manager_handle = epoch_manager::spawn(base_node_client, shutdown.clone());
 
     // Mempool
     let mempool = mempool::spawn(rx_new_transaction_message, outbound_messaging.clone());

@@ -150,8 +150,8 @@ impl<
         payload: TPayload,
     ) -> Result<(), String> {
         // TODO: Validate who message is from
-        self.validate_from_committee(&from, self.epoch_manager.current_epoch().await, shard)
-            .await?;
+        let epoch = self.epoch_manager.current_epoch().await;
+        self.validate_from_committee(&from, epoch, shard).await?;
         self.validate_qc(&qc)?;
         self.shard_db.update_high_qc(qc);
         self.shard_db.set_payload(payload);
@@ -162,10 +162,8 @@ impl<
     async fn on_beat(&mut self, shard: ShardId, payload: PayloadId) -> Result<(), String> {
         // TODO: the leader is only known after the leaf is determines
         // TODO: Review if this is correct. The epoch should stay the same for all epochs
-        if self
-            .is_leader(payload, shard, self.epoch_manager.current_epoch().await)
-            .await?
-        {
+        let epoch = self.epoch_manager.current_epoch().await;
+        if self.is_leader(payload, shard, epoch).await? {
             dbg!(&self.identity, "I am the leader");
             // if self.current_payload.is_none() {
             // self.current_payload = payload.clone();
@@ -268,7 +266,7 @@ impl<
         ))
     }
 
-    async fn validate_from_committee(&self, from: &TAddr, epoch: Epoch, shard: ShardId) -> Result<(), String> {
+    async fn validate_from_committee(&mut self, from: &TAddr, epoch: Epoch, shard: ShardId) -> Result<(), String> {
         if self.epoch_manager.get_committee(epoch, shard).await?.contains(from) {
             Ok(())
         } else {

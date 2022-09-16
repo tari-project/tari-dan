@@ -21,10 +21,21 @@
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 use async_trait::async_trait;
+use tari_comms::types::CommsPublicKey;
 
-use crate::{digital_assets_error::DigitalAssetError, models::BaseLayerMetadata};
+use crate::{
+    digital_assets_error::DigitalAssetError,
+    models::{BaseLayerMetadata, ValidatorNode},
+};
 
 #[async_trait]
-pub trait BaseNodeClient: Send + Sync {
+pub trait BaseNodeClient: Send + Sync + Clone {
     async fn get_tip_info(&mut self) -> Result<BaseLayerMetadata, DigitalAssetError>;
+    async fn get_validator_nodes(&mut self, height: u64) -> Result<Vec<ValidatorNode>, DigitalAssetError>;
+    async fn get_committee(
+        &mut self,
+        height: u64,
+        shard_key: &[u8; 32],
+    ) -> Result<Vec<CommsPublicKey>, DigitalAssetError>;
+    async fn get_shard_key(&mut self, height: u64, public_key: &[u8; 32]) -> Result<&[u8; 32], DigitalAssetError>;
 }

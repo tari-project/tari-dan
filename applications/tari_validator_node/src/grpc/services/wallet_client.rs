@@ -20,17 +20,40 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use tari_shutdown::ShutdownSignal;
-use tokio::sync::mpsc;
+use std::net::SocketAddr;
 
-use crate::{
-    grpc::services::base_node_client::GrpcBaseNodeClient,
-    p2p::services::epoch_manager::{epoch_manager_service::EpochManagerService, handle::EpochManagerHandle},
-};
+use async_trait::async_trait;
+use tari_app_grpc::tari_rpc as grpc;
+use tari_dan_core::{services::WalletClient, DigitalAssetError};
 
-pub fn spawn(base_node_client: GrpcBaseNodeClient, shutdown: ShutdownSignal) -> EpochManagerHandle {
-    let (tx_request, rx_request) = mpsc::channel(10);
-    let handle = EpochManagerHandle::new(tx_request);
-    EpochManagerService::spawn(rx_request, shutdown, base_node_client);
-    handle
+const _LOG_TARGET: &str = "tari::validator_node::app";
+
+type Client = grpc::wallet_client::WalletClient<tonic::transport::Channel>;
+
+#[derive(Clone)]
+pub struct GrpcWalletClient {
+    _endpoint: SocketAddr,
+    _client: Option<Client>,
 }
+
+impl GrpcWalletClient {
+    pub fn _new(endpoint: SocketAddr) -> GrpcWalletClient {
+        Self {
+            _endpoint: endpoint,
+            _client: None,
+        }
+    }
+
+    pub async fn _connection(&mut self) -> Result<&mut Client, DigitalAssetError> {
+        if self._client.is_none() {
+            let url = format!("http://{}", self._endpoint);
+            let inner = Client::connect(url).await?;
+            self._client = Some(inner);
+        }
+        self._client
+            .as_mut()
+            .ok_or_else(|| DigitalAssetError::FatalError("no connection".into()))
+    }
+}
+#[async_trait]
+impl WalletClient for GrpcWalletClient {}
