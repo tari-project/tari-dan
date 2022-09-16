@@ -9,7 +9,7 @@ edition = "2018"
 
 [dependencies]
 tari_app_utilities = { git = "https://github.com/tari-project/tari.git", tag = "v0.37.0", package = "tari_app_utilities" }
-tari_app_grpc = { git = "https://github.com/tari-project/tari.git", tag = "v0.37.0", package = "tari_app_grpc" }
+tari_app_grpc = { git = "https://github.com/tari-project/tari.git", branch = "feature-dan", package = "tari_app_grpc" }
 tari_validator_node_grpc = { path = "../tari_validator_node_grpc" }
 tari_common = { git = "https://github.com/tari-project/tari.git", tag = "v0.37.0", package = "tari_common" }
 tari_comms = { git = "https://github.com/tari-project/tari.git", tag = "v0.37.0", package = "tari_comms" }
@@ -39,6 +39,7 @@ clap = { version = "3.2.5", features = ["env"] }
 config = "0.13.0"
 digest = "0.9.0"
 futures = { version = "^0.3.1" }
+json5 = "0.2.2"
 log = { version = "0.4.8", features = ["std"] }
 lmdb-zero = "0.4.4"
 libsqlite3-sys = { version = "0.22.2", features = ["bundled"] }

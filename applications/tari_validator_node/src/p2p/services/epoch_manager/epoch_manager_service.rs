@@ -27,7 +27,10 @@ use tokio::{
     task::JoinHandle,
 };
 
-use crate::p2p::services::epoch_manager::base_layer_epoch_manager::BaseLayerEpochManager;
+use crate::{
+    grpc::services::base_node_client::GrpcBaseNodeClient,
+    p2p::services::epoch_manager::base_layer_epoch_manager::BaseLayerEpochManager,
+};
 // const LOG_TARGET: &str = "tari::validator_node::epoch_manager";
 
 pub struct EpochManagerService {
@@ -54,11 +57,12 @@ impl EpochManagerService {
             oneshot::Sender<Result<EpochManagerResponse, String>>,
         )>,
         shutdown: ShutdownSignal,
+        base_node_client: GrpcBaseNodeClient,
     ) -> JoinHandle<Result<(), String>> {
         tokio::spawn(async move {
             EpochManagerService {
                 rx_request,
-                inner: BaseLayerEpochManager {},
+                inner: BaseLayerEpochManager { base_node_client },
             }
             .run(shutdown)
             .await
