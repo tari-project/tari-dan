@@ -23,7 +23,10 @@
 use std::net::SocketAddr;
 
 use async_trait::async_trait;
-use tari_app_grpc::tari_rpc as grpc;
+use tari_app_grpc::tari_rpc::{self as grpc, RegisterValidatorNodeRequest, RegisterValidatorNodeResponse};
+use tari_common_types::types::Signature;
+use tari_comms::NodeIdentity;
+use tari_crypto::ristretto::RistrettoSecretKey;
 use tari_dan_core::{services::WalletClient, DigitalAssetError};
 
 const _LOG_TARGET: &str = "tari::validator_node::app";
@@ -32,28 +35,47 @@ type Client = grpc::wallet_client::WalletClient<tonic::transport::Channel>;
 
 #[derive(Clone)]
 pub struct GrpcWalletClient {
-    _endpoint: SocketAddr,
-    _client: Option<Client>,
+    endpoint: SocketAddr,
+    client: Option<Client>,
 }
 
 impl GrpcWalletClient {
-    pub fn _new(endpoint: SocketAddr) -> GrpcWalletClient {
-        Self {
-            _endpoint: endpoint,
-            _client: None,
-        }
+    pub fn new(endpoint: SocketAddr) -> GrpcWalletClient {
+        Self { endpoint, client: None }
     }
 
-    pub async fn _connection(&mut self) -> Result<&mut Client, DigitalAssetError> {
-        if self._client.is_none() {
-            let url = format!("http://{}", self._endpoint);
+    pub async fn connection(&mut self) -> Result<&mut Client, DigitalAssetError> {
+        if self.client.is_none() {
+            let url = format!("http://{}", self.endpoint);
             let inner = Client::connect(url).await?;
-            self._client = Some(inner);
+            self.client = Some(inner);
         }
-        self._client
+        self.client
             .as_mut()
             .ok_or_else(|| DigitalAssetError::FatalError("no connection".into()))
     }
+
+    pub async fn register_validator_node(
+        &mut self,
+        node_identity: &NodeIdentity,
+    ) -> Result<RegisterValidatorNodeResponse, DigitalAssetError> {
+        let inner = self.connection().await?;
+        let signature = Signature::sign(
+            node_identity.secret_key().clone(),
+            RistrettoSecretKey::default(),
+            &[0; 32],
+        )
+        .unwrap();
+        let request = RegisterValidatorNodeRequest {
+            validator_node_public_key: node_identity.public_key().to_string(),
+            validator_node_signature: Some(signature.into()),
+            fee_per_gram: 5,
+            message: "Registering VN".to_string(),
+        };
+        let result = inner.register_validator_node(request).await?.into_inner();
+        Ok(result)
+    }
 }
+
 #[async_trait]
 impl WalletClient for GrpcWalletClient {}

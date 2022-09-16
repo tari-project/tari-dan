@@ -21,8 +21,9 @@
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 use tari_comms::types::CommsPublicKey;
+use tari_dan_common_types::ShardId;
 
 pub struct ValidatorNode {
-    pub shard_key: [u8; 32],
+    pub shard_key: ShardId,
     pub public_key: CommsPublicKey,
 }

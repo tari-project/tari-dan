@@ -9,16 +9,23 @@ mod template_id;
 use std::cmp::Ordering;
 
 use borsh::{BorshDeserialize, BorshSerialize};
-use serde::{Deserialize, Deserializer};
+use serde::{Deserialize, Deserializer, Serialize};
 use tari_common_types::types::{FixedHash, FixedHashSizeError};
+use tari_crypto::tari_utilities::hex::serialize_to_hex;
 use tari_utilities::{byte_array::ByteArray, hex::Hex};
 pub use template_id::TemplateId;
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Hash, Deserialize)]
 pub struct ObjectId(#[serde(deserialize_with = "deserialize_fixed_hash_from_hex")] pub [u8; 32]);
 
-#[derive(Copy, Clone, Debug, Eq, PartialEq, Hash, Deserialize)]
-pub struct ShardId(#[serde(deserialize_with = "deserialize_fixed_hash_from_hex")] pub [u8; 32]);
+#[derive(Copy, Clone, Debug, Eq, PartialEq, Hash, Serialize, Deserialize)]
+pub struct ShardId(
+    #[serde(
+        serialize_with = "serialize_to_hex",
+        deserialize_with = "deserialize_fixed_hash_from_hex"
+    )]
+    pub [u8; 32],
+);
 
 impl ShardId {
     pub fn to_le_bytes(&self) -> &[u8] {

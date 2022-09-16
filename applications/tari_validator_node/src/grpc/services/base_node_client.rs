@@ -23,9 +23,11 @@
 use std::{convert::TryInto, net::SocketAddr};
 
 use async_trait::async_trait;
-use tari_app_grpc::tari_rpc::{self as grpc, GetCommitteeRequest};
+use tari_app_grpc::tari_rpc::{self as grpc, GetCommitteeRequest, GetShardKeyRequest};
+use tari_common_types::types::PublicKey;
 use tari_comms::types::CommsPublicKey;
 use tari_crypto::tari_utilities::ByteArray;
+use tari_dan_common_types::ShardId;
 use tari_dan_core::{
     models::{BaseLayerMetadata, ValidatorNode},
     services::BaseNodeClient,
@@ -100,7 +102,14 @@ impl BaseNodeClient for GrpcBaseNodeClient {
             .collect())
     }
 
-    async fn get_shard_key(&mut self, _height: u64, _public_key: &[u8; 32]) -> Result<&[u8; 32], DigitalAssetError> {
-        todo!()
+    async fn get_shard_key(&mut self, height: u64, public_key: &PublicKey) -> Result<ShardId, DigitalAssetError> {
+        let inner = self.connection().await?;
+        let request = GetShardKeyRequest {
+            height,
+            public_key: public_key.to_vec(),
+        };
+        let result = inner.get_shard_key(request).await?.into_inner();
+        println!("res {:?}", result);
+        Ok(ShardId::from_bytes(result.shard_key.as_bytes())?)
     }
 }
