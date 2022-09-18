@@ -30,7 +30,7 @@ use tari_crypto::tari_utilities::ByteArray;
 use tari_dan_common_types::ShardId;
 use tari_dan_core::{
     models::{BaseLayerMetadata, ValidatorNode},
-    services::BaseNodeClient,
+    services::{base_node_error::BaseNodeError, BaseNodeClient},
     DigitalAssetError,
 };
 
@@ -49,46 +49,41 @@ impl GrpcBaseNodeClient {
         Self { endpoint, client: None }
     }
 
-    pub async fn connection(&mut self) -> Result<&mut Client, DigitalAssetError> {
+    pub async fn connection(&mut self) -> Result<&mut Client, BaseNodeError> {
         if self.client.is_none() {
             let url = format!("http://{}", self.endpoint);
             let inner = Client::connect(url).await?;
             self.client = Some(inner);
         }
-        self.client
-            .as_mut()
-            .ok_or_else(|| DigitalAssetError::FatalError("no connection".into()))
+        self.client.as_mut().ok_or_else(|| BaseNodeError::ConnectionError)
     }
 }
 #[async_trait]
 impl BaseNodeClient for GrpcBaseNodeClient {
-    async fn get_tip_info(&mut self) -> Result<BaseLayerMetadata, DigitalAssetError> {
+    async fn get_tip_info(&mut self) -> Result<BaseLayerMetadata, BaseNodeError> {
         let inner = self.connection().await?;
         let request = grpc::Empty {};
         let result = inner.get_tip_info(request).await?.into_inner();
         let metadata = result
             .metadata
-            .ok_or_else(|| DigitalAssetError::InvalidPeerMessage("Base node returned no metadata".to_string()))?;
+            .ok_or_else(|| BaseNodeError::InvalidPeerMessage("Base node returned no metadata".to_string()))?;
         Ok(BaseLayerMetadata {
             height_of_longest_chain: metadata.height_of_longest_chain,
-            tip_hash: metadata.best_block.try_into().map_err(|_| {
-                DigitalAssetError::InvalidPeerMessage("best_block was not a valid fixed hash".to_string())
-            })?,
+            tip_hash: metadata
+                .best_block
+                .try_into()
+                .map_err(|_| BaseNodeError::InvalidPeerMessage("best_block was not a valid fixed hash".to_string()))?,
         })
     }
 
-    async fn get_validator_nodes(&mut self, _height: u64) -> Result<Vec<ValidatorNode>, DigitalAssetError> {
+    async fn get_validator_nodes(&mut self, _height: u64) -> Result<Vec<ValidatorNode>, BaseNodeError> {
         let inner = self.connection().await?;
         let request = grpc::Empty {};
         let _result = inner.get_tip_info(request).await?.into_inner();
         Ok(vec![])
     }
 
-    async fn get_committee(
-        &mut self,
-        height: u64,
-        shard_key: &[u8; 32],
-    ) -> Result<Vec<CommsPublicKey>, DigitalAssetError> {
+    async fn get_committee(&mut self, height: u64, shard_key: &[u8; 32]) -> Result<Vec<CommsPublicKey>, BaseNodeError> {
         let inner = self.connection().await?;
         let request = GetCommitteeRequest {
             height,
@@ -102,7 +97,7 @@ impl BaseNodeClient for GrpcBaseNodeClient {
             .collect())
     }
 
-    async fn get_shard_key(&mut self, height: u64, public_key: &PublicKey) -> Result<ShardId, DigitalAssetError> {
+    async fn get_shard_key(&mut self, height: u64, public_key: &PublicKey) -> Result<ShardId, BaseNodeError> {
         let inner = self.connection().await?;
         let request = GetShardKeyRequest {
             height,

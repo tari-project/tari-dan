@@ -32,7 +32,6 @@ mod epoch_manager;
 mod grpc;
 mod json_rpc;
 mod p2p;
-mod template_manager;
 
 use std::{fs, io, process, sync::Arc};
 
@@ -48,13 +47,12 @@ use tari_common::{
 use tari_comms::{peer_manager::PeerFeatures, NodeIdentity};
 use tari_dan_common_types::ShardId;
 use tari_dan_core::{
-    services::BaseNodeClient,
+    services::{base_node_error::BaseNodeError, BaseNodeClient},
     storage::{global::GlobalDb, DbFactory},
     DigitalAssetError,
 };
 use tari_dan_storage_sqlite::{global::SqliteGlobalDbBackendAdapter, SqliteDbFactory};
 use tari_shutdown::{Shutdown, ShutdownSignal};
-use template_manager::TemplateManager;
 use tokio::{runtime, runtime::Runtime, task};
 
 use crate::{
@@ -116,6 +114,8 @@ pub enum ShardKeyError {
     RegistrationFailed,
     #[error("Registration error {0}")]
     RegistrationError(#[from] DigitalAssetError),
+    #[error("Base node error: {0}")]
+    BaseNodeError(#[from] BaseNodeError),
 }
 
 #[derive(Serialize, Deserialize)]
@@ -204,28 +204,14 @@ async fn run_node(config: &ApplicationConfig) -> Result<(), ExitError> {
     let mut wallet_client = GrpcWalletClient::new(config.validator_node.wallet_grpc_address);
     let vn_registration = auto_register_vn(&mut wallet_client, &mut base_node_client, &node_identity, config).await;
     println!("VN Registration result : {:?}", vn_registration);
-    let _comms = spawn_services(config, shutdown.to_signal(), node_identity.clone()).await?;
-    // let validator_node_client_factory =
-    //     TariCommsValidatorNodeClientFactory::new();
-    // let base_node_client = GrpcBaseNodeClient::new(config.validator_node.base_node_grpc_address);
-    // let asset_proxy: ConcreteAssetProxy<DefaultServiceSpecification> = ConcreteAssetProxy::new(
-    //     base_node_client.clone(),
-    //     validator_node_client_factory,
-    //     5,
-    //     mempool_service.clone(),
-    //     db_factory.clone(),
-    // );
-    // let grpc_server: ValidatorNodeGrpcServer<DefaultServiceSpecification> =
-    //     ValidatorNodeGrpcServer::new(node_identity.as_ref().clone(), db_factory.clone(), asset_proxy);
-
-    // Run the gRPC API
-    // if let Some(address) = config.validator_node.grpc_address.clone() {
-    //     println!("Started GRPC server on {}", address);
-    //     task::spawn(run_grpc(grpc_server, address, shutdown.to_signal()));
-    // }
-
-    let epoch_manager = Arc::new(EpochManager::new());
-    let template_manager = Arc::new(TemplateManager::new(db_factory.clone()));
+    let _comms = spawn_services(
+        config,
+        shutdown.to_signal(),
+        node_identity.clone(),
+        global_db,
+        db_factory,
+    )
+    .await?;
 
     // Run the JSON-RPC API
     if let Some(address) = config.validator_node.json_rpc_address {
@@ -237,16 +223,7 @@ async fn run_node(config: &ApplicationConfig) -> Result<(), ExitError> {
     println!("🚀 Validator node started!");
     println!("{}", node_identity);
 
-    run_dan_node(
-        shutdown.to_signal(),
-        config.validator_node.clone(),
-        db_factory,
-        node_identity,
-        global_db,
-        epoch_manager.clone(),
-        template_manager.clone(),
-    )
-    .await?;
+    run_dan_node(shutdown.to_signal(), config.validator_node.clone(), node_identity).await?;
 
     Ok(())
 }
@@ -262,14 +239,10 @@ fn build_runtime() -> Result<Runtime, ExitError> {
 async fn run_dan_node(
     shutdown_signal: ShutdownSignal,
     config: ValidatorNodeConfig,
-    db_factory: SqliteDbFactory,
     node_identity: Arc<NodeIdentity>,
-    global_db: GlobalDb<SqliteGlobalDbBackendAdapter>,
-    epoch_manager: Arc<EpochManager>,
-    template_manager: Arc<TemplateManager>,
 ) -> Result<(), ExitError> {
-    let node = DanNode::new(config, node_identity, global_db, epoch_manager, template_manager);
-    node.start(shutdown_signal, db_factory).await
+    let node = DanNode::new(config, node_identity);
+    node.start(shutdown_signal).await
 }
 
 // async fn run_grpc<TServiceSpecification: ServiceSpecification + 'static>(

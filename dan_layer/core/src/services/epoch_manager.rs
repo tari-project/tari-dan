@@ -30,10 +30,9 @@ use crate::{
     services::infrastructure_services::NodeAddressable,
 };
 
-#[async_trait]
 pub trait EpochManager<TAddr: NodeAddressable>: Clone {
-    async fn current_epoch(&self) -> Epoch;
-    async fn is_epoch_valid(&self, epoch: Epoch) -> bool;
+    fn current_epoch(&self) -> Epoch;
+    fn is_epoch_valid(&self, epoch: Epoch) -> bool;
     fn get_committees(
         &self,
         epoch: Epoch,
@@ -76,13 +75,12 @@ impl<TAddr: NodeAddressable> RangeEpochManager<TAddr> {
     }
 }
 
-#[async_trait]
 impl<TAddr: NodeAddressable> EpochManager<TAddr> for RangeEpochManager<TAddr> {
-    async fn current_epoch(&self) -> Epoch {
+    fn current_epoch(&self) -> Epoch {
         self.current_epoch
     }
 
-    async fn is_epoch_valid(&self, epoch: Epoch) -> bool {
+    fn is_epoch_valid(&self, epoch: Epoch) -> bool {
         self.current_epoch == epoch
     }
 

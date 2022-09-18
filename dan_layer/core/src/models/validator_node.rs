@@ -23,6 +23,7 @@
 use tari_comms::types::CommsPublicKey;
 use tari_dan_common_types::ShardId;
 
+#[derive(Clone)]
 pub struct ValidatorNode {
     pub shard_key: ShardId,
     pub public_key: CommsPublicKey,

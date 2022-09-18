@@ -24,18 +24,21 @@ use async_trait::async_trait;
 use tari_comms::types::CommsPublicKey;
 use tari_dan_common_types::ShardId;
 use tari_dan_core::{
-    models::{Committee, Epoch},
+    models::{BaseLayerMetadata, Committee, Epoch},
     services::epoch_manager::EpochManager,
 };
 use tokio::sync::{mpsc::Sender, oneshot, oneshot::channel};
 
-use crate::p2p::services::epoch_manager::epoch_manager_service::{EpochManagerRequest, EpochManagerResponse};
+use crate::p2p::services::epoch_manager::{
+    epoch_manager_service::{EpochManagerRequest, EpochManagerResponse},
+    EpochManagerError,
+};
 
 #[derive(Clone)]
 pub struct EpochManagerHandle {
     tx_request: Sender<(
         EpochManagerRequest,
-        oneshot::Sender<Result<EpochManagerResponse, String>>,
+        oneshot::Sender<Result<EpochManagerResponse, EpochManagerError>>,
     )>,
 }
 
@@ -43,27 +46,36 @@ impl EpochManagerHandle {
     pub fn new(
         tx_request: Sender<(
             EpochManagerRequest,
-            oneshot::Sender<Result<EpochManagerResponse, String>>,
+            oneshot::Sender<Result<EpochManagerResponse, EpochManagerError>>,
         )>,
     ) -> Self {
         Self { tx_request }
     }
+
+    pub async fn update_epoch(&self, tip: BaseLayerMetadata) -> Result<(), EpochManagerError> {
+        let (tx, rx) = oneshot::channel();
+        self.tx_request
+            .send((EpochManagerRequest::UpdateEpoch { tip }, tx))
+            .await
+            .map_err(|e| EpochManagerError::SendError)?;
+        Ok(())
+    }
 }
-#[async_trait]
 impl EpochManager<CommsPublicKey> for EpochManagerHandle {
-    async fn current_epoch(&self) -> Epoch {
-        let (tx, rx) = channel();
-        let _ignore = self.tx_request.send((EpochManagerRequest::CurrentEpoch, tx)).await;
-        let res = rx.await.expect("Error receiving");
-        match res {
-            Ok(EpochManagerResponse::CurrentEpoch { epoch }) => epoch,
-            Err(e) => {
-                panic!("erro: {}", e)
-            },
-        }
+    fn current_epoch(&self) -> Epoch {
+        // let (tx, rx) = channel();
+        // let _ignore = self.tx_request.send((EpochManagerRequest::CurrentEpoch, tx));
+        // let res = rx.await.expect("Error receiving");
+        // match res {
+        //     Ok(EpochManagerResponse::CurrentEpoch { epoch }) => epoch,
+        //     Err(e) => {
+        //         panic!("erro: {}", e)
+        //     },
+        // }
+        todo!()
     }
 
-    async fn is_epoch_valid(&self, _epoch: Epoch) -> bool {
+    fn is_epoch_valid(&self, _epoch: Epoch) -> bool {
         todo!()
     }
 

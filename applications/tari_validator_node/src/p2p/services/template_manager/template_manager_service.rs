@@ -20,10 +20,12 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+use log::*;
 use tari_dan_core::{
     models::{BaseLayerMetadata, Epoch},
     services::epoch_manager::EpochManager,
 };
+use tari_dan_storage_sqlite::SqliteDbFactory;
 use tari_shutdown::ShutdownSignal;
 use tokio::{
     sync::{mpsc::Receiver, oneshot},
@@ -32,53 +34,61 @@ use tokio::{
 
 use crate::{
     grpc::services::base_node_client::GrpcBaseNodeClient,
-    p2p::services::epoch_manager::{base_layer_epoch_manager::BaseLayerEpochManager, EpochManagerError},
+    p2p::services::{
+        epoch_manager::base_layer_epoch_manager::BaseLayerEpochManager,
+        template_manager::{
+            template_manager::{TemplateManager, TemplateMetadata},
+            TemplateManagerError,
+        },
+    },
 };
-// const LOG_TARGET: &str = "tari::validator_node::epoch_manager";
+const LOG_TARGET: &str = "tari::validator_node::template_manager";
 
-pub struct EpochManagerService {
+pub struct TemplateManagerService {
     rx_request: Receiver<(
-        EpochManagerRequest,
-        oneshot::Sender<Result<EpochManagerResponse, EpochManagerError>>,
+        TemplateManagerRequest,
+        oneshot::Sender<Result<TemplateManagerResponse, TemplateManagerError>>,
     )>,
-    inner: BaseLayerEpochManager,
+    inner: TemplateManager,
 }
 
 #[derive(Debug, Clone)]
-pub enum EpochManagerRequest {
-    CurrentEpoch,
-    UpdateEpoch { tip: BaseLayerMetadata },
+pub enum TemplateManagerRequest {
+    AddTemplates { templates: Vec<TemplateMetadata> },
 }
 
-pub enum EpochManagerResponse {
-    CurrentEpoch { epoch: Epoch },
-    UpdateEpoch,
+pub enum TemplateManagerResponse {
+    AddTemplates,
 }
 
-impl EpochManagerService {
+impl TemplateManagerService {
     pub fn spawn(
         rx_request: Receiver<(
-            EpochManagerRequest,
-            oneshot::Sender<Result<EpochManagerResponse, EpochManagerError>>,
+            TemplateManagerRequest,
+            oneshot::Sender<Result<TemplateManagerResponse, TemplateManagerError>>,
         )>,
+        sqlite_db_factory: SqliteDbFactory,
         shutdown: ShutdownSignal,
-        base_node_client: GrpcBaseNodeClient,
-    ) -> JoinHandle<Result<(), EpochManagerError>> {
+    ) -> JoinHandle<Result<(), TemplateManagerError>> {
         tokio::spawn(async move {
-            EpochManagerService {
+            TemplateManagerService {
                 rx_request,
-                inner: BaseLayerEpochManager::new(base_node_client),
+                inner: TemplateManager::new(sqlite_db_factory),
             }
             .run(shutdown)
             .await
         })
     }
 
-    pub async fn run(&mut self, mut shutdown: ShutdownSignal) -> Result<(), EpochManagerError> {
+    pub async fn run(&mut self, mut shutdown: ShutdownSignal) -> Result<(), TemplateManagerError> {
         loop {
             tokio::select! {
                 Some((req, reply)) = self.rx_request.recv() => {
-                    let _ignore = reply.send(self.handle_request(req).await);
+                    let _ignore = reply.send(self.handle_request(req).await.map_err(|e|
+                    {error!(target: LOG_TARGET, "Error handling request:  {}", &e); e})).map_err(|_|
+                        error!(target: LOG_TARGET, "Error sending response on template manager")
+                        );
+
                 },
                 _ = shutdown.wait() => {
                     dbg!("Shutting down epoch manager");
@@ -89,14 +99,15 @@ impl EpochManagerService {
         Ok(())
     }
 
-    async fn handle_request(&mut self, req: EpochManagerRequest) -> Result<EpochManagerResponse, EpochManagerError> {
+    async fn handle_request(
+        &mut self,
+        req: TemplateManagerRequest,
+    ) -> Result<TemplateManagerResponse, TemplateManagerError> {
         match req {
-            EpochManagerRequest::CurrentEpoch => Ok(EpochManagerResponse::CurrentEpoch {
-                epoch: self.inner.current_epoch(),
-            }),
-            EpochManagerRequest::UpdateEpoch { tip } => {
-                self.inner.update_epoch(tip.height_of_longest_chain).await?;
-                Ok(EpochManagerResponse::UpdateEpoch)
+            TemplateManagerRequest::AddTemplates { templates } => {
+                self.inner.add_templates(templates).await?;
+
+                Ok(TemplateManagerResponse::AddTemplates)
             },
         }
     }

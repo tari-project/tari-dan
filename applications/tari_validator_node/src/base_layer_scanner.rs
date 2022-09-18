@@ -27,7 +27,7 @@ use tari_common_types::types::{FixedHash, FixedHashSizeError};
 use tari_crypto::tari_utilities::ByteArray;
 use tari_dan_core::{
     models::BaseLayerMetadata,
-    services::BaseNodeClient,
+    services::{base_node_error::BaseNodeError, BaseNodeClient},
     storage::{
         global::{GlobalDb, GlobalDbMetadataKey},
         StorageError,
@@ -36,11 +36,14 @@ use tari_dan_core::{
 };
 use tari_dan_storage_sqlite::global::SqliteGlobalDbBackendAdapter;
 use tari_shutdown::ShutdownSignal;
-use tokio::time;
+use tokio::{sync::mpsc::Sender, time};
 
 use crate::{
     epoch_manager::EpochManager,
-    template_manager::{TemplateManager, TemplateMetadata},
+    p2p::services::{
+        epoch_manager::{handle::EpochManagerHandle, EpochManagerError},
+        template_manager::{handle::TemplateManagerHandle, template_manager::TemplateMetadata, TemplateManagerError},
+    },
     GrpcBaseNodeClient,
     ValidatorNodeConfig,
 };
@@ -53,8 +56,8 @@ pub struct BaseLayerScanner {
     last_scanned_height: u64,
     last_scanned_hash: Option<FixedHash>,
     base_node_client: GrpcBaseNodeClient,
-    epoch_manager: Arc<EpochManager>,
-    template_manager: Arc<TemplateManager>,
+    epoch_manager: EpochManagerHandle,
+    template_manager: TemplateManagerHandle,
     shutdown: ShutdownSignal,
 }
 
@@ -63,8 +66,8 @@ impl BaseLayerScanner {
         config: ValidatorNodeConfig,
         global_db: GlobalDb<SqliteGlobalDbBackendAdapter>,
         base_node_client: GrpcBaseNodeClient,
-        epoch_manager: Arc<EpochManager>,
-        template_manager: Arc<TemplateManager>,
+        epoch_manager: EpochManagerHandle,
+        template_manager: TemplateManagerHandle,
         shutdown: ShutdownSignal,
     ) -> Self {
         Self {
@@ -94,11 +97,12 @@ impl BaseLayerScanner {
         loop {
             // fetch the new base layer info since the previous scan
             let tip = self.base_node_client.get_tip_info().await?;
+            // let block = self.base_node_client.get_block(tip.height).await?;
             let new_templates_metadata = self.scan_for_new_templates(&tip).await?;
 
             // both epoch and template tasks are I/O bound,
             // so they can be ran concurrently as they do not block CPU between them
-            let epoch_task = self.epoch_manager.update_epoch(&tip);
+            let epoch_task = self.epoch_manager.update_epoch(tip.clone());
             let template_task = self.template_manager.add_templates(new_templates_metadata);
 
             // wait for all tasks to finish
@@ -205,6 +209,12 @@ pub enum BaseLayerScannerError {
     DigitalAssetError(#[from] DigitalAssetError),
     #[error("Data corruption: {details}")]
     DataCorruption { details: String },
+    #[error("Epoch manager error: {0}")]
+    EpochManagerError(#[from] EpochManagerError),
+    #[error("Template manager error: {0}")]
+    TemplateManagerError(#[from] TemplateManagerError),
+    #[error("Base node client error: {0}")]
+    BaseNodeError(#[from] BaseNodeError),
 }
 
 // macro_rules! some_or_continue {

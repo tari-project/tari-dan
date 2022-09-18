@@ -150,7 +150,7 @@ impl<
         payload: TPayload,
     ) -> Result<(), String> {
         // TODO: Validate who message is from
-        let epoch = self.epoch_manager.current_epoch().await;
+        let epoch = self.epoch_manager.current_epoch();
         self.validate_from_committee(&from, epoch, shard).await?;
         self.validate_qc(&qc)?;
         let mut tx = self.shard_store.create_tx();
@@ -164,7 +164,7 @@ impl<
     async fn on_beat(&mut self, shard: ShardId, payload: PayloadId) -> Result<(), String> {
         // TODO: the leader is only known after the leaf is determines
         // TODO: Review if this is correct. The epoch should stay the same for all epochs
-        let epoch = self.epoch_manager.current_epoch().await;
+        let epoch = self.epoch_manager.current_epoch();
         if self.is_leader(payload, shard, epoch).await? {
             self.on_propose(shard, payload).await?;
         }
@@ -174,7 +174,7 @@ impl<
     async fn on_propose(&mut self, shard: ShardId, payload: PayloadId) -> Result<HotStuffTreeNode<TAddr>, String> {
         dbg!(&self.identity, "on propose");
 
-        let epoch = self.epoch_manager.current_epoch().await;
+        let epoch = self.epoch_manager.current_epoch();
 
         let leaf_node;
         let members;

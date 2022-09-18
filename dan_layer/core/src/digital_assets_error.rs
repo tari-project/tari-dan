@@ -36,8 +36,7 @@ pub enum DigitalAssetError {
     _MissingArgument { argument_name: String, position: usize },
     #[error("Invalid sig, TODO: fill in deets")]
     InvalidSignature,
-    #[error("Peer sent an invalid message: {0}")]
-    InvalidPeerMessage(String),
+
     #[error("Storage error: {0}")]
     StorageError(#[from] StorageError),
     #[error("Metadata was malformed: {0}")]
@@ -86,12 +85,6 @@ pub enum DigitalAssetError {
     PreparePhaseCertificateDoesNotExtendNode,
     #[error("Node not safe")]
     PreparePhaseNodeNotSafe,
-    #[error("Could not fetch the template code from the web")]
-    TemplateCodeFetchError,
-    #[error("The hash of the template code does not match the metadata")]
-    TemplateCodeHashMismatch,
-    #[error("Unsupported template method {name}")]
-    TemplateUnsupportedMethod { name: String },
     #[error("Connection error: {0}")]
     GrpcConnection(#[from] tonic::transport::Error),
     #[error("GRPC error: {0}")]
