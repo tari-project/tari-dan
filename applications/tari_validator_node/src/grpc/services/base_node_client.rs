@@ -49,7 +49,7 @@ impl GrpcBaseNodeClient {
         Self { endpoint, client: None }
     }
 
-    pub async fn connection(&mut self) -> Result<&mut Client, DigitalAssetError> {
+    async fn connection(&mut self) -> Result<&mut Client, DigitalAssetError> {
         if self.client.is_none() {
             let url = format!("http://{}", self.endpoint);
             let inner = Client::connect(url).await?;

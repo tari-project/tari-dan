@@ -20,40 +20,10 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use std::net::SocketAddr;
+mod handlers;
+pub use handlers::JsonRpcHandlers;
 
-use clap::Parser;
-use tari_app_utilities::common_cli_args::CommonCliArgs;
-use tari_common::configuration::{ConfigOverrideProvider, Network};
+mod jrpc_errors;
+mod server;
 
-#[derive(Parser, Debug)]
-#[clap(author, version, about, long_about = None)]
-#[clap(propagate_version = true)]
-pub(crate) struct Cli {
-    #[clap(flatten)]
-    pub common: CommonCliArgs,
-    /// Enable tracing
-    #[clap(long, aliases = &["tracing", "enable-tracing"])]
-    pub tracing_enabled: bool,
-    /// Supply a network (overrides existing configuration)
-    #[clap(long, env = "TARI_NETWORK")]
-    pub network: Option<String>,
-    /// Bind address for JSON-rpc server
-    #[clap(long, alias = "rpc-address")]
-    pub json_rpc_address: Option<SocketAddr>,
-}
-
-impl ConfigOverrideProvider for Cli {
-    fn get_config_property_overrides(&self, default_network: Network) -> Vec<(String, String)> {
-        let mut overrides = self.common.get_config_property_overrides(default_network);
-        let network = self.network.clone().unwrap_or_else(|| default_network.to_string());
-        overrides.push(("network".to_string(), network.clone()));
-        overrides.push(("validator_node.override_from".to_string(), network.clone()));
-        overrides.push(("p2p.seeds.override_from".to_string(), network));
-
-        if let Some(ref addr) = self.json_rpc_address {
-            overrides.push(("validator_node.json_rpc_address".to_string(), addr.to_string()));
-        }
-        overrides
-    }
-}
+pub use server::run_json_rpc;

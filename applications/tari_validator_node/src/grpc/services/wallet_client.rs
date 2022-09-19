@@ -24,10 +24,10 @@ use std::net::SocketAddr;
 
 use async_trait::async_trait;
 use tari_app_grpc::tari_rpc::{self as grpc, RegisterValidatorNodeRequest, RegisterValidatorNodeResponse};
-use tari_common_types::types::Signature;
 use tari_comms::NodeIdentity;
-use tari_crypto::ristretto::RistrettoSecretKey;
 use tari_dan_core::{services::WalletClient, DigitalAssetError};
+
+use crate::registration_signing::sign_registration;
 
 const _LOG_TARGET: &str = "tari::validator_node::app";
 
@@ -60,12 +60,7 @@ impl GrpcWalletClient {
         node_identity: &NodeIdentity,
     ) -> Result<RegisterValidatorNodeResponse, DigitalAssetError> {
         let inner = self.connection().await?;
-        let signature = Signature::sign(
-            node_identity.secret_key().clone(),
-            RistrettoSecretKey::default(),
-            &[0; 32],
-        )
-        .unwrap();
+        let signature = sign_registration(node_identity.secret_key(), 123);
         let request = RegisterValidatorNodeRequest {
             validator_node_public_key: node_identity.public_key().to_string(),
             validator_node_signature: Some(signature.into()),
