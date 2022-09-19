@@ -39,7 +39,6 @@ use tari_shutdown::ShutdownSignal;
 use tokio::time;
 
 use crate::{
-    epoch_manager::EpochManager,
     p2p::services::{
         epoch_manager::{handle::EpochManagerHandle, EpochManagerError},
         template_manager::{handle::TemplateManagerHandle, template_manager::TemplateMetadata, TemplateManagerError},

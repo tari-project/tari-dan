@@ -223,7 +223,7 @@ async fn run_node(config: &ApplicationConfig) -> Result<(), ExitError> {
     println!("🚀 Validator node started!");
     println!("{}", node_identity);
 
-    run_dan_node(shutdown.to_signal(), config.validator_node.clone(), node_identity).await?;
+    run_dan_node(shutdown.to_signal()).await?;
 
     Ok(())
 }
@@ -236,12 +236,8 @@ fn build_runtime() -> Result<Runtime, ExitError> {
         .map_err(|e| ExitError::new(ExitCode::UnknownError, e))
 }
 
-async fn run_dan_node(
-    shutdown_signal: ShutdownSignal,
-    config: ValidatorNodeConfig,
-    node_identity: Arc<NodeIdentity>,
-) -> Result<(), ExitError> {
-    let node = DanNode::new(config, node_identity);
+async fn run_dan_node(shutdown_signal: ShutdownSignal) -> Result<(), ExitError> {
+    let node = DanNode::new();
     node.start(shutdown_signal).await
 }
 

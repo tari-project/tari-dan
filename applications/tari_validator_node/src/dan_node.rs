@@ -20,11 +20,8 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use std::sync::Arc;
-
-use tari_common::exit_codes::{ExitCode, ExitError};
+use tari_common::exit_codes::ExitError;
 use tari_comms::NodeIdentity;
-use tari_dan_core::{models::BaseLayerMetadata, storage::global::GlobalDb};
 use tari_dan_storage_sqlite::{global::SqliteGlobalDbBackendAdapter, SqliteDbFactory};
 use tari_shutdown::ShutdownSignal;
 use tokio::sync::mpsc::Sender;
@@ -38,17 +35,11 @@ use crate::{
 
 const _LOG_TARGET: &str = "tari::validator_node::app";
 
-pub struct DanNode {
-    config: ValidatorNodeConfig,
-    _identity: Arc<NodeIdentity>,
-}
+pub struct DanNode {}
 
 impl DanNode {
-    pub fn new(config: ValidatorNodeConfig, identity: Arc<NodeIdentity>) -> Self {
-        Self {
-            config,
-            _identity: identity,
-        }
+    pub fn new() -> Self {
+        Self {}
     }
 
     pub async fn start(&self, mut shutdown: ShutdownSignal) -> Result<(), ExitError> {

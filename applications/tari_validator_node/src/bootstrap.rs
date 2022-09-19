@@ -26,11 +26,7 @@ use tari_app_utilities::{identity_management, identity_management::load_from_jso
 use tari_common::exit_codes::{ExitCode, ExitError};
 use tari_comms::{CommsNode, NodeIdentity};
 use tari_dan_core::storage::global::GlobalDb;
-use tari_dan_storage_sqlite::{
-    global::SqliteGlobalDbBackendAdapter,
-    sqlite_shard_store_factory::SqliteShardStoreFactory,
-    SqliteDbFactory,
-};
+use tari_dan_storage_sqlite::{global::SqliteGlobalDbBackendAdapter, SqliteDbFactory};
 use tari_p2p::initialization::spawn_comms_using_transport;
 use tari_shutdown::ShutdownSignal;
 
