@@ -27,7 +27,10 @@ use tari_comms::types::CommsPublicKey;
 use tari_dan_common_types::ShardId;
 use tari_dan_core::{
     models::{Committee, Epoch, ValidatorNode},
-    services::{epoch_manager::EpochManager, BaseNodeClient},
+    services::{
+        epoch_manager::{EpochManager, ShardCommitteeAllocation},
+        BaseNodeClient,
+    },
 };
 
 use crate::{grpc::services::base_node_client::GrpcBaseNodeClient, p2p::services::epoch_manager::EpochManagerError};
@@ -107,11 +110,14 @@ impl EpochManager<CommsPublicKey> for BaseLayerEpochManager {
         &self,
         epoch: Epoch,
         shards: &[ShardId],
-    ) -> Result<Vec<(ShardId, Option<Committee<CommsPublicKey>>)>, String> {
+    ) -> Result<Vec<ShardCommitteeAllocation<CommsPublicKey>>, String> {
         let mut result = vec![];
         for &shard in shards {
             let committee = self.get_committee(epoch, shard).ok();
-            result.push((shard, committee));
+            result.push(ShardCommitteeAllocation {
+                shard_id: shard,
+                committee,
+            });
         }
         Ok(result)
     }

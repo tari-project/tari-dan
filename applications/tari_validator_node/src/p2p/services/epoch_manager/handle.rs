@@ -25,7 +25,7 @@ use tari_comms::types::CommsPublicKey;
 use tari_dan_common_types::ShardId;
 use tari_dan_core::{
     models::{BaseLayerMetadata, Committee, Epoch},
-    services::epoch_manager::EpochManager,
+    services::epoch_manager::{EpochManager, ShardCommitteeAllocation},
 };
 use tokio::sync::{mpsc::Sender, oneshot, oneshot::channel};
 
@@ -83,7 +83,7 @@ impl EpochManager<CommsPublicKey> for EpochManagerHandle {
         &self,
         _epoch: Epoch,
         _shards: &[ShardId],
-    ) -> Result<Vec<(ShardId, Option<Committee<CommsPublicKey>>)>, String> {
+    ) -> Result<Vec<ShardCommitteeAllocation<CommsPublicKey>>, String> {
         todo!()
     }
 

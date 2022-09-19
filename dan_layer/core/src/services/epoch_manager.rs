@@ -22,7 +22,6 @@
 
 use std::{collections::HashMap, ops::Range};
 
-use async_trait::async_trait;
 use tari_dan_common_types::ShardId;
 
 use crate::{
@@ -30,14 +29,15 @@ use crate::{
     services::infrastructure_services::NodeAddressable,
 };
 
+pub struct ShardCommitteeAllocation<TAddr: NodeAddressable> {
+    pub shard_id: ShardId,
+    pub committee: Option<Committee<TAddr>>,
+}
+
 pub trait EpochManager<TAddr: NodeAddressable>: Clone {
     fn current_epoch(&self) -> Epoch;
     fn is_epoch_valid(&self, epoch: Epoch) -> bool;
-    fn get_committees(
-        &self,
-        epoch: Epoch,
-        shards: &[ShardId],
-    ) -> Result<Vec<(ShardId, Option<Committee<TAddr>>)>, String>;
+    fn get_committees(&self, epoch: Epoch, shards: &[ShardId]) -> Result<Vec<ShardCommitteeAllocation<TAddr>>, String>;
     fn get_committee(&self, epoch: Epoch, shard: ShardId) -> Result<Committee<TAddr>, String>;
     fn get_shards(&self, epoch: Epoch, addr: &TAddr, available_shards: &[ShardId]) -> Result<Vec<ShardId>, String>;
 }
@@ -84,11 +84,7 @@ impl<TAddr: NodeAddressable> EpochManager<TAddr> for RangeEpochManager<TAddr> {
         self.current_epoch == epoch
     }
 
-    fn get_committees(
-        &self,
-        epoch: Epoch,
-        shards: &[ShardId],
-    ) -> Result<Vec<(ShardId, Option<Committee<TAddr>>)>, String> {
+    fn get_committees(&self, epoch: Epoch, shards: &[ShardId]) -> Result<Vec<ShardCommitteeAllocation<TAddr>>, String> {
         let epoch = self.epochs.get(&epoch).ok_or("No value for that epoch")?;
         let mut result = vec![];
         for shard in shards {
@@ -99,7 +95,10 @@ impl<TAddr: NodeAddressable> EpochManager<TAddr> for RangeEpochManager<TAddr> {
                     break;
                 }
             }
-            result.push((*shard, found_committee.clone()));
+            result.push(ShardCommitteeAllocation {
+                shard_id: *shard,
+                committee: found_committee.clone(),
+            });
         }
 
         Ok(result)

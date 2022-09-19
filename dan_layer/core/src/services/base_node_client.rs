@@ -26,7 +26,6 @@ use tari_comms::types::CommsPublicKey;
 use tari_dan_common_types::ShardId;
 
 use crate::{
-    digital_assets_error::DigitalAssetError,
     models::{BaseLayerMetadata, ValidatorNode},
     services::base_node_error::BaseNodeError,
 };

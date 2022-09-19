@@ -190,7 +190,7 @@ impl<
                 .epoch_manager
                 .get_committees(epoch, &involved_shards)?
                 .into_iter()
-                .flat_map(|(_shard, committee)| committee.map(|c| c.members).unwrap_or_default())
+                .flat_map(|allocation| allocation.committee.map(|c| c.members).unwrap_or_default())
                 .collect();
 
             let parent = tx.get_node(&leaf).ok_or("Could not find leaf")?;

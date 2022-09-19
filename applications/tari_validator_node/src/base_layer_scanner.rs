@@ -20,7 +20,7 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use std::{convert::TryInto, sync::Arc, time::Duration};
+use std::{convert::TryInto, time::Duration};
 
 use log::*;
 use tari_common_types::types::{FixedHash, FixedHashSizeError};
@@ -36,7 +36,7 @@ use tari_dan_core::{
 };
 use tari_dan_storage_sqlite::global::SqliteGlobalDbBackendAdapter;
 use tari_shutdown::ShutdownSignal;
-use tokio::{sync::mpsc::Sender, time};
+use tokio::time;
 
 use crate::{
     epoch_manager::EpochManager,
