@@ -31,7 +31,6 @@ use tari_dan_common_types::ShardId;
 use tari_dan_core::{
     models::{BaseLayerMetadata, ValidatorNode},
     services::{base_node_error::BaseNodeError, BaseNodeClient},
-    DigitalAssetError,
 };
 
 const _LOG_TARGET: &str = "tari::validator_node::app";
@@ -55,7 +54,7 @@ impl GrpcBaseNodeClient {
             let inner = Client::connect(url).await?;
             self.client = Some(inner);
         }
-        self.client.as_mut().ok_or_else(|| BaseNodeError::ConnectionError)
+        self.client.as_mut().ok_or(BaseNodeError::ConnectionError)
     }
 }
 #[async_trait]

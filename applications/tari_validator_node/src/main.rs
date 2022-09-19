@@ -28,12 +28,11 @@ mod comms;
 mod config;
 mod dan_node;
 mod default_service_specification;
-mod epoch_manager;
 mod grpc;
 mod json_rpc;
 mod p2p;
 
-use std::{fs, io, process, sync::Arc};
+use std::{fs, io, process};
 
 use clap::Parser;
 use log::*;
@@ -48,10 +47,10 @@ use tari_comms::{peer_manager::PeerFeatures, NodeIdentity};
 use tari_dan_common_types::ShardId;
 use tari_dan_core::{
     services::{base_node_error::BaseNodeError, BaseNodeClient},
-    storage::{global::GlobalDb, DbFactory},
+    storage::DbFactory,
     DigitalAssetError,
 };
-use tari_dan_storage_sqlite::{global::SqliteGlobalDbBackendAdapter, SqliteDbFactory};
+use tari_dan_storage_sqlite::SqliteDbFactory;
 use tari_shutdown::{Shutdown, ShutdownSignal};
 use tokio::{runtime, runtime::Runtime, task};
 
@@ -60,7 +59,6 @@ use crate::{
     cli::Cli,
     config::{ApplicationConfig, ValidatorNodeConfig},
     dan_node::DanNode,
-    epoch_manager::EpochManager,
     grpc::services::{base_node_client::GrpcBaseNodeClient, wallet_client::GrpcWalletClient},
     json_rpc::run_json_rpc,
 };
@@ -133,7 +131,7 @@ async fn auto_register_vn(
     let path = &config.validator_node.shard_key_file;
     if !path.exists() {
         // If we don't have the shard key file, we want to send registration tx
-        let vn = wallet_client.register_validator_node(node_identity).await.map(|e| e)?;
+        let vn = wallet_client.register_validator_node(node_identity).await?;
         if vn.is_success {
             println!("Registering VN was successful {:?}", vn);
             let shard_key = ShardKey {

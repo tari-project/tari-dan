@@ -28,8 +28,8 @@ impl TemplateManagerHandle {
         self.request_tx
             .send((TemplateManagerRequest::AddTemplates { templates }, tx))
             .await
-            .map_err(|s| TemplateManagerError::SendError)?;
-        rx.await.map_err(|_| TemplateManagerError::SendError)?;
+            .map_err(|_| TemplateManagerError::SendError)?;
+        let _result = rx.await.map_err(|_| TemplateManagerError::SendError)?;
         Ok(())
     }
 }

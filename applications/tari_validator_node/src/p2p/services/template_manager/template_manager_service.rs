@@ -21,10 +21,6 @@
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 use log::*;
-use tari_dan_core::{
-    models::{BaseLayerMetadata, Epoch},
-    services::epoch_manager::EpochManager,
-};
 use tari_dan_storage_sqlite::SqliteDbFactory;
 use tari_shutdown::ShutdownSignal;
 use tokio::{
@@ -32,15 +28,9 @@ use tokio::{
     task::JoinHandle,
 };
 
-use crate::{
-    grpc::services::base_node_client::GrpcBaseNodeClient,
-    p2p::services::{
-        epoch_manager::base_layer_epoch_manager::BaseLayerEpochManager,
-        template_manager::{
-            template_manager::{TemplateManager, TemplateMetadata},
-            TemplateManagerError,
-        },
-    },
+use crate::p2p::services::template_manager::{
+    template_manager::{TemplateManager, TemplateMetadata},
+    TemplateManagerError,
 };
 const LOG_TARGET: &str = "tari::validator_node::template_manager";
 

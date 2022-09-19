@@ -35,7 +35,7 @@ use crate::{
         TreeNodeHash,
     },
     services::infrastructure_services::NodeAddressable,
-    storage::shard_store::ShardStoreTransaction,
+    storage::shard_store::{ShardStoreTransaction, StoreError},
 };
 
 // TODO: Clone is pretty bad here, this class should only be used for testing
@@ -75,7 +75,7 @@ impl<TAddr: NodeAddressable, TPayload: Payload> MemoryShardDb<TAddr, TPayload> {
 impl<TAddr: NodeAddressable, TPayload: Payload> ShardStoreTransaction<TAddr, TPayload>
     for MemoryShardDb<TAddr, TPayload>
 {
-    type Error = String;
+    type Error = StoreError;
 
     fn get_high_qc_for(&self, shard: ShardId) -> QuorumCertificate {
         if let Some(qc) = self.shard_high_qcs.get(&shard) {
@@ -104,7 +104,7 @@ impl<TAddr: NodeAddressable, TPayload: Payload> ShardStoreTransaction<TAddr, TPa
         }
     }
 
-    fn update_leaf_node(&mut self, shard: ShardId, node: TreeNodeHash, height: NodeHeight) -> Result<(), String> {
+    fn update_leaf_node(&mut self, shard: ShardId, node: TreeNodeHash, height: NodeHeight) -> Result<(), StoreError> {
         let leaf = self.shard_leaf_nodes.entry(shard).or_insert((node, height));
         *leaf = (node, height);
         Ok(())
@@ -187,11 +187,11 @@ impl<TAddr: NodeAddressable, TPayload: Payload> ShardStoreTransaction<TAddr, TPa
         self.nodes.insert(*node.hash(), node);
     }
 
-    fn get_node(&self, node_hash: &TreeNodeHash) -> Option<HotStuffTreeNode<TAddr>> {
+    fn get_node(&self, node_hash: &TreeNodeHash) -> Result<HotStuffTreeNode<TAddr>, Self::Error> {
         if node_hash == &TreeNodeHash::zero() {
-            Some(HotStuffTreeNode::genesis())
+            Ok(HotStuffTreeNode::genesis())
         } else {
-            self.nodes.get(node_hash).cloned()
+            self.nodes.get(node_hash).cloned().ok_or(StoreError::NodeNotFound)
         }
     }
 
@@ -203,8 +203,11 @@ impl<TAddr: NodeAddressable, TPayload: Payload> ShardStoreTransaction<TAddr, TPa
         self.last_executed_height.get(&shard).copied().unwrap_or(NodeHeight(0))
     }
 
-    fn get_payload(&self, payload_id: &PayloadId) -> Option<TPayload> {
-        self.payloads.get(payload_id).cloned()
+    fn get_payload(&self, payload_id: &PayloadId) -> Result<TPayload, Self::Error> {
+        self.payloads
+            .get(payload_id)
+            .cloned()
+            .ok_or(StoreError::CannotFindPayload)
     }
 
     fn set_payload(&mut self, payload: TPayload) {

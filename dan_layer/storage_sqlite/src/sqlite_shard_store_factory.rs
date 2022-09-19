@@ -12,7 +12,7 @@ use tari_dan_core::{
         TariDanPayload,
         TreeNodeHash,
     },
-    storage::shard_store::{ShardStoreFactory, ShardStoreTransaction},
+    storage::shard_store::{ShardStoreFactory, ShardStoreTransaction, StoreError},
 };
 
 pub struct SqliteShardStoreFactory {}
@@ -36,7 +36,7 @@ impl SqliteShardStoreTransaction {
 }
 
 impl ShardStoreTransaction<PublicKey, TariDanPayload> for SqliteShardStoreTransaction {
-    type Error = String;
+    type Error = StoreError;
 
     fn commit(&mut self) -> Result<(), Self::Error> {
         todo!()
@@ -59,7 +59,7 @@ impl ShardStoreTransaction<PublicKey, TariDanPayload> for SqliteShardStoreTransa
         _shard: tari_dan_common_types::ShardId,
         _node: TreeNodeHash,
         _height: NodeHeight,
-    ) -> Result<(), String> {
+    ) -> Result<(), Self::Error> {
         todo!()
     }
 
@@ -67,11 +67,11 @@ impl ShardStoreTransaction<PublicKey, TariDanPayload> for SqliteShardStoreTransa
         todo!()
     }
 
-    fn get_payload(&self, _payload_id: &PayloadId) -> Option<TariDanPayload> {
+    fn get_payload(&self, _payload_id: &PayloadId) -> Result<TariDanPayload, Self::Error> {
         todo!()
     }
 
-    fn get_node(&self, _node_hash: &TreeNodeHash) -> Option<HotStuffTreeNode<PublicKey>> {
+    fn get_node(&self, _node_hash: &TreeNodeHash) -> Result<HotStuffTreeNode<PublicKey>, Self::Error> {
         todo!()
     }
 

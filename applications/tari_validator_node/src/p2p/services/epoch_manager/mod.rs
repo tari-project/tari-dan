@@ -26,13 +26,3 @@ pub mod handle;
 
 mod initializer;
 pub use initializer::spawn;
-use tari_dan_core::services::base_node_error::BaseNodeError;
-use thiserror::Error;
-
-#[derive(Error, Debug)]
-pub enum EpochManagerError {
-    #[error("Could not send to channel")]
-    SendError,
-    #[error("Base node errored: {0}")]
-    BaseNodeError(#[from] BaseNodeError),
-}

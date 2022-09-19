@@ -27,7 +27,7 @@ use tari_common_types::types::{FixedHash, FixedHashSizeError};
 use tari_crypto::tari_utilities::ByteArray;
 use tari_dan_core::{
     models::BaseLayerMetadata,
-    services::{base_node_error::BaseNodeError, BaseNodeClient},
+    services::{base_node_error::BaseNodeError, epoch_manager::EpochManagerError, BaseNodeClient},
     storage::{
         global::{GlobalDb, GlobalDbMetadataKey},
         StorageError,
@@ -40,7 +40,7 @@ use tokio::time;
 
 use crate::{
     p2p::services::{
-        epoch_manager::{handle::EpochManagerHandle, EpochManagerError},
+        epoch_manager::handle::EpochManagerHandle,
         template_manager::{handle::TemplateManagerHandle, template_manager::TemplateMetadata, TemplateManagerError},
     },
     GrpcBaseNodeClient,

@@ -21,17 +21,7 @@
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 use tari_common::exit_codes::ExitError;
-use tari_comms::NodeIdentity;
-use tari_dan_storage_sqlite::{global::SqliteGlobalDbBackendAdapter, SqliteDbFactory};
 use tari_shutdown::ShutdownSignal;
-use tokio::sync::mpsc::Sender;
-
-use crate::{
-    base_layer_scanner::BaseLayerScanner,
-    config::ValidatorNodeConfig,
-    epoch_manager::EpochManager,
-    grpc::services::base_node_client::GrpcBaseNodeClient,
-};
 
 const _LOG_TARGET: &str = "tari::validator_node::app";
 

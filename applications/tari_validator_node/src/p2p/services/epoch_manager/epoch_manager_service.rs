@@ -22,7 +22,7 @@
 
 use tari_dan_core::{
     models::{BaseLayerMetadata, Epoch},
-    services::epoch_manager::EpochManager,
+    services::epoch_manager::EpochManagerError,
 };
 use tari_shutdown::ShutdownSignal;
 use tokio::{
@@ -32,7 +32,7 @@ use tokio::{
 
 use crate::{
     grpc::services::base_node_client::GrpcBaseNodeClient,
-    p2p::services::epoch_manager::{base_layer_epoch_manager::BaseLayerEpochManager, EpochManagerError},
+    p2p::services::epoch_manager::base_layer_epoch_manager::BaseLayerEpochManager,
 };
 // const LOG_TARGET: &str = "tari::validator_node::epoch_manager";
 

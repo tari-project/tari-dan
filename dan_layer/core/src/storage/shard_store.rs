@@ -23,6 +23,7 @@
 use std::{collections::HashMap, fmt::Display};
 
 use tari_dan_common_types::{ObjectId, PayloadId, ShardId, SubstateChange, SubstateState};
+use thiserror::Error;
 
 use crate::{
     models::{
@@ -46,16 +47,26 @@ pub trait ShardStoreFactory {
     fn create_tx(&self) -> Self::Transaction;
 }
 
+#[derive(Debug, Error)]
+pub enum StoreError {
+    #[error("Cannot find payload")]
+    CannotFindPayload,
+    #[error("Cannot find node")]
+    NodeNotFound,
+    #[error("Cannot update leaf node")]
+    CannotUpdateLeafNode,
+}
+
 pub trait ShardStoreTransaction<TAddr: NodeAddressable, TPayload: Payload> {
-    type Error: Display;
+    type Error: Display + Into<StoreError>;
     fn commit(&mut self) -> Result<(), Self::Error>;
     fn update_high_qc(&mut self, shard: ShardId, qc: QuorumCertificate);
     fn set_payload(&mut self, payload: TPayload);
     fn get_leaf_node(&self, shard: ShardId) -> (TreeNodeHash, NodeHeight);
-    fn update_leaf_node(&mut self, shard: ShardId, node: TreeNodeHash, height: NodeHeight) -> Result<(), String>;
+    fn update_leaf_node(&mut self, shard: ShardId, node: TreeNodeHash, height: NodeHeight) -> Result<(), StoreError>;
     fn get_high_qc_for(&self, shard: ShardId) -> QuorumCertificate;
-    fn get_payload(&self, payload_id: &PayloadId) -> Option<TPayload>;
-    fn get_node(&self, node_hash: &TreeNodeHash) -> Option<HotStuffTreeNode<TAddr>>;
+    fn get_payload(&self, payload_id: &PayloadId) -> Result<TPayload, Self::Error>;
+    fn get_node(&self, node_hash: &TreeNodeHash) -> Result<HotStuffTreeNode<TAddr>, Self::Error>;
     fn save_node(&mut self, node: HotStuffTreeNode<TAddr>);
     fn get_locked_node_hash_and_height(&self, shard: ShardId) -> (TreeNodeHash, NodeHeight);
     fn set_locked(&mut self, shard: ShardId, node_hash: TreeNodeHash, node_height: NodeHeight);
