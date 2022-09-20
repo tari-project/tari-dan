@@ -68,7 +68,8 @@ pub async fn spawn_services(
     } = message_receivers;
 
     // Epoch manager
-    let epoch_manager_handle = epoch_manager::spawn(base_node_client, shutdown.clone());
+    let epoch_manager_handle =
+        epoch_manager::spawn(base_node_client, node_identity.public_key().clone(), shutdown.clone());
 
     // Mempool
     let mempool = mempool::spawn(rx_new_transaction_message, outbound_messaging.clone());

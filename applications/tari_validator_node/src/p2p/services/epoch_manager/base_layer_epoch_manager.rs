@@ -26,7 +26,10 @@ use tari_comms::types::CommsPublicKey;
 use tari_dan_common_types::ShardId;
 use tari_dan_core::{
     models::{Committee, Epoch, ValidatorNode},
-    services::epoch_manager::{EpochManagerError, ShardCommitteeAllocation},
+    services::{
+        epoch_manager::{EpochManagerError, ShardCommitteeAllocation},
+        BaseNodeClient,
+    },
 };
 
 use crate::grpc::services::base_node_client::GrpcBaseNodeClient;
@@ -35,14 +38,16 @@ use crate::grpc::services::base_node_client::GrpcBaseNodeClient;
 pub struct BaseLayerEpochManager {
     pub base_node_client: GrpcBaseNodeClient,
     current_epoch: Epoch,
-    _validators_per_epoch: HashMap<u64, Vec<ValidatorNode>>,
+    id: CommsPublicKey,
+    validators_per_epoch: HashMap<u64, Vec<ValidatorNode>>,
 }
 impl BaseLayerEpochManager {
-    pub fn new(base_node_client: GrpcBaseNodeClient) -> Self {
+    pub fn new(base_node_client: GrpcBaseNodeClient, id: CommsPublicKey) -> Self {
         Self {
             base_node_client,
             current_epoch: Epoch(0),
-            _validators_per_epoch: HashMap::new(),
+            id,
+            validators_per_epoch: HashMap::new(),
         }
     }
 
@@ -51,37 +56,31 @@ impl BaseLayerEpochManager {
         if self.current_epoch.0 < epoch.0 {
             self.current_epoch = epoch;
         }
-        todo!()
 
         // If the committee size is bigger than vns.len() then this function is broken.
-        // let half_committee_size = 5;
-        // let mut base_node_client = self.base_node_client.clone();
-        // let shard_key = base_node_client
-        //     .clone()
-        //     .get_shard_key(epoch.0, addr)
-        //     .await
-        //     .map_err(|s| format!("{:?}", s))?;
-        // let vns = base_node_client.get_validator_nodes(epoch.0).await?;
-        // *self.validators_per_epoch.entry(epoch.0).or_insert(vns.clone()) = vns.clone();
-        // vns.sort_by(|a, b| a.shard_key.partial_cmp(&b.shard_key).unwrap());
-        // let p = vns.iter().position(|x| x.shard_key == shard_key).unwrap();
-        // let begin = &vns[(vns.len() + p - half_committee_size) % vns.len()].shard_key;
-        // let end = &vns[(p + half_committee_size) % vns.len()].shard_key;
-        // if p >= half_committee_size || p + half_committee_size >= vns.len() {
-        //     This means the committee is wrapped around
-        // Ok(available_shards
-        //     .iter()
-        //     .filter(|&a| a <= begin || a >= end)
-        //     .map(|a| a.clone())
-        //     .collect())
-        // } else {
-        //     Ok(available_shards
-        //         .iter()
-        //         .filter(|&a| a >= begin || a <= end)
-        //         .map(|a| a.clone())
-        //         .collect())
-        // }
-        // Ok(())
+        let half_committee_size = 5;
+        let mut base_node_client = self.base_node_client.clone();
+        let mut vns = base_node_client.get_validator_nodes(epoch.0).await?;
+        let shard_key = base_node_client.clone().get_shard_key(epoch.0, &self.id).await?;
+
+        vns.sort_by(|a, b| a.shard_key.partial_cmp(&b.shard_key).unwrap());
+        let p = vns.iter().position(|x| x.shard_key == shard_key).unwrap();
+        let begin = &vns[(vns.len() + p - half_committee_size) % vns.len()].shard_key;
+        let end = &vns[(p + half_committee_size) % vns.len()].shard_key;
+        let vns: Vec<ValidatorNode> = if p >= half_committee_size || p + half_committee_size >= vns.len() {
+            //     This means the committee is wrapped around
+            vns.iter()
+                .filter(|&a| &a.shard_key <= begin || &a.shard_key >= end)
+                .map(|a| a.clone())
+                .collect()
+        } else {
+            vns.iter()
+                .filter(|&a| &a.shard_key >= begin || &a.shard_key <= end)
+                .map(|a| a.clone())
+                .collect()
+        };
+        *self.validators_per_epoch.entry(epoch.0).or_insert(vns.clone()) = vns.clone();
+        Ok(())
     }
 
     pub fn current_epoch(&self) -> Epoch {

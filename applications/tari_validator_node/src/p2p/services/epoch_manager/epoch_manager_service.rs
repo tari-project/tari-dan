@@ -20,6 +20,7 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+use tari_comms::types::CommsPublicKey;
 use tari_dan_core::{
     models::{BaseLayerMetadata, Epoch},
     services::epoch_manager::EpochManagerError,
@@ -57,6 +58,7 @@ pub enum EpochManagerResponse {
 
 impl EpochManagerService {
     pub fn spawn(
+        id: CommsPublicKey,
         rx_request: Receiver<(
             EpochManagerRequest,
             oneshot::Sender<Result<EpochManagerResponse, EpochManagerError>>,
@@ -67,7 +69,7 @@ impl EpochManagerService {
         tokio::spawn(async move {
             EpochManagerService {
                 rx_request,
-                inner: BaseLayerEpochManager::new(base_node_client),
+                inner: BaseLayerEpochManager::new(base_node_client, id),
             }
             .run(shutdown)
             .await
