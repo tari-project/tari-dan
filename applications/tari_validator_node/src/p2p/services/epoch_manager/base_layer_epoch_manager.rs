@@ -79,6 +79,7 @@ impl BaseLayerEpochManager {
                 .map(|a| a.clone())
                 .collect()
         };
+        dbg!(&vns);
         *self.validators_per_epoch.entry(epoch.0).or_insert(vns.clone()) = vns.clone();
         Ok(())
     }

@@ -20,13 +20,14 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use std::net::SocketAddr;
+use std::{convert::TryInto, net::SocketAddr};
 
 use async_trait::async_trait;
+use rand::rngs::OsRng;
 use tari_app_grpc::tari_rpc::{self as grpc, RegisterValidatorNodeRequest, RegisterValidatorNodeResponse};
 use tari_common_types::types::Signature;
 use tari_comms::NodeIdentity;
-use tari_crypto::ristretto::RistrettoSecretKey;
+use tari_crypto::{keys::SecretKey, ristretto::RistrettoSecretKey, tari_utilities::ByteArray};
 use tari_dan_core::{services::WalletClient, DigitalAssetError};
 
 const _LOG_TARGET: &str = "tari::validator_node::app";
@@ -50,6 +51,7 @@ impl GrpcWalletClient {
             let inner = Client::connect(url).await?;
             self.client = Some(inner);
         }
+        dbg!(self.endpoint);
         self.client
             .as_mut()
             .ok_or_else(|| DigitalAssetError::FatalError("no connection".into()))
@@ -62,13 +64,13 @@ impl GrpcWalletClient {
         let inner = self.connection().await?;
         let signature = Signature::sign(
             node_identity.secret_key().clone(),
-            RistrettoSecretKey::default(),
+            RistrettoSecretKey::random(&mut OsRng),
             &[0; 32],
         )
         .unwrap();
         let request = RegisterValidatorNodeRequest {
-            validator_node_public_key: node_identity.public_key().to_string(),
-            validator_node_signature: Some(signature.into()),
+            validator_node_public_key: node_identity.public_key().to_vec(),
+            validator_node_signature: Some(signature.try_into()?),
             fee_per_gram: 5,
             message: "Registering VN".to_string(),
         };
