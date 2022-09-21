@@ -38,6 +38,7 @@ mod sqlite_state_db_backend_adapter;
 pub use sqlite_state_db_backend_adapter::SqliteStateDbBackendAdapter;
 pub mod engine_state_store;
 pub mod global;
+pub mod sqlite_shard_store_factory;
 mod sqlite_storage_service;
 
 pub use sqlite_storage_service::SqliteStorageService;

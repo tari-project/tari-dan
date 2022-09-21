@@ -35,10 +35,12 @@ use crate::{
         TreeNodeHash,
     },
     services::infrastructure_services::NodeAddressable,
+    storage::shard_store::{ShardStoreTransaction, StoreError},
 };
 
-#[derive(Debug, Default)]
-pub struct ShardDb<TAddr: NodeAddressable, TPayload: Payload> {
+// TODO: Clone is pretty bad here, this class should only be used for testing
+#[derive(Debug, Default, Clone)]
+pub struct MemoryShardDb<TAddr: NodeAddressable, TPayload: Payload> {
     // replica data
     shard_high_qcs: HashMap<ShardId, QuorumCertificate>,
     // pace maker data
@@ -53,9 +55,9 @@ pub struct ShardDb<TAddr: NodeAddressable, TPayload: Payload> {
     objects: HashMap<ShardId, HashMap<ObjectId, (SubstateState, Option<ObjectPledge>)>>,
 }
 
-impl<TAddr: NodeAddressable, TPayload: Payload> ShardDb<TAddr, TPayload> {
+impl<TAddr: NodeAddressable, TPayload: Payload> MemoryShardDb<TAddr, TPayload> {
     pub fn new() -> Self {
-        ShardDb {
+        Self {
             shard_high_qcs: HashMap::new(),
             shard_leaf_nodes: HashMap::new(),
             last_voted_heights: HashMap::new(),
@@ -68,8 +70,14 @@ impl<TAddr: NodeAddressable, TPayload: Payload> ShardDb<TAddr, TPayload> {
             objects: HashMap::new(),
         }
     }
+}
 
-    pub fn get_high_qc_for(&self, shard: ShardId) -> QuorumCertificate {
+impl<TAddr: NodeAddressable, TPayload: Payload> ShardStoreTransaction<TAddr, TPayload>
+    for MemoryShardDb<TAddr, TPayload>
+{
+    type Error = StoreError;
+
+    fn get_high_qc_for(&self, shard: ShardId) -> QuorumCertificate {
         if let Some(qc) = self.shard_high_qcs.get(&shard) {
             qc.clone()
         } else {
@@ -77,8 +85,8 @@ impl<TAddr: NodeAddressable, TPayload: Payload> ShardDb<TAddr, TPayload> {
         }
     }
 
-    pub fn update_high_qc(&mut self, qc: QuorumCertificate) {
-        let entry = self.shard_high_qcs.entry(qc.shard()).or_insert_with(|| qc.clone());
+    fn update_high_qc(&mut self, shard: ShardId, qc: QuorumCertificate) {
+        let entry = self.shard_high_qcs.entry(shard).or_insert_with(|| qc.clone());
         if qc.local_node_height() > entry.local_node_height() {
             *entry = qc.clone();
             self.shard_leaf_nodes
@@ -88,7 +96,7 @@ impl<TAddr: NodeAddressable, TPayload: Payload> ShardDb<TAddr, TPayload> {
         }
     }
 
-    pub fn get_leaf_node(&self, shard: ShardId) -> (TreeNodeHash, NodeHeight) {
+    fn get_leaf_node(&self, shard: ShardId) -> (TreeNodeHash, NodeHeight) {
         if let Some(leaf) = self.shard_leaf_nodes.get(&shard) {
             *leaf
         } else {
@@ -96,35 +104,35 @@ impl<TAddr: NodeAddressable, TPayload: Payload> ShardDb<TAddr, TPayload> {
         }
     }
 
-    pub fn update_leaf_node(&mut self, shard: ShardId, node: TreeNodeHash, height: NodeHeight) -> Result<(), String> {
+    fn update_leaf_node(&mut self, shard: ShardId, node: TreeNodeHash, height: NodeHeight) -> Result<(), StoreError> {
         let leaf = self.shard_leaf_nodes.entry(shard).or_insert((node, height));
         *leaf = (node, height);
         Ok(())
     }
 
-    pub fn get_last_voted_height(&self, shard: ShardId) -> NodeHeight {
+    fn get_last_voted_height(&self, shard: ShardId) -> NodeHeight {
         self.last_voted_heights.get(&shard).copied().unwrap_or(NodeHeight(0))
     }
 
-    pub fn set_last_voted_height(&mut self, shard: ShardId, height: NodeHeight) {
+    fn set_last_voted_height(&mut self, shard: ShardId, height: NodeHeight) {
         let entry = self.last_voted_heights.entry(shard).or_insert(height);
         *entry = height;
     }
 
-    pub fn get_locked_node_hash_and_height(&self, shard: ShardId) -> (TreeNodeHash, NodeHeight) {
+    fn get_locked_node_hash_and_height(&self, shard: ShardId) -> (TreeNodeHash, NodeHeight) {
         self.lock_node_and_heights
             .get(&shard)
             .copied()
             .unwrap_or((TreeNodeHash::zero(), NodeHeight(0)))
     }
 
-    pub fn set_locked(&mut self, shard: ShardId, node_hash: TreeNodeHash, node_height: NodeHeight) {
+    fn set_locked(&mut self, shard: ShardId, node_hash: TreeNodeHash, node_height: NodeHeight) {
         self.lock_node_and_heights
             .entry(shard)
             .and_modify(|e| *e = (node_hash, node_height));
     }
 
-    pub fn has_vote_for(&self, from: &TAddr, node_hash: TreeNodeHash, shard: ShardId) -> bool {
+    fn has_vote_for(&self, from: &TAddr, node_hash: TreeNodeHash, shard: ShardId) -> bool {
         if let Some(sigs) = self.votes.get(&(node_hash, shard)) {
             sigs.iter().any(|(f, _)| f == from)
         } else {
@@ -132,7 +140,7 @@ impl<TAddr: NodeAddressable, TPayload: Payload> ShardDb<TAddr, TPayload> {
         }
     }
 
-    pub fn save_received_vote_for(
+    fn save_received_vote_for(
         &mut self,
         from: TAddr,
         node_hash: TreeNodeHash,
@@ -144,14 +152,14 @@ impl<TAddr: NodeAddressable, TPayload: Payload> ShardDb<TAddr, TPayload> {
         entry.len()
     }
 
-    pub fn get_received_votes_for(&self, node_hash: TreeNodeHash, shard: ShardId) -> Vec<VoteMessage> {
+    fn get_received_votes_for(&self, node_hash: TreeNodeHash, shard: ShardId) -> Vec<VoteMessage> {
         self.votes
             .get(&(node_hash, shard))
             .map(|v| v.iter().map(|s| s.1.clone()).collect())
             .unwrap_or_default()
     }
 
-    pub fn save_payload_vote(
+    fn save_payload_vote(
         &mut self,
         shard: ShardId,
         payload: PayloadId,
@@ -163,7 +171,7 @@ impl<TAddr: NodeAddressable, TPayload: Payload> ShardDb<TAddr, TPayload> {
         height_entry.insert(shard, node);
     }
 
-    pub fn get_payload_vote(
+    fn get_payload_vote(
         &self,
         payload: PayloadId,
         payload_height: NodeHeight,
@@ -175,36 +183,39 @@ impl<TAddr: NodeAddressable, TPayload: Payload> ShardDb<TAddr, TPayload> {
             .and_then(|ph| ph.get(&shard).cloned())
     }
 
-    pub fn save_node(&mut self, node: HotStuffTreeNode<TAddr>) {
+    fn save_node(&mut self, node: HotStuffTreeNode<TAddr>) {
         self.nodes.insert(*node.hash(), node);
     }
 
-    pub fn node(&self, node_hash: &TreeNodeHash) -> Option<HotStuffTreeNode<TAddr>> {
+    fn get_node(&self, node_hash: &TreeNodeHash) -> Result<HotStuffTreeNode<TAddr>, Self::Error> {
         if node_hash == &TreeNodeHash::zero() {
-            Some(HotStuffTreeNode::genesis())
+            Ok(HotStuffTreeNode::genesis())
         } else {
-            self.nodes.get(node_hash).cloned()
+            self.nodes.get(node_hash).cloned().ok_or(StoreError::NodeNotFound)
         }
     }
 
-    pub fn set_last_executed_height(&mut self, shard: ShardId, height: NodeHeight) {
+    fn set_last_executed_height(&mut self, shard: ShardId, height: NodeHeight) {
         self.last_executed_height.entry(shard).and_modify(|e| *e = height);
     }
 
-    pub fn get_last_executed_height(&self, shard: ShardId) -> NodeHeight {
+    fn get_last_executed_height(&self, shard: ShardId) -> NodeHeight {
         self.last_executed_height.get(&shard).copied().unwrap_or(NodeHeight(0))
     }
 
-    pub fn get_payload(&self, payload_id: &PayloadId) -> Option<&TPayload> {
-        self.payloads.get(payload_id)
+    fn get_payload(&self, payload_id: &PayloadId) -> Result<TPayload, Self::Error> {
+        self.payloads
+            .get(payload_id)
+            .cloned()
+            .ok_or(StoreError::CannotFindPayload)
     }
 
-    pub fn set_payload(&mut self, payload: TPayload) {
+    fn set_payload(&mut self, payload: TPayload) {
         let payload_id = payload.to_id();
         self.payloads.entry(payload_id).or_insert(payload);
     }
 
-    pub fn pledge_object(
+    fn pledge_object(
         &mut self,
         shard: ShardId,
         object: ObjectId,
@@ -228,5 +239,13 @@ impl<TAddr: NodeAddressable, TPayload: Payload> ShardDb<TAddr, TPayload> {
         };
         entry.1 = Some(pledge.clone());
         pledge
+    }
+
+    fn commit(&mut self) -> Result<(), Self::Error> {
+        todo!()
+    }
+
+    fn save_substate_changes(&mut self, _changes: HashMap<ShardId, Option<SubstateState>>, _node: TreeNodeHash) {
+        todo!()
     }
 }

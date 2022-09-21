@@ -27,6 +27,7 @@ use tari_dan_core::{
     models::{vote_message::VoteMessage, HotStuffMessage, TariDanPayload},
     services::TariDanPayloadProcessor,
 };
+use tari_dan_storage_sqlite::sqlite_shard_store_factory::SqliteShardStoreFactory;
 use tari_shutdown::ShutdownSignal;
 use tokio::sync::mpsc;
 
@@ -47,12 +48,14 @@ pub fn spawn(
     shutdown: ShutdownSignal,
 ) {
     let payload_processor = TariDanPayloadProcessor::new();
+    let sqlite_db = SqliteShardStoreFactory {};
     HotstuffService::spawn(
         node_identity.public_key().clone(),
         epoch_manager,
         mempool,
         outbound,
         payload_processor,
+        sqlite_db,
         rx_consensus_message,
         rx_vote_message,
         shutdown,

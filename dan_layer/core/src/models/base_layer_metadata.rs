@@ -22,6 +22,7 @@
 
 use tari_common_types::types::FixedHash;
 
+#[derive(Debug, Clone)]
 pub struct BaseLayerMetadata {
     pub height_of_longest_chain: u64,
     pub tip_hash: FixedHash,

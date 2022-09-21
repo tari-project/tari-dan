@@ -20,6 +20,7 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+use tari_comms::types::CommsPublicKey;
 use tari_shutdown::ShutdownSignal;
 use tokio::sync::mpsc;
 
@@ -28,9 +29,9 @@ use crate::{
     p2p::services::epoch_manager::{epoch_manager_service::EpochManagerService, handle::EpochManagerHandle},
 };
 
-pub fn spawn(base_node_client: GrpcBaseNodeClient, shutdown: ShutdownSignal) -> EpochManagerHandle {
+pub fn spawn(base_node_client: GrpcBaseNodeClient, id: CommsPublicKey, shutdown: ShutdownSignal) -> EpochManagerHandle {
     let (tx_request, rx_request) = mpsc::channel(10);
     let handle = EpochManagerHandle::new(tx_request);
-    EpochManagerService::spawn(rx_request, shutdown, base_node_client);
+    EpochManagerService::spawn(id, rx_request, shutdown, base_node_client);
     handle
 }

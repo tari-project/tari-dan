@@ -34,6 +34,7 @@ pub use events_publisher::{EventsPublisher, LoggingEventsPublisher};
 pub use payload_processor::{PayloadProcessor, TariDanPayloadProcessor};
 pub use signing_service::{NodeIdentitySigningService, SigningService};
 mod asset_proxy;
+pub mod base_node_error;
 pub mod epoch_manager;
 pub mod leader_strategy;
 mod service_specification;

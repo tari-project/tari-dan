@@ -63,7 +63,7 @@ impl Ord for ShardId {
     }
 }
 
-#[derive(Copy, Clone, Debug, PartialEq, Eq, Hash, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash, Deserialize)]
 pub enum SubstateChange {
     Create,
     Destroy,

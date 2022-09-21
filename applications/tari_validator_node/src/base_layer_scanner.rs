@@ -20,14 +20,14 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use std::{convert::TryInto, sync::Arc, time::Duration};
+use std::{convert::TryInto, time::Duration};
 
 use log::*;
 use tari_common_types::types::{FixedHash, FixedHashSizeError};
 use tari_crypto::tari_utilities::ByteArray;
 use tari_dan_core::{
     models::BaseLayerMetadata,
-    services::BaseNodeClient,
+    services::{base_node_error::BaseNodeError, epoch_manager::EpochManagerError, BaseNodeClient},
     storage::{
         global::{GlobalDb, GlobalDbMetadataKey},
         StorageError,
@@ -39,8 +39,10 @@ use tari_shutdown::ShutdownSignal;
 use tokio::time;
 
 use crate::{
-    epoch_manager::EpochManager,
-    template_manager::{TemplateManager, TemplateMetadata},
+    p2p::services::{
+        epoch_manager::handle::EpochManagerHandle,
+        template_manager::{handle::TemplateManagerHandle, template_manager::TemplateMetadata, TemplateManagerError},
+    },
     GrpcBaseNodeClient,
     ValidatorNodeConfig,
 };
@@ -53,8 +55,8 @@ pub struct BaseLayerScanner {
     last_scanned_height: u64,
     last_scanned_hash: Option<FixedHash>,
     base_node_client: GrpcBaseNodeClient,
-    epoch_manager: Arc<EpochManager>,
-    template_manager: Arc<TemplateManager>,
+    epoch_manager: EpochManagerHandle,
+    template_manager: TemplateManagerHandle,
     shutdown: ShutdownSignal,
 }
 
@@ -63,8 +65,8 @@ impl BaseLayerScanner {
         config: ValidatorNodeConfig,
         global_db: GlobalDb<SqliteGlobalDbBackendAdapter>,
         base_node_client: GrpcBaseNodeClient,
-        epoch_manager: Arc<EpochManager>,
-        template_manager: Arc<TemplateManager>,
+        epoch_manager: EpochManagerHandle,
+        template_manager: TemplateManagerHandle,
         shutdown: ShutdownSignal,
     ) -> Self {
         Self {
@@ -94,20 +96,23 @@ impl BaseLayerScanner {
         loop {
             // fetch the new base layer info since the previous scan
             let tip = self.base_node_client.get_tip_info().await?;
+            // let block = self.base_node_client.get_block(tip.height).await?;
             let new_templates_metadata = self.scan_for_new_templates(&tip).await?;
 
             // both epoch and template tasks are I/O bound,
             // so they can be ran concurrently as they do not block CPU between them
-            let epoch_task = self.epoch_manager.update_epoch(&tip);
+            let epoch_task = self.epoch_manager.update_epoch(tip.clone());
             let template_task = self.template_manager.add_templates(new_templates_metadata);
 
             // wait for all tasks to finish
             let results = tokio::join!(epoch_task, template_task);
 
+            dbg!(&results);
             // propagate any error that may happen
             // TODO: there could be a cleaner way of propagating the errors of the individual tasks
             // TODO: maybe we want to be resilient to invalid data in base layer and just log the error?
             results.0?;
+
             results.1?;
 
             // setup the next scan cycle
@@ -205,6 +210,12 @@ pub enum BaseLayerScannerError {
     DigitalAssetError(#[from] DigitalAssetError),
     #[error("Data corruption: {details}")]
     DataCorruption { details: String },
+    #[error("Epoch manager error: {0}")]
+    EpochManagerError(#[from] EpochManagerError),
+    #[error("Template manager error: {0}")]
+    TemplateManagerError(#[from] TemplateManagerError),
+    #[error("Base node client error: {0}")]
+    BaseNodeError(#[from] BaseNodeError),
 }
 
 // macro_rules! some_or_continue {

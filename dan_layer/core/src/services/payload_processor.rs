@@ -22,7 +22,6 @@
 
 use std::collections::HashMap;
 
-use async_trait::async_trait;
 use tari_dan_common_types::ShardId;
 
 use crate::{
@@ -30,9 +29,8 @@ use crate::{
     models::{ObjectPledge, Payload, TariDanPayload},
 };
 
-#[async_trait]
 pub trait PayloadProcessor<TPayload: Payload> {
-    async fn process_payload(
+    fn process_payload(
         &self,
         payload: &TPayload,
         pledges: HashMap<ShardId, Vec<ObjectPledge>>,
@@ -48,9 +46,8 @@ impl TariDanPayloadProcessor {
     }
 }
 
-#[async_trait]
 impl PayloadProcessor<TariDanPayload> for TariDanPayloadProcessor {
-    async fn process_payload(
+    fn process_payload(
         &self,
         _payload: &TariDanPayload,
         _pledges: HashMap<ShardId, Vec<ObjectPledge>>,

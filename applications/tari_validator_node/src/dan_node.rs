@@ -20,66 +20,19 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use std::sync::Arc;
-
-use tari_common::exit_codes::{ExitCode, ExitError};
-use tari_comms::NodeIdentity;
-use tari_dan_core::storage::global::GlobalDb;
-use tari_dan_storage_sqlite::{global::SqliteGlobalDbBackendAdapter, SqliteDbFactory};
+use tari_common::exit_codes::ExitError;
 use tari_shutdown::ShutdownSignal;
-
-use crate::{
-    base_layer_scanner::BaseLayerScanner,
-    config::ValidatorNodeConfig,
-    epoch_manager::EpochManager,
-    grpc::services::base_node_client::GrpcBaseNodeClient,
-    TemplateManager,
-};
 
 const _LOG_TARGET: &str = "tari::validator_node::app";
 
-pub struct DanNode {
-    config: ValidatorNodeConfig,
-    _identity: Arc<NodeIdentity>,
-    global_db: GlobalDb<SqliteGlobalDbBackendAdapter>,
-    epoch_manager: Arc<EpochManager>,
-    template_manager: Arc<TemplateManager>,
-}
+pub struct DanNode {}
 
 impl DanNode {
-    pub fn new(
-        config: ValidatorNodeConfig,
-        identity: Arc<NodeIdentity>,
-        global_db: GlobalDb<SqliteGlobalDbBackendAdapter>,
-        epoch_manager: Arc<EpochManager>,
-        template_manager: Arc<TemplateManager>,
-    ) -> Self {
-        Self {
-            config,
-            _identity: identity,
-            global_db,
-            epoch_manager,
-            template_manager,
-        }
+    pub fn new() -> Self {
+        Self {}
     }
 
-    pub async fn start(&self, mut shutdown: ShutdownSignal, _db_factory: SqliteDbFactory) -> Result<(), ExitError> {
-        let base_node_client = GrpcBaseNodeClient::new(self.config.base_node_grpc_address);
-
-        let base_layer_scanner = BaseLayerScanner::new(
-            self.config.clone(),
-            self.global_db.clone(),
-            base_node_client,
-            self.epoch_manager.clone(),
-            self.template_manager.clone(),
-            shutdown.clone(),
-        );
-
-        base_layer_scanner
-            .start()
-            .await
-            .map_err(|err| ExitError::new(ExitCode::DigitalAssetError, err))?;
-
+    pub async fn start(&self, mut shutdown: ShutdownSignal) -> Result<(), ExitError> {
         // let base_node_client = GrpcBaseNodeClient::new(self.config.base_node_grpc_address);
         // let wallet_client = GrpcWalletClient::new(self.config.wallet_grpc_address);
         // let acceptance_manager = ConcreteAcceptanceManager::new(wallet_client, base_node_client.clone());
@@ -102,6 +55,7 @@ impl DanNode {
         //     .map_err(|err| ExitError::new(ExitCode::DigitalAssetError, err))?;
 
         // todo!();
+        // basically stay open until killed
 
         shutdown.wait().await;
 

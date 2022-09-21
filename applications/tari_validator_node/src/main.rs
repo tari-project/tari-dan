@@ -28,14 +28,12 @@ mod comms;
 mod config;
 mod dan_node;
 mod default_service_specification;
-mod epoch_manager;
 mod grpc;
 mod json_rpc;
 mod p2p;
 mod registration_signing;
-mod template_manager;
 
-use std::{fs, io, process, sync::Arc};
+use std::{fs, io, process};
 
 use clap::Parser;
 use log::*;
@@ -49,13 +47,12 @@ use tari_common::{
 use tari_comms::{peer_manager::PeerFeatures, NodeIdentity};
 use tari_dan_common_types::ShardId;
 use tari_dan_core::{
-    services::BaseNodeClient,
-    storage::{global::GlobalDb, DbFactory},
+    services::{base_node_error::BaseNodeError, BaseNodeClient},
+    storage::DbFactory,
     DigitalAssetError,
 };
-use tari_dan_storage_sqlite::{global::SqliteGlobalDbBackendAdapter, SqliteDbFactory};
+use tari_dan_storage_sqlite::SqliteDbFactory;
 use tari_shutdown::{Shutdown, ShutdownSignal};
-use template_manager::TemplateManager;
 use tokio::{runtime, runtime::Runtime, task};
 
 use crate::{
@@ -63,7 +60,6 @@ use crate::{
     cli::Cli,
     config::{ApplicationConfig, ValidatorNodeConfig},
     dan_node::DanNode,
-    epoch_manager::EpochManager,
     grpc::services::{base_node_client::GrpcBaseNodeClient, wallet_client::GrpcWalletClient},
     json_rpc::{run_json_rpc, JsonRpcHandlers},
 };
@@ -117,6 +113,8 @@ pub enum ShardKeyError {
     RegistrationFailed,
     #[error("Registration error {0}")]
     RegistrationError(#[from] DigitalAssetError),
+    #[error("Base node error: {0}")]
+    BaseNodeError(#[from] BaseNodeError),
 }
 
 #[derive(Serialize, Deserialize)]
@@ -134,7 +132,7 @@ async fn auto_register_vn(
     let path = &config.validator_node.shard_key_file;
     if !path.exists() {
         // If we don't have the shard key file, we want to send registration tx
-        let vn = wallet_client.register_validator_node(node_identity).await.map(|e| e)?;
+        let vn = wallet_client.register_validator_node(node_identity).await?;
         if vn.is_success {
             println!("Registering VN was successful {:?}", vn);
             let shard_key = ShardKey {
@@ -205,28 +203,14 @@ async fn run_node(config: &ApplicationConfig) -> Result<(), ExitError> {
     let mut wallet_client = GrpcWalletClient::new(config.validator_node.wallet_grpc_address);
     let vn_registration = auto_register_vn(&mut wallet_client, &mut base_node_client, &node_identity, config).await;
     println!("VN Registration result : {:?}", vn_registration);
-    let _comms = spawn_services(config, shutdown.to_signal(), node_identity.clone()).await?;
-    // let validator_node_client_factory =
-    //     TariCommsValidatorNodeClientFactory::new();
-    // let base_node_client = GrpcBaseNodeClient::new(config.validator_node.base_node_grpc_address);
-    // let asset_proxy: ConcreteAssetProxy<DefaultServiceSpecification> = ConcreteAssetProxy::new(
-    //     base_node_client.clone(),
-    //     validator_node_client_factory,
-    //     5,
-    //     mempool_service.clone(),
-    //     db_factory.clone(),
-    // );
-    // let grpc_server: ValidatorNodeGrpcServer<DefaultServiceSpecification> =
-    //     ValidatorNodeGrpcServer::new(node_identity.as_ref().clone(), db_factory.clone(), asset_proxy);
-
-    // Run the gRPC API
-    // if let Some(address) = config.validator_node.grpc_address.clone() {
-    //     println!("Started GRPC server on {}", address);
-    //     task::spawn(run_grpc(grpc_server, address, shutdown.to_signal()));
-    // }
-
-    let epoch_manager = Arc::new(EpochManager::new());
-    let template_manager = Arc::new(TemplateManager::new(db_factory.clone()));
+    let _comms = spawn_services(
+        config,
+        shutdown.to_signal(),
+        node_identity.clone(),
+        global_db,
+        db_factory,
+    )
+    .await?;
 
     // Run the JSON-RPC API
     if let Some(address) = config.validator_node.json_rpc_address {
@@ -242,16 +226,7 @@ async fn run_node(config: &ApplicationConfig) -> Result<(), ExitError> {
     info!(target: LOG_TARGET, "🚀 Validator node started!");
     info!(target: LOG_TARGET, "{}", node_identity);
 
-    run_dan_node(
-        shutdown.to_signal(),
-        config.validator_node.clone(),
-        db_factory,
-        node_identity,
-        global_db,
-        epoch_manager.clone(),
-        template_manager.clone(),
-    )
-    .await?;
+    run_dan_node(shutdown.to_signal()).await?;
 
     Ok(())
 }
@@ -264,17 +239,9 @@ fn build_runtime() -> Result<Runtime, ExitError> {
         .map_err(|e| ExitError::new(ExitCode::UnknownError, e))
 }
 
-async fn run_dan_node(
-    shutdown_signal: ShutdownSignal,
-    config: ValidatorNodeConfig,
-    db_factory: SqliteDbFactory,
-    node_identity: Arc<NodeIdentity>,
-    global_db: GlobalDb<SqliteGlobalDbBackendAdapter>,
-    epoch_manager: Arc<EpochManager>,
-    template_manager: Arc<TemplateManager>,
-) -> Result<(), ExitError> {
-    let node = DanNode::new(config, node_identity, global_db, epoch_manager, template_manager);
-    node.start(shutdown_signal, db_factory).await
+async fn run_dan_node(shutdown_signal: ShutdownSignal) -> Result<(), ExitError> {
+    let node = DanNode::new();
+    node.start(shutdown_signal).await
 }
 
 // async fn run_grpc<TServiceSpecification: ServiceSpecification + 'static>(

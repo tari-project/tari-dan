@@ -29,10 +29,11 @@ use tari_dan_core::{
 };
 use tari_dan_engine::hashing::hasher;
 
-use crate::SqliteDbFactory;
+use crate::{p2p::services::template_manager::TemplateManagerError, SqliteDbFactory};
 
 const LOG_TARGET: &str = "tari::validator_node::epoch_manager";
 
+#[derive(Debug, Clone)]
 pub struct TemplateMetadata {
     address: FixedHash,
     // this must be in the form of "https://example.com/my_template.wasm"
@@ -83,7 +84,7 @@ impl TemplateManager {
         }
     }
 
-    pub async fn add_templates(&self, templates_metadata: Vec<TemplateMetadata>) -> Result<(), DigitalAssetError> {
+    pub async fn add_templates(&self, templates_metadata: Vec<TemplateMetadata>) -> Result<(), TemplateManagerError> {
         info!(target: LOG_TARGET, "Adding {} new templates", templates_metadata.len());
 
         // we can add each individual template in parallel
@@ -100,14 +101,14 @@ impl TemplateManager {
         Ok(())
     }
 
-    async fn add_template(&self, template_metadata: &TemplateMetadata) -> Result<(), DigitalAssetError> {
+    async fn add_template(&self, template_metadata: &TemplateMetadata) -> Result<(), TemplateManagerError> {
         // fetch the compiled wasm code from the web
-        let template_wasm = self.fecth_template_wasm(&template_metadata.url).await?;
+        let template_wasm = self.fetch_template_wasm(&template_metadata.url).await?;
 
         // check that the code we fetched is valid (the template address is the hash)
         let hash = hasher("template").chain(&template_wasm).result().to_vec();
         if template_metadata.address.to_vec() != hash {
-            return Err(DigitalAssetError::TemplateCodeHashMismatch);
+            return Err(TemplateManagerError::TemplateCodeHashMismatch);
         }
 
         // finally, store the full template (metadata + wasm binary) in the database
@@ -116,14 +117,14 @@ impl TemplateManager {
         Ok(())
     }
 
-    async fn fecth_template_wasm(&self, url: &str) -> Result<Vec<u8>, DigitalAssetError> {
+    async fn fetch_template_wasm(&self, url: &str) -> Result<Vec<u8>, TemplateManagerError> {
         let res = reqwest::get(url)
             .await
-            .map_err(|_| DigitalAssetError::TemplateCodeFetchError)?;
+            .map_err(|_| TemplateManagerError::TemplateCodeFetchError)?;
         let wasm_bytes = res
             .bytes()
             .await
-            .map_err(|_| DigitalAssetError::TemplateCodeFetchError)?
+            .map_err(|_| TemplateManagerError::TemplateCodeFetchError)?
             .to_vec();
 
         Ok(wasm_bytes)
@@ -133,7 +134,7 @@ impl TemplateManager {
         &self,
         template_metadata: &TemplateMetadata,
         template_wasm: Vec<u8>,
-    ) -> Result<(), DigitalAssetError> {
+    ) -> Result<(), TemplateManagerError> {
         let template = DbTemplate {
             template_address: template_metadata.address,
             url: template_metadata.url.clone(),
