@@ -22,6 +22,7 @@
 
 use std::collections::HashMap;
 
+use log::warn;
 use tari_comms::types::CommsPublicKey;
 use tari_dan_common_types::ShardId;
 use tari_dan_core::{
@@ -34,12 +35,15 @@ use tari_dan_core::{
 
 use crate::grpc::services::base_node_client::GrpcBaseNodeClient;
 
+const LOG_TARGET: &str = "tari_validator_node::epoch_manager::base_layer_epoch_manager";
+
 #[derive(Clone)]
 pub struct BaseLayerEpochManager {
     pub base_node_client: GrpcBaseNodeClient,
     current_epoch: Epoch,
     id: CommsPublicKey,
     validators_per_epoch: HashMap<u64, Vec<ValidatorNode>>,
+    neighbours: HashMap<u64, Vec<ValidatorNode>>,
 }
 impl BaseLayerEpochManager {
     pub fn new(base_node_client: GrpcBaseNodeClient, id: CommsPublicKey) -> Self {
@@ -48,11 +52,12 @@ impl BaseLayerEpochManager {
             current_epoch: Epoch(0),
             id,
             validators_per_epoch: HashMap::new(),
+            neighbours: HashMap::new(),
         }
     }
 
     pub async fn update_epoch(&mut self, tip: u64) -> Result<(), EpochManagerError> {
-        let epoch = Epoch(tip / 100);
+        let epoch = Epoch(tip / 10);
         if self.current_epoch.0 < epoch.0 {
             self.current_epoch = epoch;
         }
@@ -61,7 +66,17 @@ impl BaseLayerEpochManager {
         let half_committee_size = 5;
         let mut base_node_client = self.base_node_client.clone();
         let mut vns = base_node_client.get_validator_nodes(epoch.0).await?;
-        let shard_key = base_node_client.clone().get_shard_key(epoch.0, &self.id).await?;
+        dbg!(&vns);
+        *self.validators_per_epoch.entry(epoch.0).or_insert(vns.clone()) = vns.clone();
+        let shard_key;
+        match base_node_client.clone().get_shard_key(epoch.0, &self.id).await {
+            Ok(key) => shard_key = key,
+            Err(_) => {
+                warn!(target: LOG_TARGET, "This VN is not registered");
+                return Ok(());
+            },
+        };
+        dbg!(&shard_key);
 
         vns.sort_by(|a, b| a.shard_key.partial_cmp(&b.shard_key).unwrap());
         let p = vns.iter().position(|x| x.shard_key == shard_key).unwrap();
@@ -71,16 +86,16 @@ impl BaseLayerEpochManager {
             //     This means the committee is wrapped around
             vns.iter()
                 .filter(|&a| &a.shard_key <= begin || &a.shard_key >= end)
-                .copied()
+                .cloned()
                 .collect()
         } else {
             vns.iter()
                 .filter(|&a| &a.shard_key >= begin || &a.shard_key <= end)
-                .copied()
+                .cloned()
                 .collect()
         };
         dbg!(&vns);
-        *self.validators_per_epoch.entry(epoch.0).or_insert(vns.clone()) = vns.clone();
+        *self.neighbours.entry(epoch.0).or_insert(vns.clone()) = vns.clone();
         Ok(())
     }
 

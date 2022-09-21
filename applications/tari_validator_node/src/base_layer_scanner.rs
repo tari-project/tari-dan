@@ -107,10 +107,12 @@ impl BaseLayerScanner {
             // wait for all tasks to finish
             let results = tokio::join!(epoch_task, template_task);
 
+            dbg!(&results);
             // propagate any error that may happen
             // TODO: there could be a cleaner way of propagating the errors of the individual tasks
             // TODO: maybe we want to be resilient to invalid data in base layer and just log the error?
             results.0?;
+
             results.1?;
 
             // setup the next scan cycle

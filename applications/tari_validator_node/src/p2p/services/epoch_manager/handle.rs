@@ -55,7 +55,7 @@ impl EpochManagerHandle {
             .send((EpochManagerRequest::UpdateEpoch { tip }, tx))
             .await
             .map_err(|_| EpochManagerError::SendError)?;
-        let _result = rx.await.map_err(|_| EpochManagerError::ReceiveError)?;
+        let result = rx.await.map_err(|_| EpochManagerError::ReceiveError)??;
         Ok(())
     }
 }
