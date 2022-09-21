@@ -26,7 +26,7 @@ use anyhow::anyhow;
 use async_trait::async_trait;
 use tari_common_types::types::{FixedHash, PublicKey};
 use tari_comms::PeerConnection;
-use tari_comms_dht::DhtRequester;
+// use tari_comms_dht::DhtRequester;
 use tari_crypto::tari_utilities::ByteArray;
 use tari_dan_core::{
     models::Node,
@@ -44,14 +44,15 @@ use crate::p2p::{
 };
 
 pub struct TariCommsValidatorNodeRpcClient {
-    dht: DhtRequester,
+    // dht: DhtRequester,
     address: PublicKey,
 }
 
 impl TariCommsValidatorNodeRpcClient {
     async fn create_connection(&mut self) -> Result<PeerConnection, ValidatorNodeClientError> {
-        let conn = self.dht.dial_or_discover_peer(self.address.clone()).await?;
-        Ok(conn)
+        todo!()
+        // let conn = self.dht.dial_or_discover_peer(self.address.clone()).await?;
+        // Ok(conn)
     }
 }
 
@@ -166,13 +167,13 @@ impl ValidatorNodeRpcClient for TariCommsValidatorNodeRpcClient {
 
 #[derive(Clone)]
 pub struct TariCommsValidatorNodeClientFactory {
-    dht: DhtRequester,
+    // dht: DhtRequester,
 }
 
 impl TariCommsValidatorNodeClientFactory {
-    pub fn _new(dht: DhtRequester) -> Self {
-        Self { dht }
-    }
+    // pub fn _new(dht: DhtRequester) -> Self {
+    //     Self { dht }
+    // }
 }
 
 impl ValidatorNodeClientFactory for TariCommsValidatorNodeClientFactory {
@@ -181,7 +182,7 @@ impl ValidatorNodeClientFactory for TariCommsValidatorNodeClientFactory {
 
     fn create_client(&self, address: &Self::Addr) -> Self::Client {
         TariCommsValidatorNodeRpcClient {
-            dht: self.dht.clone(),
+            // dht: self.dht.clone(),
             address: address.clone(),
         }
     }

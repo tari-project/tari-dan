@@ -71,12 +71,12 @@ impl BaseLayerEpochManager {
             //     This means the committee is wrapped around
             vns.iter()
                 .filter(|&a| &a.shard_key <= begin || &a.shard_key >= end)
-                .map(|a| a.clone())
+                .copied()
                 .collect()
         } else {
             vns.iter()
                 .filter(|&a| &a.shard_key >= begin || &a.shard_key <= end)
-                .map(|a| a.clone())
+                .copied()
                 .collect()
         };
         dbg!(&vns);

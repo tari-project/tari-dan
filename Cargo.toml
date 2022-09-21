@@ -8,7 +8,7 @@ members = [
     "dan_layer/template_lib",
     "dan_layer/template_macros",
     "applications/tari_validator_node",
-    "applications/tari_validator_node_grpc",
+    "applications/tari_validator_node_cli",
 ]
 #
 resolver = "2"
