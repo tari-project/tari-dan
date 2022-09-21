@@ -53,6 +53,7 @@ pub enum EpochManagerError {
 }
 
 #[async_trait]
+// TODO: Rename to reflect that it's a read only interface (e.g. EpochReader, EpochQuery)
 pub trait EpochManager<TAddr: NodeAddressable>: Clone {
     async fn current_epoch(&self) -> Result<Epoch, EpochManagerError>;
     async fn is_epoch_valid(&self, epoch: Epoch) -> Result<bool, EpochManagerError>;
@@ -63,6 +64,7 @@ pub trait EpochManager<TAddr: NodeAddressable>: Clone {
     ) -> Result<Vec<ShardCommitteeAllocation<TAddr>>, EpochManagerError>;
 
     async fn get_committee(&self, epoch: Epoch, shard: ShardId) -> Result<Committee<TAddr>, EpochManagerError>;
+    // TODO: Get a better name
     async fn get_shards(
         &self,
         epoch: Epoch,

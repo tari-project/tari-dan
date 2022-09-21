@@ -65,7 +65,7 @@ impl BaseLayerEpochManager {
         // If the committee size is bigger than vns.len() then this function is broken.
         let half_committee_size = 5;
         let mut base_node_client = self.base_node_client.clone();
-        let mut vns = base_node_client.get_validator_nodes(epoch.0).await?;
+        let mut vns = base_node_client.get_validator_nodes(epoch.0 * 10).await?;
         dbg!(&vns);
         *self.validators_per_epoch.entry(epoch.0).or_insert(vns.clone()) = vns.clone();
         let shard_key;

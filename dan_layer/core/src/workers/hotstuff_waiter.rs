@@ -413,6 +413,7 @@ impl<
         }
     }
 
+    // TODO: needs some explaination of the process in docs here
     async fn on_receive_proposal(&mut self, from: TAddr, node: HotStuffTreeNode<TAddr>) -> Result<(), HotStuffError> {
         dbg!("Received proposal", &self.identity, &from);
         // TODO: validate message from leader
