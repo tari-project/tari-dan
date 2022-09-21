@@ -32,6 +32,7 @@ mod epoch_manager;
 mod grpc;
 mod json_rpc;
 mod p2p;
+mod registration_signing;
 mod template_manager;
 
 use std::{fs, io, process, sync::Arc};
@@ -64,7 +65,7 @@ use crate::{
     dan_node::DanNode,
     epoch_manager::EpochManager,
     grpc::services::{base_node_client::GrpcBaseNodeClient, wallet_client::GrpcWalletClient},
-    json_rpc::run_json_rpc,
+    json_rpc::{run_json_rpc, JsonRpcHandlers},
 };
 
 const LOG_TARGET: &str = "tari::validator_node::app";
@@ -229,13 +230,17 @@ async fn run_node(config: &ApplicationConfig) -> Result<(), ExitError> {
 
     // Run the JSON-RPC API
     if let Some(address) = config.validator_node.json_rpc_address {
-        println!("Started JSON-RPC server on {}", address);
-        task::spawn(run_json_rpc(address, node_identity.as_ref().clone()));
+        info!(target: LOG_TARGET, "Started JSON-RPC server on {}", address);
+        let handlers = JsonRpcHandlers::new(
+            node_identity.clone(),
+            GrpcWalletClient::new(config.validator_node.wallet_grpc_address),
+        );
+        task::spawn(run_json_rpc(address, handlers));
     }
 
     // Show the validator node identity
-    println!("🚀 Validator node started!");
-    println!("{}", node_identity);
+    info!(target: LOG_TARGET, "🚀 Validator node started!");
+    info!(target: LOG_TARGET, "{}", node_identity);
 
     run_dan_node(
         shutdown.to_signal(),

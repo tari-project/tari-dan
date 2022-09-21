@@ -105,13 +105,13 @@ impl EpochManager<CommsPublicKey> for BaseLayerEpochManager {
             Ok(available_shards
                 .iter()
                 .filter(|&a| a <= begin || a >= end)
-                .map(|a| a.clone())
+                .copied()
                 .collect())
         } else {
             Ok(available_shards
                 .iter()
                 .filter(|&a| a >= begin || a <= end)
-                .map(|a| a.clone())
+                .copied()
                 .collect())
         }
     }
