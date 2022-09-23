@@ -23,6 +23,7 @@
 use futures::future::join_all;
 use log::*;
 use tari_common_types::types::FixedHash;
+use tari_core::transactions::transaction_components::CodeTemplateRegistration;
 use tari_dan_core::{
     storage::{chain::DbTemplate, DbFactory},
     DigitalAssetError,
@@ -40,6 +41,16 @@ pub struct TemplateMetadata {
     url: String,
     // block height in which the template was published
     height: u64,
+}
+
+impl From<CodeTemplateRegistration> for TemplateMetadata {
+    fn from(reg: CodeTemplateRegistration) -> Self {
+        TemplateMetadata {
+            address: reg.hash(),
+            url: reg.binary_url.to_string(),
+            height: 0,
+        }
+    }
 }
 
 #[allow(dead_code)]
@@ -84,8 +95,18 @@ impl TemplateManager {
         }
     }
 
-    pub async fn add_templates(&self, templates_metadata: Vec<TemplateMetadata>) -> Result<(), TemplateManagerError> {
-        info!(target: LOG_TARGET, "Adding {} new templates", templates_metadata.len());
+    pub async fn add_templates(
+        &self,
+        template_registations: Vec<CodeTemplateRegistration>,
+    ) -> Result<(), TemplateManagerError> {
+        info!(
+            target: LOG_TARGET,
+            "Adding {} new templates",
+            template_registations.len()
+        );
+
+        // extract the metadata that we need to store
+        let templates_metadata: Vec<TemplateMetadata> = template_registations.into_iter().map(Into::into).collect();
 
         // we can add each individual template in parallel
         let tasks: Vec<_> = templates_metadata.iter().map(|md| self.add_template(md)).collect();

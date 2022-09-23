@@ -24,6 +24,7 @@ use std::{convert::TryInto, time::Duration};
 
 use log::*;
 use tari_common_types::types::{FixedHash, FixedHashSizeError};
+use tari_core::transactions::transaction_components::CodeTemplateRegistration;
 use tari_crypto::tari_utilities::ByteArray;
 use tari_dan_core::{
     models::BaseLayerMetadata,
@@ -41,7 +42,7 @@ use tokio::time;
 use crate::{
     p2p::services::{
         epoch_manager::handle::EpochManagerHandle,
-        template_manager::{handle::TemplateManagerHandle, template_manager::TemplateMetadata, TemplateManagerError},
+        template_manager::{handle::TemplateManagerHandle, TemplateManagerError},
     },
     GrpcBaseNodeClient,
     ValidatorNodeConfig,
@@ -97,12 +98,12 @@ impl BaseLayerScanner {
             // fetch the new base layer info since the previous scan
             let tip = self.base_node_client.get_tip_info().await?;
             // let block = self.base_node_client.get_block(tip.height).await?;
-            let new_templates_metadata = self.scan_for_new_templates(&tip).await?;
+            let template_registrations = self.scan_for_new_templates().await?;
 
             // both epoch and template tasks are I/O bound,
             // so they can be ran concurrently as they do not block CPU between them
             let epoch_task = self.epoch_manager.update_epoch(tip.clone());
-            let template_task = self.template_manager.add_templates(new_templates_metadata);
+            let template_task = self.template_manager.add_templates(template_registrations);
 
             // wait for all tasks to finish
             let results = tokio::join!(epoch_task, template_task);
@@ -154,35 +155,23 @@ impl BaseLayerScanner {
         Ok(())
     }
 
-    async fn scan_for_new_templates(
-        &mut self,
-        tip: &BaseLayerMetadata,
-    ) -> Result<Vec<TemplateMetadata>, BaseLayerScannerError> {
+    async fn scan_for_new_templates(&mut self) -> Result<Vec<CodeTemplateRegistration>, BaseLayerScannerError> {
         info!(
             target: LOG_TARGET,
-            "🔍 Scanning base layer (tip: {}) for new templates", tip.height_of_longest_chain
+            "🔍 Scanning base layer (from height: {}) for new templates", self.last_scanned_height
         );
 
-        Ok(vec![])
+        let template_registrations = self
+            .base_node_client
+            .get_template_registrations(self.last_scanned_height)
+            .await?;
+        info!(
+            target: LOG_TARGET,
+            "{} new template(s) found",
+            template_registrations.len()
+        );
 
-        // TODO: when template publishing is implemented in the base layer, uncomment this code for real base layer
-        // scanning let outputs = self
-        // .base_node_client
-        // .get_templates(self.last_scanned_hash, self.identity.public_key())
-        // .await?;
-        //
-        // let mut new_templates = vec![];
-        //
-        // for utxo in outputs {
-        // let output = some_or_continue!(utxo.output.into_unpruned_output());
-        // let mined_height = utxo.mined_height;
-        // let sidechain_features = some_or_continue!(output.features.sidechain_features);
-        // let template = sidechain_features.template;
-        // new_contracts.push(contract);
-        // }
-        //
-        // info!(target: LOG_TARGET, "{} new template(s) found", new_templates.len());
-        // Ok(new_templates)
+        Ok(template_registrations)
     }
 
     fn set_last_scanned_block(&mut self, tip: &BaseLayerMetadata) -> Result<(), BaseLayerScannerError> {
@@ -217,12 +206,3 @@ pub enum BaseLayerScannerError {
     #[error("Base node client error: {0}")]
     BaseNodeError(#[from] BaseNodeError),
 }
-
-// macro_rules! some_or_continue {
-// ($expr:expr) => {
-// match $expr {
-// Some(x) => x,
-// None => continue,
-// }
-// };
-// }

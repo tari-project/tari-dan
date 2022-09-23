@@ -21,6 +21,7 @@
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 use log::*;
+use tari_core::transactions::transaction_components::CodeTemplateRegistration;
 use tari_dan_storage_sqlite::SqliteDbFactory;
 use tari_shutdown::ShutdownSignal;
 use tokio::{
@@ -44,7 +45,7 @@ pub struct TemplateManagerService {
 
 #[derive(Debug, Clone)]
 pub enum TemplateManagerRequest {
-    AddTemplates { templates: Vec<TemplateMetadata> },
+    AddTemplates { templates: Vec<CodeTemplateRegistration> },
 }
 
 pub enum TemplateManagerResponse {

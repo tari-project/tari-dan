@@ -27,6 +27,7 @@ use log::info;
 use tari_app_grpc::tari_rpc::{self as grpc, GetCommitteeRequest, GetShardKeyRequest};
 use tari_common_types::types::PublicKey;
 use tari_comms::types::CommsPublicKey;
+use tari_core::transactions::transaction_components::CodeTemplateRegistration;
 use tari_crypto::tari_utilities::ByteArray;
 use tari_dan_common_types::ShardId;
 use tari_dan_core::{
@@ -133,5 +134,39 @@ impl BaseNodeClient for GrpcBaseNodeClient {
         let result = inner.get_shard_key(request).await?.into_inner();
         println!("res {:?}", result);
         Ok(ShardId::from_bytes(result.shard_key.as_bytes())?)
+    }
+
+    async fn get_template_registrations(
+        &mut self,
+        height: u64,
+    ) -> Result<Vec<CodeTemplateRegistration>, BaseNodeError> {
+        let inner = self.connection().await?;
+        let request = grpc::GetTemplateRegistrationsRequest { from_height: height };
+        dbg!(&request);
+        let mut templates = vec![];
+        let mut stream = inner.get_template_registrations(request).await?.into_inner();
+        loop {
+            match stream.message().await {
+                Ok(Some(val)) => {
+                    let template_registration: CodeTemplateRegistration = val.try_into()
+                        .map_err(|_| {
+                            BaseNodeError::InvalidPeerMessage("invalid template registration".to_string())
+                        })?;
+                    templates.push(template_registration);
+                },
+                Ok(None) => {
+                    info!(target: LOG_TARGET, "No more templates");
+
+                    break;
+                },
+                Err(e) => {
+                    return Err(BaseNodeError::InvalidPeerMessage(format!(
+                        "Error reading stream: {}",
+                        e
+                    )));
+                },
+            }
+        }
+        Ok(templates)
     }
 }
