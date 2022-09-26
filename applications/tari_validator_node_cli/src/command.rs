@@ -20,10 +20,29 @@
 //   WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //   USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use clap::Subcommand;
+use std::path::PathBuf;
+
+use clap::{Subcommand, Args};
 
 #[allow(clippy::large_enum_variant)]
 #[derive(Debug, Subcommand, Clone)]
 pub enum Command {
-    Register,
+    Register(RegisterCommand),
+}
+
+#[derive(Debug, Args, Clone)]
+pub struct RegisterCommand {
+    #[clap(subcommand)]
+    pub subcommand: RegisterSubcommand,
+}
+
+#[derive(Debug, Subcommand, Clone)]
+pub enum RegisterSubcommand {
+    Node,
+    Template(RegisterTemplateArgs)
+}
+
+#[derive(Debug, Args, Clone)]
+pub struct RegisterTemplateArgs {
+    pub template_code_path: PathBuf,
 }

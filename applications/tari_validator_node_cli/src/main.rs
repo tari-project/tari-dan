@@ -27,6 +27,7 @@ mod command;
 use std::error::Error;
 
 use anyhow::anyhow;
+use command::RegisterSubcommand;
 use multiaddr::{Multiaddr, Protocol};
 use reqwest::Url;
 
@@ -54,9 +55,17 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
 async fn handle_command(command: Command, mut client: ValidatorNodeClient) -> anyhow::Result<()> {
     match command {
-        Command::Register => {
-            let tx_id = client.register().await?;
-            println!("✅ Registration submitted (tx_id: {})", tx_id);
+        Command::Register(command) => {
+            match command.subcommand {
+                RegisterSubcommand::Node => {
+                    let tx_id = client.register().await?;
+                    println!("✅ Validator node registration submitted (tx_id: {})", tx_id);
+                },
+                RegisterSubcommand::Template(args) => {
+                    println!("✅ Template code path {}", args.template_code_path.display());
+                },
+            }
+            
         },
     }
 
