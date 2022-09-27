@@ -23,6 +23,7 @@
 mod cli;
 mod client;
 mod command;
+mod prompt;
 
 use std::error::Error;
 
@@ -32,7 +33,12 @@ use multiaddr::{Multiaddr, Protocol};
 use reqwest::Url;
 use tari_dan_engine::wasm::compile::compile_template;
 
-use crate::{cli::Cli, client::ValidatorNodeClient, command::Command};
+use crate::{
+    cli::Cli,
+    client::ValidatorNodeClient,
+    command::Command,
+    prompt::{Prompt, YesNo},
+};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
@@ -104,6 +110,10 @@ async fn handle_register_template(args: RegisterTemplateArgs, mut _client: Valid
     // compile the code and retrieve the binary content of the wasm
     let wasm_module = compile_template(root_folder.as_path(), &[]).unwrap();
     let wasm_code = wasm_module.code();
+    println!(
+        "✅ Template compilation succesful (WASM file size: {} bytes)",
+        wasm_code.len()
+    );
 
     // get the local path of the compiled wasm
     // note that the file name will be the same as the root folder name
@@ -111,9 +121,52 @@ async fn handle_register_template(args: RegisterTemplateArgs, mut _client: Valid
     let mut wasm_path = root_folder.clone();
     wasm_path.push(format!("target/wasm32-unknown-unknown/release/{}.wasm", file_name));
 
-    // display the results
-    println!("Template wasm file {}", wasm_path.display());
-    println!("Template code size {}", wasm_code.len());
+    // ask the template name (skip if already passed as a CLI argument)
+    let template_name: String = match args.template_name {
+        Some(value) => value,
+        None => Prompt::new("Template name (max 32 characters):").ask()?,
+    };
+
+    // ask the template version (skip if already passed as a CLI argument)
+    let template_version: u16 = match args.template_version {
+        Some(value) => value,
+        None => Prompt::new("Template version:")
+            .with_default(0.to_string())
+            .ask_parsed()?,
+    };
+
+    // ask repository info (optional)
+    let mut repo_url = String::new();
+    let mut commit_hash = String::new();
+    let add_repo_info: YesNo = Prompt::new("Add repository info? Y/N")
+        .with_default("no")
+        .ask_parsed()?;
+    if add_repo_info.as_bool() {
+        repo_url = match args.repo_url {
+            Some(value) => value,
+            None => Prompt::new("Repository URL (max 255 characters):").ask()?,
+        };
+        commit_hash = match args.commit_hash {
+            Some(value) => value,
+            None => Prompt::new("Commit hash (max 32 characters):").ask()?,
+        };
+    }
+
+    // Show the wasm file path and ask to upload it to the web
+    let binary_url = match args.binary_url {
+        Some(value) => value,
+        None => {
+            println!("Compiled template WASM file location: {}", wasm_path.display());
+            println!("Please upload the file to a public web location and then paste the URL");
+            Prompt::new("WASM public URL (max 255 characters):").ask()?
+        },
+    };
+
+    println!("Template name: {}", template_name);
+    println!("Template version: {}", template_version);
+    println!("Repo url: {}", repo_url);
+    println!("Commit hash: {}", commit_hash);
+    println!("Binary URL: {}", binary_url);
 
     Ok(())
 }

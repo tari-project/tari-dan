@@ -45,4 +45,19 @@ pub enum RegisterSubcommand {
 #[derive(Debug, Args, Clone)]
 pub struct RegisterTemplateArgs {
     pub template_code_path: PathBuf,
+
+    #[clap(long, alias = "template-name")]
+    pub template_name: Option<String>,
+
+    #[clap(long, alias = "template-version")]
+    pub template_version: Option<u16>,
+
+    #[clap(long, alias = "repo-url")]
+    pub repo_url: Option<String>,
+
+    #[clap(long, alias = "commit-hash")]
+    pub commit_hash: Option<String>,
+
+    #[clap(long, alias = "binary-url")]
+    pub binary_url: Option<String>,
 }
