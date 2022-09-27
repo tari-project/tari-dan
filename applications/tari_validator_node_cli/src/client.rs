@@ -24,7 +24,7 @@ use std::time::Duration;
 
 use anyhow::anyhow;
 use reqwest::{header, header::HeaderMap, IntoUrl, Url};
-use serde::de::DeserializeOwned;
+use serde::{de::DeserializeOwned, Serialize};
 use serde_json as json;
 use serde_json::json;
 
@@ -33,6 +33,16 @@ pub struct ValidatorNodeClient {
     client: reqwest::Client,
     endpoint: Url,
     request_id: i64,
+}
+
+#[derive(Debug, Serialize)]
+pub struct TemplateRegistrationRequest {
+    pub template_name: String,
+    pub template_version: u16,
+    pub repo_url: String,
+    pub commit_hash: String,
+    pub binary_sha: Vec<u8>,
+    pub binary_url: String,
 }
 
 impl ValidatorNodeClient {
@@ -54,8 +64,16 @@ impl ValidatorNodeClient {
         })
     }
 
-    pub async fn register(&mut self) -> Result<u64, anyhow::Error> {
-        let val: json::Value = self.send_request("register", json!({})).await?;
+    pub async fn register_node(&mut self) -> Result<u64, anyhow::Error> {
+        let val: json::Value = self.send_request("register_node", json!({})).await?;
+        let tx_id = val["transaction_id"]
+            .as_u64()
+            .ok_or_else(|| anyhow!("Wallet did not return tx_id"))?;
+        Ok(tx_id)
+    }
+
+    pub async fn register_template(&mut self, request: TemplateRegistrationRequest) -> Result<u64, anyhow::Error> {
+        let val: json::Value = self.send_request("register_template", json!(request)).await?;
         let tx_id = val["transaction_id"]
             .as_u64()
             .ok_or_else(|| anyhow!("Wallet did not return tx_id"))?;

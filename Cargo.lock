@@ -4674,6 +4674,7 @@ dependencies = [
  "reqwest",
  "serde",
  "serde_json",
+ "tari_core 0.38.4",
  "tari_dan_engine",
  "tari_utilities",
  "thiserror",

@@ -31,11 +31,11 @@ use anyhow::anyhow;
 use command::{RegisterSubcommand, RegisterTemplateArgs};
 use multiaddr::{Multiaddr, Protocol};
 use reqwest::Url;
-use tari_dan_engine::wasm::compile::compile_template;
+use tari_dan_engine::{hashing::hasher, wasm::compile::compile_template};
 
 use crate::{
     cli::Cli,
-    client::ValidatorNodeClient,
+    client::{TemplateRegistrationRequest, ValidatorNodeClient},
     command::Command,
     prompt::{Prompt, YesNo},
 };
@@ -96,13 +96,13 @@ async fn handle_command(command: Command, client: ValidatorNodeClient) -> anyhow
 }
 
 async fn handle_register_node(mut client: ValidatorNodeClient) -> anyhow::Result<()> {
-    let tx_id = client.register().await?;
+    let tx_id = client.register_node().await?;
     println!("✅ Validator node registration submitted (tx_id: {})", tx_id);
 
     Ok(())
 }
 
-async fn handle_register_template(args: RegisterTemplateArgs, mut _client: ValidatorNodeClient) -> anyhow::Result<()> {
+async fn handle_register_template(args: RegisterTemplateArgs, mut client: ValidatorNodeClient) -> anyhow::Result<()> {
     // retrieve the root folder of the template
     let root_folder = args.template_code_path;
     println!("Template code path {}", root_folder.display());
@@ -114,6 +114,9 @@ async fn handle_register_template(args: RegisterTemplateArgs, mut _client: Valid
         "✅ Template compilation succesful (WASM file size: {} bytes)",
         wasm_code.len()
     );
+
+    // calculate the hash of the WASM binary
+    let binary_sha = hasher("template").chain(&wasm_code).result().to_vec();
 
     // get the local path of the compiled wasm
     // note that the file name will be the same as the root folder name
@@ -162,11 +165,17 @@ async fn handle_register_template(args: RegisterTemplateArgs, mut _client: Valid
         },
     };
 
-    println!("Template name: {}", template_name);
-    println!("Template version: {}", template_version);
-    println!("Repo url: {}", repo_url);
-    println!("Commit hash: {}", commit_hash);
-    println!("Binary URL: {}", binary_url);
+    // build and send the template registration request
+    let request = TemplateRegistrationRequest {
+        template_name,
+        template_version,
+        repo_url,
+        commit_hash,
+        binary_sha,
+        binary_url,
+    };
+    let tx_id = client.register_template(request).await?;
+    println!("✅ Template registration submitted (tx_id: {})", tx_id);
 
     Ok(())
 }
