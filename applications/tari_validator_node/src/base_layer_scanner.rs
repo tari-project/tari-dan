@@ -167,7 +167,7 @@ impl BaseLayerScanner {
         Ok(())
     }
 
-    async fn scan_for_new_templates(&mut self, height: u64) -> Result<Vec<TemplateMetadata>, BaseLayerScannerError> {
+    async fn scan_for_new_templates(&mut self, _height: u64) -> Result<Vec<TemplateMetadata>, BaseLayerScannerError> {
         // info!(
         //     target: LOG_TARGET,
         //     "🔍 Scanning base layer (tip: {}) for new templates", tip.height_of_longest_chain

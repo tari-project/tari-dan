@@ -20,11 +20,10 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use std::{convert::TryInto, net::SocketAddr};
+use std::net::SocketAddr;
 
 use async_trait::async_trait;
-use rand::rngs::OsRng;
-use tari_app_grpc::tari_rpc::{self as grpc, RegisterValidatorNodeRequest, RegisterValidatorNodeResponse};
+use tari_app_grpc::tari_rpc::{RegisterValidatorNodeRequest, RegisterValidatorNodeResponse};
 use tari_comms::NodeIdentity;
 use tari_crypto::tari_utilities::ByteArray;
 use tari_dan_core::{services::WalletClient, DigitalAssetError};

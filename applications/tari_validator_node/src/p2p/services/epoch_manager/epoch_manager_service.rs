@@ -21,10 +21,7 @@
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 use tari_comms::types::CommsPublicKey;
-use tari_dan_core::{
-    models::{BaseLayerMetadata, Epoch},
-    services::epoch_manager::EpochManagerError,
-};
+use tari_dan_core::{models::Epoch, services::epoch_manager::EpochManagerError};
 use tari_shutdown::ShutdownSignal;
 use tokio::{
     sync::{mpsc::Receiver, oneshot},

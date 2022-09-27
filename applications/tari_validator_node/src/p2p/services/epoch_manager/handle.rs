@@ -24,7 +24,7 @@ use async_trait::async_trait;
 use tari_comms::types::CommsPublicKey;
 use tari_dan_common_types::ShardId;
 use tari_dan_core::{
-    models::{BaseLayerMetadata, Committee, Epoch},
+    models::{Committee, Epoch},
     services::epoch_manager::{EpochManager, EpochManagerError, ShardCommitteeAllocation},
 };
 use tokio::sync::{mpsc::Sender, oneshot};
@@ -55,7 +55,7 @@ impl EpochManagerHandle {
             .send((EpochManagerRequest::UpdateEpoch { height }, tx))
             .await
             .map_err(|_| EpochManagerError::SendError)?;
-        let result = rx.await.map_err(|_| EpochManagerError::ReceiveError)??;
+        let _result = rx.await.map_err(|_| EpochManagerError::ReceiveError)??;
         Ok(())
     }
 }
