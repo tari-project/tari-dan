@@ -64,20 +64,18 @@ impl ValidatorNodeClient {
         })
     }
 
-    pub async fn register_node(&mut self) -> Result<u64, anyhow::Error> {
-        let val: json::Value = self.send_request("register_node", json!({})).await?;
+    pub async fn register_validator_node(&mut self) -> Result<u64, anyhow::Error> {
+        let val: json::Value = self.send_request("register_validator_node", json!({})).await?;
         let tx_id = val["transaction_id"]
             .as_u64()
             .ok_or_else(|| anyhow!("Wallet did not return tx_id"))?;
         Ok(tx_id)
     }
 
-    pub async fn register_template(&mut self, request: TemplateRegistrationRequest) -> Result<u64, anyhow::Error> {
-        let val: json::Value = self.send_request("register_template", json!(request)).await?;
-        let tx_id = val["transaction_id"]
-            .as_u64()
-            .ok_or_else(|| anyhow!("Wallet did not return tx_id"))?;
-        Ok(tx_id)
+    pub async fn register_template(&mut self, request: TemplateRegistrationRequest) -> Result<(), anyhow::Error> {
+        // TODO: add "transaction_id" to the grpc response
+        self.send_request("register_template", json!(request)).await?;
+        Ok(())
     }
 
     fn next_request_id(&mut self) -> i64 {

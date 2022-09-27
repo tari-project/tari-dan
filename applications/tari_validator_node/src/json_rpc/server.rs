@@ -62,7 +62,8 @@ async fn handler(
     match value.method.as_str() {
         "get_identity" => handlers.get_identity(value),
         "submit_transaction" => handlers.submit_transaction(value).await,
-        "register" => handlers.register(value).await,
+        "register_validator_node" => handlers.register_validator_node(value).await,
+        "register_template" => handlers.register_template(value).await,
         method => Ok(value.method_not_found(method)),
     }
 }

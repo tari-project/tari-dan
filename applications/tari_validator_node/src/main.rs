@@ -31,7 +31,8 @@ mod default_service_specification;
 mod grpc;
 mod json_rpc;
 mod p2p;
-mod registration_signing;
+mod template_registration_signing;
+mod validator_node_registration_signing;
 
 use std::{fs, io, process};
 

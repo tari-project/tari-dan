@@ -20,16 +20,29 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use std::{convert::TryInto, net::SocketAddr};
+use std::net::SocketAddr;
 
 use async_trait::async_trait;
-use rand::rngs::OsRng;
-use tari_app_grpc::tari_rpc::{self as grpc, RegisterValidatorNodeRequest, RegisterValidatorNodeResponse};
+use serde::{Deserialize, Serialize};
+use tari_app_grpc::tari_rpc::{
+    self as grpc,
+    BuildInfo,
+    CreateTemplateRegistrationRequest,
+    CreateTemplateRegistrationResponse,
+    RegisterValidatorNodeRequest,
+    RegisterValidatorNodeResponse,
+    TemplateRegistration,
+    TemplateType,
+    WasmInfo,
+};
 use tari_comms::NodeIdentity;
 use tari_crypto::tari_utilities::ByteArray;
 use tari_dan_core::{services::WalletClient, DigitalAssetError};
 
-use crate::registration_signing::sign_registration;
+use crate::{
+    template_registration_signing::sign_template_registration,
+    validator_node_registration_signing::sign_validator_node_registration,
+};
 
 const _LOG_TARGET: &str = "tari::validator_node::app";
 
@@ -39,6 +52,16 @@ type Client = grpc::wallet_client::WalletClient<tonic::transport::Channel>;
 pub struct GrpcWalletClient {
     endpoint: SocketAddr,
     client: Option<Client>,
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+pub struct TemplateRegistrationRequest {
+    template_name: String,
+    template_version: u16,
+    repo_url: String,
+    commit_hash: Vec<u8>,
+    binary_sha: Vec<u8>,
+    binary_url: String,
 }
 
 impl GrpcWalletClient {
@@ -63,7 +86,7 @@ impl GrpcWalletClient {
         node_identity: &NodeIdentity,
     ) -> Result<RegisterValidatorNodeResponse, DigitalAssetError> {
         let inner = self.connection().await?;
-        let signature = sign_registration(node_identity.secret_key(), 123);
+        let signature = sign_validator_node_registration(node_identity.secret_key(), 123);
         let request = RegisterValidatorNodeRequest {
             validator_node_public_key: node_identity.public_key().to_vec(),
             validator_node_signature: Some(signature.into()),
@@ -71,6 +94,38 @@ impl GrpcWalletClient {
             message: "Registering VN".to_string(),
         };
         let result = inner.register_validator_node(request).await?.into_inner();
+        Ok(result)
+    }
+
+    pub async fn register_template(
+        &mut self,
+        node_identity: &NodeIdentity,
+        data: TemplateRegistrationRequest,
+    ) -> Result<CreateTemplateRegistrationResponse, DigitalAssetError> {
+        let inner = self.connection().await?;
+        let signature = sign_template_registration(node_identity.secret_key(), data.binary_sha.to_vec());
+        let request = CreateTemplateRegistrationRequest {
+            template_registration: Some(TemplateRegistration {
+                author_public_key: node_identity.public_key().to_vec(),
+                author_signature: Some(signature.into()),
+                template_name: data.template_name,
+                template_version: data.template_version.into(),
+                // TODO: fill real abi_version
+                template_type: Some(TemplateType {
+                    template_type: Some(tari_app_grpc::tari_rpc::template_type::TemplateType::Wasm(WasmInfo {
+                        abi_version: 1,
+                    })),
+                }),
+                build_info: Some(BuildInfo {
+                    repo_url: data.repo_url,
+                    commit_hash: data.commit_hash,
+                }),
+                binary_sha: data.binary_sha,
+                binary_url: data.binary_url,
+            }),
+            fee_per_gram: 1,
+        };
+        let result = inner.create_template_registration(request).await?.into_inner();
         Ok(result)
     }
 }

@@ -83,7 +83,7 @@ fn multiaddr_to_http_url(multiaddr: Multiaddr) -> anyhow::Result<Url> {
 async fn handle_command(command: Command, client: ValidatorNodeClient) -> anyhow::Result<()> {
     match command {
         Command::Register(command) => match command.subcommand {
-            RegisterSubcommand::Node => {
+            RegisterSubcommand::Validator => {
                 handle_register_node(client).await?;
             },
             RegisterSubcommand::Template(args) => {
@@ -96,7 +96,7 @@ async fn handle_command(command: Command, client: ValidatorNodeClient) -> anyhow
 }
 
 async fn handle_register_node(mut client: ValidatorNodeClient) -> anyhow::Result<()> {
-    let tx_id = client.register_node().await?;
+    let tx_id = client.register_validator_node().await?;
     println!("✅ Validator node registration submitted (tx_id: {})", tx_id);
 
     Ok(())
@@ -174,8 +174,8 @@ async fn handle_register_template(args: RegisterTemplateArgs, mut client: Valida
         binary_sha,
         binary_url,
     };
-    let tx_id = client.register_template(request).await?;
-    println!("✅ Template registration submitted (tx_id: {})", tx_id);
+    client.register_template(request).await?;
+    println!("✅ Template registration submitted");
 
     Ok(())
 }
