@@ -27,9 +27,10 @@ mod command;
 use std::error::Error;
 
 use anyhow::anyhow;
-use command::RegisterSubcommand;
+use command::{RegisterSubcommand, RegisterTemplateArgs};
 use multiaddr::{Multiaddr, Protocol};
 use reqwest::Url;
+use tari_dan_engine::wasm::compile::compile_template;
 
 use crate::{cli::Cli, client::ValidatorNodeClient, command::Command};
 
@@ -53,25 +54,6 @@ async fn main() -> Result<(), Box<dyn Error>> {
     Ok(())
 }
 
-async fn handle_command(command: Command, mut client: ValidatorNodeClient) -> anyhow::Result<()> {
-    match command {
-        Command::Register(command) => {
-            match command.subcommand {
-                RegisterSubcommand::Node => {
-                    let tx_id = client.register().await?;
-                    println!("✅ Validator node registration submitted (tx_id: {})", tx_id);
-                },
-                RegisterSubcommand::Template(args) => {
-                    println!("✅ Template code path {}", args.template_code_path.display());
-                },
-            }
-            
-        },
-    }
-
-    Ok(())
-}
-
 fn multiaddr_to_http_url(multiaddr: Multiaddr) -> anyhow::Result<Url> {
     let mut iter = multiaddr.iter();
     let ip = iter.next().ok_or_else(|| anyhow!("Invalid multiaddr"))?;
@@ -90,4 +72,48 @@ fn multiaddr_to_http_url(multiaddr: Multiaddr) -> anyhow::Result<Url> {
 
     let url = Url::parse(&format!("http://{}:{}", ip, port))?;
     Ok(url)
+}
+
+async fn handle_command(command: Command, client: ValidatorNodeClient) -> anyhow::Result<()> {
+    match command {
+        Command::Register(command) => match command.subcommand {
+            RegisterSubcommand::Node => {
+                handle_register_node(client).await?;
+            },
+            RegisterSubcommand::Template(args) => {
+                handle_register_template(args, client).await?;
+            },
+        },
+    }
+
+    Ok(())
+}
+
+async fn handle_register_node(mut client: ValidatorNodeClient) -> anyhow::Result<()> {
+    let tx_id = client.register().await?;
+    println!("✅ Validator node registration submitted (tx_id: {})", tx_id);
+
+    Ok(())
+}
+
+async fn handle_register_template(args: RegisterTemplateArgs, mut _client: ValidatorNodeClient) -> anyhow::Result<()> {
+    // retrieve the root folder of the template
+    let root_folder = args.template_code_path;
+    println!("Template code path {}", root_folder.display());
+
+    // compile the code and retrieve the binary content of the wasm
+    let wasm_module = compile_template(root_folder.as_path(), &[]).unwrap();
+    let wasm_code = wasm_module.code();
+
+    // get the local path of the compiled wasm
+    // note that the file name will be the same as the root folder name
+    let file_name = root_folder.file_name().unwrap().to_str().unwrap();
+    let mut wasm_path = root_folder.clone();
+    wasm_path.push(format!("target/wasm32-unknown-unknown/release/{}.wasm", file_name));
+
+    // display the results
+    println!("Template wasm file {}", wasm_path.display());
+    println!("Template code size {}", wasm_code.len());
+
+    Ok(())
 }

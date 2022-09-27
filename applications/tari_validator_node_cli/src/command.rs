@@ -22,7 +22,7 @@
 
 use std::path::PathBuf;
 
-use clap::{Subcommand, Args};
+use clap::{Args, Subcommand};
 
 #[allow(clippy::large_enum_variant)]
 #[derive(Debug, Subcommand, Clone)]
@@ -39,7 +39,7 @@ pub struct RegisterCommand {
 #[derive(Debug, Subcommand, Clone)]
 pub enum RegisterSubcommand {
     Node,
-    Template(RegisterTemplateArgs)
+    Template(RegisterTemplateArgs),
 }
 
 #[derive(Debug, Args, Clone)]

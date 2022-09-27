@@ -4674,6 +4674,7 @@ dependencies = [
  "reqwest",
  "serde",
  "serde_json",
+ "tari_dan_engine",
  "tokio",
 ]
 
