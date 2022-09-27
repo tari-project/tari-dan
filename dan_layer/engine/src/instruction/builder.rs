@@ -127,13 +127,13 @@ impl TransactionBuilder {
                     involved_objects: HashMap::new(),
                 });
             }
-            t.meta.as_mut().map(|m| {
+            if let Some(m) = t.meta.as_mut() {
                 m.involved_objects.entry(shard_id).or_insert(vec![]).push((
                     object_id,
                     SubstateChange::Create,
                     ObjectClaim {},
                 ))
-            });
+            }
         }
         t
     }

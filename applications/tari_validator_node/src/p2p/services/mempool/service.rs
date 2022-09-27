@@ -21,7 +21,6 @@
 //   USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 use log::*;
-use tari_comms::types::CommsPublicKey;
 use tari_dan_common_types::ShardId;
 use tari_dan_core::{
     message::DanMessage,

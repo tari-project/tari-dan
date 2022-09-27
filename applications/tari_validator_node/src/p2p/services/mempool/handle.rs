@@ -20,7 +20,6 @@
 //   WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //   USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use tari_comms::types::CommsPublicKey;
 use tari_dan_common_types::ShardId;
 use tari_dan_engine::instruction::Transaction;
 use tokio::sync::{broadcast, broadcast::error::RecvError, mpsc, mpsc::error::SendError};
