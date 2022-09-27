@@ -49,10 +49,10 @@ impl EpochManagerHandle {
         Self { tx_request }
     }
 
-    pub async fn update_epoch(&self, tip: BaseLayerMetadata) -> Result<(), EpochManagerError> {
+    pub async fn update_epoch(&self, height: u64) -> Result<(), EpochManagerError> {
         let (tx, rx) = oneshot::channel();
         self.tx_request
-            .send((EpochManagerRequest::UpdateEpoch { tip }, tx))
+            .send((EpochManagerRequest::UpdateEpoch { height }, tx))
             .await
             .map_err(|_| EpochManagerError::SendError)?;
         let result = rx.await.map_err(|_| EpochManagerError::ReceiveError)??;

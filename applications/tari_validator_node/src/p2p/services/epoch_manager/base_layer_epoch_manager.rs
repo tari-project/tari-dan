@@ -66,21 +66,23 @@ impl BaseLayerEpochManager {
         let half_committee_size = 5;
         let mut base_node_client = self.base_node_client.clone();
         let mut vns = base_node_client.get_validator_nodes(epoch.0 * 10).await?;
-        dbg!(&vns);
         *self.validators_per_epoch.entry(epoch.0).or_insert(vns.clone()) = vns.clone();
         let shard_key;
-        match base_node_client.clone().get_shard_key(epoch.0, &self.id).await {
-            Ok(key) => shard_key = key,
-            Err(_) => {
-                warn!(target: LOG_TARGET, "This VN is not registered");
+        match base_node_client.clone().get_shard_key(epoch.0 * 10, &self.id).await {
+            Ok(Some(key)) => shard_key = key,
+            Ok(None) => {
+                warn!(target: LOG_TARGET, "Validator node not found in the current epoch");
+                return Ok(());
+            },
+            Err(e) => {
+                warn!(target: LOG_TARGET, "This VN is not registered: {}", e);
                 return Ok(());
             },
         };
-        dbg!(&shard_key);
 
         vns.sort_by(|a, b| a.shard_key.partial_cmp(&b.shard_key).unwrap());
         let p = vns.iter().position(|x| x.shard_key == shard_key).unwrap();
-        let begin = &vns[(vns.len() + p - half_committee_size) % vns.len()].shard_key;
+        let begin = &vns[((vns.len() + p).saturating_sub(half_committee_size)) % vns.len()].shard_key;
         let end = &vns[(p + half_committee_size) % vns.len()].shard_key;
         let vns: Vec<ValidatorNode> = if p >= half_committee_size || p + half_committee_size >= vns.len() {
             //     This means the committee is wrapped around
@@ -94,7 +96,6 @@ impl BaseLayerEpochManager {
                 .cloned()
                 .collect()
         };
-        dbg!(&vns);
         *self.neighbours.entry(epoch.0).or_insert(vns.clone()) = vns.clone();
         Ok(())
     }

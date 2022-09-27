@@ -48,7 +48,7 @@ pub struct EpochManagerService {
 #[derive(Debug, Clone)]
 pub enum EpochManagerRequest {
     CurrentEpoch,
-    UpdateEpoch { tip: BaseLayerMetadata },
+    UpdateEpoch { height: u64 },
 }
 
 pub enum EpochManagerResponse {
@@ -96,8 +96,8 @@ impl EpochManagerService {
             EpochManagerRequest::CurrentEpoch => Ok(EpochManagerResponse::CurrentEpoch {
                 epoch: self.inner.current_epoch(),
             }),
-            EpochManagerRequest::UpdateEpoch { tip } => {
-                self.inner.update_epoch(tip.height_of_longest_chain).await?;
+            EpochManagerRequest::UpdateEpoch { height } => {
+                self.inner.update_epoch(height).await?;
                 Ok(EpochManagerResponse::UpdateEpoch)
             },
         }

@@ -130,52 +130,52 @@ async fn auto_register_vn(
     config: &ApplicationConfig,
 ) -> Result<ShardId, ShardKeyError> {
     let path = &config.validator_node.shard_key_file;
-    if !path.exists() {
-        // If we don't have the shard key file, we want to send registration tx
-        let vn = wallet_client.register_validator_node(node_identity).await?;
-        if vn.is_success {
-            println!("Registering VN was successful {:?}", vn);
-            let shard_key = ShardKey {
-                is_registered: true,
-                shard_id: None,
-            };
-            let json = json5::to_string(&shard_key)?;
-            if let Some(p) = path.parent() {
-                if !p.exists() {
-                    fs::create_dir_all(p)?;
-                }
-            }
-            fs::write(path, json.as_bytes())?;
-            Err(ShardKeyError::NotYetRegistered)
-        } else {
-            Err(ShardKeyError::RegistrationFailed)
-        }
+    // Always write it
+
+    // if !path.exists() {
+    //     // If we don't have the shard key file, we want to send registration tx
+    //     let vn = wallet_client.register_validator_node(node_identity).await?;
+    //     if vn.is_success {
+    //         println!("Registering VN was successful {:?}", vn);
+    //         let shard_key = ShardKey {
+    //             is_registered: true,
+    //             shard_id: None,
+    //         };
+    //         let json = json5::to_string(&shard_key)?;
+    //         if let Some(p) = path.parent() {
+    //             if !p.exists() {
+    //                 fs::create_dir_all(p)?;
+    //             }
+    //         }
+    //         fs::write(path, json.as_bytes())?;
+    //         Err(ShardKeyError::NotYetRegistered)
+    //     } else {
+    //         Err(ShardKeyError::RegistrationFailed)
+    //     }
+    // } else {
+
+    // We already sent the registration tx, we are just waiting for it to be mined.
+    let tip = base_node_client.get_tip_info().await?.height_of_longest_chain;
+    let shard_id = base_node_client
+        .get_shard_key(tip, node_identity.public_key())
+        .await
+        .map_err(|e| ShardKeyError::BaseNodeError(e))?;
+    if let Some(shard_id) = shard_id {
+        let shard_key = ShardKey {
+            is_registered: true,
+            shard_id: Some(shard_id),
+        };
+        let json = json5::to_string(&shard_key)?;
+        fs::write(path, json.as_bytes())?;
+        Ok(shard_id)
     } else {
-        let shard_key_str = fs::read_to_string(path)?;
-        let shard_key = json5::from_str::<ShardKey>(&shard_key_str)?;
-        if shard_key.shard_id.is_none() {
-            // We already sent the registration tx, we are just waiting for it to be mined.
-            let tip = base_node_client.get_tip_info().await?.height_of_longest_chain;
-            let shard_id = base_node_client
-                .get_shard_key(tip, node_identity.public_key())
-                .await
-                .map_err(|_| ShardKeyError::NotYetMined)?;
-            let shard_key = ShardKey {
-                is_registered: true,
-                shard_id: Some(shard_id),
-            };
-            let json = json5::to_string(&shard_key)?;
-            if let Some(p) = path.parent() {
-                if !p.exists() {
-                    fs::create_dir_all(p)?;
-                }
-            }
-            fs::write(path, json.as_bytes())?;
-            Ok(shard_id)
-        } else {
-            shard_key.shard_id.ok_or(ShardKeyError::NotYetMined)
-        }
+        Err(ShardKeyError::NotYetMined)
     }
+
+    // } else {
+    //     shard_key.shard_id.ok_or(ShardKeyError::NotYetMined)
+    // }
+    // }
 }
 
 async fn run_node(config: &ApplicationConfig) -> Result<(), ExitError> {
