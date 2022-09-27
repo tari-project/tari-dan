@@ -21,7 +21,11 @@
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 use tari_comms::types::CommsPublicKey;
-use tari_dan_core::{models::Epoch, services::epoch_manager::EpochManagerError};
+use tari_dan_common_types::ShardId;
+use tari_dan_core::{
+    models::{Committee, Epoch},
+    services::epoch_manager::{EpochManagerError, ShardCommitteeAllocation},
+};
 use tari_shutdown::ShutdownSignal;
 use tokio::{
     sync::{mpsc::Receiver, oneshot},
@@ -45,12 +49,44 @@ pub struct EpochManagerService {
 #[derive(Debug, Clone)]
 pub enum EpochManagerRequest {
     CurrentEpoch,
-    UpdateEpoch { height: u64 },
+    UpdateEpoch {
+        height: u64,
+    },
+    IsEpochValid {
+        epoch: Epoch,
+    },
+    GetCommittees {
+        epoch: Epoch,
+        shards: Vec<ShardId>,
+    },
+    GetCommittee {
+        epoch: Epoch,
+        shard: ShardId,
+    },
+    FilterToLocalShards {
+        epoch: Epoch,
+        for_addr: CommsPublicKey,
+        available_shards: Vec<ShardId>,
+    },
 }
 
 pub enum EpochManagerResponse {
-    CurrentEpoch { epoch: Epoch },
+    CurrentEpoch {
+        epoch: Epoch,
+    },
     UpdateEpoch,
+    IsEpochValid {
+        is_valid: bool,
+    },
+    GetCommittees {
+        committees: Vec<ShardCommitteeAllocation<CommsPublicKey>>,
+    },
+    GetCommittee {
+        committee: Committee<CommsPublicKey>,
+    },
+    FilterToLocalShards {
+        shards: Vec<ShardId>,
+    },
 }
 
 impl EpochManagerService {
@@ -96,6 +132,26 @@ impl EpochManagerService {
             EpochManagerRequest::UpdateEpoch { height } => {
                 self.inner.update_epoch(height).await?;
                 Ok(EpochManagerResponse::UpdateEpoch)
+            },
+            EpochManagerRequest::IsEpochValid { epoch } => {
+                let is_valid = self.inner.is_epoch_valid(epoch);
+                Ok(EpochManagerResponse::IsEpochValid { is_valid })
+            },
+            EpochManagerRequest::GetCommittees { epoch, shards } => {
+                let committees = self.inner.get_committees(epoch, &shards)?;
+                Ok(EpochManagerResponse::GetCommittees { committees })
+            },
+            EpochManagerRequest::GetCommittee { epoch, shard } => {
+                let committee = self.inner.get_committee(epoch, shard)?;
+                Ok(EpochManagerResponse::GetCommittee { committee })
+            },
+            EpochManagerRequest::FilterToLocalShards {
+                epoch,
+                for_addr,
+                available_shards,
+            } => {
+                let shards = self.inner.filter_to_local_shards(epoch, &for_addr, &available_shards)?;
+                Ok(EpochManagerResponse::FilterToLocalShards { shards })
             },
         }
     }

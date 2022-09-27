@@ -41,7 +41,7 @@ use tokio::time;
 use crate::{
     p2p::services::{
         epoch_manager::handle::EpochManagerHandle,
-        template_manager::{handle::TemplateManagerHandle, template_manager::TemplateMetadata, TemplateManagerError},
+        template_manager::{handle::TemplateManagerHandle, manager::TemplateMetadata, TemplateManagerError},
     },
     GrpcBaseNodeClient,
     ValidatorNodeConfig,
