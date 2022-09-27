@@ -108,9 +108,19 @@ pub trait ShardStoreTransaction<TAddr: NodeAddressable, TPayload: Payload> {
     fn get_received_votes_for(&self, node_hash: TreeNodeHash, shard: ShardId) -> Vec<VoteMessage>;
 }
 
-pub struct MemoryShardStoreFactory<TAddr: NodeAddressable, TPayload: Payload> {
+#[derive(Debug, Default)]
+pub struct MemoryShardStoreFactory<TAddr, TPayload> {
     inner: MemoryShardDb<TAddr, TPayload>,
 }
+
+impl<TAddr: NodeAddressable, TPayload: Payload> MemoryShardStoreFactory<TAddr, TPayload> {
+    pub fn new() -> Self {
+        Self {
+            inner: MemoryShardDb::new(),
+        }
+    }
+}
+
 impl<TAddr: NodeAddressable, TPayload: Payload> ShardStoreFactory for MemoryShardStoreFactory<TAddr, TPayload> {
     type Addr = TAddr;
     type Payload = TPayload;

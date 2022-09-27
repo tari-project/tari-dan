@@ -1,0 +1,192 @@
+//  Copyright 2022. The Tari Project
+//
+//  Redistribution and use in source and binary forms, with or without modification, are permitted provided that the
+//  following conditions are met:
+//
+//  1. Redistributions of source code must retain the above copyright notice, this list of conditions and the following
+//  disclaimer.
+//
+//  2. Redistributions in binary form must reproduce the above copyright notice, this list of conditions and the
+//  following disclaimer in the documentation and/or other materials provided with the distribution.
+//
+//  3. Neither the name of the copyright holder nor the names of its contributors may be used to endorse or promote
+//  products derived from this software without specific prior written permission.
+//
+//  THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES,
+//  INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+//  DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
+//  SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
+//  SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY,
+//  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
+//  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+
+use std::sync::Arc;
+
+use anyhow::anyhow;
+use futures::StreamExt;
+use log::*;
+use tari_comms::{
+    connectivity::ConnectivityRequester,
+    peer_manager::{NodeId, PeerFeatures},
+    types::CommsPublicKey,
+    NodeIdentity,
+};
+use tari_dan_common_types::optional::Optional;
+use tari_dan_core::{
+    message::{DanMessage, NetworkAnnounce},
+    services::{infrastructure_services::OutboundService, DanPeer, PeerProvider},
+};
+use tokio::sync::mpsc;
+
+use crate::p2p::services::{
+    comms_peer_provider::CommsPeerProvider,
+    messaging::OutboundMessaging,
+    networking::{handle::NetworkingRequest, NetworkingError},
+};
+
+const LOG_TARGET: &str = "tari::validator_node::p2p::services::networking";
+
+pub struct Networking {
+    rx_network_announce: mpsc::Receiver<(CommsPublicKey, NetworkAnnounce<CommsPublicKey>)>,
+    rx_request: mpsc::Receiver<NetworkingRequest>,
+    node_identity: Arc<NodeIdentity>,
+    outbound: OutboundMessaging,
+    peer_provider: CommsPeerProvider,
+    connectivity: ConnectivityRequester,
+}
+
+impl Networking {
+    pub fn new(
+        rx_network_announce: mpsc::Receiver<(CommsPublicKey, NetworkAnnounce<CommsPublicKey>)>,
+        rx_request: mpsc::Receiver<NetworkingRequest>,
+        node_identity: Arc<NodeIdentity>,
+        outbound: OutboundMessaging,
+        peer_provider: CommsPeerProvider,
+        connectivity: ConnectivityRequester,
+    ) -> Self {
+        Self {
+            rx_network_announce,
+            rx_request,
+            node_identity,
+            outbound,
+            peer_provider,
+            connectivity,
+        }
+    }
+
+    pub async fn run(mut self) {
+        if let Err(err) = self.dial_seed_peers().await {
+            error!(target: LOG_TARGET, "🚨 Failed to dial seed peers: {}", err);
+        }
+        loop {
+            tokio::select! {
+                Some((_sender, announce)) = self.rx_network_announce.recv() => {
+                    if let Err(e) = self.handle_announce(announce).await {
+                        error!(target: LOG_TARGET, "Error handling network announce: {}", e);
+                    }
+                },
+
+                Some(request) = self.rx_request.recv() => {
+                    if let Err(e) = self.handle_request(request).await {
+                        error!(target: LOG_TARGET, "Error handling networking request: {}", e);
+                    }
+                },
+
+                else => break
+            }
+        }
+    }
+
+    async fn dial_seed_peers(&mut self) -> Result<(), NetworkingError> {
+        let seed_peers = self.peer_provider.get_seed_peers().await?;
+        info!(target: LOG_TARGET, "☎️ Dialling {} seed peers", seed_peers.len());
+
+        let dials = self
+            .connectivity
+            .dial_many_peers(seed_peers.into_iter().map(|p| NodeId::from_public_key(&p.identity)));
+        dials
+            .for_each(|res| async move {
+                info!(target: LOG_TARGET, "Dial result: {:?}", res);
+            })
+            .await;
+        Ok(())
+    }
+
+    async fn handle_request(&mut self, request: NetworkingRequest) -> Result<(), NetworkingError> {
+        match request {
+            NetworkingRequest::Announce(reply) => {
+                info!(target: LOG_TARGET, "📢 Announcing presence to network");
+                // TODO: Identity signature can never be empty, but handle the case properly anyway
+                let identity_signature = self.node_identity.identity_signature_read().clone().unwrap();
+                self.outbound
+                    .flood(
+                        Default::default(),
+                        DanMessage::NetworkAnnounce(NetworkAnnounce {
+                            identity: self.node_identity.public_key().clone(),
+                            addresses: vec![self.node_identity.public_address().clone()],
+                            identity_signature,
+                        }),
+                    )
+                    .await?;
+                let _ignore = reply.send(Ok(()));
+            },
+        }
+
+        Ok(())
+    }
+
+    async fn handle_announce(&mut self, announce: NetworkAnnounce<CommsPublicKey>) -> Result<(), NetworkingError> {
+        debug!("Received network announce from {}", announce.identity);
+        if self.node_identity.public_key() == &announce.identity {
+            debug!("Ignoring network announce from self");
+            return Ok(());
+        }
+
+        info!(target: LOG_TARGET, "👋 Received announce from {}", announce.identity);
+
+        if !announce.identity_signature.is_valid(
+            &announce.identity,
+            PeerFeatures::COMMUNICATION_CLIENT,
+            &announce.addresses,
+        ) {
+            // TODO: Ban sender?
+            return Err(anyhow!("Invalid identity signature"));
+        }
+
+        let peer = DanPeer {
+            identity: announce.identity.clone(),
+            addresses: announce.addresses.clone(),
+            identity_signature: Some(announce.identity_signature.clone()),
+        };
+
+        match self.peer_provider.get_peer(&announce.identity).await.optional()? {
+            Some(existing_peer) => {
+                let candidate = peer
+                    .identity_signature
+                    .as_ref()
+                    .ok_or_else(|| anyhow!("Identity signature for announce message is empty"))?;
+                if existing_peer
+                    .identity_signature
+                    .as_ref()
+                    .map(|id| candidate.updated_at() > id.updated_at())
+                    .unwrap_or(true)
+                {
+                    self.peer_provider.update_peer(peer).await?;
+
+                    // TODO: should not announce to sending peer
+                    self.outbound
+                        .flood(Default::default(), DanMessage::NetworkAnnounce(announce))
+                        .await?;
+                }
+            },
+            None => {
+                self.peer_provider.add_peer(peer).await?;
+                self.outbound
+                    .flood(Default::default(), DanMessage::NetworkAnnounce(announce))
+                    .await?;
+            },
+        }
+
+        Ok(())
+    }
+}

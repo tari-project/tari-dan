@@ -1,4 +1,4 @@
-//  Copyright 2021. The Tari Project
+//  Copyright 2022. The Tari Project
 //
 //  Redistribution and use in source and binary forms, with or without modification, are permitted provided that the
 //  following conditions are met:
@@ -20,47 +20,47 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+use std::sync::Arc;
+
 use async_trait::async_trait;
-use tari_comms::{
-    connectivity::ConnectivityError,
-    protocol::rpc::{RpcError, RpcStatus},
-    types::CommsPublicKey,
-};
-use tari_comms_dht::DhtActorError;
-use tari_dan_engine::instruction::Transaction;
+use tari_comms::{connectivity::ConnectivityRequester, types::CommsPublicKey, NodeIdentity};
+use tari_dan_core::message::NetworkAnnounce;
+use tokio::sync::mpsc;
 
-use crate::services::{infrastructure_services::NodeAddressable, DanPeer};
+use crate::p2p::services::{comms_peer_provider::CommsPeerProvider, messaging::OutboundMessaging};
 
-pub trait ValidatorNodeClientFactory: Send + Sync {
-    type Addr: NodeAddressable;
-    type Client: ValidatorNodeRpcClient;
-    fn create_client(&self, address: &Self::Addr) -> Self::Client;
+mod service;
+use service::Networking;
+
+mod error;
+pub use error::NetworkingError;
+
+mod handle;
+pub use handle::NetworkingHandle;
+
+pub fn spawn(
+    rx_network_announce: mpsc::Receiver<(CommsPublicKey, NetworkAnnounce<CommsPublicKey>)>,
+    node_identity: Arc<NodeIdentity>,
+    outbound: OutboundMessaging,
+    peer_provider: CommsPeerProvider,
+    connectivity: ConnectivityRequester,
+) -> NetworkingHandle {
+    let (tx, rx) = mpsc::channel(1);
+    tokio::spawn(
+        Networking::new(
+            rx_network_announce,
+            rx,
+            node_identity,
+            outbound,
+            peer_provider,
+            connectivity,
+        )
+        .run(),
+    );
+    NetworkingHandle::new(tx)
 }
 
 #[async_trait]
-pub trait ValidatorNodeRpcClient: Send + Sync {
-    async fn submit_transaction(
-        &mut self,
-        transaction: Transaction,
-    ) -> Result<Option<Vec<u8>>, ValidatorNodeClientError>;
-
-    async fn get_peers(&mut self) -> Result<Vec<DanPeer<CommsPublicKey>>, ValidatorNodeClientError>;
-}
-
-#[derive(Debug, thiserror::Error)]
-pub enum ValidatorNodeClientError {
-    #[error("Protocol violations for peer {peer}: {details}")]
-    ProtocolViolation { peer: CommsPublicKey, details: String },
-    #[error("Peer sent an invalid message: {0}")]
-    InvalidPeerMessage(anyhow::Error),
-    #[error("Connectivity error:{0}")]
-    ConnectivityError(#[from] ConnectivityError),
-    #[error("RpcError: {0}")]
-    RpcError(#[from] RpcError),
-    #[error("Remote node returned error: {0}")]
-    RpcStatusError(#[from] RpcStatus),
-    #[error("Dht error: {0}")]
-    DhtError(#[from] DhtActorError),
-    #[error("Node sent invalid response: {0}")]
-    InvalidResponse(anyhow::Error),
+pub trait NetworkingService {
+    async fn announce(&mut self) -> Result<(), NetworkingError>;
 }

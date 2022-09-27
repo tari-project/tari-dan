@@ -41,7 +41,11 @@ use tari_dan_storage_sqlite::{
 
 use crate::{
     grpc::services::{base_node_client::GrpcBaseNodeClient, wallet_client::GrpcWalletClient},
-    p2p::services::rpc_client::TariCommsValidatorNodeClientFactory,
+    p2p::services::{
+        comms_peer_provider::CommsPeerProvider,
+        messaging::OutboundMessaging,
+        rpc_client::TariCommsValidatorNodeClientFactory,
+    },
 };
 
 #[derive(Default, Clone)]
@@ -57,9 +61,11 @@ impl ServiceSpecification for DefaultServiceSpecification {
     type GlobalDbAdapter = SqliteGlobalDbBackendAdapter;
     // type InboundConnectionService = TariCommsInboundReceiverHandle;
     type MempoolService = MempoolServiceHandle;
+    type OutboundService = OutboundMessaging;
     // type OutboundService = TariCommsOutboundService<Self::Payload, Self::Addr>;
     type Payload = TariDanPayload;
     type PayloadProcessor = TariDanPayloadProcessor;
+    type PeerProvider = CommsPeerProvider;
     type SigningService = NodeIdentitySigningService;
     type StateDbBackendAdapter = SqliteStateDbBackendAdapter;
     type ValidatorNodeClientFactory = TariCommsValidatorNodeClientFactory;

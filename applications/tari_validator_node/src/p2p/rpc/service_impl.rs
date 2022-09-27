@@ -23,52 +23,38 @@
 use std::convert::TryInto;
 
 use log::*;
-use tari_comms::{
-    protocol::rpc::{Request, Response, RpcStatus, Streaming},
-    utils,
-};
-use tari_dan_core::{services::mempool::service::MempoolService, storage::DbFactory};
-use tari_dan_engine::{instruction::Transaction, state::StateDbUnitOfWorkReader};
+use tari_comms::protocol::rpc::{Request, Response, RpcStatus, Streaming};
+use tari_dan_core::services::{infrastructure_services::NodeAddressable, PeerProvider};
+use tari_dan_engine::instruction::Transaction;
 use tokio::{sync::mpsc, task};
 
 const LOG_TARGET: &str = "vn::p2p::rpc";
 
-use crate::p2p::{proto::validator_node as proto, rpc::ValidatorNodeRpcService};
+use crate::p2p::{proto, rpc::ValidatorNodeRpcService, services::messaging::DanMessageSenders};
 
-pub struct ValidatorNodeRpcServiceImpl<TMempoolService, TDbFactory: DbFactory> {
-    mempool_service: TMempoolService,
-    db_factory: TDbFactory,
+pub struct ValidatorNodeRpcServiceImpl<TPeerProvider> {
+    message_senders: DanMessageSenders,
+    peer_provider: TPeerProvider,
 }
 
-impl<TMempoolService: MempoolService + Clone, TDbFactory: DbFactory + Clone>
-    ValidatorNodeRpcServiceImpl<TMempoolService, TDbFactory>
-{
-    pub fn new(mempool_service: TMempoolService, db_factory: TDbFactory) -> Self {
+impl<TPeerProvider: PeerProvider> ValidatorNodeRpcServiceImpl<TPeerProvider> {
+    pub fn new(message_senders: DanMessageSenders, peer_provider: TPeerProvider) -> Self {
         Self {
-            mempool_service,
-            db_factory,
+            message_senders,
+            peer_provider,
         }
     }
 }
 
 #[tari_comms::async_trait]
-impl<TMempoolService, TDbFactory> ValidatorNodeRpcService for ValidatorNodeRpcServiceImpl<TMempoolService, TDbFactory>
-where
-    TMempoolService: MempoolService + Clone,
-    TDbFactory: DbFactory + Clone,
+impl<TPeerProvider> ValidatorNodeRpcService for ValidatorNodeRpcServiceImpl<TPeerProvider>
+where TPeerProvider: PeerProvider + Clone + Send + Sync + 'static
 {
-    async fn get_token_data(
-        &self,
-        _request: Request<proto::GetTokenDataRequest>,
-    ) -> Result<Response<proto::GetTokenDataResponse>, RpcStatus> {
-        Err(RpcStatus::general("Not implemented"))
-    }
-
     async fn submit_transaction(
         &self,
-        request: Request<proto::SubmitTransactionRequest>,
-    ) -> Result<Response<proto::SubmitTransactionResponse>, RpcStatus> {
-        println!("{:?}", request);
+        request: Request<proto::validator_node::SubmitTransactionRequest>,
+    ) -> Result<Response<proto::validator_node::SubmitTransactionResponse>, RpcStatus> {
+        let peer = request.context().fetch_peer().await?;
         let request = request.into_message();
         let transaction: Transaction = match request
             .transaction
@@ -81,124 +67,58 @@ where
             },
         };
 
-        let mut mempool_service = self.mempool_service.clone();
-        match mempool_service.submit_transaction(&transaction).await {
+        // TODO: Implement a mempool handle that returns if the transaction was accepted or not
+        match self
+            .message_senders
+            .tx_new_transaction_message
+            .send((peer.public_key, transaction))
+            .await
+        {
             Ok(_) => {
                 debug!(target: LOG_TARGET, "Accepted instruction into mempool");
-                return Ok(Response::new(proto::SubmitTransactionResponse {
+                return Ok(Response::new(proto::validator_node::SubmitTransactionResponse {
                     result: vec![],
                     status: "Accepted".to_string(),
                 }));
             },
-            Err(err) => {
-                debug!(target: LOG_TARGET, "Mempool rejected instruction: {}", err);
-                return Ok(Response::new(proto::SubmitTransactionResponse {
+            Err(_err) => {
+                // debug!(target: LOG_TARGET, "Mempool rejected instruction: {}", err);
+                return Ok(Response::new(proto::validator_node::SubmitTransactionResponse {
                     result: vec![],
-                    status: format!("Errored: {}", err),
+                    status: "Mempool has shut down".to_string(),
                 }));
             },
         }
     }
 
-    async fn get_sidechain_state(
+    async fn get_peers(
         &self,
-        request: Request<proto::GetSidechainStateRequest>,
-    ) -> Result<Streaming<proto::GetSidechainStateResponse>, RpcStatus> {
-        let msg = request.into_message();
-
-        let contract_id = msg
-            .contract_id
-            .try_into()
-            .map_err(|_| RpcStatus::bad_request("Invalid contract_id"))?;
-
-        let db = self
-            .db_factory
-            .get_state_db(&contract_id)
-            .map_err(RpcStatus::log_internal_error(LOG_TARGET))?
-            .ok_or_else(|| RpcStatus::not_found("Asset not found"))?;
-
-        let uow = db.reader();
-        let data = uow.get_all_state().map_err(RpcStatus::log_internal_error(LOG_TARGET))?;
-        let (tx, rx) = mpsc::channel(10);
+        _request: Request<proto::network::GetPeersRequest>,
+    ) -> Result<Streaming<proto::network::GetPeersResponse>, RpcStatus> {
+        let (tx, rx) = mpsc::channel(100);
+        let peer_provider = self.peer_provider.clone();
 
         task::spawn(async move {
-            for state in data {
-                let schema = proto::GetSidechainStateResponse {
-                    state: Some(proto::get_sidechain_state_response::State::Schema(state.name)),
-                };
-
-                if tx.send(Ok(schema)).await.is_err() {
-                    return;
-                }
-
-                let key_values = state
-                    .items
-                    .into_iter()
-                    .map(|kv| proto::get_sidechain_state_response::State::KeyValue(kv.into()))
-                    .map(|state| Ok(proto::GetSidechainStateResponse { state: Some(state) }));
-
-                if utils::mpsc::send_all(&tx, key_values).await.is_err() {
-                    return;
+            let mut peer_iter = peer_provider.peers_for_current_epoch_iter().await;
+            while let Some(Ok(peer)) = peer_iter.next() {
+                if tx
+                    .send(Ok(proto::network::GetPeersResponse {
+                        identity: peer.identity.as_bytes().to_vec(),
+                        identity_signature: peer.identity_signature.map(Into::into),
+                        addresses: peer.addresses.into_iter().map(|a| a.to_vec()).collect(),
+                    }))
+                    .await
+                    .is_err()
+                {
+                    debug!(
+                        target: LOG_TARGET,
+                        "Peer stream closed by client before completing. Aborting"
+                    );
+                    break;
                 }
             }
         });
 
         Ok(Streaming::new(rx))
-    }
-
-    async fn get_op_logs(
-        &self,
-        request: Request<proto::GetStateOpLogsRequest>,
-    ) -> Result<Response<proto::GetStateOpLogsResponse>, RpcStatus> {
-        let msg = request.into_message();
-
-        let contract_id = msg
-            .contract_id
-            .try_into()
-            .map_err(|_| RpcStatus::bad_request("Invalid contract_id"))?;
-
-        let db = self
-            .db_factory
-            .get_state_db(&contract_id)
-            .map_err(RpcStatus::log_internal_error(LOG_TARGET))?
-            .ok_or_else(|| RpcStatus::not_found("Asset not found"))?;
-
-        let reader = db.reader();
-        let op_logs = reader
-            .get_op_logs_for_height(msg.height)
-            .map_err(RpcStatus::log_internal_error(LOG_TARGET))?;
-
-        let resp = proto::GetStateOpLogsResponse {
-            op_logs: op_logs.into_iter().map(Into::into).collect(),
-        };
-
-        Ok(Response::new(resp))
-    }
-
-    async fn get_tip_node(
-        &self,
-        _request: Request<proto::GetTipNodeRequest>,
-    ) -> Result<Response<proto::GetTipNodeResponse>, RpcStatus> {
-        // let msg = request.into_message();
-        //
-        // let contract_id = msg
-        //     .contract_id
-        //     .try_into()
-        //     .map_err(|_| RpcStatus::bad_request("Invalid contract_id"))?;
-        //
-        // let db = self
-        //     .db_factory
-        //     .get_chain_db(&contract_id)
-        //     .map_err(RpcStatus::log_internal_error(LOG_TARGET))?
-        //     .ok_or_else(|| RpcStatus::not_found("Asset not found"))?;
-        //
-        // let tip_node = db.get_tip_node().map_err(RpcStatus::log_internal_error(LOG_TARGET))?;
-        //
-        // let resp = proto::GetTipNodeResponse {
-        //     tip_node: tip_node.map(Into::into),
-        // };
-        //
-        // Ok(Response::new(resp))
-        todo!()
     }
 }
