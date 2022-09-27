@@ -22,7 +22,10 @@
 
 use tari_comms::types::CommsPublicKey;
 use tari_dan_engine::instruction::Transaction;
-use tokio::{sync::mpsc, task};
+use tokio::{
+    sync::{broadcast, mpsc},
+    task,
+};
 
 use crate::p2p::services::{
     mempool::{handle::MempoolHandle, service::MempoolService},
@@ -30,12 +33,13 @@ use crate::p2p::services::{
 };
 
 pub fn spawn(
-    new_transactions: mpsc::Receiver<(CommsPublicKey, Transaction)>,
+    new_transactions: mpsc::Receiver<Transaction>,
+    new_transactions_sender: mpsc::Sender<Transaction>,
     outbound: OutboundMessaging,
 ) -> MempoolHandle {
-    let (tx_valid_transactions, rx_valid_transactions) = mpsc::unbounded_channel();
+    let (tx_valid_transactions, rx_valid_transactions) = broadcast::channel(100);
     let mempool = MempoolService::new(new_transactions, outbound, tx_valid_transactions);
-    let handle = MempoolHandle::new(rx_valid_transactions);
+    let handle = MempoolHandle::new(rx_valid_transactions, new_transactions_sender);
 
     task::spawn(mempool.run());
 

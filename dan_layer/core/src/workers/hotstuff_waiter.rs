@@ -582,6 +582,7 @@ impl<
                         // TODO: Start timer for receiving proposal
                     } else {
                         dbg!("All senders have dropped");
+                        break;
                     }
                 },
                 msg = self.rx_hs_message.recv() => {

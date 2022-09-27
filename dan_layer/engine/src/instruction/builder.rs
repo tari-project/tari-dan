@@ -122,11 +122,18 @@ impl TransactionBuilder {
             let id = id_provider.new_component_address();
             let shard_id = ShardId(id.into_inner());
             let object_id = ObjectId(id.into_inner());
-            t.meta.involved_objects.entry(shard_id).or_insert(vec![]).push((
-                object_id,
-                SubstateChange::Create,
-                ObjectClaim {},
-            ));
+            if t.meta.is_none() {
+                t.meta = Some(TransactionMeta {
+                    involved_objects: HashMap::new(),
+                });
+            }
+            t.meta.as_mut().map(|m| {
+                m.involved_objects.entry(shard_id).or_insert(vec![]).push((
+                    object_id,
+                    SubstateChange::Create,
+                    ObjectClaim {},
+                ))
+            });
         }
         t
     }

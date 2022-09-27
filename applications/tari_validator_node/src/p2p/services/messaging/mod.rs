@@ -53,13 +53,13 @@ pub fn spawn(
 pub struct DanMessageSenders {
     pub tx_consensus_message: mpsc::Sender<(CommsPublicKey, HotStuffMessage<TariDanPayload, CommsPublicKey>)>,
     pub tx_vote_message: mpsc::Sender<(CommsPublicKey, VoteMessage)>,
-    pub tx_new_transaction_message: mpsc::Sender<(CommsPublicKey, Transaction)>,
+    pub tx_new_transaction_message: mpsc::Sender<Transaction>,
 }
 
 pub struct DanMessageReceivers {
     pub rx_consensus_message: mpsc::Receiver<(CommsPublicKey, HotStuffMessage<TariDanPayload, CommsPublicKey>)>,
     pub rx_vote_message: mpsc::Receiver<(CommsPublicKey, VoteMessage)>,
-    pub rx_new_transaction_message: mpsc::Receiver<(CommsPublicKey, Transaction)>,
+    pub rx_new_transaction_message: mpsc::Receiver<Transaction>,
 }
 
 pub fn new_messaging_channel(size: usize) -> (DanMessageSenders, DanMessageReceivers) {

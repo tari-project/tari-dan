@@ -165,7 +165,9 @@ impl HotstuffService {
         loop {
             tokio::select! {
                 // Inbound
-               Some((tx, shard_id)) = self.mempool.next_valid_transaction() => log(self.handle_new_valid_transaction(tx, shard_id).await),
+               res = self.mempool.next_valid_transaction() => {
+                    let (tx, shard_id) = res?;
+                    log(self.handle_new_valid_transaction(tx, shard_id).await)}
 
                // Outbound
                Some(msg) = self.rx_leader.recv() => log(self.handle_leader_message(msg).await),

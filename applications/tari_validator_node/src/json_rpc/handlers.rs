@@ -33,20 +33,26 @@ use serde_json::json;
 use tari_comms::{multiaddr::Multiaddr, peer_manager::NodeId, types::CommsPublicKey, NodeIdentity};
 use tari_dan_engine::instruction::Transaction;
 
-use crate::{grpc::services::wallet_client::GrpcWalletClient, json_rpc::jrpc_errors::internal_error};
+use crate::{
+    grpc::services::wallet_client::GrpcWalletClient,
+    json_rpc::jrpc_errors::internal_error,
+    p2p::services::mempool::MempoolHandle,
+};
 
 const _LOG_TARGET: &str = "tari::validator_node::json_rpc::handlers";
 
 pub struct JsonRpcHandlers {
     node_identity: Arc<NodeIdentity>,
     wallet_grpc_client: GrpcWalletClient,
+    mempool: MempoolHandle,
 }
 
 impl JsonRpcHandlers {
-    pub fn new(node_identity: Arc<NodeIdentity>, wallet_grpc_client: GrpcWalletClient) -> Self {
+    pub fn new(node_identity: Arc<NodeIdentity>, wallet_grpc_client: GrpcWalletClient, mempool: MempoolHandle) -> Self {
         Self {
             node_identity,
             wallet_grpc_client,
+            mempool,
         }
     }
 
@@ -73,6 +79,10 @@ impl JsonRpcHandlers {
 
         // TODO: submit the transaction to the wasm engine and return the result data
         println!("Transaction: {:?}", transaction);
+        self.mempool
+            .new_transaction(transaction)
+            .await
+            .map_err(internal_error(answer_id))?;
 
         Ok(JsonRpcResponse::success(answer_id, ()))
     }

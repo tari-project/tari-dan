@@ -29,7 +29,7 @@ use tari_dan_core::{
     services::infrastructure_services::OutboundService,
 };
 use tari_dan_engine::instruction::Transaction;
-use tokio::sync::mpsc;
+use tokio::sync::{broadcast, mpsc};
 
 use crate::p2p::services::messaging::OutboundMessaging;
 
@@ -38,16 +38,16 @@ const LOG_TARGET: &str = "dan::mempool::service";
 pub struct MempoolService {
     // TODO: Should be a HashSet
     transactions: Vec<(Transaction, Option<TreeNodeHash>)>,
-    new_transactions: mpsc::Receiver<(CommsPublicKey, Transaction)>,
+    new_transactions: mpsc::Receiver<Transaction>,
     outbound: OutboundMessaging,
-    tx_valid_transactions: mpsc::UnboundedSender<(Transaction, ShardId)>,
+    tx_valid_transactions: broadcast::Sender<(Transaction, ShardId)>,
 }
 
 impl MempoolService {
     pub(super) fn new(
-        new_transactions: mpsc::Receiver<(CommsPublicKey, Transaction)>,
+        new_transactions: mpsc::Receiver<Transaction>,
         outbound: OutboundMessaging,
-        tx_valid_transactions: mpsc::UnboundedSender<(Transaction, ShardId)>,
+        tx_valid_transactions: broadcast::Sender<(Transaction, ShardId)>,
     ) -> Self {
         Self {
             transactions: Vec::new(),
@@ -60,8 +60,8 @@ impl MempoolService {
     pub async fn run(mut self) {
         loop {
             tokio::select! {
-                Some((sender, transaction)) = self.new_transactions.recv() => {
-                    self.handle_new_transaction(sender, transaction).await;
+                Some(transaction) = self.new_transactions.recv() => {
+                    self.handle_new_transaction(transaction).await;
                 }
 
                 else => {
@@ -72,7 +72,7 @@ impl MempoolService {
         }
     }
 
-    async fn handle_new_transaction(&mut self, _sender: CommsPublicKey, transaction: Transaction) {
+    async fn handle_new_transaction(&mut self, transaction: Transaction) {
         // TODO: validate transaction
         let payload = TariDanPayload::new(transaction.clone());
         for shard_id in payload.involved_shards() {
