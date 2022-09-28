@@ -127,10 +127,11 @@ impl TemplateManager {
         let template_wasm = self.fetch_template_wasm(&template_metadata.url).await?;
 
         // check that the code we fetched is valid (the template address is the hash)
-        let hash = hasher("template").chain(&template_wasm).result().to_vec();
-        if template_metadata.address.to_vec() != hash {
-            return Err(TemplateManagerError::TemplateCodeHashMismatch);
-        }
+        // TODO: we will need a consistent way of hashing the template fields
+        // let hash = hasher("template").chain(&template_wasm).result().to_vec();
+        // if template_metadata.address.to_vec() != hash {
+        //   return Err(TemplateManagerError::TemplateCodeHashMismatch);
+        // }
 
         // finally, store the full template (metadata + wasm binary) in the database
         self.store_template_in_db(template_metadata, template_wasm)?;

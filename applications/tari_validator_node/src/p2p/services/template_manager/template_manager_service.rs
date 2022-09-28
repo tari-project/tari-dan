@@ -29,10 +29,7 @@ use tokio::{
     task::JoinHandle,
 };
 
-use crate::p2p::services::template_manager::{
-    template_manager::{TemplateManager},
-    TemplateManagerError,
-};
+use crate::p2p::services::template_manager::{template_manager::TemplateManager, TemplateManagerError};
 const LOG_TARGET: &str = "tari::validator_node::template_manager";
 
 pub struct TemplateManagerService {
