@@ -22,7 +22,6 @@
 
 use std::{collections::HashMap, convert::TryFrom, time::Duration};
 
-use async_trait::async_trait;
 use lazy_static::lazy_static;
 use tari_common_types::types::PrivateKey;
 use tari_dan_common_types::ShardId;
@@ -63,7 +62,7 @@ use crate::{
     DigitalAssetError,
 };
 
-pub struct PayloadProcessorListener<TPayload: Payload> {
+pub struct PayloadProcessorListener<TPayload> {
     receiver: broadcast::Receiver<(TPayload, HashMap<ShardId, Vec<ObjectPledge>>)>,
     sender: broadcast::Sender<(TPayload, HashMap<ShardId, Vec<ObjectPledge>>)>,
 }
@@ -75,9 +74,8 @@ impl<TPayload: Payload> PayloadProcessorListener<TPayload> {
     }
 }
 
-#[async_trait]
 impl<TPayload: Payload> PayloadProcessor<TPayload> for PayloadProcessorListener<TPayload> {
-    async fn process_payload(
+    fn process_payload(
         &self,
         payload: &TPayload,
         pledges: HashMap<ShardId, Vec<ObjectPledge>>,
@@ -93,9 +91,8 @@ impl<TPayload: Payload> PayloadProcessor<TPayload> for PayloadProcessorListener<
 
 pub struct NullPayloadProcessor {}
 
-#[async_trait]
 impl<TPayload: Payload> PayloadProcessor<TPayload> for NullPayloadProcessor {
-    async fn process_payload(
+    fn process_payload(
         &self,
         _payload: &TPayload,
         _pledges: HashMap<ShardId, Vec<ObjectPledge>>,
@@ -113,7 +110,7 @@ pub trait Consensus<TPayload: Payload> {
     ) -> Result<(), String>;
 }
 
-pub struct HsTestHarness<TPayload: Payload + 'static, TAddr: NodeAddressable + 'static> {
+pub struct HsTestHarness<TPayload, TAddr> {
     identity: TAddr,
     tx_new: Sender<(TPayload, ShardId)>,
     tx_hs_messages: Sender<(TAddr, HotStuffMessage<TPayload, TAddr>)>,
@@ -123,28 +120,30 @@ pub struct HsTestHarness<TPayload: Payload + 'static, TAddr: NodeAddressable + '
     rx_vote_message: Receiver<(VoteMessage, TAddr)>,
     tx_votes: Sender<(TAddr, VoteMessage)>,
     rx_execute: broadcast::Receiver<(TPayload, HashMap<ShardId, Vec<ObjectPledge>>)>,
-    hs_waiter: Option<JoinHandle<Result<(), String>>>,
+    hs_waiter: Option<JoinHandle<Result<(), HotStuffError>>>,
 }
-impl<TPayload: Payload, TAddr: NodeAddressable> HsTestHarness<TPayload, TAddr> {
-    pub fn new<
+impl<TPayload, TAddr> HsTestHarness<TPayload, TAddr>
+where
+    TPayload: Payload + 'static,
+    TAddr: NodeAddressable + 'static,
+{
+    pub fn new<TEpochManager, TLeader>(identity: TAddr, epoch_manager: TEpochManager, leader: TLeader) -> Self
+    where
         TEpochManager: EpochManager<TAddr> + Send + Sync + 'static,
         TLeader: LeaderStrategy<TAddr> + Send + Sync + 'static,
-    >(
-        identity: TAddr,
-        epoch_manager: TEpochManager,
-        leader: TLeader,
-    ) -> Self {
+    {
         let (tx_new, rx_new) = channel(1);
         let (tx_hs_messages, rx_hs_messages) = channel(1);
         let (tx_leader, rx_leader) = channel(1);
         let (tx_broadcast, rx_broadcast) = channel(1);
         let (tx_vote_message, rx_vote_message) = channel(1);
         let (tx_votes, rx_votes) = channel(1);
-        let payload_processor = PayloadProcessorListener::new();
+        let payload_processor = PayloadProcessorListener::<TPayload>::new();
         let rx_execute = payload_processor.receiver.resubscribe();
         let shutdown = Shutdown::new();
 
-        let hs_waiter = Some(HotStuffWaiter::<_, _, _, _, _>::spawn(
+        let shard_store = MemoryShardStoreFactory::new();
+        let hs_waiter = HotStuffWaiter::spawn(
             identity.clone(),
             epoch_manager,
             leader,
@@ -155,8 +154,9 @@ impl<TPayload: Payload, TAddr: NodeAddressable> HsTestHarness<TPayload, TAddr> {
             tx_broadcast,
             tx_vote_message,
             payload_processor,
+            shard_store,
             shutdown.to_signal(),
-        ));
+        );
         Self {
             identity,
             tx_new,
@@ -167,7 +167,7 @@ impl<TPayload: Payload, TAddr: NodeAddressable> HsTestHarness<TPayload, TAddr> {
             rx_vote_message,
             tx_votes,
             rx_execute,
-            hs_waiter,
+            hs_waiter: Some(hs_waiter),
         }
     }
 
@@ -602,7 +602,11 @@ async fn test_hs_waiter_cannot_spend_until_it_is_proven_committed() {
 
 use tari_template_lib::{args::Arg, Hash};
 
-use crate::services::PayloadProcessor;
+use crate::{
+    services::PayloadProcessor,
+    storage::shard_store::MemoryShardStoreFactory,
+    workers::hotstuff_error::HotStuffError,
+};
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn test_kitchen_sink() {
@@ -736,7 +740,7 @@ mod hello_world {
     // let execute_msg = node1_instance.recv_execute().await;
 }
 
-async fn do_rounds_of_hotstuff<TPayload: Payload, TAddr: NodeAddressable>(
+async fn do_rounds_of_hotstuff<TPayload: Payload + 'static, TAddr: NodeAddressable + 'static>(
     nodes: &mut [HsTestHarness<TPayload, TAddr>],
     rounds: usize,
 ) {

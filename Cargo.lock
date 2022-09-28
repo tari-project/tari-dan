@@ -542,9 +542,9 @@ dependencies = [
 
 [[package]]
 name = "cargo_toml"
-version = "0.11.8"
+version = "0.11.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e72c3ff59e3b7d24630206bb63a73af65da4ed5df1f76ee84dfafb9fee2ba60e"
+checksum = "1946427680719501a282850618d74a03a8f456801ef805e0f083ab8325494384"
 dependencies = [
  "serde",
  "serde_derive",
@@ -664,9 +664,9 @@ dependencies = [
 
 [[package]]
 name = "clang-sys"
-version = "1.4.0"
+version = "1.3.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "fa2e27ae6ab525c3d369ded447057bca5438d86dc3a68f6faafb8269ba82ebf3"
+checksum = "5a050e2153c5be08febd6734e29298e844fdb0fa21aeddd63b4eb7baa106c69b"
 dependencies = [
  "glob",
  "libc",
@@ -1718,13 +1718,14 @@ dependencies = [
 
 [[package]]
 name = "iana-time-zone"
-version = "0.1.50"
+version = "0.1.48"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "fd911b35d940d2bd0bea0f9100068e5b97b51a1cbe13d13382f132e0365257a0"
+checksum = "237a0714f28b1ee39ccec0770ccb544eb02c9ef2c82bb096230eefcffa6468b0"
 dependencies = [
  "android_system_properties",
  "core-foundation-sys",
  "js-sys",
+ "once_cell",
  "wasm-bindgen",
  "winapi",
 ]
@@ -2422,9 +2423,9 @@ checksum = "624a8340c38c1b80fd549087862da4ba43e08858af025b236e509b6649fc13d5"
 
 [[package]]
 name = "openssl"
-version = "0.10.42"
+version = "0.10.41"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "12fc0523e3bd51a692c8850d075d74dc062ccf251c0110668cbd921917118a13"
+checksum = "618febf65336490dfcf20b73f885f5651a0c89c64c2d4a8c3662585a70bf5bd0"
 dependencies = [
  "bitflags 1.3.2",
  "cfg-if",
@@ -2454,9 +2455,9 @@ checksum = "ff011a302c396a5197692431fc1948019154afc178baf7d8e37367442a4601cf"
 
 [[package]]
 name = "openssl-sys"
-version = "0.9.76"
+version = "0.9.75"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5230151e44c0f05157effb743e8d517472843121cf9243e8b81393edb5acd9ce"
+checksum = "e5f9bd0c2710541a3cda73d6f9ac4f1b240de4ae261065d309dbe73d9dceb42f"
 dependencies = [
  "autocfg",
  "cc",
@@ -2789,9 +2790,9 @@ dependencies = [
 
 [[package]]
 name = "proc-macro2"
-version = "1.0.44"
+version = "1.0.43"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7bd7356a8122b6c4a24a82b278680c73357984ca2fc79a0f9fa6dea7dced7c58"
+checksum = "0a2ca2c61bc9f3d74d2886294ab7b9853abd9c1ad903a3ac7815c58989bb7bab"
 dependencies = [
  "unicode-ident",
 ]
@@ -2866,9 +2867,9 @@ dependencies = [
 
 [[package]]
 name = "protobuf"
-version = "2.28.0"
+version = "2.27.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "106dd99e98437432fed6519dedecfade6a06a73bb7b2a1e019fdd2bee5778d94"
+checksum = "cf7e6d18738ecd0902d30d1ad232c9125985a3422929b16c65517b38adc14f96"
 
 [[package]]
 name = "ptr_meta"
@@ -3319,9 +3320,9 @@ checksum = "e25dfac463d778e353db5be2449d1cce89bd6fd23c9f1ea21310ce6e5a1b29c4"
 
 [[package]]
 name = "serde"
-version = "1.0.145"
+version = "1.0.144"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "728eb6351430bccb993660dfffc5a72f91ccc1295abaa8ce19b27ebe4f75568b"
+checksum = "0f747710de3dcd43b88c9168773254e809d8ddbdf9653b84e2554ab219f17860"
 dependencies = [
  "serde_derive",
 ]
@@ -3356,9 +3357,9 @@ dependencies = [
 
 [[package]]
 name = "serde_derive"
-version = "1.0.145"
+version = "1.0.144"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "81fa1584d3d1bcacd84c277a0dfe21f5b0f6accf4a23d04d4c6d61f1af522b4c"
+checksum = "94ed3a816fb1d101812f83e789f888322c34e291f894f19590dc310963e87a00"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -3606,9 +3607,9 @@ checksum = "171758edb47aa306a78dfa4ab9aeb5167405bd4e3dc2b64e88f6a84bbe98bd63"
 
 [[package]]
 name = "syn"
-version = "1.0.101"
+version = "1.0.100"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e90cde112c4b9690b8cbe810cba9ddd8bc1d7472e2cae317b69e9438c1cba7d2"
+checksum = "52205623b1b0f064a4e71182c3b18ae902267282930c6d5462c91b859668426e"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -3648,7 +3649,7 @@ checksum = "c02424087780c9b71cc96799eaeddff35af2bc513278cda5c99fc1f5d026d3c1"
 [[package]]
 name = "tari_app_grpc"
 version = "0.38.4"
-source = "git+https://github.com/tari-project/tari.git?branch=feature-dan#72018f4834b8ee8fe1228c25a6be33189bdd2a3c"
+source = "git+https://github.com/tari-project/tari.git?branch=feature-dan#e7f2d34739a704eaa209a5f92110edc43d493eef"
 dependencies = [
  "argon2",
  "base64 0.13.0",
@@ -3659,9 +3660,9 @@ dependencies = [
  "prost",
  "prost-types",
  "rand",
- "tari_common_types 0.38.4",
- "tari_comms 0.38.4",
- "tari_core 0.38.4",
+ "tari_common_types 0.38.4 (git+https://github.com/tari-project/tari.git?branch=feature-dan)",
+ "tari_comms 0.38.4 (git+https://github.com/tari-project/tari.git?branch=feature-dan)",
+ "tari_core 0.38.4 (git+https://github.com/tari-project/tari.git?branch=feature-dan)",
  "tari_crypto 0.15.5",
  "tari_script 0.12.0 (git+https://github.com/tari-project/tari.git?branch=feature-dan)",
  "tari_utilities",
@@ -3673,8 +3674,8 @@ dependencies = [
 
 [[package]]
 name = "tari_app_utilities"
-version = "0.38.3"
-source = "git+https://github.com/tari-project/tari.git?tag=v0.38.3#0a396c244886cf356d24ed27c12000ab32defa4c"
+version = "0.38.4"
+source = "git+https://github.com/tari-project/tari.git?tag=v0.38.4#92ceef998dc25392b6c76e2d4a86120eff5ebc33"
 dependencies = [
  "clap 3.2.22",
  "config",
@@ -3685,21 +3686,13 @@ dependencies = [
  "rand",
  "serde",
  "structopt",
- "tari_common 0.38.3",
- "tari_common_types 0.38.3",
- "tari_comms 0.38.3",
+ "tari_common 0.38.4 (git+https://github.com/tari-project/tari.git?tag=v0.38.4)",
+ "tari_common_types 0.38.4 (git+https://github.com/tari-project/tari.git?tag=v0.38.4)",
+ "tari_comms 0.38.4 (git+https://github.com/tari-project/tari.git?tag=v0.38.4)",
  "tari_crypto 0.15.5",
  "tari_utilities",
  "thiserror",
  "tokio",
-]
-
-[[package]]
-name = "tari_base_node_grpc_client"
-version = "0.1.0"
-source = "git+https://github.com/tari-project/tari.git?branch=feature-dan#72018f4834b8ee8fe1228c25a6be33189bdd2a3c"
-dependencies = [
- "tari_app_grpc",
 ]
 
 [[package]]
@@ -3744,8 +3737,8 @@ dependencies = [
 
 [[package]]
 name = "tari_common"
-version = "0.38.3"
-source = "git+https://github.com/tari-project/tari.git?tag=v0.38.3#0a396c244886cf356d24ed27c12000ab32defa4c"
+version = "0.38.4"
+source = "git+https://github.com/tari-project/tari.git?tag=v0.38.4#92ceef998dc25392b6c76e2d4a86120eff5ebc33"
 dependencies = [
  "anyhow",
  "blake2 0.9.2",
@@ -3773,7 +3766,7 @@ dependencies = [
 [[package]]
 name = "tari_common"
 version = "0.38.4"
-source = "git+https://github.com/tari-project/tari.git?branch=feature-dan#72018f4834b8ee8fe1228c25a6be33189bdd2a3c"
+source = "git+https://github.com/tari-project/tari.git?branch=feature-dan#e7f2d34739a704eaa209a5f92110edc43d493eef"
 dependencies = [
  "anyhow",
  "blake2 0.9.2",
@@ -3799,8 +3792,8 @@ dependencies = [
 
 [[package]]
 name = "tari_common_sqlite"
-version = "0.38.3"
-source = "git+https://github.com/tari-project/tari.git?tag=v0.38.3#0a396c244886cf356d24ed27c12000ab32defa4c"
+version = "0.38.4"
+source = "git+https://github.com/tari-project/tari.git?tag=v0.38.4#92ceef998dc25392b6c76e2d4a86120eff5ebc33"
 dependencies = [
  "diesel",
  "log",
@@ -3810,7 +3803,7 @@ dependencies = [
 [[package]]
 name = "tari_common_sqlite"
 version = "0.38.4"
-source = "git+https://github.com/tari-project/tari.git?branch=feature-dan#72018f4834b8ee8fe1228c25a6be33189bdd2a3c"
+source = "git+https://github.com/tari-project/tari.git?branch=feature-dan#e7f2d34739a704eaa209a5f92110edc43d493eef"
 dependencies = [
  "diesel",
  "log",
@@ -3819,8 +3812,8 @@ dependencies = [
 
 [[package]]
 name = "tari_common_types"
-version = "0.38.3"
-source = "git+https://github.com/tari-project/tari.git?tag=v0.38.3#0a396c244886cf356d24ed27c12000ab32defa4c"
+version = "0.38.4"
+source = "git+https://github.com/tari-project/tari.git?tag=v0.38.4#92ceef998dc25392b6c76e2d4a86120eff5ebc33"
 dependencies = [
  "base64 0.13.0",
  "digest 0.9.0",
@@ -3837,7 +3830,7 @@ dependencies = [
 [[package]]
 name = "tari_common_types"
 version = "0.38.4"
-source = "git+https://github.com/tari-project/tari.git?branch=feature-dan#72018f4834b8ee8fe1228c25a6be33189bdd2a3c"
+source = "git+https://github.com/tari-project/tari.git?branch=feature-dan#e7f2d34739a704eaa209a5f92110edc43d493eef"
 dependencies = [
  "base64 0.13.0",
  "digest 0.9.0",
@@ -3853,8 +3846,8 @@ dependencies = [
 
 [[package]]
 name = "tari_comms"
-version = "0.38.3"
-source = "git+https://github.com/tari-project/tari.git?tag=v0.38.3#0a396c244886cf356d24ed27c12000ab32defa4c"
+version = "0.38.4"
+source = "git+https://github.com/tari-project/tari.git?tag=v0.38.4#92ceef998dc25392b6c76e2d4a86120eff5ebc33"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -3882,11 +3875,11 @@ dependencies = [
  "serde",
  "serde_derive",
  "snow",
- "tari_common 0.38.3",
+ "tari_common 0.38.4 (git+https://github.com/tari-project/tari.git?tag=v0.38.4)",
  "tari_crypto 0.15.5",
- "tari_metrics 0.1.0 (git+https://github.com/tari-project/tari.git?tag=v0.38.3)",
- "tari_shutdown 0.38.3",
- "tari_storage 0.38.3",
+ "tari_metrics 0.1.0 (git+https://github.com/tari-project/tari.git?tag=v0.38.4)",
+ "tari_shutdown 0.38.4 (git+https://github.com/tari-project/tari.git?tag=v0.38.4)",
+ "tari_storage 0.38.4 (git+https://github.com/tari-project/tari.git?tag=v0.38.4)",
  "tari_utilities",
  "thiserror",
  "tokio",
@@ -3900,7 +3893,7 @@ dependencies = [
 [[package]]
 name = "tari_comms"
 version = "0.38.4"
-source = "git+https://github.com/tari-project/tari.git?branch=feature-dan#72018f4834b8ee8fe1228c25a6be33189bdd2a3c"
+source = "git+https://github.com/tari-project/tari.git?branch=feature-dan#e7f2d34739a704eaa209a5f92110edc43d493eef"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -3928,11 +3921,11 @@ dependencies = [
  "serde",
  "serde_derive",
  "snow",
- "tari_common 0.38.4",
+ "tari_common 0.38.4 (git+https://github.com/tari-project/tari.git?branch=feature-dan)",
  "tari_crypto 0.15.5",
  "tari_metrics 0.1.0 (git+https://github.com/tari-project/tari.git?branch=feature-dan)",
- "tari_shutdown 0.38.4",
- "tari_storage 0.38.4",
+ "tari_shutdown 0.38.4 (git+https://github.com/tari-project/tari.git?branch=feature-dan)",
+ "tari_storage 0.38.4 (git+https://github.com/tari-project/tari.git?branch=feature-dan)",
  "tari_utilities",
  "thiserror",
  "tokio",
@@ -3945,8 +3938,8 @@ dependencies = [
 
 [[package]]
 name = "tari_comms_dht"
-version = "0.38.3"
-source = "git+https://github.com/tari-project/tari.git?tag=v0.38.3#0a396c244886cf356d24ed27c12000ab32defa4c"
+version = "0.38.4"
+source = "git+https://github.com/tari-project/tari.git?tag=v0.38.4#92ceef998dc25392b6c76e2d4a86120eff5ebc33"
 dependencies = [
  "anyhow",
  "bitflags 1.3.2",
@@ -3966,13 +3959,13 @@ dependencies = [
  "rand",
  "serde",
  "serde_derive",
- "tari_common 0.38.3",
- "tari_common_sqlite 0.38.3",
- "tari_comms 0.38.3",
- "tari_comms_rpc_macros 0.38.3",
+ "tari_common 0.38.4 (git+https://github.com/tari-project/tari.git?tag=v0.38.4)",
+ "tari_common_sqlite 0.38.4 (git+https://github.com/tari-project/tari.git?tag=v0.38.4)",
+ "tari_comms 0.38.4 (git+https://github.com/tari-project/tari.git?tag=v0.38.4)",
+ "tari_comms_rpc_macros 0.38.4 (git+https://github.com/tari-project/tari.git?tag=v0.38.4)",
  "tari_crypto 0.15.5",
- "tari_shutdown 0.38.3",
- "tari_storage 0.38.3",
+ "tari_shutdown 0.38.4 (git+https://github.com/tari-project/tari.git?tag=v0.38.4)",
+ "tari_storage 0.38.4 (git+https://github.com/tari-project/tari.git?tag=v0.38.4)",
  "tari_utilities",
  "thiserror",
  "tokio",
@@ -3983,7 +3976,7 @@ dependencies = [
 [[package]]
 name = "tari_comms_dht"
 version = "0.38.4"
-source = "git+https://github.com/tari-project/tari.git?branch=feature-dan#72018f4834b8ee8fe1228c25a6be33189bdd2a3c"
+source = "git+https://github.com/tari-project/tari.git?branch=feature-dan#e7f2d34739a704eaa209a5f92110edc43d493eef"
 dependencies = [
  "anyhow",
  "bitflags 1.3.2",
@@ -4003,13 +3996,13 @@ dependencies = [
  "rand",
  "serde",
  "serde_derive",
- "tari_common 0.38.4",
- "tari_common_sqlite 0.38.4",
- "tari_comms 0.38.4",
- "tari_comms_rpc_macros 0.38.4",
+ "tari_common 0.38.4 (git+https://github.com/tari-project/tari.git?branch=feature-dan)",
+ "tari_common_sqlite 0.38.4 (git+https://github.com/tari-project/tari.git?branch=feature-dan)",
+ "tari_comms 0.38.4 (git+https://github.com/tari-project/tari.git?branch=feature-dan)",
+ "tari_comms_rpc_macros 0.38.4 (git+https://github.com/tari-project/tari.git?branch=feature-dan)",
  "tari_crypto 0.15.5",
- "tari_shutdown 0.38.4",
- "tari_storage 0.38.4",
+ "tari_shutdown 0.38.4 (git+https://github.com/tari-project/tari.git?branch=feature-dan)",
+ "tari_storage 0.38.4 (git+https://github.com/tari-project/tari.git?branch=feature-dan)",
  "tari_utilities",
  "thiserror",
  "tokio",
@@ -4019,8 +4012,8 @@ dependencies = [
 
 [[package]]
 name = "tari_comms_rpc_macros"
-version = "0.38.3"
-source = "git+https://github.com/tari-project/tari.git?tag=v0.38.3#0a396c244886cf356d24ed27c12000ab32defa4c"
+version = "0.38.4"
+source = "git+https://github.com/tari-project/tari.git?tag=v0.38.4#92ceef998dc25392b6c76e2d4a86120eff5ebc33"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -4030,7 +4023,7 @@ dependencies = [
 [[package]]
 name = "tari_comms_rpc_macros"
 version = "0.38.4"
-source = "git+https://github.com/tari-project/tari.git?branch=feature-dan#72018f4834b8ee8fe1228c25a6be33189bdd2a3c"
+source = "git+https://github.com/tari-project/tari.git?branch=feature-dan#e7f2d34739a704eaa209a5f92110edc43d493eef"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -4039,8 +4032,8 @@ dependencies = [
 
 [[package]]
 name = "tari_core"
-version = "0.38.3"
-source = "git+https://github.com/tari-project/tari.git?tag=v0.38.3#0a396c244886cf356d24ed27c12000ab32defa4c"
+version = "0.38.4"
+source = "git+https://github.com/tari-project/tari.git?tag=v0.38.4#92ceef998dc25392b6c76e2d4a86120eff5ebc33"
 dependencies = [
  "async-trait",
  "bincode",
@@ -4075,20 +4068,20 @@ dependencies = [
  "serde_repr",
  "sha3",
  "strum_macros",
- "tari_common 0.38.3",
- "tari_common_types 0.38.3",
- "tari_comms 0.38.3",
- "tari_comms_dht 0.38.3",
- "tari_comms_rpc_macros 0.38.3",
+ "tari_common 0.38.4 (git+https://github.com/tari-project/tari.git?tag=v0.38.4)",
+ "tari_common_types 0.38.4 (git+https://github.com/tari-project/tari.git?tag=v0.38.4)",
+ "tari_comms 0.38.4 (git+https://github.com/tari-project/tari.git?tag=v0.38.4)",
+ "tari_comms_dht 0.38.4 (git+https://github.com/tari-project/tari.git?tag=v0.38.4)",
+ "tari_comms_rpc_macros 0.38.4 (git+https://github.com/tari-project/tari.git?tag=v0.38.4)",
  "tari_crypto 0.15.5",
- "tari_metrics 0.1.0 (git+https://github.com/tari-project/tari.git?tag=v0.38.3)",
- "tari_mmr 0.38.3",
- "tari_p2p 0.38.3",
- "tari_script 0.12.0 (git+https://github.com/tari-project/tari.git?tag=v0.38.3)",
- "tari_service_framework 0.38.3",
- "tari_shutdown 0.38.3",
- "tari_storage 0.38.3",
- "tari_test_utils 0.38.3",
+ "tari_metrics 0.1.0 (git+https://github.com/tari-project/tari.git?tag=v0.38.4)",
+ "tari_mmr 0.38.4 (git+https://github.com/tari-project/tari.git?tag=v0.38.4)",
+ "tari_p2p 0.38.4 (git+https://github.com/tari-project/tari.git?tag=v0.38.4)",
+ "tari_script 0.12.0 (git+https://github.com/tari-project/tari.git?tag=v0.38.4)",
+ "tari_service_framework 0.38.4 (git+https://github.com/tari-project/tari.git?tag=v0.38.4)",
+ "tari_shutdown 0.38.4 (git+https://github.com/tari-project/tari.git?tag=v0.38.4)",
+ "tari_storage 0.38.4 (git+https://github.com/tari-project/tari.git?tag=v0.38.4)",
+ "tari_test_utils 0.38.4 (git+https://github.com/tari-project/tari.git?tag=v0.38.4)",
  "tari_utilities",
  "thiserror",
  "tokio",
@@ -4100,7 +4093,7 @@ dependencies = [
 [[package]]
 name = "tari_core"
 version = "0.38.4"
-source = "git+https://github.com/tari-project/tari.git?branch=feature-dan#72018f4834b8ee8fe1228c25a6be33189bdd2a3c"
+source = "git+https://github.com/tari-project/tari.git?branch=feature-dan#e7f2d34739a704eaa209a5f92110edc43d493eef"
 dependencies = [
  "async-trait",
  "bincode",
@@ -4135,20 +4128,20 @@ dependencies = [
  "serde_repr",
  "sha3",
  "strum_macros",
- "tari_common 0.38.4",
- "tari_common_types 0.38.4",
- "tari_comms 0.38.4",
- "tari_comms_dht 0.38.4",
- "tari_comms_rpc_macros 0.38.4",
+ "tari_common 0.38.4 (git+https://github.com/tari-project/tari.git?branch=feature-dan)",
+ "tari_common_types 0.38.4 (git+https://github.com/tari-project/tari.git?branch=feature-dan)",
+ "tari_comms 0.38.4 (git+https://github.com/tari-project/tari.git?branch=feature-dan)",
+ "tari_comms_dht 0.38.4 (git+https://github.com/tari-project/tari.git?branch=feature-dan)",
+ "tari_comms_rpc_macros 0.38.4 (git+https://github.com/tari-project/tari.git?branch=feature-dan)",
  "tari_crypto 0.15.5",
  "tari_metrics 0.1.0 (git+https://github.com/tari-project/tari.git?branch=feature-dan)",
- "tari_mmr 0.38.4",
- "tari_p2p 0.38.4",
+ "tari_mmr 0.38.4 (git+https://github.com/tari-project/tari.git?branch=feature-dan)",
+ "tari_p2p 0.38.4 (git+https://github.com/tari-project/tari.git?branch=feature-dan)",
  "tari_script 0.12.0 (git+https://github.com/tari-project/tari.git?branch=feature-dan)",
- "tari_service_framework 0.38.4",
- "tari_shutdown 0.38.4",
- "tari_storage 0.38.4",
- "tari_test_utils 0.38.4",
+ "tari_service_framework 0.38.4 (git+https://github.com/tari-project/tari.git?branch=feature-dan)",
+ "tari_shutdown 0.38.4 (git+https://github.com/tari-project/tari.git?branch=feature-dan)",
+ "tari_storage 0.38.4 (git+https://github.com/tari-project/tari.git?branch=feature-dan)",
+ "tari_test_utils 0.38.4 (git+https://github.com/tari-project/tari.git?branch=feature-dan)",
  "tari_utilities",
  "thiserror",
  "tokio",
@@ -4215,8 +4208,8 @@ dependencies = [
  "prost",
  "prost-types",
  "serde",
- "tari_common 0.38.3",
- "tari_common_types 0.38.3",
+ "tari_common 0.38.4 (git+https://github.com/tari-project/tari.git?tag=v0.38.4)",
+ "tari_common_types 0.38.4 (git+https://github.com/tari-project/tari.git?tag=v0.38.4)",
  "tari_crypto 0.15.3",
  "tari_utilities",
 ]
@@ -4243,22 +4236,22 @@ dependencies = [
  "rand",
  "serde",
  "serde_json",
- "tari_common 0.38.3",
- "tari_common_types 0.38.3",
- "tari_comms 0.38.3",
- "tari_comms_dht 0.38.3",
- "tari_comms_rpc_macros 0.38.3",
- "tari_core 0.38.3",
+ "tari_common 0.38.4 (git+https://github.com/tari-project/tari.git?tag=v0.38.4)",
+ "tari_common_types 0.38.4 (git+https://github.com/tari-project/tari.git?tag=v0.38.4)",
+ "tari_comms 0.38.4 (git+https://github.com/tari-project/tari.git?tag=v0.38.4)",
+ "tari_comms_dht 0.38.4 (git+https://github.com/tari-project/tari.git?tag=v0.38.4)",
+ "tari_comms_rpc_macros 0.38.4 (git+https://github.com/tari-project/tari.git?tag=v0.38.4)",
+ "tari_core 0.38.4 (git+https://github.com/tari-project/tari.git?tag=v0.38.4)",
  "tari_crypto 0.15.5",
  "tari_dan_common_types",
  "tari_dan_engine",
- "tari_mmr 0.38.3",
- "tari_p2p 0.38.3",
- "tari_service_framework 0.38.3",
- "tari_shutdown 0.38.3",
- "tari_storage 0.38.3",
+ "tari_mmr 0.38.4 (git+https://github.com/tari-project/tari.git?tag=v0.38.4)",
+ "tari_p2p 0.38.4 (git+https://github.com/tari-project/tari.git?tag=v0.38.4)",
+ "tari_service_framework 0.38.4 (git+https://github.com/tari-project/tari.git?tag=v0.38.4)",
+ "tari_shutdown 0.38.4 (git+https://github.com/tari-project/tari.git?tag=v0.38.4)",
+ "tari_storage 0.38.4 (git+https://github.com/tari-project/tari.git?tag=v0.38.4)",
  "tari_template_lib",
- "tari_test_utils 0.38.3",
+ "tari_test_utils 0.38.4 (git+https://github.com/tari-project/tari.git?tag=v0.38.4)",
  "tari_utilities",
  "thiserror",
  "tokio",
@@ -4280,11 +4273,11 @@ dependencies = [
  "rand",
  "serde",
  "serde_json",
- "tari_common 0.38.3",
- "tari_common_types 0.38.3",
+ "tari_common 0.38.4 (git+https://github.com/tari-project/tari.git?tag=v0.38.4)",
+ "tari_common_types 0.38.4 (git+https://github.com/tari-project/tari.git?tag=v0.38.4)",
  "tari_crypto 0.15.5",
  "tari_dan_common_types",
- "tari_mmr 0.38.3",
+ "tari_mmr 0.38.4 (git+https://github.com/tari-project/tari.git?tag=v0.38.4)",
  "tari_template_abi",
  "tari_template_lib",
  "tari_utilities",
@@ -4301,7 +4294,7 @@ dependencies = [
  "borsh",
  "lmdb-zero",
  "tari_dan_engine",
- "tari_storage 0.38.3",
+ "tari_storage 0.38.4 (git+https://github.com/tari-project/tari.git?tag=v0.38.4)",
  "tempfile",
 ]
 
@@ -4314,8 +4307,8 @@ dependencies = [
  "diesel",
  "diesel_migrations",
  "log",
- "tari_common 0.38.3",
- "tari_common_types 0.38.3",
+ "tari_common 0.38.4 (git+https://github.com/tari-project/tari.git?tag=v0.38.4)",
+ "tari_common_types 0.38.4 (git+https://github.com/tari-project/tari.git?tag=v0.38.4)",
  "tari_dan_common_types",
  "tari_dan_core",
  "tari_dan_engine",
@@ -4328,7 +4321,7 @@ dependencies = [
 [[package]]
 name = "tari_metrics"
 version = "0.1.0"
-source = "git+https://github.com/tari-project/tari.git?tag=v0.38.3#0a396c244886cf356d24ed27c12000ab32defa4c"
+source = "git+https://github.com/tari-project/tari.git?tag=v0.38.4#92ceef998dc25392b6c76e2d4a86120eff5ebc33"
 dependencies = [
  "once_cell",
  "prometheus",
@@ -4338,7 +4331,7 @@ dependencies = [
 [[package]]
 name = "tari_metrics"
 version = "0.1.0"
-source = "git+https://github.com/tari-project/tari.git?branch=feature-dan#72018f4834b8ee8fe1228c25a6be33189bdd2a3c"
+source = "git+https://github.com/tari-project/tari.git?branch=feature-dan#e7f2d34739a704eaa209a5f92110edc43d493eef"
 dependencies = [
  "once_cell",
  "prometheus",
@@ -4347,14 +4340,14 @@ dependencies = [
 
 [[package]]
 name = "tari_mmr"
-version = "0.38.3"
-source = "git+https://github.com/tari-project/tari.git?tag=v0.38.3#0a396c244886cf356d24ed27c12000ab32defa4c"
+version = "0.38.4"
+source = "git+https://github.com/tari-project/tari.git?tag=v0.38.4#92ceef998dc25392b6c76e2d4a86120eff5ebc33"
 dependencies = [
  "croaring",
  "digest 0.9.0",
  "log",
  "serde",
- "tari_common 0.38.3",
+ "tari_common 0.38.4 (git+https://github.com/tari-project/tari.git?tag=v0.38.4)",
  "tari_crypto 0.15.5",
  "tari_utilities",
  "thiserror",
@@ -4363,13 +4356,13 @@ dependencies = [
 [[package]]
 name = "tari_mmr"
 version = "0.38.4"
-source = "git+https://github.com/tari-project/tari.git?branch=feature-dan#72018f4834b8ee8fe1228c25a6be33189bdd2a3c"
+source = "git+https://github.com/tari-project/tari.git?branch=feature-dan#e7f2d34739a704eaa209a5f92110edc43d493eef"
 dependencies = [
  "croaring",
  "digest 0.9.0",
  "log",
  "serde",
- "tari_common 0.38.4",
+ "tari_common 0.38.4 (git+https://github.com/tari-project/tari.git?branch=feature-dan)",
  "tari_crypto 0.15.5",
  "tari_utilities",
  "thiserror",
@@ -4377,8 +4370,8 @@ dependencies = [
 
 [[package]]
 name = "tari_p2p"
-version = "0.38.3"
-source = "git+https://github.com/tari-project/tari.git?tag=v0.38.3#0a396c244886cf356d24ed27c12000ab32defa4c"
+version = "0.38.4"
+source = "git+https://github.com/tari-project/tari.git?tag=v0.38.4#92ceef998dc25392b6c76e2d4a86120eff5ebc33"
 dependencies = [
  "anyhow",
  "bytes 0.5.6",
@@ -4393,13 +4386,13 @@ dependencies = [
  "semver",
  "serde",
  "serde_derive",
- "tari_common 0.38.3",
- "tari_comms 0.38.3",
- "tari_comms_dht 0.38.3",
+ "tari_common 0.38.4 (git+https://github.com/tari-project/tari.git?tag=v0.38.4)",
+ "tari_comms 0.38.4 (git+https://github.com/tari-project/tari.git?tag=v0.38.4)",
+ "tari_comms_dht 0.38.4 (git+https://github.com/tari-project/tari.git?tag=v0.38.4)",
  "tari_crypto 0.15.5",
- "tari_service_framework 0.38.3",
- "tari_shutdown 0.38.3",
- "tari_storage 0.38.3",
+ "tari_service_framework 0.38.4 (git+https://github.com/tari-project/tari.git?tag=v0.38.4)",
+ "tari_shutdown 0.38.4 (git+https://github.com/tari-project/tari.git?tag=v0.38.4)",
+ "tari_storage 0.38.4 (git+https://github.com/tari-project/tari.git?tag=v0.38.4)",
  "tari_utilities",
  "thiserror",
  "tokio",
@@ -4413,7 +4406,7 @@ dependencies = [
 [[package]]
 name = "tari_p2p"
 version = "0.38.4"
-source = "git+https://github.com/tari-project/tari.git?branch=feature-dan#72018f4834b8ee8fe1228c25a6be33189bdd2a3c"
+source = "git+https://github.com/tari-project/tari.git?branch=feature-dan#e7f2d34739a704eaa209a5f92110edc43d493eef"
 dependencies = [
  "anyhow",
  "bytes 0.5.6",
@@ -4425,15 +4418,16 @@ dependencies = [
  "prost",
  "rand",
  "rustls",
+ "semver",
  "serde",
  "serde_derive",
- "tari_common 0.38.4",
- "tari_comms 0.38.4",
- "tari_comms_dht 0.38.4",
+ "tari_common 0.38.4 (git+https://github.com/tari-project/tari.git?branch=feature-dan)",
+ "tari_comms 0.38.4 (git+https://github.com/tari-project/tari.git?branch=feature-dan)",
+ "tari_comms_dht 0.38.4 (git+https://github.com/tari-project/tari.git?branch=feature-dan)",
  "tari_crypto 0.15.5",
- "tari_service_framework 0.38.4",
- "tari_shutdown 0.38.4",
- "tari_storage 0.38.4",
+ "tari_service_framework 0.38.4 (git+https://github.com/tari-project/tari.git?branch=feature-dan)",
+ "tari_shutdown 0.38.4 (git+https://github.com/tari-project/tari.git?branch=feature-dan)",
+ "tari_storage 0.38.4 (git+https://github.com/tari-project/tari.git?branch=feature-dan)",
  "tari_utilities",
  "thiserror",
  "tokio",
@@ -4447,7 +4441,7 @@ dependencies = [
 [[package]]
 name = "tari_script"
 version = "0.12.0"
-source = "git+https://github.com/tari-project/tari.git?tag=v0.38.3#0a396c244886cf356d24ed27c12000ab32defa4c"
+source = "git+https://github.com/tari-project/tari.git?tag=v0.38.4#92ceef998dc25392b6c76e2d4a86120eff5ebc33"
 dependencies = [
  "blake2 0.9.2",
  "digest 0.9.0",
@@ -4463,7 +4457,7 @@ dependencies = [
 [[package]]
 name = "tari_script"
 version = "0.12.0"
-source = "git+https://github.com/tari-project/tari.git?branch=feature-dan#72018f4834b8ee8fe1228c25a6be33189bdd2a3c"
+source = "git+https://github.com/tari-project/tari.git?branch=feature-dan#e7f2d34739a704eaa209a5f92110edc43d493eef"
 dependencies = [
  "blake2 0.9.2",
  "digest 0.9.0",
@@ -4478,14 +4472,14 @@ dependencies = [
 
 [[package]]
 name = "tari_service_framework"
-version = "0.38.3"
-source = "git+https://github.com/tari-project/tari.git?tag=v0.38.3#0a396c244886cf356d24ed27c12000ab32defa4c"
+version = "0.38.4"
+source = "git+https://github.com/tari-project/tari.git?tag=v0.38.4#92ceef998dc25392b6c76e2d4a86120eff5ebc33"
 dependencies = [
  "anyhow",
  "async-trait",
  "futures",
  "log",
- "tari_shutdown 0.38.3",
+ "tari_shutdown 0.38.4 (git+https://github.com/tari-project/tari.git?tag=v0.38.4)",
  "thiserror",
  "tokio",
  "tower-service",
@@ -4494,13 +4488,13 @@ dependencies = [
 [[package]]
 name = "tari_service_framework"
 version = "0.38.4"
-source = "git+https://github.com/tari-project/tari.git?branch=feature-dan#72018f4834b8ee8fe1228c25a6be33189bdd2a3c"
+source = "git+https://github.com/tari-project/tari.git?branch=feature-dan#e7f2d34739a704eaa209a5f92110edc43d493eef"
 dependencies = [
  "anyhow",
  "async-trait",
  "futures",
  "log",
- "tari_shutdown 0.38.4",
+ "tari_shutdown 0.38.4 (git+https://github.com/tari-project/tari.git?branch=feature-dan)",
  "thiserror",
  "tokio",
  "tower-service",
@@ -4508,8 +4502,8 @@ dependencies = [
 
 [[package]]
 name = "tari_shutdown"
-version = "0.38.3"
-source = "git+https://github.com/tari-project/tari.git?tag=v0.38.3#0a396c244886cf356d24ed27c12000ab32defa4c"
+version = "0.38.4"
+source = "git+https://github.com/tari-project/tari.git?tag=v0.38.4#92ceef998dc25392b6c76e2d4a86120eff5ebc33"
 dependencies = [
  "futures",
 ]
@@ -4517,15 +4511,15 @@ dependencies = [
 [[package]]
 name = "tari_shutdown"
 version = "0.38.4"
-source = "git+https://github.com/tari-project/tari.git?branch=feature-dan#72018f4834b8ee8fe1228c25a6be33189bdd2a3c"
+source = "git+https://github.com/tari-project/tari.git?branch=feature-dan#e7f2d34739a704eaa209a5f92110edc43d493eef"
 dependencies = [
  "futures",
 ]
 
 [[package]]
 name = "tari_storage"
-version = "0.38.3"
-source = "git+https://github.com/tari-project/tari.git?tag=v0.38.3#0a396c244886cf356d24ed27c12000ab32defa4c"
+version = "0.38.4"
+source = "git+https://github.com/tari-project/tari.git?tag=v0.38.4#92ceef998dc25392b6c76e2d4a86120eff5ebc33"
 dependencies = [
  "bincode",
  "lmdb-zero",
@@ -4538,7 +4532,7 @@ dependencies = [
 [[package]]
 name = "tari_storage"
 version = "0.38.4"
-source = "git+https://github.com/tari-project/tari.git?branch=feature-dan#72018f4834b8ee8fe1228c25a6be33189bdd2a3c"
+source = "git+https://github.com/tari-project/tari.git?branch=feature-dan#e7f2d34739a704eaa209a5f92110edc43d493eef"
 dependencies = [
  "bincode",
  "lmdb-zero",
@@ -4579,12 +4573,12 @@ dependencies = [
 
 [[package]]
 name = "tari_test_utils"
-version = "0.38.3"
-source = "git+https://github.com/tari-project/tari.git?tag=v0.38.3#0a396c244886cf356d24ed27c12000ab32defa4c"
+version = "0.38.4"
+source = "git+https://github.com/tari-project/tari.git?tag=v0.38.4#92ceef998dc25392b6c76e2d4a86120eff5ebc33"
 dependencies = [
  "futures",
  "rand",
- "tari_shutdown 0.38.3",
+ "tari_shutdown 0.38.4 (git+https://github.com/tari-project/tari.git?tag=v0.38.4)",
  "tempfile",
  "tokio",
 ]
@@ -4592,11 +4586,11 @@ dependencies = [
 [[package]]
 name = "tari_test_utils"
 version = "0.38.4"
-source = "git+https://github.com/tari-project/tari.git?branch=feature-dan#72018f4834b8ee8fe1228c25a6be33189bdd2a3c"
+source = "git+https://github.com/tari-project/tari.git?branch=feature-dan#e7f2d34739a704eaa209a5f92110edc43d493eef"
 dependencies = [
  "futures",
  "rand",
- "tari_shutdown 0.38.4",
+ "tari_shutdown 0.38.4 (git+https://github.com/tari-project/tari.git?branch=feature-dan)",
  "tempfile",
  "tokio",
 ]
@@ -4627,6 +4621,7 @@ dependencies = [
  "blake2 0.9.2",
  "borsh",
  "bytecodec",
+ "chrono",
  "clap 3.2.22",
  "config",
  "digest 0.9.0",
@@ -4638,31 +4633,28 @@ dependencies = [
  "log4rs",
  "patricia_tree",
  "prost",
- "prost-types",
  "rand",
  "reqwest",
  "serde",
  "serde_json",
  "tari_app_grpc",
  "tari_app_utilities",
- "tari_base_node_grpc_client",
- "tari_common 0.38.3",
- "tari_common_types 0.38.3",
- "tari_comms 0.38.3",
- "tari_comms_rpc_macros 0.38.3",
- "tari_core 0.38.3",
+ "tari_common 0.38.4 (git+https://github.com/tari-project/tari.git?tag=v0.38.4)",
+ "tari_common_types 0.38.4 (git+https://github.com/tari-project/tari.git?tag=v0.38.4)",
+ "tari_comms 0.38.4 (git+https://github.com/tari-project/tari.git?tag=v0.38.4)",
+ "tari_comms_rpc_macros 0.38.4 (git+https://github.com/tari-project/tari.git?tag=v0.38.4)",
+ "tari_core 0.38.4 (git+https://github.com/tari-project/tari.git?tag=v0.38.4)",
  "tari_crypto 0.15.5",
  "tari_dan_common_types",
  "tari_dan_core",
  "tari_dan_engine",
  "tari_dan_storage_sqlite",
- "tari_mmr 0.38.3",
- "tari_p2p 0.38.3",
- "tari_shutdown 0.38.3",
- "tari_storage 0.38.3",
+ "tari_mmr 0.38.4 (git+https://github.com/tari-project/tari.git?tag=v0.38.4)",
+ "tari_p2p 0.38.4 (git+https://github.com/tari-project/tari.git?tag=v0.38.4)",
+ "tari_shutdown 0.38.4 (git+https://github.com/tari-project/tari.git?tag=v0.38.4)",
+ "tari_storage 0.38.4 (git+https://github.com/tari-project/tari.git?tag=v0.38.4)",
  "tari_template_lib",
- "tari_test_utils 0.38.3",
- "tari_wallet_grpc_client",
+ "tari_test_utils 0.38.4 (git+https://github.com/tari-project/tari.git?tag=v0.38.4)",
  "thiserror",
  "tokio",
  "tokio-stream",
@@ -4683,17 +4675,6 @@ dependencies = [
  "serde",
  "serde_json",
  "tokio",
-]
-
-[[package]]
-name = "tari_wallet_grpc_client"
-version = "0.1.0"
-source = "git+https://github.com/tari-project/tari.git?branch=feature-dan#72018f4834b8ee8fe1228c25a6be33189bdd2a3c"
-dependencies = [
- "tari_app_grpc",
- "tari_common_types 0.38.4",
- "thiserror",
- "tonic",
 ]
 
 [[package]]
@@ -4736,18 +4717,18 @@ checksum = "949517c0cf1bf4ee812e2e07e08ab448e3ae0d23472aee8a06c985f0c8815b16"
 
 [[package]]
 name = "thiserror"
-version = "1.0.36"
+version = "1.0.35"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0a99cb8c4b9a8ef0e7907cd3b617cc8dc04d571c4e73c8ae403d80ac160bb122"
+checksum = "c53f98874615aea268107765aa1ed8f6116782501d18e53d08b471733bea6c85"
 dependencies = [
  "thiserror-impl",
 ]
 
 [[package]]
 name = "thiserror-impl"
-version = "1.0.36"
+version = "1.0.35"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3a891860d3c8d66fec8e73ddb3765f90082374dbaaa833407b904a94f1a7eb43"
+checksum = "f8b463991b4eab2d801e724172285ec4195c650e8ec79b149e6c2a8e6dd3f783"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -5393,9 +5374,9 @@ checksum = "1c38c045535d93ec4f0b4defec448e4291638ee608530863b1e2ba115d4fff7f"
 
 [[package]]
 name = "wasm-encoder"
-version = "0.17.0"
+version = "0.16.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7e7ca71c70a6de5b10968ae4d298e548366d9cd9588176e6ff8866f3c49c96ee"
+checksum = "d443c5a7daae71697d97ec12ad70b4fe8766d3a0f4db16158ac8b781365892f7"
 dependencies = [
  "leb128",
 ]
@@ -5651,9 +5632,9 @@ checksum = "718ed7c55c2add6548cca3ddd6383d738cd73b892df400e96b9aa876f0141d7a"
 
 [[package]]
 name = "wast"
-version = "47.0.0"
+version = "46.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "117ccfc4262e62a28a13f0548a147f19ffe71e8a08be802af23ae4ea0bedad73"
+checksum = "ea0ab19660e3ea6891bba69167b9be40fad00fb1fe3dd39c5eebcee15607131b"
 dependencies = [
  "leb128",
  "memchr",
@@ -5663,9 +5644,9 @@ dependencies = [
 
 [[package]]
 name = "wat"
-version = "1.0.49"
+version = "1.0.48"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7aab4e20c60429fbba9670a6cae0fff9520046ba0aa3e6d0b1cd2653bea14898"
+checksum = "8f775282def4d5bffd94d60d6ecd57bfe6faa46171cdbf8d32bd5458842b1e3e"
 dependencies = [
  "wast",
 ]
