@@ -28,7 +28,7 @@ mod prompt;
 use std::error::Error;
 
 use anyhow::anyhow;
-use command::{RegisterSubcommand, RegisterTemplateArgs};
+use command::{PublishTemplateArgs, TemplateSubcommand, VnSubcommand};
 use multiaddr::{Multiaddr, Protocol};
 use reqwest::Url;
 use tari_dan_engine::{hashing::hasher, wasm::compile::compile_template};
@@ -82,13 +82,11 @@ fn multiaddr_to_http_url(multiaddr: Multiaddr) -> anyhow::Result<Url> {
 
 async fn handle_command(command: Command, client: ValidatorNodeClient) -> anyhow::Result<()> {
     match command {
-        Command::Register(command) => match command.subcommand {
-            RegisterSubcommand::Validator => {
-                handle_register_node(client).await?;
-            },
-            RegisterSubcommand::Template(args) => {
-                handle_register_template(args, client).await?;
-            },
+        Command::Vn(vn_command) => match vn_command.subcommand {
+            VnSubcommand::Register => handle_register_node(client).await?,
+        },
+        Command::Template(template_command) => match template_command.subcommand {
+            TemplateSubcommand::Publish(args) => handle_publish_template(args, client).await?,
         },
     }
 
@@ -102,7 +100,7 @@ async fn handle_register_node(mut client: ValidatorNodeClient) -> anyhow::Result
     Ok(())
 }
 
-async fn handle_register_template(args: RegisterTemplateArgs, mut client: ValidatorNodeClient) -> anyhow::Result<()> {
+async fn handle_publish_template(args: PublishTemplateArgs, mut client: ValidatorNodeClient) -> anyhow::Result<()> {
     // retrieve the root folder of the template
     let root_folder = args.template_code_path;
     println!("Template code path {}", root_folder.display());
