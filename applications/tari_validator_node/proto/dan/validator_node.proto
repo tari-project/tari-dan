@@ -25,18 +25,11 @@ package tari.dan.validator_node;
 
 import "common.proto";
 import "consensus.proto";
+import "network.proto";
 
 service ValidatorNode {
-  rpc GetTokenData(GetTokenDataRequest) returns (GetTokenDataResponse);
   rpc SubmitTransaction(SubmitTransactionRequest) returns (SubmitTransactionResponse);
 }
-
-message GetTokenDataRequest {
-  bytes asset_pub_key = 1;
-  bytes unique_id = 2;
-}
-
-message GetTokenDataResponse {}
 
 enum Status {
   Accepted = 0;
@@ -68,8 +61,6 @@ message InvokeMethodResponse {
   bytes result = 1;
   Status status = 2;
 }
-
-
 
 message GetSidechainStateRequest {
   bytes contract_id = 1;
@@ -158,7 +149,6 @@ message SubmitTransactionRequest{
   tari.dan.common.Transaction transaction = 1;
 }
 
-
 message SubmitTransactionResponse {
   string status = 1;
   bytes result = 2;
@@ -169,5 +159,6 @@ message DanMessage {
     tari.dan.consensus.HotStuffMessage hot_stuff = 1;
     tari.dan.consensus.VoteMessage vote = 2;
     tari.dan.common.Transaction new_transaction = 3;
+    tari.dan.network.NetworkAnnounce network_announce = 4;
   }
 }

@@ -26,19 +26,27 @@ use std::{
 };
 
 use futures::{stream, StreamExt};
-use tari_comms::{message::OutboundMessage, peer_manager::NodeId, types::CommsPublicKey, Bytes};
+use tari_comms::{
+    connectivity::ConnectivityRequester,
+    message::OutboundMessage,
+    peer_manager::NodeId,
+    types::CommsPublicKey,
+    Bytes,
+};
 use tari_dan_core::{message::DanMessage, models::TariDanPayload};
 use tonic::codegen::futures_core::future::BoxFuture;
 use tower::{Service, ServiceExt};
 
 use crate::{comms::destination::Destination, p2p::proto};
 
-#[derive(Debug, Clone, Copy, Default)]
-pub struct DanBroadcast;
+#[derive(Debug, Clone)]
+pub struct DanBroadcast {
+    connectivity: ConnectivityRequester,
+}
 
 impl DanBroadcast {
-    pub fn new() -> Self {
-        Self
+    pub fn new(connectivity: ConnectivityRequester) -> Self {
+        Self { connectivity }
     }
 }
 
@@ -50,12 +58,16 @@ where
     type Service = BroadcastService<S>;
 
     fn layer(&self, next_service: S) -> Self::Service {
-        BroadcastService { next_service }
+        BroadcastService {
+            next_service,
+            connectivity: self.connectivity.clone(),
+        }
     }
 }
 
 #[derive(Debug, Clone)]
 pub struct BroadcastService<S> {
+    connectivity: ConnectivityRequester,
     next_service: S,
 }
 
@@ -77,6 +89,7 @@ where
         (dest, msg): (Destination<CommsPublicKey>, DanMessage<TariDanPayload, CommsPublicKey>),
     ) -> Self::Future {
         let mut next_service = self.next_service.clone();
+        let mut connectivity = self.connectivity.clone();
 
         Box::pin(async move {
             let bytes = encode_message(&proto::validator_node::DanMessage::from(msg));
@@ -103,7 +116,20 @@ where
                         .await;
                 },
                 Destination::Flood => {
-                    // todo: fetch connections from connectivity
+                    let conns = connectivity.get_active_connections().await?;
+                    let iter = conns
+                        .into_iter()
+                        .map(|c| c.peer_node_id().clone())
+                        .map(|n| OutboundMessage::new(n, bytes.clone()));
+                    svc.call_all(stream::iter(iter))
+                        .unordered()
+                        .filter_map(|result| future::ready(result.err()))
+                        .for_each(|err| {
+                            // TODO: this should return the error back to the service
+                            log::warn!("Error when sending broadcast messages: {}", err);
+                            future::ready(())
+                        })
+                        .await;
                 },
             }
 

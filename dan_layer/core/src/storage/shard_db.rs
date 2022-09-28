@@ -40,7 +40,7 @@ use crate::{
 
 // TODO: Clone is pretty bad here, this class should only be used for testing
 #[derive(Debug, Default, Clone)]
-pub struct MemoryShardDb<TAddr: NodeAddressable, TPayload: Payload> {
+pub struct MemoryShardDb<TAddr, TPayload> {
     // replica data
     shard_high_qcs: HashMap<ShardId, QuorumCertificate>,
     // pace maker data

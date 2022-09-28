@@ -25,47 +25,31 @@ mod service_impl;
 pub use service_impl::ValidatorNodeRpcServiceImpl;
 use tari_comms::protocol::rpc::{Request, Response, RpcStatus, Streaming};
 use tari_comms_rpc_macros::tari_rpc;
-use tari_dan_core::{services::mempool::service::MempoolService, storage::DbFactory};
+use tari_dan_core::services::PeerProvider;
 
-use crate::p2p::proto::validator_node as proto;
+use crate::p2p::{proto, services::messaging::DanMessageSenders};
 
 #[tari_rpc(protocol_name = b"t/vn/1", server_struct = ValidatorNodeRpcServer, client_struct = ValidatorNodeRpcClient)]
 pub trait ValidatorNodeRpcService: Send + Sync + 'static {
     #[rpc(method = 1)]
-    async fn get_token_data(
-        &self,
-        request: Request<proto::GetTokenDataRequest>,
-    ) -> Result<Response<proto::GetTokenDataResponse>, RpcStatus>;
-
-    #[rpc(method = 2)]
     async fn submit_transaction(
         &self,
-        request: Request<proto::SubmitTransactionRequest>,
-    ) -> Result<Response<proto::SubmitTransactionResponse>, RpcStatus>;
+        request: Request<proto::validator_node::SubmitTransactionRequest>,
+    ) -> Result<Response<proto::validator_node::SubmitTransactionResponse>, RpcStatus>;
 
-    #[rpc(method = 4)]
-    async fn get_sidechain_state(
+    #[rpc(method = 2)]
+    async fn get_peers(
         &self,
-        request: Request<proto::GetSidechainStateRequest>,
-    ) -> Result<Streaming<proto::GetSidechainStateResponse>, RpcStatus>;
-
-    #[rpc(method = 5)]
-    async fn get_op_logs(
-        &self,
-        request: Request<proto::GetStateOpLogsRequest>,
-    ) -> Result<Response<proto::GetStateOpLogsResponse>, RpcStatus>;
-
-    #[rpc(method = 6)]
-    async fn get_tip_node(
-        &self,
-        request: Request<proto::GetTipNodeRequest>,
-    ) -> Result<Response<proto::GetTipNodeResponse>, RpcStatus>;
+        request: Request<proto::network::GetPeersRequest>,
+    ) -> Result<Streaming<proto::network::GetPeersResponse>, RpcStatus>;
 }
 
-#[allow(dead_code)]
-pub fn create_validator_node_rpc_service<TMempoolService: MempoolService + Clone, TDbFactory: DbFactory + Clone>(
-    mempool_service: TMempoolService,
-    db_factory: TDbFactory,
-) -> ValidatorNodeRpcServer<ValidatorNodeRpcServiceImpl<TMempoolService, TDbFactory>> {
-    ValidatorNodeRpcServer::new(ValidatorNodeRpcServiceImpl::new(mempool_service, db_factory))
+pub fn create_validator_node_rpc_service<TPeerProvider>(
+    message_senders: DanMessageSenders,
+    peer_provider: TPeerProvider,
+) -> ValidatorNodeRpcServer<ValidatorNodeRpcServiceImpl<TPeerProvider>>
+where
+    TPeerProvider: PeerProvider + Clone + Send + Sync + 'static,
+{
+    ValidatorNodeRpcServer::new(ValidatorNodeRpcServiceImpl::new(message_senders, peer_provider))
 }

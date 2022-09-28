@@ -20,9 +20,41 @@
 //   WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //   USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-#[derive(Debug, Clone)]
-pub enum Destination<TAddr> {
-    Peer(TAddr),
-    Selected(Vec<TAddr>),
-    Flood,
+use async_trait::async_trait;
+use tari_comms::{
+    multiaddr::Multiaddr,
+    peer_manager::{IdentitySignature, Peer},
+    types::CommsPublicKey,
+};
+
+use crate::services::infrastructure_services::NodeAddressable;
+
+#[async_trait]
+pub trait PeerProvider {
+    type Addr: NodeAddressable + Send;
+    type Error: std::error::Error + Send + Sync + 'static;
+
+    async fn get_seed_peers(&self) -> Result<Vec<DanPeer<Self::Addr>>, Self::Error>;
+    async fn get_peer(&self, addr: &Self::Addr) -> Result<DanPeer<Self::Addr>, Self::Error>;
+    async fn add_peer(&self, peer: DanPeer<Self::Addr>) -> Result<(), Self::Error>;
+    async fn update_peer(&self, peer: DanPeer<Self::Addr>) -> Result<(), Self::Error>;
+    async fn peers_for_current_epoch_iter(
+        &self,
+    ) -> Box<dyn Iterator<Item = Result<DanPeer<Self::Addr>, Self::Error>> + Send>;
+}
+
+pub struct DanPeer<TAddr> {
+    pub identity: TAddr,
+    pub addresses: Vec<Multiaddr>,
+    pub identity_signature: Option<IdentitySignature>,
+}
+
+impl From<Peer> for DanPeer<CommsPublicKey> {
+    fn from(peer: Peer) -> Self {
+        Self {
+            identity: peer.public_key,
+            addresses: peer.addresses.into_vec(),
+            identity_signature: peer.identity_signature,
+        }
+    }
 }

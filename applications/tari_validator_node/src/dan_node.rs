@@ -23,41 +23,32 @@
 use tari_common::exit_codes::ExitError;
 use tari_shutdown::ShutdownSignal;
 
-const _LOG_TARGET: &str = "tari::validator_node::app";
+use crate::{p2p::services::networking::NetworkingService, Services};
 
-pub struct DanNode {}
+const LOG_TARGET: &str = "tari::validator_node::app";
+
+pub struct DanNode {
+    services: Services,
+}
 
 impl DanNode {
-    pub fn new() -> Self {
-        Self {}
+    pub fn new(services: Services) -> Self {
+        Self { services }
     }
 
-    pub async fn start(&self, mut shutdown: ShutdownSignal) -> Result<(), ExitError> {
-        // let base_node_client = GrpcBaseNodeClient::new(self.config.base_node_grpc_address);
-        // let wallet_client = GrpcWalletClient::new(self.config.wallet_grpc_address);
-        // let acceptance_manager = ConcreteAcceptanceManager::new(wallet_client, base_node_client.clone());
-        // let workers = ContractWorkerManager::new(
-        //     self.config.clone(),
-        //     self.identity.clone(),
-        //     self.global_db.clone(),
-        //     base_node_client,
-        //     acceptance_manager,
-        //     mempool_service,
-        //     handles,
-        //     subscription_factory,
-        //     db_factory,
-        //     shutdown.clone(),
-        // );
+    pub async fn start(mut self, mut shutdown: ShutdownSignal) -> Result<(), ExitError> {
+        let mut comms_events = self.services.comms.connectivity().get_event_subscription();
+        self.services.networking.announce().await?;
 
-        // workers
-        //     .start()
-        //     .await
-        //     .map_err(|err| ExitError::new(ExitCode::DigitalAssetError, err))?;
-
-        // todo!();
-        // basically stay open until killed
-
-        shutdown.wait().await;
+        // Wait until killed
+        loop {
+            tokio::select! {
+                Ok(evt) = comms_events.recv() =>{
+                    log::info!(target: LOG_TARGET, "ℹ️  Network event: {}", evt);
+                },
+                _ = shutdown.wait() => break,
+            }
+        }
 
         Ok(())
     }
