@@ -8,21 +8,21 @@ version = "0.35.1"
 edition = "2018"
 
 [dependencies]
-tari_app_utilities = { git = "https://github.com/tari-project/tari.git", tag = "v0.38.4", package = "tari_app_utilities" }
+tari_app_utilities = { git = "https://github.com/tari-project/tari.git", branch = "feature-dan", package = "tari_app_utilities" }
 tari_app_grpc = { git = "https://github.com/tari-project/tari.git", branch = "feature-dan", package = "tari_app_grpc" }
-tari_common = { git = "https://github.com/tari-project/tari.git", tag = "v0.38.4", package = "tari_common" }
-tari_comms = { git = "https://github.com/tari-project/tari.git", tag = "v0.38.4", package = "tari_comms" }
-tari_comms_rpc_macros = { git = "https://github.com/tari-project/tari.git", tag = "v0.38.4", package = "tari_comms_rpc_macros" }
+tari_common = { git = "https://github.com/tari-project/tari.git", branch = "feature-dan", package = "tari_common" }
+tari_comms = { git = "https://github.com/tari-project/tari.git", branch = "feature-dan", package = "tari_comms" }
+tari_comms_rpc_macros = { git = "https://github.com/tari-project/tari.git", branch = "feature-dan", package = "tari_comms_rpc_macros" }
 tari_crypto = { git = "https://github.com/tari-project/tari-crypto.git", tag = "v0.15.5" }
-tari_mmr = { git = "https://github.com/tari-project/tari.git", tag = "v0.38.4", package = "tari_mmr" }
-tari_p2p = { git = "https://github.com/tari-project/tari.git", tag = "v0.38.4", package = "tari_p2p" }
-tari_shutdown = { git = "https://github.com/tari-project/tari.git", tag = "v0.38.4", package = "tari_shutdown" }
-tari_storage = { git = "https://github.com/tari-project/tari.git", tag = "v0.38.4", package = "tari_storage" }
-tari_core = { git = "https://github.com/tari-project/tari.git", tag = "v0.38.4", package = "tari_core", default-features = false, features = ["transactions"] }
+tari_mmr = { git = "https://github.com/tari-project/tari.git", branch = "feature-dan", package = "tari_mmr" }
+tari_p2p = { git = "https://github.com/tari-project/tari.git", branch = "feature-dan", package = "tari_p2p" }
+tari_shutdown = { git = "https://github.com/tari-project/tari.git", branch = "feature-dan", package = "tari_shutdown" }
+tari_storage = { git = "https://github.com/tari-project/tari.git", branch = "feature-dan", package = "tari_storage" }
+tari_core = { git = "https://github.com/tari-project/tari.git", branch = "feature-dan", package = "tari_core", default-features = false, features = ["transactions"] }
 tari_dan_core = { path = "../../dan_layer/core" }
 tari_dan_storage_sqlite = { path = "../../dan_layer/storage_sqlite" }
 tari_dan_common_types = { path = "../../dan_layer/common_types" }
-tari_common_types = { git = "https://github.com/tari-project/tari.git", tag = "v0.38.4", package = "tari_common_types" }
+tari_common_types = { git = "https://github.com/tari-project/tari.git", branch = "feature-dan", package = "tari_common_types" }
 tari_dan_engine = { path = "../../dan_layer/engine" }
 tari_template_lib = { path = "../../dan_layer/template_lib", features = ["json"] }
 
@@ -59,7 +59,7 @@ bytecodec = { version = "0.4.14", features = ["bincode_codec"] }
 serde_json = "1.0.64"
 
 [dev-dependencies]
-tari_test_utils = { git = "https://github.com/tari-project/tari.git", tag = "v0.38.4", package = "tari_test_utils" }
+tari_test_utils = { git = "https://github.com/tari-project/tari.git", branch = "feature-dan", package = "tari_test_utils" }
 
 [build-dependencies]
-tari_common = { git = "https://github.com/tari-project/tari.git", tag = "v0.38.4", package = "tari_common", features = ["build"] }
+tari_common = { git = "https://github.com/tari-project/tari.git", branch = "feature-dan", package = "tari_common", features = ["build"] }

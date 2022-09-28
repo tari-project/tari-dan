@@ -30,7 +30,7 @@ use tokio::{
 };
 
 use crate::p2p::services::template_manager::{
-    template_manager::{TemplateManager, TemplateMetadata},
+    template_manager::{TemplateManager},
     TemplateManagerError,
 };
 const LOG_TARGET: &str = "tari::validator_node::template_manager";
