@@ -22,7 +22,7 @@
 
 pub mod handle;
 mod initializer;
-pub mod template_manager;
+pub mod manager;
 pub mod template_manager_service;
 
 pub use initializer::spawn;
@@ -37,8 +37,8 @@ pub enum TemplateManagerError {
     TemplateCodeFetchError,
     #[error("The hash of the template code does not match the metadata")]
     TemplateCodeHashMismatch,
-    #[error("Unsupported template method {name}")]
-    TemplateUnsupportedMethod { name: String },
+    // #[error("Unsupported template method {name}")]
+    // TemplateUnsupportedMethod { name: String },
     #[error("Storage error: {0}")]
     StorageError(#[from] StorageError),
 }

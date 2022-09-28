@@ -65,10 +65,10 @@ pub trait EpochManager<TAddr: NodeAddressable>: Clone {
 
     async fn get_committee(&self, epoch: Epoch, shard: ShardId) -> Result<Committee<TAddr>, EpochManagerError>;
     // TODO: Get a better name
-    async fn get_shards(
+    async fn filter_to_local_shards(
         &self,
         epoch: Epoch,
-        addr: &TAddr,
+        for_addr: &TAddr,
         available_shards: &[ShardId],
     ) -> Result<Vec<ShardId>, EpochManagerError>;
 }
@@ -150,7 +150,7 @@ impl<TAddr: NodeAddressable> EpochManager<TAddr> for RangeEpochManager<TAddr> {
         Err(EpochManagerError::NoCommitteeFound(shard))
     }
 
-    async fn get_shards(
+    async fn filter_to_local_shards(
         &self,
         epoch: Epoch,
         addr: &TAddr,

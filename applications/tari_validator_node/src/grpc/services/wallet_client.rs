@@ -25,7 +25,6 @@ use std::net::SocketAddr;
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 use tari_app_grpc::tari_rpc::{
-    self as grpc,
     BuildInfo,
     CreateTemplateRegistrationRequest,
     CreateTemplateRegistrationResponse,
@@ -38,6 +37,7 @@ use tari_app_grpc::tari_rpc::{
 use tari_comms::NodeIdentity;
 use tari_crypto::tari_utilities::ByteArray;
 use tari_dan_core::{services::WalletClient, DigitalAssetError};
+use tari_wallet_grpc_client::Client as GrpcWallet;
 
 use crate::{
     template_registration_signing::sign_template_registration,
@@ -46,7 +46,7 @@ use crate::{
 
 const _LOG_TARGET: &str = "tari::validator_node::app";
 
-type Client = grpc::wallet_client::WalletClient<tonic::transport::Channel>;
+type Client = GrpcWallet<tonic::transport::Channel>;
 
 #[derive(Clone)]
 pub struct GrpcWalletClient {
