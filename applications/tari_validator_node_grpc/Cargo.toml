@@ -7,7 +7,7 @@ version = "0.35.0"
 edition = "2018"
 
 [dependencies]
-tari_common_types = {git = "https://github.com/tari-project/tari.git", tag = "v0.38.3", package = "tari_common_types"}
+tari_common_types = {git = "https://github.com/tari-project/tari.git", tag = "v0.38.4", package = "tari_common_types"}
 tari_crypto = { git = "https://github.com/tari-project/tari-crypto.git", tag = "v0.15.5" }
 tari_utilities = { git = "https://github.com/tari-project/tari_utilities.git", tag = "v0.4.5" }
 tari_dan_engine = { path = "../../dan_layer/engine"}

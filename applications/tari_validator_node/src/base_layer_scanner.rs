@@ -36,7 +36,7 @@ use tari_dan_core::{
 };
 use tari_dan_storage_sqlite::global::SqliteGlobalDbBackendAdapter;
 use tari_shutdown::ShutdownSignal;
-use tokio::time;
+use tokio::{task, time};
 
 use crate::{
     p2p::services::{
@@ -48,6 +48,30 @@ use crate::{
 };
 
 const LOG_TARGET: &str = "tari::validator_node::base_layer_scanner";
+
+pub fn spawn(
+    config: ValidatorNodeConfig,
+    global_db: GlobalDb<SqliteGlobalDbBackendAdapter>,
+    base_node_client: GrpcBaseNodeClient,
+    epoch_manager: EpochManagerHandle,
+    template_manager: TemplateManagerHandle,
+    shutdown: ShutdownSignal,
+) {
+    task::spawn(async move {
+        let base_layer_scanner = BaseLayerScanner::new(
+            config,
+            global_db,
+            base_node_client,
+            epoch_manager,
+            template_manager,
+            shutdown,
+        );
+
+        if let Err(err) = base_layer_scanner.start().await {
+            error!(target: LOG_TARGET, "Base layer scanner failed with error: {}", err);
+        }
+    });
+}
 
 pub struct BaseLayerScanner {
     config: ValidatorNodeConfig,
@@ -82,16 +106,15 @@ impl BaseLayerScanner {
     }
 
     pub async fn start(mut self) -> Result<(), BaseLayerScannerError> {
-        self.load_initial_state()?;
-
         if !self.config.scan_base_layer {
             info!(
                 target: LOG_TARGET,
-                "⚠️ scan_base_layer turned OFF. Base layer scanner is shutting down."
+                "⚠️ scan_base_layer turned OFF. Base layer scanner is exiting."
             );
-            self.shutdown.await;
             return Ok(());
         }
+
+        self.load_initial_state()?;
 
         loop {
             // fetch the new base layer info since the previous scan
@@ -107,7 +130,7 @@ impl BaseLayerScanner {
             // wait for all tasks to finish
             let results = tokio::join!(epoch_task, template_task);
 
-            dbg!(&results);
+            // dbg!(&results);
             // propagate any error that may happen
             // TODO: there could be a cleaner way of propagating the errors of the individual tasks
             // TODO: maybe we want to be resilient to invalid data in base layer and just log the error?

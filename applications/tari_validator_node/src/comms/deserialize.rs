@@ -94,6 +94,7 @@ where
         Box::pin(async move {
             let decoded_msg = proto::validator_node::DanMessage::decode(&mut body)?;
             let msg = DanMessage::try_from(decoded_msg)?;
+            log::info!(target: "tari::validator_node::comms::deserialize", "Received message {:?}", msg);
             let peer = peer_manager
                 .find_by_node_id(&source_peer)
                 .await?

@@ -20,9 +20,35 @@
 //   WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //   USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+use anyhow::anyhow;
+use async_trait::async_trait;
+use tokio::sync::{mpsc, oneshot};
+
+use crate::p2p::services::networking::{NetworkingError, NetworkingService};
+
+pub enum NetworkingRequest {
+    Announce(oneshot::Sender<Result<(), NetworkingError>>),
+}
+
 #[derive(Debug, Clone)]
-pub enum Destination<TAddr> {
-    Peer(TAddr),
-    Selected(Vec<TAddr>),
-    Flood,
+pub struct NetworkingHandle {
+    tx_request: mpsc::Sender<NetworkingRequest>,
+}
+
+impl NetworkingHandle {
+    pub(super) fn new(tx_request: mpsc::Sender<NetworkingRequest>) -> Self {
+        Self { tx_request }
+    }
+}
+
+#[async_trait]
+impl NetworkingService for NetworkingHandle {
+    async fn announce(&mut self) -> Result<(), NetworkingError> {
+        let (tx, rx) = oneshot::channel();
+        self.tx_request
+            .send(NetworkingRequest::Announce(tx))
+            .await
+            .map_err(|_| anyhow!("Service has shutdown, cannot send request"))?;
+        rx.await?
+    }
 }

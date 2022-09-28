@@ -136,9 +136,12 @@ fn configure_comms(
     };
 
     // Hook up messaging middlewares (currently none)
+    let connectivity = comms.connectivity();
     let messaging_pipeline = pipeline::Builder::new()
-        .with_outbound_pipeline(outbound_rx, |sink| {
-            ServiceBuilder::new().layer(DanBroadcast::new()).service(sink)
+        .with_outbound_pipeline(outbound_rx, move |sink| {
+            ServiceBuilder::new()
+                .layer(DanBroadcast::new(connectivity))
+                .service(sink)
         })
         .max_concurrent_inbound_tasks(3)
         .max_concurrent_outbound_tasks(3)
