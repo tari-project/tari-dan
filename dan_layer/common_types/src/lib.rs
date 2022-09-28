@@ -4,6 +4,7 @@
 pub mod proto;
 pub mod storage;
 
+pub mod optional;
 mod template_id;
 
 use std::cmp::Ordering;

@@ -95,7 +95,7 @@ impl BaseLayerEpochManager {
                 .collect()
         };
         dbg!(&vns);
-        *self.neighbours.entry(epoch.0).or_insert(vns.clone()) = vns.clone();
+        self.neighbours.insert(epoch.0, vns.clone());
         Ok(())
     }
 

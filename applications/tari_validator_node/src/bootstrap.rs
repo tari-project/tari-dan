@@ -20,21 +20,41 @@
 //   WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //   USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use std::{fs, io, sync::Arc};
+use std::{fs, io, str::FromStr, sync::Arc};
 
 use tari_app_utilities::{identity_management, identity_management::load_from_json};
 use tari_common::exit_codes::{ExitCode, ExitError};
-use tari_comms::{CommsNode, NodeIdentity};
+use tari_comms::{
+    peer_manager::{Peer, PeerFlags},
+    protocol::rpc::RpcServer,
+    CommsNode,
+    NodeIdentity,
+    PeerManager,
+    UnspawnedCommsNode,
+};
 use tari_dan_core::storage::global::GlobalDb;
 use tari_dan_storage_sqlite::{global::SqliteGlobalDbBackendAdapter, SqliteDbFactory};
-use tari_p2p::initialization::spawn_comms_using_transport;
+use tari_p2p::{initialization::spawn_comms_using_transport, peer_seeds::SeedPeer, PeerSeedsConfig};
 use tari_shutdown::ShutdownSignal;
 
 use crate::{
-    base_layer_scanner::BaseLayerScanner,
+    base_layer_scanner,
     comms,
     grpc::services::base_node_client::GrpcBaseNodeClient,
-    p2p::services::{epoch_manager, hotstuff, mempool, messaging, messaging::DanMessageReceivers, template_manager},
+    p2p::{
+        create_validator_node_rpc_service,
+        services::{
+            comms_peer_provider::CommsPeerProvider,
+            epoch_manager,
+            hotstuff,
+            mempool,
+            messaging,
+            messaging::{DanMessageReceivers, DanMessageSenders},
+            networking,
+            networking::NetworkingHandle,
+            template_manager,
+        },
+    },
     ApplicationConfig,
 };
 
@@ -59,28 +79,47 @@ pub async fn spawn_services(
 
     // Spawn messaging
     let (message_senders, message_receivers) = messaging::new_messaging_channel(10);
-    let outbound_messaging = messaging::spawn(node_identity.public_key().clone(), message_channel, message_senders);
+    let outbound_messaging = messaging::spawn(
+        node_identity.public_key().clone(),
+        message_channel,
+        message_senders.clone(),
+    );
 
     let DanMessageReceivers {
         rx_consensus_message,
         rx_vote_message,
         rx_new_transaction_message,
+        rx_network_announce,
     } = message_receivers;
 
     // Epoch manager
-    let epoch_manager_handle =
-        epoch_manager::spawn(base_node_client, node_identity.public_key().clone(), shutdown.clone());
+    let epoch_manager_handle = epoch_manager::spawn(
+        base_node_client.clone(),
+        node_identity.public_key().clone(),
+        shutdown.clone(),
+    );
 
     // Mempool
     let mempool = mempool::spawn(rx_new_transaction_message, outbound_messaging.clone());
+
+    // Add seeds
+    add_seed_peers(&comms.peer_manager(), &comms.node_identity(), &config.peer_seeds).await?;
+
+    // Networking
+    let peer_provider = CommsPeerProvider::new(comms.peer_manager());
+    let networking = networking::spawn(
+        rx_network_announce,
+        node_identity.clone(),
+        outbound_messaging.clone(),
+        peer_provider.clone(),
+        comms.connectivity(),
+    );
 
     // Template manager
     let template_manager = template_manager::spawn(sqlite_db, shutdown.clone());
 
     // Base Node scanner
-    let base_node_client = GrpcBaseNodeClient::new(config.validator_node.base_node_grpc_address);
-
-    let base_layer_scanner = BaseLayerScanner::new(
+    base_layer_scanner::spawn(
         config.validator_node.clone(),
         global_db.clone(),
         base_node_client,
@@ -88,11 +127,6 @@ pub async fn spawn_services(
         template_manager,
         shutdown.clone(),
     );
-
-    base_layer_scanner
-        .start()
-        .await
-        .map_err(|err| ExitError::new(ExitCode::DigitalAssetError, err))?;
 
     // Consensus
     hotstuff::spawn(
@@ -105,21 +139,27 @@ pub async fn spawn_services(
         shutdown,
     );
 
-    // let comms = setup_p2p_rpc(config, comms);
+    let comms = setup_p2p_rpc(config, comms, message_senders, peer_provider);
     let comms = spawn_comms_using_transport(comms, p2p_config.transport.clone())
         .await
         .map_err(|e| ExitError::new(ExitCode::ConfigError, format!("Could not spawn using transport: {}", e)))?;
 
     // Save final node identity after comms has initialized. This is required because the public_address can be
     // changed by comms during initialization when using tor.
+    save_identities(config, &comms)?;
+
+    Ok(Services { comms, networking })
+}
+
+fn save_identities(config: &ApplicationConfig, comms: &CommsNode) -> Result<(), ExitError> {
     identity_management::save_as_json(&config.validator_node.identity_file, &*comms.node_identity())
         .map_err(|e| ExitError::new(ExitCode::ConfigError, format!("Failed to save node identity: {}", e)))?;
+
     if let Some(hs) = comms.hidden_service() {
         identity_management::save_as_json(&config.validator_node.tor_identity_file, hs.tor_identity())
             .map_err(|e| ExitError::new(ExitCode::ConfigError, format!("Failed to save tor identity: {}", e)))?;
     }
-
-    Ok(Services { comms })
+    Ok(())
 }
 
 fn ensure_directories_exist(config: &ApplicationConfig) -> io::Result<()> {
@@ -130,14 +170,43 @@ fn ensure_directories_exist(config: &ApplicationConfig) -> io::Result<()> {
 
 pub struct Services {
     pub comms: CommsNode,
+    pub networking: NetworkingHandle,
     // TODO: Add more as needed
 }
 
-// fn setup_p2p_rpc(config: &ApplicationConfig, comms: UnspawnedCommsNode) -> UnspawnedCommsNode {
-//     let rpc_server = RpcServer::builder()
-//         .with_maximum_simultaneous_sessions(config.validator_node.p2p.rpc_max_simultaneous_sessions)
-//         // .add_service(create_validator_node_rpc_service(mempool, db_factory));
-//         .finish();
-//
-//     comms.add_protocol_extension(rpc_server)
-// }
+fn setup_p2p_rpc(
+    config: &ApplicationConfig,
+    comms: UnspawnedCommsNode,
+    message_senders: DanMessageSenders,
+    peer_provider: CommsPeerProvider,
+) -> UnspawnedCommsNode {
+    let rpc_server = RpcServer::builder()
+        .with_maximum_simultaneous_sessions(config.validator_node.p2p.rpc_max_simultaneous_sessions)
+        .finish()
+        .add_service(create_validator_node_rpc_service(message_senders, peer_provider));
+
+    comms.add_protocol_extension(rpc_server)
+}
+
+async fn add_seed_peers(
+    peer_manager: &PeerManager,
+    node_identity: &NodeIdentity,
+    config: &PeerSeedsConfig,
+) -> Result<(), anyhow::Error> {
+    let peers = config
+        .peer_seeds
+        .iter()
+        .map(|s| SeedPeer::from_str(s).map(Peer::from))
+        .collect::<Result<Vec<_>, _>>()?;
+
+    for mut peer in peers {
+        if &peer.public_key == node_identity.public_key() {
+            continue;
+        }
+        peer.add_flags(PeerFlags::SEED);
+
+        // debug!(target: LOG_TARGET, "Adding seed peer [{}]", peer);
+        peer_manager.add_peer(peer).await?;
+    }
+    Ok(())
+}

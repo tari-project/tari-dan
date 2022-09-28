@@ -56,7 +56,7 @@ use tari_shutdown::{Shutdown, ShutdownSignal};
 use tokio::{runtime, runtime::Runtime, task};
 
 use crate::{
-    bootstrap::spawn_services,
+    bootstrap::{spawn_services, Services},
     cli::Cli,
     config::{ApplicationConfig, ValidatorNodeConfig},
     dan_node::DanNode,
@@ -218,7 +218,7 @@ async fn run_node(config: &ApplicationConfig) -> Result<(), ExitError> {
     let mut wallet_client = GrpcWalletClient::new(config.validator_node.wallet_grpc_address);
     let vn_registration = auto_register_vn(&mut wallet_client, &mut base_node_client, &node_identity, config).await;
     println!("VN Registration result : {:?}", vn_registration);
-    let _comms = spawn_services(
+    let services = spawn_services(
         config,
         shutdown.to_signal(),
         node_identity.clone(),
@@ -227,7 +227,21 @@ async fn run_node(config: &ApplicationConfig) -> Result<(), ExitError> {
     )
     .await?;
 
-    run_dan_node(shutdown.to_signal()).await?;
+    // Run the JSON-RPC API
+    if let Some(address) = config.validator_node.json_rpc_address {
+        info!(target: LOG_TARGET, "Started JSON-RPC server on {}", address);
+        let handlers = JsonRpcHandlers::new(
+            node_identity.clone(),
+            GrpcWalletClient::new(config.validator_node.wallet_grpc_address),
+        );
+        task::spawn(run_json_rpc(address, handlers));
+    }
+
+    // Show the validator node identity
+    info!(target: LOG_TARGET, "🚀 Validator node started!");
+    info!(target: LOG_TARGET, "{}", node_identity);
+
+    run_dan_node(services, shutdown.to_signal()).await?;
 
     Ok(())
 }
@@ -240,7 +254,7 @@ fn build_runtime() -> Result<Runtime, ExitError> {
         .map_err(|e| ExitError::new(ExitCode::UnknownError, e))
 }
 
-async fn run_dan_node(shutdown_signal: ShutdownSignal) -> Result<(), ExitError> {
-    let node = DanNode::new();
+async fn run_dan_node(services: Services, shutdown_signal: ShutdownSignal) -> Result<(), ExitError> {
+    let node = DanNode::new(services);
     node.start(shutdown_signal).await
 }

@@ -148,10 +148,9 @@ impl BaseNodeClient for GrpcBaseNodeClient {
         loop {
             match stream.message().await {
                 Ok(Some(val)) => {
-                    let template_registration: CodeTemplateRegistration = val.try_into()
-                        .map_err(|_| {
-                            BaseNodeError::InvalidPeerMessage("invalid template registration".to_string())
-                        })?;
+                    let template_registration: CodeTemplateRegistration = val
+                        .try_into()
+                        .map_err(|_| BaseNodeError::InvalidPeerMessage("invalid template registration".to_string()))?;
                     templates.push(template_registration);
                 },
                 Ok(None) => {
