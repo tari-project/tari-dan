@@ -22,7 +22,6 @@
 
 use std::collections::HashMap;
 
-use log::warn;
 use tari_comms::types::CommsPublicKey;
 use tari_dan_common_types::ShardId;
 use tari_dan_core::{
@@ -35,24 +34,20 @@ use tari_dan_core::{
 
 use crate::grpc::services::base_node_client::GrpcBaseNodeClient;
 
-const LOG_TARGET: &str = "tari_validator_node::epoch_manager::base_layer_epoch_manager";
+// const LOG_TARGET: &str = "tari_validator_node::epoch_manager::base_layer_epoch_manager";
 
 #[derive(Clone)]
 pub struct BaseLayerEpochManager {
     pub base_node_client: GrpcBaseNodeClient,
     current_epoch: Epoch,
-    id: CommsPublicKey,
     validators_per_epoch: HashMap<u64, Vec<ValidatorNode>>,
-    neighbours: HashMap<u64, Vec<ValidatorNode>>,
 }
 impl BaseLayerEpochManager {
-    pub fn new(base_node_client: GrpcBaseNodeClient, id: CommsPublicKey) -> Self {
+    pub fn new(base_node_client: GrpcBaseNodeClient, _id: CommsPublicKey) -> Self {
         Self {
             base_node_client,
             current_epoch: Epoch(0),
-            id,
             validators_per_epoch: HashMap::new(),
-            neighbours: HashMap::new(),
         }
     }
 
@@ -63,38 +58,40 @@ impl BaseLayerEpochManager {
         }
 
         // If the committee size is bigger than vns.len() then this function is broken.
-        let half_committee_size = 5;
         let mut base_node_client = self.base_node_client.clone();
         let mut vns = base_node_client.get_validator_nodes(epoch.0 * 10).await?;
-        dbg!(&vns);
-        *self.validators_per_epoch.entry(epoch.0).or_insert_with(|| vns.clone()) = vns.clone();
-        let shard_key = match base_node_client.clone().get_shard_key(epoch.0, &self.id).await {
-            Ok(key) => key,
-            Err(_) => {
-                warn!(target: LOG_TARGET, "This VN is not registered");
-                return Ok(());
-            },
-        };
-        dbg!(&shard_key);
-
         vns.sort_by(|a, b| a.shard_key.partial_cmp(&b.shard_key).unwrap());
-        let p = vns.iter().position(|x| x.shard_key == shard_key).unwrap();
-        let begin = &vns[(vns.len() + p - half_committee_size) % vns.len()].shard_key;
-        let end = &vns[(p + half_committee_size) % vns.len()].shard_key;
-        let vns: Vec<ValidatorNode> = if p >= half_committee_size || p + half_committee_size >= vns.len() {
-            //     This means the committee is wrapped around
-            vns.iter()
-                .filter(|&a| &a.shard_key <= begin || &a.shard_key >= end)
-                .cloned()
-                .collect()
-        } else {
-            vns.iter()
-                .filter(|&a| &a.shard_key >= begin || &a.shard_key <= end)
-                .cloned()
-                .collect()
-        };
-        dbg!(&vns);
-        self.neighbours.insert(epoch.0, vns);
+        self.validators_per_epoch.insert(epoch.0, vns.clone());
+        // let shard_key;
+        // match base_node_client.clone().get_shard_key(epoch.0 * 10, &self.id).await {
+        //     Ok(Some(key)) => shard_key = key,
+        //     Ok(None) => {
+        //         warn!(target: LOG_TARGET, "Validator node not found in the current epoch");
+        //         return Ok(());
+        //     },
+        //     Err(e) => {
+        //         warn!(target: LOG_TARGET, "This VN is not registered: {}", e);
+        //         return Ok(());
+        //     },
+        // };
+        //
+        //
+        // let p = vns.iter().position(|x| x.shard_key == shard_key).unwrap();
+        // let begin = &vns[((vns.len() + p).saturating_sub(half_committee_size)) % vns.len()].shard_key;
+        // let end = &vns[(p + half_committee_size) % vns.len()].shard_key;
+        // let vns: Vec<ValidatorNode> = if p >= half_committee_size || p + half_committee_size >= vns.len() {
+        //     //     This means the committee is wrapped around
+        //     vns.iter()
+        //         .filter(|&a| &a.shard_key <= begin || &a.shard_key >= end)
+        //         .cloned()
+        //         .collect()
+        // } else {
+        //     vns.iter()
+        //         .filter(|&a| &a.shard_key >= begin || &a.shard_key <= end)
+        //         .cloned()
+        //         .collect()
+        // };
+        // *self.neighbours.entry(epoch.0).or_insert(vns.clone()) = vns.clone();
         Ok(())
     }
 
@@ -121,7 +118,7 @@ impl BaseLayerEpochManager {
         &self,
         epoch: Epoch,
         shards: &[ShardId],
-    ) -> Result<Vec<ShardCommitteeAllocation<CommsPublicKey>>, String> {
+    ) -> Result<Vec<ShardCommitteeAllocation<CommsPublicKey>>, EpochManagerError> {
         let mut result = vec![];
         for &shard in shards {
             let committee = self.get_committee(epoch, shard).ok();
@@ -133,53 +130,51 @@ impl BaseLayerEpochManager {
         Ok(result)
     }
 
-    pub fn get_committee(&self, _epoch: Epoch, _shard: ShardId) -> Result<Committee<CommsPublicKey>, String> {
-        todo!()
-        // let validator_nodes = self
-        //     .base_node_client
-        //     .clone()
-        //     .get_committee(epoch.0, shard.to_le_bytes().try_into().unwrap())
-        //     .map_err(|s| format!("{:?}", s))?;
-        // Ok(Committee::new(validator_nodes))
+    pub fn get_committee(&self, epoch: Epoch, shard: ShardId) -> Result<Committee<CommsPublicKey>, EpochManagerError> {
+        let vns = self
+            .validators_per_epoch
+            .get(&epoch.0)
+            .ok_or(EpochManagerError::NoEpochFound(epoch))?;
+        let half_committee_size = 4; // total committee = 7
+        if vns.len() < half_committee_size * 2 {
+            return Ok(Committee::new(vns.iter().map(|v| v.public_key.clone()).collect()));
+        }
+
+        let mid_point = vns.iter().filter(|x| x.shard_key <= shard).count();
+
+        let begin = ((mid_point as i64 - half_committee_size as i64) % vns.len() as i64) as usize;
+        let end = ((mid_point as i64 + half_committee_size as i64) % vns.len() as i64) as usize;
+        let mut result = Vec::with_capacity(half_committee_size * 2);
+        if mid_point < half_committee_size {
+            result.extend_from_slice(&vns[0..mid_point as usize]);
+            result.extend_from_slice(&vns[begin..]);
+        } else {
+            result.extend_from_slice(&vns[begin..mid_point as usize]);
+        }
+
+        if mid_point + half_committee_size >= vns.len() {
+            result.extend_from_slice(&vns[mid_point as usize..]);
+            result.extend_from_slice(&vns[0..end]);
+        } else {
+            result.extend_from_slice(&vns[mid_point as usize..end]);
+        }
+
+        Ok(Committee::new(result.into_iter().map(|v| v.public_key).collect()))
     }
 
-    #[allow(dead_code)]
-    pub fn get_shards(
+    pub fn filter_to_local_shards(
         &self,
-        _epoch: Epoch,
-        _addr: &CommsPublicKey,
-        _available_shards: &[ShardId],
-    ) -> Result<Vec<ShardId>, String> {
-        // If the committee size is bigger than vns.len() then this function is broken.
-        // let half_committee_size = 5;
-        // let mut base_node_client = self.base_node_client.clone();
-        // let shard_key = base_node_client
-        //     .clone()
-        //     .get_shard_key(epoch.0, addr)
-        //     .await
-        //     .map_err(|s| format!("{:?}", s))?;
-        // let mut vns = base_node_client
-        //     .get_validator_nodes(epoch.0)
-        //     .await
-        //     .map_err(|s| format!("{:?}", s))?;
-        // vns.sort_by(|a, b| a.shard_key.partial_cmp(&b.shard_key).unwrap());
-        // let p = vns.iter().position(|x| x.shard_key == shard_key).unwrap();
-        // let begin = &vns[(vns.len() + p - half_committee_size) % vns.len()].shard_key;
-        // let end = &vns[(p + half_committee_size) % vns.len()].shard_key;
-        // if p >= half_committee_size || p + half_committee_size >= vns.len() {
-        //     // This means the committee is wrapped around
-        //     Ok(available_shards
-        //         .iter()
-        //         .filter(|&a| a <= begin || a >= end)
-        //         .map(|a| a.clone())
-        //         .collect())
-        // } else {
-        //     Ok(available_shards
-        //         .iter()
-        //         .filter(|&a| a >= begin || a <= end)
-        //         .map(|a| a.clone())
-        //         .collect())
-        // }
-        todo!()
+        epoch: Epoch,
+        for_addr: &CommsPublicKey,
+        available_shards: &[ShardId],
+    ) -> Result<Vec<ShardId>, EpochManagerError> {
+        let mut result = vec![];
+        for shard in available_shards {
+            let committee = self.get_committee(epoch, *shard)?;
+            if committee.contains(for_addr) {
+                result.push(*shard);
+            }
+        }
+        Ok(result)
     }
 }

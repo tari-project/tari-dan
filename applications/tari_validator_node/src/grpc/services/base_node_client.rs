@@ -25,6 +25,7 @@ use std::{convert::TryInto, net::SocketAddr};
 use async_trait::async_trait;
 use log::info;
 use tari_app_grpc::tari_rpc::{self as grpc, GetCommitteeRequest, GetShardKeyRequest};
+use tari_base_node_grpc_client::BaseNodeGrpcClient;
 use tari_common_types::types::PublicKey;
 use tari_comms::types::CommsPublicKey;
 use tari_core::transactions::transaction_components::CodeTemplateRegistration;
@@ -37,7 +38,7 @@ use tari_dan_core::{
 
 const LOG_TARGET: &str = "tari::validator_node::app";
 
-type Client = grpc::base_node_client::BaseNodeClient<tonic::transport::Channel>;
+type Client = BaseNodeGrpcClient<tonic::transport::Channel>;
 
 #[derive(Clone)]
 pub struct GrpcBaseNodeClient {
@@ -125,15 +126,18 @@ impl BaseNodeClient for GrpcBaseNodeClient {
             .collect())
     }
 
-    async fn get_shard_key(&mut self, height: u64, public_key: &PublicKey) -> Result<ShardId, BaseNodeError> {
+    async fn get_shard_key(&mut self, height: u64, public_key: &PublicKey) -> Result<Option<ShardId>, BaseNodeError> {
         let inner = self.connection().await?;
         let request = GetShardKeyRequest {
             height,
             public_key: public_key.to_vec(),
         };
         let result = inner.get_shard_key(request).await?.into_inner();
-        println!("res {:?}", result);
-        Ok(ShardId::from_bytes(result.shard_key.as_bytes())?)
+        if result.shard_key.is_empty() {
+            Ok(None)
+        } else {
+            Ok(Some(ShardId::from_bytes(result.shard_key.as_bytes())?))
+        }
     }
 
     async fn get_template_registrations(

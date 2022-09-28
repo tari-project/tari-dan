@@ -72,11 +72,11 @@ impl From<DbTemplate> for Template {
     }
 }
 
-pub struct BaseLayerTemplateManager {
+pub struct TemplateManager {
     db_factory: SqliteDbFactory,
 }
 
-impl BaseLayerTemplateManager {
+impl TemplateManager {
     pub fn new(db_factory: SqliteDbFactory) -> Self {
         // TODO: preload some example templates
         Self { db_factory }
