@@ -28,7 +28,6 @@ use tari_dan_core::{
     storage::{chain::DbTemplate, DbFactory},
     DigitalAssetError,
 };
-use tari_dan_engine::hashing::hasher;
 
 use crate::{p2p::services::template_manager::TemplateManagerError, SqliteDbFactory};
 
@@ -73,11 +72,11 @@ impl From<DbTemplate> for Template {
     }
 }
 
-pub struct TemplateManager {
+pub struct BaseLayerTemplateManager {
     db_factory: SqliteDbFactory,
 }
 
-impl TemplateManager {
+impl BaseLayerTemplateManager {
     pub fn new(db_factory: SqliteDbFactory) -> Self {
         // TODO: preload some example templates
         Self { db_factory }

@@ -67,10 +67,9 @@ impl BaseLayerEpochManager {
         let mut base_node_client = self.base_node_client.clone();
         let mut vns = base_node_client.get_validator_nodes(epoch.0 * 10).await?;
         dbg!(&vns);
-        *self.validators_per_epoch.entry(epoch.0).or_insert(vns.clone()) = vns.clone();
-        let shard_key;
-        match base_node_client.clone().get_shard_key(epoch.0, &self.id).await {
-            Ok(key) => shard_key = key,
+        *self.validators_per_epoch.entry(epoch.0).or_insert_with(|| vns.clone()) = vns.clone();
+        let shard_key = match base_node_client.clone().get_shard_key(epoch.0, &self.id).await {
+            Ok(key) => key,
             Err(_) => {
                 warn!(target: LOG_TARGET, "This VN is not registered");
                 return Ok(());
@@ -95,7 +94,7 @@ impl BaseLayerEpochManager {
                 .collect()
         };
         dbg!(&vns);
-        self.neighbours.insert(epoch.0, vns.clone());
+        self.neighbours.insert(epoch.0, vns);
         Ok(())
     }
 
@@ -111,11 +110,13 @@ impl BaseLayerEpochManager {
         self.current_epoch
     }
 
+    #[allow(dead_code)]
     pub fn is_epoch_valid(&self, epoch: Epoch) -> bool {
         let current_epoch = self.current_epoch();
         current_epoch.0 - 10 <= epoch.0 && epoch.0 <= current_epoch.0 + 10
     }
 
+    #[allow(dead_code)]
     pub fn get_committees(
         &self,
         epoch: Epoch,
@@ -142,6 +143,7 @@ impl BaseLayerEpochManager {
         // Ok(Committee::new(validator_nodes))
     }
 
+    #[allow(dead_code)]
     pub fn get_shards(
         &self,
         _epoch: Epoch,

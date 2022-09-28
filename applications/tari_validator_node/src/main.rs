@@ -130,6 +130,7 @@ async fn auto_register_vn(
     config: &ApplicationConfig,
 ) -> Result<ShardId, ShardKeyError> {
     let path = &config.validator_node.shard_key_file;
+    #[allow(clippy::if_not_else)]
     if !path.exists() {
         // If we don't have the shard key file, we want to send registration tx
         let vn = wallet_client.register_validator_node(node_identity).await?;

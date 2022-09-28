@@ -20,9 +20,9 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+pub mod base_layer_template_manager;
 pub mod handle;
 mod initializer;
-pub mod template_manager;
 pub mod template_manager_service;
 
 pub use initializer::spawn;
@@ -36,8 +36,10 @@ pub enum TemplateManagerError {
     #[error("Could not fetch the template code from the web")]
     TemplateCodeFetchError,
     #[error("The hash of the template code does not match the metadata")]
+    #[allow(dead_code)]
     TemplateCodeHashMismatch,
     #[error("Unsupported template method {name}")]
+    #[allow(dead_code)]
     TemplateUnsupportedMethod { name: String },
     #[error("Storage error: {0}")]
     StorageError(#[from] StorageError),

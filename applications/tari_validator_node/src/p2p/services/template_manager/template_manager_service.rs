@@ -29,7 +29,10 @@ use tokio::{
     task::JoinHandle,
 };
 
-use crate::p2p::services::template_manager::{template_manager::TemplateManager, TemplateManagerError};
+use crate::p2p::services::template_manager::{
+    base_layer_template_manager::BaseLayerTemplateManager,
+    TemplateManagerError,
+};
 const LOG_TARGET: &str = "tari::validator_node::template_manager";
 
 pub struct TemplateManagerService {
@@ -37,7 +40,7 @@ pub struct TemplateManagerService {
         TemplateManagerRequest,
         oneshot::Sender<Result<TemplateManagerResponse, TemplateManagerError>>,
     )>,
-    inner: TemplateManager,
+    inner: BaseLayerTemplateManager,
 }
 
 #[derive(Debug, Clone)]
@@ -61,7 +64,7 @@ impl TemplateManagerService {
         tokio::spawn(async move {
             TemplateManagerService {
                 rx_request,
-                inner: TemplateManager::new(sqlite_db_factory),
+                inner: BaseLayerTemplateManager::new(sqlite_db_factory),
             }
             .run(shutdown)
             .await
