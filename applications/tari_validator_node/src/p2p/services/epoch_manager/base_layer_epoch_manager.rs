@@ -61,7 +61,7 @@ impl BaseLayerEpochManager {
         let mut base_node_client = self.base_node_client.clone();
         let mut vns = base_node_client.get_validator_nodes(epoch.0 * 10).await?;
         vns.sort_by(|a, b| a.shard_key.partial_cmp(&b.shard_key).unwrap());
-        *self.validators_per_epoch.entry(epoch.0).or_insert_with(|| vns.clone()) = vns.clone();
+        self.validators_per_epoch.insert(epoch.0, vns.clone());
         // let shard_key;
         // match base_node_client.clone().get_shard_key(epoch.0 * 10, &self.id).await {
         //     Ok(Some(key)) => shard_key = key,
