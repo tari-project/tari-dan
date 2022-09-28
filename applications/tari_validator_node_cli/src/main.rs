@@ -37,7 +37,7 @@ use crate::{
     cli::Cli,
     client::{TemplateRegistrationRequest, ValidatorNodeClient},
     command::Command,
-    prompt::{Prompt, YesNo},
+    prompt::Prompt,
 };
 
 #[tokio::main]
