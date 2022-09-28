@@ -20,7 +20,7 @@
 //   WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //   USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use std::sync::Arc;
+use std::{convert::TryInto, sync::Arc};
 
 use axum_jrpc::{
     error::{JsonRpcError, JsonRpcErrorReason},
@@ -31,11 +31,12 @@ use axum_jrpc::{
 use serde::Serialize;
 use serde_json::json;
 use tari_comms::{multiaddr::Multiaddr, peer_manager::NodeId, types::CommsPublicKey, NodeIdentity};
-use tari_dan_engine::instruction::Transaction;
+use tari_dan_engine::instruction::{Instruction, InstructionSignature, Transaction, TransactionBuilder};
+use tari_template_lib::Hash;
 
 use crate::{
     grpc::services::wallet_client::GrpcWalletClient,
-    json_rpc::jrpc_errors::internal_error,
+    json_rpc::{jrpc_errors::internal_error, messages::SubmitTransactionRequest},
     p2p::services::mempool::MempoolHandle,
 };
 
@@ -75,12 +76,29 @@ impl JsonRpcHandlers {
 
     pub async fn submit_transaction(&self, value: JsonRpcExtractor) -> JrpcResult {
         let answer_id = value.get_answer_id();
-        let transaction: Transaction = value.parse_params()?;
+        let transaction: SubmitTransactionRequest = value.parse_params()?;
+
+        let mut builder = TransactionBuilder::new();
+        builder.with_new_components(transaction.num_new_components);
+        for i in transaction.instructions {
+            builder.add_instruction(Instruction::CallFunction {
+                package_address: i.package_address.into(),
+                template: i.template,
+                function: i.function,
+                args: i.args.clone(),
+            });
+        }
+        builder.signature(transaction.signature.try_into().map_err(internal_error(answer_id))?);
+        builder.sender_public_key(transaction.sender_public_key);
+        let mempool_tx = builder.build();
+
+        // Pass to translation engine to translate into Shards and Substates.
+
+        // Submit to mempool.
 
         // TODO: submit the transaction to the wasm engine and return the result data
-        println!("Transaction: {:?}", transaction);
         self.mempool
-            .new_transaction(transaction)
+            .new_transaction(mempool_tx)
             .await
             .map_err(internal_error(answer_id))?;
 

@@ -70,6 +70,16 @@ impl TransactionBuilder {
         self
     }
 
+    pub fn signature(&mut self, signature: InstructionSignature) -> &mut Self {
+        self.signature = Some(signature);
+        self
+    }
+
+    pub fn sender_public_key(&mut self, sender_public_key: RistrettoPublicKey) -> &mut Self {
+        self.sender_public_key = Some(sender_public_key);
+        self
+    }
+
     pub fn sign(mut self, secret_key: &PrivateKey) -> Self {
         self.signature = Some(InstructionSignature::sign(secret_key, &self.instructions));
         self.sender_public_key = Some(PublicKey::from_secret_key(secret_key));
