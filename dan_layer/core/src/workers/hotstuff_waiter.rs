@@ -430,7 +430,7 @@ impl<
         let involved_shards = payload.involved_shards();
         let local_shards = self
             .epoch_manager
-            .get_shards(node.epoch(), &self.identity, &involved_shards)
+            .filter_to_local_shards(node.epoch(), &self.identity, &involved_shards)
             .await?;
 
         let mut votes_to_send = vec![];

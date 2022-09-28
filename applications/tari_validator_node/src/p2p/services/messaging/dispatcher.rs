@@ -49,27 +49,25 @@ impl MessageDispatcher {
     pub async fn run(mut self) {
         while let Some((from, msg)) = self.inbound.next_message().await {
             let result = match msg {
-                DanMessage::HotStuffMessage(msg) => self
-                    .message_senders
-                    .tx_consensus_message
-                    .send((from, msg))
-                    .await
-                    .map_err(|_| ()),
-                DanMessage::VoteMessage(msg) => self
-                    .message_senders
-                    .tx_vote_message
-                    .send((from, msg))
-                    .await
-                    .map_err(|_| ()),
+                DanMessage::HotStuffMessage(msg) => {
+                    self.message_senders.tx_consensus_message.send((from, msg)).await.ok()
+                },
+                DanMessage::VoteMessage(msg) => self.message_senders.tx_vote_message.send((from, msg)).await.ok(),
                 DanMessage::NewTransaction(msg) => self
                     .message_senders
                     .tx_new_transaction_message
                     .send(msg)
                     .await
-                    .map_err(|_| ()),
+                    .ok(),
+                DanMessage::NetworkAnnounce(announce) => self
+                    .message_senders
+                    .tx_network_announce
+                    .send((from, announce))
+                    .await
+                    .ok(),
             };
 
-            if result.is_err() {
+            if result.is_none() {
                 info!(target: LOG_TARGET, "A message sender channel closed");
                 break;
             }

@@ -20,18 +20,47 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use tari_dan_storage_sqlite::SqliteDbFactory;
-use tari_shutdown::ShutdownSignal;
+use std::sync::Arc;
+
+use async_trait::async_trait;
+use tari_comms::{connectivity::ConnectivityRequester, types::CommsPublicKey, NodeIdentity};
+use tari_dan_core::message::NetworkAnnounce;
 use tokio::sync::mpsc;
 
-use crate::p2p::services::template_manager::{
-    handle::TemplateManagerHandle,
-    template_manager_service::TemplateManagerService,
-};
+use crate::p2p::services::{comms_peer_provider::CommsPeerProvider, messaging::OutboundMessaging};
 
-pub fn spawn(sqlite_db: SqliteDbFactory, shutdown: ShutdownSignal) -> TemplateManagerHandle {
-    let (tx_request, rx_request) = mpsc::channel(10);
-    let handle = TemplateManagerHandle::new(tx_request);
-    TemplateManagerService::spawn(rx_request, sqlite_db, shutdown);
-    handle
+mod service;
+use service::Networking;
+
+mod error;
+pub use error::NetworkingError;
+
+mod handle;
+pub use handle::NetworkingHandle;
+
+pub fn spawn(
+    rx_network_announce: mpsc::Receiver<(CommsPublicKey, NetworkAnnounce<CommsPublicKey>)>,
+    node_identity: Arc<NodeIdentity>,
+    outbound: OutboundMessaging,
+    peer_provider: CommsPeerProvider,
+    connectivity: ConnectivityRequester,
+) -> NetworkingHandle {
+    let (tx, rx) = mpsc::channel(1);
+    tokio::spawn(
+        Networking::new(
+            rx_network_announce,
+            rx,
+            node_identity,
+            outbound,
+            peer_provider,
+            connectivity,
+        )
+        .run(),
+    );
+    NetworkingHandle::new(tx)
+}
+
+#[async_trait]
+pub trait NetworkingService {
+    async fn announce(&mut self) -> Result<(), NetworkingError>;
 }

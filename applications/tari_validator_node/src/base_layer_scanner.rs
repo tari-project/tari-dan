@@ -36,7 +36,7 @@ use tari_dan_core::{
 };
 use tari_dan_storage_sqlite::global::SqliteGlobalDbBackendAdapter;
 use tari_shutdown::ShutdownSignal;
-use tokio::time;
+use tokio::{task, time};
 
 use crate::{
     p2p::services::{
@@ -48,6 +48,30 @@ use crate::{
 };
 
 const LOG_TARGET: &str = "tari::validator_node::base_layer_scanner";
+
+pub fn spawn(
+    config: ValidatorNodeConfig,
+    global_db: GlobalDb<SqliteGlobalDbBackendAdapter>,
+    base_node_client: GrpcBaseNodeClient,
+    epoch_manager: EpochManagerHandle,
+    template_manager: TemplateManagerHandle,
+    shutdown: ShutdownSignal,
+) {
+    task::spawn(async move {
+        let base_layer_scanner = BaseLayerScanner::new(
+            config,
+            global_db,
+            base_node_client,
+            epoch_manager,
+            template_manager,
+            shutdown,
+        );
+
+        if let Err(err) = base_layer_scanner.start().await {
+            error!(target: LOG_TARGET, "Base layer scanner failed with error: {}", err);
+        }
+    });
+}
 
 pub struct BaseLayerScanner {
     config: ValidatorNodeConfig,
@@ -82,46 +106,58 @@ impl BaseLayerScanner {
     }
 
     pub async fn start(mut self) -> Result<(), BaseLayerScannerError> {
-        self.load_initial_state()?;
-
         if !self.config.scan_base_layer {
             info!(
                 target: LOG_TARGET,
-                "⚠️ scan_base_layer turned OFF. Base layer scanner is shutting down."
+                "⚠️ scan_base_layer turned OFF. Base layer scanner is exiting."
             );
-            self.shutdown.await;
             return Ok(());
         }
+
+        self.load_initial_state()?;
 
         loop {
             // fetch the new base layer info since the previous scan
             let tip = self.base_node_client.get_tip_info().await?;
-            // let block = self.base_node_client.get_block(tip.height).await?;
-            let new_templates_metadata = self.scan_for_new_templates(&tip).await?;
-
-            // both epoch and template tasks are I/O bound,
-            // so they can be ran concurrently as they do not block CPU between them
-            let epoch_task = self.epoch_manager.update_epoch(tip.clone());
-            let template_task = self.template_manager.add_templates(new_templates_metadata);
-
-            // wait for all tasks to finish
-            let results = tokio::join!(epoch_task, template_task);
-
-            dbg!(&results);
-            // propagate any error that may happen
-            // TODO: there could be a cleaner way of propagating the errors of the individual tasks
-            // TODO: maybe we want to be resilient to invalid data in base layer and just log the error?
-            results.0?;
-
-            results.1?;
-
-            // setup the next scan cycle
+            if tip.height_of_longest_chain > self.last_scanned_height {
+                // let new_blocks = self
+                //     .base_node_client
+                //     .get_blocks(self.last_scanned_hash, tip.height_of_longest_chain)
+                //     .await?;
+                for height in self.last_scanned_height + 1..=tip.height_of_longest_chain {
+                    self.process_block(height).await?;
+                }
+            }
             self.set_last_scanned_block(&tip)?;
+
             tokio::select! {
                 _ = time::sleep(Duration::from_secs(self.config.base_layer_scanning_interval_in_seconds)) => {},
                 _ = &mut self.shutdown => break
             }
         }
+
+        Ok(())
+    }
+
+    // TODO: Use hashes instead of height to avoid reorg problems
+    async fn process_block(&mut self, height: u64) -> Result<(), BaseLayerScannerError> {
+        let new_templates_metadata = self.scan_for_new_templates(height).await?;
+
+        // both epoch and template tasks are I/O bound,
+        // so they can be ran concurrently as they do not block CPU between them
+        let epoch_task = self.epoch_manager.update_epoch(height);
+        let template_task = self.template_manager.add_templates(new_templates_metadata);
+
+        // wait for all tasks to finish
+        let results = tokio::join!(epoch_task, template_task);
+
+        // dbg!(&results);
+        // propagate any error that may happen
+        // TODO: there could be a cleaner way of propagating the errors of the individual tasks
+        // TODO: maybe we want to be resilient to invalid data in base layer and just log the error?
+        results.0?;
+
+        results.1?;
 
         Ok(())
     }
@@ -154,14 +190,11 @@ impl BaseLayerScanner {
         Ok(())
     }
 
-    async fn scan_for_new_templates(
-        &mut self,
-        tip: &BaseLayerMetadata,
-    ) -> Result<Vec<TemplateMetadata>, BaseLayerScannerError> {
-        info!(
-            target: LOG_TARGET,
-            "🔍 Scanning base layer (tip: {}) for new templates", tip.height_of_longest_chain
-        );
+    async fn scan_for_new_templates(&mut self, _height: u64) -> Result<Vec<TemplateMetadata>, BaseLayerScannerError> {
+        // info!(
+        //     target: LOG_TARGET,
+        //     "🔍 Scanning base layer (tip: {}) for new templates", tip.height_of_longest_chain
+        // );
 
         Ok(vec![])
 

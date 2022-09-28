@@ -27,12 +27,13 @@ use std::{
 
 use anyhow::anyhow;
 use borsh::de::BorshDeserialize;
+use chrono::{DateTime, NaiveDateTime, Utc};
 use tari_common_types::types::{PrivateKey, PublicKey, Signature};
-use tari_comms::types::CommsPublicKey;
+use tari_comms::{peer_manager::IdentitySignature, types::CommsPublicKey};
 use tari_crypto::tari_utilities::ByteArray;
 use tari_dan_common_types::ShardId;
 use tari_dan_core::{
-    message::DanMessage,
+    message::{DanMessage, NetworkAnnounce},
     models::{
         vote_message::VoteMessage,
         HotStuffMessage,
@@ -72,6 +73,11 @@ impl From<DanMessage<TariDanPayload, CommsPublicKey>> for proto::validator_node:
                     transaction.into(),
                 )),
             },
+            DanMessage::NetworkAnnounce(announce) => Self {
+                message: Some(proto::validator_node::dan_message::Message::NetworkAnnounce(
+                    announce.into(),
+                )),
+            },
         }
     }
 }
@@ -89,9 +95,14 @@ impl TryFrom<proto::validator_node::DanMessage> for DanMessage<TariDanPayload, C
             proto::validator_node::dan_message::Message::NewTransaction(msg) => {
                 Ok(DanMessage::NewTransaction(msg.try_into()?))
             },
+            proto::validator_node::dan_message::Message::NetworkAnnounce(msg) => {
+                Ok(DanMessage::NetworkAnnounce(msg.try_into()?))
+            },
         }
     }
 }
+
+// -------------------------------- VoteMessage -------------------------------- //
 
 impl From<VoteMessage> for proto::consensus::VoteMessage {
     fn from(msg: VoteMessage) -> Self {
@@ -118,6 +129,8 @@ impl TryFrom<proto::consensus::VoteMessage> for VoteMessage {
         ))
     }
 }
+
+// -------------------------------- HotstuffMessage -------------------------------- //
 
 impl From<HotStuffMessage<TariDanPayload, CommsPublicKey>> for proto::consensus::HotStuffMessage {
     fn from(_source: HotStuffMessage<TariDanPayload, CommsPublicKey>) -> Self {
@@ -151,6 +164,72 @@ impl From<HotStuffTreeNode<CommsPublicKey>> for proto::consensus::HotStuffTreeNo
         // }
     }
 }
+
+// -------------------------------- NetworkAnnounce -------------------------------- //
+
+impl<T: ByteArray> From<NetworkAnnounce<T>> for proto::network::NetworkAnnounce {
+    fn from(msg: NetworkAnnounce<T>) -> Self {
+        Self {
+            identity: msg.identity.to_vec(),
+            addresses: msg.addresses.into_iter().map(|a| a.to_vec()).collect(),
+            identity_signature: Some(msg.identity_signature.into()),
+        }
+    }
+}
+
+impl<T: ByteArray> TryFrom<proto::network::NetworkAnnounce> for NetworkAnnounce<T> {
+    type Error = anyhow::Error;
+
+    fn try_from(value: proto::network::NetworkAnnounce) -> Result<Self, Self::Error> {
+        Ok(NetworkAnnounce {
+            identity: T::from_bytes(&value.identity)?,
+            addresses: value
+                .addresses
+                .into_iter()
+                .map(|a| a.try_into())
+                .collect::<Result<Vec<_>, _>>()?,
+            identity_signature: value
+                .identity_signature
+                .ok_or_else(|| anyhow!("Identity signature not provided"))?
+                .try_into()?,
+        })
+    }
+}
+
+// -------------------------------- IdentitySignature -------------------------------- //
+
+impl TryFrom<proto::network::IdentitySignature> for IdentitySignature {
+    type Error = anyhow::Error;
+
+    fn try_from(value: proto::network::IdentitySignature) -> Result<Self, Self::Error> {
+        let version = u8::try_from(value.version).map_err(|_| anyhow!("Invalid identity signature version"))?;
+        let signature = value
+            .signature
+            .ok_or_else(|| anyhow!("Identity signature missing signature"))?
+            .try_into()?;
+        let updated_at = NaiveDateTime::from_timestamp_opt(value.updated_at, 0)
+            .ok_or_else(|| anyhow!("Invalid updated_at timestamp"))?;
+        let updated_at = DateTime::<Utc>::from_utc(updated_at, Utc);
+
+        Ok(IdentitySignature::new(
+            version, // Signature::new(public_nonce, signature),
+            signature, updated_at,
+        ))
+    }
+}
+
+impl<T: Borrow<IdentitySignature>> From<T> for proto::network::IdentitySignature {
+    fn from(identity_sig: T) -> Self {
+        let sig = identity_sig.borrow();
+        proto::network::IdentitySignature {
+            version: u32::from(sig.version()),
+            signature: Some(sig.signature().into()),
+            updated_at: sig.updated_at().timestamp(),
+        }
+    }
+}
+
+// -------------------------------- QuorumCertificate -------------------------------- //
 
 impl From<QuorumCertificate> for proto::consensus::QuorumCertificate {
     fn from(_source: QuorumCertificate) -> Self {

@@ -21,19 +21,15 @@
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 use async_trait::async_trait;
-use tari_common_types::types::FixedHash;
 use tari_comms::{
     connectivity::ConnectivityError,
     protocol::rpc::{RpcError, RpcStatus},
     types::CommsPublicKey,
 };
 use tari_comms_dht::DhtActorError;
-use tari_dan_engine::{
-    instruction::Transaction,
-    state::models::{SchemaState, StateOpLogEntry},
-};
+use tari_dan_engine::instruction::Transaction;
 
-use crate::{models::Node, services::infrastructure_services::NodeAddressable};
+use crate::services::{infrastructure_services::NodeAddressable, DanPeer};
 
 pub trait ValidatorNodeClientFactory: Send + Sync {
     type Addr: NodeAddressable;
@@ -48,18 +44,7 @@ pub trait ValidatorNodeRpcClient: Send + Sync {
         transaction: Transaction,
     ) -> Result<Option<Vec<u8>>, ValidatorNodeClientError>;
 
-    async fn get_sidechain_state(
-        &mut self,
-        contract_id: &FixedHash,
-    ) -> Result<Vec<SchemaState>, ValidatorNodeClientError>;
-
-    async fn get_op_logs(
-        &mut self,
-        contract_id: &FixedHash,
-        height: u64,
-    ) -> Result<Vec<StateOpLogEntry>, ValidatorNodeClientError>;
-
-    async fn get_tip_node(&mut self, contract_id: &FixedHash) -> Result<Option<Node>, ValidatorNodeClientError>;
+    async fn get_peers(&mut self) -> Result<Vec<DanPeer<CommsPublicKey>>, ValidatorNodeClientError>;
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -76,4 +61,6 @@ pub enum ValidatorNodeClientError {
     RpcStatusError(#[from] RpcStatus),
     #[error("Dht error: {0}")]
     DhtError(#[from] DhtActorError),
+    #[error("Node sent invalid response: {0}")]
+    InvalidResponse(anyhow::Error),
 }

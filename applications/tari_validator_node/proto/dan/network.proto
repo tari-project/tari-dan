@@ -19,29 +19,30 @@
 // SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY,
 // WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 // USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+syntax = "proto3";
 
-mod base_node_client;
-mod events_publisher;
-pub mod infrastructure_services;
-pub mod mempool;
-mod payload_processor;
-mod peer_service;
-mod signing_service;
-mod wallet_client;
+package tari.dan.network;
 
-pub use asset_proxy::{AssetProxy, ConcreteAssetProxy};
-pub use base_node_client::BaseNodeClient;
-pub use events_publisher::{EventsPublisher, LoggingEventsPublisher};
-pub use payload_processor::{PayloadProcessor, TariDanPayloadProcessor};
-pub use peer_service::{DanPeer, PeerProvider};
-pub use signing_service::{NodeIdentitySigningService, SigningService};
-mod asset_proxy;
-pub mod base_node_error;
-pub mod epoch_manager;
-pub mod leader_strategy;
-mod service_specification;
-mod validator_node_rpc_client;
+import "common.proto";
 
-pub use service_specification::ServiceSpecification;
-pub use validator_node_rpc_client::{ValidatorNodeClientError, ValidatorNodeClientFactory, ValidatorNodeRpcClient};
-pub use wallet_client::WalletClient;
+message NetworkAnnounce {
+  bytes identity = 1;
+  repeated bytes addresses = 2;
+  IdentitySignature identity_signature = 3;
+}
+
+message IdentitySignature {
+  uint32 version = 1;
+  tari.dan.common.Signature signature = 2;
+  int64 updated_at = 3;
+}
+
+message GetPeersRequest {
+  uint64 since = 1;
+}
+
+message GetPeersResponse {
+  bytes identity = 1;
+  repeated bytes addresses = 2;
+  IdentitySignature identity_signature = 3;
+}

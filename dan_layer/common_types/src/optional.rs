@@ -20,9 +20,26 @@
 //   WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //   USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-#[derive(Debug, Clone)]
-pub enum Destination<TAddr> {
-    Peer(TAddr),
-    Selected(Vec<TAddr>),
-    Flood,
+/// A type that can indicate something is not found.
+/// Implement this on `E` to get the `.optional()?` function on the `Result<T, E>` type.
+pub trait IsNotFoundError {
+    fn is_not_found_error(&self) -> bool;
+}
+
+pub trait Optional<T> {
+    type Error;
+
+    fn optional(self) -> Result<Option<T>, Self::Error>;
+}
+
+impl<T, E: IsNotFoundError> Optional<T> for Result<T, E> {
+    type Error = E;
+
+    fn optional(self) -> Result<Option<T>, Self::Error> {
+        match self {
+            Ok(t) => Ok(Some(t)),
+            Err(e) if e.is_not_found_error() => Ok(None),
+            Err(e) => Err(e),
+        }
+    }
 }
