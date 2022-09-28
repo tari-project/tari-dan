@@ -23,7 +23,7 @@
 use tokio::sync::{mpsc, oneshot};
 
 use crate::p2p::services::template_manager::{
-    template_manager::TemplateMetadata,
+    manager::TemplateMetadata,
     template_manager_service::{TemplateManagerRequest, TemplateManagerResponse},
     TemplateManagerError,
 };
