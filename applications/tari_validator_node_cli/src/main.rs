@@ -28,7 +28,7 @@ mod prompt;
 use std::error::Error;
 
 use anyhow::anyhow;
-use command::{PublishTemplateArgs, TemplateSubcommand, VnSubcommand};
+use command::{RegisterTemplateArgs, TemplateSubcommand, VnSubcommand};
 use multiaddr::{Multiaddr, Protocol};
 use reqwest::Url;
 use tari_dan_engine::{hashing::hasher, wasm::compile::compile_template};
@@ -86,7 +86,7 @@ async fn handle_command(command: Command, client: ValidatorNodeClient) -> anyhow
             VnSubcommand::Register => handle_register_node(client).await?,
         },
         Command::Template(template_command) => match template_command.subcommand {
-            TemplateSubcommand::Publish(args) => handle_publish_template(args, client).await?,
+            TemplateSubcommand::Register(args) => handle_register_template(args, client).await?,
         },
     }
 
@@ -100,7 +100,7 @@ async fn handle_register_node(mut client: ValidatorNodeClient) -> anyhow::Result
     Ok(())
 }
 
-async fn handle_publish_template(args: PublishTemplateArgs, mut client: ValidatorNodeClient) -> anyhow::Result<()> {
+async fn handle_register_template(args: RegisterTemplateArgs, mut client: ValidatorNodeClient) -> anyhow::Result<()> {
     // retrieve the root folder of the template
     let root_folder = args.template_code_path;
     println!("Template code path {}", root_folder.display());
@@ -114,7 +114,9 @@ async fn handle_publish_template(args: PublishTemplateArgs, mut client: Validato
     );
 
     // calculate the hash of the WASM binary
-    let binary_sha = hasher("template").chain(&wasm_code).result().to_vec();
+    let hash = hasher("template").chain(&wasm_code).result();
+    let binary_sha = hash.to_vec();
+    println!("Template binary hash: {}", hash);
 
     // get the local path of the compiled wasm
     // note that the file name will be the same as the root folder name
@@ -136,22 +138,9 @@ async fn handle_publish_template(args: PublishTemplateArgs, mut client: Validato
             .ask_parsed()?,
     };
 
-    // ask repository info (optional)
-    let mut repo_url = String::new();
-    let mut commit_hash = String::new();
-    let add_repo_info: YesNo = Prompt::new("Add repository info? Y/N")
-        .with_default("no")
-        .ask_parsed()?;
-    if add_repo_info.as_bool() {
-        repo_url = match args.repo_url {
-            Some(value) => value,
-            None => Prompt::new("Repository URL (max 255 characters):").ask()?,
-        };
-        commit_hash = match args.commit_hash {
-            Some(value) => value,
-            None => Prompt::new("Commit hash (max 32 characters):").ask()?,
-        };
-    }
+    // TODO: ask repository info
+    let repo_url = String::new();
+    let commit_hash = vec![];
 
     // Show the wasm file path and ask to upload it to the web
     let binary_url = match args.binary_url {

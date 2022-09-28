@@ -40,7 +40,7 @@ pub struct TemplateRegistrationRequest {
     pub template_name: String,
     pub template_version: u16,
     pub repo_url: String,
-    pub commit_hash: String,
+    pub commit_hash: Vec<u8>,
     pub binary_sha: Vec<u8>,
     pub binary_url: String,
 }
