@@ -20,10 +20,10 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+use tari_core::transactions::transaction_components::CodeTemplateRegistration;
 use tokio::sync::{mpsc, oneshot};
 
 use crate::p2p::services::template_manager::{
-    manager::TemplateMetadata,
     template_manager_service::{TemplateManagerRequest, TemplateManagerResponse},
     TemplateManagerError,
 };
@@ -45,7 +45,7 @@ impl TemplateManagerHandle {
         Self { request_tx }
     }
 
-    pub async fn add_templates(&self, templates: Vec<TemplateMetadata>) -> Result<(), TemplateManagerError> {
+    pub async fn add_templates(&self, templates: Vec<CodeTemplateRegistration>) -> Result<(), TemplateManagerError> {
         let (tx, rx) = oneshot::channel();
         self.request_tx
             .send((TemplateManagerRequest::AddTemplates { templates }, tx))

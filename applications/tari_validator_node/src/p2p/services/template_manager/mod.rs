@@ -36,6 +36,7 @@ pub enum TemplateManagerError {
     #[error("Could not fetch the template code from the web")]
     TemplateCodeFetchError,
     #[error("The hash of the template code does not match the metadata")]
+    #[allow(dead_code)]
     TemplateCodeHashMismatch,
     // #[error("Unsupported template method {name}")]
     // TemplateUnsupportedMethod { name: String },
