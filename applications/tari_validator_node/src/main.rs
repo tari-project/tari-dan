@@ -195,16 +195,6 @@ async fn run_node(config: &ApplicationConfig) -> Result<(), ExitError> {
     info!(target: LOG_TARGET, "🚀 Validator node started!");
     info!(target: LOG_TARGET, "{}", node_identity);
 
-    // Run the JSON-RPC API
-    if let Some(address) = config.validator_node.json_rpc_address {
-        info!(target: LOG_TARGET, "Started JSON-RPC server on {}", address);
-        let handlers = JsonRpcHandlers::new(
-            node_identity.clone(),
-            GrpcWalletClient::new(config.validator_node.wallet_grpc_address),
-        );
-        task::spawn(run_json_rpc(address, handlers));
-    }
-
     // fs::create_dir_all(&global.peer_db_path).map_err(|err| ExitError::new(ExitCode::ConfigError, err))?;
     let mut base_node_client = GrpcBaseNodeClient::new(config.validator_node.base_node_grpc_address);
     let mut wallet_client = GrpcWalletClient::new(config.validator_node.wallet_grpc_address);
@@ -216,7 +206,8 @@ async fn run_node(config: &ApplicationConfig) -> Result<(), ExitError> {
         node_identity.clone(),
         global_db,
         db_factory,
-    );
+    )
+    .await?;
 
     // Run the http ui
     if let Some(address) = config.validator_node.http_ui_address {

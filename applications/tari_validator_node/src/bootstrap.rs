@@ -136,9 +136,6 @@ pub async fn spawn_services(
         shutdown.clone(),
     );
 
-    // TODO: wrap in method `base_layer_scanner.spawn()`
-    task::spawn(base_layer_scanner.start());
-
     // Run the JSON-RPC API
     if let Some(address) = config.validator_node.json_rpc_address {
         info!(target: LOG_TARGET, "Started JSON-RPC server on {}", address);

@@ -35,7 +35,7 @@ use tari_dan_engine::instruction::{Instruction, InstructionSignature, Transactio
 use tari_template_lib::Hash;
 
 use crate::{
-    grpc::services::wallet_client::GrpcWalletClient,
+    grpc::services::wallet_client::{GrpcWalletClient, TemplateRegistrationRequest},
     json_rpc::{jrpc_errors::internal_error, messages::SubmitTransactionRequest},
     p2p::services::mempool::MempoolHandle,
 };
