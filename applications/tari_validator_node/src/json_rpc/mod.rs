@@ -24,6 +24,7 @@ mod handlers;
 pub use handlers::JsonRpcHandlers;
 
 mod jrpc_errors;
+pub mod messages;
 mod server;
 
 pub use server::run_json_rpc;

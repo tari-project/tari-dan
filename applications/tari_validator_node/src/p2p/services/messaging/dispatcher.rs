@@ -53,12 +53,7 @@ impl MessageDispatcher {
                     self.message_senders.tx_consensus_message.send((from, msg)).await.ok()
                 },
                 DanMessage::VoteMessage(msg) => self.message_senders.tx_vote_message.send((from, msg)).await.ok(),
-                DanMessage::NewTransaction(msg) => self
-                    .message_senders
-                    .tx_new_transaction_message
-                    .send((from, msg))
-                    .await
-                    .ok(),
+                DanMessage::NewTransaction(msg) => self.message_senders.tx_new_transaction_message.send(msg).await.ok(),
                 DanMessage::NetworkAnnounce(announce) => self
                     .message_senders
                     .tx_network_announce

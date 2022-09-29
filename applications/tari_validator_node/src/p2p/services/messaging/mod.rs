@@ -57,7 +57,7 @@ pub fn spawn(
 pub struct DanMessageSenders {
     pub tx_consensus_message: mpsc::Sender<(CommsPublicKey, HotStuffMessage<TariDanPayload, CommsPublicKey>)>,
     pub tx_vote_message: mpsc::Sender<(CommsPublicKey, VoteMessage)>,
-    pub tx_new_transaction_message: mpsc::Sender<(CommsPublicKey, Transaction)>,
+    pub tx_new_transaction_message: mpsc::Sender<Transaction>,
     pub tx_network_announce: mpsc::Sender<(CommsPublicKey, NetworkAnnounce<CommsPublicKey>)>,
 }
 
@@ -65,7 +65,7 @@ pub struct DanMessageSenders {
 pub struct DanMessageReceivers {
     pub rx_consensus_message: mpsc::Receiver<(CommsPublicKey, HotStuffMessage<TariDanPayload, CommsPublicKey>)>,
     pub rx_vote_message: mpsc::Receiver<(CommsPublicKey, VoteMessage)>,
-    pub rx_new_transaction_message: mpsc::Receiver<(CommsPublicKey, Transaction)>,
+    pub rx_new_transaction_message: mpsc::Receiver<Transaction>,
     pub rx_network_announce: mpsc::Receiver<(CommsPublicKey, NetworkAnnounce<CommsPublicKey>)>,
 }
 

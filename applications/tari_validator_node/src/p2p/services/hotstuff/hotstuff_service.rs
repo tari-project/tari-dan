@@ -25,16 +25,12 @@ use tari_comms::types::CommsPublicKey;
 use tari_dan_common_types::ShardId;
 use tari_dan_core::{
     message::DanMessage,
-    models::{vote_message::VoteMessage, Committee, HotStuffMessage, Payload, TariDanPayload},
-    services::{
-        infrastructure_services::OutboundService,
-        leader_strategy::{AlwaysFirstLeader, LeaderStrategy},
-        TariDanPayloadProcessor,
-    },
+    models::{vote_message::VoteMessage, HotStuffMessage, TariDanPayload},
+    services::{infrastructure_services::OutboundService, leader_strategy::AlwaysFirstLeader, TariDanPayloadProcessor},
+    storage::shard_store::MemoryShardStoreFactory,
     workers::hotstuff_waiter::HotStuffWaiter,
 };
 use tari_dan_engine::instruction::Transaction;
-use tari_dan_storage_sqlite::sqlite_shard_store_factory::SqliteShardStoreFactory;
 use tari_shutdown::ShutdownSignal;
 use tokio::{
     sync::mpsc::{channel, Receiver, Sender},
@@ -57,7 +53,7 @@ pub struct HotstuffService {
     /// New incoming transaction from mempool
     tx_new: Sender<(TariDanPayload, ShardId)>,
     /// Outgoing leader new-view messages
-    rx_leader: Receiver<HotStuffMessage<TariDanPayload, CommsPublicKey>>,
+    rx_leader: Receiver<(CommsPublicKey, HotStuffMessage<TariDanPayload, CommsPublicKey>)>,
     /// Outgoing proposal messages to be broadcast by the leader to all replicas
     rx_broadcast: Receiver<(HotStuffMessage<TariDanPayload, CommsPublicKey>, Vec<CommsPublicKey>)>,
     /// Outgoing vote messages to be sent to the leader
@@ -72,7 +68,7 @@ impl HotstuffService {
         mempool: MempoolHandle,
         outbound: OutboundMessaging,
         payload_processor: TariDanPayloadProcessor,
-        shard_store_factory: SqliteShardStoreFactory,
+        shard_store_factory: MemoryShardStoreFactory<CommsPublicKey, TariDanPayload>,
         rx_hotstuff_messages: Receiver<(CommsPublicKey, HotStuffMessage<TariDanPayload, CommsPublicKey>)>,
         rx_vote_messages: Receiver<(CommsPublicKey, VoteMessage)>,
         shutdown: ShutdownSignal,
@@ -116,23 +112,12 @@ impl HotstuffService {
 
     async fn handle_leader_message(
         &mut self,
+        to: CommsPublicKey,
         msg: HotStuffMessage<TariDanPayload, CommsPublicKey>,
     ) -> Result<(), anyhow::Error> {
-        // TODO: who should decide the leader?
-        let leader_strategy = AlwaysFirstLeader {};
-        let committee = Committee::<CommsPublicKey>::new(vec![]);
-        let leader = leader_strategy.get_leader(
-            &committee,
-            msg.new_view_payload().as_ref().unwrap().to_id(),
-            msg.shard(),
-            0, // round?
-        );
+        dbg!("Sending to hotstuff leader", &to, &msg);
         self.outbound
-            .send(
-                self.node_public_key.clone(),
-                leader.clone(),
-                DanMessage::HotStuffMessage(msg),
-            )
+            .send(self.node_public_key.clone(), to, DanMessage::HotStuffMessage(msg))
             .await?;
         Ok(())
     }
@@ -165,10 +150,12 @@ impl HotstuffService {
         loop {
             tokio::select! {
                 // Inbound
-               Some((tx, shard_id)) = self.mempool.next_valid_transaction() => log(self.handle_new_valid_transaction(tx, shard_id).await),
+               res = self.mempool.next_valid_transaction() => {
+                    let (tx, shard_id) = res?;
+                    log(self.handle_new_valid_transaction(tx, shard_id).await)}
 
                // Outbound
-               Some(msg) = self.rx_leader.recv() => log(self.handle_leader_message(msg).await),
+               Some((to, msg)) = self.rx_leader.recv() => log(self.handle_leader_message(to, msg).await),
                Some((msg, leader)) = self.rx_vote_message.recv() => log(self.handle_vote_message(leader, msg).await),
                Some((msg, dest_nodes)) = self.rx_broadcast.recv() => log(self.handle_broadcast_message(dest_nodes, msg).await),
 

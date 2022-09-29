@@ -20,7 +20,10 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use std::collections::HashMap;
+use std::{
+    collections::HashMap,
+    sync::{Arc, RwLock},
+};
 
 use tari_dan_common_types::{ObjectId, PayloadId, ShardId, SubstateChange, SubstateState};
 
@@ -40,7 +43,7 @@ use crate::{
 
 // TODO: Clone is pretty bad here, this class should only be used for testing
 #[derive(Debug, Default, Clone)]
-pub struct MemoryShardDb<TAddr, TPayload> {
+pub struct MemoryShardDbInner<TAddr, TPayload> {
     // replica data
     shard_high_qcs: HashMap<ShardId, QuorumCertificate>,
     // pace maker data
@@ -55,7 +58,7 @@ pub struct MemoryShardDb<TAddr, TPayload> {
     objects: HashMap<ShardId, HashMap<ObjectId, (SubstateState, Option<ObjectPledge>)>>,
 }
 
-impl<TAddr: NodeAddressable, TPayload: Payload> MemoryShardDb<TAddr, TPayload> {
+impl<TAddr: NodeAddressable, TPayload: Payload> MemoryShardDbInner<TAddr, TPayload> {
     pub fn new() -> Self {
         Self {
             shard_high_qcs: HashMap::new(),
@@ -72,13 +75,26 @@ impl<TAddr: NodeAddressable, TPayload: Payload> MemoryShardDb<TAddr, TPayload> {
     }
 }
 
+#[derive(Debug, Clone, Default)]
+pub struct MemoryShardDb<TAddr, TPayload> {
+    inner: Arc<RwLock<MemoryShardDbInner<TAddr, TPayload>>>,
+}
+
+impl<TAddr: NodeAddressable, TPayload: Payload> MemoryShardDb<TAddr, TPayload> {
+    pub fn new() -> Self {
+        Self {
+            inner: Arc::new(RwLock::new(MemoryShardDbInner::new())),
+        }
+    }
+}
+
 impl<TAddr: NodeAddressable, TPayload: Payload> ShardStoreTransaction<TAddr, TPayload>
     for MemoryShardDb<TAddr, TPayload>
 {
     type Error = StoreError;
 
     fn get_high_qc_for(&self, shard: ShardId) -> QuorumCertificate {
-        if let Some(qc) = self.shard_high_qcs.get(&shard) {
+        if let Some(qc) = self.inner.read().unwrap().shard_high_qcs.get(&shard) {
             qc.clone()
         } else {
             QuorumCertificate::genesis()
@@ -86,10 +102,11 @@ impl<TAddr: NodeAddressable, TPayload: Payload> ShardStoreTransaction<TAddr, TPa
     }
 
     fn update_high_qc(&mut self, shard: ShardId, qc: QuorumCertificate) {
-        let entry = self.shard_high_qcs.entry(shard).or_insert_with(|| qc.clone());
+        let mut s = self.inner.write().unwrap();
+        let entry = s.shard_high_qcs.entry(shard).or_insert_with(|| qc.clone());
         if qc.local_node_height() > entry.local_node_height() {
             *entry = qc.clone();
-            self.shard_leaf_nodes
+            s.shard_leaf_nodes
                 .entry(qc.shard())
                 .and_modify(|e| *e = (qc.local_node_hash(), qc.local_node_height()))
                 .or_insert((qc.local_node_hash(), qc.local_node_height()));
@@ -97,7 +114,7 @@ impl<TAddr: NodeAddressable, TPayload: Payload> ShardStoreTransaction<TAddr, TPa
     }
 
     fn get_leaf_node(&self, shard: ShardId) -> (TreeNodeHash, NodeHeight) {
-        if let Some(leaf) = self.shard_leaf_nodes.get(&shard) {
+        if let Some(leaf) = self.inner.read().unwrap().shard_leaf_nodes.get(&shard) {
             *leaf
         } else {
             (TreeNodeHash::zero(), NodeHeight(0))
@@ -105,35 +122,49 @@ impl<TAddr: NodeAddressable, TPayload: Payload> ShardStoreTransaction<TAddr, TPa
     }
 
     fn update_leaf_node(&mut self, shard: ShardId, node: TreeNodeHash, height: NodeHeight) -> Result<(), StoreError> {
-        let leaf = self.shard_leaf_nodes.entry(shard).or_insert((node, height));
+        let mut guard = self.inner.write().unwrap();
+        let leaf = guard.shard_leaf_nodes.entry(shard).or_insert((node, height));
         *leaf = (node, height);
         Ok(())
     }
 
     fn get_last_voted_height(&self, shard: ShardId) -> NodeHeight {
-        self.last_voted_heights.get(&shard).copied().unwrap_or(NodeHeight(0))
+        self.inner
+            .read()
+            .unwrap()
+            .last_voted_heights
+            .get(&shard)
+            .copied()
+            .unwrap_or(NodeHeight(0))
     }
 
     fn set_last_voted_height(&mut self, shard: ShardId, height: NodeHeight) {
-        let entry = self.last_voted_heights.entry(shard).or_insert(height);
+        let mut guard = self.inner.write().unwrap();
+        let entry = guard.last_voted_heights.entry(shard).or_insert(height);
         *entry = height;
     }
 
     fn get_locked_node_hash_and_height(&self, shard: ShardId) -> (TreeNodeHash, NodeHeight) {
-        self.lock_node_and_heights
+        self.inner
+            .read()
+            .unwrap()
+            .lock_node_and_heights
             .get(&shard)
             .copied()
             .unwrap_or((TreeNodeHash::zero(), NodeHeight(0)))
     }
 
     fn set_locked(&mut self, shard: ShardId, node_hash: TreeNodeHash, node_height: NodeHeight) {
-        self.lock_node_and_heights
+        self.inner
+            .write()
+            .unwrap()
+            .lock_node_and_heights
             .entry(shard)
             .and_modify(|e| *e = (node_hash, node_height));
     }
 
     fn has_vote_for(&self, from: &TAddr, node_hash: TreeNodeHash, shard: ShardId) -> bool {
-        if let Some(sigs) = self.votes.get(&(node_hash, shard)) {
+        if let Some(sigs) = self.inner.read().unwrap().votes.get(&(node_hash, shard)) {
             sigs.iter().any(|(f, _)| f == from)
         } else {
             false
@@ -147,13 +178,17 @@ impl<TAddr: NodeAddressable, TPayload: Payload> ShardStoreTransaction<TAddr, TPa
         shard: ShardId,
         vote_message: VoteMessage,
     ) -> usize {
-        let entry = self.votes.entry((node_hash, shard)).or_insert(vec![]);
+        let mut guard = self.inner.write().unwrap();
+        let entry = guard.votes.entry((node_hash, shard)).or_insert(vec![]);
         entry.push((from, vote_message));
         entry.len()
     }
 
     fn get_received_votes_for(&self, node_hash: TreeNodeHash, shard: ShardId) -> Vec<VoteMessage> {
-        self.votes
+        self.inner
+            .read()
+            .unwrap()
+            .votes
             .get(&(node_hash, shard))
             .map(|v| v.iter().map(|s| s.1.clone()).collect())
             .unwrap_or_default()
@@ -166,7 +201,8 @@ impl<TAddr: NodeAddressable, TPayload: Payload> ShardStoreTransaction<TAddr, TPa
         payload_height: NodeHeight,
         node: HotStuffTreeNode<TAddr>,
     ) {
-        let payload_entry = self.payload_votes.entry(payload).or_insert_with(HashMap::new);
+        let mut guard = self.inner.write().unwrap();
+        let payload_entry = guard.payload_votes.entry(payload).or_insert_with(HashMap::new);
         let height_entry = payload_entry.entry(payload_height).or_insert_with(HashMap::new);
         height_entry.insert(shard, node);
     }
@@ -177,34 +213,57 @@ impl<TAddr: NodeAddressable, TPayload: Payload> ShardStoreTransaction<TAddr, TPa
         payload_height: NodeHeight,
         shard: ShardId,
     ) -> Option<HotStuffTreeNode<TAddr>> {
-        self.payload_votes
+        self.inner
+            .read()
+            .unwrap()
+            .payload_votes
             .get(&payload)
             .and_then(|pv| pv.get(&payload_height))
             .and_then(|ph| ph.get(&shard).cloned())
     }
 
     fn save_node(&mut self, node: HotStuffTreeNode<TAddr>) {
-        self.nodes.insert(*node.hash(), node);
+        self.inner.write().unwrap().nodes.insert(*node.hash(), node);
     }
 
     fn get_node(&self, node_hash: &TreeNodeHash) -> Result<HotStuffTreeNode<TAddr>, Self::Error> {
         if node_hash == &TreeNodeHash::zero() {
             Ok(HotStuffTreeNode::genesis())
         } else {
-            self.nodes.get(node_hash).cloned().ok_or(StoreError::NodeNotFound)
+            self.inner
+                .read()
+                .unwrap()
+                .nodes
+                .get(node_hash)
+                .cloned()
+                .ok_or(StoreError::NodeNotFound)
         }
     }
 
     fn set_last_executed_height(&mut self, shard: ShardId, height: NodeHeight) {
-        self.last_executed_height.entry(shard).and_modify(|e| *e = height);
+        self.inner
+            .write()
+            .unwrap()
+            .last_executed_height
+            .entry(shard)
+            .and_modify(|e| *e = height);
     }
 
     fn get_last_executed_height(&self, shard: ShardId) -> NodeHeight {
-        self.last_executed_height.get(&shard).copied().unwrap_or(NodeHeight(0))
+        self.inner
+            .read()
+            .unwrap()
+            .last_executed_height
+            .get(&shard)
+            .copied()
+            .unwrap_or(NodeHeight(0))
     }
 
     fn get_payload(&self, payload_id: &PayloadId) -> Result<TPayload, Self::Error> {
-        self.payloads
+        self.inner
+            .read()
+            .unwrap()
+            .payloads
             .get(payload_id)
             .cloned()
             .ok_or(StoreError::CannotFindPayload)
@@ -212,7 +271,12 @@ impl<TAddr: NodeAddressable, TPayload: Payload> ShardStoreTransaction<TAddr, TPa
 
     fn set_payload(&mut self, payload: TPayload) {
         let payload_id = payload.to_id();
-        self.payloads.entry(payload_id).or_insert(payload);
+        self.inner
+            .write()
+            .unwrap()
+            .payloads
+            .entry(payload_id)
+            .or_insert(payload);
     }
 
     fn pledge_object(
@@ -223,7 +287,8 @@ impl<TAddr: NodeAddressable, TPayload: Payload> ShardStoreTransaction<TAddr, TPa
         payload: PayloadId,
         current_height: NodeHeight,
     ) -> ObjectPledge {
-        let shard_data = self.objects.entry(shard).or_insert_with(HashMap::new);
+        let mut guard = self.inner.write().unwrap();
+        let shard_data = guard.objects.entry(shard).or_insert_with(HashMap::new);
         let entry = shard_data.entry(object).or_insert((SubstateState::DoesNotExist, None));
         if let Some(existing_pledge) = &entry.1 {
             if existing_pledge.pledged_until < current_height {
@@ -242,10 +307,11 @@ impl<TAddr: NodeAddressable, TPayload: Payload> ShardStoreTransaction<TAddr, TPa
     }
 
     fn commit(&mut self) -> Result<(), Self::Error> {
-        todo!()
+        // No commit needed
+        Ok(())
     }
 
     fn save_substate_changes(&mut self, _changes: HashMap<ShardId, Option<SubstateState>>, _node: TreeNodeHash) {
-        todo!()
+        // todo!()
     }
 }

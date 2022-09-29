@@ -20,41 +20,29 @@
 //   WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //   USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use tari_dan_common_types::ShardId;
-use tari_dan_engine::instruction::Transaction;
-use tokio::sync::{broadcast, broadcast::error::RecvError, mpsc, mpsc::error::SendError};
+use std::net::SocketAddr;
 
-#[derive(Debug)]
-pub struct MempoolHandle {
-    rx_valid_transactions: broadcast::Receiver<(Transaction, ShardId)>,
-    new_transactions: mpsc::Sender<Transaction>,
+use axum::{routing::get, Router};
+use log::{error, info};
+
+const LOG_TARGET: &str = "tari_validator_node::http_ui::server";
+
+pub async fn run_http_ui_server(address: SocketAddr) -> Result<(), anyhow::Error> {
+    let router = Router::new().route("/", get(index));
+
+    info!(target: LOG_TARGET, "🌐 HTTP UI started at {}", address);
+    axum::Server::bind(&address)
+        .serve(router.into_make_service())
+        .await
+        .map_err(|err| {
+            error!(target: LOG_TARGET, "HTTP UI encountered an error: {}", err);
+            err
+        })?;
+
+    info!(target: LOG_TARGET, "Stopping HTTP UI");
+    Ok(())
 }
 
-impl Clone for MempoolHandle {
-    fn clone(&self) -> Self {
-        MempoolHandle {
-            rx_valid_transactions: self.rx_valid_transactions.resubscribe(),
-            new_transactions: self.new_transactions.clone(),
-        }
-    }
-}
-
-impl MempoolHandle {
-    pub(super) fn new(
-        rx_valid_transactions: broadcast::Receiver<(Transaction, ShardId)>,
-        new_transactions: mpsc::Sender<Transaction>,
-    ) -> Self {
-        Self {
-            rx_valid_transactions,
-            new_transactions,
-        }
-    }
-
-    pub async fn new_transaction(&self, transaction: Transaction) -> Result<(), SendError<Transaction>> {
-        self.new_transactions.send(transaction).await
-    }
-
-    pub async fn next_valid_transaction(&mut self) -> Result<(Transaction, ShardId), RecvError> {
-        self.rx_valid_transactions.recv().await
-    }
+async fn index() -> &'static str {
+    "Hello, World!"
 }

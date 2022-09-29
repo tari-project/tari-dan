@@ -100,6 +100,8 @@ pub struct ValidatorNodeConfig {
     pub grpc_address: Option<Multiaddr>,
     /// JSON-RPC address of the validator node  application
     pub json_rpc_address: Option<SocketAddr>,
+    /// The address of the HTTP UI
+    pub http_ui_address: Option<SocketAddr>,
 }
 
 impl ValidatorNodeConfig {
@@ -149,6 +151,7 @@ impl Default for ValidatorNodeConfig {
             p2p,
             grpc_address: Some("/ip4/127.0.0.1/tcp/18144".parse().unwrap()),
             json_rpc_address: Some("127.0.0.1:18145".parse().unwrap()),
+            http_ui_address: Some("127.0.0.1:5000".parse().unwrap()),
         }
     }
 }

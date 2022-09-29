@@ -29,6 +29,7 @@ mod config;
 mod dan_node;
 mod default_service_specification;
 mod grpc;
+mod http_ui;
 mod json_rpc;
 mod p2p;
 mod template_registration_signing;
@@ -62,6 +63,7 @@ use crate::{
     config::{ApplicationConfig, ValidatorNodeConfig},
     dan_node::DanNode,
     grpc::services::{base_node_client::GrpcBaseNodeClient, wallet_client::GrpcWalletClient},
+    http_ui::server::run_http_ui_server,
     json_rpc::{run_json_rpc, JsonRpcHandlers},
 };
 
@@ -193,16 +195,6 @@ async fn run_node(config: &ApplicationConfig) -> Result<(), ExitError> {
     info!(target: LOG_TARGET, "🚀 Validator node started!");
     info!(target: LOG_TARGET, "{}", node_identity);
 
-    // Run the JSON-RPC API
-    if let Some(address) = config.validator_node.json_rpc_address {
-        info!(target: LOG_TARGET, "Started JSON-RPC server on {}", address);
-        let handlers = JsonRpcHandlers::new(
-            node_identity.clone(),
-            GrpcWalletClient::new(config.validator_node.wallet_grpc_address),
-        );
-        task::spawn(run_json_rpc(address, handlers));
-    }
-
     // fs::create_dir_all(&global.peer_db_path).map_err(|err| ExitError::new(ExitCode::ConfigError, err))?;
     let mut base_node_client = GrpcBaseNodeClient::new(config.validator_node.base_node_grpc_address);
     let mut wallet_client = GrpcWalletClient::new(config.validator_node.wallet_grpc_address);
@@ -217,14 +209,11 @@ async fn run_node(config: &ApplicationConfig) -> Result<(), ExitError> {
     )
     .await?;
 
-    // Run the JSON-RPC API
-    if let Some(address) = config.validator_node.json_rpc_address {
-        info!(target: LOG_TARGET, "Started JSON-RPC server on {}", address);
-        let handlers = JsonRpcHandlers::new(
-            node_identity.clone(),
-            GrpcWalletClient::new(config.validator_node.wallet_grpc_address),
-        );
-        task::spawn(run_json_rpc(address, handlers));
+    // Run the http ui
+    if let Some(address) = config.validator_node.http_ui_address {
+        info!(target: LOG_TARGET, "Started HTTP UI server on {}", address);
+
+        task::spawn(run_http_ui_server(address));
     }
 
     // Show the validator node identity

@@ -38,8 +38,6 @@ pub enum TemplateManagerError {
     #[error("The hash of the template code does not match the metadata")]
     #[allow(dead_code)]
     TemplateCodeHashMismatch,
-    // #[error("Unsupported template method {name}")]
-    // TemplateUnsupportedMethod { name: String },
     #[error("Storage error: {0}")]
     StorageError(#[from] StorageError),
 }

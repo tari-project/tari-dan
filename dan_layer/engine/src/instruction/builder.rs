@@ -70,6 +70,16 @@ impl TransactionBuilder {
         self
     }
 
+    pub fn signature(&mut self, signature: InstructionSignature) -> &mut Self {
+        self.signature = Some(signature);
+        self
+    }
+
+    pub fn sender_public_key(&mut self, sender_public_key: RistrettoPublicKey) -> &mut Self {
+        self.sender_public_key = Some(sender_public_key);
+        self
+    }
+
     pub fn sign(mut self, secret_key: &PrivateKey) -> Self {
         self.signature = Some(InstructionSignature::sign(secret_key, &self.instructions));
         self.sender_public_key = Some(PublicKey::from_secret_key(secret_key));
@@ -122,11 +132,18 @@ impl TransactionBuilder {
             let id = id_provider.new_component_address();
             let shard_id = ShardId(id.into_inner());
             let object_id = ObjectId(id.into_inner());
-            t.meta.involved_objects.entry(shard_id).or_insert(vec![]).push((
-                object_id,
-                SubstateChange::Create,
-                ObjectClaim {},
-            ));
+            if t.meta.is_none() {
+                t.meta = Some(TransactionMeta {
+                    involved_objects: HashMap::new(),
+                });
+            }
+            if let Some(m) = t.meta.as_mut() {
+                m.involved_objects.entry(shard_id).or_insert(vec![]).push((
+                    object_id,
+                    SubstateChange::Create,
+                    ObjectClaim {},
+                ))
+            }
         }
         t
     }

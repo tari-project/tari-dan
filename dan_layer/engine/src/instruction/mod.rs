@@ -114,7 +114,7 @@ pub struct Transaction {
     _fee: u64,
     sender_public_key: PublicKey,
     // Not part of signature. TODO: Should it be?
-    meta: TransactionMeta,
+    meta: Option<TransactionMeta>,
 }
 
 #[derive(Debug, Clone, Default, Deserialize)]
@@ -146,7 +146,7 @@ impl Transaction {
             signature,
             _fee: fee,
             sender_public_key,
-            meta,
+            meta: Some(meta),
         };
         s.calculate_hash();
         s
@@ -157,7 +157,7 @@ impl Transaction {
     }
 
     pub fn meta(&self) -> &TransactionMeta {
-        &self.meta
+        self.meta.as_ref().unwrap()
     }
 
     fn calculate_hash(&mut self) {

@@ -54,7 +54,7 @@ where TPeerProvider: PeerProvider + Clone + Send + Sync + 'static
         &self,
         request: Request<proto::validator_node::SubmitTransactionRequest>,
     ) -> Result<Response<proto::validator_node::SubmitTransactionResponse>, RpcStatus> {
-        let peer = request.context().fetch_peer().await?;
+        // let peer = request.context().fetch_peer().await?;
         let request = request.into_message();
         let transaction: Transaction = match request
             .transaction
@@ -68,12 +68,7 @@ where TPeerProvider: PeerProvider + Clone + Send + Sync + 'static
         };
 
         // TODO: Implement a mempool handle that returns if the transaction was accepted or not
-        match self
-            .message_senders
-            .tx_new_transaction_message
-            .send((peer.public_key, transaction))
-            .await
-        {
+        match self.message_senders.tx_new_transaction_message.send(transaction).await {
             Ok(_) => {
                 debug!(target: LOG_TARGET, "Accepted instruction into mempool");
                 return Ok(Response::new(proto::validator_node::SubmitTransactionResponse {

@@ -68,7 +68,7 @@ pub struct HotStuffWaiter<
     rx_new: Receiver<(TPayload, ShardId)>,
     rx_hs_message: Receiver<(TAddr, HotStuffMessage<TPayload, TAddr>)>,
     rx_votes: Receiver<(TAddr, VoteMessage)>,
-    tx_leader: Sender<HotStuffMessage<TPayload, TAddr>>,
+    tx_leader: Sender<(TAddr, HotStuffMessage<TPayload, TAddr>)>,
     tx_broadcast: Sender<(HotStuffMessage<TPayload, TAddr>, Vec<TAddr>)>,
     tx_vote_message: Sender<(VoteMessage, TAddr)>,
     payload_processor: TPayloadProcessor,
@@ -91,7 +91,7 @@ impl<
         rx_new: Receiver<(TPayload, ShardId)>,
         rx_hs_message: Receiver<(TAddr, HotStuffMessage<TPayload, TAddr>)>,
         rx_votes: Receiver<(TAddr, VoteMessage)>,
-        tx_leader: Sender<HotStuffMessage<TPayload, TAddr>>,
+        tx_leader: Sender<(TAddr, HotStuffMessage<TPayload, TAddr>)>,
         tx_broadcast: Sender<(HotStuffMessage<TPayload, TAddr>, Vec<TAddr>)>,
         tx_vote_message: Sender<(VoteMessage, TAddr)>,
         payload_processor: TPayloadProcessor,
@@ -121,7 +121,7 @@ impl<
         rx_new: Receiver<(TPayload, ShardId)>,
         rx_hs_message: Receiver<(TAddr, HotStuffMessage<TPayload, TAddr>)>,
         rx_votes: Receiver<(TAddr, VoteMessage)>,
-        tx_leader: Sender<HotStuffMessage<TPayload, TAddr>>,
+        tx_leader: Sender<(TAddr, HotStuffMessage<TPayload, TAddr>)>,
         tx_broadcast: Sender<(HotStuffMessage<TPayload, TAddr>, Vec<TAddr>)>,
         tx_vote_message: Sender<(VoteMessage, TAddr)>,
         payload_processor: TPayloadProcessor,
@@ -150,6 +150,7 @@ impl<
         qc: QuorumCertificate,
         payload: TPayload,
     ) -> Result<(), HotStuffError> {
+        dbg!("on receive new view");
         // TODO: Validate who message is from
         let epoch = self.epoch_manager.current_epoch().await?;
         self.validate_from_committee(&from, epoch, shard).await?;
@@ -301,6 +302,7 @@ impl<
 
     async fn on_next_sync_view(&mut self, payload: TPayload, shard: ShardId) -> Result<(), HotStuffError> {
         dbg!("new payload received", &shard);
+        let payload_id = payload.to_id();
 
         let new_view;
         {
@@ -310,8 +312,13 @@ impl<
 
             new_view = HotStuffMessage::new_view(high_qc, shard, Some(payload));
         }
+
+        let epoch = self.epoch_manager.current_epoch().await?;
+        let committee = self.epoch_manager.get_committee(epoch, shard).await?;
+        let leader = self.leader_strategy.get_leader(&committee, payload_id, shard, 0);
+
         self.tx_leader
-            .send(new_view)
+            .send((leader.clone(), new_view))
             .await
             .map_err(|_| HotStuffError::SendError)?;
         Ok(())
@@ -582,6 +589,7 @@ impl<
                         // TODO: Start timer for receiving proposal
                     } else {
                         dbg!("All senders have dropped");
+                        break;
                     }
                 },
                 msg = self.rx_hs_message.recv() => {

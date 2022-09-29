@@ -22,6 +22,7 @@
 
 use std::{fs, io, str::FromStr, sync::Arc};
 
+use log::info;
 use tari_app_utilities::{identity_management, identity_management::load_from_json};
 use tari_common::exit_codes::{ExitCode, ExitError};
 use tari_comms::{
@@ -36,6 +37,7 @@ use tari_dan_core::storage::global::GlobalDb;
 use tari_dan_storage_sqlite::{global::SqliteGlobalDbBackendAdapter, SqliteDbFactory};
 use tari_p2p::{initialization::spawn_comms_using_transport, peer_seeds::SeedPeer, PeerSeedsConfig};
 use tari_shutdown::ShutdownSignal;
+use tokio::task;
 
 use crate::{
     base_layer_scanner,
@@ -55,8 +57,13 @@ use crate::{
             template_manager,
         },
     },
+    run_json_rpc,
     ApplicationConfig,
+    GrpcWalletClient,
+    JsonRpcHandlers,
 };
+
+const LOG_TARGET: &str = "tari_validator_node::bootstrap";
 
 pub async fn spawn_services(
     config: &ApplicationConfig,
@@ -79,6 +86,7 @@ pub async fn spawn_services(
 
     // Spawn messaging
     let (message_senders, message_receivers) = messaging::new_messaging_channel(10);
+    let mempool_new_tx = message_senders.tx_new_transaction_message.clone();
     let outbound_messaging = messaging::spawn(
         node_identity.public_key().clone(),
         message_channel,
@@ -100,7 +108,7 @@ pub async fn spawn_services(
     );
 
     // Mempool
-    let mempool = mempool::spawn(rx_new_transaction_message, outbound_messaging.clone());
+    let mempool = mempool::spawn(rx_new_transaction_message, mempool_new_tx, outbound_messaging.clone());
 
     // Add seeds
     add_seed_peers(&comms.peer_manager(), &comms.node_identity(), &config.peer_seeds).await?;
@@ -127,6 +135,17 @@ pub async fn spawn_services(
         template_manager,
         shutdown.clone(),
     );
+
+    // Run the JSON-RPC API
+    if let Some(address) = config.validator_node.json_rpc_address {
+        info!(target: LOG_TARGET, "Started JSON-RPC server on {}", address);
+        let handlers = JsonRpcHandlers::new(
+            node_identity.clone(),
+            GrpcWalletClient::new(config.validator_node.wallet_grpc_address),
+            mempool.clone(),
+        );
+        task::spawn(run_json_rpc(address, handlers));
+    }
 
     // Consensus
     hotstuff::spawn(
