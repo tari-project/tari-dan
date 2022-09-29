@@ -114,7 +114,7 @@ pub struct HsTestHarness<TPayload, TAddr> {
     identity: TAddr,
     tx_new: Sender<(TPayload, ShardId)>,
     tx_hs_messages: Sender<(TAddr, HotStuffMessage<TPayload, TAddr>)>,
-    rx_leader: Receiver<HotStuffMessage<TPayload, TAddr>>,
+    rx_leader: Receiver<(TAddr, HotStuffMessage<TPayload, TAddr>)>,
     shutdown: Shutdown,
     rx_broadcast: Receiver<(HotStuffMessage<TPayload, TAddr>, Vec<TAddr>)>,
     rx_vote_message: Receiver<(VoteMessage, TAddr)>,
