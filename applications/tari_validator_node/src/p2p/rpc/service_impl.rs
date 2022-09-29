@@ -54,7 +54,7 @@ where TPeerProvider: PeerProvider + Clone + Send + Sync + 'static
         &self,
         request: Request<proto::validator_node::SubmitTransactionRequest>,
     ) -> Result<Response<proto::validator_node::SubmitTransactionResponse>, RpcStatus> {
-        let peer = request.context().fetch_peer().await?;
+        // let peer = request.context().fetch_peer().await?;
         let request = request.into_message();
         let transaction: Transaction = match request
             .transaction

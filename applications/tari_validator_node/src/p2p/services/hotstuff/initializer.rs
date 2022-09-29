@@ -28,7 +28,6 @@ use tari_dan_core::{
     services::TariDanPayloadProcessor,
     storage::shard_store::MemoryShardStoreFactory,
 };
-use tari_dan_storage_sqlite::sqlite_shard_store_factory::SqliteShardStoreFactory;
 use tari_shutdown::ShutdownSignal;
 use tokio::sync::mpsc;
 

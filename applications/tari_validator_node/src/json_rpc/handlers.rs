@@ -31,8 +31,7 @@ use axum_jrpc::{
 use serde::Serialize;
 use serde_json::json;
 use tari_comms::{multiaddr::Multiaddr, peer_manager::NodeId, types::CommsPublicKey, NodeIdentity};
-use tari_dan_engine::instruction::{Instruction, InstructionSignature, Transaction, TransactionBuilder};
-use tari_template_lib::Hash;
+use tari_dan_engine::instruction::{Instruction, TransactionBuilder};
 
 use crate::{
     grpc::services::wallet_client::{GrpcWalletClient, TemplateRegistrationRequest},

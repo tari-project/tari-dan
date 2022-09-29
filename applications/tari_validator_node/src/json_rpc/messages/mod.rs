@@ -35,8 +35,6 @@ pub struct SubmitTransactionRequest {
     pub num_new_components: u8,
 }
 
-pub struct SubmitTransactionResponse {}
-
 #[derive(Deserialize, Debug, Clone)]
 pub struct InstructionRequest {
     #[serde(deserialize_with = "deserialize_fixed_hash_from_hex")]
