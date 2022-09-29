@@ -149,6 +149,7 @@ pub async fn spawn_services(
 
     // Consensus
     hotstuff::spawn(
+        &config.validator_node,
         node_identity,
         outbound_messaging,
         epoch_manager_handle,
@@ -156,7 +157,7 @@ pub async fn spawn_services(
         rx_consensus_message,
         rx_vote_message,
         shutdown,
-    );
+    )?;
 
     let comms = setup_p2p_rpc(config, comms, message_senders, peer_provider);
     let comms = spawn_comms_using_transport(comms, p2p_config.transport.clone())

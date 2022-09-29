@@ -21,6 +21,7 @@
 // USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 use digest::Digest;
+use serde::{Deserialize, Serialize};
 use tari_crypto::hash::blake2::Blake256;
 use tari_dan_common_types::{PayloadId, ShardId};
 
@@ -29,7 +30,7 @@ use crate::{
     storage::chain::DbQc,
 };
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
 pub enum QuorumDecision {
     Accept,
     Reject,
@@ -53,7 +54,7 @@ impl QuorumDecision {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct QuorumCertificate {
     payload: PayloadId,
     payload_height: NodeHeight,

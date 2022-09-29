@@ -20,8 +20,10 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use std::collections::HashMap;
+use std::{collections::HashMap, path::PathBuf};
 
+use diesel::{dsl::count, prelude::*, SqliteConnection};
+use serde_json::json;
 use tari_common_types::types::PublicKey;
 use tari_dan_common_types::{ObjectId, PayloadId, ShardId, SubstateChange, SubstateState};
 use tari_dan_core::{
@@ -34,38 +36,112 @@ use tari_dan_core::{
         TariDanPayload,
         TreeNodeHash,
     },
-    storage::shard_store::{ShardStoreFactory, ShardStoreTransaction, StoreError},
+    storage::{
+        shard_store::{ShardStoreFactory, ShardStoreTransaction},
+        StorageError,
+    },
 };
 
-pub struct SqliteShardStoreFactory {}
+use crate::{
+    error::SqliteStorageError,
+    models::high_qc::{HighQc, NewHighQc},
+    schema::high_qcs::{dsl::high_qcs, shard_id},
+};
 
+pub struct SqliteShardStoreFactory {
+    url: PathBuf,
+}
+
+impl SqliteShardStoreFactory {
+    pub fn try_create(url: PathBuf) -> Result<Self, StorageError> {
+        let connection = SqliteConnection::establish(&url.clone().into_os_string().into_string().unwrap())
+            .map_err(|e| StorageError::ConnectionError { reason: e.to_string() })?;
+
+        embed_migrations!("./migrations");
+        embedded_migrations::run(&connection).map_err(|e| StorageError::ConnectionError { reason: e.to_string() })?;
+        Ok(Self { url })
+    }
+}
 impl ShardStoreFactory for SqliteShardStoreFactory {
     type Addr = PublicKey;
     type Payload = TariDanPayload;
     type Transaction = SqliteShardStoreTransaction;
 
-    fn create_tx(&self) -> Self::Transaction {
-        SqliteShardStoreTransaction::new()
+    fn create_tx(&self) -> Result<Self::Transaction, StorageError> {
+        match SqliteConnection::establish(&self.url.clone().into_os_string().into_string().unwrap()) {
+            Ok(connection) => {
+                connection
+                    .execute("PRAGMA foreign_keys = ON;   BEGIN TRANSACTION;")
+                    .map_err(|source| SqliteStorageError::DieselError {
+                        source,
+                        operation: "set pragma".to_string(),
+                    })?;
+                Ok(SqliteShardStoreTransaction::new(connection))
+            },
+            Err(err) => Err(SqliteStorageError::from(err).into()),
+        }
     }
 }
 
-pub struct SqliteShardStoreTransaction {}
+pub struct SqliteShardStoreTransaction {
+    connection: SqliteConnection,
+}
 
 impl SqliteShardStoreTransaction {
-    fn new() -> Self {
-        Self {}
+    fn new(connection: SqliteConnection) -> Self {
+        Self { connection }
     }
 }
 
 impl ShardStoreTransaction<PublicKey, TariDanPayload> for SqliteShardStoreTransaction {
-    type Error = StoreError;
+    type Error = StorageError;
 
     fn commit(&mut self) -> Result<(), Self::Error> {
-        todo!()
+        self.connection
+            .execute("COMMIT TRANSACTION;")
+            .map_err(|source| StorageError::QueryError {
+                reason: format!("Commit transaction error: {0}", source),
+            })?;
+        Ok(())
     }
 
-    fn update_high_qc(&mut self, _shard: ShardId, _qc: QuorumCertificate) {
-        todo!()
+    fn update_high_qc(&mut self, shard: ShardId, qc: QuorumCertificate) -> Result<(), Self::Error> {
+        // update all others for this shard to highest == false
+        use crate::schema::high_qcs::{height, is_highest, shard_id};
+        let shard = Vec::from(shard.0);
+        let num_existing_qcs: i64 = high_qcs
+            .filter(shard_id.eq(&shard))
+            .count()
+            .first(&self.connection)
+            .map_err(|source| StorageError::QueryError {
+                reason: format!("Update qc error: {0}", source),
+            })?;
+
+        // TODO: fix i32 cast
+        let rows = diesel::update(
+            high_qcs.filter(
+                shard_id
+                    .eq(&shard)
+                    .and(is_highest.eq(1))
+                    .and(height.lt(qc.local_node_height().0 as i32)),
+            ),
+        )
+        .set(is_highest.eq(0))
+        .execute(&self.connection)
+        .map_err(|e| StorageError::QueryError { reason: e.to_string() })?;
+
+        let new_row = NewHighQc {
+            shard_id: shard,
+            height: qc.local_node_height().0 as i32,
+            is_highest: if rows == 0 && num_existing_qcs > 0 { 0 } else { 1 },
+            qc_json: json!(qc).to_string(),
+        };
+        diesel::insert_into(high_qcs)
+            .values(&new_row)
+            .execute(&self.connection)
+            .map_err(|e| StorageError::QueryError { reason: e.to_string() })?;
+
+        Ok(())
     }
 
     fn set_payload(&mut self, _payload: TariDanPayload) {
@@ -85,8 +161,19 @@ impl ShardStoreTransaction<PublicKey, TariDanPayload> for SqliteShardStoreTransa
         todo!()
     }
 
-    fn get_high_qc_for(&self, _shard: ShardId) -> QuorumCertificate {
-        todo!()
+    fn get_high_qc_for(&self, shard: ShardId) -> QuorumCertificate {
+        use crate::schema::high_qcs::{height, is_highest, shard_id};
+        let qc: Option<HighQc> = high_qcs
+            .filter(shard_id.eq(Vec::from(shard.0)))
+            .order_by(height.desc())
+            .first(&self.connection)
+            .optional()
+            .expect("Need to return an error");
+        if let Some(qc) = qc {
+            serde_json::from_str(&qc.qc_json).unwrap()
+        } else {
+            QuorumCertificate::genesis()
+        }
     }
 
     fn get_payload(&self, _payload_id: &PayloadId) -> Result<TariDanPayload, Self::Error> {

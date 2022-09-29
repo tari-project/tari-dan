@@ -16,7 +16,7 @@ use tari_crypto::tari_utilities::hex::serialize_to_hex;
 use tari_utilities::{byte_array::ByteArray, hex::Hex};
 pub use template_id::TemplateId;
 
-#[derive(Copy, Clone, Debug, PartialEq, Eq, Hash, Deserialize)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Hash, Deserialize, Serialize)]
 pub struct ObjectId(#[serde(deserialize_with = "deserialize_fixed_hash_from_hex")] pub [u8; 32]);
 
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Hash, Serialize, Deserialize)]
@@ -70,7 +70,7 @@ pub enum SubstateChange {
     Destroy,
 }
 
-#[derive(Debug, Clone, BorshSerialize, BorshDeserialize)]
+#[derive(Debug, Clone, BorshSerialize, BorshDeserialize, Serialize, Deserialize)]
 pub enum SubstateState {
     DoesNotExist,
     Exists { created_by: PayloadId, data: Vec<u8> },
@@ -86,7 +86,7 @@ impl ObjectClaim {
     }
 }
 
-#[derive(Copy, Clone, Debug, PartialEq, Eq, Hash, BorshSerialize, BorshDeserialize, Deserialize)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Hash, BorshSerialize, BorshDeserialize, Serialize, Deserialize)]
 pub struct PayloadId {
     #[serde(deserialize_with = "deserialize_fixed_hash_from_hex")]
     id: [u8; 32],

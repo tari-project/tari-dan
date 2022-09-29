@@ -21,7 +21,6 @@
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 use tari_common_types::types::FixedHash;
-use tari_dan_engine::state::{StateDb, StateDbBackendAdapter};
 
 use crate::storage::{
     chain::{ChainDb, ChainDbBackendAdapter},
@@ -31,7 +30,6 @@ use crate::storage::{
 
 pub trait DbFactory: Sync + Send + 'static {
     type ChainDbBackendAdapter: ChainDbBackendAdapter;
-    type StateDbBackendAdapter: StateDbBackendAdapter;
     type GlobalDbBackendAdapter: GlobalDbBackendAdapter;
 
     fn get_chain_db(
@@ -43,16 +41,6 @@ pub trait DbFactory: Sync + Send + 'static {
         &self,
         contract_id: &FixedHash,
     ) -> Result<ChainDb<Self::ChainDbBackendAdapter>, StorageError>;
-
-    fn get_state_db(
-        &self,
-        contract_id: &FixedHash,
-    ) -> Result<Option<StateDb<Self::StateDbBackendAdapter>>, StorageError>;
-
-    fn get_or_create_state_db(
-        &self,
-        contract_id: &FixedHash,
-    ) -> Result<StateDb<Self::StateDbBackendAdapter>, StorageError>;
 
     fn get_or_create_global_db(&self) -> Result<GlobalDb<Self::GlobalDbBackendAdapter>, StorageError>;
 

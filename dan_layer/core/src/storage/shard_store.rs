@@ -36,15 +36,14 @@ use crate::{
         TreeNodeHash,
     },
     services::infrastructure_services::NodeAddressable,
-    storage::shard_db::MemoryShardDb,
+    storage::{shard_db::MemoryShardDb, StorageError},
 };
 
 pub trait ShardStoreFactory {
     type Addr: NodeAddressable;
     type Payload: Payload;
-
     type Transaction: ShardStoreTransaction<Self::Addr, Self::Payload>;
-    fn create_tx(&self) -> Self::Transaction;
+    fn create_tx(&self) -> Result<Self::Transaction, StorageError>;
 }
 
 #[derive(Debug, Error)]
@@ -55,15 +54,17 @@ pub enum StoreError {
     NodeNotFound,
     #[error("Cannot update leaf node")]
     CannotUpdateLeafNode,
+    #[error("Storage error:{0}")]
+    StorageError(#[from] StorageError),
 }
 
 pub trait ShardStoreTransaction<TAddr: NodeAddressable, TPayload: Payload> {
     type Error: Display + Into<StoreError>;
     fn commit(&mut self) -> Result<(), Self::Error>;
-    fn update_high_qc(&mut self, shard: ShardId, qc: QuorumCertificate);
+    fn update_high_qc(&mut self, shard: ShardId, qc: QuorumCertificate) -> Result<(), Self::Error>;
     fn set_payload(&mut self, payload: TPayload);
     fn get_leaf_node(&self, shard: ShardId) -> (TreeNodeHash, NodeHeight);
-    fn update_leaf_node(&mut self, shard: ShardId, node: TreeNodeHash, height: NodeHeight) -> Result<(), StoreError>;
+    fn update_leaf_node(&mut self, shard: ShardId, node: TreeNodeHash, height: NodeHeight) -> Result<(), Self::Error>;
     fn get_high_qc_for(&self, shard: ShardId) -> QuorumCertificate;
     fn get_payload(&self, payload_id: &PayloadId) -> Result<TPayload, Self::Error>;
     fn get_node(&self, node_hash: &TreeNodeHash) -> Result<HotStuffTreeNode<TAddr>, Self::Error>;
@@ -126,7 +127,7 @@ impl<TAddr: NodeAddressable, TPayload: Payload> ShardStoreFactory for MemoryShar
     type Payload = TPayload;
     type Transaction = MemoryShardDb<TAddr, TPayload>;
 
-    fn create_tx(&self) -> Self::Transaction {
-        self.inner.clone()
+    fn create_tx(&self) -> Result<Self::Transaction, StorageError> {
+        Ok(self.inner.clone())
     }
 }

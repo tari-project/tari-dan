@@ -22,7 +22,11 @@
 
 use thiserror::Error;
 
-use crate::{services::epoch_manager::EpochManagerError, storage::shard_store::StoreError, DigitalAssetError};
+use crate::{
+    services::epoch_manager::EpochManagerError,
+    storage::{shard_store::StoreError, StorageError},
+    DigitalAssetError,
+};
 
 #[derive(Error, Debug)]
 pub enum HotStuffError {
@@ -40,7 +44,8 @@ pub enum HotStuffError {
     SendError,
     #[error("Not the leader")]
     NotTheLeader,
-
     #[error("DigitalAssetError: {0}")]
     DigitalAssetError(#[from] DigitalAssetError),
+    #[error("Storage error: {0}")]
+    StorageError(#[from] StorageError),
 }

@@ -26,10 +26,10 @@ use std::{
 };
 
 use digest::{consts::U32, generic_array};
+use serde::{Deserialize, Serialize};
 use tari_common_types::types::{FixedHash, FixedHashSizeError};
 use tari_utilities::hex::{Hex, HexError};
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct TreeNodeHash(FixedHash);
 
 impl TreeNodeHash {

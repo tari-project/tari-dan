@@ -155,7 +155,7 @@ impl<
         let epoch = self.epoch_manager.current_epoch().await?;
         self.validate_from_committee(&from, epoch, shard).await?;
         self.validate_qc(&qc)?;
-        let mut tx = self.shard_store.create_tx();
+        let mut tx = self.shard_store.create_tx()?;
         tx.update_high_qc(shard, qc);
         tx.set_payload(payload);
         tx.commit().map_err(|e| e.into())?;
@@ -188,7 +188,7 @@ impl<
         let leaf;
         let leaf_height;
         {
-            let tx = self.shard_store.create_tx();
+            let tx = self.shard_store.create_tx()?;
 
             let leaf_result = tx.get_leaf_node(shard);
             leaf = leaf_result.0;
@@ -206,7 +206,7 @@ impl<
             .flat_map(|allocation| allocation.committee.map(|c| c.members).unwrap_or_default())
             .collect();
         {
-            let mut tx = self.shard_store.create_tx();
+            let mut tx = self.shard_store.create_tx()?;
 
             let parent = tx.get_node(&leaf).map_err(|e| e.into())?;
 
@@ -236,7 +236,8 @@ impl<
                 local_pledges,
             );
             tx.save_node(leaf_node.clone());
-            tx.update_leaf_node(shard, *leaf_node.hash(), leaf_node.height())?;
+            tx.update_leaf_node(shard, *leaf_node.hash(), leaf_node.height())
+                .map_err(|e| e.into())?;
             tx.commit().map_err(|e| e.into())?;
         }
         self.tx_broadcast
@@ -306,7 +307,7 @@ impl<
 
         let new_view;
         {
-            let tx = self.shard_store.create_tx();
+            let tx = self.shard_store.create_tx()?;
 
             let high_qc = tx.get_high_qc_for(shard);
 
@@ -325,7 +326,7 @@ impl<
     }
 
     async fn update_nodes(&mut self, node: HotStuffTreeNode<TAddr>, shard: ShardId) -> Result<(), HotStuffError> {
-        let mut tx = self.shard_store.create_tx();
+        let mut tx = self.shard_store.create_tx()?;
         if node.justify().local_node_hash() == TreeNodeHash::zero() {
             dbg!("Node is parented to genesis, no need to update");
             return Ok(());
@@ -431,7 +432,7 @@ impl<
         let shard = node.shard();
         let payload;
         {
-            let tx = self.shard_store.create_tx();
+            let tx = self.shard_store.create_tx()?;
             payload = tx.get_payload(&node.payload()).map_err(|e| e.into())?;
         }
         let involved_shards = payload.involved_shards();
@@ -442,7 +443,7 @@ impl<
 
         let mut votes_to_send = vec![];
         {
-            let mut tx = self.shard_store.create_tx();
+            let mut tx = self.shard_store.create_tx()?;
             tx.save_node(node.clone());
             let v_height = tx.get_last_voted_height(shard);
             // TODO: can also use the QC and committee to justify this....
@@ -511,7 +512,7 @@ impl<
         let mut on_beat_future = None;
         let node;
         {
-            let tx = self.shard_store.create_tx();
+            let tx = self.shard_store.create_tx()?;
             if tx.has_vote_for(&from, msg.local_node_hash(), msg.shard()) {
                 return Ok(());
             }
@@ -525,7 +526,7 @@ impl<
 
         let valid_committee = self.epoch_manager.get_committee(node.epoch(), node.shard()).await?;
         {
-            let mut tx = self.shard_store.create_tx();
+            let mut tx = self.shard_store.create_tx()?;
             if !valid_committee.contains(&from) {
                 return Err(HotStuffError::ReceivedMessageFromNonCommitteeMember);
             }
