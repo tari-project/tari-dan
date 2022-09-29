@@ -105,7 +105,7 @@ impl JsonRpcHandlers {
         Ok(JsonRpcResponse::success(answer_id, ()))
     }
 
-    pub async fn register(&self, value: JsonRpcExtractor) -> JrpcResult {
+    pub async fn register_validator_node(&self, value: JsonRpcExtractor) -> JrpcResult {
         let answer_id = value.get_answer_id();
 
         let resp = self
@@ -129,6 +129,19 @@ impl JsonRpcHandlers {
             answer_id,
             json!({ "transaction_id": resp.transaction_id }),
         ))
+    }
+
+    pub async fn register_template(&self, value: JsonRpcExtractor) -> JrpcResult {
+        let answer_id = value.get_answer_id();
+        let data: TemplateRegistrationRequest = value.parse_params()?;
+
+        self.wallet_client()
+            .register_template(&self.node_identity, data)
+            .await
+            .map_err(internal_error(answer_id))?;
+
+        // TODO: add "transaction_id" to the grpc response
+        Ok(JsonRpcResponse::success(answer_id, ()))
     }
 }
 

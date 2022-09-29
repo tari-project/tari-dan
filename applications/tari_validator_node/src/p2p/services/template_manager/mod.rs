@@ -36,6 +36,7 @@ pub enum TemplateManagerError {
     #[error("Could not fetch the template code from the web")]
     TemplateCodeFetchError,
     #[error("The hash of the template code does not match the metadata")]
+    #[allow(dead_code)]
     TemplateCodeHashMismatch,
     #[error("Storage error: {0}")]
     StorageError(#[from] StorageError),

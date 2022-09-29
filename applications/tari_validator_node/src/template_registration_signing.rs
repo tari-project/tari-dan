@@ -20,49 +20,30 @@
 //   WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //   USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use std::path::PathBuf;
+use rand::rngs::OsRng;
+use tari_common_types::types::{FixedHash, PrivateKey, PublicKey, Signature};
+use tari_core::{consensus::DomainSeparatedConsensusHasher, transactions::TransactionHashDomain};
+use tari_crypto::keys::PublicKey as PublicKeyT;
 
-use clap::{Args, Subcommand};
-
-#[allow(clippy::large_enum_variant)]
-#[derive(Debug, Subcommand, Clone)]
-pub enum Command {
-    Vn(VnCommand),
-    Template(TemplateCommand),
+// TODO: Find a neat way to encapsulated this signature so that it can be used by the validator node and the base layer
+// TODO: Should we include more fields in the signature?
+// signature validation
+pub fn sign_template_registration(private_key: &PrivateKey, binary_hash: Vec<u8>) -> Signature {
+    let (secret_nonce, public_nonce) = PublicKey::random_keypair(&mut OsRng);
+    let public_key = PublicKey::from_secret_key(private_key);
+    // TODO: epoch should be committed to, but this is currently not the case on the base node, so we leave it out for
+    //       now so that the transaction passes validation.
+    let challenge = construct_challenge(&public_key, &public_nonce, &binary_hash, b"");
+    Signature::sign(private_key.clone(), secret_nonce, &*challenge)
+        .expect("Sign cannot fail with 32-byte challenge and a RistrettoPublicKey")
 }
 
-#[derive(Debug, Args, Clone)]
-pub struct VnCommand {
-    #[clap(subcommand)]
-    pub subcommand: VnSubcommand,
-}
-
-#[derive(Debug, Subcommand, Clone)]
-pub enum VnSubcommand {
-    Register,
-}
-
-#[derive(Debug, Args, Clone)]
-pub struct TemplateCommand {
-    #[clap(subcommand)]
-    pub subcommand: TemplateSubcommand,
-}
-
-#[derive(Debug, Subcommand, Clone)]
-pub enum TemplateSubcommand {
-    Register(RegisterTemplateArgs),
-}
-
-#[derive(Debug, Args, Clone)]
-pub struct RegisterTemplateArgs {
-    pub template_code_path: PathBuf,
-
-    #[clap(long, alias = "template-name")]
-    pub template_name: Option<String>,
-
-    #[clap(long, alias = "template-version")]
-    pub template_version: Option<u16>,
-
-    #[clap(long, alias = "binary-url")]
-    pub binary_url: Option<String>,
+fn construct_challenge(public_key: &PublicKey, public_nonce: &PublicKey, binary_hash: &[u8], msg: &[u8]) -> FixedHash {
+    DomainSeparatedConsensusHasher::<TransactionHashDomain>::new("template_registration")
+        .chain(public_key)
+        .chain(public_nonce)
+        .chain(&binary_hash)
+        .chain(&msg)
+        .finalize()
+        .into()
 }

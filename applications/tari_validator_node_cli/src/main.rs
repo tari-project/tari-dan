@@ -23,14 +23,22 @@
 mod cli;
 mod client;
 mod command;
+mod prompt;
 
 use std::error::Error;
 
 use anyhow::anyhow;
+use command::{RegisterTemplateArgs, TemplateSubcommand, VnSubcommand};
 use multiaddr::{Multiaddr, Protocol};
 use reqwest::Url;
+use tari_dan_engine::{hashing::hasher, wasm::compile::compile_template};
 
-use crate::{cli::Cli, client::ValidatorNodeClient, command::Command};
+use crate::{
+    cli::Cli,
+    client::{TemplateRegistrationRequest, ValidatorNodeClient},
+    command::Command,
+    prompt::Prompt,
+};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
@@ -48,17 +56,6 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let client = ValidatorNodeClient::connect(endpoint)?;
 
     handle_command(cli.command, client).await?;
-
-    Ok(())
-}
-
-async fn handle_command(command: Command, mut client: ValidatorNodeClient) -> anyhow::Result<()> {
-    match command {
-        Command::Register => {
-            let tx_id = client.register().await?;
-            println!("✅ Registration submitted (tx_id: {})", tx_id);
-        },
-    }
 
     Ok(())
 }
@@ -81,4 +78,91 @@ fn multiaddr_to_http_url(multiaddr: Multiaddr) -> anyhow::Result<Url> {
 
     let url = Url::parse(&format!("http://{}:{}", ip, port))?;
     Ok(url)
+}
+
+async fn handle_command(command: Command, client: ValidatorNodeClient) -> anyhow::Result<()> {
+    match command {
+        Command::Vn(vn_command) => match vn_command.subcommand {
+            VnSubcommand::Register => handle_register_node(client).await?,
+        },
+        Command::Template(template_command) => match template_command.subcommand {
+            TemplateSubcommand::Register(args) => handle_register_template(args, client).await?,
+        },
+    }
+
+    Ok(())
+}
+
+async fn handle_register_node(mut client: ValidatorNodeClient) -> anyhow::Result<()> {
+    let tx_id = client.register_validator_node().await?;
+    println!("✅ Validator node registration submitted (tx_id: {})", tx_id);
+
+    Ok(())
+}
+
+async fn handle_register_template(args: RegisterTemplateArgs, mut client: ValidatorNodeClient) -> anyhow::Result<()> {
+    // retrieve the root folder of the template
+    let root_folder = args.template_code_path;
+    println!("Template code path {}", root_folder.display());
+
+    // compile the code and retrieve the binary content of the wasm
+    let wasm_module = compile_template(root_folder.as_path(), &[]).unwrap();
+    let wasm_code = wasm_module.code();
+    println!(
+        "✅ Template compilation succesful (WASM file size: {} bytes)",
+        wasm_code.len()
+    );
+
+    // calculate the hash of the WASM binary
+    let hash = hasher("template").chain(&wasm_code).result();
+    let binary_sha = hash.to_vec();
+    println!("Template binary hash: {}", hash);
+
+    // get the local path of the compiled wasm
+    // note that the file name will be the same as the root folder name
+    let file_name = root_folder.file_name().unwrap().to_str().unwrap();
+    let mut wasm_path = root_folder.clone();
+    wasm_path.push(format!("target/wasm32-unknown-unknown/release/{}.wasm", file_name));
+
+    // ask the template name (skip if already passed as a CLI argument)
+    let template_name: String = match args.template_name {
+        Some(value) => value,
+        None => Prompt::new("Template name (max 32 characters):").ask()?,
+    };
+
+    // ask the template version (skip if already passed as a CLI argument)
+    let template_version: u16 = match args.template_version {
+        Some(value) => value,
+        None => Prompt::new("Template version:")
+            .with_default(0.to_string())
+            .ask_parsed()?,
+    };
+
+    // TODO: ask repository info
+    let repo_url = String::new();
+    let commit_hash = vec![];
+
+    // Show the wasm file path and ask to upload it to the web
+    let binary_url = match args.binary_url {
+        Some(value) => value,
+        None => {
+            println!("Compiled template WASM file location: {}", wasm_path.display());
+            println!("Please upload the file to a public web location and then paste the URL");
+            Prompt::new("WASM public URL (max 255 characters):").ask()?
+        },
+    };
+
+    // build and send the template registration request
+    let request = TemplateRegistrationRequest {
+        template_name,
+        template_version,
+        repo_url,
+        commit_hash,
+        binary_sha,
+        binary_url,
+    };
+    client.register_template(request).await?;
+    println!("✅ Template registration submitted");
+
+    Ok(())
 }

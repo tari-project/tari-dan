@@ -27,7 +27,7 @@ use tari_crypto::keys::PublicKey as PublicKeyT;
 
 // TODO: Find a neat way to encapsulated this signature so that it can be used by the validator node and the base layer
 // signature validation
-pub fn sign_registration(private_key: &PrivateKey, _epoch: u64) -> Signature {
+pub fn sign_validator_node_registration(private_key: &PrivateKey, _epoch: u64) -> Signature {
     let (secret_nonce, public_nonce) = PublicKey::random_keypair(&mut OsRng);
     let public_key = PublicKey::from_secret_key(private_key);
     // TODO: epoch should be committed to, but this is currently not the case on the base node, so we leave it out for

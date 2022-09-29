@@ -21,6 +21,7 @@
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 use log::*;
+use tari_core::transactions::transaction_components::CodeTemplateRegistration;
 use tari_dan_storage_sqlite::SqliteDbFactory;
 use tari_shutdown::ShutdownSignal;
 use tokio::{
@@ -28,10 +29,7 @@ use tokio::{
     task::JoinHandle,
 };
 
-use crate::p2p::services::template_manager::{
-    manager::{TemplateManager, TemplateMetadata},
-    TemplateManagerError,
-};
+use crate::p2p::services::template_manager::{manager::TemplateManager, TemplateManagerError};
 const LOG_TARGET: &str = "tari::validator_node::template_manager";
 
 pub struct TemplateManagerService {
@@ -44,7 +42,7 @@ pub struct TemplateManagerService {
 
 #[derive(Debug, Clone)]
 pub enum TemplateManagerRequest {
-    AddTemplates { templates: Vec<TemplateMetadata> },
+    AddTemplates { templates: Vec<CodeTemplateRegistration> },
 }
 
 pub enum TemplateManagerResponse {

@@ -23,11 +23,11 @@
 use futures::future::join_all;
 use log::*;
 use tari_common_types::types::FixedHash;
+use tari_core::transactions::transaction_components::CodeTemplateRegistration;
 use tari_dan_core::{
     storage::{chain::DbTemplate, DbFactory},
     DigitalAssetError,
 };
-use tari_dan_engine::hashing::hasher;
 
 use crate::{p2p::services::template_manager::TemplateManagerError, SqliteDbFactory};
 
@@ -40,6 +40,16 @@ pub struct TemplateMetadata {
     url: String,
     // block height in which the template was published
     height: u64,
+}
+
+impl From<CodeTemplateRegistration> for TemplateMetadata {
+    fn from(reg: CodeTemplateRegistration) -> Self {
+        TemplateMetadata {
+            address: reg.hash(),
+            url: reg.binary_url.to_string(),
+            height: 0,
+        }
+    }
 }
 
 #[allow(dead_code)]
@@ -84,8 +94,18 @@ impl TemplateManager {
         }
     }
 
-    pub async fn add_templates(&self, templates_metadata: Vec<TemplateMetadata>) -> Result<(), TemplateManagerError> {
-        info!(target: LOG_TARGET, "Adding {} new templates", templates_metadata.len());
+    pub async fn add_templates(
+        &self,
+        template_registations: Vec<CodeTemplateRegistration>,
+    ) -> Result<(), TemplateManagerError> {
+        info!(
+            target: LOG_TARGET,
+            "Adding {} new templates",
+            template_registations.len()
+        );
+
+        // extract the metadata that we need to store
+        let templates_metadata: Vec<TemplateMetadata> = template_registations.into_iter().map(Into::into).collect();
 
         // we can add each individual template in parallel
         let tasks: Vec<_> = templates_metadata.iter().map(|md| self.add_template(md)).collect();
@@ -106,10 +126,11 @@ impl TemplateManager {
         let template_wasm = self.fetch_template_wasm(&template_metadata.url).await?;
 
         // check that the code we fetched is valid (the template address is the hash)
-        let hash = hasher("template").chain(&template_wasm).result().to_vec();
-        if template_metadata.address.to_vec() != hash {
-            return Err(TemplateManagerError::TemplateCodeHashMismatch);
-        }
+        // TODO: we will need a consistent way of hashing the template fields
+        // let hash = hasher("template").chain(&template_wasm).result().to_vec();
+        // if template_metadata.address.to_vec() != hash {
+        //   return Err(TemplateManagerError::TemplateCodeHashMismatch);
+        // }
 
         // finally, store the full template (metadata + wasm binary) in the database
         self.store_template_in_db(template_metadata, template_wasm)?;
