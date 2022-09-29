@@ -107,11 +107,13 @@ impl BaseLayerEpochManager {
         self.current_epoch
     }
 
+    #[allow(dead_code)]
     pub fn is_epoch_valid(&self, epoch: Epoch) -> bool {
         let current_epoch = self.current_epoch();
         current_epoch.0 - 10 <= epoch.0 && epoch.0 <= current_epoch.0 + 10
     }
 
+    #[allow(dead_code)]
     pub fn get_committees(
         &self,
         epoch: Epoch,

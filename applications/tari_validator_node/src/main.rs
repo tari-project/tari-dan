@@ -187,6 +187,21 @@ async fn run_node(config: &ApplicationConfig) -> Result<(), ExitError> {
         node_identity.public_key(),
         node_identity.node_id()
     );
+
+    // Show the validator node identity
+    info!(target: LOG_TARGET, "🚀 Validator node started!");
+    info!(target: LOG_TARGET, "{}", node_identity);
+
+    // Run the JSON-RPC API
+    if let Some(address) = config.validator_node.json_rpc_address {
+        info!(target: LOG_TARGET, "Started JSON-RPC server on {}", address);
+        let handlers = JsonRpcHandlers::new(
+            node_identity.clone(),
+            GrpcWalletClient::new(config.validator_node.wallet_grpc_address),
+        );
+        task::spawn(run_json_rpc(address, handlers));
+    }
+
     // fs::create_dir_all(&global.peer_db_path).map_err(|err| ExitError::new(ExitCode::ConfigError, err))?;
     let mut base_node_client = GrpcBaseNodeClient::new(config.validator_node.base_node_grpc_address);
     let mut wallet_client = GrpcWalletClient::new(config.validator_node.wallet_grpc_address);
@@ -232,27 +247,3 @@ async fn run_dan_node(services: Services, shutdown_signal: ShutdownSignal) -> Re
     let node = DanNode::new(services);
     node.start(shutdown_signal).await
 }
-
-// async fn run_grpc<TServiceSpecification: ServiceSpecification + 'static>(
-//     grpc_server: ValidatorNodeGrpcServer<TServiceSpecification>,
-//     grpc_address: Multiaddr,
-//     shutdown_signal: ShutdownSignal,
-// ) -> Result<(), anyhow::Error> {
-//     println!("Starting GRPC on {}", grpc_address);
-//     info!(target: LOG_TARGET, "Starting GRPC on {}", grpc_address);
-//
-//     let grpc_address = multiaddr_to_socketaddr(&grpc_address)?;
-//
-//     Server::builder()
-//         .add_service(ValidatorNodeServer::new(grpc_server))
-//         .serve_with_shutdown(grpc_address, shutdown_signal.map(|_| ()))
-//         .await
-//         .map_err(|err| {
-//             error!(target: LOG_TARGET, "GRPC encountered an error: {}", err);
-//             err
-//         })?;
-//
-//     info!("Stopping GRPC");
-//     info!(target: LOG_TARGET, "Stopping GRPC");
-//     Ok(())
-// }
