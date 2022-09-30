@@ -20,10 +20,12 @@
 //   WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //   USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+use std::fmt::{Display, Formatter};
+
 use async_trait::async_trait;
 use tari_comms::{
     multiaddr::Multiaddr,
-    peer_manager::{IdentitySignature, Peer},
+    peer_manager::{IdentitySignature, Peer, PeerFeatures},
     types::CommsPublicKey,
 };
 
@@ -49,6 +51,17 @@ pub struct DanPeer<TAddr> {
     pub identity_signature: Option<IdentitySignature>,
 }
 
+impl DanPeer<CommsPublicKey> {
+    pub fn is_valid(&self) -> bool {
+        match self.identity_signature {
+            Some(ref identity_signature) => {
+                identity_signature.is_valid(&self.identity, PeerFeatures::COMMUNICATION_NODE, &self.addresses)
+            },
+            None => false,
+        }
+    }
+}
+
 impl From<Peer> for DanPeer<CommsPublicKey> {
     fn from(peer: Peer) -> Self {
         Self {
@@ -56,5 +69,20 @@ impl From<Peer> for DanPeer<CommsPublicKey> {
             addresses: peer.addresses.into_vec(),
             identity_signature: peer.identity_signature,
         }
+    }
+}
+
+impl<TAddr: Display> Display for DanPeer<TAddr> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "DanPeer({}, {})",
+            self.identity,
+            self.addresses
+                .iter()
+                .map(ToString::to_string)
+                .collect::<Vec<_>>()
+                .join(", ")
+        )
     }
 }

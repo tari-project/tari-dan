@@ -25,8 +25,6 @@ use tari_shutdown::ShutdownSignal;
 
 use crate::{p2p::services::networking::NetworkingService, Services};
 
-const LOG_TARGET: &str = "tari::validator_node::app";
-
 pub struct DanNode {
     services: Services,
 }
@@ -37,18 +35,10 @@ impl DanNode {
     }
 
     pub async fn start(mut self, mut shutdown: ShutdownSignal) -> Result<(), ExitError> {
-        let mut comms_events = self.services.comms.connectivity().get_event_subscription();
         self.services.networking.announce().await?;
 
         // Wait until killed
-        loop {
-            tokio::select! {
-                Ok(evt) = comms_events.recv() =>{
-                    log::info!(target: LOG_TARGET, "ℹ️  Network event: {}", evt);
-                },
-                _ = shutdown.wait() => break,
-            }
-        }
+        shutdown.wait().await;
 
         Ok(())
     }

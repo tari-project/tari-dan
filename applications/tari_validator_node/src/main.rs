@@ -46,7 +46,7 @@ use tari_common::{
     initialize_logging,
     load_configuration,
 };
-use tari_comms::{peer_manager::PeerFeatures, NodeIdentity};
+use tari_comms::NodeIdentity;
 use tari_dan_common_types::ShardId;
 use tari_dan_core::{
     services::{base_node_error::BaseNodeError, BaseNodeClient},
@@ -65,6 +65,7 @@ use crate::{
     grpc::services::{base_node_client::GrpcBaseNodeClient, wallet_client::GrpcWalletClient},
     http_ui::server::run_http_ui_server,
     json_rpc::{run_json_rpc, JsonRpcHandlers},
+    p2p::services::networking::DAN_PEER_FEATURES,
 };
 
 const LOG_TARGET: &str = "tari::validator_node::app";
@@ -177,7 +178,7 @@ async fn run_node(config: &ApplicationConfig) -> Result<(), ExitError> {
         &config.validator_node.identity_file,
         config.validator_node.public_address.as_ref(),
         true,
-        PeerFeatures::NONE,
+        DAN_PEER_FEATURES,
     )?;
     let db_factory = SqliteDbFactory::new(config.validator_node.data_dir.clone());
     let global_db = db_factory

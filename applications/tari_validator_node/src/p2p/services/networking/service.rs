@@ -26,22 +26,26 @@ use anyhow::anyhow;
 use futures::StreamExt;
 use log::*;
 use tari_comms::{
-    connectivity::ConnectivityRequester,
-    peer_manager::{NodeId, PeerFeatures},
+    connectivity::{ConnectivityEvent, ConnectivityRequester},
+    peer_manager::NodeId,
     types::CommsPublicKey,
     NodeIdentity,
+    PeerConnection,
 };
 use tari_dan_common_types::optional::Optional;
 use tari_dan_core::{
     message::{DanMessage, NetworkAnnounce},
     services::{infrastructure_services::OutboundService, DanPeer, PeerProvider},
 };
-use tokio::sync::mpsc;
+use tokio::{
+    sync::{mpsc, Semaphore},
+    task,
+};
 
 use crate::p2p::services::{
     comms_peer_provider::CommsPeerProvider,
     messaging::OutboundMessaging,
-    networking::{handle::NetworkingRequest, NetworkingError},
+    networking::{handle::NetworkingRequest, peer_sync::PeerSyncProtocol, NetworkingError},
 };
 
 const LOG_TARGET: &str = "tari::validator_node::p2p::services::networking";
@@ -53,6 +57,7 @@ pub struct Networking {
     outbound: OutboundMessaging,
     peer_provider: CommsPeerProvider,
     connectivity: ConnectivityRequester,
+    peer_sync_permit: Arc<Semaphore>,
 }
 
 impl Networking {
@@ -71,10 +76,12 @@ impl Networking {
             outbound,
             peer_provider,
             connectivity,
+            peer_sync_permit: Arc::new(Semaphore::new(1)),
         }
     }
 
     pub async fn run(mut self) {
+        let mut events = self.connectivity.get_event_subscription();
         if let Err(err) = self.dial_seed_peers().await {
             error!(target: LOG_TARGET, "🚨 Failed to dial seed peers: {}", err);
         }
@@ -83,6 +90,12 @@ impl Networking {
                 Some((_sender, announce)) = self.rx_network_announce.recv() => {
                     if let Err(e) = self.handle_announce(announce).await {
                         error!(target: LOG_TARGET, "Error handling network announce: {}", e);
+                    }
+                },
+
+                Ok(event) = events.recv() => {
+                    if let Err(e) = self.handle_connectivity_event(event).await {
+                        error!(target: LOG_TARGET, "Error handling connectivity event: {}", e);
                     }
                 },
 
@@ -109,6 +122,19 @@ impl Networking {
                 info!(target: LOG_TARGET, "Dial result: {:?}", res);
             })
             .await;
+        Ok(())
+    }
+
+    async fn handle_connectivity_event(&self, event: ConnectivityEvent) -> Result<(), NetworkingError> {
+        match event {
+            ConnectivityEvent::PeerConnected(conn) => {
+                info!(target: LOG_TARGET, "📡 Peer connected: {}", conn);
+                self.initiate_sync_protocol(conn);
+            },
+            evt => {
+                info!(target: LOG_TARGET, "ℹ️  Network event: {}", evt);
+            },
+        }
         Ok(())
     }
 
@@ -144,20 +170,16 @@ impl Networking {
 
         info!(target: LOG_TARGET, "👋 Received announce from {}", announce.identity);
 
-        if !announce.identity_signature.is_valid(
-            &announce.identity,
-            PeerFeatures::COMMUNICATION_CLIENT,
-            &announce.addresses,
-        ) {
-            // TODO: Ban sender?
-            return Err(anyhow!("Invalid identity signature"));
-        }
-
         let peer = DanPeer {
             identity: announce.identity.clone(),
             addresses: announce.addresses.clone(),
             identity_signature: Some(announce.identity_signature.clone()),
         };
+
+        if !peer.is_valid() {
+            // TODO: Ban sender?
+            return Err(anyhow!("Invalid peer"));
+        }
 
         match self.peer_provider.get_peer(&announce.identity).await.optional()? {
             Some(existing_peer) => {
@@ -188,5 +210,26 @@ impl Networking {
         }
 
         Ok(())
+    }
+
+    fn initiate_sync_protocol(&self, conn: PeerConnection) {
+        let permit = self.peer_sync_permit.clone();
+        let peer_provider = self.peer_provider.clone();
+        task::spawn(async move {
+            let _permit = match permit.acquire().await {
+                Ok(permit) => permit,
+                Err(_) => {
+                    debug!(
+                        target: LOG_TARGET,
+                        "Networking has shut down while waiting for a peer sync permit. Aborting sync."
+                    );
+                    return;
+                },
+            };
+            let protocol = PeerSyncProtocol::new(conn, peer_provider);
+            if let Err(err) = protocol.run().await {
+                error!(target: LOG_TARGET, "Peer sync protocol failed: {}", err);
+            }
+        });
     }
 }
