@@ -21,6 +21,25 @@
 // USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 table! {
+    validator_nodes (id) {
+        id -> Integer,
+        public_key -> Binary,
+        shard_key -> Binary,
+    }
+}
+
+table! {
+    committee_members (epoch, validator_node_id) {
+        epoch -> Integer,
+        validator_node_id -> Integer,
+    }
+}
+
+joinable!(committee_members -> validator_nodes (validator_node_id));
+
+allow_tables_to_appear_in_same_query!(validator_nodes, committee_members,);
+
+table! {
     contracts (id) {
         id -> Integer,
         contract_id -> Binary,
