@@ -600,7 +600,7 @@ async fn test_hs_waiter_cannot_spend_until_it_is_proven_committed() {
     todo!()
 }
 
-use tari_template_lib::{args::Arg, Hash};
+use tari_template_lib::{args, args::Arg, Hash};
 
 use crate::{
     services::PayloadProcessor,
@@ -715,10 +715,7 @@ mod hello_world {
         }
         let state_db = MemoryStateStore::load(pre_state);
         // state_db.allow_creation_of_non_existent_shards = false;
-        let state_tracker = StateTracker::new(
-            state_db,
-            Hash::try_from(ex_transaction.transaction().hash().as_slice()).unwrap(),
-        );
+        let state_tracker = StateTracker::new(state_db, Hash::from(*ex_transaction.transaction().hash()));
         let runtime_interface = RuntimeInterfaceImpl::new(state_tracker);
         // Process the instruction
         let processor = InstructionProcessor::new(runtime_interface, package.clone());

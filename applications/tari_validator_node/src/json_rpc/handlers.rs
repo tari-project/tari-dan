@@ -31,6 +31,7 @@ use axum_jrpc::{
 use serde::Serialize;
 use serde_json::json;
 use tari_comms::{multiaddr::Multiaddr, peer_manager::NodeId, types::CommsPublicKey, NodeIdentity};
+use tari_dan_common_types::serde_with;
 use tari_dan_engine::instruction::{Instruction, TransactionBuilder};
 
 use crate::{
@@ -146,7 +147,9 @@ impl JsonRpcHandlers {
 
 #[derive(Serialize, Debug)]
 struct GetIdentityResponse {
+    #[serde(with = "serde_with::hex")]
     node_id: NodeId,
+    #[serde(with = "serde_with::hex")]
     public_key: CommsPublicKey,
     public_address: Multiaddr,
 }

@@ -36,7 +36,7 @@ use serde::Deserialize;
 pub use signature::InstructionSignature;
 use tari_common_types::types::{BulletRangeProof, ComSignature, Commitment, FixedHash, PublicKey};
 use tari_crypto::hash::blake2::Blake256;
-use tari_dan_common_types::{deserialize_fixed_hash_from_hex, ObjectClaim, ObjectId, ShardId, SubstateChange};
+use tari_dan_common_types::{serde_with, ObjectClaim, ObjectId, ShardId, SubstateChange};
 use tari_mmr::MerkleProof;
 use tari_template_lib::{
     args::Arg,
@@ -107,7 +107,7 @@ pub struct BalanceProof {}
 
 #[derive(Debug, Clone, Deserialize)]
 pub struct Transaction {
-    #[serde(deserialize_with = "deserialize_fixed_hash_from_hex")]
+    #[serde(deserialize_with = "serde_with::hex::deserialize")]
     hash: [u8; 32],
     instructions: Vec<Instruction>,
     signature: InstructionSignature,
