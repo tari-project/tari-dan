@@ -142,7 +142,7 @@ impl BaseLayerScanner {
 
     // TODO: Use hashes instead of height to avoid reorg problems
     async fn process_block(&mut self, height: u64) -> Result<(), BaseLayerScannerError> {
-        let template_registrations = self.scan_for_new_templates().await?;
+        let template_registrations = self.scan_for_new_templates(height).await?;
 
         // both epoch and template tasks are I/O bound,
         // so they can be ran concurrently as they do not block CPU between them
@@ -191,16 +191,16 @@ impl BaseLayerScanner {
         Ok(())
     }
 
-    async fn scan_for_new_templates(&mut self) -> Result<Vec<CodeTemplateRegistration>, BaseLayerScannerError> {
+    async fn scan_for_new_templates(
+        &mut self,
+        height: u64,
+    ) -> Result<Vec<CodeTemplateRegistration>, BaseLayerScannerError> {
         info!(
             target: LOG_TARGET,
             "🔍 Scanning base layer (from height: {}) for new templates", self.last_scanned_height
         );
 
-        let template_registrations = self
-            .base_node_client
-            .get_template_registrations(self.last_scanned_height)
-            .await?;
+        let template_registrations = self.base_node_client.get_template_registrations(height).await?;
         info!(
             target: LOG_TARGET,
             "{} new template(s) found",
