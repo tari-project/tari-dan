@@ -24,6 +24,7 @@ use diesel::{prelude::*, Connection, RunQueryDsl, SqliteConnection};
 use tari_common_types::types::FixedHash;
 use tari_dan_core::storage::global::{ContractState, GlobalDbBackendAdapter, GlobalDbMetadataKey};
 
+use super::models::validator_node::{NewValidatorNode, ValidatorNode};
 use crate::{
     error::SqliteStorageError,
     global::models::{
@@ -49,6 +50,8 @@ impl GlobalDbBackendAdapter for SqliteGlobalDbBackendAdapter {
     type Error = SqliteStorageError;
     type Model = Contract;
     type NewModel = NewContract;
+    type NewValidatorNode = NewValidatorNode;
+    type ValidatorNode = ValidatorNode;
 
     fn create_transaction(&self) -> Result<Self::BackendTransaction, Self::Error> {
         let connection = SqliteConnection::establish(self.database_url.as_str())?;
@@ -190,6 +193,36 @@ impl GlobalDbBackendAdapter for SqliteGlobalDbBackendAdapter {
             .map_err(|source| SqliteStorageError::DieselError {
                 source,
                 operation: "get::contracts".to_string(),
+            })
+    }
+
+    fn insert_validator_nodes(&self, validator_nodes: Vec<Self::NewValidatorNode>) -> Result<(), Self::Error> {
+        use crate::global::schema::validator_nodes;
+        let tx = self.create_transaction()?;
+
+        diesel::insert_into(validator_nodes::table)
+            .values(&validator_nodes)
+            .execute(tx.connection())
+            .map_err(|source| SqliteStorageError::DieselError {
+                source,
+                operation: "insert::validator_nodes".to_string(),
+            })?;
+
+        self.commit(&tx)?;
+
+        Ok(())
+    }
+
+    fn get_validator_nodes_per_epoch(&self, epoch: u64) -> Result<Vec<Self::ValidatorNode>, Self::Error> {
+        use crate::global::schema::{validator_nodes, validator_nodes::dsl};
+        let tx = self.create_transaction()?;
+
+        dsl::validator_nodes
+            .filter(validator_nodes::epoch.eq(epoch as i32))
+            .load::<ValidatorNode>(tx.connection())
+            .map_err(|source| SqliteStorageError::DieselError {
+                source,
+                operation: "get::validator_nodes_per_epoch".to_string(),
             })
     }
 }

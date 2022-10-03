@@ -35,6 +35,8 @@ impl GlobalDbBackendAdapter for MockGlobalDbBackupAdapter {
     type Error = StorageError;
     type Model = ();
     type NewModel = ();
+    type NewValidatorNode = ();
+    type ValidatorNode = ();
 
     fn create_transaction(&self) -> Result<Self::BackendTransaction, Self::Error> {
         todo!()
@@ -69,6 +71,14 @@ impl GlobalDbBackendAdapter for MockGlobalDbBackupAdapter {
     }
 
     fn get_contracts_with_state(&self, _state: ContractState) -> Result<Vec<Self::Model>, Self::Error> {
+        todo!()
+    }
+
+    fn insert_validator_nodes(&self, _validator_nodes: Vec<Self::NewValidatorNode>) -> Result<(), Self::Error> {
+        todo!()
+    }
+
+    fn get_validator_nodes_per_epoch(&self, _epoch: u64) -> Result<Vec<Self::ValidatorNode>, Self::Error> {
         todo!()
     }
 }

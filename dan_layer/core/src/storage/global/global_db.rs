@@ -75,4 +75,22 @@ impl<TGlobalDbBackendAdapter: GlobalDbBackendAdapter> GlobalDb<TGlobalDbBackendA
             .get_contracts_with_state(state)
             .map_err(TGlobalDbBackendAdapter::Error::into)
     }
+
+    pub fn insert_validator_nodes(
+        &self,
+        validator_nodes: Vec<TGlobalDbBackendAdapter::NewValidatorNode>,
+    ) -> Result<(), StorageError> {
+        self.adapter
+            .insert_validator_nodes(validator_nodes)
+            .map_err(TGlobalDbBackendAdapter::Error::into)
+    }
+
+    pub fn get_validator_nodes_per_epoch(
+        &self,
+        epoch: u64,
+    ) -> Result<Vec<TGlobalDbBackendAdapter::ValidatorNode>, StorageError> {
+        self.adapter
+            .get_validator_nodes_per_epoch(epoch)
+            .map_err(TGlobalDbBackendAdapter::Error::into)
+    }
 }

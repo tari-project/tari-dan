@@ -27,6 +27,7 @@ pub struct ValidatorNode {
     pub id: i32,
     pub public_key: Vec<u8>,
     pub shard_key: Vec<u8>,
+    pub epoch: i32,
 }
 
 #[derive(Insertable)]
@@ -34,4 +35,5 @@ pub struct ValidatorNode {
 pub struct NewValidatorNode {
     pub public_key: Vec<u8>,
     pub shard_key: Vec<u8>,
+    pub epoch: i32,
 }

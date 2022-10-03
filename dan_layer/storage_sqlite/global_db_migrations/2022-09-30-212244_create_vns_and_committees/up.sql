@@ -24,16 +24,7 @@ create table validator_nodes (
     id integer primary key autoincrement not null,
     public_key blob not null,
     shard_key blob not null,
-);
-
-create index validator_nodes_public_key_id_index on validator_nodes (public_key);
-
-create table committee_members (
     epoch integer not null,
-    validator_node_id integer not null,
-
-    primary key (epoch, validator_node_id),
-    foreign key (validator_node_id) references validator_ndoes(id)
 );
 
-create index committee_members_epoch_index on committee_members (epoch);
+create index validator_nodes_epoch_index on validator_nodes (epoch);

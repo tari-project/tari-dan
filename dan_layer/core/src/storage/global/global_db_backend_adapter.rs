@@ -31,6 +31,8 @@ pub trait GlobalDbBackendAdapter: Send + Sync + Clone {
     type Error: Into<StorageError>;
     type Model;
     type NewModel;
+    type ValidatorNode;
+    type NewValidatorNode;
 
     fn create_transaction(&self) -> Result<Self::BackendTransaction, Self::Error>;
     fn commit(&self, tx: &Self::BackendTransaction) -> Result<(), Self::Error>;
@@ -44,6 +46,8 @@ pub trait GlobalDbBackendAdapter: Send + Sync + Clone {
     fn save_contract(&self, contract: Self::NewModel, state: ContractState) -> Result<(), Self::Error>;
     fn update_contract_state(&self, contract_id: FixedHash, state: ContractState) -> Result<(), Self::Error>;
     fn get_contracts_with_state(&self, state: ContractState) -> Result<Vec<Self::Model>, Self::Error>;
+    fn insert_validator_nodes(&self, validator_nodes: Vec<Self::NewValidatorNode>) -> Result<(), Self::Error>;
+    fn get_validator_nodes_per_epoch(&self, epoch: u64) -> Result<Vec<Self::ValidatorNode>, Self::Error>;
 }
 
 #[derive(Debug, Clone, Copy)]
