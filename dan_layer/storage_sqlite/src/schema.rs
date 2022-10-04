@@ -1,4 +1,84 @@
 table! {
+    payload_table (id) {
+        id -> Integer,
+        payload_id -> Binary,
+        payload -> Binary,
+    }
+}
+
+table! {
+    votes (id) {
+        id -> Integer,
+        tree_node_hash -> Binary,
+        shard_id -> Binary,
+        address -> Binary,
+        node_height -> Integer,
+    }
+}
+
+table! {
+    leaf_nodes (id) {
+        id -> Integer,
+        shard_id -> Binary,
+        tree_node_hash -> Binary,
+        node_height -> Integer,
+    }
+}
+
+table! {
+    last_voted_heights (id) {
+        id -> Integer,
+        shard_id -> Binary,
+        node_height -> Integer,
+    }
+}
+
+table! {
+    lock_node_and_heights (id) {
+        id -> Integer,
+        shard_id -> Binary,
+        tree_node_hash -> Binary,
+        node_height -> Integer,
+    }
+}
+
+table! {
+    nodes (id) {
+        id -> Integer,
+        tree_node_hash -> Binary,
+        hot_stuff_tree_node -> Binary,
+    }
+}
+
+table! {
+    last_executed_height (id) {
+        id -> Integer,
+        shard_id -> Binary,
+        node_height -> Integer,
+    }
+}
+
+table! {
+    payload_votes (id) {
+        id -> Integer,
+        payload_id -> Binary,
+        shard_id -> Binary,
+        node_height -> Binary,
+        hot_stuff_tree_node -> Binary,
+    }
+}
+
+table! {
+    objects (id) {
+        id -> Integer,
+        shard_id -> Binary,
+        object_id -> Binary,
+        substate_state -> Binary,
+        object_pledge -> Binary,
+    }
+}
+
+table! {
     high_qcs (id) {
         id -> Integer,
         shard_id -> Binary,

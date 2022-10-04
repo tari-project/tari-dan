@@ -107,7 +107,7 @@ impl ShardStoreTransaction<PublicKey, TariDanPayload> for SqliteShardStoreTransa
 
     fn update_high_qc(&mut self, shard: ShardId, qc: QuorumCertificate) -> Result<(), Self::Error> {
         // update all others for this shard to highest == false
-        use crate::schema::high_qcs::{height, is_highest, shard_id};
+        use crate::schema::high_qcs::{height, is_highest};
         let shard = Vec::from(shard.0);
         let num_existing_qcs: i64 = high_qcs
             .filter(shard_id.eq(&shard))
@@ -148,13 +148,13 @@ impl ShardStoreTransaction<PublicKey, TariDanPayload> for SqliteShardStoreTransa
         todo!()
     }
 
-    fn get_leaf_node(&self, _shard: ShardId) -> (TreeNodeHash, NodeHeight) {
+    fn get_leaf_node(&self, shard: ShardId) -> (TreeNodeHash, NodeHeight) {
         todo!()
     }
 
     fn update_leaf_node(
         &mut self,
-        _shard: tari_dan_common_types::ShardId,
+        _<shard: tari_dan_common_types::ShardId,
         _node: TreeNodeHash,
         _height: NodeHeight,
     ) -> Result<(), Self::Error> {
