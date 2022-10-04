@@ -20,7 +20,7 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use std::{collections::HashMap, convert::TryFrom, time::Duration};
+use std::{collections::HashMap, time::Duration};
 
 use lazy_static::lazy_static;
 use tari_common_types::types::PrivateKey;
@@ -600,7 +600,7 @@ async fn test_hs_waiter_cannot_spend_until_it_is_proven_committed() {
     todo!()
 }
 
-use tari_template_lib::{args, args::Arg, Hash};
+use tari_template_lib::{args::Arg, Hash};
 
 use crate::{
     services::PayloadProcessor,

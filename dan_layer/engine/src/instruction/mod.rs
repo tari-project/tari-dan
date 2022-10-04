@@ -32,11 +32,10 @@ mod signature;
 use std::collections::HashMap;
 
 use digest::{Digest, FixedOutput};
-use serde::Deserialize;
 pub use signature::InstructionSignature;
 use tari_common_types::types::{BulletRangeProof, ComSignature, Commitment, FixedHash, PublicKey};
 use tari_crypto::hash::blake2::Blake256;
-use tari_dan_common_types::{serde_with, ObjectClaim, ObjectId, ShardId, SubstateChange};
+use tari_dan_common_types::{ObjectClaim, ObjectId, ShardId, SubstateChange};
 use tari_mmr::MerkleProof;
 use tari_template_lib::{
     args::Arg,
@@ -44,7 +43,7 @@ use tari_template_lib::{
 };
 use tari_utilities::ByteArray;
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone)]
 pub enum Instruction {
     CallFunction {
         package_address: PackageAddress,
@@ -105,9 +104,8 @@ pub struct StealthAddress {
 #[derive(Debug, Clone)]
 pub struct BalanceProof {}
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone)]
 pub struct Transaction {
-    #[serde(deserialize_with = "serde_with::hex::deserialize")]
     hash: [u8; 32],
     instructions: Vec<Instruction>,
     signature: InstructionSignature,
@@ -117,7 +115,7 @@ pub struct Transaction {
     meta: Option<TransactionMeta>,
 }
 
-#[derive(Debug, Clone, Default, Deserialize)]
+#[derive(Debug, Clone, Default)]
 pub struct TransactionMeta {
     involved_objects: HashMap<ShardId, Vec<(ObjectId, SubstateChange, ObjectClaim)>>,
 }
