@@ -20,7 +20,7 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use std::collections::HashMap;
+use std::convert::TryInto;
 
 use tari_comms::types::CommsPublicKey;
 use tari_dan_common_types::ShardId;
@@ -30,7 +30,9 @@ use tari_dan_core::{
         epoch_manager::{EpochManagerError, ShardCommitteeAllocation},
         BaseNodeClient,
     },
+    storage::global::GlobalDb,
 };
+use tari_dan_storage_sqlite::global::{models::validator_node::NewValidatorNode, SqliteGlobalDbBackendAdapter};
 
 use crate::grpc::services::base_node_client::GrpcBaseNodeClient;
 
@@ -38,16 +40,20 @@ use crate::grpc::services::base_node_client::GrpcBaseNodeClient;
 
 #[derive(Clone)]
 pub struct BaseLayerEpochManager {
+    pub global_db: GlobalDb<SqliteGlobalDbBackendAdapter>,
     pub base_node_client: GrpcBaseNodeClient,
     current_epoch: Epoch,
-    validators_per_epoch: HashMap<u64, Vec<ValidatorNode>>,
 }
 impl BaseLayerEpochManager {
-    pub fn new(base_node_client: GrpcBaseNodeClient, _id: CommsPublicKey) -> Self {
+    pub fn new(
+        global_db: GlobalDb<SqliteGlobalDbBackendAdapter>,
+        base_node_client: GrpcBaseNodeClient,
+        _id: CommsPublicKey,
+    ) -> Self {
         Self {
+            global_db,
             base_node_client,
             current_epoch: Epoch(0),
-            validators_per_epoch: HashMap::new(),
         }
     }
 
@@ -61,7 +67,14 @@ impl BaseLayerEpochManager {
         let mut base_node_client = self.base_node_client.clone();
         let mut vns = base_node_client.get_validator_nodes(epoch.0 * 10).await?;
         vns.sort_by(|a, b| a.shard_key.partial_cmp(&b.shard_key).unwrap());
-        self.validators_per_epoch.insert(epoch.0, vns.clone());
+
+        // insert the new VNs for this epoch in database
+        let epoch_height = epoch.0;
+        let new_vns = vns
+            .into_iter()
+            .map(|v| NewValidatorNode::new(epoch_height, v))
+            .collect();
+        self.global_db.insert_validator_nodes(new_vns)?;
         // let shard_key;
         // match base_node_client.clone().get_shard_key(epoch.0 * 10, &self.id).await {
         //     Ok(Some(key)) => shard_key = key,
@@ -131,10 +144,17 @@ impl BaseLayerEpochManager {
     }
 
     pub fn get_committee(&self, epoch: Epoch, shard: ShardId) -> Result<Committee<CommsPublicKey>, EpochManagerError> {
-        let vns = self
-            .validators_per_epoch
-            .get(&epoch.0)
-            .ok_or(EpochManagerError::NoEpochFound(epoch))?;
+        // retrieve the validator nodes for this epoch from database
+        let db_vns = self.global_db.get_validator_nodes_per_epoch(epoch.0)?;
+        if db_vns.is_empty() {
+            return Err(EpochManagerError::NoEpochFound(epoch));
+        }
+        let vns: Vec<ValidatorNode> = db_vns
+            .into_iter()
+            .map(TryInto::try_into)
+            .collect::<Result<Vec<_>, _>>()
+            .unwrap();
+
         let half_committee_size = 4; // total committee = 7
         if vns.len() < half_committee_size * 2 {
             return Ok(Committee::new(vns.iter().map(|v| v.public_key.clone()).collect()));

@@ -21,6 +21,8 @@
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 use tari_comms::types::CommsPublicKey;
+use tari_dan_core::storage::global::GlobalDb;
+use tari_dan_storage_sqlite::global::SqliteGlobalDbBackendAdapter;
 use tari_shutdown::ShutdownSignal;
 use tokio::sync::mpsc;
 
@@ -29,9 +31,14 @@ use crate::{
     p2p::services::epoch_manager::{epoch_manager_service::EpochManagerService, handle::EpochManagerHandle},
 };
 
-pub fn spawn(base_node_client: GrpcBaseNodeClient, id: CommsPublicKey, shutdown: ShutdownSignal) -> EpochManagerHandle {
+pub fn spawn(
+    global_db: GlobalDb<SqliteGlobalDbBackendAdapter>,
+    base_node_client: GrpcBaseNodeClient,
+    id: CommsPublicKey,
+    shutdown: ShutdownSignal,
+) -> EpochManagerHandle {
     let (tx_request, rx_request) = mpsc::channel(10);
     let handle = EpochManagerHandle::new(tx_request);
-    EpochManagerService::spawn(id, rx_request, shutdown, base_node_client);
+    EpochManagerService::spawn(id, rx_request, shutdown, global_db, base_node_client);
     handle
 }

@@ -102,6 +102,7 @@ pub async fn spawn_services(
 
     // Epoch manager
     let epoch_manager_handle = epoch_manager::spawn(
+        global_db.clone(),
         base_node_client.clone(),
         node_identity.public_key().clone(),
         shutdown.clone(),

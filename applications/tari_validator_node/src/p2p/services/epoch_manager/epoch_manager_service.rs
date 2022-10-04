@@ -25,7 +25,9 @@ use tari_dan_common_types::ShardId;
 use tari_dan_core::{
     models::{Committee, Epoch},
     services::epoch_manager::{EpochManagerError, ShardCommitteeAllocation},
+    storage::global::GlobalDb,
 };
+use tari_dan_storage_sqlite::global::SqliteGlobalDbBackendAdapter;
 use tari_shutdown::ShutdownSignal;
 use tokio::{
     sync::{mpsc::Receiver, oneshot},
@@ -97,12 +99,13 @@ impl EpochManagerService {
             oneshot::Sender<Result<EpochManagerResponse, EpochManagerError>>,
         )>,
         shutdown: ShutdownSignal,
+        global_db: GlobalDb<SqliteGlobalDbBackendAdapter>,
         base_node_client: GrpcBaseNodeClient,
     ) -> JoinHandle<Result<(), EpochManagerError>> {
         tokio::spawn(async move {
             EpochManagerService {
                 rx_request,
-                inner: BaseLayerEpochManager::new(base_node_client, id),
+                inner: BaseLayerEpochManager::new(global_db, base_node_client, id),
             }
             .run(shutdown)
             .await

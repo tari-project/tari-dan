@@ -20,7 +20,13 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use crate::global::schema::*;
+use std::convert::TryFrom;
+
+use tari_common_types::types::PublicKey;
+use tari_dan_common_types::ShardId;
+use tari_utilities::ByteArray;
+
+use crate::{error::SqliteStorageError, global::schema::*};
 
 #[derive(Queryable, Identifiable)]
 pub struct ValidatorNode {
@@ -30,10 +36,32 @@ pub struct ValidatorNode {
     pub epoch: i32,
 }
 
+impl TryFrom<ValidatorNode> for tari_dan_core::models::ValidatorNode {
+    type Error = SqliteStorageError;
+
+    fn try_from(vn: ValidatorNode) -> Result<Self, Self::Error> {
+        Ok(Self {
+            shard_key: ShardId::from_bytes(&vn.shard_key)?,
+            public_key: PublicKey::from_bytes(&vn.public_key)
+                .map_err(|e| SqliteStorageError::ConversionError { reason: e.to_string() })?,
+        })
+    }
+}
+
 #[derive(Insertable)]
 #[table_name = "validator_nodes"]
 pub struct NewValidatorNode {
     pub public_key: Vec<u8>,
     pub shard_key: Vec<u8>,
     pub epoch: i32,
+}
+
+impl NewValidatorNode {
+    pub fn new(epoch: u64, validator_node: tari_dan_core::models::ValidatorNode) -> Self {
+        Self {
+            public_key: validator_node.public_key.to_vec(),
+            shard_key: validator_node.shard_key.as_bytes().to_vec(),
+            epoch: epoch as i32,
+        }
+    }
 }
