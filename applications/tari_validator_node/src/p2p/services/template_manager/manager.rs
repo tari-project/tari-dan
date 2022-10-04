@@ -108,7 +108,7 @@ impl TemplateManager {
         let templates_metadata: Vec<TemplateMetadata> = template_registations.into_iter().map(Into::into).collect();
 
         // we can add each individual template in parallel
-        let tasks: Vec<_> = templates_metadata.iter().map(|md| self.add_template(md)).collect();
+        let tasks = templates_metadata.iter().map(|md| self.add_template(md));
 
         // wait for all templates to be stores
         let results = join_all(tasks).await;
@@ -127,8 +127,8 @@ impl TemplateManager {
 
         // check that the code we fetched is valid (the template address is the hash)
         // TODO: we will need a consistent way of hashing the template fields
-        // let hash = hasher("template").chain(&template_wasm).result().to_vec();
-        // if template_metadata.address.to_vec() != hash {
+        // let hash = hasher("template").chain(&template_wasm).result();
+        // if template_metadata.address.as_slice() != hash.as_slice() {
         //   return Err(TemplateManagerError::TemplateCodeHashMismatch);
         // }
 
