@@ -33,7 +33,6 @@ mod base_layer_output;
 mod committee;
 pub mod domain_events;
 mod error;
-// mod hashing;
 mod hot_stuff_message;
 mod hot_stuff_tree_node;
 mod node;

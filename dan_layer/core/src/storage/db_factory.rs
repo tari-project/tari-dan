@@ -34,16 +34,6 @@ pub trait DbFactory: Sync + Send + 'static {
     type StateDbBackendAdapter: StateDbBackendAdapter;
     type GlobalDbBackendAdapter: GlobalDbBackendAdapter;
 
-    fn get_chain_db(
-        &self,
-        contract_id: &FixedHash,
-    ) -> Result<Option<ChainDb<Self::ChainDbBackendAdapter>>, StorageError>;
-
-    fn get_or_create_chain_db(
-        &self,
-        contract_id: &FixedHash,
-    ) -> Result<ChainDb<Self::ChainDbBackendAdapter>, StorageError>;
-
     fn get_state_db(
         &self,
         contract_id: &FixedHash,

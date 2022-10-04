@@ -24,10 +24,7 @@ use digest::Digest;
 use tari_crypto::hash::blake2::Blake256;
 use tari_dan_common_types::{PayloadId, ShardId};
 
-use crate::{
-    models::{Epoch, HotStuffMessageType, NodeHeight, ObjectPledge, TreeNodeHash, ValidatorSignature, ViewId},
-    storage::chain::DbQc,
-};
+use crate::models::{Epoch, HotStuffMessageType, NodeHeight, ObjectPledge, TreeNodeHash, ValidatorSignature, ViewId};
 
 #[derive(Debug, Clone, Copy)]
 pub enum QuorumDecision {
@@ -176,17 +173,5 @@ impl QuorumCertificate {
 
     pub fn signatures(&self) -> &[ValidatorSignature] {
         &self.signatures
-    }
-}
-
-impl From<DbQc> for QuorumCertificate {
-    fn from(_rec: DbQc) -> Self {
-        // Self {
-        //     message_type: rec.message_type,
-        //     node_hash: rec.node_hash,
-        //     view_number: rec.view_number,
-        //     signatures: rec.signature,
-        // }
-        todo!()
     }
 }

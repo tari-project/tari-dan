@@ -23,7 +23,6 @@
 mod base_layer_scanner;
 mod bootstrap;
 mod cli;
-mod cmd_args;
 mod comms;
 mod config;
 mod dan_node;

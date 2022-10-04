@@ -23,7 +23,6 @@
 mod digital_assets_error;
 pub use digital_assets_error::DigitalAssetError;
 
-// mod helpers;
 pub mod message;
 pub mod models;
 pub mod services;

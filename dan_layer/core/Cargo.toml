@@ -25,7 +25,6 @@ tari_dan_engine = { path = "../engine"}
 tari_template_lib = { path = "../template_lib" }
 
 anyhow = "1.0.53"
-async-recursion = "1.0.0"
 async-trait = "0.1.50"
 blake2 = "0.9.2"
 clap = "3.1.8"
@@ -35,7 +34,6 @@ lmdb-zero = "0.4.4"
 log = { version = "0.4.8", features = ["std"] }
 num-derive = "0.3.3"
 num-traits = "0.2.15"
-primitive-types = "0.11.1"
 prost = "0.9"
 prost-types = "0.9"
 rand = "0.8.4"
