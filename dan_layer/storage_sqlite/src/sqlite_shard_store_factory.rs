@@ -154,7 +154,7 @@ impl ShardStoreTransaction<PublicKey, TariDanPayload> for SqliteShardStoreTransa
 
     fn update_leaf_node(
         &mut self,
-        _<shard: tari_dan_common_types::ShardId,
+        _shard: tari_dan_common_types::ShardId,
         _node: TreeNodeHash,
         _height: NodeHeight,
     ) -> Result<(), Self::Error> {
