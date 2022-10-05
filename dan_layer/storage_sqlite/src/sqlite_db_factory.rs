@@ -24,7 +24,6 @@ use std::{fs::create_dir_all, path::PathBuf};
 
 use diesel::{Connection, ConnectionError, SqliteConnection};
 use diesel_migrations::embed_migrations;
-use log::*;
 use tari_common_types::types::FixedHash;
 use tari_dan_core::storage::{chain::ChainDb, global::GlobalDb, DbFactory, StorageError};
 use tari_dan_engine::state::StateDb;
@@ -45,14 +44,6 @@ pub struct SqliteDbFactory {
 impl SqliteDbFactory {
     pub fn new(data_dir: PathBuf) -> Self {
         Self { data_dir }
-        // let database_url = config
-        //     .data_dir
-        //     .join("asset_data")
-        //     .into_os_string()
-        //     .into_string()
-        //     .unwrap();
-        //
-        // Self { database_url }
     }
 
     fn database_url_for(&self, contract_id: &FixedHash) -> String {
@@ -86,37 +77,6 @@ impl DbFactory for SqliteDbFactory {
     type ChainDbBackendAdapter = SqliteChainBackendAdapter;
     type GlobalDbBackendAdapter = SqliteGlobalDbBackendAdapter;
     type StateDbBackendAdapter = SqliteStateDbBackendAdapter;
-
-    fn get_chain_db(
-        &self,
-        contract_id: &FixedHash,
-    ) -> Result<Option<ChainDb<Self::ChainDbBackendAdapter>>, StorageError> {
-        let database_url = self.database_url_for(contract_id);
-        match self.try_connect(&database_url)? {
-            Some(_) => Ok(Some(ChainDb::new(SqliteChainBackendAdapter::new(database_url)))),
-            None => Ok(None),
-        }
-    }
-
-    fn get_or_create_chain_db(
-        &self,
-        contract_id: &FixedHash,
-    ) -> Result<ChainDb<Self::ChainDbBackendAdapter>, StorageError> {
-        let database_url = self.database_url_for(contract_id);
-        debug!("Loading chain database from {}", database_url);
-        create_dir_all(&PathBuf::from(&database_url).parent().unwrap())
-            .map_err(|_| StorageError::FileSystemPathDoesNotExist)?;
-        let connection = SqliteConnection::establish(database_url.as_str()).map_err(SqliteStorageError::from)?;
-        connection
-            .execute("PRAGMA foreign_keys = ON;")
-            .map_err(|source| SqliteStorageError::DieselError {
-                source,
-                operation: "set pragma".to_string(),
-            })?;
-        embed_migrations!("./migrations");
-        embedded_migrations::run(&connection).map_err(SqliteStorageError::from)?;
-        Ok(ChainDb::new(SqliteChainBackendAdapter::new(database_url)))
-    }
 
     fn get_state_db(
         &self,
