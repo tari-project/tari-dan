@@ -36,6 +36,17 @@ pub enum DanMessage<TPayload, TAddr> {
     NetworkAnnounce(NetworkAnnounce<TAddr>),
 }
 
+impl<TPayload, TAddr> DanMessage<TPayload, TAddr> {
+    pub fn as_type_str(&self) -> &'static str {
+        match self {
+            Self::HotStuffMessage(_) => "HotStuffMessage",
+            Self::VoteMessage(_) => "VoteMessage",
+            Self::NewTransaction(_) => "NewTransaction",
+            Self::NetworkAnnounce(_) => "NetworkAnnounce",
+        }
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct NetworkAnnounce<TAddr> {
     pub identity: TAddr,

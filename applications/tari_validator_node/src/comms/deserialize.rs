@@ -34,6 +34,8 @@ use tower::{Service, ServiceExt};
 
 use crate::p2p::proto;
 
+const LOG_TARGET: &str = "tari::validator_node::comms::messaging";
+
 #[derive(Debug, Clone)]
 pub struct DanDeserialize {
     peer_manager: Arc<PeerManager>,
@@ -92,9 +94,16 @@ where
         let next_service = self.next_service.clone();
         let peer_manager = self.peer_manager.clone();
         Box::pin(async move {
+            let body_len = body.len();
             let decoded_msg = proto::validator_node::DanMessage::decode(&mut body)?;
             let msg = DanMessage::try_from(decoded_msg)?;
-            log::info!(target: "tari::validator_node::comms::deserialize", "Received message {:?}", msg);
+            log::info!(
+                target: LOG_TARGET,
+                "📨 Rx: {} ({} bytes) from {}",
+                msg.as_type_str(),
+                body_len,
+                source_peer
+            );
             let peer = peer_manager
                 .find_by_node_id(&source_peer)
                 .await?

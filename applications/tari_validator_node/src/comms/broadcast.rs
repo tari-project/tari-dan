@@ -39,6 +39,8 @@ use tower::{Service, ServiceExt};
 
 use crate::{comms::destination::Destination, p2p::proto};
 
+const LOG_TARGET: &str = "tari::validator_node::comms::messaging";
+
 #[derive(Debug, Clone)]
 pub struct DanBroadcast {
     connectivity: ConnectivityRequester,
@@ -92,8 +94,16 @@ where
         let mut connectivity = self.connectivity.clone();
 
         Box::pin(async move {
+            let type_str = msg.as_type_str();
             let bytes = encode_message(&proto::validator_node::DanMessage::from(msg));
 
+            log::info!(
+                target: LOG_TARGET,
+                "📨 Tx: {} ({} bytes) to {}",
+                type_str,
+                bytes.len(),
+                dest
+            );
             let svc = next_service.ready().await?;
             match dest {
                 Destination::Peer(pk) => {

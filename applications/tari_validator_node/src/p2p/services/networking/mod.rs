@@ -23,7 +23,12 @@
 use std::sync::Arc;
 
 use async_trait::async_trait;
-use tari_comms::{connectivity::ConnectivityRequester, types::CommsPublicKey, NodeIdentity};
+use tari_comms::{
+    connectivity::ConnectivityRequester,
+    peer_manager::PeerFeatures,
+    types::CommsPublicKey,
+    NodeIdentity,
+};
 use tari_dan_core::message::NetworkAnnounce;
 use tokio::sync::mpsc;
 
@@ -36,7 +41,11 @@ mod error;
 pub use error::NetworkingError;
 
 mod handle;
+mod peer_sync;
+
 pub use handle::NetworkingHandle;
+
+pub const DAN_PEER_FEATURES: PeerFeatures = PeerFeatures::COMMUNICATION_NODE;
 
 pub fn spawn(
     rx_network_announce: mpsc::Receiver<(CommsPublicKey, NetworkAnnounce<CommsPublicKey>)>,
