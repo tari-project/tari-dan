@@ -20,10 +20,11 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+use serde::Serialize;
 use tari_comms::types::CommsPublicKey;
 use tari_dan_common_types::ShardId;
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize)]
 pub struct ValidatorNode {
     pub shard_key: ShardId,
     pub public_key: CommsPublicKey,

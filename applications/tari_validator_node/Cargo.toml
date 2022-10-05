@@ -55,6 +55,7 @@ tokio-stream = { version = "0.1.7", features = ["sync"] }
 tonic = "0.6.2"
 tower = "0.4"
 tower-layer = "0.3"
+tower-http = { version = "0.3.0", features = ["cors"] }
 
 [dev-dependencies]
 tari_test_utils = { git = "https://github.com/tari-project/tari.git", branch = "feature-dan", package = "tari_test_utils" }

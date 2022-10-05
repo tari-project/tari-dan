@@ -130,29 +130,18 @@ pub async fn spawn_services(
     base_layer_scanner::spawn(
         config.validator_node.clone(),
         global_db.clone(),
-        base_node_client,
+        base_node_client.clone(),
         epoch_manager_handle.clone(),
         template_manager,
         shutdown.clone(),
     );
 
-    // Run the JSON-RPC API
-    if let Some(address) = config.validator_node.json_rpc_address {
-        info!(target: LOG_TARGET, "Started JSON-RPC server on {}", address);
-        let handlers = JsonRpcHandlers::new(
-            node_identity.clone(),
-            GrpcWalletClient::new(config.validator_node.wallet_grpc_address),
-            mempool.clone(),
-        );
-        task::spawn(run_json_rpc(address, handlers));
-    }
-
     // Consensus
     hotstuff::spawn(
-        node_identity,
+        node_identity.clone(),
         outbound_messaging,
-        epoch_manager_handle,
-        mempool,
+        epoch_manager_handle.clone(),
+        mempool.clone(),
         rx_consensus_message,
         rx_vote_message,
         shutdown,
@@ -163,6 +152,19 @@ pub async fn spawn_services(
         .await
         .map_err(|e| ExitError::new(ExitCode::ConfigError, format!("Could not spawn using transport: {}", e)))?;
 
+    // Run the JSON-RPC API
+    if let Some(address) = config.validator_node.json_rpc_address {
+        info!(target: LOG_TARGET, "Started JSON-RPC server on {}", address);
+        let handlers = JsonRpcHandlers::new(
+            node_identity,
+            GrpcWalletClient::new(config.validator_node.wallet_grpc_address),
+            mempool,
+            epoch_manager_handle,
+            comms.clone(),
+            base_node_client,
+        );
+        task::spawn(run_json_rpc(address, handlers));
+    }
     // Save final node identity after comms has initialized. This is required because the public_address can be
     // changed by comms during initialization when using tor.
     save_identities(config, &comms)?;

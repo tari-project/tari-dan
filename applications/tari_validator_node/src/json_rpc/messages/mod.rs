@@ -24,7 +24,8 @@
 use serde::Deserialize;
 use tari_common_types::types::PublicKey;
 use tari_crypto::ristretto::RistrettoSchnorr;
-use tari_dan_common_types::serde_with;
+use tari_dan_common_types::{serde_with, ShardId};
+use tari_dan_core::models::Epoch;
 use tari_template_lib::args::Arg;
 
 #[derive(Deserialize, Debug, Clone)]
@@ -42,4 +43,10 @@ pub struct InstructionRequest {
     pub template: String,
     pub function: String,
     pub args: Vec<Arg>,
+}
+
+#[derive(Deserialize, Debug, Clone)]
+pub struct GetCommitteeRequest {
+    pub epoch: Epoch,
+    pub shard_id: ShardId,
 }

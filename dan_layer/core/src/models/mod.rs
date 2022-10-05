@@ -55,6 +55,7 @@ pub use hot_stuff_tree_node::HotStuffTreeNode;
 pub use node::Node;
 pub use payload::Payload;
 pub use quorum_certificate::{QuorumCertificate, QuorumDecision};
+use serde::Deserialize;
 pub use sidechain_metadata::SidechainMetadata;
 use tari_dan_common_types::{ObjectId, PayloadId, SubstateState};
 pub use tari_dan_payload::{CheckpointData, TariDanPayload};
@@ -86,7 +87,7 @@ impl PartialOrd for NodeHeight {
     }
 }
 
-#[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
+#[derive(Copy, Clone, Debug, Deserialize, PartialEq, Eq, Hash)]
 pub struct Epoch(pub u64);
 
 impl Epoch {

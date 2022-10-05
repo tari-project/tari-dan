@@ -20,23 +20,26 @@
 //   WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //   USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+use std::sync::{Arc, Mutex};
+
 use log::*;
 use tari_dan_common_types::ShardId;
 use tari_dan_core::{
     message::DanMessage,
-    models::{Payload, TariDanPayload, TreeNodeHash},
+    models::{Payload, TariDanPayload},
     services::infrastructure_services::OutboundService,
 };
 use tari_dan_engine::instruction::Transaction;
 use tokio::sync::{broadcast, mpsc};
 
+use super::handle::TransactionVecMutex;
 use crate::p2p::services::messaging::OutboundMessaging;
 
 const LOG_TARGET: &str = "dan::mempool::service";
 
 pub struct MempoolService {
     // TODO: Should be a HashSet
-    transactions: Vec<(Transaction, Option<TreeNodeHash>)>,
+    transactions: TransactionVecMutex,
     new_transactions: mpsc::Receiver<Transaction>,
     outbound: OutboundMessaging,
     tx_valid_transactions: broadcast::Sender<(Transaction, ShardId)>,
@@ -49,7 +52,7 @@ impl MempoolService {
         tx_valid_transactions: broadcast::Sender<(Transaction, ShardId)>,
     ) -> Self {
         Self {
-            transactions: Vec::new(),
+            transactions: Arc::new(Mutex::new(Vec::new())),
             new_transactions,
             outbound,
             tx_valid_transactions,
@@ -80,10 +83,14 @@ impl MempoolService {
                 // TODO: handle, if channel is closed I would say we can ignore it since we're probably shutting down
                 .unwrap();
         }
-        self.transactions.push((transaction.clone(), None));
+        self.transactions.lock().unwrap().push((transaction.clone(), None));
         let msg = DanMessage::NewTransaction(transaction);
         if let Err(err) = self.outbound.flood(Default::default(), msg).await {
             error!(target: LOG_TARGET, "Failed to broadcast new transaction: {}", err);
         }
+    }
+
+    pub fn get_transaction(&self) -> TransactionVecMutex {
+        self.transactions.clone()
     }
 }
