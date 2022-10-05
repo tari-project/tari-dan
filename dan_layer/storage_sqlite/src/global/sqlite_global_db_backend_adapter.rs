@@ -200,14 +200,16 @@ impl GlobalDbBackendAdapter for SqliteGlobalDbBackendAdapter {
         use crate::global::schema::validator_nodes;
         let tx = self.create_transaction()?;
 
-        diesel::insert_into(validator_nodes::table)
-            .values(&validator_nodes)
-            .execute(tx.connection())
-            .map_err(|source| SqliteStorageError::DieselError {
-                source,
-                operation: "insert::validator_nodes".to_string(),
-            })?;
-
+        // Sqlite does not support batch transactions, so we need to insert each VN in a separated query
+        for vn in validator_nodes {
+            diesel::insert_into(validator_nodes::table)
+                .values(&vn)
+                .execute(tx.connection())
+                .map_err(|source| SqliteStorageError::DieselError {
+                    source,
+                    operation: "insert::validator_nodes".to_string(),
+                })?;
+        }
         self.commit(&tx)?;
 
         Ok(())
