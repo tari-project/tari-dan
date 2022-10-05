@@ -38,7 +38,11 @@ pub fn spawn(
 ) -> MempoolHandle {
     let (tx_valid_transactions, rx_valid_transactions) = broadcast::channel(100);
     let mempool = MempoolService::new(new_transactions, outbound, tx_valid_transactions);
-    let handle = MempoolHandle::new(rx_valid_transactions, new_transactions_sender);
+    let handle = MempoolHandle::new(
+        rx_valid_transactions,
+        new_transactions_sender,
+        mempool.get_transaction(),
+    );
 
     task::spawn(mempool.run());
 

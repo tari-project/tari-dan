@@ -20,14 +20,19 @@
 //   WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //   USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+use std::sync::{Arc, Mutex};
+
 use tari_dan_common_types::ShardId;
+use tari_dan_core::models::TreeNodeHash;
 use tari_dan_engine::instruction::Transaction;
 use tokio::sync::{broadcast, broadcast::error::RecvError, mpsc, mpsc::error::SendError};
 
+pub type TransactionVecMutex = Arc<Mutex<Vec<(Transaction, Option<TreeNodeHash>)>>>;
 #[derive(Debug)]
 pub struct MempoolHandle {
     rx_valid_transactions: broadcast::Receiver<(Transaction, ShardId)>,
     new_transactions: mpsc::Sender<Transaction>,
+    transactions: TransactionVecMutex,
 }
 
 impl Clone for MempoolHandle {
@@ -35,6 +40,7 @@ impl Clone for MempoolHandle {
         MempoolHandle {
             rx_valid_transactions: self.rx_valid_transactions.resubscribe(),
             new_transactions: self.new_transactions.clone(),
+            transactions: self.transactions.clone(),
         }
     }
 }
@@ -43,10 +49,12 @@ impl MempoolHandle {
     pub(super) fn new(
         rx_valid_transactions: broadcast::Receiver<(Transaction, ShardId)>,
         new_transactions: mpsc::Sender<Transaction>,
+        transactions: TransactionVecMutex,
     ) -> Self {
         Self {
             rx_valid_transactions,
             new_transactions,
+            transactions,
         }
     }
 
@@ -56,5 +64,9 @@ impl MempoolHandle {
 
     pub async fn next_valid_transaction(&mut self) -> Result<(Transaction, ShardId), RecvError> {
         self.rx_valid_transactions.recv().await
+    }
+
+    pub fn get_mempool_size(&self) -> usize {
+        self.transactions.lock().unwrap().len()
     }
 }

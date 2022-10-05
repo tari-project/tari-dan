@@ -29,6 +29,7 @@ use axum::{
 };
 use axum_jrpc::{JrpcResult, JsonRpcExtractor};
 use log::*;
+use tower_http::cors::CorsLayer;
 
 use super::handlers::JsonRpcHandlers;
 
@@ -39,7 +40,8 @@ pub async fn run_json_rpc(address: SocketAddr, handlers: JsonRpcHandlers) -> Res
     let router = Router::new()
         .route("/", post(handler))
         .route("/json_rpc", post(handler))
-        .layer(Extension(Arc::new(handlers)));
+        .layer(Extension(Arc::new(handlers)))
+        .layer(CorsLayer::permissive());
 
     info!(target: LOG_TARGET, "🌐 RPC started at {}", address);
     axum::Server::bind(&address)
@@ -64,6 +66,12 @@ async fn handler(
         "submit_transaction" => handlers.submit_transaction(value).await,
         "register_validator_node" => handlers.register_validator_node(value).await,
         "register_template" => handlers.register_template(value).await,
+        "get_connections" => handlers.get_connections(value).await,
+        "get_mempool_stats" => handlers.get_mempool_stats(value).await,
+        "get_epoch_manager_stats" => handlers.get_epoch_manager_stats(value).await,
+        "get_comms_stats" => handlers.get_comms_stats(value).await,
+        "get_shard_key" => handlers.get_shard_key(value).await,
+        "get_committee" => handlers.get_committee(value).await,
         method => Ok(value.method_not_found(method)),
     }
 }

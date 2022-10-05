@@ -43,6 +43,6 @@ pub async fn run_http_ui_server(address: SocketAddr) -> Result<(), anyhow::Error
     Ok(())
 }
 
-async fn index() -> &'static str {
-    "Hello, World!"
+async fn index() -> axum::response::Html<&'static str> {
+    include_str!("gui.html").into()
 }

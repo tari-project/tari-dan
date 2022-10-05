@@ -31,14 +31,19 @@ use axum_jrpc::{
 use serde::Serialize;
 use serde_json::json;
 use tari_common_types::types::FixedHash;
-use tari_comms::{multiaddr::Multiaddr, peer_manager::NodeId, types::CommsPublicKey, NodeIdentity};
+use tari_comms::{multiaddr::Multiaddr, peer_manager::NodeId, types::CommsPublicKey, CommsNode, NodeIdentity};
 use tari_dan_common_types::serde_with;
+use tari_dan_core::services::{epoch_manager::EpochManager, BaseNodeClient};
 use tari_dan_engine::instruction::{Instruction, TransactionBuilder};
 
+use super::messages::GetCommitteeRequest;
 use crate::{
-    grpc::services::wallet_client::{GrpcWalletClient, TemplateRegistrationRequest},
+    grpc::services::{
+        base_node_client::GrpcBaseNodeClient,
+        wallet_client::{GrpcWalletClient, TemplateRegistrationRequest},
+    },
     json_rpc::{jrpc_errors::internal_error, messages::SubmitTransactionRequest},
-    p2p::services::mempool::MempoolHandle,
+    p2p::services::{epoch_manager::handle::EpochManagerHandle, mempool::MempoolHandle},
 };
 
 const _LOG_TARGET: &str = "tari::validator_node::json_rpc::handlers";
@@ -47,19 +52,36 @@ pub struct JsonRpcHandlers {
     node_identity: Arc<NodeIdentity>,
     wallet_grpc_client: GrpcWalletClient,
     mempool: MempoolHandle,
+    epoch_manager: EpochManagerHandle,
+    comms: CommsNode,
+    base_node_client: GrpcBaseNodeClient,
 }
 
 impl JsonRpcHandlers {
-    pub fn new(node_identity: Arc<NodeIdentity>, wallet_grpc_client: GrpcWalletClient, mempool: MempoolHandle) -> Self {
+    pub fn new(
+        node_identity: Arc<NodeIdentity>,
+        wallet_grpc_client: GrpcWalletClient,
+        mempool: MempoolHandle,
+        epoch_manager: EpochManagerHandle,
+        comms: CommsNode,
+        base_node_client: GrpcBaseNodeClient,
+    ) -> Self {
         Self {
             node_identity,
             wallet_grpc_client,
             mempool,
+            epoch_manager,
+            comms,
+            base_node_client,
         }
     }
 
     pub fn wallet_client(&self) -> GrpcWalletClient {
         self.wallet_grpc_client.clone()
+    }
+
+    pub fn base_node_client(&self) -> GrpcBaseNodeClient {
+        self.base_node_client.clone()
     }
 }
 
@@ -146,6 +168,69 @@ impl JsonRpcHandlers {
 
         // TODO: add "transaction_id" to the grpc response
         Ok(JsonRpcResponse::success(answer_id, ()))
+    }
+
+    pub async fn get_connections(&self, value: JsonRpcExtractor) -> JrpcResult {
+        let answer_id = value.get_answer_id();
+        let response = GetIdentityResponse {
+            node_id: self.node_identity.node_id().clone(),
+            public_key: self.node_identity.public_key().clone(),
+            public_address: self.node_identity.public_address(),
+        };
+
+        Ok(JsonRpcResponse::success(answer_id, response))
+    }
+
+    pub async fn get_mempool_stats(&self, value: JsonRpcExtractor) -> JrpcResult {
+        let answer_id = value.get_answer_id();
+        let response = json!({"size": self.mempool.get_mempool_size()});
+        Ok(JsonRpcResponse::success(answer_id, response))
+    }
+
+    pub async fn get_epoch_manager_stats(&self, value: JsonRpcExtractor) -> JrpcResult {
+        let answer_id = value.get_answer_id();
+        let current_epoch = self.epoch_manager.current_epoch().await.unwrap();
+        let is_valid = self.epoch_manager.is_epoch_valid(current_epoch).await.unwrap();
+        let response = json!({ "current_epoch": current_epoch.0,"is_valid":is_valid });
+        Ok(JsonRpcResponse::success(answer_id, response))
+    }
+
+    pub async fn get_comms_stats(&self, value: JsonRpcExtractor) -> JrpcResult {
+        let answer_id = value.get_answer_id();
+        let stats = self.comms.connectivity().get_connectivity_status().await.unwrap();
+        let response = json!({ "connection_status": format!("{:?}", stats) });
+        Ok(JsonRpcResponse::success(answer_id, response))
+    }
+
+    pub async fn get_shard_key(&self, value: JsonRpcExtractor) -> JrpcResult {
+        let answer_id = value.get_answer_id();
+        let height: u64 = value.parse_params()?;
+        let shard_key = self
+            .base_node_client()
+            .get_shard_key(height, self.node_identity.public_key())
+            .await
+            .unwrap();
+        let response = json!({ "shard_key": shard_key });
+        Ok(JsonRpcResponse::success(answer_id, response))
+    }
+
+    pub async fn get_committee(&self, value: JsonRpcExtractor) -> JrpcResult {
+        let answer_id = value.get_answer_id();
+        let request = value.parse_params::<GetCommitteeRequest>()?;
+        if let Ok(committee) = self.epoch_manager.get_committee(request.epoch, request.shard_id).await {
+            println!("committee {:?}", committee);
+            let response = json!({ "committee": committee });
+            Ok(JsonRpcResponse::success(answer_id, response))
+        } else {
+            Err(JsonRpcResponse::error(
+                1,
+                JsonRpcError::new(
+                    JsonRpcErrorReason::InvalidParams,
+                    "Something went wrong".to_string(),
+                    serde_json::Value::Null,
+                ),
+            ))
+        }
     }
 }
 

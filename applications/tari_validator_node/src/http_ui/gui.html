@@ -1,0 +1,95 @@
+<html>
+  <head>
+    <style>
+      .container {
+        display: grid;
+        grid-template-columns: auto auto;
+        grid-template-rows: auto;
+        justify-content: start;
+        column-gap: 10px;
+      }
+    </style>
+    <script>
+      var id = 0;
+      function toHexString(byteArray) {
+        return Array.from(byteArray, function (byte) {
+          return ("0" + byte.toString(16)).slice(-2);
+        }).join("");
+      }
+      async function json_rpc(method, params = NaN) {
+        id += 1;
+        let response = await fetch("http://127.0.0.1:18145", {
+          method: "POST",
+          body: JSON.stringify({
+            method: method,
+            jsonrpc: "2.0",
+            id: id,
+            params: params,
+          }),
+          headers: {
+            "Content-Type": "application/json",
+          },
+        });
+        let json = await response.json();
+        return json.result;
+      }
+      async function get_identity() {
+        return await json_rpc("get_identity");
+      }
+      async function get_epoch_manager_stats() {
+        return await json_rpc("get_epoch_manager_stats");
+      }
+      async function get_comms_stats() {
+        return await json_rpc("get_comms_stats");
+      }
+      async function get_mempool_stats() {
+        return await json_rpc("get_mempool_stats");
+      }
+      async function get_shard_key(height) {
+        return await json_rpc("get_shard_key", height);
+      }
+      async function get_committee(height, shard_key) {
+        return await json_rpc("get_committee", [height, shard_key]);
+      }
+
+      onload = async function () {
+        identity = await get_identity();
+        epoch_manager_stats = await get_epoch_manager_stats();
+        comms_stats = await get_comms_stats();
+        mempool_stats = await get_mempool_stats();
+        height = 60;
+        shard_key = await get_shard_key(height);
+        committee = await get_committee(epoch_manager_stats.current_epoch, shard_key.shard_key);
+        console.log(committee);
+        document.getElementById("public-key").innerHTML = identity.public_key;
+        document.getElementById("public-address").innerHTML = identity.public_address;
+        document.getElementById("node-id").innerHTML = toHexString(identity.node_id);
+        document.getElementById("current-epoch").innerHTML = epoch_manager_stats.current_epoch;
+        document.getElementById("is-valid").innerHTML = epoch_manager_stats.is_valid;
+        document.getElementById("comms-stats").innerHTML = comms_stats.connection_status;
+        document.getElementById("mempool-stats").innerHTML = mempool_stats.size;
+        document.getElementById("shard-key").innerHTML = shard_key.shard_key;
+      };
+    </script>
+  </head>
+  <body>
+    <div class="container">
+      <div class="item">Public key</div>
+      <div class="item" id="public-key"></div>
+      <div class="item">Public address</div>
+      <div class="item" id="public-address"></div>
+      <div class="item">Node Id</div>
+      <div class="item" id="node-id"></div>
+      <div class="item">Shard key</div>
+      <div class="item" id="shard-key"></div>
+      <div class="item">Current epoch</div>
+      <div class="item" id="current-epoch"></div>
+      <div class="item">Current epoch is valid</div>
+      <div class="item" id="is-valid"></div>
+      <div class="item">Comms stats</div>
+      <div class="item" id="comms-stats"></div>
+      <div class="item">Mempool stats</div>
+      <div class="item" id="mempool-stats"></div>
+    </div>
+  </body>
+</html>
