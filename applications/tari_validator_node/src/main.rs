@@ -47,7 +47,6 @@ use tari_common::{
     load_configuration,
 };
 use tari_comms::NodeIdentity;
-use tari_crypto::tari_utilities::hex::Hex;
 use tari_dan_common_types::ShardId;
 use tari_dan_core::{
     services::{base_node_error::BaseNodeError, BaseNodeClient},
@@ -188,17 +187,8 @@ async fn run_node(config: &ApplicationConfig) -> Result<(), ExitError> {
 
     info!(
         target: LOG_TARGET,
-        "Node starting with pub key: {}, node_id: {}",
+        "🚀 Node starting with pub key: {}, address: {}",
         node_identity.public_key(),
-        node_identity.node_id()
-    );
-
-    // Show the validator node identity
-    info!(target: LOG_TARGET, "🚀 Validator node started!");
-    info!(
-        target: LOG_TARGET,
-        "ℹ️ Node details: {}::{}",
-        node_identity.public_key().to_hex(),
         node_identity.public_address()
     );
 
@@ -216,15 +206,25 @@ async fn run_node(config: &ApplicationConfig) -> Result<(), ExitError> {
     )
     .await?;
 
+    // Run the JSON-RPC API
+    if let Some(address) = config.validator_node.json_rpc_address {
+        info!(target: LOG_TARGET, "🌐 Started JSON-RPC server on {}", address);
+        let handlers = JsonRpcHandlers::new(
+            GrpcWalletClient::new(config.validator_node.wallet_grpc_address),
+            base_node_client,
+            &services,
+        );
+        task::spawn(run_json_rpc(address, handlers));
+    }
+
     // Run the http ui
     if let Some(address) = config.validator_node.http_ui_address {
-        info!(target: LOG_TARGET, "Started HTTP UI server on {}", address);
+        info!(target: LOG_TARGET, "🕸️ Started HTTP UI server on {}", address);
         task::spawn(run_http_ui_server(address));
     }
 
     // Show the validator node identity
     info!(target: LOG_TARGET, "🚀 Validator node started!");
-    info!(target: LOG_TARGET, "{}", node_identity);
 
     run_dan_node(services, shutdown.to_signal()).await?;
 

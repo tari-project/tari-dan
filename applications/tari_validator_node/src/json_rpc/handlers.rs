@@ -44,6 +44,7 @@ use crate::{
     },
     json_rpc::{jrpc_errors::internal_error, messages::SubmitTransactionRequest},
     p2p::services::{epoch_manager::handle::EpochManagerHandle, mempool::MempoolHandle},
+    Services,
 };
 
 const _LOG_TARGET: &str = "tari::validator_node::json_rpc::handlers";
@@ -59,19 +60,16 @@ pub struct JsonRpcHandlers {
 
 impl JsonRpcHandlers {
     pub fn new(
-        node_identity: Arc<NodeIdentity>,
         wallet_grpc_client: GrpcWalletClient,
-        mempool: MempoolHandle,
-        epoch_manager: EpochManagerHandle,
-        comms: CommsNode,
         base_node_client: GrpcBaseNodeClient,
+        services: &Services,
     ) -> Self {
         Self {
-            node_identity,
+            node_identity: services.comms.node_identity(),
             wallet_grpc_client,
-            mempool,
-            epoch_manager,
-            comms,
+            mempool: services.mempool.clone(),
+            epoch_manager: services.epoch_manager.clone(),
+            comms: services.comms.clone(),
             base_node_client,
         }
     }
