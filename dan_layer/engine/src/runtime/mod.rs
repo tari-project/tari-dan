@@ -29,7 +29,7 @@ pub use r#impl::RuntimeInterfaceImpl;
 mod logs;
 
 mod commit_result;
-pub use commit_result::CommitResult;
+pub use commit_result::{FinalizeResult, RejectResult, SubstateDiff, TransactionResult};
 
 mod error;
 pub use error::{RuntimeError, TransactionCommitError};
@@ -92,7 +92,7 @@ pub trait RuntimeInterface: Send + Sync {
 
     fn set_last_instruction_output(&self, value: Option<Vec<u8>>) -> Result<(), RuntimeError>;
 
-    fn commit(&self) -> Result<CommitResult, RuntimeError>;
+    fn finalize(&self) -> Result<FinalizeResult, RuntimeError>;
 }
 
 #[derive(Clone)]

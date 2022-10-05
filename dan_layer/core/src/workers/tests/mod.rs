@@ -26,10 +26,10 @@ use lazy_static::lazy_static;
 use tari_common_types::types::PrivateKey;
 use tari_dan_common_types::ShardId;
 use tari_dan_engine::{
-    instruction::{Instruction, InstructionProcessor, TransactionBuilder},
-    packager::PackageBuilder,
-    runtime::{RuntimeInterfaceImpl, StateTracker},
+    packager::{PackageBuilder, TemplateModuleLoader},
+    runtime::{FinalizeResult, RejectResult, RuntimeInterfaceImpl, StateTracker, TransactionResult},
     state_store::memory::MemoryStateStore,
+    transaction::{Instruction, TransactionBuilder, TransactionProcessor},
     wasm::compile::compile_str,
 };
 use tari_shutdown::Shutdown;
@@ -59,7 +59,6 @@ use crate::{
         leader_strategy::{AlwaysFirstLeader, LeaderStrategy},
     },
     workers::hotstuff_waiter::HotStuffWaiter,
-    DigitalAssetError,
 };
 
 pub struct PayloadProcessorListener<TPayload> {
@@ -77,15 +76,17 @@ impl<TPayload: Payload> PayloadProcessorListener<TPayload> {
 impl<TPayload: Payload> PayloadProcessor<TPayload> for PayloadProcessorListener<TPayload> {
     fn process_payload(
         &self,
-        payload: &TPayload,
+        payload: TPayload,
         pledges: HashMap<ShardId, Vec<ObjectPledge>>,
-    ) -> Result<(), DigitalAssetError> {
-        self.sender
-            .send((payload.clone(), pledges))
-            .map_err(|_e| DigitalAssetError::SendError {
-                context: "Sending process payload".to_string(),
-            })?;
-        Ok(())
+    ) -> Result<FinalizeResult, PayloadProcessorError> {
+        self.sender.send((payload, pledges)).unwrap();
+        Ok(FinalizeResult::new(
+            Hash::default(),
+            vec![],
+            TransactionResult::Reject(RejectResult {
+                reason: "PayloadProcessorListener always rejects".to_string(),
+            }),
+        ))
     }
 }
 
@@ -94,10 +95,16 @@ pub struct NullPayloadProcessor {}
 impl<TPayload: Payload> PayloadProcessor<TPayload> for NullPayloadProcessor {
     fn process_payload(
         &self,
-        _payload: &TPayload,
+        payload: TPayload,
         _pledges: HashMap<ShardId, Vec<ObjectPledge>>,
-    ) -> Result<(), DigitalAssetError> {
-        Ok(())
+    ) -> Result<FinalizeResult, PayloadProcessorError> {
+        Ok(FinalizeResult::new(
+            payload.to_id().into_array().into(),
+            vec![],
+            TransactionResult::Reject(RejectResult {
+                reason: "NullPayloadProcessor".to_string(),
+            }),
+        ))
     }
 }
 
@@ -603,7 +610,7 @@ async fn test_hs_waiter_cannot_spend_until_it_is_proven_committed() {
 use tari_template_lib::{args::Arg, Hash};
 
 use crate::{
-    services::PayloadProcessor,
+    services::{PayloadProcessor, PayloadProcessorError},
     storage::shard_store::MemoryShardStoreFactory,
     workers::hotstuff_error::HotStuffError,
 };
@@ -615,8 +622,10 @@ async fn test_kitchen_sink() {
     let shard0_committee = vec![node1.clone()];
     let shard1_committee = vec![node2.clone()];
 
+    let template_address = Hash::default();
     let package = PackageBuilder::new()
-        .add_wasm_module(
+        .add_template(
+            template_address,
             compile_str(
                 r#"
     use tari_template_macros::template;
@@ -638,18 +647,17 @@ mod hello_world {
 
     }
 }
-
     "#,
                 &[],
             )
+            .unwrap()
+            .load_template()
             .unwrap(),
         )
-        .build()
-        .unwrap();
+        .build();
 
     let instruction = Instruction::CallFunction {
-        package_address: package.address(),
-        template: "HelloWorld".to_string(),
+        template_address,
         function: "new".to_string(),
         args: vec![Arg::Literal(b"Kitchen Sink".to_vec())],
     };
@@ -715,10 +723,10 @@ mod hello_world {
         }
         let state_db = MemoryStateStore::load(pre_state);
         // state_db.allow_creation_of_non_existent_shards = false;
-        let state_tracker = StateTracker::new(state_db, Hash::from(*ex_transaction.transaction().hash()));
+        let state_tracker = StateTracker::new(state_db, *ex_transaction.transaction().hash());
         let runtime_interface = RuntimeInterfaceImpl::new(state_tracker);
         // Process the instruction
-        let processor = InstructionProcessor::new(runtime_interface, package.clone());
+        let processor = TransactionProcessor::new(runtime_interface, package.clone());
         let result = processor.execute(ex_transaction.transaction().clone()).unwrap();
 
         // TODO: Save the changes substates back to shard db

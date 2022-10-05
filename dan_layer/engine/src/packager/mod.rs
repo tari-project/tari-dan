@@ -26,5 +26,8 @@ pub use error::PackageError;
 mod package;
 pub use package::{Package, PackageBuilder};
 
-mod module_loader;
-pub use module_loader::PackageModuleLoader;
+mod template;
+pub use template::LoadedTemplate;
+
+mod template_loader;
+pub use template_loader::TemplateModuleLoader;

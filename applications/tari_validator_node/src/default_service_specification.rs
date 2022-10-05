@@ -29,7 +29,6 @@ use tari_dan_core::{
         LoggingEventsPublisher,
         NodeIdentitySigningService,
         ServiceSpecification,
-        TariDanPayloadProcessor,
     },
 };
 use tari_dan_storage_sqlite::{
@@ -45,7 +44,9 @@ use crate::{
         comms_peer_provider::CommsPeerProvider,
         messaging::OutboundMessaging,
         rpc_client::TariCommsValidatorNodeClientFactory,
+        template_manager::manager::TemplateManager,
     },
+    payload_processor::TariDanPayloadProcessor,
 };
 
 #[derive(Default, Clone)]
@@ -64,7 +65,7 @@ impl ServiceSpecification for DefaultServiceSpecification {
     type OutboundService = OutboundMessaging;
     // type OutboundService = TariCommsOutboundService<Self::Payload, Self::Addr>;
     type Payload = TariDanPayload;
-    type PayloadProcessor = TariDanPayloadProcessor;
+    type PayloadProcessor = TariDanPayloadProcessor<TemplateManager>;
     type PeerProvider = CommsPeerProvider;
     type SigningService = NodeIdentitySigningService;
     type StateDbBackendAdapter = SqliteStateDbBackendAdapter;

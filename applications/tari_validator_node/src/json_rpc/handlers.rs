@@ -34,7 +34,7 @@ use tari_common_types::types::FixedHash;
 use tari_comms::{multiaddr::Multiaddr, peer_manager::NodeId, types::CommsPublicKey, CommsNode, NodeIdentity};
 use tari_dan_common_types::serde_with;
 use tari_dan_core::services::{epoch_manager::EpochManager, BaseNodeClient};
-use tari_dan_engine::instruction::{Instruction, TransactionBuilder};
+use tari_dan_engine::transaction::{Instruction, TransactionBuilder};
 
 use super::messages::GetCommitteeRequest;
 use crate::{
@@ -105,8 +105,7 @@ impl JsonRpcHandlers {
         builder.with_new_components(transaction.num_new_components);
         for i in transaction.instructions {
             builder.add_instruction(Instruction::CallFunction {
-                package_address: i.package_address.into(),
-                template: i.template,
+                template_address: i.template_address.into(),
                 function: i.function,
                 args: i.args.clone(),
             });
@@ -127,7 +126,7 @@ impl JsonRpcHandlers {
             .map_err(internal_error(answer_id))?;
 
         Ok(JsonRpcResponse::success(answer_id, SubmitTransactionResponse {
-            hash: hash.into(),
+            hash: hash.into_array().into(),
         }))
     }
 

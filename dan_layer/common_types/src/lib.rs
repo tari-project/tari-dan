@@ -46,6 +46,12 @@ impl ShardId {
     }
 }
 
+impl From<[u8; 32]> for ShardId {
+    fn from(bytes: [u8; 32]) -> Self {
+        Self(bytes)
+    }
+}
+
 impl PartialOrd for ShardId {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
         self.0.partial_cmp(&other.0)
@@ -67,8 +73,8 @@ pub enum SubstateChange {
 #[derive(Debug, Clone, BorshSerialize, BorshDeserialize)]
 pub enum SubstateState {
     DoesNotExist,
-    Exists { created_by: PayloadId, data: Vec<u8> },
-    Destroyed { deleted_by: PayloadId },
+    Up { created_by: PayloadId, data: Vec<u8> },
+    Down { deleted_by: PayloadId },
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -99,5 +105,9 @@ impl PayloadId {
 
     pub fn as_slice(&self) -> &[u8] {
         self.id.as_slice()
+    }
+
+    pub fn into_array(self) -> [u8; 32] {
+        self.id
     }
 }

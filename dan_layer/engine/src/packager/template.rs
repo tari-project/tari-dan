@@ -20,36 +20,26 @@
 //   WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //   USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use tari_comms::{multiaddr::Multiaddr, peer_manager::IdentitySignature};
-use tari_dan_engine::transaction::Transaction;
-
-use crate::models::{vote_message::VoteMessage, HotStuffMessage};
+use crate::wasm::LoadedWasmTemplate;
 
 #[derive(Debug, Clone)]
-pub enum DanMessage<TPayload, TAddr> {
-    // Consensus
-    HotStuffMessage(HotStuffMessage<TPayload, TAddr>),
-    VoteMessage(VoteMessage),
-    // Mempool
-    NewTransaction(Transaction),
-    // Network
-    NetworkAnnounce(NetworkAnnounce<TAddr>),
+pub enum LoadedTemplate {
+    Wasm(LoadedWasmTemplate),
+    // Flow(Flow)
 }
 
-impl<TPayload, TAddr> DanMessage<TPayload, TAddr> {
-    pub fn as_type_str(&self) -> &'static str {
+impl LoadedTemplate {
+    /// Returns a "friendly name" for the template typically provided by the author. This name is not guaranteed to be
+    /// unique.
+    pub fn template_name(&self) -> &str {
         match self {
-            Self::HotStuffMessage(_) => "HotStuffMessage",
-            Self::VoteMessage(_) => "VoteMessage",
-            Self::NewTransaction(_) => "NewTransaction",
-            Self::NetworkAnnounce(_) => "NetworkAnnounce",
+            LoadedTemplate::Wasm(wasm) => wasm.template_name(),
         }
     }
 }
 
-#[derive(Debug, Clone)]
-pub struct NetworkAnnounce<TAddr> {
-    pub identity: TAddr,
-    pub addresses: Vec<Multiaddr>,
-    pub identity_signature: IdentitySignature,
+impl From<LoadedWasmTemplate> for LoadedTemplate {
+    fn from(module: LoadedWasmTemplate) -> Self {
+        Self::Wasm(module)
+    }
 }

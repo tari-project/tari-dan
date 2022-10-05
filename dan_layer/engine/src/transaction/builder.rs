@@ -20,17 +20,16 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use std::{collections::HashMap, convert::TryFrom};
+use std::collections::HashMap;
 
 use tari_common_types::types::{PrivateKey, PublicKey};
 use tari_crypto::{keys::PublicKey as PublicKeyTrait, ristretto::RistrettoPublicKey};
 use tari_dan_common_types::{ObjectClaim, ObjectId, ShardId, SubstateChange};
-use tari_template_lib::Hash;
 
 use super::{Instruction, Transaction};
 use crate::{
-    instruction::{signature::InstructionSignature, TransactionMeta},
     runtime::IdProvider,
+    transaction::{signature::InstructionSignature, TransactionMeta},
 };
 
 #[derive(Debug, Clone, Default)]
@@ -111,9 +110,7 @@ impl TransactionBuilder {
             self.meta,
         );
 
-        let base_hash = &t.hash;
-
-        let id_provider = IdProvider::new(Hash::try_from(base_hash.as_slice()).expect("Bad hash"));
+        let id_provider = IdProvider::new(t.hash);
         // for o in 0..self.max_outputs {
         //     let value: [u8; 32] = Blake256::new().chain(base_hash).chain(&[o]).finalize_fixed().into();
         //     let object_id = ObjectId(value);
@@ -130,8 +127,8 @@ impl TransactionBuilder {
             // let object_id = ObjectId(value);
             // let shard_id = ShardId(value);
             let id = id_provider.new_component_address();
-            let shard_id = ShardId(id.into_inner());
-            let object_id = ObjectId(id.into_inner());
+            let shard_id = ShardId(id.into_array());
+            let object_id = ObjectId(id.into_array());
             if t.meta.is_none() {
                 t.meta = Some(TransactionMeta {
                     involved_objects: HashMap::new(),

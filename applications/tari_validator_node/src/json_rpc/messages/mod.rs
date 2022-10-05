@@ -39,8 +39,7 @@ pub struct SubmitTransactionRequest {
 #[derive(Deserialize, Debug, Clone)]
 pub struct InstructionRequest {
     #[serde(deserialize_with = "serde_with::hex::deserialize")]
-    pub package_address: [u8; 32],
-    pub template: String,
+    pub template_address: [u8; 32],
     pub function: String,
     pub args: Vec<Arg>,
 }

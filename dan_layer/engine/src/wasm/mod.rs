@@ -9,9 +9,9 @@ pub use error::{WasmError, WasmExecutionError};
 mod environment;
 
 mod module;
-pub use module::{LoadedWasmModule, WasmModule};
+pub use module::{LoadedWasmTemplate, WasmModule};
 
 mod metering;
 mod process;
 
-pub use process::{ExecutionResult, Process};
+pub use process::{ExecutionResult, WasmProcess};

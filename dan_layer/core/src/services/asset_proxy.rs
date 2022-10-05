@@ -22,7 +22,7 @@
 
 use async_trait::async_trait;
 use tari_common_types::types::PublicKey;
-use tari_dan_engine::instruction::Transaction;
+use tari_dan_engine::transaction::Transaction;
 
 use super::mempool::service::MempoolService;
 use crate::{services::ServiceSpecification, DigitalAssetError};

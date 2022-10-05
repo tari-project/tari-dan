@@ -25,9 +25,11 @@ use log::*;
 use tari_common_types::types::FixedHash;
 use tari_core::transactions::transaction_components::CodeTemplateRegistration;
 use tari_dan_core::{
+    services::TemplateProvider,
     storage::{chain::DbTemplate, DbFactory},
-    DigitalAssetError,
 };
+use tari_dan_engine::wasm::WasmModule;
+use tari_template_lib::models::TemplateAddress;
 
 use crate::{p2p::services::template_manager::TemplateManagerError, SqliteDbFactory};
 
@@ -52,10 +54,10 @@ impl From<CodeTemplateRegistration> for TemplateMetadata {
     }
 }
 
-#[allow(dead_code)]
+#[derive(Debug, Clone)]
 pub struct Template {
-    metadata: TemplateMetadata,
-    compiled_code: Vec<u8>,
+    pub metadata: TemplateMetadata,
+    pub compiled_code: Vec<u8>,
 }
 
 // we encapsulate the db row format to not expose it to the caller
@@ -82,16 +84,13 @@ impl TemplateManager {
         Self { db_factory }
     }
 
-    // to be used in the future by the engine to retrieve the wasm code for transaction execution
-    #[allow(dead_code)]
-    pub async fn get_template(&self, address: &FixedHash) -> Result<Option<Template>, DigitalAssetError> {
+    pub fn fetch_template(&self, address: &TemplateAddress) -> Result<Template, TemplateManagerError> {
         let db = self.db_factory.get_or_create_template_db()?;
-        let result = db.find_template_by_address(address)?;
+        let template = db
+            .find_template_by_address(address)?
+            .ok_or(TemplateManagerError::TemplateNotFound { address: *address })?;
 
-        match result {
-            Some(db_template) => Ok(Some(db_template.into())),
-            None => Ok(None),
-        }
+        Ok(template.into())
     }
 
     pub async fn add_templates(
@@ -167,5 +166,15 @@ impl TemplateManager {
         db.insert_template(&template)?;
 
         Ok(())
+    }
+}
+
+impl TemplateProvider for TemplateManager {
+    type Error = TemplateManagerError;
+    type Template = WasmModule;
+
+    fn get_template(&self, address: &TemplateAddress) -> Result<Self::Template, Self::Error> {
+        let template = self.fetch_template(address)?;
+        Ok(WasmModule::from_code(template.compiled_code))
     }
 }

@@ -23,35 +23,24 @@
 use std::collections::HashMap;
 
 use tari_dan_common_types::ShardId;
+use tari_dan_engine::{runtime::FinalizeResult, transaction::TransactionError};
 
-use crate::{
-    digital_assets_error::DigitalAssetError,
-    models::{ObjectPledge, Payload, TariDanPayload},
-};
+use crate::models::{ObjectPledge, Payload};
 
 pub trait PayloadProcessor<TPayload: Payload> {
     fn process_payload(
         &self,
-        payload: &TPayload,
+        payload: TPayload,
         pledges: HashMap<ShardId, Vec<ObjectPledge>>,
-    ) -> Result<(), DigitalAssetError>;
+    ) -> Result<FinalizeResult, PayloadProcessorError>;
 }
 
-#[derive(Debug, Default)]
-pub struct TariDanPayloadProcessor {}
-
-impl TariDanPayloadProcessor {
-    pub fn new() -> Self {
-        Self {}
-    }
-}
-
-impl PayloadProcessor<TariDanPayload> for TariDanPayloadProcessor {
-    fn process_payload(
-        &self,
-        _payload: &TariDanPayload,
-        _pledges: HashMap<ShardId, Vec<ObjectPledge>>,
-    ) -> Result<(), DigitalAssetError> {
-        todo!()
-    }
+#[derive(Debug, thiserror::Error)]
+pub enum PayloadProcessorError {
+    #[error(transparent)]
+    TransactionError(#[from] TransactionError),
+    // TODO: dont like the use of anyhow, but IMO preferable over a String (this is in core but the template manager
+    // is in the bin)
+    #[error("Failed to load template: {0}")]
+    FailedToLoadTemplate(anyhow::Error),
 }

@@ -22,7 +22,10 @@
 
 use thiserror::Error;
 
-use crate::{services::epoch_manager::EpochManagerError, storage::shard_store::StoreError, DigitalAssetError};
+use crate::{
+    services::{epoch_manager::EpochManagerError, PayloadProcessorError},
+    storage::shard_store::StoreError,
+};
 
 #[derive(Error, Debug)]
 pub enum HotStuffError {
@@ -40,7 +43,8 @@ pub enum HotStuffError {
     SendError,
     #[error("Not the leader")]
     NotTheLeader,
-
-    #[error("DigitalAssetError: {0}")]
-    DigitalAssetError(#[from] DigitalAssetError),
+    #[error("Payload failed to process: {0}")]
+    PayloadProcessorError(#[from] PayloadProcessorError),
+    #[error("Transaction rejected: {0}")]
+    TransactionRejected(String),
 }

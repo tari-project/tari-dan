@@ -78,6 +78,8 @@ impl<TAddr: NodeAddressable, TPayload: Payload> MemoryShardDbInner<TAddr, TPaylo
 #[derive(Debug, Clone, Default)]
 pub struct MemoryShardDb<TAddr, TPayload> {
     inner: Arc<RwLock<MemoryShardDbInner<TAddr, TPayload>>>,
+    // TODO: use this to track state, pre-commit
+    // current: MemoryShardDbInner<TAddr, TPayload>
 }
 
 impl<TAddr: NodeAddressable, TPayload: Payload> MemoryShardDb<TAddr, TPayload> {
@@ -307,7 +309,9 @@ impl<TAddr: NodeAddressable, TPayload: Payload> ShardStoreTransaction<TAddr, TPa
     }
 
     fn commit(&mut self) -> Result<(), Self::Error> {
-        // No commit needed
+        // TODO: this is not currently atomic across multiple operations and rollbacks are not supported.
+        //       We could track local state changes in a separate non-shared state instance, and apply the changes to
+        //       the shared state here on commit.
         Ok(())
     }
 

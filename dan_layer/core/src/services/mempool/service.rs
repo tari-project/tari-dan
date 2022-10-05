@@ -24,7 +24,7 @@ use std::sync::Arc;
 
 use async_trait::async_trait;
 use tari_dan_common_types::ShardId;
-use tari_dan_engine::instruction::Transaction;
+use tari_dan_engine::transaction::Transaction;
 use tokio::sync::{broadcast, broadcast::channel, Mutex};
 
 use super::outbound::MempoolOutboundService;

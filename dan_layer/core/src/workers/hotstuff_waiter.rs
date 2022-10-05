@@ -23,6 +23,7 @@
 use std::collections::HashMap;
 
 use tari_dan_common_types::{PayloadId, ShardId, SubstateState};
+use tari_dan_engine::runtime::TransactionResult;
 use tari_shutdown::ShutdownSignal;
 use tokio::{
     sync::mpsc::{Receiver, Sender},
@@ -54,14 +55,7 @@ use crate::{
     workers::hotstuff_error::HotStuffError,
 };
 
-pub struct HotStuffWaiter<
-    TPayload: Payload,
-    TAddr: NodeAddressable,
-    TLeaderStrategy: LeaderStrategy<TAddr>,
-    TEpochManager: EpochManager<TAddr>,
-    TPayloadProcessor: PayloadProcessor<TPayload>,
-    TShardStore: ShardStoreFactory,
-> {
+pub struct HotStuffWaiter<TPayload, TAddr, TLeaderStrategy, TEpochManager, TPayloadProcessor, TShardStore> {
     identity: TAddr,
     leader_strategy: TLeaderStrategy,
     epoch_manager: TEpochManager,
@@ -75,14 +69,15 @@ pub struct HotStuffWaiter<
     shard_store: TShardStore,
 }
 
-impl<
-        TPayload: Payload + 'static,
-        TAddr: NodeAddressable + 'static,
-        TLeaderStrategy: LeaderStrategy<TAddr> + 'static + Send + Sync,
-        TEpochManager: EpochManager<TAddr> + 'static + Send + Sync,
-        TPayloadProcessor: PayloadProcessor<TPayload> + 'static + Send + Sync,
-        TShardStore: ShardStoreFactory<Addr = TAddr, Payload = TPayload> + 'static + Send + Sync,
-    > HotStuffWaiter<TPayload, TAddr, TLeaderStrategy, TEpochManager, TPayloadProcessor, TShardStore>
+impl<TPayload, TAddr, TLeaderStrategy, TEpochManager, TPayloadProcessor, TShardStore>
+    HotStuffWaiter<TPayload, TAddr, TLeaderStrategy, TEpochManager, TPayloadProcessor, TShardStore>
+where
+    TPayload: Payload + 'static,
+    TAddr: NodeAddressable + 'static,
+    TLeaderStrategy: LeaderStrategy<TAddr> + 'static + Send + Sync,
+    TEpochManager: EpochManager<TAddr> + 'static + Send + Sync,
+    TPayloadProcessor: PayloadProcessor<TPayload> + 'static + Send + Sync,
+    TShardStore: ShardStoreFactory<Addr = TAddr, Payload = TPayload> + 'static + Send + Sync,
 {
     pub fn spawn(
         identity: TAddr,
@@ -396,27 +391,41 @@ impl<
         shard_pledges: HashMap<ShardId, Vec<ObjectPledge>>,
         payload: TPayload,
     ) -> Result<HashMap<ShardId, Option<SubstateState>>, HotStuffError> {
-        self.payload_processor.process_payload(&payload, shard_pledges)?;
-        // let (reply_tx, reply_rx) = oneshot::channel();
-        // self.tx_execute
-        //     .send((payload, shard_pledges, reply_tx))
-        //     .await
-        //     .map_err(|e| format!("Could not send execute cmd:{}", e))?;
-        // TODO: wait on results
-        // let result = reply_rx
-        //     .await
-        //     .map_err(|e| format!("Could not receive execute reply:{}", e))?;
-        Ok(HashMap::new())
+        let payload_id = payload.to_id();
+        let finalize = self.payload_processor.process_payload(payload, shard_pledges)?;
+        match finalize.result {
+            TransactionResult::Accept(diff) => {
+                let changes = diff
+                    .up_iter()
+                    .map(|(shard, substate)| {
+                        (
+                            *shard,
+                            Some(SubstateState::Up {
+                                created_by: payload_id,
+                                data: substate.to_bytes(),
+                            }),
+                        )
+                    })
+                    .chain(
+                        diff.down_iter()
+                            .map(|shard| (*shard, Some(SubstateState::Down { deleted_by: payload_id }))),
+                    )
+                    .collect();
+
+                Ok(changes)
+            },
+            TransactionResult::Reject(reject) => Err(HotStuffError::TransactionRejected(reject.reason)),
+        }
     }
 
     fn validate_proposal(&self, node: &HotStuffTreeNode<TAddr>) -> Result<(), HotStuffError> {
-        if node.payload_height() != NodeHeight(0) &&
-            !(node.payload() == node.justify().payload() &&
+        if node.payload_height() == NodeHeight(0) ||
+            (node.payload() == node.justify().payload() &&
                 node.payload_height() == node.justify().payload_height() + NodeHeight(1))
         {
-            Err(HotStuffError::NodePayloadDoesNotMatchJustifyPayload)
-        } else {
             Ok(())
+        } else {
+            Err(HotStuffError::NodePayloadDoesNotMatchJustifyPayload)
         }
     }
 
@@ -473,7 +482,7 @@ impl<
 
                         tx.set_last_voted_height(local_shard, local_node.height());
 
-                        let _signature = ValidatorSignature::from_bytes(&self.sign(node.hash(), shard));
+                        let _signature = self.sign(node.hash(), shard);
                         // TODO: Actually decide on this
                         let decision = QuorumDecision::Accept;
                         let mut vote_msg = VoteMessage::new(*local_node.hash(), local_shard, decision, votes.clone());
@@ -500,9 +509,9 @@ impl<
         Ok(())
     }
 
-    fn sign(&self, _node_hash: &TreeNodeHash, _shard: ShardId) -> Vec<u8> {
+    fn sign(&self, _node_hash: &TreeNodeHash, _shard: ShardId) -> ValidatorSignature {
         // todo!();
-        vec![]
+        ValidatorSignature::from_bytes(&[]).unwrap()
     }
 
     // The leader receives votes from his local shard, and forwards it to all other shards

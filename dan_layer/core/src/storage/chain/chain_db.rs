@@ -21,7 +21,7 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use tari_common_types::types::FixedHash;
+use tari_template_lib::models::TemplateAddress;
 
 use crate::storage::{
     chain::{chain_db_unit_of_work::ChainDbUnitOfWorkImpl, ChainDbBackendAdapter, ChainDbMetadataKey, DbTemplate},
@@ -48,7 +48,10 @@ impl<TBackendAdapter: ChainDbBackendAdapter> ChainDb<TBackendAdapter> {
             .map_err(TBackendAdapter::Error::into)
     }
 
-    pub fn find_template_by_address(&self, template_address: &FixedHash) -> Result<Option<DbTemplate>, StorageError> {
+    pub fn find_template_by_address(
+        &self,
+        template_address: &TemplateAddress,
+    ) -> Result<Option<DbTemplate>, StorageError> {
         self.adapter
             .find_template_by_address(template_address)
             .map_err(TBackendAdapter::Error::into)

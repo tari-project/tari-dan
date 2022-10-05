@@ -43,7 +43,7 @@ use wasmer::{
 };
 
 use crate::{
-    packager::{PackageError, PackageModuleLoader},
+    packager::{LoadedTemplate, PackageError, TemplateModuleLoader},
     wasm::{environment::WasmEnv, metering, WasmExecutionError},
 };
 
@@ -72,11 +72,8 @@ impl WasmModule {
     }
 }
 
-impl PackageModuleLoader for WasmModule {
-    type Error = PackageError;
-    type Loaded = LoadedWasmModule;
-
-    fn load_module(&self) -> Result<Self::Loaded, Self::Error> {
+impl TemplateModuleLoader for WasmModule {
+    fn load_template(&self) -> Result<LoadedTemplate, PackageError> {
         let store = self.create_store();
         let module = Module::new(&store, &self.code)?;
         let violation_flag = Arc::new(AtomicBool::new(false));
@@ -98,7 +95,7 @@ impl PackageModuleLoader for WasmModule {
         if violation_flag.load(Ordering::Relaxed) {
             return Err(PackageError::TemplateCalledEngineDuringInitialization);
         }
-        Ok(LoadedWasmModule::new(template, module))
+        Ok(LoadedWasmTemplate::new(template, module).into())
     }
 }
 
@@ -129,12 +126,12 @@ fn initialize_and_load_template_abi(
 }
 
 #[derive(Debug, Clone)]
-pub struct LoadedWasmModule {
+pub struct LoadedWasmTemplate {
     template: TemplateDef,
     module: wasmer::Module,
 }
 
-impl LoadedWasmModule {
+impl LoadedWasmTemplate {
     pub fn new(template: TemplateDef, module: wasmer::Module) -> Self {
         Self { template, module }
     }

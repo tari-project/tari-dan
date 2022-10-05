@@ -21,37 +21,41 @@
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 use tari_core::transactions::transaction_components::CodeTemplateRegistration;
+use tari_template_lib::models::TemplateAddress;
 use tokio::sync::{mpsc, oneshot};
 
 use crate::p2p::services::template_manager::{
-    template_manager_service::{TemplateManagerRequest, TemplateManagerResponse},
+    manager::Template,
+    template_manager_service::TemplateManagerRequest,
     TemplateManagerError,
 };
 
+#[derive(Debug, Clone)]
 pub struct TemplateManagerHandle {
-    request_tx: mpsc::Sender<(
-        TemplateManagerRequest,
-        oneshot::Sender<Result<TemplateManagerResponse, TemplateManagerError>>,
-    )>,
+    request_tx: mpsc::Sender<TemplateManagerRequest>,
 }
 
 impl TemplateManagerHandle {
-    pub fn new(
-        request_tx: mpsc::Sender<(
-            TemplateManagerRequest,
-            oneshot::Sender<Result<TemplateManagerResponse, TemplateManagerError>>,
-        )>,
-    ) -> Self {
+    pub fn new(request_tx: mpsc::Sender<TemplateManagerRequest>) -> Self {
         Self { request_tx }
     }
 
     pub async fn add_templates(&self, templates: Vec<CodeTemplateRegistration>) -> Result<(), TemplateManagerError> {
         let (tx, rx) = oneshot::channel();
         self.request_tx
-            .send((TemplateManagerRequest::AddTemplates { templates }, tx))
+            .send(TemplateManagerRequest::AddTemplates { templates, reply: tx })
             .await
             .map_err(|_| TemplateManagerError::SendError)?;
-        let _result = rx.await.map_err(|_| TemplateManagerError::SendError)?;
-        Ok(())
+        rx.await.map_err(|_| TemplateManagerError::SendError)?
+    }
+
+    #[allow(dead_code)]
+    pub async fn get_template(&self, address: TemplateAddress) -> Result<Template, TemplateManagerError> {
+        let (tx, rx) = oneshot::channel();
+        self.request_tx
+            .send(TemplateManagerRequest::GetTemplate { address, reply: tx })
+            .await
+            .map_err(|_| TemplateManagerError::SendError)?;
+        rx.await.map_err(|_| TemplateManagerError::SendError)?
     }
 }

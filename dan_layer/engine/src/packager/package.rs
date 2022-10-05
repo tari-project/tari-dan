@@ -20,21 +20,15 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use std::{collections::HashMap, ops::DerefMut};
+use std::collections::HashMap;
 
-use rand::{rngs::OsRng, RngCore};
-use tari_template_lib::models::PackageAddress;
+use tari_template_lib::models::TemplateAddress;
 
-use crate::{
-    hashing::hasher,
-    packager::{error::PackageError, PackageModuleLoader},
-    wasm::{LoadedWasmModule, WasmModule},
-};
+use crate::packager::template::LoadedTemplate;
 
 #[derive(Debug, Clone)]
 pub struct Package {
-    id: PackageAddress,
-    wasm_modules: HashMap<String, LoadedWasmModule>,
+    templates: HashMap<TemplateAddress, LoadedTemplate>,
 }
 
 impl Package {
@@ -42,51 +36,32 @@ impl Package {
         PackageBuilder::new()
     }
 
-    pub fn get_module_by_name(&self, name: &str) -> Option<&LoadedWasmModule> {
-        self.wasm_modules.get(name)
-    }
-
-    pub fn address(&self) -> PackageAddress {
-        self.id
+    pub fn get_template_by_address(&self, addr: &TemplateAddress) -> Option<&LoadedTemplate> {
+        self.templates.get(addr)
     }
 }
 
 #[derive(Debug, Clone, Default)]
 pub struct PackageBuilder {
-    wasm_modules: Vec<WasmModule>,
+    templates: HashMap<TemplateAddress, LoadedTemplate>,
 }
 
 impl PackageBuilder {
     pub fn new() -> Self {
         Self {
-            wasm_modules: Vec::new(),
+            templates: HashMap::new(),
         }
     }
 
-    pub fn add_wasm_module(&mut self, wasm_module: WasmModule) -> &mut Self {
-        self.wasm_modules.push(wasm_module);
+    /// Adds a template to the package. The address given is typically the hash of the template registration UTXO.
+    pub fn add_template(&mut self, address: TemplateAddress, template: LoadedTemplate) -> &mut Self {
+        self.templates.insert(address, template);
         self
     }
 
-    pub fn build(&self) -> Result<Package, PackageError> {
-        let mut wasm_modules = HashMap::with_capacity(self.wasm_modules.len());
-        for wasm in &self.wasm_modules {
-            let loaded = wasm.load_module()?;
-            wasm_modules.insert(loaded.template_name().to_string(), loaded);
+    pub fn build(&mut self) -> Package {
+        Package {
+            templates: self.templates.drain().collect(),
         }
-        let id = new_package_address(wasm_modules.values());
-
-        Ok(Package { id, wasm_modules })
     }
-}
-
-fn new_package_address<'a, I: IntoIterator<Item = &'a LoadedWasmModule>>(modules: I) -> PackageAddress {
-    let nonce = OsRng.next_u32();
-    let mut hasher = hasher("package").chain(&nonce);
-    for module in modules {
-        hasher.update(&module.template_def());
-    }
-    let mut hash = hasher.result();
-    hash.deref_mut()[..4].copy_from_slice(&nonce.to_le_bytes());
-    hash
 }

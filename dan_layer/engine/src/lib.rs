@@ -9,8 +9,8 @@ pub mod wasm;
 
 pub mod crypto;
 pub mod hashing;
-pub mod instruction;
 pub mod packager;
 pub mod runtime;
 pub mod state_store;
 pub mod traits;
+pub mod transaction;

@@ -20,12 +20,8 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use tari_template_abi::{Decode, Encode};
+use crate::packager::{template::LoadedTemplate, PackageError};
 
-use crate::models::{Contract, Package};
-
-#[derive(Debug, Decode, Encode)]
-pub struct AbiContext {
-    pub package: Package,
-    pub contract: Contract,
+pub trait TemplateModuleLoader {
+    fn load_template(&self) -> Result<LoadedTemplate, PackageError>;
 }

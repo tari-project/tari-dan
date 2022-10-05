@@ -26,7 +26,9 @@ pub mod manager;
 pub mod template_manager_service;
 
 pub use initializer::spawn;
+use tari_dan_common_types::optional::IsNotFoundError;
 use tari_dan_core::storage::StorageError;
+use tari_template_lib::models::TemplateAddress;
 use thiserror::Error;
 
 #[derive(Error, Debug)]
@@ -40,4 +42,12 @@ pub enum TemplateManagerError {
     TemplateCodeHashMismatch,
     #[error("Storage error: {0}")]
     StorageError(#[from] StorageError),
+    #[error("Template not found: {address}")]
+    TemplateNotFound { address: TemplateAddress },
+}
+
+impl IsNotFoundError for TemplateManagerError {
+    fn is_not_found_error(&self) -> bool {
+        matches!(self, Self::TemplateNotFound { .. })
+    }
 }

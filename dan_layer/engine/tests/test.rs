@@ -23,10 +23,9 @@
 mod tooling;
 
 use tari_dan_engine::{
-    instruction::Instruction,
-    packager::{Package, PackageError},
-    runtime::{RuntimeInterfaceImpl, StateTracker},
-    state_store::{memory::MemoryStateStore, AtomicDb, StateReader},
+    packager::{PackageError, TemplateModuleLoader},
+    state_store::{AtomicDb, StateReader},
+    transaction::Instruction,
     wasm::{compile::compile_template, WasmExecutionError},
 };
 use tari_template_lib::{
@@ -44,14 +43,19 @@ fn test_hello_world() {
 }
 
 #[test]
-#[ignore]
 fn test_state() {
     let template_test = TemplateTest::new(vec!["tests/templates/state"]);
     let store = template_test.state_store();
 
     // constructor
     let component_address1: ComponentAddress = template_test.call_function("State", "new", args![]);
-    template_test.assert_calls(&["emit_log", "create_component", "set_last_instruction_output"]);
+    template_test.assert_calls(&[
+        "set_current_runtime_state",
+        "emit_log",
+        "create_component",
+        "set_last_instruction_output",
+        "finalize",
+    ]);
     template_test.clear_calls();
 
     let component_address2: ComponentAddress = template_test.call_function("State", "new", args![]);
@@ -64,6 +68,7 @@ fn test_state() {
         .unwrap()
         .expect("component1 not found");
     assert_eq!(component.module_name, "State");
+
     let component: ComponentInstance = store
         .read_access()
         .unwrap()
@@ -83,7 +88,6 @@ fn test_state() {
 }
 
 #[test]
-#[ignore]
 fn test_composed() {
     let template_test = TemplateTest::new(vec!["tests/templates/state", "tests/templates/hello_world"]);
 
@@ -123,19 +127,25 @@ fn test_composed() {
 
 #[test]
 fn test_dodgy_template() {
-    let wasm = compile_template("tests/templates/buggy", &["call_engine_in_abi"]).unwrap();
-    let err = Package::builder().add_wasm_module(wasm).build().unwrap_err();
+    let err = compile_template("tests/templates/buggy", &["call_engine_in_abi"])
+        .unwrap()
+        .load_template()
+        .unwrap_err();
     assert!(matches!(err, PackageError::TemplateCalledEngineDuringInitialization));
 
-    let wasm = compile_template("tests/templates/buggy", &["return_null_abi"]).unwrap();
-    let err = Package::builder().add_wasm_module(wasm).build().unwrap_err();
+    let err = compile_template("tests/templates/buggy", &["return_null_abi"])
+        .unwrap()
+        .load_template()
+        .unwrap_err();
     assert!(matches!(
         err,
         PackageError::WasmModuleError(WasmExecutionError::AbiDecodeError)
     ));
 
-    let wasm = compile_template("tests/templates/buggy", &["unexpected_export_function"]).unwrap();
-    let err = Package::builder().add_wasm_module(wasm).build().unwrap_err();
+    let err = compile_template("tests/templates/buggy", &["unexpected_export_function"])
+        .unwrap()
+        .load_template()
+        .unwrap_err();
     assert!(matches!(
         err,
         PackageError::WasmModuleError(WasmExecutionError::UnexpectedAbiFunction { .. })
@@ -143,12 +153,8 @@ fn test_dodgy_template() {
 }
 
 #[test]
-#[ignore]
 fn test_erc20() {
-    let state_db = MemoryStateStore::default();
-    let tracker = StateTracker::new(state_db, Default::default());
-    let template_test =
-        TemplateTest::with_runtime_interface(vec!["tests/templates/erc20"], RuntimeInterfaceImpl::new(tracker));
+    let template_test = TemplateTest::new(vec!["tests/templates/erc20"]);
 
     let initial_supply = Amount(1_000_000_000_000);
     let owner_address: ComponentAddress =
@@ -158,7 +164,7 @@ fn test_erc20() {
 
     let result = template_test.execute(vec![
         Instruction::CallMethod {
-            package_address: template_test.package_address(),
+            template_address: template_test.get_template_address("FungibleAccount"),
             component_address: owner_address,
             method: "withdraw".to_string(),
             args: args![Amount(100)],
@@ -167,19 +173,19 @@ fn test_erc20() {
             key: b"foo_bucket".to_vec(),
         },
         Instruction::CallMethod {
-            package_address: template_test.package_address(),
+            template_address: template_test.get_template_address("FungibleAccount"),
             component_address: receiver_address,
             method: "deposit".to_string(),
             args: args![Workspace(b"foo_bucket")],
         },
         Instruction::CallMethod {
-            package_address: template_test.package_address(),
+            template_address: template_test.get_template_address("FungibleAccount"),
             component_address: owner_address,
             method: "balance".to_string(),
             args: args![],
         },
         Instruction::CallMethod {
-            package_address: template_test.package_address(),
+            template_address: template_test.get_template_address("FungibleAccount"),
             component_address: receiver_address,
             method: "balance".to_string(),
             args: args![],
@@ -197,7 +203,6 @@ fn test_erc20() {
 }
 
 #[test]
-#[ignore]
 fn test_private_function() {
     // instantiate the counter
     let template_test = TemplateTest::new(vec!["tests/templates/private_function"]);
@@ -220,7 +225,6 @@ fn test_private_function() {
 }
 
 #[test]
-#[ignore]
 fn test_tuples() {
     let template_test = TemplateTest::new(vec!["tests/templates/tuples"]);
 

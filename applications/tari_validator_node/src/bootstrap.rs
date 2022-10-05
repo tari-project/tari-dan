@@ -55,8 +55,10 @@ use crate::{
             networking,
             networking::NetworkingHandle,
             template_manager,
+            template_manager::manager::TemplateManager,
         },
     },
+    payload_processor::TariDanPayloadProcessor,
     run_json_rpc,
     ApplicationConfig,
     GrpcWalletClient,
@@ -124,7 +126,7 @@ pub async fn spawn_services(
     );
 
     // Template manager
-    let template_manager = template_manager::spawn(sqlite_db, shutdown.clone());
+    let template_manager = template_manager::spawn(sqlite_db.clone(), shutdown.clone());
 
     // Base Node scanner
     base_layer_scanner::spawn(
@@ -132,9 +134,26 @@ pub async fn spawn_services(
         global_db.clone(),
         base_node_client.clone(),
         epoch_manager_handle.clone(),
-        template_manager,
+        template_manager.clone(),
         shutdown.clone(),
     );
+
+    // Run the JSON-RPC API
+    if let Some(address) = config.validator_node.json_rpc_address {
+        info!(target: LOG_TARGET, "Started JSON-RPC server on {}", address);
+        let handlers = JsonRpcHandlers::new(
+            node_identity.clone(),
+            GrpcWalletClient::new(config.validator_node.wallet_grpc_address),
+            mempool.clone(),
+        );
+        task::spawn(run_json_rpc(address, handlers));
+    }
+
+    // Payload processor
+    // TODO: we recreate the db template manager here, we could use the TemplateManagerHandle, but this is async, which
+    //       would force the PayloadProcessor to be async (maybe that is ok, or maybe we dont need the template manager
+    //       to be async if it doesn't have to download the templates).
+    let payload_processor = TariDanPayloadProcessor::new(TemplateManager::new(sqlite_db));
 
     // Consensus
     hotstuff::spawn(
@@ -142,6 +161,7 @@ pub async fn spawn_services(
         outbound_messaging,
         epoch_manager_handle.clone(),
         mempool.clone(),
+        payload_processor,
         rx_consensus_message,
         rx_vote_message,
         shutdown,

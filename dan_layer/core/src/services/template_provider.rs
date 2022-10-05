@@ -20,36 +20,12 @@
 //   WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //   USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use tari_comms::{multiaddr::Multiaddr, peer_manager::IdentitySignature};
-use tari_dan_engine::transaction::Transaction;
+use tari_dan_engine::packager::TemplateModuleLoader;
+use tari_template_lib::models::TemplateAddress;
 
-use crate::models::{vote_message::VoteMessage, HotStuffMessage};
+pub trait TemplateProvider {
+    type Template: TemplateModuleLoader;
+    type Error: std::error::Error + Sync + Send + 'static;
 
-#[derive(Debug, Clone)]
-pub enum DanMessage<TPayload, TAddr> {
-    // Consensus
-    HotStuffMessage(HotStuffMessage<TPayload, TAddr>),
-    VoteMessage(VoteMessage),
-    // Mempool
-    NewTransaction(Transaction),
-    // Network
-    NetworkAnnounce(NetworkAnnounce<TAddr>),
-}
-
-impl<TPayload, TAddr> DanMessage<TPayload, TAddr> {
-    pub fn as_type_str(&self) -> &'static str {
-        match self {
-            Self::HotStuffMessage(_) => "HotStuffMessage",
-            Self::VoteMessage(_) => "VoteMessage",
-            Self::NewTransaction(_) => "NewTransaction",
-            Self::NetworkAnnounce(_) => "NetworkAnnounce",
-        }
-    }
-}
-
-#[derive(Debug, Clone)]
-pub struct NetworkAnnounce<TAddr> {
-    pub identity: TAddr,
-    pub addresses: Vec<Multiaddr>,
-    pub identity_signature: IdentitySignature,
+    fn get_template(&self, id: &TemplateAddress) -> Result<Self::Template, Self::Error>;
 }

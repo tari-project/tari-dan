@@ -85,8 +85,8 @@ fn get_function_block(template_ident: &Ident, ast: FunctionAst) -> Expr {
     let mut stmts = vec![];
     let mut should_set_state = false;
     stmts.push(parse_quote! {
-            assert_eq!(call_info.args.len(), #expected_num_args, "Call had unexpected number of args. Got = {} expected = {}", call_info.args.len(), #expected_num_args); 
-        });
+        assert_eq!(call_info.args.len(), #expected_num_args, "Call had unexpected number of args. Got = {} expected = {}", call_info.args.len(), #expected_num_args); 
+    });
     // encode all arguments of the functions
     for (i, input_type) in ast.input_types.iter().enumerate() {
         let arg_ident = format_ident!("arg_{}", i);

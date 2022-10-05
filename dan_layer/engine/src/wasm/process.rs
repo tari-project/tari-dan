@@ -25,7 +25,6 @@ use std::io;
 use borsh::{BorshDeserialize, BorshSerialize};
 use tari_template_abi::{decode, encode, encode_into, encode_with_len, CallInfo, EngineOp, Type};
 use tari_template_lib::{
-    abi_context::AbiContext,
     args::{
         Arg,
         BucketInvokeArg,
@@ -36,7 +35,7 @@ use tari_template_lib::{
         SetComponentStateArg,
         VaultInvokeArg,
     },
-    models::{Contract, ContractAddress, Package, PackageAddress},
+    AbiContext,
 };
 use wasmer::{Function, Instance, Module, Val, WasmerEnv};
 
@@ -46,41 +45,28 @@ use crate::{
     wasm::{
         environment::{AllocPtr, WasmEnv},
         error::WasmExecutionError,
-        LoadedWasmModule,
+        LoadedWasmTemplate,
     },
 };
 
 const LOG_TARGET: &str = "tari::dan::wasm::process";
 
 #[derive(Debug)]
-pub struct Process {
-    module: LoadedWasmModule,
+pub struct WasmProcess {
+    module: LoadedWasmTemplate,
     env: WasmEnv<Runtime>,
     instance: Instance,
-    package_address: PackageAddress,
-    contract_address: ContractAddress,
 }
 
-impl Process {
-    pub fn start(
-        module: LoadedWasmModule,
-        state: Runtime,
-        package_address: PackageAddress,
-    ) -> Result<Self, WasmExecutionError> {
+impl WasmProcess {
+    pub fn start(module: LoadedWasmTemplate, state: Runtime) -> Result<Self, WasmExecutionError> {
         let mut env = WasmEnv::new(state);
         let store = module.wasm_module().store();
         let tari_engine = Function::new_native_with_env(store, env.clone(), Self::tari_engine_entrypoint);
         let resolver = env.create_resolver(store, tari_engine);
         let instance = Instance::new(module.wasm_module(), &resolver)?;
         env.init_with_instance(&instance)?;
-        Ok(Self {
-            module,
-            env,
-            instance,
-            package_address,
-            // TODO:
-            contract_address: ContractAddress::default(),
-        })
+        Ok(Self { module, env, instance })
     }
 
     fn alloc_and_write<T: BorshSerialize>(&self, val: &T) -> Result<AllocPtr, WasmExecutionError> {
@@ -174,19 +160,11 @@ impl Process {
     }
 
     fn encoded_abi_context(&self) -> Vec<u8> {
-        encode(&AbiContext {
-            package: Package {
-                id: self.package_address,
-            },
-            contract: Contract {
-                address: self.contract_address,
-            },
-        })
-        .unwrap()
+        encode(&AbiContext {}).unwrap()
     }
 }
 
-impl Invokable for Process {
+impl Invokable for WasmProcess {
     type Error = WasmExecutionError;
 
     fn invoke_by_name(&self, name: &str, args: Vec<Arg>) -> Result<ExecutionResult, Self::Error> {

@@ -23,9 +23,8 @@
 use std::sync::{Arc, RwLock};
 
 use tari_dan_engine::{
-    hashing::hasher,
-    runtime::{CommitResult, IdProvider, RuntimeError, RuntimeInterface, RuntimeState},
-    state_store::{memory::MemoryStateStore, AtomicDb, StateReader, StateWriter},
+    runtime::{FinalizeResult, RuntimeError, RuntimeInterface, RuntimeInterfaceImpl, RuntimeState, StateTracker},
+    state_store::memory::MemoryStateStore,
 };
 use tari_template_lib::{
     args::{
@@ -39,7 +38,7 @@ use tari_template_lib::{
         VaultAction,
         WorkspaceAction,
     },
-    models::{Component, ComponentAddress, ComponentInstance, VaultRef},
+    models::{ComponentAddress, ComponentInstance, VaultRef},
     Hash,
 };
 
@@ -47,19 +46,21 @@ use tari_template_lib::{
 pub struct MockRuntimeInterface {
     state: MemoryStateStore,
     calls: Arc<RwLock<Vec<&'static str>>>,
-    id_provider: IdProvider,
     invoke_result: Arc<RwLock<Option<InvokeResult>>>,
-    runtime_state: Arc<RwLock<Option<RuntimeState>>>,
+    inner: RuntimeInterfaceImpl,
 }
 
 impl MockRuntimeInterface {
     pub fn new() -> Self {
+        // TODO: We use a zero transaction hash for tests, however this isn't correct and won't always work.
+        let tx_hash = Hash::default();
+        let state = MemoryStateStore::default();
+        let tracker = StateTracker::new(state.clone(), tx_hash);
         Self {
-            state: MemoryStateStore::default(),
+            state,
             calls: Arc::new(RwLock::new(vec![])),
-            id_provider: IdProvider::new(Hash::default()),
             invoke_result: Arc::new(RwLock::new(None)),
-            runtime_state: Arc::new(RwLock::new(None)),
+            inner: RuntimeInterfaceImpl::new(tracker),
         }
     }
 
@@ -75,10 +76,6 @@ impl MockRuntimeInterface {
         self.calls.write().unwrap().clear();
     }
 
-    // pub fn set_resource_invoke_result(&self, result: InvokeResult) {
-    //     *self.invoke_result.write().unwrap() = Some(result);
-    // }
-
     fn add_call(&self, call: &'static str) {
         self.calls.write().unwrap().push(call);
     }
@@ -86,7 +83,8 @@ impl MockRuntimeInterface {
 
 impl RuntimeInterface for MockRuntimeInterface {
     fn set_current_runtime_state(&self, state: RuntimeState) {
-        self.runtime_state.write().unwrap().replace(state);
+        self.add_call("set_current_runtime_state");
+        self.inner.set_current_runtime_state(state);
     }
 
     fn emit_log(&self, level: LogLevel, message: String) {
@@ -103,90 +101,72 @@ impl RuntimeInterface for MockRuntimeInterface {
 
     fn create_component(&self, arg: CreateComponentArg) -> Result<ComponentAddress, RuntimeError> {
         self.add_call("create_component");
-        let new_component = Component {
-            contract_address: Default::default(),
-            package_address: Default::default(),
-            module_name: arg.module_name,
-            state: arg.state,
-        };
-        let component_address = self.id_provider.new_component_address();
-
-        let component = ComponentInstance::new(component_address, new_component);
-        let mut tx = self.state.write_access().map_err(RuntimeError::StateDbError)?;
-        tx.set_state(&component_address, component)?;
-        tx.commit()?;
-
-        Ok(component_address)
+        self.inner.create_component(arg)
     }
 
     fn get_component(&self, component_address: &ComponentAddress) -> Result<ComponentInstance, RuntimeError> {
         self.add_call("get_component");
-        let component = self
-            .state
-            .read_access()
-            .map_err(RuntimeError::StateDbError)?
-            .get_state(component_address)?
-            .ok_or(RuntimeError::ComponentNotFound {
-                address: *component_address,
-            })?;
-        Ok(component)
+        self.inner.get_component(component_address)
     }
 
     fn set_component_state(&self, component_address: &ComponentAddress, state: Vec<u8>) -> Result<(), RuntimeError> {
         self.add_call("set_component_state");
-        let mut tx = self.state.write_access().map_err(RuntimeError::StateDbError)?;
-        let mut component: ComponentInstance =
-            tx.get_state(component_address)?
-                .ok_or(RuntimeError::ComponentNotFound {
-                    address: *component_address,
-                })?;
-        component.state = state;
-        tx.set_state(&component_address, component)?;
-        tx.commit()?;
-
-        Ok(())
+        self.inner.set_component_state(component_address, state)
     }
 
     fn resource_invoke(
         &self,
-        _resource_ref: ResourceRef,
-        _action: ResourceAction,
-        _args: Vec<Vec<u8>>,
+        resource_ref: ResourceRef,
+        action: ResourceAction,
+        args: Vec<Vec<u8>>,
     ) -> Result<InvokeResult, RuntimeError> {
         self.add_call("resource_invoke");
-        Ok(self.invoke_result.read().unwrap().as_ref().unwrap().clone())
+        match self.invoke_result.read().unwrap().as_ref() {
+            Some(result) => Ok(result.clone()),
+            None => self.inner.resource_invoke(resource_ref, action, args),
+        }
     }
 
     fn vault_invoke(
         &self,
-        _resource_ref: VaultRef,
-        _action: VaultAction,
-        _args: Vec<Vec<u8>>,
+        vault_ref: VaultRef,
+        action: VaultAction,
+        args: Vec<Vec<u8>>,
     ) -> Result<InvokeResult, RuntimeError> {
         self.add_call("vault_invoke");
-        Ok(self.invoke_result.read().unwrap().as_ref().unwrap().clone())
+        match self.invoke_result.read().unwrap().as_ref() {
+            Some(result) => Ok(result.clone()),
+            None => self.inner.vault_invoke(vault_ref, action, args),
+        }
     }
 
     fn bucket_invoke(
         &self,
-        _bucket_ref: BucketRef,
-        _action: BucketAction,
-        _args: Vec<Vec<u8>>,
+        bucket_ref: BucketRef,
+        action: BucketAction,
+        args: Vec<Vec<u8>>,
     ) -> Result<InvokeResult, RuntimeError> {
-        todo!()
+        match self.invoke_result.read().unwrap().as_ref() {
+            Some(result) => Ok(result.clone()),
+            None => self.inner.bucket_invoke(bucket_ref, action, args),
+        }
     }
 
-    fn workspace_invoke(&self, _action: WorkspaceAction, _args: Vec<Vec<u8>>) -> Result<InvokeResult, RuntimeError> {
+    fn workspace_invoke(&self, action: WorkspaceAction, args: Vec<Vec<u8>>) -> Result<InvokeResult, RuntimeError> {
         self.add_call("workspace_invoke");
-        Ok(self.invoke_result.read().unwrap().as_ref().unwrap().clone())
+        match self.invoke_result.read().unwrap().as_ref() {
+            Some(result) => Ok(result.clone()),
+            None => self.inner.workspace_invoke(action, args),
+        }
     }
 
-    fn set_last_instruction_output(&self, _value: Option<Vec<u8>>) -> Result<(), RuntimeError> {
+    fn set_last_instruction_output(&self, value: Option<Vec<u8>>) -> Result<(), RuntimeError> {
         self.add_call("set_last_instruction_output");
-        Ok(())
+        self.inner.set_last_instruction_output(value)
     }
 
-    fn commit(&self) -> Result<CommitResult, RuntimeError> {
-        Ok(CommitResult::new(hasher("tx").result(), vec![], Ok(())))
+    fn finalize(&self) -> Result<FinalizeResult, RuntimeError> {
+        self.add_call("finalize");
+        self.inner.finalize()
     }
 }

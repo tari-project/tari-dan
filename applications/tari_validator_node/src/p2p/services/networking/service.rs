@@ -112,7 +112,7 @@ impl Networking {
 
     async fn dial_seed_peers(&mut self) -> Result<(), NetworkingError> {
         let seed_peers = self.peer_provider.get_seed_peers().await?;
-        info!(target: LOG_TARGET, "☎️ Dialling {} seed peers", seed_peers.len());
+        info!(target: LOG_TARGET, "☎️ Dialing {} seed peers", seed_peers.len());
 
         let dials = self
             .connectivity

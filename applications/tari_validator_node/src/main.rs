@@ -31,6 +31,7 @@ mod grpc;
 mod http_ui;
 mod json_rpc;
 mod p2p;
+mod payload_processor;
 mod template_registration_signing;
 mod validator_node_registration_signing;
 
@@ -46,6 +47,7 @@ use tari_common::{
     load_configuration,
 };
 use tari_comms::NodeIdentity;
+use tari_crypto::tari_utilities::hex::Hex;
 use tari_dan_common_types::ShardId;
 use tari_dan_core::{
     services::{base_node_error::BaseNodeError, BaseNodeClient},
@@ -193,7 +195,12 @@ async fn run_node(config: &ApplicationConfig) -> Result<(), ExitError> {
 
     // Show the validator node identity
     info!(target: LOG_TARGET, "🚀 Validator node started!");
-    info!(target: LOG_TARGET, "{}", node_identity);
+    info!(
+        target: LOG_TARGET,
+        "ℹ️ Node details: {}::{}",
+        node_identity.public_key().to_hex(),
+        node_identity.public_address()
+    );
 
     // fs::create_dir_all(&global.peer_db_path).map_err(|err| ExitError::new(ExitCode::ConfigError, err))?;
     let mut base_node_client = GrpcBaseNodeClient::new(config.validator_node.base_node_grpc_address);
@@ -212,7 +219,6 @@ async fn run_node(config: &ApplicationConfig) -> Result<(), ExitError> {
     // Run the http ui
     if let Some(address) = config.validator_node.http_ui_address {
         info!(target: LOG_TARGET, "Started HTTP UI server on {}", address);
-
         task::spawn(run_http_ui_server(address));
     }
 
