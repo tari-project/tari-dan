@@ -220,7 +220,10 @@ async fn run_node(config: &ApplicationConfig) -> Result<(), ExitError> {
     // Run the http ui
     if let Some(address) = config.validator_node.http_ui_address {
         info!(target: LOG_TARGET, "🕸️ Started HTTP UI server on {}", address);
-        task::spawn(run_http_ui_server(address));
+        task::spawn(run_http_ui_server(
+            address,
+            config.validator_node.json_rpc_address.map(|addr| addr.to_string()),
+        ));
     }
 
     // Show the validator node identity
