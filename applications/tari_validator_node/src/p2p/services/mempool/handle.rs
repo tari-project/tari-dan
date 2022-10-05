@@ -24,7 +24,7 @@ use std::sync::{Arc, Mutex};
 
 use tari_dan_common_types::ShardId;
 use tari_dan_core::models::TreeNodeHash;
-use tari_dan_engine::instruction::Transaction;
+use tari_dan_engine::transaction::Transaction;
 use tokio::sync::{broadcast, broadcast::error::RecvError, mpsc, mpsc::error::SendError};
 
 pub type TransactionVecMutex = Arc<Mutex<Vec<(Transaction, Option<TreeNodeHash>)>>>;

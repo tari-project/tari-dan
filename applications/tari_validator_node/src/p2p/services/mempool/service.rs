@@ -29,7 +29,7 @@ use tari_dan_core::{
     models::{Payload, TariDanPayload},
     services::infrastructure_services::OutboundService,
 };
-use tari_dan_engine::instruction::Transaction;
+use tari_dan_engine::transaction::Transaction;
 use tokio::sync::{broadcast, mpsc};
 
 use super::handle::TransactionVecMutex;

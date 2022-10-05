@@ -23,18 +23,25 @@
 use std::convert::TryFrom;
 
 use serde::Deserialize;
-use tari_common_types::types::{PrivateKey, Signature};
+use tari_common_types::types::{PrivateKey, PublicKey, Signature};
+use tari_crypto::keys::PublicKey as PublicKeyT;
+use tari_utilities::ByteArray;
 
-use crate::{crypto::create_key_pair, instruction::Instruction};
+use crate::{crypto::create_key_pair, hashing::hasher, transaction::Instruction};
 
 #[derive(Debug, Clone, Deserialize)]
 pub struct InstructionSignature(Signature);
 
 impl InstructionSignature {
-    pub fn sign(secret_key: &PrivateKey, _instructions: &[Instruction]) -> Self {
-        let (nonce, _) = create_key_pair();
-        // TODO: create proper challenge
-        let challenge = [0u8; 32];
+    pub fn sign(secret_key: &PrivateKey, instructions: &[Instruction]) -> Self {
+        let public_key = PublicKey::from_secret_key(secret_key);
+        let (nonce, nonce_pk) = create_key_pair();
+        // TODO: implement dan encoding for (a wrapper of) PublicKey
+        let challenge = hasher("instruction-signature")
+            .chain(nonce_pk.as_bytes())
+            .chain(public_key.as_bytes())
+            .chain(instructions)
+            .result();
         Self(Signature::sign(secret_key.clone(), nonce, &challenge).unwrap())
     }
 

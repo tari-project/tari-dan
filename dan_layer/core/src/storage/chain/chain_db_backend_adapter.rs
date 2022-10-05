@@ -22,8 +22,6 @@
 
 use std::fmt::Debug;
 
-use tari_common_types::types::FixedHash;
-
 use super::DbTemplate;
 use crate::{models::Payload, storage::AtomicDb};
 
@@ -32,7 +30,7 @@ pub trait ChainDbBackendAdapter: AtomicDb + Send + Sync + Clone {
     type Payload: Payload;
 
     fn insert_template(&self, item: &DbTemplate, transaction: &Self::DbTransaction) -> Result<(), Self::Error>;
-    fn find_template_by_address(&self, template_address: &FixedHash) -> Result<Option<DbTemplate>, Self::Error>;
+    fn find_template_by_address(&self, template_address: &[u8]) -> Result<Option<DbTemplate>, Self::Error>;
 
     // fn is_empty(&self) -> Result<bool, Self::Error>;
     // fn node_exists(&self, node_hash: &TreeNodeHash) -> Result<bool, Self::Error>;

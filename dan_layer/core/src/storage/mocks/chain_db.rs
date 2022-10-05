@@ -22,7 +22,6 @@
 
 use std::sync::{Arc, RwLock};
 
-use tari_common_types::types::FixedHash;
 use tari_dan_common_types::ShardId;
 use tari_utilities::message_format::MessageFormat;
 
@@ -68,12 +67,12 @@ impl ChainDbBackendAdapter for MockChainDbBackupAdapter {
         Ok(())
     }
 
-    fn find_template_by_address(&self, template_address: &FixedHash) -> Result<Option<DbTemplate>, Self::Error> {
+    fn find_template_by_address(&self, template_address: &[u8]) -> Result<Option<DbTemplate>, Self::Error> {
         let lock = self.db.read()?;
         let rec = lock
             .templates
             .records()
-            .find(|(_, rec)| rec.template_address == *template_address)
+            .find(|(_, rec)| rec.template_address.as_ref() == template_address)
             .map(|(_, template)| template.clone());
         Ok(rec)
     }

@@ -154,7 +154,6 @@ mod tests {
     }
 
     #[test]
-    #[ignore]
     fn read_write_rollback_commit() {
         #[derive(Debug, Encode, Decode, PartialEq, Eq, Clone)]
         struct UserData {

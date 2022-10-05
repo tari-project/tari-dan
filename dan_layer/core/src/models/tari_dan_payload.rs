@@ -24,7 +24,7 @@ use std::fmt::Debug;
 
 use tari_common_types::types::FixedHash;
 use tari_dan_common_types::{ObjectClaim, ObjectId, ShardId, SubstateChange};
-use tari_dan_engine::instruction::Transaction;
+use tari_dan_engine::transaction::Transaction;
 
 use crate::models::{ConsensusHash, Payload};
 
@@ -41,11 +41,15 @@ impl TariDanPayload {
     pub fn transaction(&self) -> &Transaction {
         &self.transaction
     }
+
+    pub fn into_payload(self) -> Transaction {
+        self.transaction
+    }
 }
 
 impl ConsensusHash for TariDanPayload {
     fn consensus_hash(&self) -> &[u8] {
-        self.transaction.hash().as_slice()
+        self.transaction.hash()
     }
 }
 

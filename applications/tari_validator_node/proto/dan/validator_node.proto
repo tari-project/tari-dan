@@ -134,15 +134,14 @@ message Instruction {
   repeated Arg args = 3;
 
   // function only
-  string template = 4;
-  string function = 5;
+  string function = 4;
 
   // method only
-  bytes component_address = 6;
-  string method = 7;
+  bytes component_address = 5;
+  string method = 6;
 
   // PutLastInstructionOutputOnWorkspace
-  bytes key = 8;
+  bytes key = 7;
 }
 
 message SubmitTransactionRequest{

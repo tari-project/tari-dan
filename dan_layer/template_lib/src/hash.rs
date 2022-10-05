@@ -31,11 +31,11 @@ use std::{
 use tari_template_abi::{Decode, Encode};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
-#[cfg_attr(feature = "json", derive(serde::Deserialize))]
+#[cfg_attr(feature = "serde", derive(serde::Deserialize))]
 pub struct Hash(#[cfg_attr(feature = "json", serde(with = "hex"))] [u8; 32]);
 
 impl Hash {
-    pub fn into_inner(self) -> [u8; 32] {
+    pub fn into_array(self) -> [u8; 32] {
         self.0
     }
 

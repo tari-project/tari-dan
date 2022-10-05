@@ -27,7 +27,7 @@ use tari_comms::{
     types::CommsPublicKey,
 };
 use tari_comms_dht::DhtActorError;
-use tari_dan_engine::instruction::Transaction;
+use tari_dan_engine::transaction::Transaction;
 
 use crate::services::{infrastructure_services::NodeAddressable, DanPeer};
 

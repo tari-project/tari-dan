@@ -36,7 +36,7 @@ pub struct Instruction {
     pub sender: Vec<u8>,
 }
 
-impl TryFrom<Instruction> for tari_dan_engine::instruction::Instruction {
+impl TryFrom<Instruction> for tari_dan_engine::transaction::Instruction {
     type Error = SqliteStorageError;
 
     fn try_from(_instruction: Instruction) -> Result<Self, Self::Error> {

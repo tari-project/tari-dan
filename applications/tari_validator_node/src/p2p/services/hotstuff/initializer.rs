@@ -25,17 +25,20 @@ use std::sync::Arc;
 use tari_comms::{types::CommsPublicKey, NodeIdentity};
 use tari_dan_core::{
     models::{vote_message::VoteMessage, HotStuffMessage, TariDanPayload},
-    services::TariDanPayloadProcessor,
     storage::shard_store::MemoryShardStoreFactory,
 };
 use tari_shutdown::ShutdownSignal;
 use tokio::sync::mpsc;
 
-use crate::p2p::services::{
-    epoch_manager::handle::EpochManagerHandle,
-    hotstuff::hotstuff_service::HotstuffService,
-    mempool::MempoolHandle,
-    messaging::OutboundMessaging,
+use crate::{
+    p2p::services::{
+        epoch_manager::handle::EpochManagerHandle,
+        hotstuff::hotstuff_service::HotstuffService,
+        mempool::MempoolHandle,
+        messaging::OutboundMessaging,
+        template_manager::manager::TemplateManager,
+    },
+    payload_processor::TariDanPayloadProcessor,
 };
 
 pub fn spawn(
@@ -43,11 +46,11 @@ pub fn spawn(
     outbound: OutboundMessaging,
     epoch_manager: EpochManagerHandle,
     mempool: MempoolHandle,
+    payload_processor: TariDanPayloadProcessor<TemplateManager>,
     rx_consensus_message: mpsc::Receiver<(CommsPublicKey, HotStuffMessage<TariDanPayload, CommsPublicKey>)>,
     rx_vote_message: mpsc::Receiver<(CommsPublicKey, VoteMessage)>,
     shutdown: ShutdownSignal,
 ) {
-    let payload_processor = TariDanPayloadProcessor::new();
     // let sqlite_db = SqliteShardStoreFactory {};
     let db = MemoryShardStoreFactory::new();
     HotstuffService::spawn(

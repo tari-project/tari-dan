@@ -34,10 +34,9 @@ use tari_template_lib::{
         Component,
         ComponentAddress,
         ComponentInstance,
-        ContractAddress,
         Metadata,
-        PackageAddress,
         ResourceAddress,
+        TemplateAddress,
         VaultId,
     },
     resource::ResourceType,
@@ -46,7 +45,13 @@ use tari_template_lib::{
 
 use crate::{
     models::{Bucket, Resource, Vault},
-    runtime::{id_provider::IdProvider, logs::LogEntry, RuntimeError, TransactionCommitError},
+    runtime::{
+        commit_result::{SubstateDiff, SubstateValue},
+        id_provider::IdProvider,
+        logs::LogEntry,
+        RuntimeError,
+        TransactionCommitError,
+    },
     state_store::{memory::MemoryStateStore, AtomicDb, StateReader, StateWriter},
 };
 
@@ -59,8 +64,7 @@ pub struct StateTracker {
 
 #[derive(Debug, Clone)]
 pub struct RuntimeState {
-    pub package_address: PackageAddress,
-    pub contract_address: ContractAddress,
+    pub template_address: TemplateAddress,
 }
 
 #[derive(Debug, Clone)]
@@ -182,8 +186,7 @@ impl StateTracker {
     pub fn new_component(&self, new_component: CreateComponentArg) -> Result<ComponentAddress, RuntimeError> {
         let runtime_state = self.runtime_state()?;
         let component = Component {
-            contract_address: runtime_state.contract_address,
-            package_address: runtime_state.package_address,
+            template_address: runtime_state.template_address,
             module_name: new_component.module_name,
             state: new_component.state,
         };
@@ -318,33 +321,41 @@ impl StateTracker {
         })
     }
 
-    pub fn commit(&self) -> Result<(), TransactionCommitError> {
+    pub fn finalize(&self) -> Result<SubstateDiff, TransactionCommitError> {
         self.validate_finalized()?;
-
         let mut tx = self
             .state_store
             .write_access()
             .map_err(TransactionCommitError::StateStoreTransactionError)?;
 
-        self.write_with(|state| -> Result<(), TransactionCommitError> {
+        let substates = self.write_with(|state| {
+            let mut substates = SubstateDiff::new();
             for (component_addr, component) in state.new_components.drain() {
-                tx.set_state(&component_addr, component)?;
+                tx.set_state(&component_addr, component.clone())?;
+                // TODO:
+                substates.up(
+                    component_addr.into_array(),
+                    SubstateValue::new(component.into_component()),
+                );
             }
 
-            for (vault_id, vault) in state.new_vaults.drain() {
-                tx.set_state(&vault_id, vault)?;
-            }
+            // Vaults are held within a component and contain a resource, so I dont think they are a substate in and of
+            // themselves
+            // for (vault_id, vault) in state.new_vaults.drain() {
+            //   tx.set_state(&vault_id, vault)?;
+            // }
 
             for (resource_addr, resource) in state.new_resources.drain() {
-                tx.set_state(&resource_addr, resource)?;
+                tx.set_state(&resource_addr, resource.clone())?;
+                substates.up(resource_addr.into_array(), SubstateValue::new(resource));
             }
 
-            Ok(())
+            Result::<_, TransactionCommitError>::Ok(substates)
         })?;
 
         tx.commit()?;
 
-        Ok(())
+        Ok(substates)
     }
 
     fn read_with<R, F: FnOnce(&WorkingState) -> R>(&self, f: F) -> R {

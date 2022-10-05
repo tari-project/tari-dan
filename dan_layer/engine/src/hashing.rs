@@ -33,6 +33,7 @@ pub fn hasher(label: &'static str) -> TariEngineHasher {
     TariEngineHasher::new_with_label(label)
 }
 
+#[derive(Debug, Clone)]
 pub struct TariEngineHasher {
     hasher: Blake256,
 }
@@ -55,6 +56,10 @@ impl TariEngineHasher {
     pub fn chain<T: Encode + ?Sized>(mut self, data: &T) -> Self {
         self.update(data);
         self
+    }
+
+    pub fn digest<T: Encode + ?Sized>(self, data: &T) -> Hash {
+        self.chain(data).result()
     }
 
     pub fn result(self) -> Hash {

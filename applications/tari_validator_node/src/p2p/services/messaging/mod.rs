@@ -35,7 +35,7 @@ use tari_dan_core::{
     message::NetworkAnnounce,
     models::{vote_message::VoteMessage, HotStuffMessage, TariDanPayload},
 };
-use tari_dan_engine::instruction::Transaction;
+use tari_dan_engine::transaction::Transaction;
 use tokio::sync::mpsc;
 
 use crate::comms::MessageChannel;

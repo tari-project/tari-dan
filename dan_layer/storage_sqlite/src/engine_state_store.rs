@@ -176,7 +176,6 @@ mod tests {
     use super::*;
 
     #[test]
-    #[ignore]
     fn read_write_rollback_commit() {
         #[derive(Debug, BorshSerialize, BorshDeserialize, PartialEq, Eq, Clone)]
         struct UserData {

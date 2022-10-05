@@ -20,23 +20,24 @@
 //   WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //   USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use tari_template_lib::Hash;
+use std::collections::BTreeMap;
 
-use crate::{
-    runtime::{logs::LogEntry, TransactionCommitError},
-    wasm::ExecutionResult,
-};
+use tari_dan_common_types::ShardId;
+use tari_template_abi::{encode, Encode};
+use tari_template_lib::{models::Component, Hash};
+
+use crate::{models::Resource, runtime::logs::LogEntry, wasm::ExecutionResult};
 
 #[derive(Debug)]
-pub struct CommitResult {
+pub struct FinalizeResult {
     pub transaction_hash: Hash,
     pub logs: Vec<LogEntry>,
     pub execution_results: Vec<ExecutionResult>,
-    pub result: Result<(), TransactionCommitError>,
+    pub result: TransactionResult,
 }
 
-impl CommitResult {
-    pub fn new(transaction_hash: Hash, logs: Vec<LogEntry>, result: Result<(), TransactionCommitError>) -> Self {
+impl FinalizeResult {
+    pub fn new(transaction_hash: Hash, logs: Vec<LogEntry>, result: TransactionResult) -> Self {
         Self {
             transaction_hash,
             logs,
@@ -44,4 +45,93 @@ impl CommitResult {
             result,
         }
     }
+}
+
+#[derive(Debug, Clone)]
+pub enum TransactionResult {
+    Accept(SubstateDiff),
+    Reject(RejectResult),
+}
+
+impl TransactionResult {
+    pub fn expect(self, msg: &str) -> SubstateDiff {
+        match self {
+            Self::Accept(diff) => diff,
+            Self::Reject(result) => panic!("{}. Transaction was rejected {}", msg, result.reason),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Default)]
+pub struct SubstateDiff {
+    up_substates: BTreeMap<ShardId, SubstateValue>,
+    down_substates: Vec<ShardId>,
+}
+
+impl SubstateDiff {
+    pub fn new() -> Self {
+        Self {
+            up_substates: BTreeMap::new(),
+            down_substates: Vec::new(),
+        }
+    }
+
+    pub fn up<T: Into<ShardId>>(&mut self, shard_id: T, value: SubstateValue) {
+        self.up_substates.insert(shard_id.into(), value);
+    }
+
+    pub fn down<T: Into<ShardId>>(&mut self, shard_id: T) {
+        self.down_substates.push(shard_id.into());
+    }
+
+    pub fn up_iter(&self) -> impl Iterator<Item = (&ShardId, &SubstateValue)> + '_ {
+        self.up_substates.iter()
+    }
+
+    pub fn down_iter(&self) -> impl Iterator<Item = &ShardId> + '_ {
+        self.down_substates.iter()
+    }
+}
+
+#[derive(Debug, Clone, Encode)]
+pub struct SubstateValue {
+    substate: Substate,
+    version: u32,
+}
+
+impl SubstateValue {
+    pub fn new<T: Into<Substate>>(substate: T) -> Self {
+        Self {
+            substate: substate.into(),
+            version: 0,
+        }
+    }
+
+    pub fn to_bytes(&self) -> Vec<u8> {
+        encode(self).unwrap()
+    }
+}
+
+#[derive(Debug, Clone, Encode)]
+pub enum Substate {
+    Component(Component),
+    Resource(Resource),
+}
+
+impl From<Component> for Substate {
+    fn from(component: Component) -> Self {
+        Self::Component(component)
+    }
+}
+
+impl From<Resource> for Substate {
+    fn from(resource: Resource) -> Self {
+        Self::Resource(resource)
+    }
+}
+
+#[derive(Debug, Clone, Encode)]
+pub struct RejectResult {
+    // TODO: This should contain data required for a rejection vote
+    pub reason: String,
 }

@@ -8,8 +8,8 @@ use d3ne::WorkersBuilder;
 use crate::{
     flow::{FlowEngineError, FlowInstance},
     function_definitions::{FlowFunctionDefinition, FunctionArgDefinition},
-    instruction::Instruction,
     state::StateDbUnitOfWork,
+    transaction::Instruction,
 };
 
 #[derive(Clone, Default)]

@@ -22,7 +22,6 @@
 
 use std::{fs, io, str::FromStr, sync::Arc};
 
-use log::info;
 use tari_app_utilities::{identity_management, identity_management::load_from_json};
 use tari_common::exit_codes::{ExitCode, ExitError};
 use tari_comms::{
@@ -37,7 +36,6 @@ use tari_dan_core::storage::global::GlobalDb;
 use tari_dan_storage_sqlite::{global::SqliteGlobalDbBackendAdapter, SqliteDbFactory};
 use tari_p2p::{initialization::spawn_comms_using_transport, peer_seeds::SeedPeer, PeerSeedsConfig};
 use tari_shutdown::ShutdownSignal;
-use tokio::task;
 
 use crate::{
     base_layer_scanner,
@@ -48,22 +46,23 @@ use crate::{
         services::{
             comms_peer_provider::CommsPeerProvider,
             epoch_manager,
+            epoch_manager::handle::EpochManagerHandle,
             hotstuff,
             mempool,
+            mempool::MempoolHandle,
             messaging,
             messaging::{DanMessageReceivers, DanMessageSenders},
             networking,
             networking::NetworkingHandle,
             template_manager,
+            template_manager::manager::TemplateManager,
         },
     },
-    run_json_rpc,
+    payload_processor::TariDanPayloadProcessor,
     ApplicationConfig,
-    GrpcWalletClient,
-    JsonRpcHandlers,
 };
 
-const LOG_TARGET: &str = "tari_validator_node::bootstrap";
+const _LOG_TARGET: &str = "tari_validator_node::bootstrap";
 
 pub async fn spawn_services(
     config: &ApplicationConfig,
@@ -101,7 +100,7 @@ pub async fn spawn_services(
     } = message_receivers;
 
     // Epoch manager
-    let epoch_manager_handle = epoch_manager::spawn(
+    let epoch_manager = epoch_manager::spawn(
         base_node_client.clone(),
         node_identity.public_key().clone(),
         shutdown.clone(),
@@ -124,24 +123,31 @@ pub async fn spawn_services(
     );
 
     // Template manager
-    let template_manager = template_manager::spawn(sqlite_db, shutdown.clone());
+    let template_manager = template_manager::spawn(sqlite_db.clone(), shutdown.clone());
 
     // Base Node scanner
     base_layer_scanner::spawn(
         config.validator_node.clone(),
         global_db.clone(),
         base_node_client.clone(),
-        epoch_manager_handle.clone(),
-        template_manager,
+        epoch_manager.clone(),
+        template_manager.clone(),
         shutdown.clone(),
     );
+
+    // Payload processor
+    // TODO: we recreate the db template manager here, we could use the TemplateManagerHandle, but this is async, which
+    //       would force the PayloadProcessor to be async (maybe that is ok, or maybe we dont need the template manager
+    //       to be async if it doesn't have to download the templates).
+    let payload_processor = TariDanPayloadProcessor::new(TemplateManager::new(sqlite_db));
 
     // Consensus
     hotstuff::spawn(
         node_identity.clone(),
         outbound_messaging,
-        epoch_manager_handle.clone(),
+        epoch_manager.clone(),
         mempool.clone(),
+        payload_processor,
         rx_consensus_message,
         rx_vote_message,
         shutdown,
@@ -152,24 +158,16 @@ pub async fn spawn_services(
         .await
         .map_err(|e| ExitError::new(ExitCode::ConfigError, format!("Could not spawn using transport: {}", e)))?;
 
-    // Run the JSON-RPC API
-    if let Some(address) = config.validator_node.json_rpc_address {
-        info!(target: LOG_TARGET, "Started JSON-RPC server on {}", address);
-        let handlers = JsonRpcHandlers::new(
-            node_identity,
-            GrpcWalletClient::new(config.validator_node.wallet_grpc_address),
-            mempool,
-            epoch_manager_handle,
-            comms.clone(),
-            base_node_client,
-        );
-        task::spawn(run_json_rpc(address, handlers));
-    }
     // Save final node identity after comms has initialized. This is required because the public_address can be
     // changed by comms during initialization when using tor.
     save_identities(config, &comms)?;
 
-    Ok(Services { comms, networking })
+    Ok(Services {
+        comms,
+        networking,
+        mempool,
+        epoch_manager,
+    })
 }
 
 fn save_identities(config: &ApplicationConfig, comms: &CommsNode) -> Result<(), ExitError> {
@@ -192,7 +190,8 @@ fn ensure_directories_exist(config: &ApplicationConfig) -> io::Result<()> {
 pub struct Services {
     pub comms: CommsNode,
     pub networking: NetworkingHandle,
-    // TODO: Add more as needed
+    pub mempool: MempoolHandle,
+    pub epoch_manager: EpochManagerHandle,
 }
 
 fn setup_p2p_rpc(

@@ -23,25 +23,29 @@
 use std::sync::Arc;
 
 use log::*;
-use tari_template_lib::{arg, args::WorkspaceAction, invoke_args};
+use tari_template_lib::{
+    arg,
+    args::{Arg, WorkspaceAction},
+    invoke_args,
+};
 
 use crate::{
-    instruction::{error::InstructionError, Instruction, Transaction},
-    packager::Package,
-    runtime::{CommitResult, Runtime, RuntimeInterface, RuntimeState},
+    packager::{LoadedTemplate, Package},
+    runtime::{FinalizeResult, Runtime, RuntimeInterface, RuntimeState},
     traits::Invokable,
-    wasm::{ExecutionResult, Process},
+    transaction::{Instruction, Transaction, TransactionError},
+    wasm::{ExecutionResult, WasmProcess},
 };
 
 const LOG_TARGET: &str = "dan::engine::instruction_processor";
 
 #[derive(Debug, Clone)]
-pub struct InstructionProcessor<TRuntimeInterface> {
+pub struct TransactionProcessor<TRuntimeInterface> {
     package: Package,
     runtime_interface: TRuntimeInterface,
 }
 
-impl<TRuntimeInterface> InstructionProcessor<TRuntimeInterface>
+impl<TRuntimeInterface> TransactionProcessor<TRuntimeInterface>
 where TRuntimeInterface: RuntimeInterface + Clone + 'static
 {
     pub fn new(runtime_interface: TRuntimeInterface, package: Package) -> Self {
@@ -51,84 +55,68 @@ where TRuntimeInterface: RuntimeInterface + Clone + 'static
         }
     }
 
-    pub fn execute(&self, transaction: Transaction) -> Result<CommitResult, InstructionError> {
-        let mut exec_results = Vec::with_capacity(transaction.instructions.len());
-
+    pub fn execute(&self, transaction: Transaction) -> Result<FinalizeResult, TransactionError> {
         let runtime = Runtime::new(Arc::new(self.runtime_interface.clone()));
-        for instruction in transaction.instructions {
-            let result = self.process_instruction(&runtime, instruction)?;
-            exec_results.push(result);
-        }
+        let exec_results = transaction
+            .instructions
+            .into_iter()
+            .map(|instruction| self.process_instruction(&runtime, instruction))
+            .collect::<Result<Vec<_>, _>>()?;
 
-        let mut commit_results = runtime.interface().commit()?;
+        let mut finalize_result = runtime.interface().finalize()?;
         // TODO: We probably dont need this
-        commit_results.execution_results = exec_results;
+        finalize_result.execution_results = exec_results;
 
-        Ok(commit_results)
+        Ok(finalize_result)
     }
 
     fn process_instruction(
         &self,
         runtime: &Runtime,
         instruction: Instruction,
-    ) -> Result<ExecutionResult, InstructionError> {
+    ) -> Result<ExecutionResult, TransactionError> {
         debug!(target: LOG_TARGET, "instruction = {:?}", instruction);
         match instruction {
             Instruction::CallFunction {
-                package_address,
-                template,
+                template_address,
                 function,
                 args,
             } => {
-                if package_address != self.package.address() {
-                    return Err(InstructionError::PackageNotFound { package_address });
-                }
+                runtime
+                    .interface()
+                    .set_current_runtime_state(RuntimeState { template_address });
 
-                runtime.interface().set_current_runtime_state(RuntimeState {
-                    package_address,
-                    // TODO: Get contract address
-                    contract_address: Default::default(),
-                });
+                let module = self.package.get_template_by_address(&template_address).ok_or(
+                    TransactionError::TemplateNotFound {
+                        address: template_address,
+                    },
+                )?;
 
-                let module = self
-                    .package
-                    .get_module_by_name(&template)
-                    .ok_or(InstructionError::TemplateNameNotFound { name: template })?;
-
-                // TODO: implement intelligent instance caching
-                let process = Process::start(module.clone(), runtime.clone(), package_address)?;
-                let result = process.invoke_by_name(&function, args)?;
+                let result = self.invoke_template(module.clone(), runtime.clone(), &function, args)?;
                 Ok(result)
             },
             Instruction::CallMethod {
-                package_address,
+                template_address,
                 component_address,
                 method,
                 args,
             } => {
-                if package_address != self.package.address() {
-                    return Err(InstructionError::PackageNotFound { package_address });
-                }
+                let module = self.package.get_template_by_address(&template_address).ok_or(
+                    TransactionError::TemplateNotFound {
+                        address: template_address,
+                    },
+                )?;
                 let component = self.runtime_interface.get_component(&component_address)?;
-                let module = self.package.get_module_by_name(&component.module_name).ok_or_else(|| {
-                    InstructionError::TemplateNameNotFound {
-                        name: component.module_name.clone(),
-                    }
-                })?;
 
                 runtime.interface().set_current_runtime_state(RuntimeState {
-                    package_address,
-                    // TODO: Get contract address
-                    contract_address: Default::default(),
+                    template_address: component.template_address,
                 });
 
                 let mut final_args = Vec::with_capacity(args.len() + 1);
                 final_args.push(arg![component]);
                 final_args.extend(args);
 
-                // TODO: implement intelligent instance caching
-                let process = Process::start(module.clone(), runtime.clone(), package_address)?;
-                let result = process.invoke_by_name(&method, final_args)?;
+                let result = self.invoke_template(module.clone(), runtime.clone(), &method, final_args)?;
                 Ok(result)
             },
             Instruction::PutLastInstructionOutputOnWorkspace { key } => {
@@ -138,5 +126,22 @@ where TRuntimeInterface: RuntimeInterface + Clone + 'static
                 Ok(ExecutionResult::empty())
             },
         }
+    }
+
+    fn invoke_template(
+        &self,
+        module: LoadedTemplate,
+        runtime: Runtime,
+        function: &str,
+        args: Vec<Arg>,
+    ) -> Result<ExecutionResult, TransactionError> {
+        let result = match module {
+            LoadedTemplate::Wasm(wasm_module) => {
+                // TODO: implement intelligent instance caching
+                let process = WasmProcess::start(wasm_module, runtime)?;
+                process.invoke_by_name(function, args)?
+            },
+        };
+        Ok(result)
     }
 }

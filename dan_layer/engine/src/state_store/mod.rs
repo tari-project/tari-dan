@@ -24,7 +24,6 @@ pub mod memory;
 
 use std::{error::Error, io};
 
-use tari_dan_common_types::SubstateState;
 use tari_template_abi::{encode, Decode, Encode};
 
 // pub trait StateStorage<'a>: AtomicDb<'a, Error = StateStoreError> + Send + Sync {}
@@ -53,28 +52,10 @@ pub trait AtomicDb<'a> {
 pub trait StateReader {
     fn get_state_raw(&self, key: &[u8]) -> Result<Option<Vec<u8>>, StateStoreError>;
 
-    fn get_state_as_state<K: Encode>(&self, key: &K) -> Result<Option<SubstateState>, StateStoreError> {
-        let value = self.get_state_raw(&encode(key)?)?;
-        let value = value
-            .map(|v| SubstateState::deserialize(&mut v.as_slice()))
-            .transpose()?;
-        Ok(value)
-    }
-
     fn get_state<K: Encode, V: Decode>(&self, key: &K) -> Result<Option<V>, StateStoreError> {
-        let state = self.get_state_as_state(key)?;
-        if let Some(s) = state {
-            match s {
-                SubstateState::DoesNotExist => Ok(None),
-                SubstateState::Exists { data, .. } => {
-                    let value = V::deserialize(&mut data.as_slice())?;
-                    Ok(Some(value))
-                },
-                SubstateState::Destroyed { .. } => Err(StateStoreError::SubstateDestroyed),
-            }
-        } else {
-            Ok(None)
-        }
+        let value = self.get_state_raw(&encode(key)?)?;
+        let value = value.map(|v| V::deserialize(&mut v.as_slice())).transpose()?;
+        Ok(value)
     }
 
     fn exists(&self, key: &[u8]) -> Result<bool, StateStoreError>;

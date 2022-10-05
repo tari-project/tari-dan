@@ -20,11 +20,16 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use crate::packager::PackageError;
+use tari_template_lib::models::TemplateAddress;
 
-pub trait PackageModuleLoader {
-    type Loaded;
-    type Error: Into<PackageError>;
+use crate::{runtime::RuntimeError, wasm::WasmExecutionError};
 
-    fn load_module(&self) -> Result<Self::Loaded, Self::Error>;
+#[derive(Debug, thiserror::Error)]
+pub enum TransactionError {
+    #[error(transparent)]
+    WasmExecutionError(#[from] WasmExecutionError),
+    #[error("Template not found at address {address}")]
+    TemplateNotFound { address: TemplateAddress },
+    #[error(transparent)]
+    RuntimeError(#[from] RuntimeError),
 }

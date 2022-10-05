@@ -20,39 +20,43 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+use std::collections::HashMap;
+
+use serde::Deserialize;
+use tari_common_types::types::{BulletRangeProof, ComSignature, Commitment, PublicKey};
+use tari_dan_common_types::{ObjectClaim, ObjectId, ShardId, SubstateChange};
+use tari_mmr::MerkleProof;
+use tari_template_abi::Encode;
+use tari_template_lib::{
+    args::Arg,
+    models::{ComponentAddress, TemplateAddress},
+    Hash,
+};
+use tari_utilities::ByteArray;
+
+use crate::hashing::hasher;
+
 mod builder;
 pub use builder::TransactionBuilder;
 
 mod error;
+pub use error::TransactionError;
 
 mod processor;
-pub use processor::InstructionProcessor;
+pub use processor::TransactionProcessor;
 
 mod signature;
-use std::collections::HashMap;
-
-use digest::{Digest, FixedOutput};
 pub use signature::InstructionSignature;
-use tari_common_types::types::{BulletRangeProof, ComSignature, Commitment, FixedHash, PublicKey};
-use tari_crypto::hash::blake2::Blake256;
-use tari_dan_common_types::{ObjectClaim, ObjectId, ShardId, SubstateChange};
-use tari_mmr::MerkleProof;
-use tari_template_lib::{
-    args::Arg,
-    models::{ComponentAddress, PackageAddress},
-};
-use tari_utilities::ByteArray;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Deserialize, Encode)]
 pub enum Instruction {
     CallFunction {
-        package_address: PackageAddress,
-        template: String,
+        template_address: TemplateAddress,
         function: String,
         args: Vec<Arg>,
     },
     CallMethod {
-        package_address: PackageAddress,
+        template_address: TemplateAddress,
         component_address: ComponentAddress,
         method: String,
         args: Vec<Arg>,
@@ -63,13 +67,8 @@ pub enum Instruction {
 }
 
 impl Instruction {
-    pub fn hash(&self) -> FixedHash {
-        // TODO: put in actual hashes
-        match self {
-            Instruction::CallFunction { .. } => FixedHash::zero(),
-            Instruction::CallMethod { .. } => FixedHash::zero(),
-            Instruction::PutLastInstructionOutputOnWorkspace { .. } => FixedHash::zero(),
-        }
+    pub fn hash(&self) -> Hash {
+        hasher("instruction").chain(self).result()
     }
 }
 
@@ -106,13 +105,32 @@ pub struct BalanceProof {}
 
 #[derive(Debug, Clone)]
 pub struct Transaction {
-    hash: [u8; 32],
+    hash: Hash,
     instructions: Vec<Instruction>,
     signature: InstructionSignature,
     _fee: u64,
     sender_public_key: PublicKey,
     // Not part of signature. TODO: Should it be?
     meta: Option<TransactionMeta>,
+}
+
+impl Transaction {
+    pub fn required_templates(&self) -> Vec<TemplateAddress> {
+        self.instructions
+            .iter()
+            .filter_map(|instruction| match instruction {
+                Instruction::CallFunction {
+                    template_address: package_address,
+                    ..
+                } => Some(*package_address),
+                Instruction::CallMethod {
+                    template_address: package_address,
+                    ..
+                } => Some(*package_address),
+                _ => None,
+            })
+            .collect()
+    }
 }
 
 #[derive(Debug, Clone, Default)]
@@ -139,18 +157,18 @@ impl Transaction {
         meta: TransactionMeta,
     ) -> Self {
         let mut s = Self {
-            hash: [0u8; 32],
+            hash: Hash::default(),
             instructions,
             signature,
             _fee: fee,
             sender_public_key,
             meta: Some(meta),
         };
-        s.calculate_hash();
+        s.hash = s.calculate_hash();
         s
     }
 
-    pub fn hash(&self) -> &[u8; 32] {
+    pub fn hash(&self) -> &Hash {
         &self.hash
     }
 
@@ -158,15 +176,15 @@ impl Transaction {
         self.meta.as_ref().unwrap()
     }
 
-    fn calculate_hash(&mut self) {
-        let mut res = Blake256::new()
+    fn calculate_hash(&self) -> Hash {
+        let mut res = hasher("transaction")
             .chain(self.sender_public_key.as_bytes())
             .chain(self.signature.signature().get_public_nonce().as_bytes())
             .chain(self.signature.signature().get_signature().as_bytes());
         for instruction in &self.instructions {
-            res = res.chain(instruction.hash())
+            res.update(&instruction.hash())
         }
-        self.hash = res.finalize_fixed().into();
+        res.result()
     }
 
     pub fn instructions(&self) -> &[Instruction] {
