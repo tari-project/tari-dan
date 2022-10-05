@@ -20,7 +20,7 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use std::{collections::HashMap, convert::TryFrom, time::Duration};
+use std::{collections::HashMap, time::Duration};
 
 use lazy_static::lazy_static;
 use tari_common_types::types::PrivateKey;
@@ -715,10 +715,7 @@ mod hello_world {
         }
         let state_db = MemoryStateStore::load(pre_state);
         // state_db.allow_creation_of_non_existent_shards = false;
-        let state_tracker = StateTracker::new(
-            state_db,
-            Hash::try_from(ex_transaction.transaction().hash().as_slice()).unwrap(),
-        );
+        let state_tracker = StateTracker::new(state_db, Hash::from(*ex_transaction.transaction().hash()));
         let runtime_interface = RuntimeInterfaceImpl::new(state_tracker);
         // Process the instruction
         let processor = InstructionProcessor::new(runtime_interface, package.clone());

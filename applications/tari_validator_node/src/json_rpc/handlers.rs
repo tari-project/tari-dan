@@ -30,7 +30,9 @@ use axum_jrpc::{
 };
 use serde::Serialize;
 use serde_json::json;
+use tari_common_types::types::FixedHash;
 use tari_comms::{multiaddr::Multiaddr, peer_manager::NodeId, types::CommsPublicKey, NodeIdentity};
+use tari_dan_common_types::serde_with;
 use tari_dan_engine::instruction::{Instruction, TransactionBuilder};
 
 use crate::{
@@ -96,12 +98,15 @@ impl JsonRpcHandlers {
         // Submit to mempool.
 
         // TODO: submit the transaction to the wasm engine and return the result data
+        let hash = *mempool_tx.hash();
         self.mempool
             .new_transaction(mempool_tx)
             .await
             .map_err(internal_error(answer_id))?;
 
-        Ok(JsonRpcResponse::success(answer_id, ()))
+        Ok(JsonRpcResponse::success(answer_id, SubmitTransactionResponse {
+            hash: hash.into(),
+        }))
     }
 
     pub async fn register_validator_node(&self, value: JsonRpcExtractor) -> JrpcResult {
@@ -146,7 +151,15 @@ impl JsonRpcHandlers {
 
 #[derive(Serialize, Debug)]
 struct GetIdentityResponse {
+    #[serde(with = "serde_with::hex")]
     node_id: NodeId,
+    #[serde(with = "serde_with::hex")]
     public_key: CommsPublicKey,
     public_address: Multiaddr,
+}
+
+#[derive(Serialize, Debug)]
+struct SubmitTransactionResponse {
+    #[serde(with = "serde_with::base64")]
+    hash: FixedHash,
 }
