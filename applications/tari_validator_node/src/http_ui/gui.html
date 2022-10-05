@@ -51,6 +51,9 @@
       async function get_committee(height, shard_key) {
         return await json_rpc("get_committee", [height, shard_key]);
       }
+      async function get_all_vns(epoch) {
+        return await json_rpc("get_all_vns", epoch);
+      }
 
       onload = async function () {
         identity = await get_identity();
@@ -61,6 +64,8 @@
         shard_key = await get_shard_key(height);
         committee = await get_committee(epoch_manager_stats.current_epoch, shard_key.shard_key);
         console.log(committee);
+        vns = await get_all_vns(epoch_manager_stats.current_epoch);
+        console.log(vns);
         document.getElementById("public-key").innerHTML = identity.public_key;
         document.getElementById("public-address").innerHTML = identity.public_address;
         document.getElementById("node-id").innerHTML = toHexString(identity.node_id);
@@ -69,6 +74,15 @@
         document.getElementById("comms-stats").innerHTML = comms_stats.connection_status;
         document.getElementById("mempool-stats").innerHTML = mempool_stats.size;
         document.getElementById("shard-key").innerHTML = shard_key.shard_key;
+        vns_html = '<div class="container">';
+        for (vn of vns.vns) {
+          vns_html += `<div class="item">Public key</div><div class="item">${vn.public_key}</div>`;
+          vns_html += `<div class="item">Shard key</div><div class="item">${vn.shard_key}</div>`;
+          vns_html += '<div class="item"><hr/></div>';
+          vns_html += '<div class="item"><hr/></div>';
+        }
+        vns_html += "</div>";
+        document.getElementById("all-vns").innerHTML = vns_html;
       };
     </script>
   </head>
@@ -90,6 +104,8 @@
       <div class="item" id="comms-stats"></div>
       <div class="item">Mempool stats</div>
       <div class="item" id="mempool-stats"></div>
+      <div class="item">VNs</div>
+      <div class="item" id="all-vns"></div>
     </div>
   </body>
 </html>

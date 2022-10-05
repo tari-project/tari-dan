@@ -232,6 +232,14 @@ impl JsonRpcHandlers {
             ))
         }
     }
+
+    pub async fn get_all_vns(&self, value: JsonRpcExtractor) -> JrpcResult {
+        let answer_id = value.get_answer_id();
+        let epoch: u64 = value.parse_params()?;
+        let vns = self.base_node_client().get_validator_nodes(epoch * 10).await.unwrap();
+        let response = json!({ "vns": vns });
+        Ok(JsonRpcResponse::success(answer_id, response))
+    }
 }
 
 #[derive(Serialize, Debug)]

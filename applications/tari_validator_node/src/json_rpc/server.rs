@@ -72,6 +72,7 @@ async fn handler(
         "get_comms_stats" => handlers.get_comms_stats(value).await,
         "get_shard_key" => handlers.get_shard_key(value).await,
         "get_committee" => handlers.get_committee(value).await,
+        "get_all_vns" => handlers.get_all_vns(value).await,
         method => Ok(value.method_not_found(method)),
     }
 }
