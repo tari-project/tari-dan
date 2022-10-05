@@ -34,7 +34,7 @@ impl ResourceDefinition for FungibleCoin {
     }
 }
 
-#[template(extends("asdfasdfasdfasdf", "asdfasd"))]
+#[template]
 mod account_template {
     use super::*;
 

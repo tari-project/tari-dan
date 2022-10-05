@@ -69,6 +69,7 @@ impl RuntimeInterface for RuntimeInterfaceImpl {
             LogLevel::Debug => log::Level::Debug,
         };
 
+        eprintln!("{}: {}", log_level, message);
         log::log!(target: "tari::dan::engine::runtime", log_level, "{}", message);
         self.tracker.add_log(LogEntry::new(level, message));
     }

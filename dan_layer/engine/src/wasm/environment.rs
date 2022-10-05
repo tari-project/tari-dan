@@ -181,6 +181,13 @@ impl<T: Clone + Sync + Send + 'static> WasmEnv<T> {
         match env.read_from_memory(msg_ptr as u32, msg_len as u32) {
             Ok(msg) => {
                 eprintln!("📣 PANIC: ({}:{}) {}", line, col, String::from_utf8_lossy(&msg));
+                log::error!(
+                    target: WASM_DEBUG_LOG_TARGET,
+                    "📣 PANIC: ({}:{}) {}",
+                    line,
+                    col,
+                    String::from_utf8_lossy(&msg)
+                );
             },
             Err(err) => {
                 log::error!(target: WASM_DEBUG_LOG_TARGET, "Failed to read from memory: {}", err);
