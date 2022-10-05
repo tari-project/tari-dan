@@ -23,14 +23,14 @@
 use crate::schema::*;
 
 #[derive(Debug, Identifiable, Queryable)]
-pub struct LastVotedHeights {
+pub struct LastVotedHeight {
     pub id: i32,
     pub shard_id: Vec<u8>,
     pub node_height: i32,
 }
 
 #[derive(Debug, Insertable)]
-#[table_name = "last_voted_height"]
+#[table_name = "last_voted_heights"]
 pub struct NewLastVotedHeight {
     pub shard_id: Vec<u8>,
     pub node_height: i32,

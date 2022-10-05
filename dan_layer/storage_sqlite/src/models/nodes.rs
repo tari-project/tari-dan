@@ -23,7 +23,7 @@
 use crate::schema::*;
 
 #[derive(Debug, Identifiable, Queryable)]
-pub struct Nodes {
+pub struct Node {
     pub id: i32,
     pub tree_node_hash: Vec<u8>,
     pub hotstuff_tree_node: Vec<u8>,
@@ -31,7 +31,7 @@ pub struct Nodes {
 
 #[derive(Debug, Insertable)]
 #[table_name = "nodes"]
-pub struct NewNodes {
+pub struct NewNode {
     pub tree_node_hash: Vec<u8>,
     pub hotstuff_tree_node: Vec<u8>,
 }

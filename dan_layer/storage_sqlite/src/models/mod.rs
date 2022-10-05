@@ -21,4 +21,13 @@
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 pub mod high_qc;
+pub mod last_executed_height;
+pub mod last_voted_height;
+pub mod leaf_nodes;
+pub mod lock_node_and_height;
+pub mod nodes;
+pub mod objects;
+pub mod payload;
+pub mod payload_votes;
 pub mod template;
+pub mod votes;

@@ -16,10 +16,10 @@ use tari_crypto::tari_utilities::hex::serialize_to_hex;
 use tari_utilities::{byte_array::ByteArray, hex::Hex};
 pub use template_id::TemplateId;
 
-#[derive(Copy, Clone, Debug, PartialEq, Eq, Hash, Deserialize, Serialize)]
+#[derive(BorshDeserialize, BorshSerialize, Copy, Clone, Debug, PartialEq, Eq, Hash, Deserialize, Serialize)]
 pub struct ObjectId(#[serde(deserialize_with = "deserialize_fixed_hash_from_hex")] pub [u8; 32]);
 
-#[derive(Copy, Clone, Debug, Eq, PartialEq, Hash, Serialize, Deserialize)]
+#[derive(BorshDeserialize, BorshSerialize, Copy, Clone, Debug, Eq, PartialEq, Hash, Serialize, Deserialize)]
 pub struct ShardId(
     #[serde(
         serialize_with = "serialize_to_hex",
@@ -64,7 +64,7 @@ impl Ord for ShardId {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Hash, Deserialize)]
+#[derive(BorshDeserialize, BorshSerialize, Clone, Debug, PartialEq, Eq, Hash, Deserialize)]
 pub enum SubstateChange {
     Create,
     Destroy,
@@ -77,7 +77,7 @@ pub enum SubstateState {
     Destroyed { deleted_by: PayloadId },
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(BorshDeserialize, BorshSerialize, Debug, Clone, Deserialize)]
 pub struct ObjectClaim {}
 
 impl ObjectClaim {

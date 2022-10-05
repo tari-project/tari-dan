@@ -23,7 +23,7 @@
 use crate::schema::*;
 
 #[derive(Debug, Identifiable, Queryable)]
-pub struct Objects {
+pub struct Object {
     pub id: i32,
     pub shard_id: Vec<u8>,
     pub object_id: Vec<u8>,
@@ -33,7 +33,7 @@ pub struct Objects {
 
 #[derive(Debug, Insertable)]
 #[table_name = "objects"]
-pub struct NewObjects {
+pub struct NewObject {
     pub shard_id: Vec<u8>,
     pub object_id: Vec<u8>,
     pub substate_state: Vec<u8>,

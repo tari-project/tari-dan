@@ -1,7 +1,12 @@
 create table payload_table {
     id integer not null primary key AUTOINCREMENT
     payload_id blob not null,
-    payload blob not null
+    instructions blob not NULL,
+    public_nonce blob not NULL,
+    scalar blob not NULL,
+    fee integer not NULL,
+    sender_public_key blob not NULL,
+    meta blob
 }
 
 -- fetching by the payload_id will be a very common operation

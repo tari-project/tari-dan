@@ -31,6 +31,7 @@ pub use processor::InstructionProcessor;
 mod signature;
 use std::collections::HashMap;
 
+use borsh::{BorshDeserialize, BorshSerialize};
 use digest::{Digest, FixedOutput};
 use serde::Deserialize;
 pub use signature::InstructionSignature;
@@ -44,7 +45,7 @@ use tari_template_lib::{
 };
 use tari_utilities::ByteArray;
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(BorshDeserialize, BorshSerialize, Debug, Clone, Deserialize)]
 pub enum Instruction {
     CallFunction {
         package_address: PackageAddress,
@@ -117,7 +118,7 @@ pub struct Transaction {
     meta: Option<TransactionMeta>,
 }
 
-#[derive(Debug, Clone, Default, Deserialize)]
+#[derive(BorshDeserialize, BorshSerialize, Debug, Clone, Default, Deserialize)]
 pub struct TransactionMeta {
     involved_objects: HashMap<ShardId, Vec<(ObjectId, SubstateChange, ObjectClaim)>>,
 }
@@ -169,6 +170,10 @@ impl Transaction {
             res = res.chain(instruction.hash())
         }
         self.hash = res.finalize_fixed().into();
+    }
+
+    pub fn fee(&self) -> u64 {
+        self._fee
     }
 
     pub fn instructions(&self) -> &[Instruction] {

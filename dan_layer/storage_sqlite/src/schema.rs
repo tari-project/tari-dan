@@ -1,8 +1,13 @@
 table! {
-    payload_table (id) {
+    payloads (id) {
         id -> Integer,
         payload_id -> Binary,
-        payload -> Binary,
+        instructions -> Binary,
+        public_nonce -> Binary,
+        scalar -> Binary,
+        fee -> Integer,
+        sender_public_key -> Binary,
+        meta -> Binary,
     }
 }
 
@@ -46,12 +51,12 @@ table! {
     nodes (id) {
         id -> Integer,
         tree_node_hash -> Binary,
-        hot_stuff_tree_node -> Binary,
+        hotstuff_tree_node -> Binary,
     }
 }
 
 table! {
-    last_executed_height (id) {
+    last_executed_heights (id) {
         id -> Integer,
         shard_id -> Binary,
         node_height -> Integer,
@@ -63,8 +68,8 @@ table! {
         id -> Integer,
         payload_id -> Binary,
         shard_id -> Binary,
-        node_height -> Binary,
-        hot_stuff_tree_node -> Binary,
+        node_height -> Integer,
+        hotstuff_tree_node -> Binary,
     }
 }
 
@@ -109,4 +114,13 @@ allow_tables_to_appear_in_same_query!(
     high_qcs,
     metadata,
     templates,
+    payloads,
+    votes,
+    leaf_nodes,
+    last_voted_heights,
+    lock_node_and_heights,
+    nodes,
+    last_executed_heights,
+    payload_votes,
+    objects
 );

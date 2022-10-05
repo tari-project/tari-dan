@@ -20,11 +20,16 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use std::{collections::HashMap, path::PathBuf};
+use std::{
+    collections::HashMap,
+    convert::{TryFrom, TryInto},
+    path::PathBuf,
+};
 
-use diesel::{dsl::count, prelude::*, SqliteConnection};
+use borsh::{BorshDeserialize, BorshSerialize};
+use diesel::{prelude::*, SqliteConnection};
 use serde_json::json;
-use tari_common_types::types::PublicKey;
+use tari_common_types::types::{FixedHash, PrivateKey, PublicKey, Signature};
 use tari_dan_common_types::{ObjectId, PayloadId, ShardId, SubstateChange, SubstateState};
 use tari_dan_core::{
     models::{
@@ -41,11 +46,21 @@ use tari_dan_core::{
         StorageError,
     },
 };
+use tari_dan_engine::instruction::{Instruction, InstructionSignature, Transaction, TransactionMeta};
+use tari_utilities::ByteArray;
 
 use crate::{
     error::SqliteStorageError,
-    models::high_qc::{HighQc, NewHighQc},
-    schema::high_qcs::{dsl::high_qcs, shard_id},
+    models::{
+        high_qc::{HighQc, NewHighQc},
+        leaf_nodes::{LeafNode, NewLeafNode},
+        payload::{Payload, NewPayload},
+    },
+    schema::{
+        high_qcs::{dsl::high_qcs, shard_id},
+        leaf_nodes::dsl::leaf_nodes,
+        payloads::dsl::payloads,
+    },
 };
 
 pub struct SqliteShardStoreFactory {
@@ -144,25 +159,49 @@ impl ShardStoreTransaction<PublicKey, TariDanPayload> for SqliteShardStoreTransa
         Ok(())
     }
 
-    fn set_payload(&mut self, _payload: TariDanPayload) {
-        todo!()
-    }
-
     fn get_leaf_node(&self, shard: ShardId) -> (TreeNodeHash, NodeHeight) {
-        todo!()
+        use crate::schema::leaf_nodes::{node_height, shard_id};
+        let leaf_node: Option<LeafNode> = leaf_nodes
+            .filter(shard_id.eq(Vec::from(shard.0)))
+            .order_by(node_height.desc())
+            .first(&self.connection)
+            .optional()
+            .expect("TODO: Need to return an error");
+        if let Some(leaf_node) = leaf_node {
+            (
+                TreeNodeHash::try_from(leaf_node.tree_node_hash).expect("TODO: Need to return an error"),
+                NodeHeight(leaf_node.node_height as u64),
+            )
+        } else {
+            panic!("TODO: Need to return an error");
+        }
     }
 
     fn update_leaf_node(
         &mut self,
-        _shard: tari_dan_common_types::ShardId,
-        _node: TreeNodeHash,
-        _height: NodeHeight,
+        shard: tari_dan_common_types::ShardId,
+        node: TreeNodeHash,
+        height: NodeHeight,
     ) -> Result<(), Self::Error> {
-        todo!()
+        let shard = Vec::from(shard.0);
+        let tree_node_hash = Vec::from(node.as_bytes());
+
+        let new_row = NewLeafNode {
+            shard_id: shard,
+            tree_node_hash,
+            node_height: height.0 as i32,
+        };
+
+        diesel::insert_into(leaf_nodes)
+            .values(&new_row)
+            .execute(&self.connection)
+            .map_err(|e| StorageError::QueryError { reason: e.to_string() })?;
+
+        Ok(())
     }
 
     fn get_high_qc_for(&self, shard: ShardId) -> QuorumCertificate {
-        use crate::schema::high_qcs::{height, is_highest, shard_id};
+        use crate::schema::high_qcs::height;
         let qc: Option<HighQc> = high_qcs
             .filter(shard_id.eq(Vec::from(shard.0)))
             .order_by(height.desc())
@@ -176,8 +215,72 @@ impl ShardStoreTransaction<PublicKey, TariDanPayload> for SqliteShardStoreTransa
         }
     }
 
-    fn get_payload(&self, _payload_id: &PayloadId) -> Result<TariDanPayload, Self::Error> {
-        todo!()
+    fn get_payload(&self, id: &PayloadId) -> Result<TariDanPayload, Self::Error> {
+        use crate::schema::payloads::payload_id;
+
+        let payload: Option<Payload> = payloads
+            .filter(payload_id.eq(Vec::from(id.as_slice())))
+            .first(&self.connection)
+            .optional()
+            .expect("TODO: Need to return an error");
+
+        if let Some(payload) = payload {
+            let instructions = Vec::<Instruction>::deserialize(&mut payload.instructions.as_slice())
+                .expect("TODO: Need to return an error");
+            let fee: u64 = payload.fee.try_into().expect("TODO: Need to return an error");
+
+            let public_nonce = PublicKey::from_vec(&payload.public_nonce).expect("TODO: Need to return an error");
+            let signature = PrivateKey::from_bytes(payload.scalar.as_slice()).expect("TODO: Need to return an error");
+
+            let signature = InstructionSignature::try_from(Signature::new(public_nonce, signature))
+                .expect("TODO: Need to return an error");
+
+            let sender_public_key =
+                PublicKey::from_vec(&payload.sender_public_key).expect("TODO: Need to return an error");
+            let meta =
+                TransactionMeta::deserialize(&mut payload.meta.as_slice()).expect("TODO: Need to return an error");
+
+            let transaction = Transaction::new(fee, instructions, signature, sender_public_key, meta);
+
+            Ok(TariDanPayload::new(transaction))
+        } else {
+            panic!("TODO: Need to return an error");
+        }
+    }
+
+    fn set_payload(&mut self, payload: TariDanPayload) {
+        let transaction = payload.transaction();
+
+        let mut instructions = Vec::<u8>::new();
+        transaction.instructions().serialize(&mut instructions).expect("TODO: Need to return an error");
+        let signature = transaction.signature();
+
+        let public_nonce = Vec::from(signature.signature().get_public_nonce().as_bytes());
+        let scalar = Vec::from(signature.signature().get_signature().as_bytes());
+
+        let fee: i32 = transaction.fee().try_into().expect("TODO: Need to return an error");
+        let sender_public_key = Vec::from(transaction.sender_public_key().as_bytes());
+        let mut meta = Vec::<u8>::new();
+        transaction.meta().serialize(&mut meta).expect("TODO: Need to return an error");
+
+        let payload_id = Vec::from(*transaction.hash());
+
+        let new_row = NewPayload {
+            payload_id,
+            instructions,
+            public_nonce,
+            scalar,
+            fee,
+            sender_public_key,
+            meta,
+        };
+
+        diesel::insert_into(payloads)
+            .values(&new_row)
+            .execute(&self.connection)
+            .map_err(|e| StorageError::QueryError { reason: e.to_string() })
+            .unwrap();
+            
     }
 
     fn get_node(&self, _node_hash: &TreeNodeHash) -> Result<HotStuffTreeNode<PublicKey>, Self::Error> {

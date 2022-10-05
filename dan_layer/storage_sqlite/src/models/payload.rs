@@ -23,15 +23,25 @@
 use crate::schema::*;
 
 #[derive(Debug, Identifiable, Queryable)]
-pub struct PayloadTable {
+pub struct Payload {
     pub id: i32,
     pub payload_id: Vec<u8>,
-    pub payload: Vec<u8>,
+    pub instructions: Vec<u8>,
+    pub public_nonce: Vec<u8>,
+    pub scalar: Vec<u8>,
+    pub fee: i32,
+    pub sender_public_key: Vec<u8>,
+    pub meta: Vec<u8>,
 }
 
 #[derive(Debug, Insertable)]
-#[table_name = "payload_table"]
+#[table_name = "payloads"]
 pub struct NewPayload {
     pub payload_id: Vec<u8>,
-    pub payload: Vec<u8>,
+    pub instructions: Vec<u8>,
+    pub public_nonce: Vec<u8>,
+    pub scalar: Vec<u8>,
+    pub fee: i32,
+    pub sender_public_key: Vec<u8>,
+    pub meta: Vec<u8>,
 }
