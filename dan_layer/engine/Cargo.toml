@@ -30,3 +30,6 @@ tempfile = "3.3.0"
 wasmer = "2.3.0"
 wasmer-middlewares = "2.3.0"
 
+[features]
+tooling = []
+

@@ -22,10 +22,6 @@
 
 use std::sync::{Arc, RwLock};
 
-use tari_dan_engine::{
-    runtime::{FinalizeResult, RuntimeError, RuntimeInterface, RuntimeInterfaceImpl, RuntimeState, StateTracker},
-    state_store::memory::MemoryStateStore,
-};
 use tari_template_lib::{
     args::{
         BucketAction,
@@ -42,6 +38,11 @@ use tari_template_lib::{
     Hash,
 };
 
+use crate::{
+    runtime::{FinalizeResult, RuntimeError, RuntimeInterface, RuntimeInterfaceImpl, RuntimeState, StateTracker},
+    state_store::memory::MemoryStateStore,
+};
+
 #[derive(Debug, Clone)]
 pub struct MockRuntimeInterface {
     state: MemoryStateStore,
@@ -50,8 +51,8 @@ pub struct MockRuntimeInterface {
     inner: RuntimeInterfaceImpl,
 }
 
-impl MockRuntimeInterface {
-    pub fn new() -> Self {
+impl Default for MockRuntimeInterface {
+    fn default() -> Self {
         // TODO: We use a zero transaction hash for tests, however this isn't correct and won't always work.
         let tx_hash = Hash::default();
         let state = MemoryStateStore::default();
@@ -63,7 +64,9 @@ impl MockRuntimeInterface {
             inner: RuntimeInterfaceImpl::new(tracker),
         }
     }
+}
 
+impl MockRuntimeInterface {
     pub fn state_store(&self) -> MemoryStateStore {
         self.state.clone()
     }

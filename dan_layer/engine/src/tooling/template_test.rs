@@ -24,7 +24,13 @@ use std::{collections::HashMap, path::Path};
 
 use borsh::BorshDeserialize;
 use tari_crypto::ristretto::RistrettoSecretKey;
-use tari_dan_engine::{
+use tari_template_lib::{
+    args::Arg,
+    models::{ComponentAddress, TemplateAddress},
+};
+
+use super::MockRuntimeInterface;
+use crate::{
     crypto::create_key_pair,
     hashing::hasher,
     packager::{LoadedTemplate, Package, TemplateModuleLoader},
@@ -33,12 +39,6 @@ use tari_dan_engine::{
     transaction::{Instruction, TransactionBuilder, TransactionProcessor},
     wasm::{compile::compile_template, LoadedWasmTemplate},
 };
-use tari_template_lib::{
-    args::Arg,
-    models::{ComponentAddress, TemplateAddress},
-};
-
-use super::MockRuntimeInterface;
 
 pub struct TemplateTest<R> {
     package: Package,
@@ -50,7 +50,7 @@ pub struct TemplateTest<R> {
 
 impl TemplateTest<MockRuntimeInterface> {
     pub fn new<P: AsRef<Path>>(template_paths: Vec<P>) -> Self {
-        let runtime_interface = MockRuntimeInterface::new();
+        let runtime_interface = MockRuntimeInterface::default();
         Self::with_runtime_interface(template_paths, runtime_interface)
     }
 

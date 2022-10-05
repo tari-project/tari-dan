@@ -20,11 +20,10 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-mod tooling;
-
 use tari_dan_engine::{
     packager::{PackageError, TemplateModuleLoader},
     state_store::{AtomicDb, StateReader},
+    tooling::TemplateTest,
     transaction::Instruction,
     wasm::{compile::compile_template, WasmExecutionError},
 };
@@ -32,7 +31,6 @@ use tari_template_lib::{
     args,
     models::{Amount, ComponentAddress, ComponentInstance},
 };
-use tooling::TemplateTest;
 
 #[test]
 fn test_hello_world() {
