@@ -4019,6 +4019,7 @@ dependencies = [
  "tari_crypto",
  "tari_dan_common_types",
  "tari_dan_engine",
+ "tari_dan_storage",
  "tari_mmr",
  "tari_p2p",
  "tari_service_framework",
@@ -4061,6 +4062,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "tari_dan_storage"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "tari_common_types",
+ "thiserror",
+]
+
+[[package]]
 name = "tari_dan_storage_lmdb"
 version = "0.35.1"
 dependencies = [
@@ -4085,6 +4095,7 @@ dependencies = [
  "tari_dan_common_types",
  "tari_dan_core",
  "tari_dan_engine",
+ "tari_dan_storage",
  "tari_utilities",
  "thiserror",
  "tokio",
@@ -4295,6 +4306,7 @@ dependencies = [
  "tari_dan_common_types",
  "tari_dan_core",
  "tari_dan_engine",
+ "tari_dan_storage",
  "tari_dan_storage_sqlite",
  "tari_mmr",
  "tari_p2p",
@@ -4323,6 +4335,7 @@ dependencies = [
  "reqwest",
  "serde",
  "serde_json",
+ "tari_dan_common_types",
  "tari_dan_engine",
  "tari_utilities",
  "thiserror",

@@ -20,40 +20,40 @@
 //   WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //   USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use std::path::PathBuf;
+use crate::global::GlobalDbAdapter;
 
-use clap::{Args, Subcommand};
-
-#[allow(clippy::large_enum_variant)]
-#[derive(Debug, Subcommand, Clone)]
-pub enum Command {
-    #[clap(subcommand)]
-    Vn(VnSubcommand),
-    #[clap(subcommand)]
-    Templates(TemplateSubcommand),
+pub struct MetadataDb<'a, TGlobalDbAdapter: GlobalDbAdapter> {
+    backend: &'a TGlobalDbAdapter,
+    tx: &'a TGlobalDbAdapter::DbTransaction,
 }
 
-#[derive(Debug, Subcommand, Clone)]
-pub enum VnSubcommand {
-    Register,
+impl<'a, TGlobalDbAdapter: GlobalDbAdapter> MetadataDb<'a, TGlobalDbAdapter> {
+    pub fn new(backend: &'a TGlobalDbAdapter, tx: &'a TGlobalDbAdapter::DbTransaction) -> Self {
+        Self { backend, tx }
+    }
+
+    pub fn set_metadata(&self, key: MetadataKey, value: &[u8]) -> Result<(), TGlobalDbAdapter::Error> {
+        self.backend.set_metadata(self.tx, key, value)?;
+        Ok(())
+    }
+
+    pub fn get_metadata(&self, key: MetadataKey) -> Result<Option<Vec<u8>>, TGlobalDbAdapter::Error> {
+        let data = self.backend.get_metadata(self.tx, &key)?;
+        Ok(data)
+    }
 }
 
-#[derive(Debug, Subcommand, Clone)]
-pub enum TemplateSubcommand {
-    Publish(PublishTemplateArgs),
+#[derive(Debug, Clone, Copy)]
+pub enum MetadataKey {
+    BaseLayerScannerLastScannedBlockHeight,
+    BaseLayerScannerLastScannedBlockHash,
 }
 
-#[derive(Debug, Args, Clone)]
-pub struct PublishTemplateArgs {
-    #[clap(long, short = 'p', alias = "path")]
-    pub template_code_path: PathBuf,
-
-    #[clap(long, alias = "template-name")]
-    pub template_name: Option<String>,
-
-    #[clap(long, alias = "template-version")]
-    pub template_version: Option<u16>,
-
-    #[clap(long, alias = "binary-url")]
-    pub binary_url: Option<String>,
+impl MetadataKey {
+    pub fn as_key_bytes(self) -> &'static [u8] {
+        match self {
+            MetadataKey::BaseLayerScannerLastScannedBlockHash => b"base_layer_scanner.last_scanned_block_hash",
+            MetadataKey::BaseLayerScannerLastScannedBlockHeight => b"base_layer_scanner.last_scanned_block_height",
+        }
+    }
 }

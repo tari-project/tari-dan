@@ -20,40 +20,33 @@
 //   WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //   USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use std::path::PathBuf;
+use tari_common_types::types::FixedHash;
 
-use clap::{Args, Subcommand};
+use crate::global::GlobalDbAdapter;
 
-#[allow(clippy::large_enum_variant)]
-#[derive(Debug, Subcommand, Clone)]
-pub enum Command {
-    #[clap(subcommand)]
-    Vn(VnSubcommand),
-    #[clap(subcommand)]
-    Templates(TemplateSubcommand),
+pub struct TemplateDb<'a, TGlobalDbAdapter: GlobalDbAdapter> {
+    backend: &'a TGlobalDbAdapter,
+    tx: &'a TGlobalDbAdapter::DbTransaction,
 }
 
-#[derive(Debug, Subcommand, Clone)]
-pub enum VnSubcommand {
-    Register,
+impl<'a, TGlobalDbAdapter: GlobalDbAdapter> TemplateDb<'a, TGlobalDbAdapter> {
+    pub fn new(backend: &'a TGlobalDbAdapter, tx: &'a TGlobalDbAdapter::DbTransaction) -> Self {
+        Self { backend, tx }
+    }
+
+    pub fn get_template(&self, key: &[u8]) -> Result<Option<DbTemplate>, TGlobalDbAdapter::Error> {
+        self.backend.get_template(self.tx, key)
+    }
+
+    pub fn insert_template(&self, template: DbTemplate) -> Result<(), TGlobalDbAdapter::Error> {
+        self.backend.insert_template(self.tx, template)
+    }
 }
 
-#[derive(Debug, Subcommand, Clone)]
-pub enum TemplateSubcommand {
-    Publish(PublishTemplateArgs),
-}
-
-#[derive(Debug, Args, Clone)]
-pub struct PublishTemplateArgs {
-    #[clap(long, short = 'p', alias = "path")]
-    pub template_code_path: PathBuf,
-
-    #[clap(long, alias = "template-name")]
-    pub template_name: Option<String>,
-
-    #[clap(long, alias = "template-version")]
-    pub template_version: Option<u16>,
-
-    #[clap(long, alias = "binary-url")]
-    pub binary_url: Option<String>,
+#[derive(Debug, Clone)]
+pub struct DbTemplate {
+    pub template_address: FixedHash,
+    pub url: String,
+    pub height: u64,
+    pub compiled_code: Vec<u8>,
 }

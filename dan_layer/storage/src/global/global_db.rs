@@ -20,13 +20,37 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use crate::storage::StorageError;
+use std::sync::Arc;
 
-pub trait AtomicDb {
-    type Error: Into<StorageError>;
-    type DbTransaction;
+use crate::global::{backend_adapter::GlobalDbAdapter, metadata_db::MetadataDb, template_db::TemplateDb};
 
-    fn create_transaction(&self) -> Result<Self::DbTransaction, Self::Error>;
+#[derive(Debug, Clone)]
+pub struct GlobalDb<TGlobalDbBackendAdapter> {
+    adapter: Arc<TGlobalDbBackendAdapter>,
+}
 
-    fn commit(&self, transaction: &Self::DbTransaction) -> Result<(), Self::Error>;
+impl<TGlobalDbAdapter: GlobalDbAdapter> GlobalDb<TGlobalDbAdapter> {
+    pub fn new(adapter: TGlobalDbAdapter) -> Self {
+        Self {
+            adapter: Arc::new(adapter),
+        }
+    }
+
+    pub fn create_transaction(&self) -> Result<TGlobalDbAdapter::DbTransaction, TGlobalDbAdapter::Error> {
+        let tx = self.adapter.create_transaction()?;
+        Ok(tx)
+    }
+
+    pub fn templates<'a>(&'a self, tx: &'a TGlobalDbAdapter::DbTransaction) -> TemplateDb<'a, TGlobalDbAdapter> {
+        TemplateDb::new(&self.adapter, tx)
+    }
+
+    pub fn metadata<'a>(&'a self, tx: &'a TGlobalDbAdapter::DbTransaction) -> MetadataDb<'a, TGlobalDbAdapter> {
+        MetadataDb::new(&self.adapter, tx)
+    }
+
+    pub fn commit(&self, tx: TGlobalDbAdapter::DbTransaction) -> Result<(), TGlobalDbAdapter::Error> {
+        self.adapter.commit(tx)?;
+        Ok(())
+    }
 }

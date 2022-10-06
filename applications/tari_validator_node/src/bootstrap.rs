@@ -32,8 +32,8 @@ use tari_comms::{
     PeerManager,
     UnspawnedCommsNode,
 };
-use tari_dan_core::storage::global::GlobalDb;
-use tari_dan_storage_sqlite::{global::SqliteGlobalDbBackendAdapter, SqliteDbFactory};
+use tari_dan_storage::global::GlobalDb;
+use tari_dan_storage_sqlite::{global::SqliteGlobalDbAdapter, SqliteDbFactory};
 use tari_p2p::{initialization::spawn_comms_using_transport, peer_seeds::SeedPeer, PeerSeedsConfig};
 use tari_shutdown::ShutdownSignal;
 
@@ -68,7 +68,7 @@ pub async fn spawn_services(
     config: &ApplicationConfig,
     shutdown: ShutdownSignal,
     node_identity: Arc<NodeIdentity>,
-    global_db: GlobalDb<SqliteGlobalDbBackendAdapter>,
+    global_db: GlobalDb<SqliteGlobalDbAdapter>,
     sqlite_db: SqliteDbFactory,
 ) -> Result<Services, anyhow::Error> {
     let mut p2p_config = config.validator_node.p2p.clone();
