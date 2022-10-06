@@ -27,6 +27,7 @@ use reqwest::{header, header::HeaderMap, IntoUrl, Url};
 use serde::{de::DeserializeOwned, Serialize};
 use serde_json as json;
 use serde_json::json;
+use tari_dan_common_types::serde_with;
 
 #[derive(Debug, Clone)]
 pub struct ValidatorNodeClient {
@@ -40,7 +41,9 @@ pub struct TemplateRegistrationRequest {
     pub template_name: String,
     pub template_version: u16,
     pub repo_url: String,
+    #[serde(serialize_with = "serde_with::base64::serialize")]
     pub commit_hash: Vec<u8>,
+    #[serde(serialize_with = "serde_with::base64::serialize")]
     pub binary_sha: Vec<u8>,
     pub binary_url: String,
 }

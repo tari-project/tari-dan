@@ -21,20 +21,20 @@
 // USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 table! {
-    contracts (id) {
-        id -> Integer,
-        contract_id -> Binary,
-        height -> BigInt,
-        state -> Integer,
-        constitution -> Binary,
-    }
-}
-
-table! {
     metadata (key_name) {
         key_name -> Binary,
         value -> Binary,
     }
 }
 
-allow_tables_to_appear_in_same_query!(contracts, metadata,);
+table! {
+    templates (id) {
+        id -> Integer,
+        template_address -> Binary,
+        url -> Text,
+        height -> Integer,
+        compiled_code -> Binary,
+    }
+}
+
+allow_tables_to_appear_in_same_query!(metadata, templates,);

@@ -20,12 +20,15 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use tari_dan_engine::transaction::Instruction;
+use crate::{
+    atomic::AtomicDb,
+    global::{metadata_db::MetadataKey, template_db::DbTemplate},
+};
 
-use crate::models::TreeNodeHash;
+pub trait GlobalDbAdapter: AtomicDb + Send + Sync + Clone {
+    fn get_metadata(&self, tx: &Self::DbTransaction, key: &MetadataKey) -> Result<Option<Vec<u8>>, Self::Error>;
+    fn set_metadata(&self, tx: &Self::DbTransaction, key: MetadataKey, value: &[u8]) -> Result<(), Self::Error>;
 
-#[derive(Debug, Clone)]
-pub struct DbInstruction {
-    pub instruction: Instruction,
-    pub node_hash: TreeNodeHash,
+    fn get_template(&self, tx: &Self::DbTransaction, key: &[u8]) -> Result<Option<DbTemplate>, Self::Error>;
+    fn insert_template(&self, tx: &Self::DbTransaction, template: DbTemplate) -> Result<(), Self::Error>;
 }

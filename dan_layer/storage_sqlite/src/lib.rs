@@ -27,8 +27,6 @@ extern crate diesel_migrations;
 
 pub mod error;
 mod schema;
-mod sqlite_chain_backend_adapter;
-pub use sqlite_chain_backend_adapter::SqliteChainBackendAdapter;
 mod sqlite_transaction;
 pub use sqlite_transaction::SqliteTransaction;
 mod sqlite_db_factory;

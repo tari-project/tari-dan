@@ -2,6 +2,7 @@
 
 members = [
     "dan_layer/core",
+    "dan_layer/storage",
     "dan_layer/storage_lmdb",
     "dan_layer/storage_sqlite",
     "dan_layer/template_abi",

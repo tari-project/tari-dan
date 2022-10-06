@@ -30,7 +30,7 @@ use crate::p2p::services::template_manager::{
 };
 
 pub fn spawn(sqlite_db: SqliteDbFactory, shutdown: ShutdownSignal) -> TemplateManagerHandle {
-    let (tx_request, rx_request) = mpsc::channel(10);
+    let (tx_request, rx_request) = mpsc::channel(1);
     let handle = TemplateManagerHandle::new(tx_request);
     TemplateManagerService::spawn(rx_request, sqlite_db, shutdown);
     handle

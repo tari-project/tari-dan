@@ -19,26 +19,14 @@
 //  SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY,
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+mod global_db;
+pub use global_db::GlobalDb;
 
-use std::fmt::{Display, Formatter};
+mod backend_adapter;
+pub use backend_adapter::GlobalDbAdapter;
 
-use crate::storage::metadata_backend_adapter::AsKeyBytes;
+mod metadata_db;
+pub use metadata_db::{MetadataDb, MetadataKey};
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum ChainDbMetadataKey {
-    CheckpointNumber,
-}
-
-impl AsKeyBytes for ChainDbMetadataKey {
-    fn as_key_bytes(&self) -> &[u8] {
-        match self {
-            ChainDbMetadataKey::CheckpointNumber => b"checkpoint-number",
-        }
-    }
-}
-
-impl Display for ChainDbMetadataKey {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", String::from_utf8_lossy(self.as_key_bytes()))
-    }
-}
+mod template_db;
+pub use template_db::{DbTemplate, TemplateDb};

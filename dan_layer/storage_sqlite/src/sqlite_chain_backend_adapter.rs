@@ -24,13 +24,7 @@ use std::convert::TryInto;
 
 use diesel::{prelude::*, Connection, SqliteConnection};
 use log::*;
-use tari_dan_core::{
-    models::TariDanPayload,
-    storage::{
-        chain::{ChainDbBackendAdapter, DbTemplate},
-        AtomicDb,
-    },
-};
+use tari_dan_core::{models::TariDanPayload, storage::AtomicDb};
 
 use crate::{
     error::SqliteStorageError,

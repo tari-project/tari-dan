@@ -1,4 +1,4 @@
-//  Copyright 2021. The Tari Project
+//  Copyright 2021, The Tari Project
 //
 //  Redistribution and use in source and binary forms, with or without modification, are permitted provided that the
 //  following conditions are met:
@@ -20,12 +20,12 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use crate::models::TreeNodeHash;
-
-#[derive(Debug, Clone)]
-pub struct DbNode {
-    pub hash: TreeNodeHash,
-    pub parent: TreeNodeHash,
-    pub height: u32,
-    pub is_committed: bool,
+#[derive(Debug, thiserror::Error)]
+pub enum StorageError {
+    #[error("Could not connect to storage: {source}")]
+    ConnectionError { source: anyhow::Error },
+    #[error("{item} does not exist")]
+    NotFound { item: String },
+    #[error("General storage error: {source}")]
+    General { source: anyhow::Error },
 }

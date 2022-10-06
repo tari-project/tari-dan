@@ -1,4 +1,4 @@
---  // Copyright 2022. The Tari Project
+--  // Copyright 2021. The Tari Project
 --  //
 --  // Redistribution and use in source and binary forms, with or without modification, are permitted provided that the
 --  // following conditions are met:
@@ -19,3 +19,19 @@
 --  // SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY,
 --  // WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 --  // USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+
+create table templates
+(
+    id               Integer primary key autoincrement not null,
+    -- the address is the hash of the content
+    template_address blob                              not null,
+    -- where to find the template code
+    url              text                              not null,
+    -- the block height in which the template was published
+    height           bigint                            not null,
+    -- compiled template code as a WASM binary
+    compiled_code    blob                              not null
+);
+
+-- fetching by the template_address will be a very common operation
+create index templates_template_address_index on templates (template_address);

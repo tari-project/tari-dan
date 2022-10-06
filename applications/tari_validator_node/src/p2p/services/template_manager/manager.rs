@@ -21,19 +21,16 @@
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 use futures::future::join_all;
-use log::*;
 use tari_common_types::types::FixedHash;
 use tari_core::transactions::transaction_components::CodeTemplateRegistration;
-use tari_dan_core::{
-    services::TemplateProvider,
-    storage::{chain::DbTemplate, DbFactory},
-};
+use tari_dan_core::{services::TemplateProvider, storage::DbFactory};
 use tari_dan_engine::wasm::WasmModule;
+use tari_dan_storage::global::DbTemplate;
 use tari_template_lib::models::TemplateAddress;
 
 use crate::{p2p::services::template_manager::TemplateManagerError, SqliteDbFactory};
 
-const LOG_TARGET: &str = "tari::validator_node::epoch_manager";
+const _LOG_TARGET: &str = "tari::validator_node::template_manager";
 
 #[derive(Debug, Clone)]
 pub struct TemplateMetadata {
@@ -85,9 +82,11 @@ impl TemplateManager {
     }
 
     pub fn fetch_template(&self, address: &TemplateAddress) -> Result<Template, TemplateManagerError> {
-        let db = self.db_factory.get_or_create_template_db()?;
+        let db = self.db_factory.get_or_create_global_db()?;
+        let tx = db.create_transaction()?;
         let template = db
-            .find_template_by_address(address)?
+            .templates(&tx)
+            .get_template(address)?
             .ok_or(TemplateManagerError::TemplateNotFound { address: *address })?;
 
         Ok(template.into())
@@ -97,12 +96,6 @@ impl TemplateManager {
         &self,
         template_registations: Vec<CodeTemplateRegistration>,
     ) -> Result<(), TemplateManagerError> {
-        info!(
-            target: LOG_TARGET,
-            "Adding {} new templates",
-            template_registations.len()
-        );
-
         // extract the metadata that we need to store
         let templates_metadata: Vec<TemplateMetadata> = template_registations.into_iter().map(Into::into).collect();
 
@@ -162,8 +155,11 @@ impl TemplateManager {
             compiled_code: template_wasm,
         };
 
-        let db = self.db_factory.get_or_create_template_db()?;
-        db.insert_template(&template)?;
+        let db = self.db_factory.get_or_create_global_db()?;
+        let tx = db.create_transaction()?;
+        let template_db = db.templates(&tx);
+        template_db.insert_template(template)?;
+        db.commit(tx)?;
 
         Ok(())
     }

@@ -28,7 +28,7 @@ mod prompt;
 use std::error::Error;
 
 use anyhow::anyhow;
-use command::{RegisterTemplateArgs, TemplateSubcommand, VnSubcommand};
+use command::{PublishTemplateArgs, TemplateSubcommand, VnSubcommand};
 use multiaddr::{Multiaddr, Protocol};
 use reqwest::Url;
 use tari_dan_engine::{hashing::hasher, wasm::compile::compile_template};
@@ -40,7 +40,7 @@ use crate::{
     prompt::Prompt,
 };
 
-#[tokio::main]
+#[tokio::main(flavor = "current_thread")]
 async fn main() -> Result<(), Box<dyn Error>> {
     let cli = Cli::init();
 
@@ -82,12 +82,8 @@ fn multiaddr_to_http_url(multiaddr: Multiaddr) -> anyhow::Result<Url> {
 
 async fn handle_command(command: Command, client: ValidatorNodeClient) -> anyhow::Result<()> {
     match command {
-        Command::Vn(vn_command) => match vn_command.subcommand {
-            VnSubcommand::Register => handle_register_node(client).await?,
-        },
-        Command::Template(template_command) => match template_command.subcommand {
-            TemplateSubcommand::Register(args) => handle_register_template(args, client).await?,
-        },
+        Command::Vn(VnSubcommand::Register) => handle_register_node(client).await?,
+        Command::Templates(TemplateSubcommand::Publish(args)) => handle_register_template(args, client).await?,
     }
 
     Ok(())
@@ -100,7 +96,7 @@ async fn handle_register_node(mut client: ValidatorNodeClient) -> anyhow::Result
     Ok(())
 }
 
-async fn handle_register_template(args: RegisterTemplateArgs, mut client: ValidatorNodeClient) -> anyhow::Result<()> {
+async fn handle_register_template(args: PublishTemplateArgs, mut client: ValidatorNodeClient) -> anyhow::Result<()> {
     // retrieve the root folder of the template
     let root_folder = args.template_code_path;
     println!("Template code path {}", root_folder.display());
