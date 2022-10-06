@@ -26,14 +26,14 @@ use std::{
     path::PathBuf,
 };
 
-use borsh::{BorshDeserialize, BorshSerialize};
-use diesel::{prelude::*, SqliteConnection};
+use diesel::{prelude::*, SqliteConnection, dsl::max};
 use serde_json::json;
-use tari_common_types::types::{FixedHash, PrivateKey, PublicKey, Signature};
+use tari_common_types::types::{PrivateKey, PublicKey, Signature};
 use tari_dan_common_types::{ObjectId, PayloadId, ShardId, SubstateChange, SubstateState};
 use tari_dan_core::{
     models::{
         vote_message::VoteMessage,
+        Epoch,
         HotStuffTreeNode,
         NodeHeight,
         ObjectPledge,
@@ -42,6 +42,8 @@ use tari_dan_core::{
         TreeNodeHash,
     },
     storage::{
+        deserialize,
+        serialize,
         shard_store::{ShardStoreFactory, ShardStoreTransaction},
         StorageError,
     },
@@ -53,13 +55,25 @@ use crate::{
     error::SqliteStorageError,
     models::{
         high_qc::{HighQc, NewHighQc},
+        last_executed_height::{LastExecutedHeight, NewLastExecutedHeight},
+        last_voted_height::{LastVotedHeight, NewLastVotedHeight},
         leaf_nodes::{LeafNode, NewLeafNode},
-        payload::{Payload, NewPayload},
+        lock_node_and_height::{LockNodeAndHeight, NewLockNodeAndHeight},
+        nodes::{NewNode, Node},
+        payload::{NewPayload, Payload},
+        payload_votes::{NewPayloadVote, PayloadVote},
+        votes::{NewVote, Vote},
     },
     schema::{
         high_qcs::{dsl::high_qcs, shard_id},
+        last_executed_heights::dsl::last_executed_heights,
+        last_voted_heights::dsl::last_voted_heights,
         leaf_nodes::dsl::leaf_nodes,
+        lock_node_and_heights::dsl::lock_node_and_heights,
+        nodes::dsl::nodes as table_nodes,
+        payload_votes::dsl::payload_votes,
         payloads::dsl::payloads,
+        votes::dsl::votes,
     },
 };
 
@@ -225,8 +239,9 @@ impl ShardStoreTransaction<PublicKey, TariDanPayload> for SqliteShardStoreTransa
             .expect("TODO: Need to return an error");
 
         if let Some(payload) = payload {
-            let instructions = Vec::<Instruction>::deserialize(&mut payload.instructions.as_slice())
-                .expect("TODO: Need to return an error");
+            let instructions =
+                deserialize::<Vec<Instruction>>(&payload.instructions).expect("TODO: Need to return an error");
+
             let fee: u64 = payload.fee.try_into().expect("TODO: Need to return an error");
 
             let public_nonce = PublicKey::from_vec(&payload.public_nonce).expect("TODO: Need to return an error");
@@ -237,8 +252,7 @@ impl ShardStoreTransaction<PublicKey, TariDanPayload> for SqliteShardStoreTransa
 
             let sender_public_key =
                 PublicKey::from_vec(&payload.sender_public_key).expect("TODO: Need to return an error");
-            let meta =
-                TransactionMeta::deserialize(&mut payload.meta.as_slice()).expect("TODO: Need to return an error");
+            let meta = deserialize::<TransactionMeta>(&payload.meta).expect("TODO: Need to return an error");
 
             let transaction = Transaction::new(fee, instructions, signature, sender_public_key, meta);
 
@@ -250,9 +264,8 @@ impl ShardStoreTransaction<PublicKey, TariDanPayload> for SqliteShardStoreTransa
 
     fn set_payload(&mut self, payload: TariDanPayload) {
         let transaction = payload.transaction();
+        let instructions = serialize(&transaction.instructions()).expect("TODO: Need to return an error");
 
-        let mut instructions = Vec::<u8>::new();
-        transaction.instructions().serialize(&mut instructions).expect("TODO: Need to return an error");
         let signature = transaction.signature();
 
         let public_nonce = Vec::from(signature.signature().get_public_nonce().as_bytes());
@@ -260,8 +273,8 @@ impl ShardStoreTransaction<PublicKey, TariDanPayload> for SqliteShardStoreTransa
 
         let fee: i32 = transaction.fee().try_into().expect("TODO: Need to return an error");
         let sender_public_key = Vec::from(transaction.sender_public_key().as_bytes());
-        let mut meta = Vec::<u8>::new();
-        transaction.meta().serialize(&mut meta).expect("TODO: Need to return an error");
+
+        let meta = serialize(transaction.meta()).expect("TODO: Need to return an error");
 
         let payload_id = Vec::from(*transaction.hash());
 
@@ -280,23 +293,136 @@ impl ShardStoreTransaction<PublicKey, TariDanPayload> for SqliteShardStoreTransa
             .execute(&self.connection)
             .map_err(|e| StorageError::QueryError { reason: e.to_string() })
             .unwrap();
-            
     }
 
-    fn get_node(&self, _node_hash: &TreeNodeHash) -> Result<HotStuffTreeNode<PublicKey>, Self::Error> {
-        todo!()
+    fn get_node(&self, node_hash: &TreeNodeHash) -> Result<HotStuffTreeNode<PublicKey>, Self::Error> {
+        use crate::schema::nodes::{height, payload_height, tree_node_hash};
+        let node_hash = Vec::from(node_hash.as_bytes());
+        let node: Option<Node> = table_nodes
+            .filter(tree_node_hash.eq(node_hash))
+            .order_by(height.desc())
+            .order_by(payload_height.desc())
+            .first(&self.connection)
+            .optional()
+            .expect("TODO: Need to return an error");
+
+        if let Some(node) = node {
+            let mut parent = [0u8; 32];
+            parent.copy_from_slice(node.parent_node_hash.as_slice());
+            let parent = TreeNodeHash::from(parent);
+
+            let hgt: u64 = node.height.try_into().expect("TODO: Need to return an error");
+
+            let shard = deserialize::<ShardId>(&node.shard).expect("TODO: Need to return an error");
+            let payload = deserialize::<PayloadId>(&node.payload_id.as_slice()).expect("TODO: Need to return an error");
+
+            let payload_hgt: u64 = node.payload_height.try_into().expect("TODO: Need to return an error");
+            let local_pledges = deserialize::<Vec<ObjectPledge>>(&node.local_pledges.as_slice())
+                .expect("TODO: Need to return an error");
+
+            let epoch: u64 = node.epoch.try_into().expect("TODO: Need to return an error");
+            let proposed_by = PublicKey::from_vec(&node.proposed_by).expect("TODO: Need to return an error");
+
+            let justify = deserialize::<QuorumCertificate>(&node.justify).expect("TODO: Need to return an error");
+
+            Ok(HotStuffTreeNode::new(
+                parent,
+                shard,
+                NodeHeight(hgt),
+                payload,
+                NodeHeight(payload_hgt),
+                local_pledges,
+                Epoch(epoch),
+                proposed_by,
+                justify,
+            ))
+        } else {
+            panic!("TODO")
+        }
     }
 
-    fn save_node(&mut self, _node: HotStuffTreeNode<PublicKey>) {
-        todo!()
+    fn save_node(&mut self, node: HotStuffTreeNode<PublicKey>) {
+        let tree_node_hash = Vec::from(node.hash().as_bytes());
+        let parent_node_hash = Vec::from(node.parent().as_bytes());
+
+        let height = node.height().0.try_into().expect("TODO: Need to return an error");
+        let shard = serialize(&node.shard()).expect("TODO: Need to return an error");
+
+        let payload_id = serialize(&node.payload()).expect("TODO: Need to return an error");
+        let payload_height: i32 = node
+            .payload_height()
+            .0
+            .try_into()
+            .expect("TODO: Need to return an error");
+
+        let local_pledges = serialize(&node.local_pledges()).expect("TODO: Need to return an error");
+
+        let epoch: i32 = node.epoch().0.try_into().expect("TODO: Need to return an error");
+        let proposed_by = Vec::from(node.proposed_by().as_bytes());
+
+        let justify = serialize(node.justify()).expect("TODO: Need to return an error");
+
+        let new_row = NewNode {
+            tree_node_hash,
+            parent_node_hash,
+            height,
+            shard,
+            payload_id,
+            payload_height,
+            local_pledges,
+            epoch,
+            proposed_by,
+            justify,
+        };
+
+        diesel::insert_into(table_nodes)
+            .values(&new_row)
+            .execute(&self.connection)
+            .map_err(|e| StorageError::QueryError { reason: e.to_string() })
+            .expect("TODO: Need to return an error");
     }
 
-    fn get_locked_node_hash_and_height(&self, _shard: ShardId) -> (TreeNodeHash, NodeHeight) {
-        todo!()
+    fn get_locked_node_hash_and_height(&self, shard: ShardId) -> (TreeNodeHash, NodeHeight) {
+        use crate::schema::lock_node_and_heights::{node_height, shard_id};
+
+        let shard = Vec::from(shard.0);
+
+        let lock_node_hash_and_height: Option<LockNodeAndHeight> = lock_node_and_heights
+            .filter(shard_id.eq(shard))
+            .order_by(node_height.desc())
+            .first(&self.connection)
+            .optional()
+            .expect("TODO: Need to return an error");
+
+        if let Some(data) = lock_node_hash_and_height {
+            let mut tree_node_hash = [0u8; 32];
+            tree_node_hash.copy_from_slice(data.tree_node_hash.as_slice());
+            let tree_node_hash = TreeNodeHash::from(tree_node_hash);
+
+            let height: u64 = data.node_height.try_into().expect("TODO: Need to return an error");
+
+            (tree_node_hash, NodeHeight(height))
+        } else {
+            panic!("TODO")
+        }
     }
 
-    fn set_locked(&mut self, _shard: ShardId, _node_hash: TreeNodeHash, _node_height: NodeHeight) {
-        todo!()
+    fn set_locked(&mut self, shard: ShardId, node_hash: TreeNodeHash, node_height: NodeHeight) {
+        let shard = Vec::from(shard.as_bytes());
+        let node_hash = Vec::from(node_hash.as_bytes());
+        let node_height = i32::try_from(node_height.0).expect("TODO: Return an error");
+
+        let new_row = NewLockNodeAndHeight {
+            shard_id: shard,
+            tree_node_hash: node_hash,
+            node_height,
+        };
+
+        diesel::insert_into(lock_node_and_heights)
+            .values(&new_row)
+            .execute(&self.connection)
+            .map_err(|e| StorageError::QueryError { reason: e.to_string() })
+            .expect("TODO: Need to return an error");
     }
 
     fn pledge_object(
@@ -310,60 +436,227 @@ impl ShardStoreTransaction<PublicKey, TariDanPayload> for SqliteShardStoreTransa
         todo!()
     }
 
-    fn set_last_executed_height(&mut self, _shard: ShardId, _height: NodeHeight) {
-        todo!()
+    fn set_last_executed_height(&mut self, shard: ShardId, height: NodeHeight) {
+        let shard = Vec::from(shard.as_bytes());
+        let node_height: i32 = height.0.try_into().expect("TODO: Need to return an error");
+
+        let new_row = NewLastExecutedHeight {
+            shard_id: shard,
+            node_height,
+        };
+
+        diesel::insert_into(last_executed_heights)
+            .values(&new_row)
+            .execute(&self.connection)
+            .map_err(|e| StorageError::QueryError { reason: e.to_string() })
+            .expect("TODO: Need to return an error");
     }
 
-    fn get_last_executed_height(&self, _shard: ShardId) -> NodeHeight {
-        todo!()
+    fn get_last_executed_height(&self, shard: ShardId) -> NodeHeight {
+        use crate::schema::last_executed_heights::{node_height, shard_id};
+
+        let last_executed_height: Option<LastExecutedHeight> = last_executed_heights
+            .filter(shard_id.eq(Vec::from(shard.0)))
+            .order_by(node_height.desc())
+            .first(&self.connection)
+            .optional()
+            .expect("TODO: Need to return an error");
+
+        if let Some(last_exec_height) = last_executed_height {
+            let height = last_exec_height.node_height.try_into().expect("TODO: Return an error");
+            NodeHeight(height)
+        } else {
+            panic!("TODO")
+        }
     }
 
     fn save_substate_changes(&mut self, _changes: HashMap<ShardId, Option<SubstateState>>, _node: TreeNodeHash) {
         todo!()
     }
 
-    fn get_last_voted_height(&self, _shard: ShardId) -> NodeHeight {
-        todo!()
+    fn get_last_voted_height(&self, shard: ShardId) -> NodeHeight {
+        use crate::schema::last_voted_heights::{node_height, shard_id};
+
+        let last_vote: Option<LastVotedHeight> = last_voted_heights
+            .filter(shard_id.eq(Vec::from(shard.as_bytes())))
+            .order_by(node_height.desc())
+            .first(&self.connection)
+            .optional()
+            .expect("TODO: Need to return an error");
+
+        if let Some(last_vote_height) = last_vote {
+            let height = last_vote_height
+                .node_height
+                .try_into()
+                .expect("TODO: Need to return an error");
+            NodeHeight(height)
+        } else {
+            panic!("TODO")
+        }
     }
 
-    fn set_last_voted_height(&mut self, _shard: ShardId, _height: NodeHeight) {
-        todo!()
+    fn set_last_voted_height(&mut self, shard: ShardId, height: NodeHeight) {
+        let shard = Vec::from(shard.as_bytes());
+        let height: i32 = height.0.try_into().expect("TODO: Need to return an error");
+
+        let new_row = NewLastVotedHeight {
+            shard_id: shard,
+            node_height: height,
+        };
+
+        diesel::insert_into(last_voted_heights)
+            .values(&new_row)
+            .execute(&self.connection)
+            .map_err(|e| StorageError::QueryError { reason: e.to_string() })
+            .expect("TODO: Need to return an error");
     }
 
     fn get_payload_vote(
         &self,
-        _payload: PayloadId,
-        _payload_height: NodeHeight,
-        _shard: ShardId,
+        payload: PayloadId,
+        payload_height: NodeHeight,
+        shard: ShardId,
     ) -> Option<HotStuffTreeNode<PublicKey>> {
-        todo!()
+        use crate::schema::payload_votes::{node_height, payload_id, shard_id};
+
+        let payload_vote: Option<PayloadVote> = payload_votes
+            .filter(
+                payload_id
+                    .eq(Vec::from(payload.as_slice()))
+                    .and(shard_id.eq(Vec::from(shard.as_bytes())))
+                    .and(node_height.eq(payload_height.0 as i32)),
+            )
+            .first(&self.connection)
+            .optional()
+            .expect("TODO: Need to return an error");
+
+        if let Some(payload_vote) = payload_vote {
+            let hot_stuff_tree_node = deserialize::<HotStuffTreeNode<PublicKey>>(&payload_vote.hotstuff_tree_node)
+                .expect("TODO: Need to return an error");
+            Some(hot_stuff_tree_node)
+        } else {
+            None
+        }
     }
 
     fn save_payload_vote(
         &mut self,
-        _shard: ShardId,
-        _payload: PayloadId,
-        _payload_height: NodeHeight,
-        _node: HotStuffTreeNode<PublicKey>,
+        shard: ShardId,
+        payload: PayloadId,
+        payload_height: NodeHeight,
+        node: HotStuffTreeNode<PublicKey>,
     ) {
-        todo!()
+        let shard = Vec::from(shard.as_bytes());
+        let payload = Vec::from(payload.as_slice());
+        let payload_height: i32 = payload_height.0.try_into().expect("TODO: Need to return an error");
+        let node = serialize(&node).expect("TODO: Return an error");
+
+        let new_row = NewPayloadVote {
+            shard_id: shard,
+            payload_id: payload,
+            node_height: payload_height,
+            hotstuff_tree_node: node,
+        };
+
+        diesel::insert_into(payload_votes)
+            .values(&new_row)
+            .execute(&self.connection)
+            .map_err(|e| StorageError::QueryError { reason: e.to_string() })
+            .expect("TODO: Need to return an error");
     }
 
-    fn has_vote_for(&self, _from: &PublicKey, _node_hash: TreeNodeHash, _shard: ShardId) -> bool {
-        todo!()
+    fn has_vote_for(&self, from: &PublicKey, node_hash: TreeNodeHash, shard: ShardId) -> bool {
+        use crate::schema::votes::{address, node_height, shard_id, tree_node_hash};
+
+        let vote: Option<Vote> = votes
+            .filter(
+                shard_id
+                    .eq(Vec::from(shard.as_bytes()))
+                    .and(tree_node_hash.eq(Vec::from(node_hash.as_bytes())))
+                    .and(address.eq(Vec::from(from.as_bytes()))),
+            )
+            .order_by(node_height.desc())
+            .first(&self.connection)
+            .optional()
+            .expect("TODO: Need to return an error");
+
+        if let Some(_) = vote {
+            true
+        } else {
+            false
+        }
     }
 
     fn save_received_vote_for(
         &mut self,
-        _from: PublicKey,
-        _node_hash: TreeNodeHash,
-        _shard: ShardId,
-        _vote_message: VoteMessage,
+        from: PublicKey,
+        node_hash: TreeNodeHash,
+        shard: ShardId,
+        vote_message: VoteMessage,
     ) -> usize {
-        todo!()
+        use crate::schema::votes::{node_height, shard_id, tree_node_hash};
+
+        let from = Vec::from(from.as_bytes());
+        let node_hash = Vec::from(node_hash.as_bytes());
+        let shard = Vec::from(shard.as_bytes());
+        let vote_message = serialize(&vote_message).expect("TODO: Need to return an error");
+
+        let current_node_height: Option<i32> = votes
+            .select(max(node_height))
+            .first(&self.connection)
+            .map_err(|e| StorageError::QueryError { reason: e.to_string() })
+            .expect("TODO: Need to return an error");
+
+        let new_row = NewVote {
+            tree_node_hash: node_hash.clone(),
+            shard_id: shard.clone(),
+            address: from,
+            node_height: current_node_height.unwrap() + 1, // TODO: does every new received vote account for a higher height ? 
+            vote_message,
+        };
+
+        diesel::insert_into(votes)
+            .values(&new_row)
+            .execute(&self.connection)
+            .map_err(|e| StorageError::QueryError { reason: e.to_string() })
+            .expect("TODO: Need to return an error");
+
+        let count: i64 = votes
+            .filter(
+                tree_node_hash
+                    .eq(Vec::from(node_hash.as_bytes()))
+                    .and(shard_id.eq(Vec::from(shard.as_slice())))
+                )
+            .count()
+            .first(&self.connection)
+            .map_err(|source| StorageError::QueryError {
+                reason: format!("Save received vote: {0}", source),
+            })
+            .expect("TODO: Need to return an error");
+            
+        count.try_into().expect("TODO: Need to return an error")
     }
 
-    fn get_received_votes_for(&self, _node_hash: TreeNodeHash, _shard: ShardId) -> Vec<VoteMessage> {
-        todo!()
+    fn get_received_votes_for(&self, node_hash: TreeNodeHash, shard: ShardId) -> Vec<VoteMessage> {
+        use crate::schema::votes::{tree_node_hash, shard_id, address,};
+
+        let filtered_votes: Option<Vec<Vote>> = votes
+            .filter(
+                shard_id
+                    .eq(Vec::from(shard.as_bytes()))
+                    .and(tree_node_hash.eq(Vec::from(node_hash.as_bytes())))
+            )
+            .get_results(&self.connection)
+            .optional()
+            .expect("TODO: Need to return an error");
+        
+        if let Some(filtered_votes) = filtered_votes {
+            filtered_votes
+                .iter()
+                .map(|v| deserialize::<VoteMessage>(&v.vote_message).expect("TODO: Need to return an error"))
+                .collect::<Vec<_>>()
+        } else {
+            vec![]
+        }
     }
 }

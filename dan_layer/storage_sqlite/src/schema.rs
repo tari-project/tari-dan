@@ -18,6 +18,7 @@ table! {
         shard_id -> Binary,
         address -> Binary,
         node_height -> Integer,
+        vote_message -> Binary,
     }
 }
 
@@ -51,7 +52,15 @@ table! {
     nodes (id) {
         id -> Integer,
         tree_node_hash -> Binary,
-        hotstuff_tree_node -> Binary,
+        parent_node_hash -> Binary,
+        height -> Integer,
+        shard -> Binary,
+        payload_id -> Binary,
+        payload_height -> Integer,
+        local_pledges -> Binary,
+        epoch -> Integer,
+        proposed_by -> Binary,
+        justify -> Binary,
     }
 }
 

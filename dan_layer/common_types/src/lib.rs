@@ -16,10 +16,10 @@ use tari_crypto::tari_utilities::hex::serialize_to_hex;
 use tari_utilities::{byte_array::ByteArray, hex::Hex};
 pub use template_id::TemplateId;
 
-#[derive(BorshDeserialize, BorshSerialize, Copy, Clone, Debug, PartialEq, Eq, Hash, Deserialize, Serialize)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Hash, Deserialize, Serialize)]
 pub struct ObjectId(#[serde(deserialize_with = "deserialize_fixed_hash_from_hex")] pub [u8; 32]);
 
-#[derive(BorshDeserialize, BorshSerialize, Copy, Clone, Debug, Eq, PartialEq, Hash, Serialize, Deserialize)]
+#[derive(Copy, Clone, Debug, Eq, PartialEq, Hash, Serialize, Deserialize)]
 pub struct ShardId(
     #[serde(
         serialize_with = "serialize_to_hex",
@@ -64,20 +64,20 @@ impl Ord for ShardId {
     }
 }
 
-#[derive(BorshDeserialize, BorshSerialize, Clone, Debug, PartialEq, Eq, Hash, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash, Deserialize, Serialize)]
 pub enum SubstateChange {
     Create,
     Destroy,
 }
 
-#[derive(Debug, Clone, BorshSerialize, BorshDeserialize, Serialize, Deserialize)]
+#[derive(BorshDeserialize, BorshSerialize, Debug, Clone, Serialize, Deserialize)]
 pub enum SubstateState {
     DoesNotExist,
     Exists { created_by: PayloadId, data: Vec<u8> },
     Destroyed { deleted_by: PayloadId },
 }
 
-#[derive(BorshDeserialize, BorshSerialize, Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct ObjectClaim {}
 
 impl ObjectClaim {

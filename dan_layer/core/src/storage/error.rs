@@ -50,6 +50,10 @@ pub enum StorageError {
     General { details: String },
     #[error("Lock error")]
     LockError,
+    #[error("Encoding storage error")]
+    EncodingError,
+    #[error("Decoding storage error")]
+    DecodingError,
 }
 
 impl<T> From<PoisonError<T>> for StorageError {

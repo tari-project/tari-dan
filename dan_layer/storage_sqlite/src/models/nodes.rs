@@ -26,12 +26,28 @@ use crate::schema::*;
 pub struct Node {
     pub id: i32,
     pub tree_node_hash: Vec<u8>,
-    pub hotstuff_tree_node: Vec<u8>,
+    pub parent_node_hash: Vec<u8>,
+    pub height: i32,
+    pub shard: Vec<u8>,
+    pub payload_id: Vec<u8>,
+    pub payload_height: i32,
+    pub local_pledges: Vec<u8>,
+    pub epoch: i32,
+    pub proposed_by: Vec<u8>,
+    pub justify: Vec<u8>,
 }
 
 #[derive(Debug, Insertable)]
 #[table_name = "nodes"]
 pub struct NewNode {
     pub tree_node_hash: Vec<u8>,
-    pub hotstuff_tree_node: Vec<u8>,
+    pub parent_node_hash: Vec<u8>,
+    pub height: i32,
+    pub shard: Vec<u8>,
+    pub payload_id: Vec<u8>,
+    pub payload_height: i32,
+    pub local_pledges: Vec<u8>,
+    pub epoch: i32,
+    pub proposed_by: Vec<u8>,
+    pub justify: Vec<u8>,
 }

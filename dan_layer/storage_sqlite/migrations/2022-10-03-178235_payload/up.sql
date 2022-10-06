@@ -18,11 +18,12 @@ create table votes {
     tree_node_hash blob not NULL,
     shard_id blob not NULL,
     address blob not NULL,
-    node_height integer not NULL
+    node_height integer not NULL,
+    vote_message blob not NULL
 }
 
 -- fetching by the pair (tree_node_hash, shard_id) will be a very common operation
-create index votes_index on votes (tree_node_hash, shard_id)
+create index votes_index on votes (tree_node_hash, shard_id, node_height)
 
 
 create table leaf_nodes {
@@ -59,8 +60,16 @@ create index lock_node_and_heights_index on lock_node_and_heights (shard_id)
 
 create table nodes {
     id integer not null primary key AUTOINCREMENT,
-    tree_node_hash blob not NULL,
-    hotstuff_tree_node blob not NULL
+    node_hash blob not NULL,
+    parent_node_hash blob not NULL,
+    height integer not NULL,
+    shard blob not NULL,
+    payload_id blob not NULL,
+    payload_height integer not NULL,
+    local_pledges blob not NULL,
+    epoch integer not NULL,
+    proposed_by blob not NULL,
+    justify blob not NULL,
 }
 
 -- fetching by tree_node_hash will be a very common operation

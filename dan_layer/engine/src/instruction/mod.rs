@@ -31,9 +31,8 @@ pub use processor::InstructionProcessor;
 mod signature;
 use std::collections::HashMap;
 
-use borsh::{BorshDeserialize, BorshSerialize};
 use digest::{Digest, FixedOutput};
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 pub use signature::InstructionSignature;
 use tari_common_types::types::{BulletRangeProof, ComSignature, Commitment, FixedHash, PublicKey};
 use tari_crypto::hash::blake2::Blake256;
@@ -45,7 +44,7 @@ use tari_template_lib::{
 };
 use tari_utilities::ByteArray;
 
-#[derive(BorshDeserialize, BorshSerialize, Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 pub enum Instruction {
     CallFunction {
         package_address: PackageAddress,
@@ -118,7 +117,7 @@ pub struct Transaction {
     meta: Option<TransactionMeta>,
 }
 
-#[derive(BorshDeserialize, BorshSerialize, Debug, Clone, Default, Deserialize)]
+#[derive(Debug, Clone, Default, Deserialize, Serialize)]
 pub struct TransactionMeta {
     involved_objects: HashMap<ShardId, Vec<(ObjectId, SubstateChange, ObjectClaim)>>,
 }
