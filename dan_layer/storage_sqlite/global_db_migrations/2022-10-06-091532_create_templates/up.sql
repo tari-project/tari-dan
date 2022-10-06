@@ -34,4 +34,4 @@ create table templates
 );
 
 -- fetching by the template_address will be a very common operation
-create index templates_template_address_index on templates (template_address);
+create unique index templates_template_address_index on templates (template_address);
