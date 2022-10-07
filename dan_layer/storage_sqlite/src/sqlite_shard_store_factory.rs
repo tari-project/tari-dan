@@ -512,7 +512,7 @@ impl ShardStoreTransaction<PublicKey, TariDanPayload> for SqliteShardStoreTransa
         payload: PayloadId,
         current_height: NodeHeight,
     ) -> ObjectPledge {
-        use crate::schema::objects::{node_height, object_id, payload_id, shard_id, substate_state};
+        use crate::schema::objects::{node_height, object_id, payload_id, shard_id, substate_change};
 
         let shard = Vec::from(shard.as_bytes());
         let object = Vec::from(object.0);
@@ -529,7 +529,7 @@ impl ShardStoreTransaction<PublicKey, TariDanPayload> for SqliteShardStoreTransa
                 shard_id
                     .eq(shard)
                     .and(object_id.eq(object))
-                    .and(substate_state.eq(change))
+                    .and(substate_change.eq(change))
                     .and(payload_id.eq(payload))
                     .and(node_height.eq(current_height)),
             )
@@ -556,7 +556,11 @@ impl ShardStoreTransaction<PublicKey, TariDanPayload> for SqliteShardStoreTransa
 
     fn set_last_executed_height(&mut self, shard: ShardId, height: NodeHeight) {
         let shard = Vec::from(shard.as_bytes());
-        let node_height: i32 = height.0.try_into().map_err(|_| Self::Error::InvalidIntegerCast).unwrap();
+        let node_height: i32 = height
+            .0
+            .try_into()
+            .map_err(|_| Self::Error::InvalidIntegerCast)
+            .unwrap();
 
         let new_row = NewLastExecutedHeight {
             shard_id: shard,
@@ -649,7 +653,11 @@ impl ShardStoreTransaction<PublicKey, TariDanPayload> for SqliteShardStoreTransa
 
     fn set_last_voted_height(&mut self, shard: ShardId, height: NodeHeight) {
         let shard = Vec::from(shard.as_bytes());
-        let height: i32 = height.0.try_into().map_err(|_| Self::Error::InvalidIntegerCast).unwrap();
+        let height: i32 = height
+            .0
+            .try_into()
+            .map_err(|_| Self::Error::InvalidIntegerCast)
+            .unwrap();
 
         let new_row = NewLastVotedHeight {
             shard_id: shard,

@@ -29,7 +29,7 @@ pub struct Object {
     pub object_id: Vec<u8>,
     pub payload_id: Vec<u8>,
     pub node_height: i32,
-    pub substate_state: Vec<u8>,
+    pub substate_change: Vec<u8>,
     pub object_pledge: Vec<u8>,
 }
 
@@ -40,6 +40,6 @@ pub struct NewObject {
     pub object_id: Vec<u8>,
     pub payload_id: Vec<u8>,
     pub node_height: i32,
-    pub substate_state: Vec<u8>,
+    pub substate_change: Vec<u8>,
     pub object_pledge: Vec<u8>,
 }

@@ -110,7 +110,7 @@ table! {
         shard_id -> Binary,
         object_id -> Binary,
         payload_id -> Binary,
-        substate_state -> Binary,
+        substate_change -> Binary,
         object_pledge -> Binary,
         node_height -> Integer,
     }
