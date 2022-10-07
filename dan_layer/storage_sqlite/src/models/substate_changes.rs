@@ -31,9 +31,9 @@ pub struct SubstateChange {
 }
 
 #[derive(Debug, Insertable)]
-#[table_name = "subsate_changes"]
+#[table_name = "substate_changes"]
 pub struct NewSubStateChange {
     pub shard_id: Vec<u8>,
     pub tree_node_hash: Vec<u8>,
-    pub substate_changes: Vec<u8>,
+    pub substate_change: Vec<u8>,
 }
