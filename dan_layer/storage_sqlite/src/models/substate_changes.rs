@@ -23,23 +23,17 @@
 use crate::schema::*;
 
 #[derive(Debug, Identifiable, Queryable)]
-pub struct Object {
+pub struct SubstateChange {
     pub id: i32,
     pub shard_id: Vec<u8>,
-    pub object_id: Vec<u8>,
-    pub payload_id: Vec<u8>,
-    pub node_height: i32,
-    pub substate_state: Vec<u8>,
-    pub object_pledge: Vec<u8>,
+    pub tree_node_hash: Vec<u8>,
+    pub substate_changes: Vec<u8>,
 }
 
 #[derive(Debug, Insertable)]
-#[table_name = "objects"]
-pub struct NewObject {
+#[table_name = "subsate_changes"]
+pub struct NewSubStateChange {
     pub shard_id: Vec<u8>,
-    pub object_id: Vec<u8>,
-    pub payload_id: Vec<u8>,
-    pub node_height: i32,
-    pub substate_state: Vec<u8>,
-    pub object_pledge: Vec<u8>,
+    pub tree_node_hash: Vec<u8>,
+    pub substate_changes: Vec<u8>,
 }

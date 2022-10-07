@@ -29,5 +29,6 @@ pub mod nodes;
 pub mod objects;
 pub mod payload;
 pub mod payload_votes;
+pub mod substate_changes;
 pub mod template;
 pub mod votes;

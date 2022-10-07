@@ -87,8 +87,19 @@ table! {
         id -> Integer,
         shard_id -> Binary,
         object_id -> Binary,
+        payload_id -> Binary,
         substate_state -> Binary,
         object_pledge -> Binary,
+        node_height -> Integer,
+    }
+}
+
+table! {
+    substate_changes (id) {
+        id -> Integer,
+        shard_id -> Binary,
+        substate_change -> Binary,
+        tree_node_hash -> Binary,
     }
 }
 

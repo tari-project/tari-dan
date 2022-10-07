@@ -1,5 +1,5 @@
-create table payload_table {
-    id integer not null primary key AUTOINCREMENT
+create table payloads {
+    id integer not null primary key AUTOINCREMENT,
     payload_id blob not null,
     instructions blob not NULL,
     public_nonce blob not NULL,
@@ -10,7 +10,7 @@ create table payload_table {
 }
 
 -- fetching by the payload_id will be a very common operation
-create index payload_index on payload (payload_id);
+create index payload_index_payload_id on payloads (payload_id);
 
 
 create table votes {
@@ -22,8 +22,12 @@ create table votes {
     vote_message blob not NULL
 }
 
+-- fetching by node_height will be a very common operation
+create index votes_index_node_height on votes (node_height)
 -- fetching by the pair (tree_node_hash, shard_id) will be a very common operation
-create index votes_index on votes (tree_node_hash, shard_id, node_height)
+create index votes_index_tree_node_hash_shard_id on votes (tree_node_hash, shard_id)
+-- fetching by the triplet (tree_node_hash, shard_id, address) will be a very common operation
+create index votes_index_tree_node_hash_shard_id_address on votes (tree_node_hash, shard_id, address)
 
 
 create table leaf_nodes {
@@ -73,7 +77,7 @@ create table nodes {
 }
 
 -- fetching by tree_node_hash will be a very common operation
-create index nodes_index for nodes (tree_node_hash)
+create index nodes_index_tree_node_hash for nodes (tree_node_hash)
 
 
 create table last_executed_height {
@@ -99,12 +103,25 @@ create index payload_votes_index for payload_votes (payload_id, shard_id, node_h
 
 
 create table objects {
-    id integer not null primary key AUTOINCREMENT
+    id integer not null primary key AUTOINCREMENT,
     shard_id blob not NULL,
+    payload_id blob not NULL,
     object_id blob not NULL,
+    node_height integer not NULL
     substate_state blob not NULL,
-    object_pledge blob
+    object_pledge blob not NULL -- TODO: can it be non null ?
 }
 
 -- fetching by (shard_id, object_id) will be a very common operation
-create index objects_index for objects (shard_id, object_id)
+create index objects_index_shard_id_object_id_substate_state_node_height for objects (shard_id, object_id, payload_id, node_height, substate_state)
+
+
+create table substate_changes {
+    id integer not null primary key AUTOINCREMENT,
+    shard_id blob not NULL,
+    substate_change blob,
+    tree_node_hash blob not NULL
+}
+
+-- fetching by (shard_id, tree_node_hash) will be a very common operation
+create index substate_changes_shard_id_tree_node_hash for substate_changes (shard_id, tree_node_hash)
