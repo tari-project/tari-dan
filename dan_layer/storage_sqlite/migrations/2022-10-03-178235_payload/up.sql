@@ -38,7 +38,7 @@ create table leaf_nodes {
 }
 
 -- fetching by shard_id will be a very common operation
-create index leaf_nodes_index on leaf_nodes (shard_id)
+create index leaf_nodes_index_shard_id on leaf_nodes (shard_id)
 
 
 create table last_voted_heights {
@@ -48,7 +48,7 @@ create table last_voted_heights {
 }
 
 -- fetching by shard_id will be a very common operation
-create index last_voted_height_index on last_voted_height (shard_id)
+create index last_voted_height_index_shard_id on last_voted_height (shard_id)
 
 
 create table lock_node_and_heights {
@@ -59,7 +59,7 @@ create table lock_node_and_heights {
 }
 
 -- fetching by shard_id will be a very common operation
-create index lock_node_and_heights_index on lock_node_and_heights (shard_id)
+create index lock_node_and_heights_index_shard_id on lock_node_and_heights (shard_id)
 
 
 create table nodes {
@@ -87,7 +87,7 @@ create table last_executed_height {
 }
 
 -- fetching by shard_id will be a very common operation
-create index last_executed_height_index for last_executed_height (shard_id)
+create index last_executed_height_index_shard_id for last_executed_height (shard_id)
 
 
 create table payload_votes {
@@ -99,7 +99,7 @@ create table payload_votes {
 }
 
 -- fetching by (payload_id, shard_id, node_height) will be a very common operation
-create index payload_votes_index for payload_votes (payload_id, shard_id, node_height)
+create index payload_votes_index_payload_id_shard_id_node_height for payload_votes (payload_id, shard_id, node_height)
 
 
 create table objects {
@@ -113,7 +113,7 @@ create table objects {
 }
 
 -- fetching by (shard_id, object_id) will be a very common operation
-create index objects_index_shard_id_object_id_substate_state_node_height for objects (shard_id, object_id, payload_id, node_height, substate_state)
+create index objects_index_shard_id_object_id_node_height_substate_state for objects (shard_id, object_id, payload_id, node_height, substate_state)
 
 
 create table substate_changes {
