@@ -135,23 +135,25 @@ impl Default for ValidatorNodeConfig {
             identity_file: PathBuf::from("validator_node_id.json"),
             tor_identity_file: PathBuf::from("validator_node_tor_id.json"),
             public_address: None,
-            phase_timeout: 30,
             base_node_grpc_address: SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 18142),
             wallet_grpc_address: SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 18143),
             scan_base_layer: true,
             base_layer_scanning_interval_in_seconds: 10,
-            scan_for_assets: false,
-            new_asset_scanning_interval: 10,
-            assets_allow_list: None,
             data_dir: PathBuf::from("data/validator_node"),
-            constitution_auto_accept: false,
-            constitution_management_confirmation_time: 20,
-            constitution_management_polling_interval: 120,
-            constitution_management_polling_interval_in_seconds: 60,
             p2p,
             grpc_address: Some("/ip4/127.0.0.1/tcp/18144".parse().unwrap()),
             json_rpc_address: Some("127.0.0.1:18145".parse().unwrap()),
             http_ui_address: Some("127.0.0.1:5000".parse().unwrap()),
+
+            // TODO: Deprecated - need to update tari_common to remove these
+            phase_timeout: 30,
+            scan_for_assets: false,
+            new_asset_scanning_interval: 10,
+            assets_allow_list: None,
+            constitution_auto_accept: false,
+            constitution_management_confirmation_time: 20,
+            constitution_management_polling_interval: 120,
+            constitution_management_polling_interval_in_seconds: 60,
         }
     }
 }

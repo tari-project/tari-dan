@@ -20,7 +20,7 @@
 //   WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //   USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use std::{sync::Arc, time::Duration};
+use std::{str::FromStr, sync::Arc, time::Duration};
 
 use anyhow::anyhow;
 use lmdb_zero::open;
@@ -28,6 +28,7 @@ use log::*;
 use tari_common::configuration::Network;
 use tari_comms::{
     backoff::ConstantBackoff,
+    peer_manager::{Peer, PeerFeatures, PeerFlags},
     pipeline,
     pipeline::SinkService,
     protocol::{messaging::MessagingProtocolExtension, NodeNetworkInfo},
@@ -35,10 +36,11 @@ use tari_comms::{
     utils::cidr::parse_cidrs,
     CommsBuilder,
     NodeIdentity,
+    PeerManager,
     UnspawnedCommsNode,
 };
 use tari_dan_core::{message::DanMessage, models::TariDanPayload};
-use tari_p2p::{P2pConfig, MAJOR_NETWORK_VERSION, MINOR_NETWORK_VERSION};
+use tari_p2p::{peer_seeds::SeedPeer, P2pConfig, PeerSeedsConfig, MAJOR_NETWORK_VERSION, MINOR_NETWORK_VERSION};
 use tari_shutdown::ShutdownSignal;
 use tari_storage::{
     lmdb_store::{LMDBBuilder, LMDBConfig},
@@ -49,14 +51,19 @@ use tower::ServiceBuilder;
 
 const LOG_TARGET: &str = "dan::comms::initializer";
 
-use crate::comms::{broadcast::DanBroadcast, deserialize::DanDeserialize, destination::Destination};
+use crate::{
+    comms::{broadcast::DanBroadcast, deserialize::DanDeserialize, destination::Destination},
+    ApplicationConfig,
+};
 
-pub fn initialize(
+pub async fn initialize(
     node_identity: Arc<NodeIdentity>,
-    mut config: P2pConfig,
+    config: &ApplicationConfig,
     shutdown_signal: ShutdownSignal,
 ) -> Result<(UnspawnedCommsNode, MessageChannel), anyhow::Error> {
     debug!(target: LOG_TARGET, "Initializing DAN comms");
+    let seed_peers = &config.peer_seeds;
+    let mut config = config.validator_node.p2p.clone();
 
     let mut comms_builder = CommsBuilder::new()
         .with_shutdown_signal(shutdown_signal)
@@ -79,7 +86,7 @@ pub fn initialize(
 
     // let node_identity = comms.node_identity();
 
-    // TODO: Seed peer config
+    // TODO: DNS seeds
     // let peers = match Self::try_resolve_dns_seeds(&self.seed_config).await {
     //     Ok(peers) => peers,
     //     Err(err) => {
@@ -89,8 +96,7 @@ pub fn initialize(
     // };
     // add_seed_peers(&peer_manager, &node_identity, peers).await?;
     //
-    // let peers = Self::try_parse_seed_peers(&self.seed_config.peer_seeds)?;
-    // add_seed_peers(&peer_manager, &node_identity, peers).await?;
+    add_seed_peers(&comms.peer_manager(), &comms.node_identity(), seed_peers).await?;
 
     debug!(target: LOG_TARGET, "DAN comms Initialized");
     Ok((comms, message_channel))
@@ -160,4 +166,28 @@ fn configure_comms(
     ));
 
     Ok((comms, (outbound_tx, inbound_rx)))
+}
+
+async fn add_seed_peers(
+    peer_manager: &PeerManager,
+    node_identity: &NodeIdentity,
+    config: &PeerSeedsConfig,
+) -> Result<(), anyhow::Error> {
+    let peers = config
+        .peer_seeds
+        .iter()
+        .map(|s| SeedPeer::from_str(s).map(Peer::from))
+        .collect::<Result<Vec<_>, _>>()?;
+
+    for mut peer in peers {
+        if &peer.public_key == node_identity.public_key() {
+            continue;
+        }
+        peer.add_flags(PeerFlags::SEED);
+        peer.set_features(PeerFeatures::COMMUNICATION_NODE);
+
+        // debug!(target: LOG_TARGET, "Adding seed peer [{}]", peer);
+        peer_manager.add_peer(peer).await?;
+    }
+    Ok(())
 }
