@@ -25,7 +25,6 @@ use std::{
     fmt::{Display, Formatter},
 };
 
-use borsh::{BorshDeserialize, BorshSerialize};
 use digest::{consts::U32, generic_array};
 use serde::{Deserialize, Serialize};
 use tari_common_types::types::{FixedHash, FixedHashSizeError};
