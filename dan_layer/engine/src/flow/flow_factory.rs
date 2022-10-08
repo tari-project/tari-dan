@@ -4,12 +4,12 @@
 use std::collections::HashMap;
 
 use d3ne::WorkersBuilder;
+use tari_engine_types::instruction::Instruction;
 
 use crate::{
     flow::{FlowEngineError, FlowInstance},
     function_definitions::{FlowFunctionDefinition, FunctionArgDefinition},
     state::StateDbUnitOfWork,
-    transaction::Instruction,
 };
 
 #[derive(Clone, Default)]

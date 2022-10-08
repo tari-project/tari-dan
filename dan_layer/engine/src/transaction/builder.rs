@@ -25,12 +25,10 @@ use std::collections::HashMap;
 use tari_common_types::types::{PrivateKey, PublicKey};
 use tari_crypto::{keys::PublicKey as PublicKeyTrait, ristretto::RistrettoPublicKey};
 use tari_dan_common_types::{ObjectClaim, ObjectId, ShardId, SubstateChange};
+use tari_engine_types::{instruction::Instruction, signature::InstructionSignature};
 
-use super::{Instruction, Transaction};
-use crate::{
-    runtime::IdProvider,
-    transaction::{signature::InstructionSignature, TransactionMeta},
-};
+use super::Transaction;
+use crate::{crypto::create_key_pair, runtime::IdProvider, transaction::TransactionMeta};
 
 #[derive(Debug, Clone, Default)]
 pub struct TransactionBuilder {
@@ -80,7 +78,8 @@ impl TransactionBuilder {
     }
 
     pub fn sign(mut self, secret_key: &PrivateKey) -> Self {
-        self.signature = Some(InstructionSignature::sign(secret_key, &self.instructions));
+        let (nonce, nonce_pk) = create_key_pair();
+        self.signature = Some(InstructionSignature::sign(secret_key, nonce, &self.instructions));
         self.sender_public_key = Some(PublicKey::from_secret_key(secret_key));
         self
     }

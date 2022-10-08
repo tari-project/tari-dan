@@ -34,7 +34,8 @@ use tari_common_types::types::FixedHash;
 use tari_comms::{multiaddr::Multiaddr, peer_manager::NodeId, types::CommsPublicKey, CommsNode, NodeIdentity};
 use tari_dan_common_types::serde_with;
 use tari_dan_core::services::{epoch_manager::EpochManager, BaseNodeClient};
-use tari_dan_engine::transaction::{Instruction, TransactionBuilder};
+use tari_dan_engine::transaction::TransactionBuilder;
+use tari_engine_types::instruction::Instruction;
 
 use super::messages::GetCommitteeRequest;
 use crate::{

@@ -8,7 +8,6 @@ pub mod state;
 pub mod wasm;
 
 pub mod crypto;
-pub mod hashing;
 pub mod packager;
 pub mod runtime;
 pub mod state_store;

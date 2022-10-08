@@ -23,6 +23,7 @@
 use std::sync::Arc;
 
 use log::*;
+use tari_engine_types::instruction::Instruction;
 use tari_template_lib::{
     arg,
     args::{Arg, WorkspaceAction},
@@ -33,7 +34,7 @@ use crate::{
     packager::{LoadedTemplate, Package},
     runtime::{FinalizeResult, Runtime, RuntimeInterface, RuntimeState},
     traits::Invokable,
-    transaction::{Instruction, Transaction, TransactionError},
+    transaction::{Transaction, TransactionError},
     wasm::{ExecutionResult, WasmProcess},
 };
 

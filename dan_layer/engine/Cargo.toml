@@ -15,6 +15,7 @@ tari_utilities = { git = "https://github.com/tari-project/tari_utilities.git", t
 tari_mmr = { git = "https://github.com/tari-project/tari.git", branch = "feature-dan", package = "tari_mmr" }
 tari_template_abi = { path = "../template_abi", features = ["std"] }
 tari_template_lib = { path = "../template_lib", default-features = false, features = ["serde"] }
+tari_engine_types = {path = "../engine_types" }
 
 anyhow = "1.0.53"
 borsh = "0.9.3"
