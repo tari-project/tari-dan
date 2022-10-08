@@ -44,8 +44,5 @@ pub use engine::engine;
 
 #[cfg(target_arch = "wasm32")]
 pub mod panic_hook;
-#[cfg(target_arch = "wasm32")]
 pub mod prelude;
-
-#[cfg(target_arch = "wasm32")]
 pub use prelude::template;
