@@ -59,11 +59,11 @@ use crate::{
         last_voted_height::{LastVotedHeight, NewLastVotedHeight},
         leaf_nodes::{LeafNode, NewLeafNode},
         lock_node_and_height::{LockNodeAndHeight, NewLockNodeAndHeight},
-        nodes::{NewNode, Node},
+        node::{NewNode, Node},
         objects::Object,
         payload::{NewPayload, Payload},
         payload_votes::{NewPayloadVote, PayloadVote},
-        substate_changes::NewSubStateChange,
+        substate_change::NewSubStateChange,
         votes::{NewVote, Vote},
     },
     schema::{
@@ -405,9 +405,7 @@ impl ShardStoreTransaction<PublicKey, TariDanPayload> for SqliteShardStoreTransa
         let shard = serialize(&node.shard()).unwrap();
 
         let payload_id = serialize(&node.payload()).unwrap();
-        let payload_height = node
-            .payload_height()
-            .as_u64() as i64;
+        let payload_height = node.payload_height().as_u64() as i64;
 
         let local_pledges = serialize(&node.local_pledges()).unwrap();
 

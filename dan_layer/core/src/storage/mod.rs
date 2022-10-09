@@ -31,4 +31,6 @@ pub use db_factory::DbFactory;
 pub mod mocks;
 pub mod shard_db;
 pub mod shard_store;
-pub mod encoding::{deserialize, serialize};
+
+pub mod encoding;
+pub use encoding::{deserialize, serialize};
