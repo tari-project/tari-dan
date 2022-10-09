@@ -33,8 +33,10 @@ pub enum HotStuffError {
     EpochManagerError(#[from] EpochManagerError),
     #[error("Received message from a node that is not in the committee")]
     ReceivedMessageFromNonCommitteeMember,
-    #[error("Hotstuff error: `{0}`")]
+    #[error("Update leaf node error: `{0}`")]
     UpdateLeafNode(String),
+    #[error("Update high qc error: `{0}`")]
+    UpdateHighQcError(String),
     #[error("Store error: {0}")]
     StoreError(#[from] StoreError),
     #[error("Claim is not valid")]

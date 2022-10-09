@@ -26,8 +26,6 @@ use lmdb_zero as lmdb;
 use tari_storage::lmdb_store::LMDBError;
 use tari_utilities::ByteArrayError;
 
-use super::shard_store::StoreError;
-
 #[derive(Debug, thiserror::Error)]
 pub enum StorageError {
     #[error("Could not connect to storage:{reason}")]

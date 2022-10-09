@@ -270,9 +270,9 @@ impl ShardStoreTransaction<PublicKey, TariDanPayload> for SqliteShardStoreTransa
             let fee: u64 = payload.fee.try_into().map_err(|_| Self::Error::InvalidIntegerCast)?;
 
             let public_nonce =
-                PublicKey::from_vec(&payload.public_nonce).map_err(|e| Self::Error::InvalidByteArrayConversion(e))?;
+                PublicKey::from_vec(&payload.public_nonce).map_err(Self::Error::InvalidByteArrayConversion)?;
             let signature = PrivateKey::from_bytes(payload.scalar.as_slice())
-                .map_err(|e| Self::Error::InvalidByteArrayConversion(e))?;
+                .map_err(Self::Error::InvalidByteArrayConversion)?;
 
             let signature: InstructionSignature =
                 InstructionSignature::try_from(Signature::new(public_nonce, signature)).map_err(|e| {
@@ -282,7 +282,7 @@ impl ShardStoreTransaction<PublicKey, TariDanPayload> for SqliteShardStoreTransa
                 })?;
 
             let sender_public_key = PublicKey::from_vec(&payload.sender_public_key)
-                .map_err(|e| Self::Error::InvalidByteArrayConversion(e))?;
+                .map_err(Self::Error::InvalidByteArrayConversion)?;
             let meta = deserialize::<TransactionMeta>(&payload.meta)?;
 
             let transaction = Transaction::new(fee, instructions, signature, sender_public_key, meta);
@@ -355,14 +355,14 @@ impl ShardStoreTransaction<PublicKey, TariDanPayload> for SqliteShardStoreTransa
             let hgt: u64 = node.height.try_into().map_err(|_| Self::Error::InvalidIntegerCast)?;
 
             let shard = deserialize::<ShardId>(&node.shard)?;
-            let payload = deserialize::<PayloadId>(&node.payload_id.as_slice())?;
+            let payload = deserialize::<PayloadId>(node.payload_id.as_slice())?;
 
             let payload_hgt: u64 = node
                 .payload_height
                 .try_into()
                 .map_err(|_| Self::Error::InvalidIntegerCast)
                 .unwrap();
-            let local_pledges = deserialize::<Vec<ObjectPledge>>(&node.local_pledges.as_slice())?;
+            let local_pledges = deserialize::<Vec<ObjectPledge>>(node.local_pledges.as_slice())?;
 
             let epoch: u64 = node
                 .epoch
@@ -370,7 +370,7 @@ impl ShardStoreTransaction<PublicKey, TariDanPayload> for SqliteShardStoreTransa
                 .map_err(|_| Self::Error::InvalidIntegerCast)
                 .unwrap();
             let proposed_by =
-                PublicKey::from_vec(&node.proposed_by).map_err(|e| Self::Error::InvalidByteArrayConversion(e))?;
+                PublicKey::from_vec(&node.proposed_by).map_err(Self::Error::InvalidByteArrayConversion)?;
 
             let justify = deserialize::<QuorumCertificate>(&node.justify)?;
 
@@ -525,8 +525,7 @@ impl ShardStoreTransaction<PublicKey, TariDanPayload> for SqliteShardStoreTransa
                 panic!("Item does not exist");
             }
 
-            let object_pledge = deserialize::<ObjectPledge>(&object_pledge).unwrap();
-            object_pledge
+            deserialize::<ObjectPledge>(&object_pledge).unwrap()
         } else {
             panic!("Item does not exist");
         }
@@ -720,11 +719,7 @@ impl ShardStoreTransaction<PublicKey, TariDanPayload> for SqliteShardStoreTransa
             })
             .unwrap();
 
-        if let Some(_) = vote {
-            true
-        } else {
-            false
-        }
+        vote.is_some()
     }
 
     fn save_received_vote_for(

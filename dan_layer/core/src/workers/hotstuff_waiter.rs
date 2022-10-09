@@ -51,7 +51,7 @@ use crate::{
         leader_strategy::LeaderStrategy,
         PayloadProcessor,
     },
-    storage::shard_store::{ShardStoreFactory, ShardStoreTransaction, StoreError},
+    storage::shard_store::{ShardStoreFactory, ShardStoreTransaction},
     workers::hotstuff_error::HotStuffError,
 };
 
@@ -151,7 +151,7 @@ where
         self.validate_from_committee(&from, epoch, shard).await?;
         self.validate_qc(&qc)?;
         let mut tx = self.shard_store.create_tx()?;
-        tx.update_high_qc(shard, qc);
+        tx.update_high_qc(shard, qc).map_err(|e| HotStuffError::UpdateHighQcError(e.to_string()))?;
         tx.set_payload(payload);
         tx.commit().map_err(|e| e.into())?;
         Ok(())
@@ -326,7 +326,7 @@ where
             dbg!("Node is parented to genesis, no need to update");
             return Ok(());
         }
-        tx.update_high_qc(shard, node.justify().clone());
+        tx.update_high_qc(shard, node.justify().clone()).map_err(|e| HotStuffError::UpdateHighQcError(e.to_string()))?;
         let b_two = tx.get_node(&node.justify().local_node_hash()).map_err(|e| e.into())?;
 
         if b_two.justify().local_node_hash() == TreeNodeHash::zero() {
@@ -568,7 +568,8 @@ where
                             main_vote.all_shard_nodes().clone(),
                             signatures,
                         );
-                        tx.update_high_qc(msg.shard(), qc);
+                        tx.update_high_qc(msg.shard(), qc)
+                            .map_err(|e| HotStuffError::UpdateHighQcError(e.to_string()))?; // TODO: is there a better alternative to handle error?
                         tx.commit().map_err(|e| e.into())?;
                         // Should be the pace maker actually
                         on_beat_future = Some(self.on_beat(msg.shard(), node.payload()));
