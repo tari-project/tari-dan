@@ -51,7 +51,7 @@ use crate::{
         leader_strategy::LeaderStrategy,
         PayloadProcessor,
     },
-    storage::shard_store::{ShardStoreFactory, ShardStoreTransaction},
+    storage::shard_store::{ShardStoreFactory, ShardStoreTransaction, StoreError},
     workers::hotstuff_error::HotStuffError,
 };
 
@@ -231,7 +231,8 @@ where
                 local_pledges,
             );
             tx.save_node(leaf_node.clone());
-            tx.update_leaf_node(shard, *leaf_node.hash(), leaf_node.height())?;
+            tx.update_leaf_node(shard, *leaf_node.hash(), leaf_node.height())
+                .map_err(|e| HotStuffError::UpdateLeafNode(e.to_string()))?;
             tx.commit().map_err(|e| e.into())?;
         }
         self.tx_broadcast

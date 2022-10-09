@@ -99,7 +99,7 @@ impl Epoch {
     pub fn as_u64(self) -> u64 {
         self.0
     }
-    
+
     fn to_le_bytes(self) -> [u8; 8] {
         self.0.to_le_bytes()
     }

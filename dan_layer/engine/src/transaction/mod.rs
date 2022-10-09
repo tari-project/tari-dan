@@ -172,6 +172,10 @@ impl Transaction {
         &self.hash
     }
 
+    pub fn fee(&self) -> u64 {
+        self._fee
+    }
+
     pub fn meta(&self) -> &TransactionMeta {
         self.meta.as_ref().unwrap()
     }
