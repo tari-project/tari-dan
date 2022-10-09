@@ -45,6 +45,10 @@ pub enum StorageError {
     NotFound,
     #[error("File system path does not exist")]
     FileSystemPathDoesNotExist,
+    #[error("Failed data decoding")]
+    DecodingError,
+    #[error("Failed data encoding")]
+    EncodingError,
 
     #[error("General storage error: {details}")]
     General { details: String },
