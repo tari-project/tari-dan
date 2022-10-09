@@ -44,7 +44,7 @@ pub trait ShardStoreFactory {
     type Payload: Payload;
 
     type Transaction: ShardStoreTransaction<Self::Addr, Self::Payload>;
-    fn create_tx(&self) -> Self::Transaction;
+    fn create_tx(&self) -> Result<Self::Transaction, StorageError>;
 }
 
 #[derive(Debug, Error)]
@@ -127,6 +127,6 @@ impl<TAddr: NodeAddressable, TPayload: Payload> ShardStoreFactory for MemoryShar
     type Transaction = MemoryShardDb<TAddr, TPayload>;
 
     fn create_tx(&self) -> Result<Self::Transaction, StorageError> {
-        self.inner.clone()
+        Ok(self.inner.clone())
     }
 }
