@@ -36,7 +36,7 @@ use crate::{
         TreeNodeHash,
     },
     services::infrastructure_services::NodeAddressable,
-    storage::shard_db::MemoryShardDb,
+    storage::{shard_db::MemoryShardDb, StorageError},
 };
 
 pub trait ShardStoreFactory {
@@ -126,7 +126,7 @@ impl<TAddr: NodeAddressable, TPayload: Payload> ShardStoreFactory for MemoryShar
     type Payload = TPayload;
     type Transaction = MemoryShardDb<TAddr, TPayload>;
 
-    fn create_tx(&self) -> Self::Transaction {
+    fn create_tx(&self) -> Result<Self::Transaction, StorageError> {
         self.inner.clone()
     }
 }
