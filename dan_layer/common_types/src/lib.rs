@@ -64,7 +64,7 @@ impl Ord for ShardId {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Hash, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash, Deserialize, Serialize)]
 pub enum SubstateChange {
     Create,
     Destroy,
@@ -77,7 +77,7 @@ pub enum SubstateState {
     Down { deleted_by: PayloadId },
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct ObjectClaim {}
 
 impl ObjectClaim {

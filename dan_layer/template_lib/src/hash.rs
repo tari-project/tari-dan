@@ -27,7 +27,6 @@ use std::{
     io::Write,
     ops::{Deref, DerefMut},
 };
-use serde::Serialize;
 
 use tari_template_abi::{Decode, Encode};
 
