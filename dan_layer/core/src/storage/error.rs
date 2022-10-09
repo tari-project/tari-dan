@@ -49,6 +49,8 @@ pub enum StorageError {
     DecodingError,
     #[error("Failed data encoding")]
     EncodingError,
+    #[error("Fixed hash size error: {reason}")]
+    FixedHashSizeError {reason: String},
 
     #[error("General storage error: {details}")]
     General { details: String },

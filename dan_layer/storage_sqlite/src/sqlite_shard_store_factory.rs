@@ -196,7 +196,6 @@ impl ShardStoreTransaction<PublicKey, TariDanPayload> for SqliteShardStoreTransa
         if let Some(leaf_node) = leaf_node {
             (
                 TreeNodeHash::try_from(leaf_node.tree_node_hash)
-                    .map_err(|e| Self::Error::FixedHashSizeError(e))
                     .unwrap(),
                 NodeHeight(leaf_node.node_height as u64),
             )

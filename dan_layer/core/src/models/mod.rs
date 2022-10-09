@@ -27,6 +27,7 @@ use std::{
     hash::Hash,
     ops::Add,
 };
+use serde::{Deserialize, Serialize};
 
 mod base_layer_metadata;
 mod base_layer_output;
@@ -55,7 +56,6 @@ pub use hot_stuff_tree_node::HotStuffTreeNode;
 pub use node::Node;
 pub use payload::Payload;
 pub use quorum_certificate::{QuorumCertificate, QuorumDecision};
-use serde::Deserialize;
 pub use sidechain_metadata::SidechainMetadata;
 use tari_dan_common_types::{ObjectId, PayloadId, SubstateState};
 pub use tari_dan_payload::{CheckpointData, TariDanPayload};
@@ -64,10 +64,15 @@ pub use validator_node::ValidatorNode;
 pub use view::View;
 pub use view_id::ViewId;
 
-#[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Hash, Deserialize, Serialize)]
 pub struct NodeHeight(pub u64);
 
 impl NodeHeight {
+
+    pub fn as_u64(self) -> u64 {
+        self.0
+    }
+
     fn to_le_bytes(self) -> [u8; 8] {
         self.0.to_le_bytes()
     }
@@ -87,7 +92,7 @@ impl PartialOrd for NodeHeight {
     }
 }
 
-#[derive(Copy, Clone, Debug, Deserialize, PartialEq, Eq, Hash)]
+#[derive(Copy, Clone, Debug, Deserialize, PartialEq, Eq, Hash, Serialize)]
 pub struct Epoch(pub u64);
 
 impl Epoch {
@@ -96,7 +101,7 @@ impl Epoch {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct ObjectPledge {
     pub object_id: ObjectId,
     pub current_state: SubstateState,
@@ -210,7 +215,7 @@ pub enum ConsensusWorkerState {
     Idle,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Deserialize, Serialize)]
 pub struct ValidatorSignature {
     pub signer: Vec<u8>,
 }

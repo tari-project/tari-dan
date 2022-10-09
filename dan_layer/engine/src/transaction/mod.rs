@@ -22,7 +22,7 @@
 
 use std::collections::HashMap;
 
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use tari_common_types::types::{BulletRangeProof, ComSignature, Commitment, PublicKey};
 use tari_dan_common_types::{ObjectClaim, ObjectId, ShardId, SubstateChange};
 use tari_mmr::MerkleProof;
@@ -48,7 +48,7 @@ pub use processor::TransactionProcessor;
 mod signature;
 pub use signature::InstructionSignature;
 
-#[derive(Debug, Clone, Deserialize, Encode)]
+#[derive(Debug, Clone, Deserialize, Encode, Serialize)]
 pub enum Instruction {
     CallFunction {
         template_address: TemplateAddress,

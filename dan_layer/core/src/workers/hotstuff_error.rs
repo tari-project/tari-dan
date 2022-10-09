@@ -24,7 +24,7 @@ use thiserror::Error;
 
 use crate::{
     services::{epoch_manager::EpochManagerError, PayloadProcessorError},
-    storage::shard_store::StoreError,
+    storage::{shard_store::StoreError, StorageError},
 };
 
 #[derive(Error, Debug)]
@@ -47,4 +47,6 @@ pub enum HotStuffError {
     PayloadProcessorError(#[from] PayloadProcessorError),
     #[error("Transaction rejected: {0}")]
     TransactionRejected(String),
+    #[error("Storage Error: `{0}`")]
+    StorageError(#[from] StorageError),
 }
