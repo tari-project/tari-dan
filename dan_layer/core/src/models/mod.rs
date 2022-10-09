@@ -27,6 +27,7 @@ use std::{
     hash::Hash,
     ops::Add,
 };
+
 use serde::{Deserialize, Serialize};
 
 mod base_layer_metadata;
@@ -68,7 +69,6 @@ pub use view_id::ViewId;
 pub struct NodeHeight(pub u64);
 
 impl NodeHeight {
-
     pub fn as_u64(self) -> u64 {
         self.0
     }
@@ -96,6 +96,10 @@ impl PartialOrd for NodeHeight {
 pub struct Epoch(pub u64);
 
 impl Epoch {
+    pub fn as_u64(self) -> u64 {
+        self.0
+    }
+    
     fn to_le_bytes(self) -> [u8; 8] {
         self.0.to_le_bytes()
     }

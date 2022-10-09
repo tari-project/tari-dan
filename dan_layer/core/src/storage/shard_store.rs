@@ -55,6 +55,16 @@ pub enum StoreError {
     NodeNotFound,
     #[error("Cannot update leaf node")]
     CannotUpdateLeafNode,
+    #[error("Storage error: {details}")]
+    StorageError { details: String },
+}
+
+impl From<StorageError> for StoreError {
+    fn from(err: StorageError) -> Self {
+        Self::StorageError {
+            details: err.to_string()
+        }
+    }
 }
 
 pub trait ShardStoreTransaction<TAddr: NodeAddressable, TPayload: Payload> {

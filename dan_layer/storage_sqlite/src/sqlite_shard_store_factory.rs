@@ -48,7 +48,7 @@ use tari_dan_core::{
         StorageError,
     },
 };
-use tari_dan_engine::instruction::{Instruction, InstructionSignature, Transaction, TransactionMeta};
+use tari_dan_engine::transaction::{Instruction, InstructionSignature, Transaction, TransactionMeta};
 use tari_utilities::ByteArray;
 
 use crate::{
@@ -195,8 +195,7 @@ impl ShardStoreTransaction<PublicKey, TariDanPayload> for SqliteShardStoreTransa
             .unwrap();
         if let Some(leaf_node) = leaf_node {
             (
-                TreeNodeHash::try_from(leaf_node.tree_node_hash)
-                    .unwrap(),
+                TreeNodeHash::try_from(leaf_node.tree_node_hash).unwrap(),
                 NodeHeight(leaf_node.node_height as u64),
             )
         } else {
@@ -307,10 +306,10 @@ impl ShardStoreTransaction<PublicKey, TariDanPayload> for SqliteShardStoreTransa
         let sender_public_key = Vec::from(transaction.sender_public_key().as_bytes());
 
         let meta = serialize(transaction.meta())
-            .map_err(|_| Self::Error::InvalidIntegerCast)
+            .map_err(|_| Self::Error::EncodingError)
             .unwrap();
 
-        let payload_id = Vec::from(*transaction.hash());
+        let payload_id = Vec::from(transaction.hash().as_ref());
 
         let new_row = NewPayload {
             payload_id,
@@ -429,7 +428,7 @@ impl ShardStoreTransaction<PublicKey, TariDanPayload> for SqliteShardStoreTransa
         diesel::insert_into(table_nodes)
             .values(&new_row)
             .execute(&self.connection)
-            .map_err(|e| StorageError::QueryError {
+            .map_err(|e| Self::Error::QueryError {
                 reason: format!("Save node error: {}", e),
             })
             .unwrap();
