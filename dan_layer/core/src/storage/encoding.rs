@@ -20,15 +20,14 @@
 // WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 // USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-pub use error::StorageError;
-pub use store::{AssetDataStore, AssetStore};
-mod db_factory;
-mod error;
-mod store;
+use serde::{Deserialize, Serialize};
 
-pub use db_factory::DbFactory;
+use crate::storage::StorageError;
 
-pub mod mocks;
-pub mod shard_db;
-pub mod shard_store;
-pub mod encoding;
+pub fn deserialize<'a, T: Deserialize<'a>>(data: &'a [u8]) -> Result<T, StorageError> {
+    bincode::deserialize(data).map_err(|_| StorageError::DecodingError)
+}
+
+pub fn serialize<T: Serialize>(item: &T) -> Result<Vec<u8>, StorageError> {
+    bincode::serialize(&item).map_err(|_| StorageError::EncodingError)
+}
