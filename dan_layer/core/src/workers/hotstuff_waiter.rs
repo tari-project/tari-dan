@@ -151,7 +151,8 @@ where
         self.validate_from_committee(&from, epoch, shard).await?;
         self.validate_qc(&qc)?;
         let mut tx = self.shard_store.create_tx()?;
-        tx.update_high_qc(shard, qc).map_err(|e| HotStuffError::UpdateHighQcError(e.to_string()))?;
+        tx.update_high_qc(shard, qc)
+            .map_err(|e| HotStuffError::UpdateHighQcError(e.to_string()))?;
         tx.set_payload(payload);
         tx.commit().map_err(|e| e.into())?;
         Ok(())
@@ -326,7 +327,8 @@ where
             dbg!("Node is parented to genesis, no need to update");
             return Ok(());
         }
-        tx.update_high_qc(shard, node.justify().clone()).map_err(|e| HotStuffError::UpdateHighQcError(e.to_string()))?;
+        tx.update_high_qc(shard, node.justify().clone())
+            .map_err(|e| HotStuffError::UpdateHighQcError(e.to_string()))?;
         let b_two = tx.get_node(&node.justify().local_node_hash()).map_err(|e| e.into())?;
 
         if b_two.justify().local_node_hash() == TreeNodeHash::zero() {

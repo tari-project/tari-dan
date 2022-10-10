@@ -271,8 +271,8 @@ impl ShardStoreTransaction<PublicKey, TariDanPayload> for SqliteShardStoreTransa
 
             let public_nonce =
                 PublicKey::from_vec(&payload.public_nonce).map_err(Self::Error::InvalidByteArrayConversion)?;
-            let signature = PrivateKey::from_bytes(payload.scalar.as_slice())
-                .map_err(Self::Error::InvalidByteArrayConversion)?;
+            let signature =
+                PrivateKey::from_bytes(payload.scalar.as_slice()).map_err(Self::Error::InvalidByteArrayConversion)?;
 
             let signature: InstructionSignature =
                 InstructionSignature::try_from(Signature::new(public_nonce, signature)).map_err(|e| {
@@ -281,8 +281,8 @@ impl ShardStoreTransaction<PublicKey, TariDanPayload> for SqliteShardStoreTransa
                     }
                 })?;
 
-            let sender_public_key = PublicKey::from_vec(&payload.sender_public_key)
-                .map_err(Self::Error::InvalidByteArrayConversion)?;
+            let sender_public_key =
+                PublicKey::from_vec(&payload.sender_public_key).map_err(Self::Error::InvalidByteArrayConversion)?;
             let meta = deserialize::<TransactionMeta>(&payload.meta)?;
 
             let transaction = Transaction::new(fee, instructions, signature, sender_public_key, meta);
