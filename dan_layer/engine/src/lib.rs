@@ -10,8 +10,6 @@ pub mod packager;
 pub mod runtime;
 pub mod state;
 pub mod state_store;
-#[cfg(feature = "tooling")]
-pub mod tooling;
 pub mod traits;
 pub mod transaction;
 pub mod wasm;
