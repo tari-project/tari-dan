@@ -4021,6 +4021,7 @@ dependencies = [
  "tari_dan_common_types",
  "tari_dan_engine",
  "tari_dan_storage",
+ "tari_engine_types",
  "tari_mmr",
  "tari_p2p",
  "tari_service_framework",
@@ -4052,6 +4053,7 @@ dependencies = [
  "tari_common_types",
  "tari_crypto",
  "tari_dan_common_types",
+ "tari_engine_types",
  "tari_mmr",
  "tari_template_abi",
  "tari_template_lib",
@@ -4098,10 +4100,24 @@ dependencies = [
  "tari_dan_core",
  "tari_dan_engine",
  "tari_dan_storage",
+ "tari_engine_types",
  "tari_utilities",
  "thiserror",
  "tokio",
  "tokio-stream",
+]
+
+[[package]]
+name = "tari_engine_types"
+version = "0.1.0"
+dependencies = [
+ "borsh",
+ "digest 0.9.0",
+ "serde",
+ "tari_crypto",
+ "tari_template_abi",
+ "tari_template_lib",
+ "tari_utilities",
 ]
 
 [[package]]
@@ -4245,6 +4261,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "tari_template_test_tooling"
+version = "0.1.0"
+dependencies = [
+ "borsh",
+ "log",
+ "tari_crypto",
+ "tari_dan_engine",
+ "tari_engine_types",
+ "tari_template_abi",
+ "tari_template_lib",
+]
+
+[[package]]
 name = "tari_test_utils"
 version = "0.38.5"
 source = "git+https://github.com/tari-project/tari.git?branch=feature-dan#788889bb6dcd8c80f08488a62e50619fdf07696d"
@@ -4310,6 +4339,7 @@ dependencies = [
  "tari_dan_engine",
  "tari_dan_storage",
  "tari_dan_storage_sqlite",
+ "tari_engine_types",
  "tari_mmr",
  "tari_p2p",
  "tari_shutdown",
@@ -4339,6 +4369,7 @@ dependencies = [
  "serde_json",
  "tari_dan_common_types",
  "tari_dan_engine",
+ "tari_engine_types",
  "tari_utilities",
  "thiserror",
  "tokio",

@@ -8,6 +8,7 @@ members = [
     "dan_layer/template_abi",
     "dan_layer/template_lib",
     "dan_layer/template_macros",
+    "dan_layer/template_test_tooling",
     "applications/tari_validator_node",
     "applications/tari_validator_node_cli",
 ]

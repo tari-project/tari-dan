@@ -1,0 +1,17 @@
+[package]
+name = "tari_template_test_tooling"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+[dependencies]
+tari_dan_engine = { path = "../engine" }
+tari_crypto = { git = "https://github.com/tari-project/tari-crypto.git", tag = "v0.15.6" }
+tari_template_abi = { path = "../template_abi", features = ["std"] }
+tari_template_lib = { path = "../template_lib", default-features = false, features = ["serde"] }
+tari_engine_types = { path= "../engine_types"}
+
+borsh = "0.9.3"
+log = { version = "0.4.8", features = ["std"] }
+
+

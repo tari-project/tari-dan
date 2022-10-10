@@ -31,7 +31,8 @@ use anyhow::anyhow;
 use command::{PublishTemplateArgs, TemplateSubcommand, VnSubcommand};
 use multiaddr::{Multiaddr, Protocol};
 use reqwest::Url;
-use tari_dan_engine::{hashing::hasher, wasm::compile::compile_template};
+use tari_dan_engine::wasm::compile::compile_template;
+use tari_engine_types::hashing::hasher;
 
 use crate::{
     cli::Cli,

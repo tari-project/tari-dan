@@ -195,7 +195,7 @@ impl Networking {
                 {
                     self.peer_provider.update_peer(peer).await?;
 
-                    // TODO: should not announce to sending peer
+                    // TODO: should not forward announce to sending peer
                     self.outbound
                         .flood(Default::default(), DanMessage::NetworkAnnounce(announce))
                         .await?;
