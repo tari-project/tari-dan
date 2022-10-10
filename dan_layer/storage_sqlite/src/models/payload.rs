@@ -23,31 +23,25 @@
 use crate::schema::*;
 
 #[derive(Debug, Identifiable, Queryable)]
-pub struct Node {
+pub struct Payload {
     pub id: i32,
-    pub tree_node_hash: Vec<u8>,
-    pub parent_node_hash: Vec<u8>,
-    pub height: i64,
-    pub shard: Vec<u8>,
     pub payload_id: Vec<u8>,
-    pub payload_height: i64,
-    pub local_pledges: Vec<u8>,
-    pub epoch: i64,
-    pub proposed_by: Vec<u8>,
-    pub justify: Vec<u8>,
+    pub instructions: Vec<u8>,
+    pub public_nonce: Vec<u8>,
+    pub scalar: Vec<u8>,
+    pub fee: i64,
+    pub sender_public_key: Vec<u8>,
+    pub meta: Vec<u8>,
 }
 
 #[derive(Debug, Insertable)]
-#[table_name = "nodes"]
-pub struct NewNode {
-    pub tree_node_hash: Vec<u8>,
-    pub parent_node_hash: Vec<u8>,
-    pub height: i64,
-    pub shard: Vec<u8>,
+#[table_name = "payloads"]
+pub struct NewPayload {
     pub payload_id: Vec<u8>,
-    pub payload_height: i64,
-    pub local_pledges: Vec<u8>,
-    pub epoch: i64,
-    pub proposed_by: Vec<u8>,
-    pub justify: Vec<u8>,
+    pub instructions: Vec<u8>,
+    pub public_nonce: Vec<u8>,
+    pub scalar: Vec<u8>,
+    pub fee: i64,
+    pub sender_public_key: Vec<u8>,
+    pub meta: Vec<u8>,
 }

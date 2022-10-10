@@ -24,7 +24,7 @@ use thiserror::Error;
 
 use crate::{
     services::{epoch_manager::EpochManagerError, PayloadProcessorError},
-    storage::shard_store::StoreError,
+    storage::{shard_store::StoreError, StorageError},
 };
 
 #[derive(Error, Debug)]
@@ -33,6 +33,10 @@ pub enum HotStuffError {
     EpochManagerError(#[from] EpochManagerError),
     #[error("Received message from a node that is not in the committee")]
     ReceivedMessageFromNonCommitteeMember,
+    #[error("Update leaf node error: `{0}`")]
+    UpdateLeafNode(String),
+    #[error("Update high qc error: `{0}`")]
+    UpdateHighQcError(String),
     #[error("Store error: {0}")]
     StoreError(#[from] StoreError),
     #[error("Claim is not valid")]
@@ -47,4 +51,6 @@ pub enum HotStuffError {
     PayloadProcessorError(#[from] PayloadProcessorError),
     #[error("Transaction rejected: {0}")]
     TransactionRejected(String),
+    #[error("Storage Error: `{0}`")]
+    StorageError(#[from] StorageError),
 }

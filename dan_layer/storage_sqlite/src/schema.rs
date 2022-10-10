@@ -43,23 +43,6 @@ table! {
 }
 
 table! {
-    metadata (key) {
-        key -> Binary,
-        value -> Binary,
-    }
-}
-
-table! {
-    nodes (id) {
-        id -> Integer,
-        hash -> Binary,
-        parent -> Binary,
-        height -> Integer,
-        is_committed -> Bool,
-    }
-}
-
-table! {
     prepare_qc (id) {
         id -> Integer,
         message_type -> Integer,
@@ -98,15 +81,158 @@ table! {
     }
 }
 
+table! {
+    payloads (id) {
+        id -> Integer,
+        payload_id -> Binary,
+        instructions -> Binary,
+        public_nonce -> Binary,
+        scalar -> Binary,
+        fee -> BigInt,
+        sender_public_key -> Binary,
+        meta -> Binary,
+    }
+}
+
+table! {
+    votes (id) {
+        id -> Integer,
+        tree_node_hash -> Binary,
+        shard_id -> Binary,
+        address -> Binary,
+        node_height -> BigInt,
+        vote_message -> Binary,
+    }
+}
+
+table! {
+    leaf_nodes (id) {
+        id -> Integer,
+        shard_id -> Binary,
+        tree_node_hash -> Binary,
+        node_height -> BigInt,
+    }
+}
+
+table! {
+    last_voted_heights (id) {
+        id -> Integer,
+        shard_id -> Binary,
+        node_height -> BigInt,
+    }
+}
+
+table! {
+    lock_node_and_heights (id) {
+        id -> Integer,
+        shard_id -> Binary,
+        tree_node_hash -> Binary,
+        node_height -> BigInt,
+    }
+}
+
+table! {
+    nodes (id) {
+        id -> Integer,
+        tree_node_hash -> Binary,
+        parent_node_hash -> Binary,
+        height -> BigInt,
+        shard -> Binary,
+        payload_id -> Binary,
+        payload_height -> BigInt,
+        local_pledges -> Binary,
+        epoch -> BigInt,
+        proposed_by -> Binary,
+        justify -> Binary,
+    }
+}
+
+table! {
+    last_executed_heights (id) {
+        id -> Integer,
+        shard_id -> Binary,
+        node_height -> BigInt,
+    }
+}
+
+table! {
+    payload_votes (id) {
+        id -> Integer,
+        payload_id -> Binary,
+        shard_id -> Binary,
+        node_height -> BigInt,
+        hotstuff_tree_node -> Binary,
+    }
+}
+
+table! {
+    objects (id) {
+        id -> Integer,
+        shard_id -> Binary,
+        object_id -> Binary,
+        payload_id -> Binary,
+        node_height -> BigInt,
+        substate_change -> Binary,
+        object_pledge -> Binary,
+    }
+}
+
+table! {
+    substate_changes (id) {
+        id -> Integer,
+        shard_id -> Binary,
+        substate_change -> Binary,
+        tree_node_hash -> Binary,
+    }
+}
+
+table! {
+    high_qcs (id) {
+        id -> Integer,
+        shard_id -> Binary,
+        height -> BigInt,
+        is_highest -> Integer,
+        qc_json -> Text,
+    }
+}
+
+table! {
+    metadata (key) {
+        key -> Binary,
+        value -> Binary,
+    }
+}
+
+table! {
+    templates (id) {
+        id -> Integer,
+        template_address -> Binary,
+        url -> Text,
+        height -> Integer,
+        compiled_code -> Binary,
+    }
+}
+
 joinable!(instructions -> nodes (node_id));
 
 allow_tables_to_appear_in_same_query!(
     instructions,
     locked_qc,
     metadata,
-    nodes,
     prepare_qc,
     state_keys,
     state_op_log,
     state_tree,
+    high_qcs,
+    payloads,
+    votes,
+    leaf_nodes,
+    last_voted_heights,
+    lock_node_and_heights,
+    nodes,
+    last_executed_heights,
+    payload_votes,
+    objects,
+    substate_changes,
+    templates,
 );

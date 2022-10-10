@@ -24,6 +24,7 @@ use std::{io, sync::PoisonError};
 
 use lmdb_zero as lmdb;
 use tari_storage::lmdb_store::LMDBError;
+use tari_utilities::ByteArrayError;
 
 #[derive(Debug, thiserror::Error)]
 pub enum StorageError {
@@ -45,6 +46,18 @@ pub enum StorageError {
     NotFound,
     #[error("File system path does not exist")]
     FileSystemPathDoesNotExist,
+    #[error("Failed data decoding")]
+    DecodingError,
+    #[error("Failed data encoding")]
+    EncodingError,
+    #[error("Fixed hash size error: {reason}")]
+    FixedHashSizeError { reason: String },
+    #[error("Invalid integer cast")]
+    InvalidIntegerCast,
+    #[error("Invalid ByteArray conversion: `{0}`")]
+    InvalidByteArrayConversion(#[from] ByteArrayError),
+    #[error("Invalid type cast: {reason}")]
+    InvalidTypeCasting { reason: String },
 
     #[error("General storage error: {details}")]
     General { details: String },

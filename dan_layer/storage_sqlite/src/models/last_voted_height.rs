@@ -23,31 +23,15 @@
 use crate::schema::*;
 
 #[derive(Debug, Identifiable, Queryable)]
-pub struct Node {
+pub struct LastVotedHeight {
     pub id: i32,
-    pub tree_node_hash: Vec<u8>,
-    pub parent_node_hash: Vec<u8>,
-    pub height: i64,
-    pub shard: Vec<u8>,
-    pub payload_id: Vec<u8>,
-    pub payload_height: i64,
-    pub local_pledges: Vec<u8>,
-    pub epoch: i64,
-    pub proposed_by: Vec<u8>,
-    pub justify: Vec<u8>,
+    pub shard_id: Vec<u8>,
+    pub node_height: i64,
 }
 
 #[derive(Debug, Insertable)]
-#[table_name = "nodes"]
-pub struct NewNode {
-    pub tree_node_hash: Vec<u8>,
-    pub parent_node_hash: Vec<u8>,
-    pub height: i64,
-    pub shard: Vec<u8>,
-    pub payload_id: Vec<u8>,
-    pub payload_height: i64,
-    pub local_pledges: Vec<u8>,
-    pub epoch: i64,
-    pub proposed_by: Vec<u8>,
-    pub justify: Vec<u8>,
+#[table_name = "last_voted_heights"]
+pub struct NewLastVotedHeight {
+    pub shard_id: Vec<u8>,
+    pub node_height: i64,
 }

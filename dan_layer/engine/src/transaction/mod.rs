@@ -22,6 +22,7 @@
 
 use std::collections::HashMap;
 
+use serde::{Deserialize, Serialize};
 use tari_common_types::types::{BulletRangeProof, ComSignature, Commitment, PublicKey};
 use tari_dan_common_types::{ObjectClaim, ObjectId, ShardId, SubstateChange};
 use tari_engine_types::{hashing::hasher, instruction::Instruction, signature::InstructionSignature};
@@ -98,7 +99,7 @@ impl Transaction {
     }
 }
 
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone, Default, Deserialize, Serialize)]
 pub struct TransactionMeta {
     involved_objects: HashMap<ShardId, Vec<(ObjectId, SubstateChange, ObjectClaim)>>,
 }
@@ -135,6 +136,10 @@ impl Transaction {
 
     pub fn hash(&self) -> &Hash {
         &self.hash
+    }
+
+    pub fn fee(&self) -> u64 {
+        self._fee
     }
 
     pub fn meta(&self) -> &TransactionMeta {

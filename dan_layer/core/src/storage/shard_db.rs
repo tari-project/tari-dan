@@ -103,7 +103,7 @@ impl<TAddr: NodeAddressable, TPayload: Payload> ShardStoreTransaction<TAddr, TPa
         }
     }
 
-    fn update_high_qc(&mut self, shard: ShardId, qc: QuorumCertificate) {
+    fn update_high_qc(&mut self, shard: ShardId, qc: QuorumCertificate) -> Result<(), Self::Error> {
         let mut s = self.inner.write().unwrap();
         let entry = s.shard_high_qcs.entry(shard).or_insert_with(|| qc.clone());
         if qc.local_node_height() > entry.local_node_height() {
@@ -113,6 +113,7 @@ impl<TAddr: NodeAddressable, TPayload: Payload> ShardStoreTransaction<TAddr, TPa
                 .and_modify(|e| *e = (qc.local_node_hash(), qc.local_node_height()))
                 .or_insert((qc.local_node_hash(), qc.local_node_height()));
         }
+        Ok(())
     }
 
     fn get_leaf_node(&self, shard: ShardId) -> (TreeNodeHash, NodeHeight) {
