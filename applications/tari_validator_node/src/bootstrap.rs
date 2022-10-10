@@ -20,21 +20,14 @@
 //   WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //   USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use std::{fs, io, str::FromStr, sync::Arc};
+use std::{fs, io, sync::Arc};
 
 use tari_app_utilities::{identity_management, identity_management::load_from_json};
 use tari_common::exit_codes::{ExitCode, ExitError};
-use tari_comms::{
-    peer_manager::{Peer, PeerFlags},
-    protocol::rpc::RpcServer,
-    CommsNode,
-    NodeIdentity,
-    PeerManager,
-    UnspawnedCommsNode,
-};
+use tari_comms::{protocol::rpc::RpcServer, CommsNode, NodeIdentity, UnspawnedCommsNode};
 use tari_dan_storage::global::GlobalDb;
 use tari_dan_storage_sqlite::{global::SqliteGlobalDbAdapter, SqliteDbFactory};
-use tari_p2p::{initialization::spawn_comms_using_transport, peer_seeds::SeedPeer, PeerSeedsConfig};
+use tari_p2p::initialization::spawn_comms_using_transport;
 use tari_shutdown::ShutdownSignal;
 
 use crate::{
@@ -81,7 +74,7 @@ pub async fn spawn_services(
     let base_node_client = GrpcBaseNodeClient::new(config.validator_node.base_node_grpc_address);
 
     // Initialize comms
-    let (comms, message_channel) = comms::initialize(node_identity.clone(), p2p_config.clone(), shutdown.clone())?;
+    let (comms, message_channel) = comms::initialize(node_identity.clone(), config, shutdown.clone()).await?;
 
     // Spawn messaging
     let (message_senders, message_receivers) = messaging::new_messaging_channel(10);
@@ -108,9 +101,6 @@ pub async fn spawn_services(
 
     // Mempool
     let mempool = mempool::spawn(rx_new_transaction_message, mempool_new_tx, outbound_messaging.clone());
-
-    // Add seeds
-    add_seed_peers(&comms.peer_manager(), &comms.node_identity(), &config.peer_seeds).await?;
 
     // Networking
     let peer_provider = CommsPeerProvider::new(comms.peer_manager());
@@ -206,27 +196,4 @@ fn setup_p2p_rpc(
         .add_service(create_validator_node_rpc_service(message_senders, peer_provider));
 
     comms.add_protocol_extension(rpc_server)
-}
-
-async fn add_seed_peers(
-    peer_manager: &PeerManager,
-    node_identity: &NodeIdentity,
-    config: &PeerSeedsConfig,
-) -> Result<(), anyhow::Error> {
-    let peers = config
-        .peer_seeds
-        .iter()
-        .map(|s| SeedPeer::from_str(s).map(Peer::from))
-        .collect::<Result<Vec<_>, _>>()?;
-
-    for mut peer in peers {
-        if &peer.public_key == node_identity.public_key() {
-            continue;
-        }
-        peer.add_flags(PeerFlags::SEED);
-
-        // debug!(target: LOG_TARGET, "Adding seed peer [{}]", peer);
-        peer_manager.add_peer(peer).await?;
-    }
-    Ok(())
 }
