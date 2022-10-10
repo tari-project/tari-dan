@@ -2,7 +2,7 @@
 //  SPDX-License-Identifier: BSD-3-Clause
 //
 use serde::Deserialize;
-use tari_template_abi::{encode_into, Encode};
+use tari_template_abi::Encode;
 use tari_template_lib::{
     args::Arg,
     models::{ComponentAddress, TemplateAddress},

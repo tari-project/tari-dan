@@ -6,7 +6,6 @@ use std::convert::TryFrom;
 
 use serde::Deserialize;
 use tari_crypto::{
-    hasher,
     keys::PublicKey as PublicKeyT,
     ristretto::{RistrettoPublicKey, RistrettoSchnorr, RistrettoSecretKey},
 };
