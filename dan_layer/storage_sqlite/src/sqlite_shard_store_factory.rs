@@ -575,7 +575,7 @@ impl ShardStoreTransaction<PublicKey, TariDanPayload> for SqliteShardStoreTransa
     }
 
     fn save_substate_changes(&mut self, changes: HashMap<ShardId, Option<SubstateState>>, node: TreeNodeHash) {
-        for (sid, st_ch) in changes.iter() {
+        for (sid, st_ch) in &changes {
             let shard = Vec::from(sid.as_bytes());
             let substate_change = if let Some(st_ch) = st_ch {
                 serialize(st_ch).unwrap()
