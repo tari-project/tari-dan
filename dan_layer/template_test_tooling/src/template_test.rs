@@ -8,13 +8,13 @@ use borsh::BorshDeserialize;
 use tari_crypto::ristretto::RistrettoSecretKey;
 use tari_dan_engine::{
     crypto::create_key_pair,
-    hashing::hasher,
     packager::{LoadedTemplate, Package, TemplateModuleLoader},
     runtime::{FinalizeResult, RuntimeInterface},
     state_store::memory::MemoryStateStore,
-    transaction::{Instruction, TransactionBuilder, TransactionProcessor},
+    transaction::{TransactionBuilder, TransactionProcessor},
     wasm::{compile::compile_template, LoadedWasmTemplate},
 };
+use tari_engine_types::{hashing::hasher, instruction::Instruction};
 use tari_template_lib::{
     args::Arg,
     models::{ComponentAddress, TemplateAddress},

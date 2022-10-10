@@ -25,9 +25,9 @@ mod test {
     use tari_dan_engine::{
         packager::{PackageError, TemplateModuleLoader},
         state_store::{AtomicDb, StateReader},
-        transaction::Instruction,
         wasm::{compile::compile_template, WasmExecutionError},
     };
+    use tari_engine_types::instruction::Instruction;
     use tari_template_lib::{
         args,
         models::{Amount, ComponentAddress, ComponentInstance},

@@ -4,7 +4,6 @@
 pub mod crypto;
 pub mod flow;
 pub mod function_definitions;
-pub mod hashing;
 pub mod models;
 pub mod packager;
 pub mod runtime;

@@ -22,20 +22,12 @@
 
 use std::collections::HashMap;
 
-use serde::Deserialize;
 use tari_common_types::types::{BulletRangeProof, ComSignature, Commitment, PublicKey};
 use tari_dan_common_types::{ObjectClaim, ObjectId, ShardId, SubstateChange};
+use tari_engine_types::{hashing::hasher, instruction::Instruction, signature::InstructionSignature};
 use tari_mmr::MerkleProof;
-use tari_template_abi::Encode;
-use tari_template_lib::{
-    args::Arg,
-    models::{ComponentAddress, TemplateAddress},
-    Hash,
-};
+use tari_template_lib::{models::TemplateAddress, Hash};
 use tari_utilities::ByteArray;
-
-use crate::hashing::hasher;
-
 mod builder;
 pub use builder::TransactionBuilder;
 
@@ -44,33 +36,6 @@ pub use error::TransactionError;
 
 mod processor;
 pub use processor::TransactionProcessor;
-
-mod signature;
-pub use signature::InstructionSignature;
-
-#[derive(Debug, Clone, Deserialize, Encode)]
-pub enum Instruction {
-    CallFunction {
-        template_address: TemplateAddress,
-        function: String,
-        args: Vec<Arg>,
-    },
-    CallMethod {
-        template_address: TemplateAddress,
-        component_address: ComponentAddress,
-        method: String,
-        args: Vec<Arg>,
-    },
-    PutLastInstructionOutputOnWorkspace {
-        key: Vec<u8>,
-    },
-}
-
-impl Instruction {
-    pub fn hash(&self) -> Hash {
-        hasher("instruction").chain(self).result()
-    }
-}
 
 // FIXME: fix clippy
 #[allow(clippy::large_enum_variant)]
