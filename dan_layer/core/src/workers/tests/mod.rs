@@ -27,8 +27,9 @@ use tari_common_types::types::PrivateKey;
 use tari_dan_common_types::ShardId;
 use tari_dan_engine::{
     runtime::{FinalizeResult, RejectResult, SubstateDiff, TransactionResult},
-    transaction::{Instruction, TransactionBuilder},
+    transaction::TransactionBuilder,
 };
+use tari_engine_types::instruction::Instruction;
 use tari_shutdown::Shutdown;
 use tari_template_lib::args::Arg;
 use tari_utilities::ByteArray;
