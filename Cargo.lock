@@ -4266,6 +4266,7 @@ dependencies = [
  "log",
  "tari_crypto",
  "tari_dan_engine",
+ "tari_engine_types",
  "tari_template_abi",
  "tari_template_lib",
 ]
