@@ -27,7 +27,6 @@ pub struct HighQc {
     pub id: i32,
     pub shard_id: Vec<u8>,
     pub height: i64,
-    pub is_highest: i32,
     pub qc_json: String,
 }
 
@@ -36,6 +35,5 @@ pub struct HighQc {
 pub struct NewHighQc {
     pub shard_id: Vec<u8>,
     pub height: i64,
-    pub is_highest: i32,
     pub qc_json: String,
 }

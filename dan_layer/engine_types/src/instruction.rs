@@ -1,7 +1,7 @@
 //  Copyright 2022 The Tari Project
 //  SPDX-License-Identifier: BSD-3-Clause
 
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use tari_template_abi::Encode;
 use tari_template_lib::{
     args::Arg,
@@ -11,7 +11,7 @@ use tari_template_lib::{
 
 use crate::hashing::hasher;
 
-#[derive(Debug, Clone, Deserialize, Encode)]
+#[derive(Debug, Clone, Deserialize, Encode, Serialize)]
 pub enum Instruction {
     CallFunction {
         template_address: TemplateAddress,

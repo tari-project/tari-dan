@@ -48,7 +48,8 @@ use tari_dan_core::{
         StorageError,
     },
 };
-use tari_dan_engine::transaction::{Instruction, InstructionSignature, Transaction, TransactionMeta};
+use tari_dan_engine::transaction::{Transaction, TransactionMeta};
+use tari_engine_types::{instruction::Instruction, signature::InstructionSignature};
 use tari_utilities::ByteArray;
 
 use crate::{
@@ -146,30 +147,11 @@ impl ShardStoreTransaction<PublicKey, TariDanPayload> for SqliteShardStoreTransa
 
     fn update_high_qc(&mut self, shard: ShardId, qc: QuorumCertificate) -> Result<(), Self::Error> {
         // update all others for this shard to highest == false
-        use crate::schema::high_qcs::{height, is_highest};
         let shard = Vec::from(shard.0);
-        let num_existing_qcs: i64 = high_qcs
-            .filter(shard_id.eq(&shard))
-            .count()
-            .first(&self.connection)
-            .map_err(|source| StorageError::QueryError {
-                reason: format!("Update qc error: {0}", source),
-            })?;
-
-        let local_height = qc.local_node_height().as_u64() as i64;
-
-        let rows =
-            diesel::update(high_qcs.filter(shard_id.eq(&shard).and(is_highest.eq(1)).and(height.lt(local_height))))
-                .set(is_highest.eq(0))
-                .execute(&self.connection)
-                .map_err(|e| StorageError::QueryError {
-                    reason: format!("Update qc error: {0}", e),
-                })?;
 
         let new_row = NewHighQc {
             shard_id: shard,
             height: qc.local_node_height().as_u64() as i64,
-            is_highest: if rows == 0 && num_existing_qcs > 0 { 0 } else { 1 },
             qc_json: json!(qc).to_string(),
         };
         diesel::insert_into(high_qcs)
@@ -330,14 +312,14 @@ impl ShardStoreTransaction<PublicKey, TariDanPayload> for SqliteShardStoreTransa
             .unwrap();
     }
 
-    fn get_node(&self, node_hash: &TreeNodeHash) -> Result<HotStuffTreeNode<PublicKey>, Self::Error> {
-        use crate::schema::nodes::{height, payload_height, tree_node_hash};
+    fn get_node(&self, hash: &TreeNodeHash) -> Result<HotStuffTreeNode<PublicKey>, Self::Error> {
+        use crate::schema::nodes::{height, node_hash, payload_height};
 
-        let node_hash = Vec::from(node_hash.as_bytes());
+        let hash = Vec::from(hash.as_bytes());
         // TODO: Do we need to add an index to the table to order by `height` and `payload_height`
         // more efficiently ?
         let node: Option<Node> = table_nodes
-            .filter(tree_node_hash.eq(node_hash))
+            .filter(node_hash.eq(hash))
             .order_by(height.desc())
             .order_by(payload_height.desc())
             .first(&self.connection)
@@ -391,7 +373,7 @@ impl ShardStoreTransaction<PublicKey, TariDanPayload> for SqliteShardStoreTransa
     }
 
     fn save_node(&mut self, node: HotStuffTreeNode<PublicKey>) {
-        let tree_node_hash = Vec::from(node.hash().as_bytes());
+        let node_hash = Vec::from(node.hash().as_bytes());
         let parent_node_hash = Vec::from(node.parent().as_bytes());
 
         let height = node
@@ -413,7 +395,7 @@ impl ShardStoreTransaction<PublicKey, TariDanPayload> for SqliteShardStoreTransa
         let justify = serialize(node.justify()).unwrap();
 
         let new_row = NewNode {
-            tree_node_hash,
+            node_hash,
             parent_node_hash,
             height,
             shard,
