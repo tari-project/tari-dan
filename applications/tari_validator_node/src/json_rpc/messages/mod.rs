@@ -49,3 +49,9 @@ pub struct GetCommitteeRequest {
     pub epoch: Epoch,
     pub shard_id: ShardId,
 }
+
+#[derive(Deserialize, Debug, Clone)]
+pub struct GetShardKey {
+    pub height: u64,
+    pub public_key: PublicKey,
+}

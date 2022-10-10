@@ -139,6 +139,8 @@ impl BaseLayerEpochManager {
         if vns.len() < half_committee_size * 2 {
             return Ok(Committee::new(vns.iter().map(|v| v.public_key.clone()).collect()));
         }
+        println!("vns {:?}", vns);
+        println!("shard {:?}", shard);
 
         let mid_point = vns.iter().filter(|x| x.shard_key <= shard).count();
         let begin = ((vns.len() as i64 + mid_point as i64 - half_committee_size as i64) % vns.len() as i64) as usize;
@@ -157,6 +159,8 @@ impl BaseLayerEpochManager {
         } else {
             result.extend_from_slice(&vns[mid_point as usize..end]);
         }
+
+        println!("result {:?}", result);
 
         Ok(Committee::new(result.into_iter().map(|v| v.public_key).collect()))
     }
