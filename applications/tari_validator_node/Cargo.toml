@@ -61,6 +61,12 @@ tower-http = { version = "0.3.0", features = ["cors"] }
 
 [dev-dependencies]
 tari_test_utils = { git = "https://github.com/tari-project/tari.git", branch = "feature-dan", package = "tari_test_utils" }
+cucumber = { version = "0.13.0"} 
+futures = "0.3"
 
 [build-dependencies]
 tari_common = { git = "https://github.com/tari-project/tari.git", branch = "feature-dan", package = "tari_common", features = ["build"] }
+
+[[test]]
+name = "example"
+harness = false
