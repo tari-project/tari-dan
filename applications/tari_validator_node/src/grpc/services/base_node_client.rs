@@ -26,14 +26,14 @@ use async_trait::async_trait;
 use log::info;
 use tari_app_grpc::tari_rpc::{self as grpc, GetCommitteeRequest, GetShardKeyRequest};
 use tari_base_node_grpc_client::BaseNodeGrpcClient;
-use tari_common_types::types::PublicKey;
+use tari_common_types::types::{FixedHash, PublicKey};
 use tari_comms::types::CommsPublicKey;
-use tari_core::transactions::transaction_components::CodeTemplateRegistration;
+use tari_core::{blocks::BlockHeader, transactions::transaction_components::CodeTemplateRegistration};
 use tari_crypto::tari_utilities::ByteArray;
 use tari_dan_common_types::ShardId;
 use tari_dan_core::{
     models::{BaseLayerMetadata, ValidatorNode},
-    services::{base_node_error::BaseNodeError, BaseNodeClient},
+    services::{base_node_error::BaseNodeError, BaseNodeClient, BlockInfo, SideChainUtxos},
 };
 
 const LOG_TARGET: &str = "tari::validator_node::app";
@@ -141,10 +141,14 @@ impl BaseNodeClient for GrpcBaseNodeClient {
 
     async fn get_template_registrations(
         &mut self,
-        height: u64,
+        start_hash: Option<FixedHash>,
+        count: u64,
     ) -> Result<Vec<CodeTemplateRegistration>, BaseNodeError> {
         let inner = self.connection().await?;
-        let request = grpc::GetTemplateRegistrationsRequest { from_height: height };
+        let request = grpc::GetTemplateRegistrationsRequest {
+            start_hash: start_hash.map(|v| v.to_vec()).unwrap_or_default(),
+            count,
+        };
         dbg!(&request);
         let mut templates = vec![];
         let mut stream = inner.get_template_registrations(request).await?.into_inner();
@@ -152,6 +156,10 @@ impl BaseNodeClient for GrpcBaseNodeClient {
             match stream.message().await {
                 Ok(Some(val)) => {
                     let template_registration: CodeTemplateRegistration = val
+                        .registration
+                        .ok_or_else(|| {
+                            BaseNodeError::InvalidPeerMessage("Base node returned no template registration".to_string())
+                        })?
                         .try_into()
                         .map_err(|_| BaseNodeError::InvalidPeerMessage("invalid template registration".to_string()))?;
                     templates.push(template_registration);
@@ -168,5 +176,69 @@ impl BaseNodeClient for GrpcBaseNodeClient {
             }
         }
         Ok(templates)
+    }
+
+    async fn get_header_by_hash(&mut self, block_hash: FixedHash) -> Result<BlockHeader, BaseNodeError> {
+        let inner = self.connection().await?;
+        let request = grpc::GetHeaderByHashRequest {
+            hash: block_hash.to_vec(),
+        };
+        let result = inner.get_header_by_hash(request).await?.into_inner();
+        let header = result
+            .header
+            .ok_or_else(|| BaseNodeError::InvalidPeerMessage("Base node returned no header".to_string()))?;
+        let header = header.try_into().map_err(BaseNodeError::InvalidPeerMessage)?;
+        Ok(header)
+    }
+
+    async fn get_sidechain_utxos(
+        &mut self,
+        start_hash: Option<FixedHash>,
+        count: u64,
+    ) -> Result<Vec<SideChainUtxos>, BaseNodeError> {
+        let inner = self.connection().await?;
+        let request = grpc::GetSideChainUtxosRequest {
+            start_hash: start_hash.map(|v| v.to_vec()).unwrap_or_default(),
+            count,
+        };
+        let mut stream = inner.get_side_chain_utxos(request).await?.into_inner();
+        let mut responses = Vec::with_capacity(count as usize);
+        loop {
+            match stream.message().await {
+                Ok(Some(resp)) => {
+                    let block_info = resp.block_info.ok_or_else(|| {
+                        BaseNodeError::InvalidPeerMessage("Base node returned no block info".to_string())
+                    })?;
+                    let resp = SideChainUtxos {
+                        block_info: BlockInfo {
+                            height: block_info.height,
+                            hash: block_info.hash.try_into()?,
+                            next_block_hash: Some(block_info.next_block_hash)
+                                .filter(|v| !v.is_empty())
+                                .map(TryInto::try_into)
+                                .transpose()?,
+                        },
+                        outputs: resp
+                            .outputs
+                            .into_iter()
+                            .map(TryInto::try_into)
+                            .collect::<Result<_, _>>()
+                            .map_err(BaseNodeError::InvalidPeerMessage)?,
+                    };
+                    responses.push(resp);
+                },
+                Ok(None) => {
+                    break;
+                },
+                Err(e) => {
+                    return Err(BaseNodeError::InvalidPeerMessage(format!(
+                        "Error reading stream: {}",
+                        e
+                    )));
+                },
+            }
+        }
+
+        Ok(responses)
     }
 }

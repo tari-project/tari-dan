@@ -20,37 +20,29 @@
 //   WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //   USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use crate::global::schema::*;
+use tari_dan_common_types::optional::IsNotFoundError;
+use tari_dan_core::storage::StorageError;
+use tari_dan_storage_sqlite::error::SqliteStorageError;
+use tari_template_lib::models::TemplateAddress;
+use thiserror::Error;
 
-#[derive(Debug, Identifiable, Queryable)]
-#[table_name = "templates"]
-pub struct TemplateModel {
-    pub id: i32,
-    pub template_address: Vec<u8>,
-    pub url: String,
-    pub height: i32,
-    pub compiled_code: Vec<u8>,
-    pub status: String,
-    pub wasm_path: Option<String>,
-    pub added_at: i64,
+#[derive(Error, Debug)]
+pub enum TemplateManagerError {
+    #[error("There was an error sending to a channel")]
+    SendError,
+    #[error("The hash of the template code does not match the metadata")]
+    #[allow(dead_code)]
+    TemplateCodeHashMismatch,
+    #[error("Storage error: {0}")]
+    StorageError(#[from] StorageError),
+    #[error("Storage error: {0}")]
+    SqliteStorageError(#[from] SqliteStorageError),
+    #[error("Template not found: {address}")]
+    TemplateNotFound { address: TemplateAddress },
 }
 
-#[derive(Debug, Insertable)]
-#[table_name = "templates"]
-pub struct NewTemplateModel {
-    pub template_address: Vec<u8>,
-    pub url: String,
-    pub height: i32,
-    pub compiled_code: Vec<u8>,
-    pub status: String,
-    pub wasm_path: Option<String>,
-    pub added_at: i64,
-}
-
-#[derive(Debug, AsChangeset)]
-#[table_name = "templates"]
-pub struct TemplateUpdateModel {
-    pub compiled_code: Option<Vec<u8>>,
-    pub status: Option<String>,
-    pub wasm_path: Option<String>,
+impl IsNotFoundError for TemplateManagerError {
+    fn is_not_found_error(&self) -> bool {
+        matches!(self, Self::TemplateNotFound { .. })
+    }
 }

@@ -39,7 +39,7 @@ use crate::{
         comms_peer_provider::CommsPeerProvider,
         messaging::OutboundMessaging,
         rpc_client::TariCommsValidatorNodeClientFactory,
-        template_manager::manager::TemplateManager,
+        template_manager::TemplateManager,
     },
     payload_processor::TariDanPayloadProcessor,
 };

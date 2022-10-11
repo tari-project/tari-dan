@@ -57,7 +57,7 @@ impl BaseLayerEpochManager {
 
     pub async fn update_epoch(&mut self, tip: u64) -> Result<(), EpochManagerError> {
         let epoch = Epoch(tip / 10);
-        if self.current_epoch.0 >= epoch.0 {
+        if self.current_epoch >= epoch {
             // no need to update the epoch
             return Ok(());
         }

@@ -48,7 +48,7 @@ use crate::{
             networking,
             networking::NetworkingHandle,
             template_manager,
-            template_manager::manager::TemplateManager,
+            template_manager::TemplateManager,
         },
     },
     payload_processor::TariDanPayloadProcessor,

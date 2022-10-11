@@ -20,13 +20,14 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+use tari_common_types::types::FixedHash;
 use tari_core::transactions::transaction_components::CodeTemplateRegistration;
 use tari_template_lib::models::TemplateAddress;
 use tokio::sync::{mpsc, oneshot};
 
 use crate::p2p::services::template_manager::{
     manager::Template,
-    template_manager_service::TemplateManagerRequest,
+    service::TemplateManagerRequest,
     TemplateManagerError,
 };
 
@@ -40,10 +41,13 @@ impl TemplateManagerHandle {
         Self { request_tx }
     }
 
-    pub async fn add_templates(&self, templates: Vec<CodeTemplateRegistration>) -> Result<(), TemplateManagerError> {
+    pub async fn add_template(&self, template: TemplateRegistration) -> Result<(), TemplateManagerError> {
         let (tx, rx) = oneshot::channel();
         self.request_tx
-            .send(TemplateManagerRequest::AddTemplates { templates, reply: tx })
+            .send(TemplateManagerRequest::AddTemplate {
+                template: Box::new(template),
+                reply: tx,
+            })
             .await
             .map_err(|_| TemplateManagerError::SendError)?;
         rx.await.map_err(|_| TemplateManagerError::SendError)?
@@ -58,4 +62,12 @@ impl TemplateManagerHandle {
             .map_err(|_| TemplateManagerError::SendError)?;
         rx.await.map_err(|_| TemplateManagerError::SendError)?
     }
+}
+
+#[derive(Debug, Clone)]
+pub struct TemplateRegistration {
+    pub template_address: TemplateAddress,
+    pub registration: CodeTemplateRegistration,
+    pub mined_height: u64,
+    pub mined_hash: FixedHash,
 }

@@ -21,6 +21,7 @@
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 use tari_common_types::types::FixedHashSizeError;
+use tari_dan_common_types::optional::IsNotFoundError;
 use thiserror::Error;
 
 #[derive(Error, Debug)]
@@ -36,4 +37,14 @@ pub enum BaseNodeError {
     InvalidPeerMessage(String),
     #[error("Hash size error: {0}")]
     HashSizeError(#[from] FixedHashSizeError),
+}
+
+impl IsNotFoundError for BaseNodeError {
+    fn is_not_found_error(&self) -> bool {
+        if let Self::GrpcStatus(status) = self {
+            status.code() == tonic::Code::NotFound
+        } else {
+            false
+        }
+    }
 }

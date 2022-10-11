@@ -20,33 +20,36 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use futures::future::join_all;
-use tari_common_types::types::FixedHash;
-use tari_core::transactions::transaction_components::CodeTemplateRegistration;
 use tari_dan_core::{services::TemplateProvider, storage::DbFactory};
 use tari_dan_engine::wasm::WasmModule;
-use tari_dan_storage::global::DbTemplate;
+use tari_dan_storage::global::{DbTemplate, DbTemplateUpdate, TemplateStatus};
 use tari_template_lib::models::TemplateAddress;
 
-use crate::{p2p::services::template_manager::TemplateManagerError, SqliteDbFactory};
+use crate::{
+    p2p::services::template_manager::{handle::TemplateRegistration, TemplateManagerError},
+    SqliteDbFactory,
+};
 
 const _LOG_TARGET: &str = "tari::validator_node::template_manager";
 
 #[derive(Debug, Clone)]
 pub struct TemplateMetadata {
-    address: FixedHash,
+    _address: TemplateAddress,
     // this must be in the form of "https://example.com/my_template.wasm"
-    url: String,
-    // block height in which the template was published
-    height: u64,
+    _url: String,
+    /// SHA hash of binary
+    _binary_sha: Vec<u8>,
+    /// Block height in which the template was published
+    _height: u64,
 }
 
-impl From<CodeTemplateRegistration> for TemplateMetadata {
-    fn from(reg: CodeTemplateRegistration) -> Self {
+impl From<TemplateRegistration> for TemplateMetadata {
+    fn from(reg: TemplateRegistration) -> Self {
         TemplateMetadata {
-            address: reg.hash(),
-            url: reg.binary_url.to_string(),
-            height: 0,
+            _address: reg.template_address,
+            _url: reg.registration.binary_url.into_string(),
+            _binary_sha: reg.registration.binary_sha.into_vec(),
+            _height: reg.mined_height,
         }
     }
 }
@@ -62,9 +65,12 @@ impl From<DbTemplate> for Template {
     fn from(record: DbTemplate) -> Self {
         Template {
             metadata: TemplateMetadata {
-                address: record.template_address,
-                url: record.url,
-                height: record.height,
+                // TODO: this will change when common engine types are moved around
+                _address: (*record.template_address).into(),
+                _url: record.url,
+                // TODO: add field to db
+                _binary_sha: vec![],
+                _height: record.height,
             },
             compiled_code: record.compiled_code,
         }
@@ -92,84 +98,37 @@ impl TemplateManager {
         Ok(template.into())
     }
 
-    pub async fn add_templates(
-        &self,
-        template_registations: Vec<CodeTemplateRegistration>,
-    ) -> Result<(), TemplateManagerError> {
-        // extract the metadata that we need to store
-        let templates_metadata: Vec<TemplateMetadata> = template_registations.into_iter().map(Into::into).collect();
-
-        // we can add each individual template in parallel
-        let tasks = templates_metadata.iter().map(|md| self.add_template(md));
-
-        // wait for all templates to be stores
-        let results = join_all(tasks).await;
-
-        // propagate any error that may happen
-        for result in results {
-            result?
-        }
-
-        Ok(())
-    }
-
-    async fn add_template(&self, template_metadata: &TemplateMetadata) -> Result<(), TemplateManagerError> {
-        {
-            let db = self.db_factory.get_or_create_global_db()?;
-            let tx = db.create_transaction()?;
-            if db
-                .templates(&tx)
-                .get_template(template_metadata.address.as_slice())?
-                .is_some()
-            {
-                return Ok(());
-            }
-        }
-        // fetch the compiled wasm code from the web
-        let template_wasm = self.fetch_template_wasm(&template_metadata.url).await?;
-
-        // check that the code we fetched is valid (the template address is the hash)
-        // TODO: we will need a consistent way of hashing the template fields
-        // let hash = hasher("template").chain(&template_wasm).result();
-        // if template_metadata.address.as_slice() != hash.as_slice() {
-        //   return Err(TemplateManagerError::TemplateCodeHashMismatch);
-        // }
-
-        // finally, store the full template (metadata + wasm binary) in the database
-        self.store_template_in_db(template_metadata, template_wasm)?;
-
-        Ok(())
-    }
-
-    async fn fetch_template_wasm(&self, url: &str) -> Result<Vec<u8>, TemplateManagerError> {
-        let res = reqwest::get(url)
-            .await
-            .map_err(|_| TemplateManagerError::TemplateCodeFetchError)?;
-        let wasm_bytes = res
-            .bytes()
-            .await
-            .map_err(|_| TemplateManagerError::TemplateCodeFetchError)?
-            .to_vec();
-
-        Ok(wasm_bytes)
-    }
-
-    fn store_template_in_db(
-        &self,
-        template_metadata: &TemplateMetadata,
-        template_wasm: Vec<u8>,
-    ) -> Result<(), TemplateManagerError> {
+    pub(super) fn add_template(&self, template: TemplateRegistration) -> Result<(), TemplateManagerError> {
         let template = DbTemplate {
-            template_address: template_metadata.address,
-            url: template_metadata.url.clone(),
-            height: template_metadata.height,
-            compiled_code: template_wasm,
+            template_address: template.template_address.into_array().into(),
+            url: template.registration.binary_url.into_string(),
+            height: template.mined_height,
+            status: TemplateStatus::New,
+            compiled_code: vec![],
+            added_at: time::OffsetDateTime::now_utc(),
         };
 
         let db = self.db_factory.get_or_create_global_db()?;
         let tx = db.create_transaction()?;
+        if db.templates(&tx).get_template(&*template.template_address)?.is_some() {
+            return Ok(());
+        }
         let template_db = db.templates(&tx);
         template_db.insert_template(template)?;
+        db.commit(tx)?;
+
+        Ok(())
+    }
+
+    pub(super) fn update_template(
+        &self,
+        address: TemplateAddress,
+        update: DbTemplateUpdate,
+    ) -> Result<(), TemplateManagerError> {
+        let db = self.db_factory.get_or_create_global_db()?;
+        let tx = db.create_transaction()?;
+        let template_db = db.templates(&tx);
+        template_db.update_template(&address, update)?;
         db.commit(tx)?;
 
         Ok(())

@@ -36,6 +36,7 @@ axum = "0.5.15"
 axum-jrpc = { version = "0.2.1", features = ["anyhow_error"] }
 blake2 = "0.9.2"
 borsh = { version = "0.9.3", default-features = false }
+bytes = "1"
 chrono = "0.4.22"
 clap = { version = "3.2.5", features = ["env"] }
 config = "0.13.0"
@@ -51,6 +52,7 @@ rand = "0.7"
 reqwest = "0.11.11"
 serde = { version = "1.0.126", features = ["derive"] }
 serde_json = "1.0.64"
+time = "0.3.15"
 thiserror = "^1.0.20"
 tokio = { version = "1.10", features = ["macros", "time", "sync", "rt-multi-thread"] }
 tokio-stream = { version = "0.1.7", features = ["sync"] }
@@ -64,3 +66,4 @@ tari_test_utils = { git = "https://github.com/tari-project/tari.git", branch = "
 
 [build-dependencies]
 tari_common = { git = "https://github.com/tari-project/tari.git", branch = "feature-dan", package = "tari_common", features = ["build"] }
+

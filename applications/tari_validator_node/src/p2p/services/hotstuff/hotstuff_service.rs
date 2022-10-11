@@ -42,7 +42,7 @@ use crate::{
         epoch_manager::handle::EpochManagerHandle,
         mempool::MempoolHandle,
         messaging::OutboundMessaging,
-        template_manager::manager::TemplateManager,
+        template_manager::TemplateManager,
     },
     payload_processor::TariDanPayloadProcessor,
 };

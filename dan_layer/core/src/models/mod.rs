@@ -92,7 +92,7 @@ impl PartialOrd for NodeHeight {
     }
 }
 
-#[derive(Copy, Clone, Debug, Deserialize, PartialEq, Eq, Hash, Serialize)]
+#[derive(Copy, Clone, Debug, Deserialize, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize)]
 pub struct Epoch(pub u64);
 
 impl Epoch {

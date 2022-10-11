@@ -43,6 +43,9 @@ table! {
         url -> Text,
         height -> Integer,
         compiled_code -> Binary,
+        status -> Text,
+        wasm_path -> Nullable<Text>,
+        added_at -> BigInt,
     }
 }
 

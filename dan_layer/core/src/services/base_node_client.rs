@@ -21,9 +21,12 @@
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 use async_trait::async_trait;
-use tari_common_types::types::PublicKey;
+use tari_common_types::types::{FixedHash, PublicKey};
 use tari_comms::types::CommsPublicKey;
-use tari_core::transactions::transaction_components::CodeTemplateRegistration;
+use tari_core::{
+    blocks::BlockHeader,
+    transactions::transaction_components::{CodeTemplateRegistration, TransactionOutput},
+};
 use tari_dan_common_types::ShardId;
 
 use crate::{
@@ -37,6 +40,28 @@ pub trait BaseNodeClient: Send + Sync + Clone {
     async fn get_validator_nodes(&mut self, height: u64) -> Result<Vec<ValidatorNode>, BaseNodeError>;
     async fn get_committee(&mut self, height: u64, shard_key: &[u8; 32]) -> Result<Vec<CommsPublicKey>, BaseNodeError>;
     async fn get_shard_key(&mut self, height: u64, public_key: &PublicKey) -> Result<Option<ShardId>, BaseNodeError>;
-    async fn get_template_registrations(&mut self, height: u64)
-        -> Result<Vec<CodeTemplateRegistration>, BaseNodeError>;
+    async fn get_template_registrations(
+        &mut self,
+        start_hash: Option<FixedHash>,
+        count: u64,
+    ) -> Result<Vec<CodeTemplateRegistration>, BaseNodeError>;
+    async fn get_header_by_hash(&mut self, block_hash: FixedHash) -> Result<BlockHeader, BaseNodeError>;
+    async fn get_sidechain_utxos(
+        &mut self,
+        start_hash: Option<FixedHash>,
+        count: u64,
+    ) -> Result<Vec<SideChainUtxos>, BaseNodeError>;
+}
+
+#[derive(Debug, Clone)]
+pub struct SideChainUtxos {
+    pub block_info: BlockInfo,
+    pub outputs: Vec<TransactionOutput>,
+}
+
+#[derive(Debug, Clone)]
+pub struct BlockInfo {
+    pub hash: FixedHash,
+    pub height: u64,
+    pub next_block_hash: Option<FixedHash>,
 }
