@@ -24,37 +24,39 @@ use log::*;
 use tari_core::transactions::transaction_components::CodeTemplateRegistration;
 use tari_dan_storage_sqlite::SqliteDbFactory;
 use tari_shutdown::ShutdownSignal;
+use tari_template_lib::models::TemplateAddress;
 use tokio::{
     sync::{mpsc::Receiver, oneshot},
     task::JoinHandle,
 };
 
-use crate::p2p::services::template_manager::{manager::TemplateManager, TemplateManagerError};
+use crate::p2p::services::template_manager::{
+    manager::{Template, TemplateManager},
+    TemplateManagerError,
+};
+
 const LOG_TARGET: &str = "tari::validator_node::template_manager";
 
 pub struct TemplateManagerService {
-    rx_request: Receiver<(
-        TemplateManagerRequest,
-        oneshot::Sender<Result<TemplateManagerResponse, TemplateManagerError>>,
-    )>,
+    rx_request: Receiver<TemplateManagerRequest>,
     inner: TemplateManager,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub enum TemplateManagerRequest {
-    AddTemplates { templates: Vec<CodeTemplateRegistration> },
-}
-
-pub enum TemplateManagerResponse {
-    AddTemplates,
+    AddTemplates {
+        templates: Vec<CodeTemplateRegistration>,
+        reply: oneshot::Sender<Result<(), TemplateManagerError>>,
+    },
+    GetTemplate {
+        address: TemplateAddress,
+        reply: oneshot::Sender<Result<Template, TemplateManagerError>>,
+    },
 }
 
 impl TemplateManagerService {
     pub fn spawn(
-        rx_request: Receiver<(
-            TemplateManagerRequest,
-            oneshot::Sender<Result<TemplateManagerResponse, TemplateManagerError>>,
-        )>,
+        rx_request: Receiver<TemplateManagerRequest>,
         sqlite_db_factory: SqliteDbFactory,
         shutdown: ShutdownSignal,
     ) -> JoinHandle<Result<(), TemplateManagerError>> {
@@ -71,13 +73,8 @@ impl TemplateManagerService {
     pub async fn run(&mut self, mut shutdown: ShutdownSignal) -> Result<(), TemplateManagerError> {
         loop {
             tokio::select! {
-                Some((req, reply)) = self.rx_request.recv() => {
-                    let _ignore = reply.send(self.handle_request(req).await.map_err(|e|
-                    {error!(target: LOG_TARGET, "Error handling request:  {}", &e); e})).map_err(|_|
-                        error!(target: LOG_TARGET, "Error sending response on template manager")
-                        );
+                Some(req) = self.rx_request.recv() => self.handle_request(req).await,
 
-                },
                 _ = shutdown.wait() => {
                     dbg!("Shutting down epoch manager");
                     break;
@@ -87,16 +84,25 @@ impl TemplateManagerService {
         Ok(())
     }
 
-    async fn handle_request(
-        &mut self,
-        req: TemplateManagerRequest,
-    ) -> Result<TemplateManagerResponse, TemplateManagerError> {
+    async fn handle_request(&mut self, req: TemplateManagerRequest) {
+        #[allow(clippy::enum_glob_use)]
+        use TemplateManagerRequest::*;
         match req {
-            TemplateManagerRequest::AddTemplates { templates } => {
-                self.inner.add_templates(templates).await?;
-
-                Ok(TemplateManagerResponse::AddTemplates)
+            AddTemplates { templates, reply } => {
+                handle(reply, self.inner.add_templates(templates).await);
+            },
+            GetTemplate { address, reply } => {
+                handle(reply, self.inner.fetch_template(&address));
             },
         }
+    }
+}
+
+fn handle<T>(reply: oneshot::Sender<Result<T, TemplateManagerError>>, result: Result<T, TemplateManagerError>) {
+    if let Err(ref e) = result {
+        error!(target: LOG_TARGET, "Request failed with error: {}", e);
+    }
+    if reply.send(result).is_err() {
+        error!(target: LOG_TARGET, "Requester abandoned request");
     }
 }

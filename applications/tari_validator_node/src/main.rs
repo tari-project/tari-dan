@@ -23,7 +23,6 @@
 mod base_layer_scanner;
 mod bootstrap;
 mod cli;
-mod cmd_args;
 mod comms;
 mod config;
 mod dan_node;
@@ -32,6 +31,7 @@ mod grpc;
 mod http_ui;
 mod json_rpc;
 mod p2p;
+mod payload_processor;
 mod template_registration_signing;
 mod validator_node_registration_signing;
 
@@ -46,7 +46,7 @@ use tari_common::{
     initialize_logging,
     load_configuration,
 };
-use tari_comms::{peer_manager::PeerFeatures, NodeIdentity};
+use tari_comms::NodeIdentity;
 use tari_dan_common_types::ShardId;
 use tari_dan_core::{
     services::{base_node_error::BaseNodeError, BaseNodeClient},
@@ -65,6 +65,7 @@ use crate::{
     grpc::services::{base_node_client::GrpcBaseNodeClient, wallet_client::GrpcWalletClient},
     http_ui::server::run_http_ui_server,
     json_rpc::{run_json_rpc, JsonRpcHandlers},
+    p2p::services::networking::DAN_PEER_FEATURES,
 };
 
 const LOG_TARGET: &str = "tari::validator_node::app";
@@ -177,7 +178,7 @@ async fn run_node(config: &ApplicationConfig) -> Result<(), ExitError> {
         &config.validator_node.identity_file,
         config.validator_node.public_address.as_ref(),
         true,
-        PeerFeatures::NONE,
+        DAN_PEER_FEATURES,
     )?;
     let db_factory = SqliteDbFactory::new(config.validator_node.data_dir.clone());
     let global_db = db_factory
@@ -186,14 +187,10 @@ async fn run_node(config: &ApplicationConfig) -> Result<(), ExitError> {
 
     info!(
         target: LOG_TARGET,
-        "Node starting with pub key: {}, node_id: {}",
+        "🚀 Node starting with pub key: {}, address: {}",
         node_identity.public_key(),
-        node_identity.node_id()
+        node_identity.public_address()
     );
-
-    // Show the validator node identity
-    info!(target: LOG_TARGET, "🚀 Validator node started!");
-    info!(target: LOG_TARGET, "{}", node_identity);
 
     // fs::create_dir_all(&global.peer_db_path).map_err(|err| ExitError::new(ExitCode::ConfigError, err))?;
     let mut base_node_client = GrpcBaseNodeClient::new(config.validator_node.base_node_grpc_address);
@@ -209,16 +206,28 @@ async fn run_node(config: &ApplicationConfig) -> Result<(), ExitError> {
     )
     .await?;
 
+    // Run the JSON-RPC API
+    if let Some(address) = config.validator_node.json_rpc_address {
+        info!(target: LOG_TARGET, "🌐 Started JSON-RPC server on {}", address);
+        let handlers = JsonRpcHandlers::new(
+            GrpcWalletClient::new(config.validator_node.wallet_grpc_address),
+            base_node_client,
+            &services,
+        );
+        task::spawn(run_json_rpc(address, handlers));
+    }
+
     // Run the http ui
     if let Some(address) = config.validator_node.http_ui_address {
-        info!(target: LOG_TARGET, "Started HTTP UI server on {}", address);
-
-        task::spawn(run_http_ui_server(address));
+        info!(target: LOG_TARGET, "🕸️ Started HTTP UI server on {}", address);
+        task::spawn(run_http_ui_server(
+            address,
+            config.validator_node.json_rpc_address.map(|addr| addr.to_string()),
+        ));
     }
 
     // Show the validator node identity
     info!(target: LOG_TARGET, "🚀 Validator node started!");
-    info!(target: LOG_TARGET, "{}", node_identity);
 
     run_dan_node(services, shutdown.to_signal()).await?;
 

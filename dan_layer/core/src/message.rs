@@ -21,7 +21,7 @@
 //   USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 use tari_comms::{multiaddr::Multiaddr, peer_manager::IdentitySignature};
-use tari_dan_engine::instruction::Transaction;
+use tari_dan_engine::transaction::Transaction;
 
 use crate::models::{vote_message::VoteMessage, HotStuffMessage};
 
@@ -34,6 +34,17 @@ pub enum DanMessage<TPayload, TAddr> {
     NewTransaction(Transaction),
     // Network
     NetworkAnnounce(NetworkAnnounce<TAddr>),
+}
+
+impl<TPayload, TAddr> DanMessage<TPayload, TAddr> {
+    pub fn as_type_str(&self) -> &'static str {
+        match self {
+            Self::HotStuffMessage(_) => "HotStuffMessage",
+            Self::VoteMessage(_) => "VoteMessage",
+            Self::NewTransaction(_) => "NewTransaction",
+            Self::NetworkAnnounce(_) => "NetworkAnnounce",
+        }
+    }
 }
 
 #[derive(Debug, Clone)]

@@ -24,14 +24,7 @@ use std::convert::TryInto;
 
 use diesel::{prelude::*, Connection, SqliteConnection};
 use log::*;
-use tari_common_types::types::FixedHash;
-use tari_dan_core::{
-    models::TariDanPayload,
-    storage::{
-        chain::{ChainDbBackendAdapter, DbTemplate},
-        AtomicDb,
-    },
-};
+use tari_dan_core::{models::TariDanPayload, storage::AtomicDb};
 
 use crate::{
     error::SqliteStorageError,
@@ -113,11 +106,11 @@ impl ChainDbBackendAdapter for SqliteChainBackendAdapter {
         Ok(())
     }
 
-    fn find_template_by_address(&self, template_address: &FixedHash) -> Result<Option<DbTemplate>, Self::Error> {
+    fn find_template_by_address(&self, template_address: &[u8]) -> Result<Option<DbTemplate>, Self::Error> {
         use crate::schema::templates::dsl;
         let connection = self.get_connection()?;
         let template = dsl::templates
-            .filter(templates::template_address.eq(template_address.to_vec()))
+            .filter(templates::template_address.eq(template_address))
             .first::<Template>(&connection)
             .optional()
             .map_err(|source| SqliteStorageError::DieselError {

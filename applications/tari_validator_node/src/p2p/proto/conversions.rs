@@ -47,11 +47,11 @@ use tari_dan_core::{
     },
 };
 use tari_dan_engine::{
-    instruction::Transaction,
     state::{
         models::{KeyValue, StateOpLogEntry},
         DbStateOpLogEntry,
     },
+    transaction::{Transaction, TransactionMeta},
 };
 use tari_template_lib::{args::Arg, Hash};
 
@@ -463,24 +463,34 @@ impl<T: Borrow<Signature>> From<T> for proto::common::Signature {
 impl TryFrom<proto::common::Transaction> for Transaction {
     type Error = anyhow::Error;
 
-    fn try_from(_request: proto::common::Transaction) -> Result<Self, Self::Error> {
-        // let instructions = request
-        //     .instructions
-        //     .into_iter()
-        //     .map(TryInto::try_into)
-        //     .collect::<Result<Vec<tari_dan_engine::instruction::Instruction>, _>>()?;
-        // let signature: Signature = request.signature.ok_or("invalid signature")?.try_into()?;
-        // let instruction_signature = signature.try_into()?;
-        // let sender_public_key =
-        //     PublicKey::from_bytes(&request.sender_public_key).map_err(|_| "invalid sender_public_key")?;
-        // let transaction = Transaction::new(instructions, instruction_signature, sender_public_key);
-        //
-        // Ok(transaction)
-        todo!()
+    fn try_from(request: proto::common::Transaction) -> Result<Self, Self::Error> {
+        let instructions = request
+            .instructions
+            .into_iter()
+            .map(TryInto::try_into)
+            .collect::<Result<Vec<tari_engine_types::instruction::Instruction>, _>>()?;
+        let signature: Signature = request
+            .signature
+            .ok_or_else(|| anyhow!("invalid signature"))?
+            .try_into()?;
+        let instruction_signature = signature.try_into().map_err(|s| anyhow!("{}", s))?;
+        let sender_public_key =
+            PublicKey::from_bytes(&request.sender_public_key).map_err(|_| anyhow!("invalid sender_public_key"))?;
+        let transaction = Transaction::new(
+            // TODO
+            0,
+            instructions,
+            instruction_signature,
+            sender_public_key,
+            // TODO
+            TransactionMeta::default(),
+        );
+
+        Ok(transaction)
     }
 }
 
-impl TryFrom<proto::common::Instruction> for tari_dan_engine::instruction::Instruction {
+impl TryFrom<proto::common::Instruction> for tari_engine_types::instruction::Instruction {
     type Error = anyhow::Error;
 
     fn try_from(request: proto::common::Instruction) -> Result<Self, Self::Error> {
@@ -495,11 +505,9 @@ impl TryFrom<proto::common::Instruction> for tari_dan_engine::instruction::Instr
         let instruction = match request.instruction_type {
             // function
             0 => {
-                let template = request.template;
                 let function = request.function;
-                tari_dan_engine::instruction::Instruction::CallFunction {
-                    package_address,
-                    template,
+                tari_engine_types::instruction::Instruction::CallFunction {
+                    template_address: package_address,
                     function,
                     args,
                 }
@@ -509,8 +517,8 @@ impl TryFrom<proto::common::Instruction> for tari_dan_engine::instruction::Instr
                 let component_address = Hash::deserialize(&mut &request.component_address[..])
                     .map_err(|_| anyhow!("invalid component_address"))?;
                 let method = request.method;
-                tari_dan_engine::instruction::Instruction::CallMethod {
-                    package_address,
+                tari_engine_types::instruction::Instruction::CallMethod {
+                    template_address: package_address,
                     component_address,
                     method,
                     args,
@@ -542,8 +550,8 @@ impl From<Transaction> for proto::common::Transaction {
     }
 }
 
-impl From<tari_dan_engine::instruction::Instruction> for proto::common::Instruction {
-    fn from(_instruction: tari_dan_engine::instruction::Instruction) -> Self {
+impl From<tari_engine_types::instruction::Instruction> for proto::common::Instruction {
+    fn from(_instruction: tari_engine_types::instruction::Instruction) -> Self {
         // let mut result = proto::validator_node::Instruction::default();
         //
         // match instruction {

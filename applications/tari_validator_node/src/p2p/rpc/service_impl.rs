@@ -25,7 +25,7 @@ use std::convert::TryInto;
 use log::*;
 use tari_comms::protocol::rpc::{Request, Response, RpcStatus, Streaming};
 use tari_dan_core::services::{infrastructure_services::NodeAddressable, PeerProvider};
-use tari_dan_engine::instruction::Transaction;
+use tari_dan_engine::transaction::Transaction;
 use tokio::{sync::mpsc, task};
 
 const LOG_TARGET: &str = "vn::p2p::rpc";

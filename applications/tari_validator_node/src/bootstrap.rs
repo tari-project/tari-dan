@@ -20,24 +20,15 @@
 //   WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //   USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use std::{fs, io, str::FromStr, sync::Arc};
+use std::{fs, io, sync::Arc};
 
-use log::info;
 use tari_app_utilities::{identity_management, identity_management::load_from_json};
 use tari_common::exit_codes::{ExitCode, ExitError};
-use tari_comms::{
-    peer_manager::{Peer, PeerFlags},
-    protocol::rpc::RpcServer,
-    CommsNode,
-    NodeIdentity,
-    PeerManager,
-    UnspawnedCommsNode,
-};
-use tari_dan_core::storage::global::GlobalDb;
-use tari_dan_storage_sqlite::{global::SqliteGlobalDbBackendAdapter, SqliteDbFactory};
-use tari_p2p::{initialization::spawn_comms_using_transport, peer_seeds::SeedPeer, PeerSeedsConfig};
+use tari_comms::{protocol::rpc::RpcServer, CommsNode, NodeIdentity, UnspawnedCommsNode};
+use tari_dan_storage::global::GlobalDb;
+use tari_dan_storage_sqlite::{global::SqliteGlobalDbAdapter, SqliteDbFactory};
+use tari_p2p::initialization::spawn_comms_using_transport;
 use tari_shutdown::ShutdownSignal;
-use tokio::task;
 
 use crate::{
     base_layer_scanner,
@@ -48,28 +39,29 @@ use crate::{
         services::{
             comms_peer_provider::CommsPeerProvider,
             epoch_manager,
+            epoch_manager::handle::EpochManagerHandle,
             hotstuff,
             mempool,
+            mempool::MempoolHandle,
             messaging,
             messaging::{DanMessageReceivers, DanMessageSenders},
             networking,
             networking::NetworkingHandle,
             template_manager,
+            template_manager::manager::TemplateManager,
         },
     },
-    run_json_rpc,
+    payload_processor::TariDanPayloadProcessor,
     ApplicationConfig,
-    GrpcWalletClient,
-    JsonRpcHandlers,
 };
 
-const LOG_TARGET: &str = "tari_validator_node::bootstrap";
+const _LOG_TARGET: &str = "tari_validator_node::bootstrap";
 
 pub async fn spawn_services(
     config: &ApplicationConfig,
     shutdown: ShutdownSignal,
     node_identity: Arc<NodeIdentity>,
-    global_db: GlobalDb<SqliteGlobalDbBackendAdapter>,
+    global_db: GlobalDb<SqliteGlobalDbAdapter>,
     sqlite_db: SqliteDbFactory,
 ) -> Result<Services, anyhow::Error> {
     let mut p2p_config = config.validator_node.p2p.clone();
@@ -82,7 +74,7 @@ pub async fn spawn_services(
     let base_node_client = GrpcBaseNodeClient::new(config.validator_node.base_node_grpc_address);
 
     // Initialize comms
-    let (comms, message_channel) = comms::initialize(node_identity.clone(), p2p_config.clone(), shutdown.clone())?;
+    let (comms, message_channel) = comms::initialize(node_identity.clone(), config, shutdown.clone()).await?;
 
     // Spawn messaging
     let (message_senders, message_receivers) = messaging::new_messaging_channel(10);
@@ -101,8 +93,8 @@ pub async fn spawn_services(
     } = message_receivers;
 
     // Epoch manager
-    let epoch_manager_handle = epoch_manager::spawn(
-        global_db.clone(),
+    let epoch_manager = epoch_manager::spawn(
+        sqlite_db.clone(),
         base_node_client.clone(),
         node_identity.public_key().clone(),
         shutdown.clone(),
@@ -110,9 +102,6 @@ pub async fn spawn_services(
 
     // Mempool
     let mempool = mempool::spawn(rx_new_transaction_message, mempool_new_tx, outbound_messaging.clone());
-
-    // Add seeds
-    add_seed_peers(&comms.peer_manager(), &comms.node_identity(), &config.peer_seeds).await?;
 
     // Networking
     let peer_provider = CommsPeerProvider::new(comms.peer_manager());
@@ -125,35 +114,31 @@ pub async fn spawn_services(
     );
 
     // Template manager
-    let template_manager = template_manager::spawn(sqlite_db, shutdown.clone());
+    let template_manager = template_manager::spawn(sqlite_db.clone(), shutdown.clone());
 
     // Base Node scanner
     base_layer_scanner::spawn(
         config.validator_node.clone(),
         global_db.clone(),
-        base_node_client,
-        epoch_manager_handle.clone(),
-        template_manager,
+        base_node_client.clone(),
+        epoch_manager.clone(),
+        template_manager.clone(),
         shutdown.clone(),
     );
 
-    // Run the JSON-RPC API
-    if let Some(address) = config.validator_node.json_rpc_address {
-        info!(target: LOG_TARGET, "Started JSON-RPC server on {}", address);
-        let handlers = JsonRpcHandlers::new(
-            node_identity.clone(),
-            GrpcWalletClient::new(config.validator_node.wallet_grpc_address),
-            mempool.clone(),
-        );
-        task::spawn(run_json_rpc(address, handlers));
-    }
+    // Payload processor
+    // TODO: we recreate the db template manager here, we could use the TemplateManagerHandle, but this is async, which
+    //       would force the PayloadProcessor to be async (maybe that is ok, or maybe we dont need the template manager
+    //       to be async if it doesn't have to download the templates).
+    let payload_processor = TariDanPayloadProcessor::new(TemplateManager::new(sqlite_db));
 
     // Consensus
     hotstuff::spawn(
-        node_identity,
+        node_identity.clone(),
         outbound_messaging,
-        epoch_manager_handle,
-        mempool,
+        epoch_manager.clone(),
+        mempool.clone(),
+        payload_processor,
         rx_consensus_message,
         rx_vote_message,
         shutdown,
@@ -168,7 +153,12 @@ pub async fn spawn_services(
     // changed by comms during initialization when using tor.
     save_identities(config, &comms)?;
 
-    Ok(Services { comms, networking })
+    Ok(Services {
+        comms,
+        networking,
+        mempool,
+        epoch_manager,
+    })
 }
 
 fn save_identities(config: &ApplicationConfig, comms: &CommsNode) -> Result<(), ExitError> {
@@ -191,7 +181,8 @@ fn ensure_directories_exist(config: &ApplicationConfig) -> io::Result<()> {
 pub struct Services {
     pub comms: CommsNode,
     pub networking: NetworkingHandle,
-    // TODO: Add more as needed
+    pub mempool: MempoolHandle,
+    pub epoch_manager: EpochManagerHandle,
 }
 
 fn setup_p2p_rpc(
@@ -206,27 +197,4 @@ fn setup_p2p_rpc(
         .add_service(create_validator_node_rpc_service(message_senders, peer_provider));
 
     comms.add_protocol_extension(rpc_server)
-}
-
-async fn add_seed_peers(
-    peer_manager: &PeerManager,
-    node_identity: &NodeIdentity,
-    config: &PeerSeedsConfig,
-) -> Result<(), anyhow::Error> {
-    let peers = config
-        .peer_seeds
-        .iter()
-        .map(|s| SeedPeer::from_str(s).map(Peer::from))
-        .collect::<Result<Vec<_>, _>>()?;
-
-    for mut peer in peers {
-        if &peer.public_key == node_identity.public_key() {
-            continue;
-        }
-        peer.add_flags(PeerFlags::SEED);
-
-        // debug!(target: LOG_TARGET, "Adding seed peer [{}]", peer);
-        peer_manager.add_peer(peer).await?;
-    }
-    Ok(())
 }

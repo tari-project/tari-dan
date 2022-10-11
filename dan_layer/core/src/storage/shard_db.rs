@@ -78,6 +78,8 @@ impl<TAddr: NodeAddressable, TPayload: Payload> MemoryShardDbInner<TAddr, TPaylo
 #[derive(Debug, Clone, Default)]
 pub struct MemoryShardDb<TAddr, TPayload> {
     inner: Arc<RwLock<MemoryShardDbInner<TAddr, TPayload>>>,
+    // TODO: use this to track state, pre-commit
+    // current: MemoryShardDbInner<TAddr, TPayload>
 }
 
 impl<TAddr: NodeAddressable, TPayload: Payload> MemoryShardDb<TAddr, TPayload> {
@@ -101,7 +103,7 @@ impl<TAddr: NodeAddressable, TPayload: Payload> ShardStoreTransaction<TAddr, TPa
         }
     }
 
-    fn update_high_qc(&mut self, shard: ShardId, qc: QuorumCertificate) {
+    fn update_high_qc(&mut self, shard: ShardId, qc: QuorumCertificate) -> Result<(), Self::Error> {
         let mut s = self.inner.write().unwrap();
         let entry = s.shard_high_qcs.entry(shard).or_insert_with(|| qc.clone());
         if qc.local_node_height() > entry.local_node_height() {
@@ -111,6 +113,7 @@ impl<TAddr: NodeAddressable, TPayload: Payload> ShardStoreTransaction<TAddr, TPa
                 .and_modify(|e| *e = (qc.local_node_hash(), qc.local_node_height()))
                 .or_insert((qc.local_node_hash(), qc.local_node_height()));
         }
+        Ok(())
     }
 
     fn get_leaf_node(&self, shard: ShardId) -> (TreeNodeHash, NodeHeight) {
@@ -307,7 +310,9 @@ impl<TAddr: NodeAddressable, TPayload: Payload> ShardStoreTransaction<TAddr, TPa
     }
 
     fn commit(&mut self) -> Result<(), Self::Error> {
-        // No commit needed
+        // TODO: this is not currently atomic across multiple operations and rollbacks are not supported.
+        //       We could track local state changes in a separate non-shared state instance, and apply the changes to
+        //       the shared state here on commit.
         Ok(())
     }
 

@@ -29,15 +29,9 @@ use tari_dan_core::{
         LoggingEventsPublisher,
         NodeIdentitySigningService,
         ServiceSpecification,
-        TariDanPayloadProcessor,
     },
 };
-use tari_dan_storage_sqlite::{
-    global::SqliteGlobalDbBackendAdapter,
-    SqliteChainBackendAdapter,
-    SqliteDbFactory,
-    SqliteStateDbBackendAdapter,
-};
+use tari_dan_storage_sqlite::{global::SqliteGlobalDbAdapter, SqliteDbFactory, SqliteStateDbBackendAdapter};
 
 use crate::{
     grpc::services::{base_node_client::GrpcBaseNodeClient, wallet_client::GrpcWalletClient},
@@ -45,7 +39,9 @@ use crate::{
         comms_peer_provider::CommsPeerProvider,
         messaging::OutboundMessaging,
         rpc_client::TariCommsValidatorNodeClientFactory,
+        template_manager::manager::TemplateManager,
     },
+    payload_processor::TariDanPayloadProcessor,
 };
 
 #[derive(Default, Clone)]
@@ -55,19 +51,18 @@ impl ServiceSpecification for DefaultServiceSpecification {
     type Addr = PublicKey;
     type AssetProxy = ConcreteAssetProxy<Self>;
     type BaseNodeClient = GrpcBaseNodeClient;
-    type ChainDbBackendAdapter = SqliteChainBackendAdapter;
     type DbFactory = SqliteDbFactory;
     type EventsPublisher = LoggingEventsPublisher<ConsensusWorkerDomainEvent>;
-    type GlobalDbAdapter = SqliteGlobalDbBackendAdapter;
+    type GlobalDbAdapter = SqliteGlobalDbAdapter;
     // type InboundConnectionService = TariCommsInboundReceiverHandle;
     type MempoolService = MempoolServiceHandle;
     type OutboundService = OutboundMessaging;
     // type OutboundService = TariCommsOutboundService<Self::Payload, Self::Addr>;
     type Payload = TariDanPayload;
-    type PayloadProcessor = TariDanPayloadProcessor;
+    type PayloadProcessor = TariDanPayloadProcessor<TemplateManager>;
     type PeerProvider = CommsPeerProvider;
     type SigningService = NodeIdentitySigningService;
-    type StateDbBackendAdapter = SqliteStateDbBackendAdapter;
+    type StateDbAdapter = SqliteStateDbBackendAdapter;
     type ValidatorNodeClientFactory = TariCommsValidatorNodeClientFactory;
     type WalletClient = GrpcWalletClient;
 }

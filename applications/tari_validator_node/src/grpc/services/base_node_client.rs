@@ -97,8 +97,7 @@ impl BaseNodeClient for GrpcBaseNodeClient {
                     });
                 },
                 Ok(None) => {
-                    info!(target: LOG_TARGET, "No more validator nodes");
-
+                    info!(target: LOG_TARGET, "No new validator nodes for this epoch");
                     break;
                 },
                 Err(e) => {
@@ -158,8 +157,6 @@ impl BaseNodeClient for GrpcBaseNodeClient {
                     templates.push(template_registration);
                 },
                 Ok(None) => {
-                    info!(target: LOG_TARGET, "No more templates");
-
                     break;
                 },
                 Err(e) => {

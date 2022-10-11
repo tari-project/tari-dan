@@ -29,13 +29,10 @@ use tari_crypto::tari_utilities::ByteArray;
 use tari_dan_core::{
     models::BaseLayerMetadata,
     services::{base_node_error::BaseNodeError, epoch_manager::EpochManagerError, BaseNodeClient},
-    storage::{
-        global::{GlobalDb, GlobalDbMetadataKey},
-        StorageError,
-    },
     DigitalAssetError,
 };
-use tari_dan_storage_sqlite::global::SqliteGlobalDbBackendAdapter;
+use tari_dan_storage::global::{GlobalDb, MetadataKey};
+use tari_dan_storage_sqlite::{error::SqliteStorageError, global::SqliteGlobalDbAdapter};
 use tari_shutdown::ShutdownSignal;
 use tokio::{task, time};
 
@@ -52,7 +49,7 @@ const LOG_TARGET: &str = "tari::validator_node::base_layer_scanner";
 
 pub fn spawn(
     config: ValidatorNodeConfig,
-    global_db: GlobalDb<SqliteGlobalDbBackendAdapter>,
+    global_db: GlobalDb<SqliteGlobalDbAdapter>,
     base_node_client: GrpcBaseNodeClient,
     epoch_manager: EpochManagerHandle,
     template_manager: TemplateManagerHandle,
@@ -76,7 +73,7 @@ pub fn spawn(
 
 pub struct BaseLayerScanner {
     config: ValidatorNodeConfig,
-    global_db: GlobalDb<SqliteGlobalDbBackendAdapter>,
+    global_db: GlobalDb<SqliteGlobalDbAdapter>,
     last_scanned_height: u64,
     last_scanned_hash: Option<FixedHash>,
     base_node_client: GrpcBaseNodeClient,
@@ -88,7 +85,7 @@ pub struct BaseLayerScanner {
 impl BaseLayerScanner {
     pub fn new(
         config: ValidatorNodeConfig,
-        global_db: GlobalDb<SqliteGlobalDbBackendAdapter>,
+        global_db: GlobalDb<SqliteGlobalDbAdapter>,
         base_node_client: GrpcBaseNodeClient,
         epoch_manager: EpochManagerHandle,
         template_manager: TemplateManagerHandle,
@@ -142,7 +139,7 @@ impl BaseLayerScanner {
 
     // TODO: Use hashes instead of height to avoid reorg problems
     async fn process_block(&mut self, height: u64) -> Result<(), BaseLayerScannerError> {
-        let template_registrations = self.scan_for_new_templates().await?;
+        let template_registrations = self.scan_for_new_templates(height).await?;
 
         // both epoch and template tasks are I/O bound,
         // so they can be ran concurrently as they do not block CPU between them
@@ -150,15 +147,21 @@ impl BaseLayerScanner {
         let template_task = self.template_manager.add_templates(template_registrations);
 
         // wait for all tasks to finish
-        let results = tokio::join!(epoch_task, template_task);
+        let (epoch_result, template_result) = tokio::join!(epoch_task, template_task);
 
-        // dbg!(&results);
-        // propagate any error that may happen
-        // TODO: there could be a cleaner way of propagating the errors of the individual tasks
-        // TODO: maybe we want to be resilient to invalid data in base layer and just log the error?
-        results.0?;
+        if let Err(err) = epoch_result {
+            error!(
+                target: LOG_TARGET,
+                "🚨 Epoch manager failed to update epoch at height {}: {}", height, err
+            );
+        }
 
-        results.1?;
+        if let Err(err) = template_result {
+            error!(
+                target: LOG_TARGET,
+                "🚨 Template manager failed to add templates at height {}: {}", height, err
+            );
+        }
 
         Ok(())
     }
@@ -166,15 +169,15 @@ impl BaseLayerScanner {
     fn load_initial_state(&mut self) -> Result<(), BaseLayerScannerError> {
         self.last_scanned_hash = None;
         self.last_scanned_height = 0;
+        let tx = self.global_db.create_transaction()?;
+        let metadata = self.global_db.metadata(&tx);
 
-        self.last_scanned_hash = self
-            .global_db
-            .get_data(GlobalDbMetadataKey::LastScannedBaseLayerBlockHash)?
+        self.last_scanned_hash = metadata
+            .get_metadata(MetadataKey::BaseLayerScannerLastScannedBlockHash)?
             .map(TryInto::try_into)
             .transpose()?;
-        self.last_scanned_height = self
-            .global_db
-            .get_data(GlobalDbMetadataKey::LastScannedBaseLayerBlockHeight)?
+        self.last_scanned_height = metadata
+            .get_metadata(MetadataKey::BaseLayerScannerLastScannedBlockHeight)?
             .map(|data| {
                 if data.len() == 8 {
                     let mut buf = [0u8; 8];
@@ -191,32 +194,36 @@ impl BaseLayerScanner {
         Ok(())
     }
 
-    async fn scan_for_new_templates(&mut self) -> Result<Vec<CodeTemplateRegistration>, BaseLayerScannerError> {
+    async fn scan_for_new_templates(
+        &mut self,
+        height: u64,
+    ) -> Result<Vec<CodeTemplateRegistration>, BaseLayerScannerError> {
         info!(
             target: LOG_TARGET,
             "🔍 Scanning base layer (from height: {}) for new templates", self.last_scanned_height
         );
 
-        let template_registrations = self
-            .base_node_client
-            .get_template_registrations(self.last_scanned_height)
-            .await?;
-        info!(
-            target: LOG_TARGET,
-            "{} new template(s) found",
-            template_registrations.len()
-        );
+        let template_registrations = self.base_node_client.get_template_registrations(height).await?;
+        if !template_registrations.is_empty() {
+            info!(
+                target: LOG_TARGET,
+                "📁 {} new template(s) found",
+                template_registrations.len()
+            );
+        }
 
         Ok(template_registrations)
     }
 
     fn set_last_scanned_block(&mut self, tip: &BaseLayerMetadata) -> Result<(), BaseLayerScannerError> {
-        self.global_db.set_data(
-            GlobalDbMetadataKey::LastScannedBaseLayerBlockHash,
+        let tx = self.global_db.create_transaction()?;
+        let metadata = self.global_db.metadata(&tx);
+        metadata.set_metadata(
+            MetadataKey::BaseLayerScannerLastScannedBlockHash,
             tip.tip_hash.as_bytes(),
         )?;
-        self.global_db.set_data(
-            GlobalDbMetadataKey::LastScannedBaseLayerBlockHeight,
+        metadata.set_metadata(
+            MetadataKey::BaseLayerScannerLastScannedBlockHeight,
             &tip.height_of_longest_chain.to_le_bytes(),
         )?;
         self.last_scanned_hash = Some(tip.tip_hash);
@@ -230,7 +237,7 @@ pub enum BaseLayerScannerError {
     #[error(transparent)]
     FixedHashSizeError(#[from] FixedHashSizeError),
     #[error("Storage error: {0}")]
-    StorageError(#[from] StorageError),
+    SqliteStorageError(#[from] SqliteStorageError),
     #[error("DigitalAsset error: {0}")]
     DigitalAssetError(#[from] DigitalAssetError),
     #[error("Data corruption: {details}")]

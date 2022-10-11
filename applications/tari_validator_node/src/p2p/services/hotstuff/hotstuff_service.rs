@@ -26,21 +26,25 @@ use tari_dan_common_types::ShardId;
 use tari_dan_core::{
     message::DanMessage,
     models::{vote_message::VoteMessage, HotStuffMessage, TariDanPayload},
-    services::{infrastructure_services::OutboundService, leader_strategy::AlwaysFirstLeader, TariDanPayloadProcessor},
+    services::{infrastructure_services::OutboundService, leader_strategy::AlwaysFirstLeader},
     storage::shard_store::MemoryShardStoreFactory,
     workers::hotstuff_waiter::HotStuffWaiter,
 };
-use tari_dan_engine::instruction::Transaction;
+use tari_dan_engine::transaction::Transaction;
 use tari_shutdown::ShutdownSignal;
 use tokio::{
     sync::mpsc::{channel, Receiver, Sender},
     task::JoinHandle,
 };
 
-use crate::p2p::services::{
-    epoch_manager::handle::EpochManagerHandle,
-    mempool::MempoolHandle,
-    messaging::OutboundMessaging,
+use crate::{
+    p2p::services::{
+        epoch_manager::handle::EpochManagerHandle,
+        mempool::MempoolHandle,
+        messaging::OutboundMessaging,
+        template_manager::manager::TemplateManager,
+    },
+    payload_processor::TariDanPayloadProcessor,
 };
 
 #[allow(dead_code)]
@@ -67,7 +71,7 @@ impl HotstuffService {
         epoch_manager: EpochManagerHandle,
         mempool: MempoolHandle,
         outbound: OutboundMessaging,
-        payload_processor: TariDanPayloadProcessor,
+        payload_processor: TariDanPayloadProcessor<TemplateManager>,
         shard_store_factory: MemoryShardStoreFactory<CommsPublicKey, TariDanPayload>,
         rx_hotstuff_messages: Receiver<(CommsPublicKey, HotStuffMessage<TariDanPayload, CommsPublicKey>)>,
         rx_vote_messages: Receiver<(CommsPublicKey, VoteMessage)>,

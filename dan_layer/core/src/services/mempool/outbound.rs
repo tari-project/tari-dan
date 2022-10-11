@@ -21,7 +21,7 @@
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 use async_trait::async_trait;
-use tari_dan_engine::instruction::Transaction;
+use tari_dan_engine::transaction::Transaction;
 
 use crate::DigitalAssetError;
 

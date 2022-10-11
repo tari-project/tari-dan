@@ -27,14 +27,10 @@ use clap::{Args, Subcommand};
 #[allow(clippy::large_enum_variant)]
 #[derive(Debug, Subcommand, Clone)]
 pub enum Command {
-    Vn(VnCommand),
-    Template(TemplateCommand),
-}
-
-#[derive(Debug, Args, Clone)]
-pub struct VnCommand {
     #[clap(subcommand)]
-    pub subcommand: VnSubcommand,
+    Vn(VnSubcommand),
+    #[clap(subcommand)]
+    Templates(TemplateSubcommand),
 }
 
 #[derive(Debug, Subcommand, Clone)]
@@ -42,19 +38,14 @@ pub enum VnSubcommand {
     Register,
 }
 
-#[derive(Debug, Args, Clone)]
-pub struct TemplateCommand {
-    #[clap(subcommand)]
-    pub subcommand: TemplateSubcommand,
-}
-
 #[derive(Debug, Subcommand, Clone)]
 pub enum TemplateSubcommand {
-    Register(RegisterTemplateArgs),
+    Publish(PublishTemplateArgs),
 }
 
 #[derive(Debug, Args, Clone)]
-pub struct RegisterTemplateArgs {
+pub struct PublishTemplateArgs {
+    #[clap(long, short = 'p', alias = "path")]
     pub template_code_path: PathBuf,
 
     #[clap(long, alias = "template-name")]

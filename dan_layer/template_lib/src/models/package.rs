@@ -20,23 +20,5 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use tari_template_abi::{Decode, Encode};
-
-use crate::Hash;
-
-pub type PackageAddress = Hash;
-
-#[derive(Debug, Clone, Encode, Decode)]
-pub struct Package {
-    pub id: PackageAddress,
-}
-
-impl Package {
-    pub fn new(id: PackageAddress) -> Self {
-        Self { id }
-    }
-
-    pub fn id(&self) -> &PackageAddress {
-        &self.id
-    }
-}
+/// Package (template) identifier
+pub type TemplateAddress = crate::Hash;

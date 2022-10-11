@@ -24,7 +24,8 @@
 use serde::Deserialize;
 use tari_common_types::types::PublicKey;
 use tari_crypto::ristretto::RistrettoSchnorr;
-use tari_dan_common_types::deserialize_fixed_hash_from_hex;
+use tari_dan_common_types::{serde_with, ShardId};
+use tari_dan_core::models::Epoch;
 use tari_template_lib::args::Arg;
 
 #[derive(Deserialize, Debug, Clone)]
@@ -37,9 +38,20 @@ pub struct SubmitTransactionRequest {
 
 #[derive(Deserialize, Debug, Clone)]
 pub struct InstructionRequest {
-    #[serde(deserialize_with = "deserialize_fixed_hash_from_hex")]
-    pub package_address: [u8; 32],
-    pub template: String,
+    #[serde(deserialize_with = "serde_with::hex::deserialize")]
+    pub template_address: [u8; 32],
     pub function: String,
     pub args: Vec<Arg>,
+}
+
+#[derive(Deserialize, Debug, Clone)]
+pub struct GetCommitteeRequest {
+    pub epoch: Epoch,
+    pub shard_id: ShardId,
+}
+
+#[derive(Deserialize, Debug, Clone)]
+pub struct GetShardKey {
+    pub height: u64,
+    pub public_key: PublicKey,
 }

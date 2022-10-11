@@ -5,28 +5,22 @@ pub mod proto;
 pub mod storage;
 
 pub mod optional;
+pub mod serde_with;
 mod template_id;
 
 use std::cmp::Ordering;
 
+use ::serde::{Deserialize, Serialize};
 use borsh::{BorshDeserialize, BorshSerialize};
-use serde::{Deserialize, Deserializer, Serialize};
 use tari_common_types::types::{FixedHash, FixedHashSizeError};
-use tari_crypto::tari_utilities::hex::serialize_to_hex;
-use tari_utilities::{byte_array::ByteArray, hex::Hex};
+use tari_utilities::byte_array::ByteArray;
 pub use template_id::TemplateId;
 
-#[derive(Copy, Clone, Debug, PartialEq, Eq, Hash, Deserialize)]
-pub struct ObjectId(#[serde(deserialize_with = "deserialize_fixed_hash_from_hex")] pub [u8; 32]);
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Hash, Deserialize, Serialize)]
+pub struct ObjectId(#[serde(deserialize_with = "serde_with::hex::deserialize")] pub [u8; 32]);
 
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Hash, Serialize, Deserialize)]
-pub struct ShardId(
-    #[serde(
-        serialize_with = "serialize_to_hex",
-        deserialize_with = "deserialize_fixed_hash_from_hex"
-    )]
-    pub [u8; 32],
-);
+pub struct ShardId(#[serde(with = "serde_with::hex")] pub [u8; 32]);
 
 impl ShardId {
     pub fn to_le_bytes(&self) -> &[u8] {
@@ -52,6 +46,12 @@ impl ShardId {
     }
 }
 
+impl From<[u8; 32]> for ShardId {
+    fn from(bytes: [u8; 32]) -> Self {
+        Self(bytes)
+    }
+}
+
 impl PartialOrd for ShardId {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
         self.0.partial_cmp(&other.0)
@@ -64,20 +64,20 @@ impl Ord for ShardId {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Hash, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash, Deserialize, Serialize)]
 pub enum SubstateChange {
     Create,
     Destroy,
 }
 
-#[derive(Debug, Clone, BorshSerialize, BorshDeserialize)]
+#[derive(Debug, Clone, BorshSerialize, BorshDeserialize, Deserialize, Serialize)]
 pub enum SubstateState {
     DoesNotExist,
-    Exists { created_by: PayloadId, data: Vec<u8> },
-    Destroyed { deleted_by: PayloadId },
+    Up { created_by: PayloadId, data: Vec<u8> },
+    Down { deleted_by: PayloadId },
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct ObjectClaim {}
 
 impl ObjectClaim {
@@ -86,9 +86,9 @@ impl ObjectClaim {
     }
 }
 
-#[derive(Copy, Clone, Debug, PartialEq, Eq, Hash, BorshSerialize, BorshDeserialize, Deserialize)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Hash, BorshSerialize, BorshDeserialize, Deserialize, Serialize)]
 pub struct PayloadId {
-    #[serde(deserialize_with = "deserialize_fixed_hash_from_hex")]
+    #[serde(deserialize_with = "serde_with::hex::deserialize")]
     id: [u8; 32],
 }
 
@@ -106,12 +106,8 @@ impl PayloadId {
     pub fn as_slice(&self) -> &[u8] {
         self.id.as_slice()
     }
-}
 
-/// Use a serde deserializer to serialize the hex string of the given object.
-pub fn deserialize_fixed_hash_from_hex<'de, D>(deserializer: D) -> Result<[u8; 32], D::Error>
-where D: Deserializer<'de> {
-    let hex = <String as Deserialize>::deserialize(deserializer)?;
-    let hash = <[u8; 32] as Hex>::from_hex(hex.as_str()).map_err(serde::de::Error::custom)?;
-    Ok(hash)
+    pub fn into_array(self) -> [u8; 32] {
+        self.id
+    }
 }

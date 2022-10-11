@@ -21,6 +21,7 @@
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 use tari_dan_engine::state::StateDbBackendAdapter;
+use tari_dan_storage::global::GlobalDbAdapter;
 
 use super::{mempool::service::MempoolService, WalletClient};
 use crate::{
@@ -35,7 +36,7 @@ use crate::{
         SigningService,
         ValidatorNodeClientFactory,
     },
-    storage::{chain::ChainDbBackendAdapter, global::GlobalDbBackendAdapter, DbFactory},
+    storage::DbFactory,
 };
 
 /// A trait to describe a specific configuration of services. This type allows other services to
@@ -45,14 +46,9 @@ pub trait ServiceSpecification: Default + Clone {
     type Addr: NodeAddressable;
     type AssetProxy: AssetProxy + Clone;
     type BaseNodeClient: BaseNodeClient + Clone;
-    type ChainDbBackendAdapter: ChainDbBackendAdapter;
-    type DbFactory: DbFactory<
-            StateDbBackendAdapter = Self::StateDbBackendAdapter,
-            ChainDbBackendAdapter = Self::ChainDbBackendAdapter,
-            GlobalDbBackendAdapter = Self::GlobalDbAdapter,
-        > + Clone;
+    type DbFactory: DbFactory<StateDbAdapter = Self::StateDbAdapter, GlobalDbAdapter = Self::GlobalDbAdapter> + Clone;
     type EventsPublisher: EventsPublisher<ConsensusWorkerDomainEvent>;
-    type GlobalDbAdapter: GlobalDbBackendAdapter;
+    type GlobalDbAdapter: GlobalDbAdapter;
     // type InboundConnectionService: InboundConnectionService<Addr = Self::Addr, Payload = Self::Payload>;
     type MempoolService: MempoolService + Clone;
     type OutboundService: OutboundService<Addr = Self::Addr, Payload = Self::Payload>;
@@ -60,7 +56,7 @@ pub trait ServiceSpecification: Default + Clone {
     type Payload: Payload;
     type PayloadProcessor: PayloadProcessor<Self::Payload>;
     type SigningService: SigningService;
-    type StateDbBackendAdapter: StateDbBackendAdapter;
+    type StateDbAdapter: StateDbBackendAdapter;
     type ValidatorNodeClientFactory: ValidatorNodeClientFactory<Addr = Self::Addr> + Clone;
     type WalletClient: WalletClient;
 }

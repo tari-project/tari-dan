@@ -21,15 +21,13 @@
 // USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 use digest::Digest;
+use serde::{Deserialize, Serialize};
 use tari_crypto::hash::blake2::Blake256;
 use tari_dan_common_types::{PayloadId, ShardId};
 
-use crate::{
-    models::{Epoch, HotStuffMessageType, NodeHeight, ObjectPledge, TreeNodeHash, ValidatorSignature, ViewId},
-    storage::chain::DbQc,
-};
+use crate::models::{Epoch, HotStuffMessageType, NodeHeight, ObjectPledge, TreeNodeHash, ValidatorSignature, ViewId};
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Deserialize, Serialize)]
 pub enum QuorumDecision {
     Accept,
     Reject,
@@ -53,7 +51,7 @@ impl QuorumDecision {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct QuorumCertificate {
     payload: PayloadId,
     payload_height: NodeHeight,
@@ -176,17 +174,5 @@ impl QuorumCertificate {
 
     pub fn signatures(&self) -> &[ValidatorSignature] {
         &self.signatures
-    }
-}
-
-impl From<DbQc> for QuorumCertificate {
-    fn from(_rec: DbQc) -> Self {
-        // Self {
-        //     message_type: rec.message_type,
-        //     node_hash: rec.node_hash,
-        //     view_number: rec.view_number,
-        //     signatures: rec.signature,
-        // }
-        todo!()
     }
 }

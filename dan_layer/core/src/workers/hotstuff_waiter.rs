@@ -23,6 +23,7 @@
 use std::collections::HashMap;
 
 use tari_dan_common_types::{PayloadId, ShardId, SubstateState};
+use tari_dan_engine::runtime::TransactionResult;
 use tari_shutdown::ShutdownSignal;
 use tokio::{
     sync::mpsc::{Receiver, Sender},
@@ -54,14 +55,7 @@ use crate::{
     workers::hotstuff_error::HotStuffError,
 };
 
-pub struct HotStuffWaiter<
-    TPayload: Payload,
-    TAddr: NodeAddressable,
-    TLeaderStrategy: LeaderStrategy<TAddr>,
-    TEpochManager: EpochManager<TAddr>,
-    TPayloadProcessor: PayloadProcessor<TPayload>,
-    TShardStore: ShardStoreFactory,
-> {
+pub struct HotStuffWaiter<TPayload, TAddr, TLeaderStrategy, TEpochManager, TPayloadProcessor, TShardStore> {
     identity: TAddr,
     leader_strategy: TLeaderStrategy,
     epoch_manager: TEpochManager,
@@ -75,14 +69,15 @@ pub struct HotStuffWaiter<
     shard_store: TShardStore,
 }
 
-impl<
-        TPayload: Payload + 'static,
-        TAddr: NodeAddressable + 'static,
-        TLeaderStrategy: LeaderStrategy<TAddr> + 'static + Send + Sync,
-        TEpochManager: EpochManager<TAddr> + 'static + Send + Sync,
-        TPayloadProcessor: PayloadProcessor<TPayload> + 'static + Send + Sync,
-        TShardStore: ShardStoreFactory<Addr = TAddr, Payload = TPayload> + 'static + Send + Sync,
-    > HotStuffWaiter<TPayload, TAddr, TLeaderStrategy, TEpochManager, TPayloadProcessor, TShardStore>
+impl<TPayload, TAddr, TLeaderStrategy, TEpochManager, TPayloadProcessor, TShardStore>
+    HotStuffWaiter<TPayload, TAddr, TLeaderStrategy, TEpochManager, TPayloadProcessor, TShardStore>
+where
+    TPayload: Payload + 'static,
+    TAddr: NodeAddressable + 'static,
+    TLeaderStrategy: LeaderStrategy<TAddr> + 'static + Send + Sync,
+    TEpochManager: EpochManager<TAddr> + 'static + Send + Sync,
+    TPayloadProcessor: PayloadProcessor<TPayload> + 'static + Send + Sync,
+    TShardStore: ShardStoreFactory<Addr = TAddr, Payload = TPayload> + 'static + Send + Sync,
 {
     pub fn spawn(
         identity: TAddr,
@@ -155,8 +150,9 @@ impl<
         let epoch = self.epoch_manager.current_epoch().await?;
         self.validate_from_committee(&from, epoch, shard).await?;
         self.validate_qc(&qc)?;
-        let mut tx = self.shard_store.create_tx();
-        tx.update_high_qc(shard, qc);
+        let mut tx = self.shard_store.create_tx()?;
+        tx.update_high_qc(shard, qc)
+            .map_err(|e| HotStuffError::UpdateHighQcError(e.to_string()))?;
         tx.set_payload(payload);
         tx.commit().map_err(|e| e.into())?;
         Ok(())
@@ -188,7 +184,7 @@ impl<
         let leaf;
         let leaf_height;
         {
-            let tx = self.shard_store.create_tx();
+            let tx = self.shard_store.create_tx()?;
 
             let leaf_result = tx.get_leaf_node(shard);
             leaf = leaf_result.0;
@@ -206,7 +202,7 @@ impl<
             .flat_map(|allocation| allocation.committee.map(|c| c.members).unwrap_or_default())
             .collect();
         {
-            let mut tx = self.shard_store.create_tx();
+            let mut tx = self.shard_store.create_tx()?;
 
             let parent = tx.get_node(&leaf).map_err(|e| e.into())?;
 
@@ -236,7 +232,8 @@ impl<
                 local_pledges,
             );
             tx.save_node(leaf_node.clone());
-            tx.update_leaf_node(shard, *leaf_node.hash(), leaf_node.height())?;
+            tx.update_leaf_node(shard, *leaf_node.hash(), leaf_node.height())
+                .map_err(|e| HotStuffError::UpdateLeafNode(e.to_string()))?;
             tx.commit().map_err(|e| e.into())?;
         }
         self.tx_broadcast
@@ -306,7 +303,7 @@ impl<
 
         let new_view;
         {
-            let tx = self.shard_store.create_tx();
+            let tx = self.shard_store.create_tx()?;
 
             let high_qc = tx.get_high_qc_for(shard);
 
@@ -325,12 +322,13 @@ impl<
     }
 
     async fn update_nodes(&mut self, node: HotStuffTreeNode<TAddr>, shard: ShardId) -> Result<(), HotStuffError> {
-        let mut tx = self.shard_store.create_tx();
+        let mut tx = self.shard_store.create_tx()?;
         if node.justify().local_node_hash() == TreeNodeHash::zero() {
             dbg!("Node is parented to genesis, no need to update");
             return Ok(());
         }
-        tx.update_high_qc(shard, node.justify().clone());
+        tx.update_high_qc(shard, node.justify().clone())
+            .map_err(|e| HotStuffError::UpdateHighQcError(e.to_string()))?;
         let b_two = tx.get_node(&node.justify().local_node_hash()).map_err(|e| e.into())?;
 
         if b_two.justify().local_node_hash() == TreeNodeHash::zero() {
@@ -396,27 +394,41 @@ impl<
         shard_pledges: HashMap<ShardId, Vec<ObjectPledge>>,
         payload: TPayload,
     ) -> Result<HashMap<ShardId, Option<SubstateState>>, HotStuffError> {
-        self.payload_processor.process_payload(&payload, shard_pledges)?;
-        // let (reply_tx, reply_rx) = oneshot::channel();
-        // self.tx_execute
-        //     .send((payload, shard_pledges, reply_tx))
-        //     .await
-        //     .map_err(|e| format!("Could not send execute cmd:{}", e))?;
-        // TODO: wait on results
-        // let result = reply_rx
-        //     .await
-        //     .map_err(|e| format!("Could not receive execute reply:{}", e))?;
-        Ok(HashMap::new())
+        let payload_id = payload.to_id();
+        let finalize = self.payload_processor.process_payload(payload, shard_pledges)?;
+        match finalize.result {
+            TransactionResult::Accept(diff) => {
+                let changes = diff
+                    .up_iter()
+                    .map(|(shard, substate)| {
+                        (
+                            *shard,
+                            Some(SubstateState::Up {
+                                created_by: payload_id,
+                                data: substate.to_bytes(),
+                            }),
+                        )
+                    })
+                    .chain(
+                        diff.down_iter()
+                            .map(|shard| (*shard, Some(SubstateState::Down { deleted_by: payload_id }))),
+                    )
+                    .collect();
+
+                Ok(changes)
+            },
+            TransactionResult::Reject(reject) => Err(HotStuffError::TransactionRejected(reject.reason)),
+        }
     }
 
     fn validate_proposal(&self, node: &HotStuffTreeNode<TAddr>) -> Result<(), HotStuffError> {
-        if node.payload_height() != NodeHeight(0) &&
-            !(node.payload() == node.justify().payload() &&
+        if node.payload_height() == NodeHeight(0) ||
+            (node.payload() == node.justify().payload() &&
                 node.payload_height() == node.justify().payload_height() + NodeHeight(1))
         {
-            Err(HotStuffError::NodePayloadDoesNotMatchJustifyPayload)
-        } else {
             Ok(())
+        } else {
+            Err(HotStuffError::NodePayloadDoesNotMatchJustifyPayload)
         }
     }
 
@@ -431,7 +443,7 @@ impl<
         let shard = node.shard();
         let payload;
         {
-            let tx = self.shard_store.create_tx();
+            let tx = self.shard_store.create_tx()?;
             payload = tx.get_payload(&node.payload()).map_err(|e| e.into())?;
         }
         let involved_shards = payload.involved_shards();
@@ -442,7 +454,7 @@ impl<
 
         let mut votes_to_send = vec![];
         {
-            let mut tx = self.shard_store.create_tx();
+            let mut tx = self.shard_store.create_tx()?;
             tx.save_node(node.clone());
             let v_height = tx.get_last_voted_height(shard);
             // TODO: can also use the QC and committee to justify this....
@@ -473,7 +485,7 @@ impl<
 
                         tx.set_last_voted_height(local_shard, local_node.height());
 
-                        let _signature = ValidatorSignature::from_bytes(&self.sign(node.hash(), shard));
+                        let _signature = self.sign(node.hash(), shard);
                         // TODO: Actually decide on this
                         let decision = QuorumDecision::Accept;
                         let mut vote_msg = VoteMessage::new(*local_node.hash(), local_shard, decision, votes.clone());
@@ -500,9 +512,9 @@ impl<
         Ok(())
     }
 
-    fn sign(&self, _node_hash: &TreeNodeHash, _shard: ShardId) -> Vec<u8> {
+    fn sign(&self, _node_hash: &TreeNodeHash, _shard: ShardId) -> ValidatorSignature {
         // todo!();
-        vec![]
+        ValidatorSignature::from_bytes(&[]).unwrap()
     }
 
     // The leader receives votes from his local shard, and forwards it to all other shards
@@ -511,7 +523,7 @@ impl<
         let mut on_beat_future = None;
         let node;
         {
-            let tx = self.shard_store.create_tx();
+            let tx = self.shard_store.create_tx()?;
             if tx.has_vote_for(&from, msg.local_node_hash(), msg.shard()) {
                 return Ok(());
             }
@@ -525,7 +537,7 @@ impl<
 
         let valid_committee = self.epoch_manager.get_committee(node.epoch(), node.shard()).await?;
         {
-            let mut tx = self.shard_store.create_tx();
+            let mut tx = self.shard_store.create_tx()?;
             if !valid_committee.contains(&from) {
                 return Err(HotStuffError::ReceivedMessageFromNonCommitteeMember);
             }
@@ -558,7 +570,8 @@ impl<
                             main_vote.all_shard_nodes().clone(),
                             signatures,
                         );
-                        tx.update_high_qc(msg.shard(), qc);
+                        tx.update_high_qc(msg.shard(), qc)
+                            .map_err(|e| HotStuffError::UpdateHighQcError(e.to_string()))?; // TODO: is there a better alternative to handle error?
                         tx.commit().map_err(|e| e.into())?;
                         // Should be the pace maker actually
                         on_beat_future = Some(self.on_beat(msg.shard(), node.payload()));

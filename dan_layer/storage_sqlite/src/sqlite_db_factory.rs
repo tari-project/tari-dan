@@ -24,17 +24,16 @@ use std::{fs::create_dir_all, path::PathBuf};
 
 use diesel::{Connection, ConnectionError, SqliteConnection};
 use diesel_migrations::embed_migrations;
-use log::*;
 use tari_common_types::types::FixedHash;
-use tari_dan_core::storage::{chain::ChainDb, global::GlobalDb, DbFactory, StorageError};
+use tari_dan_core::storage::{DbFactory, StorageError};
 use tari_dan_engine::state::StateDb;
+use tari_dan_storage::global::GlobalDb;
 use tari_utilities::hex::Hex;
 
 use crate::{
     error::SqliteStorageError,
-    global::SqliteGlobalDbBackendAdapter,
+    global::SqliteGlobalDbAdapter,
     sqlite_state_db_backend_adapter::SqliteStateDbBackendAdapter,
-    SqliteChainBackendAdapter,
 };
 
 #[derive(Clone)]
@@ -45,14 +44,6 @@ pub struct SqliteDbFactory {
 impl SqliteDbFactory {
     pub fn new(data_dir: PathBuf) -> Self {
         Self { data_dir }
-        // let database_url = config
-        //     .data_dir
-        //     .join("asset_data")
-        //     .into_os_string()
-        //     .into_string()
-        //     .unwrap();
-        //
-        // Self { database_url }
     }
 
     fn database_url_for(&self, contract_id: &FixedHash) -> String {
@@ -83,45 +74,10 @@ impl SqliteDbFactory {
 }
 
 impl DbFactory for SqliteDbFactory {
-    type ChainDbBackendAdapter = SqliteChainBackendAdapter;
-    type GlobalDbBackendAdapter = SqliteGlobalDbBackendAdapter;
-    type StateDbBackendAdapter = SqliteStateDbBackendAdapter;
+    type GlobalDbAdapter = SqliteGlobalDbAdapter;
+    type StateDbAdapter = SqliteStateDbBackendAdapter;
 
-    fn get_chain_db(
-        &self,
-        contract_id: &FixedHash,
-    ) -> Result<Option<ChainDb<Self::ChainDbBackendAdapter>>, StorageError> {
-        let database_url = self.database_url_for(contract_id);
-        match self.try_connect(&database_url)? {
-            Some(_) => Ok(Some(ChainDb::new(SqliteChainBackendAdapter::new(database_url)))),
-            None => Ok(None),
-        }
-    }
-
-    fn get_or_create_chain_db(
-        &self,
-        contract_id: &FixedHash,
-    ) -> Result<ChainDb<Self::ChainDbBackendAdapter>, StorageError> {
-        let database_url = self.database_url_for(contract_id);
-        debug!("Loading chain database from {}", database_url);
-        create_dir_all(&PathBuf::from(&database_url).parent().unwrap())
-            .map_err(|_| StorageError::FileSystemPathDoesNotExist)?;
-        let connection = SqliteConnection::establish(database_url.as_str()).map_err(SqliteStorageError::from)?;
-        connection
-            .execute("PRAGMA foreign_keys = ON;")
-            .map_err(|source| SqliteStorageError::DieselError {
-                source,
-                operation: "set pragma".to_string(),
-            })?;
-        embed_migrations!("./migrations");
-        embedded_migrations::run(&connection).map_err(SqliteStorageError::from)?;
-        Ok(ChainDb::new(SqliteChainBackendAdapter::new(database_url)))
-    }
-
-    fn get_state_db(
-        &self,
-        contract_id: &FixedHash,
-    ) -> Result<Option<StateDb<Self::StateDbBackendAdapter>>, StorageError> {
+    fn get_state_db(&self, contract_id: &FixedHash) -> Result<Option<StateDb<Self::StateDbAdapter>>, StorageError> {
         let database_url = self.database_url_for(contract_id);
         match self.try_connect(&database_url)? {
             Some(_) => Ok(Some(StateDb::new(
@@ -132,10 +88,7 @@ impl DbFactory for SqliteDbFactory {
         }
     }
 
-    fn get_or_create_state_db(
-        &self,
-        contract_id: &FixedHash,
-    ) -> Result<StateDb<Self::StateDbBackendAdapter>, StorageError> {
+    fn get_or_create_state_db(&self, contract_id: &FixedHash) -> Result<StateDb<Self::StateDbAdapter>, StorageError> {
         let database_url = self.database_url_for(contract_id);
 
         create_dir_all(&PathBuf::from(&database_url).parent().unwrap())
@@ -156,7 +109,7 @@ impl DbFactory for SqliteDbFactory {
         ))
     }
 
-    fn get_or_create_global_db(&self) -> Result<GlobalDb<Self::GlobalDbBackendAdapter>, StorageError> {
+    fn get_or_create_global_db(&self) -> Result<GlobalDb<Self::GlobalDbAdapter>, StorageError> {
         let database_url = self
             .data_dir
             .join("global_storage.sqlite")
@@ -177,30 +130,6 @@ impl DbFactory for SqliteDbFactory {
         embed_migrations!("./global_db_migrations");
         // embedded_migrations::run(&connection).map_err(SqliteStorageError::from)?;
         embedded_migrations::run_with_output(&connection, &mut std::io::stdout()).expect("Migration failed");
-        Ok(GlobalDb::new(SqliteGlobalDbBackendAdapter::new(database_url)))
-    }
-
-    fn get_or_create_template_db(&self) -> Result<ChainDb<Self::ChainDbBackendAdapter>, StorageError> {
-        let database_url = self
-            .data_dir
-            .join("templates.sqlite")
-            .into_os_string()
-            .into_string()
-            .expect("Should not fail");
-
-        create_dir_all(&PathBuf::from(&database_url).parent().unwrap())
-            .map_err(|_| StorageError::FileSystemPathDoesNotExist)?;
-
-        let connection = SqliteConnection::establish(database_url.as_str()).map_err(SqliteStorageError::from)?;
-        connection
-            .execute("PRAGMA foreign_keys = ON;")
-            .map_err(|source| SqliteStorageError::DieselError {
-                source,
-                operation: "set pragma".to_string(),
-            })?;
-        embed_migrations!("./migrations");
-        // embedded_migrations::run(&connection).map_err(SqliteStorageError::from)?;
-        embedded_migrations::run_with_output(&connection, &mut std::io::stdout()).expect("Migration failed");
-        Ok(ChainDb::new(Self::ChainDbBackendAdapter::new(database_url)))
+        Ok(GlobalDb::new(SqliteGlobalDbAdapter::new(database_url)))
     }
 }

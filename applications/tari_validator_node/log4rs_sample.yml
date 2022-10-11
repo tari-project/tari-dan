@@ -36,7 +36,7 @@ appenders:
         count: 5
         pattern: "log/validator-node/network.{}.log"
     encoder:
-      pattern: "{d(%Y-%m-%d %H:%M:%S.%f)} [{t}] [Thread:{I}] {l:5} {m}{n} // {f}:{L}"
+      pattern: "{d(%Y-%m-%d %H:%M:%S.%f)} [{t}] [Thread:{I}] {l:5} {m}// {f}:{L}{n}"
 
   # An appender named "dan_layer" that writes to a file with a custom pattern encoder
   dan_layer:
@@ -53,7 +53,7 @@ appenders:
         count: 5
         pattern: "log/validator-node/dan_layer.{}.log"
     encoder:
-      pattern: "{d(%Y-%m-%d %H:%M:%S.%f)} [{t}] [{X(node-public-key)},{X(node-id)}] {l:5} {m}{n} // {f}:{L} "
+      pattern: "{d(%Y-%m-%d %H:%M:%S.%f)} [{t}] [{X(node-public-key)},{X(node-id)}] {l:5} {m} // {f}:{L}{n}"
 
 
   # An appender named "other" that writes to a file with a custom pattern encoder
@@ -71,7 +71,7 @@ appenders:
         count: 5
         pattern: "log/validator-node/other.{}.log"
     encoder:
-      pattern: "{d(%Y-%m-%d %H:%M:%S.%f)} [{t}] [Thread:{I}] {l:5} {m}{n} // {f}:{L} "
+      pattern: "{d(%Y-%m-%d %H:%M:%S.%f)} [{t}] [Thread:{I}] {l:5} {m} // {f}:{L} {n}"
 
 # Set the default logging level to "info"
 root:

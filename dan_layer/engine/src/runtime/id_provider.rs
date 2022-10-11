@@ -22,12 +22,11 @@
 
 use std::sync::{atomic::AtomicU32, Arc};
 
+use tari_engine_types::hashing::hasher;
 use tari_template_lib::{
     models::{BucketId, ComponentAddress, ResourceAddress, VaultId},
     Hash,
 };
-
-use crate::hashing::hasher;
 
 #[derive(Debug, Clone)]
 pub struct IdProvider {

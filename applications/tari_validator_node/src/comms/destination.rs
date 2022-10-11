@@ -20,9 +20,21 @@
 //   WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //   USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+use std::fmt::{Display, Formatter};
+
 #[derive(Debug, Clone)]
 pub enum Destination<TAddr> {
     Peer(TAddr),
     Selected(Vec<TAddr>),
     Flood,
+}
+
+impl<TAddr: Display> Display for Destination<TAddr> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Peer(addr) => write!(f, "Peer({})", addr),
+            Self::Selected(addrs) => write!(f, "Selected({})", addrs.len()),
+            Self::Flood => write!(f, "Flood"),
+        }
+    }
 }

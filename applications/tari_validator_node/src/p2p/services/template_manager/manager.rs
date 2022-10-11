@@ -21,17 +21,16 @@
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 use futures::future::join_all;
-use log::*;
 use tari_common_types::types::FixedHash;
 use tari_core::transactions::transaction_components::CodeTemplateRegistration;
-use tari_dan_core::{
-    storage::{chain::DbTemplate, DbFactory},
-    DigitalAssetError,
-};
+use tari_dan_core::{services::TemplateProvider, storage::DbFactory};
+use tari_dan_engine::wasm::WasmModule;
+use tari_dan_storage::global::DbTemplate;
+use tari_template_lib::models::TemplateAddress;
 
 use crate::{p2p::services::template_manager::TemplateManagerError, SqliteDbFactory};
 
-const LOG_TARGET: &str = "tari::validator_node::epoch_manager";
+const _LOG_TARGET: &str = "tari::validator_node::template_manager";
 
 #[derive(Debug, Clone)]
 pub struct TemplateMetadata {
@@ -52,10 +51,10 @@ impl From<CodeTemplateRegistration> for TemplateMetadata {
     }
 }
 
-#[allow(dead_code)]
+#[derive(Debug, Clone)]
 pub struct Template {
-    metadata: TemplateMetadata,
-    compiled_code: Vec<u8>,
+    pub metadata: TemplateMetadata,
+    pub compiled_code: Vec<u8>,
 }
 
 // we encapsulate the db row format to not expose it to the caller
@@ -82,33 +81,26 @@ impl TemplateManager {
         Self { db_factory }
     }
 
-    // to be used in the future by the engine to retrieve the wasm code for transaction execution
-    #[allow(dead_code)]
-    pub async fn get_template(&self, address: &FixedHash) -> Result<Option<Template>, DigitalAssetError> {
-        let db = self.db_factory.get_or_create_template_db()?;
-        let result = db.find_template_by_address(address)?;
+    pub fn fetch_template(&self, address: &TemplateAddress) -> Result<Template, TemplateManagerError> {
+        let db = self.db_factory.get_or_create_global_db()?;
+        let tx = db.create_transaction()?;
+        let template = db
+            .templates(&tx)
+            .get_template(address)?
+            .ok_or(TemplateManagerError::TemplateNotFound { address: *address })?;
 
-        match result {
-            Some(db_template) => Ok(Some(db_template.into())),
-            None => Ok(None),
-        }
+        Ok(template.into())
     }
 
     pub async fn add_templates(
         &self,
         template_registations: Vec<CodeTemplateRegistration>,
     ) -> Result<(), TemplateManagerError> {
-        info!(
-            target: LOG_TARGET,
-            "Adding {} new templates",
-            template_registations.len()
-        );
-
         // extract the metadata that we need to store
         let templates_metadata: Vec<TemplateMetadata> = template_registations.into_iter().map(Into::into).collect();
 
         // we can add each individual template in parallel
-        let tasks: Vec<_> = templates_metadata.iter().map(|md| self.add_template(md)).collect();
+        let tasks = templates_metadata.iter().map(|md| self.add_template(md));
 
         // wait for all templates to be stores
         let results = join_all(tasks).await;
@@ -127,8 +119,8 @@ impl TemplateManager {
 
         // check that the code we fetched is valid (the template address is the hash)
         // TODO: we will need a consistent way of hashing the template fields
-        // let hash = hasher("template").chain(&template_wasm).result().to_vec();
-        // if template_metadata.address.to_vec() != hash {
+        // let hash = hasher("template").chain(&template_wasm).result();
+        // if template_metadata.address.as_slice() != hash.as_slice() {
         //   return Err(TemplateManagerError::TemplateCodeHashMismatch);
         // }
 
@@ -163,9 +155,22 @@ impl TemplateManager {
             compiled_code: template_wasm,
         };
 
-        let db = self.db_factory.get_or_create_template_db()?;
-        db.insert_template(&template)?;
+        let db = self.db_factory.get_or_create_global_db()?;
+        let tx = db.create_transaction()?;
+        let template_db = db.templates(&tx);
+        template_db.insert_template(template)?;
+        db.commit(tx)?;
 
         Ok(())
+    }
+}
+
+impl TemplateProvider for TemplateManager {
+    type Error = TemplateManagerError;
+    type Template = WasmModule;
+
+    fn get_template(&self, address: &TemplateAddress) -> Result<Self::Template, Self::Error> {
+        let template = self.fetch_template(address)?;
+        Ok(WasmModule::from_code(template.compiled_code))
     }
 }

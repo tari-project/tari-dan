@@ -38,7 +38,7 @@ use tari_template_lib::{
 };
 
 use crate::runtime::{
-    commit_result::CommitResult,
+    commit_result::{FinalizeResult, RejectResult, TransactionResult},
     logs::LogEntry,
     tracker::{RuntimeState, StateTracker},
     RuntimeError,
@@ -69,6 +69,7 @@ impl RuntimeInterface for RuntimeInterfaceImpl {
             LogLevel::Debug => log::Level::Debug,
         };
 
+        eprintln!("{}: {}", log_level, message);
         log::log!(target: "tari::dan::engine::runtime", log_level, "{}", message);
         self.tracker.add_log(LogEntry::new(level, message));
     }
@@ -297,10 +298,16 @@ impl RuntimeInterface for RuntimeInterfaceImpl {
         Ok(())
     }
 
-    fn commit(&self) -> Result<CommitResult, RuntimeError> {
-        let result = self.tracker.commit();
+    fn finalize(&self) -> Result<FinalizeResult, RuntimeError> {
+        let result = match self.tracker.finalize() {
+            Ok(substate_diff) => TransactionResult::Accept(substate_diff),
+            // TODO: we should differentiate between a system error and an explicit rejection vote
+            Err(err) => TransactionResult::Reject(RejectResult {
+                reason: err.to_string(),
+            }),
+        };
         let logs = self.tracker.take_logs();
-        let commit = CommitResult::new(self.tracker.transaction_hash(), logs, result);
+        let commit = FinalizeResult::new(self.tracker.transaction_hash(), logs, result);
 
         Ok(commit)
     }

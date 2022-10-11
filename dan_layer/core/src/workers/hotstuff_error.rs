@@ -22,7 +22,10 @@
 
 use thiserror::Error;
 
-use crate::{services::epoch_manager::EpochManagerError, storage::shard_store::StoreError, DigitalAssetError};
+use crate::{
+    services::{epoch_manager::EpochManagerError, PayloadProcessorError},
+    storage::{shard_store::StoreError, StorageError},
+};
 
 #[derive(Error, Debug)]
 pub enum HotStuffError {
@@ -30,6 +33,10 @@ pub enum HotStuffError {
     EpochManagerError(#[from] EpochManagerError),
     #[error("Received message from a node that is not in the committee")]
     ReceivedMessageFromNonCommitteeMember,
+    #[error("Update leaf node error: `{0}`")]
+    UpdateLeafNode(String),
+    #[error("Update high qc error: `{0}`")]
+    UpdateHighQcError(String),
     #[error("Store error: {0}")]
     StoreError(#[from] StoreError),
     #[error("Claim is not valid")]
@@ -40,7 +47,10 @@ pub enum HotStuffError {
     SendError,
     #[error("Not the leader")]
     NotTheLeader,
-
-    #[error("DigitalAssetError: {0}")]
-    DigitalAssetError(#[from] DigitalAssetError),
+    #[error("Payload failed to process: {0}")]
+    PayloadProcessorError(#[from] PayloadProcessorError),
+    #[error("Transaction rejected: {0}")]
+    TransactionRejected(String),
+    #[error("Storage Error: `{0}`")]
+    StorageError(#[from] StorageError),
 }
