@@ -119,7 +119,7 @@ impl HotstuffService {
         to: CommsPublicKey,
         msg: HotStuffMessage<TariDanPayload, CommsPublicKey>,
     ) -> Result<(), anyhow::Error> {
-        dbg!("Sending to hotstuff leader", &to, &msg);
+        debug!(target: LOG_TARGET, "Sending leader message to {}", to);
         self.outbound
             .send(self.node_public_key.clone(), to, DanMessage::HotStuffMessage(msg))
             .await?;
@@ -150,19 +150,27 @@ impl HotstuffService {
     }
 
     pub async fn run(mut self) -> Result<(), anyhow::Error> {
-        dbg!("Main loop starting");
         loop {
             tokio::select! {
                 // Inbound
                res = self.mempool.next_valid_transaction() => {
                     let (tx, shard_id) = res?;
-                    log(self.handle_new_valid_transaction(tx, shard_id).await)}
-
+                    debug!(target: LOG_TARGET, "Received new transaction {} for shard {}", tx.hash(), shard_id);
+                    log(self.handle_new_valid_transaction(tx, shard_id).await, "new valid transaction");
+                }
                // Outbound
-               Some((to, msg)) = self.rx_leader.recv() => log(self.handle_leader_message(to, msg).await),
-               Some((msg, leader)) = self.rx_vote_message.recv() => log(self.handle_vote_message(leader, msg).await),
-               Some((msg, dest_nodes)) = self.rx_broadcast.recv() => log(self.handle_broadcast_message(dest_nodes, msg).await),
-
+               Some((to, msg)) = self.rx_leader.recv() => {
+                    debug!(target: LOG_TARGET, "Received leader message: {:?}", msg);
+                    log(self.handle_leader_message(to, msg).await, "leader message");
+                   }
+               Some((msg, leader)) = self.rx_vote_message.recv() => {
+                    debug!(target: LOG_TARGET, "Received vote message: {:?}", msg);
+                    log(self.handle_vote_message(leader, msg).await, "vote message");
+                    }
+               Some((msg, dest_nodes)) = self.rx_broadcast.recv() => {
+                    debug!(target: LOG_TARGET, "Received broadcast message: {:?}", msg);
+                    log(self.handle_broadcast_message(dest_nodes, msg).await, "broadcast message");
+                    }
                 // Shutdown
                 _ = self.shutdown.wait() => {
                     dbg!("Shutting down hs service");
@@ -174,8 +182,8 @@ impl HotstuffService {
     }
 }
 
-fn log(result: Result<(), anyhow::Error>) {
+fn log(result: Result<(), anyhow::Error>, area: &str) {
     if let Err(e) = result {
-        error!(target: LOG_TARGET, "Error in hotstuff service: {}", e);
+        error!(target: LOG_TARGET, "Error in hotstuff service: {} [{}]", e, area);
     }
 }

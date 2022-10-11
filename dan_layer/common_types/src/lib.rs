@@ -8,12 +8,16 @@ pub mod optional;
 pub mod serde_with;
 mod template_id;
 
-use std::cmp::Ordering;
+use std::{
+    cmp::Ordering,
+    fmt,
+    fmt::{Display, Formatter},
+};
 
 use ::serde::{Deserialize, Serialize};
 use borsh::{BorshDeserialize, BorshSerialize};
 use tari_common_types::types::{FixedHash, FixedHashSizeError};
-use tari_utilities::byte_array::ByteArray;
+use tari_utilities::{byte_array::ByteArray, hex::Hex};
 pub use template_id::TemplateId;
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Hash, Deserialize, Serialize)]
@@ -64,6 +68,12 @@ impl Ord for ShardId {
     }
 }
 
+impl Display for ShardId {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.0.to_hex())
+    }
+}
+
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Deserialize, Serialize)]
 pub enum SubstateChange {
     Create,
@@ -109,5 +119,11 @@ impl PayloadId {
 
     pub fn into_array(self) -> [u8; 32] {
         self.id
+    }
+}
+
+impl Display for PayloadId {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.id.to_hex())
     }
 }

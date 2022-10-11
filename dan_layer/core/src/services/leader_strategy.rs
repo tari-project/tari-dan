@@ -49,7 +49,6 @@ pub trait LeaderStrategy<TAddr: NodeAddressable> {
         shard: ShardId,
         round: u32,
     ) -> &'b TAddr {
-        dbg!(committee);
         let index = self.calculate_leader(committee, payload, shard, round);
         committee.members.get(index as usize).unwrap()
     }
