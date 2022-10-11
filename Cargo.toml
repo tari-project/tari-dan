@@ -38,20 +38,3 @@ liblmdb-sys = { git = "https://github.com/tari-project/lmdb-rs", tag = "0.7.6-ta
 #tari_shutdown = { git = "https://github.com/myfork/tari.git", branch = "mybranch" }
 #tari_storage = { git = "https://github.com/myfork/tari.git", branch = "mybranch" }
 #tari_wallet_grpc_client = { git = "https://github.com/myfork/tari.git", branch = "mybranch" }
-
-# TODO: Remove this once the PR is merged
-[patch."https://github.com/tari-project/tari.git"]
-tari_app_utilities = { git = "https://github.com/sdbondi/tari.git", branch = "base-node-return-utxo-info-for-template-reg" }
-tari_common = { git = "https://github.com/sdbondi/tari.git", branch = "base-node-return-utxo-info-for-template-reg" }
-tari_common_types = { git = "https://github.com/sdbondi/tari.git", branch = "base-node-return-utxo-info-for-template-reg" }
-tari_comms = { git = "https://github.com/sdbondi/tari.git", branch = "base-node-return-utxo-info-for-template-reg" }
-tari_comms_rpc_macros = { git = "https://github.com/sdbondi/tari.git", branch = "base-node-return-utxo-info-for-template-reg" }
-tari_core = { git = "https://github.com/sdbondi/tari.git", branch = "base-node-return-utxo-info-for-template-reg" }
-tari_mmr = { git = "https://github.com/sdbondi/tari.git", branch = "base-node-return-utxo-info-for-template-reg" }
-tari_p2p = { git = "https://github.com/sdbondi/tari.git", branch = "base-node-return-utxo-info-for-template-reg" }
-tari_shutdown = { git = "https://github.com/sdbondi/tari.git", branch = "base-node-return-utxo-info-for-template-reg" }
-tari_storage = { git = "https://github.com/sdbondi/tari.git", branch = "base-node-return-utxo-info-for-template-reg" }
-
-tari_app_grpc = { git = "https://github.com/sdbondi/tari.git", branch = "base-node-return-utxo-info-for-template-reg" }
-tari_base_node_grpc_client = { git = "https://github.com/sdbondi/tari.git", branch = "base-node-return-utxo-info-for-template-reg" }
-tari_wallet_grpc_client = { git = "https://github.com/sdbondi/tari.git", branch = "base-node-return-utxo-info-for-template-reg" }
