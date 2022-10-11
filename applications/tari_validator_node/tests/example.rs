@@ -1,7 +1,8 @@
-use std::convert::Infallible;
+use std::{convert::Infallible, time::Duration};
 
 use async_trait::async_trait;
 use cucumber::{given, then, when, WorldInit};
+use tokio::time::sleep;
 
 // These `Cat` definitions would normally be inside your project's code,
 // not test code, but we create them here for the show case.
@@ -35,23 +36,32 @@ impl cucumber::World for AnimalWorld {
 }
 
 // Steps are defined with `given`, `when` and `then` attributes.
-#[given("a hungry cat")]
-fn hungry_cat(world: &mut AnimalWorld) {
-    world.cat.hungry = true;
+#[given(expr = "a {word} cat")]
+async fn hungry_cat(world: &mut AnimalWorld, state: String) {
+    sleep(Duration::from_secs(2)).await;
+
+    match state.as_str() {
+        "hungry" => world.cat.hungry = true,
+        "satiated" => world.cat.hungry = false,
+        s => panic!("expected 'hungry' or 'satiated', found: {}", s),
+    }
 }
 
 #[when("I feed the cat")]
-fn feed_cat(world: &mut AnimalWorld) {
+async fn feed_cat(world: &mut AnimalWorld) {
+    sleep(Duration::from_secs(2)).await;
     world.cat.feed();
 }
 
 #[then("the cat is not hungry")]
-fn cat_is_fed(world: &mut AnimalWorld) {
+async fn cat_is_fed(world: &mut AnimalWorld) {
+    sleep(Duration::from_secs(2)).await;
     assert!(!world.cat.hungry);
 }
 
 // This runs before everything else, so you can setup things here.
-fn main() {
+#[tokio::main]
+async fn main() {
     // You may choose any executor you like (`tokio`, `async-std`, etc.).
     // You may even have an `async` main, it doesn't matter. The point is that
     // Cucumber is composable. :)

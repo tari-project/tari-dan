@@ -59,14 +59,15 @@ tower = "0.4"
 tower-layer = "0.3"
 tower-http = { version = "0.3.0", features = ["cors"] }
 
-[dev-dependencies]
-tari_test_utils = { git = "https://github.com/tari-project/tari.git", branch = "feature-dan", package = "tari_test_utils" }
-cucumber = { version = "0.13.0"} 
-futures = "0.3"
-
 [build-dependencies]
 tari_common = { git = "https://github.com/tari-project/tari.git", branch = "feature-dan", package = "tari_common", features = ["build"] }
 
+[dev-dependencies]
+tari_test_utils = { git = "https://github.com/tari-project/tari.git", branch = "feature-dan", package = "tari_test_utils" }
+# FIXME: the newest version failed compilation due to a missing "bool_to_option” unstable feature
+cucumber = { version = "0.13.0"} 
+tokio = { version = "1.10", features = ["macros", "rt-multi-thread", "time"] }
+
 [[test]]
-name = "example"
-harness = false
+name = "example" # this should be the same as the filename of your test target
+harness = false # allows Cucumber to print output instead of libtest
