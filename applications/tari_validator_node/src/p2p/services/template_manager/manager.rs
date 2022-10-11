@@ -114,6 +114,17 @@ impl TemplateManager {
     }
 
     async fn add_template(&self, template_metadata: &TemplateMetadata) -> Result<(), TemplateManagerError> {
+        {
+            let db = self.db_factory.get_or_create_global_db()?;
+            let tx = db.create_transaction()?;
+            if db
+                .templates(&tx)
+                .get_template(template_metadata.address.as_slice())?
+                .is_some()
+            {
+                return Ok(());
+            }
+        }
         // fetch the compiled wasm code from the web
         let template_wasm = self.fetch_template_wasm(&template_metadata.url).await?;
 

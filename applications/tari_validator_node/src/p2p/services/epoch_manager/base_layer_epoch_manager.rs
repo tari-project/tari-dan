@@ -57,8 +57,9 @@ impl BaseLayerEpochManager {
 
     pub async fn update_epoch(&mut self, tip: u64) -> Result<(), EpochManagerError> {
         let epoch = Epoch(tip / 10);
-        if self.current_epoch.0 < epoch.0 {
-            self.current_epoch = epoch;
+        if self.current_epoch.0 >= epoch.0 {
+            // no need to update the epoch
+            return Ok(());
         }
 
         // If the committee size is bigger than vns.len() then this function is broken.
@@ -68,7 +69,7 @@ impl BaseLayerEpochManager {
 
         // insert the new VNs for this epoch in the database
         self.insert_validator_nodes(epoch, vns)?;
-
+        self.current_epoch = epoch;
         // let shard_key;
         // match base_node_client.clone().get_shard_key(epoch.0 * 10, &self.id).await {
         //     Ok(Some(key)) => shard_key = key,
@@ -118,7 +119,9 @@ impl BaseLayerEpochManager {
             .map_err(|e| EpochManagerError::StorageError(e.into()))?;
         db.validator_nodes(&tx)
             .insert_validator_nodes(new_vns)
-            .map_err(|e| EpochManagerError::StorageError(e.into()))
+            .map_err(|e| EpochManagerError::StorageError(e.into()))?;
+        db.commit(tx).map_err(|e| EpochManagerError::StorageError(e.into()))?;
+        Ok(())
     }
 
     pub fn current_epoch(&self) -> Epoch {

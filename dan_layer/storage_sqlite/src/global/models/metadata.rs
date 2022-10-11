@@ -22,7 +22,7 @@
 
 use crate::global::schema::*;
 
-#[derive(Queryable, Insertable, Identifiable)]
+#[derive(Queryable, Insertable, Identifiable, Debug)]
 #[table_name = "metadata"]
 #[primary_key(key_name)]
 pub struct MetadataModel {
