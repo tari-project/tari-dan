@@ -125,12 +125,12 @@ impl BaseLayerScanner {
                 for height in self.last_scanned_height + 1..=tip.height_of_longest_chain {
                     self.process_block(height).await?;
                 }
-            }
-            self.set_last_scanned_block(&tip)?;
-
-            tokio::select! {
-                _ = time::sleep(Duration::from_secs(self.config.base_layer_scanning_interval_in_seconds)) => {},
-                _ = &mut self.shutdown => break
+                self.set_last_scanned_block(&tip)?;
+            } else {
+                tokio::select! {
+                   _ = time::sleep(Duration::from_secs(self.config.base_layer_scanning_interval_in_seconds)) => {},
+                   _ = &mut self.shutdown => break
+                }
             }
         }
 
@@ -226,6 +226,7 @@ impl BaseLayerScanner {
             MetadataKey::BaseLayerScannerLastScannedBlockHeight,
             &tip.height_of_longest_chain.to_le_bytes(),
         )?;
+        self.global_db.commit(tx)?;
         self.last_scanned_hash = Some(tip.tip_hash);
         self.last_scanned_height = tip.height_of_longest_chain;
         Ok(())
