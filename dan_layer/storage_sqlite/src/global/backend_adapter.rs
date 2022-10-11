@@ -24,10 +24,11 @@ use std::convert::TryInto;
 
 use diesel::{prelude::*, Connection, RunQueryDsl, SqliteConnection};
 use tari_dan_storage::{
-    global::{DbTemplate, GlobalDbAdapter, MetadataKey},
+    global::{DbTemplate, DbValidatorNode, GlobalDbAdapter, MetadataKey},
     AtomicDb,
 };
 
+use super::models::validator_node::{NewValidatorNode, ValidatorNode};
 use crate::{
     error::SqliteStorageError,
     global::{
@@ -164,5 +165,48 @@ impl GlobalDbAdapter for SqliteGlobalDbAdapter {
             })?;
 
         Ok(())
+    }
+
+    fn insert_validator_nodes(
+        &self,
+        tx: &Self::DbTransaction,
+        validator_nodes: Vec<DbValidatorNode>,
+    ) -> Result<(), Self::Error> {
+        use crate::global::schema::validator_nodes;
+
+        let sqlite_vns: Vec<NewValidatorNode> = validator_nodes.into_iter().map(Into::into).collect();
+
+        // Sqlite does not support batch transactions, so we need to insert each VN in a separated query
+        for vn in sqlite_vns {
+            diesel::insert_into(validator_nodes::table)
+                .values(&vn)
+                .execute(tx.connection())
+                .map_err(|source| SqliteStorageError::DieselError {
+                    source,
+                    operation: "insert::validator_nodes".to_string(),
+                })?;
+        }
+
+        Ok(())
+    }
+
+    fn get_validator_nodes_per_epoch(
+        &self,
+        tx: &Self::DbTransaction,
+        epoch: u64,
+    ) -> Result<Vec<DbValidatorNode>, Self::Error> {
+        use crate::global::schema::{validator_nodes, validator_nodes::dsl};
+
+        let sqlite_vns = dsl::validator_nodes
+            .filter(validator_nodes::epoch.eq(epoch as i32))
+            .load::<ValidatorNode>(tx.connection())
+            .map_err(|source| SqliteStorageError::DieselError {
+                source,
+                operation: "get::validator_nodes_per_epoch".to_string(),
+            })?;
+
+        let db_vns: Vec<DbValidatorNode> = sqlite_vns.into_iter().map(Into::into).collect();
+
+        Ok(db_vns)
     }
 }

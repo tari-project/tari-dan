@@ -29,6 +29,7 @@ use thiserror::Error;
 use crate::{
     models::{Committee, Epoch},
     services::{base_node_error::BaseNodeError, infrastructure_services::NodeAddressable},
+    storage::StorageError,
 };
 
 pub struct ShardCommitteeAllocation<TAddr: NodeAddressable> {
@@ -50,6 +51,8 @@ pub enum EpochManagerError {
     NoCommitteeFound(ShardId),
     #[error("Unexpected response")]
     UnexpectedResponse,
+    #[error("Storage error: {0}")]
+    StorageError(#[from] StorageError),
 }
 
 #[async_trait]

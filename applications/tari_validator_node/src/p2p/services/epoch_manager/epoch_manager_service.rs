@@ -26,6 +26,7 @@ use tari_dan_core::{
     models::{Committee, Epoch},
     services::epoch_manager::{EpochManagerError, ShardCommitteeAllocation},
 };
+use tari_dan_storage_sqlite::SqliteDbFactory;
 use tari_shutdown::ShutdownSignal;
 use tokio::{
     sync::{mpsc::Receiver, oneshot},
@@ -97,12 +98,13 @@ impl EpochManagerService {
             oneshot::Sender<Result<EpochManagerResponse, EpochManagerError>>,
         )>,
         shutdown: ShutdownSignal,
+        db_factory: SqliteDbFactory,
         base_node_client: GrpcBaseNodeClient,
     ) -> JoinHandle<Result<(), EpochManagerError>> {
         tokio::spawn(async move {
             EpochManagerService {
                 rx_request,
-                inner: BaseLayerEpochManager::new(base_node_client, id),
+                inner: BaseLayerEpochManager::new(db_factory, base_node_client, id),
             }
             .run(shutdown)
             .await

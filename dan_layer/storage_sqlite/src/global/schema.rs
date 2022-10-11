@@ -21,6 +21,15 @@
 // USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 table! {
+    validator_nodes (id) {
+        id -> Integer,
+        public_key -> Binary,
+        shard_key -> Binary,
+        epoch -> Integer,
+    }
+}
+
+table! {
     metadata (key_name) {
         key_name -> Binary,
         value -> Binary,

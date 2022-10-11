@@ -30,3 +30,6 @@ pub use metadata_db::{MetadataDb, MetadataKey};
 
 mod template_db;
 pub use template_db::{DbTemplate, TemplateDb};
+
+mod validator_node_db;
+pub use validator_node_db::{DbValidatorNode, ValidatorNodeDb};

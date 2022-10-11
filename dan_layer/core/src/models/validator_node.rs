@@ -20,12 +20,28 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+use std::convert::TryFrom;
+
 use serde::Serialize;
+use tari_common_types::types::PublicKey;
 use tari_comms::types::CommsPublicKey;
 use tari_dan_common_types::ShardId;
+use tari_dan_storage::global::DbValidatorNode;
+use tari_utilities::ByteArray;
 
 #[derive(Clone, Debug, Serialize)]
 pub struct ValidatorNode {
     pub shard_key: ShardId,
     pub public_key: CommsPublicKey,
+}
+
+impl TryFrom<DbValidatorNode> for ValidatorNode {
+    type Error = String;
+
+    fn try_from(db_vn: DbValidatorNode) -> Result<Self, Self::Error> {
+        Ok(Self {
+            shard_key: ShardId::from_bytes(&db_vn.shard_key).map_err(|e| e.to_string())?,
+            public_key: PublicKey::from_bytes(&db_vn.public_key).map_err(|e| e.to_string())?,
+        })
+    }
 }

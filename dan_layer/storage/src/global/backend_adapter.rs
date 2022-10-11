@@ -20,6 +20,7 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+use super::validator_node_db::DbValidatorNode;
 use crate::{
     atomic::AtomicDb,
     global::{metadata_db::MetadataKey, template_db::DbTemplate},
@@ -31,4 +32,15 @@ pub trait GlobalDbAdapter: AtomicDb + Send + Sync + Clone {
 
     fn get_template(&self, tx: &Self::DbTransaction, key: &[u8]) -> Result<Option<DbTemplate>, Self::Error>;
     fn insert_template(&self, tx: &Self::DbTransaction, template: DbTemplate) -> Result<(), Self::Error>;
+
+    fn insert_validator_nodes(
+        &self,
+        tx: &Self::DbTransaction,
+        validator_nodes: Vec<DbValidatorNode>,
+    ) -> Result<(), Self::Error>;
+    fn get_validator_nodes_per_epoch(
+        &self,
+        tx: &Self::DbTransaction,
+        epoch: u64,
+    ) -> Result<Vec<DbValidatorNode>, Self::Error>;
 }

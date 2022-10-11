@@ -25,3 +25,4 @@ pub use metadata::*;
 
 mod template;
 pub use template::*;
+pub mod validator_node;

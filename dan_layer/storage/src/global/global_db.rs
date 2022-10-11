@@ -22,6 +22,7 @@
 
 use std::sync::Arc;
 
+use super::validator_node_db::ValidatorNodeDb;
 use crate::global::{backend_adapter::GlobalDbAdapter, metadata_db::MetadataDb, template_db::TemplateDb};
 
 #[derive(Debug, Clone)]
@@ -47,6 +48,13 @@ impl<TGlobalDbAdapter: GlobalDbAdapter> GlobalDb<TGlobalDbAdapter> {
 
     pub fn metadata<'a>(&'a self, tx: &'a TGlobalDbAdapter::DbTransaction) -> MetadataDb<'a, TGlobalDbAdapter> {
         MetadataDb::new(&self.adapter, tx)
+    }
+
+    pub fn validator_nodes<'a>(
+        &'a self,
+        tx: &'a TGlobalDbAdapter::DbTransaction,
+    ) -> ValidatorNodeDb<'a, TGlobalDbAdapter> {
+        ValidatorNodeDb::new(&self.adapter, tx)
     }
 
     pub fn commit(&self, tx: TGlobalDbAdapter::DbTransaction) -> Result<(), TGlobalDbAdapter::Error> {

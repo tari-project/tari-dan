@@ -20,9 +20,10 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use std::collections::HashMap;
+use std::convert::TryInto;
 
 use tari_comms::types::CommsPublicKey;
+use tari_crypto::tari_utilities::ByteArray;
 use tari_dan_common_types::ShardId;
 use tari_dan_core::{
     models::{Committee, Epoch, ValidatorNode},
@@ -30,7 +31,10 @@ use tari_dan_core::{
         epoch_manager::{EpochManagerError, ShardCommitteeAllocation},
         BaseNodeClient,
     },
+    storage::DbFactory,
 };
+use tari_dan_storage::global::DbValidatorNode;
+use tari_dan_storage_sqlite::SqliteDbFactory;
 
 use crate::grpc::services::base_node_client::GrpcBaseNodeClient;
 
@@ -38,16 +42,16 @@ use crate::grpc::services::base_node_client::GrpcBaseNodeClient;
 
 #[derive(Clone)]
 pub struct BaseLayerEpochManager {
+    db_factory: SqliteDbFactory,
     pub base_node_client: GrpcBaseNodeClient,
     current_epoch: Epoch,
-    validators_per_epoch: HashMap<u64, Vec<ValidatorNode>>,
 }
 impl BaseLayerEpochManager {
-    pub fn new(base_node_client: GrpcBaseNodeClient, _id: CommsPublicKey) -> Self {
+    pub fn new(db_factory: SqliteDbFactory, base_node_client: GrpcBaseNodeClient, _id: CommsPublicKey) -> Self {
         Self {
+            db_factory,
             base_node_client,
             current_epoch: Epoch(0),
-            validators_per_epoch: HashMap::new(),
         }
     }
 
@@ -61,7 +65,10 @@ impl BaseLayerEpochManager {
         let mut base_node_client = self.base_node_client.clone();
         let mut vns = base_node_client.get_validator_nodes(epoch.0 * 10).await?;
         vns.sort_by(|a, b| a.shard_key.partial_cmp(&b.shard_key).unwrap());
-        self.validators_per_epoch.insert(epoch.0, vns.clone());
+
+        // insert the new VNs for this epoch in the database
+        self.insert_validator_nodes(epoch, vns)?;
+
         // let shard_key;
         // match base_node_client.clone().get_shard_key(epoch.0 * 10, &self.id).await {
         //     Ok(Some(key)) => shard_key = key,
@@ -93,6 +100,25 @@ impl BaseLayerEpochManager {
         // };
         // *self.neighbours.entry(epoch.0).or_insert(vns.clone()) = vns.clone();
         Ok(())
+    }
+
+    fn insert_validator_nodes(&self, epoch: Epoch, vns: Vec<ValidatorNode>) -> Result<(), EpochManagerError> {
+        let epoch_height = epoch.0;
+        let new_vns = vns
+            .into_iter()
+            .map(|v| DbValidatorNode {
+                public_key: v.public_key.to_vec(),
+                shard_key: v.shard_key.as_bytes().to_vec(),
+                epoch: epoch_height,
+            })
+            .collect();
+        let db = self.db_factory.get_or_create_global_db()?;
+        let tx = db
+            .create_transaction()
+            .map_err(|e| EpochManagerError::StorageError(e.into()))?;
+        db.validator_nodes(&tx)
+            .insert_validator_nodes(new_vns)
+            .map_err(|e| EpochManagerError::StorageError(e.into()))
     }
 
     pub fn current_epoch(&self) -> Epoch {
@@ -131,10 +157,9 @@ impl BaseLayerEpochManager {
     }
 
     pub fn get_committee(&self, epoch: Epoch, shard: ShardId) -> Result<Committee<CommsPublicKey>, EpochManagerError> {
-        let vns = self
-            .validators_per_epoch
-            .get(&epoch.0)
-            .ok_or(EpochManagerError::NoEpochFound(epoch))?;
+        // retrieve the validator nodes for this epoch from database
+        let vns = self.get_validator_nodes_per_epoch(epoch)?;
+
         let half_committee_size = 4; // total committee = 7
         if vns.len() < half_committee_size * 2 {
             return Ok(Committee::new(vns.iter().map(|v| v.public_key.clone()).collect()));
@@ -163,6 +188,26 @@ impl BaseLayerEpochManager {
         println!("result {:?}", result);
 
         Ok(Committee::new(result.into_iter().map(|v| v.public_key).collect()))
+    }
+
+    pub fn get_validator_nodes_per_epoch(&self, epoch: Epoch) -> Result<Vec<ValidatorNode>, EpochManagerError> {
+        let db = self.db_factory.get_or_create_global_db()?;
+        let tx = db
+            .create_transaction()
+            .map_err(|e| EpochManagerError::StorageError(e.into()))?;
+        let db_vns = db
+            .validator_nodes(&tx)
+            .get_validator_nodes_per_epoch(epoch.0)
+            .map_err(|e| EpochManagerError::StorageError(e.into()))?;
+        if db_vns.is_empty() {
+            return Err(EpochManagerError::NoEpochFound(epoch));
+        }
+        let vns: Vec<ValidatorNode> = db_vns
+            .into_iter()
+            .map(TryInto::try_into)
+            .collect::<Result<Vec<_>, _>>()
+            .unwrap();
+        Ok(vns)
     }
 
     pub fn filter_to_local_shards(

@@ -1,4 +1,4 @@
-//  Copyright 2021. The Tari Project
+//  Copyright 2022. The Tari Project
 //
 //  Redistribution and use in source and binary forms, with or without modification, are permitted provided that the
 //  following conditions are met:
@@ -20,24 +20,42 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use tari_comms::types::CommsPublicKey;
-use tari_dan_storage_sqlite::SqliteDbFactory;
-use tari_shutdown::ShutdownSignal;
-use tokio::sync::mpsc;
+use tari_dan_storage::global::DbValidatorNode;
 
-use crate::{
-    grpc::services::base_node_client::GrpcBaseNodeClient,
-    p2p::services::epoch_manager::{epoch_manager_service::EpochManagerService, handle::EpochManagerHandle},
-};
+use crate::global::schema::*;
 
-pub fn spawn(
-    db_factory: SqliteDbFactory,
-    base_node_client: GrpcBaseNodeClient,
-    id: CommsPublicKey,
-    shutdown: ShutdownSignal,
-) -> EpochManagerHandle {
-    let (tx_request, rx_request) = mpsc::channel(10);
-    let handle = EpochManagerHandle::new(tx_request);
-    EpochManagerService::spawn(id, rx_request, shutdown, db_factory, base_node_client);
-    handle
+#[derive(Queryable, Identifiable)]
+pub struct ValidatorNode {
+    pub id: i32,
+    pub public_key: Vec<u8>,
+    pub shard_key: Vec<u8>,
+    pub epoch: i32,
+}
+
+impl From<ValidatorNode> for DbValidatorNode {
+    fn from(vn: ValidatorNode) -> Self {
+        Self {
+            shard_key: vn.shard_key,
+            public_key: vn.public_key,
+            epoch: vn.epoch as u64,
+        }
+    }
+}
+
+#[derive(Insertable)]
+#[table_name = "validator_nodes"]
+pub struct NewValidatorNode {
+    pub public_key: Vec<u8>,
+    pub shard_key: Vec<u8>,
+    pub epoch: i32,
+}
+
+impl From<DbValidatorNode> for NewValidatorNode {
+    fn from(vn: DbValidatorNode) -> Self {
+        Self {
+            shard_key: vn.shard_key,
+            public_key: vn.public_key,
+            epoch: vn.epoch as i32,
+        }
+    }
 }
