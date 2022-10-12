@@ -4451,7 +4451,6 @@ name = "tari_validator_node_client"
 version = "0.1.0"
 dependencies = [
  "anyhow",
- "bytes 1.2.1",
  "reqwest",
  "serde",
  "serde_json",

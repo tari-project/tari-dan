@@ -177,11 +177,7 @@ where
         Ok(())
     }
 
-    async fn on_propose(
-        &mut self,
-        shard: ShardId,
-        payload: PayloadId,
-    ) -> Result<HotStuffTreeNode<TAddr>, HotStuffError> {
+    async fn on_propose(&mut self, shard: ShardId, payload: PayloadId) -> Result<(), HotStuffError> {
         debug!(target: LOG_TARGET, "Proposing payload {} for shard {}", payload, shard);
 
         let epoch = self.epoch_manager.current_epoch().await?;
@@ -219,6 +215,11 @@ where
             } else {
                 NodeHeight(0)
             };
+
+            if payload_height > NodeHeight(4) {
+                // No need to continue, we have already committed this node.
+                return Ok(());
+            }
             let objects = actual_payload.objects_for_shard(shard);
 
             let mut local_pledges = vec![];
@@ -248,7 +249,7 @@ where
             .send((HotStuffMessage::generic(leaf_node.clone(), shard), members))
             .await
             .unwrap();
-        Ok(leaf_node)
+        Ok(())
     }
 
     fn create_leaf(
@@ -438,6 +439,9 @@ where
             (node.payload() == node.justify().payload() &&
                 node.payload_height() == node.justify().payload_height() + NodeHeight(1))
         {
+            if node.payload_height() > NodeHeight(4) {
+                return Err(HotStuffError::PayloadHeightIsTooHigh);
+            }
             Ok(())
         } else {
             Err(HotStuffError::NodePayloadDoesNotMatchJustifyPayload)
