@@ -107,13 +107,13 @@ async fn handle_register_template(args: PublishTemplateArgs, mut client: Validat
     let wasm_module = compile_template(root_folder.as_path(), &[]).unwrap();
     let wasm_code = wasm_module.code();
     println!(
-        "✅ Template compilation succesful (WASM file size: {} bytes)",
+        "✅ Template compilation successful (WASM file size: {} bytes)",
         wasm_code.len()
     );
+    println!();
 
     // calculate the hash of the WASM binary
     let binary_sha = hasher("template").chain(&wasm_code).result();
-    println!("Template binary hash: {}", binary_sha);
 
     // get the local path of the compiled wasm
     // note that the file name will be the same as the root folder name
