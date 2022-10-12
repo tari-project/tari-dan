@@ -27,6 +27,7 @@ use thiserror::Error;
 pub struct Prompt {
     label: String,
     default: Option<String>,
+    value: Option<String>,
 }
 
 impl Prompt {
@@ -34,15 +35,24 @@ impl Prompt {
         Self {
             label: label.into(),
             default: None,
+            value: None,
         }
     }
 
-    pub fn with_default<T: Into<String>>(mut self, default: T) -> Self {
-        self.default = Some(default.into());
+    pub fn with_default<T: ToString>(mut self, default: T) -> Self {
+        self.default = Some(default.to_string());
+        self
+    }
+
+    pub fn with_value<T: ToString>(mut self, value: Option<T>) -> Self {
+        self.value = value.map(|r| r.to_string());
         self
     }
 
     pub fn ask(self) -> Result<String, CommandError> {
+        if let Some(response) = self.value {
+            return Ok(response);
+        }
         loop {
             match self.default.as_ref().filter(|s| !s.is_empty()) {
                 Some(default) => {

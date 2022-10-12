@@ -113,7 +113,10 @@ impl TemplateManagerService {
         match download.result {
             Ok(bytes) => {
                 // TODO: Validate binary against hash
-                info!(target: LOG_TARGET, "✅ Template downloaded successfully");
+                info!(
+                    target: LOG_TARGET,
+                    "✅ Template {} downloaded successfully", download.template_address
+                );
                 self.manager
                     .update_template(download.template_address, DbTemplateUpdate {
                         compiled_code: Some(bytes.to_vec()),

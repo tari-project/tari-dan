@@ -41,7 +41,7 @@ use super::messages::{GetCommitteeRequest, GetShardKey};
 use crate::{
     grpc::services::{
         base_node_client::GrpcBaseNodeClient,
-        wallet_client::{GrpcWalletClient, TemplateRegistrationRequest},
+        wallet_client::{GrpcWalletClient, TemplateRegistrationRequest, TemplateRegistrationResponse},
     },
     json_rpc::{jrpc_errors::internal_error, messages::SubmitTransactionRequest},
     p2p::services::{epoch_manager::handle::EpochManagerHandle, mempool::MempoolHandle},
@@ -159,13 +159,17 @@ impl JsonRpcHandlers {
         let answer_id = value.get_answer_id();
         let data: TemplateRegistrationRequest = value.parse_params()?;
 
-        self.wallet_client()
+        let resp = self
+            .wallet_client()
             .register_template(&self.node_identity, data)
             .await
             .map_err(internal_error(answer_id))?;
 
         // TODO: add "transaction_id" to the grpc response
-        Ok(JsonRpcResponse::success(answer_id, ()))
+        Ok(JsonRpcResponse::success(answer_id, TemplateRegistrationResponse {
+            template_address: resp.template_address,
+            transaction_id: resp.tx_id,
+        }))
     }
 
     pub async fn get_connections(&self, value: JsonRpcExtractor) -> JrpcResult {

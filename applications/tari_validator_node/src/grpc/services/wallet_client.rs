@@ -55,18 +55,6 @@ pub struct GrpcWalletClient {
     client: Option<Client>,
 }
 
-#[derive(Serialize, Deserialize, Debug)]
-pub struct TemplateRegistrationRequest {
-    template_name: String,
-    template_version: u16,
-    repo_url: String,
-    #[serde(with = "serde_with::base64")]
-    commit_hash: Vec<u8>,
-    #[serde(with = "serde_with::base64")]
-    binary_sha: Vec<u8>,
-    binary_url: String,
-}
-
 impl GrpcWalletClient {
     pub fn new(endpoint: SocketAddr) -> GrpcWalletClient {
         Self { endpoint, client: None }
@@ -135,3 +123,22 @@ impl GrpcWalletClient {
 
 #[async_trait]
 impl WalletClient for GrpcWalletClient {}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct TemplateRegistrationRequest {
+    template_name: String,
+    template_version: u16,
+    repo_url: String,
+    #[serde(with = "serde_with::base64")]
+    commit_hash: Vec<u8>,
+    #[serde(with = "serde_with::base64")]
+    binary_sha: Vec<u8>,
+    binary_url: String,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct TemplateRegistrationResponse {
+    #[serde(with = "serde_with::base64")]
+    pub template_address: Vec<u8>,
+    pub transaction_id: u64,
+}

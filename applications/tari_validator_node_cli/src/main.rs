@@ -25,14 +25,14 @@ mod client;
 mod command;
 mod prompt;
 
-use std::error::Error;
+use std::{convert::TryFrom, error::Error};
 
 use anyhow::anyhow;
 use command::{PublishTemplateArgs, TemplateSubcommand, VnSubcommand};
 use multiaddr::{Multiaddr, Protocol};
 use reqwest::Url;
 use tari_dan_engine::wasm::compile::compile_template;
-use tari_engine_types::hashing::hasher;
+use tari_engine_types::{hashing::hasher, TemplateAddress};
 
 use crate::{
     cli::Cli,
@@ -101,6 +101,7 @@ async fn handle_register_template(args: PublishTemplateArgs, mut client: Validat
     // retrieve the root folder of the template
     let root_folder = args.template_code_path;
     println!("Template code path {}", root_folder.display());
+    println!("⏳️ Compiling template...");
 
     // compile the code and retrieve the binary content of the wasm
     let wasm_module = compile_template(root_folder.as_path(), &[]).unwrap();
@@ -111,9 +112,8 @@ async fn handle_register_template(args: PublishTemplateArgs, mut client: Validat
     );
 
     // calculate the hash of the WASM binary
-    let hash = hasher("template").chain(&wasm_code).result();
-    let binary_sha = hash.to_vec();
-    println!("Template binary hash: {}", hash);
+    let binary_sha = hasher("template").chain(&wasm_code).result();
+    println!("Template binary hash: {}", binary_sha);
 
     // get the local path of the compiled wasm
     // note that the file name will be the same as the root folder name
@@ -122,18 +122,15 @@ async fn handle_register_template(args: PublishTemplateArgs, mut client: Validat
     wasm_path.push(format!("target/wasm32-unknown-unknown/release/{}.wasm", file_name));
 
     // ask the template name (skip if already passed as a CLI argument)
-    let template_name: String = match args.template_name {
-        Some(value) => value,
-        None => Prompt::new("Template name (max 32 characters):").ask()?,
-    };
+    let template_name = Prompt::new("Choose an user-friendly name for the template (max 32 characters):")
+        .with_value(args.template_name)
+        .ask()?;
 
     // ask the template version (skip if already passed as a CLI argument)
-    let template_version: u16 = match args.template_version {
-        Some(value) => value,
-        None => Prompt::new("Template version:")
-            .with_default(0.to_string())
-            .ask_parsed()?,
-    };
+    let template_version: u16 = Prompt::new("Template version:")
+        .with_default(0)
+        .with_value(args.template_version)
+        .ask_parsed()?;
 
     // TODO: ask repository info
     let repo_url = String::new();
@@ -155,11 +152,16 @@ async fn handle_register_template(args: PublishTemplateArgs, mut client: Validat
         template_version,
         repo_url,
         commit_hash,
-        binary_sha,
+        binary_sha: binary_sha.to_vec(),
         binary_url,
     };
-    client.register_template(request).await?;
+    let resp = client.register_template(request).await?;
     println!("✅ Template registration submitted");
+    println!();
+    println!(
+        "The template address will be {}",
+        TemplateAddress::try_from(resp.template_address.as_slice()).unwrap()
+    );
 
     Ok(())
 }
