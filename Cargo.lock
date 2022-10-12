@@ -4629,6 +4629,7 @@ dependencies = [
  "tari_template_lib",
  "tari_test_utils",
  "tari_wallet_grpc_client",
+ "tempfile",
  "thiserror",
  "tokio",
  "tokio-stream",

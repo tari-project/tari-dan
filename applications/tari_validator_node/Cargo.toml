@@ -67,7 +67,8 @@ tari_test_utils = { git = "https://github.com/tari-project/tari.git", branch = "
 # FIXME: the newest version failed compilation due to a missing "bool_to_option” unstable feature
 cucumber = { version = "0.13.0"} 
 tokio = { version = "1.10", features = ["macros", "rt-multi-thread", "time"] }
+tempfile = "3.3.0"
 
 [[test]]
-name = "example" # this should be the same as the filename of your test target
+name = "cucumber" # this should be the same as the filename of your test target
 harness = false # allows Cucumber to print output instead of libtest
