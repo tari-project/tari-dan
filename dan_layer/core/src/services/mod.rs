@@ -30,7 +30,7 @@ mod signing_service;
 mod wallet_client;
 
 pub use asset_proxy::{AssetProxy, ConcreteAssetProxy};
-pub use base_node_client::BaseNodeClient;
+pub use base_node_client::{BaseNodeClient, BlockInfo, SideChainUtxos};
 pub use events_publisher::{EventsPublisher, LoggingEventsPublisher};
 pub use payload_processor::{PayloadProcessor, PayloadProcessorError};
 pub use peer_service::{DanPeer, PeerProvider};

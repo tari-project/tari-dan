@@ -20,11 +20,9 @@
 //   WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //   USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use std::time::Duration;
-
 use anyhow::anyhow;
 use reqwest::{header, header::HeaderMap, IntoUrl, Url};
-use serde::{de::DeserializeOwned, Serialize};
+use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use serde_json as json;
 use serde_json::json;
 use tari_dan_common_types::serde_with;
@@ -36,18 +34,6 @@ pub struct ValidatorNodeClient {
     request_id: i64,
 }
 
-#[derive(Debug, Serialize)]
-pub struct TemplateRegistrationRequest {
-    pub template_name: String,
-    pub template_version: u16,
-    pub repo_url: String,
-    #[serde(serialize_with = "serde_with::base64::serialize")]
-    pub commit_hash: Vec<u8>,
-    #[serde(serialize_with = "serde_with::base64::serialize")]
-    pub binary_sha: Vec<u8>,
-    pub binary_url: String,
-}
-
 impl ValidatorNodeClient {
     pub fn connect<T: IntoUrl>(endpoint: T) -> Result<Self, anyhow::Error> {
         let client = reqwest::Client::builder()
@@ -56,8 +42,6 @@ impl ValidatorNodeClient {
                 headers.insert(header::CONTENT_TYPE, "application/json".parse().unwrap());
                 headers
             })
-            .connect_timeout(Duration::from_secs(5))
-            .timeout(Duration::from_secs(10))
             .build()?;
 
         Ok(Self {
@@ -75,10 +59,11 @@ impl ValidatorNodeClient {
         Ok(tx_id)
     }
 
-    pub async fn register_template(&mut self, request: TemplateRegistrationRequest) -> Result<(), anyhow::Error> {
-        // TODO: add "transaction_id" to the grpc response
-        self.send_request("register_template", json!(request)).await?;
-        Ok(())
+    pub async fn register_template(
+        &mut self,
+        request: TemplateRegistrationRequest,
+    ) -> Result<TemplateRegistrationResponse, anyhow::Error> {
+        self.send_request("register_template", request).await
     }
 
     fn next_request_id(&mut self) -> i64 {
@@ -86,17 +71,18 @@ impl ValidatorNodeClient {
         self.request_id
     }
 
-    async fn send_request<T: Into<json::Value>, R: DeserializeOwned>(
+    async fn send_request<T: Serialize, R: DeserializeOwned>(
         &mut self,
         method: &str,
-        body: T,
+        params: T,
     ) -> Result<R, anyhow::Error> {
+        let params = json::to_value(params)?;
         let request_json = json!(
             {
                 "jsonrpc": "2.0",
                 "id": self.next_request_id(),
                 "method": method,
-                "params": body.into(),
+                "params": params
             }
         );
         let resp = self
@@ -120,4 +106,24 @@ fn jsonrpc_result(val: json::Value) -> Result<json::Value, anyhow::Error> {
 
     let result = val.get("result").ok_or_else(|| anyhow!("Missing result field"))?;
     Ok(result.clone())
+}
+
+// TODO: duplicated in applications/tari_validator_node/src/grpc/services/wallet_client.rs
+#[derive(Debug, Serialize)]
+pub struct TemplateRegistrationRequest {
+    pub template_name: String,
+    pub template_version: u16,
+    pub repo_url: String,
+    #[serde(serialize_with = "serde_with::base64::serialize")]
+    pub commit_hash: Vec<u8>,
+    #[serde(serialize_with = "serde_with::base64::serialize")]
+    pub binary_sha: Vec<u8>,
+    pub binary_url: String,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct TemplateRegistrationResponse {
+    #[serde(deserialize_with = "serde_with::base64::deserialize")]
+    pub template_address: Vec<u8>,
+    pub transaction_id: u64,
 }

@@ -20,37 +20,5 @@
 //   WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //   USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use crate::global::schema::*;
-
-#[derive(Debug, Identifiable, Queryable)]
-#[table_name = "templates"]
-pub struct TemplateModel {
-    pub id: i32,
-    pub template_address: Vec<u8>,
-    pub url: String,
-    pub height: i32,
-    pub compiled_code: Vec<u8>,
-    pub status: String,
-    pub wasm_path: Option<String>,
-    pub added_at: i64,
-}
-
-#[derive(Debug, Insertable)]
-#[table_name = "templates"]
-pub struct NewTemplateModel {
-    pub template_address: Vec<u8>,
-    pub url: String,
-    pub height: i32,
-    pub compiled_code: Vec<u8>,
-    pub status: String,
-    pub wasm_path: Option<String>,
-    pub added_at: i64,
-}
-
-#[derive(Debug, AsChangeset)]
-#[table_name = "templates"]
-pub struct TemplateUpdateModel {
-    pub compiled_code: Option<Vec<u8>>,
-    pub status: Option<String>,
-    pub wasm_path: Option<String>,
-}
+/// Package (template) identifier
+pub type TemplateAddress = tari_template_lib::Hash;

@@ -20,6 +20,8 @@
 //   WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //   USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+use std::str::FromStr;
+
 use tari_common_types::types::FixedHash;
 
 use crate::global::GlobalDbAdapter;
@@ -41,12 +43,72 @@ impl<'a, TGlobalDbAdapter: GlobalDbAdapter> TemplateDb<'a, TGlobalDbAdapter> {
     pub fn insert_template(&self, template: DbTemplate) -> Result<(), TGlobalDbAdapter::Error> {
         self.backend.insert_template(self.tx, template)
     }
+
+    pub fn update_template(&self, key: &[u8], update: DbTemplateUpdate) -> Result<(), TGlobalDbAdapter::Error> {
+        self.backend.update_template(self.tx, key, update)
+    }
 }
 
 #[derive(Debug, Clone)]
 pub struct DbTemplate {
+    // TODO: change to TemplateAddress type
     pub template_address: FixedHash,
     pub url: String,
     pub height: u64,
     pub compiled_code: Vec<u8>,
+    pub status: TemplateStatus,
+    pub added_at: time::OffsetDateTime,
+}
+
+#[derive(Debug, Clone, Default)]
+pub struct DbTemplateUpdate {
+    pub compiled_code: Option<Vec<u8>>,
+    pub status: Option<TemplateStatus>,
+}
+
+#[derive(Debug, Clone, Default)]
+pub enum TemplateStatus {
+    /// Template has been registered but has not completed
+    #[default]
+    New,
+    /// Template download has begun but not completed
+    Pending,
+    /// Template download has completed
+    Active,
+    /// Template download completed but was invalid
+    Invalid,
+    /// Template download failed
+    DownloadFailed,
+    /// Template has been deprecated
+    Deprecated,
+}
+
+impl FromStr for TemplateStatus {
+    type Err = ();
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let normalized = s.trim().to_lowercase();
+        match normalized.as_str() {
+            "new" => Ok(TemplateStatus::New),
+            "pending" => Ok(TemplateStatus::Pending),
+            "active" => Ok(TemplateStatus::Active),
+            "invalid" => Ok(TemplateStatus::Invalid),
+            "downloadfailed" => Ok(TemplateStatus::DownloadFailed),
+            "deprecated" => Ok(TemplateStatus::Deprecated),
+            _ => Err(()),
+        }
+    }
+}
+
+impl TemplateStatus {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            TemplateStatus::New => "New",
+            TemplateStatus::Pending => "Pending",
+            TemplateStatus::Active => "Active",
+            TemplateStatus::Invalid => "Invalid",
+            TemplateStatus::DownloadFailed => "DownloadFailed",
+            TemplateStatus::Deprecated => "Deprecated",
+        }
+    }
 }

@@ -23,7 +23,10 @@
 use super::validator_node_db::DbValidatorNode;
 use crate::{
     atomic::AtomicDb,
-    global::{metadata_db::MetadataKey, template_db::DbTemplate},
+    global::{
+        metadata_db::MetadataKey,
+        template_db::{DbTemplate, DbTemplateUpdate},
+    },
 };
 
 pub trait GlobalDbAdapter: AtomicDb + Send + Sync + Clone {
@@ -32,6 +35,12 @@ pub trait GlobalDbAdapter: AtomicDb + Send + Sync + Clone {
 
     fn get_template(&self, tx: &Self::DbTransaction, key: &[u8]) -> Result<Option<DbTemplate>, Self::Error>;
     fn insert_template(&self, tx: &Self::DbTransaction, template: DbTemplate) -> Result<(), Self::Error>;
+    fn update_template(
+        &self,
+        tx: &Self::DbTransaction,
+        key: &[u8],
+        template: DbTemplateUpdate,
+    ) -> Result<(), Self::Error>;
 
     fn insert_validator_nodes(
         &self,

@@ -36,7 +36,7 @@ use crate::{
         hotstuff::hotstuff_service::HotstuffService,
         mempool::MempoolHandle,
         messaging::OutboundMessaging,
-        template_manager::manager::TemplateManager,
+        template_manager::TemplateManager,
     },
     payload_processor::TariDanPayloadProcessor,
 };

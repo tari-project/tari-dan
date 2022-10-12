@@ -20,37 +20,16 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-pub mod handle;
+mod downloader;
+mod handle;
+pub use handle::{TemplateManagerHandle, TemplateRegistration};
+
 mod initializer;
-pub mod manager;
-pub mod template_manager_service;
-
 pub use initializer::spawn;
-use tari_dan_common_types::optional::IsNotFoundError;
-use tari_dan_core::storage::StorageError;
-use tari_dan_storage_sqlite::error::SqliteStorageError;
-use tari_template_lib::models::TemplateAddress;
-use thiserror::Error;
 
-#[derive(Error, Debug)]
-pub enum TemplateManagerError {
-    #[error("There was an error sending to a channel")]
-    SendError,
-    #[error("Could not fetch the template code from the web")]
-    TemplateCodeFetchError,
-    #[error("The hash of the template code does not match the metadata")]
-    #[allow(dead_code)]
-    TemplateCodeHashMismatch,
-    #[error("Storage error: {0}")]
-    StorageError(#[from] StorageError),
-    #[error("Storage error: {0}")]
-    SqliteStorageError(#[from] SqliteStorageError),
-    #[error("Template not found: {address}")]
-    TemplateNotFound { address: TemplateAddress },
-}
+mod manager;
+pub use manager::{Template, TemplateManager};
+mod service;
 
-impl IsNotFoundError for TemplateManagerError {
-    fn is_not_found_error(&self) -> bool {
-        matches!(self, Self::TemplateNotFound { .. })
-    }
-}
+mod error;
+pub use error::TemplateManagerError;
