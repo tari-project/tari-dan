@@ -1,4 +1,4 @@
-use std::{convert::Infallible, path::PathBuf};
+use std::convert::Infallible;
 
 use async_trait::async_trait;
 use cucumber::{given, WorldInit};
@@ -39,12 +39,16 @@ async fn start_validator_node(_world: &mut TariWorld, _name: String) {
     let temp_dir = tempdir().unwrap();
     println!("Using temp_dir: {}", temp_dir.path().display());
     config.validator_node.data_dir = temp_dir.path().to_path_buf();
+    config.validator_node.shard_key_file = temp_dir.path().join("shard_key.json");
 
     // TODO: create a new one in a temp folder
-    config.validator_node.identity_file = PathBuf::from("validator_node_id.json");
+    config.validator_node.identity_file = temp_dir.path().join("validator_node_id.json");
 
-    // TODO: config.validator_node.base_node_grpc_address = "";
-    // TODO: config.validator_node.wallet_grpc_address = "";
+    // TODO: use a spawned base node instead of a real one
+    config.validator_node.base_node_grpc_address = "127.0.0.1:18152".parse().unwrap();
+
+    // TODO: use a spawned wallet instead of a real one
+    config.validator_node.wallet_grpc_address = "127.0.0.1:18153".parse().unwrap();
 
     let _result = run_node(&config).await;
 }
