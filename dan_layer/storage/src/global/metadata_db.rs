@@ -47,6 +47,7 @@ impl<'a, TGlobalDbAdapter: GlobalDbAdapter> MetadataDb<'a, TGlobalDbAdapter> {
 pub enum MetadataKey {
     BaseLayerScannerLastScannedBlockHeight,
     BaseLayerScannerLastScannedBlockHash,
+    CurrentEpoch,
 }
 
 impl MetadataKey {
@@ -54,6 +55,7 @@ impl MetadataKey {
         match self {
             MetadataKey::BaseLayerScannerLastScannedBlockHash => b"base_layer_scanner.last_scanned_block_hash",
             MetadataKey::BaseLayerScannerLastScannedBlockHeight => b"base_layer_scanner.last_scanned_block_height",
+            MetadataKey::CurrentEpoch => b"current_epoch",
         }
     }
 }

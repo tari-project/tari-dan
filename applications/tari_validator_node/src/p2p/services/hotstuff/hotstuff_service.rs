@@ -78,10 +78,10 @@ impl HotstuffService {
         shutdown: ShutdownSignal,
     ) -> JoinHandle<Result<(), anyhow::Error>> {
         dbg!("Hotstuff starting");
-        let (tx_new, rx_new) = channel(1);
-        let (tx_leader, rx_leader) = channel(1);
-        let (tx_broadcast, rx_broadcast) = channel(1);
-        let (tx_vote_message, rx_vote_message) = channel(1);
+        let (tx_new, rx_new) = channel(100);
+        let (tx_leader, rx_leader) = channel(100);
+        let (tx_broadcast, rx_broadcast) = channel(100);
+        let (tx_vote_message, rx_vote_message) = channel(100);
 
         let leader_strategy = AlwaysFirstLeader {};
         HotStuffWaiter::spawn(

@@ -64,6 +64,12 @@ impl TryFrom<Vec<u8>> for TreeNodeHash {
     }
 }
 
+impl From<TreeNodeHash> for Vec<u8> {
+    fn from(s: TreeNodeHash) -> Self {
+        s.as_bytes().to_vec()
+    }
+}
+
 impl Hex for TreeNodeHash {
     fn from_hex(hex: &str) -> Result<Self, HexError>
     where Self: Sized {

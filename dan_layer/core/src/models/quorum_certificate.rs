@@ -25,7 +25,16 @@ use serde::{Deserialize, Serialize};
 use tari_crypto::hash::blake2::Blake256;
 use tari_dan_common_types::{PayloadId, ShardId};
 
-use crate::models::{Epoch, HotStuffMessageType, NodeHeight, ObjectPledge, TreeNodeHash, ValidatorSignature, ViewId};
+use crate::models::{
+    Epoch,
+    HotStuffMessageType,
+    NodeHeight,
+    ObjectPledge,
+    ShardVote,
+    TreeNodeHash,
+    ValidatorSignature,
+    ViewId,
+};
 
 #[derive(Debug, Clone, Copy, Deserialize, Serialize)]
 pub enum QuorumDecision {
@@ -53,7 +62,7 @@ impl QuorumDecision {
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct QuorumCertificate {
-    payload: PayloadId,
+    payload_id: PayloadId,
     payload_height: NodeHeight,
     // Cache the node hash
     local_node_hash: TreeNodeHash,
@@ -62,7 +71,7 @@ pub struct QuorumCertificate {
     shard: ShardId,
     epoch: Epoch,
     decision: QuorumDecision,
-    all_shard_nodes: Vec<(ShardId, TreeNodeHash, Vec<ObjectPledge>)>,
+    all_shard_nodes: Vec<ShardVote>,
     signatures: Vec<ValidatorSignature>,
 }
 
@@ -75,11 +84,11 @@ impl QuorumCertificate {
         shard: ShardId,
         epoch: Epoch,
         decision: QuorumDecision,
-        all_shard_nodes: Vec<(ShardId, TreeNodeHash, Vec<ObjectPledge>)>,
+        all_shard_nodes: Vec<ShardVote>,
         signatures: Vec<ValidatorSignature>,
     ) -> Self {
         Self {
-            payload,
+            payload_id: payload,
             payload_height,
             local_node_hash,
             local_node_height,
@@ -93,7 +102,7 @@ impl QuorumCertificate {
 
     pub fn genesis() -> Self {
         Self {
-            payload: PayloadId::zero(),
+            payload_id: PayloadId::zero(),
             payload_height: NodeHeight(0),
             local_node_hash: TreeNodeHash::zero(),
             local_node_height: NodeHeight(0),
@@ -117,19 +126,6 @@ impl QuorumCertificate {
         self.signatures.as_slice()
     }
 
-    // pub fn combine_sig(&mut self, partial_sig: &ValidatorSignature) {
-    //     self.signatures = match &self.signatures {
-    //         None => Some(partial_sig.clone()),
-    //         Some(s) => Some(s.combine(partial_sig)),
-    //     };
-    // }
-
-    pub fn matches(&self, _message_type: HotStuffMessageType, _view_id: ViewId) -> bool {
-        todo!("Update as this has changed from view number to height")
-        // from hotstuf spec
-        // self.message_type() == message_type && view_id == self.view_number()
-    }
-
     pub fn as_bytes(&self) -> Vec<u8> {
         let mut result = Blake256::new()
             .chain(self.local_node_hash.as_bytes())
@@ -148,8 +144,8 @@ impl QuorumCertificate {
         result.finalize().to_vec()
     }
 
-    pub fn payload(&self) -> PayloadId {
-        self.payload
+    pub fn payload_id(&self) -> PayloadId {
+        self.payload_id
     }
 
     pub fn payload_height(&self) -> NodeHeight {
@@ -168,7 +164,7 @@ impl QuorumCertificate {
         &self.decision
     }
 
-    pub fn all_shard_nodes(&self) -> &[(ShardId, TreeNodeHash, Vec<ObjectPledge>)] {
+    pub fn all_shard_nodes(&self) -> &[ShardVote] {
         &self.all_shard_nodes
     }
 
