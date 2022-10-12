@@ -21,9 +21,11 @@
 //   USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 use serde::{Deserialize, Serialize};
-use tari_dan_common_types::serde_with;
+use tari_common_types::types::PublicKey;
+use tari_dan_common_types::{serde_with, Epoch, ShardId};
+use tari_engine_types::{instruction::Instruction, signature::InstructionSignature};
 
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TemplateRegistrationRequest {
     pub template_name: String,
     pub template_version: u16,
@@ -35,9 +37,55 @@ pub struct TemplateRegistrationRequest {
     pub binary_url: String,
 }
 
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TemplateRegistrationResponse {
     #[serde(with = "serde_with::base64")]
     pub template_address: Vec<u8>,
     pub transaction_id: u64,
+}
+
+/// A request to submit a transaction
+/// ```json
+/// instructions": [{
+///    "type": "CallFunction",
+///    "template_address": "55886cfee6e91503b7f1df2dc6d11951b53db64733521595c3505747b83be277",
+///    "function": "new",
+///    "args": [{
+///       "type":"Literal",
+///       "value": "1232"
+///    }]
+///  }],
+///  "signature": {
+///    "public_nonce": "90392b9cebd7bf7d693f938911ccd3fb735a6cf24fcf1341a2edca38c560b563",
+///    "signature": "90392b9cebd7bf7d693f938911ccd3fb735a6cf24fcf1341a2edca38c560b563"
+///   },
+///   "fee": 1,
+///   "sender_public_key": "90392b9cebd7bf7d693f938911ccd3fb735a6cf24fcf1341a2edca38c560b563",
+///   "num_new_components": 1
+/// }
+/// ```
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SubmitTransactionRequest {
+    pub instructions: Vec<Instruction>,
+    pub signature: InstructionSignature,
+    pub fee: u64,
+    pub sender_public_key: PublicKey,
+    pub num_new_components: u8,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SubmitTransactionResponse {
+    pub hash: Vec<u8>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct GetCommitteeRequest {
+    pub epoch: Epoch,
+    pub shard_id: ShardId,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct GetShardKey {
+    pub height: u64,
+    pub public_key: PublicKey,
 }

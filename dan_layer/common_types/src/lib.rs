@@ -4,6 +4,7 @@
 pub mod proto;
 pub mod storage;
 
+mod epoch;
 pub mod optional;
 pub mod serde_with;
 mod template_id;
@@ -16,6 +17,7 @@ use std::{
 
 use ::serde::{Deserialize, Serialize};
 use borsh::{BorshDeserialize, BorshSerialize};
+pub use epoch::Epoch;
 use tari_common_types::types::{FixedHash, FixedHashSizeError};
 use tari_utilities::{byte_array::ByteArray, hex::Hex};
 pub use template_id::TemplateId;

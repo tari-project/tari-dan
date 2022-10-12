@@ -23,9 +23,18 @@
 use digest::Digest;
 use serde::{Deserialize, Serialize};
 use tari_crypto::hash::blake2::Blake256;
-use tari_dan_common_types::{PayloadId, ShardId};
+use tari_dan_common_types::{Epoch, PayloadId, ShardId};
 
-use crate::models::{Epoch, NodeHeight, ShardVote, TreeNodeHash, ValidatorSignature};
+use crate::models::{
+    Epoch,
+    HotStuffMessageType,
+    NodeHeight,
+    ObjectPledge,
+    ShardVote,
+    TreeNodeHash,
+    ValidatorSignature,
+    ViewId,
+};
 
 #[derive(Debug, Clone, Copy, Deserialize, Serialize)]
 pub enum QuorumDecision {

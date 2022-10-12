@@ -23,10 +23,10 @@
 use digest::{Digest, FixedOutput};
 use serde::{Deserialize, Serialize};
 use tari_crypto::hash::blake2::Blake256;
-use tari_dan_common_types::{PayloadId, ShardId};
+use tari_dan_common_types::{Epoch, PayloadId, ShardId};
 
 use crate::{
-    models::{Epoch, NodeHeight, ObjectPledge, QuorumCertificate, TreeNodeHash},
+    models::{NodeHeight, ObjectPledge, QuorumCertificate, TreeNodeHash},
     services::infrastructure_services::NodeAddressable,
 };
 

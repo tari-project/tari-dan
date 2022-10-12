@@ -19,39 +19,18 @@
 //   SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY,
 //   WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //   USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-//
 
-use serde::Deserialize;
-use tari_common_types::types::PublicKey;
-use tari_crypto::ristretto::RistrettoSchnorr;
-use tari_dan_common_types::{serde_with, ShardId};
-use tari_dan_core::models::Epoch;
-use tari_template_lib::args::Arg;
+use serde::{Deserialize, Serialize};
 
-#[derive(Deserialize, Debug, Clone)]
-pub struct SubmitTransactionRequest {
-    pub instructions: Vec<InstructionRequest>,
-    pub signature: RistrettoSchnorr,
-    pub sender_public_key: PublicKey,
-    pub num_new_components: u8,
-}
+#[derive(Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Deserialize, Serialize)]
+pub struct Epoch(pub u64);
 
-#[derive(Deserialize, Debug, Clone)]
-pub struct InstructionRequest {
-    #[serde(deserialize_with = "serde_with::hex::deserialize")]
-    pub template_address: [u8; 32],
-    pub function: String,
-    pub args: Vec<Arg>,
-}
+impl Epoch {
+    pub fn as_u64(self) -> u64 {
+        self.0
+    }
 
-#[derive(Deserialize, Debug, Clone)]
-pub struct GetCommitteeRequest {
-    pub epoch: Epoch,
-    pub shard_id: ShardId,
-}
-
-#[derive(Deserialize, Debug, Clone)]
-pub struct GetShardKey {
-    pub height: u64,
-    pub public_key: PublicKey,
+    pub fn to_le_bytes(self) -> [u8; 8] {
+        self.0.to_le_bytes()
+    }
 }

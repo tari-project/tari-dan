@@ -4416,6 +4416,7 @@ dependencies = [
  "tari_storage",
  "tari_template_lib",
  "tari_test_utils",
+ "tari_validator_node_client",
  "tari_wallet_grpc_client",
  "thiserror",
  "time 0.3.15",
@@ -4455,7 +4456,9 @@ dependencies = [
  "reqwest",
  "serde",
  "serde_json",
+ "tari_common_types",
  "tari_dan_common_types",
+ "tari_engine_types",
 ]
 
 [[package]]

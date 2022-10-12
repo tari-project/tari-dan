@@ -24,9 +24,9 @@ use std::convert::TryInto;
 
 use tari_comms::types::CommsPublicKey;
 use tari_crypto::tari_utilities::ByteArray;
-use tari_dan_common_types::ShardId;
+use tari_dan_common_types::{Epoch, ShardId};
 use tari_dan_core::{
-    models::{Committee, Epoch, ValidatorNode},
+    models::{Committee, ValidatorNode},
     services::{
         epoch_manager::{EpochManagerError, ShardCommitteeAllocation},
         BaseNodeClient,
