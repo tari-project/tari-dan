@@ -21,7 +21,6 @@
 // USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 mod cli;
-mod client;
 mod command;
 mod prompt;
 
@@ -33,13 +32,9 @@ use multiaddr::{Multiaddr, Protocol};
 use reqwest::Url;
 use tari_dan_engine::wasm::compile::compile_template;
 use tari_engine_types::{hashing::hasher, TemplateAddress};
+use tari_validator_node_client::{types::TemplateRegistrationRequest, ValidatorNodeClient};
 
-use crate::{
-    cli::Cli,
-    client::{TemplateRegistrationRequest, ValidatorNodeClient},
-    command::Command,
-    prompt::Prompt,
-};
+use crate::{cli::Cli, command::Command, prompt::Prompt};
 
 #[tokio::main(flavor = "current_thread")]
 async fn main() -> Result<(), Box<dyn Error>> {
@@ -47,11 +42,8 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     let endpoint = cli
         .vn_daemon_jrpc_endpoint
-        .map(multiaddr_to_http_url)
-        .transpose()?
-        .ok_or_else(|| {
-            anyhow!("For now, please provide a daemon endpoint using e.g. `--endpoint /ip4/127.0.0.1/tcp/xxxx`")
-        })?;
+        .unwrap_or_else(|| "/ip4/127.0.0.1/tcp/18200".parse().unwrap());
+    let endpoint = multiaddr_to_http_url(endpoint)?;
 
     log::info!("🌍️ Connecting to {}", endpoint);
     let client = ValidatorNodeClient::connect(endpoint)?;
