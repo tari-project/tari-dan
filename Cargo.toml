@@ -1,6 +1,7 @@
 [workspace]
 
 members = [
+    "clients/validator_node_client",
     "dan_layer/core",
     "dan_layer/storage",
     "dan_layer/storage_lmdb",

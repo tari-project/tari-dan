@@ -19,13 +19,14 @@
 //   SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY,
 //   WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //   USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+pub mod types;
 
 use anyhow::anyhow;
 use reqwest::{header, header::HeaderMap, IntoUrl, Url};
-use serde::{de::DeserializeOwned, Deserialize, Serialize};
+use serde::{de::DeserializeOwned, Serialize};
 use serde_json as json;
 use serde_json::json;
-use tari_dan_common_types::serde_with;
+use types::{TemplateRegistrationRequest, TemplateRegistrationResponse};
 
 #[derive(Debug, Clone)]
 pub struct ValidatorNodeClient {
@@ -82,7 +83,7 @@ impl ValidatorNodeClient {
                 "jsonrpc": "2.0",
                 "id": self.next_request_id(),
                 "method": method,
-                "params": params
+                "params": params,
             }
         );
         let resp = self
@@ -106,24 +107,4 @@ fn jsonrpc_result(val: json::Value) -> Result<json::Value, anyhow::Error> {
 
     let result = val.get("result").ok_or_else(|| anyhow!("Missing result field"))?;
     Ok(result.clone())
-}
-
-// TODO: duplicated in applications/tari_validator_node/src/grpc/services/wallet_client.rs
-#[derive(Debug, Serialize)]
-pub struct TemplateRegistrationRequest {
-    pub template_name: String,
-    pub template_version: u16,
-    pub repo_url: String,
-    #[serde(serialize_with = "serde_with::base64::serialize")]
-    pub commit_hash: Vec<u8>,
-    #[serde(serialize_with = "serde_with::base64::serialize")]
-    pub binary_sha: Vec<u8>,
-    pub binary_url: String,
-}
-
-#[derive(Debug, Deserialize)]
-pub struct TemplateRegistrationResponse {
-    #[serde(deserialize_with = "serde_with::base64::deserialize")]
-    pub template_address: Vec<u8>,
-    pub transaction_id: u64,
 }

@@ -106,7 +106,7 @@ impl JsonRpcHandlers {
             builder.add_instruction(Instruction::CallFunction {
                 template_address: i.template_address.into(),
                 function: i.function,
-                args: i.args.clone(),
+                args: i.args,
             });
         }
         builder.signature(transaction.signature.try_into().map_err(internal_error(answer_id))?);
