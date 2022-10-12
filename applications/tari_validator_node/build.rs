@@ -20,12 +20,28 @@
 // WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 // USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+use std::process::Command;
+
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     tari_common::build::ProtobufCompiler::new()
         .proto_paths(&["proto/dan"])
         .include_paths(&["proto/dan"])
         .emit_rerun_if_changed_directives()
         .compile()
+        .unwrap();
+    println!("cargo:rerun-if-changed=../tari_validator_node_web_ui/src/*");
+    println!("cargo:rerun-if-changed=../tari_validator_node_web_ui/public/*");
+    let npm = if cfg!(windows) { "npm.cmd" } else { "npm" };
+
+    Command::new(npm)
+        .arg("ci")
+        .current_dir("../tari_validator_node_web_ui")
+        .status()
+        .unwrap();
+    Command::new(npm)
+        .args(["run", "build"])
+        .current_dir("../tari_validator_node_web_ui")
+        .status()
         .unwrap();
     Ok(())
 }

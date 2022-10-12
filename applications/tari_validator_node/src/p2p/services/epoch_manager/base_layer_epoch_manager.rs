@@ -168,13 +168,14 @@ impl BaseLayerEpochManager {
         println!("vns {:?}", vns);
         println!("shard {:?}", shard);
 
-        let mid_point = vns.iter().filter(|x| x.shard_key <= shard).count();
-        let begin = ((vns.len() as i64 + mid_point as i64 - half_committee_size as i64) % vns.len() as i64) as usize;
+        let mid_point = vns.iter().filter(|x| x.shard_key < shard).count();
+        let begin =
+            ((vns.len() as i64 + mid_point as i64 - (half_committee_size - 1) as i64) % vns.len() as i64) as usize;
         let end = ((mid_point as i64 + half_committee_size as i64) % vns.len() as i64) as usize;
         let mut result = Vec::with_capacity(half_committee_size * 2);
         if mid_point < half_committee_size {
-            result.extend_from_slice(&vns[0..mid_point as usize]);
             result.extend_from_slice(&vns[begin..]);
+            result.extend_from_slice(&vns[0..mid_point as usize]);
         } else {
             result.extend_from_slice(&vns[begin..mid_point as usize]);
         }
