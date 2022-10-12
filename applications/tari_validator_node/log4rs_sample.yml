@@ -91,7 +91,7 @@ loggers:
     additive: false
 
   tari::validator_node:
-    level: info
+    level: debug
     appenders:
       - dan_layer
       - stdout
@@ -105,7 +105,7 @@ loggers:
     additive: false
 
   tari::dan_layer:
-    level: info
+    level: debug
     appenders:
       - dan_layer
       - stdout

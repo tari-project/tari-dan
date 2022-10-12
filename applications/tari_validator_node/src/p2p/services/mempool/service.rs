@@ -75,13 +75,21 @@ impl MempoolService {
     }
 
     async fn handle_new_transaction(&mut self, transaction: Transaction) {
+        debug!(target: LOG_TARGET, "Received new transaction: {:?}", transaction);
         // TODO: validate transaction
         let payload = TariDanPayload::new(transaction.clone());
+        debug!(
+            target: LOG_TARGET,
+            "New Payload in mempool for shards: {:?}",
+            payload.involved_shards()
+        );
         for shard_id in payload.involved_shards() {
-            self.tx_valid_transactions
-                .send((transaction.clone(), shard_id))
-                // TODO: handle, if channel is closed I would say we can ignore it since we're probably shutting down
-                .unwrap();
+            if let Err(err) = self.tx_valid_transactions.send((transaction.clone(), shard_id)) {
+                error!(
+                    target: LOG_TARGET,
+                    "Failed to send valid transaction to shard: {}: {}", shard_id, err
+                );
+            }
         }
         self.transactions.lock().unwrap().push((transaction.clone(), None));
         let msg = DanMessage::NewTransaction(transaction);

@@ -22,6 +22,7 @@
 
 use std::collections::HashMap;
 
+use log::{debug, error, info};
 use tari_dan_common_types::{PayloadId, ShardId, SubstateState};
 use tari_dan_engine::runtime::TransactionResult;
 use tari_shutdown::ShutdownSignal;
@@ -54,6 +55,8 @@ use crate::{
     storage::shard_store::{ShardStoreFactory, ShardStoreTransaction},
     workers::hotstuff_error::HotStuffError,
 };
+
+const LOG_TARGET: &str = "tari::dan_layer::hotstuff_waiter";
 
 pub struct HotStuffWaiter<TPayload, TAddr, TLeaderStrategy, TEpochManager, TPayloadProcessor, TShardStore> {
     identity: TAddr,
@@ -145,7 +148,12 @@ where
         qc: QuorumCertificate,
         payload: TPayload,
     ) -> Result<(), HotStuffError> {
-        dbg!("on receive new view");
+        debug!(
+            target: LOG_TARGET,
+            "Received new view from {} for payload: {}",
+            from,
+            payload.to_id()
+        );
         // TODO: Validate who message is from
         let epoch = self.epoch_manager.current_epoch().await?;
         self.validate_from_committee(&from, epoch, shard).await?;
@@ -174,7 +182,7 @@ where
         shard: ShardId,
         payload: PayloadId,
     ) -> Result<HotStuffTreeNode<TAddr>, HotStuffError> {
-        dbg!(&self.identity, "on propose");
+        debug!(target: LOG_TARGET, "Proposing payload {} for shard {}", payload, shard);
 
         let epoch = self.epoch_manager.current_epoch().await?;
 
@@ -298,8 +306,8 @@ where
     }
 
     async fn on_next_sync_view(&mut self, payload: TPayload, shard: ShardId) -> Result<(), HotStuffError> {
-        dbg!("new payload received", &shard);
         let payload_id = payload.to_id();
+        debug!(target: LOG_TARGET, "on_next_sync_view started: {:?}", payload_id);
 
         let new_view;
         {
@@ -313,6 +321,10 @@ where
         let epoch = self.epoch_manager.current_epoch().await?;
         let committee = self.epoch_manager.get_committee(epoch, shard).await?;
         let leader = self.leader_strategy.get_leader(&committee, payload_id, shard, 0);
+        debug!(
+            target: LOG_TARGET,
+            "Determined leader for this payload is: {:?}, sending new view", leader
+        );
 
         self.tx_leader
             .send((leader.clone(), new_view))
@@ -597,7 +609,12 @@ where
             tokio::select! {
                 msg = self.rx_new.recv() => {
                     if let Some((p, shard)) = msg {
-                        self.on_next_sync_view(p.clone(), shard).await?;
+                        match self.on_next_sync_view(p.clone(), shard).await{
+                            Ok(_) => {},
+                            Err(e) => {
+                               error!(target: LOG_TARGET, "Error while processing new payload (on_next_sync_view): {}", e);
+                            }
+                        }
                         // self.on_beat(0, msg);
                         // TODO: Start timer for receiving proposal
                     } else {
@@ -610,13 +627,18 @@ where
                         match msg.message_type() {
                             HotStuffMessageType::NewView => {
                                 if let Some(payload) = msg.new_view_payload() {
-                                    self.on_receive_new_view(from, msg.shard(), msg.high_qc().unwrap(), payload.clone()).await?;
+                                    match self.on_receive_new_view(from, msg.shard(), msg.high_qc().unwrap(), payload.clone()).await{
+                                        Ok(_) => {},
+                                        Err(e) => {
+                                            error!(target: LOG_TARGET, "Error while processing new view (on_receive_new_view): {}", e);
+                                        }
+                                    }
                                     // There should always be a payload, otherwise the leader
                                     // can't be determined
                                     match self.on_beat(msg.shard(), payload.to_id()).await {
                                         Ok(()) => {},
                                         Err(e) => {
-                                            dbg!(e);
+                                            error!(target: LOG_TARGET, "Error while processing on_beat: {}", e);
                                         }
                                     }
                                 }
@@ -626,11 +648,11 @@ where
                                     match self.on_receive_proposal(from, node.clone()).await {
                                         Ok(()) => {},
                                         Err(e) => {
-                                            dbg!(e);
+                                            error!(target: LOG_TARGET, "Error while processing proposal (on_receive_proposal): {}", e);
                                         }
                                     }
                                 } else {
-                                    dbg!("No node supplied");
+                                    error!(target: LOG_TARGET, "Received generic message without node");
                                 }
                             }
                             _ => todo!()
@@ -639,12 +661,17 @@ where
                 },
                 msg = self.rx_votes.recv() => {
                     if let Some((from, msg)) = msg {
-                        dbg!("Received vote");
-                        self.on_receive_vote(from, msg).await?;
+                        debug!(target: LOG_TARGET, "Received vote from {}", from);
+                        match self.on_receive_vote(from, msg).await {
+                            Ok(()) => {},
+                            Err(e) => {
+                                error!(target: LOG_TARGET, "Error while processing vote (on_receive_vote): {}", e);
+                            }
+                        }
                     }
                 },
                 _ = shutdown.wait() => {
-                    dbg!("Exiting");
+                    info!(target: LOG_TARGET, "Shutting down");
                     break;
                 }
             }
