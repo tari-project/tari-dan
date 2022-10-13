@@ -20,7 +20,10 @@
 // CAUSED AND ON ANY THEORY OF LIABILITY,  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR
 // OTHERWISE) ARISING IN ANY WAY OUT OF THE  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH
 // DAMAGE.
-use std::convert::TryInto;
+use std::{
+    convert::TryInto,
+    sync::{Arc, RwLock},
+};
 
 use diesel::SqliteConnection;
 use log::*;
@@ -40,12 +43,12 @@ use crate::p2p::{proto, rpc::ValidatorNodeRpcService, services::messaging::DanMe
 pub struct ValidatorNodeRpcServiceImpl<TPeerProvider> {
     message_senders: DanMessageSenders,
     peer_provider: TPeerProvider,
-    shard_state_store: Arc<SqliteShardStoreTransaction>,
+    shard_state_store: Arc<RwLock<SqliteShardStoreTransaction>>,
 }
 
 impl<TPeerProvider: PeerProvider> ValidatorNodeRpcServiceImpl<TPeerProvider> {
     pub fn new(message_senders: DanMessageSenders, peer_provider: TPeerProvider, connection: SqliteConnection) -> Self {
-        let shard_state_store = Arc::new(SqliteShardStoreTransaction::new(connection));
+        let shard_state_store = Arc::new(RwLock::new(SqliteShardStoreTransaction::new(connection)));
 
         Self {
             message_senders,
@@ -136,7 +139,10 @@ where TPeerProvider: PeerProvider + Clone + Send + Sync + 'static
             let limit = 100i64;
             let shard_id = request.into_message().shard_id;
             loop {
-                let states = self.shard_state_store.clone().get_substates_changes(shard_id, limit, offset);
+                let states = self
+                    .shard_state_store
+                    .clone()
+                    .get_substates_changes(shard_id, limit, offset);
                 // TODO: test if we should either add limit or limit - 1 or limit + 1
                 offset += limit;
                 for state in states {

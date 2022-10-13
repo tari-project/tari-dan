@@ -20,7 +20,7 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use std::sync::Arc;
+use std::sync::{Arc, RwLock};
 mod service_impl;
 
 use diesel::SqliteConnection;
@@ -55,7 +55,7 @@ pub trait ValidatorNodeRpcService: Send + Sync + 'static {
 pub fn create_validator_node_rpc_service<TPeerProvider>(
     message_senders: DanMessageSenders,
     peer_provider: TPeerProvider,
-    connection: Arc<SqliteConnection>,
+    connection: Arc<RwLock<SqliteConnection>>,
 ) -> ValidatorNodeRpcServer<ValidatorNodeRpcServiceImpl<TPeerProvider>>
 where
     TPeerProvider: PeerProvider + Clone + Send + Sync + 'static,
