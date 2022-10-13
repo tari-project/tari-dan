@@ -186,7 +186,7 @@ table! {
     substate_changes (id) {
         id -> Integer,
         shard_id -> Binary,
-        substate_change -> Nullable<Binary>,
+        substate_change -> Binary,
         tree_node_hash -> Binary,
     }
 }

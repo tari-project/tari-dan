@@ -14,8 +14,13 @@ message Node {
     bool is_committed = 4;
 }
 
+message ShardId {
+  bytes bytes = 1;
+}
 
-
+message SubstateState {
+  
+}
 
 message SignerSignature {
   bytes signer = 1;

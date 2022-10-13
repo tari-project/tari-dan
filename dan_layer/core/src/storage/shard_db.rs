@@ -316,6 +316,10 @@ impl<TAddr: NodeAddressable, TPayload: Payload> ShardStoreTransaction<TAddr, TPa
         Ok(())
     }
 
+    fn get_substates_changes(&self, _shard_id: ShardId, _limit: i64, _offset: i64) -> Vec<SubstateState> {
+        todo!()
+    }
+
     fn save_substate_changes(&mut self, _changes: HashMap<ShardId, Option<SubstateState>>, _node: TreeNodeHash) {
         // todo!()
     }

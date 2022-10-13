@@ -102,6 +102,22 @@ impl TryFrom<proto::validator_node::DanMessage> for DanMessage<TariDanPayload, C
     }
 }
 
+// -------------------------------- ShardId ------------------------------------ //
+
+impl TryFrom<proto::consensus::ShardId> for ShardId {
+    fn try_from(value: proto::consensus::ShardId) -> Result<Self, Self::Error> {
+        Ok(ShardId(value.bytes))
+    }
+}
+
+impl From<ShardId> for proto::consensus::ShardId {
+    fn from(value: ShardId) -> Self {
+        Self {
+            bytes: value.to_le_bytes(),
+        }
+    }
+}
+
 // -------------------------------- VoteMessage -------------------------------- //
 
 impl From<VoteMessage> for proto::consensus::VoteMessage {

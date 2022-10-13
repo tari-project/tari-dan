@@ -581,6 +581,30 @@ impl ShardStoreTransaction<PublicKey, TariDanPayload> for SqliteShardStoreTransa
         }
     }
 
+    fn get_substates_changes(&self, shard: ShardId, limit: i64, offset: i64) -> Vec<SubstateState> {
+        use crate::schema::substate_changes::shard_id;
+
+        let substate_states: Option<Vec<crate::models::substate_change::SubstateChange>> = substate_changes
+            .filter(shard_id.eq(Vec::from(shard.as_bytes())))
+            .limit(limit)
+            .offset(offset)
+            .get_results(&self.connection)
+            .optional()
+            .map_err(|e| Self::Error::QueryError {
+                reason: format!("Get substate change error: {}", e),
+            })
+            .unwrap();
+
+        if let Some(substate_states) = substate_states {
+            substate_states
+                .into_iter()
+                .map(|ss| deserialize::<SubstateState>(ss.substate_changes.as_slice()).unwrap())
+                .collect::<Vec<_>>()
+        } else {
+            panic!("Items do not exist")
+        }
+    }
+
     fn get_last_voted_height(&self, shard: ShardId) -> NodeHeight {
         use crate::schema::last_voted_heights::{node_height, shard_id};
 

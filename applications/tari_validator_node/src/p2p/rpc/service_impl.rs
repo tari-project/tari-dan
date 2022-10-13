@@ -24,8 +24,12 @@ use std::convert::TryInto;
 
 use log::*;
 use tari_comms::protocol::rpc::{Request, Response, RpcStatus, Streaming};
-use tari_dan_core::services::{infrastructure_services::NodeAddressable, PeerProvider};
+use tari_dan_core::{
+    services::{infrastructure_services::NodeAddressable, PeerProvider},
+    storage::shard_store::ShardStoreTransaction,
+};
 use tari_dan_engine::transaction::Transaction;
+use tari_dan_storage_sqlite::sqlite_shard_store_factory::SqliteShardStoreTransaction;
 use tokio::{sync::mpsc, task};
 
 const LOG_TARGET: &str = "vn::p2p::rpc";
@@ -35,13 +39,17 @@ use crate::p2p::{proto, rpc::ValidatorNodeRpcService, services::messaging::DanMe
 pub struct ValidatorNodeRpcServiceImpl<TPeerProvider> {
     message_senders: DanMessageSenders,
     peer_provider: TPeerProvider,
+    shard_state_store: SqliteShardStoreTransaction,
 }
 
 impl<TPeerProvider: PeerProvider> ValidatorNodeRpcServiceImpl<TPeerProvider> {
-    pub fn new(message_senders: DanMessageSenders, peer_provider: TPeerProvider) -> Self {
+    pub fn new(message_senders: DanMessageSenders, peer_provider: TPeerProvider, connection: SqliteConnection) -> Self {
+        let shard_state_store = SqliteShardStoreTransaction::new(connection);
+
         Self {
             message_senders,
             peer_provider,
+            shard_state_store,
         }
     }
 }
@@ -63,7 +71,7 @@ where TPeerProvider: PeerProvider + Clone + Send + Sync + 'static
         {
             Ok(value) => value,
             Err(e) => {
-                return Err(RpcStatus::not_found(&format!("Could not convert transaaction: {}", e)));
+                return Err(RpcStatus::not_found(&format!("Could not convert transaction: {}", e)));
             },
         };
 
@@ -115,5 +123,28 @@ where TPeerProvider: PeerProvider + Clone + Send + Sync + 'static
         });
 
         Ok(Streaming::new(rx))
+    }
+
+    fn vn_state_sync(
+        &self,
+        request: Request<proto::common::ShardId>,
+    ) -> Result<Streaming<proto::network::VNStateSyncResponse>, RpcStatus> {
+        let (tx, rx) = mspc::channel(100);
+        task::spawn(async move {
+            let mut offset = 0i64;
+            let limit = 100i64;
+            let shard_id = request.into_message().shard_id;
+            loop {
+                let states = self.shard_state_store.get_substates_changes(shard_id, limit, offset);
+                // TODO: test if we should either add limit or limit - 1 or limit + 1
+                offset += limit;
+                for state in states {
+                    // if send returns error, the client has closed the connection, so we break the loop
+                    if tx.send(Ok(proto::network::VNStateSyncResponse { state })).is_err() {
+                        break;
+                    }
+                }
+            }
+        })
     }
 }

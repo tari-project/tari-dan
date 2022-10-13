@@ -21,7 +21,7 @@ message HotStuffMessage {
     uint64 view_number = 1;
     HotStuffMessageType message_type = 2;
     QuorumCertificate justify = 3;
-    HotStuffTreeNode node= 4;
+    HotStuffTreeNode node = 4;
     ValidatorSignature partial_sig = 5;
     bytes node_hash = 6;
     bytes contract_id = 7;
@@ -42,7 +42,7 @@ message HotStuffTreeNode {
     bytes state_root =4;
 }
 
-message ValidatorSignature{
+message ValidatorSignature {
 
 }
 
@@ -72,4 +72,4 @@ message ShardNode {
 
 message ObjectPledge {
     // TODO
-    }
+}
