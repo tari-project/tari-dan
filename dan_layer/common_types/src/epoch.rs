@@ -34,3 +34,9 @@ impl Epoch {
         self.0.to_le_bytes()
     }
 }
+
+impl From<u64> for Epoch {
+    fn from(e: u64) -> Self {
+        Self(e)
+    }
+}
