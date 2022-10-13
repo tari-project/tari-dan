@@ -29,11 +29,10 @@ use std::{
 use diesel::{dsl::max, prelude::*, SqliteConnection};
 use serde_json::json;
 use tari_common_types::types::{PrivateKey, PublicKey, Signature};
-use tari_dan_common_types::{ObjectId, PayloadId, ShardId, SubstateChange, SubstateState};
+use tari_dan_common_types::{Epoch, ObjectId, PayloadId, ShardId, SubstateChange, SubstateState};
 use tari_dan_core::{
     models::{
         vote_message::VoteMessage,
-        Epoch,
         HotStuffTreeNode,
         NodeHeight,
         ObjectPledge,

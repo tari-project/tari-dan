@@ -3,7 +3,7 @@
 
 use std::convert::TryFrom;
 
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use tari_crypto::{
     keys::PublicKey as PublicKeyT,
     ristretto::{RistrettoPublicKey, RistrettoSchnorr, RistrettoSecretKey},
@@ -12,7 +12,7 @@ use tari_utilities::ByteArray;
 
 use crate::{hashing::hasher, instruction::Instruction};
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct InstructionSignature(RistrettoSchnorr);
 
 impl InstructionSignature {
