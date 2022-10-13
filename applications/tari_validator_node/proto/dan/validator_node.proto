@@ -133,10 +133,3 @@ message DanMessage {
     tari.dan.network.NetworkAnnounce network_announce = 4;
   }
 }
-
-message StateSyncMessage {
-  oneof message {
-    tari.dan.consensus.HotstuffTreeNode hotstuff_tree_node = 1;
-    tari.dan.consensus.Payload payload = 2;
-  }
-}

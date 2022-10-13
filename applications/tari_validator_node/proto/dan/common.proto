@@ -14,10 +14,6 @@ message Node {
     bool is_committed = 4;
 }
 
-message ShardId {
-  bytes bytes = 1;
-}
-
 message SignerSignature {
   bytes signer = 1;
   Signature signature = 2;
@@ -115,9 +111,12 @@ message Arg {
   ArgType arg_type = 1;
   bytes data = 2;
 }
-
 message PayloadId {
   bytes payload_id = 1;
+}
+
+message ShardId {
+  bytes bytes = 1;
 }
 
 message SubstateState {
