@@ -13,16 +13,6 @@ enum HotStuffMessageType {
 }
 
 message HotStuffMessage {
-<<<<<<< HEAD
-    uint64 view_number = 1;
-    HotStuffMessageType message_type = 2;
-    QuorumCertificate justify = 3;
-    HotStuffTreeNode node = 4;
-    ValidatorSignature partial_sig = 5;
-    bytes node_hash = 6;
-    bytes contract_id = 7;
-    tari.dan.common.SignerSignature checkpoint_signature = 8;
-=======
     HotStuffMessageType message_type = 1;
     QuorumCertificate justify = 2;
     HotStuffTreeNode node= 3;
@@ -35,7 +25,6 @@ message ShardVote {
     bytes shard = 1;
     bytes hash = 2;
     repeated ObjectPledge pledges = 3;
->>>>>>> development
 }
 
 message QuorumCertificate {
@@ -66,13 +55,8 @@ message HotStuffTreeNode {
     QuorumCertificate justify = 9;
 }
 
-<<<<<<< HEAD
-message ValidatorSignature {
-
-=======
 message ValidatorSignature{
  bytes signer = 1;
->>>>>>> development
 }
 
 message TariDanPayload {
@@ -100,9 +84,6 @@ message ShardNode {
 }
 
 message ObjectPledge {
-<<<<<<< HEAD
-    // TODO
-=======
     enum CurrentState {
         CURRRENT_STATE_DOES_NOT_EXIST =0;
         CURRENT_STATE_UP = 1;
@@ -115,5 +96,4 @@ message ObjectPledge {
     bytes deleted_by = 5;
     bytes pledged_to_payload = 6;
     uint64 pledged_until = 7;
->>>>>>> development
 }
