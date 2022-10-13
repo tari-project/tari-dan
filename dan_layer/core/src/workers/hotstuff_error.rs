@@ -53,4 +53,6 @@ pub enum HotStuffError {
     TransactionRejected(String),
     #[error("Storage Error: `{0}`")]
     StorageError(#[from] StorageError),
+    #[error("Payload height is too high")]
+    PayloadHeightIsTooHigh,
 }
