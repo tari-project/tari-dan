@@ -20,8 +20,10 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+use std::sync::Arc;
 mod service_impl;
 
+use diesel::SqliteConnection;
 pub use service_impl::ValidatorNodeRpcServiceImpl;
 use tari_comms::protocol::rpc::{Request, Response, RpcStatus, Streaming};
 use tari_comms_rpc_macros::tari_rpc;
@@ -53,10 +55,14 @@ pub trait ValidatorNodeRpcService: Send + Sync + 'static {
 pub fn create_validator_node_rpc_service<TPeerProvider>(
     message_senders: DanMessageSenders,
     peer_provider: TPeerProvider,
-    connection: SqliteConnection,
+    connection: Arc<SqliteConnection>,
 ) -> ValidatorNodeRpcServer<ValidatorNodeRpcServiceImpl<TPeerProvider>>
 where
     TPeerProvider: PeerProvider + Clone + Send + Sync + 'static,
 {
-    ValidatorNodeRpcServer::new(ValidatorNodeRpcServiceImpl::new(message_senders, peer_provider, connection))
+    ValidatorNodeRpcServer::new(ValidatorNodeRpcServiceImpl::new(
+        message_senders,
+        peer_provider,
+        connection,
+    ))
 }
