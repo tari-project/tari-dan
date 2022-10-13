@@ -9,8 +9,7 @@ create table payloads (
     meta text NOT NULL
 );
 
--- fetching by the payload_id will be a very common operation
-create index payload_index_payload_id on payloads (payload_id);
+create unique index payload_index_payload_id on payloads (payload_id) ;
 
 
 create table votes (

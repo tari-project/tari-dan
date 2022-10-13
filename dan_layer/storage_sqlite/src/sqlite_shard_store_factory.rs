@@ -165,7 +165,7 @@ impl ShardStoreTransaction<PublicKey, TariDanPayload> for SqliteShardStoreTransa
         Ok(())
     }
 
-    fn get_leaf_node(&self, shard: ShardId) -> (TreeNodeHash, NodeHeight) {
+    fn get_leaf_node(&self, shard: ShardId) -> Result<(TreeNodeHash, NodeHeight), Self::Error> {
         use crate::schema::leaf_nodes::{node_height, shard_id};
         let leaf_node: Option<LeafNode> = leaf_nodes
             .filter(shard_id.eq(Vec::from(shard.as_bytes())))
@@ -174,16 +174,15 @@ impl ShardStoreTransaction<PublicKey, TariDanPayload> for SqliteShardStoreTransa
             .optional()
             .map_err(|e| Self::Error::QueryError {
                 reason: format!("Get leaf node: {}", e),
-            })
-            .unwrap();
+            })?;
         if let Some(leaf_node) = leaf_node {
-            (
+            Ok((
                 TreeNodeHash::try_from(leaf_node.tree_node_hash).unwrap(),
                 NodeHeight(leaf_node.node_height as u64),
-            )
+            ))
         } else {
             // if no leaves, return genesis
-            (TreeNodeHash::zero(), NodeHeight(0))
+            Ok((TreeNodeHash::zero(), NodeHeight(0)))
         }
     }
 
@@ -219,7 +218,7 @@ impl ShardStoreTransaction<PublicKey, TariDanPayload> for SqliteShardStoreTransa
         Ok(())
     }
 
-    fn get_high_qc_for(&self, shard: ShardId) -> QuorumCertificate {
+    fn get_high_qc_for(&self, shard: ShardId) -> Result<QuorumCertificate, Self::Error> {
         dbg!("get high qc");
         use crate::schema::high_qcs::height;
         let qc: Option<HighQc> = high_qcs
@@ -229,12 +228,11 @@ impl ShardStoreTransaction<PublicKey, TariDanPayload> for SqliteShardStoreTransa
             .optional()
             .map_err(|e| Self::Error::QueryError {
                 reason: format!("Get high qc error: {}", e),
-            })
-            .unwrap();
+            })?;
         if let Some(qc) = qc {
-            serde_json::from_str(&qc.qc_json).unwrap()
+            Ok(serde_json::from_str(&qc.qc_json)?)
         } else {
-            QuorumCertificate::genesis()
+            Ok(QuorumCertificate::genesis())
         }
     }
 
@@ -282,7 +280,7 @@ impl ShardStoreTransaction<PublicKey, TariDanPayload> for SqliteShardStoreTransa
         }
     }
 
-    fn set_payload(&mut self, payload: TariDanPayload) {
+    fn set_payload(&mut self, payload: TariDanPayload) -> Result<(), Self::Error> {
         let transaction = payload.transaction();
         let instructions = json!(&transaction.instructions()).to_string();
 
@@ -313,8 +311,8 @@ impl ShardStoreTransaction<PublicKey, TariDanPayload> for SqliteShardStoreTransa
             .execute(&self.connection)
             .map_err(|e| StorageError::QueryError {
                 reason: format!("Set payload error: {}", e),
-            })
-            .unwrap();
+            })?;
+        Ok(())
     }
 
     fn get_node(&self, hash: &TreeNodeHash) -> Result<HotStuffTreeNode<PublicKey>, Self::Error> {
@@ -335,8 +333,7 @@ impl ShardStoreTransaction<PublicKey, TariDanPayload> for SqliteShardStoreTransa
             .optional()
             .map_err(|e| Self::Error::QueryError {
                 reason: format!("Get node error: {}", e),
-            })
-            .unwrap();
+            })?;
 
         if let Some(node) = node {
             let mut parent = [0u8; 32];
@@ -351,15 +348,10 @@ impl ShardStoreTransaction<PublicKey, TariDanPayload> for SqliteShardStoreTransa
             let payload_hgt: u64 = node
                 .payload_height
                 .try_into()
-                .map_err(|_| Self::Error::InvalidIntegerCast)
-                .unwrap();
+                .map_err(|_| Self::Error::InvalidIntegerCast)?;
             let local_pledges: Vec<ObjectPledge> = serde_json::from_str(&node.local_pledges)?;
 
-            let epoch: u64 = node
-                .epoch
-                .try_into()
-                .map_err(|_| Self::Error::InvalidIntegerCast)
-                .unwrap();
+            let epoch: u64 = node.epoch.try_into().map_err(|_| Self::Error::InvalidIntegerCast)?;
             let proposed_by =
                 PublicKey::from_vec(&node.proposed_by).map_err(Self::Error::InvalidByteArrayConversion)?;
 
@@ -384,7 +376,7 @@ impl ShardStoreTransaction<PublicKey, TariDanPayload> for SqliteShardStoreTransa
         }
     }
 
-    fn save_node(&mut self, node: HotStuffTreeNode<PublicKey>) {
+    fn save_node(&mut self, node: HotStuffTreeNode<PublicKey>) -> Result<(), Self::Error> {
         let node_hash = Vec::from(node.hash().as_bytes());
         let parent_node_hash = Vec::from(node.parent().as_bytes());
 
@@ -392,11 +384,10 @@ impl ShardStoreTransaction<PublicKey, TariDanPayload> for SqliteShardStoreTransa
             .height()
             .0
             .try_into()
-            .map_err(|_| Self::Error::InvalidIntegerCast)
-            .unwrap();
-        let shard = serialize(&node.shard()).unwrap();
+            .map_err(|_| Self::Error::InvalidIntegerCast)?;
+        let shard = serialize(&node.shard())?;
 
-        let payload_id = serialize(&node.payload()).unwrap();
+        let payload_id = serialize(&node.payload())?;
         let payload_height = node.payload_height().as_u64() as i64;
 
         let local_pledges = json!(&node.local_pledges()).to_string();
@@ -424,11 +415,11 @@ impl ShardStoreTransaction<PublicKey, TariDanPayload> for SqliteShardStoreTransa
             .execute(&self.connection)
             .map_err(|e| Self::Error::QueryError {
                 reason: format!("Save node error: {}", e),
-            })
-            .unwrap();
+            })?;
+        Ok(())
     }
 
-    fn get_locked_node_hash_and_height(&self, shard: ShardId) -> (TreeNodeHash, NodeHeight) {
+    fn get_locked_node_hash_and_height(&self, shard: ShardId) -> Result<(TreeNodeHash, NodeHeight), Self::Error> {
         use crate::schema::lock_node_and_heights::{node_height, shard_id};
 
         let shard = Vec::from(shard.0);
@@ -440,8 +431,7 @@ impl ShardStoreTransaction<PublicKey, TariDanPayload> for SqliteShardStoreTransa
             .optional()
             .map_err(|e| Self::Error::QueryError {
                 reason: format!("Get locked node hash and height error: {}", e),
-            })
-            .unwrap();
+            })?;
 
         if let Some(data) = lock_node_hash_and_height {
             let mut tree_node_hash = [0u8; 32];
@@ -451,16 +441,20 @@ impl ShardStoreTransaction<PublicKey, TariDanPayload> for SqliteShardStoreTransa
             let height: u64 = data
                 .node_height
                 .try_into()
-                .map_err(|_| Self::Error::InvalidIntegerCast)
-                .unwrap();
+                .map_err(|_| Self::Error::InvalidIntegerCast)?;
 
-            (tree_node_hash, NodeHeight(height))
+            Ok((tree_node_hash, NodeHeight(height)))
         } else {
-            (TreeNodeHash::zero(), NodeHeight(0))
+            Ok((TreeNodeHash::zero(), NodeHeight(0)))
         }
     }
 
-    fn set_locked(&mut self, shard: ShardId, node_hash: TreeNodeHash, node_height: NodeHeight) {
+    fn set_locked(
+        &mut self,
+        shard: ShardId,
+        node_hash: TreeNodeHash,
+        node_height: NodeHeight,
+    ) -> Result<(), Self::Error> {
         let shard = Vec::from(shard.as_bytes());
         let node_hash = Vec::from(node_hash.as_bytes());
         let node_height = node_height.as_u64() as i64;
@@ -476,8 +470,8 @@ impl ShardStoreTransaction<PublicKey, TariDanPayload> for SqliteShardStoreTransa
             .execute(&self.connection)
             .map_err(|e| StorageError::QueryError {
                 reason: format!("Set locked error: {}", e),
-            })
-            .unwrap();
+            })?;
+        Ok(())
     }
 
     fn pledge_object(
@@ -486,7 +480,7 @@ impl ShardStoreTransaction<PublicKey, TariDanPayload> for SqliteShardStoreTransa
         object: ObjectId,
         payload: PayloadId,
         current_height: NodeHeight,
-    ) -> ObjectPledge {
+    ) -> Result<ObjectPledge, Self::Error> {
         use crate::schema::objects::{current_state, node_height, object_id, payload_id, shard_id};
 
         let shard = Vec::from(shard.as_bytes());
@@ -500,8 +494,7 @@ impl ShardStoreTransaction<PublicKey, TariDanPayload> for SqliteShardStoreTransa
             .optional()
             .map_err(|e| Self::Error::QueryError {
                 reason: format!("Pledge object error: {}", e),
-            })
-            .unwrap();
+            })?;
 
         let mut db_current_state = SubstateState::DoesNotExist;
         if let Some(obj) = db_object {
@@ -511,11 +504,11 @@ impl ShardStoreTransaction<PublicKey, TariDanPayload> for SqliteShardStoreTransa
                 panic!("Item does not exist");
             }
 
-            let r: ObjectPledge = serde_json::from_str(&object_pledge).unwrap();
+            let r: ObjectPledge = serde_json::from_str(&object_pledge)?;
             if r.pledged_until > current_height {
-                return r;
+                return Ok(r);
             }
-            db_current_state = serde_json::from_str(&obj.current_state).unwrap();
+            db_current_state = serde_json::from_str(&obj.current_state)?;
         }
 
         // otherwise save pledge
@@ -539,14 +532,13 @@ impl ShardStoreTransaction<PublicKey, TariDanPayload> for SqliteShardStoreTransa
             .execute(&self.connection)
             .map_err(|e| Self::Error::QueryError {
                 reason: format!("Pledge object error: {}", e),
-            })
-            .unwrap();
+            })?;
 
         // entry.1 = Some(pledge.clone());
-        pledge
+        Ok(pledge)
     }
 
-    fn set_last_executed_height(&mut self, shard: ShardId, height: NodeHeight) {
+    fn set_last_executed_height(&mut self, shard: ShardId, height: NodeHeight) -> Result<(), Self::Error> {
         let shard = Vec::from(shard.as_bytes());
         let node_height = height.as_u64() as i64;
 
@@ -560,11 +552,11 @@ impl ShardStoreTransaction<PublicKey, TariDanPayload> for SqliteShardStoreTransa
             .execute(&self.connection)
             .map_err(|e| StorageError::QueryError {
                 reason: format!("Set last executed height error: {}", e),
-            })
-            .unwrap();
+            })?;
+        Ok(())
     }
 
-    fn get_last_executed_height(&self, shard: ShardId) -> NodeHeight {
+    fn get_last_executed_height(&self, shard: ShardId) -> Result<NodeHeight, Self::Error> {
         use crate::schema::last_executed_heights::{node_height, shard_id};
 
         let last_executed_height: Option<LastExecutedHeight> = last_executed_heights
@@ -574,22 +566,24 @@ impl ShardStoreTransaction<PublicKey, TariDanPayload> for SqliteShardStoreTransa
             .optional()
             .map_err(|e| Self::Error::QueryError {
                 reason: format!("Get last executed height: {}", e),
-            })
-            .unwrap();
+            })?;
 
         if let Some(last_exec_height) = last_executed_height {
             let height = last_exec_height
                 .node_height
                 .try_into()
-                .map_err(|_| Self::Error::InvalidIntegerCast)
-                .unwrap();
-            NodeHeight(height)
+                .map_err(|_| Self::Error::InvalidIntegerCast)?;
+            Ok(NodeHeight(height))
         } else {
-            panic!("Item does not exist")
+            Ok(NodeHeight(0))
         }
     }
 
-    fn save_substate_changes(&mut self, changes: HashMap<ShardId, Option<SubstateState>>, node: TreeNodeHash) {
+    fn save_substate_changes(
+        &mut self,
+        changes: HashMap<ShardId, Option<SubstateState>>,
+        node: TreeNodeHash,
+    ) -> Result<(), Self::Error> {
         for (sid, st_ch) in &changes {
             let shard = Vec::from(sid.as_bytes());
             let substate_change = if let Some(st_ch) = st_ch {
@@ -609,12 +603,12 @@ impl ShardStoreTransaction<PublicKey, TariDanPayload> for SqliteShardStoreTransa
                 .execute(&self.connection)
                 .map_err(|e| Self::Error::QueryError {
                     reason: format!("Save substate change: {}", e),
-                })
-                .unwrap();
+                })?;
         }
+        Ok(())
     }
 
-    fn get_last_voted_height(&self, shard: ShardId) -> NodeHeight {
+    fn get_last_voted_height(&self, shard: ShardId) -> Result<NodeHeight, Self::Error> {
         use crate::schema::last_voted_heights::{node_height, shard_id};
 
         let last_vote: Option<LastVotedHeight> = last_voted_heights
@@ -624,22 +618,20 @@ impl ShardStoreTransaction<PublicKey, TariDanPayload> for SqliteShardStoreTransa
             .optional()
             .map_err(|e| Self::Error::QueryError {
                 reason: format!("Get last voted height error: {}", e),
-            })
-            .unwrap();
+            })?;
 
         if let Some(last_vote_height) = last_vote {
             let height = last_vote_height
                 .node_height
                 .try_into()
-                .map_err(|_| Self::Error::InvalidIntegerCast)
-                .unwrap();
-            NodeHeight(height)
+                .map_err(|_| Self::Error::InvalidIntegerCast)?;
+            Ok(NodeHeight(height))
         } else {
-            NodeHeight(0)
+            Ok(NodeHeight(0))
         }
     }
 
-    fn set_last_voted_height(&mut self, shard: ShardId, height: NodeHeight) {
+    fn set_last_voted_height(&mut self, shard: ShardId, height: NodeHeight) -> Result<(), Self::Error> {
         let shard = Vec::from(shard.as_bytes());
         let height = height.as_u64() as i64;
 
@@ -653,8 +645,8 @@ impl ShardStoreTransaction<PublicKey, TariDanPayload> for SqliteShardStoreTransa
             .execute(&self.connection)
             .map_err(|e| StorageError::QueryError {
                 reason: format!("Set last voted height: {}", e),
-            })
-            .unwrap();
+            })?;
+        Ok(())
     }
 
     fn get_payload_vote(
@@ -662,7 +654,7 @@ impl ShardStoreTransaction<PublicKey, TariDanPayload> for SqliteShardStoreTransa
         payload: PayloadId,
         payload_height: NodeHeight,
         shard: ShardId,
-    ) -> Option<HotStuffTreeNode<PublicKey>> {
+    ) -> Result<Option<HotStuffTreeNode<PublicKey>>, Self::Error> {
         use crate::schema::payload_votes::{node_height, payload_id, shard_id};
 
         let payload_vote: Option<PayloadVote> = payload_votes
@@ -676,15 +668,14 @@ impl ShardStoreTransaction<PublicKey, TariDanPayload> for SqliteShardStoreTransa
             .optional()
             .map_err(|e| Self::Error::QueryError {
                 reason: format!("Get payload vote: {}", e),
-            })
-            .unwrap();
+            })?;
 
         if let Some(payload_vote) = payload_vote {
             let hot_stuff_tree_node: HotStuffTreeNode<PublicKey> =
-                serde_json::from_str(&payload_vote.hotstuff_tree_node).unwrap();
-            Some(hot_stuff_tree_node)
+                serde_json::from_str(&payload_vote.hotstuff_tree_node)?;
+            Ok(Some(hot_stuff_tree_node))
         } else {
-            None
+            Ok(None)
         }
     }
 
@@ -694,7 +685,7 @@ impl ShardStoreTransaction<PublicKey, TariDanPayload> for SqliteShardStoreTransa
         payload: PayloadId,
         payload_height: NodeHeight,
         node: HotStuffTreeNode<PublicKey>,
-    ) {
+    ) -> Result<(), Self::Error> {
         let shard = Vec::from(shard.as_bytes());
         let payload = Vec::from(payload.as_slice());
         let payload_height = payload_height.as_u64() as i64;
@@ -712,11 +703,11 @@ impl ShardStoreTransaction<PublicKey, TariDanPayload> for SqliteShardStoreTransa
             .execute(&self.connection)
             .map_err(|e| StorageError::QueryError {
                 reason: format!("Save payload vote error: {}", e),
-            })
-            .unwrap();
+            })?;
+        Ok(())
     }
 
-    fn has_vote_for(&self, from: &PublicKey, node_hash: TreeNodeHash, shard: ShardId) -> bool {
+    fn has_vote_for(&self, from: &PublicKey, node_hash: TreeNodeHash, shard: ShardId) -> Result<bool, Self::Error> {
         use crate::schema::votes::{address, node_height, shard_id, tree_node_hash};
 
         let vote: Option<Vote> = votes
@@ -731,10 +722,9 @@ impl ShardStoreTransaction<PublicKey, TariDanPayload> for SqliteShardStoreTransa
             .optional()
             .map_err(|e| Self::Error::QueryError {
                 reason: format!("Has vote for error: {}", e),
-            })
-            .unwrap();
+            })?;
 
-        vote.is_some()
+        Ok(vote.is_some())
     }
 
     fn save_received_vote_for(
@@ -743,7 +733,7 @@ impl ShardStoreTransaction<PublicKey, TariDanPayload> for SqliteShardStoreTransa
         node_hash: TreeNodeHash,
         shard: ShardId,
         vote_message: VoteMessage,
-    ) -> usize {
+    ) -> Result<usize, Self::Error> {
         use crate::schema::votes::{node_height, shard_id, tree_node_hash};
 
         let from = Vec::from(from.as_bytes());
@@ -753,13 +743,13 @@ impl ShardStoreTransaction<PublicKey, TariDanPayload> for SqliteShardStoreTransa
 
         // TODO: Do we need an index for table `votes` with node_height to
         // more efficiently retrieve the max ?
-        let current_node_height: Option<i64> = votes
-            .select(max(node_height))
-            .first(&self.connection)
-            .map_err(|e| StorageError::QueryError {
-                reason: format!("Save received vote for: {}", e),
-            })
-            .unwrap();
+        let current_node_height: Option<i64> =
+            votes
+                .select(max(node_height))
+                .first(&self.connection)
+                .map_err(|e| StorageError::QueryError {
+                    reason: format!("Save received vote for: {}", e),
+                })?;
 
         let new_row = NewVote {
             tree_node_hash: node_hash.clone(),
@@ -775,8 +765,7 @@ impl ShardStoreTransaction<PublicKey, TariDanPayload> for SqliteShardStoreTransa
             .execute(&self.connection)
             .map_err(|e| StorageError::QueryError {
                 reason: format!("Save received voted for: {}", e),
-            })
-            .unwrap();
+            })?;
 
         let count: i64 = votes
             .filter(
@@ -788,13 +777,12 @@ impl ShardStoreTransaction<PublicKey, TariDanPayload> for SqliteShardStoreTransa
             .first(&self.connection)
             .map_err(|source| StorageError::QueryError {
                 reason: format!("Save received vote: {0}", source),
-            })
-            .unwrap();
+            })?;
 
-        count.try_into().map_err(|_| Self::Error::InvalidIntegerCast).unwrap()
+        count.try_into().map_err(|_| Self::Error::InvalidIntegerCast)
     }
 
-    fn get_received_votes_for(&self, node_hash: TreeNodeHash, shard: ShardId) -> Vec<VoteMessage> {
+    fn get_received_votes_for(&self, node_hash: TreeNodeHash, shard: ShardId) -> Result<Vec<VoteMessage>, Self::Error> {
         use crate::schema::votes::{shard_id, tree_node_hash};
 
         let filtered_votes: Option<Vec<Vote>> = votes
@@ -807,16 +795,16 @@ impl ShardStoreTransaction<PublicKey, TariDanPayload> for SqliteShardStoreTransa
             .optional()
             .map_err(|e| Self::Error::QueryError {
                 reason: format!("Get received vote for: {}", e),
-            })
-            .unwrap();
+            })?;
 
         if let Some(filtered_votes) = filtered_votes {
-            filtered_votes
+            let v = filtered_votes
                 .iter()
-                .map(|v| serde_json::from_str::<VoteMessage>(&v.vote_message).unwrap())
-                .collect::<Vec<_>>()
+                .map(|v| serde_json::from_str::<VoteMessage>(&v.vote_message))
+                .collect::<Result<_, _>>()?;
+            Ok(v)
         } else {
-            vec![]
+            Ok(vec![])
         }
     }
 }
