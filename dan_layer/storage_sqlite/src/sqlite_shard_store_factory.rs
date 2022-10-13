@@ -62,7 +62,7 @@ use crate::{
         leaf_nodes::{LeafNode, NewLeafNode},
         lock_node_and_height::{LockNodeAndHeight, NewLockNodeAndHeight},
         node::{NewNode, Node},
-        objects::Object,
+        objects::{NewObject, Object},
         payload::{NewPayload, Payload as SqlPayload},
         payload_votes::{NewPayloadVote, PayloadVote},
         substate_change::NewSubStateChange,
@@ -456,7 +456,7 @@ impl ShardStoreTransaction<PublicKey, TariDanPayload> for SqliteShardStoreTransa
 
             (tree_node_hash, NodeHeight(height))
         } else {
-            panic!("Item does not exist")
+            (TreeNodeHash::zero(), NodeHeight(0))
         }
     }
 
@@ -484,27 +484,18 @@ impl ShardStoreTransaction<PublicKey, TariDanPayload> for SqliteShardStoreTransa
         &mut self,
         shard: ShardId,
         object: ObjectId,
-        change: SubstateChange,
         payload: PayloadId,
         current_height: NodeHeight,
     ) -> ObjectPledge {
-        use crate::schema::objects::{node_height, object_id, payload_id, shard_id, substate_change};
+        use crate::schema::objects::{current_state, node_height, object_id, payload_id, shard_id};
 
         let shard = Vec::from(shard.as_bytes());
-        let object = Vec::from(object.0);
-        let change = json!(&change).to_string();
-        let payload = Vec::from(payload.as_slice());
-        let current_height = current_height.as_u64() as i64;
+        let f_object = Vec::from(object.as_bytes());
+        let f_payload = Vec::from(payload.as_slice());
 
-        let object: Option<Object> = objects
-            .filter(
-                shard_id
-                    .eq(shard)
-                    .and(object_id.eq(object))
-                    .and(payload_id.eq(payload))
-                    .and(node_height.eq(current_height))
-                    .and(substate_change.eq(change)),
-            )
+        let db_object: Option<Object> = objects
+            .filter(shard_id.eq(&shard).and(object_id.eq(&f_object)))
+            .order_by(node_height.desc())
             .first(&self.connection)
             .optional()
             .map_err(|e| Self::Error::QueryError {
@@ -512,7 +503,8 @@ impl ShardStoreTransaction<PublicKey, TariDanPayload> for SqliteShardStoreTransa
             })
             .unwrap();
 
-        if let Some(obj) = object {
+        let mut db_current_state = SubstateState::DoesNotExist;
+        if let Some(obj) = db_object {
             let object_pledge = obj.object_pledge;
 
             if object_pledge.is_empty() {
@@ -520,10 +512,38 @@ impl ShardStoreTransaction<PublicKey, TariDanPayload> for SqliteShardStoreTransa
             }
 
             let r: ObjectPledge = serde_json::from_str(&object_pledge).unwrap();
-            r
-        } else {
-            panic!("Item does not exist");
+            if r.pledged_until > current_height {
+                return r;
+            }
+            db_current_state = serde_json::from_str(&obj.current_state).unwrap();
         }
+
+        // otherwise save pledge
+        let pledge = ObjectPledge {
+            object_id: object,
+            current_state: db_current_state.clone(),
+            pledged_to_payload: payload,
+            pledged_until: current_height + NodeHeight(4),
+        };
+
+        let new_row = NewObject {
+            shard_id: shard,
+            object_id: f_object,
+            payload_id: f_payload,
+            node_height: current_height.as_u64() as i64,
+            object_pledge: json!(&pledge).to_string(),
+            current_state: json!(&db_current_state).to_string(),
+        };
+        diesel::insert_into(objects)
+            .values(new_row)
+            .execute(&self.connection)
+            .map_err(|e| Self::Error::QueryError {
+                reason: format!("Pledge object error: {}", e),
+            })
+            .unwrap();
+
+        // entry.1 = Some(pledge.clone());
+        pledge
     }
 
     fn set_last_executed_height(&mut self, shard: ShardId, height: NodeHeight) {
@@ -615,7 +635,7 @@ impl ShardStoreTransaction<PublicKey, TariDanPayload> for SqliteShardStoreTransa
                 .unwrap();
             NodeHeight(height)
         } else {
-            panic!("Item does not exist");
+            NodeHeight(0)
         }
     }
 

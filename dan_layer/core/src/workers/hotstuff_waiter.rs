@@ -228,7 +228,7 @@ where
                 if !claim.is_valid(payload) {
                     return Err(HotStuffError::ClaimIsNotValid);
                 }
-                local_pledges.push(tx.pledge_object(shard, object, change, payload, leaf_height));
+                local_pledges.push(tx.pledge_object(shard, object, payload, leaf_height));
             }
             leaf_node = self.create_leaf(
                 leaf,

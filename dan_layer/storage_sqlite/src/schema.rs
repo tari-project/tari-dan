@@ -93,7 +93,7 @@ table! {
         payload_id -> Binary,
         object_id -> Binary,
         node_height -> BigInt,
-        substate_change -> Text,
+        current_state -> Text,
         object_pledge -> Text,
     }
 }

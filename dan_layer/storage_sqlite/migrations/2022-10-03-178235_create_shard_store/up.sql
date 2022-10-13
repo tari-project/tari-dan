@@ -108,13 +108,9 @@ create table objects (
     payload_id blob not NULL,
     object_id blob not NULL,
     node_height bigint not NULL,
-    substate_change text not NULL,
-
+    current_state text not NULL,
     object_pledge text not NULL -- TODO: can it be non null ?
 );
-
--- fetching by (shard_id, object_id) will be a very common operation
-create index objects_index_shard_id_object_id_node_height_substate_change on objects (shard_id, object_id, payload_id, node_height, substate_change);
 
 
 create table substate_changes (

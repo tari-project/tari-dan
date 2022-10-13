@@ -286,7 +286,6 @@ impl<TAddr: NodeAddressable, TPayload: Payload> ShardStoreTransaction<TAddr, TPa
         &mut self,
         shard: ShardId,
         object: ObjectId,
-        _change: SubstateChange,
         payload: PayloadId,
         current_height: NodeHeight,
     ) -> ObjectPledge {
@@ -294,7 +293,7 @@ impl<TAddr: NodeAddressable, TPayload: Payload> ShardStoreTransaction<TAddr, TPa
         let shard_data = guard.objects.entry(shard).or_insert_with(HashMap::new);
         let entry = shard_data.entry(object).or_insert((SubstateState::DoesNotExist, None));
         if let Some(existing_pledge) = &entry.1 {
-            if existing_pledge.pledged_until < current_height {
+            if existing_pledge.pledged_until > current_height {
                 return existing_pledge.clone();
             }
         }

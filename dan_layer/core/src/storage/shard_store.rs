@@ -84,7 +84,6 @@ pub trait ShardStoreTransaction<TAddr: NodeAddressable, TPayload: Payload> {
         &mut self,
         shard: ShardId,
         object: ObjectId,
-        change: SubstateChange,
         payload: PayloadId,
         current_height: NodeHeight,
     ) -> ObjectPledge;
