@@ -450,6 +450,10 @@ where
 
     // TODO: needs some explaination of the process in docs here
     async fn on_receive_proposal(&mut self, from: TAddr, node: HotStuffTreeNode<TAddr>) -> Result<(), HotStuffError> {
+        debug!(
+            target: LOG_TARGET,
+            "Received proposal from: {:?}, node: {:?}", from, node
+        );
         // TODO: validate message from leader
         // TODO: Validate I am processing this shard
         // TODO: Validate the epoch is still valid
@@ -515,7 +519,7 @@ where
                         let mut vote_msg = VoteMessage::new(*local_node.hash(), local_shard, decision, votes.clone());
                         vote_msg.sign();
 
-                        tx.commit().map_err(|e| e.into())?;
+                        // tx.commit().map_err(|e| e.into())?;
                         votes_to_send.push(self.tx_vote_message.send((
                             vote_msg,
                             local_node.proposed_by().clone(), // self.get_leader(),
@@ -523,11 +527,22 @@ where
                         // .await
                         // .map_err(|e| e.to_string())?;
                     }
+                } else {
+                    // save the nodes
+
+                    debug!(
+                        target: LOG_TARGET,
+                        "Not enough votes to vote on the message, votes: {}, involved_shards: {}",
+                        votes.len(),
+                        involved_shards.len()
+                    );
                 }
             } else {
                 error!(target: LOG_TARGET, "Received a proposal that is not valid");
             }
+            tx.commit().map_err(|e| e.into())?;
         }
+
         for vote in votes_to_send {
             vote.await.map_err(|_| HotStuffError::SendError)?;
         }

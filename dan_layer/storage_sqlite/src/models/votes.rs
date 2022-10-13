@@ -28,7 +28,6 @@ pub struct Vote {
     pub tree_node_hash: Vec<u8>,
     pub shard_id: Vec<u8>,
     pub address: Vec<u8>,
-    pub node_height: i64,
     pub vote_message: String,
 }
 
@@ -38,6 +37,5 @@ pub struct NewVote {
     pub tree_node_hash: Vec<u8>,
     pub shard_id: Vec<u8>,
     pub address: Vec<u8>,
-    pub node_height: i64,
     pub vote_message: String,
 }

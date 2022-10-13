@@ -17,12 +17,9 @@ create table votes (
     tree_node_hash blob not NULL,
     shard_id blob not NULL,
     address blob not NULL,
-    node_height bigint not NULL,
     vote_message text not NULL
 );
 
--- fetching by node_height will be a very common operation
-create index votes_index_node_height on votes (node_height);
 -- fetching by the pair (tree_node_hash, shard_id) will be a very common operation
 create index votes_index_tree_node_hash_shard_id on votes (tree_node_hash, shard_id);
 -- fetching by the triplet (tree_node_hash, shard_id, address) will be a very common operation
@@ -76,7 +73,7 @@ create table nodes (
 );
 
 -- fetching by tree_node_hash will be a very common operation
-create index nodes_index_node_hash on nodes (node_hash);
+create unique index nodes_index_node_hash on nodes (node_hash);
 
 
 create table last_executed_heights (

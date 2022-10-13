@@ -26,7 +26,13 @@ use std::{
     path::PathBuf,
 };
 
-use diesel::{dsl::max, prelude::*, SqliteConnection};
+use diesel::{
+    dsl::max,
+    prelude::*,
+    result::{DatabaseErrorKind, DatabaseErrorKind::UniqueViolation, Error},
+    SqliteConnection,
+};
+use log::debug;
 use serde_json::json;
 use tari_common_types::types::{PrivateKey, PublicKey, Signature};
 use tari_dan_common_types::{ObjectId, PayloadId, ShardId, SubstateChange, SubstateState};
@@ -83,6 +89,7 @@ use crate::{
     },
 };
 
+const LOG_TARGET: &str = "tari::dan::storage::sqlite::shard_store";
 pub struct SqliteShardStoreFactory {
     url: PathBuf,
 }
@@ -306,12 +313,25 @@ impl ShardStoreTransaction<PublicKey, TariDanPayload> for SqliteShardStoreTransa
             meta,
         };
 
-        diesel::insert_into(payloads)
-            .values(&new_row)
-            .execute(&self.connection)
-            .map_err(|e| StorageError::QueryError {
-                reason: format!("Set payload error: {}", e),
-            })?;
+        match diesel::insert_into(payloads).values(&new_row).execute(&self.connection) {
+            Ok(_) => {},
+            Err(err) => {
+                // It can happen that we get this payload from two shards that we are responsible
+                match err {
+                    Error::DatabaseError(kind, _) => {
+                        if matches!(kind, DatabaseErrorKind::UniqueViolation) {
+                            debug!(target: LOG_TARGET, "Payload already exists");
+                            return Ok(());
+                        }
+                    },
+                    _ => {
+                        return Err(Self::Error::QueryError {
+                            reason: format!("Set payload error: {}", err),
+                        })
+                    },
+                }
+            },
+        }
         Ok(())
     }
 
@@ -327,8 +347,6 @@ impl ShardStoreTransaction<PublicKey, TariDanPayload> for SqliteShardStoreTransa
         // more efficiently ?
         let node: Option<Node> = table_nodes
             .filter(node_hash.eq(hash.clone()))
-            .order_by(height.desc())
-            .order_by(payload_height.desc())
             .first(&self.connection)
             .optional()
             .map_err(|e| Self::Error::QueryError {
@@ -342,8 +360,8 @@ impl ShardStoreTransaction<PublicKey, TariDanPayload> for SqliteShardStoreTransa
             let parent = TreeNodeHash::from(parent);
             let hgt: u64 = node.height.try_into().map_err(|_| Self::Error::InvalidIntegerCast)?;
 
-            let shard = deserialize::<ShardId>(&node.shard)?;
-            let payload = deserialize::<PayloadId>(node.payload_id.as_slice())?;
+            let shard = ShardId::from_bytes(&node.shard)?;
+            let payload = PayloadId::try_from(node.payload_id)?;
 
             let payload_hgt: u64 = node
                 .payload_height
@@ -385,9 +403,9 @@ impl ShardStoreTransaction<PublicKey, TariDanPayload> for SqliteShardStoreTransa
             .0
             .try_into()
             .map_err(|_| Self::Error::InvalidIntegerCast)?;
-        let shard = serialize(&node.shard())?;
+        let shard = Vec::from(node.shard().as_bytes());
 
-        let payload_id = serialize(&node.payload())?;
+        let payload_id = Vec::from(node.payload().as_bytes());
         let payload_height = node.payload_height().as_u64() as i64;
 
         let local_pledges = json!(&node.local_pledges()).to_string();
@@ -410,12 +428,26 @@ impl ShardStoreTransaction<PublicKey, TariDanPayload> for SqliteShardStoreTransa
             justify,
         };
 
-        diesel::insert_into(table_nodes)
+        match diesel::insert_into(table_nodes)
             .values(&new_row)
             .execute(&self.connection)
-            .map_err(|e| Self::Error::QueryError {
-                reason: format!("Save node error: {}", e),
-            })?;
+        {
+            Ok(_) => {},
+            Err(err) => match err {
+                Error::DatabaseError(kind, _) => {
+                    if matches!(kind, DatabaseErrorKind::UniqueViolation) {
+                        debug!(target: LOG_TARGET, "Node already exists");
+                        return Ok(());
+                    }
+                },
+                _ => {
+                    return Err(Self::Error::QueryError {
+                        reason: format!("Save node error: {}", err),
+                    })
+                },
+            },
+        }
+
         Ok(())
     }
 
@@ -708,7 +740,7 @@ impl ShardStoreTransaction<PublicKey, TariDanPayload> for SqliteShardStoreTransa
     }
 
     fn has_vote_for(&self, from: &PublicKey, node_hash: TreeNodeHash, shard: ShardId) -> Result<bool, Self::Error> {
-        use crate::schema::votes::{address, node_height, shard_id, tree_node_hash};
+        use crate::schema::votes::{address, shard_id, tree_node_hash};
 
         let vote: Option<Vote> = votes
             .filter(
@@ -717,7 +749,6 @@ impl ShardStoreTransaction<PublicKey, TariDanPayload> for SqliteShardStoreTransa
                     .and(tree_node_hash.eq(Vec::from(node_hash.as_bytes())))
                     .and(address.eq(Vec::from(from.as_bytes()))),
             )
-            .order_by(node_height.desc())
             .first(&self.connection)
             .optional()
             .map_err(|e| Self::Error::QueryError {
@@ -734,29 +765,17 @@ impl ShardStoreTransaction<PublicKey, TariDanPayload> for SqliteShardStoreTransa
         shard: ShardId,
         vote_message: VoteMessage,
     ) -> Result<usize, Self::Error> {
-        use crate::schema::votes::{node_height, shard_id, tree_node_hash};
+        use crate::schema::votes::{shard_id, tree_node_hash};
 
         let from = Vec::from(from.as_bytes());
         let node_hash = Vec::from(node_hash.as_bytes());
         let shard = Vec::from(shard.as_bytes());
         let vote_message = json!(&vote_message).to_string();
 
-        // TODO: Do we need an index for table `votes` with node_height to
-        // more efficiently retrieve the max ?
-        let current_node_height: Option<i64> =
-            votes
-                .select(max(node_height))
-                .first(&self.connection)
-                .map_err(|e| StorageError::QueryError {
-                    reason: format!("Save received vote for: {}", e),
-                })?;
-
         let new_row = NewVote {
             tree_node_hash: node_hash.clone(),
             shard_id: shard.clone(),
             address: from,
-            node_height: current_node_height.unwrap() + 1, /* TODO: does every new received vote account for a higher
-                                                            * height ? */
             vote_message,
         };
 

@@ -23,6 +23,7 @@
 use std::{io, sync::PoisonError};
 
 use lmdb_zero as lmdb;
+use tari_common_types::types::FixedHashSizeError;
 use tari_storage::lmdb_store::LMDBError;
 use tari_utilities::ByteArrayError;
 
@@ -50,8 +51,8 @@ pub enum StorageError {
     DecodingError,
     #[error("Failed data encoding")]
     EncodingError,
-    #[error("Fixed hash size error: {reason}")]
-    FixedHashSizeError { reason: String },
+    #[error("Fixed hash size error: {0}")]
+    FixedHashSizeError(#[from] FixedHashSizeError),
     #[error("Invalid integer cast")]
     InvalidIntegerCast,
     #[error("Invalid ByteArray conversion: `{0}`")]

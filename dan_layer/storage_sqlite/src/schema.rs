@@ -175,7 +175,6 @@ table! {
         tree_node_hash -> Binary,
         shard_id -> Binary,
         address -> Binary,
-        node_height -> BigInt,
         vote_message -> Text,
     }
 }
