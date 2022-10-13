@@ -26,7 +26,6 @@ pub use service_impl::ValidatorNodeRpcServiceImpl;
 use tari_comms::protocol::rpc::{Request, Response, RpcStatus, Streaming};
 use tari_comms_rpc_macros::tari_rpc;
 use tari_dan_core::services::PeerProvider;
-use tari_dan_storage_sqlite::sqlite_shard_store_factory::SqliteShardStoreTransaction;
 
 use crate::p2p::{proto, services::messaging::DanMessageSenders};
 
@@ -47,8 +46,8 @@ pub trait ValidatorNodeRpcService: Send + Sync + 'static {
     #[rpc(method = 3)]
     async fn vn_state_sync(
         &self,
-        request: Request<proto::network::VNStateSyncRequest>,
-    ) -> Result<Streaming<proto::network::VNStateSyncResponse>, RpcStatus>;
+        request: Request<proto::common::ShardId>,
+    ) -> Result<Streaming<proto::common::SubstateState>, RpcStatus>;
 }
 
 pub fn create_validator_node_rpc_service<TPeerProvider>(
@@ -59,9 +58,5 @@ pub fn create_validator_node_rpc_service<TPeerProvider>(
 where
     TPeerProvider: PeerProvider + Clone + Send + Sync + 'static,
 {
-    ValidatorNodeRpcServer::new(ValidatorNodeRpcServiceImpl::new(
-        message_senders,
-        peer_provider,
-        connection,
-    ))
+    ValidatorNodeRpcServer::new(ValidatorNodeRpcServiceImpl::new(message_senders, peer_provider, connection))
 }

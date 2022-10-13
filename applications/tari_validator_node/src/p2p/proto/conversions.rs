@@ -23,7 +23,6 @@
 use std::{
     borrow::Borrow,
     convert::{TryFrom, TryInto},
-    ops::Sub,
 };
 
 use anyhow::anyhow;
@@ -107,13 +106,13 @@ impl TryFrom<proto::validator_node::DanMessage> for DanMessage<TariDanPayload, C
 
 // -------------------------------- ShardId ------------------------------------ //
 
-impl TryFrom<proto::consensus::ShardId> for ShardId {
-    fn try_from(value: proto::consensus::ShardId) -> Result<Self, Self::Error> {
+impl TryFrom<proto::common::ShardId> for ShardId {
+    fn try_from(value: proto::common::ShardId) -> Result<Self, Self::Error> {
         Ok(ShardId(value.bytes))
     }
 }
 
-impl From<ShardId> for proto::consensus::ShardId {
+impl From<ShardId> for proto::common::ShardId {
     fn from(value: ShardId) -> Self {
         Self {
             bytes: value.to_le_bytes(),
@@ -123,13 +122,13 @@ impl From<ShardId> for proto::consensus::ShardId {
 
 // -------------------------------- PayloadId   -------------------------------- //
 
-impl TryFrom<proto::consensus::PayloadId> for PayloadId {
-    fn try_from(value: proto::consensus::ShardId) -> Result<Self, Self::Error> {
+impl TryFrom<proto::common::PayloadId> for PayloadId {
+    fn try_from(value: proto::common::ShardId) -> Result<Self, Self::Error> {
         Ok(PayloadId::new(value.payload_id))
     }
 }
 
-impl From<PayloadId> for proto::consensus::PayloadId {
+impl From<PayloadId> for proto::common::PayloadId {
     fn from(value: PayloadId) -> Self {
         Self {
             payload_id: value.as_slice(),
@@ -140,7 +139,7 @@ impl From<PayloadId> for proto::consensus::PayloadId {
 // -------------------------------- SubstateState ------------------------------ //
 
 impl TryFrom<proto::common::SubstateState> for SubstateState {
-    fn try_from(request: proto::consensus::SubstateState) -> Result<Self, Self::Error> {
+    fn try_from(request: proto::common::SubstateState) -> Result<Self, Self::Error> {
         let result = match request.substate_state_type {
             0 => SubstateState::DoesNotExist,
             1 => SubstateState::Up {
@@ -156,7 +155,7 @@ impl TryFrom<proto::common::SubstateState> for SubstateState {
     }
 }
 
-impl From<SubstateState> for proto::consensus::SubstateState {
+impl From<SubstateState> for proto::common::SubstateState {
     fn from(value: SubstateState) -> Self {
         let result = proto::common::SubstateState::default();
         match value {
@@ -166,11 +165,11 @@ impl From<SubstateState> for proto::consensus::SubstateState {
             SubstateState::Up { data, created_by } => {
                 result.substate_state_type = 1;
                 result.data = data;
-                result.created_by = proto::consensus::PayloadId::from(created_by);
+                result.created_by = proto::common::PayloadId::from(created_by);
             },
             SubstateState::Down { deleted_by } => {
                 result.substate_state_type = 2;
-                result.deleted_by = proto::consensus::PayloadId::from(deleted_by);
+                result.deleted_by = proto::common::PayloadId::from(deleted_by);
             },
         }
 

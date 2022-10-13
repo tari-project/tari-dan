@@ -22,6 +22,7 @@
 // DAMAGE.
 use std::convert::TryInto;
 
+use diesel::SqliteConnection;
 use log::*;
 use tari_comms::protocol::rpc::{Request, Response, RpcStatus, Streaming};
 use tari_dan_core::{
@@ -140,7 +141,7 @@ where TPeerProvider: PeerProvider + Clone + Send + Sync + 'static
                 offset += limit;
                 for state in states {
                     // if send returns error, the client has closed the connection, so we break the loop
-                    if tx.send(Ok(proto::common::State::from(state))).is_err() {
+                    if tx.send(Ok(proto::common::SubstateState::from(state))).is_err() {
                         break;
                     }
                 }

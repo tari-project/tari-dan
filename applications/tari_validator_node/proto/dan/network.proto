@@ -46,7 +46,3 @@ message GetPeersResponse {
   repeated bytes addresses = 2;
   IdentitySignature identity_signature = 3;
 }
-
-message VNStateSyncResponse {
-  bytes result = 1;
-}
