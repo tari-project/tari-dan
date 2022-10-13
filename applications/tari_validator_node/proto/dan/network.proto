@@ -47,10 +47,6 @@ message GetPeersResponse {
   IdentitySignature identity_signature = 3;
 }
 
-message VNStateSyncRequest {
-  tari.dan.common.ShardId shard_id = 1;
-}
-
 message VNStateSyncResponse {
   bytes result = 1;
 }

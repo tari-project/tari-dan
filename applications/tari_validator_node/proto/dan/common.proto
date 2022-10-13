@@ -18,10 +18,6 @@ message ShardId {
   bytes bytes = 1;
 }
 
-message SubstateState {
-  
-}
-
 message SignerSignature {
   bytes signer = 1;
   Signature signature = 2;
@@ -118,4 +114,20 @@ message Arg {
   }
   ArgType arg_type = 1;
   bytes data = 2;
+}
+
+message PayloadId {
+  bytes payload_id = 1;
+}
+
+message SubstateState {
+  enum SubstateStateType {
+    DOES_NOT_EXIST = 0;
+    UP = 1;
+    DOWN = 2;
+  }
+  SubstateStateType substate_state_type = 1;
+  PayloadId created_by = 2;
+  bytes data = 3;
+  PayloadId deleted_by = 4;
 }

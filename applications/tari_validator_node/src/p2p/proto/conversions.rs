@@ -23,6 +23,7 @@
 use std::{
     borrow::Borrow,
     convert::{TryFrom, TryInto},
+    ops::Sub,
 };
 
 use anyhow::anyhow;
@@ -31,7 +32,7 @@ use chrono::{DateTime, NaiveDateTime, Utc};
 use tari_common_types::types::{PrivateKey, PublicKey, Signature};
 use tari_comms::{peer_manager::IdentitySignature, types::CommsPublicKey};
 use tari_crypto::tari_utilities::ByteArray;
-use tari_dan_common_types::ShardId;
+use tari_dan_common_types::{PayloadId, ShardId};
 use tari_dan_core::{
     message::{DanMessage, NetworkAnnounce},
     models::{
@@ -114,6 +115,38 @@ impl From<ShardId> for proto::consensus::ShardId {
     fn from(value: ShardId) -> Self {
         Self {
             bytes: value.to_le_bytes(),
+        }
+    }
+}
+
+// -------------------------------- PayloadId   -------------------------------- //
+
+impl TryFrom<proto::consensus::PayloadId> for PayloadId {
+    fn try_from(value: proto::consensus::ShardId) -> Result<Self, Self::Error> {
+        Ok(PayloadId::new(value.payload_id))
+    }
+}
+
+impl From<PayloadId> for proto::consensus::PayloadId {
+    fn from(value: PayloadId) -> Self {
+        Self {
+            payload_id: value.as_slice(),
+        }
+    }
+}
+
+// -------------------------------- SubstateState ------------------------------ //
+
+impl TryFrom<proto::consensus::SubstateState> for SubstateState {
+    fn try_from(value: proto::consensus::SubstateState) -> Result<Self, Self::Error> {
+        Ok()
+    }
+}
+
+impl From<SubstateState> for proto::consensus::SubstateState {
+    fn from(value: SubstateState) -> Self {
+        Self {
+            payload_id: value.as_slice(),
         }
     }
 }
