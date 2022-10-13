@@ -44,6 +44,7 @@ async fn start_validator_node(_world: &mut TariWorld, _name: String) {
     config.validator_node.data_dir = temp_dir.path().to_path_buf();
     config.validator_node.shard_key_file = temp_dir.path().join("shard_key.json");
     config.validator_node.identity_file = temp_dir.path().join("validator_node_id.json");
+    config.validator_node.tor_identity_file = temp_dir.path().join("validator_node_tor_id.json");
 
     // TODO: use a spawned base node instead of a real one
     config.validator_node.base_node_grpc_address = "127.0.0.1:18152".parse().unwrap();
