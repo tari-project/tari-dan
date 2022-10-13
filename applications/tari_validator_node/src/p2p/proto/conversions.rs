@@ -143,15 +143,15 @@ impl TryFrom<proto::common::SubstateState> for SubstateState {
     fn try_from(request: proto::consensus::SubstateState) -> Result<Self, Self::Error> {
         let result = match request.substate_state_type {
             0 => SubstateState::DoesNotExist,
-            1 => SubstateState::Up { 
+            1 => SubstateState::Up {
                 created_by: request.created_by,
                 data: request.data,
             },
             2 => SubstateState::Down {
-                deleted_by: request.deleted_by
-            }
+                deleted_by: request.deleted_by,
+            },
         };
-        
+
         Ok(result)
     }
 }
@@ -171,7 +171,7 @@ impl From<SubstateState> for proto::consensus::SubstateState {
             SubstateState::Down { deleted_by } => {
                 result.substate_state_type = 2;
                 result.deleted_by = proto::consensus::PayloadId::from(deleted_by);
-            }
+            },
         }
 
         result
