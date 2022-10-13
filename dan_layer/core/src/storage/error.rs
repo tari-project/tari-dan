@@ -42,8 +42,8 @@ pub enum StorageError {
     MigrationError { reason: String },
     #[error("Invalid unit of work tracker type")]
     InvalidUnitOfWorkTrackerType,
-    #[error("Item does not exist")]
-    NotFound,
+    #[error("Not found: item: {item} key: {key}")]
+    NotFound { item: String, key: String },
     #[error("File system path does not exist")]
     FileSystemPathDoesNotExist,
     #[error("Failed data decoding")]
@@ -63,6 +63,8 @@ pub enum StorageError {
     General { details: String },
     #[error("Lock error")]
     LockError,
+    #[error("Error converting to or from json: {0}")]
+    SerdeJson(#[from] serde_json::Error),
 }
 
 impl<T> From<PoisonError<T>> for StorageError {

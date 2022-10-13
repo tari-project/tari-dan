@@ -29,7 +29,7 @@ pub struct Vote {
     pub shard_id: Vec<u8>,
     pub address: Vec<u8>,
     pub node_height: i64,
-    pub vote_message: Vec<u8>,
+    pub vote_message: String,
 }
 
 #[derive(Debug, Insertable)]
@@ -39,5 +39,5 @@ pub struct NewVote {
     pub shard_id: Vec<u8>,
     pub address: Vec<u8>,
     pub node_height: i64,
-    pub vote_message: Vec<u8>,
+    pub vote_message: String,
 }

@@ -37,6 +37,7 @@ use tari_dan_core::{
         HotStuffTreeNode,
         NodeHeight,
         ObjectPledge,
+        Payload,
         QuorumCertificate,
         TariDanPayload,
         TreeNodeHash,
@@ -50,7 +51,7 @@ use tari_dan_core::{
 };
 use tari_dan_engine::transaction::{Transaction, TransactionMeta};
 use tari_engine_types::{instruction::Instruction, signature::InstructionSignature};
-use tari_utilities::ByteArray;
+use tari_utilities::{hex::Hex, ByteArray};
 
 use crate::{
     error::SqliteStorageError,
@@ -62,7 +63,7 @@ use crate::{
         lock_node_and_height::{LockNodeAndHeight, NewLockNodeAndHeight},
         node::{NewNode, Node},
         objects::Object,
-        payload::{NewPayload, Payload},
+        payload::{NewPayload, Payload as SqlPayload},
         payload_votes::{NewPayloadVote, PayloadVote},
         substate_change::NewSubStateChange,
         votes::{NewVote, Vote},
@@ -181,7 +182,8 @@ impl ShardStoreTransaction<PublicKey, TariDanPayload> for SqliteShardStoreTransa
                 NodeHeight(leaf_node.node_height as u64),
             )
         } else {
-            panic!("Item does not exist");
+            // if no leaves, return genesis
+            (TreeNodeHash::zero(), NodeHeight(0))
         }
     }
 
@@ -218,6 +220,7 @@ impl ShardStoreTransaction<PublicKey, TariDanPayload> for SqliteShardStoreTransa
     }
 
     fn get_high_qc_for(&self, shard: ShardId) -> QuorumCertificate {
+        dbg!("get high qc");
         use crate::schema::high_qcs::height;
         let qc: Option<HighQc> = high_qcs
             .filter(shard_id.eq(Vec::from(shard.0)))
@@ -236,9 +239,10 @@ impl ShardStoreTransaction<PublicKey, TariDanPayload> for SqliteShardStoreTransa
     }
 
     fn get_payload(&self, id: &PayloadId) -> Result<TariDanPayload, Self::Error> {
+        dbg!("get payload");
         use crate::schema::payloads::payload_id;
 
-        let payload: Option<Payload> = payloads
+        let payload: Option<SqlPayload> = payloads
             .filter(payload_id.eq(Vec::from(id.as_slice())))
             .first(&self.connection)
             .optional()
@@ -247,7 +251,7 @@ impl ShardStoreTransaction<PublicKey, TariDanPayload> for SqliteShardStoreTransa
             })?;
 
         if let Some(payload) = payload {
-            let instructions = deserialize::<Vec<Instruction>>(&payload.instructions)?;
+            let instructions: Vec<Instruction> = serde_json::from_str(&payload.instructions)?;
 
             let fee: u64 = payload.fee.try_into().map_err(|_| Self::Error::InvalidIntegerCast)?;
 
@@ -265,19 +269,22 @@ impl ShardStoreTransaction<PublicKey, TariDanPayload> for SqliteShardStoreTransa
 
             let sender_public_key =
                 PublicKey::from_vec(&payload.sender_public_key).map_err(Self::Error::InvalidByteArrayConversion)?;
-            let meta = deserialize::<TransactionMeta>(&payload.meta)?;
+            let meta: TransactionMeta = serde_json::from_str(&payload.meta)?;
 
             let transaction = Transaction::new(fee, instructions, signature, sender_public_key, meta);
 
             Ok(TariDanPayload::new(transaction))
         } else {
-            Err(Self::Error::NotFound)
+            Err(Self::Error::NotFound {
+                item: "payload".to_string(),
+                key: id.to_string(),
+            })
         }
     }
 
     fn set_payload(&mut self, payload: TariDanPayload) {
         let transaction = payload.transaction();
-        let instructions = serialize(&transaction.instructions()).unwrap();
+        let instructions = json!(&transaction.instructions()).to_string();
 
         let signature = transaction.signature();
 
@@ -287,11 +294,9 @@ impl ShardStoreTransaction<PublicKey, TariDanPayload> for SqliteShardStoreTransa
         let fee = transaction.fee() as i64;
         let sender_public_key = Vec::from(transaction.sender_public_key().as_bytes());
 
-        let meta = serialize(transaction.meta())
-            .map_err(|_| Self::Error::EncodingError)
-            .unwrap();
+        let meta = json!(transaction.meta()).to_string();
 
-        let payload_id = Vec::from(transaction.hash().as_ref());
+        let payload_id = Vec::from(payload.to_id().as_slice());
 
         let new_row = NewPayload {
             payload_id,
@@ -313,13 +318,17 @@ impl ShardStoreTransaction<PublicKey, TariDanPayload> for SqliteShardStoreTransa
     }
 
     fn get_node(&self, hash: &TreeNodeHash) -> Result<HotStuffTreeNode<PublicKey>, Self::Error> {
+        if hash == &TreeNodeHash::zero() {
+            return Ok(HotStuffTreeNode::genesis());
+        }
+
         use crate::schema::nodes::{height, node_hash, payload_height};
 
         let hash = Vec::from(hash.as_bytes());
         // TODO: Do we need to add an index to the table to order by `height` and `payload_height`
         // more efficiently ?
         let node: Option<Node> = table_nodes
-            .filter(node_hash.eq(hash))
+            .filter(node_hash.eq(hash.clone()))
             .order_by(height.desc())
             .order_by(payload_height.desc())
             .first(&self.connection)
@@ -344,7 +353,7 @@ impl ShardStoreTransaction<PublicKey, TariDanPayload> for SqliteShardStoreTransa
                 .try_into()
                 .map_err(|_| Self::Error::InvalidIntegerCast)
                 .unwrap();
-            let local_pledges = deserialize::<Vec<ObjectPledge>>(node.local_pledges.as_slice())?;
+            let local_pledges: Vec<ObjectPledge> = serde_json::from_str(&node.local_pledges)?;
 
             let epoch: u64 = node
                 .epoch
@@ -354,7 +363,7 @@ impl ShardStoreTransaction<PublicKey, TariDanPayload> for SqliteShardStoreTransa
             let proposed_by =
                 PublicKey::from_vec(&node.proposed_by).map_err(Self::Error::InvalidByteArrayConversion)?;
 
-            let justify = deserialize::<QuorumCertificate>(&node.justify)?;
+            let justify: QuorumCertificate = serde_json::from_str(&node.justify)?;
 
             Ok(HotStuffTreeNode::new(
                 parent,
@@ -368,7 +377,10 @@ impl ShardStoreTransaction<PublicKey, TariDanPayload> for SqliteShardStoreTransa
                 justify,
             ))
         } else {
-            Err(Self::Error::NotFound)
+            Err(Self::Error::NotFound {
+                item: "node".to_string(),
+                key: hash.to_hex(),
+            })
         }
     }
 
@@ -387,12 +399,12 @@ impl ShardStoreTransaction<PublicKey, TariDanPayload> for SqliteShardStoreTransa
         let payload_id = serialize(&node.payload()).unwrap();
         let payload_height = node.payload_height().as_u64() as i64;
 
-        let local_pledges = serialize(&node.local_pledges()).unwrap();
+        let local_pledges = json!(&node.local_pledges()).to_string();
 
         let epoch = node.epoch().as_u64() as i64;
         let proposed_by = Vec::from(node.proposed_by().as_bytes());
 
-        let justify = serialize(node.justify()).unwrap();
+        let justify = json!(node.justify()).to_string();
 
         let new_row = NewNode {
             node_hash,
@@ -480,7 +492,7 @@ impl ShardStoreTransaction<PublicKey, TariDanPayload> for SqliteShardStoreTransa
 
         let shard = Vec::from(shard.as_bytes());
         let object = Vec::from(object.0);
-        let change = serialize(&change).unwrap();
+        let change = json!(&change).to_string();
         let payload = Vec::from(payload.as_slice());
         let current_height = current_height.as_u64() as i64;
 
@@ -507,7 +519,8 @@ impl ShardStoreTransaction<PublicKey, TariDanPayload> for SqliteShardStoreTransa
                 panic!("Item does not exist");
             }
 
-            deserialize::<ObjectPledge>(&object_pledge).unwrap()
+            let r: ObjectPledge = serde_json::from_str(&object_pledge).unwrap();
+            r
         } else {
             panic!("Item does not exist");
         }
@@ -560,9 +573,9 @@ impl ShardStoreTransaction<PublicKey, TariDanPayload> for SqliteShardStoreTransa
         for (sid, st_ch) in &changes {
             let shard = Vec::from(sid.as_bytes());
             let substate_change = if let Some(st_ch) = st_ch {
-                serialize(st_ch).unwrap()
+                json!(st_ch).to_string()
             } else {
-                vec![]
+                "".to_string()
             };
 
             let new_row = NewSubStateChange {
@@ -647,8 +660,8 @@ impl ShardStoreTransaction<PublicKey, TariDanPayload> for SqliteShardStoreTransa
             .unwrap();
 
         if let Some(payload_vote) = payload_vote {
-            let hot_stuff_tree_node =
-                deserialize::<HotStuffTreeNode<PublicKey>>(&payload_vote.hotstuff_tree_node).unwrap();
+            let hot_stuff_tree_node: HotStuffTreeNode<PublicKey> =
+                serde_json::from_str(&payload_vote.hotstuff_tree_node).unwrap();
             Some(hot_stuff_tree_node)
         } else {
             None
@@ -665,7 +678,7 @@ impl ShardStoreTransaction<PublicKey, TariDanPayload> for SqliteShardStoreTransa
         let shard = Vec::from(shard.as_bytes());
         let payload = Vec::from(payload.as_slice());
         let payload_height = payload_height.as_u64() as i64;
-        let node = serialize(&node).unwrap();
+        let node = json!(&node).to_string();
 
         let new_row = NewPayloadVote {
             shard_id: shard,
@@ -716,7 +729,7 @@ impl ShardStoreTransaction<PublicKey, TariDanPayload> for SqliteShardStoreTransa
         let from = Vec::from(from.as_bytes());
         let node_hash = Vec::from(node_hash.as_bytes());
         let shard = Vec::from(shard.as_bytes());
-        let vote_message = serialize(&vote_message).unwrap();
+        let vote_message = json!(&vote_message).to_string();
 
         // TODO: Do we need an index for table `votes` with node_height to
         // more efficiently retrieve the max ?
@@ -780,7 +793,7 @@ impl ShardStoreTransaction<PublicKey, TariDanPayload> for SqliteShardStoreTransa
         if let Some(filtered_votes) = filtered_votes {
             filtered_votes
                 .iter()
-                .map(|v| deserialize::<VoteMessage>(&v.vote_message).unwrap())
+                .map(|v| serde_json::from_str::<VoteMessage>(&v.vote_message).unwrap())
                 .collect::<Vec<_>>()
         } else {
             vec![]

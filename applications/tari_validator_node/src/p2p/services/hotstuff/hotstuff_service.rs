@@ -31,6 +31,7 @@ use tari_dan_core::{
     workers::hotstuff_waiter::HotStuffWaiter,
 };
 use tari_dan_engine::transaction::Transaction;
+use tari_dan_storage_sqlite::sqlite_shard_store_factory::SqliteShardStoreFactory;
 use tari_shutdown::ShutdownSignal;
 use tokio::{
     sync::mpsc::{channel, Receiver, Sender},
@@ -72,7 +73,7 @@ impl HotstuffService {
         mempool: MempoolHandle,
         outbound: OutboundMessaging,
         payload_processor: TariDanPayloadProcessor<TemplateManager>,
-        shard_store_factory: MemoryShardStoreFactory<CommsPublicKey, TariDanPayload>,
+        shard_store_factory: SqliteShardStoreFactory,
         rx_hotstuff_messages: Receiver<(CommsPublicKey, HotStuffMessage<TariDanPayload, CommsPublicKey>)>,
         rx_vote_messages: Receiver<(CommsPublicKey, VoteMessage)>,
         shutdown: ShutdownSignal,
@@ -119,7 +120,7 @@ impl HotstuffService {
         to: CommsPublicKey,
         msg: HotStuffMessage<TariDanPayload, CommsPublicKey>,
     ) -> Result<(), anyhow::Error> {
-        debug!(target: LOG_TARGET, "Sending leader message to {}", to);
+        trace!(target: LOG_TARGET, "Sending leader message to {}", to);
         self.outbound
             .send(self.node_public_key.clone(), to, DanMessage::HotStuffMessage(msg))
             .await?;
@@ -160,15 +161,15 @@ impl HotstuffService {
                 }
                // Outbound
                Some((to, msg)) = self.rx_leader.recv() => {
-                    debug!(target: LOG_TARGET, "Received leader message: {:?}", msg);
+                    debug!(target: LOG_TARGET, "Received leader message: {}", &msg);
                     log(self.handle_leader_message(to, msg).await, "leader message");
                    }
                Some((msg, leader)) = self.rx_vote_message.recv() => {
-                    debug!(target: LOG_TARGET, "Received vote message: {:?}", msg);
+                    debug!(target: LOG_TARGET, "Received vote message");
                     log(self.handle_vote_message(leader, msg).await, "vote message");
                     }
                Some((msg, dest_nodes)) = self.rx_broadcast.recv() => {
-                    debug!(target: LOG_TARGET, "Received broadcast message: {:?}", msg);
+                    debug!(target: LOG_TARGET, "Received broadcast message: {}", &msg);
                     log(self.handle_broadcast_message(dest_nodes, msg).await, "broadcast message");
                     }
                 // Shutdown

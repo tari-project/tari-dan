@@ -353,23 +353,13 @@ where
 
         let (_b_lock, b_lock_height) = tx.get_locked_node_hash_and_height(shard);
         if b_one.height().0 > b_lock_height.0 {
-            // commit
-            dbg!("Commiting height", b_one.height());
+            debug!(target: LOG_TARGET, "Updating locked node to: {:?}", b_one.hash());
             tx.set_locked(shard, *b_one.hash(), b_one.height());
         }
-        // if b_one.justify().local_node_hash() == &TreeNodeHash::zero() {
-        //     dbg!("b is genesis, nothing to do");
-        //     return Ok(());
-        // }
-        // let b = self
-        //     .shard_db
-        //     .node(b_one.justify().node_hash())
-        //     .ok_or("No node b")?
-        //     .clone();
-        // dbg!(&b);
+
         if node.justify().payload_height() == NodeHeight(2) {
             // decide
-            dbg!("Deciding height:", node.height());
+            debug!(target: LOG_TARGET, "Deciding on payload: {:?}", node.payload());
             self.on_commit(node, shard, &mut tx)?;
         }
         tx.commit().map_err(|e| e.into())?;
@@ -385,7 +375,6 @@ where
         if tx.get_last_executed_height(shard) < node.height() {
             if node.parent() != &TreeNodeHash::zero() {
                 let parent = tx.get_node(node.parent()).map_err(|e| e.into())?;
-                dbg!("Committing parent");
                 self.on_commit(parent, shard, tx)?;
             }
             if node.justify().payload_height() == NodeHeight(2) {
@@ -456,7 +445,6 @@ where
 
     // TODO: needs some explaination of the process in docs here
     async fn on_receive_proposal(&mut self, from: TAddr, node: HotStuffTreeNode<TAddr>) -> Result<(), HotStuffError> {
-        dbg!("Received proposal", &self.identity, &from);
         // TODO: validate message from leader
         // TODO: Validate I am processing this shard
         // TODO: Validate the epoch is still valid
@@ -498,7 +486,6 @@ where
                         break;
                     }
                 }
-                dbg!(&self.identity, "Votes received", votes.len());
                 if votes.len() == involved_shards.len() {
                     // it may happen that we are involved in more than one committee, in which case send the votes to
                     // each leader.
@@ -527,8 +514,7 @@ where
                     }
                 }
             } else {
-                dbg!("Invalid proposal");
-                dbg!("ignoring");
+                error!(target: LOG_TARGET, "Received a proposal that is not valid");
             }
         }
         for vote in votes_to_send {
@@ -570,7 +556,6 @@ where
 
             let total_votes = tx.save_received_vote_for(from, msg.local_node_hash(), msg.shard(), msg.clone());
             // Check for consensus
-            dbg!(total_votes);
             if total_votes >= valid_committee.consensus_threshold() {
                 let mut different_votes = HashMap::new();
                 for vote in tx.get_received_votes_for(msg.local_node_hash(), msg.shard()) {
@@ -603,9 +588,7 @@ where
                         on_beat_future = Some(self.on_beat(msg.shard(), node.payload()));
                         break;
                     }
-                    dbg!("Not enough votes for this one", votes.len());
                 }
-                dbg!("Enough votes, but not enough for a single node");
             }
         }
         if let Some(on_beat) = on_beat_future {

@@ -27,6 +27,7 @@ use tari_dan_core::{
     models::{vote_message::VoteMessage, HotStuffMessage, TariDanPayload},
     storage::shard_store::MemoryShardStoreFactory,
 };
+use tari_dan_storage_sqlite::sqlite_shard_store_factory::SqliteShardStoreFactory;
 use tari_shutdown::ShutdownSignal;
 use tokio::sync::mpsc;
 
@@ -39,10 +40,12 @@ use crate::{
         template_manager::TemplateManager,
     },
     payload_processor::TariDanPayloadProcessor,
+    ValidatorNodeConfig,
 };
 
-pub fn spawn(
+pub fn try_spawn(
     node_identity: Arc<NodeIdentity>,
+    config: &ValidatorNodeConfig,
     outbound: OutboundMessaging,
     epoch_manager: EpochManagerHandle,
     mempool: MempoolHandle,
@@ -50,9 +53,9 @@ pub fn spawn(
     rx_consensus_message: mpsc::Receiver<(CommsPublicKey, HotStuffMessage<TariDanPayload, CommsPublicKey>)>,
     rx_vote_message: mpsc::Receiver<(CommsPublicKey, VoteMessage)>,
     shutdown: ShutdownSignal,
-) {
-    // let sqlite_db = SqliteShardStoreFactory {};
-    let db = MemoryShardStoreFactory::new();
+) -> Result<(), anyhow::Error> {
+    let db = SqliteShardStoreFactory::try_create(config.data_dir.join("state.db"))?;
+    // let db = MemoryShardStoreFactory::new();
     HotstuffService::spawn(
         node_identity.public_key().clone(),
         epoch_manager,
@@ -64,4 +67,5 @@ pub fn spawn(
         rx_vote_message,
         shutdown,
     );
+    Ok(())
 }

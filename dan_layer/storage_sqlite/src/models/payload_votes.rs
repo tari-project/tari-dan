@@ -28,7 +28,7 @@ pub struct PayloadVote {
     pub payload_id: Vec<u8>,
     pub shard_id: Vec<u8>,
     pub node_height: i64,
-    pub hotstuff_tree_node: Vec<u8>,
+    pub hotstuff_tree_node: String,
 }
 
 #[derive(Debug, Insertable)]
@@ -37,5 +37,5 @@ pub struct NewPayloadVote {
     pub payload_id: Vec<u8>,
     pub shard_id: Vec<u8>,
     pub node_height: i64,
-    pub hotstuff_tree_node: Vec<u8>,
+    pub hotstuff_tree_node: String,
 }

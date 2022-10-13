@@ -20,6 +20,8 @@
 // WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 // USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+use std::fmt::{Display, Formatter};
+
 use tari_common_types::types::FixedHash;
 use tari_dan_common_types::ShardId;
 
@@ -166,5 +168,18 @@ impl<TPayload: Payload, TAddr: NodeAddressable> HotStuffMessage<TPayload, TAddr>
 
     pub fn partial_sig(&self) -> Option<&ValidatorSignature> {
         todo!()
+    }
+}
+
+impl<TPayload: Payload, TAddr: NodeAddressable> Display for HotStuffMessage<TPayload, TAddr> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "HSMessage {{ message_type: {:?}, node height: {:?}, payload height: {:?}, shard: {:?} }}",
+            self.message_type,
+            self.node.as_ref().map(|n| n.height()),
+            self.node.as_ref().map(|n| n.payload_height()),
+            self.shard.as_ref().map(|s| s.to_string())
+        )
     }
 }

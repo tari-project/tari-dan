@@ -1,12 +1,12 @@
 create table payloads (
     id integer not null primary key AUTOINCREMENT,
     payload_id blob not null,
-    instructions blob not NULL,
+    instructions text not NULL,
     public_nonce blob not NULL,
     scalar blob not NULL,
     fee bigint not NULL,
     sender_public_key blob not NULL,
-    meta blob NOT NULL
+    meta text NOT NULL
 );
 
 -- fetching by the payload_id will be a very common operation
@@ -19,7 +19,7 @@ create table votes (
     shard_id blob not NULL,
     address blob not NULL,
     node_height bigint not NULL,
-    vote_message blob not NULL
+    vote_message text not NULL
 );
 
 -- fetching by node_height will be a very common operation
@@ -70,10 +70,10 @@ create table nodes (
     shard blob not NULL,
     payload_id blob not NULL,
     payload_height bigint not NULL,
-    local_pledges blob not NULL,
+    local_pledges text not NULL,
     epoch bigint not NULL,
     proposed_by blob not NULL,
-    justify blob not NULL
+    justify text not NULL
 );
 
 -- fetching by tree_node_hash will be a very common operation
@@ -95,7 +95,7 @@ create table payload_votes (
     payload_id blob not NULL,
     shard_id blob not NULL,
     node_height bigint not NULL,
-    hotstuff_tree_node blob not NULL
+    hotstuff_tree_node text not NULL
 );
 
 -- fetching by (payload_id, shard_id, node_height) will be a very common operation
@@ -108,9 +108,9 @@ create table objects (
     payload_id blob not NULL,
     object_id blob not NULL,
     node_height bigint not NULL,
-    substate_change blob not NULL,
+    substate_change text not NULL,
 
-    object_pledge blob not NULL -- TODO: can it be non null ?
+    object_pledge text not NULL -- TODO: can it be non null ?
 );
 
 -- fetching by (shard_id, object_id) will be a very common operation
@@ -120,7 +120,7 @@ create index objects_index_shard_id_object_id_node_height_substate_change on obj
 create table substate_changes (
     id integer not null primary key AUTOINCREMENT,
     shard_id blob not NULL,
-    substate_change blob,
+    substate_change text not null,
     tree_node_hash blob not NULL
 );
 

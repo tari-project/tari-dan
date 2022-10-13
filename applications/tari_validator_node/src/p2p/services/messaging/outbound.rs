@@ -129,7 +129,7 @@ impl OutboundService for OutboundMessaging {
         message: DanMessage<Self::Payload, Self::Addr>,
     ) -> Result<(), DigitalAssetError> {
         if to == self.our_node_addr {
-            debug!(target: LOG_TARGET, "Sending {:?} to self", message);
+            trace!(target: LOG_TARGET, "Sending {:?} to self", message);
             self.loopback_sender
                 .send(message)
                 .await
@@ -161,7 +161,7 @@ impl OutboundService for OutboundMessaging {
 
         // send it more than once to ourselves??
         for _ in ours {
-            debug!(target: LOG_TARGET, "Sending {:?} to self", message);
+            trace!(target: LOG_TARGET, "Sending {:?} to self", message);
             self.loopback_sender
                 .send(message.clone())
                 .await
