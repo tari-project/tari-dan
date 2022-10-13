@@ -4122,6 +4122,7 @@ dependencies = [
  "tari_mmr",
  "tari_template_abi",
  "tari_template_lib",
+ "tari_template_test_tooling",
  "tari_utilities",
  "tempfile",
  "thiserror",
