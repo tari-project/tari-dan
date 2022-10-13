@@ -665,7 +665,6 @@ where
                                     error!(target: LOG_TARGET, "Received generic message without node");
                                 }
                             }
-                            _ => todo!()
                         }
                     }
                 },

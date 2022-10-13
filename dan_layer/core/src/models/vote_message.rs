@@ -26,7 +26,7 @@ use tari_common_types::types::FixedHash;
 use tari_crypto::hash::blake2::Blake256;
 use tari_dan_common_types::ShardId;
 
-use crate::models::{ObjectPledge, QuorumDecision, ShardVote, TreeNodeHash, ValidatorSignature};
+use crate::models::{QuorumDecision, ShardVote, TreeNodeHash, ValidatorSignature};
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct VoteMessage {

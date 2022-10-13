@@ -36,9 +36,7 @@ use tari_dan_core::{
     message::{DanMessage, NetworkAnnounce},
     models::{
         vote_message::VoteMessage,
-        Epoch,
         HotStuffMessage,
-        HotStuffMessageType,
         HotStuffTreeNode,
         Node,
         ObjectPledge,
@@ -142,7 +140,7 @@ impl From<HotStuffMessage<TariDanPayload, CommsPublicKey>> for proto::consensus:
             message_type: i32::from(source.message_type().as_u8()),
             node: source.node().map(|n| n.clone().into()),
             justify: source.justify().map(|j| j.clone().into()),
-            high_qc: source.high_qc().map(|h| h.clone().into()),
+            high_qc: source.high_qc().map(|h| h.into()),
             shard: source.shard().as_bytes().to_vec(),
             new_view_payload: source.new_view_payload().map(|p| p.clone().into()),
         }
@@ -175,7 +173,7 @@ impl From<ObjectPledge> for proto::consensus::ObjectPledge {
             SubstateState::DoesNotExist => {},
             SubstateState::Up { created_by, data } => {
                 inner_created_by = created_by.as_bytes().to_vec();
-                inner_data = data.clone();
+                inner_data = data;
                 current_state = 1;
             },
             SubstateState::Down { deleted_by } => {
@@ -290,9 +288,7 @@ impl From<ShardVote> for proto::consensus::ShardVote {
 }
 impl From<ValidatorSignature> for proto::consensus::ValidatorSignature {
     fn from(s: ValidatorSignature) -> Self {
-        Self {
-            signer: s.signer.clone(),
-        }
+        Self { signer: s.signer }
     }
 }
 
@@ -418,9 +414,7 @@ impl TryFrom<proto::consensus::ValidatorSignature> for ValidatorSignature {
     type Error = anyhow::Error;
 
     fn try_from(value: proto::consensus::ValidatorSignature) -> Result<Self, Self::Error> {
-        Ok(Self {
-            signer: value.signer.try_into()?,
-        })
+        Ok(Self { signer: value.signer })
     }
 }
 
@@ -433,7 +427,7 @@ impl TryFrom<proto::consensus::TariDanPayload> for TariDanPayload {
                 .transaction
                 .map(|s| s.try_into())
                 .transpose()?
-                .ok_or(anyhow!("transaction is missing"))?,
+                .ok_or_else(|| anyhow!("transaction is missing"))?,
         ))
     }
 }
