@@ -23,7 +23,6 @@
 use std::net::SocketAddr;
 
 use async_trait::async_trait;
-use serde::{Deserialize, Serialize};
 use tari_app_grpc::tari_rpc::{
     BuildInfo,
     CreateTemplateRegistrationRequest,
@@ -36,8 +35,8 @@ use tari_app_grpc::tari_rpc::{
 };
 use tari_comms::NodeIdentity;
 use tari_crypto::tari_utilities::ByteArray;
-use tari_dan_common_types::serde_with;
 use tari_dan_core::{services::WalletClient, DigitalAssetError};
+use tari_validator_node_client::types::TemplateRegistrationRequest;
 use tari_wallet_grpc_client::Client as GrpcWallet;
 
 use crate::{
@@ -123,22 +122,3 @@ impl GrpcWalletClient {
 
 #[async_trait]
 impl WalletClient for GrpcWalletClient {}
-
-#[derive(Debug, Serialize, Deserialize)]
-pub struct TemplateRegistrationRequest {
-    template_name: String,
-    template_version: u16,
-    repo_url: String,
-    #[serde(with = "serde_with::base64")]
-    commit_hash: Vec<u8>,
-    #[serde(with = "serde_with::base64")]
-    binary_sha: Vec<u8>,
-    binary_url: String,
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-pub struct TemplateRegistrationResponse {
-    #[serde(with = "serde_with::base64")]
-    pub template_address: Vec<u8>,
-    pub transaction_id: u64,
-}

@@ -21,9 +21,9 @@
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 use tari_comms::types::CommsPublicKey;
-use tari_dan_common_types::ShardId;
+use tari_dan_common_types::{Epoch, ShardId};
 use tari_dan_core::{
-    models::{Committee, Epoch},
+    models::Committee,
     services::epoch_manager::{EpochManagerError, ShardCommitteeAllocation},
 };
 use tari_dan_storage_sqlite::SqliteDbFactory;
@@ -112,6 +112,9 @@ impl EpochManagerService {
     }
 
     pub async fn run(&mut self, mut shutdown: ShutdownSignal) -> Result<(), EpochManagerError> {
+        // first, load initial state
+        self.inner.load_initial_state().await?;
+
         loop {
             tokio::select! {
                 Some((req, reply)) = self.rx_request.recv() => {

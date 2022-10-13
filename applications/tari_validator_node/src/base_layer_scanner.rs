@@ -270,6 +270,8 @@ impl BaseLayerScanner {
                 }
             }
 
+            self.epoch_manager.update_epoch(block_info.height).await?;
+
             self.set_last_scanned_block(block_info.height, block_info.hash)?;
             match block_info.next_block_hash {
                 Some(next_hash) => {
@@ -304,7 +306,8 @@ impl BaseLayerScanner {
             target: LOG_TARGET,
             "⛓️ Validator node registration UTXO found at height {}", height,
         );
-        self.epoch_manager.update_epoch(height).await?;
+        // todo: maybe register? idk
+        // self.epoch_manager.update_epoch(height).await?;
         Ok(())
     }
 

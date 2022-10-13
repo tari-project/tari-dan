@@ -23,11 +23,11 @@
 use std::{collections::HashMap, ops::Range};
 
 use async_trait::async_trait;
-use tari_dan_common_types::ShardId;
+use tari_dan_common_types::{Epoch, ShardId};
 use thiserror::Error;
 
 use crate::{
-    models::{Committee, Epoch},
+    models::Committee,
     services::{base_node_error::BaseNodeError, infrastructure_services::NodeAddressable},
     storage::StorageError,
 };

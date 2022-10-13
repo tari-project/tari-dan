@@ -26,14 +26,14 @@ use tari_common_types::types::FixedHash;
 use tari_crypto::hash::blake2::Blake256;
 use tari_dan_common_types::ShardId;
 
-use crate::models::{ObjectPledge, QuorumDecision, TreeNodeHash, ValidatorSignature};
+use crate::models::{QuorumDecision, ShardVote, TreeNodeHash, ValidatorSignature};
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct VoteMessage {
     local_node_hash: TreeNodeHash,
     shard: ShardId,
     decision: QuorumDecision,
-    all_shard_nodes: Vec<(ShardId, TreeNodeHash, Vec<ObjectPledge>)>,
+    all_shard_nodes: Vec<ShardVote>,
     signature: Option<ValidatorSignature>,
 }
 
@@ -42,9 +42,9 @@ impl VoteMessage {
         local_node_hash: TreeNodeHash,
         shard: ShardId,
         decision: QuorumDecision,
-        mut all_shard_nodes: Vec<(ShardId, TreeNodeHash, Vec<ObjectPledge>)>,
+        mut all_shard_nodes: Vec<ShardVote>,
     ) -> Self {
-        all_shard_nodes.sort_by(|a, b| a.0.cmp(&b.0));
+        all_shard_nodes.sort_by(|a, b| a.shard_id.cmp(&b.shard_id));
 
         Self {
             local_node_hash,
@@ -59,10 +59,10 @@ impl VoteMessage {
         local_node_hash: TreeNodeHash,
         shard: ShardId,
         decision: QuorumDecision,
-        mut all_shard_nodes: Vec<(ShardId, TreeNodeHash, Vec<ObjectPledge>)>,
+        mut all_shard_nodes: Vec<ShardVote>,
         signature: ValidatorSignature,
     ) -> Self {
-        all_shard_nodes.sort_by(|a, b| a.0.cmp(&b.0));
+        all_shard_nodes.sort_by(|a, b| a.shard_id.cmp(&b.shard_id));
 
         Self {
             local_node_hash,
@@ -85,10 +85,15 @@ impl VoteMessage {
     pub fn get_all_nodes_hash(&self) -> FixedHash {
         let mut result = Blake256::new().chain(&[self.decision.as_u8()]);
         // data must already be sorted
-        for (shard, hash, pledges) in &self.all_shard_nodes {
+        for ShardVote {
+            shard_id,
+            node_hash,
+            pledges,
+        } in &self.all_shard_nodes
+        {
             result = result
-                .chain(shard.0)
-                .chain(hash.as_bytes())
+                .chain(shard_id.0)
+                .chain(node_hash.as_bytes())
                 .chain((pledges.len() as u32).to_le_bytes());
 
             for p in pledges {
@@ -110,7 +115,7 @@ impl VoteMessage {
         self.decision
     }
 
-    pub fn all_shard_nodes(&self) -> &Vec<(ShardId, TreeNodeHash, Vec<ObjectPledge>)> {
+    pub fn all_shard_nodes(&self) -> &Vec<ShardVote> {
         &self.all_shard_nodes
     }
 }

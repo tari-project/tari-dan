@@ -24,16 +24,16 @@ use std::convert::TryInto;
 
 use tari_comms::types::CommsPublicKey;
 use tari_crypto::tari_utilities::ByteArray;
-use tari_dan_common_types::ShardId;
+use tari_dan_common_types::{Epoch, ShardId};
 use tari_dan_core::{
-    models::{Committee, Epoch, ValidatorNode},
+    models::{Committee, ValidatorNode},
     services::{
         epoch_manager::{EpochManagerError, ShardCommitteeAllocation},
         BaseNodeClient,
     },
     storage::DbFactory,
 };
-use tari_dan_storage::global::DbValidatorNode;
+use tari_dan_storage::global::{DbValidatorNode, MetadataKey};
 use tari_dan_storage_sqlite::SqliteDbFactory;
 
 use crate::grpc::services::base_node_client::GrpcBaseNodeClient;
@@ -55,6 +55,25 @@ impl BaseLayerEpochManager {
         }
     }
 
+    pub async fn load_initial_state(&mut self) -> Result<(), EpochManagerError> {
+        let db = self.db_factory.get_or_create_global_db()?;
+        let tx = db
+            .create_transaction()
+            .map_err(|e| EpochManagerError::StorageError(e.into()))?;
+        let metadata = db.metadata(&tx);
+        let current_epoch = metadata
+            .get_metadata(MetadataKey::CurrentEpoch)
+            .map_err(|e| EpochManagerError::StorageError(e.into()))?
+            .map(|v| {
+                let v2 = [v[0], v[1], v[2], v[3], v[4], v[5], v[6], v[7]];
+                Epoch(u64::from_le_bytes(v2))
+            })
+            .unwrap_or_else(|| Epoch(0));
+        self.current_epoch = current_epoch;
+
+        Ok(())
+    }
+
     pub async fn update_epoch(&mut self, tip: u64) -> Result<(), EpochManagerError> {
         let epoch = Epoch(tip / 10);
         if self.current_epoch >= epoch {
@@ -69,37 +88,16 @@ impl BaseLayerEpochManager {
 
         // insert the new VNs for this epoch in the database
         self.insert_validator_nodes(epoch, vns)?;
+        let db = self.db_factory.get_or_create_global_db()?;
+        let tx = db
+            .create_transaction()
+            .map_err(|e| EpochManagerError::StorageError(e.into()))?;
+        let metadata = db.metadata(&tx);
+        metadata
+            .set_metadata(MetadataKey::CurrentEpoch, &epoch.0.to_le_bytes())
+            .map_err(|e| EpochManagerError::StorageError(e.into()))?;
+        db.commit(tx).map_err(|e| EpochManagerError::StorageError(e.into()))?;
         self.current_epoch = epoch;
-        // let shard_key;
-        // match base_node_client.clone().get_shard_key(epoch.0 * 10, &self.id).await {
-        //     Ok(Some(key)) => shard_key = key,
-        //     Ok(None) => {
-        //         warn!(target: LOG_TARGET, "Validator node not found in the current epoch");
-        //         return Ok(());
-        //     },
-        //     Err(e) => {
-        //         warn!(target: LOG_TARGET, "This VN is not registered: {}", e);
-        //         return Ok(());
-        //     },
-        // };
-        //
-        //
-        // let p = vns.iter().position(|x| x.shard_key == shard_key).unwrap();
-        // let begin = &vns[((vns.len() + p).saturating_sub(half_committee_size)) % vns.len()].shard_key;
-        // let end = &vns[(p + half_committee_size) % vns.len()].shard_key;
-        // let vns: Vec<ValidatorNode> = if p >= half_committee_size || p + half_committee_size >= vns.len() {
-        //     //     This means the committee is wrapped around
-        //     vns.iter()
-        //         .filter(|&a| &a.shard_key <= begin || &a.shard_key >= end)
-        //         .cloned()
-        //         .collect()
-        // } else {
-        //     vns.iter()
-        //         .filter(|&a| &a.shard_key >= begin || &a.shard_key <= end)
-        //         .cloned()
-        //         .collect()
-        // };
-        // *self.neighbours.entry(epoch.0).or_insert(vns.clone()) = vns.clone();
         Ok(())
     }
 

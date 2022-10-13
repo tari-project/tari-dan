@@ -23,7 +23,7 @@
 use std::collections::HashMap;
 
 use log::{debug, error, info};
-use tari_dan_common_types::{PayloadId, ShardId, SubstateState};
+use tari_dan_common_types::{Epoch, PayloadId, ShardId, SubstateState};
 use tari_dan_engine::runtime::TransactionResult;
 use tari_shutdown::ShutdownSignal;
 use tokio::{
@@ -34,7 +34,6 @@ use tokio::{
 use crate::{
     models::{
         vote_message::VoteMessage,
-        Epoch,
         HotStuffMessage,
         HotStuffMessageType,
         HotStuffTreeNode,
@@ -43,6 +42,7 @@ use crate::{
         Payload,
         QuorumCertificate,
         QuorumDecision,
+        ShardVote,
         TreeNodeHash,
         ValidatorSignature,
     },
@@ -388,11 +388,16 @@ where
                 self.on_commit(parent, shard, tx)?;
             }
             if node.justify().payload_height() == NodeHeight(2) {
-                let payload = tx.get_payload(&node.justify().payload()).map_err(|e| e.into())?;
+                let payload = tx.get_payload(&node.justify().payload_id()).map_err(|e| e.into())?;
 
                 let mut all_pledges = HashMap::new();
-                for (pledge_shard, _, pledges) in node.justify().all_shard_nodes() {
-                    all_pledges.insert(*pledge_shard, pledges.clone());
+                for ShardVote {
+                    shard_id,
+                    node_hash: _,
+                    pledges,
+                } in node.justify().all_shard_nodes()
+                {
+                    all_pledges.insert(*shard_id, pledges.clone());
                 }
                 let changes = self.execute(all_pledges, payload)?;
                 tx.save_substate_changes(changes, *node.hash());
@@ -436,7 +441,7 @@ where
 
     fn validate_proposal(&self, node: &HotStuffTreeNode<TAddr>) -> Result<(), HotStuffError> {
         if node.payload_height() == NodeHeight(0) ||
-            (node.payload() == node.justify().payload() &&
+            (node.payload() == node.justify().payload_id() &&
                 node.payload_height() == node.justify().payload_height() + NodeHeight(1))
         {
             if node.payload_height() > NodeHeight(4) {
@@ -483,7 +488,11 @@ where
                 let mut votes = vec![];
                 for s in &involved_shards {
                     if let Some(vote) = tx.get_payload_vote(node.payload(), node.payload_height(), *s) {
-                        votes.push((*s, *vote.hash(), vote.local_pledges().to_vec()));
+                        votes.push(ShardVote {
+                            shard_id: *s,
+                            node_hash: *vote.hash(),
+                            pledges: vote.local_pledges().to_vec(),
+                        });
                     } else {
                         break;
                     }
@@ -659,7 +668,6 @@ where
                                     error!(target: LOG_TARGET, "Received generic message without node");
                                 }
                             }
-                            _ => todo!()
                         }
                     }
                 },

@@ -63,7 +63,7 @@ impl AtomicDb for SqliteGlobalDbAdapter {
                 operation: "set pragma".to_string(),
             })?;
         connection
-            .execute("BEGIN EXCLUSIVE TRANSACTION;")
+            .execute("BEGIN TRANSACTION;")
             .map_err(|source| SqliteStorageError::DieselError {
                 source,
                 operation: "begin transaction".to_string(),

@@ -83,6 +83,17 @@ impl MempoolService {
             "New Payload in mempool for shards: {:?}",
             payload.involved_shards()
         );
+        {
+            let mut access = self.transactions.lock().unwrap();
+            // TODO: O(n)
+            if access.iter().any(|(tx, _)| tx.hash() == transaction.hash()) {
+                info!(target: LOG_TARGET, "🎱 Transaction already in mempool");
+                return;
+            }
+
+            access.push((transaction.clone(), None));
+        }
+
         for shard_id in payload.involved_shards() {
             if let Err(err) = self.tx_valid_transactions.send((transaction.clone(), shard_id)) {
                 error!(
@@ -91,7 +102,8 @@ impl MempoolService {
                 );
             }
         }
-        self.transactions.lock().unwrap().push((transaction.clone(), None));
+
+        // TODO: Should just propagate to shards involved
         let msg = DanMessage::NewTransaction(transaction);
         if let Err(err) = self.outbound.flood(Default::default(), msg).await {
             error!(target: LOG_TARGET, "Failed to broadcast new transaction: {}", err);

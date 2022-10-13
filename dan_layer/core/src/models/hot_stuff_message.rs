@@ -44,12 +44,7 @@ pub struct HotStuffMessage<TPayload, TAddr> {
     // The high qc: used for new view messages
     high_qc: Option<QuorumCertificate>,
     node: Option<HotStuffTreeNode<TAddr>>,
-    // node_hash: Option<TreeNodeHash>,
-    // partial_sig: Option<ValidatorSignature>,
-    // checkpoint_signature: Option<SignerSignature>,
-    // contract_id: Option<FixedHash>,
     shard: Option<ShardId>,
-    _epoch: Option<u32>,
     // Used for broadcasting the payload in new view
     new_view_payload: Option<TPayload>,
 }
@@ -62,7 +57,6 @@ impl<TPayload: Payload, TAddr: NodeAddressable> Default for HotStuffMessage<TPay
             high_qc: Default::default(),
             node: Default::default(),
             shard: Default::default(),
-            _epoch: None,
             new_view_payload: None,
         }
     }
@@ -70,22 +64,21 @@ impl<TPayload: Payload, TAddr: NodeAddressable> Default for HotStuffMessage<TPay
 
 impl<TPayload: Payload, TAddr: NodeAddressable> HotStuffMessage<TPayload, TAddr> {
     pub fn new(
-        _message_type: HotStuffMessageType,
-        _justify: Option<QuorumCertificate>,
-        _node: Option<HotStuffTreeNode<TAddr>>,
-        _node_hash: Option<TreeNodeHash>,
-        _partial_sig: Option<ValidatorSignature>,
-        _contract_id: FixedHash,
+        message_type: HotStuffMessageType,
+        justify: Option<QuorumCertificate>,
+        high_qc: Option<QuorumCertificate>,
+        node: Option<HotStuffTreeNode<TAddr>>,
+        shard: Option<ShardId>,
+        new_view_payload: Option<TPayload>,
     ) -> Self {
-        todo!();
-        // Self {
-        //     message_type,
-        //     justify,
-        //     node,
-        //     high_qc: None,
-        //     shard: None,
-        //     new_view_payload: None,
-        // }
+        Self {
+            message_type,
+            justify,
+            high_qc,
+            node,
+            shard,
+            new_view_payload,
+        }
     }
 
     pub fn new_view(high_qc: QuorumCertificate, shard: ShardId, payload: Option<TPayload>) -> Self {
@@ -95,7 +88,6 @@ impl<TPayload: Payload, TAddr: NodeAddressable> HotStuffMessage<TPayload, TAddr>
             shard: Some(shard),
             justify: None,
             node: None,
-            _epoch: None,
             // Traditional hotstuff does not include broadcasting a payload at the same time,
             // but if this is a view for a specific payload, then it can be sent to the leader as
             // an attachment

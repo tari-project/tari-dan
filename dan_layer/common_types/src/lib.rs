@@ -4,6 +4,7 @@
 pub mod proto;
 pub mod storage;
 
+mod epoch;
 pub mod optional;
 pub mod serde_with;
 mod template_id;
@@ -16,12 +17,30 @@ use std::{
 
 use ::serde::{Deserialize, Serialize};
 use borsh::{BorshDeserialize, BorshSerialize};
+pub use epoch::Epoch;
 use tari_common_types::types::{FixedHash, FixedHashSizeError};
 use tari_utilities::{byte_array::ByteArray, hex::Hex};
 pub use template_id::TemplateId;
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Hash, Deserialize, Serialize)]
 pub struct ObjectId(#[serde(deserialize_with = "serde_with::hex::deserialize")] pub [u8; 32]);
+
+impl ObjectId {
+    pub fn as_bytes(&self) -> &[u8] {
+        &self.0
+    }
+}
+
+impl TryFrom<Vec<u8>> for ObjectId {
+    type Error = FixedHashSizeError;
+
+    fn try_from(value: Vec<u8>) -> Result<Self, Self::Error> {
+        let hash = FixedHash::try_from(value)?;
+        let mut v = [0u8; 32];
+        v.copy_from_slice(hash.as_slice());
+        Ok(Self(v))
+    }
+}
 
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Hash, Serialize, Deserialize)]
 pub struct ShardId(#[serde(with = "serde_with::hex")] pub [u8; 32]);
@@ -53,6 +72,20 @@ impl ShardId {
 impl From<[u8; 32]> for ShardId {
     fn from(bytes: [u8; 32]) -> Self {
         Self(bytes)
+    }
+}
+
+impl From<ShardId> for Vec<u8> {
+    fn from(s: ShardId) -> Self {
+        s.as_bytes().to_vec()
+    }
+}
+
+impl TryFrom<Vec<u8>> for ShardId {
+    type Error = FixedHashSizeError;
+
+    fn try_from(value: Vec<u8>) -> Result<Self, Self::Error> {
+        Self::from_bytes(&value)
     }
 }
 
@@ -117,6 +150,10 @@ impl PayloadId {
         self.id.as_slice()
     }
 
+    pub fn as_bytes(&self) -> &[u8] {
+        self.as_slice()
+    }
+
     pub fn into_array(self) -> [u8; 32] {
         self.id
     }
@@ -125,5 +162,13 @@ impl PayloadId {
 impl Display for PayloadId {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         write!(f, "{}", self.id.to_hex())
+    }
+}
+
+impl TryFrom<Vec<u8>> for PayloadId {
+    type Error = FixedHashSizeError;
+
+    fn try_from(value: Vec<u8>) -> Result<Self, Self::Error> {
+        Ok(PayloadId::new(FixedHash::try_from(value.as_slice())?))
     }
 }
