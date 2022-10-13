@@ -20,27 +20,25 @@
 //   WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //   USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use std::path::PathBuf;
+use clap::Subcommand;
 
-use clap::Parser;
-use multiaddr::Multiaddr;
+mod account;
+pub use account::AccountsSubcommand;
 
-use crate::command::Command;
+mod template;
+pub use template::{PublishTemplateArgs, TemplateSubcommand};
 
-#[derive(Parser, Debug)]
-#[clap(author, version, about, long_about = None)]
-#[clap(propagate_version = true)]
-pub(crate) struct Cli {
-    #[clap(long, alias = "endpoint")]
-    pub vn_daemon_jrpc_endpoint: Option<Multiaddr>,
-    #[clap(long, short = 'b', alias = "basedir")]
-    pub base_dir: Option<PathBuf>,
+mod vn;
+
+pub use vn::VnSubcommand;
+
+#[allow(clippy::large_enum_variant)]
+#[derive(Debug, Subcommand, Clone)]
+pub enum Command {
     #[clap(subcommand)]
-    pub command: Command,
-}
-
-impl Cli {
-    pub fn init() -> Self {
-        Self::parse()
-    }
+    Vn(VnSubcommand),
+    #[clap(subcommand)]
+    Templates(TemplateSubcommand),
+    #[clap(subcommand)]
+    Accounts(AccountsSubcommand),
 }
