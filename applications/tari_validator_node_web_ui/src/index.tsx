@@ -20,10 +20,20 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-mod handlers;
-pub use handlers::JsonRpcHandlers;
+import React from "react";
+import ReactDOM from "react-dom/client";
+import "./index.css";
+import ValidatorNode from "./ValidatorNode";
+import reportWebVitals from "./reportWebVitals";
 
-mod jrpc_errors;
-mod server;
+const root = ReactDOM.createRoot(document.getElementById("root") as HTMLElement);
+root.render(
+  <React.StrictMode>
+    <ValidatorNode />
+  </React.StrictMode>
+);
 
-pub use server::run_json_rpc;
+// If you want to start measuring performance in your app, pass a function
+// to log results (for example: reportWebVitals(console.log))
+// or send to an analytics endpoint. Learn more: https://bit.ly/CRA-vitals
+reportWebVitals();

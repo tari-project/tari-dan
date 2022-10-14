@@ -20,10 +20,15 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-mod handlers;
-pub use handlers::JsonRpcHandlers;
+interface IEpoch {
+  current_epoch: number;
+  is_valid: boolean;
+}
 
-mod jrpc_errors;
-mod server;
+interface IIdentity {
+  node_id: string;
+  public_address: string;
+  public_key: string;
+}
 
-pub use server::run_json_rpc;
+export { type IEpoch, type IIdentity };

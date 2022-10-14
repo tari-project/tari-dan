@@ -28,6 +28,7 @@ use tari_dan_engine::transaction::Transaction;
 use tokio::sync::{broadcast, broadcast::error::RecvError, mpsc, mpsc::error::SendError};
 
 pub type TransactionVecMutex = Arc<Mutex<Vec<(Transaction, Option<TreeNodeHash>)>>>;
+
 #[derive(Debug)]
 pub struct MempoolHandle {
     rx_valid_transactions: broadcast::Receiver<(Transaction, ShardId)>,

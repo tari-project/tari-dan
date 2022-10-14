@@ -11,7 +11,8 @@ use tari_template_lib::{
 
 use crate::hashing::hasher;
 
-#[derive(Debug, Clone, Deserialize, Encode, Serialize)]
+#[derive(Debug, Clone, Encode, Deserialize, Serialize)]
+#[serde(tag = "type")]
 pub enum Instruction {
     CallFunction {
         template_address: TemplateAddress,

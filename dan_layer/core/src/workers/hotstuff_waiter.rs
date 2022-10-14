@@ -23,7 +23,7 @@
 use std::collections::HashMap;
 
 use log::{debug, error, info};
-use tari_dan_common_types::{PayloadId, ShardId, SubstateState};
+use tari_dan_common_types::{Epoch, PayloadId, ShardId, SubstateState};
 use tari_dan_engine::runtime::TransactionResult;
 use tari_shutdown::ShutdownSignal;
 use tokio::{
@@ -34,7 +34,6 @@ use tokio::{
 use crate::{
     models::{
         vote_message::VoteMessage,
-        Epoch,
         HotStuffMessage,
         HotStuffMessageType,
         HotStuffTreeNode,
