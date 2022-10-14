@@ -36,6 +36,17 @@ table! {
 }
 
 table! {
+    leader_proposals (id) {
+        id -> Integer,
+        payload_id -> Binary,
+        shard_id -> Binary,
+        payload_height -> BigInt,
+        node_hash -> Binary,
+        hotstuff_tree_node -> Text,
+    }
+}
+
+table! {
     leaf_nodes (id) {
         id -> Integer,
         shard_id -> Binary,
@@ -99,16 +110,6 @@ table! {
 }
 
 table! {
-    payload_votes (id) {
-        id -> Integer,
-        payload_id -> Binary,
-        shard_id -> Binary,
-        node_height -> BigInt,
-        hotstuff_tree_node -> Text,
-    }
-}
-
-table! {
     payloads (id) {
         id -> Integer,
         payload_id -> Binary,
@@ -128,6 +129,16 @@ table! {
         view_number -> BigInt,
         node_hash -> Binary,
         signature -> Nullable<Binary>,
+    }
+}
+
+table! {
+    received_votes (id) {
+        id -> Integer,
+        tree_node_hash -> Binary,
+        shard_id -> Binary,
+        address -> Binary,
+        vote_message -> Text,
     }
 }
 
@@ -169,16 +180,6 @@ table! {
     }
 }
 
-table! {
-    votes (id) {
-        id -> Integer,
-        tree_node_hash -> Binary,
-        shard_id -> Binary,
-        address -> Binary,
-        vote_message -> Text,
-    }
-}
-
 joinable!(instructions -> nodes (node_id));
 
 allow_tables_to_appear_in_same_query!(
@@ -186,18 +187,18 @@ allow_tables_to_appear_in_same_query!(
     instructions,
     last_executed_heights,
     last_voted_heights,
+    leader_proposals,
     leaf_nodes,
     lock_node_and_heights,
     locked_qc,
     metadata,
     nodes,
     objects,
-    payload_votes,
     payloads,
     prepare_qc,
+    received_votes,
     state_keys,
     state_op_log,
     state_tree,
     substate_changes,
-    votes,
 );

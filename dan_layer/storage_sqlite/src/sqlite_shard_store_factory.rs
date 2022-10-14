@@ -32,7 +32,7 @@ use diesel::{
     result::{DatabaseErrorKind, DatabaseErrorKind::UniqueViolation, Error},
     SqliteConnection,
 };
-use log::debug;
+use log::{debug, warn};
 use serde_json::json;
 use tari_common_types::types::{PrivateKey, PublicKey, Signature};
 use tari_dan_common_types::{ObjectId, PayloadId, ShardId, SubstateChange, SubstateState};
@@ -65,27 +65,27 @@ use crate::{
         high_qc::{HighQc, NewHighQc},
         last_executed_height::{LastExecutedHeight, NewLastExecutedHeight},
         last_voted_height::{LastVotedHeight, NewLastVotedHeight},
+        leader_proposals::{LeaderProposal, NewLeaderProposal},
         leaf_nodes::{LeafNode, NewLeafNode},
         lock_node_and_height::{LockNodeAndHeight, NewLockNodeAndHeight},
         node::{NewNode, Node},
         objects::{NewObject, Object},
         payload::{NewPayload, Payload as SqlPayload},
-        payload_votes::{NewPayloadVote, PayloadVote},
+        received_votes::{NewReceivedVote, ReceivedVote},
         substate_change::NewSubStateChange,
-        votes::{NewVote, Vote},
     },
     schema::{
         high_qcs::{dsl::high_qcs, shard_id},
         last_executed_heights::dsl::last_executed_heights,
         last_voted_heights::dsl::last_voted_heights,
+        leader_proposals::dsl::leader_proposals,
         leaf_nodes::dsl::leaf_nodes,
         lock_node_and_heights::dsl::lock_node_and_heights,
         nodes::dsl::nodes as table_nodes,
         objects::dsl::objects,
-        payload_votes::dsl::payload_votes,
         payloads::dsl::payloads,
+        received_votes::dsl::received_votes,
         substate_changes::dsl::substate_changes,
-        votes::dsl::votes,
     },
 };
 
@@ -681,20 +681,20 @@ impl ShardStoreTransaction<PublicKey, TariDanPayload> for SqliteShardStoreTransa
         Ok(())
     }
 
-    fn get_payload_vote(
+    fn get_leader_proposals(
         &self,
         payload: PayloadId,
         payload_height: NodeHeight,
         shard: ShardId,
     ) -> Result<Option<HotStuffTreeNode<PublicKey>>, Self::Error> {
-        use crate::schema::payload_votes::{node_height, payload_id, shard_id};
+        use crate::schema::leader_proposals::{payload_height as s_payload_height, payload_id, shard_id};
 
-        let payload_vote: Option<PayloadVote> = payload_votes
+        let payload_vote: Option<LeaderProposal> = leader_proposals
             .filter(
                 payload_id
                     .eq(Vec::from(payload.as_slice()))
                     .and(shard_id.eq(Vec::from(shard.as_bytes())))
-                    .and(node_height.eq(payload_height.as_u64() as i64)),
+                    .and(s_payload_height.eq(payload_height.as_u64() as i64)),
             )
             .first(&self.connection)
             .optional()
@@ -711,7 +711,7 @@ impl ShardStoreTransaction<PublicKey, TariDanPayload> for SqliteShardStoreTransa
         }
     }
 
-    fn save_payload_vote(
+    fn save_leader_proposals(
         &mut self,
         shard: ShardId,
         payload: PayloadId,
@@ -721,28 +721,41 @@ impl ShardStoreTransaction<PublicKey, TariDanPayload> for SqliteShardStoreTransa
         let shard = Vec::from(shard.as_bytes());
         let payload = Vec::from(payload.as_slice());
         let payload_height = payload_height.as_u64() as i64;
+        let node_hash = node.hash().as_bytes().to_vec();
         let node = json!(&node).to_string();
 
-        let new_row = NewPayloadVote {
+        let new_row = NewLeaderProposal {
             shard_id: shard,
             payload_id: payload,
-            node_height: payload_height,
+            payload_height,
+            node_hash,
             hotstuff_tree_node: node,
         };
 
-        diesel::insert_into(payload_votes)
+        match diesel::insert_into(leader_proposals)
             .values(&new_row)
             .execute(&self.connection)
-            .map_err(|e| StorageError::QueryError {
-                reason: format!("Save payload vote error: {}", e),
-            })?;
-        Ok(())
+        {
+            Ok(_) => Ok(()),
+            Err(e) => match e {
+                diesel::result::Error::DatabaseError(diesel::result::DatabaseErrorKind::UniqueViolation, _) => {
+                    warn!(target: LOG_TARGET, "Leader proposal already exists");
+                    Ok(())
+                },
+                _ => Err(Self::Error::QueryError {
+                    reason: format!("Save leader proposal: {}", e),
+                }),
+            },
+        }
+        // .map_err(|e| StorageError::QueryError {
+        //     reason: format!("Save payload vote error: {}", e),
+        // })?;
     }
 
     fn has_vote_for(&self, from: &PublicKey, node_hash: TreeNodeHash, shard: ShardId) -> Result<bool, Self::Error> {
-        use crate::schema::votes::{address, shard_id, tree_node_hash};
+        use crate::schema::received_votes::{address, shard_id, tree_node_hash};
 
-        let vote: Option<Vote> = votes
+        let vote: Option<ReceivedVote> = received_votes
             .filter(
                 shard_id
                     .eq(Vec::from(shard.as_bytes()))
@@ -765,28 +778,28 @@ impl ShardStoreTransaction<PublicKey, TariDanPayload> for SqliteShardStoreTransa
         shard: ShardId,
         vote_message: VoteMessage,
     ) -> Result<usize, Self::Error> {
-        use crate::schema::votes::{shard_id, tree_node_hash};
+        use crate::schema::received_votes::{shard_id, tree_node_hash};
 
         let from = Vec::from(from.as_bytes());
         let node_hash = Vec::from(node_hash.as_bytes());
         let shard = Vec::from(shard.as_bytes());
         let vote_message = json!(&vote_message).to_string();
 
-        let new_row = NewVote {
+        let new_row = NewReceivedVote {
             tree_node_hash: node_hash.clone(),
             shard_id: shard.clone(),
             address: from,
             vote_message,
         };
 
-        diesel::insert_into(votes)
+        diesel::insert_into(received_votes)
             .values(&new_row)
             .execute(&self.connection)
             .map_err(|e| StorageError::QueryError {
                 reason: format!("Save received voted for: {}", e),
             })?;
 
-        let count: i64 = votes
+        let count: i64 = received_votes
             .filter(
                 tree_node_hash
                     .eq(Vec::from(node_hash.as_bytes()))
@@ -802,9 +815,9 @@ impl ShardStoreTransaction<PublicKey, TariDanPayload> for SqliteShardStoreTransa
     }
 
     fn get_received_votes_for(&self, node_hash: TreeNodeHash, shard: ShardId) -> Result<Vec<VoteMessage>, Self::Error> {
-        use crate::schema::votes::{shard_id, tree_node_hash};
+        use crate::schema::received_votes::{shard_id, tree_node_hash};
 
-        let filtered_votes: Option<Vec<Vote>> = votes
+        let filtered_votes: Option<Vec<ReceivedVote>> = received_votes
             .filter(
                 shard_id
                     .eq(Vec::from(shard.as_bytes()))

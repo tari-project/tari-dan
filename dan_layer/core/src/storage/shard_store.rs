@@ -101,13 +101,13 @@ pub trait ShardStoreTransaction<TAddr: NodeAddressable, TPayload: Payload> {
     ) -> Result<(), Self::Error>;
     fn get_last_voted_height(&self, shard: ShardId) -> Result<NodeHeight, Self::Error>;
     fn set_last_voted_height(&mut self, shard: ShardId, height: NodeHeight) -> Result<(), Self::Error>;
-    fn get_payload_vote(
+    fn get_leader_proposals(
         &self,
         payload: PayloadId,
         payload_height: NodeHeight,
         shard: ShardId,
     ) -> Result<Option<HotStuffTreeNode<TAddr>>, Self::Error>;
-    fn save_payload_vote(
+    fn save_leader_proposals(
         &mut self,
         shard: ShardId,
         payload: PayloadId,

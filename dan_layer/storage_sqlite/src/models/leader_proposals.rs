@@ -23,19 +23,21 @@
 use crate::schema::*;
 
 #[derive(Debug, Identifiable, Queryable)]
-pub struct PayloadVote {
+pub struct LeaderProposal {
     pub id: i32,
     pub payload_id: Vec<u8>,
     pub shard_id: Vec<u8>,
-    pub node_height: i64,
+    pub payload_height: i64,
+    pub node_hash: Vec<u8>,
     pub hotstuff_tree_node: String,
 }
 
 #[derive(Debug, Insertable)]
-#[table_name = "payload_votes"]
-pub struct NewPayloadVote {
+#[table_name = "leader_proposals"]
+pub struct NewLeaderProposal {
     pub payload_id: Vec<u8>,
     pub shard_id: Vec<u8>,
-    pub node_height: i64,
+    pub payload_height: i64,
+    pub node_hash: Vec<u8>,
     pub hotstuff_tree_node: String,
 }

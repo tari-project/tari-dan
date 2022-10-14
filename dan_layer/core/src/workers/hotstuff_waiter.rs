@@ -217,7 +217,7 @@ where
                 NodeHeight(0)
             };
 
-            if payload_height > NodeHeight(4) {
+            if payload_height > NodeHeight(3) {
                 // No need to continue, we have already committed this node.
                 return Ok(());
             }
@@ -439,7 +439,7 @@ where
             (node.payload() == node.justify().payload_id() &&
                 node.payload_height() == node.justify().payload_height() + NodeHeight(1))
         {
-            if node.payload_height() > NodeHeight(4) {
+            if node.payload_height() > NodeHeight(3) {
                 return Err(HotStuffError::PayloadHeightIsTooHigh);
             }
             Ok(())
@@ -481,13 +481,13 @@ where
             if node.height() > v_height &&
                 (node.parent() == &locked_node || node.justify().local_node_height() > locked_height)
             {
-                tx.save_payload_vote(shard, node.payload(), node.payload_height(), node.clone())
+                tx.save_leader_proposals(shard, node.payload(), node.payload_height(), node.clone())
                     .map_err(|e| e.into())?;
 
                 let mut votes = vec![];
                 for s in &involved_shards {
                     if let Some(vote) = tx
-                        .get_payload_vote(node.payload(), node.payload_height(), *s)
+                        .get_leader_proposals(node.payload(), node.payload_height(), *s)
                         .map_err(|e| e.into())?
                     {
                         votes.push(ShardVote {
@@ -506,7 +506,7 @@ where
                     for local_shard in local_shards {
                         dbg!("Can vote on the message");
                         let local_node = tx
-                            .get_payload_vote(node.payload(), node.payload_height(), local_shard)
+                            .get_leader_proposals(node.payload(), node.payload_height(), local_shard)
                             .map_err(|e| e.into())?
                             .unwrap();
 

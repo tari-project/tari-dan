@@ -211,7 +211,7 @@ impl<TAddr: NodeAddressable, TPayload: Payload> ShardStoreTransaction<TAddr, TPa
             .unwrap_or_default())
     }
 
-    fn save_payload_vote(
+    fn save_leader_proposals(
         &mut self,
         shard: ShardId,
         payload: PayloadId,
@@ -225,7 +225,7 @@ impl<TAddr: NodeAddressable, TPayload: Payload> ShardStoreTransaction<TAddr, TPa
         Ok(())
     }
 
-    fn get_payload_vote(
+    fn get_leader_proposals(
         &self,
         payload: PayloadId,
         payload_height: NodeHeight,

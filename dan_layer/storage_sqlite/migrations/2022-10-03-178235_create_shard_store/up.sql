@@ -12,19 +12,13 @@ create table payloads (
 create unique index payload_index_payload_id on payloads (payload_id) ;
 
 
-create table votes (
+create table received_votes (
     id integer not null primary key AUTOINCREMENT,
     tree_node_hash blob not NULL,
     shard_id blob not NULL,
     address blob not NULL,
     vote_message text not NULL
 );
-
--- fetching by the pair (tree_node_hash, shard_id) will be a very common operation
-create index votes_index_tree_node_hash_shard_id on votes (tree_node_hash, shard_id);
--- fetching by the triplet (tree_node_hash, shard_id, address) will be a very common operation
-create index votes_index_tree_node_hash_shard_id_address on votes (tree_node_hash, shard_id, address);
-
 
 create table leaf_nodes (
     id integer not null primary key AUTOINCREMENT,
@@ -86,17 +80,16 @@ create table last_executed_heights (
 create index last_executed_height_index_shard_id on last_executed_heights (shard_id);
 
 
-create table payload_votes (
+create table leader_proposals (
     id integer not null primary key AUTOINCREMENT,
     payload_id blob not NULL,
     shard_id blob not NULL,
-    node_height bigint not NULL,
+    payload_height bigint not NULL,
+    node_hash blob not NULL,
     hotstuff_tree_node text not NULL
 );
 
--- fetching by (payload_id, shard_id, node_height) will be a very common operation
-create index payload_votes_index_payload_id_shard_id_node_height on payload_votes (payload_id, shard_id, node_height);
-
+create unique index leader_proposals_index on leader_proposals (payload_id, shard_id, payload_height, node_hash);
 
 create table objects (
     id integer not null primary key AUTOINCREMENT,
@@ -116,5 +109,3 @@ create table substate_changes (
     tree_node_hash blob not NULL
 );
 
--- fetching by (shard_id, tree_node_hash) will be a very common operation
-create index substate_changes_shard_id_tree_node_hash on substate_changes (shard_id, tree_node_hash);
