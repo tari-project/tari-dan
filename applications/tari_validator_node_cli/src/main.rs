@@ -20,8 +20,10 @@
 // WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 // USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+mod account_manager;
 mod cli;
 mod command;
+mod from_hex;
 mod prompt;
 
 use std::{error::Error, path::PathBuf};
@@ -58,6 +60,7 @@ async fn handle_command(command: Command, base_dir: PathBuf, client: ValidatorNo
         Command::Vn(cmd) => cmd.handle(client).await?,
         Command::Templates(cmd) => cmd.handle(client).await?,
         Command::Accounts(cmd) => cmd.handle(base_dir).await?,
+        Command::Transactions(cmd) => cmd.handle(base_dir, client).await?,
     }
 
     Ok(())

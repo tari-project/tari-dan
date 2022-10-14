@@ -20,48 +20,37 @@
 //   WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //   USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use std::path::Path;
+use std::{convert::TryFrom, str::FromStr};
 
-use clap::Subcommand;
+use tari_utilities::hex::from_hex;
 
-use crate::account_manager::AccountFileManager;
+#[derive(Debug, Clone)]
+pub struct FromHex<T>(pub T);
 
-#[derive(Debug, Subcommand, Clone)]
-pub enum AccountsSubcommand {
-    #[clap(alias = "create")]
-    New,
-    List,
-    Use {
-        name: String,
-    },
+impl<T> FromHex<T> {
+    pub fn into_inner(self) -> T {
+        self.0
+    }
 }
 
-impl AccountsSubcommand {
-    pub async fn handle<P: AsRef<Path>>(self, base_dir: P) -> anyhow::Result<()> {
-        let account_manager = AccountFileManager::init(base_dir.as_ref().to_path_buf())?;
+// impl<T: Hex> FromStr for FromHex<T> {
+//     type Err = HexError;
+//
+//     fn from_str(s: &str) -> Result<Self, Self::Err> {
+//         T::from_hex(s).map(Self)
+//     }
+// }
 
-        #[allow(clippy::enum_glob_use)]
-        use AccountsSubcommand::*;
-        match self {
-            New => {
-                let account = account_manager.create_account()?;
-                println!("New account {} created", account);
-            },
-            List => {
-                println!("Accounts:");
-                for (i, account) in account_manager.all().into_iter().enumerate() {
-                    if account.is_active {
-                        println!("{}. (active) {}", i, account);
-                    } else {
-                        println!("{}. {}", i, account);
-                    }
-                }
-            },
-            Use { name } => {
-                account_manager.set_active_account(&name)?;
-                println!("Account {} is now active", name);
-            },
-        }
-        Ok(())
+impl<T> FromStr for FromHex<T>
+where
+    T: TryFrom<Vec<u8>>,
+    T::Error: std::error::Error + Send + Sync + 'static,
+{
+    type Err = anyhow::Error;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let a = from_hex(s)?;
+        let item = T::try_from(a)?;
+        Ok(Self(item))
     }
 }
