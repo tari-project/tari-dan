@@ -22,19 +22,12 @@
 
 use std::{fs::create_dir_all, path::PathBuf};
 
-use diesel::{Connection, ConnectionError, SqliteConnection};
+use diesel::{Connection, SqliteConnection};
 use diesel_migrations::embed_migrations;
-use tari_common_types::types::FixedHash;
 use tari_dan_core::storage::{DbFactory, StorageError};
-use tari_dan_engine::state::StateDb;
 use tari_dan_storage::global::GlobalDb;
-use tari_utilities::hex::Hex;
 
-use crate::{
-    error::SqliteStorageError,
-    global::SqliteGlobalDbAdapter,
-    sqlite_state_db_backend_adapter::SqliteStateDbBackendAdapter,
-};
+use crate::{error::SqliteStorageError, global::SqliteGlobalDbAdapter};
 
 #[derive(Clone)]
 pub struct SqliteDbFactory {
@@ -45,69 +38,10 @@ impl SqliteDbFactory {
     pub fn new(data_dir: PathBuf) -> Self {
         Self { data_dir }
     }
-
-    fn database_url_for(&self, contract_id: &FixedHash) -> String {
-        self.data_dir
-            .join("asset_data")
-            .join(contract_id.to_hex())
-            .join("dan_storage.sqlite")
-            .into_os_string()
-            .into_string()
-            .expect("Should not fail")
-    }
-
-    fn try_connect(&self, url: &str) -> Result<Option<SqliteConnection>, StorageError> {
-        match SqliteConnection::establish(url) {
-            Ok(connection) => {
-                connection
-                    .execute("PRAGMA foreign_keys = ON;")
-                    .map_err(|source| SqliteStorageError::DieselError {
-                        source,
-                        operation: "set pragma".to_string(),
-                    })?;
-                Ok(Some(connection))
-            },
-            Err(ConnectionError::BadConnection(_)) => Ok(None),
-            Err(err) => Err(SqliteStorageError::from(err).into()),
-        }
-    }
 }
 
 impl DbFactory for SqliteDbFactory {
     type GlobalDbAdapter = SqliteGlobalDbAdapter;
-    type StateDbAdapter = SqliteStateDbBackendAdapter;
-
-    fn get_state_db(&self, contract_id: &FixedHash) -> Result<Option<StateDb<Self::StateDbAdapter>>, StorageError> {
-        let database_url = self.database_url_for(contract_id);
-        match self.try_connect(&database_url)? {
-            Some(_) => Ok(Some(StateDb::new(
-                *contract_id,
-                SqliteStateDbBackendAdapter::new(database_url),
-            ))),
-            None => Ok(None),
-        }
-    }
-
-    fn get_or_create_state_db(&self, contract_id: &FixedHash) -> Result<StateDb<Self::StateDbAdapter>, StorageError> {
-        let database_url = self.database_url_for(contract_id);
-
-        create_dir_all(&PathBuf::from(&database_url).parent().unwrap())
-            .map_err(|_| StorageError::FileSystemPathDoesNotExist)?;
-
-        let connection = SqliteConnection::establish(database_url.as_str()).map_err(SqliteStorageError::from)?;
-        connection
-            .execute("PRAGMA foreign_keys = ON;")
-            .map_err(|source| SqliteStorageError::DieselError {
-                source,
-                operation: "set pragma".to_string(),
-            })?;
-        embed_migrations!("./migrations");
-        embedded_migrations::run(&connection).map_err(SqliteStorageError::from)?;
-        Ok(StateDb::new(
-            *contract_id,
-            SqliteStateDbBackendAdapter::new(database_url),
-        ))
-    }
 
     fn get_or_create_global_db(&self) -> Result<GlobalDb<Self::GlobalDbAdapter>, StorageError> {
         let database_url = self

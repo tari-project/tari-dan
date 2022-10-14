@@ -22,4 +22,5 @@ async-trait = "0.1.50"
 tokio = { version = "1.10", features = ["macros", "time"] }
 tokio-stream = { version = "0.1.7", features = ["sync"] }
 log = { version = "0.4.8", features = ["std"] }
+time = "0.3.15"
 serde_json = "1.0.85"

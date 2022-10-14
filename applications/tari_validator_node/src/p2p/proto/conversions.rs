@@ -31,7 +31,7 @@ use chrono::{DateTime, NaiveDateTime, Utc};
 use tari_common_types::types::{PrivateKey, PublicKey, Signature};
 use tari_comms::{peer_manager::IdentitySignature, types::CommsPublicKey};
 use tari_crypto::tari_utilities::ByteArray;
-use tari_dan_common_types::ShardId;
+use tari_dan_common_types::{ShardId, SubstateState};
 use tari_dan_core::{
     message::{DanMessage, NetworkAnnounce},
     models::{
@@ -39,8 +39,10 @@ use tari_dan_core::{
         HotStuffMessage,
         HotStuffTreeNode,
         Node,
+        ObjectPledge,
         QuorumCertificate,
         QuorumDecision,
+        ShardVote,
         TariDanPayload,
         TreeNodeHash,
         ValidatorSignature,
@@ -133,35 +135,61 @@ impl TryFrom<proto::consensus::VoteMessage> for VoteMessage {
 // -------------------------------- HotstuffMessage -------------------------------- //
 
 impl From<HotStuffMessage<TariDanPayload, CommsPublicKey>> for proto::consensus::HotStuffMessage {
-    fn from(_source: HotStuffMessage<TariDanPayload, CommsPublicKey>) -> Self {
-        todo!()
-        // Self {
-        //     message_type: i32::from(source.message_type().as_u8()),
-        //     node: source.node().map(|n| n.clone().into()),
-        //     justify: source.justify().map(|j| j.clone().into()),
-        //     partial_sig: source.partial_sig().map(|s| s.clone().into()),
-        //     view_number: source.view_number().as_u64(),
-        //     node_hash: source
-        //         .node_hash()
-        //         .copied()
-        //         .unwrap_or_else(TreeNodeHash::zero)
-        //         .as_bytes()
-        //         .to_vec(),
-        //     checkpoint_signature: source.checkpoint_signature().map(Into::into),
-        //     contract_id: source.contract_id().to_vec(),
-        // }
+    fn from(source: HotStuffMessage<TariDanPayload, CommsPublicKey>) -> Self {
+        Self {
+            message_type: i32::from(source.message_type().as_u8()),
+            node: source.node().map(|n| n.clone().into()),
+            justify: source.justify().map(|j| j.clone().into()),
+            high_qc: source.high_qc().map(|h| h.into()),
+            shard: source.shard().as_bytes().to_vec(),
+            new_view_payload: source.new_view_payload().map(|p| p.clone().into()),
+        }
     }
 }
 
 impl From<HotStuffTreeNode<CommsPublicKey>> for proto::consensus::HotStuffTreeNode {
-    fn from(_source: HotStuffTreeNode<CommsPublicKey>) -> Self {
-        todo!()
-        // Self {
-        //     parent: Vec::from(source.parent().as_bytes()),
-        //     payload: Some(source.payload().clone().into()),
-        //     height: source.height(),
-        //     state_root: Vec::from(source.state_root().as_bytes()),
-        // }
+    fn from(source: HotStuffTreeNode<CommsPublicKey>) -> Self {
+        Self {
+            parent: Vec::from(source.parent().as_bytes()),
+            payload: source.payload().as_bytes().to_vec(),
+            height: source.height().as_u64(),
+            shard: source.shard().as_bytes().to_vec(),
+            payload_height: source.payload_height().as_u64(),
+            local_pledges: source.local_pledges().iter().map(|p| p.clone().into()).collect(),
+            epoch: source.epoch().as_u64(),
+            proposed_by: source.proposed_by().as_bytes().to_vec(),
+            justify: Some(source.justify().clone().into()),
+        }
+    }
+}
+
+impl From<ObjectPledge> for proto::consensus::ObjectPledge {
+    fn from(source: ObjectPledge) -> Self {
+        let mut inner_created_by = vec![];
+        let mut inner_data = vec![];
+        let mut inner_deleted_by = vec![];
+        let mut current_state = 0;
+        match source.current_state {
+            SubstateState::DoesNotExist => {},
+            SubstateState::Up { created_by, data } => {
+                inner_created_by = created_by.as_bytes().to_vec();
+                inner_data = data;
+                current_state = 1;
+            },
+            SubstateState::Down { deleted_by } => {
+                inner_deleted_by = deleted_by.as_bytes().to_vec();
+                current_state = 2;
+            },
+        }
+        Self {
+            object_id: source.object_id.as_bytes().to_vec(),
+            current_state,
+            created_by: inner_created_by,
+            data: inner_data,
+            deleted_by: inner_deleted_by,
+            pledged_to_payload: source.pledged_to_payload.as_bytes().to_vec(),
+            pledged_until: source.pledged_until.as_u64(),
+        }
     }
 }
 
@@ -232,20 +260,35 @@ impl<T: Borrow<IdentitySignature>> From<T> for proto::network::IdentitySignature
 // -------------------------------- QuorumCertificate -------------------------------- //
 
 impl From<QuorumCertificate> for proto::consensus::QuorumCertificate {
-    fn from(_source: QuorumCertificate) -> Self {
-        todo!()
-        // Self {
-        //     message_type: i32::from(source.message_type().as_u8()),
-        //     node_hash: Vec::from(source.node_hash().as_bytes()),
-        //     view_number: source.view_number().as_u64(),
-        //     signature: source.signature().map(|s| s.clone().into()),
-        // }
+    fn from(source: QuorumCertificate) -> Self {
+        Self {
+            payload_id: source.payload_id().as_bytes().to_vec(),
+            payload_height: source.payload_height().as_u64(),
+            local_node_hash: source.local_node_hash().as_bytes().to_vec(),
+            local_node_height: source.local_node_height().as_u64(),
+            shard: source.shard().as_bytes().to_vec(),
+            epoch: source.epoch().as_u64(),
+            decision: match source.decision() {
+                QuorumDecision::Accept => 1,
+                QuorumDecision::Reject => 0,
+            },
+            all_shard_nodes: source.all_shard_nodes().iter().map(|p| p.clone().into()).collect(),
+            signatures: source.signatures().iter().map(|p| p.clone().into()).collect(),
+        }
     }
 }
-
+impl From<ShardVote> for proto::consensus::ShardVote {
+    fn from(s: ShardVote) -> Self {
+        Self {
+            shard: s.shard_id.into(),
+            hash: s.node_hash.into(),
+            pledges: s.pledges.iter().map(|p| p.clone().into()).collect(),
+        }
+    }
+}
 impl From<ValidatorSignature> for proto::consensus::ValidatorSignature {
-    fn from(_s: ValidatorSignature) -> Self {
-        Self {}
+    fn from(s: ValidatorSignature) -> Self {
+        Self { signer: s.signer }
     }
 }
 
@@ -260,90 +303,132 @@ impl From<TariDanPayload> for proto::consensus::TariDanPayload {
 impl TryFrom<proto::consensus::HotStuffMessage> for HotStuffMessage<TariDanPayload, CommsPublicKey> {
     type Error = anyhow::Error;
 
-    fn try_from(_value: proto::consensus::HotStuffMessage) -> Result<Self, Self::Error> {
-        todo!()
-        // let node_hash = if value.node_hash.is_empty() {
-        //     None
-        // } else {
-        //     Some(TreeNodeHash::try_from(value.node_hash).map_err(|err| err.to_string())?)
-        // };
-        // Ok(Self::new(
-        //     ViewId(value.view_number),
-        //     HotStuffMessageType::try_from(u8::try_from(value.message_type).unwrap())?,
-        //     value.justify.map(|j| j.try_into()).transpose()?,
-        //     value.node.map(|n| n.try_into()).transpose()?,
-        //     node_hash,
-        //     value.partial_sig.map(|p| p.try_into()).transpose()?,
-        //     value.checkpoint_signature.map(|p| p.try_into()).transpose()?,
-        //     value
-        //         .contract_id
-        //         .try_into()
-        //         .map_err(|err| format!("Not a valid contract ID:{}", err))?,
-        // ))
+    fn try_from(value: proto::consensus::HotStuffMessage) -> Result<Self, Self::Error> {
+        Ok(Self::new(
+            value.message_type.try_into()?,
+            value.justify.map(|j| j.try_into()).transpose()?,
+            value.high_qc.map(|h| h.try_into()).transpose()?,
+            value.node.map(|n| n.try_into()).transpose()?,
+            Some(value.shard.try_into()?),
+            value.new_view_payload.map(|p| p.try_into()).transpose()?,
+        ))
     }
 }
 
 impl TryFrom<proto::consensus::QuorumCertificate> for QuorumCertificate {
     type Error = anyhow::Error;
 
-    fn try_from(_value: proto::consensus::QuorumCertificate) -> Result<Self, Self::Error> {
-        // Ok(Self::new(
-        //     HotStuffMessageType::try_from(u8::try_from(value.message_type).unwrap())?,
-        //     ViewId(value.view_number),
-        //     TreeNodeHash::try_from(value.node_hash).map_err(|err| err.to_string())?,
-        //     value.signature.map(|s| s.try_into()).transpose()?,
-        // ))
-        todo!()
+    fn try_from(value: proto::consensus::QuorumCertificate) -> Result<Self, Self::Error> {
+        Ok(Self::new(
+            value.payload_id.try_into()?,
+            value.payload_height.into(),
+            value.local_node_hash.try_into()?,
+            value.local_node_height.into(),
+            value.shard.try_into()?,
+            value.epoch.into(),
+            match value.decision {
+                0 => QuorumDecision::Reject,
+                1 => QuorumDecision::Accept,
+                _ => return Err(anyhow!("Invalid decision")),
+            },
+            value
+                .all_shard_nodes
+                .iter()
+                .map(|s| s.clone().try_into())
+                .collect::<Result<_, _>>()?,
+            value
+                .signatures
+                .iter()
+                .map(|v| v.clone().try_into())
+                .collect::<Result<_, _>>()?,
+        ))
+    }
+}
+
+impl TryFrom<proto::consensus::ShardVote> for ShardVote {
+    type Error = anyhow::Error;
+
+    fn try_from(value: proto::consensus::ShardVote) -> Result<Self, Self::Error> {
+        Ok(Self {
+            shard_id: value.shard.try_into()?,
+            node_hash: value.hash.try_into()?,
+            pledges: value
+                .pledges
+                .iter()
+                .map(|p| p.clone().try_into())
+                .collect::<Result<_, _>>()?,
+        })
+    }
+}
+
+impl TryFrom<proto::consensus::ObjectPledge> for ObjectPledge {
+    type Error = anyhow::Error;
+
+    fn try_from(value: proto::consensus::ObjectPledge) -> Result<Self, Self::Error> {
+        Ok(Self {
+            object_id: value.object_id.try_into()?,
+            current_state: match value.current_state {
+                0 => SubstateState::DoesNotExist,
+                1 => SubstateState::Up {
+                    created_by: value.created_by.try_into()?,
+                    data: value.data.clone(),
+                },
+                2 => SubstateState::Down {
+                    deleted_by: value.deleted_by.try_into()?,
+                },
+                _ => return Err(anyhow!("Invalid current_state")),
+            },
+            pledged_to_payload: value.pledged_to_payload.try_into()?,
+            pledged_until: value.pledged_until.into(),
+        })
     }
 }
 
 impl TryFrom<proto::consensus::HotStuffTreeNode> for HotStuffTreeNode<CommsPublicKey> {
     type Error = anyhow::Error;
 
-    fn try_from(_value: proto::consensus::HotStuffTreeNode) -> Result<Self, Self::Error> {
-        todo!()
-        // if value.parent.is_empty() {
-        //     return Err("parent not provided".to_string());
-        // }
-        // let state_root = value
-        //     .state_root
-        //     .try_into()
-        //     .map(StateRoot::new)
-        //     .map_err(|_| "Incorrect length for state_root")?;
-        // Ok(Self::new(
-        //     TreeNodeHash::try_from(value.parent).map_err(|_| "Incorrect length for parent")?,
-        //     value
-        //         .payload
-        //         .map(|p| p.try_into())
-        //         .transpose()?
-        //         .ok_or("payload not provided")?,
-        //     state_root,
-        //     value.height,
-        // ))
+    fn try_from(value: proto::consensus::HotStuffTreeNode) -> Result<Self, Self::Error> {
+        Ok(Self::new(
+            value.parent.try_into()?,
+            value.shard.try_into()?,
+            value.height.into(),
+            value.payload.try_into()?,
+            value.payload_height.into(),
+            value
+                .local_pledges
+                .iter()
+                .map(|lp| lp.clone().try_into())
+                .collect::<Result<_, _>>()?,
+            value.epoch.into(),
+            PublicKey::from_bytes(value.proposed_by.as_slice())?,
+            value
+                .justify
+                .map(|j| j.try_into())
+                .transpose()?
+                .ok_or_else(|| anyhow!("Justify is required"))?,
+        ))
     }
 }
 
 impl TryFrom<proto::consensus::ValidatorSignature> for ValidatorSignature {
     type Error = anyhow::Error;
 
-    fn try_from(_value: proto::consensus::ValidatorSignature) -> Result<Self, Self::Error> {
-        todo!()
-        // Ok(Self {})
+    fn try_from(value: proto::consensus::ValidatorSignature) -> Result<Self, Self::Error> {
+        Ok(Self { signer: value.signer })
     }
 }
 
 impl TryFrom<proto::consensus::TariDanPayload> for TariDanPayload {
     type Error = anyhow::Error;
 
-    fn try_from(_value: proto::consensus::TariDanPayload) -> Result<Self, Self::Error> {
-        // let instruction_set = value
-        //     .instruction_set
-        //     .ok_or_else(|| "Instructions were not present".to_string())?
-        //     .try_into()?;
-        // let checkpoint = value.checkpoint.map(|c| c.try_into()).transpose()?;
-        //
-        // Ok(Self::new(instruction_set, checkpoint))
-        todo!()
+    fn try_from(value: proto::consensus::TariDanPayload) -> Result<Self, Self::Error> {
+        Ok(Self::new(
+            value
+                .transaction
+                .map(|s| s.try_into())
+                .transpose()?
+                .ok_or_else(|| anyhow!("transaction is missing"))?,
+        ))
     }
 }
 
@@ -494,20 +579,19 @@ impl TryFrom<proto::common::Instruction> for tari_engine_types::instruction::Ins
     type Error = anyhow::Error;
 
     fn try_from(request: proto::common::Instruction) -> Result<Self, Self::Error> {
-        let package_address =
-            Hash::deserialize(&mut &request.package_address[..]).map_err(|_| anyhow!("invalid package_addresss"))?;
+        let template_address =
+            Hash::deserialize(&mut &request.template_address[..]).map_err(|_| anyhow!("invalid package_addresss"))?;
         let args = request
             .args
             .into_iter()
-            .map(|a| Arg::from_bytes(&a))
-            .collect::<Result<Vec<Arg>, _>>()
-            .unwrap();
+            .map(|a| a.try_into())
+            .collect::<Result<_, _>>()?;
         let instruction = match request.instruction_type {
             // function
             0 => {
                 let function = request.function;
                 tari_engine_types::instruction::Instruction::CallFunction {
-                    template_address: package_address,
+                    template_address,
                     function,
                     args,
                 }
@@ -518,7 +602,7 @@ impl TryFrom<proto::common::Instruction> for tari_engine_types::instruction::Ins
                     .map_err(|_| anyhow!("invalid component_address"))?;
                 let method = request.method;
                 tari_engine_types::instruction::Instruction::CallMethod {
-                    template_address: package_address,
+                    template_address,
                     component_address,
                     method,
                     args,
@@ -551,46 +635,42 @@ impl From<Transaction> for proto::common::Transaction {
 }
 
 impl From<tari_engine_types::instruction::Instruction> for proto::common::Instruction {
-    fn from(_instruction: tari_engine_types::instruction::Instruction) -> Self {
-        // let mut result = proto::validator_node::Instruction::default();
-        //
-        // match instruction {
-        //     tari_dan_engine::instruction::Instruction::CallFunction {
-        //         package_address,
-        //         template,
-        //         function,
-        //         args,
-        //     } => {
-        //         result.instruction_type = 0;
-        //         result.package_address = package_address.to_vec();
-        //         result.template = template;
-        //         result.function = function;
-        //         result.args = args.into_iter().map(|a| a.to_bytes()).collect();
-        //     },
-        //     tari_dan_engine::instruction::Instruction::CallMethod {
-        //         component_address,
-        //         package_address,
-        //         method,
-        //         args,
-        //     } => {
-        //         result.instruction_type = 1;
-        //         result.package_address = package_address.to_vec();
-        //         result.component_address = component_address.to_vec();
-        //         result.method = method;
-        //         result.args = args.into_iter().map(|a| a.to_bytes()).collect();
-        //     },
-        //     _ => todo!(),
-        // }
-        //
-        // result
-        todo!()
+    fn from(instruction: tari_engine_types::instruction::Instruction) -> Self {
+        let mut result = proto::common::Instruction::default();
+
+        match instruction {
+            tari_engine_types::instruction::Instruction::CallFunction {
+                template_address,
+                function,
+                args,
+            } => {
+                result.instruction_type = 0;
+                result.template_address = template_address.to_vec();
+                result.function = function;
+                result.args = args.into_iter().map(|a| a.into()).collect();
+            },
+            tari_engine_types::instruction::Instruction::CallMethod {
+                template_address,
+                component_address,
+                method,
+                args,
+            } => {
+                result.instruction_type = 1;
+                result.template_address = template_address.to_vec();
+                result.component_address = component_address.to_vec();
+                result.method = method;
+                result.args = args.into_iter().map(|a| a.into()).collect();
+            },
+            _ => todo!(),
+        }
+        result
     }
 }
 
-impl TryFrom<proto::validator_node::Arg> for Arg {
+impl TryFrom<proto::common::Arg> for Arg {
     type Error = anyhow::Error;
 
-    fn try_from(request: proto::validator_node::Arg) -> Result<Self, Self::Error> {
+    fn try_from(request: proto::common::Arg) -> Result<Self, Self::Error> {
         let data = request.data.clone();
         let arg = match request.arg_type {
             0 => Arg::Literal(data),
@@ -602,9 +682,9 @@ impl TryFrom<proto::validator_node::Arg> for Arg {
     }
 }
 
-impl From<Arg> for proto::validator_node::Arg {
+impl From<Arg> for proto::common::Arg {
     fn from(arg: Arg) -> Self {
-        let mut result = proto::validator_node::Arg::default();
+        let mut result = proto::common::Arg::default();
 
         match arg {
             Arg::Literal(data) => {

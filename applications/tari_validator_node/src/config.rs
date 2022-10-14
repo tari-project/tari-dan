@@ -23,12 +23,13 @@
 use std::{
     net::{IpAddr, Ipv4Addr, SocketAddr},
     path::{Path, PathBuf},
+    time::Duration,
 };
 
 use config::Config;
 use serde::{Deserialize, Serialize};
 use tari_common::{
-    configuration::{CommonConfig, Network},
+    configuration::{serializers, CommonConfig, Network},
     ConfigurationError,
     DefaultConfigLoader,
     SubConfigPath,
@@ -77,7 +78,8 @@ pub struct ValidatorNodeConfig {
     /// If set to false, there will be no base layer scanning at all
     pub scan_base_layer: bool,
     /// How often do we want to scan the base layer for changes
-    pub base_layer_scanning_interval_in_seconds: u64,
+    #[serde(with = "serializers::seconds")]
+    pub base_layer_scanning_interval: Duration,
     /// If set to true, it will constantly scan for new assets on the base layer
     pub scan_for_assets: bool,
     /// How often do we want to scan the base layer for changes
@@ -138,11 +140,11 @@ impl Default for ValidatorNodeConfig {
             base_node_grpc_address: SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 18142),
             wallet_grpc_address: SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 18143),
             scan_base_layer: true,
-            base_layer_scanning_interval_in_seconds: 10,
+            base_layer_scanning_interval: Duration::from_secs(10),
             data_dir: PathBuf::from("data/validator_node"),
             p2p,
             grpc_address: Some("/ip4/127.0.0.1/tcp/18144".parse().unwrap()),
-            json_rpc_address: Some("127.0.0.1:18145".parse().unwrap()),
+            json_rpc_address: Some("127.0.0.1:18200".parse().unwrap()),
             http_ui_address: Some("127.0.0.1:5000".parse().unwrap()),
 
             // TODO: Deprecated - need to update tari_common to remove these

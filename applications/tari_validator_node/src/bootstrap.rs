@@ -48,7 +48,7 @@ use crate::{
             networking,
             networking::NetworkingHandle,
             template_manager,
-            template_manager::manager::TemplateManager,
+            template_manager::TemplateManager,
         },
     },
     payload_processor::TariDanPayloadProcessor,
@@ -133,8 +133,9 @@ pub async fn spawn_services(
     let payload_processor = TariDanPayloadProcessor::new(TemplateManager::new(sqlite_db));
 
     // Consensus
-    hotstuff::spawn(
+    hotstuff::try_spawn(
         node_identity.clone(),
+        &config.validator_node,
         outbound_messaging,
         epoch_manager.clone(),
         mempool.clone(),
@@ -142,7 +143,7 @@ pub async fn spawn_services(
         rx_consensus_message,
         rx_vote_message,
         shutdown,
-    );
+    )?;
 
     let comms = setup_p2p_rpc(config, comms, message_senders, peer_provider);
     let comms = spawn_comms_using_transport(comms, p2p_config.transport.clone())

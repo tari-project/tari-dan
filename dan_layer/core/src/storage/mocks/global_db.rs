@@ -21,7 +21,7 @@
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 use tari_dan_storage::{
-    global::{DbTemplate, DbValidatorNode, GlobalDbAdapter, MetadataKey},
+    global::{DbTemplate, DbTemplateUpdate, DbValidatorNode, GlobalDbAdapter, MetadataKey},
     AtomicDb,
 };
 
@@ -57,6 +57,15 @@ impl GlobalDbAdapter for MockGlobalDbBackupAdapter {
     }
 
     fn insert_template(&self, _tx: &Self::DbTransaction, _template: DbTemplate) -> Result<(), Self::Error> {
+        todo!()
+    }
+
+    fn update_template(
+        &self,
+        _tx: &Self::DbTransaction,
+        _key: &[u8],
+        _template: DbTemplateUpdate,
+    ) -> Result<(), Self::Error> {
         todo!()
     }
 

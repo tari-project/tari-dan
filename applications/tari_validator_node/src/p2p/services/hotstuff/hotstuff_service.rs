@@ -27,10 +27,10 @@ use tari_dan_core::{
     message::DanMessage,
     models::{vote_message::VoteMessage, HotStuffMessage, TariDanPayload},
     services::{infrastructure_services::OutboundService, leader_strategy::AlwaysFirstLeader},
-    storage::shard_store::MemoryShardStoreFactory,
     workers::hotstuff_waiter::HotStuffWaiter,
 };
 use tari_dan_engine::transaction::Transaction;
+use tari_dan_storage_sqlite::sqlite_shard_store_factory::SqliteShardStoreFactory;
 use tari_shutdown::ShutdownSignal;
 use tokio::{
     sync::mpsc::{channel, Receiver, Sender},
@@ -42,7 +42,7 @@ use crate::{
         epoch_manager::handle::EpochManagerHandle,
         mempool::MempoolHandle,
         messaging::OutboundMessaging,
-        template_manager::manager::TemplateManager,
+        template_manager::TemplateManager,
     },
     payload_processor::TariDanPayloadProcessor,
 };
@@ -72,16 +72,16 @@ impl HotstuffService {
         mempool: MempoolHandle,
         outbound: OutboundMessaging,
         payload_processor: TariDanPayloadProcessor<TemplateManager>,
-        shard_store_factory: MemoryShardStoreFactory<CommsPublicKey, TariDanPayload>,
+        shard_store_factory: SqliteShardStoreFactory,
         rx_hotstuff_messages: Receiver<(CommsPublicKey, HotStuffMessage<TariDanPayload, CommsPublicKey>)>,
         rx_vote_messages: Receiver<(CommsPublicKey, VoteMessage)>,
         shutdown: ShutdownSignal,
     ) -> JoinHandle<Result<(), anyhow::Error>> {
         dbg!("Hotstuff starting");
-        let (tx_new, rx_new) = channel(1);
-        let (tx_leader, rx_leader) = channel(1);
-        let (tx_broadcast, rx_broadcast) = channel(1);
-        let (tx_vote_message, rx_vote_message) = channel(1);
+        let (tx_new, rx_new) = channel(100);
+        let (tx_leader, rx_leader) = channel(100);
+        let (tx_broadcast, rx_broadcast) = channel(100);
+        let (tx_vote_message, rx_vote_message) = channel(100);
 
         let leader_strategy = AlwaysFirstLeader {};
         HotStuffWaiter::spawn(
@@ -119,7 +119,7 @@ impl HotstuffService {
         to: CommsPublicKey,
         msg: HotStuffMessage<TariDanPayload, CommsPublicKey>,
     ) -> Result<(), anyhow::Error> {
-        dbg!("Sending to hotstuff leader", &to, &msg);
+        trace!(target: LOG_TARGET, "Sending leader message to {}", to);
         self.outbound
             .send(self.node_public_key.clone(), to, DanMessage::HotStuffMessage(msg))
             .await?;
@@ -150,19 +150,27 @@ impl HotstuffService {
     }
 
     pub async fn run(mut self) -> Result<(), anyhow::Error> {
-        dbg!("Main loop starting");
         loop {
             tokio::select! {
                 // Inbound
                res = self.mempool.next_valid_transaction() => {
                     let (tx, shard_id) = res?;
-                    log(self.handle_new_valid_transaction(tx, shard_id).await)}
-
+                    debug!(target: LOG_TARGET, "Received new transaction {} for shard {}", tx.hash(), shard_id);
+                    log(self.handle_new_valid_transaction(tx, shard_id).await, "new valid transaction");
+                }
                // Outbound
-               Some((to, msg)) = self.rx_leader.recv() => log(self.handle_leader_message(to, msg).await),
-               Some((msg, leader)) = self.rx_vote_message.recv() => log(self.handle_vote_message(leader, msg).await),
-               Some((msg, dest_nodes)) = self.rx_broadcast.recv() => log(self.handle_broadcast_message(dest_nodes, msg).await),
-
+               Some((to, msg)) = self.rx_leader.recv() => {
+                    debug!(target: LOG_TARGET, "Received leader message: {}", &msg);
+                    log(self.handle_leader_message(to, msg).await, "leader message");
+                   }
+               Some((msg, leader)) = self.rx_vote_message.recv() => {
+                    debug!(target: LOG_TARGET, "Received vote message");
+                    log(self.handle_vote_message(leader, msg).await, "vote message");
+                    }
+               Some((msg, dest_nodes)) = self.rx_broadcast.recv() => {
+                    debug!(target: LOG_TARGET, "Received broadcast message: {}", &msg);
+                    log(self.handle_broadcast_message(dest_nodes, msg).await, "broadcast message");
+                    }
                 // Shutdown
                 _ = self.shutdown.wait() => {
                     dbg!("Shutting down hs service");
@@ -174,8 +182,8 @@ impl HotstuffService {
     }
 }
 
-fn log(result: Result<(), anyhow::Error>) {
+fn log(result: Result<(), anyhow::Error>, area: &str) {
     if let Err(e) = result {
-        error!(target: LOG_TARGET, "Error in hotstuff service: {}", e);
+        error!(target: LOG_TARGET, "Error in hotstuff service: {} [{}]", e, area);
     }
 }

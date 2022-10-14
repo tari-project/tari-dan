@@ -8,42 +8,55 @@ package tari.dan.consensus;
 import "common.proto";
 
 enum HotStuffMessageType {
-    HOT_STUFF_MESSAGE_TYPE_UNKNOWN = 0;
-    HOT_STUFF_MESSAGE_TYPE_NEW_VIEW = 1;
-    HOT_STUFF_MESSAGE_TYPE_PREPARE = 2;
-    HOT_STUFF_MESSAGE_TYPE_PRE_COMMIT = 3;
-    HOT_STUFF_MESSAGE_TYPE_COMMIT = 4;
-    HOT_STUFF_MESSAGE_TYPE_GENESIS = 255;
-
+    HOT_STUFF_MESSAGE_TYPE_NEW_VIEW = 0;
+    HOT_STUFF_MESSAGE_TYPE_GENERIC = 1;
 }
 
 message HotStuffMessage {
-    uint64 view_number = 1;
-    HotStuffMessageType message_type = 2;
-    QuorumCertificate justify = 3;
-    HotStuffTreeNode node= 4;
-    ValidatorSignature partial_sig = 5;
-    bytes node_hash = 6;
-    bytes contract_id = 7;
-    tari.dan.common.SignerSignature checkpoint_signature = 8;
+    HotStuffMessageType message_type = 1;
+    QuorumCertificate justify = 2;
+    HotStuffTreeNode node= 3;
+    QuorumCertificate high_qc = 4;
+    bytes shard = 5;
+    TariDanPayload new_view_payload = 6;
+}
+
+message ShardVote {
+    bytes shard = 1;
+    bytes hash = 2;
+    repeated ObjectPledge pledges = 3;
 }
 
 message QuorumCertificate {
-    HotStuffMessageType message_type = 1;
-    bytes node_hash = 2;
-    uint64 view_number = 3;
-    ValidatorSignature signature = 4;
+    enum QuorumDecision {
+        QUORUM_DECISION_REJECT = 0;
+        QUORUM_DECISION_ACCEPT = 1;
+    }
+    bytes payload_id = 1;
+    uint64 payload_height = 2;
+    bytes local_node_hash = 3;
+    uint64 local_node_height = 4;
+    bytes shard = 5;
+    uint64 epoch = 6;
+    QuorumDecision decision = 7;
+    repeated ShardVote all_shard_nodes = 8;
+    repeated ValidatorSignature signatures = 9;
 }
 
 message HotStuffTreeNode {
     bytes parent = 1;
-    TariDanPayload payload = 2;
-    uint32 height = 3;
-    bytes state_root =4;
+    bytes payload = 2;
+    uint64 height = 3;
+    bytes shard = 4;
+    uint64 payload_height = 5;
+    repeated ObjectPledge local_pledges= 6;
+    uint64 epoch = 7;
+    bytes proposed_by = 8;
+    QuorumCertificate justify = 9;
 }
 
 message ValidatorSignature{
-
+ bytes signer = 1;
 }
 
 message TariDanPayload {
@@ -71,5 +84,16 @@ message ShardNode {
 }
 
 message ObjectPledge {
-    // TODO
+    enum CurrentState {
+        CURRRENT_STATE_DOES_NOT_EXIST =0;
+        CURRENT_STATE_UP = 1;
+        CURRENT_STATE_DOWN = 2;
     }
+    bytes object_id = 1;
+    CurrentState current_state = 2;
+    bytes created_by =3;
+    bytes data = 4;
+    bytes deleted_by = 5;
+    bytes pledged_to_payload = 6;
+    uint64 pledged_until = 7;
+}

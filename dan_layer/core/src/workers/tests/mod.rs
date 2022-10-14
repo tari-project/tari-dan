@@ -663,8 +663,8 @@ async fn test_kitchen_sink() {
     // This tells us which shards are involved in the transaction
     // Because there are no inputs, we need to say that there are 2 components
     // being created, so that two shards are involved, not just one.
-    builder.with_new_components(2);
-    let transaction = builder.sign(&secret_key).build();
+    builder.with_new_components(2).sign(&secret_key);
+    let transaction = builder.build();
 
     let involved_shards = transaction.meta().involved_shards();
     let s1;

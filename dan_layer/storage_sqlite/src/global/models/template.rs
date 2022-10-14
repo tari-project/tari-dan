@@ -30,6 +30,9 @@ pub struct TemplateModel {
     pub url: String,
     pub height: i32,
     pub compiled_code: Vec<u8>,
+    pub status: String,
+    pub wasm_path: Option<String>,
+    pub added_at: i64,
 }
 
 #[derive(Debug, Insertable)]
@@ -39,4 +42,15 @@ pub struct NewTemplateModel {
     pub url: String,
     pub height: i32,
     pub compiled_code: Vec<u8>,
+    pub status: String,
+    pub wasm_path: Option<String>,
+    pub added_at: i64,
+}
+
+#[derive(Debug, AsChangeset)]
+#[table_name = "templates"]
+pub struct TemplateUpdateModel {
+    pub compiled_code: Option<Vec<u8>>,
+    pub status: Option<String>,
+    pub wasm_path: Option<String>,
 }

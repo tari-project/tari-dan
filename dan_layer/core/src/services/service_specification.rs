@@ -20,7 +20,6 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use tari_dan_engine::state::StateDbBackendAdapter;
 use tari_dan_storage::global::GlobalDbAdapter;
 
 use super::{mempool::service::MempoolService, WalletClient};
@@ -46,7 +45,7 @@ pub trait ServiceSpecification: Default + Clone {
     type Addr: NodeAddressable;
     type AssetProxy: AssetProxy + Clone;
     type BaseNodeClient: BaseNodeClient + Clone;
-    type DbFactory: DbFactory<StateDbAdapter = Self::StateDbAdapter, GlobalDbAdapter = Self::GlobalDbAdapter> + Clone;
+    type DbFactory: DbFactory<GlobalDbAdapter = Self::GlobalDbAdapter> + Clone;
     type EventsPublisher: EventsPublisher<ConsensusWorkerDomainEvent>;
     type GlobalDbAdapter: GlobalDbAdapter;
     // type InboundConnectionService: InboundConnectionService<Addr = Self::Addr, Payload = Self::Payload>;
@@ -56,7 +55,6 @@ pub trait ServiceSpecification: Default + Clone {
     type Payload: Payload;
     type PayloadProcessor: PayloadProcessor<Self::Payload>;
     type SigningService: SigningService;
-    type StateDbAdapter: StateDbBackendAdapter;
     type ValidatorNodeClientFactory: ValidatorNodeClientFactory<Addr = Self::Addr> + Clone;
     type WalletClient: WalletClient;
 }

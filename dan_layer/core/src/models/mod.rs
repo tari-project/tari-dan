@@ -28,6 +28,7 @@ use std::{
     ops::Add,
 };
 
+use anyhow::anyhow;
 use serde::{Deserialize, Serialize};
 
 mod base_layer_metadata;
@@ -58,7 +59,7 @@ pub use node::Node;
 pub use payload::Payload;
 pub use quorum_certificate::{QuorumCertificate, QuorumDecision};
 pub use sidechain_metadata::SidechainMetadata;
-use tari_dan_common_types::{ObjectId, PayloadId, SubstateState};
+use tari_dan_common_types::{ObjectId, PayloadId, ShardId, SubstateState};
 pub use tari_dan_payload::{CheckpointData, TariDanPayload};
 pub use tree_node_hash::TreeNodeHash;
 pub use validator_node::ValidatorNode;
@@ -92,16 +93,9 @@ impl PartialOrd for NodeHeight {
     }
 }
 
-#[derive(Copy, Clone, Debug, Deserialize, PartialEq, Eq, Hash, Serialize)]
-pub struct Epoch(pub u64);
-
-impl Epoch {
-    pub fn as_u64(self) -> u64 {
-        self.0
-    }
-
-    fn to_le_bytes(self) -> [u8; 8] {
-        self.0.to_le_bytes()
+impl From<u64> for NodeHeight {
+    fn from(height: u64) -> Self {
+        NodeHeight(height)
     }
 }
 
@@ -143,13 +137,6 @@ impl AsRef<[u8]> for TokenId {
 pub enum HotStuffMessageType {
     NewView,
     Generic,
-    // TODO: remove
-    Prepare,
-    PreCommit,
-    Commit,
-    Decide,
-    // Special type
-    Genesis,
 }
 
 impl Default for HotStuffMessageType {
@@ -161,13 +148,8 @@ impl Default for HotStuffMessageType {
 impl HotStuffMessageType {
     pub fn as_u8(&self) -> u8 {
         match self {
-            HotStuffMessageType::NewView => 1,
-            HotStuffMessageType::Prepare => 2,
-            HotStuffMessageType::PreCommit => 3,
-            HotStuffMessageType::Commit => 4,
-            HotStuffMessageType::Decide => 5,
-            HotStuffMessageType::Genesis => 255,
-            HotStuffMessageType::Generic => 102,
+            HotStuffMessageType::NewView => 0,
+            HotStuffMessageType::Generic => 1,
         }
     }
 }
@@ -177,14 +159,21 @@ impl TryFrom<u8> for HotStuffMessageType {
 
     fn try_from(value: u8) -> Result<Self, Self::Error> {
         match value {
-            1 => Ok(HotStuffMessageType::NewView),
-            2 => Ok(HotStuffMessageType::Prepare),
-            3 => Ok(HotStuffMessageType::PreCommit),
-            4 => Ok(HotStuffMessageType::Commit),
-            5 => Ok(HotStuffMessageType::Decide),
-            102 => Ok(HotStuffMessageType::Generic),
-            255 => Ok(HotStuffMessageType::Genesis),
+            0 => Ok(HotStuffMessageType::NewView),
+            1 => Ok(HotStuffMessageType::Generic),
             _ => Err("Not a value message type".to_string()),
+        }
+    }
+}
+
+impl TryFrom<i32> for HotStuffMessageType {
+    type Error = anyhow::Error;
+
+    fn try_from(value: i32) -> Result<Self, Self::Error> {
+        match value {
+            0 => Ok(HotStuffMessageType::NewView),
+            1 => Ok(HotStuffMessageType::Generic),
+            _ => Err(anyhow!("Not a value message type")),
         }
     }
 }
@@ -254,4 +243,11 @@ impl From<u64> for ChainHeight {
     fn from(v: u64) -> Self {
         ChainHeight(v)
     }
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct ShardVote {
+    pub shard_id: ShardId,
+    pub node_hash: TreeNodeHash,
+    pub pledges: Vec<ObjectPledge>,
 }

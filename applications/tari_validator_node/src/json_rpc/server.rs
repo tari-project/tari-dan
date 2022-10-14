@@ -62,17 +62,23 @@ async fn handler(
 ) -> JrpcResult {
     info!(target: LOG_TARGET, "🌐 JSON-RPC request: {}", value.method);
     match value.method.as_str() {
-        "get_identity" => handlers.get_identity(value),
+        // Transaction
+        // "get_transaction_status" => handlers.get_transaction_status(value).await,
         "submit_transaction" => handlers.submit_transaction(value).await,
-        "register_validator_node" => handlers.register_validator_node(value).await,
+        // Template
         "register_template" => handlers.register_template(value).await,
-        "get_connections" => handlers.get_connections(value).await,
+        // Validator Node
+        "get_identity" => handlers.get_identity(value),
+        "register_validator_node" => handlers.register_validator_node(value).await,
         "get_mempool_stats" => handlers.get_mempool_stats(value).await,
         "get_epoch_manager_stats" => handlers.get_epoch_manager_stats(value).await,
-        "get_comms_stats" => handlers.get_comms_stats(value).await,
         "get_shard_key" => handlers.get_shard_key(value).await,
         "get_committee" => handlers.get_committee(value).await,
         "get_all_vns" => handlers.get_all_vns(value).await,
+        // Comms
+        "get_comms_stats" => handlers.get_comms_stats(value).await,
+        "get_connections" => handlers.get_connections(value).await,
+
         method => Ok(value.method_not_found(method)),
     }
 }

@@ -25,13 +25,24 @@ use tari_shutdown::ShutdownSignal;
 use tokio::sync::mpsc;
 
 use crate::p2p::services::template_manager::{
+    downloader::TemplateDownloadWorker,
     handle::TemplateManagerHandle,
-    template_manager_service::TemplateManagerService,
+    service::TemplateManagerService,
 };
 
 pub fn spawn(sqlite_db: SqliteDbFactory, shutdown: ShutdownSignal) -> TemplateManagerHandle {
     let (tx_request, rx_request) = mpsc::channel(1);
     let handle = TemplateManagerHandle::new(tx_request);
-    TemplateManagerService::spawn(rx_request, sqlite_db, shutdown);
+
+    let (tx_download_queue, rx_download_queue) = mpsc::channel(1);
+    let (tx_completed_downloads, rx_completed_downloads) = mpsc::channel(1);
+    TemplateManagerService::spawn(
+        rx_request,
+        sqlite_db,
+        tx_download_queue,
+        rx_completed_downloads,
+        shutdown,
+    );
+    TemplateDownloadWorker::new(rx_download_queue, tx_completed_downloads).spawn();
     handle
 }

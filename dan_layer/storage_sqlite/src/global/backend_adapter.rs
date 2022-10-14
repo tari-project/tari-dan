@@ -24,7 +24,7 @@ use std::convert::TryInto;
 
 use diesel::{prelude::*, Connection, RunQueryDsl, SqliteConnection};
 use tari_dan_storage::{
-    global::{DbTemplate, DbValidatorNode, GlobalDbAdapter, MetadataKey},
+    global::{DbTemplate, DbTemplateUpdate, DbValidatorNode, GlobalDbAdapter, MetadataKey},
     AtomicDb,
 };
 
@@ -32,7 +32,7 @@ use super::models::validator_node::{NewValidatorNode, ValidatorNode};
 use crate::{
     error::SqliteStorageError,
     global::{
-        models::{MetadataModel, NewTemplateModel, TemplateModel},
+        models::{MetadataModel, NewTemplateModel, TemplateModel, TemplateUpdateModel},
         schema::templates,
     },
     SqliteTransaction,
@@ -63,7 +63,7 @@ impl AtomicDb for SqliteGlobalDbAdapter {
                 operation: "set pragma".to_string(),
             })?;
         connection
-            .execute("BEGIN EXCLUSIVE TRANSACTION;")
+            .execute("BEGIN TRANSACTION;")
             .map_err(|source| SqliteStorageError::DieselError {
                 source,
                 operation: "begin transaction".to_string(),
@@ -129,9 +129,9 @@ impl GlobalDbAdapter for SqliteGlobalDbAdapter {
 
     fn get_template(&self, tx: &Self::DbTransaction, key: &[u8]) -> Result<Option<DbTemplate>, Self::Error> {
         use crate::global::schema::templates::dsl;
-        let template = dsl::templates
+        let template: Option<TemplateModel> = dsl::templates
             .filter(templates::template_address.eq(key))
-            .first::<TemplateModel>(tx.connection())
+            .first(tx.connection())
             .optional()
             .map_err(|source| SqliteStorageError::DieselError {
                 source,
@@ -144,6 +144,8 @@ impl GlobalDbAdapter for SqliteGlobalDbAdapter {
                 url: t.url,
                 height: t.height as u64,
                 compiled_code: t.compiled_code,
+                status: t.status.parse().expect("DB status corrupted"),
+                added_at: time::OffsetDateTime::from_unix_timestamp(t.added_at).expect("added_at timestamp corrupted"),
             })),
             None => Ok(None),
         }
@@ -155,6 +157,10 @@ impl GlobalDbAdapter for SqliteGlobalDbAdapter {
             url: item.url.to_string(),
             height: item.height as i32,
             compiled_code: item.compiled_code.clone(),
+            status: item.status.as_str().to_string(),
+            // TODO
+            wasm_path: None,
+            added_at: item.added_at.unix_timestamp(),
         };
         diesel::insert_into(templates::table)
             .values(new_template)
@@ -162,6 +168,29 @@ impl GlobalDbAdapter for SqliteGlobalDbAdapter {
             .map_err(|source| SqliteStorageError::DieselError {
                 source,
                 operation: "insert_template".to_string(),
+            })?;
+
+        Ok(())
+    }
+
+    fn update_template(
+        &self,
+        tx: &Self::DbTransaction,
+        key: &[u8],
+        template: DbTemplateUpdate,
+    ) -> Result<(), Self::Error> {
+        let model = TemplateUpdateModel {
+            compiled_code: template.compiled_code,
+            status: template.status.map(|s| s.as_str().to_string()),
+            wasm_path: None,
+        };
+        diesel::update(templates::table)
+            .filter(templates::template_address.eq(key))
+            .set(model)
+            .execute(tx.connection())
+            .map_err(|source| SqliteStorageError::DieselError {
+                source,
+                operation: "update_template".to_string(),
             })?;
 
         Ok(())

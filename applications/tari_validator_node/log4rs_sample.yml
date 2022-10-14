@@ -91,7 +91,7 @@ loggers:
     additive: false
 
   tari::validator_node:
-    level: info
+    level: debug
     appenders:
       - dan_layer
       - stdout
@@ -105,7 +105,7 @@ loggers:
     additive: false
 
   tari::dan_layer:
-    level: info
+    level: debug
     appenders:
       - dan_layer
       - stdout
@@ -122,3 +122,19 @@ loggers:
     level: info
     appenders:
       - network
+
+  # spits out the whole wasm if in debug mode
+  regalloc:
+    level: info
+    appenders:
+      - other
+      - stdout
+    additive: false
+
+  # spits out the whole wasm if in debug mode
+  cranelift_codegen:
+    level: info
+    appenders:
+      - other
+      - stdout
+    additive: false

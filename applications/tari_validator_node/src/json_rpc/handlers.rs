@@ -20,7 +20,7 @@
 //   WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //   USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use std::{convert::TryInto, sync::Arc};
+use std::sync::Arc;
 
 use axum_jrpc::{
     error::{JsonRpcError, JsonRpcErrorReason},
@@ -29,21 +29,23 @@ use axum_jrpc::{
     JsonRpcResponse,
 };
 use serde::Serialize;
-use serde_json::json;
-use tari_common_types::types::FixedHash;
+use serde_json::{self as json, json};
 use tari_comms::{multiaddr::Multiaddr, peer_manager::NodeId, types::CommsPublicKey, CommsNode, NodeIdentity};
 use tari_dan_common_types::serde_with;
 use tari_dan_core::services::{epoch_manager::EpochManager, BaseNodeClient};
 use tari_dan_engine::transaction::TransactionBuilder;
-use tari_engine_types::instruction::Instruction;
+use tari_validator_node_client::types::{
+    GetCommitteeRequest,
+    GetShardKey,
+    SubmitTransactionRequest,
+    SubmitTransactionResponse,
+    TemplateRegistrationRequest,
+    TemplateRegistrationResponse,
+};
 
-use super::messages::{GetCommitteeRequest, GetShardKey};
 use crate::{
-    grpc::services::{
-        base_node_client::GrpcBaseNodeClient,
-        wallet_client::{GrpcWalletClient, TemplateRegistrationRequest},
-    },
-    json_rpc::{jrpc_errors::internal_error, messages::SubmitTransactionRequest},
+    grpc::services::{base_node_client::GrpcBaseNodeClient, wallet_client::GrpcWalletClient},
+    json_rpc::jrpc_errors::internal_error,
     p2p::services::{epoch_manager::handle::EpochManagerHandle, mempool::MempoolHandle},
     Services,
 };
@@ -101,24 +103,20 @@ impl JsonRpcHandlers {
         let transaction: SubmitTransactionRequest = value.parse_params()?;
 
         let mut builder = TransactionBuilder::new();
-        builder.with_new_components(transaction.num_new_components);
-        for i in transaction.instructions {
-            builder.add_instruction(Instruction::CallFunction {
-                template_address: i.template_address.into(),
-                function: i.function,
-                args: i.args.clone(),
-            });
-        }
-        builder.signature(transaction.signature.try_into().map_err(internal_error(answer_id))?);
-        builder.sender_public_key(transaction.sender_public_key);
+        builder
+            .with_instructions(transaction.instructions)
+            .with_new_components(transaction.num_new_components)
+            .signature(transaction.signature)
+            .sender_public_key(transaction.sender_public_key);
+
         let mempool_tx = builder.build();
 
         // Pass to translation engine to translate into Shards and Substates.
 
-        // Submit to mempool.
-
         // TODO: submit the transaction to the wasm engine and return the result data
         let hash = *mempool_tx.hash();
+
+        // Submit to mempool.
         self.mempool
             .new_transaction(mempool_tx)
             .await
@@ -144,7 +142,7 @@ impl JsonRpcHandlers {
                 JsonRpcError::new(
                     JsonRpcErrorReason::ApplicationError(1),
                     format!("Failed to register validator node: {}", resp.failure_message),
-                    serde_json::Value::Null,
+                    json::Value::Null,
                 ),
             ));
         }
@@ -159,13 +157,17 @@ impl JsonRpcHandlers {
         let answer_id = value.get_answer_id();
         let data: TemplateRegistrationRequest = value.parse_params()?;
 
-        self.wallet_client()
+        let resp = self
+            .wallet_client()
             .register_template(&self.node_identity, data)
             .await
             .map_err(internal_error(answer_id))?;
 
         // TODO: add "transaction_id" to the grpc response
-        Ok(JsonRpcResponse::success(answer_id, ()))
+        Ok(JsonRpcResponse::success(answer_id, TemplateRegistrationResponse {
+            template_address: resp.template_address,
+            transaction_id: resp.tx_id,
+        }))
     }
 
     pub async fn get_connections(&self, value: JsonRpcExtractor) -> JrpcResult {
@@ -225,7 +227,7 @@ impl JsonRpcHandlers {
                 JsonRpcError::new(
                     JsonRpcErrorReason::InvalidParams,
                     "Something went wrong".to_string(),
-                    serde_json::Value::Null,
+                    json::Value::Null,
                 ),
             ))
         }
@@ -244,13 +246,6 @@ impl JsonRpcHandlers {
 struct GetIdentityResponse {
     #[serde(with = "serde_with::hex")]
     node_id: NodeId,
-    #[serde(with = "serde_with::hex")]
     public_key: CommsPublicKey,
     public_address: Multiaddr,
-}
-
-#[derive(Serialize, Debug)]
-struct SubmitTransactionResponse {
-    #[serde(with = "serde_with::base64")]
-    hash: FixedHash,
 }
