@@ -20,27 +20,22 @@
 //   WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //   USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use std::path::PathBuf;
+use clap::Subcommand;
+use tari_validator_node_client::ValidatorNodeClient;
 
-use clap::Parser;
-use multiaddr::Multiaddr;
-
-use crate::command::Command;
-
-#[derive(Parser, Debug)]
-#[clap(author, version, about, long_about = None)]
-#[clap(propagate_version = true)]
-pub(crate) struct Cli {
-    #[clap(long, alias = "endpoint")]
-    pub vn_daemon_jrpc_endpoint: Option<Multiaddr>,
-    #[clap(long, short = 'b', alias = "basedir")]
-    pub base_dir: Option<PathBuf>,
-    #[clap(subcommand)]
-    pub command: Command,
+#[derive(Debug, Subcommand, Clone)]
+pub enum VnSubcommand {
+    Register,
 }
 
-impl Cli {
-    pub fn init() -> Self {
-        Self::parse()
+impl VnSubcommand {
+    pub async fn handle(self, mut client: ValidatorNodeClient) -> Result<(), anyhow::Error> {
+        match self {
+            VnSubcommand::Register => {
+                let tx_id = client.register_validator_node().await?;
+                println!("✅ Validator node registration submitted (tx_id: {})", tx_id);
+            },
+        }
+        Ok(())
     }
 }

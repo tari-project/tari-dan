@@ -11,7 +11,7 @@ use tari_dan_engine::{
     packager::{LoadedTemplate, Package, TemplateModuleLoader},
     runtime::{FinalizeResult, RuntimeInterface},
     state_store::memory::MemoryStateStore,
-    transaction::{TransactionBuilder, TransactionProcessor},
+    transaction::{Transaction, TransactionProcessor},
     wasm::{compile::compile_template, LoadedWasmTemplate},
 };
 use tari_engine_types::{hashing::hasher, instruction::Instruction};
@@ -112,11 +112,12 @@ impl<R: RuntimeInterface + Clone + 'static> TemplateTest<R> {
     }
 
     pub fn execute(&self, instructions: Vec<Instruction>) -> FinalizeResult {
-        let mut builder = TransactionBuilder::new();
+        let mut builder = Transaction::builder();
         for instruction in instructions {
             builder.add_instruction(instruction);
         }
-        let transaction = builder.sign(&self.secret_key).build();
+        builder.sign(&self.secret_key);
+        let transaction = builder.build();
 
         self.processor.execute(transaction).unwrap()
     }

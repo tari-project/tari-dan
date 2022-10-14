@@ -21,7 +21,7 @@
 //   USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 use serde::{Deserialize, Serialize};
-use tari_common_types::types::PublicKey;
+use tari_common_types::types::{FixedHash, PublicKey};
 use tari_dan_common_types::{serde_with, Epoch, ShardId};
 use tari_engine_types::{instruction::Instruction, signature::InstructionSignature};
 
@@ -73,9 +73,16 @@ pub struct SubmitTransactionRequest {
     pub num_new_components: u8,
 }
 
+// #[derive(Debug, Clone, Serialize, Deserialize)]
+// pub struct SubmitTransactionResponse {
+//     // TODO: Return hash type
+//     pub hash: Vec<u8>,
+// }
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SubmitTransactionResponse {
-    pub hash: Vec<u8>,
+    #[serde(with = "serde_with::hex")]
+    pub hash: FixedHash,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

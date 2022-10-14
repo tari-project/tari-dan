@@ -20,27 +20,37 @@
 //   WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //   USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use std::path::PathBuf;
+use std::{convert::TryFrom, str::FromStr};
 
-use clap::Parser;
-use multiaddr::Multiaddr;
+use tari_utilities::hex::from_hex;
 
-use crate::command::Command;
+#[derive(Debug, Clone)]
+pub struct FromHex<T>(pub T);
 
-#[derive(Parser, Debug)]
-#[clap(author, version, about, long_about = None)]
-#[clap(propagate_version = true)]
-pub(crate) struct Cli {
-    #[clap(long, alias = "endpoint")]
-    pub vn_daemon_jrpc_endpoint: Option<Multiaddr>,
-    #[clap(long, short = 'b', alias = "basedir")]
-    pub base_dir: Option<PathBuf>,
-    #[clap(subcommand)]
-    pub command: Command,
+impl<T> FromHex<T> {
+    pub fn into_inner(self) -> T {
+        self.0
+    }
 }
 
-impl Cli {
-    pub fn init() -> Self {
-        Self::parse()
+// impl<T: Hex> FromStr for FromHex<T> {
+//     type Err = HexError;
+//
+//     fn from_str(s: &str) -> Result<Self, Self::Err> {
+//         T::from_hex(s).map(Self)
+//     }
+// }
+
+impl<T> FromStr for FromHex<T>
+where
+    T: TryFrom<Vec<u8>>,
+    T::Error: std::error::Error + Send + Sync + 'static,
+{
+    type Err = anyhow::Error;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let a = from_hex(s)?;
+        let item = T::try_from(a)?;
+        Ok(Self(item))
     }
 }

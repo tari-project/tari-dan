@@ -20,40 +20,48 @@
 //   WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //   USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use std::path::PathBuf;
+use std::path::Path;
 
-use clap::{Args, Subcommand};
+use clap::Subcommand;
 
-#[allow(clippy::large_enum_variant)]
-#[derive(Debug, Subcommand, Clone)]
-pub enum Command {
-    #[clap(subcommand)]
-    Vn(VnSubcommand),
-    #[clap(subcommand)]
-    Templates(TemplateSubcommand),
-}
+use crate::account_manager::AccountFileManager;
 
 #[derive(Debug, Subcommand, Clone)]
-pub enum VnSubcommand {
-    Register,
+pub enum AccountsSubcommand {
+    #[clap(alias = "create")]
+    New,
+    List,
+    Use {
+        name: String,
+    },
 }
 
-#[derive(Debug, Subcommand, Clone)]
-pub enum TemplateSubcommand {
-    Publish(PublishTemplateArgs),
-}
+impl AccountsSubcommand {
+    pub async fn handle<P: AsRef<Path>>(self, base_dir: P) -> anyhow::Result<()> {
+        let account_manager = AccountFileManager::init(base_dir.as_ref().to_path_buf())?;
 
-#[derive(Debug, Args, Clone)]
-pub struct PublishTemplateArgs {
-    #[clap(long, short = 'p', alias = "path")]
-    pub template_code_path: PathBuf,
-
-    #[clap(long, alias = "template-name")]
-    pub template_name: Option<String>,
-
-    #[clap(long, alias = "template-version")]
-    pub template_version: Option<u16>,
-
-    #[clap(long, alias = "binary-url")]
-    pub binary_url: Option<String>,
+        #[allow(clippy::enum_glob_use)]
+        use AccountsSubcommand::*;
+        match self {
+            New => {
+                let account = account_manager.create_account()?;
+                println!("New account {} created", account);
+            },
+            List => {
+                println!("Accounts:");
+                for (i, account) in account_manager.all().into_iter().enumerate() {
+                    if account.is_active {
+                        println!("{}. (active) {}", i, account);
+                    } else {
+                        println!("{}. {}", i, account);
+                    }
+                }
+            },
+            Use { name } => {
+                account_manager.set_active_account(&name)?;
+                println!("Account {} is now active", name);
+            },
+        }
+        Ok(())
+    }
 }

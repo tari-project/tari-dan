@@ -84,7 +84,7 @@ impl TransactionBuilder {
         self
     }
 
-    pub fn sign(mut self, secret_key: &PrivateKey) -> Self {
+    pub fn sign(&mut self, secret_key: &PrivateKey) -> &mut Self {
         let (nonce, _nonce_pk) = create_key_pair();
         self.signature = Some(InstructionSignature::sign(secret_key, nonce, &self.instructions));
         self.sender_public_key = Some(PublicKey::from_secret_key(secret_key));

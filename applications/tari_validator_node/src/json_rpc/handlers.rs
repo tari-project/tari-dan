@@ -30,7 +30,6 @@ use axum_jrpc::{
 };
 use serde::Serialize;
 use serde_json::{self as json, json};
-use tari_common_types::types::FixedHash;
 use tari_comms::{multiaddr::Multiaddr, peer_manager::NodeId, types::CommsPublicKey, CommsNode, NodeIdentity};
 use tari_dan_common_types::serde_with;
 use tari_dan_core::services::{epoch_manager::EpochManager, BaseNodeClient};
@@ -39,6 +38,7 @@ use tari_validator_node_client::types::{
     GetCommitteeRequest,
     GetShardKey,
     SubmitTransactionRequest,
+    SubmitTransactionResponse,
     TemplateRegistrationRequest,
     TemplateRegistrationResponse,
 };
@@ -246,13 +246,6 @@ impl JsonRpcHandlers {
 struct GetIdentityResponse {
     #[serde(with = "serde_with::hex")]
     node_id: NodeId,
-    #[serde(with = "serde_with::hex")]
     public_key: CommsPublicKey,
     public_address: Multiaddr,
-}
-
-#[derive(Serialize, Debug)]
-struct SubmitTransactionResponse {
-    #[serde(with = "serde_with::hex")]
-    hash: FixedHash,
 }
