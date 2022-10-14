@@ -35,7 +35,7 @@ mod payload_processor;
 mod template_registration_signing;
 mod validator_node_registration_signing;
 
-use std::{fs, io, process};
+use std::{io, process};
 
 use clap::Parser;
 use log::*;
@@ -46,13 +46,8 @@ use tari_common::{
     initialize_logging,
     load_configuration,
 };
-use tari_comms::NodeIdentity;
 use tari_dan_common_types::ShardId;
-use tari_dan_core::{
-    services::{base_node_error::BaseNodeError, BaseNodeClient},
-    storage::DbFactory,
-    DigitalAssetError,
-};
+use tari_dan_core::{services::base_node_error::BaseNodeError, storage::DbFactory, DigitalAssetError};
 use tari_dan_storage_sqlite::SqliteDbFactory;
 use tari_shutdown::{Shutdown, ShutdownSignal};
 use tokio::{runtime, runtime::Runtime, task};
@@ -127,50 +122,6 @@ pub struct ShardKey {
     shard_id: Option<ShardId>,
 }
 
-async fn auto_register_vn(
-    wallet_client: &mut GrpcWalletClient,
-    base_node_client: &mut GrpcBaseNodeClient,
-    node_identity: &NodeIdentity,
-    config: &ApplicationConfig,
-) -> Result<ShardId, ShardKeyError> {
-    let path = &config.validator_node.shard_key_file;
-
-    // We already sent the registration tx, we are just waiting for it to be mined.
-    let tip = base_node_client.get_tip_info().await?.height_of_longest_chain;
-    let shard_id = base_node_client
-        .get_shard_key(tip, node_identity.public_key())
-        .await
-        .map_err(ShardKeyError::BaseNodeError)?;
-    if let Some(shard_id) = shard_id {
-        let shard_key = ShardKey {
-            is_registered: true,
-            shard_id: Some(shard_id),
-        };
-        let json = json5::to_string(&shard_key)?;
-        fs::write(path, json.as_bytes())?;
-        Ok(shard_id)
-    } else {
-        let vn = wallet_client.register_validator_node(node_identity).await?;
-        if vn.is_success {
-            println!("Registering VN was successful {:?}", vn);
-            let shard_key = ShardKey {
-                is_registered: true,
-                shard_id: None,
-            };
-            let json = json5::to_string(&shard_key)?;
-            if let Some(p) = path.parent() {
-                if !p.exists() {
-                    fs::create_dir_all(p)?;
-                }
-            }
-            fs::write(path, json.as_bytes())?;
-            Err(ShardKeyError::NotYetRegistered)
-        } else {
-            Err(ShardKeyError::RegistrationFailed)
-        }
-    }
-}
-
 async fn run_node(config: &ApplicationConfig) -> Result<(), ExitError> {
     let shutdown = Shutdown::new();
 
@@ -193,10 +144,7 @@ async fn run_node(config: &ApplicationConfig) -> Result<(), ExitError> {
     );
 
     // fs::create_dir_all(&global.peer_db_path).map_err(|err| ExitError::new(ExitCode::ConfigError, err))?;
-    let mut base_node_client = GrpcBaseNodeClient::new(config.validator_node.base_node_grpc_address);
-    let mut wallet_client = GrpcWalletClient::new(config.validator_node.wallet_grpc_address);
-    let vn_registration = auto_register_vn(&mut wallet_client, &mut base_node_client, &node_identity, config).await;
-    println!("VN Registration result : {:?}", vn_registration);
+    let base_node_client = GrpcBaseNodeClient::new(config.validator_node.base_node_grpc_address);
     let services = spawn_services(
         config,
         shutdown.to_signal(),
