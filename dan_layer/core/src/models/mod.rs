@@ -99,25 +99,6 @@ impl From<u64> for NodeHeight {
     }
 }
 
-#[derive(Copy, Clone, Debug, Deserialize, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize)]
-pub struct Epoch(pub u64);
-
-impl Epoch {
-    pub fn as_u64(self) -> u64 {
-        self.0
-    }
-
-    fn to_le_bytes(self) -> [u8; 8] {
-        self.0.to_le_bytes()
-    }
-}
-
-impl From<u64> for Epoch {
-    fn from(e: u64) -> Self {
-        Self(e)
-    }
-}
-
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct ObjectPledge {
     pub object_id: ObjectId,

@@ -19,14 +19,16 @@
 //   SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY,
 //   WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //   USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-pub mod types;
-
 use anyhow::anyhow;
 use reqwest::{header, header::HeaderMap, IntoUrl, Url};
 use serde::{de::DeserializeOwned, Serialize};
 use serde_json as json;
 use serde_json::json;
-use types::{TemplateRegistrationRequest, TemplateRegistrationResponse};
+
+pub mod types;
+use types::{SubmitTransactionRequest, TemplateRegistrationRequest, TemplateRegistrationResponse};
+
+use crate::types::SubmitTransactionResponse;
 
 #[derive(Debug, Clone)]
 pub struct ValidatorNodeClient {
@@ -65,6 +67,13 @@ impl ValidatorNodeClient {
         request: TemplateRegistrationRequest,
     ) -> Result<TemplateRegistrationResponse, anyhow::Error> {
         self.send_request("register_template", request).await
+    }
+
+    pub async fn submit_transaction(
+        &mut self,
+        request: SubmitTransactionRequest,
+    ) -> Result<SubmitTransactionResponse, anyhow::Error> {
+        self.send_request("submit_transaction", request).await
     }
 
     fn next_request_id(&mut self) -> i64 {

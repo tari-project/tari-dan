@@ -20,10 +20,12 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-mod handlers;
-pub use handlers::JsonRpcHandlers;
+import React from "react";
+import { render, screen } from "@testing-library/react";
+import ValidatorNode from "./ValidatorNode";
 
-mod jrpc_errors;
-mod server;
-
-pub use server::run_json_rpc;
+test("renders learn react link", () => {
+  render(<ValidatorNode />);
+  const linkElement = screen.getByText(/learn react/i);
+  expect(linkElement).toBeInTheDocument();
+});

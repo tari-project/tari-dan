@@ -38,7 +38,6 @@ use tari_dan_common_types::{ObjectId, PayloadId, ShardId, SubstateState};
 use tari_dan_core::{
     models::{
         vote_message::VoteMessage,
-        Epoch,
         HotStuffTreeNode,
         NodeHeight,
         ObjectPledge,

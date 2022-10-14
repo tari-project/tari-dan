@@ -67,6 +67,13 @@ impl TransactionBuilder {
         self
     }
 
+    pub fn with_instructions(&mut self, instructions: Vec<Instruction>) -> &mut Self {
+        self.instructions.extend(instructions);
+        // Reset the signature as it is no longer valid
+        self.signature = None;
+        self
+    }
+
     pub fn signature(&mut self, signature: InstructionSignature) -> &mut Self {
         self.signature = Some(signature);
         self

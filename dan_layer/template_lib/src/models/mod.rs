@@ -29,9 +29,6 @@ pub use bucket::{AnyBucket, Bucket, BucketId};
 mod component;
 pub use component::*;
 
-// mod contract;
-// pub use contract::{Contract, ContractAddress};
-
 mod metadata;
 pub use metadata::Metadata;
 
