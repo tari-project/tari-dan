@@ -22,15 +22,23 @@
 
 use std::{net::SocketAddr, sync::Arc};
 
-use axum::{routing::get, Extension, Router};
+use axum::{
+    http::{Response, Uri},
+    response::IntoResponse,
+    routing::get,
+    Extension,
+    Router,
+};
+use include_dir::{include_dir, Dir};
 use log::{error, info};
+use reqwest::StatusCode;
 
 const LOG_TARGET: &str = "tari_validator_node::http_ui::server";
 
 pub async fn run_http_ui_server(address: SocketAddr, json_rpc_address: Option<String>) -> Result<(), anyhow::Error> {
-    let router = Router::new().route("/", get(index)).layer(Extension(Arc::new(
-        json_rpc_address.unwrap_or_else(|| "127.0.0.1:18145".to_string()),
-    )));
+    let router = Router::new()
+        .nest("/", get(handler))
+        .layer(Extension(Arc::new(json_rpc_address)));
 
     info!(target: LOG_TARGET, "🌐 HTTP UI started at {}", address);
     axum::Server::bind(&address)
@@ -45,21 +53,39 @@ pub async fn run_http_ui_server(address: SocketAddr, json_rpc_address: Option<St
     Ok(())
 }
 
-async fn index(Extension(json_rpc_address): Extension<Arc<String>>) -> axum::response::Html<String> {
-    println!("address {:?}", json_rpc_address);
-    include_str!("gui.html")
-        .replace("{{address}}", &json_rpc_address)
-        .into()
-}
+static PROJECT_DIR: Dir<'_> = include_dir!("applications/tari_validator_node_web_ui/build");
 
-#[cfg(test)]
-mod tests {
-    #[test]
-    fn test_there_is_only_one_port_in_html() {
-        assert_eq!(
-            include_str!("gui.html").matches("{{address}}").count(),
-            1,
-            "There should be exactly one {{{{address}}}}"
-        );
+async fn handler(uri: Uri, Extension(json_rpc_address): Extension<Arc<Option<String>>>) -> impl IntoResponse {
+    let path = uri.path();
+    // If path starts with /, strip it.
+    let path = match path.strip_prefix('/') {
+        Some(path) => path,
+        None => path,
+    };
+    // If there is no path, we want index.html
+    let path = match path {
+        "" => "index.html",
+        path => path,
+    };
+    if path == "json_rpc_address" {
+        if let Some(ref json_rpc_address) = *json_rpc_address {
+            return Response::builder()
+                .status(StatusCode::OK)
+                .body(json_rpc_address.clone())
+                .unwrap();
+        }
     }
+    if let Some(lib_rs) = PROJECT_DIR.get_file(path) {
+        if let Some(body) = lib_rs.contents_utf8() {
+            return Response::builder()
+                .status(StatusCode::OK)
+                .body(body.to_owned())
+                .unwrap();
+        }
+    }
+    println!("Not found {:?}", path);
+    Response::builder()
+        .status(StatusCode::NOT_FOUND)
+        .body("".to_string())
+        .unwrap()
 }
