@@ -20,19 +20,12 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use tari_common_types::types::FixedHash;
-use tari_dan_engine::state::{StateDb, StateDbBackendAdapter};
 use tari_dan_storage::global::{GlobalDb, GlobalDbAdapter};
 
 use crate::storage::StorageError;
 
 pub trait DbFactory: Sync + Send + 'static {
-    type StateDbAdapter: StateDbBackendAdapter;
     type GlobalDbAdapter: GlobalDbAdapter;
-
-    fn get_state_db(&self, contract_id: &FixedHash) -> Result<Option<StateDb<Self::StateDbAdapter>>, StorageError>;
-
-    fn get_or_create_state_db(&self, contract_id: &FixedHash) -> Result<StateDb<Self::StateDbAdapter>, StorageError>;
 
     fn get_or_create_global_db(&self) -> Result<GlobalDb<Self::GlobalDbAdapter>, StorageError>;
 }
