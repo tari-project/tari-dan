@@ -28,10 +28,7 @@ use std::{
 use diesel::SqliteConnection;
 use log::*;
 use tari_comms::protocol::rpc::{Request, Response, RpcStatus, Streaming};
-use tari_dan_core::{
-    services::{infrastructure_services::NodeAddressable, PeerProvider},
-    storage::shard_store::ShardStoreTransaction,
-};
+use tari_dan_core::services::{infrastructure_services::NodeAddressable, PeerProvider};
 use tari_dan_engine::transaction::Transaction;
 use tari_dan_storage_sqlite::sqlite_shard_store_factory::SqliteShardStoreTransaction;
 use tokio::{sync::mpsc, task};
@@ -48,7 +45,7 @@ pub struct ValidatorNodeRpcServiceImpl<TPeerProvider> {
 
 impl<TPeerProvider: PeerProvider> ValidatorNodeRpcServiceImpl<TPeerProvider> {
     pub fn new(message_senders: DanMessageSenders, peer_provider: TPeerProvider, connection: SqliteConnection) -> Self {
-        let shard_state_store = Arc::new(RwLock::new(SqliteShardStoreTransaction::new(connection)));
+        let shard_state_store = Arc::new(RwLock::new(SqliteShardStoreTransaction { connection }));
 
         Self {
             message_senders,
@@ -137,7 +134,7 @@ where TPeerProvider: PeerProvider + Clone + Send + Sync + 'static
         task::spawn(async move {
             let mut offset = 0i64;
             let limit = 100i64;
-            let shard_id = request.into_message().shard_id;
+            let shard_id = request.into_message().bytes;
             loop {
                 let states = self
                     .shard_state_store
@@ -147,7 +144,7 @@ where TPeerProvider: PeerProvider + Clone + Send + Sync + 'static
                 offset += limit;
                 for state in states {
                     // if send returns error, the client has closed the connection, so we break the loop
-                    if tx.send(Ok(proto::common::SubstateState::from(state))).is_err() {
+                    if tx.send(Ok(proto::common::SubstateState::from(state))).await.is_err() {
                         break;
                     }
                 }

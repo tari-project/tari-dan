@@ -20,8 +20,13 @@
 //   WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //   USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use std::{fs, io, sync::Arc};
+use std::{
+    fs,
+    io,
+    sync::{Arc, RwLock},
+};
 
+use diesel::SqliteConnection;
 use tari_app_utilities::{identity_management, identity_management::load_from_json};
 use tari_common::exit_codes::{ExitCode, ExitError};
 use tari_comms::{protocol::rpc::RpcServer, CommsNode, NodeIdentity, UnspawnedCommsNode};
@@ -63,6 +68,7 @@ pub async fn spawn_services(
     node_identity: Arc<NodeIdentity>,
     global_db: GlobalDb<SqliteGlobalDbAdapter>,
     sqlite_db: SqliteDbFactory,
+    connection: Arc<RwLock<SqliteConnection>>,
 ) -> Result<Services, anyhow::Error> {
     let mut p2p_config = config.validator_node.p2p.clone();
     p2p_config.transport.tor.identity = load_from_json(&config.validator_node.tor_identity_file)
@@ -144,7 +150,7 @@ pub async fn spawn_services(
         shutdown,
     );
 
-    let comms = setup_p2p_rpc(config, comms, message_senders, peer_provider);
+    let comms = setup_p2p_rpc(config, comms, message_senders, peer_provider, connection);
     let comms = spawn_comms_using_transport(comms, p2p_config.transport.clone())
         .await
         .map_err(|e| ExitError::new(ExitCode::ConfigError, format!("Could not spawn using transport: {}", e)))?;
@@ -190,11 +196,16 @@ fn setup_p2p_rpc(
     comms: UnspawnedCommsNode,
     message_senders: DanMessageSenders,
     peer_provider: CommsPeerProvider,
+    connection: Arc<RwLock<SqliteConnection>>,
 ) -> UnspawnedCommsNode {
     let rpc_server = RpcServer::builder()
         .with_maximum_simultaneous_sessions(config.validator_node.p2p.rpc_max_simultaneous_sessions)
         .finish()
-        .add_service(create_validator_node_rpc_service(message_senders, peer_provider));
+        .add_service(create_validator_node_rpc_service(
+            message_senders,
+            peer_provider,
+            connection,
+        ));
 
     comms.add_protocol_extension(rpc_server)
 }

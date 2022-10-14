@@ -107,15 +107,19 @@ impl TryFrom<proto::validator_node::DanMessage> for DanMessage<TariDanPayload, C
 // -------------------------------- ShardId ------------------------------------ //
 
 impl TryFrom<proto::common::ShardId> for ShardId {
+    type Error = anyhow::Error;
+
     fn try_from(value: proto::common::ShardId) -> Result<Self, Self::Error> {
-        Ok(ShardId(value.bytes))
+        let mut data = [0u8; 32];
+        data.copy_from_slice(value.bytes.as_slice());
+        Ok(ShardId(data))
     }
 }
 
 impl From<ShardId> for proto::common::ShardId {
     fn from(value: ShardId) -> Self {
         Self {
-            bytes: value.to_le_bytes(),
+            bytes: Vec::from(value.to_le_bytes()),
         }
     }
 }
@@ -123,7 +127,9 @@ impl From<ShardId> for proto::common::ShardId {
 // -------------------------------- PayloadId   -------------------------------- //
 
 impl TryFrom<proto::common::PayloadId> for PayloadId {
-    fn try_from(value: proto::common::ShardId) -> Result<Self, Self::Error> {
+    type Error = anyhow::Error;
+
+    fn try_from(value: proto::common::PayloadId) -> Result<Self, Self::Error> {
         Ok(PayloadId::new(value.payload_id))
     }
 }
@@ -139,15 +145,17 @@ impl From<PayloadId> for proto::common::PayloadId {
 // -------------------------------- SubstateState ------------------------------ //
 
 impl TryFrom<proto::common::SubstateState> for SubstateState {
+    type Error = anyhow::Error;
+
     fn try_from(request: proto::common::SubstateState) -> Result<Self, Self::Error> {
         let result = match request.substate_state_type {
             0 => SubstateState::DoesNotExist,
             1 => SubstateState::Up {
-                created_by: request.created_by,
+                created_by: request.created_by.ok_or(Self::Error)?,
                 data: request.data,
             },
             2 => SubstateState::Down {
-                deleted_by: request.deleted_by,
+                deleted_by: request.deleted_by.ok_or(Self::Error)?,
             },
         };
 
@@ -165,11 +173,11 @@ impl From<SubstateState> for proto::common::SubstateState {
             SubstateState::Up { data, created_by } => {
                 result.substate_state_type = 1;
                 result.data = data;
-                result.created_by = proto::common::PayloadId::from(created_by);
+                result.created_by = Some(proto::common::PayloadId::from(created_by));
             },
             SubstateState::Down { deleted_by } => {
                 result.substate_state_type = 2;
-                result.deleted_by = proto::common::PayloadId::from(deleted_by);
+                result.deleted_by = Some(proto::common::PayloadId::from(deleted_by));
             },
         }
 
