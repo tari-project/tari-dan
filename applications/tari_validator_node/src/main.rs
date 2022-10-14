@@ -35,7 +35,7 @@ mod payload_processor;
 mod template_registration_signing;
 mod validator_node_registration_signing;
 
-use std::{fs, io, process};
+use std::{fs, io, path::PathBuf, process};
 
 use clap::Parser;
 use log::*;
@@ -203,6 +203,7 @@ async fn run_node(config: &ApplicationConfig) -> Result<(), ExitError> {
         node_identity.clone(),
         global_db,
         db_factory,
+        connection,
     )
     .await?;
 

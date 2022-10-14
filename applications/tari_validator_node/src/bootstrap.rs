@@ -20,11 +20,7 @@
 //   WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //   USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use std::{
-    fs,
-    io,
-    sync::{Arc, RwLock},
-};
+use std::{fs, io, sync::Arc};
 
 use diesel::SqliteConnection;
 use tari_app_utilities::{identity_management, identity_management::load_from_json};
@@ -68,7 +64,7 @@ pub async fn spawn_services(
     node_identity: Arc<NodeIdentity>,
     global_db: GlobalDb<SqliteGlobalDbAdapter>,
     sqlite_db: SqliteDbFactory,
-    connection: Arc<RwLock<SqliteConnection>>,
+    connection: SqliteConnection,
 ) -> Result<Services, anyhow::Error> {
     let mut p2p_config = config.validator_node.p2p.clone();
     p2p_config.transport.tor.identity = load_from_json(&config.validator_node.tor_identity_file)
@@ -196,7 +192,7 @@ fn setup_p2p_rpc(
     comms: UnspawnedCommsNode,
     message_senders: DanMessageSenders,
     peer_provider: CommsPeerProvider,
-    connection: Arc<RwLock<SqliteConnection>>,
+    connection: SqliteConnection,
 ) -> UnspawnedCommsNode {
     let rpc_server = RpcServer::builder()
         .with_maximum_simultaneous_sessions(config.validator_node.p2p.rpc_max_simultaneous_sessions)

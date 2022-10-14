@@ -28,7 +28,7 @@ use std::{
 use anyhow::anyhow;
 use borsh::de::BorshDeserialize;
 use chrono::{DateTime, NaiveDateTime, Utc};
-use tari_common_types::types::{PrivateKey, PublicKey, Signature};
+use tari_common_types::types::{FixedHash, PrivateKey, PublicKey, Signature};
 use tari_comms::{peer_manager::IdentitySignature, types::CommsPublicKey};
 use tari_crypto::tari_utilities::ByteArray;
 use tari_dan_common_types::{PayloadId, ShardId, SubstateState};
@@ -130,14 +130,15 @@ impl TryFrom<proto::common::PayloadId> for PayloadId {
     type Error = anyhow::Error;
 
     fn try_from(value: proto::common::PayloadId) -> Result<Self, Self::Error> {
-        Ok(PayloadId::new(value.payload_id))
+        let hash = FixedHash::try_from(Vec::from(value.payload_id))?;
+        Ok(PayloadId::new(hash))
     }
 }
 
 impl From<PayloadId> for proto::common::PayloadId {
     fn from(value: PayloadId) -> Self {
         Self {
-            payload_id: value.as_slice(),
+            payload_id: Vec::from(value.as_slice()),
         }
     }
 }
@@ -151,11 +152,11 @@ impl TryFrom<proto::common::SubstateState> for SubstateState {
         let result = match request.substate_state_type {
             0 => SubstateState::DoesNotExist,
             1 => SubstateState::Up {
-                created_by: request.created_by.ok_or(Self::Error)?,
+                created_by: PayloadId::try_from(request.created_by.unwrap())?,
                 data: request.data,
             },
             2 => SubstateState::Down {
-                deleted_by: request.deleted_by.ok_or(Self::Error)?,
+                deleted_by: PayloadId::try_from(request.deleted_by.unwrap())?,
             },
         };
 

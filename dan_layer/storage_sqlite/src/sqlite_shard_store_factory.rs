@@ -81,6 +81,7 @@ use crate::{
     },
 };
 
+#[derive(Debug, Clone)]
 pub struct SqliteShardStoreFactory {
     url: PathBuf,
 }

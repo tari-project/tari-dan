@@ -21,17 +21,23 @@
 // OTHERWISE) ARISING IN ANY WAY OUT OF THE  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH
 // DAMAGE.
 use std::{
-    convert::TryInto,
-    sync::{Arc, RwLock},
+    convert::{TryFrom, TryInto},
+    ops::Deref,
 };
 
 use diesel::SqliteConnection;
 use log::*;
 use tari_comms::protocol::rpc::{Request, Response, RpcStatus, Streaming};
-use tari_dan_core::services::{infrastructure_services::NodeAddressable, PeerProvider};
+use tari_dan_common_types::ShardId;
+use tari_dan_core::{
+    services::{infrastructure_services::NodeAddressable, PeerProvider},
+    storage::shard_store::{ShardStoreFactory, ShardStoreTransaction},
+};
 use tari_dan_engine::transaction::Transaction;
-use tari_dan_storage_sqlite::sqlite_shard_store_factory::SqliteShardStoreTransaction;
+use tari_dan_storage_sqlite::sqlite_shard_store_factory::SqliteShardStoreFactory;
 use tokio::{sync::mpsc, task};
+
+use crate::p2p::proto::network::{VnStateSyncRequest, VnStateSyncResponse};
 
 const LOG_TARGET: &str = "vn::p2p::rpc";
 
@@ -40,13 +46,15 @@ use crate::p2p::{proto, rpc::ValidatorNodeRpcService, services::messaging::DanMe
 pub struct ValidatorNodeRpcServiceImpl<TPeerProvider> {
     message_senders: DanMessageSenders,
     peer_provider: TPeerProvider,
-    shard_state_store: Arc<RwLock<SqliteShardStoreTransaction>>,
+    shard_state_store: SqliteShardStoreFactory,
 }
 
 impl<TPeerProvider: PeerProvider> ValidatorNodeRpcServiceImpl<TPeerProvider> {
-    pub fn new(message_senders: DanMessageSenders, peer_provider: TPeerProvider, connection: SqliteConnection) -> Self {
-        let shard_state_store = Arc::new(RwLock::new(SqliteShardStoreTransaction { connection }));
-
+    pub fn new(
+        message_senders: DanMessageSenders,
+        peer_provider: TPeerProvider,
+        shard_state_store: SqliteShardStoreFactory,
+    ) -> Self {
         Self {
             message_senders,
             peer_provider,
@@ -126,25 +134,74 @@ where TPeerProvider: PeerProvider + Clone + Send + Sync + 'static
         Ok(Streaming::new(rx))
     }
 
-    fn vn_state_sync(
+    async fn get_vn_state_inventory(
         &self,
-        request: Request<proto::common::ShardId>,
-    ) -> Result<Streaming<proto::common::SubstateState>, RpcStatus> {
+        request: Request<GetVnStateInventoryRequest>,
+    ) -> Result<Response<GetVnStateInventoryResponse>, RpcStatus> {
+        let start_shard_id = request
+            .into_message()
+            .start_shard_id
+            .and_then(|s| ShardId::try_from(s).ok())
+            .ok_or_else(|| RpcStatus::bad_request("Invalid start_shard_id provided"))?;
+        let end_shard_id = request
+            .into_message()
+            .end_shard_id
+            .and_then(|s| ShardId::try_from(s).ok())
+            .ok_or_else(|| RpcStatus::bad_request("Invalid end_shard_id provided"))?;
+
+        let inventory = self
+            .shard_state_store
+            .get_state_inventory(start_shard_id, end_shard_id)
+            .map_err(RpcStatus::log_internal_error(target))?;
+
+        Ok(Response::new(GetVnStateInventoryResponse {
+            inventory: inventory.into_iter().map(|item| item.into()).collect(),
+        }))
+    }
+
+    async fn vn_state_sync(
+        &self,
+        request: Request<VnStateSyncRequest>,
+    ) -> Result<Streaming<VnStateSyncResponse>, RpcStatus> {
         let (tx, rx) = mpsc::channel(100);
+        let msg = request.into_message();
+        let start_shard_id = msg.start_shard_id.and_then(|s| ShardId::try_from(s).ok());
+        let end_shard_id = msg.end_shard_id.and_then(|s| ShardId::try_from(s).ok());
+
+        let missing_shard_ids = msg.missing_shard_state_ids;
+
+        if missing_shard_ids.is_empty() && (start_shard_id.is_none() || end_shard_id.is_none()) {
+            return Err(RpcStatus::bad_request("explain why bad"));
+        }
+
+        let shard_store = self.shard_state_store.clone();
+
         task::spawn(async move {
             let mut offset = 0i64;
             let limit = 100i64;
-            let shard_id = request.into_message().bytes;
             loop {
-                let states = self
-                    .shard_state_store
-                    .clone()
-                    .get_substates_changes(shard_id, limit, offset);
+                let tx = shard_store.create_tx();
+
+                // match tx.get_substates_changes_by_shard_ids(shard_ids) {
+                let states = match tx.get_substates_changes_by_range(start_shard_id, end_shard_id) {
+                    Ok(s) => s,
+                    Err(err) => {
+                        error!(target: LOG_TARGET, "{}", err);
+                        let _ignore = tx.send(Err(RpcStatus::internal_error(err))).await;
+                        return;
+                    },
+                };
+
+                // select data from db where shard_id <= end_shard_id and shard_id >= start_shard_id
                 // TODO: test if we should either add limit or limit - 1 or limit + 1
                 offset += limit;
                 for state in states {
                     // if send returns error, the client has closed the connection, so we break the loop
-                    if tx.send(Ok(proto::common::SubstateState::from(state))).await.is_err() {
+                    let substate_state = proto::common::SubstateState::from(state);
+                    let response = proto::network::VnStateSyncResponse {
+                        substate_state: Some(substate_state),
+                    };
+                    if tx.send(Ok(response)).await.is_err() {
                         break;
                     }
                 }

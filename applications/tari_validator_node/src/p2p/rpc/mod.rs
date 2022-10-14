@@ -20,7 +20,6 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use std::sync::{Arc, RwLock};
 mod service_impl;
 
 use diesel::SqliteConnection;
@@ -46,16 +45,22 @@ pub trait ValidatorNodeRpcService: Send + Sync + 'static {
     ) -> Result<Streaming<proto::network::GetPeersResponse>, RpcStatus>;
 
     #[rpc(method = 3)]
+    async fn get_vn_state_inventory(
+        &self,
+        request: Request<proto::network::GetVnStateInventoryRequest>,
+    ) -> Result<Response<proto::network::GetVnStateInventoryResponse>, RpcStatus>;
+
+    #[rpc(method = 4)]
     async fn vn_state_sync(
         &self,
-        request: Request<proto::common::ShardId>,
-    ) -> Result<Streaming<proto::common::SubstateState>, RpcStatus>;
+        request: Request<proto::network::VnStateSyncRequest>,
+    ) -> Result<Streaming<proto::network::VnStateSyncResponse>, RpcStatus>;
 }
 
 pub fn create_validator_node_rpc_service<TPeerProvider>(
     message_senders: DanMessageSenders,
     peer_provider: TPeerProvider,
-    connection: Arc<RwLock<SqliteConnection>>,
+    connection: SqliteConnection,
 ) -> ValidatorNodeRpcServer<ValidatorNodeRpcServiceImpl<TPeerProvider>>
 where
     TPeerProvider: PeerProvider + Clone + Send + Sync + 'static,

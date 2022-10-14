@@ -46,3 +46,24 @@ message GetPeersResponse {
   repeated bytes addresses = 2;
   IdentitySignature identity_signature = 3;
 }
+
+message VNStateSyncRequest {
+  // Range
+  tari.dan.common.ShardId start_shard_id = 1;
+  tari.dan.common.ShardId end_shard_id = 2;
+  // Specific shard ids
+  repeated tari.dan.common.ShardId missing_shard_state_ids = 3;
+}
+
+message VNStateSyncResponse {
+  tari.dan.common.SubstateState substate_state = 1;
+}
+
+message GetVnStateInventoryRequest {
+  tari.dan.common.ShardId start_shard_id = 1;
+  tari.dan.common.ShardId end_shard_id = 2;
+}
+
+message GetVnStateInventoryResponse {
+  repeated tari.dan.common.ShardId shard_id = 1;
+}
