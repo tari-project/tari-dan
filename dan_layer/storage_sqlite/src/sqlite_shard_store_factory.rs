@@ -34,7 +34,7 @@ use diesel::{
 use log::{debug, warn};
 use serde_json::json;
 use tari_common_types::types::{PrivateKey, PublicKey, Signature};
-use tari_dan_common_types::{ObjectId, PayloadId, ShardId, SubstateState};
+use tari_dan_common_types::{Epoch, ObjectId, PayloadId, ShardId, SubstateState};
 use tari_dan_core::{
     models::{
         vote_message::VoteMessage,

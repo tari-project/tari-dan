@@ -22,13 +22,10 @@
 
 use std::{fs::create_dir_all, path::PathBuf};
 
-use diesel::{Connection, ConnectionError, SqliteConnection};
+use diesel::{Connection, SqliteConnection};
 use diesel_migrations::embed_migrations;
-use tari_common_types::types::FixedHash;
 use tari_dan_core::storage::{DbFactory, StorageError};
-use tari_dan_engine::state::StateDb;
 use tari_dan_storage::global::GlobalDb;
-use tari_utilities::hex::Hex;
 
 use crate::{error::SqliteStorageError, global::SqliteGlobalDbAdapter};
 
@@ -40,32 +37,6 @@ pub struct SqliteDbFactory {
 impl SqliteDbFactory {
     pub fn new(data_dir: PathBuf) -> Self {
         Self { data_dir }
-    }
-
-    fn database_url_for(&self, contract_id: &FixedHash) -> String {
-        self.data_dir
-            .join("asset_data")
-            .join(contract_id.to_hex())
-            .join("dan_storage.sqlite")
-            .into_os_string()
-            .into_string()
-            .expect("Should not fail")
-    }
-
-    fn try_connect(&self, url: &str) -> Result<Option<SqliteConnection>, StorageError> {
-        match SqliteConnection::establish(url) {
-            Ok(connection) => {
-                connection
-                    .execute("PRAGMA foreign_keys = ON;")
-                    .map_err(|source| SqliteStorageError::DieselError {
-                        source,
-                        operation: "set pragma".to_string(),
-                    })?;
-                Ok(Some(connection))
-            },
-            Err(ConnectionError::BadConnection(_)) => Ok(None),
-            Err(err) => Err(SqliteStorageError::from(err).into()),
-        }
     }
 }
 

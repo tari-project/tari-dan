@@ -23,20 +23,14 @@
 // pub mod chain_db;
 pub mod global_db;
 
-use std::{
-    collections::HashMap,
-    sync::{Arc, RwLock},
-};
+use std::sync::{Arc, RwLock};
 
-use tari_common_types::types::FixedHash;
-use tari_dan_engine::state::{mocks::state_db::MockStateDbBackupAdapter, StateDb};
 use tari_dan_storage::global::GlobalDb;
 
 use crate::storage::{mocks::global_db::MockGlobalDbBackupAdapter, DbFactory, StorageError};
 
 #[derive(Clone, Default)]
 pub struct MockDbFactory {
-    state_db: Arc<RwLock<HashMap<FixedHash, MockStateDbBackupAdapter>>>,
     _global_db: Arc<RwLock<MockGlobalDbBackupAdapter>>,
 }
 
