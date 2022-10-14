@@ -21,7 +21,6 @@
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 pub mod high_qc;
-pub mod instruction;
 pub mod last_executed_height;
 pub mod last_voted_height;
 pub mod leader_proposals;
@@ -34,6 +33,4 @@ pub mod objects;
 pub mod payload;
 pub mod prepare_qc;
 pub mod received_votes;
-pub mod state_key;
-pub mod state_op_log;
 pub mod substate_change;

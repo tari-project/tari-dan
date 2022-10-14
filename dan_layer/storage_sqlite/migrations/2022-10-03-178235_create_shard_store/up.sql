@@ -51,7 +51,6 @@ create table lock_node_and_heights (
 -- fetching by shard_id will be a very common operation
 create index lock_node_and_heights_index_shard_id on lock_node_and_heights (shard_id);
 
-drop table nodes;
 create table nodes (
     id integer not null primary key AUTOINCREMENT,
     node_hash blob not NULL,

@@ -42,22 +42,6 @@ pub struct MockDbFactory {
 
 impl DbFactory for MockDbFactory {
     type GlobalDbAdapter = MockGlobalDbBackupAdapter;
-    type StateDbAdapter = MockStateDbBackupAdapter;
-
-    fn get_state_db(&self, contract_id: &FixedHash) -> Result<Option<StateDb<Self::StateDbAdapter>>, StorageError> {
-        Ok(self
-            .state_db
-            .read()
-            .unwrap()
-            .get(contract_id)
-            .cloned()
-            .map(|db| StateDb::new(*contract_id, db)))
-    }
-
-    fn get_or_create_state_db(&self, contract_id: &FixedHash) -> Result<StateDb<Self::StateDbAdapter>, StorageError> {
-        let entry = self.state_db.write().unwrap().entry(*contract_id).or_default().clone();
-        Ok(StateDb::new(*contract_id, entry))
-    }
 
     fn get_or_create_global_db(&self) -> Result<GlobalDb<Self::GlobalDbAdapter>, StorageError> {
         // let entry = self.global_db.write().unwrap().clone();

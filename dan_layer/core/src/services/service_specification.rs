@@ -46,7 +46,7 @@ pub trait ServiceSpecification: Default + Clone {
     type Addr: NodeAddressable;
     type AssetProxy: AssetProxy + Clone;
     type BaseNodeClient: BaseNodeClient + Clone;
-    type DbFactory: DbFactory<StateDbAdapter = Self::StateDbAdapter, GlobalDbAdapter = Self::GlobalDbAdapter> + Clone;
+    type DbFactory: DbFactory<GlobalDbAdapter = Self::GlobalDbAdapter> + Clone;
     type EventsPublisher: EventsPublisher<ConsensusWorkerDomainEvent>;
     type GlobalDbAdapter: GlobalDbAdapter;
     // type InboundConnectionService: InboundConnectionService<Addr = Self::Addr, Payload = Self::Payload>;
@@ -56,7 +56,6 @@ pub trait ServiceSpecification: Default + Clone {
     type Payload: Payload;
     type PayloadProcessor: PayloadProcessor<Self::Payload>;
     type SigningService: SigningService;
-    type StateDbAdapter: StateDbBackendAdapter;
     type ValidatorNodeClientFactory: ValidatorNodeClientFactory<Addr = Self::Addr> + Clone;
     type WalletClient: WalletClient;
 }

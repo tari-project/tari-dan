@@ -8,18 +8,6 @@ table! {
 }
 
 table! {
-    instructions (id) {
-        id -> Integer,
-        hash -> Binary,
-        node_id -> Integer,
-        template_id -> Integer,
-        method -> Text,
-        args -> Binary,
-        sender -> Binary,
-    }
-}
-
-table! {
     last_executed_heights (id) {
         id -> Integer,
         shard_id -> Binary,
@@ -61,16 +49,6 @@ table! {
         shard_id -> Binary,
         tree_node_hash -> Binary,
         node_height -> BigInt,
-    }
-}
-
-table! {
-    locked_qc (id) {
-        id -> Integer,
-        message_type -> Integer,
-        view_number -> BigInt,
-        node_hash -> Binary,
-        signature -> Nullable<Binary>,
     }
 }
 
@@ -123,51 +101,12 @@ table! {
 }
 
 table! {
-    prepare_qc (id) {
-        id -> Integer,
-        message_type -> Integer,
-        view_number -> BigInt,
-        node_hash -> Binary,
-        signature -> Nullable<Binary>,
-    }
-}
-
-table! {
     received_votes (id) {
         id -> Integer,
         tree_node_hash -> Binary,
         shard_id -> Binary,
         address -> Binary,
         vote_message -> Text,
-    }
-}
-
-table! {
-    state_keys (schema_name, key_name) {
-        schema_name -> Text,
-        key_name -> Binary,
-        value -> Binary,
-    }
-}
-
-table! {
-    state_op_log (id) {
-        id -> Integer,
-        height -> BigInt,
-        merkle_root -> Nullable<Binary>,
-        operation -> Text,
-        schema -> Text,
-        key -> Binary,
-        value -> Nullable<Binary>,
-    }
-}
-
-table! {
-    state_tree (id) {
-        id -> Integer,
-        version -> Integer,
-        is_current -> Bool,
-        data -> Binary,
     }
 }
 
@@ -180,25 +119,17 @@ table! {
     }
 }
 
-joinable!(instructions -> nodes (node_id));
-
 allow_tables_to_appear_in_same_query!(
     high_qcs,
-    instructions,
     last_executed_heights,
     last_voted_heights,
     leader_proposals,
     leaf_nodes,
     lock_node_and_heights,
-    locked_qc,
     metadata,
     nodes,
     objects,
     payloads,
-    prepare_qc,
     received_votes,
-    state_keys,
-    state_op_log,
-    state_tree,
     substate_changes,
 );
