@@ -81,6 +81,10 @@ pub struct Transaction {
 }
 
 impl Transaction {
+    pub fn builder() -> TransactionBuilder {
+        TransactionBuilder::new()
+    }
+
     pub fn required_templates(&self) -> Vec<TemplateAddress> {
         self.instructions
             .iter()

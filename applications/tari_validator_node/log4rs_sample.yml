@@ -122,3 +122,19 @@ loggers:
     level: info
     appenders:
       - network
+
+  # spits out the whole wasm if in debug mode
+  regalloc:
+    level: info
+    appenders:
+      - other
+      - stdout
+    additive: false
+
+  # spits out the whole wasm if in debug mode
+  cranelift_codegen:
+    level: info
+    appenders:
+      - other
+      - stdout
+    additive: false

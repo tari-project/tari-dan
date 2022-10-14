@@ -29,8 +29,8 @@ pub struct Object {
     pub object_id: Vec<u8>,
     pub payload_id: Vec<u8>,
     pub node_height: i64,
-    pub substate_change: Vec<u8>,
-    pub object_pledge: Vec<u8>,
+    pub current_state: String,
+    pub object_pledge: String,
 }
 
 #[derive(Debug, Insertable)]
@@ -40,6 +40,6 @@ pub struct NewObject {
     pub object_id: Vec<u8>,
     pub payload_id: Vec<u8>,
     pub node_height: i64,
-    pub substate_change: Vec<u8>,
-    pub object_pledge: Vec<u8>,
+    pub current_state: String,
+    pub object_pledge: String,
 }

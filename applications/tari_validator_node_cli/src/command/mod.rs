@@ -20,9 +20,20 @@
 //   WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //   USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use std::path::PathBuf;
+use clap::Subcommand;
 
-use clap::{Args, Subcommand};
+mod account;
+pub use account::AccountsSubcommand;
+
+mod template;
+pub use template::{PublishTemplateArgs, TemplateSubcommand};
+
+mod vn;
+pub use vn::VnSubcommand;
+
+use crate::command::transaction::TransactionSubcommand;
+
+mod transaction;
 
 #[allow(clippy::large_enum_variant)]
 #[derive(Debug, Subcommand, Clone)]
@@ -31,29 +42,8 @@ pub enum Command {
     Vn(VnSubcommand),
     #[clap(subcommand)]
     Templates(TemplateSubcommand),
-}
-
-#[derive(Debug, Subcommand, Clone)]
-pub enum VnSubcommand {
-    Register,
-}
-
-#[derive(Debug, Subcommand, Clone)]
-pub enum TemplateSubcommand {
-    Publish(PublishTemplateArgs),
-}
-
-#[derive(Debug, Args, Clone)]
-pub struct PublishTemplateArgs {
-    #[clap(long, short = 'p', alias = "path")]
-    pub template_code_path: PathBuf,
-
-    #[clap(long, alias = "template-name")]
-    pub template_name: Option<String>,
-
-    #[clap(long, alias = "template-version")]
-    pub template_version: Option<u16>,
-
-    #[clap(long, alias = "binary-url")]
-    pub binary_url: Option<String>,
+    #[clap(subcommand)]
+    Accounts(AccountsSubcommand),
+    #[clap(subcommand)]
+    Transactions(TransactionSubcommand),
 }

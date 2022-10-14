@@ -23,7 +23,7 @@ use tari_utilities::{byte_array::ByteArray, hex::Hex};
 pub use template_id::TemplateId;
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Hash, Deserialize, Serialize)]
-pub struct ObjectId(#[serde(deserialize_with = "serde_with::hex::deserialize")] pub [u8; 32]);
+pub struct ObjectId(#[serde(with = "serde_with::hex")] pub [u8; 32]);
 
 impl ObjectId {
     pub fn as_bytes(&self) -> &[u8] {
@@ -131,7 +131,7 @@ impl ObjectClaim {
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Hash, BorshSerialize, BorshDeserialize, Deserialize, Serialize)]
 pub struct PayloadId {
-    #[serde(deserialize_with = "serde_with::hex::deserialize")]
+    #[serde(with = "serde_with::hex")]
     id: [u8; 32],
 }
 

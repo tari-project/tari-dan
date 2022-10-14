@@ -19,23 +19,49 @@
 //   SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY,
 //   WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //   USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-//
-use crate::schema::*;
 
-#[derive(Debug, Identifiable, Queryable)]
-pub struct PayloadVote {
-    pub id: i32,
-    pub payload_id: Vec<u8>,
-    pub shard_id: Vec<u8>,
-    pub node_height: i64,
-    pub hotstuff_tree_node: Vec<u8>,
+use std::path::Path;
+
+use clap::Subcommand;
+
+use crate::account_manager::AccountFileManager;
+
+#[derive(Debug, Subcommand, Clone)]
+pub enum AccountsSubcommand {
+    #[clap(alias = "create")]
+    New,
+    List,
+    Use {
+        name: String,
+    },
 }
 
-#[derive(Debug, Insertable)]
-#[table_name = "payload_votes"]
-pub struct NewPayloadVote {
-    pub payload_id: Vec<u8>,
-    pub shard_id: Vec<u8>,
-    pub node_height: i64,
-    pub hotstuff_tree_node: Vec<u8>,
+impl AccountsSubcommand {
+    pub async fn handle<P: AsRef<Path>>(self, base_dir: P) -> anyhow::Result<()> {
+        let account_manager = AccountFileManager::init(base_dir.as_ref().to_path_buf())?;
+
+        #[allow(clippy::enum_glob_use)]
+        use AccountsSubcommand::*;
+        match self {
+            New => {
+                let account = account_manager.create_account()?;
+                println!("New account {} created", account);
+            },
+            List => {
+                println!("Accounts:");
+                for (i, account) in account_manager.all().into_iter().enumerate() {
+                    if account.is_active {
+                        println!("{}. (active) {}", i, account);
+                    } else {
+                        println!("{}. {}", i, account);
+                    }
+                }
+            },
+            Use { name } => {
+                account_manager.set_active_account(&name)?;
+                println!("Account {} is now active", name);
+            },
+        }
+        Ok(())
+    }
 }

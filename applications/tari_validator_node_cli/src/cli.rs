@@ -20,6 +20,8 @@
 //   WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //   USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+use std::path::PathBuf;
+
 use clap::Parser;
 use multiaddr::Multiaddr;
 
@@ -31,6 +33,8 @@ use crate::command::Command;
 pub(crate) struct Cli {
     #[clap(long, alias = "endpoint")]
     pub vn_daemon_jrpc_endpoint: Option<Multiaddr>,
+    #[clap(long, short = 'b', alias = "basedir")]
+    pub base_dir: Option<PathBuf>,
     #[clap(subcommand)]
     pub command: Command,
 }

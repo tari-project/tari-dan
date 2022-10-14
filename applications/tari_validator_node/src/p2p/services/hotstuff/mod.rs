@@ -23,4 +23,4 @@
 pub mod hotstuff_service;
 mod initializer;
 
-pub use initializer::spawn;
+pub use initializer::try_spawn;
