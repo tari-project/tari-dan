@@ -37,8 +37,11 @@ use tari_dan_engine::transaction::TransactionBuilder;
 use tari_validator_node_client::types::{
     GetCommitteeRequest,
     GetShardKey,
+    GetTemplatesRequest,
+    GetTemplatesResponse,
     SubmitTransactionRequest,
     SubmitTransactionResponse,
+    TemplateMetadata,
     TemplateRegistrationRequest,
     TemplateRegistrationResponse,
 };
@@ -46,7 +49,11 @@ use tari_validator_node_client::types::{
 use crate::{
     grpc::services::{base_node_client::GrpcBaseNodeClient, wallet_client::GrpcWalletClient},
     json_rpc::jrpc_errors::internal_error,
-    p2p::services::{epoch_manager::handle::EpochManagerHandle, mempool::MempoolHandle},
+    p2p::services::{
+        epoch_manager::handle::EpochManagerHandle,
+        mempool::MempoolHandle,
+        template_manager::TemplateManagerHandle,
+    },
     Services,
 };
 
@@ -56,6 +63,7 @@ pub struct JsonRpcHandlers {
     node_identity: Arc<NodeIdentity>,
     wallet_grpc_client: GrpcWalletClient,
     mempool: MempoolHandle,
+    template_manager: TemplateManagerHandle,
     epoch_manager: EpochManagerHandle,
     comms: CommsNode,
     base_node_client: GrpcBaseNodeClient,
@@ -72,6 +80,7 @@ impl JsonRpcHandlers {
             wallet_grpc_client,
             mempool: services.mempool.clone(),
             epoch_manager: services.epoch_manager.clone(),
+            template_manager: services.template_manager.clone(),
             comms: services.comms.clone(),
             base_node_client,
         }
@@ -163,10 +172,32 @@ impl JsonRpcHandlers {
             .await
             .map_err(internal_error(answer_id))?;
 
-        // TODO: add "transaction_id" to the grpc response
         Ok(JsonRpcResponse::success(answer_id, TemplateRegistrationResponse {
             template_address: resp.template_address,
             transaction_id: resp.tx_id,
+        }))
+    }
+
+    pub async fn get_templates(&self, value: JsonRpcExtractor) -> JrpcResult {
+        let answer_id = value.get_answer_id();
+        let req: GetTemplatesRequest = value.parse_params()?;
+
+        let templates = self
+            .template_manager
+            .get_templates(req.limit as usize)
+            .await
+            .map_err(internal_error(answer_id))?;
+
+        Ok(JsonRpcResponse::success(answer_id, GetTemplatesResponse {
+            templates: templates
+                .into_iter()
+                .map(|t| TemplateMetadata {
+                    address: t.address,
+                    url: t.url,
+                    binary_sha: t.binary_sha,
+                    height: t.height,
+                })
+                .collect(),
         }))
     }
 

@@ -48,7 +48,7 @@ use crate::{
             networking,
             networking::NetworkingHandle,
             template_manager,
-            template_manager::TemplateManager,
+            template_manager::{TemplateManager, TemplateManagerHandle},
         },
     },
     payload_processor::TariDanPayloadProcessor,
@@ -158,6 +158,7 @@ pub async fn spawn_services(
         networking,
         mempool,
         epoch_manager,
+        template_manager,
     })
 }
 
@@ -183,6 +184,7 @@ pub struct Services {
     pub networking: NetworkingHandle,
     pub mempool: MempoolHandle,
     pub epoch_manager: EpochManagerHandle,
+    pub template_manager: TemplateManagerHandle,
 }
 
 fn setup_p2p_rpc(

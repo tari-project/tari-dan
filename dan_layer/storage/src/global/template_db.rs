@@ -40,6 +40,10 @@ impl<'a, TGlobalDbAdapter: GlobalDbAdapter> TemplateDb<'a, TGlobalDbAdapter> {
         self.backend.get_template(self.tx, key)
     }
 
+    pub fn get_templates(&self, limit: usize) -> Result<Vec<DbTemplate>, TGlobalDbAdapter::Error> {
+        self.backend.get_templates(self.tx, limit)
+    }
+
     pub fn insert_template(&self, template: DbTemplate) -> Result<(), TGlobalDbAdapter::Error> {
         self.backend.insert_template(self.tx, template)
     }

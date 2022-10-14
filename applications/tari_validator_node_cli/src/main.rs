@@ -25,6 +25,8 @@ mod cli;
 mod command;
 mod from_hex;
 mod prompt;
+#[macro_use]
+mod table;
 
 use std::{error::Error, path::PathBuf};
 

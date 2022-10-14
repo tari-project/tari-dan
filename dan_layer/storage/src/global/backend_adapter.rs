@@ -34,6 +34,8 @@ pub trait GlobalDbAdapter: AtomicDb + Send + Sync + Clone {
     fn set_metadata(&self, tx: &Self::DbTransaction, key: MetadataKey, value: &[u8]) -> Result<(), Self::Error>;
 
     fn get_template(&self, tx: &Self::DbTransaction, key: &[u8]) -> Result<Option<DbTemplate>, Self::Error>;
+    fn get_templates(&self, tx: &Self::DbTransaction, limit: usize) -> Result<Vec<DbTemplate>, Self::Error>;
+
     fn insert_template(&self, tx: &Self::DbTransaction, template: DbTemplate) -> Result<(), Self::Error>;
     fn update_template(
         &self,
