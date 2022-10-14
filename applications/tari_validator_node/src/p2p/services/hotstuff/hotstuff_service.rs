@@ -27,7 +27,6 @@ use tari_dan_core::{
     message::DanMessage,
     models::{vote_message::VoteMessage, HotStuffMessage, TariDanPayload},
     services::{infrastructure_services::OutboundService, leader_strategy::AlwaysFirstLeader},
-    storage::shard_store::MemoryShardStoreFactory,
     workers::hotstuff_waiter::HotStuffWaiter,
 };
 use tari_dan_engine::transaction::Transaction;

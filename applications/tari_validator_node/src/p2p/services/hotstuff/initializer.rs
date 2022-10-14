@@ -23,10 +23,7 @@
 use std::sync::Arc;
 
 use tari_comms::{types::CommsPublicKey, NodeIdentity};
-use tari_dan_core::{
-    models::{vote_message::VoteMessage, HotStuffMessage, TariDanPayload},
-    storage::shard_store::MemoryShardStoreFactory,
-};
+use tari_dan_core::models::{vote_message::VoteMessage, HotStuffMessage, TariDanPayload};
 use tari_dan_storage_sqlite::sqlite_shard_store_factory::SqliteShardStoreFactory;
 use tari_shutdown::ShutdownSignal;
 use tokio::sync::mpsc;

@@ -224,7 +224,7 @@ where
             let objects = actual_payload.objects_for_shard(shard);
 
             let mut local_pledges = vec![];
-            for (object, change, claim) in objects {
+            for (object, _, claim) in objects {
                 if !claim.is_valid(payload) {
                     return Err(HotStuffError::ClaimIsNotValid);
                 }

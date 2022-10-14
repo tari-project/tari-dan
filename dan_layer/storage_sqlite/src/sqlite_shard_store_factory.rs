@@ -27,15 +27,14 @@ use std::{
 };
 
 use diesel::{
-    dsl::max,
     prelude::*,
-    result::{DatabaseErrorKind, DatabaseErrorKind::UniqueViolation, Error},
+    result::{DatabaseErrorKind, Error},
     SqliteConnection,
 };
 use log::{debug, warn};
 use serde_json::json;
 use tari_common_types::types::{PrivateKey, PublicKey, Signature};
-use tari_dan_common_types::{ObjectId, PayloadId, ShardId, SubstateChange, SubstateState};
+use tari_dan_common_types::{ObjectId, PayloadId, ShardId, SubstateState};
 use tari_dan_core::{
     models::{
         vote_message::VoteMessage,
@@ -49,8 +48,6 @@ use tari_dan_core::{
         TreeNodeHash,
     },
     storage::{
-        deserialize,
-        serialize,
         shard_store::{ShardStoreFactory, ShardStoreTransaction},
         StorageError,
     },
@@ -340,7 +337,7 @@ impl ShardStoreTransaction<PublicKey, TariDanPayload> for SqliteShardStoreTransa
             return Ok(HotStuffTreeNode::genesis());
         }
 
-        use crate::schema::nodes::{height, node_hash, payload_height};
+        use crate::schema::nodes::node_hash;
 
         let hash = Vec::from(hash.as_bytes());
         // TODO: Do we need to add an index to the table to order by `height` and `payload_height`
@@ -513,7 +510,7 @@ impl ShardStoreTransaction<PublicKey, TariDanPayload> for SqliteShardStoreTransa
         payload: PayloadId,
         current_height: NodeHeight,
     ) -> Result<ObjectPledge, Self::Error> {
-        use crate::schema::objects::{current_state, node_height, object_id, payload_id, shard_id};
+        use crate::schema::objects::{node_height, object_id, shard_id};
 
         let shard = Vec::from(shard.as_bytes());
         let f_object = Vec::from(object.as_bytes());
