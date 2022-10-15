@@ -7,19 +7,30 @@ license = "BSD-3-Clause"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-tari_common = { git = "https://github.com/tari-project/tari.git", branch = "feature-dan", package = "tari_common" }
-tari_comms = { git = "https://github.com/tari-project/tari.git", branch = "feature-dan", package = "tari_comms" }
-tari_comms_dht = { git = "https://github.com/tari-project/tari.git", branch = "feature-dan", package = "tari_comms_dht" }
-tari_comms_rpc_macros = { git = "https://github.com/tari-project/tari.git", branch = "feature-dan", package = "tari_comms_rpc_macros" }
+# tari_common = { git = "https://github.com/tari-project/tari.git", branch = "feature-dan", package = "tari_common" }
+tari_common = { path = "../../../tari/common" }
+# tari_comms = { git = "https://github.com/tari-project/tari.git", branch = "feature-dan", package = "tari_comms" }
+tari_comms = { path = "../../../tari/comms/core" }
+# tari_comms_dht = { git = "https://github.com/tari-project/tari.git", branch = "feature-dan", package = "tari_comms_dht" }
+tari_comms_dht = { path = "../../../tari/comms/dht" }
+# tari_comms_rpc_macros = { git = "https://github.com/tari-project/tari.git", branch = "feature-dan", package = "tari_comms_rpc_macros" }
+tari_comms_rpc_macros = { path = "../../../tari/comms/rpc_macros" }
 tari_crypto = { git = "https://github.com/tari-project/tari-crypto.git", tag = "v0.15.6" }
-tari_mmr = { git = "https://github.com/tari-project/tari.git", branch = "feature-dan", package = "tari_mmr" }
-tari_p2p = { git = "https://github.com/tari-project/tari.git", branch = "feature-dan", package = "tari_p2p" }
-tari_service_framework = { git = "https://github.com/tari-project/tari.git", branch = "feature-dan", package = "tari_service_framework" }
-tari_shutdown = { git = "https://github.com/tari-project/tari.git", branch = "feature-dan", package = "tari_shutdown" }
-tari_storage = { git = "https://github.com/tari-project/tari.git", branch = "feature-dan", package = "tari_storage" }
-tari_core = { git = "https://github.com/tari-project/tari.git", branch = "feature-dan", package = "tari_core" }
+# tari_mmr = { git = "https://github.com/tari-project/tari.git", branch = "feature-dan", package = "tari_mmr" }
+tari_mmr = { path = "../../../tari/base_layer/mmr" }
+# tari_p2p = { git = "https://github.com/tari-project/tari.git", branch = "feature-dan", package = "tari_p2p" }
+tari_p2p = { path = "../../../tari/base_layer/p2p" }
+# tari_service_framework = { git = "https://github.com/tari-project/tari.git", branch = "feature-dan", package = "tari_service_framework" }
+tari_service_framework = { path = "../../../tari/base_layer/service_framework" }
+# tari_shutdown = { git = "https://github.com/tari-project/tari.git", branch = "feature-dan", package = "tari_shutdown" }
+tari_shutdown = { path = "../../../tari/infrastructure/shutdown" }
+# tari_storage = { git = "https://github.com/tari-project/tari.git", branch = "feature-dan", package = "tari_storage" }
+tari_storage = { path = "../../../tari/infrastructure/storage" }
+# tari_core = { git = "https://github.com/tari-project/tari.git", branch = "feature-dan", package = "tari_core" }
+tari_core = { path = "../../../tari/base_layer/core", default-features = false, features = ["transactions"] }
 tari_dan_common_types = { path = "../common_types" }
-tari_common_types = { git = "https://github.com/tari-project/tari.git", branch = "feature-dan", package = "tari_common_types" }
+# tari_common_types = { git = "https://github.com/tari-project/tari.git", branch = "feature-dan", package = "tari_common_types" }
+tari_common_types = { path = "../../../tari/base_layer/common_types" }
 tari_utilities = { git = "https://github.com/tari-project/tari_utilities.git", tag = "v0.4.7" }
 tari_dan_engine = { path = "../engine" }
 tari_template_lib = { path = "../template_lib" }
@@ -53,4 +64,5 @@ serde_json = "1.0.64"
 tari_test_utils = { git = "https://github.com/tari-project/tari.git", branch = "feature-dan", package = "tari_test_utils" }
 
 [build-dependencies]
-tari_common = { git = "https://github.com/tari-project/tari.git", branch = "feature-dan", package = "tari_common", features = ["build"] }
+# tari_common = { git = "https://github.com/tari-project/tari.git", branch = "feature-dan", package = "tari_common", features = ["build"] }
+tari_common = { path = "../../../tari/common", features = ["build"] }
