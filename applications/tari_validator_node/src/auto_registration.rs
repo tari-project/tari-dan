@@ -74,7 +74,7 @@ async fn start(
 
     loop {
         tokio::select! {
-            _ = time::sleep(Duration::from_secs(120)) => {
+            _ = time::sleep(config.validator_node.base_layer_scanning_interval) => {
                 let epoch_changed = epoch_manager.current_epoch().await?;
 
                 if current_epoch != epoch_changed {
