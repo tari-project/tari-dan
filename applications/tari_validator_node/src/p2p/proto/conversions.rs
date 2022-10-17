@@ -130,7 +130,7 @@ impl TryFrom<proto::common::PayloadId> for PayloadId {
     type Error = anyhow::Error;
 
     fn try_from(value: proto::common::PayloadId) -> Result<Self, Self::Error> {
-        let hash = FixedHash::try_from(Vec::from(value.payload_id))?;
+        let hash = FixedHash::try_from(value.payload_id)?;
         Ok(PayloadId::new(hash))
     }
 }
