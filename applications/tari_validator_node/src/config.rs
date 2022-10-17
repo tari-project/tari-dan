@@ -60,6 +60,7 @@ impl ApplicationConfig {
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(deny_unknown_fields)]
+#[allow(clippy::struct_excessive_bools)]
 pub struct ValidatorNodeConfig {
     override_from: Option<String>,
     pub shard_key_file: PathBuf,
