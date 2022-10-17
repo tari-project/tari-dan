@@ -94,11 +94,15 @@ pub trait ShardStoreTransaction<TAddr: NodeAddressable, TPayload: Payload> {
     ) -> Result<ObjectPledge, Self::Error>;
     fn set_last_executed_height(&mut self, shard: ShardId, height: NodeHeight) -> Result<(), Self::Error>;
     fn get_last_executed_height(&self, shard: ShardId) -> Result<NodeHeight, Self::Error>;
-    fn save_substate_changes(&mut self, changes: HashMap<ShardId, Option<SubstateState>>, node: TreeNodeHash) -> Result<(), Self::Error>;
+    fn save_substate_changes(
+        &mut self,
+        changes: HashMap<ShardId, Option<SubstateState>>,
+        node: TreeNodeHash,
+    ) -> Result<(), Self::Error>;
     fn get_substates_changes(&self, shard_id: ShardId, limit: i64, offset: i64) -> Result<Vec<SubstateState>, Self::Error>;
     fn get_last_voted_height(&self, shard: ShardId) -> Result<NodeHeight, Self::Error>;
     fn set_last_voted_height(&mut self, shard: ShardId, height: NodeHeight) -> Result<(), Self::Error>;
-    fn get_payload_vote(
+    fn get_leader_proposals(
         &self,
         payload: PayloadId,
         payload_height: NodeHeight,

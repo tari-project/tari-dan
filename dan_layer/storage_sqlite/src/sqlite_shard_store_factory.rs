@@ -49,6 +49,7 @@ use tari_dan_core::{
     storage::{
         shard_store::{ShardStoreFactory, ShardStoreTransaction},
         StorageError,
+        deserialize,
     },
 };
 use tari_dan_engine::transaction::{Transaction, TransactionMeta};
@@ -638,7 +639,12 @@ impl ShardStoreTransaction<PublicKey, TariDanPayload> for SqliteShardStoreTransa
         Ok(())
     }
 
-    fn get_substates_changes(&self, shard: ShardId, limit: i64, offset: i64) -> Result<Vec<SubstateState>, Self::Error> {
+    fn get_substates_changes(
+        &self,
+        shard: ShardId,
+        limit: i64,
+        offset: i64,
+    ) -> Result<Vec<SubstateState>, Self::Error> {
         use crate::schema::substate_changes::shard_id;
 
         let substate_states: Option<Vec<crate::models::substate_change::SubstateChange>> = substate_changes
@@ -655,8 +661,8 @@ impl ShardStoreTransaction<PublicKey, TariDanPayload> for SqliteShardStoreTransa
         if let Some(substate_states) = substate_states {
             Ok(substate_states
                 .into_iter()
-                .map(|ss| deserialize::<SubstateState>(ss.substate_changes.as_slice()).unwrap())
-                .collect::<Vec<_>>())
+                .map(|ss| serde_json::from_str(ss.substate_changes.as_str()))
+                .collect::<Result<_, Self::Error>>())?
         } else {
             return Err(Self::Error::NotFound {
                 item: "substate",
