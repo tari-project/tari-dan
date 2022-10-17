@@ -198,8 +198,8 @@ where TPeerProvider: PeerProvider + Clone + Send + Sync + 'static
         let store_tx = Arc::new(Mutex::new(
             shard_store
                 .create_tx()
-                .map_err(RpcStatus::log_internal_error(LOG_TARGET))?),
-        );
+                .map_err(RpcStatus::log_internal_error(LOG_TARGET))?,
+        ));
 
         task::spawn(async move {
             loop {
