@@ -109,12 +109,10 @@ fn read_active_account<P: AsRef<Path>>(base_dir: P) -> Option<Account> {
     let active_account = fs::read_to_string(base_dir.as_ref().join("active_account")).ok()?;
     read_account_key(base_dir.as_ref().join(format!("{}.json", active_account)))
         .ok()
-        .and_then(|key| {
-            Some(Account {
-                public_key: PublicKey::from_secret_key(&key),
-                secret_key: key,
-                is_active: true,
-            })
+        .map(|key| Account {
+            public_key: PublicKey::from_secret_key(&key),
+            secret_key: key,
+            is_active: true,
         })
 }
 
