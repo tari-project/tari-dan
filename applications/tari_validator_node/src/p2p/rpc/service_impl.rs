@@ -96,6 +96,9 @@ where TPeerProvider: PeerProvider + Clone + Send + Sync + 'static
         task::spawn(async move {
             let mut peer_iter = peer_provider.peers_for_current_epoch_iter().await;
             while let Some(Ok(peer)) = peer_iter.next() {
+                if peer.identity_signature.is_none() {
+                    continue;
+                }
                 if tx
                     .send(Ok(proto::network::GetPeersResponse {
                         identity: peer.identity.as_bytes().to_vec(),

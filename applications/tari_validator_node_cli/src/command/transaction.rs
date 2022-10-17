@@ -38,10 +38,8 @@ pub enum TransactionSubcommand {
 pub struct SubmitCallFunctionArgs {
     template_address: FromHex<TemplateAddress>,
     function_name: String,
-    // #[clap(long, short = 'f')]
-    // pub function_name: String,
-    // #[clap(long, short = 'a')]
-    // pub function_args: Vec<Arg>,
+    #[clap(long)]
+    wait_for_result: bool,
 }
 
 impl TransactionSubcommand {
@@ -77,9 +75,17 @@ impl TransactionSubcommand {
                     sender_public_key: transaction.sender_public_key().clone(),
                     // TODO:
                     num_new_components: 1,
+                    wait_for_result: args.wait_for_result,
                 };
+
+                if args.wait_for_result {
+                    println!("⏳️ Waiting for transaction result...");
+                }
                 let resp = client.submit_transaction(request).await?;
                 println!("✅ Transaction submitted (hash: {})", resp.hash);
+                for (shard_id, _) in resp.changes {
+                    println!("🌼️ New component: {}", shard_id);
+                }
             },
         }
         Ok(())

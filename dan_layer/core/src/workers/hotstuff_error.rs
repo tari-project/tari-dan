@@ -55,4 +55,6 @@ pub enum HotStuffError {
     StorageError(#[from] StorageError),
     #[error("Payload height is too high")]
     PayloadHeightIsTooHigh,
+    #[error("Received generic message without node")]
+    RecvGenericMessageWithoutNode,
 }

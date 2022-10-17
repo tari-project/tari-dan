@@ -130,7 +130,7 @@ impl ValidatorNodeConfig {
 impl Default for ValidatorNodeConfig {
     fn default() -> Self {
         let p2p = P2pConfig {
-            datastore_path: PathBuf::from("peer_db/validator_node"),
+            datastore_path: PathBuf::from("data/peer_db"),
             ..Default::default()
         };
 

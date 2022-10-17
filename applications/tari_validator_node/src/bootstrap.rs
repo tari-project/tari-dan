@@ -25,6 +25,7 @@ use std::{fs, io, sync::Arc};
 use tari_app_utilities::{identity_management, identity_management::load_from_json};
 use tari_common::exit_codes::{ExitCode, ExitError};
 use tari_comms::{protocol::rpc::RpcServer, CommsNode, NodeIdentity, UnspawnedCommsNode};
+use tari_dan_core::workers::events::{EventSubscription, HotStuffEvent};
 use tari_dan_storage::global::GlobalDb;
 use tari_dan_storage_sqlite::{global::SqliteGlobalDbAdapter, SqliteDbFactory};
 use tari_p2p::initialization::spawn_comms_using_transport;
@@ -134,7 +135,7 @@ pub async fn spawn_services(
     let payload_processor = TariDanPayloadProcessor::new(TemplateManager::new(sqlite_db));
 
     // Consensus
-    hotstuff::try_spawn(
+    let hotstuff_events = hotstuff::try_spawn(
         node_identity.clone(),
         &config.validator_node,
         outbound_messaging,
@@ -165,6 +166,7 @@ pub async fn spawn_services(
         networking,
         mempool,
         epoch_manager,
+        hotstuff_events,
     })
 }
 
@@ -190,6 +192,7 @@ pub struct Services {
     pub networking: NetworkingHandle,
     pub mempool: MempoolHandle,
     pub epoch_manager: EpochManagerHandle,
+    pub hotstuff_events: EventSubscription<HotStuffEvent>,
 }
 
 fn setup_p2p_rpc(

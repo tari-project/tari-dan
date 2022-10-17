@@ -609,16 +609,12 @@ impl ShardStoreTransaction<PublicKey, TariDanPayload> for SqliteShardStoreTransa
 
     fn save_substate_changes(
         &mut self,
-        changes: HashMap<ShardId, Option<SubstateState>>,
+        changes: &HashMap<ShardId, SubstateState>,
         node: TreeNodeHash,
     ) -> Result<(), Self::Error> {
-        for (sid, st_ch) in &changes {
+        for (sid, st_ch) in changes {
             let shard = Vec::from(sid.as_bytes());
-            let substate_change = if let Some(st_ch) = st_ch {
-                json!(st_ch).to_string()
-            } else {
-                "".to_string()
-            };
+            let substate_change = json!(st_ch).to_string();
 
             let new_row = NewSubStateChange {
                 shard_id: shard,

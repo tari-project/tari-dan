@@ -27,14 +27,17 @@ use tari_dan_core::{
     message::DanMessage,
     models::{vote_message::VoteMessage, HotStuffMessage, TariDanPayload},
     services::{infrastructure_services::OutboundService, leader_strategy::AlwaysFirstLeader},
-    workers::hotstuff_waiter::HotStuffWaiter,
+    workers::{
+        events::{EventSubscription, HotStuffEvent},
+        hotstuff_waiter::HotStuffWaiter,
+    },
 };
 use tari_dan_engine::transaction::Transaction;
 use tari_dan_storage_sqlite::sqlite_shard_store_factory::SqliteShardStoreFactory;
 use tari_shutdown::ShutdownSignal;
-use tokio::{
-    sync::mpsc::{channel, Receiver, Sender},
-    task::JoinHandle,
+use tokio::sync::{
+    broadcast,
+    mpsc::{channel, Receiver, Sender},
 };
 
 use crate::{
@@ -76,12 +79,13 @@ impl HotstuffService {
         rx_hotstuff_messages: Receiver<(CommsPublicKey, HotStuffMessage<TariDanPayload, CommsPublicKey>)>,
         rx_vote_messages: Receiver<(CommsPublicKey, VoteMessage)>,
         shutdown: ShutdownSignal,
-    ) -> JoinHandle<Result<(), anyhow::Error>> {
+    ) -> EventSubscription<HotStuffEvent> {
         dbg!("Hotstuff starting");
         let (tx_new, rx_new) = channel(100);
         let (tx_leader, rx_leader) = channel(100);
         let (tx_broadcast, rx_broadcast) = channel(100);
         let (tx_vote_message, rx_vote_message) = channel(100);
+        let (tx_events, _) = broadcast::channel(100);
 
         let leader_strategy = AlwaysFirstLeader {};
         HotStuffWaiter::spawn(
@@ -94,6 +98,7 @@ impl HotstuffService {
             tx_leader,
             tx_broadcast,
             tx_vote_message,
+            tx_events.clone(),
             payload_processor,
             shard_store_factory,
             shutdown.clone(),
@@ -111,7 +116,9 @@ impl HotstuffService {
                 shutdown,
             }
             .run(),
-        )
+        );
+
+        EventSubscription::new(tx_events)
     }
 
     async fn handle_leader_message(
