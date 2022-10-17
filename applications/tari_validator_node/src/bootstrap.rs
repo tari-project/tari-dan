@@ -35,6 +35,7 @@ use tari_p2p::initialization::spawn_comms_using_transport;
 use tari_shutdown::ShutdownSignal;
 
 use crate::{
+    auto_registration,
     base_layer_scanner,
     comms,
     grpc::services::base_node_client::GrpcBaseNodeClient,
@@ -146,7 +147,7 @@ pub async fn spawn_services(
         payload_processor,
         rx_consensus_message,
         rx_vote_message,
-        shutdown,
+        shutdown.clone(),
     )?;
 
     let shard_store_store = SqliteShardStoreFactory::try_create(config.validator_node.data_dir.join("state.db"))?;
@@ -159,6 +160,11 @@ pub async fn spawn_services(
     // Save final node identity after comms has initialized. This is required because the public_address can be
     // changed by comms during initialization when using tor.
     save_identities(config, &comms)?;
+
+    // Auto-registration
+    if config.validator_node.auto_register {
+        auto_registration::spawn(config.clone(), node_identity.clone(), epoch_manager.clone(), shutdown);
+    }
 
     Ok(Services {
         comms,
