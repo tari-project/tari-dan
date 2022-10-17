@@ -77,9 +77,6 @@ async fn start(
             _ = time::sleep(Duration::from_secs(120)) => {
                 let epoch_changed = epoch_manager.current_epoch().await?;
 
-                info!(target: LOG_TARGET, "current epoch: {:?}", &current_epoch);
-                info!(target: LOG_TARGET, "epoch changed: {:?}", &epoch_changed);
-
                 if current_epoch != epoch_changed {
                     current_epoch = epoch_changed;
 
