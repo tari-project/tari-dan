@@ -36,13 +36,18 @@ mod payload_processor;
 mod template_registration_signing;
 mod validator_node_registration_signing;
 
-use std::{io, process};
+use std::{
+    io,
+    net::{IpAddr, Ipv4Addr, SocketAddr},
+    process,
+};
 
 use clap::Parser;
 use log::*;
 use serde::{Deserialize, Serialize};
 use tari_app_utilities::identity_management::setup_node_identity;
 use tari_common::{
+    configuration::bootstrap::{grpc_default_port, ApplicationType},
     exit_codes::{ExitCode, ExitError},
     initialize_logging,
     load_configuration,
@@ -145,7 +150,14 @@ async fn run_node(config: &ApplicationConfig) -> Result<(), ExitError> {
     );
 
     // fs::create_dir_all(&global.peer_db_path).map_err(|err| ExitError::new(ExitCode::ConfigError, err))?;
-    let base_node_client = GrpcBaseNodeClient::new(config.validator_node.base_node_grpc_address);
+    let base_node_client = GrpcBaseNodeClient::new(config.validator_node.base_node_grpc_address.unwrap_or_else(|| {
+        let port = grpc_default_port(ApplicationType::BaseNode, config.network);
+        SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), port)
+    }));
+    let wallet_client = GrpcWalletClient::new(config.validator_node.wallet_grpc_address.unwrap_or_else(|| {
+        let port = grpc_default_port(ApplicationType::ConsoleWallet, config.network);
+        SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), port)
+    }));
     let services = spawn_services(
         config,
         shutdown.to_signal(),
@@ -158,11 +170,7 @@ async fn run_node(config: &ApplicationConfig) -> Result<(), ExitError> {
     // Run the JSON-RPC API
     if let Some(address) = config.validator_node.json_rpc_address {
         info!(target: LOG_TARGET, "🌐 Started JSON-RPC server on {}", address);
-        let handlers = JsonRpcHandlers::new(
-            GrpcWalletClient::new(config.validator_node.wallet_grpc_address),
-            base_node_client,
-            &services,
-        );
+        let handlers = JsonRpcHandlers::new(wallet_client, base_node_client, &services);
         task::spawn(run_json_rpc(address, handlers));
     }
 
