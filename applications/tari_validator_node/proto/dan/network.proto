@@ -65,5 +65,5 @@ message GetVnStateInventoryRequest {
 }
 
 message GetVnStateInventoryResponse {
-  repeated tari.dan.common.ShardId shard_id = 1;
+  repeated tari.dan.common.ShardId inventory = 1;
 }

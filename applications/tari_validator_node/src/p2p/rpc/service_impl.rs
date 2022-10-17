@@ -23,6 +23,7 @@
 use std::{
     convert::{TryFrom, TryInto},
     ops::Deref,
+    sync::{Arc, Mutex},
 };
 
 use diesel::SqliteConnection;
@@ -37,7 +38,12 @@ use tari_dan_engine::transaction::Transaction;
 use tari_dan_storage_sqlite::sqlite_shard_store_factory::SqliteShardStoreFactory;
 use tokio::{sync::mpsc, task};
 
-use crate::p2p::proto::network::{VnStateSyncRequest, VnStateSyncResponse};
+use crate::p2p::proto::network::{
+    GetVnStateInventoryRequest,
+    GetVnStateInventoryResponse,
+    VnStateSyncRequest,
+    VnStateSyncResponse,
+};
 
 const LOG_TARGET: &str = "vn::p2p::rpc";
 
@@ -142,17 +148,20 @@ where TPeerProvider: PeerProvider + Clone + Send + Sync + 'static
             .into_message()
             .start_shard_id
             .and_then(|s| ShardId::try_from(s).ok())
-            .ok_or_else(|| RpcStatus::bad_request("Invalid start_shard_id provided"))?;
+            .ok_or_else(|| RpcStatus::bad_request("Invalid gRPC request: start_shard_id not provided"))?;
         let end_shard_id = request
             .into_message()
             .end_shard_id
             .and_then(|s| ShardId::try_from(s).ok())
-            .ok_or_else(|| RpcStatus::bad_request("Invalid end_shard_id provided"))?;
+            .ok_or_else(|| RpcStatus::bad_request("Invalid gRPC request: end_shard_id not provided"))?;
 
-        let inventory = self
+        let store_tx = self
             .shard_state_store
+            .create_tx()
+            .map_err(RpcStatus::log_internal_error(LOG_TARGET))?;
+        let inventory = store_tx
             .get_state_inventory(start_shard_id, end_shard_id)
-            .map_err(RpcStatus::log_internal_error(target))?;
+            .map_err(RpcStatus::log_internal_error(LOG_TARGET))?;
 
         Ok(Response::new(GetVnStateInventoryResponse {
             inventory: inventory.into_iter().map(|item| item.into()).collect(),
@@ -165,35 +174,47 @@ where TPeerProvider: PeerProvider + Clone + Send + Sync + 'static
     ) -> Result<Streaming<VnStateSyncResponse>, RpcStatus> {
         let (tx, rx) = mpsc::channel(100);
         let msg = request.into_message();
-        let start_shard_id = msg.start_shard_id.and_then(|s| ShardId::try_from(s).ok());
-        let end_shard_id = msg.end_shard_id.and_then(|s| ShardId::try_from(s).ok());
+        let start_shard_id =
+            msg.start_shard_id
+                .and_then(|s| ShardId::try_from(s).ok())
+                .ok_or(RpcStatus::bad_request(
+                    "Invalid gRPC request: start_shard_id not provided",
+                ))?;
+        let end_shard_id = msg
+            .end_shard_id
+            .and_then(|s| ShardId::try_from(s).ok())
+            .ok_or(RpcStatus::bad_request(
+                "Invalid gRPC request: end_shard_id not provided",
+            ))?;
 
         let missing_shard_ids = msg.missing_shard_state_ids;
 
-        if missing_shard_ids.is_empty() && (start_shard_id.is_none() || end_shard_id.is_none()) {
+        if missing_shard_ids.is_empty() {
             return Err(RpcStatus::bad_request("explain why bad"));
         }
 
         let shard_store = self.shard_state_store.clone();
+        let store_tx = Arc::new(Mutex::new(shard_store.create_tx()?));
 
         task::spawn(async move {
             let mut offset = 0i64;
             let limit = 100i64;
             loop {
-                let tx = shard_store.create_tx();
-
-                // match tx.get_substates_changes_by_shard_ids(shard_ids) {
-                let states = match tx.get_substates_changes_by_range(start_shard_id, end_shard_id) {
+                let states = match store_tx
+                    .deref()
+                    .into_inner()
+                    .unwrap()
+                    .get_substates_changes_by_range(start_shard_id, end_shard_id)
+                {
                     Ok(s) => s,
                     Err(err) => {
                         error!(target: LOG_TARGET, "{}", err);
-                        let _ignore = tx.send(Err(RpcStatus::internal_error(err))).await;
+                        let _ignore = tx.send(Err(RpcStatus::general(&err))).await;
                         return;
                     },
                 };
 
                 // select data from db where shard_id <= end_shard_id and shard_id >= start_shard_id
-                // TODO: test if we should either add limit or limit - 1 or limit + 1
                 offset += limit;
                 for state in states {
                     // if send returns error, the client has closed the connection, so we break the loop

@@ -53,7 +53,7 @@ use tari_dan_core::{
     storage::DbFactory,
     DigitalAssetError,
 };
-use tari_dan_storage_sqlite::SqliteDbFactory;
+use tari_dan_storage_sqlite::{sqlite_shard_store_factory::SqliteShardStoreFactory, SqliteDbFactory};
 use tari_shutdown::{Shutdown, ShutdownSignal};
 use tokio::{runtime, runtime::Runtime, task};
 
@@ -171,7 +171,7 @@ async fn auto_register_vn(
     }
 }
 
-async fn run_node(config: &ApplicationConfig) -> Result<(), ExitError> {
+async fn run_node(config: &ApplicationConfig, url: PathBuf) -> Result<(), ExitError> {
     let shutdown = Shutdown::new();
 
     let node_identity = setup_node_identity(
@@ -197,13 +197,16 @@ async fn run_node(config: &ApplicationConfig) -> Result<(), ExitError> {
     let mut wallet_client = GrpcWalletClient::new(config.validator_node.wallet_grpc_address);
     let vn_registration = auto_register_vn(&mut wallet_client, &mut base_node_client, &node_identity, config).await;
     println!("VN Registration result : {:?}", vn_registration);
+
+    let shard_store_factory = SqliteShardStoreFactory { url };
+
     let services = spawn_services(
         config,
         shutdown.to_signal(),
         node_identity.clone(),
         global_db,
         db_factory,
-        connection,
+        shard_store_factory,
     )
     .await?;
 

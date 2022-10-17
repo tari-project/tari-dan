@@ -114,8 +114,8 @@ table! {
     substate_changes (id) {
         id -> Integer,
         shard_id -> Binary,
-        substate_change -> Text,
         tree_node_hash -> Binary,
+        substate_change -> Text,
     }
 }
 

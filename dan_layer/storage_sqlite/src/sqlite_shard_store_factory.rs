@@ -47,9 +47,9 @@ use tari_dan_core::{
         TreeNodeHash,
     },
     storage::{
+        deserialize,
         shard_store::{ShardStoreFactory, ShardStoreTransaction},
         StorageError,
-        deserialize,
     },
 };
 use tari_dan_engine::transaction::{Transaction, TransactionMeta};
@@ -639,18 +639,15 @@ impl ShardStoreTransaction<PublicKey, TariDanPayload> for SqliteShardStoreTransa
         Ok(())
     }
 
-    fn get_substates_changes(
-        &self,
-        shard: ShardId,
-        limit: i64,
-        offset: i64,
-    ) -> Result<Vec<SubstateState>, Self::Error> {
+    fn get_state_inventory(&self, start_shard: ShardId, end_shard: ShardId) -> Result<Vec<ShardId>, Self::Error> {
         use crate::schema::substate_changes::shard_id;
 
         let substate_states: Option<Vec<crate::models::substate_change::SubstateChange>> = substate_changes
-            .filter(shard_id.eq(Vec::from(shard.as_bytes())))
-            .limit(limit)
-            .offset(offset)
+            .filter(
+                shard_id
+                    .gt(Vec::from(start_shard.as_bytes()))
+                    .and(shard_id.lt(Vec::from(end_shard.as_bytes()))),
+            )
             .get_results(&self.connection)
             .optional()
             .map_err(|e| Self::Error::QueryError {
@@ -659,14 +656,50 @@ impl ShardStoreTransaction<PublicKey, TariDanPayload> for SqliteShardStoreTransa
             .unwrap();
 
         if let Some(substate_states) = substate_states {
-            Ok(substate_states
-                .into_iter()
-                .map(|ss| serde_json::from_str(ss.substate_changes.as_str()))
-                .collect::<Result<_, Self::Error>>())?
+            substate_states
+                .iter()
+                .map(|ss| deserialize::<ShardId>(ss.shard_id.as_slice()))
+                .collect::<Result<Vec<_>, _>>()
         } else {
             return Err(Self::Error::NotFound {
-                item: "substate",
-                key: shard.to_string(),
+                item: "substate".to_string(),
+                key: format!("{}, {}", start_shard, end_shard),
+            });
+        }
+    }
+
+    fn get_substates_changes_by_range(
+        &self,
+        start_shard: ShardId,
+        end_shard: ShardId,
+    ) -> Result<Vec<SubstateState>, Self::Error> {
+        use crate::schema::substate_changes::shard_id;
+
+        let substate_states: Option<Vec<crate::models::substate_change::SubstateChange>> = substate_changes
+            .filter(
+                shard_id
+                    .gt(Vec::from(start_shard.as_bytes()))
+                    .and(shard_id.lt(Vec::from(end_shard.as_bytes()))),
+            )
+            .get_results(&self.connection)
+            .optional()
+            .map_err(|e| Self::Error::QueryError {
+                reason: format!("Get substate change error: {}", e),
+            })
+            .unwrap();
+
+        if let Some(substate_states) = substate_states {
+            substate_states
+                .iter()
+                .map(|ss| {
+                    serde_json::from_str::<SubstateState>(ss.substate_change.as_str())
+                        .map_err(|e| StorageError::SerdeJson(e))
+                })
+                .collect::<Result<_, _>>()
+        } else {
+            return Err(Self::Error::NotFound {
+                item: "substate".to_string(),
+                key: format!("{}, {}", start_shard, end_shard),
             });
         }
     }

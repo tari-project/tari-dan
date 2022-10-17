@@ -27,7 +27,7 @@ pub struct SubstateChange {
     pub id: i32,
     pub shard_id: Vec<u8>,
     pub tree_node_hash: Vec<u8>,
-    pub substate_changes: String,
+    pub substate_change: String,
 }
 
 #[derive(Debug, Insertable)]
