@@ -158,6 +158,7 @@ impl TryFrom<proto::common::SubstateState> for SubstateState {
             2 => SubstateState::Down {
                 deleted_by: PayloadId::try_from(request.deleted_by.unwrap())?,
             },
+            _ => return Err(anyhow!("bad gRPC substate state parsing")),
         };
 
         Ok(result)
@@ -166,7 +167,7 @@ impl TryFrom<proto::common::SubstateState> for SubstateState {
 
 impl From<SubstateState> for proto::common::SubstateState {
     fn from(value: SubstateState) -> Self {
-        let result = proto::common::SubstateState::default();
+        let mut result = proto::common::SubstateState::default();
         match value {
             SubstateState::DoesNotExist => {
                 result.substate_state_type = 0;

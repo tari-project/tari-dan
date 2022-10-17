@@ -35,7 +35,7 @@ mod payload_processor;
 mod template_registration_signing;
 mod validator_node_registration_signing;
 
-use std::{fs, io, path::PathBuf, process};
+use std::{fs, io, process};
 
 use clap::Parser;
 use log::*;
@@ -53,7 +53,7 @@ use tari_dan_core::{
     storage::DbFactory,
     DigitalAssetError,
 };
-use tari_dan_storage_sqlite::{sqlite_shard_store_factory::SqliteShardStoreFactory, SqliteDbFactory};
+use tari_dan_storage_sqlite::SqliteDbFactory;
 use tari_shutdown::{Shutdown, ShutdownSignal};
 use tokio::{runtime, runtime::Runtime, task};
 
@@ -171,7 +171,7 @@ async fn auto_register_vn(
     }
 }
 
-async fn run_node(config: &ApplicationConfig, url: PathBuf) -> Result<(), ExitError> {
+async fn run_node(config: &ApplicationConfig) -> Result<(), ExitError> {
     let shutdown = Shutdown::new();
 
     let node_identity = setup_node_identity(
@@ -198,15 +198,12 @@ async fn run_node(config: &ApplicationConfig, url: PathBuf) -> Result<(), ExitEr
     let vn_registration = auto_register_vn(&mut wallet_client, &mut base_node_client, &node_identity, config).await;
     println!("VN Registration result : {:?}", vn_registration);
 
-    let shard_store_factory = SqliteShardStoreFactory { url };
-
     let services = spawn_services(
         config,
         shutdown.to_signal(),
         node_identity.clone(),
         global_db,
         db_factory,
-        shard_store_factory,
     )
     .await?;
 

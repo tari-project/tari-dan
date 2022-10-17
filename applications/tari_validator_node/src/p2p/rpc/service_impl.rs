@@ -22,11 +22,9 @@
 // DAMAGE.
 use std::{
     convert::{TryFrom, TryInto},
-    ops::Deref,
-    sync::{Arc, Mutex},
+    sync::Arc,
 };
 
-use diesel::SqliteConnection;
 use log::*;
 use tari_comms::protocol::rpc::{Request, Response, RpcStatus, Streaming};
 use tari_dan_common_types::ShardId;
@@ -36,7 +34,10 @@ use tari_dan_core::{
 };
 use tari_dan_engine::transaction::Transaction;
 use tari_dan_storage_sqlite::sqlite_shard_store_factory::SqliteShardStoreFactory;
-use tokio::{sync::mpsc, task};
+use tokio::{
+    sync::{mpsc, Mutex},
+    task,
+};
 
 use crate::p2p::proto::network::{
     GetVnStateInventoryRequest,
@@ -144,13 +145,12 @@ where TPeerProvider: PeerProvider + Clone + Send + Sync + 'static
         &self,
         request: Request<GetVnStateInventoryRequest>,
     ) -> Result<Response<GetVnStateInventoryResponse>, RpcStatus> {
+        let request = request.into_message();
         let start_shard_id = request
-            .into_message()
             .start_shard_id
             .and_then(|s| ShardId::try_from(s).ok())
             .ok_or_else(|| RpcStatus::bad_request("Invalid gRPC request: start_shard_id not provided"))?;
         let end_shard_id = request
-            .into_message()
             .end_shard_id
             .and_then(|s| ShardId::try_from(s).ok())
             .ok_or_else(|| RpcStatus::bad_request("Invalid gRPC request: end_shard_id not provided"))?;
@@ -194,18 +194,21 @@ where TPeerProvider: PeerProvider + Clone + Send + Sync + 'static
         }
 
         let shard_store = self.shard_state_store.clone();
-        let store_tx = Arc::new(Mutex::new(shard_store.create_tx()?));
+
+        let store_tx = Arc::new(Mutex::new(
+            shard_store
+                .create_tx()
+                .map_err(RpcStatus::log_internal_error(LOG_TARGET))?),
+        );
 
         task::spawn(async move {
-            let mut offset = 0i64;
-            let limit = 100i64;
             loop {
-                let states = match store_tx
-                    .deref()
-                    .into_inner()
-                    .unwrap()
-                    .get_substates_changes_by_range(start_shard_id, end_shard_id)
-                {
+                let substate_states = store_tx
+                    .lock()
+                    .await
+                    .get_substates_changes_by_range(start_shard_id, end_shard_id);
+
+                let states = match substate_states {
                     Ok(s) => s,
                     Err(err) => {
                         error!(target: LOG_TARGET, "{}", err);
@@ -215,7 +218,6 @@ where TPeerProvider: PeerProvider + Clone + Send + Sync + 'static
                 };
 
                 // select data from db where shard_id <= end_shard_id and shard_id >= start_shard_id
-                offset += limit;
                 for state in states {
                     // if send returns error, the client has closed the connection, so we break the loop
                     let substate_state = proto::common::SubstateState::from(state);
