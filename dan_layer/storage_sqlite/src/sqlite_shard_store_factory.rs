@@ -692,8 +692,7 @@ impl ShardStoreTransaction<PublicKey, TariDanPayload> for SqliteShardStoreTransa
             substate_states
                 .iter()
                 .map(|ss| {
-                    serde_json::from_str::<SubstateState>(ss.substate_change.as_str())
-                        .map_err(StorageError::SerdeJson)
+                    serde_json::from_str::<SubstateState>(ss.substate_change.as_str()).map_err(StorageError::SerdeJson)
                 })
                 .collect::<Result<_, _>>()
         } else {

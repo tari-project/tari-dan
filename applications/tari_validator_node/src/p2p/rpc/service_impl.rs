@@ -174,18 +174,14 @@ where TPeerProvider: PeerProvider + Clone + Send + Sync + 'static
     ) -> Result<Streaming<VnStateSyncResponse>, RpcStatus> {
         let (tx, rx) = mpsc::channel(100);
         let msg = request.into_message();
-        let start_shard_id =
-            msg.start_shard_id
-                .and_then(|s| ShardId::try_from(s).ok())
-                .ok_or_else(|| RpcStatus::bad_request(
-                    "Invalid gRPC request: start_shard_id not provided",
-                ))?;
+        let start_shard_id = msg
+            .start_shard_id
+            .and_then(|s| ShardId::try_from(s).ok())
+            .ok_or_else(|| RpcStatus::bad_request("Invalid gRPC request: start_shard_id not provided"))?;
         let end_shard_id = msg
             .end_shard_id
             .and_then(|s| ShardId::try_from(s).ok())
-            .ok_or_else(|| RpcStatus::bad_request(
-                "Invalid gRPC request: end_shard_id not provided",
-            ))?;
+            .ok_or_else(|| RpcStatus::bad_request("Invalid gRPC request: end_shard_id not provided"))?;
 
         let missing_shard_ids = msg.missing_shard_state_ids;
 
