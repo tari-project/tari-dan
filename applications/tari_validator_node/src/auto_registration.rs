@@ -54,7 +54,7 @@ pub fn spawn(
     epoch_manager: EpochManagerHandle,
     shutdown: ShutdownSignal,
 ) {
-    info!(target: LOG_TARGET, "♻️ Node configured for auto registration");
+    info!(target: LOG_TARGET, "♽️ Node configured for auto registration");
 
     task::spawn(async move {
         if let Err(err) = start(config, node_identity, epoch_manager, shutdown).await {
