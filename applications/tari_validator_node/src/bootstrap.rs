@@ -167,9 +167,7 @@ pub async fn spawn_services(
     save_identities(config, &comms)?;
 
     // Auto-registration
-    if config.validator_node.auto_register {
-        auto_registration::spawn(config.clone(), node_identity.clone(), epoch_manager.clone(), shutdown);
-    }
+    auto_registration::spawn(config.clone(), node_identity.clone(), epoch_manager.clone(), shutdown);
 
     Ok(Services {
         comms,

@@ -84,6 +84,10 @@ pub fn spawn(
     epoch_manager: EpochManagerHandle,
     shutdown: ShutdownSignal,
 ) {
+    if !config.validator_node.auto_register {
+        return;
+    }
+
     info!(target: LOG_TARGET, "♽️ Node configured for auto registration");
 
     task::spawn(async move {
