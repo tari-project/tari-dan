@@ -7,7 +7,7 @@ use axum::http::HeaderMap;
 use reqwest::{header, Response, Url};
 use serde_json::json;
 use tari_common::configuration::CommonConfig;
-use tari_p2p::{Network, PeerSeedsConfig};
+use tari_p2p::{Network, PeerSeedsConfig, TransportType};
 use tari_validator_node::{run_node, ApplicationConfig, ValidatorNodeConfig};
 use tempfile::tempdir;
 use tokio::runtime;
@@ -47,6 +47,7 @@ pub fn spawn_validator_node(
         config.validator_node.tor_identity_file = temp_dir.path().join("validator_node_tor_id.json");
         config.validator_node.base_node_grpc_address = format!("127.0.0.1:{}", base_node_grpc_port).parse().unwrap();
         config.validator_node.wallet_grpc_address = format!("127.0.0.1:{}", wallet_grpc_port).parse().unwrap();
+        config.validator_node.p2p.transport.transport_type = TransportType::Tcp;
 
         let mut builder = runtime::Builder::new_multi_thread();
         let rt = builder.enable_all().build().unwrap();

@@ -10,7 +10,7 @@ use tari_base_node::{run_base_node, BaseNodeConfig, MetricsConfig};
 use tari_common::configuration::CommonConfig;
 use tari_comms::{multiaddr::Multiaddr, peer_manager::PeerFeatures, NodeIdentity};
 use tari_comms_dht::DhtConfig;
-use tari_p2p::{auto_update::AutoUpdateConfig, Network, PeerSeedsConfig};
+use tari_p2p::{auto_update::AutoUpdateConfig, Network, PeerSeedsConfig, TransportType};
 use tempfile::tempdir;
 use tokio::runtime;
 
@@ -45,16 +45,20 @@ pub fn spawn_base_node(world: &mut TariWorld, bn_name: String) {
         let temp_dir = tempdir().unwrap();
         println!("Using base_node temp_dir: {}", temp_dir.path().display());
         base_node_config.base_node.network = Network::LocalNet;
-        // FIXME: this option seems to be ignored by the base node, and only works with a real tor running
-        base_node_config.base_node.use_libtor = true;
         base_node_config.base_node.grpc_enabled = true;
         base_node_config.base_node.grpc_address =
             Some(Multiaddr::from_str(&format!("/ip4/127.0.0.1/tcp/{}", grpc_port)).unwrap());
+
         base_node_config.base_node.data_dir = temp_dir.path().to_path_buf();
         base_node_config.base_node.identity_file = temp_dir.path().join("base_node_id.json");
         base_node_config.base_node.tor_identity_file = temp_dir.path().join("base_node_tor_id.json");
 
         base_node_config.base_node.lmdb_path = temp_dir.path().to_path_buf();
+        base_node_config.base_node.p2p.transport.transport_type = TransportType::Tcp;
+        base_node_config.base_node.p2p.transport.tcp.listener_address =
+            Multiaddr::from_str(&format!("/ip4/127.0.0.1/tcp/{}", port)).unwrap();
+        base_node_config.base_node.p2p.public_address =
+            Some(base_node_config.base_node.p2p.transport.tcp.listener_address.clone());
         base_node_config.base_node.p2p.datastore_path = temp_dir.path().to_path_buf();
         base_node_config.base_node.p2p.dht = DhtConfig::default_local_test();
 
