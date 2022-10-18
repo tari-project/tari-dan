@@ -32,6 +32,7 @@ use tari_dan_core::{
     services::epoch_manager::{EpochManager, EpochManagerError},
     DigitalAssetError,
 };
+use tari_dan_storage_sqlite::error::SqliteStorageError;
 use tari_shutdown::ShutdownSignal;
 use tari_wallet_grpc_client::WalletClientError;
 use tokio::{task, time};
@@ -50,6 +51,8 @@ pub enum AutoRegistrationError {
     WalletClientError(#[from] WalletClientError),
     #[error("DigitalAsset error: {0}")]
     DigitalAssetError(#[from] DigitalAssetError),
+    #[error("Sqlite storage error: {0}")]
+    SqliteStorageError(#[from] SqliteStorageError),
 }
 
 pub fn spawn(
@@ -87,14 +90,20 @@ async fn start(
                 if current_epoch != epoch_changed {
                     current_epoch = epoch_changed;
 
-                    match wallet_client.register_validator_node(&node_identity).await {
-                        Ok(resp) => {
-                            let tx_id = resp.transaction_id;
-                            info!(target: LOG_TARGET, "✅ Validator node auto registration submitted (tx_id: {})", tx_id);
-                        },
-                        Err(e) => return Err(AutoRegistrationError::RegistrationFailed {
-                          details: e.to_string(),
-                        })
+                    if let Ok(Some(next_epoch)) = epoch_manager.next_registration_epoch().await {
+                        if next_epoch == current_epoch {
+                            match wallet_client.register_validator_node(&node_identity).await {
+                                Ok(resp) => {
+                                    let tx_id = resp.transaction_id;
+                                    info!(target: LOG_TARGET, "✅ Validator node auto registration submitted (tx_id: {})", tx_id);
+
+                                    epoch_manager.update_next_registration_epoch(current_epoch).await?;
+                                },
+                                Err(e) => return Err(AutoRegistrationError::RegistrationFailed {
+                                  details: e.to_string(),
+                                })
+                            }
+                        }
                     }
                 }
             },

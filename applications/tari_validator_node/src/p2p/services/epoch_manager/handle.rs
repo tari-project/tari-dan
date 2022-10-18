@@ -58,6 +58,28 @@ impl EpochManagerHandle {
         let _result = rx.await.map_err(|_| EpochManagerError::ReceiveError)??;
         Ok(())
     }
+
+    pub async fn next_registration_epoch(&self) -> Result<Option<Epoch>, EpochManagerError> {
+        let (tx, rx) = oneshot::channel();
+        self.tx_request
+            .send((EpochManagerRequest::NextRegistrationEpoch, tx))
+            .await
+            .map_err(|_| EpochManagerError::SendError)?;
+        match rx.await.map_err(|_| EpochManagerError::ReceiveError)?? {
+            EpochManagerResponse::NextRegistrationEpoch { epoch } => Ok(epoch),
+            _ => Err(EpochManagerError::UnexpectedResponse),
+        }
+    }
+
+    pub async fn update_next_registration_epoch(&self, epoch: Epoch) -> Result<(), EpochManagerError> {
+        let (tx, rx) = oneshot::channel();
+        self.tx_request
+            .send((EpochManagerRequest::UpdateNextRegistrationEpoch { epoch }, tx))
+            .await
+            .map_err(|_| EpochManagerError::SendError)?;
+        let _result = rx.await.map_err(|_| EpochManagerError::ReceiveError)??;
+        Ok(())
+    }
 }
 #[async_trait]
 impl EpochManager<CommsPublicKey> for EpochManagerHandle {

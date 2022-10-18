@@ -134,6 +134,37 @@ impl BaseLayerEpochManager {
         self.current_epoch
     }
 
+    pub async fn next_registration_epoch(&self) -> Result<Option<Epoch>, EpochManagerError> {
+        let db = self.db_factory.get_or_create_global_db()?;
+        let tx = db
+            .create_transaction()
+            .map_err(|e| EpochManagerError::StorageError(e.into()))?;
+        let metadata = db.metadata(&tx);
+        Ok(metadata
+            .get_metadata(MetadataKey::NextEpochRegistration)
+            .map_err(|e| EpochManagerError::StorageError(e.into()))?
+            .map(|v| {
+                let v2 = [v[0], v[1], v[2], v[3], v[4], v[5], v[6], v[7]];
+                Epoch(u64::from_le_bytes(v2))
+            }))
+    }
+
+    pub async fn update_next_registration_epoch(&self, epoch: Epoch) -> Result<(), EpochManagerError> {
+        let db = self.db_factory.get_or_create_global_db()?;
+        let tx = db
+            .create_transaction()
+            .map_err(|e| EpochManagerError::StorageError(e.into()))?;
+        let metadata = db.metadata(&tx);
+        metadata
+            .set_metadata(
+                MetadataKey::NextEpochRegistration,
+                &Epoch(epoch.as_u64() + 9).to_le_bytes(),
+            )
+            .map_err(|e| EpochManagerError::StorageError(e.into()))?;
+        db.commit(tx).map_err(|e| EpochManagerError::StorageError(e.into()))?;
+        Ok(())
+    }
+
     #[allow(dead_code)]
     pub fn is_epoch_valid(&self, epoch: Epoch) -> bool {
         let current_epoch = self.current_epoch();
