@@ -39,7 +39,6 @@ use tari_p2p::initialization::spawn_comms_using_transport;
 use tari_shutdown::ShutdownSignal;
 
 use crate::{
-    registration,
     base_layer_scanner,
     comms,
     grpc::services::base_node_client::GrpcBaseNodeClient,
@@ -61,6 +60,7 @@ use crate::{
         },
     },
     payload_processor::TariDanPayloadProcessor,
+    registration,
     ApplicationConfig,
 };
 

@@ -47,7 +47,6 @@ use tari_validator_node_client::types::{
 };
 
 use crate::{
-    registration,
     grpc::services::{base_node_client::GrpcBaseNodeClient, wallet_client::GrpcWalletClient},
     json_rpc::jrpc_errors::internal_error,
     p2p::services::{
@@ -55,6 +54,7 @@ use crate::{
         mempool::MempoolHandle,
         template_manager::TemplateManagerHandle,
     },
+    registration,
     Services,
 };
 
