@@ -47,6 +47,7 @@ use tari_validator_node_client::types::{
 };
 
 use crate::{
+    auto_registration,
     grpc::services::{base_node_client::GrpcBaseNodeClient, wallet_client::GrpcWalletClient},
     json_rpc::jrpc_errors::internal_error,
     p2p::services::{
@@ -139,9 +140,7 @@ impl JsonRpcHandlers {
     pub async fn register_validator_node(&self, value: JsonRpcExtractor) -> JrpcResult {
         let answer_id = value.get_answer_id();
 
-        let resp = self
-            .wallet_client()
-            .register_validator_node(&self.node_identity)
+        let resp = auto_registration::register(self.wallet_client(), self.node_identity.clone(), &self.epoch_manager)
             .await
             .map_err(internal_error(answer_id))?;
 

@@ -26,6 +26,7 @@ use std::{
 };
 
 use log::{error, info};
+use tari_app_grpc::tari_rpc::RegisterValidatorNodeResponse;
 use tari_common::configuration::bootstrap::{grpc_default_port, ApplicationType};
 use tari_comms::NodeIdentity;
 use tari_dan_core::{
@@ -53,6 +54,28 @@ pub enum AutoRegistrationError {
     DigitalAssetError(#[from] DigitalAssetError),
     #[error("Sqlite storage error: {0}")]
     SqliteStorageError(#[from] SqliteStorageError),
+}
+
+pub async fn register(
+    mut wallet_client: GrpcWalletClient,
+    node_identity: Arc<NodeIdentity>,
+    epoch_manager: &EpochManagerHandle,
+) -> Result<RegisterValidatorNodeResponse, AutoRegistrationError> {
+    match wallet_client.register_validator_node(&node_identity).await {
+        Ok(resp) => {
+            let tx_id = resp.transaction_id;
+            info!(
+                target: LOG_TARGET,
+                "✅ Validator node registration submitted (tx_id: {})", tx_id
+            );
+
+            let current_epoch = epoch_manager.current_epoch().await?;
+            epoch_manager.update_next_registration_epoch(current_epoch).await?;
+
+            Ok(resp)
+        },
+        Err(e) => Err(AutoRegistrationError::RegistrationFailed { details: e.to_string() }),
+    }
 }
 
 pub fn spawn(
@@ -85,25 +108,12 @@ async fn start(
     loop {
         tokio::select! {
             _ = time::sleep(config.validator_node.base_layer_scanning_interval) => {
-                let epoch_changed = epoch_manager.current_epoch().await?;
+                let current_epoch = epoch_manager.current_epoch().await?;
 
-                if current_epoch != epoch_changed {
-                    current_epoch = epoch_changed;
-
-                    if let Ok(Some(next_epoch)) = epoch_manager.next_registration_epoch().await {
-                        if next_epoch == current_epoch {
-                            match wallet_client.register_validator_node(&node_identity).await {
-                                Ok(resp) => {
-                                    let tx_id = resp.transaction_id;
-                                    info!(target: LOG_TARGET, "✅ Validator node auto registration submitted (tx_id: {})", tx_id);
-
-                                    epoch_manager.update_next_registration_epoch(current_epoch).await?;
-                                },
-                                Err(e) => return Err(AutoRegistrationError::RegistrationFailed {
-                                  details: e.to_string(),
-                                })
-                            }
-                        }
+                if let Ok(Some(next_registration_epoch)) = epoch_manager.next_registration_epoch().await {
+                    if current_epoch == next_registration_epoch {
+                        let wallet_client = GrpcWalletClient::new(config.validator_node.wallet_grpc_address);
+                        register(wallet_client, node_identity.clone(), &epoch_manager).await?;
                     }
                 }
             },
