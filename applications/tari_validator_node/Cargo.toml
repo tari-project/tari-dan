@@ -88,7 +88,9 @@ tokio = { version = "1.10", features = ["macros", "rt-multi-thread", "time"] }
 tempfile = "3.3.0"
 # TODO: use a "git" dependency when the base node is spliited in the "feature-dan" branch
 tari_base_node = { path = "../../../tari/applications/tari_base_node", features = ["libtor"] }
+tari_console_wallet = { path = "../../../tari/applications/tari_console_wallet", features = ["libtor"] }
 tari_comms_dht = { path = "../../../tari/comms/dht" }
+tari_wallet = { path = "../../../tari/base_layer/wallet" }
 
 [[test]]
 name = "cucumber" # this should be the same as the filename of your test target

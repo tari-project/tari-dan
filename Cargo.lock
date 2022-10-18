@@ -135,13 +135,23 @@ checksum = "983cd8b9d4b02a6dc6ffa557262eb5858a27a0038ffffe21a0f133eaa819a164"
 
 [[package]]
 name = "argon2"
+version = "0.2.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ca5162d1b961cb589a8ca08a2aa7cabc6341e05e0bf18d66a07697900b5d2ad0"
+dependencies = [
+ "blake2 0.9.2",
+ "password-hash 0.2.3",
+]
+
+[[package]]
+name = "argon2"
 version = "0.4.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "db4ce4441f99dbd377ca8a8f57b698c44d0d6e712d8329b5040da5a64aa1ce73"
 dependencies = [
  "base64ct",
  "blake2 0.10.4",
- "password-hash",
+ "password-hash 0.4.2",
 ]
 
 [[package]]
@@ -636,6 +646,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "cassowary"
+version = "0.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "df8670b8c7b9dae1793364eafadf7239c40d669904660c5960d74cfd80b46a53"
+
+[[package]]
 name = "cast5"
 version = "0.9.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -876,6 +892,15 @@ dependencies = [
  "error-code",
  "str-buf",
  "winapi",
+]
+
+[[package]]
+name = "cloudabi"
+version = "0.0.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ddfc5b9aa5d4507acaf872de71051dfd0e309860e88966e1051e462a077aac4f"
+dependencies = [
+ "bitflags 1.3.2",
 ]
 
 [[package]]
@@ -1121,18 +1146,68 @@ dependencies = [
 
 [[package]]
 name = "crossterm"
+version = "0.17.7"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6f4919d60f26ae233e14233cc39746c8c8bb8cd7b05840ace83604917b51b6c7"
+dependencies = [
+ "bitflags 1.3.2",
+ "crossterm_winapi 0.6.2",
+ "lazy_static",
+ "libc",
+ "mio 0.7.14",
+ "parking_lot 0.10.2",
+ "signal-hook 0.1.17",
+ "winapi",
+]
+
+[[package]]
+name = "crossterm"
+version = "0.20.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c0ebde6a9dd5e331cd6c6f48253254d117642c31653baa475e394657c59c1f7d"
+dependencies = [
+ "bitflags 1.3.2",
+ "crossterm_winapi 0.8.0",
+ "libc",
+ "mio 0.7.14",
+ "parking_lot 0.11.2",
+ "signal-hook 0.3.14",
+ "signal-hook-mio",
+ "winapi",
+]
+
+[[package]]
+name = "crossterm"
 version = "0.23.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a2102ea4f781910f8a5b98dd061f4c2023f479ce7bb1236330099ceb5a93cf17"
 dependencies = [
  "bitflags 1.3.2",
- "crossterm_winapi",
+ "crossterm_winapi 0.9.0",
  "futures-core",
  "libc",
- "mio",
- "parking_lot",
- "signal-hook",
+ "mio 0.8.4",
+ "parking_lot 0.12.1",
+ "signal-hook 0.3.14",
  "signal-hook-mio",
+ "winapi",
+]
+
+[[package]]
+name = "crossterm_winapi"
+version = "0.6.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c2265c3f8e080075d9b6417aa72293fc71662f34b4af2612d8d1b074d29510db"
+dependencies = [
+ "winapi",
+]
+
+[[package]]
+name = "crossterm_winapi"
+version = "0.8.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3a6966607622438301997d3dac0d2f6e9a90c68bb6bc1785ea98456ab93c0507"
+dependencies = [
  "winapi",
 ]
 
@@ -1204,7 +1279,7 @@ dependencies = [
  "cucumber-expressions",
  "derive_more",
  "either",
- "futures",
+ "futures 0.3.24",
  "gherkin",
  "globwalk",
  "inventory",
@@ -1865,6 +1940,12 @@ checksum = "2022715d62ab30faffd124d40b76f4134a550a87792276512b18d63272333394"
 
 [[package]]
 name = "futures"
+version = "0.1.31"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3a471a38ef8ed83cd6e40aa59c1ffe17db6855c18e3604d9c4ed8c08ebc28678"
+
+[[package]]
+name = "futures"
 version = "0.3.24"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7f21eda599937fba36daeb58a22e8f5cee2d14c4a17b5b7739c7c8e5e3b8230c"
@@ -1940,6 +2021,7 @@ version = "0.3.24"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "44fb6cb1be61cc1d2e43b262516aafcf63b241cffdb1d3fa115f91d9c7b09c90"
 dependencies = [
+ "futures 0.1.31",
  "futures-channel",
  "futures-core",
  "futures-io",
@@ -2694,6 +2776,15 @@ dependencies = [
 
 [[package]]
 name = "lock_api"
+version = "0.3.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c4da24a77a3d8a6d4862d95f72e6fdb9c09a643ecdb402d754004a557f2bec75"
+dependencies = [
+ "scopeguard",
+]
+
+[[package]]
+name = "lock_api"
 version = "0.4.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "435011366fe56583b16cf956f9df0095b405b82d76425bc8981c0e22e60ec4df"
@@ -2733,7 +2824,7 @@ dependencies = [
  "libc",
  "log",
  "log-mdc",
- "parking_lot",
+ "parking_lot 0.12.1",
  "serde",
  "serde-value",
  "serde_json",
@@ -2908,6 +2999,19 @@ dependencies = [
 
 [[package]]
 name = "mio"
+version = "0.7.14"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8067b404fe97c70829f082dec8bcf4f71225d7eaea1d8645349cb76fa06205cc"
+dependencies = [
+ "libc",
+ "log",
+ "miow",
+ "ntapi",
+ "winapi",
+]
+
+[[package]]
+name = "mio"
 version = "0.8.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "57ee1c23c7c63b0c9250c339ffdc69255f110b298b901b9f6c82547b7b87caaf"
@@ -2916,6 +3020,15 @@ dependencies = [
  "log",
  "wasi 0.11.0+wasi-snapshot-preview1",
  "windows-sys 0.36.1",
+]
+
+[[package]]
+name = "miow"
+version = "0.3.7"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b9f1c5b025cda876f66ef43a113f91ebc9f4ccef34843000e0adf6ebbab84e21"
+dependencies = [
+ "winapi",
 ]
 
 [[package]]
@@ -3084,6 +3197,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "ntapi"
+version = "0.3.7"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c28774a7fd2fbb4f0babd8237ce554b73af68021b5f695a3cebd6c59bac0980f"
+dependencies = [
+ "winapi",
+]
+
+[[package]]
 name = "num-bigint"
 version = "0.2.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3221,7 +3343,7 @@ version = "1.15.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e82dad04139b71a90c080c8463fe0dc7902db5192d939bd0950f074d014339e1"
 dependencies = [
- "parking_lot_core",
+ "parking_lot_core 0.9.3",
 ]
 
 [[package]]
@@ -3283,7 +3405,7 @@ checksum = "e1cf9b1c4e9a6c4de793c632496fa490bdc0e1eea73f0c91394f7b6990935d22"
 dependencies = [
  "async-trait",
  "crossbeam-channel",
- "futures",
+ "futures 0.3.24",
  "js-sys",
  "lazy_static",
  "percent-encoding 2.2.0",
@@ -3372,12 +3494,61 @@ checksum = "9ff7415e9ae3fff1225851df9e0d9e4e5479f947619774677a63572e55e80eff"
 
 [[package]]
 name = "parking_lot"
+version = "0.10.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d3a704eb390aafdc107b0e392f56a82b668e3a71366993b5340f5833fd62505e"
+dependencies = [
+ "lock_api 0.3.4",
+ "parking_lot_core 0.7.2",
+]
+
+[[package]]
+name = "parking_lot"
+version = "0.11.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7d17b78036a60663b797adeaee46f5c9dfebb86948d1255007a1d6be0271ff99"
+dependencies = [
+ "instant",
+ "lock_api 0.4.9",
+ "parking_lot_core 0.8.5",
+]
+
+[[package]]
+name = "parking_lot"
 version = "0.12.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3742b2c103b9f06bc9fff0a37ff4912935851bee6d36f3c02bcc755bcfec228f"
 dependencies = [
- "lock_api",
- "parking_lot_core",
+ "lock_api 0.4.9",
+ "parking_lot_core 0.9.3",
+]
+
+[[package]]
+name = "parking_lot_core"
+version = "0.7.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d58c7c768d4ba344e3e8d72518ac13e259d7c7ade24167003b8488e10b6740a3"
+dependencies = [
+ "cfg-if 0.1.10",
+ "cloudabi",
+ "libc",
+ "redox_syscall 0.1.57",
+ "smallvec",
+ "winapi",
+]
+
+[[package]]
+name = "parking_lot_core"
+version = "0.8.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d76e8e1493bcac0d2766c42737f34458f1c8c50c0d23bcb24ea953affb273216"
+dependencies = [
+ "cfg-if 1.0.0",
+ "instant",
+ "libc",
+ "redox_syscall 0.2.16",
+ "smallvec",
+ "winapi",
 ]
 
 [[package]]
@@ -3388,9 +3559,20 @@ checksum = "09a279cbf25cb0757810394fbc1e359949b59e348145c643a939a525692e6929"
 dependencies = [
  "cfg-if 1.0.0",
  "libc",
- "redox_syscall",
+ "redox_syscall 0.2.16",
  "smallvec",
  "windows-sys 0.36.1",
+]
+
+[[package]]
+name = "password-hash"
+version = "0.2.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "77e0b28ace46c5a396546bcf443bf422b57049617433d8854227352a4a9b24e7"
+dependencies = [
+ "base64ct",
+ "rand_core 0.6.4",
+ "subtle",
 ]
 
 [[package]]
@@ -3726,7 +3908,7 @@ dependencies = [
  "fnv",
  "lazy_static",
  "memchr",
- "parking_lot",
+ "parking_lot 0.12.1",
  "protobuf",
  "thiserror",
 ]
@@ -3836,7 +4018,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "51de85fb3fb6524929c8a2eb85e6b6d363de4e8c48f9e2c2eac4944abc181c93"
 dependencies = [
  "log",
- "parking_lot",
+ "parking_lot 0.12.1",
  "scheduled-thread-pool",
 ]
 
@@ -3957,6 +4139,12 @@ dependencies = [
 
 [[package]]
 name = "redox_syscall"
+version = "0.1.57"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "41cc0f7e4d5d4544e8861606a285bb08d3e70712ccc7d2b84d7c0ccfaf4b05ce"
+
+[[package]]
+name = "redox_syscall"
 version = "0.2.16"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "fb5a58c1855b4b6819d59012155603f0b22ad30cad752600aadfcb695265519a"
@@ -3971,7 +4159,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b033d837a7cf162d7993aded9304e30a83213c648b6e389db233191f891e5c2b"
 dependencies = [
  "getrandom 0.2.7",
- "redox_syscall",
+ "redox_syscall 0.2.16",
  "thiserror",
 ]
 
@@ -4139,6 +4327,16 @@ dependencies = [
  "base64 0.13.0",
  "bitflags 1.3.2",
  "serde",
+]
+
+[[package]]
+name = "rpassword"
+version = "5.0.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ffc936cf8a7ea60c58f030fd36a612a48f440610214dc54bc36431f9ea0c3efb"
+dependencies = [
+ "libc",
+ "winapi",
 ]
 
 [[package]]
@@ -4330,7 +4528,7 @@ version = "0.2.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "977a7519bff143a44f842fd07e80ad1329295bd71686457f18e496736f4bf9bf"
 dependencies = [
- "parking_lot",
+ "parking_lot 0.12.1",
 ]
 
 [[package]]
@@ -4612,6 +4810,17 @@ checksum = "43b2853a4d09f215c24cc5489c992ce46052d359b5109343cbafbf26bc62f8a3"
 
 [[package]]
 name = "signal-hook"
+version = "0.1.17"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7e31d442c16f047a671b5a71e2161d6e68814012b7f5379d269ebd915fac2729"
+dependencies = [
+ "libc",
+ "mio 0.7.14",
+ "signal-hook-registry",
+]
+
+[[package]]
+name = "signal-hook"
 version = "0.3.14"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a253b5e89e2698464fc26b545c9edceb338e18a89effeeecfea192c3025be29d"
@@ -4627,8 +4836,9 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "29ad2e15f37ec9a6cc544097b78a1ec90001e9f71b81338ca39f430adaca99af"
 dependencies = [
  "libc",
- "mio",
- "signal-hook",
+ "mio 0.7.14",
+ "mio 0.8.4",
+ "signal-hook 0.3.14",
 ]
 
 [[package]]
@@ -4926,7 +5136,7 @@ checksum = "c02424087780c9b71cc96799eaeddff35af2bc513278cda5c99fc1f5d026d3c1"
 name = "tari_app_grpc"
 version = "0.38.5"
 dependencies = [
- "argon2",
+ "argon2 0.4.1",
  "base64 0.13.0",
  "chrono",
  "digest 0.9.0",
@@ -4954,7 +5164,7 @@ dependencies = [
  "clap 3.2.22",
  "config",
  "dirs-next 1.0.2",
- "futures",
+ "futures 0.3.24",
  "json5 0.2.8",
  "log",
  "rand 0.7.3",
@@ -4979,10 +5189,10 @@ dependencies = [
  "chrono",
  "clap 3.2.22",
  "config",
- "crossterm",
+ "crossterm 0.23.2",
  "derive_more",
  "either",
- "futures",
+ "futures 0.3.24",
  "log",
  "log-mdc",
  "nom 7.1.1",
@@ -5153,7 +5363,7 @@ dependencies = [
  "data-encoding",
  "derivative",
  "digest 0.9.0",
- "futures",
+ "futures 0.3.24",
  "lazy_static",
  "lmdb-zero",
  "log",
@@ -5195,7 +5405,7 @@ dependencies = [
  "diesel",
  "diesel_migrations",
  "digest 0.9.0",
- "futures",
+ "futures 0.3.24",
  "log",
  "log-mdc",
  "pin-project 0.4.30",
@@ -5228,6 +5438,56 @@ dependencies = [
 ]
 
 [[package]]
+name = "tari_console_wallet"
+version = "0.38.5"
+dependencies = [
+ "base64 0.13.0",
+ "bitflags 1.3.2",
+ "chrono",
+ "clap 3.2.22",
+ "config",
+ "crossterm 0.17.7",
+ "digest 0.9.0",
+ "futures 0.3.24",
+ "log",
+ "opentelemetry",
+ "opentelemetry-jaeger",
+ "qrcode",
+ "rand 0.7.3",
+ "regex",
+ "rpassword",
+ "rustyline",
+ "serde",
+ "serde_json",
+ "sha2 0.9.9",
+ "strum",
+ "strum_macros",
+ "tari_app_grpc",
+ "tari_app_utilities",
+ "tari_common",
+ "tari_common_types 0.38.5",
+ "tari_comms",
+ "tari_comms_dht",
+ "tari_core",
+ "tari_crypto",
+ "tari_key_manager",
+ "tari_libtor",
+ "tari_p2p",
+ "tari_shutdown 0.38.5",
+ "tari_utilities",
+ "tari_wallet",
+ "thiserror",
+ "tokio",
+ "tonic",
+ "tracing",
+ "tracing-opentelemetry",
+ "tracing-subscriber",
+ "tui",
+ "unicode-segmentation",
+ "unicode-width",
+]
+
+[[package]]
 name = "tari_core"
 version = "0.38.5"
 dependencies = [
@@ -5243,7 +5503,7 @@ dependencies = [
  "derivative",
  "digest 0.9.0",
  "fs2",
- "futures",
+ "futures 0.3.24",
  "hex",
  "integer-encoding 3.0.4",
  "lmdb-zero",
@@ -5336,7 +5596,7 @@ dependencies = [
  "blake2 0.9.2",
  "clap 3.2.22",
  "digest 0.9.0",
- "futures",
+ "futures 0.3.24",
  "lazy_static",
  "lmdb-zero",
  "log",
@@ -5461,6 +5721,29 @@ dependencies = [
 ]
 
 [[package]]
+name = "tari_key_manager"
+version = "0.38.5"
+dependencies = [
+ "argon2 0.2.4",
+ "arrayvec",
+ "blake2 0.9.2",
+ "chacha20 0.7.3",
+ "clear_on_drop",
+ "crc32fast",
+ "derivative",
+ "digest 0.9.0",
+ "rand 0.7.3",
+ "serde",
+ "serde_derive",
+ "serde_json",
+ "strum",
+ "strum_macros",
+ "tari_crypto",
+ "tari_utilities",
+ "thiserror",
+]
+
+[[package]]
 name = "tari_libtor"
 version = "0.24.0"
 dependencies = [
@@ -5482,7 +5765,7 @@ name = "tari_metrics"
 version = "0.1.0"
 dependencies = [
  "anyhow",
- "futures",
+ "futures 0.3.24",
  "log",
  "once_cell",
  "prometheus",
@@ -5514,7 +5797,7 @@ dependencies = [
  "bytes 0.5.6",
  "chrono",
  "fs2",
- "futures",
+ "futures 0.3.24",
  "lmdb-zero",
  "log",
  "pgp",
@@ -5563,7 +5846,7 @@ version = "0.38.5"
 dependencies = [
  "anyhow",
  "async-trait",
- "futures",
+ "futures 0.3.24",
  "log",
  "tari_shutdown 0.38.5",
  "thiserror",
@@ -5575,7 +5858,7 @@ dependencies = [
 name = "tari_shutdown"
 version = "0.38.5"
 dependencies = [
- "futures",
+ "futures 0.3.24",
 ]
 
 [[package]]
@@ -5583,7 +5866,7 @@ name = "tari_shutdown"
 version = "0.38.5"
 source = "git+https://github.com/tari-project/tari.git?branch=feature-dan#9e81c7b6257773ddca970982adb89a1e0d548e2b"
 dependencies = [
- "futures",
+ "futures 0.3.24",
 ]
 
 [[package]]
@@ -5644,7 +5927,7 @@ dependencies = [
 name = "tari_test_utils"
 version = "0.38.5"
 dependencies = [
- "futures",
+ "futures 0.3.24",
  "rand 0.7.3",
  "tari_shutdown 0.38.5",
  "tempfile",
@@ -5656,7 +5939,7 @@ name = "tari_test_utils"
 version = "0.38.5"
 source = "git+https://github.com/tari-project/tari.git?branch=feature-dan#9e81c7b6257773ddca970982adb89a1e0d548e2b"
 dependencies = [
- "futures",
+ "futures 0.3.24",
  "rand 0.7.3",
  "tari_shutdown 0.38.5 (git+https://github.com/tari-project/tari.git?branch=feature-dan)",
  "tempfile",
@@ -5694,7 +5977,7 @@ dependencies = [
  "config",
  "cucumber",
  "digest 0.9.0",
- "futures",
+ "futures 0.3.24",
  "include_dir",
  "json5 0.2.8",
  "libsqlite3-sys",
@@ -5715,6 +5998,7 @@ dependencies = [
  "tari_comms",
  "tari_comms_dht",
  "tari_comms_rpc_macros",
+ "tari_console_wallet",
  "tari_core",
  "tari_crypto",
  "tari_dan_common_types",
@@ -5730,6 +6014,7 @@ dependencies = [
  "tari_template_lib",
  "tari_test_utils 0.38.5 (git+https://github.com/tari-project/tari.git?branch=feature-dan)",
  "tari_validator_node_client",
+ "tari_wallet",
  "tari_wallet_grpc_client",
  "tempfile",
  "thiserror",
@@ -5780,6 +6065,55 @@ dependencies = [
 ]
 
 [[package]]
+name = "tari_wallet"
+version = "0.38.5"
+dependencies = [
+ "argon2 0.2.4",
+ "async-trait",
+ "bincode",
+ "blake2 0.9.2",
+ "chacha20poly1305",
+ "chrono",
+ "clear_on_drop",
+ "derivative",
+ "diesel",
+ "diesel_migrations",
+ "digest 0.9.0",
+ "fs2",
+ "futures 0.3.24",
+ "itertools",
+ "libsqlite3-sys",
+ "lmdb-zero",
+ "log",
+ "log4rs",
+ "prost",
+ "rand 0.7.3",
+ "serde",
+ "serde_json",
+ "sha2 0.9.9",
+ "strum",
+ "strum_macros",
+ "tari_common",
+ "tari_common_sqlite",
+ "tari_common_types 0.38.5",
+ "tari_comms",
+ "tari_comms_dht",
+ "tari_core",
+ "tari_crypto",
+ "tari_key_manager",
+ "tari_p2p",
+ "tari_script",
+ "tari_service_framework",
+ "tari_shutdown 0.38.5",
+ "tari_storage",
+ "tari_utilities",
+ "tempfile",
+ "thiserror",
+ "tokio",
+ "tower",
+]
+
+[[package]]
 name = "tari_wallet_grpc_client"
 version = "0.1.0"
 dependencies = [
@@ -5798,7 +6132,7 @@ dependencies = [
  "cfg-if 1.0.0",
  "fastrand",
  "libc",
- "redox_syscall",
+ "redox_syscall 0.2.16",
  "remove_dir_all",
  "winapi",
 ]
@@ -5873,7 +6207,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "5fdfe0627923f7411a43ec9ec9c39c3a9b4151be313e0922042581fb6c9b717f"
 dependencies = [
  "libc",
- "redox_syscall",
+ "redox_syscall 0.2.16",
  "winapi",
 ]
 
@@ -5963,7 +6297,7 @@ dependencies = [
  "bytes 1.2.1",
  "libc",
  "memchr",
- "mio",
+ "mio 0.8.4",
  "num_cpus",
  "pin-project-lite",
  "signal-hook-registry",
@@ -6338,6 +6672,19 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "283d3b89e1368717881a9d51dad843cc435380d8109c9e47d38780a324698d8b"
 dependencies = [
  "cfg-if 0.1.10",
+]
+
+[[package]]
+name = "tui"
+version = "0.16.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "39c8ce4e27049eed97cfa363a5048b09d995e209994634a0efc26a14ab6c0c23"
+dependencies = [
+ "bitflags 1.3.2",
+ "cassowary",
+ "crossterm 0.20.0",
+ "unicode-segmentation",
+ "unicode-width",
 ]
 
 [[package]]
@@ -7138,10 +7485,10 @@ version = "0.10.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e5d9ba232399af1783a58d8eb26f6b5006fbefe2dc9ef36bd283324792d03ea5"
 dependencies = [
- "futures",
+ "futures 0.3.24",
  "log",
  "nohash-hasher",
- "parking_lot",
+ "parking_lot 0.12.1",
  "rand 0.8.5",
  "static_assertions",
 ]

@@ -4,7 +4,7 @@ use std::convert::Infallible;
 
 use async_trait::async_trait;
 use cucumber::{given, then, WorldInit};
-use utils::validator_node::spawn_validator_node;
+use utils::{validator_node::spawn_validator_node, wallet::spawn_wallet};
 
 use crate::utils::{base_node::spawn_base_node, validator_node::send_vn_json_rpc_request};
 
@@ -28,9 +28,15 @@ async fn start_base_node(_world: &mut TariWorld, _bn_name: String) {
     spawn_base_node();
 }
 
-#[given(expr = "a validator node {word} connected to base node {word}")]
-async fn start_validator_node(_world: &mut TariWorld, _vn_name: String, _bn_name: String) {
-    // TODO: pass base node grpc port param
+#[given(expr = "a wallet {word} connected to base node {word}")]
+async fn start_wallet(_world: &mut TariWorld, _wallet_name: String, _bn_name: String) {
+    // TODO: pass grpc port param
+    spawn_wallet();
+}
+
+#[given(expr = "a validator node {word} connected to base node {word} and wallet {word}")]
+async fn start_validator_node(_world: &mut TariWorld, _vn_name: String, _bn_name: String, _wallet_name: String) {
+    // TODO: pass base node and wallet grpc port param
     spawn_validator_node();
 }
 
