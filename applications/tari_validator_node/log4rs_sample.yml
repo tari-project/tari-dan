@@ -138,3 +138,8 @@ loggers:
       - other
       - stdout
     additive: false
+  wasmer_compiler_cranelift:
+    level: warn
+    appenders:
+      - other
+    additive: false
