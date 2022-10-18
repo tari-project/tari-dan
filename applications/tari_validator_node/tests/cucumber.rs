@@ -1,16 +1,22 @@
 mod utils;
 
-use std::convert::Infallible;
+use std::{collections::HashMap, convert::Infallible};
 
 use async_trait::async_trait;
 use cucumber::{given, then, WorldInit};
 use utils::{validator_node::spawn_validator_node, wallet::spawn_wallet};
 
-use crate::utils::{base_node::spawn_base_node, validator_node::send_vn_json_rpc_request};
+use crate::utils::{
+    base_node::{spawn_base_node, BaseNodeProcess},
+    validator_node::{send_vn_json_rpc_request, ValidatorNodeProcess},
+    wallet::WalletProcess,
+};
 
 #[derive(Debug, Default, WorldInit)]
 pub struct TariWorld {
-    // TODO: add VNS, base nodes, wallets, etc
+    base_nodes: HashMap<String, BaseNodeProcess>,
+    wallets: HashMap<String, WalletProcess>,
+    validator_nodes: HashMap<String, ValidatorNodeProcess>,
 }
 
 #[async_trait(?Send)]
@@ -18,26 +24,27 @@ impl cucumber::World for TariWorld {
     type Error = Infallible;
 
     async fn new() -> Result<Self, Self::Error> {
-        Ok(Self {})
+        Ok(Self {
+            base_nodes: HashMap::new(),
+            wallets: HashMap::new(),
+            validator_nodes: HashMap::new(),
+        })
     }
 }
 
 #[given(expr = "a base node {word}")]
-async fn start_base_node(_world: &mut TariWorld, _bn_name: String) {
-    // TODO: pass grpc port param
-    spawn_base_node();
+async fn start_base_node(world: &mut TariWorld, bn_name: String) {
+    spawn_base_node(world, bn_name);
 }
 
 #[given(expr = "a wallet {word} connected to base node {word}")]
-async fn start_wallet(_world: &mut TariWorld, _wallet_name: String, _bn_name: String) {
-    // TODO: pass grpc port param
-    spawn_wallet();
+async fn start_wallet(world: &mut TariWorld, wallet_name: String, bn_name: String) {
+    spawn_wallet(world, wallet_name, bn_name);
 }
 
 #[given(expr = "a validator node {word} connected to base node {word} and wallet {word}")]
-async fn start_validator_node(_world: &mut TariWorld, _vn_name: String, _bn_name: String, _wallet_name: String) {
-    // TODO: pass base node and wallet grpc port param
-    spawn_validator_node();
+async fn start_validator_node(world: &mut TariWorld, vn_name: String, bn_name: String, wallet_name: String) {
+    spawn_validator_node(world, vn_name, bn_name, wallet_name);
 }
 
 #[then(expr = "the validator node {word} returns a valid identity")]

@@ -1,4 +1,8 @@
-use std::{str::FromStr, thread, time::Duration};
+use std::{
+    str::FromStr,
+    thread::{self, JoinHandle},
+    time::Duration,
+};
 
 use tari_common::configuration::CommonConfig;
 use tari_comms::multiaddr::Multiaddr;
@@ -9,8 +13,28 @@ use tari_wallet::WalletConfig;
 use tempfile::tempdir;
 use tokio::runtime;
 
-pub fn spawn_wallet() {
-    thread::spawn(move || {
+use crate::TariWorld;
+
+#[derive(Debug)]
+pub struct WalletProcess {
+    pub name: String,
+    pub grpc_port: u64,
+    pub handle: JoinHandle<()>,
+}
+
+pub fn spawn_wallet(world: &mut TariWorld, wallet_name: String, base_node_name: String) {
+    // TODO: use different ports on each spawned wallet
+    let grpc_port = 18153;
+    let base_node_public_key = world
+        .base_nodes
+        .get(&base_node_name)
+        .unwrap()
+        .identity
+        .public_key()
+        .clone();
+    let base_node_grpc_port = world.base_nodes.get(&base_node_name).unwrap().grpc_port;
+
+    let handle = thread::spawn(move || {
         let mut wallet_config = tari_console_wallet::ApplicationConfig {
             common: CommonConfig::default(),
             auto_update: AutoUpdateConfig::default(),
@@ -25,12 +49,16 @@ pub fn spawn_wallet() {
         wallet_config.wallet.password = Some("test".into());
         wallet_config.wallet.use_libtor = true;
         wallet_config.wallet.grpc_enabled = true;
-        wallet_config.wallet.grpc_address = Some(Multiaddr::from_str("/ip4/127.0.0.1/tcp/18153").unwrap());
+        wallet_config.wallet.grpc_address =
+            Some(Multiaddr::from_str(&format!("/ip4/127.0.0.1/tcp/{}", grpc_port)).unwrap());
         wallet_config.wallet.data_dir = temp_dir.path().to_path_buf().join("data/wallet");
         wallet_config.wallet.db_file = temp_dir.path().to_path_buf().join("db/console_wallet.db");
         wallet_config.wallet.p2p.datastore_path = temp_dir.path().to_path_buf().join("peer_db/wallet");
         wallet_config.wallet.p2p.dht = DhtConfig::default_local_test();
-        wallet_config.wallet.custom_base_node = Some("/ip4/127.0.0.1/tcp/18152".to_string());
+        wallet_config.wallet.custom_base_node = Some(format!(
+            "{}::/ip4/127.0.0.1/tcp/{}",
+            base_node_public_key, base_node_grpc_port
+        ));
 
         let mut builder = runtime::Builder::new_multi_thread();
         let rt = builder.enable_all().build().unwrap();
@@ -42,7 +70,15 @@ pub fn spawn_wallet() {
         }
     });
 
+    // make the new wallet able to be referenced by other processes
+    let wallet_process = WalletProcess {
+        name: wallet_name.clone(),
+        grpc_port,
+        handle,
+    };
+    world.wallets.insert(wallet_name, wallet_process);
+
     // We need to give it time for the wallet to startup
     // TODO: it would be better to scan the wallet to detect when it has started
-    thread::sleep(Duration::from_secs(2));
+    thread::sleep(Duration::from_secs(5));
 }
