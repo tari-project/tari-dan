@@ -84,7 +84,11 @@ impl GrpcWalletClient {
             message: "Registering VN".to_string(),
         };
         let result = inner.register_validator_node(request).await?.into_inner();
-        Ok(result)
+
+        match result.is_success {
+            true => Ok(result),
+            false => Err(DigitalAssetError::NodeRegistration(result.failure_message)),
+        }
     }
 
     pub async fn register_template(

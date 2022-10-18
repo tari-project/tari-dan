@@ -23,9 +23,10 @@
 use std::{
     net::{IpAddr, Ipv4Addr, SocketAddr},
     sync::Arc,
+    time::Duration,
 };
 
-use log::{error, info};
+use log::{error, info, warn};
 use tari_app_grpc::tari_rpc::RegisterValidatorNodeResponse;
 use tari_common::configuration::bootstrap::{grpc_default_port, ApplicationType};
 use tari_comms::NodeIdentity;
@@ -41,6 +42,8 @@ use tokio::{task, time};
 use crate::{p2p::services::epoch_manager::handle::EpochManagerHandle, ApplicationConfig, GrpcWalletClient};
 
 const LOG_TARGET: &str = "tari::validator_node::app";
+const MAX_REGISTRATION_ATTEMPTS: u8 = 3;
+const REGISTRATION_COOLDOWN_IN_MS: u32 = 500;
 
 #[derive(Debug, thiserror::Error)]
 pub enum AutoRegistrationError {
@@ -61,20 +64,42 @@ pub async fn register(
     node_identity: Arc<NodeIdentity>,
     epoch_manager: &EpochManagerHandle,
 ) -> Result<RegisterValidatorNodeResponse, AutoRegistrationError> {
-    match wallet_client.register_validator_node(&node_identity).await {
-        Ok(resp) => {
-            let tx_id = resp.transaction_id;
-            info!(
-                target: LOG_TARGET,
-                "✅ Validator node registration submitted (tx_id: {})", tx_id
-            );
+    let mut attempts = 1;
 
-            let current_epoch = epoch_manager.current_epoch().await?;
-            epoch_manager.update_next_registration_epoch(current_epoch).await?;
+    loop {
+        match wallet_client.register_validator_node(&node_identity).await {
+            Ok(resp) => {
+                let tx_id = resp.transaction_id;
+                info!(
+                    target: LOG_TARGET,
+                    "✅ Validator node registration submitted (tx_id: {})", tx_id
+                );
 
-            Ok(resp)
-        },
-        Err(e) => Err(AutoRegistrationError::RegistrationFailed { details: e.to_string() }),
+                let current_epoch = epoch_manager.current_epoch().await?;
+                epoch_manager.update_next_registration_epoch(current_epoch).await?;
+
+                return Ok(resp);
+            },
+            Err(e) => {
+                warn!(
+                    target: LOG_TARGET,
+                    "❌ Validator node registration failed with error {}. Trying again, attempt {} of 3.",
+                    e.to_string(),
+                    attempts
+                );
+
+                if attempts >= MAX_REGISTRATION_ATTEMPTS {
+                    return Err(AutoRegistrationError::RegistrationFailed { details: e.to_string() });
+                }
+
+                _ = time::sleep(Duration::from_millis(
+                    (REGISTRATION_COOLDOWN_IN_MS * attempts as u32) as u64,
+                ))
+                .await;
+
+                attempts += 1;
+            },
+        }
     }
 }
 

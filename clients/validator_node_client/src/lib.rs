@@ -58,7 +58,7 @@ impl ValidatorNodeClient {
         let val: json::Value = self.send_request("register_validator_node", json!({})).await?;
         let tx_id = val["transaction_id"]
             .as_u64()
-            .ok_or_else(|| anyhow!("Wallet did not return tx_id"))?;
+            .ok_or_else(|| anyhow!("Wallet did not return tx_id {}", val["message"].clone()))?;
         Ok(tx_id)
     }
 
