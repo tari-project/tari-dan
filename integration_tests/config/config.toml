@@ -349,13 +349,6 @@ monerod_use_auth = false
 
 [validator_node]
 
-# If set to false, there will be no scanning at all.
-scan_for_assets = true
-# How often do we want to scan the base layer for changes.
-new_asset_scanning_interval = 10
-# If set then only the specific assets will be checked.
-# assets_allow_list = ["<pubkey>"]
-
 ########################################################################################################################
 #                                                                                                                      #
 #                                          Collectibles Configuration Options                                          #

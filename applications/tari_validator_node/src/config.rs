@@ -70,8 +70,6 @@ pub struct ValidatorNodeConfig {
     pub tor_identity_file: PathBuf,
     /// The node's publicly-accessible hostname
     pub public_address: Option<Multiaddr>,
-    /// The asset worker will adhere to this phased timeout for the asset
-    pub phase_timeout: u64,
     /// The Tari base node's GRPC address
     pub base_node_grpc_address: SocketAddr,
     /// The Tari console wallet's GRPC address
@@ -81,24 +79,10 @@ pub struct ValidatorNodeConfig {
     /// How often do we want to scan the base layer for changes
     #[serde(with = "serializers::seconds")]
     pub base_layer_scanning_interval: Duration,
-    /// If set to true, it will constantly scan for new assets on the base layer
-    pub scan_for_assets: bool,
-    /// How often do we want to scan the base layer for changes
-    pub new_asset_scanning_interval: u64,
-    /// If set then only the specific assets will be checked
-    pub assets_allow_list: Option<Vec<String>>,
     /// The relative path to store persistent data
     pub data_dir: PathBuf,
     /// The p2p configuration settings
     pub p2p: P2pConfig,
-    /// The constitution will auto accept contracts if true
-    pub constitution_auto_accept: bool,
-    /// Constitution confirmation time in block height
-    pub constitution_management_confirmation_time: u64,
-    /// Constitution polling interval in block height
-    pub constitution_management_polling_interval: u64,
-    /// Constitution polling interval in time (seconds)
-    pub constitution_management_polling_interval_in_seconds: u64,
     /// GRPC address of the validator node  application
     pub grpc_address: Option<Multiaddr>,
     /// JSON-RPC address of the validator node  application
@@ -150,16 +134,6 @@ impl Default for ValidatorNodeConfig {
             json_rpc_address: Some("127.0.0.1:18200".parse().unwrap()),
             http_ui_address: Some("127.0.0.1:5000".parse().unwrap()),
             auto_register: false,
-
-            // TODO: Deprecated - need to update tari_common to remove these
-            phase_timeout: 30,
-            scan_for_assets: false,
-            new_asset_scanning_interval: 10,
-            assets_allow_list: None,
-            constitution_auto_accept: false,
-            constitution_management_confirmation_time: 20,
-            constitution_management_polling_interval: 120,
-            constitution_management_polling_interval_in_seconds: 60,
         }
     }
 }
