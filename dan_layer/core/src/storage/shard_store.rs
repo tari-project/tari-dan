@@ -100,11 +100,7 @@ pub trait ShardStoreTransaction<TAddr: NodeAddressable, TPayload: Payload> {
         node: &HotStuffTreeNode<TAddr>,
     ) -> Result<(), Self::Error>;
     fn get_state_inventory(&self, start_shard: ShardId, end_shard: ShardId) -> Result<Vec<ShardId>, Self::Error>;
-    fn get_substates_changes_by_range(
-        &self,
-        start_shard: ShardId,
-        end_shard: ShardId,
-    ) -> Result<Vec<SubstateState>, Self::Error>;
+    fn get_substate_states(&self, shards: &[ShardId]) -> Result<Vec<SubstateState>, Self::Error>;
     fn get_last_voted_height(&self, shard: ShardId) -> Result<NodeHeight, Self::Error>;
     fn set_last_voted_height(&mut self, shard: ShardId, height: NodeHeight) -> Result<(), Self::Error>;
     fn get_leader_proposals(

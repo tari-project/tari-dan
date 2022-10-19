@@ -48,11 +48,8 @@ message GetPeersResponse {
 }
 
 message VNStateSyncRequest {
-  // Range
-  tari.dan.common.ShardId start_shard_id = 1;
-  tari.dan.common.ShardId end_shard_id = 2;
   // Specific shard ids
-  repeated tari.dan.common.ShardId missing_shard_state_ids = 3;
+  repeated tari.dan.common.ShardId missing_shard_state_ids = 1;
 }
 
 message VNStateSyncResponse {

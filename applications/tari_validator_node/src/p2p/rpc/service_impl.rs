@@ -177,19 +177,20 @@ where TPeerProvider: PeerProvider + Clone + Send + Sync + 'static
     ) -> Result<Streaming<VnStateSyncResponse>, RpcStatus> {
         let (tx, rx) = mpsc::channel(100);
         let msg = request.into_message();
-        let start_shard_id = msg
-            .start_shard_id
-            .and_then(|s| ShardId::try_from(s).ok())
-            .ok_or_else(|| RpcStatus::bad_request("Invalid gRPC request: start_shard_id not provided"))?;
-        let end_shard_id = msg
-            .end_shard_id
-            .and_then(|s| ShardId::try_from(s).ok())
-            .ok_or_else(|| RpcStatus::bad_request("Invalid gRPC request: end_shard_id not provided"))?;
 
-        let missing_shard_ids = msg.missing_shard_state_ids;
+        let missing_shard_ids = msg
+            .missing_shard_state_ids
+            .iter()
+            .map(|s| {
+                ShardId::try_from(s.bytes.as_slice())
+                    .expect("Invalid gRPC request: failed to parse shard id's request data")
+            })
+            .collect::<Vec<ShardId>>();
 
         if missing_shard_ids.is_empty() {
-            return Err(RpcStatus::bad_request("explain why bad"));
+            return Err(RpcStatus::bad_request(
+                "Invalid gRPC request: request should contain at least one shard id available",
+            ));
         }
 
         let shard_store = self.shard_state_store.clone();
@@ -202,10 +203,7 @@ where TPeerProvider: PeerProvider + Clone + Send + Sync + 'static
 
         task::spawn(async move {
             loop {
-                let substate_states = store_tx
-                    .lock()
-                    .await
-                    .get_substates_changes_by_range(start_shard_id, end_shard_id);
+                let substate_states = store_tx.lock().await.get_substate_states(missing_shard_ids.as_slice());
 
                 let states = match substate_states {
                     Ok(s) => s,
@@ -218,11 +216,11 @@ where TPeerProvider: PeerProvider + Clone + Send + Sync + 'static
 
                 // select data from db where shard_id <= end_shard_id and shard_id >= start_shard_id
                 for state in states {
-                    // if send returns error, the client has closed the connection, so we break the loop
                     let substate_state = proto::common::SubstateState::from(state);
                     let response = proto::network::VnStateSyncResponse {
                         substate_state: Some(substate_state),
                     };
+                    // if send returns error, the client has closed the connection, so we break the loop
                     if tx.send(Ok(response)).await.is_err() {
                         break;
                     }

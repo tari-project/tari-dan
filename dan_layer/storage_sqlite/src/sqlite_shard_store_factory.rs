@@ -744,19 +744,15 @@ impl ShardStoreTransaction<PublicKey, TariDanPayload> for SqliteShardStoreTransa
         }
     }
 
-    fn get_substates_changes_by_range(
-        &self,
-        start_shard: ShardId,
-        end_shard: ShardId,
-    ) -> Result<Vec<SubstateState>, Self::Error> {
+    fn get_substate_states(&self, shards: &[ShardId]) -> Result<Vec<SubstateState>, Self::Error> {
         use crate::schema::substates::shard_id;
+        let shards = shards
+            .iter()
+            .map(|sh| Vec::from(sh.as_bytes()))
+            .collect::<Vec<Vec<u8>>>();
 
         let substate_states: Option<Vec<crate::models::substate::Substate>> = substates
-            .filter(
-                shard_id
-                    .gt(Vec::from(start_shard.as_bytes()))
-                    .and(shard_id.lt(Vec::from(end_shard.as_bytes()))),
-            )
+            .filter(shard_id.eq_any(shards))
             .get_results(&self.connection)
             .optional()
             .map_err(|e| Self::Error::QueryError {
@@ -781,10 +777,10 @@ impl ShardStoreTransaction<PublicKey, TariDanPayload> for SqliteShardStoreTransa
                 })
                 .collect::<Result<_, _>>()
         } else {
-            return Err(Self::Error::NotFound {
+            Err(Self::Error::NotFound {
                 item: "substate".to_string(),
-                key: format!("{}, {}", start_shard, end_shard),
-            });
+                key: "No data found for available shards".to_string(),
+            })
         }
     }
 

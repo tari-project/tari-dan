@@ -350,11 +350,7 @@ impl<TAddr: NodeAddressable, TPayload: Payload> ShardStoreTransaction<TAddr, TPa
         Ok(vec![])
     }
 
-    fn get_substates_changes_by_range(
-        &self,
-        _start_shard: ShardId,
-        _end_shard: ShardId,
-    ) -> Result<Vec<SubstateState>, Self::Error> {
+    fn get_substate_states(&self, _shards: &[ShardId]) -> Result<Vec<SubstateState>, Self::Error> {
         Ok(vec![])
     }
 }
