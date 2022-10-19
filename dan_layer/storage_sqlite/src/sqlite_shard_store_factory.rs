@@ -737,10 +737,7 @@ impl ShardStoreTransaction<PublicKey, TariDanPayload> for SqliteShardStoreTransa
                 .map(|ss| deserialize::<ShardId>(ss.shard_id.as_slice()))
                 .collect::<Result<Vec<_>, _>>()
         } else {
-            return Err(Self::Error::NotFound {
-                item: "substate".to_string(),
-                key: format!("{}, {}", start_shard, end_shard),
-            });
+            Ok(vec![])
         }
     }
 
