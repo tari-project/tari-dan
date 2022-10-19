@@ -59,7 +59,7 @@ pub use node::Node;
 pub use payload::Payload;
 pub use quorum_certificate::{QuorumCertificate, QuorumDecision};
 pub use sidechain_metadata::SidechainMetadata;
-use tari_dan_common_types::{ObjectId, PayloadId, ShardId, SubstateState};
+use tari_dan_common_types::{PayloadId, ShardId, SubstateState};
 pub use tari_dan_payload::{CheckpointData, TariDanPayload};
 pub use tree_node_hash::TreeNodeHash;
 pub use validator_node::ValidatorNode;
@@ -101,7 +101,7 @@ impl From<u64> for NodeHeight {
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct ObjectPledge {
-    pub object_id: ObjectId,
+    pub shard_id: ShardId,
     pub current_state: SubstateState,
     pub pledged_to_payload: PayloadId,
     pub pledged_until: NodeHeight,
