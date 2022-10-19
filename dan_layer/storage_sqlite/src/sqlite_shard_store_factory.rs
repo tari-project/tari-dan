@@ -670,14 +670,7 @@ impl ShardStoreTransaction<PublicKey, TariDanPayload> for SqliteShardStoreTransa
                 tree_node_hash.eq(Some(node.hash().as_bytes())),
                 node_height.eq(node.height().as_u64() as i64),
                 is_draft.eq(false),
-                substate_type.eq(match st_change {
-                    SubstateState::DoesNotExist => "DOESNOTEXIST", // TODO: should we remove the chance of this
-                    // happening? It's not valid for a change to
-                    // be saved as "Does not exist"
-                    SubstateState::Up { .. } => "UP",
-                    SubstateState::Down { .. } => "DOWN",
-                }
-                .to_string()),
+                substate_type.eq(st_change.as_str().to_string()),
                 data.eq(match st_change {
                     SubstateState::DoesNotExist => None,
                     SubstateState::Up { data: d, .. } => Some(d.clone()),
@@ -691,14 +684,7 @@ impl ShardStoreTransaction<PublicKey, TariDanPayload> for SqliteShardStoreTransa
             })?;
             if rows_affected == 0 {
                 let new_row = NewSubstate {
-                    substate_type: match st_change {
-                        SubstateState::DoesNotExist => "DoesNotExist", // TODO: should we remove the chance of this
-                        // happening? It's not valid for a change to
-                        // be saved as "Does not exist"
-                        SubstateState::Up { .. } => "Up",
-                        SubstateState::Down { .. } => "Down",
-                    }
-                    .to_string(),
+                    substate_type: st_change.as_str().to_string(),
                     shard_id: shard.clone(),
                     node_height: node.height().as_u64() as i64,
                     data: match st_change {
