@@ -20,11 +20,20 @@
 //   WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //   USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use std::{fs, io, sync::Arc};
+use std::{
+    fs,
+    io,
+    net::{IpAddr, Ipv4Addr, SocketAddr},
+    sync::Arc,
+};
 
 use tari_app_utilities::{identity_management, identity_management::load_from_json};
-use tari_common::exit_codes::{ExitCode, ExitError};
+use tari_common::{
+    configuration::bootstrap::{grpc_default_port, ApplicationType},
+    exit_codes::{ExitCode, ExitError},
+};
 use tari_comms::{protocol::rpc::RpcServer, CommsNode, NodeIdentity, UnspawnedCommsNode};
+use tari_dan_core::workers::events::{EventSubscription, HotStuffEvent};
 use tari_dan_storage::global::GlobalDb;
 use tari_dan_storage_sqlite::{
     global::SqliteGlobalDbAdapter,
@@ -35,7 +44,6 @@ use tari_p2p::initialization::spawn_comms_using_transport;
 use tari_shutdown::ShutdownSignal;
 
 use crate::{
-    auto_registration,
     base_layer_scanner,
     comms,
     grpc::services::base_node_client::GrpcBaseNodeClient,
@@ -53,10 +61,11 @@ use crate::{
             networking,
             networking::NetworkingHandle,
             template_manager,
-            template_manager::TemplateManager,
+            template_manager::{TemplateManager, TemplateManagerHandle},
         },
     },
     payload_processor::TariDanPayloadProcessor,
+    registration,
     ApplicationConfig,
 };
 
@@ -76,7 +85,10 @@ pub async fn spawn_services(
     ensure_directories_exist(config)?;
 
     // Connection to base node
-    let base_node_client = GrpcBaseNodeClient::new(config.validator_node.base_node_grpc_address);
+    let base_node_client = GrpcBaseNodeClient::new(config.validator_node.base_node_grpc_address.unwrap_or_else(|| {
+        let port = grpc_default_port(ApplicationType::BaseNode, config.network);
+        SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), port)
+    }));
 
     // Initialize comms
     let (comms, message_channel) = comms::initialize(node_identity.clone(), config, shutdown.clone()).await?;
@@ -138,7 +150,7 @@ pub async fn spawn_services(
     let payload_processor = TariDanPayloadProcessor::new(TemplateManager::new(sqlite_db));
 
     // Consensus
-    hotstuff::try_spawn(
+    let hotstuff_events = hotstuff::try_spawn(
         node_identity.clone(),
         &config.validator_node,
         outbound_messaging,
@@ -162,15 +174,15 @@ pub async fn spawn_services(
     save_identities(config, &comms)?;
 
     // Auto-registration
-    if config.validator_node.auto_register {
-        auto_registration::spawn(config.clone(), node_identity.clone(), epoch_manager.clone(), shutdown);
-    }
+    registration::spawn(config.clone(), node_identity.clone(), epoch_manager.clone(), shutdown);
 
     Ok(Services {
         comms,
         networking,
         mempool,
         epoch_manager,
+        template_manager,
+        hotstuff_events,
     })
 }
 
@@ -196,6 +208,8 @@ pub struct Services {
     pub networking: NetworkingHandle,
     pub mempool: MempoolHandle,
     pub epoch_manager: EpochManagerHandle,
+    pub template_manager: TemplateManagerHandle,
+    pub hotstuff_events: EventSubscription<HotStuffEvent>,
 }
 
 fn setup_p2p_rpc(

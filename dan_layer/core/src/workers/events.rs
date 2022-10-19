@@ -20,44 +20,35 @@
 //   WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //   USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use crate::global::GlobalDbAdapter;
+use std::collections::HashMap;
 
-pub struct MetadataDb<'a, TGlobalDbAdapter: GlobalDbAdapter> {
-    backend: &'a TGlobalDbAdapter,
-    tx: &'a TGlobalDbAdapter::DbTransaction,
-}
+use tari_dan_common_types::{ShardId, SubstateState};
+use tokio::sync::broadcast;
 
-impl<'a, TGlobalDbAdapter: GlobalDbAdapter> MetadataDb<'a, TGlobalDbAdapter> {
-    pub fn new(backend: &'a TGlobalDbAdapter, tx: &'a TGlobalDbAdapter::DbTransaction) -> Self {
-        Self { backend, tx }
+use crate::models::TreeNodeHash;
+
+/// Wraps a broadcast sender, allowing a subscription (Receiver) to be obtained but removing the ability to send an
+/// event.
+pub struct EventSubscription<T>(broadcast::Sender<T>);
+
+impl<T> EventSubscription<T> {
+    pub fn new(sender: broadcast::Sender<T>) -> Self {
+        Self(sender)
     }
 
-    pub fn set_metadata(&self, key: MetadataKey, value: &[u8]) -> Result<(), TGlobalDbAdapter::Error> {
-        self.backend.set_metadata(self.tx, key, value)?;
-        Ok(())
-    }
-
-    pub fn get_metadata(&self, key: MetadataKey) -> Result<Option<Vec<u8>>, TGlobalDbAdapter::Error> {
-        let data = self.backend.get_metadata(self.tx, &key)?;
-        Ok(data)
+    pub fn subscribe(&self) -> broadcast::Receiver<T> {
+        self.0.subscribe()
     }
 }
 
-#[derive(Debug, Clone, Copy)]
-pub enum MetadataKey {
-    BaseLayerScannerLastScannedBlockHeight,
-    BaseLayerScannerLastScannedBlockHash,
-    CurrentEpoch,
-    NextEpochRegistration,
+impl<T> Clone for EventSubscription<T> {
+    fn clone(&self) -> Self {
+        Self(self.0.clone())
+    }
 }
 
-impl MetadataKey {
-    pub fn as_key_bytes(self) -> &'static [u8] {
-        match self {
-            MetadataKey::BaseLayerScannerLastScannedBlockHash => b"base_layer_scanner.last_scanned_block_hash",
-            MetadataKey::BaseLayerScannerLastScannedBlockHeight => b"base_layer_scanner.last_scanned_block_height",
-            MetadataKey::CurrentEpoch => b"current_epoch",
-            MetadataKey::NextEpochRegistration => b"last_registered_epoch",
-        }
-    }
+#[derive(Debug, Clone)]
+pub enum HotStuffEvent {
+    OnCommit(TreeNodeHash, HashMap<ShardId, SubstateState>),
+    Failed(String),
 }

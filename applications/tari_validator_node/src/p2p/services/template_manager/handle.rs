@@ -26,7 +26,7 @@ use tari_template_lib::models::TemplateAddress;
 use tokio::sync::{mpsc, oneshot};
 
 use crate::p2p::services::template_manager::{
-    manager::Template,
+    manager::{Template, TemplateMetadata},
     service::TemplateManagerRequest,
     TemplateManagerError,
 };
@@ -58,6 +58,15 @@ impl TemplateManagerHandle {
         let (tx, rx) = oneshot::channel();
         self.request_tx
             .send(TemplateManagerRequest::GetTemplate { address, reply: tx })
+            .await
+            .map_err(|_| TemplateManagerError::SendError)?;
+        rx.await.map_err(|_| TemplateManagerError::SendError)?
+    }
+
+    pub async fn get_templates(&self, limit: usize) -> Result<Vec<TemplateMetadata>, TemplateManagerError> {
+        let (tx, rx) = oneshot::channel();
+        self.request_tx
+            .send(TemplateManagerRequest::GetTemplates { limit, reply: tx })
             .await
             .map_err(|_| TemplateManagerError::SendError)?;
         rx.await.map_err(|_| TemplateManagerError::SendError)?

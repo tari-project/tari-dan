@@ -28,7 +28,7 @@ use serde_json::json;
 pub mod types;
 use types::{SubmitTransactionRequest, TemplateRegistrationRequest, TemplateRegistrationResponse};
 
-use crate::types::SubmitTransactionResponse;
+use crate::types::{GetTemplatesRequest, GetTemplatesResponse, SubmitTransactionResponse};
 
 #[derive(Debug, Clone)]
 pub struct ValidatorNodeClient {
@@ -58,7 +58,7 @@ impl ValidatorNodeClient {
         let val: json::Value = self.send_request("register_validator_node", json!({})).await?;
         let tx_id = val["transaction_id"]
             .as_u64()
-            .ok_or_else(|| anyhow!("Wallet did not return tx_id"))?;
+            .ok_or_else(|| anyhow!("Wallet did not return tx_id {}", val["message"].clone()))?;
         Ok(tx_id)
     }
 
@@ -67,6 +67,13 @@ impl ValidatorNodeClient {
         request: TemplateRegistrationRequest,
     ) -> Result<TemplateRegistrationResponse, anyhow::Error> {
         self.send_request("register_template", request).await
+    }
+
+    pub async fn get_active_templates(
+        &mut self,
+        request: GetTemplatesRequest,
+    ) -> Result<GetTemplatesResponse, anyhow::Error> {
+        self.send_request("get_templates", request).await
     }
 
     pub async fn submit_transaction(

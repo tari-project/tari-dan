@@ -23,13 +23,7 @@
 use tari_common_types::types::PublicKey;
 use tari_dan_core::{
     models::{domain_events::ConsensusWorkerDomainEvent, TariDanPayload},
-    services::{
-        mempool::service::MempoolServiceHandle,
-        ConcreteAssetProxy,
-        LoggingEventsPublisher,
-        NodeIdentitySigningService,
-        ServiceSpecification,
-    },
+    services::{LoggingEventsPublisher, NodeIdentitySigningService, ServiceSpecification},
 };
 use tari_dan_storage_sqlite::{global::SqliteGlobalDbAdapter, SqliteDbFactory};
 
@@ -49,15 +43,11 @@ pub struct DefaultServiceSpecification;
 
 impl ServiceSpecification for DefaultServiceSpecification {
     type Addr = PublicKey;
-    type AssetProxy = ConcreteAssetProxy<Self>;
     type BaseNodeClient = GrpcBaseNodeClient;
     type DbFactory = SqliteDbFactory;
     type EventsPublisher = LoggingEventsPublisher<ConsensusWorkerDomainEvent>;
     type GlobalDbAdapter = SqliteGlobalDbAdapter;
-    // type InboundConnectionService = TariCommsInboundReceiverHandle;
-    type MempoolService = MempoolServiceHandle;
     type OutboundService = OutboundMessaging;
-    // type OutboundService = TariCommsOutboundService<Self::Payload, Self::Addr>;
     type Payload = TariDanPayload;
     type PayloadProcessor = TariDanPayloadProcessor<TemplateManager>;
     type PeerProvider = CommsPeerProvider;

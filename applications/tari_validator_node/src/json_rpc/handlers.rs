@@ -20,7 +20,7 @@
 //   WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //   USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use std::sync::Arc;
+use std::{collections::HashMap, sync::Arc, time::Duration};
 
 use axum_jrpc::{
     error::{JsonRpcError, JsonRpcErrorReason},
@@ -28,36 +28,52 @@ use axum_jrpc::{
     JsonRpcExtractor,
     JsonRpcResponse,
 };
+use log::*;
 use serde::Serialize;
 use serde_json::{self as json, json};
 use tari_comms::{multiaddr::Multiaddr, peer_manager::NodeId, types::CommsPublicKey, CommsNode, NodeIdentity};
 use tari_dan_common_types::serde_with;
-use tari_dan_core::services::{epoch_manager::EpochManager, BaseNodeClient};
+use tari_dan_core::{
+    services::{epoch_manager::EpochManager, BaseNodeClient},
+    workers::events::{EventSubscription, HotStuffEvent},
+};
 use tari_dan_engine::transaction::TransactionBuilder;
+use tari_template_lib::Hash;
 use tari_validator_node_client::types::{
     GetCommitteeRequest,
     GetShardKey,
+    GetTemplatesRequest,
+    GetTemplatesResponse,
     SubmitTransactionRequest,
     SubmitTransactionResponse,
+    TemplateMetadata,
     TemplateRegistrationRequest,
     TemplateRegistrationResponse,
 };
+use tokio::sync::{broadcast, broadcast::error::RecvError};
 
 use crate::{
     grpc::services::{base_node_client::GrpcBaseNodeClient, wallet_client::GrpcWalletClient},
     json_rpc::jrpc_errors::internal_error,
-    p2p::services::{epoch_manager::handle::EpochManagerHandle, mempool::MempoolHandle},
+    p2p::services::{
+        epoch_manager::handle::EpochManagerHandle,
+        mempool::MempoolHandle,
+        template_manager::TemplateManagerHandle,
+    },
+    registration,
     Services,
 };
 
-const _LOG_TARGET: &str = "tari::validator_node::json_rpc::handlers";
+const LOG_TARGET: &str = "tari::validator_node::json_rpc::handlers";
 
 pub struct JsonRpcHandlers {
     node_identity: Arc<NodeIdentity>,
     wallet_grpc_client: GrpcWalletClient,
     mempool: MempoolHandle,
+    template_manager: TemplateManagerHandle,
     epoch_manager: EpochManagerHandle,
     comms: CommsNode,
+    hotstuff_events: EventSubscription<HotStuffEvent>,
     base_node_client: GrpcBaseNodeClient,
 }
 
@@ -72,7 +88,9 @@ impl JsonRpcHandlers {
             wallet_grpc_client,
             mempool: services.mempool.clone(),
             epoch_manager: services.epoch_manager.clone(),
+            template_manager: services.template_manager.clone(),
             comms: services.comms.clone(),
+            hotstuff_events: services.hotstuff_events.clone(),
             base_node_client,
         }
     }
@@ -116,23 +134,27 @@ impl JsonRpcHandlers {
         // TODO: submit the transaction to the wasm engine and return the result data
         let hash = *mempool_tx.hash();
 
+        let subscription = self.hotstuff_events.subscribe();
         // Submit to mempool.
         self.mempool
             .new_transaction(mempool_tx)
             .await
             .map_err(internal_error(answer_id))?;
 
+        if transaction.wait_for_result {
+            return wait_for_result(answer_id, hash, subscription, Duration::from_secs(10)).await;
+        }
+
         Ok(JsonRpcResponse::success(answer_id, SubmitTransactionResponse {
             hash: hash.into_array().into(),
+            changes: HashMap::new(),
         }))
     }
 
     pub async fn register_validator_node(&self, value: JsonRpcExtractor) -> JrpcResult {
         let answer_id = value.get_answer_id();
 
-        let resp = self
-            .wallet_client()
-            .register_validator_node(&self.node_identity)
+        let resp = registration::register(self.wallet_client(), self.node_identity.clone(), &self.epoch_manager)
             .await
             .map_err(internal_error(answer_id))?;
 
@@ -163,10 +185,32 @@ impl JsonRpcHandlers {
             .await
             .map_err(internal_error(answer_id))?;
 
-        // TODO: add "transaction_id" to the grpc response
         Ok(JsonRpcResponse::success(answer_id, TemplateRegistrationResponse {
             template_address: resp.template_address,
             transaction_id: resp.tx_id,
+        }))
+    }
+
+    pub async fn get_templates(&self, value: JsonRpcExtractor) -> JrpcResult {
+        let answer_id = value.get_answer_id();
+        let req: GetTemplatesRequest = value.parse_params()?;
+
+        let templates = self
+            .template_manager
+            .get_templates(req.limit as usize)
+            .await
+            .map_err(internal_error(answer_id))?;
+
+        Ok(JsonRpcResponse::success(answer_id, GetTemplatesResponse {
+            templates: templates
+                .into_iter()
+                .map(|t| TemplateMetadata {
+                    address: t.address,
+                    url: t.url,
+                    binary_sha: t.binary_sha,
+                    height: t.height,
+                })
+                .collect(),
         }))
     }
 
@@ -248,4 +292,61 @@ struct GetIdentityResponse {
     node_id: NodeId,
     public_key: CommsPublicKey,
     public_address: Multiaddr,
+}
+
+async fn wait_for_result(
+    answer_id: i64,
+    hash: Hash,
+    mut subscription: broadcast::Receiver<HotStuffEvent>,
+    timeout: Duration,
+) -> JrpcResult {
+    loop {
+        match tokio::time::timeout(timeout, subscription.recv()).await {
+            Ok(res) => match res {
+                Ok(HotStuffEvent::OnCommit(_tree_node_hash, changes)) => {
+                    // TODO: How do we correlate this to our transaction?
+                    let response = SubmitTransactionResponse {
+                        hash: hash.into_array().into(),
+                        changes,
+                    };
+                    return Ok(JsonRpcResponse::success(answer_id, response));
+                },
+                Ok(HotStuffEvent::Failed(err)) => {
+                    return Err(JsonRpcResponse::error(
+                        answer_id,
+                        JsonRpcError::new(
+                            // TODO: define error code
+                            JsonRpcErrorReason::ApplicationError(1),
+                            err,
+                            json!(null),
+                        ),
+                    ));
+                },
+                Err(RecvError::Lagged(n)) => {
+                    error!(target: LOG_TARGET, "HotStuffEvent subscription lagged ({})", n);
+                },
+                Err(RecvError::Closed) => {
+                    return Err(JsonRpcResponse::error(
+                        answer_id,
+                        JsonRpcError::new(
+                            // TODO: define error code
+                            JsonRpcErrorReason::ApplicationError(1),
+                            "Failed to receive event".to_string(),
+                            json!(null),
+                        ),
+                    ));
+                },
+            },
+            Err(_) => {
+                return Err(JsonRpcResponse::error(
+                    answer_id,
+                    JsonRpcError::new(
+                        JsonRpcErrorReason::ApplicationError(2),
+                        "Timeout waiting for result".to_string(),
+                        json!(null),
+                    ),
+                ));
+            },
+        }
+    }
 }
