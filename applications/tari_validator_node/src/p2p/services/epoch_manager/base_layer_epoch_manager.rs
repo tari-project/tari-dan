@@ -110,7 +110,7 @@ impl BaseLayerEpochManager {
         db.commit(tx).map_err(|e| EpochManagerError::StorageError(e.into()))?;
         self.current_epoch = epoch;
         self.tx_events
-            .send(EpochManagerEvent::EpochChanged)
+            .send(EpochManagerEvent::EpochChanged(epoch))
             .map_err(|_| EpochManagerError::SendError)?;
 
         Ok(())

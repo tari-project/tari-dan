@@ -108,7 +108,7 @@ pub enum EpochManagerResponse {
 
 #[derive(Debug, Clone)]
 pub enum EpochManagerEvent {
-    EpochChanged,
+    EpochChanged(Epoch),
 }
 
 impl EpochManagerService {

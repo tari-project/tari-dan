@@ -139,9 +139,7 @@ async fn start(
         tokio::select! {
             Ok(event) = rx.recv() => {
                 match event {
-                    EpochManagerEvent::EpochChanged => {
-                        let current_epoch = epoch_manager.current_epoch().await?;
-
+                    EpochManagerEvent::EpochChanged(current_epoch) => {
                         if let Ok(Some(next_registration_epoch)) = epoch_manager.next_registration_epoch().await {
                             if current_epoch == next_registration_epoch {
                                 let mut wallet_client = GrpcWalletClient::new(config.validator_node.wallet_grpc_address.unwrap_or_else(|| {
