@@ -21,7 +21,7 @@
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 use std::{
-    net::{IpAddr, Ipv4Addr, SocketAddr},
+    net::SocketAddr,
     path::{Path, PathBuf},
     time::Duration,
 };
@@ -71,9 +71,9 @@ pub struct ValidatorNodeConfig {
     /// The node's publicly-accessible hostname
     pub public_address: Option<Multiaddr>,
     /// The Tari base node's GRPC address
-    pub base_node_grpc_address: SocketAddr,
+    pub base_node_grpc_address: Option<SocketAddr>,
     /// The Tari console wallet's GRPC address
-    pub wallet_grpc_address: SocketAddr,
+    pub wallet_grpc_address: Option<SocketAddr>,
     /// If set to false, there will be no base layer scanning at all
     pub scan_base_layer: bool,
     /// How often do we want to scan the base layer for changes
@@ -124,8 +124,8 @@ impl Default for ValidatorNodeConfig {
             identity_file: PathBuf::from("validator_node_id.json"),
             tor_identity_file: PathBuf::from("validator_node_tor_id.json"),
             public_address: None,
-            base_node_grpc_address: SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 18142),
-            wallet_grpc_address: SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 18143),
+            base_node_grpc_address: None,
+            wallet_grpc_address: None,
             scan_base_layer: true,
             base_layer_scanning_interval: Duration::from_secs(10),
             data_dir: PathBuf::from("data/validator_node"),
