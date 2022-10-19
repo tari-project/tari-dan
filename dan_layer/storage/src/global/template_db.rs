@@ -55,6 +55,7 @@ impl<'a, TGlobalDbAdapter: GlobalDbAdapter> TemplateDb<'a, TGlobalDbAdapter> {
 
 #[derive(Debug, Clone)]
 pub struct DbTemplate {
+    pub template_name: String,
     // TODO: change to TemplateAddress type
     pub template_address: FixedHash,
     pub url: String,
