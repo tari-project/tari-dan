@@ -24,6 +24,7 @@ use std::convert::TryInto;
 
 use tari_comms::types::CommsPublicKey;
 use tari_crypto::tari_utilities::ByteArray;
+use tokio::sync::broadcast;
 use tari_dan_common_types::{Epoch, ShardId};
 use tari_dan_core::{
     models::{Committee, ValidatorNode},
@@ -37,6 +38,7 @@ use tari_dan_storage::global::{DbValidatorNode, MetadataKey};
 use tari_dan_storage_sqlite::SqliteDbFactory;
 
 use crate::grpc::services::base_node_client::GrpcBaseNodeClient;
+use crate::p2p::services::epoch_manager::epoch_manager_service::EpochManagerEvent;
 
 // const LOG_TARGET: &str = "tari_validator_node::epoch_manager::base_layer_epoch_manager";
 
@@ -45,13 +47,15 @@ pub struct BaseLayerEpochManager {
     db_factory: SqliteDbFactory,
     pub base_node_client: GrpcBaseNodeClient,
     current_epoch: Epoch,
+    tx_events: broadcast::Sender<EpochManagerEvent>,
 }
 impl BaseLayerEpochManager {
-    pub fn new(db_factory: SqliteDbFactory, base_node_client: GrpcBaseNodeClient, _id: CommsPublicKey) -> Self {
+    pub fn new(db_factory: SqliteDbFactory, base_node_client: GrpcBaseNodeClient, _id: CommsPublicKey, tx_events: broadcast::Sender<EpochManagerEvent>) -> Self {
         Self {
             db_factory,
             base_node_client,
             current_epoch: Epoch(0),
+            tx_events,
         }
     }
 
@@ -98,6 +102,10 @@ impl BaseLayerEpochManager {
             .map_err(|e| EpochManagerError::StorageError(e.into()))?;
         db.commit(tx).map_err(|e| EpochManagerError::StorageError(e.into()))?;
         self.current_epoch = epoch;
+        self.tx_events
+            .send(EpochManagerEvent::EpochChanged)
+            .map_err(|_| EpochManagerError::SendError)?;
+
         Ok(())
     }
 

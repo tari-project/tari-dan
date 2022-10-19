@@ -124,10 +124,9 @@ impl EpochManagerService {
     ) -> JoinHandle<Result<(), EpochManagerError>> {
         tokio::spawn(async move {
             let (tx, rx) = broadcast::channel(10);
-
             EpochManagerService {
                 rx_request,
-                inner: BaseLayerEpochManager::new(db_factory, base_node_client, id),
+                inner: BaseLayerEpochManager::new(db_factory, base_node_client, id, tx.clone()),
                 notifications: (tx, rx),
             }
             .run(shutdown)
@@ -160,12 +159,6 @@ impl EpochManagerService {
             }),
             EpochManagerRequest::UpdateEpoch { height } => {
                 self.inner.update_epoch(height).await?;
-
-                self.notifications
-                    .0
-                    .send(EpochManagerEvent::EpochChanged)
-                    .map_err(|_| EpochManagerError::SendError)?;
-
                 Ok(EpochManagerResponse::UpdateEpoch)
             },
             EpochManagerRequest::NextRegistrationEpoch => Ok(EpochManagerResponse::NextRegistrationEpoch {
