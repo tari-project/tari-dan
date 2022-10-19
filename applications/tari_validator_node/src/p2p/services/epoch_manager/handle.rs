@@ -27,9 +27,13 @@ use tari_dan_core::{
     models::Committee,
     services::epoch_manager::{EpochManager, EpochManagerError, ShardCommitteeAllocation},
 };
-use tokio::sync::{mpsc::Sender, oneshot};
+use tokio::sync::{broadcast, mpsc::Sender, oneshot};
 
-use crate::p2p::services::epoch_manager::epoch_manager_service::{EpochManagerRequest, EpochManagerResponse};
+use crate::p2p::services::epoch_manager::epoch_manager_service::{
+    EpochManagerEvent,
+    EpochManagerRequest,
+    EpochManagerResponse,
+};
 
 #[derive(Clone)]
 pub struct EpochManagerHandle {
@@ -57,6 +61,40 @@ impl EpochManagerHandle {
             .map_err(|_| EpochManagerError::SendError)?;
         let _result = rx.await.map_err(|_| EpochManagerError::ReceiveError)??;
         Ok(())
+    }
+
+    pub async fn next_registration_epoch(&self) -> Result<Option<Epoch>, EpochManagerError> {
+        let (tx, rx) = oneshot::channel();
+        self.tx_request
+            .send((EpochManagerRequest::NextRegistrationEpoch, tx))
+            .await
+            .map_err(|_| EpochManagerError::SendError)?;
+        match rx.await.map_err(|_| EpochManagerError::ReceiveError)?? {
+            EpochManagerResponse::NextRegistrationEpoch { epoch } => Ok(epoch),
+            _ => Err(EpochManagerError::UnexpectedResponse),
+        }
+    }
+
+    pub async fn update_next_registration_epoch(&self, epoch: Epoch) -> Result<(), EpochManagerError> {
+        let (tx, rx) = oneshot::channel();
+        self.tx_request
+            .send((EpochManagerRequest::UpdateNextRegistrationEpoch { epoch }, tx))
+            .await
+            .map_err(|_| EpochManagerError::SendError)?;
+        let _result = rx.await.map_err(|_| EpochManagerError::ReceiveError)??;
+        Ok(())
+    }
+
+    pub async fn subscribe(&self) -> Result<broadcast::Receiver<EpochManagerEvent>, EpochManagerError> {
+        let (tx, rx) = oneshot::channel();
+        self.tx_request
+            .send((EpochManagerRequest::Subscribe, tx))
+            .await
+            .map_err(|_| EpochManagerError::SendError)?;
+        match rx.await.map_err(|_| EpochManagerError::ReceiveError)?? {
+            EpochManagerResponse::Subscribe { rx } => Ok(rx),
+            _ => Err(EpochManagerError::UnexpectedResponse),
+        }
     }
 }
 #[async_trait]

@@ -40,7 +40,6 @@ use tari_p2p::initialization::spawn_comms_using_transport;
 use tari_shutdown::ShutdownSignal;
 
 use crate::{
-    auto_registration,
     base_layer_scanner,
     comms,
     grpc::services::base_node_client::GrpcBaseNodeClient,
@@ -62,6 +61,7 @@ use crate::{
         },
     },
     payload_processor::TariDanPayloadProcessor,
+    registration,
     ApplicationConfig,
 };
 
@@ -168,9 +168,7 @@ pub async fn spawn_services(
     save_identities(config, &comms)?;
 
     // Auto-registration
-    if config.validator_node.auto_register {
-        auto_registration::spawn(config.clone(), node_identity.clone(), epoch_manager.clone(), shutdown);
-    }
+    registration::spawn(config.clone(), node_identity.clone(), epoch_manager.clone(), shutdown);
 
     Ok(Services {
         comms,

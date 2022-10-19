@@ -20,7 +20,6 @@
 // WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 // USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-mod auto_registration;
 mod base_layer_scanner;
 mod bootstrap;
 mod cli;
@@ -33,6 +32,7 @@ mod http_ui;
 mod json_rpc;
 mod p2p;
 mod payload_processor;
+mod registration;
 mod template_registration_signing;
 mod validator_node_registration_signing;
 

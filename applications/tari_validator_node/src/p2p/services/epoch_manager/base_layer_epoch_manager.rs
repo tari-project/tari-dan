@@ -35,8 +35,12 @@ use tari_dan_core::{
 };
 use tari_dan_storage::global::{DbValidatorNode, MetadataKey};
 use tari_dan_storage_sqlite::SqliteDbFactory;
+use tokio::sync::broadcast;
 
-use crate::grpc::services::base_node_client::GrpcBaseNodeClient;
+use crate::{
+    grpc::services::base_node_client::GrpcBaseNodeClient,
+    p2p::services::epoch_manager::epoch_manager_service::EpochManagerEvent,
+};
 
 // const LOG_TARGET: &str = "tari_validator_node::epoch_manager::base_layer_epoch_manager";
 
@@ -45,13 +49,20 @@ pub struct BaseLayerEpochManager {
     db_factory: SqliteDbFactory,
     pub base_node_client: GrpcBaseNodeClient,
     current_epoch: Epoch,
+    tx_events: broadcast::Sender<EpochManagerEvent>,
 }
 impl BaseLayerEpochManager {
-    pub fn new(db_factory: SqliteDbFactory, base_node_client: GrpcBaseNodeClient, _id: CommsPublicKey) -> Self {
+    pub fn new(
+        db_factory: SqliteDbFactory,
+        base_node_client: GrpcBaseNodeClient,
+        _id: CommsPublicKey,
+        tx_events: broadcast::Sender<EpochManagerEvent>,
+    ) -> Self {
         Self {
             db_factory,
             base_node_client,
             current_epoch: Epoch(0),
+            tx_events,
         }
     }
 
@@ -98,6 +109,10 @@ impl BaseLayerEpochManager {
             .map_err(|e| EpochManagerError::StorageError(e.into()))?;
         db.commit(tx).map_err(|e| EpochManagerError::StorageError(e.into()))?;
         self.current_epoch = epoch;
+        self.tx_events
+            .send(EpochManagerEvent::EpochChanged(epoch))
+            .map_err(|_| EpochManagerError::SendError)?;
+
         Ok(())
     }
 
@@ -132,6 +147,37 @@ impl BaseLayerEpochManager {
         //     .height_of_longest_chain;
         // Epoch(tip - 100)
         self.current_epoch
+    }
+
+    pub async fn next_registration_epoch(&self) -> Result<Option<Epoch>, EpochManagerError> {
+        let db = self.db_factory.get_or_create_global_db()?;
+        let tx = db
+            .create_transaction()
+            .map_err(|e| EpochManagerError::StorageError(e.into()))?;
+        let metadata = db.metadata(&tx);
+        Ok(metadata
+            .get_metadata(MetadataKey::NextEpochRegistration)
+            .map_err(|e| EpochManagerError::StorageError(e.into()))?
+            .map(|v| {
+                let v2 = [v[0], v[1], v[2], v[3], v[4], v[5], v[6], v[7]];
+                Epoch(u64::from_le_bytes(v2))
+            }))
+    }
+
+    pub async fn update_next_registration_epoch(&self, epoch: Epoch) -> Result<(), EpochManagerError> {
+        let db = self.db_factory.get_or_create_global_db()?;
+        let tx = db
+            .create_transaction()
+            .map_err(|e| EpochManagerError::StorageError(e.into()))?;
+        let metadata = db.metadata(&tx);
+        metadata
+            .set_metadata(
+                MetadataKey::NextEpochRegistration,
+                &Epoch(epoch.as_u64() + 9).to_le_bytes(),
+            )
+            .map_err(|e| EpochManagerError::StorageError(e.into()))?;
+        db.commit(tx).map_err(|e| EpochManagerError::StorageError(e.into()))?;
+        Ok(())
     }
 
     #[allow(dead_code)]

@@ -29,7 +29,7 @@ use tari_dan_core::{
 use tari_dan_storage_sqlite::SqliteDbFactory;
 use tari_shutdown::ShutdownSignal;
 use tokio::{
-    sync::{mpsc::Receiver, oneshot},
+    sync::{broadcast, mpsc::Receiver, oneshot},
     task::JoinHandle,
 };
 
@@ -45,6 +45,10 @@ pub struct EpochManagerService {
         oneshot::Sender<Result<EpochManagerResponse, EpochManagerError>>,
     )>,
     inner: BaseLayerEpochManager,
+    events: (
+        broadcast::Sender<EpochManagerEvent>,
+        broadcast::Receiver<EpochManagerEvent>,
+    ),
 }
 
 #[derive(Debug, Clone)]
@@ -52,6 +56,10 @@ pub enum EpochManagerRequest {
     CurrentEpoch,
     UpdateEpoch {
         height: u64,
+    },
+    NextRegistrationEpoch,
+    UpdateNextRegistrationEpoch {
+        epoch: Epoch,
     },
     IsEpochValid {
         epoch: Epoch,
@@ -69,6 +77,7 @@ pub enum EpochManagerRequest {
         for_addr: CommsPublicKey,
         available_shards: Vec<ShardId>,
     },
+    Subscribe,
 }
 
 pub enum EpochManagerResponse {
@@ -76,6 +85,10 @@ pub enum EpochManagerResponse {
         epoch: Epoch,
     },
     UpdateEpoch,
+    NextRegistrationEpoch {
+        epoch: Option<Epoch>,
+    },
+    UpdateNextRegistrationEpoch,
     IsEpochValid {
         is_valid: bool,
     },
@@ -88,6 +101,14 @@ pub enum EpochManagerResponse {
     FilterToLocalShards {
         shards: Vec<ShardId>,
     },
+    Subscribe {
+        rx: broadcast::Receiver<EpochManagerEvent>,
+    },
+}
+
+#[derive(Debug, Clone)]
+pub enum EpochManagerEvent {
+    EpochChanged(Epoch),
 }
 
 impl EpochManagerService {
@@ -102,9 +123,11 @@ impl EpochManagerService {
         base_node_client: GrpcBaseNodeClient,
     ) -> JoinHandle<Result<(), EpochManagerError>> {
         tokio::spawn(async move {
+            let (tx, rx) = broadcast::channel(10);
             EpochManagerService {
                 rx_request,
-                inner: BaseLayerEpochManager::new(db_factory, base_node_client, id),
+                inner: BaseLayerEpochManager::new(db_factory, base_node_client, id, tx.clone()),
+                events: (tx, rx),
             }
             .run(shutdown)
             .await
@@ -138,6 +161,13 @@ impl EpochManagerService {
                 self.inner.update_epoch(height).await?;
                 Ok(EpochManagerResponse::UpdateEpoch)
             },
+            EpochManagerRequest::NextRegistrationEpoch => Ok(EpochManagerResponse::NextRegistrationEpoch {
+                epoch: self.inner.next_registration_epoch().await?,
+            }),
+            EpochManagerRequest::UpdateNextRegistrationEpoch { epoch } => {
+                self.inner.update_next_registration_epoch(epoch).await?;
+                Ok(EpochManagerResponse::UpdateNextRegistrationEpoch)
+            },
             EpochManagerRequest::IsEpochValid { epoch } => {
                 let is_valid = self.inner.is_epoch_valid(epoch);
                 Ok(EpochManagerResponse::IsEpochValid { is_valid })
@@ -158,6 +188,9 @@ impl EpochManagerService {
                 let shards = self.inner.filter_to_local_shards(epoch, &for_addr, &available_shards)?;
                 Ok(EpochManagerResponse::FilterToLocalShards { shards })
             },
+            EpochManagerRequest::Subscribe => Ok(EpochManagerResponse::Subscribe {
+                rx: self.events.1.resubscribe(),
+            }),
         }
     }
 }
