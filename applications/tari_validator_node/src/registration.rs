@@ -39,7 +39,11 @@ use tari_shutdown::ShutdownSignal;
 use tari_wallet_grpc_client::WalletClientError;
 use tokio::{task, time};
 
-use crate::{p2p::services::epoch_manager::handle::EpochManagerHandle, ApplicationConfig, GrpcWalletClient};
+use crate::{
+    p2p::services::epoch_manager::{epoch_manager_service::EpochManagerEvent, handle::EpochManagerHandle},
+    ApplicationConfig,
+    GrpcWalletClient,
+};
 
 const LOG_TARGET: &str = "tari::validator_node::app";
 const MAX_REGISTRATION_ATTEMPTS: u8 = 8;
@@ -129,21 +133,25 @@ async fn start(
     epoch_manager: EpochManagerHandle,
     mut shutdown: ShutdownSignal,
 ) -> Result<(), AutoRegistrationError> {
-    let mut wallet_client = GrpcWalletClient::new(config.validator_node.wallet_grpc_address.unwrap_or_else(|| {
-        let port = grpc_default_port(ApplicationType::ConsoleWallet, config.network);
-        SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), port)
-    }));
-    let mut current_epoch = epoch_manager.current_epoch().await?;
+    let mut rx = epoch_manager.subscribe().await?;
 
     loop {
         tokio::select! {
-            _ = time::sleep(config.validator_node.base_layer_scanning_interval) => {
-                let current_epoch = epoch_manager.current_epoch().await?;
+            Ok(event) = rx.recv() => {
+                match event {
+                    EpochManagerEvent::EpochChanged => {
+                        let current_epoch = epoch_manager.current_epoch().await?;
 
-                if let Ok(Some(next_registration_epoch)) = epoch_manager.next_registration_epoch().await {
-                    if current_epoch == next_registration_epoch {
-                        let wallet_client = GrpcWalletClient::new(config.validator_node.wallet_grpc_address);
-                        register(wallet_client, node_identity.clone(), &epoch_manager).await?;
+                        if let Ok(Some(next_registration_epoch)) = epoch_manager.next_registration_epoch().await {
+                            if current_epoch == next_registration_epoch {
+                                let mut wallet_client = GrpcWalletClient::new(config.validator_node.wallet_grpc_address.unwrap_or_else(|| {
+                                    let port = grpc_default_port(ApplicationType::ConsoleWallet, config.network);
+                                    SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), port)
+                                }));
+
+                                register(wallet_client, node_identity.clone(), &epoch_manager).await?;
+                            }
+                        }
                     }
                 }
             },

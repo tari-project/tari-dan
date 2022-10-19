@@ -29,7 +29,7 @@ use tari_dan_core::{
 use tari_dan_storage_sqlite::SqliteDbFactory;
 use tari_shutdown::ShutdownSignal;
 use tokio::{
-    sync::{mpsc::Receiver, oneshot},
+    sync::{broadcast, mpsc::Receiver, oneshot},
     task::JoinHandle,
 };
 
@@ -45,6 +45,10 @@ pub struct EpochManagerService {
         oneshot::Sender<Result<EpochManagerResponse, EpochManagerError>>,
     )>,
     inner: BaseLayerEpochManager,
+    notifications: (
+        broadcast::Sender<EpochManagerEvent>,
+        broadcast::Receiver<EpochManagerEvent>,
+    ),
 }
 
 #[derive(Debug, Clone)]
@@ -73,6 +77,7 @@ pub enum EpochManagerRequest {
         for_addr: CommsPublicKey,
         available_shards: Vec<ShardId>,
     },
+    Subscribe,
 }
 
 pub enum EpochManagerResponse {
@@ -96,6 +101,14 @@ pub enum EpochManagerResponse {
     FilterToLocalShards {
         shards: Vec<ShardId>,
     },
+    Subscribe {
+        rx: broadcast::Receiver<EpochManagerEvent>,
+    },
+}
+
+#[derive(Debug, Clone)]
+pub enum EpochManagerEvent {
+    EpochChanged,
 }
 
 impl EpochManagerService {
@@ -110,9 +123,12 @@ impl EpochManagerService {
         base_node_client: GrpcBaseNodeClient,
     ) -> JoinHandle<Result<(), EpochManagerError>> {
         tokio::spawn(async move {
+            let (tx, rx) = broadcast::channel(10);
+
             EpochManagerService {
                 rx_request,
                 inner: BaseLayerEpochManager::new(db_factory, base_node_client, id),
+                notifications: (tx, rx),
             }
             .run(shutdown)
             .await
@@ -144,6 +160,12 @@ impl EpochManagerService {
             }),
             EpochManagerRequest::UpdateEpoch { height } => {
                 self.inner.update_epoch(height).await?;
+
+                self.notifications
+                    .0
+                    .send(EpochManagerEvent::EpochChanged)
+                    .map_err(|_| EpochManagerError::SendError)?;
+
                 Ok(EpochManagerResponse::UpdateEpoch)
             },
             EpochManagerRequest::NextRegistrationEpoch => Ok(EpochManagerResponse::NextRegistrationEpoch {
@@ -173,6 +195,9 @@ impl EpochManagerService {
                 let shards = self.inner.filter_to_local_shards(epoch, &for_addr, &available_shards)?;
                 Ok(EpochManagerResponse::FilterToLocalShards { shards })
             },
+            EpochManagerRequest::Subscribe => Ok(EpochManagerResponse::Subscribe {
+                rx: self.notifications.1.resubscribe(),
+            }),
         }
     }
 }
