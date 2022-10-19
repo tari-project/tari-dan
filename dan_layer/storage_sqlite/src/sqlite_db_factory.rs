@@ -29,7 +29,7 @@ use tari_dan_storage::global::GlobalDb;
 
 use crate::{error::SqliteStorageError, global::SqliteGlobalDbAdapter};
 
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 pub struct SqliteDbFactory {
     data_dir: PathBuf,
 }

@@ -89,6 +89,7 @@ impl From<DbTemplate> for Template {
     }
 }
 
+#[derive(Debug, Clone)]
 pub struct TemplateManager {
     db_factory: SqliteDbFactory,
 }
@@ -159,7 +160,7 @@ impl TemplateProvider for TemplateManager {
     type Error = TemplateManagerError;
     type Template = WasmModule;
 
-    fn get_template(&self, address: &TemplateAddress) -> Result<Self::Template, Self::Error> {
+    fn get_template_module(&self, address: &TemplateAddress) -> Result<Self::Template, Self::Error> {
         let template = self.fetch_template(address)?;
         Ok(WasmModule::from_code(template.compiled_code))
     }

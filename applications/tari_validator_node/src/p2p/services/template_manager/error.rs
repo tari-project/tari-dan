@@ -22,6 +22,7 @@
 
 use tari_dan_common_types::optional::IsNotFoundError;
 use tari_dan_core::storage::StorageError;
+use tari_dan_engine::packager::PackageError;
 use tari_dan_storage_sqlite::error::SqliteStorageError;
 use tari_template_lib::models::TemplateAddress;
 use thiserror::Error;
@@ -39,6 +40,8 @@ pub enum TemplateManagerError {
     SqliteStorageError(#[from] SqliteStorageError),
     #[error("Template not found: {address}")]
     TemplateNotFound { address: TemplateAddress },
+    #[error(transparent)]
+    PackageError(#[from] PackageError),
 }
 
 impl IsNotFoundError for TemplateManagerError {

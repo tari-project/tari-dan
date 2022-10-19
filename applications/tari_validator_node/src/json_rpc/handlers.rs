@@ -42,6 +42,8 @@ use tari_template_lib::Hash;
 use tari_validator_node_client::types::{
     GetCommitteeRequest,
     GetShardKey,
+    GetTemplateRequest,
+    GetTemplateResponse,
     GetTemplatesRequest,
     GetTemplatesResponse,
     SubmitTransactionRequest,
@@ -211,6 +213,33 @@ impl JsonRpcHandlers {
                     height: t.height,
                 })
                 .collect(),
+        }))
+    }
+
+    pub async fn get_template(&self, value: JsonRpcExtractor) -> JrpcResult {
+        let answer_id = value.get_answer_id();
+        let req: GetTemplateRequest = value.parse_params()?;
+
+        let template = self
+            .template_manager
+            .get_template(req.template_address)
+            .await
+            .map_err(internal_error(answer_id))?;
+
+        let abi = self
+            .template_manager
+            .load_template_abi(req.template_address)
+            .await
+            .map_err(internal_error(answer_id))?;
+
+        Ok(JsonRpcResponse::success(answer_id, GetTemplateResponse {
+            registration_metadata: TemplateMetadata {
+                address: template.metadata.address,
+                url: template.metadata.url,
+                binary_sha: template.metadata.binary_sha,
+                height: template.metadata.height,
+            },
+            abi,
         }))
     }
 
