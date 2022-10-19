@@ -20,9 +20,13 @@
 //   WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //   USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use std::sync::Arc;
+use std::{
+    net::{IpAddr, Ipv4Addr, SocketAddr},
+    sync::Arc,
+};
 
 use log::{error, info};
+use tari_common::configuration::bootstrap::{grpc_default_port, ApplicationType};
 use tari_comms::NodeIdentity;
 use tari_dan_core::{
     services::epoch_manager::{EpochManager, EpochManagerError},
@@ -69,7 +73,10 @@ async fn start(
     epoch_manager: EpochManagerHandle,
     mut shutdown: ShutdownSignal,
 ) -> Result<(), AutoRegistrationError> {
-    let mut wallet_client = GrpcWalletClient::new(config.validator_node.wallet_grpc_address);
+    let mut wallet_client = GrpcWalletClient::new(config.validator_node.wallet_grpc_address.unwrap_or_else(|| {
+        let port = grpc_default_port(ApplicationType::ConsoleWallet, config.network);
+        SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), port)
+    }));
     let mut current_epoch = epoch_manager.current_epoch().await?;
 
     loop {

@@ -20,10 +20,18 @@
 //   WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //   USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use std::{fs, io, sync::Arc};
+use std::{
+    fs,
+    io,
+    net::{IpAddr, Ipv4Addr, SocketAddr},
+    sync::Arc,
+};
 
 use tari_app_utilities::{identity_management, identity_management::load_from_json};
-use tari_common::exit_codes::{ExitCode, ExitError};
+use tari_common::{
+    configuration::bootstrap::{grpc_default_port, ApplicationType},
+    exit_codes::{ExitCode, ExitError},
+};
 use tari_comms::{protocol::rpc::RpcServer, CommsNode, NodeIdentity, UnspawnedCommsNode};
 use tari_dan_core::workers::events::{EventSubscription, HotStuffEvent};
 use tari_dan_storage::global::GlobalDb;
@@ -50,7 +58,7 @@ use crate::{
             networking,
             networking::NetworkingHandle,
             template_manager,
-            template_manager::TemplateManager,
+            template_manager::{TemplateManager, TemplateManagerHandle},
         },
     },
     payload_processor::TariDanPayloadProcessor,
@@ -73,7 +81,10 @@ pub async fn spawn_services(
     ensure_directories_exist(config)?;
 
     // Connection to base node
-    let base_node_client = GrpcBaseNodeClient::new(config.validator_node.base_node_grpc_address);
+    let base_node_client = GrpcBaseNodeClient::new(config.validator_node.base_node_grpc_address.unwrap_or_else(|| {
+        let port = grpc_default_port(ApplicationType::BaseNode, config.network);
+        SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), port)
+    }));
 
     // Initialize comms
     let (comms, message_channel) = comms::initialize(node_identity.clone(), config, shutdown.clone()).await?;
@@ -166,6 +177,7 @@ pub async fn spawn_services(
         networking,
         mempool,
         epoch_manager,
+        template_manager,
         hotstuff_events,
     })
 }
@@ -192,6 +204,7 @@ pub struct Services {
     pub networking: NetworkingHandle,
     pub mempool: MempoolHandle,
     pub epoch_manager: EpochManagerHandle,
+    pub template_manager: TemplateManagerHandle,
     pub hotstuff_events: EventSubscription<HotStuffEvent>,
 }
 

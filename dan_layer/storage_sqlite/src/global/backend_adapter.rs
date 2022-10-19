@@ -20,11 +20,11 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use std::convert::TryInto;
+use std::convert::{TryFrom, TryInto};
 
 use diesel::{prelude::*, Connection, RunQueryDsl, SqliteConnection};
 use tari_dan_storage::{
-    global::{DbTemplate, DbTemplateUpdate, DbValidatorNode, GlobalDbAdapter, MetadataKey},
+    global::{DbTemplate, DbTemplateUpdate, DbValidatorNode, GlobalDbAdapter, MetadataKey, TemplateStatus},
     AtomicDb,
 };
 
@@ -149,6 +149,33 @@ impl GlobalDbAdapter for SqliteGlobalDbAdapter {
             })),
             None => Ok(None),
         }
+    }
+
+    fn get_templates(&self, tx: &Self::DbTransaction, limit: usize) -> Result<Vec<DbTemplate>, Self::Error> {
+        use crate::global::schema::templates::dsl;
+        let templates = dsl::templates
+            .filter(templates::status.eq(TemplateStatus::Active.as_str()))
+            .limit(i64::try_from(limit).unwrap_or(i64::MAX))
+            .get_results::<TemplateModel>(tx.connection())
+            .map_err(|source| SqliteStorageError::DieselError {
+                source,
+                operation: "get_template".to_string(),
+            })?;
+
+        templates
+            .into_iter()
+            .map(|t| {
+                Ok(DbTemplate {
+                    template_address: t.template_address.try_into()?,
+                    url: t.url,
+                    height: t.height as u64,
+                    compiled_code: t.compiled_code,
+                    status: t.status.parse().expect("DB status corrupted"),
+                    added_at: time::OffsetDateTime::from_unix_timestamp(t.added_at)
+                        .expect("added_at timestamp corrupted"),
+                })
+            })
+            .collect()
     }
 
     fn insert_template(&self, tx: &Self::DbTransaction, item: DbTemplate) -> Result<(), Self::Error> {

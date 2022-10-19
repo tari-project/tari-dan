@@ -56,6 +56,10 @@ impl GlobalDbAdapter for MockGlobalDbBackupAdapter {
         todo!()
     }
 
+    fn get_templates(&self, _tx: &Self::DbTransaction, _limit: usize) -> Result<Vec<DbTemplate>, Self::Error> {
+        todo!()
+    }
+
     fn insert_template(&self, _tx: &Self::DbTransaction, _template: DbTemplate) -> Result<(), Self::Error> {
         todo!()
     }

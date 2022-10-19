@@ -33,7 +33,7 @@ use tokio::{
 use crate::p2p::services::template_manager::{
     downloader::{DownloadRequest, DownloadResult},
     handle::TemplateRegistration,
-    manager::{Template, TemplateManager},
+    manager::{Template, TemplateManager, TemplateMetadata},
     TemplateManagerError,
 };
 
@@ -55,6 +55,10 @@ pub enum TemplateManagerRequest {
     GetTemplate {
         address: TemplateAddress,
         reply: oneshot::Sender<Result<Template, TemplateManagerError>>,
+    },
+    GetTemplates {
+        limit: usize,
+        reply: oneshot::Sender<Result<Vec<TemplateMetadata>, TemplateManagerError>>,
     },
 }
 
@@ -106,6 +110,7 @@ impl TemplateManagerService {
             GetTemplate { address, reply } => {
                 handle(reply, self.manager.fetch_template(&address));
             },
+            GetTemplates { limit, reply } => handle(reply, self.manager.fetch_template_metadata(limit)),
         }
     }
 

@@ -25,7 +25,7 @@ use std::collections::HashMap;
 use serde::{Deserialize, Serialize};
 use tari_common_types::types::{FixedHash, PublicKey};
 use tari_dan_common_types::{serde_with, Epoch, ShardId, SubstateState};
-use tari_engine_types::{instruction::Instruction, signature::InstructionSignature};
+use tari_engine_types::{instruction::Instruction, signature::InstructionSignature, TemplateAddress};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TemplateRegistrationRequest {
@@ -44,6 +44,26 @@ pub struct TemplateRegistrationResponse {
     #[serde(with = "serde_with::base64")]
     pub template_address: Vec<u8>,
     pub transaction_id: u64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct GetTemplatesRequest {
+    pub limit: u64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct GetTemplatesResponse {
+    pub templates: Vec<TemplateMetadata>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TemplateMetadata {
+    pub address: TemplateAddress,
+    pub url: String,
+    /// SHA hash of binary
+    pub binary_sha: Vec<u8>,
+    /// Block height in which the template was published
+    pub height: u64,
 }
 
 /// A request to submit a transaction
