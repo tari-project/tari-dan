@@ -22,12 +22,11 @@
 
 use tari_dan_storage::global::GlobalDbAdapter;
 
-use super::{mempool::service::MempoolService, WalletClient};
+use super::WalletClient;
 use crate::{
     models::{domain_events::ConsensusWorkerDomainEvent, Payload},
     services::{
         infrastructure_services::{NodeAddressable, OutboundService},
-        AssetProxy,
         BaseNodeClient,
         EventsPublisher,
         PayloadProcessor,
@@ -43,13 +42,10 @@ use crate::{
 /// This trait is intended to only include `types` and no methods.
 pub trait ServiceSpecification: Default + Clone {
     type Addr: NodeAddressable;
-    type AssetProxy: AssetProxy + Clone;
     type BaseNodeClient: BaseNodeClient + Clone;
     type DbFactory: DbFactory<GlobalDbAdapter = Self::GlobalDbAdapter> + Clone;
     type EventsPublisher: EventsPublisher<ConsensusWorkerDomainEvent>;
     type GlobalDbAdapter: GlobalDbAdapter;
-    // type InboundConnectionService: InboundConnectionService<Addr = Self::Addr, Payload = Self::Payload>;
-    type MempoolService: MempoolService + Clone;
     type OutboundService: OutboundService<Addr = Self::Addr, Payload = Self::Payload>;
     type PeerProvider: PeerProvider<Addr = Self::Addr>;
     type Payload: Payload;

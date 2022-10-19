@@ -650,12 +650,12 @@ impl ShardStoreTransaction<PublicKey, TariDanPayload> for SqliteShardStoreTransa
 
     fn save_substate_changes(
         &mut self,
-        changes: HashMap<ShardId, Option<SubstateState>>,
+        changes: &HashMap<ShardId, SubstateState>,
         node: &HotStuffTreeNode<PublicKey>,
     ) -> Result<(), Self::Error> {
         use crate::schema::substates::{data, is_draft, justify, node_height, shard_id, substate_type, tree_node_hash};
         let payload_id = Vec::from(node.payload().as_slice());
-        for (sid, st_change) in &changes {
+        for (sid, st_change) in changes {
             let shard = Vec::from(sid.as_bytes());
 
             let rows_affected = diesel::update(
@@ -670,26 +670,12 @@ impl ShardStoreTransaction<PublicKey, TariDanPayload> for SqliteShardStoreTransa
                 tree_node_hash.eq(Some(node.hash().as_bytes())),
                 node_height.eq(node.height().as_u64() as i64),
                 is_draft.eq(false),
-                substate_type.eq(st_change
-                    .as_ref()
-                    .map(|s| {
-                        match s {
-                            SubstateState::DoesNotExist => "DOESNOTEXIST", // TODO: should we remove the chance of this
-                            // happening? It's not valid for a change to
-                            // be saved as "Does not exist"
-                            SubstateState::Up { .. } => "UP",
-                            SubstateState::Down { .. } => "DOWN",
-                        }
-                        .to_string()
-                    })
-                    .ok_or_else(|| Self::Error::QueryError {
-                        reason: "Substate type not found".to_string(),
-                    })?),
-                data.eq(st_change.as_ref().and_then(|s| match s {
+                substate_type.eq(st_change.as_str().to_string()),
+                data.eq(match st_change {
                     SubstateState::DoesNotExist => None,
                     SubstateState::Up { data: d, .. } => Some(d.clone()),
                     SubstateState::Down { .. } => None,
-                })),
+                }),
                 justify.eq(Some(json!(node.justify()).to_string())),
             ))
             .execute(&self.connection)
@@ -698,24 +684,14 @@ impl ShardStoreTransaction<PublicKey, TariDanPayload> for SqliteShardStoreTransa
             })?;
             if rows_affected == 0 {
                 let new_row = NewSubstate {
-                    substate_type: st_change
-                        .as_ref()
-                        .map(|s| match s {
-                            SubstateState::DoesNotExist => "DoesNotExist", // TODO: should we remove the chance of this
-                            // happening? It's not valid for a change to
-                            // be saved as "Does not exist"
-                            SubstateState::Up { .. } => "Up",
-                            SubstateState::Down { .. } => "Down",
-                        })
-                        .unwrap_or("NoChange")
-                        .to_string(),
+                    substate_type: st_change.as_str().to_string(),
                     shard_id: shard.clone(),
                     node_height: node.height().as_u64() as i64,
-                    data: st_change.as_ref().and_then(|s| match s {
+                    data: match st_change {
                         SubstateState::DoesNotExist => None,
                         SubstateState::Up { data: d, .. } => Some(d.clone()),
                         SubstateState::Down { .. } => None,
-                    }),
+                    },
                     created_by_payload_id: payload_id.clone(),
                     justify: Some(json!(node.justify()).to_string()),
                     is_draft: false,

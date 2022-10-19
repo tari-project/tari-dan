@@ -108,6 +108,16 @@ pub enum SubstateState {
     Down { deleted_by: PayloadId },
 }
 
+impl SubstateState {
+    pub fn as_str(&self) -> &str {
+        match self {
+            Self::DoesNotExist => "DoesNotExist",
+            Self::Up { .. } => "Up",
+            Self::Down { .. } => "Down",
+        }
+    }
+}
+
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct ObjectClaim {}
 

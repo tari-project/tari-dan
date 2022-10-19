@@ -339,7 +339,7 @@ impl<TAddr: NodeAddressable, TPayload: Payload> ShardStoreTransaction<TAddr, TPa
 
     fn save_substate_changes(
         &mut self,
-        _changes: HashMap<ShardId, Option<SubstateState>>,
+        _changes: &HashMap<ShardId, SubstateState>,
         _node: &HotStuffTreeNode<TAddr>,
     ) -> Result<(), Self::Error> {
         // todo!()
