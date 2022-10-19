@@ -25,13 +25,17 @@ use std::{convert::TryFrom, path::PathBuf};
 use clap::{Args, Subcommand};
 use tari_dan_engine::wasm::compile::compile_template;
 use tari_engine_types::{hashing::hasher, TemplateAddress};
-use tari_validator_node_client::{types::TemplateRegistrationRequest, ValidatorNodeClient};
+use tari_validator_node_client::{
+    types::{GetTemplatesRequest, TemplateRegistrationRequest},
+    ValidatorNodeClient,
+};
 
-use crate::Prompt;
+use crate::{table::Table, table_row, Prompt};
 
 #[derive(Debug, Subcommand, Clone)]
 pub enum TemplateSubcommand {
     Publish(PublishTemplateArgs),
+    List,
 }
 
 #[derive(Debug, Args, Clone)]
@@ -53,9 +57,25 @@ impl TemplateSubcommand {
     pub async fn handle(self, client: ValidatorNodeClient) -> Result<(), anyhow::Error> {
         match self {
             TemplateSubcommand::Publish(args) => handle_publish(args, client).await?,
+            TemplateSubcommand::List => handle_list(client).await?,
         }
         Ok(())
     }
+}
+
+async fn handle_list(mut client: ValidatorNodeClient) -> Result<(), anyhow::Error> {
+    let templates = client.get_active_templates(GetTemplatesRequest { limit: 10 }).await?;
+    println!("Templates:");
+
+    let mut table = Table::new();
+    table
+        .set_titles(vec!["Address", "Download Url", "Mined Height", "Status"])
+        .enable_row_count();
+    for template in templates.templates {
+        table.add_row(table_row![template.address, template.url, template.height, "Active"]);
+    }
+    table.print_stdout();
+    Ok(())
 }
 
 async fn handle_publish(args: PublishTemplateArgs, mut client: ValidatorNodeClient) -> anyhow::Result<()> {

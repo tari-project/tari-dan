@@ -67,6 +67,7 @@ async fn handler(
         "submit_transaction" => handlers.submit_transaction(value).await,
         // Template
         "register_template" => handlers.register_template(value).await,
+        "get_templates" => handlers.get_templates(value).await,
         // Validator Node
         "get_identity" => handlers.get_identity(value),
         "register_validator_node" => handlers.register_validator_node(value).await,
