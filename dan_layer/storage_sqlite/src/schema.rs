@@ -1,43 +1,9 @@
-// Copyright 2022. The Tari Project
-//
-// Redistribution and use in source and binary forms, with or without modification, are permitted provided that the
-// following conditions are met:
-//
-// 1. Redistributions of source code must retain the above copyright notice, this list of conditions and the following
-// disclaimer.
-//
-// 2. Redistributions in binary form must reproduce the above copyright notice, this list of conditions and the
-// following disclaimer in the documentation and/or other materials provided with the distribution.
-//
-// 3. Neither the name of the copyright holder nor the names of its contributors may be used to endorse or promote
-// products derived from this software without specific prior written permission.
-//
-// THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES,
-// INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
-// DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
-// SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
-// SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY,
-// WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
-// USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-
 table! {
     high_qcs (id) {
         id -> Integer,
         shard_id -> Binary,
         height -> BigInt,
         qc_json -> Text,
-    }
-}
-
-table! {
-    instructions (id) {
-        id -> Integer,
-        hash -> Binary,
-        node_id -> Integer,
-        template_id -> Integer,
-        method -> Text,
-        args -> Binary,
-        sender -> Binary,
     }
 }
 
@@ -54,6 +20,17 @@ table! {
         id -> Integer,
         shard_id -> Binary,
         node_height -> BigInt,
+    }
+}
+
+table! {
+    leader_proposals (id) {
+        id -> Integer,
+        payload_id -> Binary,
+        shard_id -> Binary,
+        payload_height -> BigInt,
+        node_hash -> Binary,
+        hotstuff_tree_node -> Text,
     }
 }
 
@@ -76,16 +53,6 @@ table! {
 }
 
 table! {
-    locked_qc (id) {
-        id -> Integer,
-        message_type -> Integer,
-        view_number -> BigInt,
-        node_hash -> Binary,
-        signature -> Nullable<Binary>,
-    }
-}
-
-table! {
     metadata (key) {
         key -> Binary,
         value -> Binary,
@@ -101,32 +68,10 @@ table! {
         shard -> Binary,
         payload_id -> Binary,
         payload_height -> BigInt,
-        local_pledges -> Binary,
+        local_pledges -> Text,
         epoch -> BigInt,
         proposed_by -> Binary,
-        justify -> Binary,
-    }
-}
-
-table! {
-    objects (id) {
-        id -> Integer,
-        shard_id -> Binary,
-        payload_id -> Binary,
-        object_id -> Binary,
-        node_height -> BigInt,
-        substate_change -> Binary,
-        object_pledge -> Binary,
-    }
-}
-
-table! {
-    payload_votes (id) {
-        id -> Integer,
-        payload_id -> Binary,
-        shard_id -> Binary,
-        node_height -> BigInt,
-        hotstuff_tree_node -> Binary,
+        justify -> Text,
     }
 }
 
@@ -134,93 +79,52 @@ table! {
     payloads (id) {
         id -> Integer,
         payload_id -> Binary,
-        instructions -> Binary,
+        instructions -> Text,
         public_nonce -> Binary,
         scalar -> Binary,
         fee -> BigInt,
         sender_public_key -> Binary,
-        meta -> Binary,
+        meta -> Text,
     }
 }
 
 table! {
-    prepare_qc (id) {
-        id -> Integer,
-        message_type -> Integer,
-        view_number -> BigInt,
-        node_hash -> Binary,
-        signature -> Nullable<Binary>,
-    }
-}
-
-table! {
-    state_keys (schema_name, key_name) {
-        schema_name -> Text,
-        key_name -> Binary,
-        value -> Binary,
-    }
-}
-
-table! {
-    state_op_log (id) {
-        id -> Integer,
-        height -> BigInt,
-        merkle_root -> Nullable<Binary>,
-        operation -> Text,
-        schema -> Text,
-        key -> Binary,
-        value -> Nullable<Binary>,
-    }
-}
-
-table! {
-    state_tree (id) {
-        id -> Integer,
-        version -> Integer,
-        is_current -> Bool,
-        data -> Binary,
-    }
-}
-
-table! {
-    substate_changes (id) {
-        id -> Integer,
-        shard_id -> Binary,
-        substate_change -> Nullable<Binary>,
-        tree_node_hash -> Binary,
-    }
-}
-
-table! {
-    votes (id) {
+    received_votes (id) {
         id -> Integer,
         tree_node_hash -> Binary,
         shard_id -> Binary,
         address -> Binary,
-        node_height -> BigInt,
-        vote_message -> Binary,
+        vote_message -> Text,
     }
 }
 
-joinable!(instructions -> nodes (node_id));
+table! {
+    substates (id) {
+        id -> Integer,
+        substate_type -> Text,
+        shard_id -> Binary,
+        node_height -> BigInt,
+        data -> Nullable<Binary>,
+        created_by_payload_id -> Binary,
+        deleted_by_payload_id -> Nullable<Binary>,
+        justify -> Nullable<Text>,
+        is_draft -> Bool,
+        tree_node_hash -> Nullable<Binary>,
+        pledged_to_payload_id -> Nullable<Binary>,
+        pledged_until_height -> Nullable<BigInt>,
+    }
+}
 
 allow_tables_to_appear_in_same_query!(
     high_qcs,
-    instructions,
     last_executed_heights,
     last_voted_heights,
+    leader_proposals,
     leaf_nodes,
     lock_node_and_heights,
-    locked_qc,
     metadata,
     nodes,
-    objects,
-    payload_votes,
     payloads,
-    prepare_qc,
-    state_keys,
-    state_op_log,
-    state_tree,
-    substate_changes,
-    votes,
+    received_votes,
+    substates,
 );

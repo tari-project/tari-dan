@@ -21,19 +21,15 @@
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 pub mod high_qc;
-pub mod instruction;
 pub mod last_executed_height;
 pub mod last_voted_height;
+pub mod leader_proposals;
 pub mod leaf_nodes;
 pub mod lock_node_and_height;
 pub mod locked_qc;
 pub mod metadata;
 pub mod node;
-pub mod objects;
 pub mod payload;
-pub mod payload_votes;
 pub mod prepare_qc;
-pub mod state_key;
-pub mod state_op_log;
-pub mod substate_change;
-pub mod votes;
+pub mod received_votes;
+pub mod substate;

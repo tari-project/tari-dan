@@ -23,10 +23,9 @@
 use std::collections::HashMap;
 
 use serde::{Deserialize, Serialize};
-use tari_common_types::types::{BulletRangeProof, ComSignature, Commitment, PublicKey};
-use tari_dan_common_types::{ObjectClaim, ObjectId, ShardId, SubstateChange};
+use tari_common_types::types::PublicKey;
+use tari_dan_common_types::{ObjectClaim, ShardId, SubstateChange};
 use tari_engine_types::{hashing::hasher, instruction::Instruction, signature::InstructionSignature};
-use tari_mmr::MerkleProof;
 use tari_template_lib::{models::TemplateAddress, Hash};
 use tari_utilities::ByteArray;
 mod builder;
@@ -37,34 +36,6 @@ pub use error::TransactionError;
 
 mod processor;
 pub use processor::TransactionProcessor;
-
-// FIXME: fix clippy
-#[allow(clippy::large_enum_variant)]
-#[derive(Debug, Clone)]
-pub enum ThaumInput {
-    Standard {
-        object_id: ObjectId,
-    },
-    PegIn {
-        commitment: Commitment,
-        burn_proof: MerkleProof,
-        spending_key: StealthAddress,
-        owner_proof: ComSignature,
-    },
-}
-
-#[derive(Debug, Clone)]
-pub struct ThaumOutput {
-    _commitment: Commitment,
-    _owner: StealthAddress,
-    _rangeproof: BulletRangeProof,
-}
-
-#[derive(Debug, Clone)]
-pub struct StealthAddress {
-    _nonce: PublicKey,
-    _address: PublicKey,
-}
 
 #[derive(Debug, Clone)]
 pub struct BalanceProof {}
@@ -105,7 +76,7 @@ impl Transaction {
 
 #[derive(Debug, Clone, Default, Deserialize, Serialize)]
 pub struct TransactionMeta {
-    involved_objects: HashMap<ShardId, Vec<(ObjectId, SubstateChange, ObjectClaim)>>,
+    involved_objects: HashMap<ShardId, (SubstateChange, ObjectClaim)>,
 }
 
 impl TransactionMeta {
@@ -113,8 +84,8 @@ impl TransactionMeta {
         self.involved_objects.keys().copied().collect()
     }
 
-    pub fn objects_for_shard(&self, shard_id: ShardId) -> Vec<(ObjectId, SubstateChange, ObjectClaim)> {
-        self.involved_objects.get(&shard_id).cloned().unwrap_or_default()
+    pub fn objects_for_shard(&self, shard_id: ShardId) -> Option<(SubstateChange, ObjectClaim)> {
+        self.involved_objects.get(&shard_id).cloned()
     }
 }
 

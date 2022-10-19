@@ -23,6 +23,7 @@
 use std::{io, sync::PoisonError};
 
 use lmdb_zero as lmdb;
+use tari_common_types::types::FixedHashSizeError;
 use tari_storage::lmdb_store::LMDBError;
 use tari_utilities::ByteArrayError;
 
@@ -42,16 +43,16 @@ pub enum StorageError {
     MigrationError { reason: String },
     #[error("Invalid unit of work tracker type")]
     InvalidUnitOfWorkTrackerType,
-    #[error("Item does not exist")]
-    NotFound,
+    #[error("Not found: item: {item} key: {key}")]
+    NotFound { item: String, key: String },
     #[error("File system path does not exist")]
     FileSystemPathDoesNotExist,
     #[error("Failed data decoding")]
     DecodingError,
     #[error("Failed data encoding")]
     EncodingError,
-    #[error("Fixed hash size error: {reason}")]
-    FixedHashSizeError { reason: String },
+    #[error("Fixed hash size error: {0}")]
+    FixedHashSizeError(#[from] FixedHashSizeError),
     #[error("Invalid integer cast")]
     InvalidIntegerCast,
     #[error("Invalid ByteArray conversion: `{0}`")]
@@ -63,6 +64,10 @@ pub enum StorageError {
     General { details: String },
     #[error("Lock error")]
     LockError,
+    #[error("Error converting to or from json: {0}")]
+    SerdeJson(#[from] serde_json::Error),
+    #[error("Error converting substate type:{substate_type}")]
+    InvalidSubStateType { substate_type: String },
 }
 
 impl<T> From<PoisonError<T>> for StorageError {

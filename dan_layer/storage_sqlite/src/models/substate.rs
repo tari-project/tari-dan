@@ -23,19 +23,33 @@
 use crate::schema::*;
 
 #[derive(Debug, Identifiable, Queryable)]
-pub struct PayloadVote {
+pub struct Substate {
     pub id: i32,
-    pub payload_id: Vec<u8>,
+    pub substate_type: String,
     pub shard_id: Vec<u8>,
     pub node_height: i64,
-    pub hotstuff_tree_node: Vec<u8>,
+    pub data: Option<Vec<u8>>,
+    pub created_by_payload_id: Vec<u8>,
+    pub deleted_by_payload_id: Option<Vec<u8>>,
+    pub justify: Option<String>,
+    pub is_draft: bool,
+    pub tree_node_hash: Option<Vec<u8>>,
+    pub pledged_to_payload_id: Option<Vec<u8>>,
+    pub pledged_until_height: Option<i64>,
 }
 
 #[derive(Debug, Insertable)]
-#[table_name = "payload_votes"]
-pub struct NewPayloadVote {
-    pub payload_id: Vec<u8>,
+#[table_name = "substates"]
+pub struct NewSubstate {
+    pub substate_type: String,
     pub shard_id: Vec<u8>,
     pub node_height: i64,
-    pub hotstuff_tree_node: Vec<u8>,
+    pub data: Option<Vec<u8>>,
+    pub created_by_payload_id: Vec<u8>,
+    pub deleted_by_payload_id: Option<Vec<u8>>,
+    pub justify: Option<String>,
+    pub is_draft: bool,
+    pub tree_node_hash: Option<Vec<u8>>,
+    pub pledged_to_payload_id: Option<Vec<u8>>,
+    pub pledged_until_height: Option<i64>,
 }

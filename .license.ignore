@@ -1,5 +1,6 @@
 ./CODEOWNERS
 ./LICENSE
+./dan_layer/storage_sqlite/src/schema.rs
 ./integration_tests/Makefile
 ./integration_tests/cucumber.js
 ./integration_tests/environment

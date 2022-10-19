@@ -60,6 +60,7 @@ impl ApplicationConfig {
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(deny_unknown_fields)]
+#[allow(clippy::struct_excessive_bools)]
 pub struct ValidatorNodeConfig {
     override_from: Option<String>,
     pub shard_key_file: PathBuf,
@@ -104,6 +105,8 @@ pub struct ValidatorNodeConfig {
     pub json_rpc_address: Option<SocketAddr>,
     /// The address of the HTTP UI
     pub http_ui_address: Option<SocketAddr>,
+    /// The node will re-register each epoch
+    pub auto_register: bool,
 }
 
 impl ValidatorNodeConfig {
@@ -146,6 +149,7 @@ impl Default for ValidatorNodeConfig {
             grpc_address: Some("/ip4/127.0.0.1/tcp/18144".parse().unwrap()),
             json_rpc_address: Some("127.0.0.1:18200".parse().unwrap()),
             http_ui_address: Some("127.0.0.1:5000".parse().unwrap()),
+            auto_register: false,
 
             // TODO: Deprecated - need to update tari_common to remove these
             phase_timeout: 30,

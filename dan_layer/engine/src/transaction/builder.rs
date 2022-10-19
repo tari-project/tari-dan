@@ -24,7 +24,7 @@ use std::collections::HashMap;
 
 use tari_common_types::types::{PrivateKey, PublicKey};
 use tari_crypto::{keys::PublicKey as PublicKeyTrait, ristretto::RistrettoPublicKey};
-use tari_dan_common_types::{ObjectClaim, ObjectId, ShardId, SubstateChange};
+use tari_dan_common_types::{ObjectClaim, ShardId, SubstateChange};
 use tari_engine_types::{instruction::Instruction, signature::InstructionSignature};
 
 use super::Transaction;
@@ -91,9 +91,10 @@ impl TransactionBuilder {
         self
     }
 
-    pub fn add_input_object(&mut self, input_object: (ShardId, ObjectId)) -> &mut Self {
-        let entry = self.meta.involved_objects.entry(input_object.0).or_insert(vec![]);
-        entry.push((input_object.1, SubstateChange::Destroy, ObjectClaim {}));
+    pub fn add_input_object(&mut self, input_object: ShardId) -> &mut Self {
+        self.meta
+            .involved_objects
+            .insert(input_object, (SubstateChange::Destroy, ObjectClaim {}));
         self
     }
 
@@ -134,18 +135,14 @@ impl TransactionBuilder {
             // let shard_id = ShardId(value);
             let id = id_provider.new_component_address();
             let shard_id = ShardId(id.into_array());
-            let object_id = ObjectId(id.into_array());
             if t.meta.is_none() {
                 t.meta = Some(TransactionMeta {
                     involved_objects: HashMap::new(),
                 });
             }
             if let Some(m) = t.meta.as_mut() {
-                m.involved_objects.entry(shard_id).or_insert(vec![]).push((
-                    object_id,
-                    SubstateChange::Create,
-                    ObjectClaim {},
-                ))
+                m.involved_objects
+                    .insert(shard_id, (SubstateChange::Create, ObjectClaim {}));
             }
         }
         t

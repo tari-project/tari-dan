@@ -1,4 +1,4 @@
-//  Copyright 2021. The Tari Project
+//  Copyright 2022. The Tari Project
 //
 //  Redistribution and use in source and binary forms, with or without modification, are permitted provided that the
 //  following conditions are met:
@@ -20,12 +20,4 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use crate::schema::*;
-
-#[derive(Queryable, Insertable, Identifiable)]
-#[primary_key(schema_name, key_name)]
-pub struct StateKey {
-    pub schema_name: String,
-    pub key_name: Vec<u8>,
-    pub value: Vec<u8>,
-}
+/// <reference types="react-scripts" />
