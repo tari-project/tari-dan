@@ -127,7 +127,9 @@ pub async fn spawn_services(
     );
 
     // Template manager
-    let template_manager = template_manager::spawn(sqlite_db.clone(), shutdown.clone());
+
+    let template_manager = TemplateManager::new(sqlite_db.clone());
+    let template_manager_service = template_manager::spawn(template_manager.clone(), shutdown.clone());
 
     // Base Node scanner
     base_layer_scanner::spawn(
@@ -135,15 +137,12 @@ pub async fn spawn_services(
         global_db.clone(),
         base_node_client.clone(),
         epoch_manager.clone(),
-        template_manager.clone(),
+        template_manager_service.clone(),
         shutdown.clone(),
     );
 
     // Payload processor
-    // TODO: we recreate the db template manager here, we could use the TemplateManagerHandle, but this is async, which
-    //       would force the PayloadProcessor to be async (maybe that is ok, or maybe we dont need the template manager
-    //       to be async if it doesn't have to download the templates).
-    let payload_processor = TariDanPayloadProcessor::new(TemplateManager::new(sqlite_db));
+    let payload_processor = TariDanPayloadProcessor::new(template_manager);
 
     // Consensus
     let hotstuff_events = hotstuff::try_spawn(
@@ -177,7 +176,7 @@ pub async fn spawn_services(
         networking,
         mempool,
         epoch_manager,
-        template_manager,
+        template_manager: template_manager_service,
         hotstuff_events,
     })
 }

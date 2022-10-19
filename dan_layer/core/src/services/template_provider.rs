@@ -27,5 +27,5 @@ pub trait TemplateProvider {
     type Template: TemplateModuleLoader;
     type Error: std::error::Error + Sync + Send + 'static;
 
-    fn get_template(&self, id: &TemplateAddress) -> Result<Self::Template, Self::Error>;
+    fn get_template_module(&self, id: &TemplateAddress) -> Result<Self::Template, Self::Error>;
 }
