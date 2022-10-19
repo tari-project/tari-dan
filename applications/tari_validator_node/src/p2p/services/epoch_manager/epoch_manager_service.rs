@@ -50,12 +50,12 @@ pub struct EpochManagerService {
 #[derive(Debug, Clone)]
 pub enum EpochManagerRequest {
     CurrentEpoch,
+    UpdateEpoch {
+        height: u64,
+    },
     NextRegistrationEpoch,
     UpdateNextRegistrationEpoch {
         epoch: Epoch,
-    },
-    UpdateEpoch {
-        height: u64,
     },
     IsEpochValid {
         epoch: Epoch,
@@ -79,11 +79,11 @@ pub enum EpochManagerResponse {
     CurrentEpoch {
         epoch: Epoch,
     },
+    UpdateEpoch,
     NextRegistrationEpoch {
         epoch: Option<Epoch>,
     },
     UpdateNextRegistrationEpoch,
-    UpdateEpoch,
     IsEpochValid {
         is_valid: bool,
     },
@@ -142,16 +142,16 @@ impl EpochManagerService {
             EpochManagerRequest::CurrentEpoch => Ok(EpochManagerResponse::CurrentEpoch {
                 epoch: self.inner.current_epoch(),
             }),
+            EpochManagerRequest::UpdateEpoch { height } => {
+                self.inner.update_epoch(height).await?;
+                Ok(EpochManagerResponse::UpdateEpoch)
+            },
             EpochManagerRequest::NextRegistrationEpoch => Ok(EpochManagerResponse::NextRegistrationEpoch {
                 epoch: self.inner.next_registration_epoch().await?,
             }),
             EpochManagerRequest::UpdateNextRegistrationEpoch { epoch } => {
                 self.inner.update_next_registration_epoch(epoch).await?;
                 Ok(EpochManagerResponse::UpdateNextRegistrationEpoch)
-            },
-            EpochManagerRequest::UpdateEpoch { height } => {
-                self.inner.update_epoch(height).await?;
-                Ok(EpochManagerResponse::UpdateEpoch)
             },
             EpochManagerRequest::IsEpochValid { epoch } => {
                 let is_valid = self.inner.is_epoch_valid(epoch);
