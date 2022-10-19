@@ -24,7 +24,6 @@ use std::convert::TryInto;
 
 use tari_comms::types::CommsPublicKey;
 use tari_crypto::tari_utilities::ByteArray;
-use tokio::sync::broadcast;
 use tari_dan_common_types::{Epoch, ShardId};
 use tari_dan_core::{
     models::{Committee, ValidatorNode},
@@ -36,9 +35,12 @@ use tari_dan_core::{
 };
 use tari_dan_storage::global::{DbValidatorNode, MetadataKey};
 use tari_dan_storage_sqlite::SqliteDbFactory;
+use tokio::sync::broadcast;
 
-use crate::grpc::services::base_node_client::GrpcBaseNodeClient;
-use crate::p2p::services::epoch_manager::epoch_manager_service::EpochManagerEvent;
+use crate::{
+    grpc::services::base_node_client::GrpcBaseNodeClient,
+    p2p::services::epoch_manager::epoch_manager_service::EpochManagerEvent,
+};
 
 // const LOG_TARGET: &str = "tari_validator_node::epoch_manager::base_layer_epoch_manager";
 
@@ -50,7 +52,12 @@ pub struct BaseLayerEpochManager {
     tx_events: broadcast::Sender<EpochManagerEvent>,
 }
 impl BaseLayerEpochManager {
-    pub fn new(db_factory: SqliteDbFactory, base_node_client: GrpcBaseNodeClient, _id: CommsPublicKey, tx_events: broadcast::Sender<EpochManagerEvent>) -> Self {
+    pub fn new(
+        db_factory: SqliteDbFactory,
+        base_node_client: GrpcBaseNodeClient,
+        _id: CommsPublicKey,
+        tx_events: broadcast::Sender<EpochManagerEvent>,
+    ) -> Self {
         Self {
             db_factory,
             base_node_client,

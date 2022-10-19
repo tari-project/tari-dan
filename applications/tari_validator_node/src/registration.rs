@@ -97,9 +97,9 @@ pub async fn register(
                     return Err(AutoRegistrationError::RegistrationFailed { details: e.to_string() });
                 }
 
-                time::sleep(Duration::from_millis(
-                    u64::from(REGISTRATION_COOLDOWN_IN_MS * u32::from(attempts)),
-                ))
+                time::sleep(Duration::from_millis(u64::from(
+                    REGISTRATION_COOLDOWN_IN_MS * u32::from(attempts),
+                )))
                 .await;
 
                 attempts += 1;
