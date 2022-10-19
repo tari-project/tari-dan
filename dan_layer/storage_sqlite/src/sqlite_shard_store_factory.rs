@@ -800,7 +800,7 @@ impl ShardStoreTransaction<PublicKey, TariDanPayload> for SqliteShardStoreTransa
                         "DOWN" => Ok(SubstateState::Down {
                             deleted_by: PayloadId::try_from(ss.deleted_by_payload_id.clone().unwrap_or_default())?,
                         }),
-                        _ => return Err(StorageError::InvalidSubStateType {
+                        _ => Err(StorageError::InvalidSubStateType {
                             substate_type: ss.substate_type.clone(),
                         }),
                     }
