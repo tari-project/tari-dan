@@ -265,7 +265,7 @@ impl From<ObjectPledge> for proto::consensus::ObjectPledge {
             },
         }
         Self {
-            object_id: source.object_id.as_bytes().to_vec(),
+            shard_id: source.shard_id.as_bytes().to_vec(),
             current_state,
             created_by: inner_created_by,
             data: inner_data,
@@ -449,7 +449,7 @@ impl TryFrom<proto::consensus::ObjectPledge> for ObjectPledge {
 
     fn try_from(value: proto::consensus::ObjectPledge) -> Result<Self, Self::Error> {
         Ok(Self {
-            object_id: value.object_id.try_into()?,
+            shard_id: value.shard_id.try_into()?,
             current_state: match value.current_state {
                 0 => SubstateState::DoesNotExist,
                 1 => SubstateState::Up {

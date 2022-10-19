@@ -97,7 +97,7 @@ impl VoteMessage {
                 .chain((pledges.len() as u32).to_le_bytes());
 
             for p in pledges {
-                result = result.chain(p.object_id.0)
+                result = result.chain(p.shard_id.0)
             }
         }
         result.finalize_fixed().into()

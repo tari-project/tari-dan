@@ -23,23 +23,33 @@
 use crate::schema::*;
 
 #[derive(Debug, Identifiable, Queryable)]
-pub struct Object {
+pub struct Substate {
     pub id: i32,
+    pub substate_type: String,
     pub shard_id: Vec<u8>,
-    pub object_id: Vec<u8>,
-    pub payload_id: Vec<u8>,
     pub node_height: i64,
-    pub current_state: String,
-    pub object_pledge: String,
+    pub data: Option<Vec<u8>>,
+    pub created_by_payload_id: Vec<u8>,
+    pub deleted_by_payload_id: Option<Vec<u8>>,
+    pub justify: Option<String>,
+    pub is_draft: bool,
+    pub tree_node_hash: Option<Vec<u8>>,
+    pub pledged_to_payload_id: Option<Vec<u8>>,
+    pub pledged_until_height: Option<i64>,
 }
 
 #[derive(Debug, Insertable)]
-#[table_name = "objects"]
-pub struct NewObject {
+#[table_name = "substates"]
+pub struct NewSubstate {
+    pub substate_type: String,
     pub shard_id: Vec<u8>,
-    pub object_id: Vec<u8>,
-    pub payload_id: Vec<u8>,
     pub node_height: i64,
-    pub current_state: String,
-    pub object_pledge: String,
+    pub data: Option<Vec<u8>>,
+    pub created_by_payload_id: Vec<u8>,
+    pub deleted_by_payload_id: Option<Vec<u8>>,
+    pub justify: Option<String>,
+    pub is_draft: bool,
+    pub tree_node_hash: Option<Vec<u8>>,
+    pub pledged_to_payload_id: Option<Vec<u8>>,
+    pub pledged_until_height: Option<i64>,
 }
