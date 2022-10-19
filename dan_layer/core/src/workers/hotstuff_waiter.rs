@@ -229,18 +229,16 @@ where
                 // No need to continue, we have already committed this node.
                 return Ok(());
             }
-            let objects = actual_payload.objects_for_shard(shard);
+            let (change, claim) = actual_payload
+                .objects_for_shard(shard)
+                .ok_or(HotStuffError::ShardHasNoData)?;
 
-            let mut local_pledges = vec![];
-            for (object, _, claim) in objects {
-                if !claim.is_valid(payload) {
-                    return Err(HotStuffError::ClaimIsNotValid);
-                }
-                local_pledges.push(
-                    tx.pledge_object(shard, object, payload, leaf_height)
-                        .map_err(|e| e.into())?,
-                );
+            if !claim.is_valid(payload) {
+                return Err(HotStuffError::ClaimIsNotValid);
             }
+            let local_pledges = vec![tx
+                .pledge_object(shard, payload, change, leaf_height)
+                .map_err(|e| e.into())?];
             leaf_node = self.create_leaf(
                 leaf,
                 shard,
@@ -409,7 +407,7 @@ where
                     all_pledges.insert(*shard_id, pledges.clone());
                 }
                 changes.extend(self.execute(all_pledges, payload)?);
-                tx.save_substate_changes(&changes, *node.hash()).map_err(|e| e.into())?;
+                tx.save_substate_changes(&changes, &node).map_err(|e| e.into())?;
             }
             tx.set_last_executed_height(shard, node.height())
                 .map_err(|e| e.into())?;

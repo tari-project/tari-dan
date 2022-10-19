@@ -34,7 +34,7 @@ use diesel::{
 use log::{debug, warn};
 use serde_json::json;
 use tari_common_types::types::{PrivateKey, PublicKey, Signature};
-use tari_dan_common_types::{Epoch, ObjectId, PayloadId, ShardId, SubstateState};
+use tari_dan_common_types::{Epoch, PayloadId, ShardId, SubstateChange, SubstateState};
 use tari_dan_core::{
     models::{
         vote_message::VoteMessage,
@@ -65,10 +65,9 @@ use crate::{
         leaf_nodes::{LeafNode, NewLeafNode},
         lock_node_and_height::{LockNodeAndHeight, NewLockNodeAndHeight},
         node::{NewNode, Node},
-        objects::{NewObject, Object},
         payload::{NewPayload, Payload as SqlPayload},
         received_votes::{NewReceivedVote, ReceivedVote},
-        substate_change::NewSubStateChange,
+        substate::{NewSubstate, Substate},
     },
     schema::{
         high_qcs::{dsl::high_qcs, shard_id},
@@ -78,10 +77,9 @@ use crate::{
         leaf_nodes::dsl::leaf_nodes,
         lock_node_and_heights::dsl::lock_node_and_heights,
         nodes::dsl::nodes as table_nodes,
-        objects::dsl::objects,
         payloads::dsl::payloads,
         received_votes::dsl::received_votes,
-        substate_changes::dsl::substate_changes,
+        substates::{dsl::substates, pledged_to_payload_id},
     },
 };
 
@@ -134,6 +132,40 @@ pub struct SqliteShardStoreTransaction {
 impl SqliteShardStoreTransaction {
     fn new(connection: SqliteConnection) -> Self {
         Self { connection }
+    }
+
+    fn create_pledge(&mut self, shard: &Vec<u8>, obj: Substate) -> Result<ObjectPledge, StorageError> {
+        use crate::schema::substates::{is_draft, node_height, shard_id};
+        let current_state: Option<Substate> = substates
+            .filter(shard_id.eq(&shard).and(is_draft.eq(false)))
+            .order_by(node_height.desc())
+            .first(&self.connection)
+            .optional()
+            .map_err(|e| StorageError::QueryError {
+                reason: format!("Pledge object error: {}", e),
+            })?;
+
+        let pledge = ObjectPledge {
+            shard_id: ShardId::try_from(shard.as_slice())?,
+            current_state: current_state
+                .map(|s| match s.substate_type.as_str() {
+                    "UP" => Ok(SubstateState::Up {
+                        created_by: PayloadId::try_from(s.created_by_payload_id)?,
+                        data: s.data.unwrap_or_default(),
+                    }),
+                    "DOWN" => Ok(SubstateState::Down {
+                        deleted_by: PayloadId::try_from(s.deleted_by_payload_id.unwrap_or_default())?,
+                    }),
+                    _ => Err(StorageError::InvalidSubStateType {
+                        substate_type: s.substate_type,
+                    }),
+                })
+                .transpose()?
+                .unwrap_or(SubstateState::DoesNotExist),
+            pledged_to_payload: PayloadId::try_from(obj.pledged_to_payload_id.unwrap_or_default())?,
+            pledged_until: NodeHeight(obj.pledged_until_height.unwrap_or_default() as u64),
+        };
+        Ok(pledge)
     }
 }
 
@@ -505,18 +537,16 @@ impl ShardStoreTransaction<PublicKey, TariDanPayload> for SqliteShardStoreTransa
     fn pledge_object(
         &mut self,
         shard: ShardId,
-        object: ObjectId,
         payload: PayloadId,
+        change: SubstateChange,
         current_height: NodeHeight,
     ) -> Result<ObjectPledge, Self::Error> {
-        use crate::schema::objects::{node_height, object_id, shard_id};
-
+        use crate::schema::substates::{is_draft, node_height, shard_id};
         let shard = Vec::from(shard.as_bytes());
-        let f_object = Vec::from(object.as_bytes());
         let f_payload = Vec::from(payload.as_slice());
 
-        let db_object: Option<Object> = objects
-            .filter(shard_id.eq(&shard).and(object_id.eq(&f_object)))
+        let draft_object: Option<Substate> = substates
+            .filter(shard_id.eq(&shard).and(is_draft.eq(true)))
             .order_by(node_height.desc())
             .first(&self.connection)
             .optional()
@@ -524,46 +554,57 @@ impl ShardStoreTransaction<PublicKey, TariDanPayload> for SqliteShardStoreTransa
                 reason: format!("Pledge object error: {}", e),
             })?;
 
-        let mut db_current_state = SubstateState::DoesNotExist;
-        if let Some(obj) = db_object {
-            let object_pledge = obj.object_pledge;
-
-            if object_pledge.is_empty() {
-                panic!("Item does not exist");
+        if let Some(obj) = draft_object {
+            // TODO: write test for this logic
+            if obj.pledged_until_height.unwrap_or_default() as u64 >= current_height.as_u64() {
+                return self.create_pledge(&shard, obj);
             }
-
-            let r: ObjectPledge = serde_json::from_str(&object_pledge)?;
-            if r.pledged_until > current_height {
-                return Ok(r);
-            }
-            db_current_state = serde_json::from_str(&obj.current_state)?;
         }
 
         // otherwise save pledge
-        let pledge = ObjectPledge {
-            object_id: object,
-            current_state: db_current_state.clone(),
-            pledged_to_payload: payload,
-            pledged_until: current_height + NodeHeight(4),
-        };
-
-        let new_row = NewObject {
-            shard_id: shard,
-            object_id: f_object,
-            payload_id: f_payload,
+        let new_row = NewSubstate {
+            substate_type: match change {
+                SubstateChange::Create => "UP".to_string(),
+                SubstateChange::Destroy => "DOWN".to_string(),
+            },
+            shard_id: shard.clone(),
             node_height: current_height.as_u64() as i64,
-            object_pledge: json!(&pledge).to_string(),
-            current_state: json!(&db_current_state).to_string(),
+            data: None,
+            created_by_payload_id: f_payload.clone(),
+            deleted_by_payload_id: None,
+            justify: None,
+            is_draft: true,
+            tree_node_hash: None,
+            pledged_to_payload_id: Some(f_payload.clone()),
+            pledged_until_height: Some(current_height.as_u64() as i64 + 4),
         };
-        diesel::insert_into(objects)
+        let num_affected = diesel::insert_into(substates)
             .values(new_row)
             .execute(&self.connection)
             .map_err(|e| Self::Error::QueryError {
                 reason: format!("Pledge object error: {}", e),
             })?;
 
-        // entry.1 = Some(pledge.clone());
-        Ok(pledge)
+        if num_affected != 1 {
+            return Err(Self::Error::QueryError {
+                reason: "Pledge object error: no substate returned".to_string(),
+            });
+        }
+
+        let draft_object: Substate = substates
+            .filter(
+                shard_id
+                    .eq(&shard)
+                    .and(is_draft.eq(true))
+                    .and(pledged_to_payload_id.eq(f_payload)),
+            )
+            .order_by(node_height.desc())
+            .first(&self.connection)
+            .map_err(|e| Self::Error::QueryError {
+                reason: format!("Pledge object error: {}", e),
+            })?;
+
+        self.create_pledge(&shard, draft_object)
     }
 
     fn set_last_executed_height(&mut self, shard: ShardId, height: NodeHeight) -> Result<(), Self::Error> {
@@ -610,24 +651,87 @@ impl ShardStoreTransaction<PublicKey, TariDanPayload> for SqliteShardStoreTransa
     fn save_substate_changes(
         &mut self,
         changes: &HashMap<ShardId, SubstateState>,
-        node: TreeNodeHash,
+        node: &HotStuffTreeNode<PublicKey>,
     ) -> Result<(), Self::Error> {
-        for (sid, st_ch) in changes {
+        use crate::schema::substates::{data, is_draft, justify, node_height, shard_id, substate_type, tree_node_hash};
+        let payload_id = Vec::from(node.payload().as_slice());
+        for (sid, st_change) in changes {
             let shard = Vec::from(sid.as_bytes());
-            let substate_change = json!(st_ch).to_string();
 
-            let new_row = NewSubStateChange {
-                shard_id: shard,
-                tree_node_hash: Vec::from(node.as_bytes()),
-                substate_change,
-            };
+            let rows_affected = diesel::update(
+                substates.filter(
+                    shard_id
+                        .eq(shard.clone())
+                        .and(is_draft.eq(true))
+                        .and(pledged_to_payload_id.eq(&payload_id)),
+                ),
+            )
+            .set((
+                tree_node_hash.eq(Some(node.hash().as_bytes())),
+                node_height.eq(node.height().as_u64() as i64),
+                is_draft.eq(false),
+                substate_type.eq(st_change
+                    .as_ref()
+                    .map(|s| {
+                        match s {
+                            SubstateState::DoesNotExist => "DOESNOTEXIST", // TODO: should we remove the chance of this
+                            // happening? It's not valid for a change to
+                            // be saved as "Does not exist"
+                            SubstateState::Up { .. } => "UP",
+                            SubstateState::Down { .. } => "DOWN",
+                        }
+                        .to_string()
+                    })
+                    .ok_or_else(|| Self::Error::QueryError {
+                        reason: "Substate type not found".to_string(),
+                    })?),
+                data.eq(st_change.as_ref().and_then(|s| match s {
+                    SubstateState::DoesNotExist => None,
+                    SubstateState::Up { data: d, .. } => Some(d.clone()),
+                    SubstateState::Down { .. } => None,
+                })),
+                justify.eq(Some(json!(node.justify()).to_string())),
+            ))
+            .execute(&self.connection)
+            .map_err(|e| Self::Error::QueryError {
+                reason: format!("Save substate changes error: {}", e),
+            })?;
+            if rows_affected == 0 {
+                let new_row = NewSubstate {
+                    substate_type: st_change
+                        .as_ref()
+                        .map(|s| match s {
+                            SubstateState::DoesNotExist => "DoesNotExist", // TODO: should we remove the chance of this
+                            // happening? It's not valid for a change to
+                            // be saved as "Does not exist"
+                            SubstateState::Up { .. } => "Up",
+                            SubstateState::Down { .. } => "Down",
+                        })
+                        .unwrap_or("NoChange")
+                        .to_string(),
+                    shard_id: shard.clone(),
+                    node_height: node.height().as_u64() as i64,
+                    data: st_change.as_ref().and_then(|s| match s {
+                        SubstateState::DoesNotExist => None,
+                        SubstateState::Up { data: d, .. } => Some(d.clone()),
+                        SubstateState::Down { .. } => None,
+                    }),
+                    created_by_payload_id: payload_id.clone(),
+                    justify: Some(json!(node.justify()).to_string()),
+                    is_draft: false,
+                    tree_node_hash: Some(Vec::from(node.hash().as_bytes())),
+                    pledged_to_payload_id: None,
+                    deleted_by_payload_id: None,
+                    pledged_until_height: None,
+                };
 
-            diesel::insert_into(substate_changes)
-                .values(&new_row)
-                .execute(&self.connection)
-                .map_err(|e| Self::Error::QueryError {
-                    reason: format!("Save substate change: {}", e),
-                })?;
+                diesel::insert_into(substates)
+                    .values(&new_row)
+                    .execute(&self.connection)
+                    .map_err(|e| Self::Error::QueryError {
+                        reason: format!("Save substate change: {}", e),
+                    })?;
+            }
         }
         Ok(())
     }

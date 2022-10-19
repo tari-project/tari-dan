@@ -22,7 +22,7 @@
 
 use std::{collections::HashMap, fmt::Display};
 
-use tari_dan_common_types::{ObjectId, PayloadId, ShardId, SubstateState};
+use tari_dan_common_types::{PayloadId, ShardId, SubstateChange, SubstateState};
 use thiserror::Error;
 
 use crate::{
@@ -88,8 +88,8 @@ pub trait ShardStoreTransaction<TAddr: NodeAddressable, TPayload: Payload> {
     fn pledge_object(
         &mut self,
         shard: ShardId,
-        object: ObjectId,
         payload: PayloadId,
+        change: SubstateChange,
         current_height: NodeHeight,
     ) -> Result<ObjectPledge, Self::Error>;
     fn set_last_executed_height(&mut self, shard: ShardId, height: NodeHeight) -> Result<(), Self::Error>;
@@ -97,7 +97,7 @@ pub trait ShardStoreTransaction<TAddr: NodeAddressable, TPayload: Payload> {
     fn save_substate_changes(
         &mut self,
         changes: &HashMap<ShardId, SubstateState>,
-        node: TreeNodeHash,
+        node: &HotStuffTreeNode<TAddr>,
     ) -> Result<(), Self::Error>;
     fn get_last_voted_height(&self, shard: ShardId) -> Result<NodeHeight, Self::Error>;
     fn set_last_voted_height(&mut self, shard: ShardId, height: NodeHeight) -> Result<(), Self::Error>;

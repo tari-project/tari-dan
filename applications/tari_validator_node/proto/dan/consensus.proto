@@ -89,7 +89,7 @@ message ObjectPledge {
         CURRENT_STATE_UP = 1;
         CURRENT_STATE_DOWN = 2;
     }
-    bytes object_id = 1;
+    bytes shard_id = 1;
     CurrentState current_state = 2;
     bytes created_by =3;
     bytes data = 4;
