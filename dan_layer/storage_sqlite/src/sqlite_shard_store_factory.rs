@@ -767,19 +767,17 @@ impl ShardStoreTransaction<PublicKey, TariDanPayload> for SqliteShardStoreTransa
         if let Some(substate_states) = substate_states {
             substate_states
                 .iter()
-                .map(|ss| {
-                    match ss.substate_type.as_str() {
-                        "UP" => Ok(SubstateState::Up {
-                            created_by: PayloadId::try_from(ss.created_by_payload_id.clone())?,
-                            data: ss.data.clone().unwrap_or_default(),
-                        }),
-                        "DOWN" => Ok(SubstateState::Down {
-                            deleted_by: PayloadId::try_from(ss.deleted_by_payload_id.clone().unwrap_or_default())?,
-                        }),
-                        _ => Err(StorageError::InvalidSubStateType {
-                            substate_type: ss.substate_type.clone(),
-                        }),
-                    }
+                .map(|ss| match ss.substate_type.as_str() {
+                    "UP" => Ok(SubstateState::Up {
+                        created_by: PayloadId::try_from(ss.created_by_payload_id.clone())?,
+                        data: ss.data.clone().unwrap_or_default(),
+                    }),
+                    "DOWN" => Ok(SubstateState::Down {
+                        deleted_by: PayloadId::try_from(ss.deleted_by_payload_id.clone().unwrap_or_default())?,
+                    }),
+                    _ => Err(StorageError::InvalidSubStateType {
+                        substate_type: ss.substate_type.clone(),
+                    }),
                 })
                 .collect::<Result<_, _>>()
         } else {
