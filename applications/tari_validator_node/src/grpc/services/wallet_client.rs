@@ -85,9 +85,10 @@ impl GrpcWalletClient {
         };
         let result = inner.register_validator_node(request).await?.into_inner();
 
-        match result.is_success {
-            true => Ok(result),
-            false => Err(DigitalAssetError::NodeRegistration(result.failure_message)),
+        if result.is_success {
+            Ok(result)
+        } else {
+            Err(DigitalAssetError::NodeRegistration(result.failure_message))
         }
     }
 
