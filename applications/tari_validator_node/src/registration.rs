@@ -42,8 +42,8 @@ use tokio::{task, time};
 use crate::{p2p::services::epoch_manager::handle::EpochManagerHandle, ApplicationConfig, GrpcWalletClient};
 
 const LOG_TARGET: &str = "tari::validator_node::app";
-const MAX_REGISTRATION_ATTEMPTS: u8 = 3;
-const REGISTRATION_COOLDOWN_IN_MS: u32 = 500;
+const MAX_REGISTRATION_ATTEMPTS: u8 = 8;
+const REGISTRATION_COOLDOWN_IN_MS: u32 = 350;
 
 #[derive(Debug, thiserror::Error)]
 pub enum AutoRegistrationError {
@@ -83,9 +83,10 @@ pub async fn register(
             Err(e) => {
                 warn!(
                     target: LOG_TARGET,
-                    "❌ Validator node registration failed with error {}. Trying again, attempt {} of 3.",
+                    "❌ Validator node registration failed with error {}. Trying again, attempt {} of {}.",
                     e.to_string(),
-                    attempts
+                    attempts,
+                    MAX_REGISTRATION_ATTEMPTS,
                 );
 
                 if attempts >= MAX_REGISTRATION_ATTEMPTS {
