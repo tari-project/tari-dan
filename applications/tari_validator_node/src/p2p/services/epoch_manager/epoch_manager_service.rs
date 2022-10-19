@@ -45,7 +45,7 @@ pub struct EpochManagerService {
         oneshot::Sender<Result<EpochManagerResponse, EpochManagerError>>,
     )>,
     inner: BaseLayerEpochManager,
-    notifications: (
+    events: (
         broadcast::Sender<EpochManagerEvent>,
         broadcast::Receiver<EpochManagerEvent>,
     ),
@@ -127,7 +127,7 @@ impl EpochManagerService {
             EpochManagerService {
                 rx_request,
                 inner: BaseLayerEpochManager::new(db_factory, base_node_client, id, tx.clone()),
-                notifications: (tx, rx),
+                events: (tx, rx),
             }
             .run(shutdown)
             .await
@@ -189,7 +189,7 @@ impl EpochManagerService {
                 Ok(EpochManagerResponse::FilterToLocalShards { shards })
             },
             EpochManagerRequest::Subscribe => Ok(EpochManagerResponse::Subscribe {
-                rx: self.notifications.1.resubscribe(),
+                rx: self.events.1.resubscribe(),
             }),
         }
     }
