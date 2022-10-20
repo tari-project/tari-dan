@@ -21,10 +21,12 @@
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 use log::*;
+use tari_dan_core::services::TemplateProvider;
+use tari_dan_engine::packager::TemplateModuleLoader;
 use tari_dan_storage::global::{DbTemplateUpdate, TemplateStatus};
-use tari_dan_storage_sqlite::SqliteDbFactory;
 use tari_shutdown::ShutdownSignal;
 use tari_template_lib::models::TemplateAddress;
+use tari_validator_node_client::types::{FunctionDef, TemplateAbi};
 use tokio::{
     sync::{mpsc, mpsc::Receiver, oneshot},
     task::JoinHandle,
@@ -60,12 +62,16 @@ pub enum TemplateManagerRequest {
         limit: usize,
         reply: oneshot::Sender<Result<Vec<TemplateMetadata>, TemplateManagerError>>,
     },
+    LoadTemplateAbi {
+        address: TemplateAddress,
+        reply: oneshot::Sender<Result<TemplateAbi, TemplateManagerError>>,
+    },
 }
 
 impl TemplateManagerService {
     pub fn spawn(
         rx_request: Receiver<TemplateManagerRequest>,
-        sqlite_db_factory: SqliteDbFactory,
+        manager: TemplateManager,
         download_queue: mpsc::Sender<DownloadRequest>,
         completed_downloads: mpsc::Receiver<DownloadResult>,
         shutdown: ShutdownSignal,
@@ -73,7 +79,7 @@ impl TemplateManagerService {
         tokio::spawn(
             Self {
                 rx_request,
-                manager: TemplateManager::new(sqlite_db_factory),
+                manager,
                 download_queue,
                 completed_downloads,
             }
@@ -111,7 +117,26 @@ impl TemplateManagerService {
                 handle(reply, self.manager.fetch_template(&address));
             },
             GetTemplates { limit, reply } => handle(reply, self.manager.fetch_template_metadata(limit)),
+            LoadTemplateAbi { address, reply } => handle(reply, self.handle_load_template_abi(address)),
         }
+    }
+
+    fn handle_load_template_abi(&mut self, address: TemplateAddress) -> Result<TemplateAbi, TemplateManagerError> {
+        let template = self.manager.get_template_module(&address)?;
+        let loaded = template.load_template()?;
+        Ok(TemplateAbi {
+            template_name: loaded.template_def().template_name.clone(),
+            functions: loaded
+                .template_def()
+                .functions
+                .iter()
+                .map(|f| FunctionDef {
+                    name: f.name.clone(),
+                    arguments: f.arguments.iter().map(|a| a.to_string()).collect(),
+                    output: f.output.to_string(),
+                })
+                .collect(),
+        })
     }
 
     fn handle_completed_download(&mut self, download: DownloadResult) -> Result<(), TemplateManagerError> {

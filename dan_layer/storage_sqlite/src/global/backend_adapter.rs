@@ -140,6 +140,7 @@ impl GlobalDbAdapter for SqliteGlobalDbAdapter {
 
         match template {
             Some(t) => Ok(Some(DbTemplate {
+                template_name: t.template_name,
                 template_address: t.template_address.try_into()?,
                 url: t.url,
                 height: t.height as u64,
@@ -166,6 +167,7 @@ impl GlobalDbAdapter for SqliteGlobalDbAdapter {
             .into_iter()
             .map(|t| {
                 Ok(DbTemplate {
+                    template_name: t.template_name,
                     template_address: t.template_address.try_into()?,
                     url: t.url,
                     height: t.height as u64,
@@ -180,6 +182,7 @@ impl GlobalDbAdapter for SqliteGlobalDbAdapter {
 
     fn insert_template(&self, tx: &Self::DbTransaction, item: DbTemplate) -> Result<(), Self::Error> {
         let new_template = NewTemplateModel {
+            template_name: item.template_name,
             template_address: item.template_address.to_vec(),
             url: item.url.to_string(),
             height: item.height as i32,

@@ -29,7 +29,9 @@ use tari_dan_storage::global::GlobalDb;
 
 use crate::{error::SqliteStorageError, global::SqliteGlobalDbAdapter};
 
-#[derive(Clone)]
+const LOG_TARGET: &str = "tari::dan::sqlite_storage";
+
+#[derive(Debug, Clone)]
 pub struct SqliteDbFactory {
     data_dir: PathBuf,
 }
@@ -44,26 +46,24 @@ impl DbFactory for SqliteDbFactory {
     type GlobalDbAdapter = SqliteGlobalDbAdapter;
 
     fn get_or_create_global_db(&self) -> Result<GlobalDb<Self::GlobalDbAdapter>, StorageError> {
-        let database_url = self
-            .data_dir
-            .join("global_storage.sqlite")
-            .into_os_string()
-            .into_string()
-            .expect("Should not fail");
+        let database_url = self.data_dir.join("global_storage.sqlite");
 
-        create_dir_all(&PathBuf::from(&database_url).parent().unwrap())
-            .map_err(|_| StorageError::FileSystemPathDoesNotExist)?;
+        create_dir_all(&database_url.parent().unwrap()).map_err(|_| StorageError::FileSystemPathDoesNotExist)?;
 
-        let connection = SqliteConnection::establish(database_url.as_str()).map_err(SqliteStorageError::from)?;
+        let database_url = database_url.to_str().expect("database_url utf-8 error").to_string();
+        let connection = SqliteConnection::establish(&database_url).map_err(SqliteStorageError::from)?;
+
+        embed_migrations!("./global_db_migrations");
+        // embedded_migrations::run(&connection).map_err(SqliteStorageError::from)?;
+        if let Err(err) = embedded_migrations::run_with_output(&connection, &mut std::io::stdout()) {
+            log::error!(target: LOG_TARGET, "Error running migrations: {}", err);
+        }
         connection
             .execute("PRAGMA foreign_keys = ON;")
             .map_err(|source| SqliteStorageError::DieselError {
                 source,
                 operation: "set pragma".to_string(),
             })?;
-        embed_migrations!("./global_db_migrations");
-        // embedded_migrations::run(&connection).map_err(SqliteStorageError::from)?;
-        embedded_migrations::run_with_output(&connection, &mut std::io::stdout()).expect("Migration failed");
         Ok(GlobalDb::new(SqliteGlobalDbAdapter::new(database_url)))
     }
 }

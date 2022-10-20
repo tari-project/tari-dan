@@ -89,6 +89,7 @@ impl From<DbTemplate> for Template {
     }
 }
 
+#[derive(Debug, Clone)]
 pub struct TemplateManager {
     db_factory: SqliteDbFactory,
 }
@@ -120,6 +121,7 @@ impl TemplateManager {
 
     pub(super) fn add_template(&self, template: TemplateRegistration) -> Result<(), TemplateManagerError> {
         let template = DbTemplate {
+            template_name: template.template_name,
             template_address: template.template_address.into_array().into(),
             url: template.registration.binary_url.into_string(),
             height: template.mined_height,
@@ -159,7 +161,7 @@ impl TemplateProvider for TemplateManager {
     type Error = TemplateManagerError;
     type Template = WasmModule;
 
-    fn get_template(&self, address: &TemplateAddress) -> Result<Self::Template, Self::Error> {
+    fn get_template_module(&self, address: &TemplateAddress) -> Result<Self::Template, Self::Error> {
         let template = self.fetch_template(address)?;
         Ok(WasmModule::from_code(template.compiled_code))
     }

@@ -26,16 +26,17 @@ use clap::{Args, Subcommand};
 use tari_dan_engine::wasm::compile::compile_template;
 use tari_engine_types::{hashing::hasher, TemplateAddress};
 use tari_validator_node_client::{
-    types::{GetTemplatesRequest, TemplateRegistrationRequest},
+    types::{GetTemplateRequest, GetTemplateResponse, GetTemplatesRequest, TemplateRegistrationRequest},
     ValidatorNodeClient,
 };
 
-use crate::{table::Table, table_row, Prompt};
+use crate::{from_hex::FromHex, table::Table, table_row, Prompt};
 
 #[derive(Debug, Subcommand, Clone)]
 pub enum TemplateSubcommand {
-    Publish(PublishTemplateArgs),
+    Get { template_address: FromHex<TemplateAddress> },
     List,
+    Publish(PublishTemplateArgs),
 }
 
 #[derive(Debug, Args, Clone)]
@@ -55,12 +56,40 @@ pub struct PublishTemplateArgs {
 
 impl TemplateSubcommand {
     pub async fn handle(self, client: ValidatorNodeClient) -> Result<(), anyhow::Error> {
+        #[allow(clippy::enum_glob_use)]
+        use TemplateSubcommand::*;
         match self {
-            TemplateSubcommand::Publish(args) => handle_publish(args, client).await?,
-            TemplateSubcommand::List => handle_list(client).await?,
+            Get { template_address } => handle_get(template_address.into_inner(), client).await?,
+            List => handle_list(client).await?,
+            Publish(args) => handle_publish(args, client).await?,
         }
         Ok(())
     }
+}
+
+async fn handle_get(template_address: TemplateAddress, mut client: ValidatorNodeClient) -> Result<(), anyhow::Error> {
+    let GetTemplateResponse {
+        registration_metadata,
+        abi,
+    } = client.get_template(GetTemplateRequest { template_address }).await?;
+    println!(
+        "Template {} | Mined at {}",
+        registration_metadata.address, registration_metadata.height
+    );
+    println!();
+
+    let mut table = Table::new();
+    table.set_titles(vec!["Function", "Args", "Returns"]);
+    for f in abi.functions {
+        table.add_row(table_row![
+            format!("{}::{}", abi.template_name, f.name),
+            f.arguments.join(","),
+            f.output
+        ]);
+    }
+    table.print_stdout();
+
+    Ok(())
 }
 
 async fn handle_list(mut client: ValidatorNodeClient) -> Result<(), anyhow::Error> {

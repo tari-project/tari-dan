@@ -47,6 +47,30 @@ pub struct TemplateRegistrationResponse {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct GetTemplateRequest {
+    pub template_address: TemplateAddress,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct GetTemplateResponse {
+    pub registration_metadata: TemplateMetadata,
+    pub abi: TemplateAbi,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TemplateAbi {
+    pub template_name: String,
+    pub functions: Vec<FunctionDef>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct FunctionDef {
+    pub name: String,
+    pub arguments: Vec<String>,
+    pub output: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct GetTemplatesRequest {
     pub limit: u64,
 }
