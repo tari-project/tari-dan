@@ -20,12 +20,13 @@
 //   WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //   USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+use serde::Serialize;
 use tari_comms::{multiaddr::Multiaddr, peer_manager::IdentitySignature};
 use tari_dan_engine::transaction::Transaction;
 
 use crate::models::{vote_message::VoteMessage, HotStuffMessage};
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize)]
 pub enum DanMessage<TPayload, TAddr> {
     // Consensus
     HotStuffMessage(HotStuffMessage<TPayload, TAddr>),
@@ -47,7 +48,7 @@ impl<TPayload, TAddr> DanMessage<TPayload, TAddr> {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize)]
 pub struct NetworkAnnounce<TAddr> {
     pub identity: TAddr,
     pub addresses: Vec<Multiaddr>,

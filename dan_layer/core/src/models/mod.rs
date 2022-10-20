@@ -133,7 +133,7 @@ impl AsRef<[u8]> for TokenId {
     }
 }
 
-#[derive(Debug, Copy, Clone, Eq, PartialEq)]
+#[derive(Debug, Copy, Clone, Eq, PartialEq, Serialize)]
 pub enum HotStuffMessageType {
     NewView,
     Generic,

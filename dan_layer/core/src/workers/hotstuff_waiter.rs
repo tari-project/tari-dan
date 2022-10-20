@@ -322,10 +322,13 @@ where
 
         let new_view;
         {
-            let tx = self.shard_store.create_tx()?;
+            let mut tx = self.shard_store.create_tx()?;
 
             let high_qc = tx.get_high_qc_for(shard).map_err(|e| e.into())?;
 
+            //  Save the payload, because we will need it when the proposal comes back
+            tx.set_payload(payload.clone()).map_err(|e| e.into())?;
+            tx.commit().map_err(|e| e.into())?;
             new_view = HotStuffMessage::new_view(high_qc, shard, Some(payload));
         }
 
