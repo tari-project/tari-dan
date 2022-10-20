@@ -1,4 +1,5 @@
 use std::{
+    str::FromStr,
     thread::{self, JoinHandle},
     time::Duration,
 };
@@ -7,6 +8,8 @@ use axum::http::HeaderMap;
 use reqwest::{header, Response, Url};
 use serde_json::json;
 use tari_common::configuration::CommonConfig;
+use tari_comms::multiaddr::Multiaddr;
+use tari_comms_dht::DhtConfig;
 use tari_p2p::{Network, PeerSeedsConfig, TransportType};
 use tari_validator_node::{run_node, ApplicationConfig, ValidatorNodeConfig};
 use tempfile::tempdir;
@@ -17,6 +20,7 @@ use crate::TariWorld;
 #[derive(Debug)]
 pub struct ValidatorNodeProcess {
     pub name: String,
+    pub port: u64,
     pub handle: JoinHandle<()>,
 }
 
@@ -26,11 +30,13 @@ pub fn spawn_validator_node(
     base_node_name: String,
     wallet_name: String,
 ) {
+    thread::sleep(Duration::from_secs(500));
+    // TODO: use different ports on each spawned vn
+    let port = 9002;
     let base_node_grpc_port = world.base_nodes.get(&base_node_name).unwrap().grpc_port;
     let wallet_grpc_port = world.wallets.get(&wallet_name).unwrap().grpc_port;
 
     let handle = thread::spawn(move || {
-        // TODO: store the VN in the world by the name
         let mut config = ApplicationConfig {
             common: CommonConfig::default(),
             validator_node: ValidatorNodeConfig::default(),
@@ -47,7 +53,14 @@ pub fn spawn_validator_node(
         config.validator_node.tor_identity_file = temp_dir.path().join("validator_node_tor_id.json");
         config.validator_node.base_node_grpc_address = format!("127.0.0.1:{}", base_node_grpc_port).parse().unwrap();
         config.validator_node.wallet_grpc_address = format!("127.0.0.1:{}", wallet_grpc_port).parse().unwrap();
+
         config.validator_node.p2p.transport.transport_type = TransportType::Tcp;
+        config.validator_node.p2p.transport.tcp.listener_address =
+            Multiaddr::from_str(&format!("/ip4/127.0.0.1/tcp/{}", port)).unwrap();
+        config.validator_node.p2p.public_address =
+            Some(config.validator_node.p2p.transport.tcp.listener_address.clone());
+        config.validator_node.p2p.datastore_path = temp_dir.path().to_path_buf().join("peer_db/wallet");
+        config.validator_node.p2p.dht = DhtConfig::default_local_test();
 
         let mut builder = runtime::Builder::new_multi_thread();
         let rt = builder.enable_all().build().unwrap();
@@ -61,6 +74,7 @@ pub fn spawn_validator_node(
     // make the new vn able to be referenced by other processes
     let validator_node_process = ValidatorNodeProcess {
         name: validator_node_name.clone(),
+        port,
         handle,
     };
     world

@@ -1,11 +1,21 @@
-use std::thread;
+use std::str::FromStr;
 
-use tari_app_utilities::common_cli_args::CommonCliArgs;
-use tari_miner::{cli::Cli, config::MinerConfig};
-use tempfile::tempdir;
-use tokio::runtime;
+use tari_app_grpc::{
+    authentication::ClientAuthenticationInterceptor,
+    tari_rpc::{pow_algo::PowAlgos, wallet_client::WalletClient, NewBlockTemplate, NewBlockTemplateRequest, PowAlgo},
+};
+use tari_base_node_grpc_client::BaseNodeGrpcClient;
+use tari_miner::utils::{coinbase_request, extract_outputs_and_kernels};
+use tari_wallet_grpc_client::GrpcAuthentication;
+use tonic::{
+    codegen::InterceptedService,
+    transport::{Channel, Endpoint},
+};
 
 use crate::TariWorld;
+
+type BaseNodeClient = BaseNodeGrpcClient<tonic::transport::Channel>;
+type WalletGrpcClient = WalletClient<InterceptedService<Channel, ClientAuthenticationInterceptor>>;
 
 #[derive(Debug)]
 pub struct MinerProcess {
@@ -28,38 +38,61 @@ pub async fn mine_blocks(world: &mut TariWorld, miner_name: String, num_blocks: 
     let base_node_grpc_port = world.base_nodes.get(&miner.base_node_name).unwrap().grpc_port;
     let wallet_grpc_port = world.wallets.get(&miner.wallet_name).unwrap().grpc_port;
 
-    let config = MinerConfig {
-        base_node_grpc_address: format!("/ip4/127.0.0.1/tcp/{}", base_node_grpc_port).parse().unwrap(),
-        wallet_grpc_address: format!("/ip4/127.0.0.1/tcp/{}", wallet_grpc_port).parse().unwrap(),
-        num_mining_threads: 1,
-        ..Default::default()
+    let base_node_grpc_url = format!("http://127.0.0.1:{}", base_node_grpc_port);
+    let mut base_client = BaseNodeClient::connect(base_node_grpc_url).await.unwrap();
+
+    let mut wallet_client = connect_wallet(wallet_grpc_port).await;
+
+    for _ in 0..num_blocks {
+        mine_block(&mut base_client, &mut wallet_client).await;
+    }
+}
+
+async fn mine_block(base_client: &mut BaseNodeClient, wallet_client: &mut WalletGrpcClient) {
+    // get block template request
+    let template_req = NewBlockTemplateRequest {
+        algo: Some(PowAlgo {
+            pow_algo: PowAlgos::Sha3.into(),
+        }),
+        max_weight: 0,
     };
+    let template_res = base_client
+        .get_new_block_template(template_req)
+        .await
+        .unwrap()
+        .into_inner();
+    let mut block_template: NewBlockTemplate = template_res.new_block_template.clone().unwrap();
 
-    let temp_dir = tempdir().unwrap();
-    println!("Using miner temp_dir: {}", temp_dir.path().display());
-    let data_dir = temp_dir.into_path();
-    let data_dir_str = data_dir.clone().into_os_string().into_string().unwrap();
-    let mut config_path = data_dir;
-    config_path.push("config.toml");
+    // get the coinbase from the wallet
+    let coinbase_req = coinbase_request(&template_res).unwrap();
+    let coinbase_res = wallet_client.get_coinbase(coinbase_req).await.unwrap().into_inner();
 
-    let cli = Cli {
-        common: CommonCliArgs {
-            base_path: data_dir_str,
-            config: config_path.into_os_string().into_string().unwrap(),
-            log_config: None,
-            log_level: None,
-            config_property_overrides: vec![],
-        },
-        mine_until_height: Some(1),
-        miner_max_blocks: Some(num_blocks),
-        miner_min_diff: Some(0),
-        miner_max_diff: Some(100000),
-    };
+    // add the coinbase to the block
+    let (output, kernel) = extract_outputs_and_kernels(coinbase_res).unwrap();
+    let body = block_template.body.as_mut().unwrap();
+    body.outputs.push(output);
+    body.kernels.push(kernel);
 
-    let handle = thread::spawn(move || async { 
-        tari_miner::run_miner_with_cli(config, cli).await
-    });
-    
-    // we block test execution until the blocks have been mined
-    handle.join().unwrap().await.unwrap();
+    let block_result = base_client
+        .get_new_block(block_template.clone())
+        .await
+        .unwrap()
+        .into_inner();
+    let block = block_result.block.unwrap();
+
+    let _sumbmit_res = base_client.submit_block(block).await.unwrap();
+
+    println!(
+        "Block successfully mined at height {:?}",
+        block_template.header.unwrap().height
+    );
+}
+
+async fn connect_wallet(wallet_grpc_port: u64) -> WalletGrpcClient {
+    let wallet_addr = format!("http://127.0.0.1:{}", wallet_grpc_port);
+    let channel = Endpoint::from_str(&wallet_addr).unwrap().connect().await.unwrap();
+    WalletClient::with_interceptor(
+        channel,
+        ClientAuthenticationInterceptor::create(&GrpcAuthentication::default()).unwrap(),
+    )
 }
