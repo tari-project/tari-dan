@@ -575,6 +575,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "bufstream"
+version = "0.1.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "40e38929add23cdf8a366df9b0e088953150724bcbe5fc330b0d8eb3b328eec8"
+
+[[package]]
 name = "bumpalo"
 version = "3.11.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1102,6 +1108,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "crossbeam"
+version = "0.8.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2801af0d36612ae591caa9568261fddce32ce6e08a7275ea334a06a4ad021a2c"
+dependencies = [
+ "cfg-if 1.0.0",
+ "crossbeam-channel",
+ "crossbeam-deque",
+ "crossbeam-epoch",
+ "crossbeam-queue",
+ "crossbeam-utils",
+]
+
+[[package]]
 name = "crossbeam-channel"
 version = "0.5.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1133,6 +1153,16 @@ dependencies = [
  "crossbeam-utils",
  "memoffset",
  "scopeguard",
+]
+
+[[package]]
+name = "crossbeam-queue"
+version = "0.3.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1cd42583b04998a5363558e5f9291ee5a5ff6b49944332103f251e7479a82aa7"
+dependencies = [
+ "cfg-if 1.0.0",
+ "crossbeam-utils",
 ]
 
 [[package]]
@@ -5776,6 +5806,41 @@ dependencies = [
 ]
 
 [[package]]
+name = "tari_miner"
+version = "0.38.5"
+dependencies = [
+ "base64 0.13.0",
+ "bufstream",
+ "chrono",
+ "clap 3.2.22",
+ "crossbeam",
+ "crossterm 0.17.7",
+ "derivative",
+ "futures 0.3.24",
+ "hex",
+ "log",
+ "native-tls",
+ "num_cpus",
+ "prost-types",
+ "rand 0.7.3",
+ "reqwest",
+ "serde",
+ "serde_json",
+ "sha3",
+ "tari_app_grpc",
+ "tari_app_utilities",
+ "tari_common",
+ "tari_common_types 0.38.5",
+ "tari_comms",
+ "tari_core",
+ "tari_crypto",
+ "tari_utilities",
+ "thiserror",
+ "tokio",
+ "tonic",
+]
+
+[[package]]
 name = "tari_mmr"
 version = "0.38.5"
 dependencies = [
@@ -6007,6 +6072,7 @@ dependencies = [
  "tari_dan_storage",
  "tari_dan_storage_sqlite",
  "tari_engine_types",
+ "tari_miner",
  "tari_mmr",
  "tari_p2p",
  "tari_shutdown 0.38.5",
