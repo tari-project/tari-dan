@@ -52,6 +52,7 @@ use crate::{
 };
 
 const LOG_TARGET: &str = "tari::validator_node::base_layer_scanner";
+const NUM_CONFIRMATIONS: u64 = 10;
 
 pub fn spawn(
     config: ValidatorNodeConfig,
@@ -216,7 +217,7 @@ impl BaseLayerScanner {
     }
 
     async fn sync_blockchain(&mut self) -> Result<(), BaseLayerScannerError> {
-        let start_scan_height = self.last_scanned_height;
+        let start_scan_height = self.last_scanned_height - NUM_CONFIRMATIONS;
         let mut current_hash = self.last_scanned_hash;
         // TODO: we need to scan ending a few blocks back to mitigate for reorgs
         let tip = self.base_node_client.get_tip_info().await?;
