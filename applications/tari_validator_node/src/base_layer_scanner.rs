@@ -52,7 +52,7 @@ use crate::{
 };
 
 const LOG_TARGET: &str = "tari::validator_node::base_layer_scanner";
-const NUM_CONFIRMATIONS: u64 = 10;
+const NUM_CONFIRMATIONS: u64 = 10; 
 
 pub fn spawn(
     config: ValidatorNodeConfig,
@@ -217,14 +217,14 @@ impl BaseLayerScanner {
     }
 
     async fn sync_blockchain(&mut self) -> Result<(), BaseLayerScannerError> {
-        let start_scan_height = self.last_scanned_height - NUM_CONFIRMATIONS;
+        let start_scan_height = self.last_scanned_height;
         let mut current_hash = self.last_scanned_hash;
         // TODO: we need to scan ending a few blocks back to mitigate for reorgs
         let tip = self.base_node_client.get_tip_info().await?;
         if tip.height_of_longest_chain == 0 {
             return Ok(());
         }
-        let end_height = tip.height_of_longest_chain;
+        let end_height = tip.height_of_longest_chain - NUM_CONFIRMATIONS;
 
         for current_height in start_scan_height..=end_height {
             let utxos = self
@@ -265,13 +265,8 @@ impl BaseLayerScanner {
                         self.register_validator_node_registration(current_height, reg).await?;
                     },
                     SideChainFeature::TemplateRegistration(reg) => {
-                        self.register_code_template_registration(
-                            reg.clone().template_name.into_string(),
-                            (*output_hash).into(),
-                            reg,
-                            &block_info,
-                        )
-                        .await?;
+                        self.register_code_template_registration(reg.clone().template_name.into_string(), (*output_hash).into(), reg, &block_info)
+                            .await?;
                     },
                 }
             }
