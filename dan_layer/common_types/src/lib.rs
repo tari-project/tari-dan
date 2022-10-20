@@ -95,7 +95,7 @@ impl Display for ShardId {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Hash, Deserialize, Serialize)]
+#[derive(Clone, Debug, Copy, PartialEq, Eq, Hash, Deserialize, Serialize)]
 pub enum SubstateChange {
     Create,
     Destroy,
