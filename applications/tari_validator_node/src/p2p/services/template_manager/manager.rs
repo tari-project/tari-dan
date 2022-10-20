@@ -121,6 +121,7 @@ impl TemplateManager {
 
     pub(super) fn add_template(&self, template: TemplateRegistration) -> Result<(), TemplateManagerError> {
         let template = DbTemplate {
+            template_name: template.template_name,
             template_address: template.template_address.into_array().into(),
             url: template.registration.binary_url.into_string(),
             height: template.mined_height,

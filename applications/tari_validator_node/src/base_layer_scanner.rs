@@ -264,8 +264,13 @@ impl BaseLayerScanner {
                         self.register_validator_node_registration(current_height, reg).await?;
                     },
                     SideChainFeature::TemplateRegistration(reg) => {
-                        self.register_code_template_registration((*output_hash).into(), reg, &block_info)
-                            .await?;
+                        self.register_code_template_registration(
+                            reg.clone().template_name.into_string(),
+                            (*output_hash).into(),
+                            reg,
+                            &block_info,
+                        )
+                        .await?;
                     },
                 }
             }
@@ -313,6 +318,7 @@ impl BaseLayerScanner {
 
     async fn register_code_template_registration(
         &mut self,
+        template_name: String,
         template_address: TemplateAddress,
         registration: CodeTemplateRegistration,
         block_info: &BlockInfo,
@@ -322,6 +328,7 @@ impl BaseLayerScanner {
             "🌠 new template found with address {} at height {}", template_address, block_info.height
         );
         let template = TemplateRegistration {
+            template_name,
             template_address,
             registration,
             mined_height: block_info.height,

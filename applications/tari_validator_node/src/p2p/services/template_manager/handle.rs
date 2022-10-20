@@ -84,6 +84,7 @@ impl TemplateManagerHandle {
 
 #[derive(Debug, Clone)]
 pub struct TemplateRegistration {
+    pub template_name: String,
     pub template_address: TemplateAddress,
     pub registration: CodeTemplateRegistration,
     pub mined_height: u64,

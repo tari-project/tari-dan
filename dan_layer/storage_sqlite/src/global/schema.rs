@@ -39,6 +39,7 @@ table! {
 table! {
     templates (id) {
         id -> Integer,
+        template_name -> Text,
         template_address -> Binary,
         url -> Text,
         height -> Integer,
