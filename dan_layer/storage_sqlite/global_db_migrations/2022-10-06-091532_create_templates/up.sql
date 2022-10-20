@@ -32,7 +32,7 @@ create table templates
     -- compiled template code as a WASM binary
     compiled_code    blob                              not null,
     -- template name 
-    template_name    text                              not null,
+    template_name    text                              not null
 );
 
 -- fetching by the template_address will be a very common operation
