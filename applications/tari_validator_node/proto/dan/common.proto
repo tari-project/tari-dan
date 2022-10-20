@@ -130,6 +130,7 @@ message SubstateState {
   PayloadId created_by = 2;
   bytes data = 3;
   PayloadId deleted_by = 4;
+}
 
 message TransactionMeta {
   repeated bytes involved_shard_ids = 1;
