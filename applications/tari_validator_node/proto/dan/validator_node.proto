@@ -112,10 +112,6 @@ message GetIdentityResponse {
   bytes node_id = 3;
 }
 
-
-
-
-
 message SubmitTransactionRequest{
   tari.dan.common.Transaction transaction = 1;
 }

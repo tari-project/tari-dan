@@ -28,10 +28,10 @@ use std::{
 use anyhow::anyhow;
 use borsh::de::BorshDeserialize;
 use chrono::{DateTime, NaiveDateTime, Utc};
-use tari_common_types::types::{PrivateKey, PublicKey, Signature};
+use tari_common_types::types::{FixedHash, PrivateKey, PublicKey, Signature};
 use tari_comms::{peer_manager::IdentitySignature, types::CommsPublicKey};
 use tari_crypto::tari_utilities::ByteArray;
-use tari_dan_common_types::{ShardId, SubstateState};
+use tari_dan_common_types::{ObjectClaim, PayloadId, ShardId, SubstateChange, SubstateState};
 use tari_dan_core::{
     message::{DanMessage, NetworkAnnounce},
     models::{
@@ -101,6 +101,89 @@ impl TryFrom<proto::validator_node::DanMessage> for DanMessage<TariDanPayload, C
                 Ok(DanMessage::NetworkAnnounce(msg.try_into()?))
             },
         }
+    }
+}
+
+// -------------------------------- ShardId ------------------------------------ //
+
+impl TryFrom<proto::common::ShardId> for ShardId {
+    type Error = anyhow::Error;
+
+    fn try_from(value: proto::common::ShardId) -> Result<Self, Self::Error> {
+        let mut data = [0u8; 32];
+        data.copy_from_slice(value.bytes.as_slice());
+        Ok(ShardId(data))
+    }
+}
+
+impl From<ShardId> for proto::common::ShardId {
+    fn from(value: ShardId) -> Self {
+        Self {
+            bytes: Vec::from(value.to_le_bytes()),
+        }
+    }
+}
+
+// -------------------------------- PayloadId   -------------------------------- //
+
+impl TryFrom<proto::common::PayloadId> for PayloadId {
+    type Error = anyhow::Error;
+
+    fn try_from(value: proto::common::PayloadId) -> Result<Self, Self::Error> {
+        let hash = FixedHash::try_from(value.payload_id)?;
+        Ok(PayloadId::new(hash))
+    }
+}
+
+impl From<PayloadId> for proto::common::PayloadId {
+    fn from(value: PayloadId) -> Self {
+        Self {
+            payload_id: Vec::from(value.as_slice()),
+        }
+    }
+}
+
+// -------------------------------- SubstateState ------------------------------ //
+
+impl TryFrom<proto::common::SubstateState> for SubstateState {
+    type Error = anyhow::Error;
+
+    fn try_from(request: proto::common::SubstateState) -> Result<Self, Self::Error> {
+        let result = match request.substate_state_type {
+            0 => SubstateState::DoesNotExist,
+            1 => SubstateState::Up {
+                created_by: PayloadId::try_from(request.created_by.unwrap())?,
+                data: request.data,
+            },
+            2 => SubstateState::Down {
+                deleted_by: PayloadId::try_from(request.deleted_by.unwrap())?,
+            },
+            _ => return Err(anyhow!("bad gRPC substate state parsing")),
+        };
+
+        Ok(result)
+    }
+}
+
+impl From<SubstateState> for proto::common::SubstateState {
+    fn from(value: SubstateState) -> Self {
+        let mut result = proto::common::SubstateState::default();
+        match value {
+            SubstateState::DoesNotExist => {
+                result.substate_state_type = 0;
+            },
+            SubstateState::Up { data, created_by } => {
+                result.substate_state_type = 1;
+                result.data = data;
+                result.created_by = Some(proto::common::PayloadId::from(created_by));
+            },
+            SubstateState::Down { deleted_by } => {
+                result.substate_state_type = 2;
+                result.deleted_by = Some(proto::common::PayloadId::from(deleted_by));
+            },
+        }
+
+        result
     }
 }
 
@@ -561,19 +644,41 @@ impl TryFrom<proto::common::Transaction> for Transaction {
         let instruction_signature = signature.try_into().map_err(|s| anyhow!("{}", s))?;
         let sender_public_key =
             PublicKey::from_bytes(&request.sender_public_key).map_err(|_| anyhow!("invalid sender_public_key"))?;
+        let meta = request.meta.map(TryInto::try_into).transpose()?;
         let transaction = Transaction::new(
-            // TODO
-            0,
+            request.fee,
             instructions,
             instruction_signature,
             sender_public_key,
-            // TODO
-            TransactionMeta::default(),
+            meta.unwrap_or_default(),
         );
 
         Ok(transaction)
     }
 }
+
+impl From<Transaction> for proto::common::Transaction {
+    fn from(transaction: Transaction) -> Self {
+        let fee = transaction.fee();
+        let meta = transaction.meta().clone();
+        let (instructions, signature, sender_public_key) = transaction.destruct();
+
+        proto::common::Transaction {
+            instructions: instructions.into_iter().map(Into::into).collect(),
+            signature: Some(signature.signature().into()),
+            sender_public_key: sender_public_key.to_vec(),
+            fee,
+            meta: Some(meta.into()),
+            // balance_proof: todo!(),
+            // inputs: todo!(),
+            // max_instruction_outputs: todo!(),
+            // outputs: todo!(),
+            ..Default::default()
+        }
+    }
+}
+
+// -------------------------------- Instruction -------------------------------- //
 
 impl TryFrom<proto::common::Instruction> for tari_engine_types::instruction::Instruction {
     type Error = anyhow::Error;
@@ -616,24 +721,6 @@ impl TryFrom<proto::common::Instruction> for tari_engine_types::instruction::Ins
     }
 }
 
-impl From<Transaction> for proto::common::Transaction {
-    fn from(transaction: Transaction) -> Self {
-        let (instructions, signature, sender_public_key) = transaction.destruct();
-
-        proto::common::Transaction {
-            instructions: instructions.into_iter().map(Into::into).collect(),
-            signature: Some(signature.signature().into()),
-            sender_public_key: sender_public_key.to_vec(),
-            // balance_proof: todo!(),
-            // inputs: todo!(),
-            // max_instruction_outputs: todo!(),
-            // outputs: todo!(),
-            // fee: todo!(),
-            ..Default::default()
-        }
-    }
-}
-
 impl From<tari_engine_types::instruction::Instruction> for proto::common::Instruction {
     fn from(instruction: tari_engine_types::instruction::Instruction) -> Self {
         let mut result = proto::common::Instruction::default();
@@ -667,6 +754,8 @@ impl From<tari_engine_types::instruction::Instruction> for proto::common::Instru
     }
 }
 
+// -------------------------------- Arg -------------------------------- //
+
 impl TryFrom<proto::common::Arg> for Arg {
     type Error = anyhow::Error;
 
@@ -698,5 +787,71 @@ impl From<Arg> for proto::common::Arg {
         }
 
         result
+    }
+}
+
+// -------------------------------- TransactionMeta -------------------------------- //
+
+impl TryFrom<proto::common::TransactionMeta> for TransactionMeta {
+    type Error = anyhow::Error;
+
+    fn try_from(val: proto::common::TransactionMeta) -> Result<Self, Self::Error> {
+        if val.involved_shard_ids.len() != val.involved_substates.len() {
+            return Err(anyhow!(
+                "involved_shard_ids and involved_shard_ids must have the same length"
+            ));
+        }
+
+        Ok(TransactionMeta::new(
+            val.involved_shard_ids
+                .into_iter()
+                .map(|s| ShardId::try_from(s).map_err(|e| anyhow!("{}", e)))
+                .zip(val.involved_substates.into_iter().map(|c| {
+                    proto::common::SubstateChange::from_i32(c.change)
+                        .ok_or_else(|| anyhow!("invalid change"))
+                        .and_then(SubstateChange::try_from)
+                }))
+                .map(|(a, b)| {
+                    let a = a?;
+                    let b = b?;
+                    Result::<_, anyhow::Error>::Ok((a, (b, ObjectClaim {})))
+                })
+                .collect::<Result<_, _>>()?,
+        ))
+    }
+}
+
+impl<T: Borrow<TransactionMeta>> From<T> for proto::common::TransactionMeta {
+    fn from(val: T) -> Self {
+        let mut meta = proto::common::TransactionMeta::default();
+        for (k, (ch, _)) in val.borrow().involved_objects_iter() {
+            meta.involved_shard_ids.push(k.as_bytes().to_vec());
+            meta.involved_substates.push(proto::common::SubstateRef {
+                change: proto::common::SubstateChange::from(*ch) as i32,
+            });
+        }
+        meta
+    }
+}
+
+// -------------------------------- SubstateChange -------------------------------- //
+
+impl TryFrom<proto::common::SubstateChange> for SubstateChange {
+    type Error = anyhow::Error;
+
+    fn try_from(val: proto::common::SubstateChange) -> Result<Self, Self::Error> {
+        match val {
+            proto::common::SubstateChange::Create => Ok(SubstateChange::Create),
+            proto::common::SubstateChange::Destroy => Ok(SubstateChange::Destroy),
+        }
+    }
+}
+
+impl From<SubstateChange> for proto::common::SubstateChange {
+    fn from(val: SubstateChange) -> Self {
+        match val {
+            SubstateChange::Create => proto::common::SubstateChange::Create,
+            SubstateChange::Destroy => proto::common::SubstateChange::Destroy,
+        }
     }
 }

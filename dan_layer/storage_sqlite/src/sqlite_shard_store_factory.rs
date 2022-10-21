@@ -47,6 +47,7 @@ use tari_dan_core::{
         TreeNodeHash,
     },
     storage::{
+        deserialize,
         shard_store::{ShardStoreFactory, ShardStoreTransaction},
         StorageError,
     },
@@ -84,6 +85,8 @@ use crate::{
 };
 
 const LOG_TARGET: &str = "tari::dan::storage::sqlite::shard_store";
+
+#[derive(Debug, Clone)]
 pub struct SqliteShardStoreFactory {
     url: PathBuf,
 }
@@ -710,6 +713,72 @@ impl ShardStoreTransaction<PublicKey, TariDanPayload> for SqliteShardStoreTransa
             }
         }
         Ok(())
+    }
+
+    fn get_state_inventory(&self, start_shard: ShardId, end_shard: ShardId) -> Result<Vec<ShardId>, Self::Error> {
+        use crate::schema::substates::shard_id;
+
+        let substate_states: Option<Vec<crate::models::substate::Substate>> = substates
+            .filter(
+                shard_id
+                    .gt(Vec::from(start_shard.as_bytes()))
+                    .and(shard_id.lt(Vec::from(end_shard.as_bytes()))),
+            )
+            .get_results(&self.connection)
+            .optional()
+            .map_err(|e| Self::Error::QueryError {
+                reason: format!("Get substate change error: {}", e),
+            })
+            .unwrap();
+
+        if let Some(substate_states) = substate_states {
+            substate_states
+                .iter()
+                .map(|ss| deserialize::<ShardId>(ss.shard_id.as_slice()))
+                .collect::<Result<Vec<_>, _>>()
+        } else {
+            Ok(vec![])
+        }
+    }
+
+    fn get_substate_states(&self, shards: &[ShardId]) -> Result<Vec<SubstateState>, Self::Error> {
+        use crate::schema::substates::shard_id;
+        let shards = shards
+            .iter()
+            .map(|sh| Vec::from(sh.as_bytes()))
+            .collect::<Vec<Vec<u8>>>();
+
+        let substate_states: Option<Vec<crate::models::substate::Substate>> = substates
+            .filter(shard_id.eq_any(shards))
+            .get_results(&self.connection)
+            .optional()
+            .map_err(|e| Self::Error::QueryError {
+                reason: format!("Get substate change error: {}", e),
+            })
+            .unwrap();
+
+        if let Some(substate_states) = substate_states {
+            substate_states
+                .iter()
+                .map(|ss| match ss.substate_type.as_str() {
+                    "UP" => Ok(SubstateState::Up {
+                        created_by: PayloadId::try_from(ss.created_by_payload_id.clone())?,
+                        data: ss.data.clone().unwrap_or_default(),
+                    }),
+                    "DOWN" => Ok(SubstateState::Down {
+                        deleted_by: PayloadId::try_from(ss.deleted_by_payload_id.clone().unwrap_or_default())?,
+                    }),
+                    _ => Err(StorageError::InvalidSubStateType {
+                        substate_type: ss.substate_type.clone(),
+                    }),
+                })
+                .collect::<Result<_, _>>()
+        } else {
+            Err(Self::Error::NotFound {
+                item: "substate".to_string(),
+                key: "No data found for available shards".to_string(),
+            })
+        }
     }
 
     fn get_last_voted_height(&self, shard: ShardId) -> Result<NodeHeight, Self::Error> {

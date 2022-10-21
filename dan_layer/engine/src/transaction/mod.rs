@@ -40,7 +40,7 @@ pub use processor::TransactionProcessor;
 #[derive(Debug, Clone)]
 pub struct BalanceProof {}
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize)]
 pub struct Transaction {
     hash: Hash,
     instructions: Vec<Instruction>,
@@ -80,6 +80,14 @@ pub struct TransactionMeta {
 }
 
 impl TransactionMeta {
+    pub fn new(involved_objects: HashMap<ShardId, (SubstateChange, ObjectClaim)>) -> Self {
+        Self { involved_objects }
+    }
+
+    pub fn involved_objects_iter(&self) -> impl Iterator<Item = (&ShardId, &(SubstateChange, ObjectClaim))> + '_ {
+        self.involved_objects.iter()
+    }
+
     pub fn involved_shards(&self) -> Vec<ShardId> {
         self.involved_objects.keys().copied().collect()
     }

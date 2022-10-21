@@ -4001,6 +4001,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "tari_comms_logging"
+version = "0.1.0"
+dependencies = [
+ "diesel",
+ "diesel_migrations",
+ "log",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "tari_comms_rpc_macros"
 version = "0.38.7"
 source = "git+https://github.com/tari-project/tari.git?branch=feature-dan#ce35b656b84d69d2b56f07e3b1e84d0c3279466f"
@@ -4438,6 +4449,7 @@ dependencies = [
  "chrono",
  "clap 3.2.22",
  "config",
+ "diesel",
  "digest 0.9.0",
  "futures",
  "include_dir",
@@ -4457,6 +4469,7 @@ dependencies = [
  "tari_common",
  "tari_common_types",
  "tari_comms",
+ "tari_comms_logging",
  "tari_comms_rpc_macros",
  "tari_core",
  "tari_crypto",
@@ -4501,6 +4514,7 @@ dependencies = [
  "tari_dan_common_types",
  "tari_dan_engine",
  "tari_engine_types",
+ "tari_template_lib",
  "tari_utilities",
  "tari_validator_node_client",
  "thiserror",

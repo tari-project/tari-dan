@@ -22,13 +22,14 @@
 
 use std::fmt::Debug;
 
+use serde::Serialize;
 use tari_common_types::types::FixedHash;
 use tari_dan_common_types::{ObjectClaim, ShardId, SubstateChange};
 use tari_dan_engine::transaction::Transaction;
 
 use crate::models::{ConsensusHash, Payload};
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize)]
 pub struct TariDanPayload {
     transaction: Transaction,
 }

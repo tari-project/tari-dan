@@ -35,7 +35,11 @@ use tari_common::{
 use tari_comms::{protocol::rpc::RpcServer, CommsNode, NodeIdentity, UnspawnedCommsNode};
 use tari_dan_core::workers::events::{EventSubscription, HotStuffEvent};
 use tari_dan_storage::global::GlobalDb;
-use tari_dan_storage_sqlite::{global::SqliteGlobalDbAdapter, SqliteDbFactory};
+use tari_dan_storage_sqlite::{
+    global::SqliteGlobalDbAdapter,
+    sqlite_shard_store_factory::SqliteShardStoreFactory,
+    SqliteDbFactory,
+};
 use tari_p2p::initialization::spawn_comms_using_transport;
 use tari_shutdown::ShutdownSignal;
 
@@ -157,7 +161,9 @@ pub async fn spawn_services(
         shutdown.clone(),
     )?;
 
-    let comms = setup_p2p_rpc(config, comms, message_senders, peer_provider);
+    let shard_store_store = SqliteShardStoreFactory::try_create(config.validator_node.data_dir.join("state.db"))?;
+
+    let comms = setup_p2p_rpc(config, comms, message_senders, peer_provider, shard_store_store);
     let comms = spawn_comms_using_transport(comms, p2p_config.transport.clone())
         .await
         .map_err(|e| ExitError::new(ExitCode::ConfigError, format!("Could not spawn using transport: {}", e)))?;
@@ -210,11 +216,16 @@ fn setup_p2p_rpc(
     comms: UnspawnedCommsNode,
     message_senders: DanMessageSenders,
     peer_provider: CommsPeerProvider,
+    shard_store_store: SqliteShardStoreFactory,
 ) -> UnspawnedCommsNode {
     let rpc_server = RpcServer::builder()
         .with_maximum_simultaneous_sessions(config.validator_node.p2p.rpc_max_simultaneous_sessions)
         .finish()
-        .add_service(create_validator_node_rpc_service(message_senders, peer_provider));
+        .add_service(create_validator_node_rpc_service(
+            message_senders,
+            peer_provider,
+            shard_store_store,
+        ));
 
     comms.add_protocol_extension(rpc_server)
 }
