@@ -30,6 +30,7 @@ tari_base_node_grpc_client = { git = "https://github.com/tari-project/tari.git",
 tari_wallet_grpc_client = { git = "https://github.com/tari-project/tari.git", branch = "feature-dan" }
 tari_engine_types = { path = "../../dan_layer/engine_types" }
 tari_validator_node_client = { path = "../../clients/validator_node_client" }
+tari_comms_logging = { path = "../../comms/tari_comms_logging" }
 
 anyhow = "1.0.53"
 async-trait = "0.1.50"
@@ -69,4 +70,3 @@ tari_test_utils = { git = "https://github.com/tari-project/tari.git", branch = "
 
 [build-dependencies]
 tari_common = { git = "https://github.com/tari-project/tari.git", branch = "feature-dan", features = ["build"] }
-

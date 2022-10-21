@@ -26,4 +26,5 @@ mod destination;
 pub use destination::Destination;
 
 mod initializer;
+
 pub use initializer::{initialize, MessageChannel};
