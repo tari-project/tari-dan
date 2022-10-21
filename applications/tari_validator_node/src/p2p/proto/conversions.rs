@@ -195,7 +195,7 @@ impl From<VoteMessage> for proto::consensus::VoteMessage {
             local_node_hash: msg.local_node_hash().as_bytes().to_vec(),
             shard_id: msg.shard().as_bytes().to_vec(),
             decision: i32::from(msg.decision().as_u8()),
-            all_shard_nodes: vec![], // TODO: msg.all_shard_nodes().iter().map(|n| n.into()).collect(),
+            all_shard_nodes: msg.all_shard_nodes().iter().map(|n| n.clone().into()).collect(),
             signature: msg.signature().to_bytes(),
         }
     }
@@ -209,7 +209,11 @@ impl TryFrom<proto::consensus::VoteMessage> for VoteMessage {
             TreeNodeHash::try_from(value.local_node_hash)?,
             ShardId::from_bytes(&value.shard_id)?,
             QuorumDecision::from_u8(u8::try_from(value.decision)?)?,
-            vec![], // TODO: value.all_shard_nodes,
+            value
+                .all_shard_nodes
+                .into_iter()
+                .map(|n| n.try_into())
+                .collect::<Result<Vec<_>, _>>()?,
             ValidatorSignature::from_bytes(&value.signature)?,
         ))
     }
@@ -222,7 +226,6 @@ impl From<HotStuffMessage<TariDanPayload, CommsPublicKey>> for proto::consensus:
         Self {
             message_type: i32::from(source.message_type().as_u8()),
             node: source.node().map(|n| n.clone().into()),
-            justify: source.justify().map(|j| j.clone().into()),
             high_qc: source.high_qc().map(|h| h.into()),
             shard: source.shard().as_bytes().to_vec(),
             new_view_payload: source.new_view_payload().map(|p| p.clone().into()),
@@ -364,7 +367,7 @@ impl From<ShardVote> for proto::consensus::ShardVote {
     fn from(s: ShardVote) -> Self {
         Self {
             shard: s.shard_id.into(),
-            hash: s.node_hash.into(),
+            node_hash: s.node_hash.into(),
             pledges: s.pledges.iter().map(|p| p.clone().into()).collect(),
         }
     }
@@ -389,7 +392,6 @@ impl TryFrom<proto::consensus::HotStuffMessage> for HotStuffMessage<TariDanPaylo
     fn try_from(value: proto::consensus::HotStuffMessage) -> Result<Self, Self::Error> {
         Ok(Self::new(
             value.message_type.try_into()?,
-            value.justify.map(|j| j.try_into()).transpose()?,
             value.high_qc.map(|h| h.try_into()).transpose()?,
             value.node.map(|n| n.try_into()).transpose()?,
             Some(value.shard.try_into()?),
@@ -434,7 +436,7 @@ impl TryFrom<proto::consensus::ShardVote> for ShardVote {
     fn try_from(value: proto::consensus::ShardVote) -> Result<Self, Self::Error> {
         Ok(Self {
             shard_id: value.shard.try_into()?,
-            node_hash: value.hash.try_into()?,
+            node_hash: value.node_hash.try_into()?,
             pledges: value
                 .pledges
                 .iter()

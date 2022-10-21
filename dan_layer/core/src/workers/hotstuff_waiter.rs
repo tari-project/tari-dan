@@ -596,6 +596,8 @@ where
                 .save_received_vote_for(from, msg.local_node_hash(), msg.shard(), msg.clone())
                 .map_err(|e| e.into())?;
             // Check for consensus
+            dbg!(&valid_committee);
+            dbg!(total_votes);
             if total_votes >= valid_committee.consensus_threshold() {
                 let mut different_votes = HashMap::new();
                 for vote in tx
@@ -626,14 +628,19 @@ where
                         );
                         tx.update_high_qc(msg.shard(), qc)
                             .map_err(|e| HotStuffError::UpdateHighQcError(e.to_string()))?; // TODO: is there a better alternative to handle error?
-                        tx.commit().map_err(|e| e.into())?;
+
                         // Should be the pace maker actually
                         on_beat_future = Some(self.on_beat(msg.shard(), node.payload()));
                         break;
                     }
                 }
             }
+
+            // commit the transaction
+            tx.commit().map_err(|e| e.into())?;
+            // drop tx
         }
+
         if let Some(on_beat) = on_beat_future {
             on_beat.await?;
         }
