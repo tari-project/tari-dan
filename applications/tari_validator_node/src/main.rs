@@ -37,8 +37,10 @@ mod template_registration_signing;
 mod validator_node_registration_signing;
 
 use std::{
-    io,
+    fs::{self, File},
+    io::{self, Write},
     net::{IpAddr, Ipv4Addr, SocketAddr},
+    path::{Path, PathBuf},
     process,
 };
 
@@ -86,10 +88,26 @@ fn main() {
     }
 }
 
+fn initialize_config_file(config_path: &PathBuf) -> Result<(), ExitError> {
+    let source = include_str!("../config/a_validator_node.toml").to_string();
+    let path: &Path = config_path.as_ref();
+
+    if let Some(d) = path.parent() {
+        fs::create_dir_all(d)?
+    };
+
+    let mut file = File::create(config_path).map_err(|e| ExitError::new(ExitCode::ConfigError, e.to_string()))?;
+    file.write_all(source.as_ref())?;
+
+    Ok(())
+}
+
 fn main_inner() -> Result<(), ExitError> {
     let cli = Cli::parse();
     let config_path = cli.common.config_path();
-    let cfg = load_configuration(config_path, true, &cli)?;
+    initialize_config_file(&config_path)?;
+
+    let cfg = load_configuration(config_path, false, &cli)?;
     initialize_logging(
         &cli.common.log_config_path("validator"),
         include_str!("../log4rs_sample.yml"),
