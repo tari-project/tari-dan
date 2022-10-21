@@ -19,7 +19,4 @@ table! {
     }
 }
 
-allow_tables_to_appear_in_same_query!(
-    inbound_messages,
-    outbound_messages,
-);
+allow_tables_to_appear_in_same_query!(inbound_messages, outbound_messages,);
