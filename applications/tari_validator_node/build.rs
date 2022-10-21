@@ -33,15 +33,20 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("cargo:rerun-if-changed=../tari_validator_node_web_ui/public");
     let npm = if cfg!(windows) { "npm.cmd" } else { "npm" };
 
-    Command::new(npm)
+    if let Err(error) = Command::new(npm)
         .arg("ci")
         .current_dir("../tari_validator_node_web_ui")
         .status()
-        .unwrap();
-    Command::new(npm)
+    {
+        println!("cargo:warning='npm ci' error : {:?}", error);
+    }
+    if let Err(error) = Command::new(npm)
         .args(["run", "build"])
         .current_dir("../tari_validator_node_web_ui")
         .status()
-        .unwrap();
+    {
+        println!("cargo:warning='npm run build' error : {:?}", error);
+        println!("cargo:warning=The web ui will not be included!");
+    }
     Ok(())
 }
