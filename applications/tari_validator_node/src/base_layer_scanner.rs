@@ -24,8 +24,10 @@ use std::convert::TryInto;
 
 use log::*;
 use tari_common_types::types::{FixedHash, FixedHashSizeError};
-use tari_core::{
-    transactions::transaction_components::{CodeTemplateRegistration, SideChainFeature, ValidatorNodeRegistration},
+use tari_core::transactions::transaction_components::{
+    CodeTemplateRegistration,
+    SideChainFeature,
+    ValidatorNodeRegistration,
 };
 use tari_crypto::tari_utilities::ByteArray;
 use tari_dan_common_types::optional::Optional;
@@ -41,13 +43,11 @@ use tari_template_lib::models::TemplateAddress;
 use tokio::{task, time};
 
 use crate::{
-    p2p::{
-        services::{
-            epoch_manager::handle::EpochManagerHandle,
-            template_manager::{TemplateManagerError, TemplateManagerHandle, TemplateRegistration},
-        },
-    },
     consensus_constants::ConsensusConstants,
+    p2p::services::{
+        epoch_manager::handle::EpochManagerHandle,
+        template_manager::{TemplateManagerError, TemplateManagerHandle, TemplateRegistration},
+    },
     GrpcBaseNodeClient,
     ValidatorNodeConfig,
 };

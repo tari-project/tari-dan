@@ -63,11 +63,12 @@ use crate::{
     bootstrap::{spawn_services, Services},
     cli::Cli,
     config::{ApplicationConfig, ValidatorNodeConfig},
+    consensus_constants::ConsensusConstants,
     dan_node::DanNode,
     grpc::services::{base_node_client::GrpcBaseNodeClient, wallet_client::GrpcWalletClient},
     http_ui::server::run_http_ui_server,
     json_rpc::{run_json_rpc, JsonRpcHandlers},
-    p2p::services::networking::DAN_PEER_FEATURES, consensus_constants::ConsensusConstants,
+    p2p::services::networking::DAN_PEER_FEATURES,
 };
 
 const LOG_TARGET: &str = "tari::validator_node::app";
