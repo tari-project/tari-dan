@@ -217,7 +217,20 @@ where
         {
             let mut tx = self.shard_store.create_tx()?;
 
+            dbg!(&leaf);
             let parent = tx.get_node(&leaf).map_err(|e| e.into())?;
+            dbg!(&parent);
+            dbg!(&qc);
+
+            if leaf != TreeNodeHash::zero() && parent.justify().local_node_hash() == qc.local_node_hash() {
+                info!(
+                    target: LOG_TARGET,
+                    "Leaf node already has the same QC as the proposed QC, so we have already sent a proposal for \
+                     this payload"
+                );
+                // We have already sent a proposal for this paylaod. Do nothing
+                return Ok(());
+            }
 
             let payload_height = if parent.payload() == payload {
                 parent.payload_height() + NodeHeight(1)
