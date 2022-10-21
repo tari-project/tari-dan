@@ -91,7 +91,6 @@ tari_base_node = { path = "../../../tari/applications/tari_base_node", features 
 tari_console_wallet = { path = "../../../tari/applications/tari_console_wallet", features = ["libtor"] }
 tari_comms_dht = { path = "../../../tari/comms/dht" }
 tari_wallet = { path = "../../../tari/base_layer/wallet" }
-tari_miner = { path = "../../../tari/applications/tari_miner" }
 
 [[test]]
 name = "cucumber" # this should be the same as the filename of your test target

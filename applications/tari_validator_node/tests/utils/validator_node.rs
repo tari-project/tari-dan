@@ -30,7 +30,6 @@ pub fn spawn_validator_node(
     base_node_name: String,
     wallet_name: String,
 ) {
-    thread::sleep(Duration::from_secs(500));
     // TODO: use different ports on each spawned vn
     let port = 9002;
     let base_node_grpc_port = world.base_nodes.get(&base_node_name).unwrap().grpc_port;
