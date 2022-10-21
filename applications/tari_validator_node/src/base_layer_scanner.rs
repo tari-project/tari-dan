@@ -42,10 +42,13 @@ use tari_template_lib::models::TemplateAddress;
 use tokio::{task, time};
 
 use crate::{
-    p2p::{services::{
-        epoch_manager::handle::EpochManagerHandle,
-        template_manager::{TemplateManagerError, TemplateManagerHandle, TemplateRegistration},
-    }, proto::consensus},
+    p2p::{
+        proto::consensus,
+        services::{
+            epoch_manager::handle::EpochManagerHandle,
+            template_manager::{TemplateManagerError, TemplateManagerHandle, TemplateRegistration},
+        },
+    },
     GrpcBaseNodeClient,
     ValidatorNodeConfig,
 };
