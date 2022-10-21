@@ -42,8 +42,8 @@ function AllVNs({ epoch }: { epoch: number }) {
         </tr>
         {vns.map(({ public_key, shard_key }, i) => (
           <tr>
-            <td>{public_key}</td>
-            <td>{shard_key}</td>
+            <td className="key">{public_key}</td>
+            <td className="key">{shard_key}</td>
           </tr>
         ))}
       </table>

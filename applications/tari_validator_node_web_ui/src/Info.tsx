@@ -59,7 +59,7 @@ function Info({ epoch, identity, shardKey }: { epoch: IEpoch; identity: IIdentit
     return (
       <tr>
         <td>Shard key</td>
-        <td>{shardKey}</td>
+        <td className="key">{shardKey}</td>
       </tr>
     );
   };
@@ -75,15 +75,15 @@ function Info({ epoch, identity, shardKey }: { epoch: IEpoch; identity: IIdentit
         </tr>
         <tr>
           <td>Node id</td>
-          <td>{identity.node_id}</td>
+          <td className="key">{identity.node_id}</td>
         </tr>
         <tr>
           <td>Public address</td>
-          <td>{identity.public_address}</td>
+          <td className="key">{identity.public_address}</td>
         </tr>
         <tr>
           <td>Public key</td>
-          <td>{identity.public_key}</td>
+          <td className="key">{identity.public_key}</td>
         </tr>
         {renderShardKey()}
       </table>

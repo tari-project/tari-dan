@@ -66,8 +66,8 @@ function RecentTransactions() {
             <tr>
               <td>{height}</td>
               <td>{payload_height}</td>
-              <td>{toHexString(payload_id)}</td>
-              <td>{toHexString(shard)}</td>
+              <td className="key">{toHexString(payload_id)}</td>
+              <td className="key">{toHexString(shard)}</td>
               <td>{total_leader_proposals}</td>
               <td>{total_votes}</td>
             </tr>
