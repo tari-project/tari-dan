@@ -22,6 +22,7 @@
 
 use std::fmt::{Display, Formatter};
 
+use serde::Serialize;
 use tari_common_types::types::FixedHash;
 use tari_dan_common_types::ShardId;
 
@@ -39,7 +40,7 @@ use crate::{
 };
 
 // TODO: convert to enum
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize)]
 pub struct HotStuffMessage<TPayload, TAddr> {
     message_type: HotStuffMessageType,
     justify: Option<QuorumCertificate>,
