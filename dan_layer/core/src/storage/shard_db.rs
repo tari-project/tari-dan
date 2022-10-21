@@ -355,6 +355,7 @@ impl<TAddr: NodeAddressable, TPayload: Payload> ShardStoreTransaction<TAddr, TPa
         // todo!()
         Ok(vec![])
     }
+
     fn get_recent_transactions(&self) -> Result<Vec<RecentTransaction>, Self::Error> {
         // todo!()
         Ok(vec![])
