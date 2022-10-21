@@ -40,7 +40,6 @@ use tari_dan_storage_sqlite::{
     sqlite_shard_store_factory::SqliteShardStoreFactory,
     SqliteDbFactory,
 };
-use tari_p2p::initialization::spawn_comms_using_transport;
 use tari_shutdown::ShutdownSignal;
 
 use crate::{
@@ -164,7 +163,7 @@ pub async fn spawn_services(
     let shard_store_store = SqliteShardStoreFactory::try_create(config.validator_node.data_dir.join("state.db"))?;
 
     let comms = setup_p2p_rpc(config, comms, message_senders, peer_provider, shard_store_store);
-    let comms = spawn_comms_using_transport(comms, p2p_config.transport.clone())
+    let comms = comms::spawn_comms_using_transport(comms, p2p_config.transport.clone())
         .await
         .map_err(|e| ExitError::new(ExitCode::ConfigError, format!("Could not spawn using transport: {}", e)))?;
 
