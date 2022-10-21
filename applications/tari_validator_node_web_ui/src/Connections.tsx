@@ -21,20 +21,51 @@
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 import { useEffect, useState } from "react";
+import { toHexString } from "./helpers";
 import { getConnections } from "./json_rpc";
 
+interface IConnection {
+  address: string;
+  age: number;
+  direction: boolean;
+  node_id: number[];
+  public_key: string;
+}
+
 function Connections() {
-  const [connections, setConnections] = useState<Array<String>>([]);
+  const [connections, setConnections] = useState<IConnection[]>([]);
   useEffect(() => {
     getConnections().then((response) => {
       console.log(response);
-      setConnections(response);
+      setConnections(response.connections);
     });
   }, []);
 
   return (
     <div className="section">
       <div className="caption">Connections</div>
+      <table className="connections-table">
+        <thead>
+          <tr>
+            <th>Address</th>
+            <th>Age</th>
+            <th>Direction</th>
+            <th>Node id</th>
+            <th>Public key</th>
+          </tr>
+        </thead>
+        <tbody>
+          {connections.map(({ address, age, direction, node_id, public_key }) => (
+            <tr key={public_key}>
+              <td>{address}</td>
+              <td>{age}</td>
+              <td>{direction ? "Inbound" : "Outbound"}</td>
+              <td>{toHexString(node_id)}</td>
+              <td>{public_key}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
     </div>
   );
 }

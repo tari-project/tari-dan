@@ -22,7 +22,6 @@
 
 import React, { useEffect, useState } from "react";
 import { getAllVns } from "./json_rpc";
-import "./AllVNs.css";
 
 function AllVNs({ epoch }: { epoch: number }) {
   const [vns, setVns] = useState([]);
@@ -36,16 +35,20 @@ function AllVNs({ epoch }: { epoch: number }) {
     <div className="section">
       <div className="caption">VNs</div>
       <table className="all-vns-table">
-        <tr>
-          <th>Public key</th>
-          <th>Shard key</th>
-        </tr>
-        {vns.map(({ public_key, shard_key }, i) => (
+        <thead>
           <tr>
-            <td className="key">{public_key}</td>
-            <td className="key">{shard_key}</td>
+            <th>Public key</th>
+            <th>Shard key</th>
           </tr>
-        ))}
+        </thead>
+        <tbody>
+          {vns.map(({ public_key, shard_key }, i) => (
+            <tr key={public_key}>
+              <td className="key">{public_key}</td>
+              <td className="key">{shard_key}</td>
+            </tr>
+          ))}
+        </tbody>
       </table>
     </div>
   );

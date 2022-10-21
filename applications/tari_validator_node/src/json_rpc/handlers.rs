@@ -269,14 +269,39 @@ impl JsonRpcHandlers {
 
     pub async fn get_connections(&self, value: JsonRpcExtractor) -> JrpcResult {
         let answer_id = value.get_answer_id();
-        Err(JsonRpcResponse::error(
-            answer_id,
-            JsonRpcError::new(
-                JsonRpcErrorReason::InvalidParams,
-                "Something went wrong".to_string(),
-                json::Value::Null,
-            ),
-        ))
+        if let Ok(active_connections) = self.comms.connectivity().get_active_connections().await {
+            let mut response = GetConnectionsResponse { connections: vec![] };
+            let peer_manager = self.comms.peer_manager();
+            for conn in active_connections {
+                let peer = peer_manager
+                    .find_by_node_id(conn.peer_node_id())
+                    .await
+                    .expect("Unexpected peer database error")
+                    .expect("Peer not found");
+
+                //  response.connections.push(Connection { node_id: (), public_key: (), address: (), direction: (), age:
+                //                                                                                      (), user_agent:
+                // (), Info: () })
+                println!("peer {:?}", peer);
+                response.connections.push(Connection {
+                    node_id: peer.node_id,
+                    public_key: peer.public_key,
+                    address: conn.address().clone(),
+                    direction: conn.direction().is_inbound(),
+                    age: conn.age().as_secs(),
+                });
+            }
+            Ok(JsonRpcResponse::success(answer_id, response))
+        } else {
+            Err(JsonRpcResponse::error(
+                answer_id,
+                JsonRpcError::new(
+                    JsonRpcErrorReason::InvalidParams,
+                    "Something went wrong".to_string(),
+                    json::Value::Null,
+                ),
+            ))
+        }
     }
 
     pub async fn get_mempool_stats(&self, value: JsonRpcExtractor) -> JrpcResult {
@@ -401,11 +426,9 @@ struct GetIdentityResponse {
 struct Connection {
     node_id: NodeId,
     public_key: CommsPublicKey,
-    address: Arc<Multiaddr>,
+    address: Multiaddr,
     direction: bool,
-    age: Duration,
-    user_agent: String,
-    info: String,
+    age: u64,
 }
 
 #[derive(Serialize, Debug)]

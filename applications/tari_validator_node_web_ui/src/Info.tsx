@@ -42,9 +42,9 @@ function Info({ epoch, identity, shardKey }: { epoch: IEpoch; identity: IIdentit
   const renderShardKey = () => {
     if (shardKey === null)
       return (
-        <>
-          <div className="label">Shard key</div>
-          <div>
+        <tr>
+          <td>Shard key</td>
+          <td>
             <span
               className={`${registering ? "disabled-button" : "button"}`}
               id="register"
@@ -53,12 +53,12 @@ function Info({ epoch, identity, shardKey }: { epoch: IEpoch; identity: IIdentit
               Register
             </span>
             {registerMessage ? <span>{registerMessage}</span> : null}
-          </div>
-        </>
+          </td>
+        </tr>
       );
     return (
       <tr>
-        <td>Shard key</td>
+        <th>Shard key</th>
         <td className="key">{shardKey}</td>
       </tr>
     );
@@ -66,26 +66,28 @@ function Info({ epoch, identity, shardKey }: { epoch: IEpoch; identity: IIdentit
   return (
     <div className="section">
       <div className="caption">Info</div>
-      <table>
-        <tr>
-          <td>Epoch</td>
-          <td>
-            {epoch.current_epoch} ({epoch.is_valid ? "Valid" : "Not valid"})
-          </td>
-        </tr>
-        <tr>
-          <td>Node id</td>
-          <td className="key">{identity.node_id}</td>
-        </tr>
-        <tr>
-          <td>Public address</td>
-          <td className="key">{identity.public_address}</td>
-        </tr>
-        <tr>
-          <td>Public key</td>
-          <td className="key">{identity.public_key}</td>
-        </tr>
-        {renderShardKey()}
+      <table className="info-table">
+        <tbody>
+          <tr>
+            <th>Epoch</th>
+            <td>
+              {epoch.current_epoch} ({epoch.is_valid ? "Valid" : "Not valid"})
+            </td>
+          </tr>
+          <tr>
+            <th>Node id</th>
+            <td className="key">{identity.node_id}</td>
+          </tr>
+          <tr>
+            <th>Public address</th>
+            <td className="key">{identity.public_address}</td>
+          </tr>
+          <tr>
+            <th>Public key</th>
+            <td className="key">{identity.public_key}</td>
+          </tr>
+          {renderShardKey()}
+        </tbody>
       </table>
     </div>
   );

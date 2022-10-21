@@ -1,4 +1,7 @@
-.info {
-  display: grid;
-  grid-template-columns: 200px auto;
+.info-table {
+  text-align: left;
+}
+
+.info-table td {
+  text-align: left;
 }

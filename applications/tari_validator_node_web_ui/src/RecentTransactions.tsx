@@ -23,7 +23,6 @@
 import { useEffect, useState } from "react";
 import { toHexString } from "./helpers";
 import { getRecentTransactions } from "./json_rpc";
-import "./RecentTransactions.css";
 
 interface IRecentTransaction {
   height: number;
@@ -48,31 +47,34 @@ function RecentTransactions() {
       </div>
     );
   }
-  console.log(recentTransacations);
   return (
     <div className="section">
       <div className="caption">Recent transactions</div>
       <table className="recent-transactions-table">
-        <tr>
-          <th className="column">Height</th>
-          <th className="column">Payload height</th>
-          <th className="column">Payload id</th>
-          <th className="column">Shard</th>
-          <th className="column">Total leader proposal</th>
-          <th className="column">Total votes</th>
-        </tr>
-        {recentTransacations.map(
-          ({ height, payload_height, payload_id, shard, total_leader_proposals, total_votes }) => (
-            <tr>
-              <td>{height}</td>
-              <td>{payload_height}</td>
-              <td className="key">{toHexString(payload_id)}</td>
-              <td className="key">{toHexString(shard)}</td>
-              <td>{total_leader_proposals}</td>
-              <td>{total_votes}</td>
-            </tr>
-          )
-        )}
+        <thead>
+          <tr>
+            <th className="column">Height</th>
+            <th className="column">Payload height</th>
+            <th className="column">Payload id</th>
+            <th className="column">Shard</th>
+            <th className="column">Total leader proposal</th>
+            <th className="column">Total votes</th>
+          </tr>
+        </thead>
+        <tbody>
+          {recentTransacations.map(
+            ({ height, payload_height, payload_id, shard, total_leader_proposals, total_votes }) => (
+              <tr key={payload_height + toHexString(payload_id)}>
+                <td>{height}</td>
+                <td>{payload_height}</td>
+                <td className="key">{toHexString(payload_id)}</td>
+                <td className="key">{toHexString(shard)}</td>
+                <td>{total_leader_proposals}</td>
+                <td>{total_votes}</td>
+              </tr>
+            )
+          )}
+        </tbody>
       </table>
     </div>
   );

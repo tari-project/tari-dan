@@ -105,9 +105,14 @@
   font-weight: bold;
 }
 
-.connections {
-  display: grid;
-  grid-template-columns: 200px auto;
-  border: 1px solid;
-  padding: 5px;
+table {
+  border-spacing: 50px 0;
+}
+
+td {
+  text-align: center;
+}
+
+th {
+  font-weight: bold;
 }
