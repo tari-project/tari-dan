@@ -25,7 +25,7 @@ use tari_common_types::types::{FixedHash, PublicKey};
 use tari_comms::types::CommsPublicKey;
 use tari_core::{
     blocks::BlockHeader,
-    transactions::transaction_components::{CodeTemplateRegistration, TransactionOutput},
+    transactions::transaction_components::{CodeTemplateRegistration, TransactionOutput}, consensus::ConsensusConstants,
 };
 use tari_dan_common_types::ShardId;
 
@@ -40,6 +40,7 @@ pub trait BaseNodeClient: Send + Sync + Clone {
     async fn get_validator_nodes(&mut self, height: u64) -> Result<Vec<ValidatorNode>, BaseNodeError>;
     async fn get_committee(&mut self, height: u64, shard_key: &[u8; 32]) -> Result<Vec<CommsPublicKey>, BaseNodeError>;
     async fn get_shard_key(&mut self, height: u64, public_key: &PublicKey) -> Result<Option<ShardId>, BaseNodeError>;
+    async fn get_consensus_constants(&self) -> Result<ConsensusConstants, BaseNodeError>;
     async fn get_template_registrations(
         &mut self,
         start_hash: Option<FixedHash>,
