@@ -25,7 +25,7 @@ pub struct WalletProcess {
 
 pub fn spawn_wallet(world: &mut TariWorld, wallet_name: String, base_node_name: String) {
     // TODO: use different ports on each spawned wallet
-    let port = 9001;
+    let port = 8001;
     let grpc_port = 18153;
     let base_node_public_key = world
         .base_nodes

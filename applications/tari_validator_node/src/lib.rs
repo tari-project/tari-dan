@@ -22,7 +22,7 @@
 
 mod base_layer_scanner;
 mod bootstrap;
-mod cli;
+pub mod cli;
 mod comms;
 mod config;
 mod consensus_constants;
@@ -48,6 +48,7 @@ use tari_app_utilities::identity_management::setup_node_identity;
 use tari_common::{
     configuration::bootstrap::{grpc_default_port, ApplicationType},
     exit_codes::{ExitCode, ExitError},
+    initialize_logging,
 };
 use tari_dan_common_types::ShardId;
 use tari_dan_core::{services::base_node_error::BaseNodeError, storage::DbFactory, DigitalAssetError};
@@ -58,6 +59,7 @@ use tokio::task;
 pub use crate::config::{ApplicationConfig, ValidatorNodeConfig};
 use crate::{
     bootstrap::{spawn_services, Services},
+    cli::Cli,
     consensus_constants::ConsensusConstants,
     dan_node::DanNode,
     grpc::services::{base_node_client::GrpcBaseNodeClient, wallet_client::GrpcWalletClient},
@@ -94,7 +96,12 @@ pub struct ShardKey {
     shard_id: Option<ShardId>,
 }
 
-pub async fn run_node(config: &ApplicationConfig) -> Result<(), ExitError> {
+pub async fn run_validator_node_with_cli(config: &ApplicationConfig, cli: &Cli) -> Result<(), ExitError> {
+    initialize_logging(
+        &cli.common.log_config_path("validator"),
+        include_str!("../log4rs_sample.yml"),
+    )?;
+
     let shutdown = Shutdown::new();
 
     let node_identity = setup_node_identity(

@@ -27,7 +27,7 @@ pub struct BaseNodeProcess {
 
 pub fn spawn_base_node(world: &mut TariWorld, bn_name: String) {
     // TODO: use different ports on each spawned base node
-    let port = 9000;
+    let port = 8000;
     let grpc_port = 18152;
     let base_node_address = Multiaddr::from_str(&format!("/ip4/127.0.0.1/tcp/{}", port)).unwrap();
     let base_node_identity = NodeIdentity::random(&mut OsRng, base_node_address, PeerFeatures::COMMUNICATION_NODE);

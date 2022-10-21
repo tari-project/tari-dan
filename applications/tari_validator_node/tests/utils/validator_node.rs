@@ -7,11 +7,12 @@ use std::{
 use axum::http::HeaderMap;
 use reqwest::{header, Response, Url};
 use serde_json::json;
+use tari_app_utilities::common_cli_args::CommonCliArgs;
 use tari_common::configuration::CommonConfig;
 use tari_comms::multiaddr::Multiaddr;
 use tari_comms_dht::DhtConfig;
 use tari_p2p::{Network, PeerSeedsConfig, TransportType};
-use tari_validator_node::{run_node, ApplicationConfig, ValidatorNodeConfig};
+use tari_validator_node::{cli::Cli, run_validator_node_with_cli, ApplicationConfig, ValidatorNodeConfig};
 use tempfile::tempdir;
 use tokio::runtime;
 
@@ -21,6 +22,7 @@ use crate::TariWorld;
 pub struct ValidatorNodeProcess {
     pub name: String,
     pub port: u64,
+    pub json_rpc_port: u64,
     pub handle: JoinHandle<()>,
 }
 
@@ -31,7 +33,8 @@ pub fn spawn_validator_node(
     wallet_name: String,
 ) {
     // TODO: use different ports on each spawned vn
-    let port = 9002;
+    let port = 8003;
+    let json_rpc_port = 18145;
     let base_node_grpc_port = world.base_nodes.get(&base_node_name).unwrap().grpc_port;
     let wallet_grpc_port = world.wallets.get(&wallet_name).unwrap().grpc_port;
 
@@ -61,10 +64,28 @@ pub fn spawn_validator_node(
             Some(config.validator_node.p2p.transport.tcp.listener_address.clone());
         config.validator_node.p2p.datastore_path = temp_dir.path().to_path_buf().join("peer_db/wallet");
         config.validator_node.p2p.dht = DhtConfig::default_local_test();
+        config.validator_node.json_rpc_address = Some(format!("127.0.0.1:{}", json_rpc_port).parse().unwrap());
+
+        let data_dir = config.validator_node.data_dir.clone();
+        let data_dir_str = data_dir.clone().into_os_string().into_string().unwrap();
+        let mut config_path = data_dir.clone();
+        config_path.push("config.toml");
+        let cli = Cli {
+            common: CommonCliArgs {
+                base_path: data_dir_str,
+                config: config_path.into_os_string().into_string().unwrap(),
+                log_config: None,
+                log_level: None,
+                config_property_overrides: vec![],
+            },
+            tracing_enabled: true,
+            network: Some(Network::LocalNet.to_string()),
+            json_rpc_address: Some(format!("127.0.0.1:{}", json_rpc_port).parse().unwrap()),
+        };
 
         let mut builder = runtime::Builder::new_multi_thread();
         let rt = builder.enable_all().build().unwrap();
-        let result = rt.block_on(run_node(&config));
+        let result = rt.block_on(run_validator_node_with_cli(&config, &cli));
         if let Err(e) = result {
             println!("{:?}", e);
             panic!();
@@ -76,6 +97,7 @@ pub fn spawn_validator_node(
         name: validator_node_name.clone(),
         port,
         handle,
+        json_rpc_port,
     };
     world
         .validator_nodes

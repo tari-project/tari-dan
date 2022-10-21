@@ -28,13 +28,10 @@ use clap::Parser;
 use log::*;
 use tari_common::{
     exit_codes::{ExitCode, ExitError},
-    initialize_logging,
     load_configuration,
 };
-use tari_validator_node::{run_node, ApplicationConfig};
+use tari_validator_node::{cli::Cli, run_validator_node_with_cli, ApplicationConfig};
 use tokio::{runtime, runtime::Runtime};
-
-use crate::cli::Cli;
 
 const LOG_TARGET: &str = "tari::validator_node::app";
 
@@ -57,14 +54,10 @@ fn main_inner() -> Result<(), ExitError> {
     let cli = Cli::parse();
     let config_path = cli.common.config_path();
     let cfg = load_configuration(config_path, true, &cli)?;
-    initialize_logging(
-        &cli.common.log_config_path("validator"),
-        include_str!("../log4rs_sample.yml"),
-    )?;
     let config = ApplicationConfig::load_from(&cfg)?;
     println!("Starting validator node on network {}", config.network);
     let runtime = build_runtime()?;
-    runtime.block_on(run_node(&config))?;
+    runtime.block_on(run_validator_node_with_cli(&config, &cli))?;
 
     Ok(())
 }

@@ -74,7 +74,7 @@ async fn assert_valid_vn_identity(_world: &mut TariWorld, _name: String) -> Resu
     assert_eq!(resp.status(), 200);
 
     // TODO: assert that the body format is correct with the identity
-    println!("{}", resp.text().await.unwrap());
+    println!("VN identity response: {:?}", resp.text().await.unwrap());
 
     Ok(())
 }
