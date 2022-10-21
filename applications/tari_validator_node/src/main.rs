@@ -25,6 +25,7 @@ mod bootstrap;
 mod cli;
 mod comms;
 mod config;
+mod consensus_constants;
 mod dan_node;
 mod default_service_specification;
 mod grpc;
@@ -62,6 +63,7 @@ use crate::{
     bootstrap::{spawn_services, Services},
     cli::Cli,
     config::{ApplicationConfig, ValidatorNodeConfig},
+    consensus_constants::ConsensusConstants,
     dan_node::DanNode,
     grpc::services::{base_node_client::GrpcBaseNodeClient, wallet_client::GrpcWalletClient},
     http_ui::server::run_http_ui_server,
@@ -164,6 +166,7 @@ async fn run_node(config: &ApplicationConfig) -> Result<(), ExitError> {
         node_identity.clone(),
         global_db,
         db_factory,
+        ConsensusConstants::devnet(), // TODO: change this eventually
     )
     .await?;
 
