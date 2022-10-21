@@ -34,12 +34,17 @@ const LOG_TARGET: &str = "tari::validator::networking::peer_sync";
 
 pub struct PeerSyncProtocol<TPeerProvider> {
     conn: PeerConnection,
+    our_identity: CommsPublicKey,
     peer_provider: TPeerProvider,
 }
 
 impl<TPeerProvider: PeerProvider<Addr = CommsPublicKey>> PeerSyncProtocol<TPeerProvider> {
-    pub fn new(conn: PeerConnection, peer_provider: TPeerProvider) -> Self {
-        Self { conn, peer_provider }
+    pub fn new(conn: PeerConnection, our_identity: CommsPublicKey, peer_provider: TPeerProvider) -> Self {
+        Self {
+            conn,
+            our_identity,
+            peer_provider,
+        }
     }
 
     pub async fn run(mut self) -> Result<(), anyhow::Error> {
@@ -49,9 +54,13 @@ impl<TPeerProvider: PeerProvider<Addr = CommsPublicKey>> PeerSyncProtocol<TPeerP
         let mut stream = client.get_peers(proto::network::GetPeersRequest::default()).await?;
         while let Some(resp) = stream.next().await {
             let resp = resp?;
+            let identity = CommsPublicKey::from_bytes(&resp.identity)?;
+            if self.our_identity == identity {
+                continue;
+            }
 
             let peer = DanPeer {
-                identity: CommsPublicKey::from_bytes(&resp.identity)?,
+                identity,
                 addresses: resp
                     .addresses
                     .into_iter()

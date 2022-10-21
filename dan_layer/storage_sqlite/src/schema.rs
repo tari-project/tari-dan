@@ -1,4 +1,6 @@
-table! {
+// @generated automatically by Diesel CLI.
+
+diesel::table! {
     high_qcs (id) {
         id -> Integer,
         shard_id -> Binary,
@@ -7,7 +9,7 @@ table! {
     }
 }
 
-table! {
+diesel::table! {
     last_executed_heights (id) {
         id -> Integer,
         shard_id -> Binary,
@@ -15,7 +17,7 @@ table! {
     }
 }
 
-table! {
+diesel::table! {
     last_voted_heights (id) {
         id -> Integer,
         shard_id -> Binary,
@@ -23,7 +25,7 @@ table! {
     }
 }
 
-table! {
+diesel::table! {
     leader_proposals (id) {
         id -> Integer,
         payload_id -> Binary,
@@ -34,7 +36,7 @@ table! {
     }
 }
 
-table! {
+diesel::table! {
     leaf_nodes (id) {
         id -> Integer,
         shard_id -> Binary,
@@ -43,7 +45,7 @@ table! {
     }
 }
 
-table! {
+diesel::table! {
     lock_node_and_heights (id) {
         id -> Integer,
         shard_id -> Binary,
@@ -52,14 +54,14 @@ table! {
     }
 }
 
-table! {
+diesel::table! {
     metadata (key) {
         key -> Binary,
         value -> Binary,
     }
 }
 
-table! {
+diesel::table! {
     nodes (id) {
         id -> Integer,
         node_hash -> Binary,
@@ -75,19 +77,7 @@ table! {
     }
 }
 
-table! {
-    objects (id) {
-        id -> Integer,
-        shard_id -> Binary,
-        payload_id -> Binary,
-        object_id -> Binary,
-        node_height -> BigInt,
-        current_state -> Text,
-        object_pledge -> Text,
-    }
-}
-
-table! {
+diesel::table! {
     payloads (id) {
         id -> Integer,
         payload_id -> Binary,
@@ -100,7 +90,7 @@ table! {
     }
 }
 
-table! {
+diesel::table! {
     received_votes (id) {
         id -> Integer,
         tree_node_hash -> Binary,
@@ -110,16 +100,24 @@ table! {
     }
 }
 
-table! {
-    substate_changes (id) {
+diesel::table! {
+    substates (id) {
         id -> Integer,
+        substate_type -> Text,
         shard_id -> Binary,
-        substate_change -> Text,
-        tree_node_hash -> Binary,
+        node_height -> BigInt,
+        data -> Nullable<Binary>,
+        created_by_payload_id -> Binary,
+        deleted_by_payload_id -> Nullable<Binary>,
+        justify -> Nullable<Text>,
+        is_draft -> Bool,
+        tree_node_hash -> Nullable<Binary>,
+        pledged_to_payload_id -> Nullable<Binary>,
+        pledged_until_height -> Nullable<BigInt>,
     }
 }
 
-allow_tables_to_appear_in_same_query!(
+diesel::allow_tables_to_appear_in_same_query!(
     high_qcs,
     last_executed_heights,
     last_voted_heights,
@@ -128,8 +126,7 @@ allow_tables_to_appear_in_same_query!(
     lock_node_and_heights,
     metadata,
     nodes,
-    objects,
     payloads,
     received_votes,
-    substate_changes,
+    substates,
 );

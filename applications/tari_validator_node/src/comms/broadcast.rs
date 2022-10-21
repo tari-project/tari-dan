@@ -26,6 +26,7 @@ use std::{
 };
 
 use futures::{stream, StreamExt};
+use log::warn;
 use tari_comms::{
     connectivity::ConnectivityRequester,
     message::OutboundMessage,
@@ -33,6 +34,8 @@ use tari_comms::{
     types::CommsPublicKey,
     Bytes,
 };
+use tari_comms_logging::SqliteMessageLog;
+use tari_crypto::tari_utilities::ByteArray;
 use tari_dan_core::{message::DanMessage, models::TariDanPayload};
 use tonic::codegen::futures_core::future::BoxFuture;
 use tower::{Service, ServiceExt};
@@ -44,11 +47,12 @@ const LOG_TARGET: &str = "tari::validator_node::comms::messaging";
 #[derive(Debug, Clone)]
 pub struct DanBroadcast {
     connectivity: ConnectivityRequester,
+    logger: SqliteMessageLog,
 }
 
 impl DanBroadcast {
-    pub fn new(connectivity: ConnectivityRequester) -> Self {
-        Self { connectivity }
+    pub fn new(connectivity: ConnectivityRequester, logger: SqliteMessageLog) -> Self {
+        Self { connectivity, logger }
     }
 }
 
@@ -63,6 +67,7 @@ where
         BroadcastService {
             next_service,
             connectivity: self.connectivity.clone(),
+            logger: self.logger.clone(),
         }
     }
 }
@@ -70,6 +75,7 @@ where
 #[derive(Debug, Clone)]
 pub struct BroadcastService<S> {
     connectivity: ConnectivityRequester,
+    logger: SqliteMessageLog,
     next_service: S,
 }
 
@@ -92,10 +98,11 @@ where
     ) -> Self::Future {
         let mut next_service = self.next_service.clone();
         let mut connectivity = self.connectivity.clone();
+        let logger = self.logger.clone();
 
         Box::pin(async move {
             let type_str = msg.as_type_str();
-            let bytes = encode_message(&proto::validator_node::DanMessage::from(msg));
+            let bytes = encode_message(&proto::validator_node::DanMessage::from(msg.clone()));
 
             log::info!(
                 target: LOG_TARGET,
@@ -107,14 +114,15 @@ where
             let svc = next_service.ready().await?;
             match dest {
                 Destination::Peer(pk) => {
+                    logger.log_outbound_message("Peer", ByteArray::as_bytes(&pk).to_vec(), type_str, &msg);
                     svc.call(OutboundMessage::new(NodeId::from_public_key(&pk), bytes))
                         .await?;
                 },
                 Destination::Selected(pks) => {
-                    let iter = pks
-                        .iter()
-                        .map(NodeId::from_public_key)
-                        .map(|n| OutboundMessage::new(n, bytes.clone()));
+                    let iter = pks.iter().map(NodeId::from_public_key).map(|n| {
+                        logger.log_outbound_message("Selected", n.as_bytes().to_vec(), type_str, &msg);
+                        OutboundMessage::new(n, bytes.clone())
+                    });
                     svc.call_all(stream::iter(iter))
                         .unordered()
                         .filter_map(|result| future::ready(result.err()))
@@ -127,10 +135,13 @@ where
                 },
                 Destination::Flood => {
                     let conns = connectivity.get_active_connections().await?;
-                    let iter = conns
-                        .into_iter()
-                        .map(|c| c.peer_node_id().clone())
-                        .map(|n| OutboundMessage::new(n, bytes.clone()));
+                    if conns.is_empty() {
+                        warn!(target: LOG_TARGET, "No active connections to flood to");
+                    }
+                    let iter = conns.into_iter().map(|c| c.peer_node_id().clone()).map(|n| {
+                        logger.log_outbound_message("Flood", n.as_bytes().to_vec(), type_str, &msg);
+                        OutboundMessage::new(n, bytes.clone())
+                    });
                     svc.call_all(stream::iter(iter))
                         .unordered()
                         .filter_map(|result| future::ready(result.err()))

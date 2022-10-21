@@ -23,10 +23,11 @@
 use tari_common_types::types::FixedHash;
 use tari_core::transactions::transaction_components::CodeTemplateRegistration;
 use tari_template_lib::models::TemplateAddress;
+use tari_validator_node_client::types::TemplateAbi;
 use tokio::sync::{mpsc, oneshot};
 
 use crate::p2p::services::template_manager::{
-    manager::Template,
+    manager::{Template, TemplateMetadata},
     service::TemplateManagerRequest,
     TemplateManagerError,
 };
@@ -53,7 +54,6 @@ impl TemplateManagerHandle {
         rx.await.map_err(|_| TemplateManagerError::SendError)?
     }
 
-    #[allow(dead_code)]
     pub async fn get_template(&self, address: TemplateAddress) -> Result<Template, TemplateManagerError> {
         let (tx, rx) = oneshot::channel();
         self.request_tx
@@ -62,10 +62,29 @@ impl TemplateManagerHandle {
             .map_err(|_| TemplateManagerError::SendError)?;
         rx.await.map_err(|_| TemplateManagerError::SendError)?
     }
+
+    pub async fn load_template_abi(&self, address: TemplateAddress) -> Result<TemplateAbi, TemplateManagerError> {
+        let (tx, rx) = oneshot::channel();
+        self.request_tx
+            .send(TemplateManagerRequest::LoadTemplateAbi { address, reply: tx })
+            .await
+            .map_err(|_| TemplateManagerError::SendError)?;
+        rx.await.map_err(|_| TemplateManagerError::SendError)?
+    }
+
+    pub async fn get_templates(&self, limit: usize) -> Result<Vec<TemplateMetadata>, TemplateManagerError> {
+        let (tx, rx) = oneshot::channel();
+        self.request_tx
+            .send(TemplateManagerRequest::GetTemplates { limit, reply: tx })
+            .await
+            .map_err(|_| TemplateManagerError::SendError)?;
+        rx.await.map_err(|_| TemplateManagerError::SendError)?
+    }
 }
 
 #[derive(Debug, Clone)]
 pub struct TemplateRegistration {
+    pub template_name: String,
     pub template_address: TemplateAddress,
     pub registration: CodeTemplateRegistration,
     pub mined_height: u64,

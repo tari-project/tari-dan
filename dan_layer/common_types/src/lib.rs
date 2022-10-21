@@ -22,26 +22,6 @@ use tari_common_types::types::{FixedHash, FixedHashSizeError};
 use tari_utilities::{byte_array::ByteArray, hex::Hex};
 pub use template_id::TemplateId;
 
-#[derive(Copy, Clone, Debug, PartialEq, Eq, Hash, Deserialize, Serialize)]
-pub struct ObjectId(#[serde(with = "serde_with::hex")] pub [u8; 32]);
-
-impl ObjectId {
-    pub fn as_bytes(&self) -> &[u8] {
-        &self.0
-    }
-}
-
-impl TryFrom<Vec<u8>> for ObjectId {
-    type Error = FixedHashSizeError;
-
-    fn try_from(value: Vec<u8>) -> Result<Self, Self::Error> {
-        let hash = FixedHash::try_from(value)?;
-        let mut v = [0u8; 32];
-        v.copy_from_slice(hash.as_slice());
-        Ok(Self(v))
-    }
-}
-
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Hash, Serialize, Deserialize)]
 pub struct ShardId(#[serde(with = "serde_with::hex")] pub [u8; 32]);
 
@@ -89,6 +69,14 @@ impl TryFrom<Vec<u8>> for ShardId {
     }
 }
 
+impl TryFrom<&[u8]> for ShardId {
+    type Error = FixedHashSizeError;
+
+    fn try_from(value: &[u8]) -> Result<Self, Self::Error> {
+        Self::from_bytes(value)
+    }
+}
+
 impl PartialOrd for ShardId {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
         self.0.partial_cmp(&other.0)
@@ -107,7 +95,7 @@ impl Display for ShardId {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Hash, Deserialize, Serialize)]
+#[derive(Clone, Debug, Copy, PartialEq, Eq, Hash, Deserialize, Serialize)]
 pub enum SubstateChange {
     Create,
     Destroy,
@@ -118,6 +106,16 @@ pub enum SubstateState {
     DoesNotExist,
     Up { created_by: PayloadId, data: Vec<u8> },
     Down { deleted_by: PayloadId },
+}
+
+impl SubstateState {
+    pub fn as_str(&self) -> &str {
+        match self {
+            Self::DoesNotExist => "DoesNotExist",
+            Self::Up { .. } => "Up",
+            Self::Down { .. } => "Down",
+        }
+    }
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]

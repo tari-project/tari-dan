@@ -14,16 +14,15 @@ enum HotStuffMessageType {
 
 message HotStuffMessage {
     HotStuffMessageType message_type = 1;
-    QuorumCertificate justify = 2;
-    HotStuffTreeNode node= 3;
-    QuorumCertificate high_qc = 4;
-    bytes shard = 5;
-    TariDanPayload new_view_payload = 6;
+    HotStuffTreeNode node= 2;
+    QuorumCertificate high_qc = 3;
+    bytes shard = 4;
+    TariDanPayload new_view_payload = 5;
 }
 
 message ShardVote {
     bytes shard = 1;
-    bytes hash = 2;
+    bytes node_hash = 2;
     repeated ObjectPledge pledges = 3;
 }
 
@@ -67,7 +66,8 @@ message VoteMessage {
     bytes local_node_hash = 1;
     bytes shard_id = 2;
     QuorumDecision decision = 3;
-    repeated ShardNode all_shard_nodes = 4;
+    repeated ShardVote all_shard_nodes = 4;
+
     bytes signature = 5;
 }
 
@@ -77,19 +77,13 @@ enum QuorumDecision {
     QUORUM_DECISION_REJECT = 2;
 }
 
-message ShardNode {
-    bytes shard_id  = 1;
-    bytes tree_node_hash = 2;
-    repeated ObjectPledge object_pledges = 3;
-}
-
 message ObjectPledge {
     enum CurrentState {
         CURRRENT_STATE_DOES_NOT_EXIST =0;
         CURRENT_STATE_UP = 1;
         CURRENT_STATE_DOWN = 2;
     }
-    bytes object_id = 1;
+    bytes shard_id = 1;
     CurrentState current_state = 2;
     bytes created_by =3;
     bytes data = 4;

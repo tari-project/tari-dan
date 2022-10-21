@@ -30,7 +30,9 @@ create table templates
     -- the block height in which the template was published
     height           bigint                            not null,
     -- compiled template code as a WASM binary
-    compiled_code    blob                              not null
+    compiled_code    blob                              not null,
+    -- template name 
+    template_name    text                              not null
 );
 
 -- fetching by the template_address will be a very common operation

@@ -25,23 +25,35 @@ use std::path::Path;
 use clap::{Args, Subcommand};
 use tari_dan_engine::transaction::Transaction;
 use tari_engine_types::{instruction::Instruction, TemplateAddress};
+use tari_template_lib::models::ComponentAddress;
 use tari_validator_node_client::{types::SubmitTransactionRequest, ValidatorNodeClient};
 
 use crate::{account_manager::AccountFileManager, from_hex::FromHex};
 
 #[derive(Debug, Subcommand, Clone)]
 pub enum TransactionSubcommand {
-    SubmitCallFunction(SubmitCallFunctionArgs),
+    Submit(SubmitArgs),
 }
 
 #[derive(Debug, Args, Clone)]
-pub struct SubmitCallFunctionArgs {
-    template_address: FromHex<TemplateAddress>,
-    function_name: String,
-    // #[clap(long, short = 'f')]
-    // pub function_name: String,
-    // #[clap(long, short = 'a')]
-    // pub function_args: Vec<Arg>,
+pub struct SubmitArgs {
+    #[clap(subcommand)]
+    instruction: CliInstruction,
+    #[clap(long, short = 'w')]
+    wait_for_result: bool,
+}
+
+#[derive(Debug, Subcommand, Clone)]
+pub enum CliInstruction {
+    CallFunction {
+        template_address: FromHex<TemplateAddress>,
+        function_name: String,
+    },
+    CallMethod {
+        template_address: FromHex<TemplateAddress>,
+        component_address: FromHex<ComponentAddress>,
+        method_name: String,
+    },
 }
 
 impl TransactionSubcommand {
@@ -51,37 +63,70 @@ impl TransactionSubcommand {
         mut client: ValidatorNodeClient,
     ) -> Result<(), anyhow::Error> {
         match self {
-            TransactionSubcommand::SubmitCallFunction(args) => {
-                let account_manager = AccountFileManager::init(base_dir.as_ref().to_path_buf())?;
-                let account = account_manager.get_active_account().ok_or_else(|| {
-                    anyhow::anyhow!("No active account. Use `accounts use [public key hex]` to set one.")
-                })?;
-
-                // TODO: this is a little clunky
-                let mut builder = Transaction::builder();
-                builder
-                    .add_instruction(Instruction::CallFunction {
-                        template_address: args.template_address.into_inner(),
-                        function: args.function_name,
-                        // TODO
-                        args: vec![],
-                    })
-                    .sign(&account.secret_key)
-                    .fee(1);
-                let transaction = builder.build();
-
-                let request = SubmitTransactionRequest {
-                    instructions: transaction.instructions().to_vec(),
-                    signature: transaction.signature().clone(),
-                    fee: transaction.fee(),
-                    sender_public_key: transaction.sender_public_key().clone(),
-                    // TODO:
-                    num_new_components: 1,
-                };
-                let resp = client.submit_transaction(request).await?;
-                println!("✅ Transaction submitted (hash: {})", resp.hash);
-            },
+            TransactionSubcommand::Submit(args) => handle_submit(args, base_dir, &mut client).await?,
         }
         Ok(())
     }
+}
+
+async fn handle_submit(
+    args: SubmitArgs,
+    base_dir: impl AsRef<Path>,
+    client: &mut ValidatorNodeClient,
+) -> Result<(), anyhow::Error> {
+    let instruction = match args.instruction {
+        CliInstruction::CallFunction {
+            template_address,
+            function_name,
+        } => {
+            Instruction::CallFunction {
+                template_address: template_address.into_inner(),
+                function: function_name,
+                // TODO
+                args: vec![],
+            }
+        },
+        CliInstruction::CallMethod {
+            template_address,
+            component_address,
+            method_name,
+        } => {
+            Instruction::CallMethod {
+                template_address: template_address.into_inner(),
+                component_address: component_address.into_inner(),
+                method: method_name,
+                // TODO
+                args: vec![],
+            }
+        },
+    };
+    let account_manager = AccountFileManager::init(base_dir.as_ref().to_path_buf())?;
+    let account = account_manager
+        .get_active_account()
+        .ok_or_else(|| anyhow::anyhow!("No active account. Use `accounts use [public key hex]` to set one."))?;
+
+    // TODO: this is a little clunky
+    let mut builder = Transaction::builder();
+    builder.add_instruction(instruction).sign(&account.secret_key).fee(1);
+    let transaction = builder.build();
+
+    let request = SubmitTransactionRequest {
+        instructions: transaction.instructions().to_vec(),
+        signature: transaction.signature().clone(),
+        fee: transaction.fee(),
+        sender_public_key: transaction.sender_public_key().clone(),
+        // TODO:
+        num_new_components: 1,
+        wait_for_result: args.wait_for_result,
+    };
+
+    if args.wait_for_result {
+        println!("⏳️ Waiting for transaction result...");
+    }
+    let resp = client.submit_transaction(request).await?;
+    println!("✅ Transaction {} submitted.", resp.hash);
+    for (shard_id, _) in resp.changes {
+        println!("🌼️ New component: {}", shard_id);
+    }
+    Ok(())
 }

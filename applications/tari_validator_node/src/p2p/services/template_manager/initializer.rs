@@ -20,7 +20,6 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use tari_dan_storage_sqlite::SqliteDbFactory;
 use tari_shutdown::ShutdownSignal;
 use tokio::sync::mpsc;
 
@@ -28,21 +27,17 @@ use crate::p2p::services::template_manager::{
     downloader::TemplateDownloadWorker,
     handle::TemplateManagerHandle,
     service::TemplateManagerService,
+    TemplateManager,
 };
 
-pub fn spawn(sqlite_db: SqliteDbFactory, shutdown: ShutdownSignal) -> TemplateManagerHandle {
+pub fn spawn(manager: TemplateManager, shutdown: ShutdownSignal) -> TemplateManagerHandle {
     let (tx_request, rx_request) = mpsc::channel(1);
     let handle = TemplateManagerHandle::new(tx_request);
 
     let (tx_download_queue, rx_download_queue) = mpsc::channel(1);
     let (tx_completed_downloads, rx_completed_downloads) = mpsc::channel(1);
-    TemplateManagerService::spawn(
-        rx_request,
-        sqlite_db,
-        tx_download_queue,
-        rx_completed_downloads,
-        shutdown,
-    );
+
+    TemplateManagerService::spawn(rx_request, manager, tx_download_queue, rx_completed_downloads, shutdown);
     TemplateDownloadWorker::new(rx_download_queue, tx_completed_downloads).spawn();
     handle
 }

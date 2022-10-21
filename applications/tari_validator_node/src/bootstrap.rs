@@ -20,19 +20,33 @@
 //   WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //   USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use std::{fs, io, sync::Arc};
+use std::{
+    fs,
+    io,
+    net::{IpAddr, Ipv4Addr, SocketAddr},
+    sync::Arc,
+};
 
 use tari_app_utilities::{identity_management, identity_management::load_from_json};
-use tari_common::exit_codes::{ExitCode, ExitError};
+use tari_common::{
+    configuration::bootstrap::{grpc_default_port, ApplicationType},
+    exit_codes::{ExitCode, ExitError},
+};
 use tari_comms::{protocol::rpc::RpcServer, CommsNode, NodeIdentity, UnspawnedCommsNode};
+use tari_dan_core::workers::events::{EventSubscription, HotStuffEvent};
 use tari_dan_storage::global::GlobalDb;
-use tari_dan_storage_sqlite::{global::SqliteGlobalDbAdapter, SqliteDbFactory};
+use tari_dan_storage_sqlite::{
+    global::SqliteGlobalDbAdapter,
+    sqlite_shard_store_factory::SqliteShardStoreFactory,
+    SqliteDbFactory,
+};
 use tari_p2p::initialization::spawn_comms_using_transport;
 use tari_shutdown::ShutdownSignal;
 
 use crate::{
     base_layer_scanner,
     comms,
+    consensus_constants::ConsensusConstants,
     grpc::services::base_node_client::GrpcBaseNodeClient,
     p2p::{
         create_validator_node_rpc_service,
@@ -48,10 +62,11 @@ use crate::{
             networking,
             networking::NetworkingHandle,
             template_manager,
-            template_manager::TemplateManager,
+            template_manager::{TemplateManager, TemplateManagerHandle},
         },
     },
     payload_processor::TariDanPayloadProcessor,
+    registration,
     ApplicationConfig,
 };
 
@@ -63,6 +78,7 @@ pub async fn spawn_services(
     node_identity: Arc<NodeIdentity>,
     global_db: GlobalDb<SqliteGlobalDbAdapter>,
     sqlite_db: SqliteDbFactory,
+    consensus_constants: ConsensusConstants,
 ) -> Result<Services, anyhow::Error> {
     let mut p2p_config = config.validator_node.p2p.clone();
     p2p_config.transport.tor.identity = load_from_json(&config.validator_node.tor_identity_file)
@@ -71,7 +87,10 @@ pub async fn spawn_services(
     ensure_directories_exist(config)?;
 
     // Connection to base node
-    let base_node_client = GrpcBaseNodeClient::new(config.validator_node.base_node_grpc_address);
+    let base_node_client = GrpcBaseNodeClient::new(config.validator_node.base_node_grpc_address.unwrap_or_else(|| {
+        let port = grpc_default_port(ApplicationType::BaseNode, config.network);
+        SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), port)
+    }));
 
     // Initialize comms
     let (comms, message_channel) = comms::initialize(node_identity.clone(), config, shutdown.clone()).await?;
@@ -114,7 +133,9 @@ pub async fn spawn_services(
     );
 
     // Template manager
-    let template_manager = template_manager::spawn(sqlite_db.clone(), shutdown.clone());
+
+    let template_manager = TemplateManager::new(sqlite_db.clone());
+    let template_manager_service = template_manager::spawn(template_manager.clone(), shutdown.clone());
 
     // Base Node scanner
     base_layer_scanner::spawn(
@@ -122,18 +143,16 @@ pub async fn spawn_services(
         global_db.clone(),
         base_node_client.clone(),
         epoch_manager.clone(),
-        template_manager.clone(),
+        template_manager_service.clone(),
         shutdown.clone(),
+        consensus_constants,
     );
 
     // Payload processor
-    // TODO: we recreate the db template manager here, we could use the TemplateManagerHandle, but this is async, which
-    //       would force the PayloadProcessor to be async (maybe that is ok, or maybe we dont need the template manager
-    //       to be async if it doesn't have to download the templates).
-    let payload_processor = TariDanPayloadProcessor::new(TemplateManager::new(sqlite_db));
+    let payload_processor = TariDanPayloadProcessor::new(template_manager);
 
     // Consensus
-    hotstuff::try_spawn(
+    let hotstuff_events = hotstuff::try_spawn(
         node_identity.clone(),
         &config.validator_node,
         outbound_messaging,
@@ -142,10 +161,12 @@ pub async fn spawn_services(
         payload_processor,
         rx_consensus_message,
         rx_vote_message,
-        shutdown,
+        shutdown.clone(),
     )?;
 
-    let comms = setup_p2p_rpc(config, comms, message_senders, peer_provider);
+    let shard_store_store = SqliteShardStoreFactory::try_create(config.validator_node.data_dir.join("state.db"))?;
+
+    let comms = setup_p2p_rpc(config, comms, message_senders, peer_provider, shard_store_store);
     let comms = spawn_comms_using_transport(comms, p2p_config.transport.clone())
         .await
         .map_err(|e| ExitError::new(ExitCode::ConfigError, format!("Could not spawn using transport: {}", e)))?;
@@ -154,11 +175,16 @@ pub async fn spawn_services(
     // changed by comms during initialization when using tor.
     save_identities(config, &comms)?;
 
+    // Auto-registration
+    registration::spawn(config.clone(), node_identity.clone(), epoch_manager.clone(), shutdown);
+
     Ok(Services {
         comms,
         networking,
         mempool,
         epoch_manager,
+        template_manager: template_manager_service,
+        hotstuff_events,
     })
 }
 
@@ -184,6 +210,8 @@ pub struct Services {
     pub networking: NetworkingHandle,
     pub mempool: MempoolHandle,
     pub epoch_manager: EpochManagerHandle,
+    pub template_manager: TemplateManagerHandle,
+    pub hotstuff_events: EventSubscription<HotStuffEvent>,
 }
 
 fn setup_p2p_rpc(
@@ -191,11 +219,16 @@ fn setup_p2p_rpc(
     comms: UnspawnedCommsNode,
     message_senders: DanMessageSenders,
     peer_provider: CommsPeerProvider,
+    shard_store_store: SqliteShardStoreFactory,
 ) -> UnspawnedCommsNode {
     let rpc_server = RpcServer::builder()
         .with_maximum_simultaneous_sessions(config.validator_node.p2p.rpc_max_simultaneous_sessions)
         .finish()
-        .add_service(create_validator_node_rpc_service(message_senders, peer_provider));
+        .add_service(create_validator_node_rpc_service(
+            message_senders,
+            peer_provider,
+            shard_store_store,
+        ));
 
     comms.add_protocol_extension(rpc_server)
 }

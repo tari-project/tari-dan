@@ -20,12 +20,14 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use async_trait::async_trait;
-use tari_dan_engine::transaction::Transaction;
+pub struct ConsensusConstants {
+    pub base_layer_confirmations: u64,
+}
 
-use crate::DigitalAssetError;
-
-#[async_trait]
-pub trait MempoolOutboundService: Sync + Send {
-    async fn propagate_transaction(&mut self, transaction: Transaction) -> Result<(), DigitalAssetError>;
+impl ConsensusConstants {
+    pub const fn devnet() -> Self {
+        Self {
+            base_layer_confirmations: 3,
+        }
+    }
 }

@@ -22,12 +22,16 @@
 
 use std::collections::HashMap;
 
+use futures::future::join_all;
 use log::{debug, error, info};
 use tari_dan_common_types::{Epoch, PayloadId, ShardId, SubstateState};
 use tari_dan_engine::runtime::TransactionResult;
 use tari_shutdown::ShutdownSignal;
 use tokio::{
-    sync::mpsc::{Receiver, Sender},
+    sync::{
+        broadcast,
+        mpsc::{Receiver, Sender},
+    },
     task::JoinHandle,
 };
 
@@ -53,7 +57,7 @@ use crate::{
         PayloadProcessor,
     },
     storage::shard_store::{ShardStoreFactory, ShardStoreTransaction},
-    workers::hotstuff_error::HotStuffError,
+    workers::{events::HotStuffEvent, hotstuff_error::HotStuffError},
 };
 
 const LOG_TARGET: &str = "tari::dan_layer::hotstuff_waiter";
@@ -68,6 +72,7 @@ pub struct HotStuffWaiter<TPayload, TAddr, TLeaderStrategy, TEpochManager, TPayl
     tx_leader: Sender<(TAddr, HotStuffMessage<TPayload, TAddr>)>,
     tx_broadcast: Sender<(HotStuffMessage<TPayload, TAddr>, Vec<TAddr>)>,
     tx_vote_message: Sender<(VoteMessage, TAddr)>,
+    tx_events: broadcast::Sender<HotStuffEvent>,
     payload_processor: TPayloadProcessor,
     shard_store: TShardStore,
 }
@@ -92,6 +97,7 @@ where
         tx_leader: Sender<(TAddr, HotStuffMessage<TPayload, TAddr>)>,
         tx_broadcast: Sender<(HotStuffMessage<TPayload, TAddr>, Vec<TAddr>)>,
         tx_vote_message: Sender<(VoteMessage, TAddr)>,
+        tx_events: broadcast::Sender<HotStuffEvent>,
         payload_processor: TPayloadProcessor,
         shard_store: TShardStore,
         shutdown: ShutdownSignal,
@@ -106,6 +112,7 @@ where
             tx_leader,
             tx_broadcast,
             tx_vote_message,
+            tx_events,
             payload_processor,
             shard_store,
         );
@@ -122,6 +129,7 @@ where
         tx_leader: Sender<(TAddr, HotStuffMessage<TPayload, TAddr>)>,
         tx_broadcast: Sender<(HotStuffMessage<TPayload, TAddr>, Vec<TAddr>)>,
         tx_vote_message: Sender<(VoteMessage, TAddr)>,
+        tx_events: broadcast::Sender<HotStuffEvent>,
         payload_processor: TPayloadProcessor,
         shard_store: TShardStore,
     ) -> Self {
@@ -135,6 +143,7 @@ where
             tx_leader,
             tx_broadcast,
             tx_vote_message,
+            tx_events,
             payload_processor,
             shard_store,
         }
@@ -210,6 +219,16 @@ where
 
             let parent = tx.get_node(&leaf).map_err(|e| e.into())?;
 
+            if leaf != TreeNodeHash::zero() && parent.justify().local_node_hash() == qc.local_node_hash() {
+                info!(
+                    target: LOG_TARGET,
+                    "Leaf node already has the same QC as the proposed QC, so we have already sent a proposal for \
+                     this payload"
+                );
+                // We have already sent a proposal for this paylaod. Do nothing
+                return Ok(());
+            }
+
             let payload_height = if parent.payload() == payload {
                 parent.payload_height() + NodeHeight(1)
             } else {
@@ -220,18 +239,16 @@ where
                 // No need to continue, we have already committed this node.
                 return Ok(());
             }
-            let objects = actual_payload.objects_for_shard(shard);
+            let (change, claim) = actual_payload
+                .objects_for_shard(shard)
+                .ok_or(HotStuffError::ShardHasNoData)?;
 
-            let mut local_pledges = vec![];
-            for (object, _, claim) in objects {
-                if !claim.is_valid(payload) {
-                    return Err(HotStuffError::ClaimIsNotValid);
-                }
-                local_pledges.push(
-                    tx.pledge_object(shard, object, payload, leaf_height)
-                        .map_err(|e| e.into())?,
-                );
+            if !claim.is_valid(payload) {
+                return Err(HotStuffError::ClaimIsNotValid);
             }
+            let local_pledges = vec![tx
+                .pledge_object(shard, payload, change, leaf_height)
+                .map_err(|e| e.into())?];
             leaf_node = self.create_leaf(
                 leaf,
                 shard,
@@ -315,10 +332,13 @@ where
 
         let new_view;
         {
-            let tx = self.shard_store.create_tx()?;
+            let mut tx = self.shard_store.create_tx()?;
 
             let high_qc = tx.get_high_qc_for(shard).map_err(|e| e.into())?;
 
+            //  Save the payload, because we will need it when the proposal comes back
+            tx.set_payload(payload.clone()).map_err(|e| e.into())?;
+            tx.commit().map_err(|e| e.into())?;
             new_view = HotStuffMessage::new_view(high_qc, shard, Some(payload));
         }
 
@@ -338,7 +358,9 @@ where
     }
 
     async fn update_nodes(&mut self, node: HotStuffTreeNode<TAddr>, shard: ShardId) -> Result<(), HotStuffError> {
+        let node_hash = *node.hash();
         let mut tx = self.shard_store.create_tx()?;
+
         if node.justify().local_node_hash() == TreeNodeHash::zero() {
             dbg!("Node is parented to genesis, no need to update");
             return Ok(());
@@ -355,7 +377,7 @@ where
 
         let (_b_lock, b_lock_height) = tx.get_locked_node_hash_and_height(shard).map_err(|e| e.into())?;
         if b_one.height().0 > b_lock_height.0 {
-            debug!(target: LOG_TARGET, "Updating locked node to: {:?}", b_one.hash());
+            info!(target: LOG_TARGET, "Updating locked node to: {:?}", b_one.hash());
             tx.set_locked(shard, *b_one.hash(), b_one.height())
                 .map_err(|e| e.into())?;
         }
@@ -363,9 +385,13 @@ where
         if node.justify().payload_height() == NodeHeight(2) {
             // decide
             debug!(target: LOG_TARGET, "Deciding on payload: {:?}", node.payload());
-            self.on_commit(node, shard, &mut tx)?;
+            let changes = self.on_commit(node, shard, &mut tx)?;
+            if !changes.is_empty() {
+                self.publish_event(HotStuffEvent::OnCommit(node_hash, changes));
+            }
         }
         tx.commit().map_err(|e| e.into())?;
+
         Ok(())
     }
 
@@ -374,11 +400,12 @@ where
         node: HotStuffTreeNode<TAddr>,
         shard: ShardId,
         tx: &mut TShardStore::Transaction,
-    ) -> Result<(), HotStuffError> {
+    ) -> Result<HashMap<ShardId, SubstateState>, HotStuffError> {
+        let mut changes = HashMap::new();
         if tx.get_last_executed_height(shard).map_err(|e| e.into())? < node.height() {
             if node.parent() != &TreeNodeHash::zero() {
                 let parent = tx.get_node(node.parent()).map_err(|e| e.into())?;
-                self.on_commit(parent, shard, tx)?;
+                changes.extend(self.on_commit(parent, shard, tx)?);
             }
             if node.justify().payload_height() == NodeHeight(2) {
                 let payload = tx.get_payload(&node.justify().payload_id()).map_err(|e| e.into())?;
@@ -392,20 +419,20 @@ where
                 {
                     all_pledges.insert(*shard_id, pledges.clone());
                 }
-                let changes = self.execute(all_pledges, payload)?;
-                tx.save_substate_changes(changes, *node.hash()).map_err(|e| e.into())?;
+                changes.extend(self.execute(all_pledges, payload)?);
+                tx.save_substate_changes(&changes, &node).map_err(|e| e.into())?;
             }
             tx.set_last_executed_height(shard, node.height())
                 .map_err(|e| e.into())?;
         }
-        Ok(())
+        Ok(changes)
     }
 
     fn execute(
         &mut self,
         shard_pledges: HashMap<ShardId, Vec<ObjectPledge>>,
         payload: TPayload,
-    ) -> Result<HashMap<ShardId, Option<SubstateState>>, HotStuffError> {
+    ) -> Result<HashMap<ShardId, SubstateState>, HotStuffError> {
         let payload_id = payload.to_id();
         let finalize = self.payload_processor.process_payload(payload, shard_pledges)?;
         match finalize.result {
@@ -413,17 +440,14 @@ where
                 let changes = diff
                     .up_iter()
                     .map(|(shard, substate)| {
-                        (
-                            *shard,
-                            Some(SubstateState::Up {
-                                created_by: payload_id,
-                                data: substate.to_bytes(),
-                            }),
-                        )
+                        (*shard, SubstateState::Up {
+                            created_by: payload_id,
+                            data: substate.to_bytes(),
+                        })
                     })
                     .chain(
                         diff.down_iter()
-                            .map(|shard| (*shard, Some(SubstateState::Down { deleted_by: payload_id }))),
+                            .map(|shard| (*shard, SubstateState::Down { deleted_by: payload_id })),
                     )
                     .collect();
 
@@ -447,7 +471,7 @@ where
         }
     }
 
-    // TODO: needs some explaination of the process in docs here
+    // TODO: needs some explanation of the process in docs here
     async fn on_receive_proposal(&mut self, from: TAddr, node: HotStuffTreeNode<TAddr>) -> Result<(), HotStuffError> {
         debug!(
             target: LOG_TARGET,
@@ -518,17 +542,13 @@ where
                         let mut vote_msg = VoteMessage::new(*local_node.hash(), local_shard, decision, votes.clone());
                         vote_msg.sign();
 
-                        // tx.commit().map_err(|e| e.into())?;
                         votes_to_send.push(self.tx_vote_message.send((
                             vote_msg,
                             local_node.proposed_by().clone(), // self.get_leader(),
                         )));
-                        // .await
-                        // .map_err(|e| e.to_string())?;
                     }
                 } else {
                     // save the nodes
-
                     debug!(
                         target: LOG_TARGET,
                         "Not enough votes to vote on the message, votes: {}, involved_shards: {}",
@@ -542,8 +562,8 @@ where
             tx.commit().map_err(|e| e.into())?;
         }
 
-        for vote in votes_to_send {
-            vote.await.map_err(|_| HotStuffError::SendError)?;
+        for res in join_all(votes_to_send).await {
+            res.map_err(|_| HotStuffError::SendError)?;
         }
         self.update_nodes(node.clone(), shard).await?;
         Ok(())
@@ -586,6 +606,8 @@ where
                 .save_received_vote_for(from, msg.local_node_hash(), msg.shard(), msg.clone())
                 .map_err(|e| e.into())?;
             // Check for consensus
+            dbg!(&valid_committee);
+            dbg!(total_votes);
             if total_votes >= valid_committee.consensus_threshold() {
                 let mut different_votes = HashMap::new();
                 for vote in tx
@@ -616,14 +638,19 @@ where
                         );
                         tx.update_high_qc(msg.shard(), qc)
                             .map_err(|e| HotStuffError::UpdateHighQcError(e.to_string()))?; // TODO: is there a better alternative to handle error?
-                        tx.commit().map_err(|e| e.into())?;
+
                         // Should be the pace maker actually
                         on_beat_future = Some(self.on_beat(msg.shard(), node.payload()));
                         break;
                     }
                 }
             }
+
+            // commit the transaction
+            tx.commit().map_err(|e| e.into())?;
+            // drop tx
         }
+
         if let Some(on_beat) = on_beat_future {
             on_beat.await?;
         }
@@ -634,16 +661,40 @@ where
     //     self.leader_strategy.get_leader(&self.committee, payload, shard)
     // }
 
+    async fn on_new_hs_message(
+        &mut self,
+        from: TAddr,
+        msg: HotStuffMessage<TPayload, TAddr>,
+    ) -> Result<(), HotStuffError> {
+        match msg.message_type() {
+            HotStuffMessageType::NewView => {
+                if let Some(payload) = msg.new_view_payload() {
+                    self.on_receive_new_view(from, msg.shard(), msg.high_qc().unwrap(), payload.clone())
+                        .await?;
+                    // There should always be a payload, otherwise the leader
+                    // can't be determined
+                    self.on_beat(msg.shard(), payload.to_id()).await?;
+                }
+            },
+            HotStuffMessageType::Generic => {
+                let node = msg.node().ok_or(HotStuffError::RecvGenericMessageWithoutNode)?;
+                self.on_receive_proposal(from, node.clone()).await?;
+            },
+        }
+        Ok(())
+    }
+
+    fn publish_event(&self, event: HotStuffEvent) {
+        let _ignore = self.tx_events.send(event);
+    }
+
     pub async fn run(mut self, mut shutdown: ShutdownSignal) -> Result<(), HotStuffError> {
         loop {
             tokio::select! {
                 msg = self.rx_new.recv() => {
                     if let Some((p, shard)) = msg {
-                        match self.on_next_sync_view(p.clone(), shard).await{
-                            Ok(_) => {},
-                            Err(e) => {
-                               error!(target: LOG_TARGET, "Error while processing new payload (on_next_sync_view): {}", e);
-                            }
+                        if let Err(e) = self.on_next_sync_view(p, shard).await {
+                           error!(target: LOG_TARGET, "Error while processing new payload (on_next_sync_view): {}", e);
                         }
                         // self.on_beat(0, msg);
                         // TODO: Start timer for receiving proposal
@@ -652,55 +703,20 @@ where
                         break;
                     }
                 },
-                msg = self.rx_hs_message.recv() => {
-                    if let Some((from, msg) ) = msg {
-                        match msg.message_type() {
-                            HotStuffMessageType::NewView => {
-                                if let Some(payload) = msg.new_view_payload() {
-                                    match self.on_receive_new_view(from, msg.shard(), msg.high_qc().unwrap(), payload.clone()).await{
-                                        Ok(_) => {},
-                                        Err(e) => {
-                                            error!(target: LOG_TARGET, "Error while processing new view (on_receive_new_view): {}", e);
-                                        }
-                                    }
-                                    // There should always be a payload, otherwise the leader
-                                    // can't be determined
-                                    match self.on_beat(msg.shard(), payload.to_id()).await {
-                                        Ok(()) => {},
-                                        Err(e) => {
-                                            error!(target: LOG_TARGET, "Error while processing on_beat: {}", e);
-                                        }
-                                    }
-                                }
-                            },
-                            HotStuffMessageType::Generic => {
-                                if let Some(node) = msg.node() {
-                                    match self.on_receive_proposal(from, node.clone()).await {
-                                        Ok(()) => {},
-                                        Err(e) => {
-                                            error!(target: LOG_TARGET, "Error while processing proposal (on_receive_proposal): {}", e);
-                                        }
-                                    }
-                                } else {
-                                    error!(target: LOG_TARGET, "Received generic message without node");
-                                }
-                            }
-                        }
+                Some((from, msg)) = self.rx_hs_message.recv() => {
+                    if let Err(e) = self.on_new_hs_message(from, msg).await {
+                        self.publish_event(HotStuffEvent::Failed(e.to_string()));
+                        error!(target: LOG_TARGET, "Error while processing new hotstuff message (on_new_hs_message): {}", e);
                     }
                 },
-                msg = self.rx_votes.recv() => {
-                    if let Some((from, msg)) = msg {
-                        debug!(target: LOG_TARGET, "Received vote from {}", from);
-                        match self.on_receive_vote(from, msg).await {
-                            Ok(()) => {},
-                            Err(e) => {
-                                error!(target: LOG_TARGET, "Error while processing vote (on_receive_vote): {}", e);
-                            }
-                        }
+                Some((from, msg)) = self.rx_votes.recv() => {
+                    debug!(target: LOG_TARGET, "Received vote from {}", from);
+                    if let Err(e) = self.on_receive_vote(from, msg).await {
+                        error!(target: LOG_TARGET, "Error while processing vote (on_receive_vote): {}", e);
                     }
                 },
                 _ = shutdown.wait() => {
-                    info!(target: LOG_TARGET, "Shutting down");
+                    info!(target: LOG_TARGET, "💤 Shutting down");
                     break;
                 }
             }

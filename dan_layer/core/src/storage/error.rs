@@ -66,6 +66,8 @@ pub enum StorageError {
     LockError,
     #[error("Error converting to or from json: {0}")]
     SerdeJson(#[from] serde_json::Error),
+    #[error("Error converting substate type:{substate_type}")]
+    InvalidSubStateType { substate_type: String },
 }
 
 impl<T> From<PoisonError<T>> for StorageError {

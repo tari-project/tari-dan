@@ -34,22 +34,34 @@ const _LOG_TARGET: &str = "tari::validator_node::template_manager";
 
 #[derive(Debug, Clone)]
 pub struct TemplateMetadata {
-    _address: TemplateAddress,
+    pub address: TemplateAddress,
     // this must be in the form of "https://example.com/my_template.wasm"
-    _url: String,
+    pub url: String,
     /// SHA hash of binary
-    _binary_sha: Vec<u8>,
+    pub binary_sha: Vec<u8>,
     /// Block height in which the template was published
-    _height: u64,
+    pub height: u64,
 }
 
 impl From<TemplateRegistration> for TemplateMetadata {
     fn from(reg: TemplateRegistration) -> Self {
         TemplateMetadata {
-            _address: reg.template_address,
-            _url: reg.registration.binary_url.into_string(),
-            _binary_sha: reg.registration.binary_sha.into_vec(),
-            _height: reg.mined_height,
+            address: reg.template_address,
+            url: reg.registration.binary_url.into_string(),
+            binary_sha: reg.registration.binary_sha.into_vec(),
+            height: reg.mined_height,
+        }
+    }
+}
+
+// TODO: Allow fetching of just the template metadata without the compiled code
+impl From<DbTemplate> for TemplateMetadata {
+    fn from(record: DbTemplate) -> Self {
+        TemplateMetadata {
+            address: (*record.template_address).into(),
+            url: record.url,
+            binary_sha: vec![],
+            height: record.height,
         }
     }
 }
@@ -66,17 +78,18 @@ impl From<DbTemplate> for Template {
         Template {
             metadata: TemplateMetadata {
                 // TODO: this will change when common engine types are moved around
-                _address: (*record.template_address).into(),
-                _url: record.url,
+                address: (*record.template_address).into(),
+                url: record.url,
                 // TODO: add field to db
-                _binary_sha: vec![],
-                _height: record.height,
+                binary_sha: vec![],
+                height: record.height,
             },
             compiled_code: record.compiled_code,
         }
     }
 }
 
+#[derive(Debug, Clone)]
 pub struct TemplateManager {
     db_factory: SqliteDbFactory,
 }
@@ -98,8 +111,17 @@ impl TemplateManager {
         Ok(template.into())
     }
 
+    pub fn fetch_template_metadata(&self, limit: usize) -> Result<Vec<TemplateMetadata>, TemplateManagerError> {
+        let db = self.db_factory.get_or_create_global_db()?;
+        let tx = db.create_transaction()?;
+        // TODO: we should be able to fetch just the metadata and not the compiled code
+        let templates = db.templates(&tx).get_templates(limit)?;
+        Ok(templates.into_iter().map(Into::into).collect())
+    }
+
     pub(super) fn add_template(&self, template: TemplateRegistration) -> Result<(), TemplateManagerError> {
         let template = DbTemplate {
+            template_name: template.template_name,
             template_address: template.template_address.into_array().into(),
             url: template.registration.binary_url.into_string(),
             height: template.mined_height,
@@ -139,7 +161,7 @@ impl TemplateProvider for TemplateManager {
     type Error = TemplateManagerError;
     type Template = WasmModule;
 
-    fn get_template(&self, address: &TemplateAddress) -> Result<Self::Template, Self::Error> {
+    fn get_template_module(&self, address: &TemplateAddress) -> Result<Self::Template, Self::Error> {
         let template = self.fetch_template(address)?;
         Ok(WasmModule::from_code(template.compiled_code))
     }

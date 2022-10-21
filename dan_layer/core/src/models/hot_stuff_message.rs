@@ -22,6 +22,7 @@
 
 use std::fmt::{Display, Formatter};
 
+use serde::Serialize;
 use tari_common_types::types::FixedHash;
 use tari_dan_common_types::ShardId;
 
@@ -39,10 +40,9 @@ use crate::{
 };
 
 // TODO: convert to enum
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize)]
 pub struct HotStuffMessage<TPayload, TAddr> {
     message_type: HotStuffMessageType,
-    justify: Option<QuorumCertificate>,
     // The high qc: used for new view messages
     high_qc: Option<QuorumCertificate>,
     node: Option<HotStuffTreeNode<TAddr>>,
@@ -55,7 +55,6 @@ impl<TPayload: Payload, TAddr: NodeAddressable> Default for HotStuffMessage<TPay
     fn default() -> Self {
         Self {
             message_type: Default::default(),
-            justify: Default::default(),
             high_qc: Default::default(),
             node: Default::default(),
             shard: Default::default(),
@@ -67,7 +66,6 @@ impl<TPayload: Payload, TAddr: NodeAddressable> Default for HotStuffMessage<TPay
 impl<TPayload: Payload, TAddr: NodeAddressable> HotStuffMessage<TPayload, TAddr> {
     pub fn new(
         message_type: HotStuffMessageType,
-        justify: Option<QuorumCertificate>,
         high_qc: Option<QuorumCertificate>,
         node: Option<HotStuffTreeNode<TAddr>>,
         shard: Option<ShardId>,
@@ -75,7 +73,6 @@ impl<TPayload: Payload, TAddr: NodeAddressable> HotStuffMessage<TPayload, TAddr>
     ) -> Self {
         Self {
             message_type,
-            justify,
             high_qc,
             node,
             shard,
@@ -88,7 +85,6 @@ impl<TPayload: Payload, TAddr: NodeAddressable> HotStuffMessage<TPayload, TAddr>
             message_type: HotStuffMessageType::NewView,
             high_qc: Some(high_qc),
             shard: Some(shard),
-            justify: None,
             node: None,
             // Traditional hotstuff does not include broadcasting a payload at the same time,
             // but if this is a view for a specific payload, then it can be sent to the leader as
@@ -151,10 +147,6 @@ impl<TPayload: Payload, TAddr: NodeAddressable> HotStuffMessage<TPayload, TAddr>
 
     pub fn message_type(&self) -> HotStuffMessageType {
         self.message_type
-    }
-
-    pub fn justify(&self) -> Option<&QuorumCertificate> {
-        self.justify.as_ref()
     }
 
     pub fn matches(&self, message_type: HotStuffMessageType, view_id: ViewId) -> bool {

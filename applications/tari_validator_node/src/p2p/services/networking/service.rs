@@ -119,7 +119,9 @@ impl Networking {
             .dial_many_peers(seed_peers.into_iter().map(|p| NodeId::from_public_key(&p.identity)));
         dials
             .for_each(|res| async move {
-                info!(target: LOG_TARGET, "Dial result: {:?}", res);
+                if let Err(err) = res {
+                    error!(target: LOG_TARGET, "🚨 Failed to dial seed peer: {}", err);
+                }
             })
             .await;
         Ok(())
@@ -215,6 +217,7 @@ impl Networking {
     fn initiate_sync_protocol(&self, conn: PeerConnection) {
         let permit = self.peer_sync_permit.clone();
         let peer_provider = self.peer_provider.clone();
+        let our_identity = self.node_identity.public_key().clone();
         task::spawn(async move {
             let _permit = match permit.acquire().await {
                 Ok(permit) => permit,
@@ -226,7 +229,7 @@ impl Networking {
                     return;
                 },
             };
-            let protocol = PeerSyncProtocol::new(conn, peer_provider);
+            let protocol = PeerSyncProtocol::new(conn, our_identity, peer_provider);
             if let Err(err) = protocol.run().await {
                 error!(target: LOG_TARGET, "Peer sync protocol failed: {}", err);
             }

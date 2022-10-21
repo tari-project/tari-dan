@@ -43,6 +43,7 @@ use tari_template_lib::models::TemplateAddress;
 use tokio::{task, time};
 
 use crate::{
+    consensus_constants::ConsensusConstants,
     p2p::services::{
         epoch_manager::handle::EpochManagerHandle,
         template_manager::{TemplateManagerError, TemplateManagerHandle, TemplateRegistration},
@@ -60,6 +61,7 @@ pub fn spawn(
     epoch_manager: EpochManagerHandle,
     template_manager: TemplateManagerHandle,
     shutdown: ShutdownSignal,
+    consensus_constants: ConsensusConstants,
 ) {
     task::spawn(async move {
         let base_layer_scanner = BaseLayerScanner::new(
@@ -69,6 +71,7 @@ pub fn spawn(
             epoch_manager,
             template_manager,
             shutdown,
+            consensus_constants,
         );
 
         if let Err(err) = base_layer_scanner.start().await {
@@ -86,6 +89,7 @@ pub struct BaseLayerScanner {
     epoch_manager: EpochManagerHandle,
     template_manager: TemplateManagerHandle,
     shutdown: ShutdownSignal,
+    consensus_constants: ConsensusConstants,
 }
 
 impl BaseLayerScanner {
@@ -96,6 +100,7 @@ impl BaseLayerScanner {
         epoch_manager: EpochManagerHandle,
         template_manager: TemplateManagerHandle,
         shutdown: ShutdownSignal,
+        consensus_constants: ConsensusConstants,
     ) -> Self {
         Self {
             config,
@@ -106,6 +111,7 @@ impl BaseLayerScanner {
             epoch_manager,
             template_manager,
             shutdown,
+            consensus_constants,
         }
     }
 
@@ -223,7 +229,19 @@ impl BaseLayerScanner {
         if tip.height_of_longest_chain == 0 {
             return Ok(());
         }
-        let end_height = tip.height_of_longest_chain;
+        let end_height = match tip
+            .height_of_longest_chain
+            .checked_sub(self.consensus_constants.base_layer_confirmations)
+        {
+            None => {
+                debug!(
+                    target: LOG_TARGET,
+                    "Base layer blockchain is not yet at the required height to start scanning it"
+                );
+                return Ok(());
+            },
+            Some(end_height) => end_height,
+        };
 
         for current_height in start_scan_height..=end_height {
             let utxos = self
@@ -264,8 +282,13 @@ impl BaseLayerScanner {
                         self.register_validator_node_registration(current_height, reg).await?;
                     },
                     SideChainFeature::TemplateRegistration(reg) => {
-                        self.register_code_template_registration((*output_hash).into(), reg, &block_info)
-                            .await?;
+                        self.register_code_template_registration(
+                            reg.clone().template_name.into_string(),
+                            (*output_hash).into(),
+                            reg,
+                            &block_info,
+                        )
+                        .await?;
                     },
                 }
             }
@@ -313,6 +336,7 @@ impl BaseLayerScanner {
 
     async fn register_code_template_registration(
         &mut self,
+        template_name: String,
         template_address: TemplateAddress,
         registration: CodeTemplateRegistration,
         block_info: &BlockInfo,
@@ -322,6 +346,7 @@ impl BaseLayerScanner {
             "🌠 new template found with address {} at height {}", template_address, block_info.height
         );
         let template = TemplateRegistration {
+            template_name,
             template_address,
             registration,
             mined_height: block_info.height,

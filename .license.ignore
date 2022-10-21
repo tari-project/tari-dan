@@ -1,5 +1,6 @@
 ./CODEOWNERS
 ./LICENSE
+./comms/tari_comms_logging/src/schema.rs
 ./dan_layer/storage_sqlite/src/schema.rs
 ./integration_tests/Makefile
 ./integration_tests/cucumber.js

@@ -20,13 +20,31 @@
 // CAUSED AND ON ANY THEORY OF LIABILITY,  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR
 // OTHERWISE) ARISING IN ANY WAY OUT OF THE  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH
 // DAMAGE.
-use std::convert::TryInto;
+use std::{
+    convert::{TryFrom, TryInto},
+    sync::Arc,
+};
 
 use log::*;
 use tari_comms::protocol::rpc::{Request, Response, RpcStatus, Streaming};
-use tari_dan_core::services::{infrastructure_services::NodeAddressable, PeerProvider};
+use tari_dan_common_types::ShardId;
+use tari_dan_core::{
+    services::{infrastructure_services::NodeAddressable, PeerProvider},
+    storage::shard_store::{ShardStoreFactory, ShardStoreTransaction},
+};
 use tari_dan_engine::transaction::Transaction;
-use tokio::{sync::mpsc, task};
+use tari_dan_storage_sqlite::sqlite_shard_store_factory::SqliteShardStoreFactory;
+use tokio::{
+    sync::{mpsc, Mutex},
+    task,
+};
+
+use crate::p2p::proto::network::{
+    GetVnStateInventoryRequest,
+    GetVnStateInventoryResponse,
+    VnStateSyncRequest,
+    VnStateSyncResponse,
+};
 
 const LOG_TARGET: &str = "vn::p2p::rpc";
 
@@ -35,13 +53,19 @@ use crate::p2p::{proto, rpc::ValidatorNodeRpcService, services::messaging::DanMe
 pub struct ValidatorNodeRpcServiceImpl<TPeerProvider> {
     message_senders: DanMessageSenders,
     peer_provider: TPeerProvider,
+    shard_state_store: SqliteShardStoreFactory,
 }
 
 impl<TPeerProvider: PeerProvider> ValidatorNodeRpcServiceImpl<TPeerProvider> {
-    pub fn new(message_senders: DanMessageSenders, peer_provider: TPeerProvider) -> Self {
+    pub fn new(
+        message_senders: DanMessageSenders,
+        peer_provider: TPeerProvider,
+        shard_state_store: SqliteShardStoreFactory,
+    ) -> Self {
         Self {
             message_senders,
             peer_provider,
+            shard_state_store,
         }
     }
 }
@@ -63,7 +87,7 @@ where TPeerProvider: PeerProvider + Clone + Send + Sync + 'static
         {
             Ok(value) => value,
             Err(e) => {
-                return Err(RpcStatus::not_found(&format!("Could not convert transaaction: {}", e)));
+                return Err(RpcStatus::not_found(&format!("Could not convert transaction: {}", e)));
             },
         };
 
@@ -96,6 +120,9 @@ where TPeerProvider: PeerProvider + Clone + Send + Sync + 'static
         task::spawn(async move {
             let mut peer_iter = peer_provider.peers_for_current_epoch_iter().await;
             while let Some(Ok(peer)) = peer_iter.next() {
+                if peer.identity_signature.is_none() {
+                    continue;
+                }
                 if tx
                     .send(Ok(proto::network::GetPeersResponse {
                         identity: peer.identity.as_bytes().to_vec(),
@@ -114,6 +141,92 @@ where TPeerProvider: PeerProvider + Clone + Send + Sync + 'static
             }
         });
 
+        Ok(Streaming::new(rx))
+    }
+
+    async fn get_vn_state_inventory(
+        &self,
+        request: Request<GetVnStateInventoryRequest>,
+    ) -> Result<Response<GetVnStateInventoryResponse>, RpcStatus> {
+        let request = request.into_message();
+        let start_shard_id = request
+            .start_shard_id
+            .and_then(|s| ShardId::try_from(s).ok())
+            .ok_or_else(|| RpcStatus::bad_request("Invalid gRPC request: start_shard_id not provided"))?;
+        let end_shard_id = request
+            .end_shard_id
+            .and_then(|s| ShardId::try_from(s).ok())
+            .ok_or_else(|| RpcStatus::bad_request("Invalid gRPC request: end_shard_id not provided"))?;
+
+        let store_tx = self
+            .shard_state_store
+            .create_tx()
+            .map_err(RpcStatus::log_internal_error(LOG_TARGET))?;
+        let inventory = store_tx
+            .get_state_inventory(start_shard_id, end_shard_id)
+            .map_err(RpcStatus::log_internal_error(LOG_TARGET))?;
+
+        Ok(Response::new(GetVnStateInventoryResponse {
+            inventory: inventory.into_iter().map(|item| item.into()).collect(),
+        }))
+    }
+
+    async fn vn_state_sync(
+        &self,
+        request: Request<VnStateSyncRequest>,
+    ) -> Result<Streaming<VnStateSyncResponse>, RpcStatus> {
+        let (tx, rx) = mpsc::channel(100);
+        let msg = request.into_message();
+
+        let missing_shard_ids = msg
+            .missing_shard_state_ids
+            .iter()
+            .map(|s| {
+                ShardId::try_from(s.bytes.as_slice())
+                    .expect("Invalid gRPC request: failed to parse shard id's request data")
+            })
+            .collect::<Vec<ShardId>>();
+
+        if missing_shard_ids.is_empty() {
+            return Err(RpcStatus::bad_request(
+                "Invalid gRPC request: request should contain at least one shard id available",
+            ));
+        }
+
+        let shard_store = self.shard_state_store.clone();
+
+        let store_tx = Arc::new(Mutex::new(
+            shard_store
+                .create_tx()
+                .map_err(RpcStatus::log_internal_error(LOG_TARGET))?,
+        ));
+
+        task::spawn(async move {
+            loop {
+                let substate_states = store_tx.lock().await.get_substate_states(missing_shard_ids.as_slice());
+
+                let states = match substate_states {
+                    Ok(s) => s,
+                    Err(err) => {
+                        error!(target: LOG_TARGET, "{}", err);
+                        let _ignore = tx.send(Err(RpcStatus::general(&err))).await;
+                        return;
+                    },
+                };
+
+                // select data from db where shard_id <= end_shard_id and shard_id >= start_shard_id
+                for state in states {
+                    let substate_state = proto::common::SubstateState::from(state);
+                    let response = proto::network::VnStateSyncResponse {
+                        substate_state: Some(substate_state),
+                    };
+                    // if send returns error, the client has closed the connection, so we break the loop
+                    if tx.send(Ok(response)).await.is_err() {
+                        break;
+                    }
+                }
+            }
+        });
         Ok(Streaming::new(rx))
     }
 }

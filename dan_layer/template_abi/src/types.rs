@@ -21,7 +21,7 @@
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 use crate::{
-    rust::{string::String, vec::Vec},
+    rust::{fmt, string::String, vec::Vec},
     Decode,
     Encode,
 };
@@ -61,4 +61,26 @@ pub enum Type {
     U128,
     String,
     Other { name: String },
+}
+
+#[cfg(feature = "std")]
+impl fmt::Display for Type {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Type::Unit => write!(f, "Unit"),
+            Type::Bool => write!(f, "Bool"),
+            Type::I8 => write!(f, "I8"),
+            Type::I16 => write!(f, "I16"),
+            Type::I32 => write!(f, "I32"),
+            Type::I64 => write!(f, "I64"),
+            Type::I128 => write!(f, "I128"),
+            Type::U8 => write!(f, "U8"),
+            Type::U16 => write!(f, "U16"),
+            Type::U32 => write!(f, "U32"),
+            Type::U64 => write!(f, "U64"),
+            Type::U128 => write!(f, "U128"),
+            Type::String => write!(f, "String"),
+            Type::Other { name } => write!(f, "{}", name),
+        }
+    }
 }

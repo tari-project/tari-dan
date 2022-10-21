@@ -25,6 +25,8 @@ mod cli;
 mod command;
 mod from_hex;
 mod prompt;
+#[macro_use]
+mod table;
 
 use std::{error::Error, path::PathBuf};
 
@@ -50,7 +52,9 @@ async fn main() -> Result<(), Box<dyn Error>> {
     log::info!("🌍️ Connecting to {}", endpoint);
     let client = ValidatorNodeClient::connect(endpoint)?;
 
-    handle_command(cli.command, base_dir, client).await?;
+    if let Err(err) = handle_command(cli.command, base_dir, client).await {
+        eprintln!("👮 Command failed with error \"{}\"", err);
+    }
 
     Ok(())
 }

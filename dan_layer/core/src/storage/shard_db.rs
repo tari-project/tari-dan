@@ -25,7 +25,7 @@ use std::{
     sync::{Arc, RwLock},
 };
 
-use tari_dan_common_types::{ObjectId, PayloadId, ShardId, SubstateState};
+use tari_dan_common_types::{PayloadId, ShardId, SubstateChange, SubstateState};
 
 use crate::{
     models::{
@@ -55,7 +55,7 @@ pub struct MemoryShardDbInner<TAddr, TPayload> {
     last_executed_height: HashMap<ShardId, NodeHeight>,
     payloads: HashMap<PayloadId, TPayload>,
     payload_votes: HashMap<PayloadId, HashMap<NodeHeight, HashMap<ShardId, HotStuffTreeNode<TAddr>>>>,
-    objects: HashMap<ShardId, HashMap<ObjectId, (SubstateState, Option<ObjectPledge>)>>,
+    objects: HashMap<ShardId, (SubstateState, Option<ObjectPledge>)>,
 }
 
 impl<TAddr: NodeAddressable, TPayload: Payload> MemoryShardDbInner<TAddr, TPayload> {
@@ -305,13 +305,15 @@ impl<TAddr: NodeAddressable, TPayload: Payload> ShardStoreTransaction<TAddr, TPa
     fn pledge_object(
         &mut self,
         shard: ShardId,
-        object: ObjectId,
         payload: PayloadId,
+        _change: SubstateChange,
         current_height: NodeHeight,
     ) -> Result<ObjectPledge, Self::Error> {
         let mut guard = self.inner.write().unwrap();
-        let shard_data = guard.objects.entry(shard).or_insert_with(HashMap::new);
-        let entry = shard_data.entry(object).or_insert((SubstateState::DoesNotExist, None));
+        let entry = guard
+            .objects
+            .entry(shard)
+            .or_insert((SubstateState::DoesNotExist, None));
         if let Some(existing_pledge) = &entry.1 {
             if existing_pledge.pledged_until > current_height {
                 return Ok(existing_pledge.clone());
@@ -319,7 +321,7 @@ impl<TAddr: NodeAddressable, TPayload: Payload> ShardStoreTransaction<TAddr, TPa
         }
 
         let pledge = ObjectPledge {
-            object_id: object,
+            shard_id: shard,
             current_state: entry.0.clone(),
             pledged_to_payload: payload,
             pledged_until: current_height + NodeHeight(4),
@@ -337,10 +339,18 @@ impl<TAddr: NodeAddressable, TPayload: Payload> ShardStoreTransaction<TAddr, TPa
 
     fn save_substate_changes(
         &mut self,
-        _changes: HashMap<ShardId, Option<SubstateState>>,
-        _node: TreeNodeHash,
+        _changes: &HashMap<ShardId, SubstateState>,
+        _node: &HotStuffTreeNode<TAddr>,
     ) -> Result<(), Self::Error> {
         // todo!()
         Ok(())
+    }
+
+    fn get_state_inventory(&self, _start_shard: ShardId, _end_shard: ShardId) -> Result<Vec<ShardId>, Self::Error> {
+        Ok(vec![])
+    }
+
+    fn get_substate_states(&self, _shards: &[ShardId]) -> Result<Vec<SubstateState>, Self::Error> {
+        Ok(vec![])
     }
 }

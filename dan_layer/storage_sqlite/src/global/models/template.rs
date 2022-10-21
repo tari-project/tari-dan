@@ -26,6 +26,7 @@ use crate::global::schema::*;
 #[table_name = "templates"]
 pub struct TemplateModel {
     pub id: i32,
+    pub template_name: String,
     pub template_address: Vec<u8>,
     pub url: String,
     pub height: i32,
@@ -38,6 +39,7 @@ pub struct TemplateModel {
 #[derive(Debug, Insertable)]
 #[table_name = "templates"]
 pub struct NewTemplateModel {
+    pub template_name: String,
     pub template_address: Vec<u8>,
     pub url: String,
     pub height: i32,

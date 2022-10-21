@@ -14,9 +14,6 @@ message Node {
     bool is_committed = 4;
 }
 
-
-
-
 message SignerSignature {
   bytes signer = 1;
   Signature signature = 2;
@@ -72,7 +69,7 @@ message MerkleProof {
    uint32 path_bitmap = 3;
 }
 
-message Transaction{
+message Transaction {
   repeated ThaumInput inputs = 1;
   repeated ThaumOutput outputs = 2;
   repeated Instruction instructions = 3;
@@ -81,6 +78,7 @@ message Transaction{
   Signature signature = 6;
   uint64 fee = 7;
   bytes sender_public_key = 8;
+  TransactionMeta meta = 9;
 }
 
 message Instruction {
@@ -113,4 +111,39 @@ message Arg {
   }
   ArgType arg_type = 1;
   bytes data = 2;
+}
+message PayloadId {
+  bytes payload_id = 1;
+}
+
+message ShardId {
+  bytes bytes = 1;
+}
+
+message SubstateState {
+  enum SubstateStateType {
+    DOES_NOT_EXIST = 0;
+    UP = 1;
+    DOWN = 2;
+  }
+  SubstateStateType substate_state_type = 1;
+  PayloadId created_by = 2;
+  bytes data = 3;
+  PayloadId deleted_by = 4;
+}
+
+message TransactionMeta {
+  repeated bytes involved_shard_ids = 1;
+  // TODO: no idea what to call this ;)
+  repeated SubstateRef involved_substates = 2;
+}
+
+message SubstateRef {
+  SubstateChange change = 1;
+  // claim = 2
+}
+
+enum SubstateChange {
+    Create = 0;
+    Destroy = 1;
 }

@@ -20,6 +20,8 @@
 //   WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //   USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+use tari_template_abi::TemplateDef;
+
 use crate::wasm::LoadedWasmTemplate;
 
 #[derive(Debug, Clone)]
@@ -34,6 +36,12 @@ impl LoadedTemplate {
     pub fn template_name(&self) -> &str {
         match self {
             LoadedTemplate::Wasm(wasm) => wasm.template_name(),
+        }
+    }
+
+    pub fn template_def(&self) -> &TemplateDef {
+        match self {
+            LoadedTemplate::Wasm(wasm) => wasm.template_def(),
         }
     }
 }

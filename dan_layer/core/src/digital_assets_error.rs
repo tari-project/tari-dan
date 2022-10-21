@@ -101,6 +101,8 @@ pub enum DigitalAssetError {
     StateStorageError(#[from] StateStorageError),
     #[error("Hash size error: {0}")]
     HashSizeError(#[from] FixedHashSizeError),
+    #[error("Failed to register the validator node: {0}")]
+    NodeRegistration(String),
 }
 
 impl From<lmdb_zero::Error> for DigitalAssetError {

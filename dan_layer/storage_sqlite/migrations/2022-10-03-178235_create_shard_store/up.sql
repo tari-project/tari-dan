@@ -90,21 +90,19 @@ create table leader_proposals (
 
 create unique index leader_proposals_index on leader_proposals (payload_id, shard_id, payload_height, node_hash);
 
-create table objects (
+
+create table substates (
     id integer not null primary key AUTOINCREMENT,
+    substate_type text not null,
     shard_id blob not NULL,
-    payload_id blob not NULL,
-    object_id blob not NULL,
     node_height bigint not NULL,
-    current_state text not NULL,
-    object_pledge text not NULL -- TODO: can it be non null ?
-);
-
-
-create table substate_changes (
-    id integer not null primary key AUTOINCREMENT,
-    shard_id blob not NULL,
-    substate_change text not null,
-    tree_node_hash blob not NULL
+    data blob null,
+    created_by_payload_id blob not null,
+    deleted_by_payload_id blob null,
+    justify text null,
+    is_draft boolean not null,
+    tree_node_hash blob NULL,
+    pledged_to_payload_id blob NULL,
+    pledged_until_height bigint NULL
 );
 

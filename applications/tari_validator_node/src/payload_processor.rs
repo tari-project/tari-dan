@@ -70,7 +70,7 @@ where TTemplateProvider: TemplateProvider
         for addr in template_addresses {
             let template = self
                 .template_provider
-                .get_template(&addr)
+                .get_template_module(&addr)
                 .map_err(|err| PayloadProcessorError::FailedToLoadTemplate(err.into()))?;
             let loaded_template = template
                 .load_template()

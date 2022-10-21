@@ -25,6 +25,7 @@ mod bootstrap;
 mod cli;
 mod comms;
 mod config;
+mod consensus_constants;
 mod dan_node;
 mod default_service_specification;
 mod grpc;
@@ -32,22 +33,24 @@ mod http_ui;
 mod json_rpc;
 mod p2p;
 mod payload_processor;
+mod registration;
 mod template_registration_signing;
 mod validator_node_registration_signing;
 
-use std::{fs, io};
+use std::{
+    io,
+    net::{IpAddr, Ipv4Addr, SocketAddr},
+};
 
 use log::*;
 use serde::{Deserialize, Serialize};
 use tari_app_utilities::identity_management::setup_node_identity;
-use tari_common::exit_codes::{ExitCode, ExitError};
-use tari_comms::NodeIdentity;
-use tari_dan_common_types::ShardId;
-use tari_dan_core::{
-    services::{base_node_error::BaseNodeError, BaseNodeClient},
-    storage::DbFactory,
-    DigitalAssetError,
+use tari_common::{
+    configuration::bootstrap::{grpc_default_port, ApplicationType},
+    exit_codes::{ExitCode, ExitError},
 };
+use tari_dan_common_types::ShardId;
+use tari_dan_core::{services::base_node_error::BaseNodeError, storage::DbFactory, DigitalAssetError};
 use tari_dan_storage_sqlite::SqliteDbFactory;
 use tari_shutdown::{Shutdown, ShutdownSignal};
 use tokio::task;
@@ -55,6 +58,7 @@ use tokio::task;
 pub use crate::config::{ApplicationConfig, ValidatorNodeConfig};
 use crate::{
     bootstrap::{spawn_services, Services},
+    consensus_constants::ConsensusConstants,
     dan_node::DanNode,
     grpc::services::{base_node_client::GrpcBaseNodeClient, wallet_client::GrpcWalletClient},
     http_ui::server::run_http_ui_server,
@@ -112,27 +116,28 @@ pub async fn run_node(config: &ApplicationConfig) -> Result<(), ExitError> {
     );
 
     // fs::create_dir_all(&global.peer_db_path).map_err(|err| ExitError::new(ExitCode::ConfigError, err))?;
-    let mut base_node_client = GrpcBaseNodeClient::new(config.validator_node.base_node_grpc_address);
-    let mut wallet_client = GrpcWalletClient::new(config.validator_node.wallet_grpc_address);
-    let vn_registration = auto_register_vn(&mut wallet_client, &mut base_node_client, &node_identity, config).await;
-    println!("VN Registration result : {:?}", vn_registration);
+    let base_node_client = GrpcBaseNodeClient::new(config.validator_node.base_node_grpc_address.unwrap_or_else(|| {
+        let port = grpc_default_port(ApplicationType::BaseNode, config.network);
+        SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), port)
+    }));
+    let wallet_client = GrpcWalletClient::new(config.validator_node.wallet_grpc_address.unwrap_or_else(|| {
+        let port = grpc_default_port(ApplicationType::ConsoleWallet, config.network);
+        SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), port)
+    }));
     let services = spawn_services(
         config,
         shutdown.to_signal(),
         node_identity.clone(),
         global_db,
         db_factory,
+        ConsensusConstants::devnet(), // TODO: change this eventually
     )
     .await?;
 
     // Run the JSON-RPC API
     if let Some(address) = config.validator_node.json_rpc_address {
         info!(target: LOG_TARGET, "🌐 Started JSON-RPC server on {}", address);
-        let handlers = JsonRpcHandlers::new(
-            GrpcWalletClient::new(config.validator_node.wallet_grpc_address),
-            base_node_client,
-            &services,
-        );
+        let handlers = JsonRpcHandlers::new(wallet_client, base_node_client, &services);
         task::spawn(run_json_rpc(address, handlers));
     }
 
@@ -151,50 +156,6 @@ pub async fn run_node(config: &ApplicationConfig) -> Result<(), ExitError> {
     run_dan_node(services, shutdown.to_signal()).await?;
 
     Ok(())
-}
-
-async fn auto_register_vn(
-    wallet_client: &mut GrpcWalletClient,
-    base_node_client: &mut GrpcBaseNodeClient,
-    node_identity: &NodeIdentity,
-    config: &ApplicationConfig,
-) -> Result<ShardId, ShardKeyError> {
-    let path = &config.validator_node.shard_key_file;
-
-    // We already sent the registration tx, we are just waiting for it to be mined.
-    let tip = base_node_client.get_tip_info().await?.height_of_longest_chain;
-    let shard_id = base_node_client
-        .get_shard_key(tip, node_identity.public_key())
-        .await
-        .map_err(ShardKeyError::BaseNodeError)?;
-    if let Some(shard_id) = shard_id {
-        let shard_key = ShardKey {
-            is_registered: true,
-            shard_id: Some(shard_id),
-        };
-        let json = json5::to_string(&shard_key)?;
-        fs::write(path, json.as_bytes())?;
-        Ok(shard_id)
-    } else {
-        let vn = wallet_client.register_validator_node(node_identity).await?;
-        if vn.is_success {
-            println!("Registering VN was successful {:?}", vn);
-            let shard_key = ShardKey {
-                is_registered: true,
-                shard_id: None,
-            };
-            let json = json5::to_string(&shard_key)?;
-            if let Some(p) = path.parent() {
-                if !p.exists() {
-                    fs::create_dir_all(p)?;
-                }
-            }
-            fs::write(path, json.as_bytes())?;
-            Err(ShardKeyError::NotYetRegistered)
-        } else {
-            Err(ShardKeyError::RegistrationFailed)
-        }
-    }
 }
 
 async fn run_dan_node(services: Services, shutdown_signal: ShutdownSignal) -> Result<(), ExitError> {

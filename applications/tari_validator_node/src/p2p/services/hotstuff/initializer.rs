@@ -23,7 +23,10 @@
 use std::sync::Arc;
 
 use tari_comms::{types::CommsPublicKey, NodeIdentity};
-use tari_dan_core::models::{vote_message::VoteMessage, HotStuffMessage, TariDanPayload};
+use tari_dan_core::{
+    models::{vote_message::VoteMessage, HotStuffMessage, TariDanPayload},
+    workers::events::{EventSubscription, HotStuffEvent},
+};
 use tari_dan_storage_sqlite::sqlite_shard_store_factory::SqliteShardStoreFactory;
 use tari_shutdown::ShutdownSignal;
 use tokio::sync::mpsc;
@@ -50,10 +53,10 @@ pub fn try_spawn(
     rx_consensus_message: mpsc::Receiver<(CommsPublicKey, HotStuffMessage<TariDanPayload, CommsPublicKey>)>,
     rx_vote_message: mpsc::Receiver<(CommsPublicKey, VoteMessage)>,
     shutdown: ShutdownSignal,
-) -> Result<(), anyhow::Error> {
+) -> Result<EventSubscription<HotStuffEvent>, anyhow::Error> {
     let db = SqliteShardStoreFactory::try_create(config.data_dir.join("state.db"))?;
     // let db = MemoryShardStoreFactory::new();
-    HotstuffService::spawn(
+    let events = HotstuffService::spawn(
         node_identity.public_key().clone(),
         epoch_manager,
         mempool,
@@ -64,5 +67,5 @@ pub fn try_spawn(
         rx_vote_message,
         shutdown,
     );
-    Ok(())
+    Ok(events)
 }

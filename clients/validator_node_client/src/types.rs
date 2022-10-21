@@ -20,10 +20,12 @@
 //   WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //   USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+use std::collections::HashMap;
+
 use serde::{Deserialize, Serialize};
 use tari_common_types::types::{FixedHash, PublicKey};
-use tari_dan_common_types::{serde_with, Epoch, ShardId};
-use tari_engine_types::{instruction::Instruction, signature::InstructionSignature};
+use tari_dan_common_types::{serde_with, Epoch, ShardId, SubstateState};
+use tari_engine_types::{instruction::Instruction, signature::InstructionSignature, TemplateAddress};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TemplateRegistrationRequest {
@@ -42,6 +44,50 @@ pub struct TemplateRegistrationResponse {
     #[serde(with = "serde_with::base64")]
     pub template_address: Vec<u8>,
     pub transaction_id: u64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct GetTemplateRequest {
+    pub template_address: TemplateAddress,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct GetTemplateResponse {
+    pub registration_metadata: TemplateMetadata,
+    pub abi: TemplateAbi,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TemplateAbi {
+    pub template_name: String,
+    pub functions: Vec<FunctionDef>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct FunctionDef {
+    pub name: String,
+    pub arguments: Vec<String>,
+    pub output: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct GetTemplatesRequest {
+    pub limit: u64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct GetTemplatesResponse {
+    pub templates: Vec<TemplateMetadata>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TemplateMetadata {
+    pub address: TemplateAddress,
+    pub url: String,
+    /// SHA hash of binary
+    pub binary_sha: Vec<u8>,
+    /// Block height in which the template was published
+    pub height: u64,
 }
 
 /// A request to submit a transaction
@@ -71,18 +117,16 @@ pub struct SubmitTransactionRequest {
     pub fee: u64,
     pub sender_public_key: PublicKey,
     pub num_new_components: u8,
+    /// Set to true to wait for the transaction to complete before returning
+    #[serde(default)]
+    pub wait_for_result: bool,
 }
-
-// #[derive(Debug, Clone, Serialize, Deserialize)]
-// pub struct SubmitTransactionResponse {
-//     // TODO: Return hash type
-//     pub hash: Vec<u8>,
-// }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SubmitTransactionResponse {
     #[serde(with = "serde_with::hex")]
     pub hash: FixedHash,
+    pub changes: HashMap<ShardId, SubstateState>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

@@ -19,21 +19,36 @@
 //   SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY,
 //   WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //   USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-//
-use crate::schema::*;
 
-#[derive(Debug, Identifiable, Queryable)]
-pub struct SubstateChange {
-    pub id: i32,
-    pub shard_id: Vec<u8>,
-    pub tree_node_hash: Vec<u8>,
-    pub substate_changes: String,
+use std::collections::HashMap;
+
+use tari_dan_common_types::{ShardId, SubstateState};
+use tokio::sync::broadcast;
+
+use crate::models::TreeNodeHash;
+
+/// Wraps a broadcast sender, allowing a subscription (Receiver) to be obtained but removing the ability to send an
+/// event.
+pub struct EventSubscription<T>(broadcast::Sender<T>);
+
+impl<T> EventSubscription<T> {
+    pub fn new(sender: broadcast::Sender<T>) -> Self {
+        Self(sender)
+    }
+
+    pub fn subscribe(&self) -> broadcast::Receiver<T> {
+        self.0.subscribe()
+    }
 }
 
-#[derive(Debug, Insertable)]
-#[table_name = "substate_changes"]
-pub struct NewSubStateChange {
-    pub shard_id: Vec<u8>,
-    pub tree_node_hash: Vec<u8>,
-    pub substate_change: String,
+impl<T> Clone for EventSubscription<T> {
+    fn clone(&self) -> Self {
+        Self(self.0.clone())
+    }
+}
+
+#[derive(Debug, Clone)]
+pub enum HotStuffEvent {
+    OnCommit(TreeNodeHash, HashMap<ShardId, SubstateState>),
+    Failed(String),
 }

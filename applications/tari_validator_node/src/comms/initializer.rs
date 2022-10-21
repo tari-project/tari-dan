@@ -39,6 +39,7 @@ use tari_comms::{
     PeerManager,
     UnspawnedCommsNode,
 };
+use tari_comms_logging::SqliteMessageLog;
 use tari_dan_core::{message::DanMessage, models::TariDanPayload};
 use tari_p2p::{peer_seeds::SeedPeer, P2pConfig, PeerSeedsConfig, MAJOR_NETWORK_VERSION, MINOR_NETWORK_VERSION};
 use tari_shutdown::ShutdownSignal;
@@ -143,17 +144,19 @@ fn configure_comms(
 
     // Hook up messaging middlewares (currently none)
     let connectivity = comms.connectivity();
+    let logger1 = SqliteMessageLog::new(config.datastore_path.clone());
+    let logger2 = logger1.clone();
     let messaging_pipeline = pipeline::Builder::new()
         .with_outbound_pipeline(outbound_rx, move |sink| {
             ServiceBuilder::new()
-                .layer(DanBroadcast::new(connectivity))
+                .layer(DanBroadcast::new(connectivity, logger1))
                 .service(sink)
         })
         .max_concurrent_inbound_tasks(3)
         .max_concurrent_outbound_tasks(3)
         .with_inbound_pipeline(
             ServiceBuilder::new()
-                .layer(DanDeserialize::new(comms.peer_manager()))
+                .layer(DanDeserialize::new(comms.peer_manager(), logger2))
                 .service(SinkService::new(inbound_tx)),
         )
         .build();

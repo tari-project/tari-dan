@@ -142,6 +142,7 @@ where
         let (tx_broadcast, rx_broadcast) = channel(1);
         let (tx_vote_message, rx_vote_message) = channel(1);
         let (tx_votes, rx_votes) = channel(1);
+        let (tx_events, _) = broadcast::channel(100);
         let payload_processor = PayloadProcessorListener::<TPayload>::new();
         let rx_execute = payload_processor.receiver.resubscribe();
         let shutdown = Shutdown::new();
@@ -157,6 +158,7 @@ where
             tx_leader,
             tx_broadcast,
             tx_vote_message,
+            tx_events,
             payload_processor,
             shard_store,
             shutdown.to_signal(),

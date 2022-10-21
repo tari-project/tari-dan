@@ -29,21 +29,23 @@ use std::{
 use futures::future::BoxFuture;
 use prost::Message;
 use tari_comms::{message::InboundMessage, types::CommsPublicKey, PeerManager};
+use tari_comms_logging::SqliteMessageLog;
+use tari_crypto::tari_utilities::ByteArray;
 use tari_dan_core::{message::DanMessage, models::TariDanPayload};
 use tower::{Service, ServiceExt};
 
 use crate::p2p::proto;
-
 const LOG_TARGET: &str = "tari::validator_node::comms::messaging";
 
 #[derive(Debug, Clone)]
 pub struct DanDeserialize {
     peer_manager: Arc<PeerManager>,
+    logger: SqliteMessageLog,
 }
 
 impl DanDeserialize {
-    pub fn new(peer_manager: Arc<PeerManager>) -> Self {
-        Self { peer_manager }
+    pub fn new(peer_manager: Arc<PeerManager>, logger: SqliteMessageLog) -> Self {
+        Self { peer_manager, logger }
     }
 }
 
@@ -60,6 +62,7 @@ where
     fn layer(&self, next_service: S) -> Self::Service {
         DanDeserializeService {
             next_service,
+            logger: self.logger.clone(),
             peer_manager: self.peer_manager.clone(),
         }
     }
@@ -68,6 +71,7 @@ where
 #[derive(Debug, Clone)]
 pub struct DanDeserializeService<S> {
     next_service: S,
+    logger: SqliteMessageLog,
     peer_manager: Arc<PeerManager>,
 }
 
@@ -93,6 +97,7 @@ where
         } = msg;
         let next_service = self.next_service.clone();
         let peer_manager = self.peer_manager.clone();
+        let logger = self.logger.clone();
         Box::pin(async move {
             let body_len = body.len();
             let decoded_msg = proto::validator_node::DanMessage::decode(&mut body)?;
@@ -108,6 +113,7 @@ where
                 .find_by_node_id(&source_peer)
                 .await?
                 .ok_or_else(|| anyhow::anyhow!("Could not find peer with node id {}", source_peer))?;
+            logger.log_inbound_message(peer.public_key.as_bytes().to_vec(), msg.as_type_str(), &msg);
             let mut svc = next_service.ready_oneshot().await?;
             svc.call((peer.public_key, msg)).await?;
             Ok(())
