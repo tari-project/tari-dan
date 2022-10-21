@@ -46,6 +46,7 @@ use tari_shutdown::ShutdownSignal;
 use crate::{
     base_layer_scanner,
     comms,
+    consensus_constants::ConsensusConstants,
     grpc::services::base_node_client::GrpcBaseNodeClient,
     p2p::{
         create_validator_node_rpc_service,
@@ -77,6 +78,7 @@ pub async fn spawn_services(
     node_identity: Arc<NodeIdentity>,
     global_db: GlobalDb<SqliteGlobalDbAdapter>,
     sqlite_db: SqliteDbFactory,
+    consensus_constants: ConsensusConstants,
 ) -> Result<Services, anyhow::Error> {
     let mut p2p_config = config.validator_node.p2p.clone();
     p2p_config.transport.tor.identity = load_from_json(&config.validator_node.tor_identity_file)
@@ -143,6 +145,7 @@ pub async fn spawn_services(
         epoch_manager.clone(),
         template_manager_service.clone(),
         shutdown.clone(),
+        consensus_constants,
     );
 
     // Payload processor

@@ -67,7 +67,7 @@ use crate::{
     grpc::services::{base_node_client::GrpcBaseNodeClient, wallet_client::GrpcWalletClient},
     http_ui::server::run_http_ui_server,
     json_rpc::{run_json_rpc, JsonRpcHandlers},
-    p2p::services::networking::DAN_PEER_FEATURES,
+    p2p::services::networking::DAN_PEER_FEATURES, consensus_constants::ConsensusConstants,
 };
 
 const LOG_TARGET: &str = "tari::validator_node::app";
@@ -165,6 +165,7 @@ async fn run_node(config: &ApplicationConfig) -> Result<(), ExitError> {
         node_identity.clone(),
         global_db,
         db_factory,
+        ConsensusConstants::devnet(), // TODO: change this eventually
     )
     .await?;
 

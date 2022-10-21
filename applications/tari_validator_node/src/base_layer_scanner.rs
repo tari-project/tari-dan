@@ -25,7 +25,6 @@ use std::convert::TryInto;
 use log::*;
 use tari_common_types::types::{FixedHash, FixedHashSizeError};
 use tari_core::{
-    consensus::ConsensusConstants,
     transactions::transaction_components::{CodeTemplateRegistration, SideChainFeature, ValidatorNodeRegistration},
 };
 use tari_crypto::tari_utilities::ByteArray;
@@ -43,12 +42,12 @@ use tokio::{task, time};
 
 use crate::{
     p2p::{
-        proto::consensus,
         services::{
             epoch_manager::handle::EpochManagerHandle,
             template_manager::{TemplateManagerError, TemplateManagerHandle, TemplateRegistration},
         },
     },
+    consensus_constants::ConsensusConstants,
     GrpcBaseNodeClient,
     ValidatorNodeConfig,
 };
@@ -90,7 +89,7 @@ pub struct BaseLayerScanner {
     epoch_manager: EpochManagerHandle,
     template_manager: TemplateManagerHandle,
     shutdown: ShutdownSignal,
-    consensus_constants: crate::consensus_constants::ConsensusConstants,
+    consensus_constants: ConsensusConstants,
 }
 
 impl BaseLayerScanner {
@@ -230,9 +229,19 @@ impl BaseLayerScanner {
         if tip.height_of_longest_chain == 0 {
             return Ok(());
         }
-        let end_height = tip
+        let end_height = match tip
             .height_of_longest_chain
-            .checked_sub(self.consensus_constants.base_layer_confirmations);
+            .checked_sub(self.consensus_constants.base_layer_confirmations)
+        {
+            None => {
+                debug!(
+                    target: LOG_TARGET,
+                    "Base layer blockchain is not yet at the required height to start scanning it"
+                );
+                return Ok(());
+            },
+            Some(end_height) => end_height,
+        };
 
         for current_height in start_scan_height..=end_height {
             let utxos = self
