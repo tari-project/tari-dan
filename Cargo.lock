@@ -4513,6 +4513,7 @@ dependencies = [
  "tari_dan_common_types",
  "tari_dan_engine",
  "tari_engine_types",
+ "tari_template_lib",
  "tari_utilities",
  "tari_validator_node_client",
  "thiserror",
