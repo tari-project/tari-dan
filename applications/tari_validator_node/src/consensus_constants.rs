@@ -27,7 +27,7 @@ pub struct ConsensusConstants {
 impl ConsensusConstants {
     pub const fn devnet() -> Self {
         Self {
-            base_layer_confirmations: 100, // 3 days
+            base_layer_confirmations: 3,
         }
     }
 }
