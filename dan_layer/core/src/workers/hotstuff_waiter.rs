@@ -217,10 +217,7 @@ where
         {
             let mut tx = self.shard_store.create_tx()?;
 
-            dbg!(&leaf);
             let parent = tx.get_node(&leaf).map_err(|e| e.into())?;
-            dbg!(&parent);
-            dbg!(&qc);
 
             if leaf != TreeNodeHash::zero() && parent.justify().local_node_hash() == qc.local_node_hash() {
                 info!(
