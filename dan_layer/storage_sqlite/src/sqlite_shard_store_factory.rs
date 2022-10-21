@@ -152,11 +152,11 @@ impl SqliteShardStoreTransaction {
             shard_id: ShardId::try_from(shard.as_slice())?,
             current_state: current_state
                 .map(|s| match s.substate_type.as_str() {
-                    "UP" => Ok(SubstateState::Up {
+                    "Up" => Ok(SubstateState::Up {
                         created_by: PayloadId::try_from(s.created_by_payload_id)?,
                         data: s.data.unwrap_or_default(),
                     }),
-                    "DOWN" => Ok(SubstateState::Down {
+                    "Down" => Ok(SubstateState::Down {
                         deleted_by: PayloadId::try_from(s.deleted_by_payload_id.unwrap_or_default())?,
                     }),
                     _ => Err(StorageError::InvalidSubStateType {
@@ -567,8 +567,8 @@ impl ShardStoreTransaction<PublicKey, TariDanPayload> for SqliteShardStoreTransa
         // otherwise save pledge
         let new_row = NewSubstate {
             substate_type: match change {
-                SubstateChange::Create => "UP".to_string(),
-                SubstateChange::Destroy => "DOWN".to_string(),
+                SubstateChange::Create => "Up".to_string(),
+                SubstateChange::Destroy => "Down".to_string(),
             },
             shard_id: shard.clone(),
             node_height: current_height.as_u64() as i64,
@@ -761,11 +761,11 @@ impl ShardStoreTransaction<PublicKey, TariDanPayload> for SqliteShardStoreTransa
             substate_states
                 .iter()
                 .map(|ss| match ss.substate_type.as_str() {
-                    "UP" => Ok(SubstateState::Up {
+                    "Up" => Ok(SubstateState::Up {
                         created_by: PayloadId::try_from(ss.created_by_payload_id.clone())?,
                         data: ss.data.clone().unwrap_or_default(),
                     }),
-                    "DOWN" => Ok(SubstateState::Down {
+                    "Down" => Ok(SubstateState::Down {
                         deleted_by: PayloadId::try_from(ss.deleted_by_payload_id.clone().unwrap_or_default())?,
                     }),
                     _ => Err(StorageError::InvalidSubStateType {
