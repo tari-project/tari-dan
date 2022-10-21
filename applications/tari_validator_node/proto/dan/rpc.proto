@@ -21,21 +21,21 @@
 // USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 syntax = "proto3";
 
-package tari.dan.validator_node;
+package tari.dan.rpc;
 
 import "common.proto";
 import "consensus.proto";
 import "network.proto";
+import "transaction.proto";
 
-service ValidatorNode {
-  rpc SubmitTransaction(SubmitTransactionRequest) returns (SubmitTransactionResponse);
-}
+//service ValidatorNode {
+//  rpc SubmitTransaction(SubmitTransactionRequest) returns (SubmitTransactionResponse);
+//}
 
 enum Status {
   Accepted = 0;
   Errored = 1;
 }
-
 
 message InvokeReadMethodRequest{
   bytes contract_id = 1;
@@ -62,48 +62,6 @@ message InvokeMethodResponse {
   Status status = 2;
 }
 
-message GetSidechainStateRequest {
-  bytes contract_id = 1;
-}
-
-message GetSidechainStateResponse {
-  oneof state {
-    string schema = 1;
-    KeyValue key_value = 2;
-  }
-}
-
-message KeyValue {
-  bytes key = 1;
-  bytes value = 2;
-}
-
-message GetStateOpLogsRequest {
-  bytes contract_id = 1;
-  uint64 height = 2;
-}
-
-message GetStateOpLogsResponse {
-  repeated StateOpLog op_logs = 1;
-}
-
-message StateOpLog {
-  uint64 height = 1;
-  string operation = 2;
-  string schema = 3;
-  bytes key = 4;
-  bytes value = 5;
-  bytes merkle_root = 6;
-}
-
-message GetTipNodeRequest{
-  bytes contract_id = 1;
-}
-
-message GetTipNodeResponse {
-  tari.dan.common.Node tip_node = 1;
-}
-
 message GetIdentityRequest {}
 
 message GetIdentityResponse {
@@ -113,7 +71,7 @@ message GetIdentityResponse {
 }
 
 message SubmitTransactionRequest{
-  tari.dan.common.Transaction transaction = 1;
+  tari.dan.transaction.Transaction transaction = 1;
 }
 
 message SubmitTransactionResponse {
@@ -121,11 +79,30 @@ message SubmitTransactionResponse {
   bytes result = 2;
 }
 
-message DanMessage {
-  oneof message {
-    tari.dan.consensus.HotStuffMessage hot_stuff = 1;
-    tari.dan.consensus.VoteMessage vote = 2;
-    tari.dan.common.Transaction new_transaction = 3;
-    tari.dan.network.NetworkAnnounce network_announce = 4;
-  }
+message GetPeersRequest {
+  uint64 since = 1;
+}
+
+message GetPeersResponse {
+  bytes identity = 1;
+  repeated bytes addresses = 2;
+  tari.dan.network.IdentitySignature identity_signature = 3;
+}
+
+message VNStateSyncRequest {
+  // Specific shard ids
+  repeated tari.dan.common.ShardId missing_shard_state_ids = 1;
+}
+
+message VNStateSyncResponse {
+  tari.dan.consensus.SubstateState substate_state = 1;
+}
+
+message GetVnStateInventoryRequest {
+  tari.dan.common.ShardId start_shard_id = 1;
+  tari.dan.common.ShardId end_shard_id = 2;
+}
+
+message GetVnStateInventoryResponse {
+  repeated tari.dan.common.ShardId inventory = 1;
 }

@@ -100,7 +100,7 @@ where
         let logger = self.logger.clone();
         Box::pin(async move {
             let body_len = body.len();
-            let decoded_msg = proto::validator_node::DanMessage::decode(&mut body)?;
+            let decoded_msg = proto::network::DanMessage::decode(&mut body)?;
             let msg = DanMessage::try_from(decoded_msg)?;
             log::info!(
                 target: LOG_TARGET,

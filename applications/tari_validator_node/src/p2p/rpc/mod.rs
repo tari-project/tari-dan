@@ -35,26 +35,26 @@ pub trait ValidatorNodeRpcService: Send + Sync + 'static {
     #[rpc(method = 1)]
     async fn submit_transaction(
         &self,
-        request: Request<proto::validator_node::SubmitTransactionRequest>,
-    ) -> Result<Response<proto::validator_node::SubmitTransactionResponse>, RpcStatus>;
+        request: Request<proto::rpc::SubmitTransactionRequest>,
+    ) -> Result<Response<proto::rpc::SubmitTransactionResponse>, RpcStatus>;
 
     #[rpc(method = 2)]
     async fn get_peers(
         &self,
-        request: Request<proto::network::GetPeersRequest>,
-    ) -> Result<Streaming<proto::network::GetPeersResponse>, RpcStatus>;
+        request: Request<proto::rpc::GetPeersRequest>,
+    ) -> Result<Streaming<proto::rpc::GetPeersResponse>, RpcStatus>;
 
     #[rpc(method = 3)]
     async fn get_vn_state_inventory(
         &self,
-        request: Request<proto::network::GetVnStateInventoryRequest>,
-    ) -> Result<Response<proto::network::GetVnStateInventoryResponse>, RpcStatus>;
+        request: Request<proto::rpc::GetVnStateInventoryRequest>,
+    ) -> Result<Response<proto::rpc::GetVnStateInventoryResponse>, RpcStatus>;
 
     #[rpc(method = 4)]
     async fn vn_state_sync(
         &self,
-        request: Request<proto::network::VnStateSyncRequest>,
-    ) -> Result<Streaming<proto::network::VnStateSyncResponse>, RpcStatus>;
+        request: Request<proto::rpc::VnStateSyncRequest>,
+    ) -> Result<Streaming<proto::rpc::VnStateSyncResponse>, RpcStatus>;
 }
 
 pub fn create_validator_node_rpc_service<TPeerProvider>(

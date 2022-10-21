@@ -51,7 +51,7 @@ impl<TPeerProvider: PeerProvider<Addr = CommsPublicKey>> PeerSyncProtocol<TPeerP
         let mut client = self.conn.connect_rpc::<rpc::ValidatorNodeRpcClient>().await?;
 
         // TODO: limit peer sync to current epoch
-        let mut stream = client.get_peers(proto::network::GetPeersRequest::default()).await?;
+        let mut stream = client.get_peers(proto::rpc::GetPeersRequest::default()).await?;
         while let Some(resp) = stream.next().await {
             let resp = resp?;
             let identity = CommsPublicKey::from_bytes(&resp.identity)?;
