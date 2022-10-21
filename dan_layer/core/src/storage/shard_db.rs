@@ -345,4 +345,12 @@ impl<TAddr: NodeAddressable, TPayload: Payload> ShardStoreTransaction<TAddr, TPa
         // todo!()
         Ok(())
     }
+
+    fn get_state_inventory(&self, _start_shard: ShardId, _end_shard: ShardId) -> Result<Vec<ShardId>, Self::Error> {
+        Ok(vec![])
+    }
+
+    fn get_substate_states(&self, _shards: &[ShardId]) -> Result<Vec<SubstateState>, Self::Error> {
+        Ok(vec![])
+    }
 }

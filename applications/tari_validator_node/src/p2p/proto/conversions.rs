@@ -28,10 +28,10 @@ use std::{
 use anyhow::anyhow;
 use borsh::de::BorshDeserialize;
 use chrono::{DateTime, NaiveDateTime, Utc};
-use tari_common_types::types::{PrivateKey, PublicKey, Signature};
+use tari_common_types::types::{FixedHash, PrivateKey, PublicKey, Signature};
 use tari_comms::{peer_manager::IdentitySignature, types::CommsPublicKey};
 use tari_crypto::tari_utilities::ByteArray;
-use tari_dan_common_types::{ObjectClaim, ShardId, SubstateChange, SubstateState};
+use tari_dan_common_types::{ObjectClaim, PayloadId, ShardId, SubstateChange, SubstateState};
 use tari_dan_core::{
     message::{DanMessage, NetworkAnnounce},
     models::{
@@ -101,6 +101,89 @@ impl TryFrom<proto::validator_node::DanMessage> for DanMessage<TariDanPayload, C
                 Ok(DanMessage::NetworkAnnounce(msg.try_into()?))
             },
         }
+    }
+}
+
+// -------------------------------- ShardId ------------------------------------ //
+
+impl TryFrom<proto::common::ShardId> for ShardId {
+    type Error = anyhow::Error;
+
+    fn try_from(value: proto::common::ShardId) -> Result<Self, Self::Error> {
+        let mut data = [0u8; 32];
+        data.copy_from_slice(value.bytes.as_slice());
+        Ok(ShardId(data))
+    }
+}
+
+impl From<ShardId> for proto::common::ShardId {
+    fn from(value: ShardId) -> Self {
+        Self {
+            bytes: Vec::from(value.to_le_bytes()),
+        }
+    }
+}
+
+// -------------------------------- PayloadId   -------------------------------- //
+
+impl TryFrom<proto::common::PayloadId> for PayloadId {
+    type Error = anyhow::Error;
+
+    fn try_from(value: proto::common::PayloadId) -> Result<Self, Self::Error> {
+        let hash = FixedHash::try_from(value.payload_id)?;
+        Ok(PayloadId::new(hash))
+    }
+}
+
+impl From<PayloadId> for proto::common::PayloadId {
+    fn from(value: PayloadId) -> Self {
+        Self {
+            payload_id: Vec::from(value.as_slice()),
+        }
+    }
+}
+
+// -------------------------------- SubstateState ------------------------------ //
+
+impl TryFrom<proto::common::SubstateState> for SubstateState {
+    type Error = anyhow::Error;
+
+    fn try_from(request: proto::common::SubstateState) -> Result<Self, Self::Error> {
+        let result = match request.substate_state_type {
+            0 => SubstateState::DoesNotExist,
+            1 => SubstateState::Up {
+                created_by: PayloadId::try_from(request.created_by.unwrap())?,
+                data: request.data,
+            },
+            2 => SubstateState::Down {
+                deleted_by: PayloadId::try_from(request.deleted_by.unwrap())?,
+            },
+            _ => return Err(anyhow!("bad gRPC substate state parsing")),
+        };
+
+        Ok(result)
+    }
+}
+
+impl From<SubstateState> for proto::common::SubstateState {
+    fn from(value: SubstateState) -> Self {
+        let mut result = proto::common::SubstateState::default();
+        match value {
+            SubstateState::DoesNotExist => {
+                result.substate_state_type = 0;
+            },
+            SubstateState::Up { data, created_by } => {
+                result.substate_state_type = 1;
+                result.data = data;
+                result.created_by = Some(proto::common::PayloadId::from(created_by));
+            },
+            SubstateState::Down { deleted_by } => {
+                result.substate_state_type = 2;
+                result.deleted_by = Some(proto::common::PayloadId::from(deleted_by));
+            },
+        }
+
+        result
     }
 }
 

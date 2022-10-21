@@ -4449,6 +4449,7 @@ dependencies = [
  "chrono",
  "clap 3.2.22",
  "config",
+ "diesel",
  "digest 0.9.0",
  "futures",
  "include_dir",
