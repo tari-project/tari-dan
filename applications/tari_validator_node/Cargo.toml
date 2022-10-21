@@ -8,39 +8,26 @@ version = "0.35.1"
 edition = "2018"
 
 [dependencies]
-# tari_app_utilities = { git = "https://github.com/tari-project/tari.git", branch = "feature-dan", package = "tari_app_utilities" }
-tari_app_utilities = { path = "../../../tari/applications/tari_app_utilities" }
-# tari_app_grpc = { git = "https://github.com/tari-project/tari.git", branch = "feature-dan", package = "tari_app_grpc" }
-tari_app_grpc = { path = "../../../tari/applications/tari_app_grpc" }
-# tari_common = { git = "https://github.com/tari-project/tari.git", branch = "feature-dan", package = "tari_common" }
-tari_common = { path = "../../../tari/common" }
-# tari_comms = { git = "https://github.com/tari-project/tari.git", branch = "feature-dan", package = "tari_comms" }
-tari_comms = { path = "../../../tari/comms/core" }
-# tari_comms_rpc_macros = { git = "https://github.com/tari-project/tari.git", branch = "feature-dan", package = "tari_comms_rpc_macros" }
-tari_comms_rpc_macros = { path = "../../../tari/comms/rpc_macros" }
+tari_app_utilities = { git = "https://github.com/tari-project/tari.git", branch = "feature-dan", package = "tari_app_utilities" }
+tari_app_grpc = { git = "https://github.com/tari-project/tari.git", branch = "feature-dan", package = "tari_app_grpc" }
+tari_common = { git = "https://github.com/tari-project/tari.git", branch = "feature-dan", package = "tari_common" }
+tari_comms = { git = "https://github.com/tari-project/tari.git", branch = "feature-dan", package = "tari_comms" }
+tari_comms_rpc_macros = { git = "https://github.com/tari-project/tari.git", branch = "feature-dan", package = "tari_comms_rpc_macros" }
 tari_crypto = { git = "https://github.com/tari-project/tari-crypto.git", tag = "v0.15.6" }
-# tari_mmr = { git = "https://github.com/tari-project/tari.git", branch = "feature-dan", package = "tari_mmr" }
-tari_mmr = { path = "../../../tari/base_layer/mmr" }
-# tari_p2p = { git = "https://github.com/tari-project/tari.git", branch = "feature-dan", package = "tari_p2p" }
-tari_p2p = { path = "../../../tari/base_layer/p2p" }
-# tari_shutdown = { git = "https://github.com/tari-project/tari.git", branch = "feature-dan", package = "tari_shutdown" }
-tari_shutdown = { path = "../../../tari/infrastructure/shutdown" }
-# tari_storage = { git = "https://github.com/tari-project/tari.git", branch = "feature-dan", package = "tari_storage" }
-tari_storage = { path = "../../../tari/infrastructure/storage" }
-# tari_core = { git = "https://github.com/tari-project/tari.git", branch = "feature-dan", package = "tari_core", default-features = false, features = ["transactions"] }
-tari_core = { path = "../../../tari/base_layer/core", default-features = false, features = ["transactions"] }
+tari_mmr = { git = "https://github.com/tari-project/tari.git", branch = "feature-dan", package = "tari_mmr" }
+tari_p2p = { git = "https://github.com/tari-project/tari.git", branch = "feature-dan", package = "tari_p2p" }
+tari_shutdown = { git = "https://github.com/tari-project/tari.git", branch = "feature-dan", package = "tari_shutdown" }
+tari_storage = { git = "https://github.com/tari-project/tari.git", branch = "feature-dan", package = "tari_storage" }
+tari_core = { git = "https://github.com/tari-project/tari.git", branch = "feature-dan", package = "tari_core", default-features = false, features = ["transactions"] }
 tari_dan_core = { path = "../../dan_layer/core" }
 tari_dan_storage = { path = "../../dan_layer/storage" }
 tari_dan_storage_sqlite = { path = "../../dan_layer/storage_sqlite" }
 tari_dan_common_types = { path = "../../dan_layer/common_types" }
-# tari_common_types = { git = "https://github.com/tari-project/tari.git", branch = "feature-dan", package = "tari_common_types" }
-tari_common_types = { path = "../../../tari/base_layer/common_types" }
+tari_common_types = { git = "https://github.com/tari-project/tari.git", branch = "feature-dan", package = "tari_common_types" }
 tari_dan_engine = { path = "../../dan_layer/engine" }
 tari_template_lib = { path = "../../dan_layer/template_lib", features = ["json"] }
-# tari_base_node_grpc_client = { git = "https://github.com/tari-project/tari.git", branch = "feature-dan", package = "tari_base_node_grpc_client" }
-tari_base_node_grpc_client = { path = "../../../tari/clients/rust/base_node_grpc_client" }
-# tari_wallet_grpc_client = { git = "https://github.com/tari-project/tari.git", branch = "feature-dan", package = "tari_wallet_grpc_client" }
-tari_wallet_grpc_client = { path = "../../../tari/clients/rust/wallet_grpc_client" }
+tari_base_node_grpc_client = { git = "https://github.com/tari-project/tari.git", branch = "feature-dan", package = "tari_base_node_grpc_client" }
+tari_wallet_grpc_client = { git = "https://github.com/tari-project/tari.git", branch = "feature-dan", package = "tari_wallet_grpc_client" }
 tari_engine_types = { path = "../../dan_layer/engine_types" }
 tari_validator_node_client = { path = "../../clients/validator_node_client" }
 
@@ -77,20 +64,18 @@ tower-layer = "0.3"
 tower-http = { version = "0.3.0", features = ["cors"] }
 
 [build-dependencies]
-# tari_common = { git = "https://github.com/tari-project/tari.git", branch = "feature-dan", package = "tari_common", features = ["build"] }
-tari_common = { path = "../../../tari/common", features = ["build"] }
+tari_common = { git = "https://github.com/tari-project/tari.git", branch = "feature-dan", package = "tari_common", features = ["build"] }
 
 [dev-dependencies]
-tari_test_utils = { git = "https://github.com/tari-project/tari.git", branch = "feature-dan", package = "tari_test_utils" }
-# FIXME: the newest version failed compilation due to a missing "bool_to_option” unstable feature
+# FIXME: the newest version failed compilation due to a missing "bool_to_option" unstable feature
 cucumber = { version = "0.13.0"} 
 tokio = { version = "1.10", features = ["macros", "rt-multi-thread", "time"] }
 tempfile = "3.3.0"
-# TODO: use a "git" dependency when the base node is spliited in the "feature-dan" branch
-tari_base_node = { path = "../../../tari/applications/tari_base_node", features = ["libtor"] }
-tari_console_wallet = { path = "../../../tari/applications/tari_console_wallet", features = ["libtor"] }
-tari_comms_dht = { path = "../../../tari/comms/dht" }
-tari_wallet = { path = "../../../tari/base_layer/wallet" }
+tari_test_utils = { git = "https://github.com/tari-project/tari.git", branch = "feature-dan", package = "tari_test_utils" }
+tari_base_node = { git = "https://github.com/tari-project/tari.git", branch = "feature-dan", package = "tari_base_node" }
+tari_console_wallet = { git = "https://github.com/tari-project/tari.git", branch = "feature-dan", package = "tari_console_wallet"}
+tari_comms_dht = { git = "https://github.com/tari-project/tari.git", branch = "feature-dan", package = "tari_comms_dht" }
+tari_wallet = { git = "https://github.com/tari-project/tari.git", branch = "feature-dan", package = "tari_wallet" }
 
 [[test]]
 name = "cucumber" # this should be the same as the filename of your test target
