@@ -1,0 +1,8 @@
+.recent-transactions-table {
+  /* border-collapse: separate; */
+  border-spacing: 50px 0;
+}
+
+.recent-transactions-table > tr > td {
+  text-align: center;
+}

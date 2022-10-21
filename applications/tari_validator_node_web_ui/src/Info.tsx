@@ -23,6 +23,7 @@
 import { useState } from "react";
 import { IEpoch, IIdentity } from "./interfaces";
 import { registerValidatorNode } from "./json_rpc";
+import "./Info.css";
 
 function Info({ epoch, identity, shardKey }: { epoch: IEpoch; identity: IIdentity; shardKey: string | null }) {
   const [registering, setRegistering] = useState(false);
@@ -34,7 +35,7 @@ function Info({ epoch, identity, shardKey }: { epoch: IEpoch; identity: IIdentit
         setRegistering(false);
         setRegisterMessage(response.message);
       } else {
-        setRegisterMessage(`Registration successul, the TxId ${response.transaction_id}`);
+        setRegisterMessage(`Registration successful, the TxId ${response.transaction_id}`);
       }
     });
   };
@@ -56,25 +57,36 @@ function Info({ epoch, identity, shardKey }: { epoch: IEpoch; identity: IIdentit
         </>
       );
     return (
-      <>
-        <div className="label">Shard key</div>
-        <div className="key">{shardKey}</div>
-      </>
+      <tr>
+        <td>Shard key</td>
+        <td>{shardKey}</td>
+      </tr>
     );
   };
   return (
-    <div className="info">
-      <div className="label">Epoch</div>
-      <div className="">
-        {epoch.current_epoch} ({epoch.is_valid ? "Valid" : "Not valid"})
-      </div>
-      <div className="label">Node id</div>
-      <div className="key">{identity.node_id}</div>
-      <div className="label">Public address</div>
-      <div className="key">{identity.public_address}</div>
-      <div className="label">Public key</div>
-      <div className="key">{identity.public_key}</div>
-      {renderShardKey()}
+    <div className="section">
+      <div className="caption">Info</div>
+      <table>
+        <tr>
+          <td>Epoch</td>
+          <td>
+            {epoch.current_epoch} ({epoch.is_valid ? "Valid" : "Not valid"})
+          </td>
+        </tr>
+        <tr>
+          <td>Node id</td>
+          <td>{identity.node_id}</td>
+        </tr>
+        <tr>
+          <td>Public address</td>
+          <td>{identity.public_address}</td>
+        </tr>
+        <tr>
+          <td>Public key</td>
+          <td>{identity.public_key}</td>
+        </tr>
+        {renderShardKey()}
+      </table>
     </div>
   );
 }

@@ -152,7 +152,7 @@ pub async fn spawn_services(
     let payload_processor = TariDanPayloadProcessor::new(template_manager);
 
     // Consensus
-    let hotstuff_events = hotstuff::try_spawn(
+    let (hotstuff_events, db) = hotstuff::try_spawn(
         node_identity.clone(),
         &config.validator_node,
         outbound_messaging,
@@ -185,6 +185,7 @@ pub async fn spawn_services(
         epoch_manager,
         template_manager: template_manager_service,
         hotstuff_events,
+        db,
     })
 }
 
@@ -212,6 +213,7 @@ pub struct Services {
     pub epoch_manager: EpochManagerHandle,
     pub template_manager: TemplateManagerHandle,
     pub hotstuff_events: EventSubscription<HotStuffEvent>,
+    pub db: SqliteShardStoreFactory,
 }
 
 fn setup_p2p_rpc(

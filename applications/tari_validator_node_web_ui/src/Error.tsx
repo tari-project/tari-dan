@@ -20,35 +20,15 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-import React, { useEffect, useState } from "react";
-import { getAllVns } from "./json_rpc";
-import "./AllVNs.css";
+import { useEffect, useState } from "react";
 
-function AllVNs({ epoch }: { epoch: number }) {
-  const [vns, setVns] = useState([]);
-  useEffect(() => {
-    getAllVns(epoch).then((response) => {
-      setVns(response.vns);
-    });
-  }, [epoch]);
-  if (!(vns?.length > 0)) return <div>All VNS are loading</div>;
+function Error({ component, message }: { component: String; message: String }) {
   return (
-    <div className="section">
-      <div className="caption">VNs</div>
-      <table className="all-vns-table">
-        <tr>
-          <th>Public key</th>
-          <th>Shard key</th>
-        </tr>
-        {vns.map(({ public_key, shard_key }, i) => (
-          <tr>
-            <td>{public_key}</td>
-            <td>{shard_key}</td>
-          </tr>
-        ))}
-      </table>
+    <div className="container">
+      <span className="component error">{component}</span>
+      <span className="message error">{message}</span>
     </div>
   );
 }
 
-export default AllVNs;
+export default Error;

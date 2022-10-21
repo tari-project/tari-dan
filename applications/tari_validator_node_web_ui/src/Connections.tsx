@@ -20,35 +20,23 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-import React, { useEffect, useState } from "react";
-import { getAllVns } from "./json_rpc";
-import "./AllVNs.css";
+import { useEffect, useState } from "react";
+import { getConnections } from "./json_rpc";
 
-function AllVNs({ epoch }: { epoch: number }) {
-  const [vns, setVns] = useState([]);
+function Connections() {
+  const [connections, setConnections] = useState<Array<String>>([]);
   useEffect(() => {
-    getAllVns(epoch).then((response) => {
-      setVns(response.vns);
+    getConnections().then((response) => {
+      console.log(response);
+      setConnections(response);
     });
-  }, [epoch]);
-  if (!(vns?.length > 0)) return <div>All VNS are loading</div>;
+  }, []);
+
   return (
     <div className="section">
-      <div className="caption">VNs</div>
-      <table className="all-vns-table">
-        <tr>
-          <th>Public key</th>
-          <th>Shard key</th>
-        </tr>
-        {vns.map(({ public_key, shard_key }, i) => (
-          <tr>
-            <td>{public_key}</td>
-            <td>{shard_key}</td>
-          </tr>
-        ))}
-      </table>
+      <div className="caption">Connections</div>
     </div>
   );
 }
 
-export default AllVNs;
+export default Connections;

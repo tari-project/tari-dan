@@ -29,6 +29,8 @@ use std::{
 use diesel::{
     prelude::*,
     result::{DatabaseErrorKind, Error},
+    sql_query,
+    sql_types::{BigInt, Binary},
     SqliteConnection,
 };
 use log::{debug, warn};
@@ -43,6 +45,7 @@ use tari_dan_core::{
         ObjectPledge,
         Payload,
         QuorumCertificate,
+        RecentTransaction,
         TariDanPayload,
         TreeNodeHash,
     },
@@ -77,7 +80,7 @@ use crate::{
         leader_proposals::dsl::leader_proposals,
         leaf_nodes::dsl::leaf_nodes,
         lock_node_and_heights::dsl::lock_node_and_heights,
-        nodes::dsl::nodes as table_nodes,
+        nodes::dsl::nodes,
         payloads::dsl::payloads,
         received_votes::dsl::received_votes,
         substates::{dsl::substates, pledged_to_payload_id},
@@ -85,6 +88,35 @@ use crate::{
 };
 
 const LOG_TARGET: &str = "tari::dan::storage::sqlite::shard_store";
+
+#[derive(Debug, QueryableByName)]
+pub struct QueryableRecentTransaction {
+    #[sql_type = "Binary"]
+    pub payload_id: Vec<u8>,
+    #[sql_type = "Binary"]
+    pub shard: Vec<u8>,
+    #[sql_type = "BigInt"]
+    pub height: i64,
+    #[sql_type = "BigInt"]
+    pub payload_height: i64,
+    #[sql_type = "BigInt"]
+    pub total_votes: i64,
+    #[sql_type = "BigInt"]
+    pub total_leader_proposals: i64,
+}
+
+impl From<QueryableRecentTransaction> for RecentTransaction {
+    fn from(recent_transaction: QueryableRecentTransaction) -> Self {
+        Self {
+            payload_id: recent_transaction.payload_id,
+            shard: recent_transaction.shard,
+            height: recent_transaction.height,
+            payload_height: recent_transaction.payload_height,
+            total_votes: recent_transaction.total_votes,
+            total_leader_proposals: recent_transaction.total_leader_proposals,
+        }
+    }
+}
 
 #[derive(Debug, Clone)]
 pub struct SqliteShardStoreFactory {
@@ -376,7 +408,7 @@ impl ShardStoreTransaction<PublicKey, TariDanPayload> for SqliteShardStoreTransa
         let hash = Vec::from(hash.as_bytes());
         // TODO: Do we need to add an index to the table to order by `height` and `payload_height`
         // more efficiently ?
-        let node: Option<Node> = table_nodes
+        let node: Option<Node> = nodes
             .filter(node_hash.eq(hash.clone()))
             .first(&self.connection)
             .optional()
@@ -459,10 +491,7 @@ impl ShardStoreTransaction<PublicKey, TariDanPayload> for SqliteShardStoreTransa
             justify,
         };
 
-        match diesel::insert_into(table_nodes)
-            .values(&new_row)
-            .execute(&self.connection)
-        {
+        match diesel::insert_into(nodes).values(&new_row).execute(&self.connection) {
             Ok(_) => {},
             Err(err) => match err {
                 Error::DatabaseError(kind, _) => {
@@ -979,5 +1008,22 @@ impl ShardStoreTransaction<PublicKey, TariDanPayload> for SqliteShardStoreTransa
         } else {
             Ok(vec![])
         }
+    }
+
+    fn get_recent_transactions(&self) -> Result<Vec<RecentTransaction>, Self::Error> {
+        let res = sql_query(
+            "select p.payload_id, n.shard, n.height, n.payload_height, (select count(*) from received_votes v where \
+             v.tree_node_hash = n.node_hash) as total_votes, (select count(*) from leader_proposals lp where \
+             lp.payload_id  = n.payload_id and lp.payload_height = n.payload_height) as total_leader_proposals from \
+             payloads p inner join nodes n on p.payload_id = n.payload_id order by n.shard, n.height",
+        )
+        .load::<QueryableRecentTransaction>(&self.connection)
+        .map_err(|e| Self::Error::QueryError {
+            reason: format!("Get recent transactions: {}", e),
+        })?;
+        Ok(res
+            .into_iter()
+            .map(|recent_transaction| recent_transaction.into())
+            .collect())
     }
 }

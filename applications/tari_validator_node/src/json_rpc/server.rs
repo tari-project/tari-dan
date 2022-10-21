@@ -65,6 +65,7 @@ async fn handler(
         // Transaction
         // "get_transaction_status" => handlers.get_transaction_status(value).await,
         "submit_transaction" => handlers.submit_transaction(value).await,
+        "get_recent_transactions" => handlers.get_recent_transactions(value).await,
         // Template
         "get_template" => handlers.get_template(value).await,
         "get_templates" => handlers.get_templates(value).await,
@@ -80,7 +81,6 @@ async fn handler(
         // Comms
         "get_comms_stats" => handlers.get_comms_stats(value).await,
         "get_connections" => handlers.get_connections(value).await,
-
         method => Ok(value.method_not_found(method)),
     }
 }

@@ -35,9 +35,11 @@ use tari_comms::{multiaddr::Multiaddr, peer_manager::NodeId, types::CommsPublicK
 use tari_dan_common_types::serde_with;
 use tari_dan_core::{
     services::{epoch_manager::EpochManager, BaseNodeClient},
+    storage::shard_store::{ShardStoreFactory, ShardStoreTransaction},
     workers::events::{EventSubscription, HotStuffEvent},
 };
 use tari_dan_engine::transaction::TransactionBuilder;
+use tari_dan_storage_sqlite::sqlite_shard_store_factory::SqliteShardStoreFactory;
 use tari_template_lib::Hash;
 use tari_validator_node_client::types::{
     GetCommitteeRequest,
@@ -77,6 +79,7 @@ pub struct JsonRpcHandlers {
     comms: CommsNode,
     hotstuff_events: EventSubscription<HotStuffEvent>,
     base_node_client: GrpcBaseNodeClient,
+    db: SqliteShardStoreFactory,
 }
 
 impl JsonRpcHandlers {
@@ -94,6 +97,7 @@ impl JsonRpcHandlers {
             comms: services.comms.clone(),
             hotstuff_events: services.hotstuff_events.clone(),
             base_node_client,
+            db: services.db.clone(),
         }
     }
 
@@ -151,6 +155,26 @@ impl JsonRpcHandlers {
             hash: hash.into_array().into(),
             changes: HashMap::new(),
         }))
+    }
+
+    pub async fn get_recent_transactions(&self, value: JsonRpcExtractor) -> JrpcResult {
+        let answer_id = value.get_answer_id();
+        let tx = self.db.create_tx().unwrap();
+        if let Ok(recent_transactions) = tx.get_recent_transactions() {
+            Ok(JsonRpcResponse::success(
+                answer_id,
+                json!({ "transactions": recent_transactions }),
+            ))
+        } else {
+            Err(JsonRpcResponse::error(
+                answer_id,
+                JsonRpcError::new(
+                    JsonRpcErrorReason::InvalidParams,
+                    "Something went wrong".to_string(),
+                    json::Value::Null,
+                ),
+            ))
+        }
     }
 
     pub async fn register_validator_node(&self, value: JsonRpcExtractor) -> JrpcResult {
@@ -245,13 +269,14 @@ impl JsonRpcHandlers {
 
     pub async fn get_connections(&self, value: JsonRpcExtractor) -> JrpcResult {
         let answer_id = value.get_answer_id();
-        let response = GetIdentityResponse {
-            node_id: self.node_identity.node_id().clone(),
-            public_key: self.node_identity.public_key().clone(),
-            public_address: self.node_identity.public_address(),
-        };
-
-        Ok(JsonRpcResponse::success(answer_id, response))
+        Err(JsonRpcResponse::error(
+            answer_id,
+            JsonRpcError::new(
+                JsonRpcErrorReason::InvalidParams,
+                "Something went wrong".to_string(),
+                json::Value::Null,
+            ),
+        ))
     }
 
     pub async fn get_mempool_stats(&self, value: JsonRpcExtractor) -> JrpcResult {
@@ -262,41 +287,80 @@ impl JsonRpcHandlers {
 
     pub async fn get_epoch_manager_stats(&self, value: JsonRpcExtractor) -> JrpcResult {
         let answer_id = value.get_answer_id();
-        let current_epoch = self.epoch_manager.current_epoch().await.unwrap();
-        let is_valid = self.epoch_manager.is_epoch_valid(current_epoch).await.unwrap();
-        let response = json!({ "current_epoch": current_epoch.0,"is_valid":is_valid });
-        Ok(JsonRpcResponse::success(answer_id, response))
+        if let Ok(current_epoch) = self.epoch_manager.current_epoch().await {
+            if let Ok(is_valid) = self.epoch_manager.is_epoch_valid(current_epoch).await {
+                let response = json!({ "current_epoch": current_epoch.0,"is_valid":is_valid });
+                Ok(JsonRpcResponse::success(answer_id, response))
+            } else {
+                Err(JsonRpcResponse::error(
+                    answer_id,
+                    JsonRpcError::new(
+                        JsonRpcErrorReason::InvalidParams,
+                        "Something went wrong".to_string(),
+                        json::Value::Null,
+                    ),
+                ))
+            }
+        } else {
+            Err(JsonRpcResponse::error(
+                answer_id,
+                JsonRpcError::new(
+                    JsonRpcErrorReason::InvalidParams,
+                    "Something went wrong".to_string(),
+                    json::Value::Null,
+                ),
+            ))
+        }
     }
 
     pub async fn get_comms_stats(&self, value: JsonRpcExtractor) -> JrpcResult {
         let answer_id = value.get_answer_id();
-        let stats = self.comms.connectivity().get_connectivity_status().await.unwrap();
-        let response = json!({ "connection_status": format!("{:?}", stats) });
-        Ok(JsonRpcResponse::success(answer_id, response))
+        if let Ok(stats) = self.comms.connectivity().get_connectivity_status().await {
+            let response = json!({ "connection_status": format!("{:?}", stats) });
+            Ok(JsonRpcResponse::success(answer_id, response))
+        } else {
+            Err(JsonRpcResponse::error(
+                answer_id,
+                JsonRpcError::new(
+                    JsonRpcErrorReason::InvalidParams,
+                    "Something went wrong".to_string(),
+                    json::Value::Null,
+                ),
+            ))
+        }
     }
 
     pub async fn get_shard_key(&self, value: JsonRpcExtractor) -> JrpcResult {
         let answer_id = value.get_answer_id();
         let request = value.parse_params::<GetShardKey>()?;
-        let shard_key = self
+        if let Ok(shard_key) = self
             .base_node_client()
             .get_shard_key(request.height, &request.public_key)
             .await
-            .unwrap();
-        let response = json!({ "shard_key": shard_key });
-        Ok(JsonRpcResponse::success(answer_id, response))
+        {
+            let response = json!({ "shard_key": shard_key });
+            Ok(JsonRpcResponse::success(answer_id, response))
+        } else {
+            Err(JsonRpcResponse::error(
+                answer_id,
+                JsonRpcError::new(
+                    JsonRpcErrorReason::InvalidParams,
+                    "Something went wrong".to_string(),
+                    json::Value::Null,
+                ),
+            ))
+        }
     }
 
     pub async fn get_committee(&self, value: JsonRpcExtractor) -> JrpcResult {
         let answer_id = value.get_answer_id();
         let request = value.parse_params::<GetCommitteeRequest>()?;
         if let Ok(committee) = self.epoch_manager.get_committee(request.epoch, request.shard_id).await {
-            println!("committee {:?}", committee);
             let response = json!({ "committee": committee });
             Ok(JsonRpcResponse::success(answer_id, response))
         } else {
             Err(JsonRpcResponse::error(
-                1,
+                answer_id,
                 JsonRpcError::new(
                     JsonRpcErrorReason::InvalidParams,
                     "Something went wrong".to_string(),
@@ -309,9 +373,19 @@ impl JsonRpcHandlers {
     pub async fn get_all_vns(&self, value: JsonRpcExtractor) -> JrpcResult {
         let answer_id = value.get_answer_id();
         let epoch: u64 = value.parse_params()?;
-        let vns = self.base_node_client().get_validator_nodes(epoch * 10).await.unwrap();
-        let response = json!({ "vns": vns });
-        Ok(JsonRpcResponse::success(answer_id, response))
+        if let Ok(vns) = self.base_node_client().get_validator_nodes(epoch * 10).await {
+            let response = json!({ "vns": vns });
+            Ok(JsonRpcResponse::success(answer_id, response))
+        } else {
+            Err(JsonRpcResponse::error(
+                answer_id,
+                JsonRpcError::new(
+                    JsonRpcErrorReason::InvalidParams,
+                    "Something went wrong".to_string(),
+                    json::Value::Null,
+                ),
+            ))
+        }
     }
 }
 
@@ -321,6 +395,22 @@ struct GetIdentityResponse {
     node_id: NodeId,
     public_key: CommsPublicKey,
     public_address: Multiaddr,
+}
+
+#[derive(Serialize, Debug)]
+struct Connection {
+    node_id: NodeId,
+    public_key: CommsPublicKey,
+    address: Arc<Multiaddr>,
+    direction: bool,
+    age: Duration,
+    user_agent: String,
+    info: String,
+}
+
+#[derive(Serialize, Debug)]
+struct GetConnectionsResponse {
+    connections: Vec<Connection>,
 }
 
 async fn wait_for_result(
