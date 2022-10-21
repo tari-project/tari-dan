@@ -25,6 +25,7 @@ mod bootstrap;
 mod cli;
 mod comms;
 mod config;
+mod consensus_constants;
 mod dan_node;
 mod default_service_specification;
 mod grpc;

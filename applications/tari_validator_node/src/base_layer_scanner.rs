@@ -24,10 +24,9 @@ use std::convert::TryInto;
 
 use log::*;
 use tari_common_types::types::{FixedHash, FixedHashSizeError};
-use tari_core::transactions::transaction_components::{
-    CodeTemplateRegistration,
-    SideChainFeature,
-    ValidatorNodeRegistration,
+use tari_core::{
+    consensus::ConsensusConstants,
+    transactions::transaction_components::{CodeTemplateRegistration, SideChainFeature, ValidatorNodeRegistration},
 };
 use tari_crypto::tari_utilities::ByteArray;
 use tari_dan_common_types::optional::Optional;
@@ -43,16 +42,15 @@ use tari_template_lib::models::TemplateAddress;
 use tokio::{task, time};
 
 use crate::{
-    p2p::services::{
+    p2p::{services::{
         epoch_manager::handle::EpochManagerHandle,
         template_manager::{TemplateManagerError, TemplateManagerHandle, TemplateRegistration},
-    },
+    }, proto::consensus},
     GrpcBaseNodeClient,
     ValidatorNodeConfig,
 };
 
 const LOG_TARGET: &str = "tari::validator_node::base_layer_scanner";
-const NUM_CONFIRMATIONS: u64 = 10; 
 
 pub fn spawn(
     config: ValidatorNodeConfig,
@@ -61,6 +59,7 @@ pub fn spawn(
     epoch_manager: EpochManagerHandle,
     template_manager: TemplateManagerHandle,
     shutdown: ShutdownSignal,
+    consensus_constants: ConsensusConstants,
 ) {
     task::spawn(async move {
         let base_layer_scanner = BaseLayerScanner::new(
@@ -70,6 +69,7 @@ pub fn spawn(
             epoch_manager,
             template_manager,
             shutdown,
+            consensus_constants,
         );
 
         if let Err(err) = base_layer_scanner.start().await {
@@ -87,6 +87,7 @@ pub struct BaseLayerScanner {
     epoch_manager: EpochManagerHandle,
     template_manager: TemplateManagerHandle,
     shutdown: ShutdownSignal,
+    consensus_constants: crate::consensus_constants::ConsensusConstants,
 }
 
 impl BaseLayerScanner {
@@ -97,6 +98,7 @@ impl BaseLayerScanner {
         epoch_manager: EpochManagerHandle,
         template_manager: TemplateManagerHandle,
         shutdown: ShutdownSignal,
+        consensus_constants: ConsensusConstants,
     ) -> Self {
         Self {
             config,
@@ -107,6 +109,7 @@ impl BaseLayerScanner {
             epoch_manager,
             template_manager,
             shutdown,
+            consensus_constants,
         }
     }
 
@@ -224,7 +227,9 @@ impl BaseLayerScanner {
         if tip.height_of_longest_chain == 0 {
             return Ok(());
         }
-        let end_height = tip.height_of_longest_chain - NUM_CONFIRMATIONS;
+        let end_height = tip
+            .height_of_longest_chain
+            .checked_sub(self.consensus_constants.base_layer_confirmations);
 
         for current_height in start_scan_height..=end_height {
             let utxos = self
@@ -265,8 +270,13 @@ impl BaseLayerScanner {
                         self.register_validator_node_registration(current_height, reg).await?;
                     },
                     SideChainFeature::TemplateRegistration(reg) => {
-                        self.register_code_template_registration(reg.clone().template_name.into_string(), (*output_hash).into(), reg, &block_info)
-                            .await?;
+                        self.register_code_template_registration(
+                            reg.clone().template_name.into_string(),
+                            (*output_hash).into(),
+                            reg,
+                            &block_info,
+                        )
+                        .await?;
                     },
                 }
             }
