@@ -252,3 +252,13 @@ pub struct ShardVote {
     pub node_hash: TreeNodeHash,
     pub pledges: Vec<ObjectPledge>,
 }
+
+#[derive(Debug, Serialize)]
+pub struct RecentTransaction {
+    pub payload_id: Vec<u8>,
+    pub shard: Vec<u8>,
+    pub height: i64,
+    pub payload_height: i64,
+    pub total_votes: i64,
+    pub total_leader_proposals: i64,
+}

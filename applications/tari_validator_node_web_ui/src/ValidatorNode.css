@@ -1,12 +1,14 @@
-.validator-node {
-  display: grid;
+.section {
+  padding: 5px 10px;
+  border-bottom: 1px solid black;
 }
 
-.info {
+.caption {
+  font-weight: bold;
+}
+
+.validator-node {
   display: grid;
-  grid-template-columns: 200px auto;
-  border: 1px solid;
-  padding: 5px;
 }
 
 .key {
@@ -15,11 +17,6 @@
   user-select: all;
   margin-top: auto;
   margin-bottom: auto;
-}
-
-.committees {
-  display: grid;
-  border: 1px solid;
 }
 
 .committee-wrapper {
@@ -43,9 +40,6 @@
   display: grid;
   justify-content: start;
   justify-items: start;
-}
-
-.range-label {
 }
 
 .range {
@@ -108,5 +102,17 @@
 }
 
 .me {
+  font-weight: bold;
+}
+
+table {
+  border-spacing: 50px 0;
+}
+
+td {
+  text-align: center;
+}
+
+th {
   font-weight: bold;
 }

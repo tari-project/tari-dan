@@ -23,9 +23,12 @@
 import { useEffect, useState } from "react";
 import AllVNs from "./AllVNs";
 import Committees from "./Committees";
+import Connections from "./Connections";
 import Info from "./Info";
 import { IEpoch, IIdentity } from "./interfaces";
-import { getEpochManagerStats, getIdentity, getShardKey } from "./json_rpc";
+import { getEpochManagerStats, getIdentity, getRecentTransactions, getShardKey } from "./json_rpc";
+import Mempool from "./Mempool";
+import RecentTransactions from "./RecentTransactions";
 import "./ValidatorNode.css";
 
 function ValidatorNode() {
@@ -75,6 +78,9 @@ function ValidatorNode() {
       });
     }
   }, [epoch, identity]);
+  useEffect(() => {
+    getRecentTransactions();
+  }, []);
   if (error !== "") {
     return <div className="error">{error}</div>;
   }
@@ -85,6 +91,9 @@ function ValidatorNode() {
       {shardKey ? (
         <Committees currentEpoch={epoch.current_epoch} shardKey={shardKey} publicKey={identity.public_key} />
       ) : null}
+      <Connections />
+      <Mempool />
+      <RecentTransactions />
       <AllVNs epoch={epoch.current_epoch} />
     </div>
   );

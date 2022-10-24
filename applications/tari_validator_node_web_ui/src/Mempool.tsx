@@ -20,38 +20,32 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-import React, { useEffect, useState } from "react";
-import { getAllVns } from "./json_rpc";
+import { useEffect, useState } from "react";
+import Error from "./Error";
+import { getMempoolStats } from "./json_rpc";
 
-function AllVNs({ epoch }: { epoch: number }) {
-  const [vns, setVns] = useState([]);
+function Mempool() {
+  const [state, setState] = useState();
+  const [error, setError] = useState<String>();
   useEffect(() => {
-    getAllVns(epoch).then((response) => {
-      setVns(response.vns);
-    });
-  }, [epoch]);
-  if (!(vns?.length > 0)) return <div>All VNS are loading</div>;
+    getMempoolStats()
+      .then((response) => {
+        setState(response.size);
+        setError(undefined);
+      })
+      .catch((reason) => {
+        setError(reason);
+      });
+  }, []);
+  if (error) {
+    return <Error component="Mempool" message={error} />;
+  }
   return (
     <div className="section">
-      <div className="caption">VNs</div>
-      <table className="all-vns-table">
-        <thead>
-          <tr>
-            <th>Public key</th>
-            <th>Shard key</th>
-          </tr>
-        </thead>
-        <tbody>
-          {vns.map(({ public_key, shard_key }, i) => (
-            <tr key={public_key}>
-              <td className="key">{public_key}</td>
-              <td className="key">{shard_key}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
+      <div className="caption">Mempool</div>
+      <div className="label">Size {state === undefined ? "checking..." : state}</div>
     </div>
   );
 }
 
-export default AllVNs;
+export default Mempool;

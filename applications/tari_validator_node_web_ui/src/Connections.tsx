@@ -20,32 +20,48 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-import React, { useEffect, useState } from "react";
-import { getAllVns } from "./json_rpc";
+import { useEffect, useState } from "react";
+import { toHexString } from "./helpers";
+import { getConnections } from "./json_rpc";
 
-function AllVNs({ epoch }: { epoch: number }) {
-  const [vns, setVns] = useState([]);
+interface IConnection {
+  address: string;
+  age: number;
+  direction: boolean;
+  node_id: number[];
+  public_key: string;
+}
+
+function Connections() {
+  const [connections, setConnections] = useState<IConnection[]>([]);
   useEffect(() => {
-    getAllVns(epoch).then((response) => {
-      setVns(response.vns);
+    getConnections().then((response) => {
+      console.log(response);
+      setConnections(response.connections);
     });
-  }, [epoch]);
-  if (!(vns?.length > 0)) return <div>All VNS are loading</div>;
+  }, []);
+
   return (
     <div className="section">
-      <div className="caption">VNs</div>
-      <table className="all-vns-table">
+      <div className="caption">Connections</div>
+      <table className="connections-table">
         <thead>
           <tr>
+            <th>Address</th>
+            <th>Age</th>
+            <th>Direction</th>
+            <th>Node id</th>
             <th>Public key</th>
-            <th>Shard key</th>
           </tr>
         </thead>
         <tbody>
-          {vns.map(({ public_key, shard_key }, i) => (
+          {connections.map(({ address, age, direction, node_id, public_key }) => (
             <tr key={public_key}>
-              <td className="key">{public_key}</td>
-              <td className="key">{shard_key}</td>
+              <td>{address}</td>
+              <td>{age}</td>
+              <td>{direction ? "Inbound" : "Outbound"}</td>
+              <td>{toHexString(node_id)}</td>
+              <td>{public_key}</td>
             </tr>
           ))}
         </tbody>
@@ -54,4 +70,4 @@ function AllVNs({ epoch }: { epoch: number }) {
   );
 }
 
-export default AllVNs;
+export default Connections;

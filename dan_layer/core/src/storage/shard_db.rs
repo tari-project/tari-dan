@@ -35,6 +35,7 @@ use crate::{
         ObjectPledge,
         Payload,
         QuorumCertificate,
+        RecentTransaction,
         TreeNodeHash,
     },
     services::infrastructure_services::NodeAddressable,
@@ -351,6 +352,12 @@ impl<TAddr: NodeAddressable, TPayload: Payload> ShardStoreTransaction<TAddr, TPa
     }
 
     fn get_substate_states(&self, _shards: &[ShardId]) -> Result<Vec<SubstateState>, Self::Error> {
+        // todo!()
+        Ok(vec![])
+    }
+
+    fn get_recent_transactions(&self) -> Result<Vec<RecentTransaction>, Self::Error> {
+        // todo!()
         Ok(vec![])
     }
 }

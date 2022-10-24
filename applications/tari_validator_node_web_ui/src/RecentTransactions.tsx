@@ -20,38 +20,64 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-import React, { useEffect, useState } from "react";
-import { getAllVns } from "./json_rpc";
+import { useEffect, useState } from "react";
+import { toHexString } from "./helpers";
+import { getRecentTransactions } from "./json_rpc";
 
-function AllVNs({ epoch }: { epoch: number }) {
-  const [vns, setVns] = useState([]);
+interface IRecentTransaction {
+  height: number;
+  payload_height: number;
+  payload_id: number[];
+  shard: number[];
+  total_leader_proposals: number;
+  total_votes: number;
+}
+
+function RecentTransactions() {
+  const [recentTransacations, setRecentTransacations] = useState<IRecentTransaction[]>([]);
   useEffect(() => {
-    getAllVns(epoch).then((response) => {
-      setVns(response.vns);
+    getRecentTransactions().then((response) => {
+      setRecentTransacations(response.transactions);
     });
-  }, [epoch]);
-  if (!(vns?.length > 0)) return <div>All VNS are loading</div>;
+  }, []);
+  if (recentTransacations === undefined) {
+    return (
+      <div className="section">
+        <h4>Recent transactions ... loading</h4>
+      </div>
+    );
+  }
   return (
     <div className="section">
-      <div className="caption">VNs</div>
-      <table className="all-vns-table">
+      <div className="caption">Recent transactions</div>
+      <table className="recent-transactions-table">
         <thead>
           <tr>
-            <th>Public key</th>
-            <th>Shard key</th>
+            <th className="column">Height</th>
+            <th className="column">Payload height</th>
+            <th className="column">Payload id</th>
+            <th className="column">Shard</th>
+            <th className="column">Total leader proposal</th>
+            <th className="column">Total votes</th>
           </tr>
         </thead>
         <tbody>
-          {vns.map(({ public_key, shard_key }, i) => (
-            <tr key={public_key}>
-              <td className="key">{public_key}</td>
-              <td className="key">{shard_key}</td>
-            </tr>
-          ))}
+          {recentTransacations.map(
+            ({ height, payload_height, payload_id, shard, total_leader_proposals, total_votes }) => (
+              <tr key={payload_height + toHexString(payload_id)}>
+                <td>{height}</td>
+                <td>{payload_height}</td>
+                <td className="key">{toHexString(payload_id)}</td>
+                <td className="key">{toHexString(shard)}</td>
+                <td>{total_leader_proposals}</td>
+                <td>{total_votes}</td>
+              </tr>
+            )
+          )}
         </tbody>
       </table>
     </div>
   );
 }
 
-export default AllVNs;
+export default RecentTransactions;
