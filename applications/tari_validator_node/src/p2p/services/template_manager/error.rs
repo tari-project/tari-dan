@@ -32,7 +32,6 @@ pub enum TemplateManagerError {
     #[error("There was an error sending to a channel")]
     SendError,
     #[error("The hash of the template code does not match the metadata")]
-    #[allow(dead_code)]
     TemplateCodeHashMismatch,
     #[error("Storage error: {0}")]
     StorageError(#[from] StorageError),

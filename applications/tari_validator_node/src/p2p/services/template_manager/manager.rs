@@ -108,6 +108,10 @@ impl TemplateManager {
             .get_template(address)?
             .ok_or(TemplateManagerError::TemplateNotFound { address: *address })?;
 
+        if matches!(template.status, TemplateStatus::Invalid) {
+            return Err(TemplateManagerError::TemplateCodeHashMismatch);
+        }
+
         Ok(template.into())
     }
 
