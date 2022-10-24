@@ -102,7 +102,7 @@ where
 
         Box::pin(async move {
             let type_str = msg.as_type_str();
-            let bytes = encode_message(&proto::validator_node::DanMessage::from(msg.clone()));
+            let bytes = encode_message(&proto::network::DanMessage::from(msg.clone()));
 
             log::info!(
                 target: LOG_TARGET,
