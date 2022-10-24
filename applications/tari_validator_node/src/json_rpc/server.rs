@@ -36,23 +36,25 @@ use super::handlers::JsonRpcHandlers;
 const LOG_TARGET: &str = "tari::validator_node::json_rpc";
 const JSON_SIZE_LIMIT_BYTES: u64 = 25 * 1024; // 25 kb
 
-pub async fn run_json_rpc(address: SocketAddr, handlers: JsonRpcHandlers) -> Result<(), anyhow::Error> {
+pub async fn run_json_rpc(preferred_address: SocketAddr, handlers: JsonRpcHandlers) -> Result<(), anyhow::Error> {
     let router = Router::new()
         .route("/", post(handler))
         .route("/json_rpc", post(handler))
         .layer(Extension(Arc::new(handlers)))
         .layer(CorsLayer::permissive());
 
-    info!(target: LOG_TARGET, "🌐 RPC started at {}", address);
-    axum::Server::bind(&address)
-        .serve(router.into_make_service())
-        .await
-        .map_err(|err| {
-            error!(target: LOG_TARGET, "JSON-RPC encountered an error: {}", err);
-            err
-        })?;
+    let server = axum::Server::try_bind(&preferred_address).or_else(|_| {
+        error!(
+            target: LOG_TARGET,
+            "🌐 Failed to bind on preferred address {}. Trying OS-assigned", preferred_address
+        );
+        axum::Server::try_bind(&"127.0.0.1:0".parse().unwrap())
+    })?;
+    let server = server.serve(router.into_make_service());
+    info!(target: LOG_TARGET, "🌐 JSON-RPC listening on {}", server.local_addr());
+    server.await?;
 
-    info!(target: LOG_TARGET, "Stopping JSON-RPC");
+    info!(target: LOG_TARGET, "💤 Stopping JSON-RPC");
     Ok(())
 }
 
