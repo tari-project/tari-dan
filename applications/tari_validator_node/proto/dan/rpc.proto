@@ -28,10 +28,6 @@ import "consensus.proto";
 import "network.proto";
 import "transaction.proto";
 
-//service ValidatorNode {
-//  rpc SubmitTransaction(SubmitTransactionRequest) returns (SubmitTransactionResponse);
-//}
-
 enum Status {
   Accepted = 0;
   Errored = 1;
