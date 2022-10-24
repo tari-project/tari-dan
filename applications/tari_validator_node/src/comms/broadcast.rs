@@ -114,13 +114,13 @@ where
             let svc = next_service.ready().await?;
             match dest {
                 Destination::Peer(pk) => {
-                    logger.log_outbound_message("Peer", ByteArray::as_bytes(&pk).to_vec(), type_str, &msg);
+                    logger.log_outbound_message("Peer", pk.to_vec(), type_str, &msg);
                     svc.call(OutboundMessage::new(NodeId::from_public_key(&pk), bytes))
                         .await?;
                 },
                 Destination::Selected(pks) => {
                     let iter = pks.iter().map(NodeId::from_public_key).map(|n| {
-                        logger.log_outbound_message("Selected", n.as_bytes().to_vec(), type_str, &msg);
+                        logger.log_outbound_message("Selected", n.to_vec(), type_str, &msg);
                         OutboundMessage::new(n, bytes.clone())
                     });
                     svc.call_all(stream::iter(iter))
