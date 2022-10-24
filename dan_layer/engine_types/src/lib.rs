@@ -6,4 +6,4 @@ pub mod instruction;
 pub mod signature;
 
 mod template;
-pub use template::TemplateAddress;
+pub use template::{calculate_template_binary_hash, TemplateAddress};

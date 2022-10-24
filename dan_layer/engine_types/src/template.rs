@@ -20,5 +20,13 @@
 //   WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //   USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+use tari_template_lib::Hash;
+
+use crate::hashing::hasher;
+
 /// Package (template) identifier
 pub type TemplateAddress = tari_template_lib::Hash;
+
+pub fn calculate_template_binary_hash(wasm_code: &[u8]) -> Hash {
+    hasher("template").chain(wasm_code).result()
+}

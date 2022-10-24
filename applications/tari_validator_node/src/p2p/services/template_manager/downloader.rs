@@ -23,6 +23,7 @@
 use bytes::Bytes;
 use futures::{future::BoxFuture, stream::FuturesUnordered};
 use prost::bytes;
+use tari_core::consensus::MaxSizeBytes;
 use tari_template_lib::models::TemplateAddress;
 use tokio::{sync::mpsc, task};
 use tokio_stream::StreamExt;
@@ -30,6 +31,7 @@ use tokio_stream::StreamExt;
 pub struct DownloadRequest {
     pub address: TemplateAddress,
     pub url: String,
+    pub expected_binary_sha: MaxSizeBytes<32>,
 }
 
 pub(super) struct TemplateDownloadWorker {
@@ -82,6 +84,7 @@ async fn download(req: DownloadRequest) -> DownloadResult {
 
     DownloadResult {
         template_address: req.address,
+        expected_binary_sha: req.expected_binary_sha.clone(),
         result: inner(req).await,
     }
 }
@@ -95,5 +98,6 @@ pub enum TemplateDownloadError {
 #[derive(Debug)]
 pub struct DownloadResult {
     pub template_address: TemplateAddress,
+    pub expected_binary_sha: MaxSizeBytes<32>,
     pub result: Result<Bytes, TemplateDownloadError>,
 }
