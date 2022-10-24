@@ -89,16 +89,16 @@ fn create_populated_state_store<I: IntoIterator<Item = ObjectPledge>>(inputs: I)
     let state_db = MemoryStateStore::default();
 
     // Populate state db with inputs
-    {
-        let mut tx = state_db.write_access().unwrap();
-        for input in inputs {
-            match input.current_state {
-                SubstateState::Up { created_by, data } => {
-                    tx.set_state_raw(created_by.as_slice(), data).unwrap();
-                },
-                SubstateState::DoesNotExist | SubstateState::Down { .. } => { /* Do nothing */ },
-            }
+    let mut tx = state_db.write_access().unwrap();
+    for input in inputs {
+        match input.current_state {
+            SubstateState::Up { created_by, data } => {
+                tx.set_state_raw(created_by.as_slice(), data).unwrap();
+            },
+            SubstateState::DoesNotExist | SubstateState::Down { .. } => panic!("Unexpected pledge {:?}", input),
         }
     }
+    tx.commit().unwrap();
+
     state_db
 }
