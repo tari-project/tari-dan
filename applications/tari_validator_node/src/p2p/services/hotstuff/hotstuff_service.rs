@@ -160,24 +160,24 @@ impl HotstuffService {
         loop {
             tokio::select! {
                 // Inbound
-               res = self.mempool.next_valid_transaction() => {
+                res = self.mempool.next_valid_transaction() => {
                     let (tx, shard_id) = res?;
                     debug!(target: LOG_TARGET, "Received new transaction {} for shard {}", tx.hash(), shard_id);
                     log(self.handle_new_valid_transaction(tx, shard_id).await, "new valid transaction");
                 }
-               // Outbound
-               Some((to, msg)) = self.rx_leader.recv() => {
+                // Outbound
+                Some((to, msg)) = self.rx_leader.recv() => {
                     debug!(target: LOG_TARGET, "Received leader message: {}", &msg);
                     log(self.handle_leader_message(to, msg).await, "leader message");
-                   }
-               Some((msg, leader)) = self.rx_vote_message.recv() => {
+                }
+                Some((msg, leader)) = self.rx_vote_message.recv() => {
                     debug!(target: LOG_TARGET, "Received vote message");
                     log(self.handle_vote_message(leader, msg).await, "vote message");
-                    }
-               Some((msg, dest_nodes)) = self.rx_broadcast.recv() => {
+                }
+                Some((msg, dest_nodes)) = self.rx_broadcast.recv() => {
                     debug!(target: LOG_TARGET, "Received broadcast message: {}", &msg);
                     log(self.handle_broadcast_message(dest_nodes, msg).await, "broadcast message");
-                    }
+                }
                 // Shutdown
                 _ = self.shutdown.wait() => {
                     dbg!("Shutting down hs service");

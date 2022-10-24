@@ -29,7 +29,7 @@ use tari_dan_core::{
 };
 use tari_dan_engine::{
     packager::{Package, TemplateModuleLoader},
-    runtime::{FinalizeResult, RuntimeInterfaceImpl, StateTracker},
+    runtime::{FinalizeResult, RuntimeInterfaceImpl, StateTracker, Substate, SubstateValue},
     state_store::{memory::MemoryStateStore, AtomicDb, StateWriter},
     transaction::TransactionProcessor,
 };
@@ -92,10 +92,24 @@ fn create_populated_state_store<I: IntoIterator<Item = ObjectPledge>>(inputs: I)
     let mut tx = state_db.write_access().unwrap();
     for input in inputs {
         match input.current_state {
-            SubstateState::Up { created_by, data } => {
-                tx.set_state_raw(created_by.as_slice(), data).unwrap();
+            SubstateState::Up { data, .. } => {
+                // TODO: Engine should be able to read SubstateValue
+                let val = SubstateValue::from_bytes(&data).unwrap();
+                match val.into_substate() {
+                    Substate::Component(component) => {
+                        tx.set_state_raw(
+                            input.shard_id.as_bytes(),
+                            tari_dan_engine::abi::encode(&component).unwrap(),
+                        )
+                        .unwrap();
+                    },
+                    Substate::Resource(resx) => {
+                        tx.set_state_raw(input.shard_id.as_bytes(), tari_dan_engine::abi::encode(&resx).unwrap())
+                            .unwrap();
+                    },
+                }
             },
-            SubstateState::DoesNotExist | SubstateState::Down { .. } => panic!("Unexpected pledge {:?}", input),
+            SubstateState::DoesNotExist | SubstateState::Down { .. } => { /* Do nothing */ },
         }
     }
     tx.commit().unwrap();

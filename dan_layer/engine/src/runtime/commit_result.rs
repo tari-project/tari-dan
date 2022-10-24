@@ -23,8 +23,8 @@
 use std::collections::BTreeMap;
 
 use tari_dan_common_types::ShardId;
-use tari_template_abi::{encode, Encode};
-use tari_template_lib::{models::Component, Hash};
+use tari_template_abi::{decode, encode, Decode, Encode};
+use tari_template_lib::{models::ComponentInstance, Hash};
 
 use crate::{models::Resource, runtime::logs::LogEntry, wasm::ExecutionResult};
 
@@ -93,7 +93,7 @@ impl SubstateDiff {
     }
 }
 
-#[derive(Debug, Clone, Encode)]
+#[derive(Debug, Clone, Encode, Decode)]
 pub struct SubstateValue {
     substate: Substate,
     version: u32,
@@ -107,19 +107,27 @@ impl SubstateValue {
         }
     }
 
+    pub fn into_substate(self) -> Substate {
+        self.substate
+    }
+
     pub fn to_bytes(&self) -> Vec<u8> {
         encode(self).unwrap()
     }
+
+    pub fn from_bytes(bytes: &[u8]) -> std::io::Result<Self> {
+        decode(bytes)
+    }
 }
 
-#[derive(Debug, Clone, Encode)]
+#[derive(Debug, Clone, Encode, Decode)]
 pub enum Substate {
-    Component(Component),
+    Component(ComponentInstance),
     Resource(Resource),
 }
 
-impl From<Component> for Substate {
-    fn from(component: Component) -> Self {
+impl From<ComponentInstance> for Substate {
+    fn from(component: ComponentInstance) -> Self {
         Self::Component(component)
     }
 }
