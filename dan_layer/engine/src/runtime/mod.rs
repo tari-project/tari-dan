@@ -29,7 +29,7 @@ pub use r#impl::RuntimeInterfaceImpl;
 mod logs;
 
 mod commit_result;
-pub use commit_result::{FinalizeResult, RejectResult, SubstateDiff, TransactionResult};
+pub use commit_result::{FinalizeResult, RejectResult, Substate, SubstateDiff, SubstateValue, TransactionResult};
 
 mod error;
 pub use error::{RuntimeError, TransactionCommitError};

@@ -333,10 +333,7 @@ impl StateTracker {
             for (component_addr, component) in state.new_components.drain() {
                 tx.set_state(&component_addr, component.clone())?;
                 // TODO:
-                substates.up(
-                    component_addr.into_array(),
-                    SubstateValue::new(component.into_component()),
-                );
+                substates.up(component_addr.into_array(), SubstateValue::new(component));
             }
 
             // Vaults are held within a component and contain a resource, so I dont think they are a substate in and of
