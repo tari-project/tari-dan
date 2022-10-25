@@ -28,10 +28,11 @@ use std::{
 use digest::{consts::U32, generic_array};
 use serde::{Deserialize, Serialize};
 use tari_common_types::types::{FixedHash, FixedHashSizeError};
+use tari_dan_common_types::serde_with;
 use tari_utilities::hex::{Hex, HexError};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Deserialize, Serialize)]
-pub struct TreeNodeHash(FixedHash);
+pub struct TreeNodeHash(#[serde(with = "serde_with::hex")] FixedHash);
 
 impl TreeNodeHash {
     pub fn zero() -> Self {
@@ -61,6 +62,12 @@ impl TryFrom<Vec<u8>> for TreeNodeHash {
     fn try_from(value: Vec<u8>) -> Result<Self, Self::Error> {
         let hash = FixedHash::try_from(value)?;
         Ok(Self(hash))
+    }
+}
+
+impl AsRef<[u8]> for TreeNodeHash {
+    fn as_ref(&self) -> &[u8] {
+        self.0.as_slice()
     }
 }
 

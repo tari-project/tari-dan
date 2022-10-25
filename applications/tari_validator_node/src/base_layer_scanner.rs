@@ -59,6 +59,7 @@ pub fn spawn(
     epoch_manager: EpochManagerHandle,
     template_manager: TemplateManagerHandle,
     shutdown: ShutdownSignal,
+    consensus_constants: crate::consensus_constants::ConsensusConstants,
 ) {
     task::spawn(async move {
         let base_layer_scanner = BaseLayerScanner::new(
@@ -68,6 +69,7 @@ pub fn spawn(
             epoch_manager,
             template_manager,
             shutdown,
+            consensus_constants,
         );
 
         if let Err(err) = base_layer_scanner.start().await {
@@ -80,11 +82,13 @@ pub struct BaseLayerScanner {
     config: ValidatorNodeConfig,
     global_db: GlobalDb<SqliteGlobalDbAdapter>,
     last_scanned_height: u64,
+    last_scanned_tip: Option<FixedHash>,
     last_scanned_hash: Option<FixedHash>,
     base_node_client: GrpcBaseNodeClient,
     epoch_manager: EpochManagerHandle,
     template_manager: TemplateManagerHandle,
     shutdown: ShutdownSignal,
+    consensus_constants: crate::consensus_constants::ConsensusConstants,
 }
 
 impl BaseLayerScanner {
@@ -95,16 +99,19 @@ impl BaseLayerScanner {
         epoch_manager: EpochManagerHandle,
         template_manager: TemplateManagerHandle,
         shutdown: ShutdownSignal,
+        consensus_constants: crate::consensus_constants::ConsensusConstants,
     ) -> Self {
         Self {
             config,
             global_db,
+            last_scanned_tip: None,
             last_scanned_height: 0,
             last_scanned_hash: None,
             base_node_client,
             epoch_manager,
             template_manager,
             shutdown,
+            consensus_constants,
         }
     }
 
@@ -143,6 +150,10 @@ impl BaseLayerScanner {
         let tx = self.global_db.create_transaction()?;
         let metadata = self.global_db.metadata(&tx);
 
+        self.last_scanned_tip = metadata
+            .get_metadata(MetadataKey::BaseLayerScannerLastScannedTip)?
+            .map(TryInto::try_into)
+            .transpose()?;
         self.last_scanned_hash = metadata
             .get_metadata(MetadataKey::BaseLayerScannerLastScannedBlockHash)?
             .map(TryInto::try_into)
@@ -168,15 +179,18 @@ impl BaseLayerScanner {
     async fn scan_blockchain(&mut self) -> Result<(), BaseLayerScannerError> {
         // fetch the new base layer info since the previous scan
         let tip = self.base_node_client.get_tip_info().await?;
-        let consensus_constants = self.get_consensus_constants().await?;
+        let consensus_constants = self.base_node_client.get_consensus_constants().await?;
 
         match self.get_blockchain_progression(&tip).await? {
             BlockchainProgression::Progressed => {
                 info!(
                     target: LOG_TARGET,
-                    "⛓️ Blockchain has progressed to height {}. We last scanned {}. Scanning for new side-chain UTXOs.",
+                    "⛓️ Blockchain has progressed to height {}. We last scanned {}/{}. Scanning for new side-chain \
+                     UTXOs.",
                     tip.height_of_longest_chain,
-                    self.last_scanned_height
+                    self.last_scanned_height,
+                    tip.height_of_longest_chain
+                        .saturating_sub(self.consensus_constants.base_layer_confirmations)
                 );
                 self.sync_blockchain().await?;
             },
@@ -198,18 +212,11 @@ impl BaseLayerScanner {
         Ok(())
     }
 
-    async fn get_consensus_constants(&mut self) -> Result<ConsensusConstants, BaseLayerScannerError> {
-        self.base_node_client
-            .get_consensus_constants()
-            .await
-            .map_err(|e| BaseLayerScannerError::BaseNodeError(e))
-    }
-
     async fn get_blockchain_progression(
         &mut self,
         tip: &BaseLayerMetadata,
     ) -> Result<BlockchainProgression, BaseLayerScannerError> {
-        match self.last_scanned_hash {
+        match self.last_scanned_tip {
             Some(hash) if hash == tip.tip_hash => Ok(BlockchainProgression::NoProgress),
             Some(hash) => {
                 let header = self.base_node_client.get_header_by_hash(hash).await.optional()?;
@@ -226,12 +233,20 @@ impl BaseLayerScanner {
     async fn sync_blockchain(&mut self) -> Result<(), BaseLayerScannerError> {
         let start_scan_height = self.last_scanned_height;
         let mut current_hash = self.last_scanned_hash;
-        // TODO: we need to scan ending a few blocks back to mitigate for reorgs
         let tip = self.base_node_client.get_tip_info().await?;
-        if tip.height_of_longest_chain == 0 {
-            return Ok(());
-        }
-        let end_height = tip.height_of_longest_chain;
+        let end_height = match tip
+            .height_of_longest_chain
+            .checked_sub(self.consensus_constants.base_layer_confirmations)
+        {
+            None => {
+                debug!(
+                    target: LOG_TARGET,
+                    "Base layer blockchain is not yet at the required height to start scanning it"
+                );
+                return Ok(());
+            },
+            Some(end_height) => end_height,
+        };
 
         for current_height in start_scan_height..=end_height {
             let utxos = self
@@ -285,7 +300,7 @@ impl BaseLayerScanner {
 
             self.epoch_manager.update_epoch(block_info.height).await?;
 
-            self.set_last_scanned_block(block_info.height, block_info.hash)?;
+            self.set_last_scanned_block(tip.tip_hash, block_info.height, block_info.hash)?;
             match block_info.next_block_hash {
                 Some(next_hash) => {
                     current_hash = Some(next_hash);
@@ -347,15 +362,22 @@ impl BaseLayerScanner {
         Ok(())
     }
 
-    fn set_last_scanned_block(&mut self, height: u64, hash: FixedHash) -> Result<(), BaseLayerScannerError> {
+    fn set_last_scanned_block(
+        &mut self,
+        tip: FixedHash,
+        height: u64,
+        hash: FixedHash,
+    ) -> Result<(), BaseLayerScannerError> {
         let tx = self.global_db.create_transaction()?;
         let metadata = self.global_db.metadata(&tx);
+        metadata.set_metadata(MetadataKey::BaseLayerScannerLastScannedTip, tip.as_bytes())?;
         metadata.set_metadata(MetadataKey::BaseLayerScannerLastScannedBlockHash, hash.as_bytes())?;
         metadata.set_metadata(
             MetadataKey::BaseLayerScannerLastScannedBlockHeight,
             &height.to_le_bytes(),
         )?;
         self.global_db.commit(tx)?;
+        self.last_scanned_tip = Some(tip);
         self.last_scanned_hash = Some(hash);
         self.last_scanned_height = height;
         Ok(())

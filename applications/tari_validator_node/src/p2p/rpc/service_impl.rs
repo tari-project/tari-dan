@@ -39,7 +39,7 @@ use tokio::{
     task,
 };
 
-use crate::p2p::proto::network::{
+use crate::p2p::proto::rpc::{
     GetVnStateInventoryRequest,
     GetVnStateInventoryResponse,
     VnStateSyncRequest,
@@ -76,8 +76,8 @@ where TPeerProvider: PeerProvider + Clone + Send + Sync + 'static
 {
     async fn submit_transaction(
         &self,
-        request: Request<proto::validator_node::SubmitTransactionRequest>,
-    ) -> Result<Response<proto::validator_node::SubmitTransactionResponse>, RpcStatus> {
+        request: Request<proto::rpc::SubmitTransactionRequest>,
+    ) -> Result<Response<proto::rpc::SubmitTransactionResponse>, RpcStatus> {
         // let peer = request.context().fetch_peer().await?;
         let request = request.into_message();
         let transaction: Transaction = match request
@@ -95,14 +95,14 @@ where TPeerProvider: PeerProvider + Clone + Send + Sync + 'static
         match self.message_senders.tx_new_transaction_message.send(transaction).await {
             Ok(_) => {
                 debug!(target: LOG_TARGET, "Accepted instruction into mempool");
-                return Ok(Response::new(proto::validator_node::SubmitTransactionResponse {
+                return Ok(Response::new(proto::rpc::SubmitTransactionResponse {
                     result: vec![],
                     status: "Accepted".to_string(),
                 }));
             },
             Err(_err) => {
                 // debug!(target: LOG_TARGET, "Mempool rejected instruction: {}", err);
-                return Ok(Response::new(proto::validator_node::SubmitTransactionResponse {
+                return Ok(Response::new(proto::rpc::SubmitTransactionResponse {
                     result: vec![],
                     status: "Mempool has shut down".to_string(),
                 }));
@@ -112,8 +112,8 @@ where TPeerProvider: PeerProvider + Clone + Send + Sync + 'static
 
     async fn get_peers(
         &self,
-        _request: Request<proto::network::GetPeersRequest>,
-    ) -> Result<Streaming<proto::network::GetPeersResponse>, RpcStatus> {
+        _request: Request<proto::rpc::GetPeersRequest>,
+    ) -> Result<Streaming<proto::rpc::GetPeersResponse>, RpcStatus> {
         let (tx, rx) = mpsc::channel(100);
         let peer_provider = self.peer_provider.clone();
 
@@ -124,7 +124,7 @@ where TPeerProvider: PeerProvider + Clone + Send + Sync + 'static
                     continue;
                 }
                 if tx
-                    .send(Ok(proto::network::GetPeersResponse {
+                    .send(Ok(proto::rpc::GetPeersResponse {
                         identity: peer.identity.as_bytes().to_vec(),
                         identity_signature: peer.identity_signature.map(Into::into),
                         addresses: peer.addresses.into_iter().map(|a| a.to_vec()).collect(),
@@ -216,8 +216,8 @@ where TPeerProvider: PeerProvider + Clone + Send + Sync + 'static
 
                 // select data from db where shard_id <= end_shard_id and shard_id >= start_shard_id
                 for state in states {
-                    let substate_state = proto::common::SubstateState::from(state);
-                    let response = proto::network::VnStateSyncResponse {
+                    let substate_state = proto::consensus::SubstateState::from(state);
+                    let response = proto::rpc::VnStateSyncResponse {
                         substate_state: Some(substate_state),
                     };
                     // if send returns error, the client has closed the connection, so we break the loop

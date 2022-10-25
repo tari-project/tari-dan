@@ -33,6 +33,7 @@ use crate::{
         ObjectPledge,
         Payload,
         QuorumCertificate,
+        RecentTransaction,
         TreeNodeHash,
     },
     services::infrastructure_services::NodeAddressable,
@@ -126,6 +127,7 @@ pub trait ShardStoreTransaction<TAddr: NodeAddressable, TPayload: Payload> {
     ) -> Result<usize, Self::Error>;
 
     fn get_received_votes_for(&self, node_hash: TreeNodeHash, shard: ShardId) -> Result<Vec<VoteMessage>, Self::Error>;
+    fn get_recent_transactions(&self) -> Result<Vec<RecentTransaction>, Self::Error>;
 }
 
 #[derive(Debug, Default)]

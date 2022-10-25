@@ -30,23 +30,27 @@ function AllVNs({ epoch }: { epoch: number }) {
       setVns(response.vns);
     });
   }, [epoch]);
-  if (vns.length === 0) return <div>All VNS are loading</div>;
+  if (!(vns?.length > 0)) return <div>All VNS are loading</div>;
   return (
-    <>
-      <div className="label">VNS</div>
-      <div className="vns">
-        {vns.map(({ public_key, shard_key }, i) => {
-          return (
-            <React.Fragment key={public_key}>
-              <div className="label">Public key</div>
-              <div className="key">{public_key}</div>
-              <div className="label">Shard key</div>
-              <div className="key">{shard_key}</div>
-            </React.Fragment>
-          );
-        })}
-      </div>
-    </>
+    <div className="section">
+      <div className="caption">VNs</div>
+      <table className="all-vns-table">
+        <thead>
+          <tr>
+            <th>Public key</th>
+            <th>Shard key</th>
+          </tr>
+        </thead>
+        <tbody>
+          {vns.map(({ public_key, shard_key }, i) => (
+            <tr key={public_key}>
+              <td className="key">{public_key}</td>
+              <td className="key">{shard_key}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
   );
 }
 

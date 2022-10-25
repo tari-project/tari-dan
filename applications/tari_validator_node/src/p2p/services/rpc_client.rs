@@ -37,7 +37,7 @@ use tari_dan_engine::transaction::Transaction;
 use tokio_stream::StreamExt;
 
 use crate::p2p::{
-    proto::{network::GetPeersRequest, validator_node::SubmitTransactionRequest},
+    proto::rpc::{GetPeersRequest, SubmitTransactionRequest},
     rpc,
 };
 

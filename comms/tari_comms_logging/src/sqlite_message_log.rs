@@ -59,7 +59,7 @@ impl SqliteMessageLog {
                     destination_type: destination_type.to_string(),
                     destination_pubkey: destination.into(),
                     message_type: message_type.to_string(),
-                    message_json: serde_json::to_string(message).unwrap(),
+                    message_json: serde_json::to_string_pretty(message).unwrap(),
                 })
                 .execute(&conn)
                 .map_err(|e| {
@@ -76,7 +76,7 @@ impl SqliteMessageLog {
                 .values(NewInboundMessage {
                     from_pubkey: from_peer.into(),
                     message_type: message_type.to_string(),
-                    message_json: serde_json::to_string(message).unwrap(),
+                    message_json: serde_json::to_string_pretty(message).unwrap(),
                 })
                 .execute(&conn)
                 .map_err(|e| {

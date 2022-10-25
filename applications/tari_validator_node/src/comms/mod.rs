@@ -27,4 +27,4 @@ pub use destination::Destination;
 
 mod initializer;
 
-pub use initializer::{initialize, MessageChannel};
+pub use initializer::{initialize, spawn_comms_using_transport, MessageChannel};

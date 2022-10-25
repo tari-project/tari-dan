@@ -23,7 +23,7 @@
 async function jsonRpc(method: string, params: any = null) {
   let id = 0;
   id += 1;
-  let address = "127.0.0.1:18145";
+  let address = "127.0.0.1:18200";
   try {
     let text = await (await fetch("json_rpc_address")).text();
     if (/^\d+(\.\d+){3}:[0-9]+$/.test(text)) {
@@ -66,8 +66,14 @@ async function getCommittee(height: number, shard_key: string) {
 async function getAllVns(epoch: number) {
   return await jsonRpc("get_all_vns", epoch);
 }
+async function getConnections() {
+  return await jsonRpc("get_connections");
+}
 async function registerValidatorNode() {
   return await jsonRpc("register_validator_node");
+}
+async function getRecentTransactions() {
+  return await jsonRpc("get_recent_transactions");
 }
 
 export {
@@ -78,5 +84,7 @@ export {
   getShardKey,
   getCommittee,
   getAllVns,
+  getConnections,
+  getRecentTransactions,
   registerValidatorNode,
 };

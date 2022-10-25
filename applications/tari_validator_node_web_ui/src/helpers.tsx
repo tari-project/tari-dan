@@ -99,4 +99,10 @@ function compare(a: any, b: any) {
   return 0;
 }
 
-export { U256, compare };
+function toHexString(byteArray: number[]) {
+  return Array.from(byteArray, function (byte) {
+    return ("0" + (byte & 0xff).toString(16)).slice(-2);
+  }).join("");
+}
+
+export { U256, compare, toHexString };

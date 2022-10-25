@@ -53,7 +53,7 @@ pub fn try_spawn(
     rx_consensus_message: mpsc::Receiver<(CommsPublicKey, HotStuffMessage<TariDanPayload, CommsPublicKey>)>,
     rx_vote_message: mpsc::Receiver<(CommsPublicKey, VoteMessage)>,
     shutdown: ShutdownSignal,
-) -> Result<EventSubscription<HotStuffEvent>, anyhow::Error> {
+) -> Result<(EventSubscription<HotStuffEvent>, SqliteShardStoreFactory), anyhow::Error> {
     let db = SqliteShardStoreFactory::try_create(config.data_dir.join("state.db"))?;
     // let db = MemoryShardStoreFactory::new();
     let events = HotstuffService::spawn(
@@ -62,10 +62,10 @@ pub fn try_spawn(
         mempool,
         outbound,
         payload_processor,
-        db,
+        db.clone(),
         rx_consensus_message,
         rx_vote_message,
         shutdown,
     );
-    Ok(events)
+    Ok((events, db))
 }

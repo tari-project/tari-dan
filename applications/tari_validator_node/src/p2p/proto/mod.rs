@@ -21,8 +21,8 @@
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 mod conversions;
 
-pub mod common {
-    include!(concat!(env!("OUT_DIR"), "/tari.dan.common.rs"));
+pub mod transaction {
+    include!(concat!(env!("OUT_DIR"), "/tari.dan.transaction.rs"));
 }
 
 pub mod consensus {
@@ -30,10 +30,14 @@ pub mod consensus {
 }
 
 pub mod network {
+    #![allow(clippy::large_enum_variant)]
     include!(concat!(env!("OUT_DIR"), "/tari.dan.network.rs"));
 }
 
-pub mod validator_node {
-    #![allow(clippy::large_enum_variant)]
-    include!(concat!(env!("OUT_DIR"), "/tari.dan.validator_node.rs"));
+pub mod rpc {
+    include!(concat!(env!("OUT_DIR"), "/tari.dan.rpc.rs"));
+}
+
+pub mod common {
+    include!(concat!(env!("OUT_DIR"), "/tari.dan.common.rs"));
 }

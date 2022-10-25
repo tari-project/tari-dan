@@ -20,16 +20,31 @@
 //   WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //   USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use serde::{Deserialize, Deserializer, Serialize, Serializer};
-use tari_utilities::hex::Hex;
+use serde::{Deserialize, Deserializer, Serializer};
+use tari_utilities::hex::{from_hex, to_hex};
 
-pub fn serialize<S: Serializer, T: Hex>(v: &T, s: S) -> Result<S::Ok, S::Error> {
-    v.to_hex().serialize(s)
+pub fn serialize<S: Serializer, T: AsRef<[u8]>>(v: &T, s: S) -> Result<S::Ok, S::Error> {
+    if s.is_human_readable() {
+        let st = to_hex(v.as_ref());
+        s.serialize_str(&st)
+    } else {
+        s.serialize_bytes(v.as_ref())
+    }
 }
 
 /// Use a serde deserializer to serialize the hex string of the given object.
-pub fn deserialize<'de, D: Deserializer<'de>, T: Hex>(d: D) -> Result<T, D::Error> {
-    let hex = <String as Deserialize>::deserialize(d)?;
-    let hash = Hex::from_hex(hex.as_str()).map_err(serde::de::Error::custom)?;
+pub fn deserialize<'de, D, T>(d: D) -> Result<T, D::Error>
+where
+    D: Deserializer<'de>,
+    T: TryFrom<Vec<u8>>,
+{
+    let bytes = if d.is_human_readable() {
+        let hex = <String as Deserialize>::deserialize(d)?;
+        from_hex(&hex).map_err(serde::de::Error::custom)?
+    } else {
+        <Vec<u8> as Deserialize>::deserialize(d)?
+    };
+
+    let hash = T::try_from(bytes).map_err(|_| serde::de::Error::custom("Failed to convert bytes to T"))?;
     Ok(hash)
 }

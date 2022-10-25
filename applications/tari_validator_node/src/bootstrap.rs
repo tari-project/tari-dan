@@ -40,12 +40,12 @@ use tari_dan_storage_sqlite::{
     sqlite_shard_store_factory::SqliteShardStoreFactory,
     SqliteDbFactory,
 };
-use tari_p2p::initialization::spawn_comms_using_transport;
 use tari_shutdown::ShutdownSignal;
 
 use crate::{
     base_layer_scanner,
     comms,
+    consensus_constants::ConsensusConstants,
     grpc::services::base_node_client::GrpcBaseNodeClient,
     p2p::{
         create_validator_node_rpc_service,
@@ -77,6 +77,7 @@ pub async fn spawn_services(
     node_identity: Arc<NodeIdentity>,
     global_db: GlobalDb<SqliteGlobalDbAdapter>,
     sqlite_db: SqliteDbFactory,
+    consensus_constants: ConsensusConstants,
 ) -> Result<Services, anyhow::Error> {
     let mut p2p_config = config.validator_node.p2p.clone();
     p2p_config.transport.tor.identity = load_from_json(&config.validator_node.tor_identity_file)
@@ -143,13 +144,14 @@ pub async fn spawn_services(
         epoch_manager.clone(),
         template_manager_service.clone(),
         shutdown.clone(),
+        consensus_constants,
     );
 
     // Payload processor
     let payload_processor = TariDanPayloadProcessor::new(template_manager);
 
     // Consensus
-    let hotstuff_events = hotstuff::try_spawn(
+    let (hotstuff_events, db) = hotstuff::try_spawn(
         node_identity.clone(),
         &config.validator_node,
         outbound_messaging,
@@ -164,7 +166,7 @@ pub async fn spawn_services(
     let shard_store_store = SqliteShardStoreFactory::try_create(config.validator_node.data_dir.join("state.db"))?;
 
     let comms = setup_p2p_rpc(config, comms, message_senders, peer_provider, shard_store_store);
-    let comms = spawn_comms_using_transport(comms, p2p_config.transport.clone())
+    let comms = comms::spawn_comms_using_transport(comms, p2p_config.transport.clone())
         .await
         .map_err(|e| ExitError::new(ExitCode::ConfigError, format!("Could not spawn using transport: {}", e)))?;
 
@@ -182,6 +184,7 @@ pub async fn spawn_services(
         epoch_manager,
         template_manager: template_manager_service,
         hotstuff_events,
+        db,
     })
 }
 
@@ -209,6 +212,7 @@ pub struct Services {
     pub epoch_manager: EpochManagerHandle,
     pub template_manager: TemplateManagerHandle,
     pub hotstuff_events: EventSubscription<HotStuffEvent>,
+    pub db: SqliteShardStoreFactory,
 }
 
 fn setup_p2p_rpc(

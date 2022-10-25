@@ -31,11 +31,17 @@ pub fn serialize<S: Serializer, T: AsRef<[u8]>>(v: &T, s: S) -> Result<S::Ok, S:
     }
 }
 
-pub fn deserialize<'de, D: Deserializer<'de>>(d: D) -> Result<Vec<u8>, D::Error> {
-    if d.is_human_readable() {
+pub fn deserialize<'de, D, T>(d: D) -> Result<T, D::Error>
+where
+    D: Deserializer<'de>,
+    T: TryFrom<Vec<u8>>,
+{
+    let bytes = if d.is_human_readable() {
         let s = String::deserialize(d)?;
-        base64::decode(s.as_bytes()).map_err(serde::de::Error::custom)
+        base64::decode(s.as_bytes()).map_err(serde::de::Error::custom)?
     } else {
-        Vec::<u8>::deserialize(d)
-    }
+        Vec::<u8>::deserialize(d)?
+    };
+
+    T::try_from(bytes).map_err(|_| serde::de::Error::custom("Failed to convert bytes to T"))
 }

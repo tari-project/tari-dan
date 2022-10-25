@@ -59,7 +59,7 @@ pub use node::Node;
 pub use payload::Payload;
 pub use quorum_certificate::{QuorumCertificate, QuorumDecision};
 pub use sidechain_metadata::SidechainMetadata;
-use tari_dan_common_types::{PayloadId, ShardId, SubstateState};
+use tari_dan_common_types::{serde_with, PayloadId, ShardId, SubstateState};
 pub use tari_dan_payload::{CheckpointData, TariDanPayload};
 pub use tree_node_hash::TreeNodeHash;
 pub use validator_node::ValidatorNode;
@@ -210,6 +210,7 @@ pub enum ConsensusWorkerState {
 
 #[derive(Clone, Debug, PartialEq, Eq, Deserialize, Serialize)]
 pub struct ValidatorSignature {
+    #[serde(with = "serde_with::hex")]
     pub signer: Vec<u8>,
 }
 
@@ -250,4 +251,14 @@ pub struct ShardVote {
     pub shard_id: ShardId,
     pub node_hash: TreeNodeHash,
     pub pledges: Vec<ObjectPledge>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct RecentTransaction {
+    pub payload_id: Vec<u8>,
+    pub shard: Vec<u8>,
+    pub height: i64,
+    pub payload_height: i64,
+    pub total_votes: i64,
+    pub total_leader_proposals: i64,
 }

@@ -32,16 +32,29 @@ use tari_comms::{
     pipeline,
     pipeline::SinkService,
     protocol::{messaging::MessagingProtocolExtension, NodeNetworkInfo},
+    tor,
+    transports::{predicate::FalsePredicate, MemoryTransport, SocksConfig, SocksTransport, TcpWithTorTransport},
     types::CommsPublicKey,
     utils::cidr::parse_cidrs,
     CommsBuilder,
+    CommsNode,
     NodeIdentity,
     PeerManager,
     UnspawnedCommsNode,
 };
 use tari_comms_logging::SqliteMessageLog;
 use tari_dan_core::{message::DanMessage, models::TariDanPayload};
-use tari_p2p::{peer_seeds::SeedPeer, P2pConfig, PeerSeedsConfig, MAJOR_NETWORK_VERSION, MINOR_NETWORK_VERSION};
+use tari_p2p::{
+    initialization::CommsInitializationError,
+    peer_seeds::SeedPeer,
+    P2pConfig,
+    PeerSeedsConfig,
+    TorTransportConfig,
+    TransportConfig,
+    TransportType,
+    MAJOR_NETWORK_VERSION,
+    MINOR_NETWORK_VERSION,
+};
 use tari_shutdown::ShutdownSignal;
 use tari_storage::{
     lmdb_store::{LMDBBuilder, LMDBConfig},
@@ -193,4 +206,90 @@ async fn add_seed_peers(
         peer_manager.add_peer(peer).await?;
     }
     Ok(())
+}
+
+pub async fn spawn_comms_using_transport(
+    comms: UnspawnedCommsNode,
+    transport_config: TransportConfig,
+) -> Result<CommsNode, CommsInitializationError> {
+    let comms = match transport_config.transport_type {
+        TransportType::Memory => {
+            debug!(target: LOG_TARGET, "Building in-memory comms stack");
+            comms
+                .with_listener_address(transport_config.memory.listener_address.clone())
+                .spawn_with_transport(MemoryTransport)
+                .await?
+        },
+        TransportType::Tcp => {
+            let config = transport_config.tcp;
+            debug!(
+                target: LOG_TARGET,
+                "Building TCP comms stack{}",
+                config
+                    .tor_socks_address
+                    .as_ref()
+                    .map(|_| " with Tor support")
+                    .unwrap_or("")
+            );
+            let mut transport = TcpWithTorTransport::new();
+            if let Some(addr) = config.tor_socks_address {
+                transport.set_tor_socks_proxy(SocksConfig {
+                    proxy_address: addr,
+                    authentication: config.tor_socks_auth.into(),
+                    proxy_bypass_predicate: Arc::new(FalsePredicate::new()),
+                });
+            }
+            comms
+                .with_listener_address(config.listener_address)
+                .spawn_with_transport(transport)
+                .await?
+        },
+        TransportType::Tor => {
+            let tor_config = transport_config.tor;
+            debug!(target: LOG_TARGET, "Building TOR comms stack ({:?})", tor_config);
+            let mut hidden_service_ctl = initialize_hidden_service(tor_config).await?;
+            // Set the listener address to be the address (usually local) to which tor will forward all traffic
+            let transport = hidden_service_ctl.initialize_transport().await?;
+            debug!(target: LOG_TARGET, "Comms and DHT configured");
+            comms
+                .with_listener_address(hidden_service_ctl.proxied_address())
+                .with_hidden_service_controller(hidden_service_ctl)
+                .spawn_with_transport(transport)
+                .await?
+        },
+        TransportType::Socks5 => {
+            debug!(target: LOG_TARGET, "Building SOCKS5 comms stack");
+            let transport = SocksTransport::new(transport_config.socks.into());
+            comms
+                .with_listener_address(transport_config.tcp.listener_address)
+                .spawn_with_transport(transport)
+                .await?
+        },
+    };
+
+    Ok(comms)
+}
+
+async fn initialize_hidden_service(
+    mut config: TorTransportConfig,
+) -> Result<tor::HiddenServiceController, CommsInitializationError> {
+    let mut builder = tor::HiddenServiceBuilder::new()
+        .with_hs_flags(tor::HsFlags::DETACH)
+        .with_port_mapping(config.to_port_mapping()?)
+        .with_socks_authentication(config.to_socks_auth())
+        .with_control_server_auth(config.to_control_auth()?)
+        .with_socks_address_override(config.socks_address_override)
+        .with_control_server_address(config.control_address)
+        .with_bypass_proxy_addresses(config.proxy_bypass_addresses.into());
+
+    if config.proxy_bypass_for_outbound_tcp {
+        builder = builder.bypass_tor_for_tcp_addresses();
+    }
+
+    if let Some(identity) = config.identity.take() {
+        builder = builder.with_tor_identity(identity);
+    }
+
+    let hidden_svc_ctl = builder.build().await?;
+    Ok(hidden_svc_ctl)
 }

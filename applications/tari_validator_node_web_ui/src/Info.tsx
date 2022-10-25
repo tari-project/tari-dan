@@ -23,6 +23,7 @@
 import { useState } from "react";
 import { IEpoch, IIdentity } from "./interfaces";
 import { registerValidatorNode } from "./json_rpc";
+import "./Info.css";
 
 function Info({ epoch, identity, shardKey }: { epoch: IEpoch; identity: IIdentity; shardKey: string | null }) {
   const [registering, setRegistering] = useState(false);
@@ -34,16 +35,16 @@ function Info({ epoch, identity, shardKey }: { epoch: IEpoch; identity: IIdentit
         setRegistering(false);
         setRegisterMessage(response.message);
       } else {
-        setRegisterMessage(`Registration successul, the TxId ${response.transaction_id}`);
+        setRegisterMessage(`Registration successful, the TxId ${response.transaction_id}`);
       }
     });
   };
   const renderShardKey = () => {
     if (shardKey === null)
       return (
-        <>
-          <div className="label">Shard key</div>
-          <div>
+        <tr>
+          <td>Shard key</td>
+          <td>
             <span
               className={`${registering ? "disabled-button" : "button"}`}
               id="register"
@@ -52,29 +53,42 @@ function Info({ epoch, identity, shardKey }: { epoch: IEpoch; identity: IIdentit
               Register
             </span>
             {registerMessage ? <span>{registerMessage}</span> : null}
-          </div>
-        </>
+          </td>
+        </tr>
       );
     return (
-      <>
-        <div className="label">Shard key</div>
-        <div className="key">{shardKey}</div>
-      </>
+      <tr>
+        <th>Shard key</th>
+        <td className="key">{shardKey}</td>
+      </tr>
     );
   };
   return (
-    <div className="info">
-      <div className="label">Epoch</div>
-      <div className="">
-        {epoch.current_epoch} ({epoch.is_valid ? "Valid" : "Not valid"})
-      </div>
-      <div className="label">Node id</div>
-      <div className="key">{identity.node_id}</div>
-      <div className="label">Public address</div>
-      <div className="key">{identity.public_address}</div>
-      <div className="label">Public key</div>
-      <div className="key">{identity.public_key}</div>
-      {renderShardKey()}
+    <div className="section">
+      <div className="caption">Info</div>
+      <table className="info-table">
+        <tbody>
+          <tr>
+            <th>Epoch</th>
+            <td>
+              {epoch.current_epoch} ({epoch.is_valid ? "Valid" : "Not valid"})
+            </td>
+          </tr>
+          <tr>
+            <th>Node id</th>
+            <td className="key">{identity.node_id}</td>
+          </tr>
+          <tr>
+            <th>Public address</th>
+            <td className="key">{identity.public_address}</td>
+          </tr>
+          <tr>
+            <th>Public key</th>
+            <td className="key">{identity.public_key}</td>
+          </tr>
+          {renderShardKey()}
+        </tbody>
+      </table>
     </div>
   );
 }

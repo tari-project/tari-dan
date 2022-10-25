@@ -45,6 +45,7 @@ impl<'a, TGlobalDbAdapter: GlobalDbAdapter> MetadataDb<'a, TGlobalDbAdapter> {
 
 #[derive(Debug, Clone, Copy)]
 pub enum MetadataKey {
+    BaseLayerScannerLastScannedTip,
     BaseLayerScannerLastScannedBlockHeight,
     BaseLayerScannerLastScannedBlockHash,
     CurrentEpoch,
@@ -54,6 +55,7 @@ pub enum MetadataKey {
 impl MetadataKey {
     pub fn as_key_bytes(self) -> &'static [u8] {
         match self {
+            MetadataKey::BaseLayerScannerLastScannedTip => b"base_layer_scanner.last_scanned_tip",
             MetadataKey::BaseLayerScannerLastScannedBlockHash => b"base_layer_scanner.last_scanned_block_hash",
             MetadataKey::BaseLayerScannerLastScannedBlockHeight => b"base_layer_scanner.last_scanned_block_height",
             MetadataKey::CurrentEpoch => b"current_epoch",

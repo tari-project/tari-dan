@@ -76,10 +76,13 @@ function Committees({
     return <div className="commiittees">Committees are loading</div>;
   }
   return (
-    <div className="committees">
-      {committees.map(([begin, end, committee]) => (
-        <Committee key={begin} begin={begin} end={end} members={committee} publicKey={publicKey} />
-      ))}
+    <div className="section">
+      <div className="caption">Committees</div>
+      <div className="committees">
+        {committees.map(([begin, end, committee]) => (
+          <Committee key={begin} begin={begin} end={end} members={committee} publicKey={publicKey} />
+        ))}
+      </div>
     </div>
   );
 }
