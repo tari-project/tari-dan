@@ -24,10 +24,9 @@ use std::convert::TryInto;
 
 use log::*;
 use tari_common_types::types::{FixedHash, FixedHashSizeError};
-use tari_core::transactions::transaction_components::{
-    CodeTemplateRegistration,
-    SideChainFeature,
-    ValidatorNodeRegistration,
+use tari_core::{
+    consensus::ConsensusConstants,
+    transactions::transaction_components::{CodeTemplateRegistration, SideChainFeature, ValidatorNodeRegistration},
 };
 use tari_crypto::tari_utilities::ByteArray;
 use tari_dan_common_types::optional::Optional;
@@ -169,6 +168,8 @@ impl BaseLayerScanner {
     async fn scan_blockchain(&mut self) -> Result<(), BaseLayerScannerError> {
         // fetch the new base layer info since the previous scan
         let tip = self.base_node_client.get_tip_info().await?;
+        let consensus_constants = self.get_consensus_constants().await?;
+
         match self.get_blockchain_progression(&tip).await? {
             BlockchainProgression::Progressed => {
                 info!(
@@ -195,6 +196,13 @@ impl BaseLayerScanner {
         }
 
         Ok(())
+    }
+
+    async fn get_consensus_constants(&mut self) -> Result<ConsensusConstants, BaseLayerScannerError> {
+        self.base_node_client
+            .get_consensus_constants()
+            .await
+            .map_err(|e| BaseLayerScannerError::BaseNodeError(e))
     }
 
     async fn get_blockchain_progression(
