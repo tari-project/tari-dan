@@ -20,12 +20,7 @@
 //   WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //   USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use std::{
-    str::FromStr,
-    sync::Arc,
-    thread::{self, JoinHandle},
-    time::Duration,
-};
+use std::{str::FromStr, sync::Arc, time::Duration};
 
 use rand::rngs::OsRng;
 use tari_base_node::{run_base_node, BaseNodeConfig, MetricsConfig};
@@ -34,7 +29,7 @@ use tari_comms::{multiaddr::Multiaddr, peer_manager::PeerFeatures, NodeIdentity}
 use tari_comms_dht::DhtConfig;
 use tari_p2p::{auto_update::AutoUpdateConfig, Network, PeerSeedsConfig, TransportType};
 use tempfile::tempdir;
-use tokio::runtime;
+use tokio::task;
 
 use crate::TariWorld;
 
@@ -44,18 +39,18 @@ pub struct BaseNodeProcess {
     pub port: u64,
     pub grpc_port: u64,
     pub identity: NodeIdentity,
-    pub handle: JoinHandle<()>,
+    pub handle: task::JoinHandle<()>,
 }
 
-pub fn spawn_base_node(world: &mut TariWorld, bn_name: String) {
+pub async fn spawn_base_node(world: &mut TariWorld, bn_name: String) {
     // TODO: use different ports on each spawned base node
-    let port = 8000;
-    let grpc_port = 18152;
+    let port = 48000;
+    let grpc_port = 48152;
     let base_node_address = Multiaddr::from_str(&format!("/ip4/127.0.0.1/tcp/{}", port)).unwrap();
     let base_node_identity = NodeIdentity::random(&mut OsRng, base_node_address, PeerFeatures::COMMUNICATION_NODE);
     let identity = base_node_identity.clone();
 
-    let handle = thread::spawn(move || {
+    let handle = task::spawn(async move {
         let mut base_node_config = tari_base_node::ApplicationConfig {
             common: CommonConfig::default(),
             auto_update: AutoUpdateConfig::default(),
@@ -68,8 +63,8 @@ pub fn spawn_base_node(world: &mut TariWorld, bn_name: String) {
         println!("Using base_node temp_dir: {}", temp_dir.path().display());
         base_node_config.base_node.network = Network::LocalNet;
         base_node_config.base_node.grpc_enabled = true;
-        base_node_config.base_node.grpc_address =
-            Some(Multiaddr::from_str(&format!("/ip4/127.0.0.1/tcp/{}", grpc_port)).unwrap());
+        base_node_config.base_node.grpc_address = Some(format!("/ip4/127.0.0.1/tcp/{}", grpc_port).parse().unwrap());
+        base_node_config.base_node.report_grpc_error = true;
 
         base_node_config.base_node.data_dir = temp_dir.path().to_path_buf();
         base_node_config.base_node.identity_file = temp_dir.path().join("base_node_id.json");
@@ -78,19 +73,15 @@ pub fn spawn_base_node(world: &mut TariWorld, bn_name: String) {
         base_node_config.base_node.lmdb_path = temp_dir.path().to_path_buf();
         base_node_config.base_node.p2p.transport.transport_type = TransportType::Tcp;
         base_node_config.base_node.p2p.transport.tcp.listener_address =
-            Multiaddr::from_str(&format!("/ip4/127.0.0.1/tcp/{}", port)).unwrap();
+            format!("/ip4/127.0.0.1/tcp/{}", port).parse().unwrap();
         base_node_config.base_node.p2p.public_address =
             Some(base_node_config.base_node.p2p.transport.tcp.listener_address.clone());
         base_node_config.base_node.p2p.datastore_path = temp_dir.path().to_path_buf();
         base_node_config.base_node.p2p.dht = DhtConfig::default_local_test();
 
-        let mut builder = runtime::Builder::new_multi_thread();
-        let rt = builder.enable_all().build().unwrap();
-
-        let result = rt.block_on(run_base_node(Arc::new(base_node_identity), Arc::new(base_node_config)));
+        let result = run_base_node(Arc::new(base_node_identity), Arc::new(base_node_config)).await;
         if let Err(e) = result {
-            println!("{:?}", e);
-            panic!();
+            panic!("{:?}", e);
         }
     });
 
@@ -106,5 +97,5 @@ pub fn spawn_base_node(world: &mut TariWorld, bn_name: String) {
 
     // We need to give it time for the base node to startup
     // TODO: it would be better to scan the base node to detect when it has started
-    thread::sleep(Duration::from_secs(5));
+    tokio::time::sleep(Duration::from_secs(5)).await;
 }

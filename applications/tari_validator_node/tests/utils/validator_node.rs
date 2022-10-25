@@ -20,23 +20,18 @@
 //   WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //   USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use std::{
-    str::FromStr,
-    thread::{self, JoinHandle},
-    time::Duration,
-};
+use std::{str::FromStr, time::Duration};
 
-use axum::http::HeaderMap;
-use reqwest::{header, Response, Url};
-use serde_json::json;
+use reqwest::Url;
 use tari_app_utilities::common_cli_args::CommonCliArgs;
 use tari_common::configuration::CommonConfig;
 use tari_comms::multiaddr::Multiaddr;
 use tari_comms_dht::DhtConfig;
 use tari_p2p::{Network, PeerSeedsConfig, TransportType};
 use tari_validator_node::{cli::Cli, run_validator_node_with_cli, ApplicationConfig, ValidatorNodeConfig};
+use tari_validator_node_client::ValidatorNodeClient;
 use tempfile::tempdir;
-use tokio::runtime;
+use tokio::task;
 
 use crate::TariWorld;
 
@@ -45,22 +40,22 @@ pub struct ValidatorNodeProcess {
     pub name: String,
     pub port: u64,
     pub json_rpc_port: u64,
-    pub handle: JoinHandle<()>,
+    pub handle: task::JoinHandle<()>,
 }
 
-pub fn spawn_validator_node(
+pub async fn spawn_validator_node(
     world: &mut TariWorld,
     validator_node_name: String,
     base_node_name: String,
     wallet_name: String,
 ) {
     // TODO: use different ports on each spawned vn
-    let port = 8003;
-    let json_rpc_port = 18145;
+    let port = 48003;
+    let json_rpc_port = 48145;
     let base_node_grpc_port = world.base_nodes.get(&base_node_name).unwrap().grpc_port;
     let wallet_grpc_port = world.wallets.get(&wallet_name).unwrap().grpc_port;
 
-    let handle = thread::spawn(move || {
+    let handle = task::spawn(async move {
         let mut config = ApplicationConfig {
             common: CommonConfig::default(),
             validator_node: ValidatorNodeConfig::default(),
@@ -90,8 +85,7 @@ pub fn spawn_validator_node(
 
         let data_dir = config.validator_node.data_dir.clone();
         let data_dir_str = data_dir.clone().into_os_string().into_string().unwrap();
-        let mut config_path = data_dir;
-        config_path.push("config.toml");
+        let config_path = data_dir.join("config.toml");
         let cli = Cli {
             common: CommonCliArgs {
                 base_path: data_dir_str,
@@ -105,12 +99,9 @@ pub fn spawn_validator_node(
             json_rpc_address: Some(format!("127.0.0.1:{}", json_rpc_port).parse().unwrap()),
         };
 
-        let mut builder = runtime::Builder::new_multi_thread();
-        let rt = builder.enable_all().build().unwrap();
-        let result = rt.block_on(run_validator_node_with_cli(&config, &cli));
+        let result = run_validator_node_with_cli(&config, &cli).await;
         if let Err(e) = result {
-            println!("{:?}", e);
-            panic!();
+            panic!("{:?}", e);
         }
     });
 
@@ -127,33 +118,10 @@ pub fn spawn_validator_node(
 
     // We need to give it time for the VN to startup
     // TODO: it would be better to scan the VN to detect when it has started
-    thread::sleep(Duration::from_secs(5));
+    tokio::time::sleep(Duration::from_secs(5)).await;
 }
 
-pub async fn send_vn_json_rpc_request<T: Into<serde_json::Value>>(port: u64, method: String, body: T) -> Response {
+pub async fn get_vn_client(port: u64) -> ValidatorNodeClient {
     let endpoint: Url = Url::parse(&format!("http://localhost:{}", port)).unwrap();
-    let client = reqwest::Client::builder()
-        .default_headers({
-            let mut headers = HeaderMap::with_capacity(1);
-            headers.insert(header::CONTENT_TYPE, "application/json".parse().unwrap());
-            headers
-        })
-        .connect_timeout(Duration::from_secs(5))
-        .timeout(Duration::from_secs(10))
-        .build()
-        .unwrap();
-    let request_json = json!(
-        {
-            "jsonrpc": "2.0",
-            "id": 1,
-            "method": method,
-            "params": body.into(),
-        }
-    );
-    client
-        .post(endpoint.clone())
-        .body(request_json.to_string())
-        .send()
-        .await
-        .unwrap()
+    ValidatorNodeClient::connect(endpoint).unwrap()
 }

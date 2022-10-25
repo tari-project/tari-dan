@@ -28,6 +28,13 @@ use tari_dan_common_types::{serde_with, Epoch, ShardId, SubstateState};
 use tari_engine_types::{instruction::Instruction, signature::InstructionSignature, TemplateAddress};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct GetIdentityResponse {
+    pub node_id: String,
+    pub public_key: String,
+    pub public_address: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TemplateRegistrationRequest {
     pub template_name: String,
     pub template_version: u16,
