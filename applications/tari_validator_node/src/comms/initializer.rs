@@ -110,7 +110,9 @@ pub async fn initialize(
     // };
     // add_seed_peers(&peer_manager, &node_identity, peers).await?;
     //
-    add_seed_peers(&comms.peer_manager(), &comms.node_identity(), seed_peers).await?;
+    let peer_manager = comms.peer_manager();
+    let node_identity = comms.node_identity();
+    add_seed_peers(&peer_manager, &node_identity, seed_peers).await?;
 
     debug!(target: LOG_TARGET, "DAN comms Initialized");
     Ok((comms, message_channel))

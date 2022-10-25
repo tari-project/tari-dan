@@ -26,20 +26,17 @@ use std::process;
 
 use clap::Parser;
 use log::*;
-use tari_common::{
-    exit_codes::{ExitCode, ExitError},
-    load_configuration,
-};
+use tari_common::{exit_codes::ExitError, load_configuration};
 use tari_validator_node::{cli::Cli, run_validator_node_with_cli, ApplicationConfig};
-use tokio::{runtime, runtime::Runtime};
 
 const LOG_TARGET: &str = "tari::validator_node::app";
 
-fn main() {
+#[tokio::main]
+async fn main() {
     // Uncomment to enable tokio tracing via tokio-console
     // console_subscriber::init();
 
-    if let Err(err) = main_inner() {
+    if let Err(err) = main_inner().await {
         let exit_code = err.exit_code;
         eprintln!("{:?}", err);
         error!(
@@ -50,22 +47,13 @@ fn main() {
     }
 }
 
-fn main_inner() -> Result<(), ExitError> {
+async fn main_inner() -> Result<(), ExitError> {
     let cli = Cli::parse();
     let config_path = cli.common.config_path();
     let cfg = load_configuration(config_path, true, &cli)?;
     let config = ApplicationConfig::load_from(&cfg)?;
     println!("Starting validator node on network {}", config.network);
-    let runtime = build_runtime()?;
-    runtime.block_on(run_validator_node_with_cli(&config, &cli))?;
+    run_validator_node_with_cli(&config, &cli).await?;
 
     Ok(())
-}
-
-fn build_runtime() -> Result<Runtime, ExitError> {
-    let mut builder = runtime::Builder::new_multi_thread();
-    builder
-        .enable_all()
-        .build()
-        .map_err(|e| ExitError::new(ExitCode::UnknownError, e))
 }

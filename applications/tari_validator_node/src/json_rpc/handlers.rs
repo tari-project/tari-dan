@@ -32,7 +32,7 @@ use log::*;
 use serde::Serialize;
 use serde_json::{self as json, json};
 use tari_comms::{multiaddr::Multiaddr, peer_manager::NodeId, types::CommsPublicKey, CommsNode, NodeIdentity};
-use tari_dan_common_types::serde_with;
+use tari_crypto::tari_utilities::hex::Hex;
 use tari_dan_core::{
     services::{epoch_manager::EpochManager, BaseNodeClient},
     storage::shard_store::{ShardStoreFactory, ShardStoreTransaction},
@@ -43,6 +43,7 @@ use tari_dan_storage_sqlite::sqlite_shard_store_factory::SqliteShardStoreFactory
 use tari_template_lib::Hash;
 use tari_validator_node_client::types::{
     GetCommitteeRequest,
+    GetIdentityResponse,
     GetShardKey,
     GetTemplateRequest,
     GetTemplateResponse,
@@ -114,9 +115,9 @@ impl JsonRpcHandlers {
     pub fn get_identity(&self, value: JsonRpcExtractor) -> JrpcResult {
         let answer_id = value.get_answer_id();
         let response = GetIdentityResponse {
-            node_id: self.node_identity.node_id().clone(),
-            public_key: self.node_identity.public_key().clone(),
-            public_address: self.node_identity.public_address(),
+            node_id: self.node_identity.node_id().to_hex(),
+            public_key: self.node_identity.public_key().to_hex(),
+            public_address: self.node_identity.public_address().to_string(),
         };
 
         Ok(JsonRpcResponse::success(answer_id, response))
@@ -412,14 +413,6 @@ impl JsonRpcHandlers {
             ))
         }
     }
-}
-
-#[derive(Serialize, Debug)]
-struct GetIdentityResponse {
-    #[serde(with = "serde_with::hex")]
-    node_id: NodeId,
-    public_key: CommsPublicKey,
-    public_address: Multiaddr,
 }
 
 #[derive(Serialize, Debug)]
