@@ -44,7 +44,7 @@ message QuorumCertificate {
 
 message HotStuffTreeNode {
   bytes parent = 1;
-  bytes payload = 2;
+  bytes payload_id = 2;
   uint64 height = 3;
   bytes shard = 4;
   uint64 payload_height = 5;
@@ -52,6 +52,7 @@ message HotStuffTreeNode {
   uint64 epoch = 7;
   bytes proposed_by = 8;
   QuorumCertificate justify = 9;
+  optional TariDanPayload payload = 10;
 }
 
 message ValidatorSignature {

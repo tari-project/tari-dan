@@ -284,7 +284,6 @@ impl JsonRpcHandlers {
                 //  response.connections.push(Connection { node_id: (), public_key: (), address: (), direction: (), age:
                 //                                                                                      (), user_agent:
                 // (), Info: () })
-                println!("peer {:?}", peer);
                 response.connections.push(Connection {
                     node_id: peer.node_id,
                     public_key: peer.public_key,
