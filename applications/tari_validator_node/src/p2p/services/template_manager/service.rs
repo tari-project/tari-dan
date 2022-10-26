@@ -20,6 +20,8 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+use std::convert::TryInto;
+
 use log::*;
 use tari_dan_core::services::TemplateProvider;
 use tari_dan_engine::packager::TemplateModuleLoader;
@@ -149,8 +151,8 @@ impl TemplateManagerService {
                 );
 
                 // validation of the downloaded template binary hash
-                let actual_binary_sha = calculate_template_binary_hash(&bytes);
-                let template_status = if actual_binary_sha.to_vec() == download.expected_binary_sha.to_vec() {
+                let actual_binary_hash = calculate_template_binary_hash(&bytes);
+                let template_status = if actual_binary_hash == download.expected_binary_hash {
                     TemplateStatus::Active
                 } else {
                     warn!(
@@ -181,7 +183,13 @@ impl TemplateManagerService {
     async fn handle_add_template(&mut self, template: TemplateRegistration) -> Result<(), TemplateManagerError> {
         let address = template.template_address;
         let url = template.registration.binary_url.to_string();
-        let expected_binary_sha = template.registration.binary_sha.clone();
+        let expected_binary_hash = template
+            .registration
+            .binary_sha
+            .clone()
+            .into_vec()
+            .try_into()
+            .map_err(|_| TemplateManagerError::InvalidBaseLayerTemplate)?;
         self.manager.add_template(template)?;
         // We could queue this up much later, at which point we'd update to pending
         self.manager.update_template(address, DbTemplateUpdate {
@@ -194,7 +202,7 @@ impl TemplateManagerService {
             .send(DownloadRequest {
                 address,
                 url,
-                expected_binary_sha,
+                expected_binary_hash,
             })
             .await;
         info!(target: LOG_TARGET, "⏳️️ Template {} queued for download", address);

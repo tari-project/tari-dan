@@ -29,16 +29,18 @@ use thiserror::Error;
 
 #[derive(Error, Debug)]
 pub enum TemplateManagerError {
+    #[error("The template in the base layer is invalid")]
+    InvalidBaseLayerTemplate,
     #[error("There was an error sending to a channel")]
     SendError,
-    #[error("The hash of the template code does not match the metadata")]
-    TemplateCodeHashMismatch,
     #[error("Storage error: {0}")]
     StorageError(#[from] StorageError),
     #[error("Storage error: {0}")]
     SqliteStorageError(#[from] SqliteStorageError),
     #[error("Template not found: {address}")]
     TemplateNotFound { address: TemplateAddress },
+    #[error("The template is unavailable for use")]
+    TemplateUnavailable,
     #[error(transparent)]
     PackageError(#[from] PackageError),
 }
