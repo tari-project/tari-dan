@@ -20,9 +20,10 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use std::convert::TryInto;
+use std::convert::TryFrom;
 
 use log::*;
+use tari_common_types::types::FixedHash;
 use tari_dan_core::services::TemplateProvider;
 use tari_dan_engine::packager::TemplateModuleLoader;
 use tari_dan_storage::global::{DbTemplateUpdate, TemplateStatus};
@@ -183,12 +184,7 @@ impl TemplateManagerService {
     async fn handle_add_template(&mut self, template: TemplateRegistration) -> Result<(), TemplateManagerError> {
         let address = template.template_address;
         let url = template.registration.binary_url.to_string();
-        let expected_binary_hash = template
-            .registration
-            .binary_sha
-            .clone()
-            .into_vec()
-            .try_into()
+        let expected_binary_hash = FixedHash::try_from(template.registration.binary_sha.clone().into_vec())
             .map_err(|_| TemplateManagerError::InvalidBaseLayerTemplate)?;
         self.manager.add_template(template)?;
         // We could queue this up much later, at which point we'd update to pending
