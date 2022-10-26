@@ -62,10 +62,25 @@ The easiest way to create a template is with the template at https://github.com/
 cargo generate https://github.com/tari-project/wasm-template.git
 ```
 
+Install the `wasm32-unknown-unknown` target with rustup
+
+```
+rustup target add wasm32-unknown-unknown
+```
+
+In the directory you created run:
+
+```
+cd package
+cargo wasm-build
+```
+
+Upload the WASM file created in `package/target/wasm32-unknown-unknown/release` to an HTTP server (or IPFS).
+
 After editing the project, you can deploy the project using the validator_node_cli:
 
 ```
-cargo run --bin tari_validator_node_cli -- templates publish
+cargo run --bin tari_validator_node_cli -- templates publish 
 ```
 
 (See help on tari_validator_node_cli for more details)
