@@ -230,6 +230,7 @@ impl BaseLayerScanner {
         }
     }
 
+    #[allow(clippy::too_many_lines)]
     async fn sync_blockchain(&mut self) -> Result<(), BaseLayerScannerError> {
         let start_scan_height = self.last_scanned_height;
         let mut current_hash = self.last_scanned_hash;
