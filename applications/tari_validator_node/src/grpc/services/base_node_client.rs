@@ -36,7 +36,7 @@ use tari_dan_core::{
     services::{base_node_error::BaseNodeError, BaseNodeClient, BlockInfo, SideChainUtxos},
 };
 
-use crate::consensus_constants::ConsensusConstants;
+use crate::consensus_constants::BaseLayerConsensusConstants;
 
 const LOG_TARGET: &str = "tari::validator_node::app";
 
@@ -62,13 +62,16 @@ impl GrpcBaseNodeClient {
         self.client.as_mut().ok_or(BaseNodeError::ConnectionError)
     }
 
-    pub async fn get_consensus_constants(&mut self, block_height: u64) -> Result<ConsensusConstants, BaseNodeError> {
+    pub async fn get_consensus_constants(
+        &mut self,
+        block_height: u64,
+    ) -> Result<BaseLayerConsensusConstants, BaseNodeError> {
         let inner = self.connection().await?;
 
         let request = grpc::BlockHeight { block_height };
         let result = inner.get_constants(request).await?.into_inner();
 
-        let consensus_constants = ConsensusConstants::devnet(result.validator_node_timeout);
+        let consensus_constants = BaseLayerConsensusConstants::new(result.validator_node_timeout);
         Ok(consensus_constants)
     }
 }

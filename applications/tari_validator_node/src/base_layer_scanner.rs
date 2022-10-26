@@ -261,7 +261,7 @@ impl BaseLayerScanner {
                     ))
                 })?;
             let block_info = utxos.block_info;
-            // TODO: Because we dont know the next hash when we're done scanning to the tip, we need to load the
+            // TODO: Because we don't know the next hash when we're done scanning to the tip, we need to load the
             //       previous scanned block again to get it.  This isn't ideal, but won't be an issue when we scan a few
             //       blocks back.
             if self.last_scanned_hash.map(|h| h == block_info.hash).unwrap_or(false) {
@@ -288,7 +288,7 @@ impl BaseLayerScanner {
                             .base_node_client
                             .get_consensus_constants(tip.height_of_longest_chain)
                             .await?
-                            .validator_node_timeout;
+                            .get_validator_node_timeout();
                         if current_height.checked_sub(self.last_scanned_height).ok_or(
                             BaseLayerScannerError::DataCorruption {
                                 details: format!(
