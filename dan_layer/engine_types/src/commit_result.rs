@@ -20,37 +20,38 @@
 //   WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //   USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use std::{
-    fmt::Display,
-    time::{Duration, SystemTime, UNIX_EPOCH},
-};
+use serde::{Deserialize, Serialize};
+use tari_template_lib::Hash;
 
-use tari_template_lib::args::LogLevel;
+use crate::{execution_result::ExecutionResult, logs::LogEntry, substate::SubstateDiff};
 
-#[derive(Debug, Clone)]
-pub struct LogEntry {
-    pub timestamp: u64,
-    pub message: String,
-    pub level: LogLevel,
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct FinalizeResult {
+    pub transaction_hash: Hash,
+    pub logs: Vec<LogEntry>,
+    pub execution_results: Vec<ExecutionResult>,
+    pub result: TransactionResult,
 }
 
-impl LogEntry {
-    pub fn new(level: LogLevel, message: String) -> Self {
-        let now = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            // If the errors, the clock has been set before the UNIX_EPOCH
-            .unwrap_or_else(|_| Duration::from_secs(0))
-            .as_secs();
+impl FinalizeResult {
+    pub fn new(transaction_hash: Hash, logs: Vec<LogEntry>, result: TransactionResult) -> Self {
         Self {
-            timestamp: now,
-            message,
-            level,
+            transaction_hash,
+            logs,
+            execution_results: Vec::new(),
+            result,
         }
     }
 }
 
-impl Display for LogEntry {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{} {} {}", self.timestamp, self.level, self.message)
-    }
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum TransactionResult {
+    Accept(SubstateDiff),
+    Reject(RejectResult),
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RejectResult {
+    // TODO: This should contain data required for a rejection vote
+    pub reason: String,
 }

@@ -55,33 +55,19 @@ impl AtomicDb for SqliteGlobalDbAdapter {
 
     fn create_transaction(&self) -> Result<Self::DbTransaction, Self::Error> {
         let connection = SqliteConnection::establish(self.database_url.as_str())?;
-
         connection
             .execute("PRAGMA foreign_keys = ON;")
             .map_err(|source| SqliteStorageError::DieselError {
                 source,
                 operation: "set pragma".to_string(),
             })?;
-        connection
-            .execute("BEGIN TRANSACTION;")
-            .map_err(|source| SqliteStorageError::DieselError {
-                source,
-                operation: "begin transaction".to_string(),
-            })?;
 
-        Ok(SqliteTransaction::new(connection))
+        let tx = SqliteTransaction::begin(connection)?;
+        Ok(tx)
     }
 
     fn commit(&self, transaction: Self::DbTransaction) -> Result<(), Self::Error> {
-        transaction
-            .connection()
-            .execute("COMMIT;")
-            .map_err(|source| SqliteStorageError::DieselError {
-                source,
-                operation: "commit".to_string(),
-            })?;
-
-        Ok(())
+        transaction.commit()
     }
 }
 

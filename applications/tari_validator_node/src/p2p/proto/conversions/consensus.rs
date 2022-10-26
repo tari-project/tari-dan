@@ -40,6 +40,7 @@ use tari_dan_core::models::{
     TreeNodeHash,
     ValidatorSignature,
 };
+use tari_engine_types::substate::Substate;
 
 use crate::p2p::proto;
 
@@ -264,7 +265,7 @@ impl TryFrom<proto::consensus::SubstateState> for SubstateState {
             Some(State::DoesNotExist(_)) => Ok(Self::DoesNotExist),
             Some(State::Up(up)) => Ok(Self::Up {
                 created_by: up.created_by.try_into()?,
-                data: up.data,
+                data: Substate::from_bytes(&up.data)?,
             }),
             Some(State::Down(down)) => Ok(Self::Down {
                 deleted_by: down.deleted_by.try_into()?,
@@ -284,7 +285,7 @@ impl From<SubstateState> for proto::consensus::SubstateState {
             SubstateState::Up { created_by, data } => Self {
                 state: Some(State::Up(proto::consensus::UpState {
                     created_by: created_by.as_bytes().to_vec(),
-                    data,
+                    data: data.to_bytes(),
                 })),
             },
             SubstateState::Down { deleted_by } => Self {

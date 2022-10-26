@@ -25,6 +25,7 @@ use std::collections::HashMap;
 use tari_template_abi::{Decode, Encode};
 
 #[derive(Clone, Debug, Decode, Encode, Default)]
+#[cfg_attr(feature = "serde", derive(serde::Deserialize, serde::Serialize))]
 pub struct Metadata {
     metadata: HashMap<Vec<u8>, Vec<u8>>,
 }

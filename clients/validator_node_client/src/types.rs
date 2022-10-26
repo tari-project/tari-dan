@@ -20,12 +20,15 @@
 //   WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //   USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use std::collections::HashMap;
-
 use serde::{Deserialize, Serialize};
 use tari_common_types::types::{FixedHash, PublicKey};
-use tari_dan_common_types::{serde_with, Epoch, ShardId, SubstateState};
-use tari_engine_types::{instruction::Instruction, signature::InstructionSignature, TemplateAddress};
+use tari_dan_common_types::{serde_with, Epoch, ShardId};
+use tari_engine_types::{
+    commit_result::FinalizeResult,
+    instruction::Instruction,
+    signature::InstructionSignature,
+    TemplateAddress,
+};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct GetIdentityResponse {
@@ -134,7 +137,23 @@ pub struct SubmitTransactionRequest {
 pub struct SubmitTransactionResponse {
     #[serde(with = "serde_with::hex")]
     pub hash: FixedHash,
-    pub changes: HashMap<ShardId, SubstateState>,
+    // TODO: we should not return the whole state but only the addresses and perhaps a hash of the state
+    pub result: Option<FinalizeResult>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct LogEntry {
+    pub timestamp: u64,
+    pub message: String,
+    pub level: LogLevel,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+pub enum LogLevel {
+    Error,
+    Warn,
+    Info,
+    Debug,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

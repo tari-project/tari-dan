@@ -87,7 +87,7 @@ impl SqliteMessageLog {
         }
     }
 
-    pub fn connect(&self) -> Option<SqliteConnection> {
+    fn connect(&self) -> Option<SqliteConnection> {
         let database_url = &self.path;
 
         let _ = create_dir_all(database_url.parent().unwrap()).map_err(|e| {

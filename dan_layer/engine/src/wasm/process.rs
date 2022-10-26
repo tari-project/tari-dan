@@ -20,10 +20,9 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use std::io;
-
 use borsh::{BorshDeserialize, BorshSerialize};
-use tari_template_abi::{decode, encode, encode_into, encode_with_len, CallInfo, EngineOp, Type};
+use tari_engine_types::execution_result::ExecutionResult;
+use tari_template_abi::{decode, encode, encode_into, encode_with_len, CallInfo, EngineOp};
 use tari_template_lib::{
     args::{
         Arg,
@@ -207,26 +206,7 @@ impl Invokable for WasmProcess {
         // TODO: decode raw as per function def
         Ok(ExecutionResult {
             raw,
-            return_type: func_def.output.clone(),
+            return_type: func_def.output.clone().into(),
         })
-    }
-}
-
-#[derive(Debug, Clone)]
-pub struct ExecutionResult {
-    pub raw: Vec<u8>,
-    pub return_type: Type,
-}
-
-impl ExecutionResult {
-    pub fn decode<T: BorshDeserialize>(&self) -> io::Result<T> {
-        tari_template_abi::decode(&self.raw)
-    }
-
-    pub fn empty() -> Self {
-        ExecutionResult {
-            raw: Vec::new(),
-            return_type: Type::Unit,
-        }
     }
 }

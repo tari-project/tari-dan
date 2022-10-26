@@ -20,7 +20,7 @@
 //   WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //   USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use std::{collections::HashMap, sync::Arc, time::Duration};
+use std::{sync::Arc, time::Duration};
 
 use axum_jrpc::{
     error::{JsonRpcError, JsonRpcErrorReason},
@@ -155,7 +155,7 @@ impl JsonRpcHandlers {
 
         Ok(JsonRpcResponse::success(answer_id, SubmitTransactionResponse {
             hash: hash.into_array().into(),
-            changes: HashMap::new(),
+            result: None,
         }))
     }
 
@@ -439,11 +439,12 @@ async fn wait_for_result(
     loop {
         match tokio::time::timeout(timeout, subscription.recv()).await {
             Ok(res) => match res {
-                Ok(HotStuffEvent::OnCommit(_tree_node_hash, changes)) => {
+                Ok(HotStuffEvent::OnCommit(_tree_node_hash, mut results)) => {
                     // TODO: How do we correlate this to our transaction?
                     let response = SubmitTransactionResponse {
                         hash: hash.into_array().into(),
-                        changes,
+                        // TODO: There should probably only be one result (on_commit recursion)
+                        result: results.pop(),
                     };
                     return Ok(JsonRpcResponse::success(answer_id, response));
                 },

@@ -169,10 +169,10 @@ impl SqliteShardStoreTransaction {
         Self { connection }
     }
 
-    fn create_pledge(&mut self, shard: &Vec<u8>, obj: Substate) -> Result<ObjectPledge, StorageError> {
+    fn create_pledge(&mut self, shard: ShardId, obj: Substate) -> Result<ObjectPledge, StorageError> {
         use crate::schema::substates::{is_draft, node_height, shard_id};
         let current_state: Option<Substate> = substates
-            .filter(shard_id.eq(&shard).and(is_draft.eq(false)))
+            .filter(shard_id.eq(shard.as_bytes()).and(is_draft.eq(false)))
             .order_by(node_height.desc())
             .first(&self.connection)
             .optional()
@@ -181,12 +181,17 @@ impl SqliteShardStoreTransaction {
             })?;
 
         let pledge = ObjectPledge {
-            shard_id: ShardId::try_from(shard.as_slice())?,
+            shard_id: shard,
             current_state: current_state
                 .map(|s| match s.substate_type.as_str() {
                     "Up" => Ok(SubstateState::Up {
                         created_by: PayloadId::try_from(s.created_by_payload_id)?,
-                        data: s.data.unwrap_or_default(),
+                        data: s
+                            .data
+                            .map(|json| serde_json::from_str(&json))
+                            .transpose()?
+                            // TODO: substate data should not be an option?
+                            .expect("substate without data"),
                     }),
                     "Down" => Ok(SubstateState::Down {
                         deleted_by: PayloadId::try_from(s.deleted_by_payload_id.unwrap_or_default())?,
@@ -574,11 +579,11 @@ impl ShardStoreTransaction<PublicKey, TariDanPayload> for SqliteShardStoreTransa
         current_height: NodeHeight,
     ) -> Result<ObjectPledge, Self::Error> {
         use crate::schema::substates::{is_draft, node_height, shard_id};
-        let shard = Vec::from(shard.as_bytes());
+        let shard_vec = Vec::from(shard.as_bytes());
         let f_payload = Vec::from(payload.as_slice());
 
         let draft_object: Option<Substate> = substates
-            .filter(shard_id.eq(&shard).and(is_draft.eq(true)))
+            .filter(shard_id.eq(&shard_vec).and(is_draft.eq(true)))
             .order_by(node_height.desc())
             .first(&self.connection)
             .optional()
@@ -589,7 +594,7 @@ impl ShardStoreTransaction<PublicKey, TariDanPayload> for SqliteShardStoreTransa
         if let Some(obj) = draft_object {
             // TODO: write test for this logic
             if obj.pledged_until_height.unwrap_or_default() as u64 >= current_height.as_u64() {
-                return self.create_pledge(&shard, obj);
+                return self.create_pledge(shard, obj);
             }
         }
 
@@ -599,7 +604,7 @@ impl ShardStoreTransaction<PublicKey, TariDanPayload> for SqliteShardStoreTransa
                 SubstateChange::Create => "Up".to_string(),
                 SubstateChange::Destroy => "Down".to_string(),
             },
-            shard_id: shard.clone(),
+            shard_id: shard_vec.clone(),
             node_height: current_height.as_u64() as i64,
             data: None,
             created_by_payload_id: f_payload.clone(),
@@ -626,7 +631,7 @@ impl ShardStoreTransaction<PublicKey, TariDanPayload> for SqliteShardStoreTransa
         let draft_object: Substate = substates
             .filter(
                 shard_id
-                    .eq(&shard)
+                    .eq(&shard_vec)
                     .and(is_draft.eq(true))
                     .and(pledged_to_payload_id.eq(f_payload)),
             )
@@ -636,7 +641,7 @@ impl ShardStoreTransaction<PublicKey, TariDanPayload> for SqliteShardStoreTransa
                 reason: format!("Pledge object error: {}", e),
             })?;
 
-        self.create_pledge(&shard, draft_object)
+        self.create_pledge(shard, draft_object)
     }
 
     fn set_last_executed_height(&mut self, shard: ShardId, height: NodeHeight) -> Result<(), Self::Error> {
@@ -705,7 +710,7 @@ impl ShardStoreTransaction<PublicKey, TariDanPayload> for SqliteShardStoreTransa
                 substate_type.eq(st_change.as_str().to_string()),
                 data.eq(match st_change {
                     SubstateState::DoesNotExist => None,
-                    SubstateState::Up { data: d, .. } => Some(d.clone()),
+                    SubstateState::Up { data: d, .. } => Some(serde_json::to_string_pretty(d)?),
                     SubstateState::Down { .. } => None,
                 }),
                 justify.eq(Some(json!(node.justify()).to_string())),
@@ -721,7 +726,7 @@ impl ShardStoreTransaction<PublicKey, TariDanPayload> for SqliteShardStoreTransa
                     node_height: node.height().as_u64() as i64,
                     data: match st_change {
                         SubstateState::DoesNotExist => None,
-                        SubstateState::Up { data: d, .. } => Some(d.clone()),
+                        SubstateState::Up { data: d, .. } => Some(serde_json::to_string_pretty(d)?),
                         SubstateState::Down { .. } => None,
                     },
                     created_by_payload_id: payload_id.clone(),
@@ -792,7 +797,13 @@ impl ShardStoreTransaction<PublicKey, TariDanPayload> for SqliteShardStoreTransa
                 .map(|ss| match ss.substate_type.as_str() {
                     "Up" => Ok(SubstateState::Up {
                         created_by: PayloadId::try_from(ss.created_by_payload_id.clone())?,
-                        data: ss.data.clone().unwrap_or_default(),
+                        data: ss
+                            .data
+                            .as_ref()
+                            .map(|json| serde_json::from_str(json))
+                            .transpose()?
+                            // TODO: substate data should not be an option?
+                            .expect("substate without data"),
                     }),
                     "Down" => Ok(SubstateState::Down {
                         deleted_by: PayloadId::try_from(ss.deleted_by_payload_id.clone().unwrap_or_default())?,

@@ -29,10 +29,11 @@ use tari_dan_core::{
 };
 use tari_dan_engine::{
     packager::{Package, TemplateModuleLoader},
-    runtime::{FinalizeResult, RuntimeInterfaceImpl, StateTracker, Substate, SubstateValue},
+    runtime::{RuntimeInterfaceImpl, StateTracker},
     state_store::{memory::MemoryStateStore, AtomicDb, StateWriter},
     transaction::TransactionProcessor,
 };
+use tari_engine_types::{commit_result::FinalizeResult, substate::SubstateValue};
 
 #[derive(Debug, Default)]
 pub struct TariDanPayloadProcessor<TTemplateProvider> {
@@ -94,16 +95,15 @@ fn create_populated_state_store<I: IntoIterator<Item = ObjectPledge>>(inputs: I)
         match input.current_state {
             SubstateState::Up { data, .. } => {
                 // TODO: Engine should be able to read SubstateValue
-                let val = SubstateValue::from_bytes(&data).unwrap();
-                match val.into_substate() {
-                    Substate::Component(component) => {
+                match data.into_substate() {
+                    SubstateValue::Component(component) => {
                         tx.set_state_raw(
                             input.shard_id.as_bytes(),
                             tari_dan_engine::abi::encode(&component).unwrap(),
                         )
                         .unwrap();
                     },
-                    Substate::Resource(resx) => {
+                    SubstateValue::Resource(resx) => {
                         tx.set_state_raw(input.shard_id.as_bytes(), tari_dan_engine::abi::encode(&resx).unwrap())
                             .unwrap();
                     },
