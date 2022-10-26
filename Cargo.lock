@@ -5544,6 +5544,7 @@ dependencies = [
  "tari_common",
  "tari_common_types",
  "tari_crypto",
+ "tari_engine_types",
  "tari_utilities",
 ]
 
@@ -5679,6 +5680,7 @@ dependencies = [
  "tari_template_abi",
  "tari_template_lib",
  "tari_utilities",
+ "thiserror",
 ]
 
 [[package]]

@@ -25,7 +25,7 @@ use std::collections::HashMap;
 use futures::future::join_all;
 use log::{debug, error, info};
 use tari_dan_common_types::{Epoch, PayloadId, ShardId, SubstateState};
-use tari_dan_engine::runtime::TransactionResult;
+use tari_engine_types::commit_result::FinalizeResult;
 use tari_shutdown::ShutdownSignal;
 use tokio::{
     sync::{
@@ -385,10 +385,8 @@ where
         if node.justify().payload_height() == NodeHeight(2) {
             // decide
             debug!(target: LOG_TARGET, "Deciding on payload: {:?}", node.payload());
-            let changes = self.on_commit(node, shard, &mut tx)?;
-            if !changes.is_empty() {
-                self.publish_event(HotStuffEvent::OnCommit(node_hash, changes));
-            }
+            let results = self.on_commit(node, shard, &mut tx)?;
+            self.publish_event(HotStuffEvent::OnCommit(node_hash, results));
         }
         tx.commit().map_err(|e| e.into())?;
 
@@ -400,12 +398,12 @@ where
         node: HotStuffTreeNode<TAddr>,
         shard: ShardId,
         tx: &mut TShardStore::Transaction,
-    ) -> Result<HashMap<ShardId, SubstateState>, HotStuffError> {
-        let mut changes = HashMap::new();
+    ) -> Result<Vec<FinalizeResult>, HotStuffError> {
+        let mut results = Vec::new();
         if tx.get_last_executed_height(shard).map_err(|e| e.into())? < node.height() {
             if node.parent() != &TreeNodeHash::zero() {
                 let parent = tx.get_node(node.parent()).map_err(|e| e.into())?;
-                changes.extend(self.on_commit(parent, shard, tx)?);
+                results.extend(self.on_commit(parent, shard, tx)?);
             }
             if node.justify().payload_height() == NodeHeight(2) {
                 let payload = tx.get_payload(&node.justify().payload_id()).map_err(|e| e.into())?;
@@ -419,42 +417,24 @@ where
                 {
                     all_pledges.insert(*shard_id, pledges.clone());
                 }
-                changes.extend(self.execute(all_pledges, payload)?);
+                let payload_id = payload.to_id();
+                results.push(self.execute(all_pledges, payload)?);
+                let changes = extract_changes(payload_id, &results)?;
                 tx.save_substate_changes(&changes, &node).map_err(|e| e.into())?;
             }
             tx.set_last_executed_height(shard, node.height())
                 .map_err(|e| e.into())?;
         }
-        Ok(changes)
+        Ok(results)
     }
 
     fn execute(
         &mut self,
         shard_pledges: HashMap<ShardId, Vec<ObjectPledge>>,
         payload: TPayload,
-    ) -> Result<HashMap<ShardId, SubstateState>, HotStuffError> {
-        let payload_id = payload.to_id();
+    ) -> Result<FinalizeResult, HotStuffError> {
         let finalize = self.payload_processor.process_payload(payload, shard_pledges)?;
-        match finalize.result {
-            TransactionResult::Accept(diff) => {
-                let changes = diff
-                    .up_iter()
-                    .map(|(shard, substate)| {
-                        (*shard, SubstateState::Up {
-                            created_by: payload_id,
-                            data: substate.to_bytes(),
-                        })
-                    })
-                    .chain(
-                        diff.down_iter()
-                            .map(|shard| (*shard, SubstateState::Down { deleted_by: payload_id })),
-                    )
-                    .collect();
-
-                Ok(changes)
-            },
-            TransactionResult::Reject(reject) => Err(HotStuffError::TransactionRejected(reject.reason)),
-        }
+        Ok(finalize)
     }
 
     fn validate_proposal(&self, node: &HotStuffTreeNode<TAddr>) -> Result<(), HotStuffError> {
@@ -723,4 +703,37 @@ where
         }
         Ok(())
     }
+}
+
+fn extract_changes(
+    payload_id: PayloadId,
+    results: &[FinalizeResult],
+) -> Result<HashMap<ShardId, SubstateState>, HotStuffError> {
+    use tari_engine_types::commit_result::TransactionResult;
+    let mut changes = HashMap::new();
+    for finalize in results {
+        match finalize.result {
+            TransactionResult::Accept(ref diff) => {
+                changes.extend(
+                    diff.up_iter()
+                        .map(|(shard, substate)| {
+                            (shard.into_shard_id().into(), SubstateState::Up {
+                                created_by: payload_id,
+                                data: substate.clone(),
+                            })
+                        })
+                        .chain(diff.down_iter().map(|shard| {
+                            (shard.into_shard_id().into(), SubstateState::Down {
+                                deleted_by: payload_id,
+                            })
+                        })),
+                );
+            },
+            TransactionResult::Reject(ref reject) => {
+                return Err(HotStuffError::TransactionRejected(reject.reason.clone()))
+            },
+        }
+    }
+
+    Ok(changes)
 }

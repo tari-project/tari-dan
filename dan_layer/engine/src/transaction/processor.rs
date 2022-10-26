@@ -23,7 +23,7 @@
 use std::sync::Arc;
 
 use log::*;
-use tari_engine_types::instruction::Instruction;
+use tari_engine_types::{commit_result::FinalizeResult, execution_result::ExecutionResult, instruction::Instruction};
 use tari_template_lib::{
     arg,
     args::{Arg, WorkspaceAction},
@@ -32,10 +32,10 @@ use tari_template_lib::{
 
 use crate::{
     packager::{LoadedTemplate, Package},
-    runtime::{FinalizeResult, Runtime, RuntimeInterface, RuntimeState},
+    runtime::{Runtime, RuntimeInterface, RuntimeState},
     traits::Invokable,
     transaction::{Transaction, TransactionError},
-    wasm::{ExecutionResult, WasmProcess},
+    wasm::WasmProcess,
 };
 
 const LOG_TARGET: &str = "dan::engine::instruction_processor";

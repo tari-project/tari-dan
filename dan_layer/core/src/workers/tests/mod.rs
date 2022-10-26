@@ -25,11 +25,12 @@ use std::{collections::HashMap, time::Duration};
 use lazy_static::lazy_static;
 use tari_common_types::types::PrivateKey;
 use tari_dan_common_types::ShardId;
-use tari_dan_engine::{
-    runtime::{FinalizeResult, RejectResult, SubstateDiff, TransactionResult},
-    transaction::TransactionBuilder,
+use tari_dan_engine::transaction::TransactionBuilder;
+use tari_engine_types::{
+    commit_result::{FinalizeResult, RejectResult, TransactionResult},
+    instruction::Instruction,
+    substate::SubstateDiff,
 };
-use tari_engine_types::instruction::Instruction;
 use tari_shutdown::Shutdown;
 use tari_template_lib::args::Arg;
 use tari_utilities::ByteArray;

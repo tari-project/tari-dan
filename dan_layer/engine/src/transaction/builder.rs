@@ -98,6 +98,13 @@ impl TransactionBuilder {
         self
     }
 
+    pub fn with_inputs(&mut self, inputs: Vec<ShardId>) -> &mut Self {
+        for input in inputs {
+            self.add_input_object(input);
+        }
+        self
+    }
+
     // pub fn add_outputs(&mut self, max_outputs: u8) -> &mut Self {
     //     self.max_outputs += max_outputs;
     //     self

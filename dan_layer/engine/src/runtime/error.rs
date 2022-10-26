@@ -23,9 +23,10 @@
 use std::{fmt::Display, io};
 
 use anyhow::anyhow;
+use tari_engine_types::resource::ResourceError;
 use tari_template_lib::models::{Amount, BucketId, ComponentAddress, ResourceAddress, VaultId};
 
-use crate::{models::ResourceError, state_store::StateStoreError};
+use crate::state_store::StateStoreError;
 
 #[derive(Debug, thiserror::Error)]
 pub enum RuntimeError {

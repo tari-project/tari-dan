@@ -23,7 +23,8 @@
 use std::collections::HashMap;
 
 use tari_dan_common_types::ShardId;
-use tari_dan_engine::{runtime::FinalizeResult, transaction::TransactionError};
+use tari_dan_engine::transaction::TransactionError;
+use tari_engine_types::commit_result::FinalizeResult;
 
 use crate::models::{ObjectPledge, Payload};
 

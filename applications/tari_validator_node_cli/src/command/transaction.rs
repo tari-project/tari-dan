@@ -23,9 +23,17 @@
 use std::path::Path;
 
 use clap::{Args, Subcommand};
+use tari_dan_common_types::ShardId;
 use tari_dan_engine::transaction::Transaction;
-use tari_engine_types::{instruction::Instruction, TemplateAddress};
+use tari_engine_types::{
+    commit_result::{FinalizeResult, TransactionResult},
+    execution_result::Type,
+    instruction::Instruction,
+    substate::SubstateValue,
+    TemplateAddress,
+};
 use tari_template_lib::models::ComponentAddress;
+use tari_utilities::hex::to_hex;
 use tari_validator_node_client::{types::SubmitTransactionRequest, ValidatorNodeClient};
 
 use crate::{account_manager::AccountFileManager, from_hex::FromHex};
@@ -74,6 +82,7 @@ async fn handle_submit(
     base_dir: impl AsRef<Path>,
     client: &mut ValidatorNodeClient,
 ) -> Result<(), anyhow::Error> {
+    let mut inputs = vec![];
     let instruction = match args.instruction {
         CliInstruction::CallFunction {
             template_address,
@@ -91,6 +100,7 @@ async fn handle_submit(
             component_address,
             method_name,
         } => {
+            inputs.push(component_address.into_inner().into_array().into());
             Instruction::CallMethod {
                 template_address: template_address.into_inner(),
                 component_address: component_address.into_inner(),
@@ -115,6 +125,7 @@ async fn handle_submit(
         signature: transaction.signature().clone(),
         fee: transaction.fee(),
         sender_public_key: transaction.sender_public_key().clone(),
+        inputs,
         // TODO:
         num_new_components: 1,
         wait_for_result: args.wait_for_result,
@@ -125,8 +136,89 @@ async fn handle_submit(
     }
     let resp = client.submit_transaction(request).await?;
     println!("✅ Transaction {} submitted.", resp.hash);
-    for (shard_id, _) in resp.changes {
-        println!("🌼️ New component: {}", shard_id);
+    println!();
+    if let Some(result) = resp.result {
+        summarize(&result);
     }
     Ok(())
+}
+
+fn summarize(result: &FinalizeResult) {
+    match result.result {
+        TransactionResult::Accept(ref diff) => {
+            for (address, substate) in diff.up_iter() {
+                println!("️🌲 New substate {}", ShardId::from(address.into_shard_id()));
+                match substate.substate_value() {
+                    SubstateValue::Component(component) => {
+                        println!(
+                            "           component ({}): {}",
+                            component.module_name, component.component_address
+                        );
+                    },
+                    SubstateValue::Resource(resource) => {
+                        println!("           resource: {}", resource.address());
+                    },
+                }
+                println!();
+            }
+            for address in diff.down_iter() {
+                println!("🗑️ Destroyed substate {}", ShardId::from(address.into_shard_id()));
+                println!();
+            }
+        },
+        TransactionResult::Reject(ref reject) => {
+            println!("❌️ Transaction rejected: {}", reject.reason);
+        },
+    }
+    println!("========= Return Values =========");
+    for result in &result.execution_results {
+        match result.return_type {
+            Type::Unit => {},
+            Type::Bool => {
+                println!("bool: {}", result.decode::<bool>().unwrap());
+            },
+            Type::I8 => {
+                println!("i8: {}", result.decode::<i8>().unwrap());
+            },
+            Type::I16 => {
+                println!("i16: {}", result.decode::<i16>().unwrap());
+            },
+            Type::I32 => {
+                println!("i32: {}", result.decode::<i32>().unwrap());
+            },
+            Type::I64 => {
+                println!("i64: {}", result.decode::<i64>().unwrap());
+            },
+            Type::I128 => {
+                println!("i128: {}", result.decode::<i128>().unwrap());
+            },
+            Type::U8 => {
+                println!("u8: {}", result.decode::<u8>().unwrap());
+            },
+            Type::U16 => {
+                println!("u16: {}", result.decode::<u16>().unwrap());
+            },
+            Type::U32 => {
+                println!("u32: {}", result.decode::<u32>().unwrap());
+            },
+            Type::U64 => {
+                println!("u64: {}", result.decode::<u64>().unwrap());
+            },
+            Type::U128 => {
+                println!("u128: {}", result.decode::<u128>().unwrap());
+            },
+            Type::String => {
+                println!("string: {}", result.decode::<String>().unwrap());
+            },
+            Type::Other { ref name } => {
+                println!("{}: {}", name, to_hex(&result.raw));
+            },
+        }
+    }
+
+    println!();
+    println!("========= LOGS =========");
+    for log in &result.logs {
+        println!("{}", log);
+    }
 }

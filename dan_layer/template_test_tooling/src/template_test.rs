@@ -9,12 +9,12 @@ use tari_crypto::ristretto::RistrettoSecretKey;
 use tari_dan_engine::{
     crypto::create_key_pair,
     packager::{LoadedTemplate, Package, TemplateModuleLoader},
-    runtime::{FinalizeResult, RuntimeInterface},
+    runtime::RuntimeInterface,
     state_store::memory::MemoryStateStore,
     transaction::{Transaction, TransactionProcessor},
     wasm::{compile::compile_template, LoadedWasmTemplate},
 };
-use tari_engine_types::{hashing::hasher, instruction::Instruction};
+use tari_engine_types::{commit_result::FinalizeResult, hashing::hasher, instruction::Instruction};
 use tari_template_lib::{
     args::Arg,
     models::{ComponentAddress, TemplateAddress},

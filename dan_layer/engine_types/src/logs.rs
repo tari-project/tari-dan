@@ -20,33 +20,38 @@
 //   WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //   USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use tari_engine_types::commit_result::FinalizeResult;
-use tokio::sync::broadcast;
+use std::{
+    fmt::Display,
+    time::{Duration, SystemTime, UNIX_EPOCH},
+};
 
-use crate::models::TreeNodeHash;
+use serde::{Deserialize, Serialize};
+pub use tari_template_lib::args::LogLevel;
 
-/// Wraps a broadcast sender, allowing a subscription (Receiver) to be obtained but removing the ability to send an
-/// event.
-pub struct EventSubscription<T>(broadcast::Sender<T>);
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct LogEntry {
+    pub timestamp: u64,
+    pub message: String,
+    pub level: LogLevel,
+}
 
-impl<T> EventSubscription<T> {
-    pub fn new(sender: broadcast::Sender<T>) -> Self {
-        Self(sender)
-    }
-
-    pub fn subscribe(&self) -> broadcast::Receiver<T> {
-        self.0.subscribe()
+impl LogEntry {
+    pub fn new(level: LogLevel, message: String) -> Self {
+        let now = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            // If the errors, the clock has been set before the UNIX_EPOCH
+            .unwrap_or_else(|_| Duration::from_secs(0))
+            .as_secs();
+        Self {
+            timestamp: now,
+            message,
+            level,
+        }
     }
 }
 
-impl<T> Clone for EventSubscription<T> {
-    fn clone(&self) -> Self {
-        Self(self.0.clone())
+impl Display for LogEntry {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{} {} {}", self.timestamp, self.level, self.message)
     }
-}
-
-#[derive(Debug, Clone)]
-pub enum HotStuffEvent {
-    OnCommit(TreeNodeHash, Vec<FinalizeResult>),
-    Failed(String),
 }

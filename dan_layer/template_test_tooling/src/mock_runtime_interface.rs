@@ -5,9 +5,10 @@
 use std::sync::{Arc, RwLock};
 
 use tari_dan_engine::{
-    runtime::{FinalizeResult, RuntimeError, RuntimeInterface, RuntimeInterfaceImpl, RuntimeState, StateTracker},
+    runtime::{RuntimeError, RuntimeInterface, RuntimeInterfaceImpl, RuntimeState, StateTracker},
     state_store::memory::MemoryStateStore,
 };
+use tari_engine_types::commit_result::FinalizeResult;
 use tari_template_lib::{
     args::{
         BucketAction,
