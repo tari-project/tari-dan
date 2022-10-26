@@ -20,10 +20,11 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+use tari_engine_types::resource::{Resource, ResourceError};
 use tari_template_abi::{Decode, Encode};
 use tari_template_lib::models::{Amount, ResourceAddress};
 
-use crate::models::{resource::ResourceError, Bucket, Resource};
+use crate::models::Bucket;
 
 #[derive(Debug, Clone, Encode, Decode)]
 pub struct Vault {

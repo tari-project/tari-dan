@@ -106,7 +106,7 @@ diesel::table! {
         substate_type -> Text,
         shard_id -> Binary,
         node_height -> BigInt,
-        data -> Nullable<Binary>,
+        data -> Nullable<Text>,
         created_by_payload_id -> Binary,
         deleted_by_payload_id -> Nullable<Binary>,
         justify -> Nullable<Text>,

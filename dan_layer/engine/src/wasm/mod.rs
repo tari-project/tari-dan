@@ -14,4 +14,4 @@ pub use module::{LoadedWasmTemplate, WasmModule};
 mod metering;
 mod process;
 
-pub use process::{ExecutionResult, WasmProcess};
+pub use process::WasmProcess;

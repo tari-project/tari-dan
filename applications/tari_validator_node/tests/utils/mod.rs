@@ -20,33 +20,7 @@
 //   WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //   USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use tari_engine_types::commit_result::FinalizeResult;
-use tokio::sync::broadcast;
-
-use crate::models::TreeNodeHash;
-
-/// Wraps a broadcast sender, allowing a subscription (Receiver) to be obtained but removing the ability to send an
-/// event.
-pub struct EventSubscription<T>(broadcast::Sender<T>);
-
-impl<T> EventSubscription<T> {
-    pub fn new(sender: broadcast::Sender<T>) -> Self {
-        Self(sender)
-    }
-
-    pub fn subscribe(&self) -> broadcast::Receiver<T> {
-        self.0.subscribe()
-    }
-}
-
-impl<T> Clone for EventSubscription<T> {
-    fn clone(&self) -> Self {
-        Self(self.0.clone())
-    }
-}
-
-#[derive(Debug, Clone)]
-pub enum HotStuffEvent {
-    OnCommit(TreeNodeHash, Vec<FinalizeResult>),
-    Failed(String),
-}
+pub mod base_node;
+pub mod miner;
+pub mod validator_node;
+pub mod wallet;

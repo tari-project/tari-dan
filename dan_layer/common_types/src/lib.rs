@@ -19,6 +19,7 @@ use ::serde::{Deserialize, Serialize};
 use borsh::{BorshDeserialize, BorshSerialize};
 pub use epoch::Epoch;
 use tari_common_types::types::{FixedHash, FixedHashSizeError};
+use tari_engine_types::substate::Substate;
 use tari_utilities::{byte_array::ByteArray, hex::Hex};
 pub use template_id::TemplateId;
 
@@ -104,7 +105,7 @@ pub enum SubstateChange {
 #[derive(Debug, Clone, BorshSerialize, BorshDeserialize, Deserialize, Serialize)]
 pub enum SubstateState {
     DoesNotExist,
-    Up { created_by: PayloadId, data: Vec<u8> },
+    Up { created_by: PayloadId, data: Substate },
     Down { deleted_by: PayloadId },
 }
 

@@ -168,6 +168,11 @@ impl TemplateManagerService {
                         compiled_code: Some(bytes.to_vec()),
                         status: Some(template_status),
                     })?;
+
+                info!(
+                    target: LOG_TARGET,
+                    "✅ Template {} downloaded successfully", download.template_address
+                );
             },
             Err(err) => {
                 warn!(target: LOG_TARGET, "🚨 Failed to download template: {}", err);

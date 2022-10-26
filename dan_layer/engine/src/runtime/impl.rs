@@ -20,6 +20,10 @@
 //   WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //   USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+use tari_engine_types::{
+    commit_result::{FinalizeResult, RejectResult, TransactionResult},
+    logs::LogEntry,
+};
 use tari_template_abi::decode;
 use tari_template_lib::{
     args::{
@@ -38,8 +42,6 @@ use tari_template_lib::{
 };
 
 use crate::runtime::{
-    commit_result::{FinalizeResult, RejectResult, TransactionResult},
-    logs::LogEntry,
     tracker::{RuntimeState, StateTracker},
     RuntimeError,
     RuntimeInterface,

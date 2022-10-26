@@ -26,6 +26,7 @@ use newtype_ops::newtype_ops;
 use tari_template_abi::{Decode, Encode};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Decode, Encode)]
+#[cfg_attr(feature = "serde", derive(serde::Deserialize, serde::Serialize))]
 pub struct Amount(pub i128);
 
 impl Amount {

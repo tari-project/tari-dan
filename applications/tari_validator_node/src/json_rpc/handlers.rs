@@ -20,7 +20,7 @@
 //   WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //   USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use std::{collections::HashMap, sync::Arc, time::Duration};
+use std::{sync::Arc, time::Duration};
 
 use axum_jrpc::{
     error::{JsonRpcError, JsonRpcErrorReason},
@@ -32,7 +32,7 @@ use log::*;
 use serde::Serialize;
 use serde_json::{self as json, json};
 use tari_comms::{multiaddr::Multiaddr, peer_manager::NodeId, types::CommsPublicKey, CommsNode, NodeIdentity};
-use tari_dan_common_types::serde_with;
+use tari_crypto::tari_utilities::hex::Hex;
 use tari_dan_core::{
     services::{epoch_manager::EpochManager, BaseNodeClient},
     storage::shard_store::{ShardStoreFactory, ShardStoreTransaction},
@@ -43,6 +43,7 @@ use tari_dan_storage_sqlite::sqlite_shard_store_factory::SqliteShardStoreFactory
 use tari_template_lib::Hash;
 use tari_validator_node_client::types::{
     GetCommitteeRequest,
+    GetIdentityResponse,
     GetShardKey,
     GetTemplateRequest,
     GetTemplateResponse,
@@ -114,9 +115,9 @@ impl JsonRpcHandlers {
     pub fn get_identity(&self, value: JsonRpcExtractor) -> JrpcResult {
         let answer_id = value.get_answer_id();
         let response = GetIdentityResponse {
-            node_id: self.node_identity.node_id().clone(),
-            public_key: self.node_identity.public_key().clone(),
-            public_address: self.node_identity.public_address(),
+            node_id: self.node_identity.node_id().to_hex(),
+            public_key: self.node_identity.public_key().to_hex(),
+            public_address: self.node_identity.public_address().to_string(),
         };
 
         Ok(JsonRpcResponse::success(answer_id, response))
@@ -128,6 +129,7 @@ impl JsonRpcHandlers {
 
         let mut builder = TransactionBuilder::new();
         builder
+            .with_inputs(transaction.inputs)
             .with_instructions(transaction.instructions)
             .with_new_components(transaction.num_new_components)
             .signature(transaction.signature)
@@ -153,7 +155,7 @@ impl JsonRpcHandlers {
 
         Ok(JsonRpcResponse::success(answer_id, SubmitTransactionResponse {
             hash: hash.into_array().into(),
-            changes: HashMap::new(),
+            result: None,
         }))
     }
 
@@ -415,14 +417,6 @@ impl JsonRpcHandlers {
 }
 
 #[derive(Serialize, Debug)]
-struct GetIdentityResponse {
-    #[serde(with = "serde_with::hex")]
-    node_id: NodeId,
-    public_key: CommsPublicKey,
-    public_address: Multiaddr,
-}
-
-#[derive(Serialize, Debug)]
 struct Connection {
     node_id: NodeId,
     public_key: CommsPublicKey,
@@ -445,11 +439,12 @@ async fn wait_for_result(
     loop {
         match tokio::time::timeout(timeout, subscription.recv()).await {
             Ok(res) => match res {
-                Ok(HotStuffEvent::OnCommit(_tree_node_hash, changes)) => {
+                Ok(HotStuffEvent::OnCommit(_tree_node_hash, mut results)) => {
                     // TODO: How do we correlate this to our transaction?
                     let response = SubmitTransactionResponse {
                         hash: hash.into_array().into(),
-                        changes,
+                        // TODO: There should probably only be one result (on_commit recursion)
+                        result: results.pop(),
                     };
                     return Ok(JsonRpcResponse::success(answer_id, response));
                 },

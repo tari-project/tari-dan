@@ -53,7 +53,7 @@ pub async fn run_http_ui_server(address: SocketAddr, json_rpc_address: Option<St
     Ok(())
 }
 
-static PROJECT_DIR: Dir<'_> = include_dir!("applications/tari_validator_node_web_ui/build");
+static PROJECT_DIR: Dir<'_> = include_dir!("$CARGO_MANIFEST_DIR/../tari_validator_node_web_ui/build");
 
 async fn handler(uri: Uri, Extension(json_rpc_address): Extension<Arc<Option<String>>>) -> impl IntoResponse {
     let path = uri.path();
