@@ -129,6 +129,7 @@ impl JsonRpcHandlers {
 
         let mut builder = TransactionBuilder::new();
         builder
+            .with_inputs(transaction.inputs)
             .with_instructions(transaction.instructions)
             .with_new_components(transaction.num_new_components)
             .signature(transaction.signature)

@@ -74,6 +74,7 @@ async fn handle_submit(
     base_dir: impl AsRef<Path>,
     client: &mut ValidatorNodeClient,
 ) -> Result<(), anyhow::Error> {
+    let mut inputs = vec![];
     let instruction = match args.instruction {
         CliInstruction::CallFunction {
             template_address,
@@ -91,6 +92,7 @@ async fn handle_submit(
             component_address,
             method_name,
         } => {
+            inputs.push(component_address.into_inner().into_array().into());
             Instruction::CallMethod {
                 template_address: template_address.into_inner(),
                 component_address: component_address.into_inner(),
@@ -115,6 +117,7 @@ async fn handle_submit(
         signature: transaction.signature().clone(),
         fee: transaction.fee(),
         sender_public_key: transaction.sender_public_key().clone(),
+        inputs,
         // TODO:
         num_new_components: 1,
         wait_for_result: args.wait_for_result,
