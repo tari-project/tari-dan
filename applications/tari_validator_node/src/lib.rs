@@ -51,7 +51,11 @@ use tari_common::{
     initialize_logging,
 };
 use tari_dan_common_types::ShardId;
-use tari_dan_core::{services::base_node_error::BaseNodeError, storage::DbFactory, DigitalAssetError};
+use tari_dan_core::{
+    services::{base_node_error::BaseNodeError, BaseNodeClient},
+    storage::DbFactory,
+    DigitalAssetError,
+};
 use tari_dan_storage_sqlite::SqliteDbFactory;
 use tari_shutdown::{Shutdown, ShutdownSignal};
 use tokio::task;
@@ -123,21 +127,35 @@ pub async fn run_validator_node_with_cli(config: &ApplicationConfig, cli: &Cli) 
     );
 
     // fs::create_dir_all(&global.peer_db_path).map_err(|err| ExitError::new(ExitCode::ConfigError, err))?;
-    let base_node_client = GrpcBaseNodeClient::new(config.validator_node.base_node_grpc_address.unwrap_or_else(|| {
-        let port = grpc_default_port(ApplicationType::BaseNode, config.network);
-        SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), port)
-    }));
+    let mut base_node_client =
+        GrpcBaseNodeClient::new(config.validator_node.base_node_grpc_address.unwrap_or_else(|| {
+            let port = grpc_default_port(ApplicationType::BaseNode, config.network);
+            SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), port)
+        }));
     let wallet_client = GrpcWalletClient::new(config.validator_node.wallet_grpc_address.unwrap_or_else(|| {
         let port = grpc_default_port(ApplicationType::ConsoleWallet, config.network);
         SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), port)
     }));
+
+    let block_height = base_node_client
+        .get_tip_info()
+        .await
+        .map_err(|e| ExitError::new(ExitCode::GrpcError, e.to_string()))?
+        .height_of_longest_chain;
+
+    let validator_node_timeout = base_node_client
+        .get_consensus_constants(block_height)
+        .await
+        .map_err(|e| ExitError::new(ExitCode::GrpcError, e.to_string().as_str()))?
+        .validator_node_timeout;
+
     let services = spawn_services(
         config,
         shutdown.to_signal(),
         node_identity.clone(),
         global_db,
         db_factory,
-        ConsensusConstants::devnet(), // TODO: change this eventually
+        ConsensusConstants::devnet(validator_node_timeout), // TODO: change this eventually
     )
     .await?;
 

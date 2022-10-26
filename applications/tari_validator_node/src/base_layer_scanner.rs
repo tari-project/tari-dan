@@ -24,9 +24,10 @@ use std::convert::TryInto;
 
 use log::*;
 use tari_common_types::types::{FixedHash, FixedHashSizeError};
-use tari_core::{
-    consensus::ConsensusConstants,
-    transactions::transaction_components::{CodeTemplateRegistration, SideChainFeature, ValidatorNodeRegistration},
+use tari_core::transactions::transaction_components::{
+    CodeTemplateRegistration,
+    SideChainFeature,
+    ValidatorNodeRegistration,
 };
 use tari_crypto::tari_utilities::ByteArray;
 use tari_dan_common_types::optional::Optional;
@@ -179,7 +180,6 @@ impl BaseLayerScanner {
     async fn scan_blockchain(&mut self) -> Result<(), BaseLayerScannerError> {
         // fetch the new base layer info since the previous scan
         let tip = self.base_node_client.get_tip_info().await?;
-        let consensus_constants = self.base_node_client.get_consensus_constants().await?;
 
         match self.get_blockchain_progression(&tip).await? {
             BlockchainProgression::Progressed => {
@@ -284,7 +284,23 @@ impl BaseLayerScanner {
                 })?;
                 match sidechain_feature {
                     SideChainFeature::ValidatorNodeRegistration(reg) => {
-                        self.register_validator_node_registration(current_height, reg).await?;
+                        let validator_node_timeout = self
+                            .base_node_client
+                            .get_consensus_constants(tip.height_of_longest_chain)
+                            .await?
+                            .validator_node_timeout;
+                        if current_height.checked_sub(self.last_scanned_height).ok_or(
+                            BaseLayerScannerError::DataCorruption {
+                                details: format!(
+                                    "Invalid last scanned height: current height is {}, whereas last scanned height \
+                                     is {}",
+                                    current_height, self.last_scanned_height,
+                                ),
+                            },
+                        )? >= validator_node_timeout
+                        {
+                            self.register_validator_node_registration(current_height, reg).await?;
+                        }
                     },
                     SideChainFeature::TemplateRegistration(reg) => {
                         self.register_code_template_registration(

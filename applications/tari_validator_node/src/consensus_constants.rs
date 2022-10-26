@@ -22,12 +22,14 @@
 
 pub struct ConsensusConstants {
     pub base_layer_confirmations: u64,
+    pub validator_node_timeout: u64,
 }
 
 impl ConsensusConstants {
-    pub const fn devnet() -> Self {
+    pub const fn devnet(validator_node_timeout: u64) -> Self {
         Self {
             base_layer_confirmations: 3,
+            validator_node_timeout,
         }
     }
 }

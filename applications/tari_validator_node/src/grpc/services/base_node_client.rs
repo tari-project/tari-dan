@@ -20,13 +20,7 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use std::{
-    collections::HashMap,
-    convert::{TryFrom, TryInto},
-    net::SocketAddr,
-    num::NonZeroU64,
-    ops::RangeInclusive,
-};
+use std::{convert::TryInto, net::SocketAddr};
 
 use async_trait::async_trait;
 use log::info;
@@ -34,32 +28,15 @@ use tari_app_grpc::tari_rpc::{self as grpc, GetCommitteeRequest, GetShardKeyRequ
 use tari_base_node_grpc_client::BaseNodeGrpcClient;
 use tari_common_types::types::{FixedHash, PublicKey};
 use tari_comms::types::CommsPublicKey;
-use tari_core::{
-    blocks::BlockHeader,
-    consensus::{
-        consensus_constants::{OutputVersionRange, PowAlgorithmConstants},
-        ConsensusConstants,
-    },
-    proof_of_work::{Difficulty, PowAlgorithm},
-    transactions::{
-        tari_amount::MicroTari,
-        transaction_components::{
-            CodeTemplateRegistration,
-            OutputFeaturesVersion,
-            OutputType,
-            TransactionInputVersion,
-            TransactionKernelVersion,
-            TransactionOutputVersion,
-        },
-        weight::{TransactionWeight, WeightParams},
-    },
-};
+use tari_core::{blocks::BlockHeader, transactions::transaction_components::CodeTemplateRegistration};
 use tari_crypto::tari_utilities::ByteArray;
 use tari_dan_common_types::ShardId;
 use tari_dan_core::{
     models::{BaseLayerMetadata, ValidatorNode},
     services::{base_node_error::BaseNodeError, BaseNodeClient, BlockInfo, SideChainUtxos},
 };
+
+use crate::consensus_constants::ConsensusConstants;
 
 const LOG_TARGET: &str = "tari::validator_node::app";
 
@@ -83,6 +60,16 @@ impl GrpcBaseNodeClient {
             self.client = Some(inner);
         }
         self.client.as_mut().ok_or(BaseNodeError::ConnectionError)
+    }
+
+    pub async fn get_consensus_constants(&mut self, block_height: u64) -> Result<ConsensusConstants, BaseNodeError> {
+        let inner = self.connection().await?;
+
+        let request = grpc::BlockHeight { block_height };
+        let result = inner.get_constants(request).await?.into_inner();
+
+        let consensus_constants = ConsensusConstants::devnet(result.validator_node_timeout);
+        Ok(consensus_constants)
     }
 }
 #[async_trait]
@@ -162,217 +149,6 @@ impl BaseNodeClient for GrpcBaseNodeClient {
         } else {
             Ok(Some(ShardId::from_bytes(result.shard_key.as_bytes())?))
         }
-    }
-
-    async fn get_consensus_constants(&mut self) -> Result<ConsensusConstants, BaseNodeError> {
-        let inner = self.connection().await?;
-        let request = grpc::Empty {};
-        let result = inner.get_constants(request).await?.into_inner();
-
-        let blockchain_version_range =
-            result
-                .valid_blockchain_version_range
-                .ok_or(BaseNodeError::InvalidPeerMessage(
-                    "Unavailable data for requested blockchain version".to_string(),
-                ))?;
-
-        let lower_blockchain_version = u16::try_from(blockchain_version_range.min)
-            .map_err(|e| BaseNodeError::InvalidPeerMessage(e.to_string()))?;
-
-        let upper_blockchain_version = u16::try_from(blockchain_version_range.max)
-            .map_err(|e| BaseNodeError::InvalidPeerMessage(e.to_string()))?;
-
-        let valid_blockchain_version_range = RangeInclusive::new(lower_blockchain_version, upper_blockchain_version);
-
-        let mut proof_of_work = HashMap::<PowAlgorithm, PowAlgorithmConstants>::new();
-
-        if let Some(pow) = result.proof_of_work.get(&0u32) {
-            let pow = PowAlgorithmConstants {
-                max_target_time: pow.max_target_time,
-                min_difficulty: Difficulty::from_u64(pow.min_difficulty),
-                max_difficulty: Difficulty::from_u64(pow.max_difficulty),
-                target_time: pow.target_time,
-            };
-            proof_of_work.insert(PowAlgorithm::Monero, pow);
-        }
-
-        if let Some(pow) = result.proof_of_work.get(&1u32) {
-            let pow = PowAlgorithmConstants {
-                max_target_time: pow.max_target_time,
-                min_difficulty: Difficulty::from_u64(pow.min_difficulty),
-                max_difficulty: Difficulty::from_u64(pow.max_difficulty),
-                target_time: pow.target_time,
-            };
-            proof_of_work.insert(PowAlgorithm::Sha3, pow);
-        }
-
-        let requested_transaction_weight = result.transaction_weight.ok_or(BaseNodeError::InvalidPeerMessage(
-            "Unavailable data for requested transaction weight".to_string(),
-        ))?;
-
-        let kernel_weight = requested_transaction_weight.kernel_weight;
-        let input_weight = requested_transaction_weight.input_weight;
-        let output_weight = requested_transaction_weight.output_weight;
-        let metadata_bytes_per_gram = NonZeroU64::new(requested_transaction_weight.metadata_bytes_per_gram);
-
-        let transaction_weight = TransactionWeight::new(WeightParams {
-            kernel_weight,
-            input_weight,
-            output_weight,
-            metadata_bytes_per_gram,
-        });
-
-        let input_version_range = result.input_version_range.ok_or(BaseNodeError::InvalidPeerMessage(
-            "Unavailable data for requested input version".to_string(),
-        ))?;
-        let lower_input_version = match input_version_range.min {
-            0u64 => TransactionInputVersion::V0,
-            1 => TransactionInputVersion::V1,
-            _ => {
-                return Err(BaseNodeError::InvalidPeerMessage(
-                    "Failed to parse lower input version".to_string(),
-                ))
-            },
-        };
-        let upper_input_version = match input_version_range.max {
-            0u64 => TransactionInputVersion::V0,
-            1 => TransactionInputVersion::V1,
-            _ => {
-                return Err(BaseNodeError::InvalidPeerMessage(
-                    "Failed to parse upper input version".to_string(),
-                ))
-            },
-        };
-
-        let input_version_range = RangeInclusive::new(lower_input_version, upper_input_version);
-
-        let requested_output_version_range = result.output_version_range.ok_or(BaseNodeError::InvalidPeerMessage(
-            "Unavailable data for requested output version range".to_string(),
-        ))?;
-
-        let outputs = requested_output_version_range
-            .outputs
-            .ok_or(BaseNodeError::InvalidPeerMessage(
-                "Unavailable data for requested output version range outputs".to_string(),
-            ))?;
-        let features = requested_output_version_range
-            .features
-            .ok_or(BaseNodeError::InvalidPeerMessage(
-                "Unavailable data for requested output version range features".to_string(),
-            ))?;
-
-        let lower_output_version = match outputs.min {
-            0u64 => TransactionOutputVersion::V0,
-            1 => TransactionOutputVersion::V1,
-            _ => {
-                return Err(BaseNodeError::InvalidPeerMessage(
-                    "Failed to parse lower output version".to_string(),
-                ))
-            },
-        };
-        let upper_output_version = match outputs.max {
-            0u64 => TransactionOutputVersion::V0,
-            1 => TransactionOutputVersion::V1,
-            _ => {
-                return Err(BaseNodeError::InvalidPeerMessage(
-                    "Failed to parse upper output version".to_string(),
-                ))
-            },
-        };
-
-        let outputs = RangeInclusive::new(lower_output_version, upper_output_version);
-
-        let lower_features_version = match features.min {
-            0u64 => OutputFeaturesVersion::V0,
-            1 => OutputFeaturesVersion::V1,
-            _ => {
-                return Err(BaseNodeError::InvalidPeerMessage(
-                    "Failed to parse lower features version".to_string(),
-                ))
-            },
-        };
-        let upper_features_version = match features.max {
-            0u64 => OutputFeaturesVersion::V0,
-            1 => OutputFeaturesVersion::V1,
-            _ => {
-                return Err(BaseNodeError::InvalidPeerMessage(
-                    "Failed to parse upper features version".to_string(),
-                ))
-            },
-        };
-
-        let features = RangeInclusive::new(lower_features_version, upper_features_version);
-
-        let output_version_range = OutputVersionRange { outputs, features };
-
-        let requested_kernel_version_range = result.kernel_version_range.ok_or(BaseNodeError::InvalidPeerMessage(
-            "Unavailable data for requested kernel version range".to_string(),
-        ))?;
-
-        let lower_kernel_version = match requested_kernel_version_range.min {
-            0u64 => TransactionKernelVersion::V0,
-            _ => {
-                return Err(BaseNodeError::InvalidPeerMessage(
-                    "Failed to parse transaction kernel version correctly".to_string(),
-                ))
-            },
-        };
-        let upper_kernel_version = match requested_kernel_version_range.max {
-            0u64 => TransactionKernelVersion::V0,
-            _ => {
-                return Err(BaseNodeError::InvalidPeerMessage(
-                    "Failed to parse transaction kernel version correctly".to_string(),
-                ))
-            },
-        };
-
-        let kernel_version_range = RangeInclusive::new(lower_kernel_version, upper_kernel_version);
-
-        let permitted_output_types = result.permitted_output_types;
-        let permitted_output_types = permitted_output_types
-            .iter()
-            .map(|&ut| match ut {
-                0i32 => Ok(OutputType::Standard),
-                1 => Ok(OutputType::Coinbase),
-                2 => Ok(OutputType::Burn),
-                3 => Ok(OutputType::ValidatorNodeRegistration),
-                4 => Ok(OutputType::CodeTemplateRegistration),
-                _ => {
-                    return Err(BaseNodeError::InvalidPeerMessage(
-                        "Failed to parse permitted output types".to_string(),
-                    ))
-                },
-            })
-            .collect::<Result<Vec<_>, _>>()?;
-
-        let validator_node_timeout = result.validator_node_timeout;
-
-        let consensus_constants = ConsensusConstants {
-            effective_from_height: result.effective_from_height,
-            coinbase_lock_height: result.coinbase_lock_height,
-            blockchain_version: u16::try_from(result.blockchain_version)
-                .map_err(|e| BaseNodeError::InvalidPeerMessage(e.to_string()))?,
-            valid_blockchain_version_range,
-            future_time_limit: result.future_time_limit,
-            difficulty_block_window: result.difficulty_block_window,
-            max_block_transaction_weight: result.max_block_transaction_weight,
-            median_timestamp_count: usize::try_from(result.median_timestamp_count)
-                .map_err(|e| BaseNodeError::InvalidPeerMessage(e.to_string()))?,
-            emission_initial: MicroTari(result.emission_initial),
-            emission_decay: result.emission_decay.leak(),
-            emission_tail: MicroTari(result.emission_tail),
-            max_randomx_seed_height: result.max_randomx_seed_height,
-            proof_of_work,
-            faucet_value: MicroTari(result.faucet_value),
-            transaction_weight,
-            max_script_byte_size: result.max_script_byte_size as usize,
-            input_version_range,
-            output_version_range,
-            kernel_version_range,
-            permitted_output_types: permitted_output_types.leak(),
-            validator_node_timeout,
-        };
-        Ok(consensus_constants)
     }
 
     async fn get_template_registrations(
