@@ -24,7 +24,7 @@ use std::{convert::TryFrom, path::PathBuf};
 
 use clap::{Args, Subcommand};
 use tari_dan_engine::wasm::compile::compile_template;
-use tari_engine_types::{hashing::hasher, TemplateAddress};
+use tari_engine_types::{calculate_template_binary_hash, TemplateAddress};
 use tari_validator_node_client::{
     types::{GetTemplateRequest, GetTemplateResponse, GetTemplatesRequest, TemplateRegistrationRequest},
     ValidatorNodeClient,
@@ -123,7 +123,7 @@ async fn handle_publish(args: PublishTemplateArgs, mut client: ValidatorNodeClie
     println!();
 
     // calculate the hash of the WASM binary
-    let binary_sha = hasher("template").chain(&wasm_code).result();
+    let binary_sha = calculate_template_binary_hash(wasm_code);
 
     // get the local path of the compiled wasm
     // note that the file name will be the same as the root folder name

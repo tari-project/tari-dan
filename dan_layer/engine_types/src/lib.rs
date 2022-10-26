@@ -11,4 +11,4 @@ pub mod signature;
 pub mod substate;
 
 mod template;
-pub use template::TemplateAddress;
+pub use template::{calculate_template_binary_hash, TemplateAddress};

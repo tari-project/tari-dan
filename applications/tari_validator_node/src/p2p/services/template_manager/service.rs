@@ -20,10 +20,14 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+use std::convert::TryFrom;
+
 use log::*;
+use tari_common_types::types::FixedHash;
 use tari_dan_core::services::TemplateProvider;
 use tari_dan_engine::packager::TemplateModuleLoader;
 use tari_dan_storage::global::{DbTemplateUpdate, TemplateStatus};
+use tari_engine_types::calculate_template_binary_hash;
 use tari_shutdown::ShutdownSignal;
 use tari_template_lib::models::TemplateAddress;
 use tari_validator_node_client::types::{FunctionDef, TemplateAbi};
@@ -142,11 +146,27 @@ impl TemplateManagerService {
     fn handle_completed_download(&mut self, download: DownloadResult) -> Result<(), TemplateManagerError> {
         match download.result {
             Ok(bytes) => {
-                // TODO: Validate binary against hash
+                info!(
+                    target: LOG_TARGET,
+                    "✅ Template {} downloaded successfully", download.template_address
+                );
+
+                // validation of the downloaded template binary hash
+                let actual_binary_hash = calculate_template_binary_hash(&bytes);
+                let template_status = if actual_binary_hash == download.expected_binary_hash {
+                    TemplateStatus::Active
+                } else {
+                    warn!(
+                        target: LOG_TARGET,
+                        "⚠️ Template {} hash mismatch", download.template_address
+                    );
+                    TemplateStatus::Invalid
+                };
+
                 self.manager
                     .update_template(download.template_address, DbTemplateUpdate {
                         compiled_code: Some(bytes.to_vec()),
-                        status: Some(TemplateStatus::Active),
+                        status: Some(template_status),
                     })?;
 
                 info!(
@@ -169,6 +189,8 @@ impl TemplateManagerService {
     async fn handle_add_template(&mut self, template: TemplateRegistration) -> Result<(), TemplateManagerError> {
         let address = template.template_address;
         let url = template.registration.binary_url.to_string();
+        let expected_binary_hash = FixedHash::try_from(template.registration.binary_sha.clone().into_vec())
+            .map_err(|_| TemplateManagerError::InvalidBaseLayerTemplate)?;
         self.manager.add_template(template)?;
         // We could queue this up much later, at which point we'd update to pending
         self.manager.update_template(address, DbTemplateUpdate {
@@ -176,7 +198,14 @@ impl TemplateManagerService {
             ..Default::default()
         })?;
 
-        let _ignore = self.download_queue.send(DownloadRequest { address, url }).await;
+        let _ignore = self
+            .download_queue
+            .send(DownloadRequest {
+                address,
+                url,
+                expected_binary_hash,
+            })
+            .await;
         info!(target: LOG_TARGET, "⏳️️ Template {} queued for download", address);
         Ok(())
     }
