@@ -254,7 +254,11 @@ where
                 leaf,
                 shard,
                 payload_id,
-                Some(actual_payload),
+                if payload_height.as_u64() == 0 {
+                    Some(actual_payload)
+                } else {
+                    None
+                },
                 qc,
                 epoch,
                 self.identity.clone(),
@@ -476,8 +480,8 @@ where
 
         let shard = node.shard();
         let payload;
-        if let Some(spayload) = node.payload() {
-            payload = spayload.clone();
+        if let Some(node_payload) = node.payload() {
+            payload = node_payload.clone();
         } else {
             let tx = self.shard_store.create_tx()?;
             payload = tx.get_payload(&node.payload_id()).map_err(|e| e.into())?;
