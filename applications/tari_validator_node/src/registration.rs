@@ -156,7 +156,7 @@ async fn start(
 
                             let current_block_height = current_epoch.as_u64() * 10 + 1;
                             let last_registration_height = last_registration_epoch.as_u64() * 10 + 1;
-                            let validator_node_registration_expiry = base_node_client.get_consensus_constants(current_block_height).await.map_err(|e| AutoRegistrationError::BaseNodeError(e))?.get_validator_node_registration_expiry();
+                            let validator_node_registration_expiry = base_node_client.get_consensus_constants(current_block_height).await.map_err(AutoRegistrationError::BaseNodeError)?.get_validator_node_registration_expiry();
 
                             if current_block_height.checked_sub(last_registration_height).ok_or(AutoRegistrationError::MathOverflow)? >= validator_node_registration_expiry {
                                 let wallet_client = GrpcWalletClient::new(config.validator_node.wallet_grpc_address.unwrap_or_else(|| {
