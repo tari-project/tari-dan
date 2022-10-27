@@ -42,6 +42,7 @@ use utils::{
 
 use crate::utils::{
     base_node::{get_base_node_client, spawn_base_node, BaseNodeProcess},
+    http_server::MockHttpServer,
     miner::MinerProcess,
     template::{send_template_registration, RegisteredTemplate},
     validator_node::{get_vn_client, ValidatorNodeProcess},
@@ -55,6 +56,7 @@ pub struct TariWorld {
     validator_nodes: HashMap<String, ValidatorNodeProcess>,
     miners: HashMap<String, MinerProcess>,
     templates: HashMap<String, RegisteredTemplate>,
+    http_server: Option<MockHttpServer>,
 }
 
 #[async_trait(?Send)]
@@ -68,6 +70,7 @@ impl cucumber::World for TariWorld {
             validator_nodes: HashMap::new(),
             miners: HashMap::new(),
             templates: HashMap::new(),
+            http_server: None,
         })
     }
 }
