@@ -158,4 +158,12 @@ mod tests {
         let f = b / a;
         assert_eq!(f, 1);
     }
+
+    #[test]
+    #[cfg(feature = "serde")]
+    fn can_serialize() {
+        let a = Amount::new(4);
+        let b = serde_json::to_string(&a).unwrap();
+        assert_eq!(b, "4");
+    }
 }
