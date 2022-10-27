@@ -20,7 +20,7 @@
 //   WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //   USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use std::{str::FromStr, sync::Arc, time::Duration};
+use std::{net::SocketAddr, str::FromStr, sync::Arc, time::Duration};
 
 use rand::rngs::OsRng;
 use tari_base_node::{run_base_node, BaseNodeConfig, MetricsConfig};
@@ -28,6 +28,7 @@ use tari_common::configuration::CommonConfig;
 use tari_comms::{multiaddr::Multiaddr, peer_manager::PeerFeatures, NodeIdentity};
 use tari_comms_dht::DhtConfig;
 use tari_p2p::{auto_update::AutoUpdateConfig, Network, PeerSeedsConfig, TransportType};
+use tari_validator_node::GrpcBaseNodeClient;
 use tempfile::tempdir;
 use tokio::task;
 
@@ -48,6 +49,7 @@ pub async fn spawn_base_node(world: &mut TariWorld, bn_name: String) {
     let grpc_port = 48152;
     let base_node_address = Multiaddr::from_str(&format!("/ip4/127.0.0.1/tcp/{}", port)).unwrap();
     let base_node_identity = NodeIdentity::random(&mut OsRng, base_node_address, PeerFeatures::COMMUNICATION_NODE);
+    println!("Base node identity: {}", base_node_identity);
     let identity = base_node_identity.clone();
 
     let handle = task::spawn(async move {
@@ -98,4 +100,9 @@ pub async fn spawn_base_node(world: &mut TariWorld, bn_name: String) {
     // We need to give it time for the base node to startup
     // TODO: it would be better to scan the base node to detect when it has started
     tokio::time::sleep(Duration::from_secs(5)).await;
+}
+
+pub async fn get_base_node_client(port: u64) -> GrpcBaseNodeClient {
+    let endpoint: SocketAddr = format!("127.0.0.1:{}", port).parse().unwrap();
+    GrpcBaseNodeClient::new(endpoint)
 }

@@ -40,6 +40,7 @@ pub struct ValidatorNodeProcess {
     pub name: String,
     pub port: u64,
     pub json_rpc_port: u64,
+    pub base_node_grpc_port: u64,
     pub handle: task::JoinHandle<()>,
 }
 
@@ -109,6 +110,7 @@ pub async fn spawn_validator_node(
     let validator_node_process = ValidatorNodeProcess {
         name: validator_node_name.clone(),
         port,
+        base_node_grpc_port,
         handle,
         json_rpc_port,
     };
