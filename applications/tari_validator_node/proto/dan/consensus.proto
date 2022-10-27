@@ -52,7 +52,7 @@ message HotStuffTreeNode {
   uint64 epoch = 7;
   bytes proposed_by = 8;
   QuorumCertificate justify = 9;
-  optional TariDanPayload payload = 10;
+  TariDanPayload payload = 10;
 }
 
 message ValidatorSignature {
