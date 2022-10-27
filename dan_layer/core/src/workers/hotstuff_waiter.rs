@@ -36,6 +36,7 @@ use tokio::{
 };
 
 use crate::{
+    consensus_constants::ConsensusConstants,
     models::{
         vote_message::VoteMessage,
         HotStuffMessage,
@@ -75,6 +76,7 @@ pub struct HotStuffWaiter<TPayload, TAddr, TLeaderStrategy, TEpochManager, TPayl
     tx_events: broadcast::Sender<HotStuffEvent>,
     payload_processor: TPayloadProcessor,
     shard_store: TShardStore,
+    consensus_constants: ConsensusConstants,
 }
 
 impl<TPayload, TAddr, TLeaderStrategy, TEpochManager, TPayloadProcessor, TShardStore>
@@ -101,6 +103,7 @@ where
         payload_processor: TPayloadProcessor,
         shard_store: TShardStore,
         shutdown: ShutdownSignal,
+        consensus_constants: ConsensusConstants,
     ) -> JoinHandle<Result<(), HotStuffError>> {
         let waiter = HotStuffWaiter::new(
             identity,
@@ -115,6 +118,7 @@ where
             tx_events,
             payload_processor,
             shard_store,
+            consensus_constants,
         );
         tokio::spawn(waiter.run(shutdown))
     }
@@ -132,6 +136,7 @@ where
         tx_events: broadcast::Sender<HotStuffEvent>,
         payload_processor: TPayloadProcessor,
         shard_store: TShardStore,
+        consensus_constants: ConsensusConstants,
     ) -> Self {
         Self {
             identity,
@@ -146,6 +151,7 @@ where
             tx_events,
             payload_processor,
             shard_store,
+            consensus_constants,
         }
     }
 
@@ -235,7 +241,7 @@ where
                 NodeHeight(0)
             };
 
-            if payload_height > NodeHeight(3) {
+            if payload_height > NodeHeight(self.consensus_constants.hotstuff_rounds) {
                 // No need to continue, we have already committed this node.
                 return Ok(());
             }
@@ -382,7 +388,7 @@ where
                 .map_err(|e| e.into())?;
         }
 
-        if node.justify().payload_height() == NodeHeight(2) {
+        if node.justify().payload_height() == NodeHeight(self.consensus_constants.hotstuff_rounds - 1) {
             // decide
             debug!(target: LOG_TARGET, "Deciding on payload: {:?}", node.payload());
             let results = self.on_commit(node, shard, &mut tx)?;
@@ -405,7 +411,7 @@ where
                 let parent = tx.get_node(node.parent()).map_err(|e| e.into())?;
                 results.extend(self.on_commit(parent, shard, tx)?);
             }
-            if node.justify().payload_height() == NodeHeight(2) {
+            if node.justify().payload_height() == NodeHeight(self.consensus_constants.hotstuff_rounds - 1) {
                 let payload = tx.get_payload(&node.justify().payload_id()).map_err(|e| e.into())?;
 
                 let mut all_pledges = HashMap::new();
@@ -442,7 +448,7 @@ where
             (node.payload() == node.justify().payload_id() &&
                 node.payload_height() == node.justify().payload_height() + NodeHeight(1))
         {
-            if node.payload_height() > NodeHeight(3) {
+            if node.payload_height() > NodeHeight(self.consensus_constants.hotstuff_rounds) {
                 return Err(HotStuffError::PayloadHeightIsTooHigh);
             }
             Ok(())

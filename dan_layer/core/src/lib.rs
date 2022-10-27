@@ -23,6 +23,7 @@
 mod digital_assets_error;
 pub use digital_assets_error::DigitalAssetError;
 
+pub mod consensus_constants;
 pub mod message;
 pub mod models;
 pub mod services;

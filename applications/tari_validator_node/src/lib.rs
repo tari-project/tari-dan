@@ -25,7 +25,6 @@ mod bootstrap;
 pub mod cli;
 mod comms;
 mod config;
-mod consensus_constants;
 mod dan_node;
 mod default_service_specification;
 mod grpc;
@@ -52,6 +51,7 @@ use tari_common::{
 };
 use tari_dan_common_types::ShardId;
 use tari_dan_core::{
+    consensus_constants::ConsensusConstants,
     services::{base_node_error::BaseNodeError, BaseNodeClient},
     storage::DbFactory,
     DigitalAssetError,
@@ -64,7 +64,6 @@ pub use crate::config::{ApplicationConfig, ValidatorNodeConfig};
 use crate::{
     bootstrap::{spawn_services, Services},
     cli::Cli,
-    consensus_constants::ConsensusConstants,
     dan_node::DanNode,
     grpc::services::{base_node_client::GrpcBaseNodeClient, wallet_client::GrpcWalletClient},
     http_ui::server::run_http_ui_server,
