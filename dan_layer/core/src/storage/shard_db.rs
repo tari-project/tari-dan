@@ -42,6 +42,9 @@ use crate::{
     storage::shard_store::{ShardStoreTransaction, StoreError},
 };
 
+type PayloadVotes<TAddr, TPayload> =
+    HashMap<PayloadId, HashMap<NodeHeight, HashMap<ShardId, HotStuffTreeNode<TAddr, TPayload>>>>;
+
 // TODO: Clone is pretty bad here, this class should only be used for testing
 #[derive(Debug, Default, Clone)]
 pub struct MemoryShardDbInner<TAddr, TPayload> {
@@ -55,7 +58,7 @@ pub struct MemoryShardDbInner<TAddr, TPayload> {
     nodes: HashMap<TreeNodeHash, HotStuffTreeNode<TAddr, TPayload>>,
     last_executed_height: HashMap<ShardId, NodeHeight>,
     payloads: HashMap<PayloadId, TPayload>,
-    payload_votes: HashMap<PayloadId, HashMap<NodeHeight, HashMap<ShardId, HotStuffTreeNode<TAddr, TPayload>>>>,
+    payload_votes: PayloadVotes<TAddr, TPayload>,
     objects: HashMap<ShardId, (SubstateState, Option<ObjectPledge>)>,
 }
 

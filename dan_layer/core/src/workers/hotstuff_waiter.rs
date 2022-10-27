@@ -479,13 +479,12 @@ where
         self.validate_proposal(&node)?;
 
         let shard = node.shard();
-        let payload;
-        if let Some(node_payload) = node.payload() {
-            payload = node_payload.clone();
+        let payload = if let Some(node_payload) = node.payload() {
+            node_payload.clone()
         } else {
             let tx = self.shard_store.create_tx()?;
-            payload = tx.get_payload(&node.payload_id()).map_err(|e| e.into())?;
-        }
+            tx.get_payload(&node.payload_id()).map_err(|e| e.into())?
+        };
         let involved_shards = payload.involved_shards();
         let local_shards = self
             .epoch_manager
