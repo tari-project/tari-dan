@@ -22,13 +22,18 @@
 
 mod utils;
 
-use std::{collections::HashMap, convert::Infallible, time::Duration};
+use std::{
+    collections::HashMap,
+    convert::{Infallible, TryFrom},
+    time::Duration,
+};
 
 use async_trait::async_trait;
 use cucumber::{given, then, when, WorldInit};
 use tari_dan_core::services::BaseNodeClient;
+use tari_template_lib::Hash;
 use tari_validator_node::GrpcBaseNodeClient;
-use tari_validator_node_client::types::GetIdentityResponse;
+use tari_validator_node_client::types::{GetIdentityResponse, GetTemplateRequest, TemplateRegistrationResponse};
 use utils::{
     miner::{mine_blocks, register_miner_process},
     validator_node::spawn_validator_node,
@@ -38,6 +43,7 @@ use utils::{
 use crate::utils::{
     base_node::{get_base_node_client, spawn_base_node, BaseNodeProcess},
     miner::MinerProcess,
+    template::{send_template_registration, RegisteredTemplate},
     validator_node::{get_vn_client, ValidatorNodeProcess},
     wallet::WalletProcess,
 };
@@ -48,6 +54,7 @@ pub struct TariWorld {
     wallets: HashMap<String, WalletProcess>,
     validator_nodes: HashMap<String, ValidatorNodeProcess>,
     miners: HashMap<String, MinerProcess>,
+    templates: HashMap<String, RegisteredTemplate>,
 }
 
 #[async_trait(?Send)]
@@ -60,6 +67,7 @@ impl cucumber::World for TariWorld {
             wallets: HashMap::new(),
             validator_nodes: HashMap::new(),
             miners: HashMap::new(),
+            templates: HashMap::new(),
         })
     }
 }
@@ -100,6 +108,23 @@ async fn send_vn_registration(world: &mut TariWorld, vn_name: String) {
     tokio::time::sleep(Duration::from_secs(4)).await;
 }
 
+#[when(expr = "the validator node {word} registers the template \"{word}\"")]
+async fn register_template(world: &mut TariWorld, vn_name: String, template_name: String) {
+    let resp: TemplateRegistrationResponse = send_template_registration(world, template_name.clone(), vn_name).await;
+    assert!(resp.transaction_id != 0);
+    assert!(!resp.template_address.is_empty());
+
+    // store the template address for future reference
+    let registered_template = RegisteredTemplate {
+        name: template_name.clone(),
+        address: Hash::try_from(resp.template_address.as_slice()).unwrap(),
+    };
+    world.templates.insert(template_name, registered_template);
+
+    // give it some time for the registration tx to be processed by the wallet and base node
+    tokio::time::sleep(Duration::from_secs(4)).await;
+}
+
 #[then(expr = "the validator node {word} is listed as registered")]
 async fn assert_vn_is_registered(world: &mut TariWorld, vn_name: String) {
     let base_node_grpc_port = world.validator_nodes.get(&vn_name).unwrap().base_node_grpc_port;
@@ -115,6 +140,21 @@ async fn assert_vn_is_registered(world: &mut TariWorld, vn_name: String) {
     let mut client = get_vn_client(jrpc_port).await;
     let identity: GetIdentityResponse = client.get_identity().await.unwrap();
     assert_eq!(identity.public_key, registered_vn.public_key.to_string());
+}
+
+#[then(expr = "the template \"{word}\" is listed as registered by the validator node {word}")]
+async fn assert_template_is_registered(world: &mut TariWorld, template_name: String, vn_name: String) {
+    // retrieve the template address
+    let template_address = world.templates.get(&template_name).unwrap().address;
+
+    // try to get the template from the VN
+    let jrpc_port = world.validator_nodes.get(&vn_name).unwrap().json_rpc_port;
+    let mut client = get_vn_client(jrpc_port).await;
+    let req = GetTemplateRequest { template_address };
+    let resp = client.get_template(req).await.unwrap();
+
+    // check that the template is indeed in the response
+    assert_eq!(resp.registration_metadata.address, template_address);
 }
 
 #[then(expr = "the validator node {word} returns a valid identity")]
