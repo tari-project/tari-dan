@@ -36,6 +36,7 @@ use crate::{
 
 #[async_trait]
 pub trait BaseNodeClient: Send + Sync + Clone {
+    async fn test_connection(&mut self) -> Result<(), BaseNodeError>;
     async fn get_tip_info(&mut self) -> Result<BaseLayerMetadata, BaseNodeError>;
     async fn get_validator_nodes(&mut self, height: u64) -> Result<Vec<ValidatorNode>, BaseNodeError>;
     async fn get_committee(&mut self, height: u64, shard_key: &[u8; 32]) -> Result<Vec<CommsPublicKey>, BaseNodeError>;
