@@ -285,11 +285,11 @@ impl BaseLayerScanner {
                 })?;
                 match sidechain_feature {
                     SideChainFeature::ValidatorNodeRegistration(reg) => {
-                        let validator_node_timeout = self
+                        let validator_node_registration_expiry = self
                             .base_node_client
                             .get_consensus_constants(tip.height_of_longest_chain)
                             .await?
-                            .get_validator_node_timeout();
+                            .get_validator_node_registration_expiry();
                         if current_height.checked_sub(self.last_scanned_height).ok_or(
                             BaseLayerScannerError::DataCorruption {
                                 details: format!(
@@ -298,7 +298,7 @@ impl BaseLayerScanner {
                                     current_height, self.last_scanned_height,
                                 ),
                             },
-                        )? >= validator_node_timeout
+                        )? >= validator_node_registration_expiry
                         {
                             self.register_validator_node_registration(current_height, reg).await?;
                         }

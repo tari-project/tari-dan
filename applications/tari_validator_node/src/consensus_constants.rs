@@ -33,15 +33,17 @@ impl ConsensusConstants {
 }
 
 pub struct BaseLayerConsensusConstants {
-    validator_node_timeout: u64,
+    validator_node_registration_expiry: u64,
 }
 
 impl BaseLayerConsensusConstants {
-    pub fn new(validator_node_timeout: u64) -> Self {
-        Self { validator_node_timeout }
+    pub fn new(validator_node_registration_expiry: u64) -> Self {
+        Self {
+            validator_node_registration_expiry,
+        }
     }
 
-    pub fn get_validator_node_timeout(&self) -> u64 {
-        self.validator_node_timeout
+    pub fn get_validator_node_registration_expiry(&self) -> u64 {
+        self.validator_node_registration_expiry
     }
 }
