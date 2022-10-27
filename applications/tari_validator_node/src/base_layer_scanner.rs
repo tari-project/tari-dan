@@ -30,7 +30,7 @@ use tari_core::transactions::transaction_components::{
     ValidatorNodeRegistration,
 };
 use tari_crypto::tari_utilities::ByteArray;
-use tari_dan_common_types::optional::Optional;
+use tari_dan_common_types::{optional::Optional, Epoch};
 use tari_dan_core::{
     models::BaseLayerMetadata,
     services::{base_node_error::BaseNodeError, epoch_manager::EpochManagerError, BaseNodeClient, BlockInfo},
@@ -230,7 +230,6 @@ impl BaseLayerScanner {
         }
     }
 
-    #[allow(clippy::too_many_lines)]
     async fn sync_blockchain(&mut self) -> Result<(), BaseLayerScannerError> {
         let start_scan_height = self.last_scanned_height;
         let mut current_hash = self.last_scanned_hash;
@@ -285,23 +284,7 @@ impl BaseLayerScanner {
                 })?;
                 match sidechain_feature {
                     SideChainFeature::ValidatorNodeRegistration(reg) => {
-                        let validator_node_registration_expiry = self
-                            .base_node_client
-                            .get_consensus_constants(tip.height_of_longest_chain)
-                            .await?
-                            .get_validator_node_registration_expiry();
-                        if current_height.checked_sub(self.last_scanned_height).ok_or(
-                            BaseLayerScannerError::DataCorruption {
-                                details: format!(
-                                    "Invalid last scanned height: current height is {}, whereas last scanned height \
-                                     is {}",
-                                    current_height, self.last_scanned_height,
-                                ),
-                            },
-                        )? >= validator_node_registration_expiry
-                        {
-                            self.register_validator_node_registration(current_height, reg).await?;
-                        }
+                        self.register_validator_node_registration(current_height, reg).await?;
                     },
                     SideChainFeature::TemplateRegistration(reg) => {
                         self.register_code_template_registration(
@@ -351,8 +334,10 @@ impl BaseLayerScanner {
             target: LOG_TARGET,
             "⛓️ Validator node registration UTXO found at height {}", height,
         );
-        // todo: maybe register? idk
-        // self.epoch_manager.update_epoch(height).await?;
+
+        let epoch_height = Epoch::from_block_height(height); // epoch duration corresponds to 10 blocks
+        self.epoch_manager.update_last_registration_epoch(epoch_height).await?;
+
         Ok(())
     }
 
