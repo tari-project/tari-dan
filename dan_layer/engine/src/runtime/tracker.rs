@@ -104,10 +104,10 @@ impl StateTracker {
         self.write_with(|state| mem::take(&mut state.logs))
     }
 
-    fn check_amount(&self, amount: &Amount) -> Result<(), RuntimeError> {
+    fn check_amount(&self, amount: Amount) -> Result<(), RuntimeError> {
         if amount.is_negative() {
             return Err(RuntimeError::InvalidAmount {
-                amount: *amount,
+                amount,
                 reason: "Amount must be positive".to_string(),
             });
         }
@@ -118,7 +118,7 @@ impl StateTracker {
         let resource_address = self.id_provider.new_resource_address();
         match mint_arg {
             MintResourceArg::Fungible { amount, metadata } => {
-                self.check_amount(&amount)?;
+                self.check_amount(amount)?;
                 self.write_with(|state| {
                     let resource = Resource::fungible(resource_address, amount, metadata);
                     state.new_resources.insert(resource.address(), resource);
@@ -355,11 +355,11 @@ impl StateTracker {
     }
 
     fn read_with<R, F: FnOnce(&WorkingState) -> R>(&self, f: F) -> R {
-        f(&*self.working_state.read().unwrap())
+        f(&self.working_state.read().unwrap())
     }
 
     fn write_with<R, F: FnOnce(&mut WorkingState) -> R>(&self, f: F) -> R {
-        f(&mut *self.working_state.write().unwrap())
+        f(&mut self.working_state.write().unwrap())
     }
 
     pub fn transaction_hash(&self) -> Hash {

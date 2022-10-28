@@ -106,7 +106,7 @@ impl From<u32> for Amount {
 }
 impl From<i64> for Amount {
     fn from(value: i64) -> Self {
-        Amount::new(i64::from(value))
+        Amount::new(value)
     }
 }
 

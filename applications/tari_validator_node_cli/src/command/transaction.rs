@@ -113,7 +113,7 @@ impl CliArg {
             CliArg::U32(v) => i64::from(*v).to_le_bytes().to_vec(),
             CliArg::U16(v) => i64::from(*v).to_le_bytes().to_vec(),
             CliArg::U8(v) => i64::from(*v).to_le_bytes().to_vec(),
-            CliArg::I64(v) => i64::from(*v).to_le_bytes().to_vec(),
+            CliArg::I64(v) => v.to_le_bytes().to_vec(),
             CliArg::I32(v) => i64::from(*v).to_le_bytes().to_vec(),
             CliArg::I16(v) => i64::from(*v).to_le_bytes().to_vec(),
             CliArg::I8(v) => i64::from(*v).to_le_bytes().to_vec(),
