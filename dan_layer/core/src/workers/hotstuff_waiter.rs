@@ -480,6 +480,8 @@ where
 
         let shard = node.shard();
         let payload = if let Some(node_payload) = node.payload() {
+            let mut tx = self.shard_store.create_tx()?;
+            tx.set_payload(node_payload.clone()).map_err(|e| e.into())?;
             node_payload.clone()
         } else {
             let tx = self.shard_store.create_tx()?;
