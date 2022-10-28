@@ -106,7 +106,7 @@ impl TryFrom<proto::consensus::HotStuffMessage> for HotStuffMessage<TariDanPaylo
 
 // -------------------------------- HotStuffTreeNode -------------------------------- //
 
-impl TryFrom<proto::consensus::HotStuffTreeNode> for HotStuffTreeNode<CommsPublicKey> {
+impl TryFrom<proto::consensus::HotStuffTreeNode> for HotStuffTreeNode<CommsPublicKey, TariDanPayload> {
     type Error = anyhow::Error;
 
     fn try_from(value: proto::consensus::HotStuffTreeNode) -> Result<Self, Self::Error> {
@@ -114,7 +114,8 @@ impl TryFrom<proto::consensus::HotStuffTreeNode> for HotStuffTreeNode<CommsPubli
             value.parent.try_into()?,
             value.shard.try_into()?,
             value.height.into(),
-            value.payload.try_into()?,
+            value.payload_id.try_into()?,
+            value.payload.map(|a| a.try_into().unwrap()),
             value.payload_height.into(),
             value
                 .local_pledges
@@ -132,13 +133,14 @@ impl TryFrom<proto::consensus::HotStuffTreeNode> for HotStuffTreeNode<CommsPubli
     }
 }
 
-impl From<HotStuffTreeNode<CommsPublicKey>> for proto::consensus::HotStuffTreeNode {
-    fn from(source: HotStuffTreeNode<CommsPublicKey>) -> Self {
+impl From<HotStuffTreeNode<CommsPublicKey, TariDanPayload>> for proto::consensus::HotStuffTreeNode {
+    fn from(source: HotStuffTreeNode<CommsPublicKey, TariDanPayload>) -> Self {
         Self {
             parent: Vec::from(source.parent().as_bytes()),
-            payload: source.payload().as_bytes().to_vec(),
+            payload: source.payload().map(|a| a.clone().into()),
             height: source.height().as_u64(),
             shard: source.shard().as_bytes().to_vec(),
+            payload_id: source.payload_id().as_bytes().to_vec(),
             payload_height: source.payload_height().as_u64(),
             local_pledges: source.local_pledges().iter().map(|p| p.clone().into()).collect(),
             epoch: source.epoch().as_u64(),

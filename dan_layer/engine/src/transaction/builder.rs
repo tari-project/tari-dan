@@ -37,7 +37,7 @@ pub struct TransactionBuilder {
     sender_public_key: Option<RistrettoPublicKey>,
     fee: u64,
     meta: TransactionMeta,
-    new_components: u8,
+    num_outputs: u8,
     // max_outputs: u8,
 }
 
@@ -52,7 +52,7 @@ impl TransactionBuilder {
                 involved_objects: HashMap::new(),
             },
             // max_outputs: 0,
-            new_components: 0,
+            num_outputs: 0,
         }
     }
 
@@ -91,7 +91,23 @@ impl TransactionBuilder {
         self
     }
 
-    pub fn add_input_object(&mut self, input_object: ShardId) -> &mut Self {
+    /// Reference this input without consuming it
+    pub fn add_input_ref(&mut self, input_object: ShardId) -> &mut Self {
+        self.meta
+            .involved_objects
+            .insert(input_object, (SubstateChange::Exists, ObjectClaim {}));
+        self
+    }
+
+    pub fn with_input_refs(&mut self, inputs: Vec<ShardId>) -> &mut Self {
+        for input in inputs {
+            self.add_input_ref(input);
+        }
+        self
+    }
+
+    /// Add an input to be consumed
+    pub fn add_input(&mut self, input_object: ShardId) -> &mut Self {
         self.meta
             .involved_objects
             .insert(input_object, (SubstateChange::Destroy, ObjectClaim {}));
@@ -100,18 +116,13 @@ impl TransactionBuilder {
 
     pub fn with_inputs(&mut self, inputs: Vec<ShardId>) -> &mut Self {
         for input in inputs {
-            self.add_input_object(input);
+            self.add_input(input);
         }
         self
     }
 
-    // pub fn add_outputs(&mut self, max_outputs: u8) -> &mut Self {
-    //     self.max_outputs += max_outputs;
-    //     self
-    // }
-
-    pub fn with_new_components(&mut self, components: u8) -> &mut Self {
-        self.new_components += components;
+    pub fn with_num_outputs(&mut self, num_outputs: u8) -> &mut Self {
+        self.num_outputs = num_outputs;
         self
     }
 
@@ -125,33 +136,12 @@ impl TransactionBuilder {
         );
 
         let id_provider = IdProvider::new(t.hash);
-        // for o in 0..self.max_outputs {
-        //     let value: [u8; 32] = Blake256::new().chain(base_hash).chain(&[o]).finalize_fixed().into();
-        //     let object_id = ObjectId(value);
-        //     let shard_id = ShardId(value);
-        //     t.meta.involved_objects.entry(shard_id).or_insert(vec![]).push((
-        //         object_id,
-        //         SubstateChange::Create,
-        //         ObjectClaim {},
-        //     ));
-        // }
 
-        for _o in 0..self.new_components {
-            // let value: [u8; 32] = Blake256::chain(Blake256::new(), base_hash).chain(&[o]).finalize_fixed().into();
-            // let object_id = ObjectId(value);
-            // let shard_id = ShardId(value);
-            let id = id_provider.new_component_address();
-            let shard_id = ShardId(id.into_array());
-            if t.meta.is_none() {
-                t.meta = Some(TransactionMeta {
-                    involved_objects: HashMap::new(),
-                });
-            }
-            if let Some(m) = t.meta.as_mut() {
-                m.involved_objects
-                    .insert(shard_id, (SubstateChange::Create, ObjectClaim {}));
-            }
-        }
+        let meta = t.meta.get_or_insert(TransactionMeta::default());
+        meta.involved_objects.extend(
+            (0..self.num_outputs).map(|_| (id_provider.new_output_shard(), (SubstateChange::Create, ObjectClaim {}))),
+        );
+
         t
     }
 }

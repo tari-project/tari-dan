@@ -77,8 +77,8 @@ pub trait ShardStoreTransaction<TAddr: NodeAddressable, TPayload: Payload> {
     fn update_leaf_node(&mut self, shard: ShardId, node: TreeNodeHash, height: NodeHeight) -> Result<(), Self::Error>;
     fn get_high_qc_for(&self, shard: ShardId) -> Result<QuorumCertificate, Self::Error>;
     fn get_payload(&self, payload_id: &PayloadId) -> Result<TPayload, Self::Error>;
-    fn get_node(&self, node_hash: &TreeNodeHash) -> Result<HotStuffTreeNode<TAddr>, Self::Error>;
-    fn save_node(&mut self, node: HotStuffTreeNode<TAddr>) -> Result<(), Self::Error>;
+    fn get_node(&self, node_hash: &TreeNodeHash) -> Result<HotStuffTreeNode<TAddr, TPayload>, Self::Error>;
+    fn save_node(&mut self, node: HotStuffTreeNode<TAddr, TPayload>) -> Result<(), Self::Error>;
     fn get_locked_node_hash_and_height(&self, shard: ShardId) -> Result<(TreeNodeHash, NodeHeight), Self::Error>;
     fn set_locked(
         &mut self,
@@ -98,7 +98,7 @@ pub trait ShardStoreTransaction<TAddr: NodeAddressable, TPayload: Payload> {
     fn save_substate_changes(
         &mut self,
         changes: &HashMap<ShardId, SubstateState>,
-        node: &HotStuffTreeNode<TAddr>,
+        node: &HotStuffTreeNode<TAddr, TPayload>,
     ) -> Result<(), Self::Error>;
     fn get_state_inventory(&self, start_shard: ShardId, end_shard: ShardId) -> Result<Vec<ShardId>, Self::Error>;
     fn get_substate_states(&self, shards: &[ShardId]) -> Result<Vec<SubstateState>, Self::Error>;
@@ -109,13 +109,13 @@ pub trait ShardStoreTransaction<TAddr: NodeAddressable, TPayload: Payload> {
         payload: PayloadId,
         payload_height: NodeHeight,
         shard: ShardId,
-    ) -> Result<Option<HotStuffTreeNode<TAddr>>, Self::Error>;
+    ) -> Result<Option<HotStuffTreeNode<TAddr, TPayload>>, Self::Error>;
     fn save_leader_proposals(
         &mut self,
         shard: ShardId,
         payload: PayloadId,
         payload_height: NodeHeight,
-        node: HotStuffTreeNode<TAddr>,
+        node: HotStuffTreeNode<TAddr, TPayload>,
     ) -> Result<(), Self::Error>;
     fn has_vote_for(&self, from: &TAddr, node_hash: TreeNodeHash, shard: ShardId) -> Result<bool, Self::Error>;
     fn save_received_vote_for(

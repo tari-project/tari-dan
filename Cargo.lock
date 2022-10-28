@@ -5843,6 +5843,7 @@ dependencies = [
  "hex",
  "newtype-ops",
  "serde",
+ "serde_json",
  "tari_template_abi",
  "tari_template_macros",
 ]

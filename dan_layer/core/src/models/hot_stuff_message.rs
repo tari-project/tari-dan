@@ -45,7 +45,7 @@ pub struct HotStuffMessage<TPayload, TAddr> {
     message_type: HotStuffMessageType,
     // The high qc: used for new view messages
     high_qc: Option<QuorumCertificate>,
-    node: Option<HotStuffTreeNode<TAddr>>,
+    node: Option<HotStuffTreeNode<TAddr, TPayload>>,
     shard: Option<ShardId>,
     // Used for broadcasting the payload in new view
     new_view_payload: Option<TPayload>,
@@ -67,7 +67,7 @@ impl<TPayload: Payload, TAddr: NodeAddressable> HotStuffMessage<TPayload, TAddr>
     pub fn new(
         message_type: HotStuffMessageType,
         high_qc: Option<QuorumCertificate>,
-        node: Option<HotStuffTreeNode<TAddr>>,
+        node: Option<HotStuffTreeNode<TAddr, TPayload>>,
         shard: Option<ShardId>,
         new_view_payload: Option<TPayload>,
     ) -> Self {
@@ -93,7 +93,7 @@ impl<TPayload: Payload, TAddr: NodeAddressable> HotStuffMessage<TPayload, TAddr>
         }
     }
 
-    pub fn generic(node: HotStuffTreeNode<TAddr>, shard: ShardId) -> Self {
+    pub fn generic(node: HotStuffTreeNode<TAddr, TPayload>, shard: ShardId) -> Self {
         Self {
             message_type: HotStuffMessageType::Generic,
             shard: Some(shard),
@@ -137,7 +137,7 @@ impl<TPayload: Payload, TAddr: NodeAddressable> HotStuffMessage<TPayload, TAddr>
         self.shard.unwrap()
     }
 
-    pub fn node(&self) -> Option<&HotStuffTreeNode<TAddr>> {
+    pub fn node(&self) -> Option<&HotStuffTreeNode<TAddr, TPayload>> {
         self.node.as_ref()
     }
 

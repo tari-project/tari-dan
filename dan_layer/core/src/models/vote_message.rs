@@ -55,6 +55,14 @@ impl VoteMessage {
         }
     }
 
+    pub fn accept(local_node_hash: TreeNodeHash, shard: ShardId, all_shard_nodes: Vec<ShardVote>) -> Self {
+        Self::new(local_node_hash, shard, QuorumDecision::Accept, all_shard_nodes)
+    }
+
+    pub fn reject(local_node_hash: TreeNodeHash, shard: ShardId, all_shard_nodes: Vec<ShardVote>) -> Self {
+        Self::new(local_node_hash, shard, QuorumDecision::Reject, all_shard_nodes)
+    }
+
     pub fn with_signature(
         local_node_hash: TreeNodeHash,
         shard: ShardId,
@@ -83,7 +91,7 @@ impl VoteMessage {
     }
 
     pub fn get_all_nodes_hash(&self) -> FixedHash {
-        let mut result = Blake256::new().chain(&[self.decision.as_u8()]);
+        let mut result = Blake256::new().chain([self.decision.as_u8()]);
         // data must already be sorted
         for ShardVote {
             shard_id,
