@@ -22,12 +22,14 @@
 
 pub struct ConsensusConstants {
     pub base_layer_confirmations: u64,
+    pub hotstuff_rounds: u64,
 }
 
 impl ConsensusConstants {
     pub const fn devnet() -> Self {
         Self {
             base_layer_confirmations: 3,
+            hotstuff_rounds: 4,
         }
     }
 }

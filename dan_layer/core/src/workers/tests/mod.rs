@@ -44,6 +44,7 @@ use tokio::{
 };
 
 use crate::{
+    consensus_constants::ConsensusConstants,
     models::{
         vote_message::VoteMessage,
         HotStuffMessage,
@@ -148,6 +149,8 @@ where
         let rx_execute = payload_processor.receiver.resubscribe();
         let shutdown = Shutdown::new();
 
+        let consensus_constants = ConsensusConstants::devnet();
+
         let shard_store = MemoryShardStoreFactory::new();
         let hs_waiter = HotStuffWaiter::spawn(
             identity.clone(),
@@ -163,6 +166,7 @@ where
             payload_processor,
             shard_store,
             shutdown.to_signal(),
+            consensus_constants,
         );
         Self {
             identity,
