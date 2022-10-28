@@ -232,14 +232,27 @@ impl ShardStoreTransaction<PublicKey, TariDanPayload> for SqliteShardStoreTransa
             height: qc.local_node_height().as_u64() as i64,
             qc_json: json!(qc).to_string(),
         };
-        diesel::insert_into(high_qcs)
-            .values(&new_row)
-            .execute(&self.connection)
-            .map_err(|e| StorageError::QueryError {
-                reason: format!("Update qc error: {0}", e),
-            })?;
-
-        Ok(())
+        match diesel::insert_into(high_qcs).values(&new_row).execute(&self.connection) {
+            Ok(_) => Ok(()),
+            Err(err) => {
+                // It can happen that we get this payload from two shards that we are responsible
+                match err {
+                    Error::DatabaseError(kind, _) => {
+                        if matches!(kind, DatabaseErrorKind::UniqueViolation) {
+                            debug!(target: LOG_TARGET, "High QC already exists");
+                            Ok(())
+                        } else {
+                            Err(StorageError::QueryError {
+                                reason: format!("Update high qc error: {}", err),
+                            })
+                        }
+                    },
+                    _ => Err(Self::Error::QueryError {
+                        reason: format!("update high QC error: {}", err),
+                    }),
+                }
+            },
+        }
     }
 
     fn get_leaf_node(&self, shard: ShardId) -> Result<(TreeNodeHash, NodeHeight), Self::Error> {
