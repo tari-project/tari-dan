@@ -20,7 +20,7 @@
 //   WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //   USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use std::path::Path;
+use std::{convert::TryFrom, path::Path, str::FromStr};
 
 use clap::{Args, Subcommand};
 use tari_dan_common_types::ShardId;
@@ -32,7 +32,7 @@ use tari_engine_types::{
     substate::SubstateValue,
     TemplateAddress,
 };
-use tari_template_lib::models::ComponentAddress;
+use tari_template_lib::{args::Arg, models::ComponentAddress};
 use tari_utilities::hex::to_hex;
 use tari_validator_node_client::{types::SubmitTransactionRequest, ValidatorNodeClient};
 
@@ -49,6 +49,77 @@ pub struct SubmitArgs {
     instruction: CliInstruction,
     #[clap(long, short = 'w')]
     wait_for_result: bool,
+    #[clap(long, short = 'a')]
+    args: Vec<CliArg>,
+}
+
+#[derive(Debug, Clone)]
+pub enum CliArg {
+    String(String),
+    U64(u64),
+    U32(u32),
+    U16(u16),
+    U8(u8),
+    I64(i64),
+    I32(i32),
+    I16(i16),
+    I8(i8),
+    Bool(bool),
+}
+
+impl FromStr for CliArg {
+    type Err = String;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        if let Ok(v) = s.parse::<u64>() {
+            return Ok(CliArg::U64(v));
+        }
+        if let Ok(v) = s.parse::<u32>() {
+            return Ok(CliArg::U32(v));
+        }
+        if let Ok(v) = s.parse::<u16>() {
+            return Ok(CliArg::U16(v));
+        }
+        if let Ok(v) = s.parse::<u8>() {
+            return Ok(CliArg::U8(v));
+        }
+        if let Ok(v) = s.parse::<i64>() {
+            return Ok(CliArg::I64(v));
+        }
+        if let Ok(v) = s.parse::<i32>() {
+            return Ok(CliArg::I32(v));
+        }
+        if let Ok(v) = s.parse::<i16>() {
+            return Ok(CliArg::I16(v));
+        }
+        if let Ok(v) = s.parse::<i8>() {
+            return Ok(CliArg::I8(v));
+        }
+        if let Ok(v) = s.parse::<bool>() {
+            return Ok(CliArg::Bool(v));
+        }
+        Ok(CliArg::String(s.to_string()))
+    }
+}
+
+impl CliArg {
+    pub fn as_bytes(&self) -> Vec<u8> {
+        match self {
+            CliArg::String(s) => s.as_bytes().to_vec(),
+            CliArg::U64(v) => i64::try_from(*v)
+                .expect("Not a valid i64 number")
+                .to_le_bytes()
+                .to_vec(),
+            CliArg::U32(v) => i64::from(*v).to_le_bytes().to_vec(),
+            CliArg::U16(v) => i64::from(*v).to_le_bytes().to_vec(),
+            CliArg::U8(v) => i64::from(*v).to_le_bytes().to_vec(),
+            CliArg::I64(v) => v.to_le_bytes().to_vec(),
+            CliArg::I32(v) => i64::from(*v).to_le_bytes().to_vec(),
+            CliArg::I16(v) => i64::from(*v).to_le_bytes().to_vec(),
+            CliArg::I8(v) => i64::from(*v).to_le_bytes().to_vec(),
+            CliArg::Bool(v) => i64::from(*v).to_le_bytes().to_vec(),
+        }
+    }
 }
 
 #[derive(Debug, Subcommand, Clone)]
@@ -87,13 +158,10 @@ async fn handle_submit(
         CliInstruction::CallFunction {
             template_address,
             function_name,
-        } => {
-            Instruction::CallFunction {
-                template_address: template_address.into_inner(),
-                function: function_name,
-                // TODO
-                args: vec![],
-            }
+        } => Instruction::CallFunction {
+            template_address: template_address.into_inner(),
+            function: function_name,
+            args: args.args.iter().map(|s| Arg::literal(s.as_bytes())).collect(),
         },
         CliInstruction::CallMethod {
             template_address,
@@ -105,8 +173,7 @@ async fn handle_submit(
                 template_address: template_address.into_inner(),
                 component_address: component_address.into_inner(),
                 method: method_name,
-                // TODO
-                args: vec![],
+                args: args.args.iter().map(|s| Arg::literal(s.as_bytes())).collect(),
             }
         },
     };

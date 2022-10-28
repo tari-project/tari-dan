@@ -143,3 +143,8 @@ loggers:
     appenders:
       - other
     additive: false
+  hyper:
+    level: info
+    appenders:
+      - other
+    additive: false

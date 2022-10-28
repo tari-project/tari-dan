@@ -83,7 +83,7 @@ impl VoteMessage {
     }
 
     pub fn get_all_nodes_hash(&self) -> FixedHash {
-        let mut result = Blake256::new().chain(&[self.decision.as_u8()]);
+        let mut result = Blake256::new().chain([self.decision.as_u8()]);
         // data must already be sorted
         for ShardVote {
             shard_id,

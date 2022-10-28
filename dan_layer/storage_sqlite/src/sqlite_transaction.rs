@@ -24,7 +24,7 @@ use diesel::{Connection, SqliteConnection};
 
 use crate::error::SqliteStorageError;
 
-const LOG_TARGET: &str = "storage::sqlite::transaction";
+const LOG_TARGET: &str = "tari::dan::storage::sqlite::transaction";
 
 pub struct SqliteTransaction {
     connection: SqliteConnection,
@@ -35,7 +35,7 @@ impl SqliteTransaction {
     pub fn begin(connection: SqliteConnection) -> Result<Self, SqliteStorageError> {
         // TODO: This busy wait sucks and there is definitely a better way, but we care more about the SQLite DB working
         //       than performance
-        while let Err(err) = connection.execute("BEGIN EXCLUSIVE;") {
+        while let Err(err) = connection.execute("BEGIN;") {
             if err.to_string().contains("database is locked") {
                 log::warn!(target: LOG_TARGET, "Database is locked, retrying in 100ms");
                 std::thread::sleep(std::time::Duration::from_millis(100));

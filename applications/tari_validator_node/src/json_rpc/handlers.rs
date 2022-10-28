@@ -150,7 +150,7 @@ impl JsonRpcHandlers {
             .map_err(internal_error(answer_id))?;
 
         if transaction.wait_for_result {
-            return wait_for_result(answer_id, hash, subscription, Duration::from_secs(10)).await;
+            return wait_for_result(answer_id, hash, subscription, Duration::from_secs(30)).await;
         }
 
         Ok(JsonRpcResponse::success(answer_id, SubmitTransactionResponse {
@@ -445,9 +445,11 @@ async fn wait_for_result(
                         // TODO: There should probably only be one result (on_commit recursion)
                         result: results.pop(),
                     };
+                    dbg!(&response);
                     return Ok(JsonRpcResponse::success(answer_id, response));
                 },
                 Ok(HotStuffEvent::Failed(err)) => {
+                    warn!(target: LOG_TARGET, "Transaction failed: {}", err);
                     return Err(JsonRpcResponse::error(
                         answer_id,
                         JsonRpcError::new(
