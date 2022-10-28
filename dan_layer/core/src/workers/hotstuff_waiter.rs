@@ -224,22 +224,20 @@ where
             let mut tx = self.shard_store.create_tx()?;
 
             let parent = tx.get_node(&leaf).map_err(|e| e.into())?;
-
-            if leaf != TreeNodeHash::zero() && parent.justify().local_node_hash() == qc.local_node_hash() {
-                info!(
-                    target: LOG_TARGET,
-                    "Leaf node already has the same QC as the proposed QC, so we have already sent a proposal for \
-                     this payload"
-                );
-                // We have already sent a proposal for this paylaod. Do nothing
-                return Ok(());
-            }
-
             let payload_height = if parent.payload_id() == payload_id {
                 parent.payload_height() + NodeHeight(1)
             } else {
                 NodeHeight(0)
             };
+            if payload_height != NodeHeight(0) && parent.justify().local_node_hash() == qc.local_node_hash() {
+                info!(
+                    target: LOG_TARGET,
+                    "Leaf node already has the same QC as the proposed QC, so we have already sent a proposal for \
+                     this payload"
+                );
+                // We have already sent a proposal for this payload. Do nothing
+                return Ok(());
+            }
 
             if payload_height > NodeHeight(self.consensus_constants.hotstuff_rounds) {
                 info!(
@@ -392,7 +390,7 @@ where
     async fn update_nodes(
         &mut self,
         node: HotStuffTreeNode<TAddr, TPayload>,
-        finalize_result: &FinalizeResult,
+        // finalize_result: &FinalizeResult,
     ) -> Result<(), HotStuffError> {
         let shard = node.shard();
 
@@ -420,14 +418,22 @@ where
         }
 
         if node.justify().payload_height() == NodeHeight(self.consensus_constants.hotstuff_rounds - 2) {
-            let result = finalize_result;
-            self.publish_result_event(node.justify().payload_id(), result);
-            let changes = extract_changes(node.payload_id(), result)?;
+            let payload = tx.get_payload(&node.payload_id()).map_err(|e| e.into())?;
+            let shard_pledges = node
+                .justify()
+                .all_shard_nodes()
+                .iter()
+                .map(|s| (s.shard_id, s.pledges.clone()))
+                .collect();
+            let finalize_result = self.execute(shard_pledges, payload)?;
+            self.publish_result_event(node.justify().payload_id(), &finalize_result);
+            let changes = extract_changes(node.payload_id(), &finalize_result)?;
             info!(
                 target: LOG_TARGET,
                 "payload changeset: {}",
                 serde_json::to_string(&changes).unwrap()
             );
+
             self.on_commit(node, &changes, &mut tx)?;
         }
         tx.commit().map_err(|e| e.into())?;
@@ -463,6 +469,7 @@ where
 
             if node.parent() != &TreeNodeHash::zero() {
                 let parent = tx.get_node(node.parent()).map_err(|e| e.into())?;
+                // TODO: this is not correct, the parent node has different changes
                 self.on_commit(parent, changes, tx)?;
             }
 
@@ -477,15 +484,16 @@ where
 
     fn execute(
         &self,
-        node: &HotStuffTreeNode<TAddr, TPayload>,
+        // node: &HotStuffTreeNode<TAddr, TPayload>,
+        shard_pledges: HashMap<ShardId, Vec<ObjectPledge>>,
         payload: TPayload,
     ) -> Result<FinalizeResult, HotStuffError> {
-        let shard_pledges = node
-            .justify()
-            .all_shard_nodes()
-            .iter()
-            .map(|s| (s.shard_id, s.pledges.clone()))
-            .collect();
+        // let shard_pledges = node
+        //     .justify()
+        //     .all_shard_nodes()
+        //     .iter()
+        //     .map(|s| (s.shard_id, s.pledges.clone()))
+        //     .collect();
         let finalize = self.payload_processor.process_payload(payload, shard_pledges)?;
         Ok(finalize)
     }
@@ -539,9 +547,6 @@ where
         let mut votes_to_send = vec![];
         // let mut finalize_result = None;
 
-        // Execute the payload!
-        let finalize_result = self.execute(&node, payload)?;
-
         {
             let mut tx = self.shard_store.create_tx()?;
             tx.save_node(node.clone()).map_err(|e| e.into())?;
@@ -554,22 +559,29 @@ where
                 tx.save_leader_proposals(shard, node.payload_id(), node.payload_height(), node.clone())
                     .map_err(|e| e.into())?;
 
-                let mut votes = vec![];
+                let mut leader_proposals = vec![];
                 for s in &involved_shards {
-                    if let Some(vote) = tx
+                    if let Some(leader_proposal) = tx
                         .get_leader_proposals(node.payload_id(), node.payload_height(), *s)
                         .map_err(|e| e.into())?
                     {
-                        votes.push(ShardVote {
+                        leader_proposals.push(ShardVote {
                             shard_id: *s,
-                            node_hash: *vote.hash(),
-                            pledges: vote.local_pledges().to_vec(),
+                            node_hash: *leader_proposal.hash(),
+                            pledges: leader_proposal.local_pledges().to_vec(),
                         });
                     } else {
                         break;
                     }
                 }
-                if votes.len() == involved_shards.len() {
+                if leader_proposals.len() == involved_shards.len() {
+                    // Execute the payload!
+                    let shard_pledges = leader_proposals
+                        .iter()
+                        .map(|s| (s.shard_id, s.pledges.clone()))
+                        .collect();
+                    let finalize_result = self.execute(shard_pledges, payload)?;
+
                     // it may happen that we are involved in more than one committee, in which case send the votes to
                     // each leader.
 
@@ -585,7 +597,12 @@ where
 
                         let _signature = self.sign(node.hash(), shard);
 
-                        let vote_msg = self.decide(*local_node.hash(), local_shard, votes.clone(), &finalize_result)?;
+                        let vote_msg = self.decide(
+                            *local_node.hash(),
+                            local_shard,
+                            leader_proposals.clone(),
+                            &finalize_result,
+                        )?;
 
                         votes_to_send.push(self.tx_vote_message.send((
                             vote_msg,
@@ -598,7 +615,7 @@ where
                     info!(
                         target: LOG_TARGET,
                         "🔥 Not enough votes to vote on the message, votes: {}, involved_shards: {}",
-                        votes.len(),
+                        leader_proposals.len(),
                         involved_shards.len()
                     );
                 }
@@ -611,7 +628,7 @@ where
         for res in join_all(votes_to_send).await {
             res.map_err(|_| HotStuffError::SendError)?;
         }
-        self.update_nodes(node.clone(), &finalize_result).await?;
+        self.update_nodes(node.clone()).await?;
         Ok(())
     }
 

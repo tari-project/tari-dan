@@ -205,7 +205,7 @@ impl BaseLayerScanner {
                 self.sync_blockchain().await?;
             },
             BlockchainProgression::NoProgress => {
-                debug!(target: LOG_TARGET, "No new blocks to scan.");
+                trace!(target: LOG_TARGET, "No new blocks to scan.");
             },
         }
 

@@ -123,6 +123,7 @@ loggers:
     appenders:
       - network
 
+
   # spits out the whole wasm if in debug mode
   regalloc:
     level: info
@@ -144,6 +145,11 @@ loggers:
       - other
     additive: false
   hyper:
+    level: info
+    appenders:
+      - other
+    additive: false
+  tower:
     level: info
     appenders:
       - other

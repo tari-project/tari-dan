@@ -49,6 +49,7 @@ pub struct SubmitArgs {
     instruction: CliInstruction,
     #[clap(long, short = 'w')]
     wait_for_result: bool,
+    #[clap(long, short = 'n')]
     num_outputs: Option<u8>,
 }
 

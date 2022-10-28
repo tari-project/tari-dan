@@ -207,6 +207,7 @@ impl SqliteShardStoreTransaction {
             pledged_to_payload: PayloadId::try_from(obj.pledged_to_payload_id.unwrap_or_default())?,
             pledged_until: NodeHeight(obj.pledged_until_height.unwrap_or_default() as u64),
         };
+        dbg!(&pledge);
         Ok(pledge)
     }
 }
@@ -657,7 +658,7 @@ impl ShardStoreTransaction<PublicKey, TariDanPayload> for SqliteShardStoreTransa
             is_draft: true,
             tree_node_hash: None,
             pledged_to_payload_id: Some(f_payload.clone()),
-            pledged_until_height: Some(current_height.as_u64() as i64 + 4),
+            pledged_until_height: Some(current_height.as_u64() as i64 + 3),
         };
         let num_affected = diesel::insert_into(substates)
             .values(new_row)
