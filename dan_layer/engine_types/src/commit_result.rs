@@ -52,6 +52,5 @@ pub enum TransactionResult {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RejectResult {
-    // TODO: This should contain data required for a rejection vote
     pub reason: String,
 }

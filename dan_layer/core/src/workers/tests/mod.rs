@@ -234,6 +234,7 @@ where
         }
     }
 
+    #[allow(dead_code)]
     async fn assert_no_execute(&mut self) {
         assert!(
             timeout(Duration::from_secs(1), self.rx_execute.recv()).await.is_err(),
@@ -403,8 +404,9 @@ async fn test_hs_waiter_execute_called_when_consensus_reached() {
     instance.tx_hs_messages.send((node1.clone(), proposal2)).await.unwrap();
     let (vote, _) = instance.recv_vote_message().await;
 
-    // No execute yet
-    instance.assert_no_execute().await;
+    // Execute at h=0
+    let (executed_payload, _) = instance.recv_execute().await;
+    assert_eq!(executed_payload, payload);
 
     instance.tx_votes.send((node1.clone(), vote.clone())).await.unwrap();
 
@@ -414,8 +416,10 @@ async fn test_hs_waiter_execute_called_when_consensus_reached() {
     instance.tx_hs_messages.send((node1.clone(), proposal3)).await.unwrap();
     let (vote, _) = instance.recv_vote_message().await;
 
-    // No execute yet
-    instance.assert_no_execute().await;
+    // Execute again at h=1
+    let (executed_payload, _) = instance.recv_execute().await;
+    assert_eq!(executed_payload, payload);
+
     // loopback the vote
     instance.tx_votes.send((node1.clone(), vote.clone())).await.unwrap();
 
@@ -426,21 +430,10 @@ async fn test_hs_waiter_execute_called_when_consensus_reached() {
     let (vote, _) = instance.recv_vote_message().await;
     dbg!(&vote);
 
-    // // No execute yet
-    // assert!(
-    //     timeout(Duration::from_secs(1), rx_execute.recv()).await.is_err(),
-    //     "received an execute when we weren't expecting it"
-    // );
-    //
-    // tx_votes.send((node1, vote.clone())).await.unwrap();
-    //
-    let executed_payload = timeout(Duration::from_secs(10), instance.rx_execute.recv())
-        .await
-        .expect("timed out")
-        .expect("Should not be None");
-    // executed_payload.2.send(HashMap::new()).unwrap();
+    // Execute again at h=2
+    let (executed_payload, _) = instance.recv_execute().await;
+    assert_eq!(executed_payload, payload);
 
-    assert_eq!(executed_payload.0, payload);
     instance.assert_shuts_down_safely().await
 }
 

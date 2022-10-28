@@ -94,6 +94,12 @@ impl MempoolService {
             access.push((transaction.clone(), None));
         }
 
+        // TODO: Should just propagate to shards involved
+        let msg = DanMessage::NewTransaction(transaction.clone());
+        if let Err(err) = self.outbound.flood(Default::default(), msg).await {
+            error!(target: LOG_TARGET, "Failed to broadcast new transaction: {}", err);
+        }
+
         for shard_id in payload.involved_shards() {
             if let Err(err) = self.tx_valid_transactions.send((transaction.clone(), shard_id)) {
                 error!(
@@ -101,12 +107,6 @@ impl MempoolService {
                     "Failed to send valid transaction to shard: {}: {}", shard_id, err
                 );
             }
-        }
-
-        // TODO: Should just propagate to shards involved
-        let msg = DanMessage::NewTransaction(transaction);
-        if let Err(err) = self.outbound.flood(Default::default(), msg).await {
-            error!(target: LOG_TARGET, "Failed to broadcast new transaction: {}", err);
         }
     }
 

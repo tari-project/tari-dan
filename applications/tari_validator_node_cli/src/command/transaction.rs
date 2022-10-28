@@ -186,6 +186,7 @@ async fn handle_submit(
     let mut builder = Transaction::builder();
     builder.add_instruction(instruction).sign(&account.secret_key).fee(1);
     let transaction = builder.build();
+    let tx_hash = *transaction.hash();
 
     let request = SubmitTransactionRequest {
         instructions: transaction.instructions().to_vec(),
@@ -198,12 +199,12 @@ async fn handle_submit(
         wait_for_result: args.wait_for_result,
     };
 
+    println!("✅ Transaction {} submitted.", tx_hash);
     if args.wait_for_result {
         println!("⏳️ Waiting for transaction result...");
+        println!();
     }
     let resp = client.submit_transaction(request).await?;
-    println!("✅ Transaction {} submitted.", resp.hash);
-    println!();
     if let Some(result) = resp.result {
         summarize(&result);
     }
@@ -218,12 +219,12 @@ fn summarize(result: &FinalizeResult) {
                 match substate.substate_value() {
                     SubstateValue::Component(component) => {
                         println!(
-                            "           component ({}): {}",
+                            "       ▶ component ({}): {}",
                             component.module_name, component.component_address
                         );
                     },
                     SubstateValue::Resource(resource) => {
-                        println!("           resource: {}", resource.address());
+                        println!("       ▶ resource: {}", resource.address());
                     },
                 }
                 println!();

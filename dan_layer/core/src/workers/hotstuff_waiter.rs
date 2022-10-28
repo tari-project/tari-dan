@@ -23,9 +23,9 @@
 use std::collections::HashMap;
 
 use futures::future::join_all;
-use log::{debug, error, info};
+use log::{debug, error, info, warn};
 use tari_dan_common_types::{Epoch, PayloadId, ShardId, SubstateState};
-use tari_engine_types::commit_result::FinalizeResult;
+use tari_engine_types::commit_result::{FinalizeResult, TransactionResult};
 use tari_shutdown::ShutdownSignal;
 use tokio::{
     sync::{
@@ -45,7 +45,6 @@ use crate::{
         ObjectPledge,
         Payload,
         QuorumCertificate,
-        QuorumDecision,
         ShardVote,
         TreeNodeHash,
         ValidatorSignature,
@@ -157,11 +156,11 @@ where
         qc: QuorumCertificate,
         payload: TPayload,
     ) -> Result<(), HotStuffError> {
-        debug!(
+        info!(
             target: LOG_TARGET,
-            "Received new view from {} for payload: {}",
-            from,
-            payload.to_id()
+            "🔥 Receive NewView for payload {} and shard {}",
+            payload.to_id(),
+            shard
         );
         // TODO: Validate who message is from
         let epoch = self.epoch_manager.current_epoch().await?;
@@ -187,9 +186,9 @@ where
     }
 
     async fn on_propose(&mut self, shard: ShardId, payload_id: PayloadId) -> Result<(), HotStuffError> {
-        debug!(
+        info!(
             target: LOG_TARGET,
-            "Proposing payload {} for shard {}", payload_id, shard
+            "🔥 OnPropose for payload {} and shard {}", payload_id, shard
         );
 
         let epoch = self.epoch_manager.current_epoch().await?;
@@ -237,6 +236,14 @@ where
             };
 
             if payload_height > NodeHeight(3) {
+                info!(
+                    target: LOG_TARGET,
+                    "🔥 OnPropose payload {} and shard {} has height {}, this node has already been committed",
+                    payload_id,
+                    shard,
+                    payload_height
+                );
+
                 // No need to continue, we have already committed this node.
                 return Ok(());
             }
@@ -247,9 +254,14 @@ where
             if !claim.is_valid(payload_id) {
                 return Err(HotStuffError::ClaimIsNotValid);
             }
-            let local_pledges = vec![tx
+            let local_pledge = tx
                 .pledge_object(shard, payload_id, change, leaf_height)
-                .map_err(|e| e.into())?];
+                .map_err(|e| e.into())?;
+            info!(
+                target: LOG_TARGET,
+                "🔥 PLEDGE: {}",
+                serde_json::to_string(&local_pledge).unwrap(),
+            );
             leaf_node = self.create_leaf(
                 leaf,
                 shard,
@@ -264,7 +276,7 @@ where
                 self.identity.clone(),
                 NodeHeight(leaf_height.0 + 1),
                 payload_height,
-                local_pledges,
+                vec![local_pledge],
             );
             tx.save_node(leaf_node.clone()).map_err(|e| e.into())?;
             tx.update_leaf_node(shard, *leaf_node.hash(), leaf_node.height())
@@ -335,6 +347,12 @@ where
     }
 
     async fn on_next_sync_view(&mut self, payload: TPayload, shard: ShardId) -> Result<(), HotStuffError> {
+        info!(
+            target: LOG_TARGET,
+            "🔥 Send NEWVIEW for payload {} and shard {}",
+            payload.to_id(),
+            shard
+        );
         let payload_id = payload.to_id();
         debug!(target: LOG_TARGET, "on_next_sync_view started: {:?}", payload_id);
 
@@ -368,15 +386,16 @@ where
     async fn update_nodes(
         &mut self,
         node: HotStuffTreeNode<TAddr, TPayload>,
-        shard: ShardId,
+        finalize_result: Option<&FinalizeResult>,
     ) -> Result<(), HotStuffError> {
-        let node_hash = *node.hash();
-        let mut tx = self.shard_store.create_tx()?;
+        let shard = node.shard();
 
         if node.justify().local_node_hash() == TreeNodeHash::zero() {
             dbg!("Node is parented to genesis, no need to update");
             return Ok(());
         }
+
+        let mut tx = self.shard_store.create_tx()?;
         tx.update_high_qc(shard, node.justify().clone())
             .map_err(|e| HotStuffError::UpdateHighQcError(e.to_string()))?;
         let b_two = tx.get_node(&node.justify().local_node_hash()).map_err(|e| e.into())?;
@@ -388,63 +407,90 @@ where
         let b_one = tx.get_node(&b_two.justify().local_node_hash()).map_err(|e| e.into())?;
 
         let (_b_lock, b_lock_height) = tx.get_locked_node_hash_and_height(shard).map_err(|e| e.into())?;
-        if b_one.height().0 > b_lock_height.0 {
+        if b_one.height() > b_lock_height {
             info!(target: LOG_TARGET, "Updating locked node to: {:?}", b_one.hash());
             tx.set_locked(shard, *b_one.hash(), b_one.height())
                 .map_err(|e| e.into())?;
         }
 
         if node.justify().payload_height() == NodeHeight(2) {
-            // decide
-            debug!(target: LOG_TARGET, "Deciding on payload: {:?}", node.payload_id());
-            let results = self.on_commit(node, shard, &mut tx)?;
-            self.publish_event(HotStuffEvent::OnCommit(node_hash, results));
+            match finalize_result {
+                Some(result) => {
+                    self.publish_result_event(node.justify().payload_id(), result);
+                    let changes = extract_changes(node.payload_id(), result)?;
+                    info!(
+                        target: LOG_TARGET,
+                        "payload changeset: {}",
+                        serde_json::to_string(&changes).unwrap()
+                    );
+                    self.on_commit(node, &changes, &mut tx)?;
+                },
+                None => {
+                    warn!(
+                        target: LOG_TARGET,
+                        "No finalize result for payload {}. Not enough votes?",
+                        node.payload_id()
+                    );
+
+                    self.on_commit(node, &HashMap::new(), &mut tx)?;
+                },
+            }
         }
         tx.commit().map_err(|e| e.into())?;
 
         Ok(())
     }
 
+    fn publish_result_event(&self, payload_id: PayloadId, result: &FinalizeResult) {
+        match result.result {
+            TransactionResult::Accept(_) => {
+                self.publish_event(HotStuffEvent::OnAccept(payload_id, result.clone()));
+            },
+            TransactionResult::Reject(ref reject) => {
+                self.publish_event(HotStuffEvent::OnReject(payload_id, reject.clone()));
+            },
+        }
+    }
+
     fn on_commit(
         &mut self,
         node: HotStuffTreeNode<TAddr, TPayload>,
-        shard: ShardId,
+        changes: &HashMap<ShardId, SubstateState>,
         tx: &mut TShardStore::Transaction,
-    ) -> Result<Vec<FinalizeResult>, HotStuffError> {
-        let mut results = Vec::new();
+    ) -> Result<(), HotStuffError> {
+        let shard = node.shard();
         if tx.get_last_executed_height(shard).map_err(|e| e.into())? < node.height() {
+            info!(
+                target: LOG_TARGET,
+                "🔥 OnCommit for payload {} and shard {}",
+                node.payload_id(),
+                shard,
+            );
+
             if node.parent() != &TreeNodeHash::zero() {
                 let parent = tx.get_node(node.parent()).map_err(|e| e.into())?;
-                results.extend(self.on_commit(parent, shard, tx)?);
+                self.on_commit(parent, changes, tx)?;
             }
             if node.justify().payload_height() == NodeHeight(2) {
-                let payload = tx.get_payload(&node.justify().payload_id()).map_err(|e| e.into())?;
-
-                let mut all_pledges = HashMap::new();
-                for ShardVote {
-                    shard_id,
-                    node_hash: _,
-                    pledges,
-                } in node.justify().all_shard_nodes()
-                {
-                    all_pledges.insert(*shard_id, pledges.clone());
-                }
-                let payload_id = payload.to_id();
-                results.push(self.execute(all_pledges, payload)?);
-                let changes = extract_changes(payload_id, &results)?;
-                tx.save_substate_changes(&changes, &node).map_err(|e| e.into())?;
+                tx.save_substate_changes(changes, &node).map_err(|e| e.into())?;
             }
             tx.set_last_executed_height(shard, node.height())
                 .map_err(|e| e.into())?;
         }
-        Ok(results)
+        Ok(())
     }
 
     fn execute(
-        &mut self,
-        shard_pledges: HashMap<ShardId, Vec<ObjectPledge>>,
+        &self,
+        node: &HotStuffTreeNode<TAddr, TPayload>,
         payload: TPayload,
     ) -> Result<FinalizeResult, HotStuffError> {
+        let shard_pledges = node
+            .justify()
+            .all_shard_nodes()
+            .iter()
+            .map(|s| (s.shard_id, s.pledges.clone()))
+            .collect();
         let finalize = self.payload_processor.process_payload(payload, shard_pledges)?;
         Ok(finalize)
     }
@@ -471,8 +517,12 @@ where
     ) -> Result<(), HotStuffError> {
         info!(
             target: LOG_TARGET,
-            "Received proposal from: {:?}, node: {:?}", from, node
+            "🔥 Receive PROPOSAL for payload {} and shard {} from {}",
+            node.payload_id(),
+            node.shard(),
+            from,
         );
+
         // TODO: validate message from leader
         // TODO: Validate I am processing this shard
         // TODO: Validate the epoch is still valid
@@ -492,6 +542,7 @@ where
             .await?;
 
         let mut votes_to_send = vec![];
+        let mut finalize_result = None;
         {
             let mut tx = self.shard_store.create_tx()?;
             tx.save_node(node.clone()).map_err(|e| e.into())?;
@@ -523,6 +574,9 @@ where
                     // it may happen that we are involved in more than one committee, in which case send the votes to
                     // each leader.
 
+                    // Execute the payload!
+                    let execution_result = self.execute(&node, payload)?;
+
                     for local_shard in local_shards {
                         dbg!("Can vote on the message");
                         let local_node = tx
@@ -534,21 +588,21 @@ where
                             .map_err(|e| e.into())?;
 
                         let _signature = self.sign(node.hash(), shard);
-                        // TODO: Actually decide on this
-                        let decision = QuorumDecision::Accept;
-                        let mut vote_msg = VoteMessage::new(*local_node.hash(), local_shard, decision, votes.clone());
-                        vote_msg.sign();
+
+                        let vote_msg =
+                            self.decide(*local_node.hash(), local_shard, votes.clone(), &execution_result)?;
 
                         votes_to_send.push(self.tx_vote_message.send((
                             vote_msg,
                             local_node.proposed_by().clone(), // self.get_leader(),
                         )));
                     }
+
+                    finalize_result = Some(execution_result);
                 } else {
-                    // save the nodes
-                    debug!(
+                    info!(
                         target: LOG_TARGET,
-                        "Not enough votes to vote on the message, votes: {}, involved_shards: {}",
+                        "🔥 Not enough votes to vote on the message, votes: {}, involved_shards: {}",
                         votes.len(),
                         involved_shards.len()
                     );
@@ -562,7 +616,7 @@ where
         for res in join_all(votes_to_send).await {
             res.map_err(|_| HotStuffError::SendError)?;
         }
-        self.update_nodes(node.clone(), shard).await?;
+        self.update_nodes(node.clone(), finalize_result.as_ref()).await?;
         Ok(())
     }
 
@@ -571,8 +625,42 @@ where
         ValidatorSignature::from_bytes(&[]).unwrap()
     }
 
+    fn decide(
+        &self,
+        local_node: TreeNodeHash,
+        local_shard: ShardId,
+        votes: Vec<ShardVote>,
+        finalize_result: &FinalizeResult,
+    ) -> Result<VoteMessage, HotStuffError> {
+        let mut vote_msg = match finalize_result.result {
+            TransactionResult::Accept(ref accept) => {
+                info!(
+                    target: LOG_TARGET,
+                    "💚 Vote to ACCEPT payload. Up substate(s): {}, down substate(s): {}",
+                    accept.up_iter().count(),
+                    accept.down_iter().count(),
+                );
+                VoteMessage::accept(local_node, local_shard, votes)
+            },
+            TransactionResult::Reject(ref reject) => {
+                info!(target: LOG_TARGET, "⚔ Vote to REJECT payload: {}", reject.reason);
+                VoteMessage::reject(local_node, local_shard, votes)
+            },
+        };
+
+        vote_msg.sign();
+        Ok(vote_msg)
+    }
+
     // The leader receives votes from his local shard, and forwards it to all other shards
     async fn on_receive_vote(&mut self, from: TAddr, msg: VoteMessage) -> Result<(), HotStuffError> {
+        info!(
+            target: LOG_TARGET,
+            "🔥 Receive {:?} VOTE for shard {} from {}",
+            msg.decision(),
+            msg.shard(),
+            from,
+        );
         // TODO: Only do this if you're the leader
         let mut on_beat_future = None;
         let node;
@@ -724,32 +812,27 @@ where
 
 fn extract_changes(
     payload_id: PayloadId,
-    results: &[FinalizeResult],
+    finalize: &FinalizeResult,
 ) -> Result<HashMap<ShardId, SubstateState>, HotStuffError> {
-    use tari_engine_types::commit_result::TransactionResult;
     let mut changes = HashMap::new();
-    for finalize in results {
-        match finalize.result {
-            TransactionResult::Accept(ref diff) => {
-                changes.extend(
-                    diff.up_iter()
-                        .map(|(shard, substate)| {
-                            (shard.into_shard_id().into(), SubstateState::Up {
-                                created_by: payload_id,
-                                data: substate.clone(),
-                            })
+    match finalize.result {
+        TransactionResult::Accept(ref diff) => {
+            changes.extend(
+                diff.up_iter()
+                    .map(|(shard, substate)| {
+                        (shard.into_shard_id().into(), SubstateState::Up {
+                            created_by: payload_id,
+                            data: substate.clone(),
                         })
-                        .chain(diff.down_iter().map(|shard| {
-                            (shard.into_shard_id().into(), SubstateState::Down {
-                                deleted_by: payload_id,
-                            })
-                        })),
-                );
-            },
-            TransactionResult::Reject(ref reject) => {
-                return Err(HotStuffError::TransactionRejected(reject.reason.clone()))
-            },
-        }
+                    })
+                    .chain(diff.down_iter().map(|shard| {
+                        (shard.into_shard_id().into(), SubstateState::Down {
+                            deleted_by: payload_id,
+                        })
+                    })),
+            );
+        },
+        TransactionResult::Reject(ref reject) => return Err(HotStuffError::TransactionRejected(reject.reason.clone())),
     }
 
     Ok(changes)

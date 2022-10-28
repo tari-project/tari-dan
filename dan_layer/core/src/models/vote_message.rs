@@ -55,6 +55,14 @@ impl VoteMessage {
         }
     }
 
+    pub fn accept(local_node_hash: TreeNodeHash, shard: ShardId, all_shard_nodes: Vec<ShardVote>) -> Self {
+        Self::new(local_node_hash, shard, QuorumDecision::Accept, all_shard_nodes)
+    }
+
+    pub fn reject(local_node_hash: TreeNodeHash, shard: ShardId, all_shard_nodes: Vec<ShardVote>) -> Self {
+        Self::new(local_node_hash, shard, QuorumDecision::Reject, all_shard_nodes)
+    }
+
     pub fn with_signature(
         local_node_hash: TreeNodeHash,
         shard: ShardId,
