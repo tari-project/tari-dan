@@ -20,11 +20,9 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use std::{convert::TryFrom, fmt::Debug};
+use std::fmt::Debug;
 
-use digest::Digest;
 use tari_common_types::types::FixedHash;
-use tari_crypto::hash::blake2::Blake256;
 use tari_dan_common_types::{ObjectClaim, PayloadId, ShardId, SubstateChange};
 
 use crate::models::ConsensusHash;
@@ -33,9 +31,7 @@ use crate::models::ConsensusHash;
 pub trait Payload: Debug + Clone + Send + Sync + ConsensusHash {
     fn involved_shards(&self) -> Vec<ShardId>;
     fn to_id(&self) -> PayloadId {
-        let s = self.consensus_hash();
-        let x = Blake256::new().chain(s);
-        PayloadId::new(FixedHash::try_from(x.finalize()).unwrap())
+        PayloadId::new(self.consensus_hash())
     }
     fn objects_for_shard(&self, shard: ShardId) -> Option<(SubstateChange, ObjectClaim)>;
 }
@@ -53,7 +49,7 @@ pub trait Payload: Debug + Clone + Send + Sync + ConsensusHash {
 // }
 
 impl ConsensusHash for (String, Vec<ShardId>) {
-    fn consensus_hash(&self) -> &[u8] {
+    fn consensus_hash(&self) -> FixedHash {
         self.0.consensus_hash()
     }
 }

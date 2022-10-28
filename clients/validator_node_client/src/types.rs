@@ -126,8 +126,8 @@ pub struct SubmitTransactionRequest {
     pub signature: InstructionSignature,
     pub fee: u64,
     pub sender_public_key: PublicKey,
-    pub num_new_components: u8,
     pub inputs: Vec<ShardId>,
+    pub num_outputs: u8,
     /// Set to true to wait for the transaction to complete before returning
     #[serde(default)]
     pub wait_for_result: bool,

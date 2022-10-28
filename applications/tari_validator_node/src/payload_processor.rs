@@ -97,6 +97,8 @@ fn create_populated_state_store<I: IntoIterator<Item = ObjectPledge>>(inputs: I)
                 // TODO: Engine should be able to read SubstateValue
                 match data.into_substate() {
                     SubstateValue::Component(component) => {
+                        eprintln!("🐞inpuy = {}", input.shard_id);
+                        eprintln!("🐞ca = {}", component.component_address);
                         tx.set_state_raw(
                             input.shard_id.as_bytes(),
                             tari_dan_engine::abi::encode(&component).unwrap(),

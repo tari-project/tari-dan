@@ -98,7 +98,11 @@ impl Display for ShardId {
 
 #[derive(Clone, Debug, Copy, PartialEq, Eq, Hash, Deserialize, Serialize)]
 pub enum SubstateChange {
+    /// An "Up" state
     Create,
+    /// Substate exists but will not be created/destroyed
+    Exists,
+    /// A "Down" state
     Destroy,
 }
 

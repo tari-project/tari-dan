@@ -23,13 +23,13 @@
 use std::{
     cmp::Ordering,
     convert::{Infallible, TryFrom},
-    fmt::Debug,
-    hash::Hash,
+    fmt::{Debug, Display, Formatter},
     ops::Add,
 };
 
 use anyhow::anyhow;
 use serde::{Deserialize, Serialize};
+use tari_common_types::types::FixedHash;
 
 mod base_layer_metadata;
 mod base_layer_output;
@@ -96,6 +96,12 @@ impl PartialOrd for NodeHeight {
 impl From<u64> for NodeHeight {
     fn from(height: u64) -> Self {
         NodeHeight(height)
+    }
+}
+
+impl Display for NodeHeight {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(f, "NodeHeight({})", self.0)
     }
 }
 
@@ -179,18 +185,20 @@ impl TryFrom<i32> for HotStuffMessageType {
 }
 
 pub trait ConsensusHash {
-    fn consensus_hash(&self) -> &[u8];
+    fn consensus_hash(&self) -> FixedHash;
 }
 
 impl ConsensusHash for &str {
-    fn consensus_hash(&self) -> &[u8] {
-        self.as_bytes()
+    fn consensus_hash(&self) -> FixedHash {
+        let mut hash = [0u8; FixedHash::byte_size()];
+        hash[..self.len()].copy_from_slice(self.as_bytes());
+        hash.into()
     }
 }
 
 impl ConsensusHash for String {
-    fn consensus_hash(&self) -> &[u8] {
-        self.as_bytes()
+    fn consensus_hash(&self) -> FixedHash {
+        self.as_str().consensus_hash()
     }
 }
 

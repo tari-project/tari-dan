@@ -35,7 +35,9 @@ impl SqliteTransaction {
     pub fn begin(connection: SqliteConnection) -> Result<Self, SqliteStorageError> {
         // TODO: This busy wait sucks and there is definitely a better way, but we care more about the SQLite DB working
         //       than performance
-        while let Err(err) = connection.execute("BEGIN;") {
+        // NOTE: We use an EXCLUSIVE transaction because sometimes transaction commits fail otherwise. Need to
+        // investigate.
+        while let Err(err) = connection.execute("BEGIN EXCLUSIVE;") {
             if err.to_string().contains("database is locked") {
                 log::warn!(target: LOG_TARGET, "Database is locked, retrying in 100ms");
                 std::thread::sleep(std::time::Duration::from_millis(100));
@@ -89,10 +91,12 @@ impl SqliteTransaction {
 impl Drop for SqliteTransaction {
     fn drop(&mut self) {
         if !self.is_done {
-            log::warn!(
-                target: LOG_TARGET,
-                "SqliteTransaction was dropped without being committed or rolled back"
-            );
+            // TODO: Read transactions dont need to be explicitly committed/rolled back. I think we should differentiate
+            //       between a read and write transaction, LMDB needs this in any case.
+            // log::warn!(
+            //     target: LOG_TARGET,
+            //     "SqliteTransaction was dropped without being committed or rolled back"
+            // );
             let _ignore = self.rollback_inner();
         }
     }
