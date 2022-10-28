@@ -445,9 +445,11 @@ async fn wait_for_result(
                         // TODO: There should probably only be one result (on_commit recursion)
                         result: results.pop(),
                     };
+                    dbg!(&response);
                     return Ok(JsonRpcResponse::success(answer_id, response));
                 },
                 Ok(HotStuffEvent::Failed(err)) => {
+                    warn!(target: LOG_TARGET, "Transaction failed: {}", err);
                     return Err(JsonRpcResponse::error(
                         answer_id,
                         JsonRpcError::new(
