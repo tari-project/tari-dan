@@ -23,7 +23,7 @@
 use std::collections::HashMap;
 
 use futures::future::join_all;
-use log::{debug, error, info, warn};
+use log::*;
 use tari_dan_common_types::{Epoch, PayloadId, ShardId, SubstateState};
 use tari_engine_types::commit_result::{FinalizeResult, TransactionResult};
 use tari_shutdown::ShutdownSignal;
@@ -386,7 +386,7 @@ where
     async fn update_nodes(
         &mut self,
         node: HotStuffTreeNode<TAddr, TPayload>,
-        finalize_result: Option<&FinalizeResult>,
+        finalize_result: &FinalizeResult,
     ) -> Result<(), HotStuffError> {
         let shard = node.shard();
 
@@ -414,27 +414,15 @@ where
         }
 
         if node.justify().payload_height() == NodeHeight(2) {
-            match finalize_result {
-                Some(result) => {
-                    self.publish_result_event(node.justify().payload_id(), result);
-                    let changes = extract_changes(node.payload_id(), result)?;
-                    info!(
-                        target: LOG_TARGET,
-                        "payload changeset: {}",
-                        serde_json::to_string(&changes).unwrap()
-                    );
-                    self.on_commit(node, &changes, &mut tx)?;
-                },
-                None => {
-                    warn!(
-                        target: LOG_TARGET,
-                        "No finalize result for payload {}. Not enough votes?",
-                        node.payload_id()
-                    );
-
-                    self.on_commit(node, &HashMap::new(), &mut tx)?;
-                },
-            }
+            let result = finalize_result;
+            self.publish_result_event(node.justify().payload_id(), result);
+            let changes = extract_changes(node.payload_id(), result)?;
+            info!(
+                target: LOG_TARGET,
+                "payload changeset: {}",
+                serde_json::to_string(&changes).unwrap()
+            );
+            self.on_commit(node, &changes, &mut tx)?;
         }
         tx.commit().map_err(|e| e.into())?;
 
@@ -542,7 +530,11 @@ where
             .await?;
 
         let mut votes_to_send = vec![];
-        let mut finalize_result = None;
+        // let mut finalize_result = None;
+
+        // Execute the payload!
+        let finalize_result = self.execute(&node, payload)?;
+
         {
             let mut tx = self.shard_store.create_tx()?;
             tx.save_node(node.clone()).map_err(|e| e.into())?;
@@ -574,9 +566,6 @@ where
                     // it may happen that we are involved in more than one committee, in which case send the votes to
                     // each leader.
 
-                    // Execute the payload!
-                    let execution_result = self.execute(&node, payload)?;
-
                     for local_shard in local_shards {
                         dbg!("Can vote on the message");
                         let local_node = tx
@@ -589,8 +578,7 @@ where
 
                         let _signature = self.sign(node.hash(), shard);
 
-                        let vote_msg =
-                            self.decide(*local_node.hash(), local_shard, votes.clone(), &execution_result)?;
+                        let vote_msg = self.decide(*local_node.hash(), local_shard, votes.clone(), &finalize_result)?;
 
                         votes_to_send.push(self.tx_vote_message.send((
                             vote_msg,
@@ -598,7 +586,7 @@ where
                         )));
                     }
 
-                    finalize_result = Some(execution_result);
+                    // finalize_result = Some(execution_result);
                 } else {
                     info!(
                         target: LOG_TARGET,
@@ -616,7 +604,7 @@ where
         for res in join_all(votes_to_send).await {
             res.map_err(|_| HotStuffError::SendError)?;
         }
-        self.update_nodes(node.clone(), finalize_result.as_ref()).await?;
+        self.update_nodes(node.clone(), &finalize_result).await?;
         Ok(())
     }
 
