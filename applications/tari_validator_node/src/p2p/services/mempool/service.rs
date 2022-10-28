@@ -93,6 +93,7 @@ impl MempoolService {
 
             access.push((transaction.clone(), None));
         }
+        info!(target: LOG_TARGET, "🎱 New transaction in mempool");
 
         // TODO: Should just propagate to shards involved
         let msg = DanMessage::NewTransaction(transaction.clone());

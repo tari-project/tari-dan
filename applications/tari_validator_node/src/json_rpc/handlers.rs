@@ -129,9 +129,9 @@ impl JsonRpcHandlers {
 
         let mut builder = TransactionBuilder::new();
         builder
-            .with_inputs(transaction.inputs)
+            .with_input_refs(transaction.inputs)
             .with_instructions(transaction.instructions)
-            .with_new_components(transaction.num_new_components)
+            .with_num_outputs(transaction.num_outputs)
             .signature(transaction.signature)
             .sender_public_key(transaction.sender_public_key);
 
@@ -439,9 +439,9 @@ async fn wait_for_result(
         match tokio::time::timeout(timeout, subscription.recv()).await {
             Ok(res) => match res {
                 Ok(HotStuffEvent::OnAccept(payload_id, result)) => {
-                    // if payload_id.as_slice() != hash.as_ref() {
-                    //     continue;
-                    // }
+                    if payload_id.as_slice() != hash.as_ref() {
+                        continue;
+                    }
 
                     let response = SubmitTransactionResponse {
                         hash: hash.into_array().into(),
@@ -451,9 +451,9 @@ async fn wait_for_result(
                     return Ok(JsonRpcResponse::success(answer_id, response));
                 },
                 Ok(HotStuffEvent::OnReject(payload_id, reject)) => {
-                    // if payload_id.as_slice() != hash.as_ref() {
-                    //     continue;
-                    // }
+                    if payload_id.as_slice() != hash.as_ref() {
+                        continue;
+                    }
                     return Err(JsonRpcResponse::error(
                         answer_id,
                         JsonRpcError::new(

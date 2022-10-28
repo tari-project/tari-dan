@@ -22,6 +22,7 @@
 
 use std::sync::{atomic::AtomicU32, Arc};
 
+use tari_dan_common_types::ShardId;
 use tari_engine_types::hashing::hasher;
 use tari_template_lib::{
     models::{BucketId, ComponentAddress, ResourceAddress, VaultId},
@@ -51,18 +52,20 @@ impl IdProvider {
     }
 
     pub fn new_resource_address(&self) -> ResourceAddress {
-        hasher("resource")
+        hasher("output")
             .chain(&self.transaction_hash)
             .chain(&self.next_id())
             .result()
     }
 
     pub fn new_component_address(&self) -> ComponentAddress {
-        hasher("component")
-            .chain(&self.transaction_hash)
-            // .chain(&new_component)
-            .chain(&self.next_id())
-            .result()
+        // Note: we rely on component and resource addresses being constructed in the same way.
+        self.new_resource_address()
+    }
+
+    pub fn new_output_shard(&self) -> ShardId {
+        // Note: we rely on component and resource addresses being constructed in the same way.
+        self.new_resource_address().into_array().into()
     }
 
     pub fn new_vault_id(&self) -> VaultId {

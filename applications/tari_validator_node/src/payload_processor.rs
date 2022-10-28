@@ -33,7 +33,6 @@ use tari_dan_engine::{
     state_store::{memory::MemoryStateStore, AtomicDb, StateWriter},
     transaction::TransactionProcessor,
 };
-use tari_dan_storage_sqlite::global::schema::validator_nodes::epoch;
 use tari_engine_types::{commit_result::FinalizeResult, substate::SubstateValue};
 
 #[derive(Debug, Default)]

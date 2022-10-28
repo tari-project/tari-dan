@@ -632,6 +632,7 @@ impl ShardStoreTransaction<PublicKey, TariDanPayload> for SqliteShardStoreTransa
         let new_row = NewSubstate {
             substate_type: match change {
                 SubstateChange::Create => "Up".to_string(),
+                SubstateChange::Exists => "Exists".to_string(),
                 SubstateChange::Destroy => "Down".to_string(),
             },
             shard_id: shard_vec.clone(),
