@@ -25,19 +25,21 @@ use serde::{Deserialize, Serialize};
 use tari_crypto::hash::blake2::Blake256;
 use tari_dan_common_types::{Epoch, PayloadId, ShardId};
 
+use super::Payload;
 use crate::{
     models::{NodeHeight, ObjectPledge, QuorumCertificate, TreeNodeHash},
     services::infrastructure_services::NodeAddressable,
 };
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
-pub struct HotStuffTreeNode<TAddr> {
+pub struct HotStuffTreeNode<TAddr, TPayload> {
     hash: TreeNodeHash,
     parent: TreeNodeHash,
     shard: ShardId,
     height: NodeHeight,
     // The payload that the node is proposing
-    payload: PayloadId,
+    payload_id: PayloadId,
+    payload: Option<TPayload>,
     // How far in the consensus this payload is. It should be 4 in order to be committed.
     payload_height: NodeHeight,
     local_pledges: Vec<ObjectPledge>,
@@ -47,12 +49,13 @@ pub struct HotStuffTreeNode<TAddr> {
     justify: QuorumCertificate,
 }
 
-impl<TAddr: NodeAddressable> HotStuffTreeNode<TAddr> {
+impl<TAddr: NodeAddressable, TPayload: Payload> HotStuffTreeNode<TAddr, TPayload> {
     pub fn new(
         parent: TreeNodeHash,
         shard: ShardId,
         height: NodeHeight,
-        payload: PayloadId,
+        payload_id: PayloadId,
+        payload: Option<TPayload>,
         payload_height: NodeHeight,
         local_pledges: Vec<ObjectPledge>,
         epoch: Epoch,
@@ -63,6 +66,7 @@ impl<TAddr: NodeAddressable> HotStuffTreeNode<TAddr> {
             hash: TreeNodeHash::zero(),
             parent,
             shard,
+            payload_id,
             payload,
             epoch,
             height,
@@ -78,7 +82,8 @@ impl<TAddr: NodeAddressable> HotStuffTreeNode<TAddr> {
     pub fn genesis() -> Self {
         let mut s = Self {
             parent: TreeNodeHash::zero(),
-            payload: PayloadId::zero(),
+            payload_id: PayloadId::zero(),
+            payload: None,
             payload_height: NodeHeight(0),
             hash: TreeNodeHash::zero(),
             shard: ShardId::zero(),
@@ -99,7 +104,7 @@ impl<TAddr: NodeAddressable> HotStuffTreeNode<TAddr> {
             .chain(self.height.to_le_bytes())
             .chain(self.justify.as_bytes())
             .chain(self.shard.to_le_bytes())
-            .chain(self.payload.as_slice())
+            .chain(self.payload_id.as_slice())
             .chain(self.payload_height.to_le_bytes())
             .chain(self.proposed_by.as_bytes());
         // TODO: Add in other fields
@@ -124,8 +129,12 @@ impl<TAddr: NodeAddressable> HotStuffTreeNode<TAddr> {
         &self.parent
     }
 
-    pub fn payload(&self) -> PayloadId {
-        self.payload
+    pub fn payload_id(&self) -> PayloadId {
+        self.payload_id
+    }
+
+    pub fn payload(&self) -> Option<&TPayload> {
+        self.payload.as_ref()
     }
 
     pub fn payload_height(&self) -> NodeHeight {
@@ -153,7 +162,7 @@ impl<TAddr: NodeAddressable> HotStuffTreeNode<TAddr> {
     }
 }
 
-impl<TAddr: NodeAddressable> PartialEq for HotStuffTreeNode<TAddr> {
+impl<TAddr: NodeAddressable, TPayload: Payload> PartialEq for HotStuffTreeNode<TAddr, TPayload> {
     fn eq(&self, other: &Self) -> bool {
         self.hash.eq(&other.hash)
     }
