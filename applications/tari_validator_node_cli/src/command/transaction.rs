@@ -49,8 +49,7 @@ pub struct SubmitArgs {
     instruction: CliInstruction,
     #[clap(long, short = 'w')]
     wait_for_result: bool,
-    #[clap(long, short = 'a')]
-    args: Vec<CliArg>,
+    num_outputs: Option<u8>,
 }
 
 #[derive(Debug, Clone)]
@@ -103,7 +102,7 @@ impl FromStr for CliArg {
 }
 
 impl CliArg {
-    pub fn as_bytes(&self) -> Vec<u8> {
+    pub fn to_bytes(&self) -> Vec<u8> {
         match self {
             CliArg::String(s) => s.as_bytes().to_vec(),
             CliArg::U64(v) => i64::try_from(*v)
@@ -127,11 +126,15 @@ pub enum CliInstruction {
     CallFunction {
         template_address: FromHex<TemplateAddress>,
         function_name: String,
+        #[clap(long, short = 'a')]
+        args: Vec<CliArg>,
     },
     CallMethod {
         template_address: FromHex<TemplateAddress>,
         component_address: FromHex<ComponentAddress>,
         method_name: String,
+        #[clap(long, short = 'a')]
+        args: Vec<CliArg>,
     },
 }
 
@@ -158,22 +161,24 @@ async fn handle_submit(
         CliInstruction::CallFunction {
             template_address,
             function_name,
+            args,
         } => Instruction::CallFunction {
             template_address: template_address.into_inner(),
             function: function_name,
-            args: args.args.iter().map(|s| Arg::literal(s.as_bytes())).collect(),
+            args: args.iter().map(|s| Arg::literal(s.to_bytes())).collect(),
         },
         CliInstruction::CallMethod {
             template_address,
             component_address,
             method_name,
+            args,
         } => {
             inputs.push(component_address.into_inner().into_array().into());
             Instruction::CallMethod {
                 template_address: template_address.into_inner(),
                 component_address: component_address.into_inner(),
                 method: method_name,
-                args: args.args.iter().map(|s| Arg::literal(s.as_bytes())).collect(),
+                args: args.iter().map(|s| Arg::literal(s.to_bytes())).collect(),
             }
         },
     };
@@ -194,8 +199,7 @@ async fn handle_submit(
         fee: transaction.fee(),
         sender_public_key: transaction.sender_public_key().clone(),
         inputs,
-        // TODO:
-        num_new_components: 1,
+        num_outputs: args.num_outputs.unwrap_or(0),
         wait_for_result: args.wait_for_result,
     };
 
