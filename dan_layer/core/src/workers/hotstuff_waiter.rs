@@ -176,18 +176,21 @@ where
     }
 
     // pacemaker
-    async fn on_beat(&mut self, shard: ShardId, payload: PayloadId) -> Result<(), HotStuffError> {
+    async fn on_beat(&mut self, shard: ShardId, payload_id: PayloadId) -> Result<(), HotStuffError> {
         // TODO: the leader is only known after the leaf is determines
         // TODO: Review if this is correct. The epoch should stay the same for all epochs
         let epoch = self.epoch_manager.current_epoch().await?;
-        if self.is_leader(payload, shard, epoch).await? {
-            self.on_propose(shard, payload).await?;
+        if self.is_leader(payload_id, shard, epoch).await? {
+            self.on_propose(shard, payload_id).await?;
         }
         Ok(())
     }
 
-    async fn on_propose(&mut self, shard: ShardId, payload: PayloadId) -> Result<(), HotStuffError> {
-        debug!(target: LOG_TARGET, "Proposing payload {} for shard {}", payload, shard);
+    async fn on_propose(&mut self, shard: ShardId, payload_id: PayloadId) -> Result<(), HotStuffError> {
+        debug!(
+            target: LOG_TARGET,
+            "Proposing payload {} for shard {}", payload_id, shard
+        );
 
         let epoch = self.epoch_manager.current_epoch().await?;
 
@@ -199,11 +202,9 @@ where
         {
             let tx = self.shard_store.create_tx()?;
 
-            let leaf_result = tx.get_leaf_node(shard).map_err(|e| e.into())?;
-            leaf = leaf_result.0;
-            leaf_height = leaf_result.1;
+            (leaf, leaf_height) = tx.get_leaf_node(shard).map_err(|e| e.into())?;
             qc = tx.get_high_qc_for(shard).map_err(|e| e.into())?;
-            actual_payload = tx.get_payload(&payload).map_err(|e| e.into())?;
+            actual_payload = tx.get_payload(&payload_id).map_err(|e| e.into())?;
         }
 
         let involved_shards = actual_payload.involved_shards();
@@ -229,7 +230,7 @@ where
                 return Ok(());
             }
 
-            let payload_height = if parent.payload() == payload {
+            let payload_height = if parent.payload_id() == payload_id {
                 parent.payload_height() + NodeHeight(1)
             } else {
                 NodeHeight(0)
@@ -243,16 +244,21 @@ where
                 .objects_for_shard(shard)
                 .ok_or(HotStuffError::ShardHasNoData)?;
 
-            if !claim.is_valid(payload) {
+            if !claim.is_valid(payload_id) {
                 return Err(HotStuffError::ClaimIsNotValid);
             }
             let local_pledges = vec![tx
-                .pledge_object(shard, payload, change, leaf_height)
+                .pledge_object(shard, payload_id, change, leaf_height)
                 .map_err(|e| e.into())?];
             leaf_node = self.create_leaf(
                 leaf,
                 shard,
-                payload,
+                payload_id,
+                if payload_height.as_u64() == 0 {
+                    Some(actual_payload)
+                } else {
+                    None
+                },
                 qc,
                 epoch,
                 self.identity.clone(),
@@ -276,18 +282,20 @@ where
         &self,
         parent: TreeNodeHash,
         shard: ShardId,
-        payload: PayloadId,
+        payload_id: PayloadId,
+        payload: Option<TPayload>,
         qc: QuorumCertificate,
         epoch: Epoch,
         leader: TAddr,
         height: NodeHeight,
         payload_height: NodeHeight,
         local_pledges: Vec<ObjectPledge>,
-    ) -> HotStuffTreeNode<TAddr> {
+    ) -> HotStuffTreeNode<TAddr, TPayload> {
         HotStuffTreeNode::new(
             parent,
             shard,
             height,
+            payload_id,
             payload,
             payload_height,
             local_pledges,
@@ -357,7 +365,11 @@ where
         Ok(())
     }
 
-    async fn update_nodes(&mut self, node: HotStuffTreeNode<TAddr>, shard: ShardId) -> Result<(), HotStuffError> {
+    async fn update_nodes(
+        &mut self,
+        node: HotStuffTreeNode<TAddr, TPayload>,
+        shard: ShardId,
+    ) -> Result<(), HotStuffError> {
         let node_hash = *node.hash();
         let mut tx = self.shard_store.create_tx()?;
 
@@ -384,7 +396,7 @@ where
 
         if node.justify().payload_height() == NodeHeight(2) {
             // decide
-            debug!(target: LOG_TARGET, "Deciding on payload: {:?}", node.payload());
+            debug!(target: LOG_TARGET, "Deciding on payload: {:?}", node.payload_id());
             let results = self.on_commit(node, shard, &mut tx)?;
             self.publish_event(HotStuffEvent::OnCommit(node_hash, results));
         }
@@ -395,7 +407,7 @@ where
 
     fn on_commit(
         &mut self,
-        node: HotStuffTreeNode<TAddr>,
+        node: HotStuffTreeNode<TAddr, TPayload>,
         shard: ShardId,
         tx: &mut TShardStore::Transaction,
     ) -> Result<Vec<FinalizeResult>, HotStuffError> {
@@ -437,9 +449,9 @@ where
         Ok(finalize)
     }
 
-    fn validate_proposal(&self, node: &HotStuffTreeNode<TAddr>) -> Result<(), HotStuffError> {
+    fn validate_proposal(&self, node: &HotStuffTreeNode<TAddr, TPayload>) -> Result<(), HotStuffError> {
         if node.payload_height() == NodeHeight(0) ||
-            (node.payload() == node.justify().payload_id() &&
+            (node.payload_id() == node.justify().payload_id() &&
                 node.payload_height() == node.justify().payload_height() + NodeHeight(1))
         {
             if node.payload_height() > NodeHeight(3) {
@@ -452,8 +464,12 @@ where
     }
 
     // TODO: needs some explanation of the process in docs here
-    async fn on_receive_proposal(&mut self, from: TAddr, node: HotStuffTreeNode<TAddr>) -> Result<(), HotStuffError> {
-        debug!(
+    async fn on_receive_proposal(
+        &mut self,
+        from: TAddr,
+        node: HotStuffTreeNode<TAddr, TPayload>,
+    ) -> Result<(), HotStuffError> {
+        info!(
             target: LOG_TARGET,
             "Received proposal from: {:?}, node: {:?}", from, node
         );
@@ -463,11 +479,12 @@ where
         self.validate_proposal(&node)?;
 
         let shard = node.shard();
-        let payload;
-        {
+        let payload = if let Some(node_payload) = node.payload() {
+            node_payload.clone()
+        } else {
             let tx = self.shard_store.create_tx()?;
-            payload = tx.get_payload(&node.payload()).map_err(|e| e.into())?;
-        }
+            tx.get_payload(&node.payload_id()).map_err(|e| e.into())?
+        };
         let involved_shards = payload.involved_shards();
         let local_shards = self
             .epoch_manager
@@ -484,13 +501,13 @@ where
             if node.height() > v_height &&
                 (node.parent() == &locked_node || node.justify().local_node_height() > locked_height)
             {
-                tx.save_leader_proposals(shard, node.payload(), node.payload_height(), node.clone())
+                tx.save_leader_proposals(shard, node.payload_id(), node.payload_height(), node.clone())
                     .map_err(|e| e.into())?;
 
                 let mut votes = vec![];
                 for s in &involved_shards {
                     if let Some(vote) = tx
-                        .get_leader_proposals(node.payload(), node.payload_height(), *s)
+                        .get_leader_proposals(node.payload_id(), node.payload_height(), *s)
                         .map_err(|e| e.into())?
                     {
                         votes.push(ShardVote {
@@ -509,7 +526,7 @@ where
                     for local_shard in local_shards {
                         dbg!("Can vote on the message");
                         let local_node = tx
-                            .get_leader_proposals(node.payload(), node.payload_height(), local_shard)
+                            .get_leader_proposals(node.payload_id(), node.payload_height(), local_shard)
                             .map_err(|e| e.into())?
                             .unwrap();
 
@@ -606,7 +623,7 @@ where
                         let main_vote = votes.get(0).unwrap();
 
                         let qc = QuorumCertificate::new(
-                            node.payload(),
+                            node.payload_id(),
                             node.payload_height(),
                             main_vote.local_node_hash(),
                             node.height(),
@@ -620,7 +637,7 @@ where
                             .map_err(|e| HotStuffError::UpdateHighQcError(e.to_string()))?; // TODO: is there a better alternative to handle error?
 
                         // Should be the pace maker actually
-                        on_beat_future = Some(self.on_beat(msg.shard(), node.payload()));
+                        on_beat_future = Some(self.on_beat(msg.shard(), node.payload_id()));
                         break;
                     }
                 }

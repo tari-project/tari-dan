@@ -403,7 +403,7 @@ impl ShardStoreTransaction<PublicKey, TariDanPayload> for SqliteShardStoreTransa
         Ok(())
     }
 
-    fn get_node(&self, hash: &TreeNodeHash) -> Result<HotStuffTreeNode<PublicKey>, Self::Error> {
+    fn get_node(&self, hash: &TreeNodeHash) -> Result<HotStuffTreeNode<PublicKey, TariDanPayload>, Self::Error> {
         if hash == &TreeNodeHash::zero() {
             return Ok(HotStuffTreeNode::genesis());
         }
@@ -448,6 +448,7 @@ impl ShardStoreTransaction<PublicKey, TariDanPayload> for SqliteShardStoreTransa
                 shard,
                 NodeHeight(hgt),
                 payload,
+                None,
                 NodeHeight(payload_hgt),
                 local_pledges,
                 Epoch(epoch),
@@ -462,7 +463,7 @@ impl ShardStoreTransaction<PublicKey, TariDanPayload> for SqliteShardStoreTransa
         }
     }
 
-    fn save_node(&mut self, node: HotStuffTreeNode<PublicKey>) -> Result<(), Self::Error> {
+    fn save_node(&mut self, node: HotStuffTreeNode<PublicKey, TariDanPayload>) -> Result<(), Self::Error> {
         let node_hash = Vec::from(node.hash().as_bytes());
         let parent_node_hash = Vec::from(node.parent().as_bytes());
 
@@ -473,7 +474,7 @@ impl ShardStoreTransaction<PublicKey, TariDanPayload> for SqliteShardStoreTransa
             .map_err(|_| Self::Error::InvalidIntegerCast)?;
         let shard = Vec::from(node.shard().as_bytes());
 
-        let payload_id = Vec::from(node.payload().as_bytes());
+        let payload_id = Vec::from(node.payload_id().as_bytes());
         let payload_height = node.payload_height().as_u64() as i64;
 
         let local_pledges = json!(&node.local_pledges()).to_string();
@@ -688,10 +689,10 @@ impl ShardStoreTransaction<PublicKey, TariDanPayload> for SqliteShardStoreTransa
     fn save_substate_changes(
         &mut self,
         changes: &HashMap<ShardId, SubstateState>,
-        node: &HotStuffTreeNode<PublicKey>,
+        node: &HotStuffTreeNode<PublicKey, TariDanPayload>,
     ) -> Result<(), Self::Error> {
         use crate::schema::substates::{data, is_draft, justify, node_height, shard_id, substate_type, tree_node_hash};
-        let payload_id = Vec::from(node.payload().as_slice());
+        let payload_id = Vec::from(node.payload_id().as_slice());
         for (sid, st_change) in changes {
             let shard = Vec::from(sid.as_bytes());
 
@@ -867,7 +868,7 @@ impl ShardStoreTransaction<PublicKey, TariDanPayload> for SqliteShardStoreTransa
         payload: PayloadId,
         payload_height: NodeHeight,
         shard: ShardId,
-    ) -> Result<Option<HotStuffTreeNode<PublicKey>>, Self::Error> {
+    ) -> Result<Option<HotStuffTreeNode<PublicKey, TariDanPayload>>, Self::Error> {
         use crate::schema::leader_proposals::{payload_height as s_payload_height, payload_id, shard_id};
 
         let payload_vote: Option<LeaderProposal> = leader_proposals
@@ -884,7 +885,7 @@ impl ShardStoreTransaction<PublicKey, TariDanPayload> for SqliteShardStoreTransa
             })?;
 
         if let Some(payload_vote) = payload_vote {
-            let hot_stuff_tree_node: HotStuffTreeNode<PublicKey> =
+            let hot_stuff_tree_node: HotStuffTreeNode<PublicKey, TariDanPayload> =
                 serde_json::from_str(&payload_vote.hotstuff_tree_node)?;
             Ok(Some(hot_stuff_tree_node))
         } else {
@@ -897,7 +898,7 @@ impl ShardStoreTransaction<PublicKey, TariDanPayload> for SqliteShardStoreTransa
         shard: ShardId,
         payload: PayloadId,
         payload_height: NodeHeight,
-        node: HotStuffTreeNode<PublicKey>,
+        node: HotStuffTreeNode<PublicKey, TariDanPayload>,
     ) -> Result<(), Self::Error> {
         let shard = Vec::from(shard.as_bytes());
         let payload = Vec::from(payload.as_slice());
