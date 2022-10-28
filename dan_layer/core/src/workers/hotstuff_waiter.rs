@@ -388,7 +388,7 @@ where
                 .map_err(|e| e.into())?;
         }
 
-        if node.justify().payload_height() == NodeHeight(self.consensus_constants.hotstuff_rounds - 1) {
+        if node.justify().payload_height() == NodeHeight(self.consensus_constants.hotstuff_rounds - 2) {
             // decide
             debug!(target: LOG_TARGET, "Deciding on payload: {:?}", node.payload());
             let results = self.on_commit(node, shard, &mut tx)?;
@@ -411,7 +411,7 @@ where
                 let parent = tx.get_node(node.parent()).map_err(|e| e.into())?;
                 results.extend(self.on_commit(parent, shard, tx)?);
             }
-            if node.justify().payload_height() == NodeHeight(self.consensus_constants.hotstuff_rounds - 1) {
+            if node.justify().payload_height() == NodeHeight(self.consensus_constants.hotstuff_rounds - 2) {
                 let payload = tx.get_payload(&node.justify().payload_id()).map_err(|e| e.into())?;
 
                 let mut all_pledges = HashMap::new();
@@ -448,7 +448,7 @@ where
             (node.payload() == node.justify().payload_id() &&
                 node.payload_height() == node.justify().payload_height() + NodeHeight(1))
         {
-            if node.payload_height() > NodeHeight(self.consensus_constants.hotstuff_rounds) {
+            if node.payload_height() > NodeHeight(self.consensus_constants.hotstuff_rounds - 1) {
                 return Err(HotStuffError::PayloadHeightIsTooHigh);
             }
             Ok(())
