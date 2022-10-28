@@ -241,7 +241,6 @@ where
                 NodeHeight(0)
             };
 
-
             if payload_height > NodeHeight(self.consensus_constants.hotstuff_rounds) {
                 info!(
                     target: LOG_TARGET,
