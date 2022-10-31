@@ -90,7 +90,7 @@ pub async fn spawn_validator_node(
         config.validator_node.http_ui_address = Some(format!("127.0.0.1:{}", http_ui_port).parse().unwrap());
 
         // The VNS will try to auto register upon startup
-        config.validator_node.auto_register = true;
+        config.validator_node.auto_register = false;
 
         let data_dir = config.validator_node.data_dir.clone();
         let data_dir_str = data_dir.clone().into_os_string().into_string().unwrap();
