@@ -40,7 +40,7 @@ pub use processor::TransactionProcessor;
 #[derive(Debug, Clone)]
 pub struct BalanceProof {}
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Transaction {
     hash: Hash,
     instructions: Vec<Instruction>,

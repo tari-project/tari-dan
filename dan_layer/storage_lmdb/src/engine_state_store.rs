@@ -82,7 +82,7 @@ impl<'a, T: Deref<Target = ConstTransaction<'a>>> StateReader for LmdbTransactio
     fn get_state_raw(&self, key: &[u8]) -> Result<Option<Vec<u8>>, StateStoreError> {
         let access = self.tx.access();
         access
-            .get::<_, [u8]>(&*self.db, key)
+            .get::<_, [u8]>(&self.db, key)
             .map(|data| data.to_vec())
             .to_opt()
             .map_err(StateStoreError::custom)
@@ -97,7 +97,7 @@ impl<'a> StateWriter for LmdbTransaction<WriteTransaction<'a>> {
     fn set_state_raw(&mut self, key: &[u8], value: Vec<u8>) -> Result<(), StateStoreError> {
         let mut access = self.tx.access();
         access
-            .put(&*self.db, key, &value, put::Flags::empty())
+            .put(&self.db, key, &value, put::Flags::empty())
             .map_err(StateStoreError::custom)
     }
 

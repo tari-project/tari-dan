@@ -122,7 +122,7 @@ impl<T: Clone + Sync + Send + 'static> WasmEnv<T> {
         }
         let view = memory.uint8view().subarray(ptr, ptr + len);
         let mut data = vec![0u8; len as usize];
-        copy_from_cell_slice(&*view, &mut data);
+        copy_from_cell_slice(&view, &mut data);
         Ok(data)
     }
 

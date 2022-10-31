@@ -78,6 +78,7 @@ async fn create_base_node_client(world: &TariWorld, miner_name: &String) -> Base
     let miner = world.miners.get(miner_name).unwrap();
     let base_node_grpc_port = world.base_nodes.get(&miner.base_node_name).unwrap().grpc_port;
     let base_node_grpc_url = format!("http://127.0.0.1:{}", base_node_grpc_port);
+    eprintln!("Base node GRPC at {}", base_node_grpc_url);
     BaseNodeClient::connect(base_node_grpc_url).await.unwrap()
 }
 
@@ -85,6 +86,7 @@ async fn create_wallet_client(world: &TariWorld, miner_name: &String) -> WalletG
     let miner = world.miners.get(miner_name).unwrap();
     let wallet_grpc_port = world.wallets.get(&miner.wallet_name).unwrap().grpc_port;
     let wallet_addr = format!("http://127.0.0.1:{}", wallet_grpc_port);
+    eprintln!("Wallet GRPC at {}", wallet_addr);
     let channel = Endpoint::from_str(&wallet_addr).unwrap().connect().await.unwrap();
     WalletClient::with_interceptor(
         channel,
@@ -127,6 +129,7 @@ async fn create_block_template_with_coinbase(
         .await
         .unwrap()
         .into_inner();
+
     let mut block_template = template_res.new_block_template.clone().unwrap();
 
     // add the coinbase outputs and kernels to the block template

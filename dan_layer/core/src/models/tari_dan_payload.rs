@@ -22,14 +22,14 @@
 
 use std::fmt::Debug;
 
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use tari_common_types::types::FixedHash;
 use tari_dan_common_types::{ObjectClaim, ShardId, SubstateChange};
 use tari_dan_engine::transaction::Transaction;
 
 use crate::models::{ConsensusHash, Payload};
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TariDanPayload {
     transaction: Transaction,
 }
@@ -49,8 +49,8 @@ impl TariDanPayload {
 }
 
 impl ConsensusHash for TariDanPayload {
-    fn consensus_hash(&self) -> &[u8] {
-        self.transaction.hash()
+    fn consensus_hash(&self) -> FixedHash {
+        self.transaction.hash().into_array().into()
     }
 }
 
@@ -70,7 +70,7 @@ pub struct CheckpointData {
 }
 
 impl ConsensusHash for CheckpointData {
-    fn consensus_hash(&self) -> &[u8] {
-        self.hash.as_slice()
+    fn consensus_hash(&self) -> FixedHash {
+        self.hash
     }
 }

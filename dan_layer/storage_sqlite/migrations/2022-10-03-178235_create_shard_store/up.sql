@@ -96,7 +96,7 @@ create table substates (
     substate_type text not null,
     shard_id blob not NULL,
     node_height bigint not NULL,
-    data blob null,
+    data text null,
     created_by_payload_id blob not null,
     deleted_by_payload_id blob null,
     justify text null,

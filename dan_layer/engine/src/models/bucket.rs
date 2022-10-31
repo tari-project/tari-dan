@@ -1,10 +1,9 @@
 // Copyright 2022 The Tari Project
 // SPDX-License-Identifier: BSD-3-Clause
 
+use tari_engine_types::resource::{Resource, ResourceError};
 use tari_template_abi::{Decode, Encode};
 use tari_template_lib::models::{Amount, ResourceAddress};
-
-use crate::models::{resource::Resource, ResourceError};
 
 #[derive(Debug, Clone, Encode, Decode)]
 pub struct Bucket {

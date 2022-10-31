@@ -250,6 +250,7 @@ impl TryFrom<proto::transaction::SubstateChange> for SubstateChange {
     fn try_from(val: proto::transaction::SubstateChange) -> Result<Self, Self::Error> {
         match val {
             proto::transaction::SubstateChange::Create => Ok(SubstateChange::Create),
+            proto::transaction::SubstateChange::Exists => Ok(SubstateChange::Exists),
             proto::transaction::SubstateChange::Destroy => Ok(SubstateChange::Destroy),
         }
     }
@@ -259,6 +260,7 @@ impl From<SubstateChange> for proto::transaction::SubstateChange {
     fn from(val: SubstateChange) -> Self {
         match val {
             SubstateChange::Create => proto::transaction::SubstateChange::Create,
+            SubstateChange::Exists => proto::transaction::SubstateChange::Exists,
             SubstateChange::Destroy => proto::transaction::SubstateChange::Destroy,
         }
     }

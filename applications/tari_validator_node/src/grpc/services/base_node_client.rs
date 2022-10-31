@@ -75,8 +75,14 @@ impl GrpcBaseNodeClient {
         Ok(consensus_constants)
     }
 }
+
 #[async_trait]
 impl BaseNodeClient for GrpcBaseNodeClient {
+    async fn test_connection(&mut self) -> Result<(), BaseNodeError> {
+        self.connection().await?;
+        Ok(())
+    }
+
     async fn get_tip_info(&mut self) -> Result<BaseLayerMetadata, BaseNodeError> {
         let inner = self.connection().await?;
         let request = grpc::Empty {};

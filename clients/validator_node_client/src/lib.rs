@@ -29,6 +29,7 @@ pub mod types;
 use types::{SubmitTransactionRequest, TemplateRegistrationRequest, TemplateRegistrationResponse};
 
 use crate::types::{
+    GetIdentityResponse,
     GetTemplateRequest,
     GetTemplateResponse,
     GetTemplatesRequest,
@@ -58,6 +59,10 @@ impl ValidatorNodeClient {
             endpoint: endpoint.into_url()?,
             request_id: 0,
         })
+    }
+
+    pub async fn get_identity(&mut self) -> Result<GetIdentityResponse, anyhow::Error> {
+        self.send_request("get_identity", json!({})).await
     }
 
     pub async fn register_validator_node(&mut self) -> Result<u64, anyhow::Error> {

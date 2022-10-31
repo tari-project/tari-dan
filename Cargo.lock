@@ -5544,6 +5544,7 @@ dependencies = [
  "tari_common",
  "tari_common_types",
  "tari_crypto",
+ "tari_engine_types",
  "tari_utilities",
 ]
 
@@ -5675,10 +5676,12 @@ dependencies = [
  "borsh",
  "digest 0.9.0",
  "serde",
+ "tari_common_types",
  "tari_crypto",
  "tari_template_abi",
  "tari_template_lib",
  "tari_utilities",
+ "thiserror",
 ]
 
 [[package]]
@@ -5840,6 +5843,7 @@ dependencies = [
  "hex",
  "newtype-ops",
  "serde",
+ "serde_json",
  "tari_template_abi",
  "tari_template_macros",
 ]

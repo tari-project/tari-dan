@@ -29,10 +29,11 @@ use tari_dan_core::{
 };
 use tari_dan_engine::{
     packager::{Package, TemplateModuleLoader},
-    runtime::{FinalizeResult, RuntimeInterfaceImpl, StateTracker},
+    runtime::{RuntimeInterfaceImpl, StateTracker},
     state_store::{memory::MemoryStateStore, AtomicDb, StateWriter},
     transaction::TransactionProcessor,
 };
+use tari_engine_types::{commit_result::FinalizeResult, substate::SubstateValue};
 
 #[derive(Debug, Default)]
 pub struct TariDanPayloadProcessor<TTemplateProvider> {
@@ -89,16 +90,31 @@ fn create_populated_state_store<I: IntoIterator<Item = ObjectPledge>>(inputs: I)
     let state_db = MemoryStateStore::default();
 
     // Populate state db with inputs
-    {
-        let mut tx = state_db.write_access().unwrap();
-        for input in inputs {
-            match input.current_state {
-                SubstateState::Up { created_by, data } => {
-                    tx.set_state_raw(created_by.as_slice(), data).unwrap();
-                },
-                SubstateState::DoesNotExist | SubstateState::Down { .. } => { /* Do nothing */ },
-            }
+    let mut tx = state_db.write_access().unwrap();
+    for input in inputs {
+        match input.current_state {
+            SubstateState::Up { data, .. } => {
+                // TODO: Engine should be able to read SubstateValue
+                match data.into_substate() {
+                    SubstateValue::Component(component) => {
+                        eprintln!("🐞inpuy = {}", input.shard_id);
+                        eprintln!("🐞ca = {}", component.component_address);
+                        tx.set_state_raw(
+                            input.shard_id.as_bytes(),
+                            tari_dan_engine::abi::encode(&component).unwrap(),
+                        )
+                        .unwrap();
+                    },
+                    SubstateValue::Resource(resx) => {
+                        tx.set_state_raw(input.shard_id.as_bytes(), tari_dan_engine::abi::encode(&resx).unwrap())
+                            .unwrap();
+                    },
+                }
+            },
+            SubstateState::DoesNotExist | SubstateState::Down { .. } => { /* Do nothing */ },
         }
     }
+    tx.commit().unwrap();
+
     state_db
 }

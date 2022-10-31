@@ -24,6 +24,7 @@ use log::*;
 use tari_comms::types::CommsPublicKey;
 use tari_dan_common_types::ShardId;
 use tari_dan_core::{
+    consensus_constants::ConsensusConstants,
     message::DanMessage,
     models::{vote_message::VoteMessage, HotStuffMessage, TariDanPayload},
     services::{infrastructure_services::OutboundService, leader_strategy::AlwaysFirstLeader},
@@ -88,6 +89,9 @@ impl HotstuffService {
         let (tx_events, _) = broadcast::channel(100);
 
         let leader_strategy = AlwaysFirstLeader {};
+
+        let consensus_constants = ConsensusConstants::devnet();
+
         HotStuffWaiter::spawn(
             node_public_key.clone(),
             epoch_manager,
@@ -102,6 +106,7 @@ impl HotstuffService {
             payload_processor,
             shard_store_factory,
             shutdown.clone(),
+            consensus_constants,
         );
 
         tokio::spawn(
@@ -160,24 +165,24 @@ impl HotstuffService {
         loop {
             tokio::select! {
                 // Inbound
-               res = self.mempool.next_valid_transaction() => {
+                res = self.mempool.next_valid_transaction() => {
                     let (tx, shard_id) = res?;
                     debug!(target: LOG_TARGET, "Received new transaction {} for shard {}", tx.hash(), shard_id);
                     log(self.handle_new_valid_transaction(tx, shard_id).await, "new valid transaction");
                 }
-               // Outbound
-               Some((to, msg)) = self.rx_leader.recv() => {
+                // Outbound
+                Some((to, msg)) = self.rx_leader.recv() => {
                     debug!(target: LOG_TARGET, "Received leader message: {}", &msg);
                     log(self.handle_leader_message(to, msg).await, "leader message");
-                   }
-               Some((msg, leader)) = self.rx_vote_message.recv() => {
+                }
+                Some((msg, leader)) = self.rx_vote_message.recv() => {
                     debug!(target: LOG_TARGET, "Received vote message");
                     log(self.handle_vote_message(leader, msg).await, "vote message");
-                    }
-               Some((msg, dest_nodes)) = self.rx_broadcast.recv() => {
+                }
+                Some((msg, dest_nodes)) = self.rx_broadcast.recv() => {
                     debug!(target: LOG_TARGET, "Received broadcast message: {}", &msg);
                     log(self.handle_broadcast_message(dest_nodes, msg).await, "broadcast message");
-                    }
+                }
                 // Shutdown
                 _ = self.shutdown.wait() => {
                     dbg!("Shutting down hs service");

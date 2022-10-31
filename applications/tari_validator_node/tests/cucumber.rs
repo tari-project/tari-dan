@@ -35,7 +35,7 @@ use utils::{
 use crate::utils::{
     base_node::{spawn_base_node, BaseNodeProcess},
     miner::MinerProcess,
-    validator_node::{send_vn_json_rpc_request, ValidatorNodeProcess},
+    validator_node::{get_vn_client, ValidatorNodeProcess},
     wallet::WalletProcess,
 };
 
@@ -63,12 +63,12 @@ impl cucumber::World for TariWorld {
 
 #[given(expr = "a base node {word}")]
 async fn start_base_node(world: &mut TariWorld, bn_name: String) {
-    spawn_base_node(world, bn_name);
+    spawn_base_node(world, bn_name).await;
 }
 
 #[given(expr = "a wallet {word} connected to base node {word}")]
 async fn start_wallet(world: &mut TariWorld, wallet_name: String, bn_name: String) {
-    spawn_wallet(world, wallet_name, bn_name);
+    spawn_wallet(world, wallet_name, bn_name).await;
 }
 
 #[given(expr = "a miner {word} connected to base node {word} and wallet {word}")]
@@ -78,7 +78,7 @@ async fn create_miner(world: &mut TariWorld, miner_name: String, bn_name: String
 
 #[given(expr = "a validator node {word} connected to base node {word} and wallet {word}")]
 async fn start_validator_node(world: &mut TariWorld, vn_name: String, bn_name: String, wallet_name: String) {
-    spawn_validator_node(world, vn_name, bn_name, wallet_name);
+    spawn_validator_node(world, vn_name, bn_name, wallet_name).await;
 }
 
 #[when(expr = "miner {word} mines {int} new blocks")]
@@ -87,21 +87,19 @@ async fn run_miner(world: &mut TariWorld, miner_name: String, num_blocks: u64) {
 }
 
 #[then(expr = "the validator node {word} returns a valid identity")]
-async fn assert_valid_vn_identity(_world: &mut TariWorld, _name: String) -> Result<(), String> {
-    // TODO: retrieve the VN from the world by name
+async fn assert_valid_vn_identity(world: &mut TariWorld, name: String) -> Result<(), String> {
+    let jrpc_port = world.validator_nodes.get(&name).unwrap().json_rpc_port;
 
     // send the JSON RPC "get_identity" request to the VN
-    let body: Vec<String> = vec![];
-    let resp = send_vn_json_rpc_request(18145, "get_identity".to_string(), body).await;
-    assert_eq!(resp.status(), 200);
+    let mut client = get_vn_client(jrpc_port).await;
+    let resp = client.get_identity().await.unwrap();
 
-    // TODO: assert that the body format is correct with the identity
-    println!("VN identity response: {:?}", resp.text().await.unwrap());
-
+    println!("VN identity response: {:?}", resp);
     Ok(())
 }
 
 #[tokio::main]
 async fn main() {
-    futures::executor::block_on(TariWorld::run("tests/features/"));
+    // env_logger::init();
+    TariWorld::run("tests/features/").await;
 }

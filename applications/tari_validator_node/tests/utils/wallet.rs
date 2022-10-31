@@ -20,11 +20,7 @@
 //   WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //   USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use std::{
-    str::FromStr,
-    thread::{self, JoinHandle},
-    time::Duration,
-};
+use std::{str::FromStr, thread, thread::JoinHandle, time::Duration};
 
 use tari_common::configuration::CommonConfig;
 use tari_comms::multiaddr::Multiaddr;
@@ -45,10 +41,10 @@ pub struct WalletProcess {
     pub handle: JoinHandle<()>,
 }
 
-pub fn spawn_wallet(world: &mut TariWorld, wallet_name: String, base_node_name: String) {
+pub async fn spawn_wallet(world: &mut TariWorld, wallet_name: String, base_node_name: String) {
     // TODO: use different ports on each spawned wallet
-    let port = 8001;
-    let grpc_port = 18153;
+    let port = 48001;
+    let grpc_port = 48153;
     let base_node_public_key = world
         .base_nodes
         .get(&base_node_name)
@@ -67,21 +63,21 @@ pub fn spawn_wallet(world: &mut TariWorld, wallet_name: String, base_node_name: 
         };
 
         let temp_dir = tempdir().unwrap();
-        println!("Using wallet temp_dir: {}", temp_dir.path().display());
+        eprintln!("Using wallet temp_dir: {}", temp_dir.path().display());
 
         wallet_config.wallet.network = Network::LocalNet;
         wallet_config.wallet.password = Some("test".into());
         wallet_config.wallet.grpc_enabled = true;
         wallet_config.wallet.grpc_address =
             Some(Multiaddr::from_str(&format!("/ip4/127.0.0.1/tcp/{}", grpc_port)).unwrap());
-        wallet_config.wallet.data_dir = temp_dir.path().to_path_buf().join("data/wallet");
-        wallet_config.wallet.db_file = temp_dir.path().to_path_buf().join("db/console_wallet.db");
+        wallet_config.wallet.data_dir = temp_dir.path().join("data/wallet");
+        wallet_config.wallet.db_file = temp_dir.path().join("db/console_wallet.db");
 
         wallet_config.wallet.p2p.transport.transport_type = TransportType::Tcp;
         wallet_config.wallet.p2p.transport.tcp.listener_address =
             Multiaddr::from_str(&format!("/ip4/127.0.0.1/tcp/{}", port)).unwrap();
         wallet_config.wallet.p2p.public_address = Some(wallet_config.wallet.p2p.transport.tcp.listener_address.clone());
-        wallet_config.wallet.p2p.datastore_path = temp_dir.path().to_path_buf().join("peer_db/wallet");
+        wallet_config.wallet.p2p.datastore_path = temp_dir.path().join("peer_db/wallet");
         wallet_config.wallet.p2p.dht = DhtConfig::default_local_test();
 
         wallet_config.wallet.custom_base_node = Some(format!(
@@ -94,8 +90,7 @@ pub fn spawn_wallet(world: &mut TariWorld, wallet_name: String, base_node_name: 
 
         let result = run_wallet(rt, &mut wallet_config);
         if let Err(e) = result {
-            println!("{:?}", e);
-            panic!();
+            panic!("{:?}", e);
         }
     });
 
@@ -110,5 +105,5 @@ pub fn spawn_wallet(world: &mut TariWorld, wallet_name: String, base_node_name: 
 
     // We need to give it time for the wallet to startup
     // TODO: it would be better to scan the wallet to detect when it has started
-    thread::sleep(Duration::from_secs(5));
+    tokio::time::sleep(Duration::from_secs(5)).await;
 }

@@ -214,14 +214,14 @@ impl BaseLayerEpochManager {
             ((vns.len() as i64 + mid_point as i64 - (half_committee_size - 1) as i64) % vns.len() as i64) as usize;
         let end = ((mid_point as i64 + half_committee_size as i64) % vns.len() as i64) as usize;
         let mut result = Vec::with_capacity(half_committee_size * 2);
-        if mid_point < half_committee_size {
+        if begin > mid_point {
             result.extend_from_slice(&vns[begin..]);
             result.extend_from_slice(&vns[0..mid_point as usize]);
         } else {
             result.extend_from_slice(&vns[begin..mid_point as usize]);
         }
 
-        if mid_point + half_committee_size >= vns.len() {
+        if end < mid_point {
             result.extend_from_slice(&vns[mid_point as usize..]);
             result.extend_from_slice(&vns[0..end]);
         } else {

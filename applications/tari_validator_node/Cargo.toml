@@ -71,13 +71,13 @@ tari_common = { git = "https://github.com/tari-project/tari.git", branch = "feat
 [dev-dependencies]
 # FIXME: the newest version failed compilation due to a missing "bool_to_option" unstable feature
 cucumber = { version = "0.13.0"} 
-tokio = { version = "1.10", features = ["macros", "rt-multi-thread", "time"] }
 tempfile = "3.3.0"
 tari_test_utils = { git = "https://github.com/tari-project/tari.git", branch = "feature-dan", package = "tari_test_utils" }
 tari_base_node = { git = "https://github.com/tari-project/tari.git", branch = "feature-dan", package = "tari_base_node" }
 tari_console_wallet = { git = "https://github.com/tari-project/tari.git", branch = "feature-dan", package = "tari_console_wallet"}
 tari_comms_dht = { git = "https://github.com/tari-project/tari.git", branch = "feature-dan", package = "tari_comms_dht" }
 tari_wallet = { git = "https://github.com/tari-project/tari.git", branch = "feature-dan", package = "tari_wallet" }
+#env_logger = "0.9.0"
 
 [[test]]
 name = "cucumber" # this should be the same as the filename of your test target

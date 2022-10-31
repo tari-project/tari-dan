@@ -33,7 +33,10 @@ use tari_common::{
     exit_codes::{ExitCode, ExitError},
 };
 use tari_comms::{protocol::rpc::RpcServer, CommsNode, NodeIdentity, UnspawnedCommsNode};
-use tari_dan_core::workers::events::{EventSubscription, HotStuffEvent};
+use tari_dan_core::{
+    consensus_constants::ConsensusConstants,
+    workers::events::{EventSubscription, HotStuffEvent},
+};
 use tari_dan_storage::global::GlobalDb;
 use tari_dan_storage_sqlite::{
     global::SqliteGlobalDbAdapter,
@@ -45,7 +48,6 @@ use tari_shutdown::ShutdownSignal;
 use crate::{
     base_layer_scanner,
     comms,
-    consensus_constants::ConsensusConstants,
     grpc::services::base_node_client::GrpcBaseNodeClient,
     p2p::{
         create_validator_node_rpc_service,

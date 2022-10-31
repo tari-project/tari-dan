@@ -48,7 +48,7 @@ impl DbFactory for SqliteDbFactory {
     fn get_or_create_global_db(&self) -> Result<GlobalDb<Self::GlobalDbAdapter>, StorageError> {
         let database_url = self.data_dir.join("global_storage.sqlite");
 
-        create_dir_all(&database_url.parent().unwrap()).map_err(|_| StorageError::FileSystemPathDoesNotExist)?;
+        create_dir_all(database_url.parent().unwrap()).map_err(|_| StorageError::FileSystemPathDoesNotExist)?;
 
         let database_url = database_url.to_str().expect("database_url utf-8 error").to_string();
         let connection = SqliteConnection::establish(&database_url).map_err(SqliteStorageError::from)?;

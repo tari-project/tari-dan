@@ -24,7 +24,7 @@ use std::{fmt, fmt::Formatter};
 
 use crate::models::{ConsensusWorkerState, Event};
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ConsensusWorkerDomainEvent {
     StateChanged {
         from: ConsensusWorkerState,
