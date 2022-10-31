@@ -111,11 +111,14 @@ pub async fn spawn_services(
     } = message_receivers;
 
     // Epoch manager
+    let validator_node_config = config.validator_node.clone();
     let epoch_manager = epoch_manager::spawn(
         sqlite_db.clone(),
         base_node_client.clone(),
         node_identity.public_key().clone(),
         shutdown.clone(),
+        node_identity.clone(),
+        validator_node_config,
     );
 
     // Mempool

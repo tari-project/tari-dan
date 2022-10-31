@@ -40,9 +40,7 @@ pub fn get_committee_shard_ids(vns: &[ValidatorNode]) -> Result<RangeInclusive<S
         Ok(RangeInclusive::new(min_shard_id, max_shard_id))
     } else {
         let min_shard_id = vns.first().ok_or(EpochManagerError::ValidatorNodesNotFound)?.shard_key;
-        Ok(RangeInclusive::new(
-            vns.first().ok_or(EpochManagerError::ValidatorNodesNotFound)?.shard_key,
-            vns.last().ok_or(EpochManagerError::ValidatorNodesNotFound)?.shard_key,
-        ))
+        let max_shard_id = vns.last().ok_or(EpochManagerError::ValidatorNodesNotFound)?.shard_key;
+        Ok(RangeInclusive::new(min_shard_id, max_shard_id))
     }
 }

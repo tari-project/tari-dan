@@ -20,7 +20,7 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use std::convert::TryInto;
+use std::{convert::TryInto, sync::Arc};
 
 use tari_comms::{types::CommsPublicKey, NodeIdentity};
 use tari_crypto::tari_utilities::ByteArray;
@@ -55,7 +55,7 @@ pub struct BaseLayerEpochManager {
     pub base_node_client: GrpcBaseNodeClient,
     current_epoch: Epoch,
     tx_events: broadcast::Sender<EpochManagerEvent>,
-    node_identity: NodeIdentity,
+    node_identity: Arc<NodeIdentity>,
     validator_node_config: ValidatorNodeConfig,
 }
 
@@ -65,7 +65,7 @@ impl BaseLayerEpochManager {
         base_node_client: GrpcBaseNodeClient,
         _id: CommsPublicKey,
         tx_events: broadcast::Sender<EpochManagerEvent>,
-        node_identity: NodeIdentity,
+        node_identity: Arc<NodeIdentity>,
         validator_node_config: ValidatorNodeConfig,
     ) -> Self {
         Self {
@@ -138,7 +138,7 @@ impl BaseLayerEpochManager {
             .map(|i| committee_vns[i].shard_key)
             .collect::<Vec<_>>();
 
-        let substates_to_sync = shard_db
+        let _substates_to_sync = shard_db
             .get_substate_states(&shards_to_sync)
             .map_err(EpochManagerError::StorageError)?;
 
