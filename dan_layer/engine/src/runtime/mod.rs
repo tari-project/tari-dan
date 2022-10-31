@@ -26,11 +26,6 @@ pub use id_provider::IdProvider;
 mod r#impl;
 pub use r#impl::RuntimeInterfaceImpl;
 
-mod logs;
-
-mod commit_result;
-pub use commit_result::{FinalizeResult, RejectResult, Substate, SubstateDiff, SubstateValue, TransactionResult};
-
 mod error;
 pub use error::{RuntimeError, TransactionCommitError};
 
@@ -38,6 +33,7 @@ mod tracker;
 
 use std::{fmt::Debug, sync::Arc};
 
+use tari_engine_types::commit_result::FinalizeResult;
 use tari_template_lib::{
     args::{
         Arg,

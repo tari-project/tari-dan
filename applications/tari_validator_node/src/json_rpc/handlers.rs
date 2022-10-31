@@ -20,7 +20,7 @@
 //   WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //   USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use std::{collections::HashMap, sync::Arc, time::Duration};
+use std::{sync::Arc, time::Duration};
 
 use axum_jrpc::{
     error::{JsonRpcError, JsonRpcErrorReason},
@@ -129,8 +129,9 @@ impl JsonRpcHandlers {
 
         let mut builder = TransactionBuilder::new();
         builder
+            .with_input_refs(transaction.inputs)
             .with_instructions(transaction.instructions)
-            .with_new_components(transaction.num_new_components)
+            .with_num_outputs(transaction.num_outputs)
             .signature(transaction.signature)
             .sender_public_key(transaction.sender_public_key);
 
@@ -149,12 +150,12 @@ impl JsonRpcHandlers {
             .map_err(internal_error(answer_id))?;
 
         if transaction.wait_for_result {
-            return wait_for_result(answer_id, hash, subscription, Duration::from_secs(10)).await;
+            return wait_for_result(answer_id, hash, subscription, Duration::from_secs(30)).await;
         }
 
         Ok(JsonRpcResponse::success(answer_id, SubmitTransactionResponse {
             hash: hash.into_array().into(),
-            changes: HashMap::new(),
+            result: None,
         }))
     }
 
@@ -283,7 +284,6 @@ impl JsonRpcHandlers {
                 //  response.connections.push(Connection { node_id: (), public_key: (), address: (), direction: (), age:
                 //                                                                                      (), user_agent:
                 // (), Info: () })
-                println!("peer {:?}", peer);
                 response.connections.push(Connection {
                     node_id: peer.node_id,
                     public_key: peer.public_key,
@@ -438,15 +438,35 @@ async fn wait_for_result(
     loop {
         match tokio::time::timeout(timeout, subscription.recv()).await {
             Ok(res) => match res {
-                Ok(HotStuffEvent::OnCommit(_tree_node_hash, changes)) => {
-                    // TODO: How do we correlate this to our transaction?
+                Ok(HotStuffEvent::OnAccept(payload_id, result)) => {
+                    if payload_id.as_slice() != hash.as_ref() {
+                        continue;
+                    }
+
                     let response = SubmitTransactionResponse {
                         hash: hash.into_array().into(),
-                        changes,
+                        result: Some(result),
                     };
+                    dbg!(&response);
                     return Ok(JsonRpcResponse::success(answer_id, response));
                 },
+                Ok(HotStuffEvent::OnReject(payload_id, reject)) => {
+                    if payload_id.as_slice() != hash.as_ref() {
+                        continue;
+                    }
+                    return Err(JsonRpcResponse::error(
+                        answer_id,
+                        JsonRpcError::new(
+                            // TODO: define error code
+                            JsonRpcErrorReason::ApplicationError(1),
+                            reject.reason,
+                            json!(null),
+                        ),
+                    ));
+                },
                 Ok(HotStuffEvent::Failed(err)) => {
+                    // May not be our tx that failed
+                    warn!(target: LOG_TARGET, "Transaction failed: {}", err);
                     return Err(JsonRpcResponse::error(
                         answer_id,
                         JsonRpcError::new(

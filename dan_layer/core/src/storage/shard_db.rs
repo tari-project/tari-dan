@@ -42,6 +42,9 @@ use crate::{
     storage::shard_store::{ShardStoreTransaction, StoreError},
 };
 
+type PayloadVotes<TAddr, TPayload> =
+    HashMap<PayloadId, HashMap<NodeHeight, HashMap<ShardId, HotStuffTreeNode<TAddr, TPayload>>>>;
+
 // TODO: Clone is pretty bad here, this class should only be used for testing
 #[derive(Debug, Default, Clone)]
 pub struct MemoryShardDbInner<TAddr, TPayload> {
@@ -52,10 +55,10 @@ pub struct MemoryShardDbInner<TAddr, TPayload> {
     last_voted_heights: HashMap<ShardId, NodeHeight>,
     lock_node_and_heights: HashMap<ShardId, (TreeNodeHash, NodeHeight)>,
     votes: HashMap<(TreeNodeHash, ShardId), Vec<(TAddr, VoteMessage)>>,
-    nodes: HashMap<TreeNodeHash, HotStuffTreeNode<TAddr>>,
+    nodes: HashMap<TreeNodeHash, HotStuffTreeNode<TAddr, TPayload>>,
     last_executed_height: HashMap<ShardId, NodeHeight>,
     payloads: HashMap<PayloadId, TPayload>,
-    payload_votes: HashMap<PayloadId, HashMap<NodeHeight, HashMap<ShardId, HotStuffTreeNode<TAddr>>>>,
+    payload_votes: PayloadVotes<TAddr, TPayload>,
     objects: HashMap<ShardId, (SubstateState, Option<ObjectPledge>)>,
 }
 
@@ -217,7 +220,7 @@ impl<TAddr: NodeAddressable, TPayload: Payload> ShardStoreTransaction<TAddr, TPa
         shard: ShardId,
         payload: PayloadId,
         payload_height: NodeHeight,
-        node: HotStuffTreeNode<TAddr>,
+        node: HotStuffTreeNode<TAddr, TPayload>,
     ) -> Result<(), Self::Error> {
         let mut guard = self.inner.write().unwrap();
         let payload_entry = guard.payload_votes.entry(payload).or_insert_with(HashMap::new);
@@ -231,7 +234,7 @@ impl<TAddr: NodeAddressable, TPayload: Payload> ShardStoreTransaction<TAddr, TPa
         payload: PayloadId,
         payload_height: NodeHeight,
         shard: ShardId,
-    ) -> Result<Option<HotStuffTreeNode<TAddr>>, Self::Error> {
+    ) -> Result<Option<HotStuffTreeNode<TAddr, TPayload>>, Self::Error> {
         Ok(self
             .inner
             .read()
@@ -242,12 +245,12 @@ impl<TAddr: NodeAddressable, TPayload: Payload> ShardStoreTransaction<TAddr, TPa
             .and_then(|ph| ph.get(&shard).cloned()))
     }
 
-    fn save_node(&mut self, node: HotStuffTreeNode<TAddr>) -> Result<(), Self::Error> {
+    fn save_node(&mut self, node: HotStuffTreeNode<TAddr, TPayload>) -> Result<(), Self::Error> {
         self.inner.write().unwrap().nodes.insert(*node.hash(), node);
         Ok(())
     }
 
-    fn get_node(&self, node_hash: &TreeNodeHash) -> Result<HotStuffTreeNode<TAddr>, Self::Error> {
+    fn get_node(&self, node_hash: &TreeNodeHash) -> Result<HotStuffTreeNode<TAddr, TPayload>, Self::Error> {
         if node_hash == &TreeNodeHash::zero() {
             Ok(HotStuffTreeNode::genesis())
         } else {
@@ -341,7 +344,7 @@ impl<TAddr: NodeAddressable, TPayload: Payload> ShardStoreTransaction<TAddr, TPa
     fn save_substate_changes(
         &mut self,
         _changes: &HashMap<ShardId, SubstateState>,
-        _node: &HotStuffTreeNode<TAddr>,
+        _node: &HotStuffTreeNode<TAddr, TPayload>,
     ) -> Result<(), Self::Error> {
         // todo!()
         Ok(())

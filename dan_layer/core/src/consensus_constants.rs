@@ -20,29 +20,16 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use tari_template_abi::{CreateComponentArg, Decode, Encode};
-use tari_template_lib::{
-    models::{ContractAddress, PackageId},
-    Hash,
-};
-
-pub type ComponentId = Hash;
-
-#[derive(Debug, Clone, Encode, Decode)]
-pub struct Component {
-    pub contract_address: ContractAddress,
-    pub package_address: PackageId,
-    pub module_name: String,
-    pub state: Vec<u8>,
+pub struct ConsensusConstants {
+    pub base_layer_confirmations: u64,
+    pub hotstuff_rounds: u64,
 }
 
-impl From<CreateComponentArg> for Component {
-    fn from(arg: CreateComponentArg) -> Self {
+impl ConsensusConstants {
+    pub const fn devnet() -> Self {
         Self {
-            contract_address: arg.contract_address,
-            package_address: arg.package_address,
-            module_name: arg.component_name,
-            state: arg.state,
+            base_layer_confirmations: 3,
+            hotstuff_rounds: 4,
         }
     }
 }

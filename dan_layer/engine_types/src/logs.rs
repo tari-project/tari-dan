@@ -25,9 +25,10 @@ use std::{
     time::{Duration, SystemTime, UNIX_EPOCH},
 };
 
-use tari_template_lib::args::LogLevel;
+use serde::{Deserialize, Serialize};
+pub use tari_template_lib::args::LogLevel;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct LogEntry {
     pub timestamp: u64,
     pub message: String,

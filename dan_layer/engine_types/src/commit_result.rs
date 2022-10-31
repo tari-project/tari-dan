@@ -20,33 +20,37 @@
 //   WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //   USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use tari_dan_common_types::optional::IsNotFoundError;
-use tari_dan_core::storage::StorageError;
-use tari_dan_engine::packager::PackageError;
-use tari_dan_storage_sqlite::error::SqliteStorageError;
-use tari_template_lib::models::TemplateAddress;
-use thiserror::Error;
+use serde::{Deserialize, Serialize};
+use tari_template_lib::Hash;
 
-#[derive(Error, Debug)]
-pub enum TemplateManagerError {
-    #[error("The template in the base layer is invalid")]
-    InvalidBaseLayerTemplate,
-    #[error("There was an error sending to a channel")]
-    SendError,
-    #[error("Storage error: {0}")]
-    StorageError(#[from] StorageError),
-    #[error("Storage error: {0}")]
-    SqliteStorageError(#[from] SqliteStorageError),
-    #[error("Template not found: {address}")]
-    TemplateNotFound { address: TemplateAddress },
-    #[error("The template is unavailable for use")]
-    TemplateUnavailable,
-    #[error(transparent)]
-    PackageError(#[from] PackageError),
+use crate::{execution_result::ExecutionResult, logs::LogEntry, substate::SubstateDiff};
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct FinalizeResult {
+    pub transaction_hash: Hash,
+    pub logs: Vec<LogEntry>,
+    pub execution_results: Vec<ExecutionResult>,
+    pub result: TransactionResult,
 }
 
-impl IsNotFoundError for TemplateManagerError {
-    fn is_not_found_error(&self) -> bool {
-        matches!(self, Self::TemplateNotFound { .. })
+impl FinalizeResult {
+    pub fn new(transaction_hash: Hash, logs: Vec<LogEntry>, result: TransactionResult) -> Self {
+        Self {
+            transaction_hash,
+            logs,
+            execution_results: Vec::new(),
+            result,
+        }
     }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum TransactionResult {
+    Accept(SubstateDiff),
+    Reject(RejectResult),
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RejectResult {
+    pub reason: String,
 }

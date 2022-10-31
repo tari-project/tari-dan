@@ -26,6 +26,11 @@ use std::{
     sync::{Arc, RwLock},
 };
 
+use tari_engine_types::{
+    logs::LogEntry,
+    resource::Resource,
+    substate::{Substate, SubstateAddress, SubstateDiff},
+};
 use tari_template_lib::{
     args::{CreateComponentArg, MintResourceArg},
     models::{
@@ -44,14 +49,8 @@ use tari_template_lib::{
 };
 
 use crate::{
-    models::{Bucket, Resource, Vault},
-    runtime::{
-        commit_result::{SubstateDiff, SubstateValue},
-        id_provider::IdProvider,
-        logs::LogEntry,
-        RuntimeError,
-        TransactionCommitError,
-    },
+    models::{Bucket, Vault},
+    runtime::{id_provider::IdProvider, RuntimeError, TransactionCommitError},
     state_store::{memory::MemoryStateStore, AtomicDb, StateReader, StateWriter},
 };
 
@@ -105,10 +104,10 @@ impl StateTracker {
         self.write_with(|state| mem::take(&mut state.logs))
     }
 
-    fn check_amount(&self, amount: &Amount) -> Result<(), RuntimeError> {
+    fn check_amount(&self, amount: Amount) -> Result<(), RuntimeError> {
         if amount.is_negative() {
             return Err(RuntimeError::InvalidAmount {
-                amount: *amount,
+                amount,
                 reason: "Amount must be positive".to_string(),
             });
         }
@@ -119,7 +118,7 @@ impl StateTracker {
         let resource_address = self.id_provider.new_resource_address();
         match mint_arg {
             MintResourceArg::Fungible { amount, metadata } => {
-                self.check_amount(&amount)?;
+                self.check_amount(amount)?;
                 self.write_with(|state| {
                     let resource = Resource::fungible(resource_address, amount, metadata);
                     state.new_resources.insert(resource.address(), resource);
@@ -333,7 +332,7 @@ impl StateTracker {
             for (component_addr, component) in state.new_components.drain() {
                 tx.set_state(&component_addr, component.clone())?;
                 // TODO:
-                substates.up(component_addr.into_array(), SubstateValue::new(component));
+                substates.up(SubstateAddress::Component(component_addr), Substate::new(component));
             }
 
             // Vaults are held within a component and contain a resource, so I dont think they are a substate in and of
@@ -344,7 +343,7 @@ impl StateTracker {
 
             for (resource_addr, resource) in state.new_resources.drain() {
                 tx.set_state(&resource_addr, resource.clone())?;
-                substates.up(resource_addr.into_array(), SubstateValue::new(resource));
+                substates.up(SubstateAddress::Resource(resource_addr), Substate::new(resource));
             }
 
             Result::<_, TransactionCommitError>::Ok(substates)
@@ -356,11 +355,11 @@ impl StateTracker {
     }
 
     fn read_with<R, F: FnOnce(&WorkingState) -> R>(&self, f: F) -> R {
-        f(&*self.working_state.read().unwrap())
+        f(&self.working_state.read().unwrap())
     }
 
     fn write_with<R, F: FnOnce(&mut WorkingState) -> R>(&self, f: F) -> R {
-        f(&mut *self.working_state.write().unwrap())
+        f(&mut self.working_state.write().unwrap())
     }
 
     pub fn transaction_hash(&self) -> Hash {

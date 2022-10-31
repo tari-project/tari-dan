@@ -25,11 +25,12 @@ use std::{collections::HashMap, time::Duration};
 use lazy_static::lazy_static;
 use tari_common_types::types::PrivateKey;
 use tari_dan_common_types::ShardId;
-use tari_dan_engine::{
-    runtime::{FinalizeResult, RejectResult, SubstateDiff, TransactionResult},
-    transaction::TransactionBuilder,
+use tari_dan_engine::transaction::TransactionBuilder;
+use tari_engine_types::{
+    commit_result::{FinalizeResult, RejectResult, TransactionResult},
+    instruction::Instruction,
+    substate::SubstateDiff,
 };
-use tari_engine_types::instruction::Instruction;
 use tari_shutdown::Shutdown;
 use tari_template_lib::args::Arg;
 use tari_utilities::ByteArray;
@@ -43,6 +44,7 @@ use tokio::{
 };
 
 use crate::{
+    consensus_constants::ConsensusConstants,
     models::{
         vote_message::VoteMessage,
         HotStuffMessage,
@@ -147,6 +149,8 @@ where
         let rx_execute = payload_processor.receiver.resubscribe();
         let shutdown = Shutdown::new();
 
+        let consensus_constants = ConsensusConstants::devnet();
+
         let shard_store = MemoryShardStoreFactory::new();
         let hs_waiter = HotStuffWaiter::spawn(
             identity.clone(),
@@ -162,6 +166,7 @@ where
             payload_processor,
             shard_store,
             shutdown.to_signal(),
+            consensus_constants,
         );
         Self {
             identity,
@@ -233,6 +238,7 @@ where
         }
     }
 
+    #[allow(dead_code)]
     async fn assert_no_execute(&mut self) {
         assert!(
             timeout(Duration::from_secs(1), self.rx_execute.recv()).await.is_err(),
@@ -402,8 +408,9 @@ async fn test_hs_waiter_execute_called_when_consensus_reached() {
     instance.tx_hs_messages.send((node1.clone(), proposal2)).await.unwrap();
     let (vote, _) = instance.recv_vote_message().await;
 
-    // No execute yet
-    instance.assert_no_execute().await;
+    // Execute at h=0
+    let (executed_payload, _) = instance.recv_execute().await;
+    assert_eq!(executed_payload, payload);
 
     instance.tx_votes.send((node1.clone(), vote.clone())).await.unwrap();
 
@@ -413,8 +420,10 @@ async fn test_hs_waiter_execute_called_when_consensus_reached() {
     instance.tx_hs_messages.send((node1.clone(), proposal3)).await.unwrap();
     let (vote, _) = instance.recv_vote_message().await;
 
-    // No execute yet
-    instance.assert_no_execute().await;
+    // Execute again at h=1
+    let (executed_payload, _) = instance.recv_execute().await;
+    assert_eq!(executed_payload, payload);
+
     // loopback the vote
     instance.tx_votes.send((node1.clone(), vote.clone())).await.unwrap();
 
@@ -425,21 +434,10 @@ async fn test_hs_waiter_execute_called_when_consensus_reached() {
     let (vote, _) = instance.recv_vote_message().await;
     dbg!(&vote);
 
-    // // No execute yet
-    // assert!(
-    //     timeout(Duration::from_secs(1), rx_execute.recv()).await.is_err(),
-    //     "received an execute when we weren't expecting it"
-    // );
-    //
-    // tx_votes.send((node1, vote.clone())).await.unwrap();
-    //
-    let executed_payload = timeout(Duration::from_secs(10), instance.rx_execute.recv())
-        .await
-        .expect("timed out")
-        .expect("Should not be None");
-    // executed_payload.2.send(HashMap::new()).unwrap();
+    // Execute again at h=2
+    let (executed_payload, _) = instance.recv_execute().await;
+    assert_eq!(executed_payload, payload);
 
-    assert_eq!(executed_payload.0, payload);
     instance.assert_shuts_down_safely().await
 }
 
@@ -665,7 +663,7 @@ async fn test_kitchen_sink() {
     // This tells us which shards are involved in the transaction
     // Because there are no inputs, we need to say that there are 2 components
     // being created, so that two shards are involved, not just one.
-    builder.with_new_components(2).sign(&secret_key);
+    builder.with_num_outputs(2).sign(&secret_key);
     let transaction = builder.build();
 
     let involved_shards = transaction.meta().involved_shards();

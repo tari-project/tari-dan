@@ -24,7 +24,7 @@ use std::{convert::TryFrom, str::FromStr};
 
 use tari_utilities::hex::from_hex;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Copy)]
 pub struct FromHex<T>(pub T);
 
 impl<T> FromHex<T> {
