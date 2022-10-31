@@ -61,7 +61,7 @@ pub fn spawn(
     epoch_manager: EpochManagerHandle,
     template_manager: TemplateManagerHandle,
     shutdown: ShutdownSignal,
-    consensus_constants: crate::consensus_constants::ConsensusConstants,
+    consensus_constants: ConsensusConstants,
 ) {
     task::spawn(async move {
         let base_layer_scanner = BaseLayerScanner::new(
@@ -90,7 +90,7 @@ pub struct BaseLayerScanner {
     epoch_manager: EpochManagerHandle,
     template_manager: TemplateManagerHandle,
     shutdown: ShutdownSignal,
-    consensus_constants: crate::consensus_constants::ConsensusConstants,
+    consensus_constants: ConsensusConstants,
 }
 
 impl BaseLayerScanner {
@@ -101,7 +101,7 @@ impl BaseLayerScanner {
         epoch_manager: EpochManagerHandle,
         template_manager: TemplateManagerHandle,
         shutdown: ShutdownSignal,
-        consensus_constants: crate::consensus_constants::ConsensusConstants,
+        consensus_constants: ConsensusConstants,
     ) -> Self {
         Self {
             config,

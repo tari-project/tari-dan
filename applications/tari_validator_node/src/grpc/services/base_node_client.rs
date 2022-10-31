@@ -32,11 +32,10 @@ use tari_core::{blocks::BlockHeader, transactions::transaction_components::CodeT
 use tari_crypto::tari_utilities::ByteArray;
 use tari_dan_common_types::ShardId;
 use tari_dan_core::{
+    consensus_constants::BaseLayerConsensusConstants,
     models::{BaseLayerMetadata, ValidatorNode},
     services::{base_node_error::BaseNodeError, BaseNodeClient, BlockInfo, SideChainUtxos},
 };
-
-use crate::consensus_constants::BaseLayerConsensusConstants;
 
 const LOG_TARGET: &str = "tari::validator_node::app";
 
