@@ -20,7 +20,7 @@
 //   WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //   USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use std::{str::FromStr, time::Duration, path::PathBuf};
+use std::{path::PathBuf, str::FromStr, time::Duration};
 
 use reqwest::Url;
 use tari_app_utilities::common_cli_args::CommonCliArgs;
@@ -128,8 +128,6 @@ pub async fn spawn_validator_node(
     // We need to give it time for the VN to startup
     // TODO: it would be better to scan the VN to detect when it has started
     tokio::time::sleep(Duration::from_secs(5)).await;
-    
-    
 }
 
 fn get_config_file_path() -> PathBuf {

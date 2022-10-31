@@ -43,8 +43,9 @@ pub async fn send_template_transaction(
         signature: transaction.signature().clone(),
         fee: transaction.fee(),
         sender_public_key: transaction.sender_public_key().clone(),
-        num_new_components: 1,
         wait_for_result: true,
+        inputs: vec![],
+        num_outputs: 1,
     };
 
     // send the template transaction request
