@@ -20,7 +20,7 @@
 //   WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //   USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use std::path::Path;
+use std::{convert::TryFrom, path::Path, str::FromStr};
 
 use clap::{Args, Subcommand};
 use tari_dan_common_types::ShardId;
@@ -32,7 +32,7 @@ use tari_engine_types::{
     substate::SubstateValue,
     TemplateAddress,
 };
-use tari_template_lib::models::ComponentAddress;
+use tari_template_lib::{args::Arg, models::ComponentAddress};
 use tari_utilities::hex::to_hex;
 use tari_validator_node_client::{types::SubmitTransactionRequest, ValidatorNodeClient};
 
@@ -49,6 +49,77 @@ pub struct SubmitArgs {
     instruction: CliInstruction,
     #[clap(long, short = 'w')]
     wait_for_result: bool,
+    #[clap(long, short = 'n')]
+    num_outputs: Option<u8>,
+}
+
+#[derive(Debug, Clone)]
+pub enum CliArg {
+    String(String),
+    U64(u64),
+    U32(u32),
+    U16(u16),
+    U8(u8),
+    I64(i64),
+    I32(i32),
+    I16(i16),
+    I8(i8),
+    Bool(bool),
+}
+
+impl FromStr for CliArg {
+    type Err = String;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        if let Ok(v) = s.parse::<u64>() {
+            return Ok(CliArg::U64(v));
+        }
+        if let Ok(v) = s.parse::<u32>() {
+            return Ok(CliArg::U32(v));
+        }
+        if let Ok(v) = s.parse::<u16>() {
+            return Ok(CliArg::U16(v));
+        }
+        if let Ok(v) = s.parse::<u8>() {
+            return Ok(CliArg::U8(v));
+        }
+        if let Ok(v) = s.parse::<i64>() {
+            return Ok(CliArg::I64(v));
+        }
+        if let Ok(v) = s.parse::<i32>() {
+            return Ok(CliArg::I32(v));
+        }
+        if let Ok(v) = s.parse::<i16>() {
+            return Ok(CliArg::I16(v));
+        }
+        if let Ok(v) = s.parse::<i8>() {
+            return Ok(CliArg::I8(v));
+        }
+        if let Ok(v) = s.parse::<bool>() {
+            return Ok(CliArg::Bool(v));
+        }
+        Ok(CliArg::String(s.to_string()))
+    }
+}
+
+impl CliArg {
+    pub fn to_bytes(&self) -> Vec<u8> {
+        match self {
+            CliArg::String(s) => s.as_bytes().to_vec(),
+            CliArg::U64(v) => i64::try_from(*v)
+                .expect("Not a valid i64 number")
+                .to_le_bytes()
+                .to_vec(),
+            CliArg::U32(v) => i64::from(*v).to_le_bytes().to_vec(),
+            CliArg::U16(v) => i64::from(*v).to_le_bytes().to_vec(),
+            CliArg::U8(v) => i64::from(*v).to_le_bytes().to_vec(),
+            CliArg::I64(v) => v.to_le_bytes().to_vec(),
+            CliArg::I32(v) => i64::from(*v).to_le_bytes().to_vec(),
+            CliArg::I16(v) => i64::from(*v).to_le_bytes().to_vec(),
+            CliArg::I8(v) => i64::from(*v).to_le_bytes().to_vec(),
+            CliArg::Bool(v) => i64::from(*v).to_le_bytes().to_vec(),
+        }
+    }
 }
 
 #[derive(Debug, Subcommand, Clone)]
@@ -56,11 +127,15 @@ pub enum CliInstruction {
     CallFunction {
         template_address: FromHex<TemplateAddress>,
         function_name: String,
+        #[clap(long, short = 'a')]
+        args: Vec<CliArg>,
     },
     CallMethod {
         template_address: FromHex<TemplateAddress>,
         component_address: FromHex<ComponentAddress>,
         method_name: String,
+        #[clap(long, short = 'a')]
+        args: Vec<CliArg>,
     },
 }
 
@@ -87,26 +162,24 @@ async fn handle_submit(
         CliInstruction::CallFunction {
             template_address,
             function_name,
-        } => {
-            Instruction::CallFunction {
-                template_address: template_address.into_inner(),
-                function: function_name,
-                // TODO
-                args: vec![],
-            }
+            args,
+        } => Instruction::CallFunction {
+            template_address: template_address.into_inner(),
+            function: function_name,
+            args: args.iter().map(|s| Arg::literal(s.to_bytes())).collect(),
         },
         CliInstruction::CallMethod {
             template_address,
             component_address,
             method_name,
+            args,
         } => {
             inputs.push(component_address.into_inner().into_array().into());
             Instruction::CallMethod {
                 template_address: template_address.into_inner(),
                 component_address: component_address.into_inner(),
                 method: method_name,
-                // TODO
-                args: vec![],
+                args: args.iter().map(|s| Arg::literal(s.to_bytes())).collect(),
             }
         },
     };
@@ -119,6 +192,7 @@ async fn handle_submit(
     let mut builder = Transaction::builder();
     builder.add_instruction(instruction).sign(&account.secret_key).fee(1);
     let transaction = builder.build();
+    let tx_hash = *transaction.hash();
 
     let request = SubmitTransactionRequest {
         instructions: transaction.instructions().to_vec(),
@@ -126,17 +200,16 @@ async fn handle_submit(
         fee: transaction.fee(),
         sender_public_key: transaction.sender_public_key().clone(),
         inputs,
-        // TODO:
-        num_new_components: 1,
+        num_outputs: args.num_outputs.unwrap_or(0),
         wait_for_result: args.wait_for_result,
     };
 
+    println!("✅ Transaction {} submitted.", tx_hash);
     if args.wait_for_result {
         println!("⏳️ Waiting for transaction result...");
+        println!();
     }
     let resp = client.submit_transaction(request).await?;
-    println!("✅ Transaction {} submitted.", resp.hash);
-    println!();
     if let Some(result) = resp.result {
         summarize(&result);
     }
@@ -151,12 +224,12 @@ fn summarize(result: &FinalizeResult) {
                 match substate.substate_value() {
                     SubstateValue::Component(component) => {
                         println!(
-                            "           component ({}): {}",
+                            "       ▶ component ({}): {}",
                             component.module_name, component.component_address
                         );
                     },
                     SubstateValue::Resource(resource) => {
-                        println!("           resource: {}", resource.address());
+                        println!("       ▶ resource: {}", resource.address());
                     },
                 }
                 println!();

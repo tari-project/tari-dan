@@ -49,8 +49,8 @@ impl TariDanPayload {
 }
 
 impl ConsensusHash for TariDanPayload {
-    fn consensus_hash(&self) -> &[u8] {
-        self.transaction.hash()
+    fn consensus_hash(&self) -> FixedHash {
+        self.transaction.hash().into_array().into()
     }
 }
 
@@ -70,7 +70,7 @@ pub struct CheckpointData {
 }
 
 impl ConsensusHash for CheckpointData {
-    fn consensus_hash(&self) -> &[u8] {
-        self.hash.as_slice()
+    fn consensus_hash(&self) -> FixedHash {
+        self.hash
     }
 }

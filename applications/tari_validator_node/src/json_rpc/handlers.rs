@@ -129,9 +129,9 @@ impl JsonRpcHandlers {
 
         let mut builder = TransactionBuilder::new();
         builder
-            .with_inputs(transaction.inputs)
+            .with_input_refs(transaction.inputs)
             .with_instructions(transaction.instructions)
-            .with_new_components(transaction.num_new_components)
+            .with_num_outputs(transaction.num_outputs)
             .signature(transaction.signature)
             .sender_public_key(transaction.sender_public_key);
 
@@ -150,7 +150,7 @@ impl JsonRpcHandlers {
             .map_err(internal_error(answer_id))?;
 
         if transaction.wait_for_result {
-            return wait_for_result(answer_id, hash, subscription, Duration::from_secs(10)).await;
+            return wait_for_result(answer_id, hash, subscription, Duration::from_secs(30)).await;
         }
 
         Ok(JsonRpcResponse::success(answer_id, SubmitTransactionResponse {
@@ -438,16 +438,35 @@ async fn wait_for_result(
     loop {
         match tokio::time::timeout(timeout, subscription.recv()).await {
             Ok(res) => match res {
-                Ok(HotStuffEvent::OnCommit(_tree_node_hash, mut results)) => {
-                    // TODO: How do we correlate this to our transaction?
+                Ok(HotStuffEvent::OnAccept(payload_id, result)) => {
+                    if payload_id.as_slice() != hash.as_ref() {
+                        continue;
+                    }
+
                     let response = SubmitTransactionResponse {
                         hash: hash.into_array().into(),
-                        // TODO: There should probably only be one result (on_commit recursion)
-                        result: results.pop(),
+                        result: Some(result),
                     };
+                    dbg!(&response);
                     return Ok(JsonRpcResponse::success(answer_id, response));
                 },
+                Ok(HotStuffEvent::OnReject(payload_id, reject)) => {
+                    if payload_id.as_slice() != hash.as_ref() {
+                        continue;
+                    }
+                    return Err(JsonRpcResponse::error(
+                        answer_id,
+                        JsonRpcError::new(
+                            // TODO: define error code
+                            JsonRpcErrorReason::ApplicationError(1),
+                            reject.reason,
+                            json!(null),
+                        ),
+                    ));
+                },
                 Ok(HotStuffEvent::Failed(err)) => {
+                    // May not be our tx that failed
+                    warn!(target: LOG_TARGET, "Transaction failed: {}", err);
                     return Err(JsonRpcResponse::error(
                         answer_id,
                         JsonRpcError::new(

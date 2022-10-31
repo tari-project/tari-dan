@@ -24,6 +24,7 @@ use log::*;
 use tari_comms::types::CommsPublicKey;
 use tari_dan_common_types::ShardId;
 use tari_dan_core::{
+    consensus_constants::ConsensusConstants,
     message::DanMessage,
     models::{vote_message::VoteMessage, HotStuffMessage, TariDanPayload},
     services::{infrastructure_services::OutboundService, leader_strategy::AlwaysFirstLeader},
@@ -88,6 +89,9 @@ impl HotstuffService {
         let (tx_events, _) = broadcast::channel(100);
 
         let leader_strategy = AlwaysFirstLeader {};
+
+        let consensus_constants = ConsensusConstants::devnet();
+
         HotStuffWaiter::spawn(
             node_public_key.clone(),
             epoch_manager,
@@ -102,6 +106,7 @@ impl HotstuffService {
             payload_processor,
             shard_store_factory,
             shutdown.clone(),
+            consensus_constants,
         );
 
         tokio::spawn(

@@ -123,6 +123,7 @@ loggers:
     appenders:
       - network
 
+
   # spits out the whole wasm if in debug mode
   regalloc:
     level: info
@@ -140,6 +141,16 @@ loggers:
     additive: false
   wasmer_compiler_cranelift:
     level: warn
+    appenders:
+      - other
+    additive: false
+  hyper:
+    level: info
+    appenders:
+      - other
+    additive: false
+  tower:
+    level: info
     appenders:
       - other
     additive: false

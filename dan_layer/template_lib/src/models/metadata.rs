@@ -22,12 +22,14 @@
 
 use std::collections::HashMap;
 
+use hex;
 use tari_template_abi::{Decode, Encode};
 
 #[derive(Clone, Debug, Decode, Encode, Default)]
 #[cfg_attr(feature = "serde", derive(serde::Deserialize, serde::Serialize))]
 pub struct Metadata {
-    metadata: HashMap<Vec<u8>, Vec<u8>>,
+    // TODO: Serialize as hex so that this can be serialized. In future this should be optimized.
+    metadata: HashMap<String, Vec<u8>>,
 }
 
 impl Metadata {
@@ -38,10 +40,10 @@ impl Metadata {
     }
 
     pub fn insert(&mut self, key: Vec<u8>, value: Vec<u8>) {
-        self.metadata.insert(key, value);
+        self.metadata.insert(hex::encode(key), value);
     }
 
     pub fn get(&self, key: &[u8]) -> Option<&[u8]> {
-        self.metadata.get(key).map(|v| v.as_slice())
+        self.metadata.get(&hex::encode(key)).map(|v| v.as_slice())
     }
 }

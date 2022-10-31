@@ -32,6 +32,7 @@ use tari_core::transactions::transaction_components::{
 use tari_crypto::tari_utilities::ByteArray;
 use tari_dan_common_types::optional::Optional;
 use tari_dan_core::{
+    consensus_constants::ConsensusConstants,
     models::BaseLayerMetadata,
     services::{base_node_error::BaseNodeError, epoch_manager::EpochManagerError, BaseNodeClient, BlockInfo},
     DigitalAssetError,
@@ -43,7 +44,6 @@ use tari_template_lib::models::TemplateAddress;
 use tokio::{task, time};
 
 use crate::{
-    consensus_constants::ConsensusConstants,
     p2p::services::{
         epoch_manager::handle::EpochManagerHandle,
         template_manager::{TemplateManagerError, TemplateManagerHandle, TemplateRegistration},
@@ -205,7 +205,7 @@ impl BaseLayerScanner {
                 self.sync_blockchain().await?;
             },
             BlockchainProgression::NoProgress => {
-                debug!(target: LOG_TARGET, "No new blocks to scan.");
+                trace!(target: LOG_TARGET, "No new blocks to scan.");
             },
         }
 

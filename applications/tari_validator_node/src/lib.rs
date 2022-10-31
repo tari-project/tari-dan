@@ -25,7 +25,6 @@ mod bootstrap;
 pub mod cli;
 mod comms;
 mod config;
-mod consensus_constants;
 mod dan_node;
 mod default_service_specification;
 mod grpc;
@@ -52,6 +51,7 @@ use tari_common::{
 };
 use tari_dan_common_types::ShardId;
 use tari_dan_core::{
+    consensus_constants::ConsensusConstants,
     services::{base_node_error::BaseNodeError, BaseNodeClient},
     storage::DbFactory,
     DigitalAssetError,
@@ -64,7 +64,6 @@ pub use crate::config::{ApplicationConfig, ValidatorNodeConfig};
 use crate::{
     bootstrap::{spawn_services, Services},
     cli::Cli,
-    consensus_constants::ConsensusConstants,
     dan_node::DanNode,
     grpc::services::{base_node_client::GrpcBaseNodeClient, wallet_client::GrpcWalletClient},
     http_ui::server::run_http_ui_server,
@@ -126,20 +125,8 @@ pub async fn run_validator_node_with_cli(config: &ApplicationConfig, cli: &Cli) 
         node_identity.public_address()
     );
 
-    // fs::create_dir_all(&global.peer_db_path).map_err(|err| ExitError::new(ExitCode::ConfigError, err))?;
-    let mut base_node_client =
-        GrpcBaseNodeClient::new(config.validator_node.base_node_grpc_address.unwrap_or_else(|| {
-            let port = grpc_default_port(ApplicationType::BaseNode, config.network);
-            SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), port)
-        }));
-    base_node_client
-        .test_connection()
-        .await
-        .map_err(|error| ExitError::new(ExitCode::NetworkError, error))?;
-    let wallet_client = GrpcWalletClient::new(config.validator_node.wallet_grpc_address.unwrap_or_else(|| {
-        let port = grpc_default_port(ApplicationType::ConsoleWallet, config.network);
-        SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), port)
-    }));
+    let (base_node_client, wallet_client) = create_base_layer_clients(config).await?;
+
     let services = spawn_services(
         config,
         shutdown.to_signal(),
@@ -166,9 +153,6 @@ pub async fn run_validator_node_with_cli(config: &ApplicationConfig, cli: &Cli) 
         ));
     }
 
-    // Show the validator node identity
-    info!(target: LOG_TARGET, "🚀 Validator node started!");
-
     run_dan_node(services, shutdown.to_signal()).await?;
 
     Ok(())
@@ -176,5 +160,27 @@ pub async fn run_validator_node_with_cli(config: &ApplicationConfig, cli: &Cli) 
 
 async fn run_dan_node(services: Services, shutdown_signal: ShutdownSignal) -> Result<(), ExitError> {
     let node = DanNode::new(services);
+    info!(target: LOG_TARGET, "🚀 Validator node started!");
     node.start(shutdown_signal).await
+}
+
+async fn create_base_layer_clients(
+    config: &ApplicationConfig,
+) -> Result<(GrpcBaseNodeClient, GrpcWalletClient), ExitError> {
+    let mut base_node_client =
+        GrpcBaseNodeClient::new(config.validator_node.base_node_grpc_address.unwrap_or_else(|| {
+            let port = grpc_default_port(ApplicationType::BaseNode, config.network);
+            SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), port)
+        }));
+    base_node_client
+        .test_connection()
+        .await
+        .map_err(|error| ExitError::new(ExitCode::ConfigError, error))?;
+
+    let wallet_client = GrpcWalletClient::new(config.validator_node.wallet_grpc_address.unwrap_or_else(|| {
+        let port = grpc_default_port(ApplicationType::ConsoleWallet, config.network);
+        SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), port)
+    }));
+
+    Ok((base_node_client, wallet_client))
 }

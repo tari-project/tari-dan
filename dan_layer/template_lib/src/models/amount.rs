@@ -27,10 +27,10 @@ use tari_template_abi::{Decode, Encode};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Decode, Encode)]
 #[cfg_attr(feature = "serde", derive(serde::Deserialize, serde::Serialize))]
-pub struct Amount(pub i128);
+pub struct Amount(pub i64);
 
 impl Amount {
-    pub const fn new(amount: i128) -> Self {
+    pub const fn new(amount: i64) -> Self {
         Amount(amount)
     }
 
@@ -50,7 +50,7 @@ impl Amount {
         !self.is_positive()
     }
 
-    pub fn value(&self) -> i128 {
+    pub fn value(&self) -> i64 {
         self.0
     }
 
@@ -87,37 +87,26 @@ impl Amount {
     }
 }
 
-impl From<i128> for Amount {
-    fn from(value: i128) -> Self {
-        Amount::new(value)
-    }
-}
-
 impl From<usize> for Amount {
     fn from(value: usize) -> Self {
-        Amount::new(value as i128)
+        Amount::new(value as i64)
     }
 }
 
 impl From<i32> for Amount {
     fn from(value: i32) -> Self {
-        Amount::new(i128::from(value))
+        Amount::new(i64::from(value))
     }
 }
 
 impl From<u32> for Amount {
     fn from(value: u32) -> Self {
-        Amount::new(i128::from(value))
+        Amount::new(i64::from(value))
     }
 }
 impl From<i64> for Amount {
     fn from(value: i64) -> Self {
-        Amount::new(i128::from(value))
-    }
-}
-impl From<u64> for Amount {
-    fn from(value: u64) -> Self {
-        Amount::new(i128::from(value))
+        Amount::new(value)
     }
 }
 
@@ -125,12 +114,12 @@ newtype_ops! { [Amount] {add sub mul div} {:=} Self Self }
 newtype_ops! { [Amount] {add sub mul div} {:=} &Self &Self }
 newtype_ops! { [Amount] {add sub mul div} {:=} Self &Self }
 
-newtype_ops! { [Amount] {add sub mul div} {:=} Self i128 }
-newtype_ops! { [Amount] {add sub mul div} {:=} &Self &i128 }
-newtype_ops! { [Amount] {add sub mul div} {:=} Self &i128 }
+newtype_ops! { [Amount] {add sub mul div} {:=} Self i64 }
+newtype_ops! { [Amount] {add sub mul div} {:=} &Self &i64 }
+newtype_ops! { [Amount] {add sub mul div} {:=} Self &i64 }
 
-impl PartialEq<i128> for Amount {
-    fn eq(&self, other: &i128) -> bool {
+impl PartialEq<i64> for Amount {
+    fn eq(&self, other: &i64) -> bool {
         self.0 == *other
     }
 }
@@ -157,5 +146,13 @@ mod tests {
         assert_eq!(e, 24);
         let f = b / a;
         assert_eq!(f, 1);
+    }
+
+    #[test]
+    #[cfg(feature = "serde")]
+    fn can_serialize() {
+        let a = Amount::new(4);
+        let b = serde_json::to_string(&a).unwrap();
+        assert_eq!(b, "4");
     }
 }

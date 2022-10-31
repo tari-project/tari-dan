@@ -22,7 +22,7 @@
 
 use crate::models::TreeNodeHash;
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Node {
     hash: TreeNodeHash,
     parent: TreeNodeHash,
