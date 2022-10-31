@@ -12,7 +12,7 @@ use tari_utilities::ByteArray;
 
 use crate::{hashing::hasher, instruction::Instruction};
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct InstructionSignature(RistrettoSchnorr);
 
 impl InstructionSignature {

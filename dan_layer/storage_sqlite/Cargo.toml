@@ -13,6 +13,7 @@ tari_utilities = { git = "https://github.com/tari-project/tari_utilities.git", t
 tari_dan_engine = { path = "../engine" }
 tari_dan_storage = { path = "../storage" }
 tari_engine_types= {path = "../engine_types"}
+tari_test_utils = { git = "https://github.com/tari-project/tari.git", branch = "feature-dan", package = "tari_test_utils", optional = true }
 
 borsh = "0.9.3"
 diesel = { version = "1.4.8", default-features = false, features = ["sqlite"] }
@@ -24,3 +25,6 @@ tokio-stream = { version = "0.1.7", features = ["sync"] }
 log = { version = "0.4.8", features = ["std"] }
 time = "0.3.15"
 serde_json = "1.0.85"
+
+[features]
+test = ["tari_test_utils"]

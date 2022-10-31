@@ -36,5 +36,6 @@ pub mod global;
 mod models;
 pub mod sqlite_shard_store_factory;
 mod sqlite_storage_service;
+pub mod test_helpers;
 
 pub use sqlite_storage_service::SqliteStorageService;
