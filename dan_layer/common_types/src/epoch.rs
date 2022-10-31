@@ -33,6 +33,10 @@ impl Epoch {
     pub fn to_le_bytes(self) -> [u8; 8] {
         self.0.to_le_bytes()
     }
+
+    pub fn to_height(self) -> u64 {
+        self.0 * 10
+    }
 }
 
 impl From<u64> for Epoch {

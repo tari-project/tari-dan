@@ -22,7 +22,7 @@
 
 use std::convert::TryInto;
 
-use tari_comms::types::CommsPublicKey;
+use tari_comms::{types::CommsPublicKey, NodeIdentity};
 use tari_crypto::tari_utilities::ByteArray;
 use tari_dan_common_types::{Epoch, ShardId};
 use tari_dan_core::{
@@ -31,15 +31,20 @@ use tari_dan_core::{
         epoch_manager::{EpochManagerError, ShardCommitteeAllocation},
         BaseNodeClient,
     },
-    storage::DbFactory,
+    storage::{
+        shard_store::{ShardStoreFactory, ShardStoreTransaction},
+        DbFactory,
+    },
 };
 use tari_dan_storage::global::{DbValidatorNode, MetadataKey};
-use tari_dan_storage_sqlite::SqliteDbFactory;
+use tari_dan_storage_sqlite::{sqlite_shard_store_factory::SqliteShardStoreFactory, SqliteDbFactory};
 use tokio::sync::broadcast;
 
+use super::get_committee_shard_ids;
 use crate::{
     grpc::services::base_node_client::GrpcBaseNodeClient,
     p2p::services::epoch_manager::epoch_manager_service::EpochManagerEvent,
+    ValidatorNodeConfig,
 };
 
 // const LOG_TARGET: &str = "tari_validator_node::epoch_manager::base_layer_epoch_manager";
@@ -50,19 +55,26 @@ pub struct BaseLayerEpochManager {
     pub base_node_client: GrpcBaseNodeClient,
     current_epoch: Epoch,
     tx_events: broadcast::Sender<EpochManagerEvent>,
+    node_identity: NodeIdentity,
+    validator_node_config: ValidatorNodeConfig,
 }
+
 impl BaseLayerEpochManager {
     pub fn new(
         db_factory: SqliteDbFactory,
         base_node_client: GrpcBaseNodeClient,
         _id: CommsPublicKey,
         tx_events: broadcast::Sender<EpochManagerEvent>,
+        node_identity: NodeIdentity,
+        validator_node_config: ValidatorNodeConfig,
     ) -> Self {
         Self {
             db_factory,
             base_node_client,
             current_epoch: Epoch(0),
             tx_events,
+            node_identity,
+            validator_node_config,
         }
     }
 
@@ -94,8 +106,41 @@ impl BaseLayerEpochManager {
 
         // If the committee size is bigger than vns.len() then this function is broken.
         let mut base_node_client = self.base_node_client.clone();
-        let mut vns = base_node_client.get_validator_nodes(epoch.0 * 10).await?;
+        let mut vns = base_node_client.get_validator_nodes(epoch.to_height()).await?;
         vns.sort_by(|a, b| a.shard_key.partial_cmp(&b.shard_key).unwrap());
+
+        let current_shard_key = vns
+            .iter()
+            .find(|v| v.public_key == *self.node_identity.public_key())
+            .ok_or(EpochManagerError::UnexpectedResponse)?
+            .shard_key;
+
+        // from current_shard_key we can get the corresponding vns committee
+        let committee_vns = self.get_committee_vns_from_shard_key(epoch, current_shard_key)?;
+        let (start_shard, end_shard) = get_committee_shard_ids(&committee_vns)?.into_inner();
+
+        let data_dir = self.validator_node_config.data_dir.clone();
+        let shard_db_factory =
+            SqliteShardStoreFactory::try_create(data_dir).map_err(EpochManagerError::StorageError)?;
+        let shard_db = shard_db_factory.create_tx().map_err(EpochManagerError::StorageError)?;
+
+        // query the shard store transaction db to get inventory
+        let inventory = shard_db
+            .get_state_inventory(start_shard, end_shard)
+            .map_err(EpochManagerError::StorageError)?;
+
+        // shards in the committee but not in the inventory have to be synced
+        let shards_to_sync = (0..committee_vns.len())
+            .filter(|&i| {
+                let shard = committee_vns[i].shard_key;
+                !inventory.contains(&shard)
+            })
+            .map(|i| committee_vns[i].shard_key)
+            .collect::<Vec<_>>();
+
+        let substates_to_sync = shard_db
+            .get_substate_states(&shards_to_sync)
+            .map_err(EpochManagerError::StorageError)?;
 
         // insert the new VNs for this epoch in the database
         self.insert_validator_nodes(epoch, vns)?;
@@ -203,13 +248,17 @@ impl BaseLayerEpochManager {
         Ok(result)
     }
 
-    pub fn get_committee(&self, epoch: Epoch, shard: ShardId) -> Result<Committee<CommsPublicKey>, EpochManagerError> {
+    pub fn get_committee_vns_from_shard_key(
+        &self,
+        epoch: Epoch,
+        shard: ShardId,
+    ) -> Result<Vec<ValidatorNode>, EpochManagerError> {
         // retrieve the validator nodes for this epoch from database
         let vns = self.get_validator_nodes_per_epoch(epoch)?;
 
         let half_committee_size = 4; // total committee = 7
         if vns.len() < half_committee_size * 2 {
-            return Ok(Committee::new(vns.iter().map(|v| v.public_key.clone()).collect()));
+            return Ok(vns);
         }
 
         let mid_point = vns.iter().filter(|x| x.shard_key < shard).count();
@@ -231,6 +280,11 @@ impl BaseLayerEpochManager {
             result.extend_from_slice(&vns[mid_point as usize..end]);
         }
 
+        Ok(result)
+    }
+
+    pub fn get_committee(&self, epoch: Epoch, shard: ShardId) -> Result<Committee<CommsPublicKey>, EpochManagerError> {
+        let result = self.get_committee_vns_from_shard_key(epoch, shard)?;
         Ok(Committee::new(result.into_iter().map(|v| v.public_key).collect()))
     }
 

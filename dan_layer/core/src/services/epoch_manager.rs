@@ -53,6 +53,8 @@ pub enum EpochManagerError {
     UnexpectedResponse,
     #[error("Storage error: {0}")]
     StorageError(#[from] StorageError),
+    #[error("No validator nodes found for current shard key")]
+    ValidatorNodesNotFound,
 }
 
 #[async_trait]

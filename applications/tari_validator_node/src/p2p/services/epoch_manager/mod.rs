@@ -25,4 +25,24 @@ pub mod epoch_manager_service;
 pub mod handle;
 
 mod initializer;
+use std::ops::RangeInclusive;
+
 pub use initializer::spawn;
+use tari_dan_common_types::ShardId;
+use tari_dan_core::{models::ValidatorNode, services::epoch_manager::EpochManagerError};
+
+pub fn get_committee_shard_ids(vns: &[ValidatorNode]) -> Result<RangeInclusive<ShardId>, EpochManagerError> {
+    // TODO: add this committee_size to ConsensusConstants
+    let committee_size = 7;
+    if vns.len() < committee_size {
+        let min_shard_id = ShardId::zero();
+        let max_shard_id = ShardId([u8::MAX; 32]);
+        Ok(RangeInclusive::new(min_shard_id, max_shard_id))
+    } else {
+        let min_shard_id = vns.first().ok_or(EpochManagerError::ValidatorNodesNotFound)?.shard_key;
+        Ok(RangeInclusive::new(
+            vns.first().ok_or(EpochManagerError::ValidatorNodesNotFound)?.shard_key,
+            vns.last().ok_or(EpochManagerError::ValidatorNodesNotFound)?.shard_key,
+        ))
+    }
+}
