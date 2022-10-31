@@ -20,7 +20,7 @@
 //   WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //   USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use std::{str::FromStr, time::Duration};
+use std::{str::FromStr, time::Duration, path::PathBuf};
 
 use reqwest::Url;
 use tari_app_utilities::common_cli_args::CommonCliArgs;
@@ -40,6 +40,7 @@ pub struct ValidatorNodeProcess {
     pub name: String,
     pub port: u64,
     pub json_rpc_port: u64,
+    pub http_ui_port: u64,
     pub base_node_grpc_port: u64,
     pub handle: task::JoinHandle<()>,
 }
@@ -50,11 +51,14 @@ pub async fn spawn_validator_node(
     base_node_name: String,
     wallet_name: String,
 ) {
-    // TODO: use different ports on each spawned vn
-    let port = 48003;
-    let json_rpc_port = 48145;
+    // each spawned VN will use different ports
+    let (port, json_rpc_port, http_ui_port) = match world.validator_nodes.values().last() {
+        Some(v) => (v.port + 1, v.json_rpc_port + 1, v.http_ui_port + 1),
+        None => (49000, 49500, 50000), // default ports if it's the first vn to be spawned
+    };
     let base_node_grpc_port = world.base_nodes.get(&base_node_name).unwrap().grpc_port;
     let wallet_grpc_port = world.wallets.get(&wallet_name).unwrap().grpc_port;
+    let name = validator_node_name.clone();
 
     let handle = task::spawn(async move {
         let mut config = ApplicationConfig {
@@ -65,12 +69,12 @@ pub async fn spawn_validator_node(
         };
 
         // temporal folder for the VN files (e.g. sqlite file, json files, etc.)
-        let temp_dir = tempdir().unwrap();
-        println!("Using validator_node temp_dir: {}", temp_dir.path().display());
-        config.validator_node.data_dir = temp_dir.path().to_path_buf();
-        config.validator_node.shard_key_file = temp_dir.path().join("shard_key.json");
-        config.validator_node.identity_file = temp_dir.path().join("validator_node_id.json");
-        config.validator_node.tor_identity_file = temp_dir.path().join("validator_node_tor_id.json");
+        let temp_dir = tempdir().unwrap().path().join(validator_node_name.clone());
+        println!("Using validator_node temp_dir: {}", temp_dir.display());
+        config.validator_node.data_dir = temp_dir.to_path_buf();
+        config.validator_node.shard_key_file = temp_dir.join("shard_key.json");
+        config.validator_node.identity_file = temp_dir.join("validator_node_id.json");
+        config.validator_node.tor_identity_file = temp_dir.join("validator_node_tor_id.json");
         config.validator_node.base_node_grpc_address =
             Some(format!("127.0.0.1:{}", base_node_grpc_port).parse().unwrap());
         config.validator_node.wallet_grpc_address = Some(format!("127.0.0.1:{}", wallet_grpc_port).parse().unwrap());
@@ -80,9 +84,13 @@ pub async fn spawn_validator_node(
             Multiaddr::from_str(&format!("/ip4/127.0.0.1/tcp/{}", port)).unwrap();
         config.validator_node.p2p.public_address =
             Some(config.validator_node.p2p.transport.tcp.listener_address.clone());
-        config.validator_node.p2p.datastore_path = temp_dir.path().to_path_buf().join("peer_db/wallet");
+        config.validator_node.p2p.datastore_path = temp_dir.to_path_buf().join("peer_db/wallet");
         config.validator_node.p2p.dht = DhtConfig::default_local_test();
         config.validator_node.json_rpc_address = Some(format!("127.0.0.1:{}", json_rpc_port).parse().unwrap());
+        config.validator_node.http_ui_address = Some(format!("127.0.0.1:{}", http_ui_port).parse().unwrap());
+
+        // The VNS will try to auto register upon startup
+        config.validator_node.auto_register = true;
 
         let data_dir = config.validator_node.data_dir.clone();
         let data_dir_str = data_dir.clone().into_os_string().into_string().unwrap();
@@ -91,7 +99,7 @@ pub async fn spawn_validator_node(
             common: CommonCliArgs {
                 base_path: data_dir_str,
                 config: config_path.into_os_string().into_string().unwrap(),
-                log_config: None,
+                log_config: Some(get_config_file_path()),
                 log_level: None,
                 config_property_overrides: vec![],
             },
@@ -108,19 +116,26 @@ pub async fn spawn_validator_node(
 
     // make the new vn able to be referenced by other processes
     let validator_node_process = ValidatorNodeProcess {
-        name: validator_node_name.clone(),
+        name: name.clone(),
         port,
         base_node_grpc_port,
+        http_ui_port,
         handle,
         json_rpc_port,
     };
-    world
-        .validator_nodes
-        .insert(validator_node_name, validator_node_process);
+    world.validator_nodes.insert(name, validator_node_process);
 
     // We need to give it time for the VN to startup
     // TODO: it would be better to scan the VN to detect when it has started
     tokio::time::sleep(Duration::from_secs(5)).await;
+    
+    
+}
+
+fn get_config_file_path() -> PathBuf {
+    let mut config_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    config_path.push("tests/log4rs/validator_node.yml");
+    config_path
 }
 
 pub async fn get_vn_client(port: u64) -> ValidatorNodeClient {

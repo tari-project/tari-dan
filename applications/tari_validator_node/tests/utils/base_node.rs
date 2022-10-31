@@ -44,9 +44,11 @@ pub struct BaseNodeProcess {
 }
 
 pub async fn spawn_base_node(world: &mut TariWorld, bn_name: String) {
-    // TODO: use different ports on each spawned base node
-    let port = 48000;
-    let grpc_port = 48152;
+    // each spawned base node will use different ports
+    let (port, grpc_port) = match world.base_nodes.values().last() {
+        Some(v) => (v.port + 1, v.grpc_port + 1),
+        None => (47000, 47500), // default ports if it's the first base node to be spawned
+    };
     let base_node_address = Multiaddr::from_str(&format!("/ip4/127.0.0.1/tcp/{}", port)).unwrap();
     let base_node_identity = NodeIdentity::random(&mut OsRng, base_node_address, PeerFeatures::COMMUNICATION_NODE);
     println!("Base node identity: {}", base_node_identity);

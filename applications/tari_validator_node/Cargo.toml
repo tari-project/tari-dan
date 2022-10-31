@@ -79,6 +79,7 @@ tari_comms_dht = { git = "https://github.com/tari-project/tari.git", branch = "f
 tari_wallet = { git = "https://github.com/tari-project/tari.git", branch = "feature-dan", package = "tari_wallet" }
 #env_logger = "0.9.0"
 httpmock = "0.6.6"
+indexmap = "1.9.1"
 
 [[test]]
 name = "cucumber" # this should be the same as the filename of your test target

@@ -53,9 +53,11 @@ pub struct WalletProcess {
 }
 
 pub async fn spawn_wallet(world: &mut TariWorld, wallet_name: String, base_node_name: String) {
-    // TODO: use different ports on each spawned wallet
-    let port = 48001;
-    let grpc_port = 48153;
+    // each spawned wallet will use different ports
+    let (port, grpc_port) = match world.base_nodes.values().last() {
+        Some(v) => (v.port + 1, v.grpc_port + 1),
+        None => (48000, 48500), // default ports if it's the first wallet to be spawned
+    };
     let base_node_public_key = world
         .base_nodes
         .get(&base_node_name)

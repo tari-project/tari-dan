@@ -71,7 +71,7 @@ pub async fn mine_blocks(world: &mut TariWorld, miner_name: String, num_blocks: 
 
     for _ in 0..num_blocks {
         mine_block(&mut base_client, &mut wallet_client).await;
-        tokio::time::sleep(Duration::from_secs(1)).await;
+        tokio::time::sleep(Duration::from_millis(100)).await;
     }
 
     // Give some time for the base node and wallet to sync the new blocks

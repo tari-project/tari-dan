@@ -23,19 +23,20 @@
 mod utils;
 
 use std::{
-    collections::HashMap,
     convert::{Infallible, TryFrom},
     time::Duration,
 };
 
 use async_trait::async_trait;
 use cucumber::{given, then, when, WorldInit};
+use indexmap::IndexMap;
 use tari_dan_core::services::BaseNodeClient;
 use tari_template_lib::Hash;
 use tari_validator_node::GrpcBaseNodeClient;
 use tari_validator_node_client::types::{GetIdentityResponse, GetTemplateRequest, TemplateRegistrationResponse};
 use utils::{
     miner::{mine_blocks, register_miner_process},
+    template::send_template_transaction,
     validator_node::spawn_validator_node,
     wallet::spawn_wallet,
 };
@@ -51,11 +52,11 @@ use crate::utils::{
 
 #[derive(Debug, Default, WorldInit)]
 pub struct TariWorld {
-    base_nodes: HashMap<String, BaseNodeProcess>,
-    wallets: HashMap<String, WalletProcess>,
-    validator_nodes: HashMap<String, ValidatorNodeProcess>,
-    miners: HashMap<String, MinerProcess>,
-    templates: HashMap<String, RegisteredTemplate>,
+    base_nodes: IndexMap<String, BaseNodeProcess>,
+    wallets: IndexMap<String, WalletProcess>,
+    validator_nodes: IndexMap<String, ValidatorNodeProcess>,
+    miners: IndexMap<String, MinerProcess>,
+    templates: IndexMap<String, RegisteredTemplate>,
     http_server: Option<MockHttpServer>,
 }
 
@@ -65,11 +66,11 @@ impl cucumber::World for TariWorld {
 
     async fn new() -> Result<Self, Self::Error> {
         Ok(Self {
-            base_nodes: HashMap::new(),
-            wallets: HashMap::new(),
-            validator_nodes: HashMap::new(),
-            miners: HashMap::new(),
-            templates: HashMap::new(),
+            base_nodes: IndexMap::new(),
+            wallets: IndexMap::new(),
+            validator_nodes: IndexMap::new(),
+            miners: IndexMap::new(),
+            templates: IndexMap::new(),
             http_server: None,
         })
     }
@@ -111,7 +112,7 @@ async fn send_vn_registration(world: &mut TariWorld, vn_name: String) {
     tokio::time::sleep(Duration::from_secs(4)).await;
 }
 
-#[when(expr = "the validator node {word} registers the template \"{word}\"")]
+#[when(expr = "validator node {word} registers the template \"{word}\"")]
 async fn register_template(world: &mut TariWorld, vn_name: String, template_name: String) {
     let resp: TemplateRegistrationResponse = send_template_registration(world, template_name.clone(), vn_name).await;
     assert!(resp.transaction_id != 0);
@@ -169,6 +170,14 @@ async fn assert_valid_vn_identity(world: &mut TariWorld, vn_name: String) {
     let resp = client.get_identity().await.unwrap();
 
     println!("VN identity response: {:?}", resp);
+}
+
+#[then(
+    expr = "the validator node {word} calls the function \"{word}\" on the template \"{word}\" and gets a valid \
+            response"
+)]
+async fn call_template_function(world: &mut TariWorld, vn_name: String, function_name: String, template_name: String) {
+    let _resp = send_template_transaction(world, vn_name, template_name, function_name).await;
 }
 
 #[tokio::main]
