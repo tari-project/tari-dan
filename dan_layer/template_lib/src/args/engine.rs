@@ -60,20 +60,32 @@ impl Display for LogLevel {
 }
 
 #[derive(Debug, Clone, Encode, Decode)]
-pub struct CreateComponentArg {
-    pub module_name: String,
-    pub state: Vec<u8>,
+pub struct ComponentInvokeArg {
+    pub component_ref: ComponentRef,
+    pub action: ComponentAction,
+    pub args: Vec<Vec<u8>>,
 }
 
-#[derive(Debug, Clone, Encode, Decode)]
-pub struct GetComponentArg {
-    pub component_address: ComponentAddress,
+#[derive(Clone, Debug, Decode, Encode)]
+pub enum ComponentAction {
+    Get,
+    Create,
+    SetState,
 }
 
-#[derive(Debug, Clone, Encode, Decode)]
-pub struct SetComponentStateArg {
-    pub component_address: ComponentAddress,
-    pub state: Vec<u8>,
+#[derive(Clone, Copy, Hash, Debug, Decode, Encode)]
+pub enum ComponentRef {
+    Component,
+    Ref(ComponentAddress),
+}
+
+impl ComponentRef {
+    pub fn as_component_address(&self) -> Option<ComponentAddress> {
+        match self {
+            ComponentRef::Component => None,
+            ComponentRef::Ref(addr) => Some(*addr),
+        }
+    }
 }
 
 #[derive(Clone, Debug, Decode, Encode)]
@@ -138,7 +150,7 @@ impl InvokeResult {
         self.decode().unwrap()
     }
 
-    pub fn empty() -> Self {
+    pub fn unit() -> Self {
         Self { output: vec![] }
     }
 }

@@ -27,6 +27,7 @@ use std::{
 use anyhow::anyhow;
 use tari_dan_common_types::SubstateState;
 use tari_template_abi::encode;
+use tari_utilities::hex::to_hex;
 
 use crate::state_store::{AtomicDb, StateReader, StateStoreError, StateWriter};
 
@@ -94,8 +95,15 @@ impl<'a> AtomicDb<'a> for MemoryStateStore {
 }
 
 impl<'a> StateReader for MemoryTransaction<RwLockReadGuard<'a, InnerKvMap>> {
-    fn get_state_raw(&self, key: &[u8]) -> Result<Option<Vec<u8>>, StateStoreError> {
-        Ok(self.pending.get(key).cloned().or_else(|| self.guard.get(key).cloned()))
+    fn get_state_raw(&self, key: &[u8]) -> Result<Vec<u8>, StateStoreError> {
+        self.pending
+            .get(key)
+            .cloned()
+            .or_else(|| self.guard.get(key).cloned())
+            .ok_or_else(|| StateStoreError::NotFound {
+                kind: "state",
+                key: to_hex(key),
+            })
     }
 
     fn exists(&self, key: &[u8]) -> Result<bool, StateStoreError> {
@@ -104,8 +112,15 @@ impl<'a> StateReader for MemoryTransaction<RwLockReadGuard<'a, InnerKvMap>> {
 }
 
 impl<'a> StateReader for MemoryTransaction<RwLockWriteGuard<'a, InnerKvMap>> {
-    fn get_state_raw(&self, key: &[u8]) -> Result<Option<Vec<u8>>, StateStoreError> {
-        Ok(self.pending.get(key).cloned().or_else(|| self.guard.get(key).cloned()))
+    fn get_state_raw(&self, key: &[u8]) -> Result<Vec<u8>, StateStoreError> {
+        self.pending
+            .get(key)
+            .cloned()
+            .or_else(|| self.guard.get(key).cloned())
+            .ok_or_else(|| StateStoreError::NotFound {
+                kind: "state",
+                key: to_hex(key),
+            })
     }
 
     fn exists(&self, key: &[u8]) -> Result<bool, StateStoreError> {
@@ -138,6 +153,7 @@ impl<'a> StateWriter for MemoryTransaction<RwLockWriteGuard<'a, InnerKvMap>> {
 
 #[cfg(test)]
 mod tests {
+    use tari_dan_common_types::optional::Optional;
     use tari_template_abi::{Decode, Encode};
 
     use super::*;
@@ -148,8 +164,8 @@ mod tests {
         let mut access = store.write_access().unwrap();
         access.set_state_raw(b"abc", vec![1, 2, 3]).unwrap();
         let res = access.get_state_raw(b"abc").unwrap();
-        assert_eq!(res, Some(vec![1, 2, 3]));
-        let res = access.get_state_raw(b"def").unwrap();
+        assert_eq!(res, vec![1, 2, 3]);
+        let res = access.get_state_raw(b"def").optional().unwrap();
         assert_eq!(res, None);
     }
 
@@ -170,16 +186,16 @@ mod tests {
         {
             let mut access = store.write_access().unwrap();
             access.set_state(b"abc", user_data.clone()).unwrap();
-            let res = access.get_state(b"abc").unwrap();
-            assert_eq!(res, Some(user_data.clone()));
-            let res = access.get_state::<_, UserData>(b"def").unwrap();
+            let res: UserData = access.get_state(b"abc").unwrap();
+            assert_eq!(res, user_data);
+            let res = access.get_state::<_, UserData>(b"def").optional().unwrap();
             assert_eq!(res, None);
             // Drop without commit rolls back
         }
 
         {
             let access = store.read_access().unwrap();
-            let res = access.get_state::<_, UserData>(b"abc").unwrap();
+            let res = access.get_state::<_, UserData>(b"abc").optional().unwrap();
             assert_eq!(res, None);
         }
 
@@ -190,7 +206,7 @@ mod tests {
         }
 
         let access = store.read_access().unwrap();
-        let res = access.get_state(b"abc").unwrap();
-        assert_eq!(res, Some(user_data));
+        let res: UserData = access.get_state(b"abc").unwrap();
+        assert_eq!(res, user_data);
     }
 }

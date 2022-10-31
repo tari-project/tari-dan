@@ -24,16 +24,7 @@ use borsh::{BorshDeserialize, BorshSerialize};
 use tari_engine_types::execution_result::ExecutionResult;
 use tari_template_abi::{decode, encode, encode_into, encode_with_len, CallInfo, EngineOp};
 use tari_template_lib::{
-    args::{
-        Arg,
-        BucketInvokeArg,
-        CreateComponentArg,
-        EmitLogArg,
-        GetComponentArg,
-        ResourceInvokeArg,
-        SetComponentStateArg,
-        VaultInvokeArg,
-    },
+    args::{Arg, BucketInvokeArg, ComponentInvokeArg, EmitLogArg, ResourceInvokeArg, VaultInvokeArg},
     AbiContext,
 };
 use wasmer::{Function, Instance, Module, Val, WasmerEnv};
@@ -103,16 +94,10 @@ impl WasmProcess {
                 env.state().interface().emit_log(arg.level, arg.message);
                 Result::<_, WasmExecutionError>::Ok(())
             }),
-            EngineOp::CreateComponent => Self::handle(env, arg, |env, arg: CreateComponentArg| {
-                env.state().interface().create_component(arg)
-            }),
-            EngineOp::GetComponent => Self::handle(env, arg, |env, arg: GetComponentArg| {
-                env.state().interface().get_component(&arg.component_address)
-            }),
-            EngineOp::SetComponentState => Self::handle(env, arg, |env, arg: SetComponentStateArg| {
+            EngineOp::ComponentInvoke => Self::handle(env, arg, |env, arg: ComponentInvokeArg| {
                 env.state()
                     .interface()
-                    .set_component_state(&arg.component_address, arg.state)
+                    .component_invoke(arg.component_ref, arg.action, arg.args)
             }),
             EngineOp::ResourceInvoke => Self::handle(env, arg, |env, arg: ResourceInvokeArg| {
                 env.state()

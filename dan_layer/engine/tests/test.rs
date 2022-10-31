@@ -22,13 +22,12 @@
 
 use tari_dan_engine::{
     packager::{PackageError, TemplateModuleLoader},
-    state_store::{AtomicDb, StateReader},
     wasm::{compile::compile_template, WasmExecutionError},
 };
 use tari_engine_types::instruction::Instruction;
 use tari_template_lib::{
     args,
-    models::{Amount, ComponentAddress, ComponentInstance},
+    models::{Amount, ComponentAddress},
 };
 use tari_template_test_tooling::TemplateTest;
 
@@ -43,14 +42,14 @@ fn test_hello_world() {
 #[test]
 fn test_state() {
     let template_test = TemplateTest::new(vec!["tests/templates/state"]);
-    let store = template_test.state_store();
+    let store = template_test.read_only_state_store();
 
     // constructor
     let component_address1: ComponentAddress = template_test.call_function("State", "new", args![]);
     template_test.assert_calls(&[
         "set_current_runtime_state",
         "emit_log",
-        "create_component",
+        "component_invoke",
         "set_last_instruction_output",
         "finalize",
     ]);
@@ -59,20 +58,10 @@ fn test_state() {
     let component_address2: ComponentAddress = template_test.call_function("State", "new", args![]);
     assert_ne!(component_address1, component_address2);
 
-    let component: ComponentInstance = store
-        .read_access()
-        .unwrap()
-        .get_state(&component_address1)
-        .unwrap()
-        .expect("component1 not found");
+    let component = store.get_component(component_address1).unwrap();
     assert_eq!(component.module_name, "State");
 
-    let component: ComponentInstance = store
-        .read_access()
-        .unwrap()
-        .get_state(&component_address2)
-        .unwrap()
-        .expect("component2 not found");
+    let component = store.get_component(component_address2).unwrap();
     assert_eq!(component.module_name, "State");
 
     // call the "set" method to update the instance value

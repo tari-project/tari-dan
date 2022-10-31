@@ -50,6 +50,17 @@ pub enum TransactionResult {
     Reject(RejectResult),
 }
 
+impl TransactionResult {
+    pub fn expect(self, msg: &str) -> SubstateDiff {
+        match self {
+            Self::Accept(substate_diff) => substate_diff,
+            Self::Reject(reject_result) => {
+                panic!("{}: {}", msg, reject_result.reason);
+            },
+        }
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RejectResult {
     pub reason: String,

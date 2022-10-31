@@ -33,13 +33,17 @@ mod tracker;
 
 use std::{fmt::Debug, sync::Arc};
 
-use tari_engine_types::commit_result::FinalizeResult;
+use tari_engine_types::{
+    commit_result::FinalizeResult,
+    substate::{SubstateAddress, SubstateValue},
+};
 use tari_template_lib::{
     args::{
         Arg,
         BucketAction,
         BucketRef,
-        CreateComponentArg,
+        ComponentAction,
+        ComponentRef,
         InvokeResult,
         LogLevel,
         ResourceAction,
@@ -48,7 +52,7 @@ use tari_template_lib::{
         WorkspaceAction,
     },
     invoke_args,
-    models::{ComponentAddress, ComponentInstance, VaultRef},
+    models::VaultRef,
 };
 pub use tracker::{RuntimeState, StateTracker};
 
@@ -57,11 +61,14 @@ pub trait RuntimeInterface: Send + Sync {
 
     fn emit_log(&self, level: LogLevel, message: String);
 
-    fn create_component(&self, arg: CreateComponentArg) -> Result<ComponentAddress, RuntimeError>;
+    fn get_substate(&self, address: &SubstateAddress) -> Result<SubstateValue, RuntimeError>;
 
-    fn get_component(&self, component_address: &ComponentAddress) -> Result<ComponentInstance, RuntimeError>;
-
-    fn set_component_state(&self, component_address: &ComponentAddress, state: Vec<u8>) -> Result<(), RuntimeError>;
+    fn component_invoke(
+        &self,
+        component_ref: ComponentRef,
+        action: ComponentAction,
+        args: Vec<Vec<u8>>,
+    ) -> Result<InvokeResult, RuntimeError>;
 
     fn resource_invoke(
         &self,

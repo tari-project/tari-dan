@@ -20,37 +20,48 @@
 //   WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //   USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use crate::rust::fmt;
+use serde::{Deserialize, Serialize};
+use tari_template_abi::{Decode, Encode};
+use tari_template_lib::models::{Amount, ResourceAddress, VaultId};
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-#[repr(i32)]
-pub enum EngineOp {
-    EmitLog = 0x00,
-    ComponentInvoke = 0x01,
-    ResourceInvoke = 0x02,
-    VaultInvoke = 0x03,
-    BucketInvoke = 0x04,
+use crate::{
+    bucket::Bucket,
+    resource::{Resource, ResourceError},
+};
+
+#[derive(Debug, Clone, Encode, Decode, Serialize, Deserialize)]
+pub struct Vault {
+    vault_id: VaultId,
+    resource: Resource,
 }
 
-impl EngineOp {
-    pub fn from_i32(value: i32) -> Option<Self> {
-        match value {
-            0x00 => Some(EngineOp::EmitLog),
-            0x01 => Some(EngineOp::ComponentInvoke),
-            0x02 => Some(EngineOp::ResourceInvoke),
-            0x03 => Some(EngineOp::VaultInvoke),
-            0x04 => Some(EngineOp::BucketInvoke),
-            _ => None,
-        }
+impl Vault {
+    pub fn new(vault_id: VaultId, resource: Resource) -> Self {
+        Self { vault_id, resource }
     }
 
-    pub fn as_i32(&self) -> i32 {
-        *self as i32
+    pub fn deposit(&mut self, bucket: Bucket) -> Result<(), ResourceError> {
+        self.resource.deposit(bucket.into_resource())?;
+        Ok(())
     }
-}
 
-impl fmt::Display for EngineOp {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{:?}", self)
+    pub fn withdraw(&mut self, amount: Amount) -> Result<Resource, ResourceError> {
+        self.resource.withdraw(amount)
+    }
+
+    pub fn balance(&self) -> Amount {
+        self.resource.amount()
+    }
+
+    pub fn id(&self) -> VaultId {
+        self.vault_id
+    }
+
+    pub fn resource_address(&self) -> ResourceAddress {
+        self.resource.address()
+    }
+
+    pub fn resource(&self) -> &Resource {
+        &self.resource
     }
 }
