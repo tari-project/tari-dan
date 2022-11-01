@@ -386,11 +386,7 @@ where
         Ok(())
     }
 
-    async fn update_nodes(
-        &mut self,
-        node: HotStuffTreeNode<TAddr, TPayload>,
-        // finalize_result: &FinalizeResult,
-    ) -> Result<(), HotStuffError> {
+    async fn update_nodes(&mut self, node: HotStuffTreeNode<TAddr, TPayload>) -> Result<(), HotStuffError> {
         let shard = node.shard();
 
         if node.justify().local_node_hash() == TreeNodeHash::zero() {
@@ -804,7 +800,7 @@ where
                 },
                 Some((from, msg)) = self.rx_hs_message.recv() => {
                     if let Err(e) = self.on_new_hs_message(from, msg).await {
-                        self.publish_event(HotStuffEvent::Failed(e.to_string()));
+                        // self.publish_event(HotStuffEvent::Failed(e.to_string()));
                         error!(target: LOG_TARGET, "Error while processing new hotstuff message (on_new_hs_message): {}", e);
                     }
                 },
@@ -833,14 +829,14 @@ fn extract_changes(
         TransactionResult::Accept(ref diff) => {
             changes.extend(
                 diff.up_iter()
-                    .map(|(shard, substate)| {
-                        (shard.into_shard_id().into(), SubstateState::Up {
+                    .map(|(address, substate)| {
+                        (ShardId::from_address(address), SubstateState::Up {
                             created_by: payload_id,
                             data: substate.clone(),
                         })
                     })
-                    .chain(diff.down_iter().map(|shard| {
-                        (shard.into_shard_id().into(), SubstateState::Down {
+                    .chain(diff.down_iter().map(|address| {
+                        (ShardId::from_address(address), SubstateState::Down {
                             deleted_by: payload_id,
                         })
                     })),

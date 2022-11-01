@@ -20,11 +20,16 @@
 //   WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //   USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+use std::fmt::{Display, Formatter};
+
 use serde::{Deserialize, Serialize};
 use tari_template_abi::{decode, encode, Decode, Encode};
-use tari_template_lib::models::{ComponentAddress, ComponentInstance, ResourceAddress};
+use tari_template_lib::{
+    models::{ComponentAddress, ComponentInstance, ResourceAddress, VaultId},
+    Hash,
+};
 
-use crate::resource::Resource;
+use crate::{resource::Resource, vault::Vault};
 
 #[derive(Debug, Clone, Encode, Decode, Serialize, Deserialize)]
 pub struct Substate {
@@ -33,10 +38,10 @@ pub struct Substate {
 }
 
 impl Substate {
-    pub fn new<T: Into<SubstateValue>>(substate: T) -> Self {
+    pub fn new<T: Into<SubstateValue>>(version: u32, substate: T) -> Self {
         Self {
             substate: substate.into(),
-            version: 0,
+            version,
         }
     }
 
@@ -65,12 +70,15 @@ impl Substate {
 pub enum SubstateAddress {
     Component(ComponentAddress),
     Resource(ResourceAddress),
+    Vault(VaultId),
 }
+
 impl SubstateAddress {
-    pub fn into_shard_id(self) -> [u8; 32] {
+    pub fn into_hash(self) -> Hash {
         match self {
-            SubstateAddress::Component(addr) => addr.into_array(),
-            SubstateAddress::Resource(addr) => addr.into_array(),
+            SubstateAddress::Component(address) => address,
+            SubstateAddress::Resource(address) => address,
+            SubstateAddress::Vault(id) => id,
         }
     }
 }
@@ -88,10 +96,44 @@ impl SubstateAddress {
 //     }
 // }
 
+impl Display for SubstateAddress {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            SubstateAddress::Component(addr) => write!(f, "Component({})", addr),
+            SubstateAddress::Resource(addr) => write!(f, "Resource({})", addr),
+            SubstateAddress::Vault(addr) => write!(f, "Vault({})", addr),
+        }
+    }
+}
+
 #[derive(Debug, Clone, Encode, Decode, Serialize, Deserialize)]
 pub enum SubstateValue {
     Component(ComponentInstance),
     Resource(Resource),
+    Vault(Vault),
+}
+
+impl SubstateValue {
+    pub fn into_component(self) -> Option<ComponentInstance> {
+        match self {
+            SubstateValue::Component(component) => Some(component),
+            _ => None,
+        }
+    }
+
+    pub fn component_mut(&mut self) -> Option<&mut ComponentInstance> {
+        match self {
+            SubstateValue::Component(component) => Some(component),
+            _ => None,
+        }
+    }
+
+    pub fn into_resource(self) -> Option<Resource> {
+        match self {
+            SubstateValue::Resource(resource) => Some(resource),
+            _ => None,
+        }
+    }
 }
 
 impl From<ComponentInstance> for SubstateValue {
@@ -103,6 +145,12 @@ impl From<ComponentInstance> for SubstateValue {
 impl From<Resource> for SubstateValue {
     fn from(resource: Resource) -> Self {
         Self::Resource(resource)
+    }
+}
+
+impl From<Vault> for SubstateValue {
+    fn from(vault: Vault) -> Self {
+        Self::Vault(vault)
     }
 }
 

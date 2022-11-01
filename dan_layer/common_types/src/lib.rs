@@ -19,7 +19,7 @@ use ::serde::{Deserialize, Serialize};
 use borsh::{BorshDeserialize, BorshSerialize};
 pub use epoch::Epoch;
 use tari_common_types::types::{FixedHash, FixedHashSizeError};
-use tari_engine_types::substate::Substate;
+use tari_engine_types::substate::{Substate, SubstateAddress};
 use tari_utilities::{byte_array::ByteArray, hex::Hex};
 pub use template_id::TemplateId;
 
@@ -27,6 +27,14 @@ pub use template_id::TemplateId;
 pub struct ShardId(#[serde(with = "serde_with::hex")] pub [u8; 32]);
 
 impl ShardId {
+    pub fn from_address(addr: &SubstateAddress) -> Self {
+        match addr {
+            SubstateAddress::Component(addr) => addr.into_array().into(),
+            SubstateAddress::Resource(addr) => addr.into_array().into(),
+            SubstateAddress::Vault(vault_id) => vault_id.into_array().into(),
+        }
+    }
+
     pub fn to_le_bytes(&self) -> &[u8] {
         self.0.as_bytes()
     }
@@ -43,6 +51,10 @@ impl ShardId {
 
     pub fn from_bytes(bytes: &[u8]) -> Result<Self, FixedHashSizeError> {
         FixedHash::try_from(bytes).map(Self::new)
+    }
+
+    pub fn into_array(self) -> [u8; 32] {
+        self.0
     }
 
     pub fn zero() -> Self {

@@ -145,7 +145,7 @@ fn get_function_block(template_ident: &Ident, ast: FunctionAst) -> Expr {
     // after user function invocation, update the component state
     if should_set_state {
         stmts.push(parse_quote! {
-            engine().set_component_state(component.id(), state);
+            engine().set_component_state(component.address(), state);
         });
     }
 

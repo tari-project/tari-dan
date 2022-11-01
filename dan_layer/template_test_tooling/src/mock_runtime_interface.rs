@@ -8,12 +8,16 @@ use tari_dan_engine::{
     runtime::{RuntimeError, RuntimeInterface, RuntimeInterfaceImpl, RuntimeState, StateTracker},
     state_store::memory::MemoryStateStore,
 };
-use tari_engine_types::commit_result::FinalizeResult;
+use tari_engine_types::{
+    commit_result::FinalizeResult,
+    substate::{SubstateAddress, SubstateValue},
+};
 use tari_template_lib::{
     args::{
         BucketAction,
         BucketRef,
-        CreateComponentArg,
+        ComponentAction,
+        ComponentRef,
         InvokeResult,
         LogLevel,
         ResourceAction,
@@ -21,7 +25,7 @@ use tari_template_lib::{
         VaultAction,
         WorkspaceAction,
     },
-    models::{ComponentAddress, ComponentInstance, VaultRef},
+    models::VaultRef,
     Hash,
 };
 
@@ -84,19 +88,19 @@ impl RuntimeInterface for MockRuntimeInterface {
         log::log!(target: "tari::dan::engine::runtime", level, "{}", message);
     }
 
-    fn create_component(&self, arg: CreateComponentArg) -> Result<ComponentAddress, RuntimeError> {
-        self.add_call("create_component");
-        self.inner.create_component(arg)
+    fn get_substate(&self, address: &SubstateAddress) -> Result<SubstateValue, RuntimeError> {
+        self.add_call("get_substate");
+        self.inner.get_substate(address)
     }
 
-    fn get_component(&self, component_address: &ComponentAddress) -> Result<ComponentInstance, RuntimeError> {
-        self.add_call("get_component");
-        self.inner.get_component(component_address)
-    }
-
-    fn set_component_state(&self, component_address: &ComponentAddress, state: Vec<u8>) -> Result<(), RuntimeError> {
-        self.add_call("set_component_state");
-        self.inner.set_component_state(component_address, state)
+    fn component_invoke(
+        &self,
+        component_ref: ComponentRef,
+        action: ComponentAction,
+        args: Vec<Vec<u8>>,
+    ) -> Result<InvokeResult, RuntimeError> {
+        self.add_call("component_invoke");
+        self.inner.component_invoke(component_ref, action, args)
     }
 
     fn resource_invoke(

@@ -31,7 +31,7 @@ use crate::{
     Hash,
 };
 
-pub type VaultId = (Hash, u32);
+pub type VaultId = Hash;
 
 #[derive(Clone, Debug, Decode, Encode)]
 pub enum VaultRef {
