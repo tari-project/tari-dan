@@ -192,11 +192,6 @@ where
     }
 
     async fn on_propose(&mut self, shard: ShardId, payload_id: PayloadId) -> Result<(), HotStuffError> {
-        info!(
-            target: LOG_TARGET,
-            "🔥 OnPropose for payload {} and shard {}", payload_id, shard
-        );
-
         let epoch = self.epoch_manager.current_epoch().await?;
 
         let leaf_node;
@@ -229,6 +224,10 @@ where
             } else {
                 NodeHeight(0)
             };
+            info!(
+                target: LOG_TARGET,
+                "🔥 OnPropose for payload {} {} and shard {}", payload_height, payload_id, shard
+            );
             if payload_height != NodeHeight(0) && parent.justify().local_node_hash() == qc.local_node_hash() {
                 info!(
                     target: LOG_TARGET,
@@ -239,7 +238,7 @@ where
                 return Ok(());
             }
 
-            if payload_height > NodeHeight(self.consensus_constants.hotstuff_rounds) {
+            if payload_height > NodeHeight(self.consensus_constants.hotstuff_rounds - 1) {
                 info!(
                     target: LOG_TARGET,
                     "🔥 OnPropose payload {} and shard {} has height {}, this node has already been committed",
@@ -503,8 +502,12 @@ where
             (node.payload_id() == node.justify().payload_id() &&
                 node.payload_height() == node.justify().payload_height() + NodeHeight(1))
         {
-            if node.payload_height() > NodeHeight(self.consensus_constants.hotstuff_rounds - 1) {
-                return Err(HotStuffError::PayloadHeightIsTooHigh);
+            let max_node_height = NodeHeight(self.consensus_constants.hotstuff_rounds - 1);
+            if node.payload_height() > max_node_height {
+                return Err(HotStuffError::PayloadHeightIsTooHigh {
+                    actual: node.payload_height(),
+                    max: max_node_height,
+                });
             }
             Ok(())
         } else {
@@ -756,10 +759,6 @@ where
         }
         Ok(())
     }
-
-    // fn get_leader(&self, payload: Option<&TPayload>, shard: u32) -> &TAddr {
-    //     self.leader_strategy.get_leader(&self.committee, payload, shard)
-    // }
 
     async fn on_new_hs_message(
         &mut self,

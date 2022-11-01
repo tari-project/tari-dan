@@ -78,16 +78,22 @@ impl MempoolService {
         debug!(target: LOG_TARGET, "Received new transaction: {:?}", transaction);
         // TODO: validate transaction
         let payload = TariDanPayload::new(transaction.clone());
-        debug!(
-            target: LOG_TARGET,
-            "New Payload in mempool for shards: {:?}",
-            payload.involved_shards()
-        );
+
+        let shards = payload.involved_shards();
+        debug!(target: LOG_TARGET, "New Payload in mempool for shards: {:?}", shards);
+        if shards.is_empty() {
+            warn!(target: LOG_TARGET, "⚠ No involved shards for payload");
+        }
+
         {
             let mut access = self.transactions.lock().unwrap();
             // TODO: O(n)
             if access.iter().any(|(tx, _)| tx.hash() == transaction.hash()) {
-                info!(target: LOG_TARGET, "🎱 Transaction already in mempool");
+                info!(
+                    target: LOG_TARGET,
+                    "🎱 Transaction {} already in mempool",
+                    transaction.hash()
+                );
                 return;
             }
 
