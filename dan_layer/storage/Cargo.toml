@@ -9,7 +9,6 @@ license = "BSD-3-Clause"
 [dependencies]
 tari_common_types = { git = "https://github.com/tari-project/tari.git", branch = "feature-dan", package = "tari_common_types" }
 
-anyhow = "1"
 thiserror = "1"
 time = "0.3.15"
 serde = "1.0"

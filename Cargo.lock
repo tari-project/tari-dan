@@ -5627,7 +5627,6 @@ dependencies = [
 name = "tari_dan_storage"
 version = "0.1.0"
 dependencies = [
- "anyhow",
  "serde",
  "tari_common_types",
  "thiserror",
@@ -5664,7 +5663,6 @@ dependencies = [
  "tari_dan_engine",
  "tari_dan_storage",
  "tari_engine_types",
- "tari_test_utils",
  "tari_utilities",
  "thiserror",
  "time 0.3.16",
