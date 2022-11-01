@@ -1,3 +1,6 @@
+//  Copyright 2022 The Tari Project
+//  SPDX-License-Identifier: BSD-3-Clause
+
 use std::path::PathBuf;
 
 use tari_dan_engine::{crypto::create_key_pair, transaction::Transaction, wasm::compile::compile_template};
