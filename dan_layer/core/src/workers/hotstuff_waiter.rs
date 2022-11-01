@@ -483,12 +483,6 @@ where
         shard_pledges: HashMap<ShardId, Vec<ObjectPledge>>,
         payload: TPayload,
     ) -> Result<FinalizeResult, HotStuffError> {
-        // let shard_pledges = node
-        //     .justify()
-        //     .all_shard_nodes()
-        //     .iter()
-        //     .map(|s| (s.shard_id, s.pledges.clone()))
-        //     .collect();
         let finalize = self.payload_processor.process_payload(payload, shard_pledges)?;
         Ok(finalize)
     }

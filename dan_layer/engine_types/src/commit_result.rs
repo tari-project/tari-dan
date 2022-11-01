@@ -42,6 +42,16 @@ impl FinalizeResult {
             result,
         }
     }
+
+    pub fn errored(transaction_hash: Hash, reason: String) -> Self {
+        Self::new(
+            transaction_hash,
+            Vec::new(),
+            TransactionResult::Reject(RejectResult {
+                reason: format!("Transaction errored: {}", reason),
+            }),
+        )
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
