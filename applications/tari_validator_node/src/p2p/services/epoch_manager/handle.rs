@@ -63,22 +63,22 @@ impl EpochManagerHandle {
         Ok(())
     }
 
-    pub async fn next_registration_epoch(&self) -> Result<Option<Epoch>, EpochManagerError> {
+    pub async fn last_registration_epoch(&self) -> Result<Option<Epoch>, EpochManagerError> {
         let (tx, rx) = oneshot::channel();
         self.tx_request
-            .send((EpochManagerRequest::NextRegistrationEpoch, tx))
+            .send((EpochManagerRequest::LastRegistrationEpoch, tx))
             .await
             .map_err(|_| EpochManagerError::SendError)?;
         match rx.await.map_err(|_| EpochManagerError::ReceiveError)?? {
-            EpochManagerResponse::NextRegistrationEpoch { epoch } => Ok(epoch),
+            EpochManagerResponse::LastRegistrationEpoch { epoch } => Ok(epoch),
             _ => Err(EpochManagerError::UnexpectedResponse),
         }
     }
 
-    pub async fn update_next_registration_epoch(&self, epoch: Epoch) -> Result<(), EpochManagerError> {
+    pub async fn update_last_registration_epoch(&self, epoch: Epoch) -> Result<(), EpochManagerError> {
         let (tx, rx) = oneshot::channel();
         self.tx_request
-            .send((EpochManagerRequest::UpdateNextRegistrationEpoch { epoch }, tx))
+            .send((EpochManagerRequest::UpdateLastRegistrationEpoch { epoch }, tx))
             .await
             .map_err(|_| EpochManagerError::SendError)?;
         let _result = rx.await.map_err(|_| EpochManagerError::ReceiveError)??;
