@@ -192,11 +192,6 @@ where
     }
 
     async fn on_propose(&mut self, shard: ShardId, payload_id: PayloadId) -> Result<(), HotStuffError> {
-        info!(
-            target: LOG_TARGET,
-            "🔥 OnPropose for payload {} and shard {}", payload_id, shard
-        );
-
         let epoch = self.epoch_manager.current_epoch().await?;
 
         let leaf_node;
@@ -229,6 +224,10 @@ where
             } else {
                 NodeHeight(0)
             };
+            info!(
+                target: LOG_TARGET,
+                "🔥 OnPropose for payload {} {} and shard {}", payload_height, payload_id, shard
+            );
             if payload_height != NodeHeight(0) && parent.justify().local_node_hash() == qc.local_node_hash() {
                 info!(
                     target: LOG_TARGET,
@@ -239,7 +238,7 @@ where
                 return Ok(());
             }
 
-            if payload_height > NodeHeight(self.consensus_constants.hotstuff_rounds) {
+            if payload_height > NodeHeight(self.consensus_constants.hotstuff_rounds - 1) {
                 info!(
                     target: LOG_TARGET,
                     "🔥 OnPropose payload {} and shard {} has height {}, this node has already been committed",
@@ -387,11 +386,7 @@ where
         Ok(())
     }
 
-    async fn update_nodes(
-        &mut self,
-        node: HotStuffTreeNode<TAddr, TPayload>,
-        // finalize_result: &FinalizeResult,
-    ) -> Result<(), HotStuffError> {
+    async fn update_nodes(&mut self, node: HotStuffTreeNode<TAddr, TPayload>) -> Result<(), HotStuffError> {
         let shard = node.shard();
 
         if node.justify().local_node_hash() == TreeNodeHash::zero() {
@@ -503,8 +498,12 @@ where
             (node.payload_id() == node.justify().payload_id() &&
                 node.payload_height() == node.justify().payload_height() + NodeHeight(1))
         {
-            if node.payload_height() > NodeHeight(self.consensus_constants.hotstuff_rounds - 1) {
-                return Err(HotStuffError::PayloadHeightIsTooHigh);
+            let max_node_height = NodeHeight(self.consensus_constants.hotstuff_rounds - 1);
+            if node.payload_height() > max_node_height {
+                return Err(HotStuffError::PayloadHeightIsTooHigh {
+                    actual: node.payload_height(),
+                    max: max_node_height,
+                });
             }
             Ok(())
         } else {
@@ -533,6 +532,9 @@ where
 
         let shard = node.shard();
         let payload = if let Some(node_payload) = node.payload() {
+            let mut tx = self.shard_store.create_tx()?;
+            tx.set_payload(node_payload.clone()).map_err(|e| e.into())?;
+            tx.commit().map_err(|e| e.into())?;
             node_payload.clone()
         } else {
             let tx = self.shard_store.create_tx()?;
@@ -754,10 +756,6 @@ where
         Ok(())
     }
 
-    // fn get_leader(&self, payload: Option<&TPayload>, shard: u32) -> &TAddr {
-    //     self.leader_strategy.get_leader(&self.committee, payload, shard)
-    // }
-
     async fn on_new_hs_message(
         &mut self,
         from: TAddr,
@@ -802,7 +800,7 @@ where
                 },
                 Some((from, msg)) = self.rx_hs_message.recv() => {
                     if let Err(e) = self.on_new_hs_message(from, msg).await {
-                        self.publish_event(HotStuffEvent::Failed(e.to_string()));
+                        // self.publish_event(HotStuffEvent::Failed(e.to_string()));
                         error!(target: LOG_TARGET, "Error while processing new hotstuff message (on_new_hs_message): {}", e);
                     }
                 },
@@ -831,14 +829,14 @@ fn extract_changes(
         TransactionResult::Accept(ref diff) => {
             changes.extend(
                 diff.up_iter()
-                    .map(|(shard, substate)| {
-                        (shard.into_shard_id().into(), SubstateState::Up {
+                    .map(|(address, substate)| {
+                        (ShardId::from_address(address), SubstateState::Up {
                             created_by: payload_id,
                             data: substate.clone(),
                         })
                     })
-                    .chain(diff.down_iter().map(|shard| {
-                        (shard.into_shard_id().into(), SubstateState::Down {
+                    .chain(diff.down_iter().map(|address| {
+                        (ShardId::from_address(address), SubstateState::Down {
                             deleted_by: payload_id,
                         })
                     })),

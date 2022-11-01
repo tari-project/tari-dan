@@ -33,7 +33,11 @@ use tari_dan_engine::{
     state_store::{memory::MemoryStateStore, AtomicDb, StateWriter},
     transaction::TransactionProcessor,
 };
-use tari_engine_types::{commit_result::FinalizeResult, substate::SubstateValue};
+use tari_engine_types::{
+    commit_result::FinalizeResult,
+    substate::{SubstateAddress, SubstateValue},
+};
+use tari_template_lib::models::{ComponentAddress, ResourceAddress, VaultId};
 
 #[derive(Debug, Default)]
 pub struct TariDanPayloadProcessor<TTemplateProvider> {
@@ -94,20 +98,28 @@ fn create_populated_state_store<I: IntoIterator<Item = ObjectPledge>>(inputs: I)
     for input in inputs {
         match input.current_state {
             SubstateState::Up { data, .. } => {
-                // TODO: Engine should be able to read SubstateValue
-                match data.into_substate() {
-                    SubstateValue::Component(component) => {
-                        eprintln!("🐞inpuy = {}", input.shard_id);
-                        eprintln!("🐞ca = {}", component.component_address);
-                        tx.set_state_raw(
-                            input.shard_id.as_bytes(),
-                            tari_dan_engine::abi::encode(&component).unwrap(),
+                // TODO: The 1:1 mapping between ShardId and component/resource address could be cleaned up
+                match data.substate_value() {
+                    SubstateValue::Component(_) => {
+                        tx.set_state(
+                            &SubstateAddress::Component(ComponentAddress::from(input.shard_id.into_array())),
+                            data,
                         )
                         .unwrap();
                     },
-                    SubstateValue::Resource(resx) => {
-                        tx.set_state_raw(input.shard_id.as_bytes(), tari_dan_engine::abi::encode(&resx).unwrap())
-                            .unwrap();
+                    SubstateValue::Resource(_) => {
+                        tx.set_state(
+                            &SubstateAddress::Resource(ResourceAddress::from(input.shard_id.into_array())),
+                            data,
+                        )
+                        .unwrap();
+                    },
+                    SubstateValue::Vault(_) => {
+                        tx.set_state(
+                            &SubstateAddress::Vault(VaultId::from(input.shard_id.into_array())),
+                            data,
+                        )
+                        .unwrap();
                     },
                 }
             },

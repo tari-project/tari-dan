@@ -20,28 +20,61 @@
 //   WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //   USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use serde::{Deserialize, Serialize};
+use std::{
+    fs,
+    path::{Path, PathBuf},
+};
 
-#[derive(Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Deserialize, Serialize)]
-pub struct Epoch(pub u64);
+use tari_common_types::types::PublicKey;
+use tari_dan_core::{
+    models::TariDanPayload,
+    storage::{shard_store::ShardStoreFactory, StorageError},
+};
+use tari_dan_storage_sqlite::sqlite_shard_store_factory::{SqliteShardStoreFactory, SqliteShardStoreTransaction};
+use tari_test_utils::paths::create_temporary_data_path;
+pub struct TempShardStoreFactory {
+    sqlite: SqliteShardStoreFactory,
+    path: PathBuf,
+    delete_on_drop: bool,
+}
 
-impl Epoch {
-    pub fn as_u64(self) -> u64 {
-        self.0
+impl TempShardStoreFactory {
+    pub fn new() -> Self {
+        let temp_path = create_temporary_data_path();
+        let sqlite = SqliteShardStoreFactory::try_create(temp_path.join("state.db")).unwrap();
+        Self {
+            sqlite,
+            path: temp_path,
+            delete_on_drop: true,
+        }
     }
 
-    pub fn to_le_bytes(self) -> [u8; 8] {
-        self.0.to_le_bytes()
-    }
-
-    pub fn from_block_height(bh: u64) -> Self {
-        let e = bh / 10;
-        Self(e)
+    pub fn disable_delete_on_drop(&mut self) -> &mut Self {
+        self.delete_on_drop = false;
+        self
     }
 }
 
-impl From<u64> for Epoch {
-    fn from(e: u64) -> Self {
-        Self(e)
+impl Default for TempShardStoreFactory {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl ShardStoreFactory for TempShardStoreFactory {
+    type Addr = PublicKey;
+    type Payload = TariDanPayload;
+    type Transaction = SqliteShardStoreTransaction;
+
+    fn create_tx(&self) -> Result<Self::Transaction, StorageError> {
+        self.sqlite.create_tx()
+    }
+}
+
+impl Drop for TempShardStoreFactory {
+    fn drop(&mut self) {
+        if self.delete_on_drop && Path::new(&self.path).exists() {
+            fs::remove_dir_all(&self.path).expect("Could not delete temporary file");
+        }
     }
 }

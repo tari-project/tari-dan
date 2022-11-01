@@ -20,28 +20,38 @@
 //   WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //   USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use serde::{Deserialize, Serialize};
+use tari_template_abi::{Decode, Encode};
+use tari_template_lib::models::{Amount, ResourceAddress};
 
-#[derive(Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Deserialize, Serialize)]
-pub struct Epoch(pub u64);
+use crate::resource::{Resource, ResourceError};
 
-impl Epoch {
-    pub fn as_u64(self) -> u64 {
-        self.0
-    }
-
-    pub fn to_le_bytes(self) -> [u8; 8] {
-        self.0.to_le_bytes()
-    }
-
-    pub fn from_block_height(bh: u64) -> Self {
-        let e = bh / 10;
-        Self(e)
-    }
+#[derive(Debug, Clone, Encode, Decode)]
+pub struct Bucket {
+    resource: Resource,
 }
 
-impl From<u64> for Epoch {
-    fn from(e: u64) -> Self {
-        Self(e)
+impl Bucket {
+    pub fn new(resource: Resource) -> Self {
+        Self { resource }
+    }
+
+    pub fn amount(&self) -> Amount {
+        self.resource.amount()
+    }
+
+    pub fn resource_address(&self) -> ResourceAddress {
+        self.resource.address()
+    }
+
+    pub fn resource(&self) -> &Resource {
+        &self.resource
+    }
+
+    pub fn into_resource(self) -> Resource {
+        self.resource
+    }
+
+    pub fn take(&mut self, amount: Amount) -> Result<Resource, ResourceError> {
+        self.resource.withdraw(amount)
     }
 }

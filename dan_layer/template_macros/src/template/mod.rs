@@ -187,7 +187,7 @@ mod tests {
                         let arg_1 = decode::<u32>(&call_info.args[1usize]).unwrap();
                         let rtn = State_template::State::set(&mut state, arg_1);
                         result = encode_with_len(&rtn);
-                        engine().set_component_state(component.id(), state);
+                        engine().set_component_state(component.address(), state);
                     },
                     _ => panic!("invalid function name")
                 };

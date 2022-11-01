@@ -51,6 +51,8 @@ pub struct SubmitArgs {
     wait_for_result: bool,
     #[clap(long, short = 'n')]
     num_outputs: Option<u8>,
+    #[clap(long, short = 'v')]
+    version: Option<u8>,
 }
 
 #[derive(Debug, Clone)]
@@ -190,7 +192,12 @@ async fn handle_submit(
 
     // TODO: this is a little clunky
     let mut builder = Transaction::builder();
-    builder.add_instruction(instruction).sign(&account.secret_key).fee(1);
+    builder
+        .with_input_refs(inputs.clone())
+        .with_num_outputs(args.num_outputs.unwrap_or(0))
+        .add_instruction(instruction)
+        .sign(&account.secret_key)
+        .fee(1);
     let transaction = builder.build();
     let tx_hash = *transaction.hash();
 
@@ -220,7 +227,11 @@ fn summarize(result: &FinalizeResult) {
     match result.result {
         TransactionResult::Accept(ref diff) => {
             for (address, substate) in diff.up_iter() {
-                println!("️🌲 New substate {}", ShardId::from(address.into_shard_id()));
+                println!(
+                    "️🌲 New substate {} (v{})",
+                    ShardId::from_address(address),
+                    substate.version()
+                );
                 match substate.substate_value() {
                     SubstateValue::Component(component) => {
                         println!(
@@ -231,11 +242,14 @@ fn summarize(result: &FinalizeResult) {
                     SubstateValue::Resource(resource) => {
                         println!("       ▶ resource: {}", resource.address());
                     },
+                    SubstateValue::Vault(vault) => {
+                        println!("       ▶ vault: {} {}", vault.id(), vault.resource_address());
+                    },
                 }
                 println!();
             }
             for address in diff.down_iter() {
-                println!("🗑️ Destroyed substate {}", ShardId::from(address.into_shard_id()));
+                println!("🗑️ Destroyed substate {}", ShardId::from_address(address));
                 println!();
             }
         },

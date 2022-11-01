@@ -49,7 +49,7 @@ pub enum MetadataKey {
     BaseLayerScannerLastScannedBlockHeight,
     BaseLayerScannerLastScannedBlockHash,
     CurrentEpoch,
-    NextEpochRegistration,
+    LastEpochRegistration,
 }
 
 impl MetadataKey {
@@ -59,7 +59,7 @@ impl MetadataKey {
             MetadataKey::BaseLayerScannerLastScannedBlockHash => b"base_layer_scanner.last_scanned_block_hash",
             MetadataKey::BaseLayerScannerLastScannedBlockHeight => b"base_layer_scanner.last_scanned_block_height",
             MetadataKey::CurrentEpoch => b"current_epoch",
-            MetadataKey::NextEpochRegistration => b"last_registered_epoch",
+            MetadataKey::LastEpochRegistration => b"last_registered_epoch",
         }
     }
 }

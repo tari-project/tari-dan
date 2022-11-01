@@ -32,6 +32,7 @@ use tari_core::{blocks::BlockHeader, transactions::transaction_components::CodeT
 use tari_crypto::tari_utilities::ByteArray;
 use tari_dan_common_types::ShardId;
 use tari_dan_core::{
+    consensus_constants::BaseLayerConsensusConstants,
     models::{BaseLayerMetadata, ValidatorNode},
     services::{base_node_error::BaseNodeError, BaseNodeClient, BlockInfo, SideChainUtxos},
 };
@@ -58,6 +59,19 @@ impl GrpcBaseNodeClient {
             self.client = Some(inner);
         }
         self.client.as_mut().ok_or(BaseNodeError::ConnectionError)
+    }
+
+    pub async fn get_consensus_constants(
+        &mut self,
+        block_height: u64,
+    ) -> Result<BaseLayerConsensusConstants, BaseNodeError> {
+        let inner = self.connection().await?;
+
+        let request = grpc::BlockHeight { block_height };
+        let result = inner.get_constants(request).await?.into_inner();
+
+        let consensus_constants = BaseLayerConsensusConstants::new(result.validator_node_timeout);
+        Ok(consensus_constants)
     }
 }
 

@@ -171,7 +171,7 @@ impl TemplateManagerService {
 
                 info!(
                     target: LOG_TARGET,
-                    "✅ Template {} downloaded successfully", download.template_address
+                    "✅ Template {} has status {:?}", download.template_address, template_status
                 );
             },
             Err(err) => {

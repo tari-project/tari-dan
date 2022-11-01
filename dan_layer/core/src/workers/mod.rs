@@ -28,5 +28,3 @@ pub mod states;
 pub mod events;
 pub mod hotstuff_error;
 pub mod hotstuff_waiter;
-#[cfg(test)]
-mod tests;

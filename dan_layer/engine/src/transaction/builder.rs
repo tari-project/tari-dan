@@ -127,7 +127,7 @@ impl TransactionBuilder {
     }
 
     pub fn build(mut self) -> Transaction {
-        let mut t = Transaction::new(
+        let mut transaction = Transaction::new(
             self.fee,
             self.instructions.drain(..).collect(),
             self.signature.take().expect("not signed"),
@@ -135,13 +135,13 @@ impl TransactionBuilder {
             self.meta,
         );
 
-        let id_provider = IdProvider::new(t.hash);
+        let id_provider = IdProvider::new(transaction.hash);
 
-        let meta = t.meta.get_or_insert(TransactionMeta::default());
+        let meta = transaction.meta.get_or_insert(TransactionMeta::default());
         meta.involved_objects.extend(
             (0..self.num_outputs).map(|_| (id_provider.new_output_shard(), (SubstateChange::Create, ObjectClaim {}))),
         );
 
-        t
+        transaction
     }
 }

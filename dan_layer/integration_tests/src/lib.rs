@@ -20,40 +20,8 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use tari_engine_types::resource::{Resource, ResourceError};
-use tari_template_abi::{Decode, Encode};
-use tari_template_lib::models::{Amount, ResourceAddress};
+mod temp_shard_store_factory;
+pub use temp_shard_store_factory::TempShardStoreFactory;
 
-use crate::models::Bucket;
-
-#[derive(Debug, Clone, Encode, Decode)]
-pub struct Vault {
-    resource: Resource,
-}
-
-impl Vault {
-    pub fn new(resource: Resource) -> Self {
-        Self { resource }
-    }
-
-    pub fn deposit(&mut self, bucket: Bucket) -> Result<(), ResourceError> {
-        self.resource.deposit(bucket.into_resource())?;
-        Ok(())
-    }
-
-    pub fn withdraw(&mut self, amount: Amount) -> Result<Resource, ResourceError> {
-        self.resource.withdraw(amount)
-    }
-
-    pub fn balance(&self) -> Amount {
-        self.resource.amount()
-    }
-
-    pub fn resource_address(&self) -> ResourceAddress {
-        self.resource.address()
-    }
-
-    pub fn resource(&self) -> &Resource {
-        &self.resource
-    }
-}
+#[cfg(test)]
+mod test_consensus;

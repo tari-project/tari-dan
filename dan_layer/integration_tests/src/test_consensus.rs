@@ -1,49 +1,33 @@
-//  Copyright 2022. The Tari Project
+//   Copyright 2022. The Tari Project
 //
-//  Redistribution and use in source and binary forms, with or without modification, are permitted provided that the
-//  following conditions are met:
+//   Redistribution and use in source and binary forms, with or without modification, are permitted provided that the
+//   following conditions are met:
 //
-//  1. Redistributions of source code must retain the above copyright notice, this list of conditions and the following
-//  disclaimer.
+//   1. Redistributions of source code must retain the above copyright notice, this list of conditions and the following
+//   disclaimer.
 //
-//  2. Redistributions in binary form must reproduce the above copyright notice, this list of conditions and the
-//  following disclaimer in the documentation and/or other materials provided with the distribution.
+//   2. Redistributions in binary form must reproduce the above copyright notice, this list of conditions and the
+//   following disclaimer in the documentation and/or other materials provided with the distribution.
 //
-//  3. Neither the name of the copyright holder nor the names of its contributors may be used to endorse or promote
-//  products derived from this software without specific prior written permission.
+//   3. Neither the name of the copyright holder nor the names of its contributors may be used to endorse or promote
+//   products derived from this software without specific prior written permission.
 //
-//  THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES,
-//  INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
-//  DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
-//  SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
-//  SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY,
-//  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
-//  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+//   THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES,
+//   INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+//   DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
+//   SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
+//   SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY,
+//   WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
+//   USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 use std::{collections::HashMap, time::Duration};
 
 use lazy_static::lazy_static;
-use tari_common_types::types::PrivateKey;
+use rand::rngs::OsRng;
+use tari_common_types::types::{PrivateKey, PublicKey};
+use tari_crypto::keys::PublicKey as PublicKeyT;
 use tari_dan_common_types::ShardId;
-use tari_dan_engine::transaction::TransactionBuilder;
-use tari_engine_types::{
-    commit_result::{FinalizeResult, RejectResult, TransactionResult},
-    instruction::Instruction,
-    substate::SubstateDiff,
-};
-use tari_shutdown::Shutdown;
-use tari_template_lib::args::Arg;
-use tari_utilities::ByteArray;
-use tokio::{
-    sync::{
-        broadcast,
-        mpsc::{channel, Receiver, Sender},
-    },
-    task::JoinHandle,
-    time::timeout,
-};
-
-use crate::{
+use tari_dan_core::{
     consensus_constants::ConsensusConstants,
     models::{
         vote_message::VoteMessage,
@@ -56,28 +40,45 @@ use crate::{
     },
     services::{
         epoch_manager::{EpochManager, RangeEpochManager},
-        infrastructure_services::NodeAddressable,
         leader_strategy::{AlwaysFirstLeader, LeaderStrategy},
     },
     workers::hotstuff_waiter::HotStuffWaiter,
 };
+use tari_dan_engine::transaction::{Transaction, TransactionBuilder};
+use tari_engine_types::{
+    commit_result::{FinalizeResult, RejectResult, TransactionResult},
+    instruction::Instruction,
+    substate::SubstateDiff,
+};
+use tari_shutdown::Shutdown;
+use tari_utilities::ByteArray;
+use tokio::{
+    sync::{
+        broadcast,
+        mpsc::{channel, Receiver, Sender},
+    },
+    task::JoinHandle,
+    time::timeout,
+};
 
-pub struct PayloadProcessorListener<TPayload> {
-    receiver: broadcast::Receiver<(TPayload, HashMap<ShardId, Vec<ObjectPledge>>)>,
-    sender: broadcast::Sender<(TPayload, HashMap<ShardId, Vec<ObjectPledge>>)>,
+use crate::TempShardStoreFactory;
+
+pub struct PayloadProcessorListener {
+    receiver: broadcast::Receiver<(TariDanPayload, HashMap<ShardId, Vec<ObjectPledge>>)>,
+    sender: broadcast::Sender<(TariDanPayload, HashMap<ShardId, Vec<ObjectPledge>>)>,
 }
 
-impl<TPayload: Payload> PayloadProcessorListener<TPayload> {
+impl PayloadProcessorListener {
     pub fn new() -> Self {
         let (sender, receiver) = broadcast::channel(100);
         Self { receiver, sender }
     }
 }
 
-impl<TPayload: Payload> PayloadProcessor<TPayload> for PayloadProcessorListener<TPayload> {
+impl PayloadProcessor<TariDanPayload> for PayloadProcessorListener {
     fn process_payload(
         &self,
-        payload: TPayload,
+        payload: TariDanPayload,
         pledges: HashMap<ShardId, Vec<ObjectPledge>>,
     ) -> Result<FinalizeResult, PayloadProcessorError> {
         self.sender.send((payload, pledges)).unwrap();
@@ -91,10 +92,10 @@ impl<TPayload: Payload> PayloadProcessor<TPayload> for PayloadProcessorListener<
 
 pub struct NullPayloadProcessor {}
 
-impl<TPayload: Payload> PayloadProcessor<TPayload> for NullPayloadProcessor {
+impl PayloadProcessor<TariDanPayload> for NullPayloadProcessor {
     fn process_payload(
         &self,
-        payload: TPayload,
+        payload: TariDanPayload,
         _pledges: HashMap<ShardId, Vec<ObjectPledge>>,
     ) -> Result<FinalizeResult, PayloadProcessorError> {
         Ok(FinalizeResult::new(
@@ -107,36 +108,33 @@ impl<TPayload: Payload> PayloadProcessor<TPayload> for NullPayloadProcessor {
     }
 }
 
-pub trait Consensus<TPayload: Payload> {
+pub trait Consensus<TariDanPayload> {
     fn execute_transaction(
         &mut self,
-        payload: TPayload,
+        payload: TariDanPayload,
         inputs: Vec<ObjectPledge>,
         outputs: Vec<ObjectPledge>,
     ) -> Result<(), String>;
 }
 
-pub struct HsTestHarness<TPayload, TAddr> {
-    identity: TAddr,
-    tx_new: Sender<(TPayload, ShardId)>,
-    tx_hs_messages: Sender<(TAddr, HotStuffMessage<TPayload, TAddr>)>,
-    rx_leader: Receiver<(TAddr, HotStuffMessage<TPayload, TAddr>)>,
+pub struct HsTestHarness {
+    identity: PublicKey,
+    tx_new: Sender<(TariDanPayload, ShardId)>,
+    tx_hs_messages: Sender<(PublicKey, HotStuffMessage<TariDanPayload, PublicKey>)>,
+    rx_leader: Receiver<(PublicKey, HotStuffMessage<TariDanPayload, PublicKey>)>,
     shutdown: Shutdown,
-    rx_broadcast: Receiver<(HotStuffMessage<TPayload, TAddr>, Vec<TAddr>)>,
-    rx_vote_message: Receiver<(VoteMessage, TAddr)>,
-    tx_votes: Sender<(TAddr, VoteMessage)>,
-    rx_execute: broadcast::Receiver<(TPayload, HashMap<ShardId, Vec<ObjectPledge>>)>,
+    rx_broadcast: Receiver<(HotStuffMessage<TariDanPayload, PublicKey>, Vec<PublicKey>)>,
+    rx_vote_message: Receiver<(VoteMessage, PublicKey)>,
+    tx_votes: Sender<(PublicKey, VoteMessage)>,
+    rx_execute: broadcast::Receiver<(TariDanPayload, HashMap<ShardId, Vec<ObjectPledge>>)>,
     hs_waiter: Option<JoinHandle<Result<(), HotStuffError>>>,
 }
-impl<TPayload, TAddr> HsTestHarness<TPayload, TAddr>
-where
-    TPayload: Payload + 'static,
-    TAddr: NodeAddressable + 'static,
-{
-    pub fn new<TEpochManager, TLeader>(identity: TAddr, epoch_manager: TEpochManager, leader: TLeader) -> Self
+
+impl HsTestHarness {
+    pub fn new<TEpochManager, TLeader>(identity: PublicKey, epoch_manager: TEpochManager, leader: TLeader) -> Self
     where
-        TEpochManager: EpochManager<TAddr> + Send + Sync + 'static,
-        TLeader: LeaderStrategy<TAddr> + Send + Sync + 'static,
+        TEpochManager: EpochManager<PublicKey> + Send + Sync + 'static,
+        TLeader: LeaderStrategy<PublicKey> + Send + Sync + 'static,
     {
         let (tx_new, rx_new) = channel(1);
         let (tx_hs_messages, rx_hs_messages) = channel(1);
@@ -145,13 +143,13 @@ where
         let (tx_vote_message, rx_vote_message) = channel(1);
         let (tx_votes, rx_votes) = channel(1);
         let (tx_events, _) = broadcast::channel(100);
-        let payload_processor = PayloadProcessorListener::<TPayload>::new();
+        let payload_processor = PayloadProcessorListener::new();
         let rx_execute = payload_processor.receiver.resubscribe();
         let shutdown = Shutdown::new();
 
         let consensus_constants = ConsensusConstants::devnet();
+        let shard_store = TempShardStoreFactory::new();
 
-        let shard_store = MemoryShardStoreFactory::new();
         let hs_waiter = HotStuffWaiter::spawn(
             identity.clone(),
             epoch_manager,
@@ -182,7 +180,7 @@ where
         }
     }
 
-    fn identity(&self) -> TAddr {
+    fn identity(&self) -> PublicKey {
         self.identity.clone()
     }
 
@@ -196,7 +194,7 @@ where
             .unwrap();
     }
 
-    async fn recv_broadcast(&mut self) -> (HotStuffMessage<TPayload, TAddr>, Vec<TAddr>) {
+    async fn recv_broadcast(&mut self) -> (HotStuffMessage<TariDanPayload, PublicKey>, Vec<PublicKey>) {
         if let Some(msg) = timeout(Duration::from_secs(10), self.rx_broadcast.recv())
             .await
             .expect("timed out")
@@ -210,7 +208,7 @@ where
         }
     }
 
-    async fn recv_vote_message(&mut self) -> (VoteMessage, TAddr) {
+    async fn recv_vote_message(&mut self) -> (VoteMessage, PublicKey) {
         if let Some(msg) = timeout(Duration::from_secs(10), self.rx_vote_message.recv())
             .await
             .expect("timed out")
@@ -224,7 +222,7 @@ where
         }
     }
 
-    async fn recv_execute(&mut self) -> (TPayload, HashMap<ShardId, Vec<ObjectPledge>>) {
+    async fn recv_execute(&mut self) -> (TariDanPayload, HashMap<ShardId, Vec<ObjectPledge>>) {
         if let Ok(msg) = timeout(Duration::from_secs(10), self.rx_execute.recv())
             .await
             .expect("timed out")
@@ -254,12 +252,13 @@ lazy_static! {
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn test_receives_new_payload_starts_new_chain() {
-    let node1 = "node1".to_string();
+    // let node1 = "node1".to_string();
+    let (node1_pk, node1) = PublicKey::random_keypair(&mut OsRng);
 
     let epoch_manager = RangeEpochManager::new(*SHARD0..*SHARD1, vec![node1.clone()]);
     let mut instance = HsTestHarness::new(node1.clone(), epoch_manager, AlwaysFirstLeader {});
 
-    let new_payload = ("Hello world".to_string(), vec![*SHARD0]);
+    let new_payload = TariDanPayload::new(Transaction::builder().sign(&node1_pk).clone().build());
     instance.tx_new.send((new_payload, *SHARD0)).await.unwrap();
     let leader_message = instance.rx_leader.recv().await.expect("Did not receive leader message");
     dbg!(leader_message);
@@ -268,11 +267,18 @@ async fn test_receives_new_payload_starts_new_chain() {
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn test_hs_waiter_leader_proposes() {
-    let node1 = "node1".to_string();
-    let node2 = "node2".to_string();
+    let (node1_pk, node1) = PublicKey::random_keypair(&mut OsRng);
+    let (_, node2) = PublicKey::random_keypair(&mut OsRng);
     let epoch_manager = RangeEpochManager::new(*SHARD0..*SHARD1, vec![node1.clone(), node2.clone()]);
     let mut instance = HsTestHarness::new(node1.clone(), epoch_manager, AlwaysFirstLeader {});
-    let payload = ("Hello World".to_string(), vec![*SHARD0]);
+    // let payload = ("Hello World".to_string(), vec![*SHARD0]);
+    let payload = TariDanPayload::new(
+        Transaction::builder()
+            .add_input(*SHARD0)
+            .sign(&node1_pk)
+            .clone()
+            .build(),
+    );
 
     dbg!(payload.to_id());
     // Send a new view message
@@ -292,11 +298,18 @@ async fn test_hs_waiter_leader_proposes() {
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn test_hs_waiter_replica_sends_vote_for_proposal() {
-    let node1 = "node1".to_string();
-    let node2 = "node2".to_string();
+    let (node1_pk, node1) = PublicKey::random_keypair(&mut OsRng);
+    let (_, node2) = PublicKey::random_keypair(&mut OsRng);
     let epoch_manager = RangeEpochManager::new(*SHARD0..*SHARD1, vec![node1.clone(), node2.clone()]);
     let mut instance = HsTestHarness::new(node1.clone(), epoch_manager, AlwaysFirstLeader {});
-    let payload = ("Hello World".to_string(), vec![*SHARD0]);
+    // let payload = ("Hello World".to_string(), vec![*SHARD0]);
+    let payload = TariDanPayload::new(
+        Transaction::builder()
+            .add_input(*SHARD0)
+            .sign(&node1_pk)
+            .clone()
+            .build(),
+    );
     let new_view_message = HotStuffMessage::new_view(QuorumCertificate::genesis(), *SHARD0, Some(payload));
 
     // Node 2 sends new view to node 1
@@ -326,11 +339,17 @@ async fn test_hs_waiter_replica_sends_vote_for_proposal() {
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn test_hs_waiter_leader_sends_new_proposal_when_enough_votes_are_received() {
-    let node1 = "node1".to_string();
-    let node2 = "node2".to_string();
+    let (node1_pk, node1) = PublicKey::random_keypair(&mut OsRng);
+    let (_, node2) = PublicKey::random_keypair(&mut OsRng);
     let epoch_manager = RangeEpochManager::new(*SHARD0..*SHARD1, vec![node1.clone(), node2.clone()]);
     let mut instance = HsTestHarness::new(node1.clone(), epoch_manager, AlwaysFirstLeader {});
-    let payload = ("Hello World".to_string(), vec![*SHARD0]);
+    let payload = TariDanPayload::new(
+        Transaction::builder()
+            .add_input(*SHARD0)
+            .sign(&node1_pk)
+            .clone()
+            .build(),
+    );
 
     // Start a new view
     let new_view_message = HotStuffMessage::new_view(QuorumCertificate::genesis(), *SHARD0, Some(payload));
@@ -382,10 +401,16 @@ async fn test_hs_waiter_leader_sends_new_proposal_when_enough_votes_are_received
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn test_hs_waiter_execute_called_when_consensus_reached() {
-    let node1 = "node1".to_string();
+    let (node1_pk, node1) = PublicKey::random_keypair(&mut OsRng);
     let epoch_manager = RangeEpochManager::new(*SHARD0..*SHARD1, vec![node1.clone()]);
     let mut instance = HsTestHarness::new(node1.clone(), epoch_manager, AlwaysFirstLeader {});
-    let payload = ("Hello World".to_string(), vec![*SHARD0]);
+    let payload = TariDanPayload::new(
+        Transaction::builder()
+            .add_input(*SHARD0)
+            .sign(&node1_pk)
+            .clone()
+            .build(),
+    );
 
     let new_view_message = HotStuffMessage::new_view(QuorumCertificate::genesis(), *SHARD0, Some(payload.clone()));
     instance
@@ -443,8 +468,8 @@ async fn test_hs_waiter_execute_called_when_consensus_reached() {
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn test_hs_waiter_multishard_votes() {
-    let node1 = "node1".to_string();
-    let node2 = "node2".to_string();
+    let (node1_pk, node1) = PublicKey::random_keypair(&mut OsRng);
+    let (_, node2) = PublicKey::random_keypair(&mut OsRng);
     let shard0_committee = vec![node1.clone()];
     let shard1_committee = vec![node2.clone()];
     let epoch_manager = RangeEpochManager::new_with_multiple(&[
@@ -454,7 +479,13 @@ async fn test_hs_waiter_multishard_votes() {
     let mut node1_instance = HsTestHarness::new(node1.clone(), epoch_manager.clone(), AlwaysFirstLeader {});
     let mut node2_instance = HsTestHarness::new(node2.clone(), epoch_manager, AlwaysFirstLeader {});
 
-    let payload = ("Hello World".to_string(), vec![*SHARD0, *SHARD1]);
+    let payload = TariDanPayload::new(
+        Transaction::builder()
+            .with_inputs(vec![*SHARD0, *SHARD1])
+            .sign(&node1_pk)
+            .clone()
+            .build(),
+    );
 
     let new_view_message = HotStuffMessage::new_view(QuorumCertificate::genesis(), *SHARD0, Some(payload.clone()));
     node1_instance
@@ -604,54 +635,51 @@ async fn test_hs_waiter_cannot_spend_until_it_is_proven_committed() {
     todo!()
 }
 
-use tari_template_lib::Hash;
-
-use crate::{
+use tari_dan_core::{
     services::{PayloadProcessor, PayloadProcessorError},
-    storage::shard_store::MemoryShardStoreFactory,
     workers::hotstuff_error::HotStuffError,
 };
+use tari_template_lib::{args::Arg, Hash};
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn test_kitchen_sink() {
-    let node1 = "node1".to_string();
-    let node2 = "node2".to_string();
+    let (_, node1) = PublicKey::random_keypair(&mut OsRng);
+    let (_, node2) = PublicKey::random_keypair(&mut OsRng);
     let shard0_committee = vec![node1.clone()];
     let shard1_committee = vec![node2.clone()];
 
-    let template_address = Hash::default();
-    //     let package = PackageBuilder::new()
-    //         .add_template(
-    //             template_address,
-    //             compile_str(
-    //                 r#"
-    //     use tari_template_lib::prelude::*;
+    // let package = PackageBuilder::new()
+    //     .add_template(
+    //         template_address,
+    //         compile_str(
+    //             r#"
+    //         use tari_template_lib::prelude::*;
     //
-    // #[template]
-    // mod hello_world {
-    //     pub struct HelloWorld { }
+    //     #[template]
+    //     mod hello_world {
+    //         pub struct HelloWorld { }
     //
-    //     impl HelloWorld {
-    //         pub fn new() -> Self {
-    //             Self {}
-    //         }
+    //         impl HelloWorld {
+    //             pub fn new() -> Self {
+    //                 Self {}
+    //             }
     //
-    //         pub fn greet() -> String {
-    //             "Hello World!".to_string()
+    //             pub fn greet() -> String {
+    //                 "Hello World!".to_string()
+    //             }
     //         }
     //     }
-    // }
-    //     "#,
-    //                 &[],
-    //             )
-    //             .unwrap()
-    //             .load_template()
-    //             .unwrap(),
+    //         "#,
+    //             &[],
     //         )
-    //         .build();
+    //         .unwrap()
+    //         .load_template()
+    //         .unwrap(),
+    //     )
+    //     .build();
 
     let instruction = Instruction::CallFunction {
-        template_address,
+        template_address: Hash::default(),
         function: "new".to_string(),
         args: vec![Arg::Literal(b"Kitchen Sink".to_vec())],
     };
@@ -740,10 +768,8 @@ async fn test_kitchen_sink() {
     // let execute_msg = node1_instance.recv_execute().await;
 }
 
-async fn do_rounds_of_hotstuff<TPayload: Payload + 'static, TAddr: NodeAddressable + 'static>(
-    nodes: &mut [HsTestHarness<TPayload, TAddr>],
-    rounds: usize,
-) {
+async fn do_rounds_of_hotstuff(nodes: &mut [HsTestHarness], rounds: usize) {
+    #[allow(clippy::mutable_key_type)]
     let mut node_map = HashMap::new();
     for (i, n) in nodes.iter().enumerate() {
         node_map.insert(n.identity(), i);
@@ -766,6 +792,7 @@ async fn do_rounds_of_hotstuff<TPayload: Payload + 'static, TAddr: NodeAddressab
             }
         }
 
+        #[allow(clippy::mutable_key_type)]
         let mut votes = HashMap::new();
         for node in nodes.iter_mut() {
             let (vote1, leader) = node.recv_vote_message().await;

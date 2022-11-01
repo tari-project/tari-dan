@@ -21,7 +21,9 @@
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 use diesel::{connection::TransactionManager, Connection, OptionalExtension, QueryDsl, RunQueryDsl, SqliteConnection};
+use tari_dan_common_types::optional::Optional;
 use tari_dan_engine::state_store::{AtomicDb, StateReader, StateStoreError, StateWriter};
+use tari_utilities::hex::to_hex;
 
 use crate::{diesel::ExpressionMethods, error::SqliteStorageError, schema::metadata};
 pub struct SqliteStateStore {
@@ -82,7 +84,7 @@ impl<'a> SqliteTransaction<'a> {
 }
 
 impl<'a> StateReader for SqliteTransaction<'a> {
-    fn get_state_raw(&self, key: &[u8]) -> Result<Option<Vec<u8>>, StateStoreError> {
+    fn get_state_raw(&self, key: &[u8]) -> Result<Vec<u8>, StateStoreError> {
         use crate::schema::metadata::dsl;
         let val = dsl::metadata
             .select(metadata::value)
@@ -94,6 +96,10 @@ impl<'a> StateReader for SqliteTransaction<'a> {
                     source,
                     operation: "get state".to_string(),
                 })
+            })?
+            .ok_or(StateStoreError::NotFound {
+                kind: "state",
+                key: to_hex(key),
             })?;
 
         Ok(val)
@@ -122,7 +128,7 @@ impl<'a> StateWriter for SqliteTransaction<'a> {
         use crate::schema::metadata::dsl;
 
         // TODO: Check key exists without getting the data
-        match self.get_state_raw(key) {
+        match self.get_state_raw(key).optional() {
             Ok(Some(_)) => diesel::update(dsl::metadata.filter(metadata::key.eq(key)))
                 .set(metadata::value.eq(value))
                 .execute(self.conn)
@@ -193,17 +199,17 @@ mod tests {
         {
             let mut access = store.write_access().unwrap();
             access.set_state(b"abc", user_data.clone()).unwrap();
-            let res = access.get_state(b"abc").unwrap();
-            assert_eq!(res, Some(user_data.clone()));
+            let res = access.get_state::<_, UserData>(b"abc").unwrap();
+            assert_eq!(res, user_data);
             assert!(access.exists(b"abc").unwrap());
-            let res = access.get_state::<_, UserData>(b"def").unwrap();
+            let res = access.get_state::<_, UserData>(b"def").optional().unwrap();
             assert_eq!(res, None);
             // Drop without commit rolls back
         }
 
         {
             let access = store.read_access().unwrap();
-            let res = access.get_state::<_, UserData>(b"abc").unwrap();
+            let res = access.get_state::<_, UserData>(b"abc").optional().unwrap();
             assert_eq!(res, None);
             assert!(!access.exists(b"abc").unwrap());
         }
@@ -215,7 +221,7 @@ mod tests {
         }
 
         let access = store.read_access().unwrap();
-        let res = access.get_state(b"abc").unwrap();
-        assert_eq!(res, Some(user_data));
+        let res = access.get_state::<_, UserData>(b"abc").unwrap();
+        assert_eq!(res, user_data);
     }
 }
