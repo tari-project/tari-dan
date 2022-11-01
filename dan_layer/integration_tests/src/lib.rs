@@ -1,4 +1,4 @@
-//  Copyright 2021. The Tari Project
+//  Copyright 2022. The Tari Project
 //
 //  Redistribution and use in source and binary forms, with or without modification, are permitted provided that the
 //  following conditions are met:
@@ -20,20 +20,8 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-#[macro_use]
-extern crate diesel;
-#[macro_use]
-extern crate diesel_migrations;
+mod temp_shard_store_factory;
+pub use temp_shard_store_factory::TempShardStoreFactory;
 
-pub mod error;
-mod schema;
-mod sqlite_transaction;
-pub use sqlite_transaction::SqliteTransaction;
-mod sqlite_db_factory;
-pub use sqlite_db_factory::SqliteDbFactory;
-pub mod engine_state_store;
-pub mod global;
-mod models;
-pub mod sqlite_shard_store_factory;
-mod sqlite_storage_service;
-pub use sqlite_storage_service::SqliteStorageService;
+#[cfg(test)]
+mod test_consensus;
