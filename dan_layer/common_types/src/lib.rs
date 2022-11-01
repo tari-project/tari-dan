@@ -123,7 +123,7 @@ impl SubstateState {
     }
 }
 
-#[derive(Debug, Clone, Deserialize, Serialize)]
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
 pub struct ObjectClaim {}
 
 impl ObjectClaim {

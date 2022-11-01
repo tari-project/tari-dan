@@ -5662,11 +5662,33 @@ dependencies = [
  "tari_dan_engine",
  "tari_dan_storage",
  "tari_engine_types",
+ "tari_test_utils",
  "tari_utilities",
  "thiserror",
  "time 0.3.16",
  "tokio",
  "tokio-stream",
+]
+
+[[package]]
+name = "tari_dan_tests"
+version = "0.35.1"
+dependencies = [
+ "lazy_static",
+ "rand 0.7.3",
+ "tari_common",
+ "tari_common_types",
+ "tari_crypto",
+ "tari_dan_common_types",
+ "tari_dan_core",
+ "tari_dan_engine",
+ "tari_dan_storage_sqlite",
+ "tari_engine_types",
+ "tari_shutdown",
+ "tari_template_lib",
+ "tari_test_utils",
+ "tari_utilities",
+ "tokio",
 ]
 
 [[package]]

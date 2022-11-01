@@ -29,7 +29,7 @@ use tari_dan_engine::transaction::Transaction;
 
 use crate::models::{ConsensusHash, Payload};
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct TariDanPayload {
     transaction: Transaction,
 }
