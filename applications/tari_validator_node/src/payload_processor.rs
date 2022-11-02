@@ -85,7 +85,11 @@ where TTemplateProvider: TemplateProvider
         let package = builder.build();
 
         let processor = TransactionProcessor::new(runtime, package);
-        let result = processor.execute(transaction)?;
+        let tx_hash = *transaction.hash();
+        let result = match processor.execute(transaction) {
+            Ok(result) => result,
+            Err(err) => FinalizeResult::errored(tx_hash, err.to_string()),
+        };
         Ok(result)
     }
 }
