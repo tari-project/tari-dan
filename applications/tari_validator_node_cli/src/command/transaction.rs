@@ -26,7 +26,7 @@ use clap::{Args, Subcommand};
 use tari_dan_common_types::{ShardId, SubstateChange};
 use tari_dan_engine::transaction::Transaction;
 use tari_engine_types::{
-    commit_result::{FinalizeResult, TransactionResult},
+    commit_result::TransactionResult,
     execution_result::Type,
     instruction::Instruction,
     substate::SubstateValue,
@@ -34,7 +34,10 @@ use tari_engine_types::{
 };
 use tari_template_lib::{args::Arg, models::ComponentAddress};
 use tari_utilities::hex::to_hex;
-use tari_validator_node_client::{types::SubmitTransactionRequest, ValidatorNodeClient};
+use tari_validator_node_client::{
+    types::{SubmitTransactionRequest, TransactionFinalizeResult},
+    ValidatorNodeClient,
+};
 
 use crate::{account_manager::AccountFileManager, from_hex::FromHex};
 
@@ -235,12 +238,19 @@ async fn handle_submit(
     Ok(())
 }
 
-fn summarize(result: &FinalizeResult) {
-    match result.result {
+fn summarize(result: &TransactionFinalizeResult) {
+    println!("✅️ Transaction finalized",);
+    println!();
+    println!("Epoch: {}", result.qc.epoch());
+    println!("Payload height: {}", result.qc.payload_height());
+    println!("Signed by: {} validator nodes", result.qc.signature().len());
+    println!();
+    println!("========= Substates =========");
+    match result.finalize.result {
         TransactionResult::Accept(ref diff) => {
             for (address, substate) in diff.up_iter() {
                 println!(
-                    "️🌲 New substate {} (v{})",
+                    "️🌲 UP substate {} (v{})",
                     ShardId::from_address(address),
                     substate.version()
                 );
@@ -261,7 +271,7 @@ fn summarize(result: &FinalizeResult) {
                 println!();
             }
             for address in diff.down_iter() {
-                println!("🗑️ Destroyed substate {}", ShardId::from_address(address));
+                println!("🗑️ DOWN substate {}", ShardId::from_address(address));
                 println!();
             }
         },
@@ -270,7 +280,7 @@ fn summarize(result: &FinalizeResult) {
         },
     }
     println!("========= Return Values =========");
-    for result in &result.execution_results {
+    for result in &result.finalize.execution_results {
         match result.return_type {
             Type::Unit => {},
             Type::Bool => {
@@ -317,7 +327,7 @@ fn summarize(result: &FinalizeResult) {
 
     println!();
     println!("========= LOGS =========");
-    for log in &result.logs {
+    for log in &result.finalize.logs {
         println!("{}", log);
     }
 }
