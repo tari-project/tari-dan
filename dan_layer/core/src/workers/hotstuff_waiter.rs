@@ -421,7 +421,6 @@ where
                 .map(|s| (s.shard_id, s.pledges.clone()))
                 .collect();
             let finalize_result = self.execute(shard_pledges, payload)?;
-            self.publish_result_event(node.justify().payload_id(), &finalize_result);
             let changes = extract_changes(node.payload_id(), &finalize_result)?;
             info!(
                 target: LOG_TARGET,
@@ -429,22 +428,13 @@ where
                 serde_json::to_string(&changes).unwrap()
             );
 
+            let qc = node.justify().clone();
             self.on_commit(node, &changes, &mut tx)?;
+            self.publish_event(HotStuffEvent::OnFinalized(Box::new(qc), finalize_result));
         }
         tx.commit().map_err(|e| e.into())?;
 
         Ok(())
-    }
-
-    fn publish_result_event(&self, payload_id: PayloadId, result: &FinalizeResult) {
-        match result.result {
-            TransactionResult::Accept(_) => {
-                self.publish_event(HotStuffEvent::OnAccept(payload_id, result.clone()));
-            },
-            TransactionResult::Reject(ref reject) => {
-                self.publish_event(HotStuffEvent::OnReject(payload_id, reject.clone()));
-            },
-        }
     }
 
     fn on_commit(
@@ -479,16 +469,9 @@ where
 
     fn execute(
         &self,
-        // node: &HotStuffTreeNode<TAddr, TPayload>,
         shard_pledges: HashMap<ShardId, Vec<ObjectPledge>>,
         payload: TPayload,
     ) -> Result<FinalizeResult, HotStuffError> {
-        // let shard_pledges = node
-        //     .justify()
-        //     .all_shard_nodes()
-        //     .iter()
-        //     .map(|s| (s.shard_id, s.pledges.clone()))
-        //     .collect();
         let finalize = self.payload_processor.process_payload(payload, shard_pledges)?;
         Ok(finalize)
     }
