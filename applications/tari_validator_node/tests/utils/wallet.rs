@@ -50,6 +50,7 @@ pub struct WalletProcess {
     pub port: u64,
     pub grpc_port: u64,
     pub handle: JoinHandle<()>,
+    pub temp_dir_path: String,
 }
 
 pub async fn spawn_wallet(world: &mut TariWorld, wallet_name: String, base_node_name: String) {
@@ -70,6 +71,8 @@ pub async fn spawn_wallet(world: &mut TariWorld, wallet_name: String, base_node_
         net_address: format! {"/ip4/127.0.0.1/tcp/{}", base_node_port},
         public_key_hex: base_node_public_key.clone().to_string(),
     };
+    let temp_dir = tempdir().unwrap();
+    let temp_dir_path = temp_dir.path().display().to_string();
 
     let handle = thread::spawn(move || {
         let mut wallet_config = tari_console_wallet::ApplicationConfig {
@@ -79,7 +82,6 @@ pub async fn spawn_wallet(world: &mut TariWorld, wallet_name: String, base_node_
             peer_seeds: PeerSeedsConfig::default(),
         };
 
-        let temp_dir = tempdir().unwrap();
         eprintln!("Using wallet temp_dir: {}", temp_dir.path().display());
 
         wallet_config.wallet.network = Network::LocalNet;
@@ -117,6 +119,7 @@ pub async fn spawn_wallet(world: &mut TariWorld, wallet_name: String, base_node_
         port,
         grpc_port,
         handle,
+        temp_dir_path,
     };
     world.wallets.insert(wallet_name.clone(), wallet_process);
 
