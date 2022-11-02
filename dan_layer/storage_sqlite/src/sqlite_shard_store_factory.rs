@@ -207,7 +207,6 @@ impl SqliteShardStoreTransaction {
             pledged_to_payload: PayloadId::try_from(obj.pledged_to_payload_id.unwrap_or_default())?,
             pledged_until: NodeHeight(obj.pledged_until_height.unwrap_or_default() as u64),
         };
-        dbg!(&pledge);
         Ok(pledge)
     }
 }
@@ -467,7 +466,7 @@ impl ShardStoreTransaction<PublicKey, TariDanPayload> for SqliteShardStoreTransa
                 .payload_height
                 .try_into()
                 .map_err(|_| Self::Error::InvalidIntegerCast)?;
-            let local_pledges: Vec<ObjectPledge> =
+            let local_pledge: Option<ObjectPledge> =
                 serde_json::from_str(&node.local_pledges).map_err(|source| StorageError::SerdeJson {
                     source,
                     operation: "get_node".to_string(),
@@ -493,7 +492,7 @@ impl ShardStoreTransaction<PublicKey, TariDanPayload> for SqliteShardStoreTransa
                 payload,
                 None,
                 NodeHeight(payload_hgt),
-                local_pledges,
+                local_pledge,
                 Epoch(epoch),
                 proposed_by,
                 justify,
@@ -520,7 +519,7 @@ impl ShardStoreTransaction<PublicKey, TariDanPayload> for SqliteShardStoreTransa
         let payload_id = Vec::from(node.payload_id().as_bytes());
         let payload_height = node.payload_height().as_u64() as i64;
 
-        let local_pledges = json!(&node.local_pledges()).to_string();
+        let local_pledges = json!(&node.local_pledge()).to_string();
 
         let epoch = node.epoch().as_u64() as i64;
         let proposed_by = Vec::from(node.proposed_by().as_bytes());

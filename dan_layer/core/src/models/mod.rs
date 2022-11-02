@@ -258,7 +258,7 @@ impl From<u64> for ChainHeight {
 pub struct ShardVote {
     pub shard_id: ShardId,
     pub node_hash: TreeNodeHash,
-    pub pledges: Vec<ObjectPledge>,
+    pub pledge: Option<ObjectPledge>,
 }
 
 #[derive(Debug, Serialize)]

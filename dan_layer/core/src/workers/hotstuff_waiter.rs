@@ -25,7 +25,7 @@ use std::collections::HashMap;
 use futures::future::join_all;
 use log::*;
 use tari_dan_common_types::{Epoch, PayloadId, ShardId, SubstateState};
-use tari_engine_types::commit_result::{FinalizeResult, TransactionResult};
+use tari_engine_types::commit_result::{FinalizeResult, RejectResult, TransactionResult};
 use tari_shutdown::ShutdownSignal;
 use tokio::{
     sync::{
@@ -279,7 +279,7 @@ where
                 self.identity.clone(),
                 NodeHeight(leaf_height.0 + 1),
                 payload_height,
-                vec![local_pledge],
+                Some(local_pledge),
             );
             tx.save_node(leaf_node.clone()).map_err(|e| e.into())?;
             tx.update_leaf_node(shard, *leaf_node.hash(), leaf_node.height())
@@ -304,7 +304,7 @@ where
         leader: TAddr,
         height: NodeHeight,
         payload_height: NodeHeight,
-        local_pledges: Vec<ObjectPledge>,
+        local_pledge: Option<ObjectPledge>,
     ) -> HotStuffTreeNode<TAddr, TPayload> {
         HotStuffTreeNode::new(
             parent,
@@ -313,7 +313,7 @@ where
             payload_id,
             payload,
             payload_height,
-            local_pledges,
+            local_pledge,
             epoch,
             leader,
             qc,
@@ -418,7 +418,7 @@ where
                 .justify()
                 .all_shard_nodes()
                 .iter()
-                .map(|s| (s.shard_id, s.pledges.clone()))
+                .map(|s| (s.shard_id, s.pledge.clone()))
                 .collect();
             let finalize_result = self.execute(shard_pledges, payload)?;
             self.publish_result_event(node.justify().payload_id(), &finalize_result);
@@ -480,7 +480,7 @@ where
     fn execute(
         &self,
         // node: &HotStuffTreeNode<TAddr, TPayload>,
-        shard_pledges: HashMap<ShardId, Vec<ObjectPledge>>,
+        shard_pledges: HashMap<ShardId, Option<ObjectPledge>>,
         payload: TPayload,
     ) -> Result<FinalizeResult, HotStuffError> {
         let finalize = self.payload_processor.process_payload(payload, shard_pledges)?;
@@ -564,7 +564,7 @@ where
                         leader_proposals.push(ShardVote {
                             shard_id: *s,
                             node_hash: *leader_proposal.hash(),
-                            pledges: leader_proposal.local_pledges().to_vec(),
+                            pledge: leader_proposal.local_pledge().cloned(),
                         });
                     } else {
                         break;
@@ -572,11 +572,17 @@ where
                 }
                 if leader_proposals.len() == involved_shards.len() {
                     // Execute the payload!
-                    let shard_pledges = leader_proposals
+                    let shard_pledges: HashMap<ShardId, Option<ObjectPledge>> = leader_proposals
                         .iter()
-                        .map(|s| (s.shard_id, s.pledges.clone()))
+                        .map(|s| (s.shard_id, s.pledge.clone()))
                         .collect();
-                    let finalize_result = self.execute(shard_pledges, payload)?;
+                    let mut finalize_result = self.execute(shard_pledges.clone(), payload)?;
+
+                    // validate that correct objects have been pledged.
+                    let changes = extract_changes(node.payload_id(), &finalize_result)?;
+
+                    // Change the vote if we do not have all the objects pledged
+                    Self::validate_pledges(&shard_pledges, &mut finalize_result, changes);
 
                     // it may happen that we are involved in more than one committee, in which case send the votes to
                     // each leader.
@@ -626,6 +632,60 @@ where
         }
         self.update_nodes(node.clone()).await?;
         Ok(())
+    }
+
+    fn validate_pledges(
+        shard_pledges: &HashMap<ShardId, Option<ObjectPledge>>,
+        finalize_result: &mut FinalizeResult,
+        changes: HashMap<ShardId, SubstateState>,
+    ) {
+        for (shard_changed, substate) in changes {
+            let pledged_object = shard_pledges.get(&shard_changed);
+            if let Some(Some(pledge)) = pledged_object {
+                match substate {
+                    SubstateState::DoesNotExist => match pledge.current_state {
+                        SubstateState::DoesNotExist => (),
+                        _ => {
+                            finalize_result.result = TransactionResult::Reject(RejectResult {
+                                reason: format!("Shard {} was required to not exist, but it does", shard_changed,),
+                            });
+                            break;
+                        },
+                    },
+                    SubstateState::Up { .. } => match pledge.current_state {
+                        SubstateState::DoesNotExist => (),
+                        _ => {
+                            finalize_result.result = TransactionResult::Reject(RejectResult {
+                                reason: format!(
+                                    "Shard {} was required to not exist, but it is {}",
+                                    shard_changed,
+                                    pledge.current_state.as_str(),
+                                ),
+                            });
+                            break;
+                        },
+                    },
+                    SubstateState::Down { .. } => match pledge.current_state {
+                        SubstateState::Up { .. } => (),
+                        _ => {
+                            finalize_result.result = TransactionResult::Reject(RejectResult {
+                                reason: format!(
+                                    "Shard {} was required to be up, but it is {}",
+                                    shard_changed,
+                                    pledge.current_state.as_str(),
+                                ),
+                            });
+                            break;
+                        },
+                    },
+                }
+            } else {
+                finalize_result.result = TransactionResult::Reject(RejectResult {
+                    reason: format!("Shard {} was not pledged", shard_changed),
+                });
+                break;
+            }
+        }
     }
 
     fn sign(&self, _node_hash: &TreeNodeHash, _shard: ShardId) -> ValidatorSignature {
