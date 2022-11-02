@@ -33,18 +33,30 @@ use tari_template_lib::{
 pub struct IdProvider {
     current_id: Arc<AtomicU32>,
     transaction_hash: Hash,
+    max_ids: u32,
+}
+
+#[derive(Debug, thiserror::Error)]
+#[error("Maximum ID allocation of {max} exceeded")]
+pub struct MaxIdsExceeded {
+    max: u32,
 }
 
 impl IdProvider {
-    pub fn new(transaction_hash: Hash) -> Self {
+    pub fn new(transaction_hash: Hash, max_ids: u32) -> Self {
         Self {
             current_id: Arc::new(AtomicU32::new(0)),
             transaction_hash,
+            max_ids,
         }
     }
 
-    fn next(&self) -> u32 {
-        self.current_id.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
+    fn next(&self) -> Result<u32, MaxIdsExceeded> {
+        let id = self.current_id.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        if id >= self.max_ids {
+            return Err(MaxIdsExceeded { max: self.max_ids });
+        }
+        Ok(id)
     }
 
     pub fn transaction_hash(&self) -> Hash {
@@ -53,30 +65,45 @@ impl IdProvider {
 
     /// Generates a new unique id H(tx_hash || n).
     /// NOTE: we rely on IDs being predictable for all outputs (components, resources, vaults).
-    fn new_id(&self) -> Hash {
-        hasher("output")
+    fn new_id(&self) -> Result<Hash, MaxIdsExceeded> {
+        let id = hasher("output")
             .chain(&self.transaction_hash)
-            .chain(&self.next())
-            .result()
+            .chain(&self.next()?)
+            .result();
+        Ok(id)
     }
 
-    pub fn new_resource_address(&self) -> ResourceAddress {
+    pub fn new_resource_address(&self) -> Result<ResourceAddress, MaxIdsExceeded> {
         self.new_id()
     }
 
-    pub fn new_component_address(&self) -> ComponentAddress {
+    pub fn new_component_address(&self) -> Result<ComponentAddress, MaxIdsExceeded> {
         self.new_id()
     }
 
-    pub fn new_output_shard(&self) -> ShardId {
-        self.new_id().into_array().into()
+    pub fn new_output_shard(&self) -> Result<ShardId, MaxIdsExceeded> {
+        Ok(self.new_id()?.into_array().into())
     }
 
-    pub fn new_vault_id(&self) -> VaultId {
+    pub fn new_vault_id(&self) -> Result<VaultId, MaxIdsExceeded> {
         self.new_id()
     }
 
-    pub fn new_bucket_id(&self) -> BucketId {
+    pub fn new_bucket_id(&self) -> Result<BucketId, MaxIdsExceeded> {
         self.next()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn it_fails_if_generating_more_ids_than_the_max() {
+        let id_provider = IdProvider::new(Hash::default(), 0);
+        id_provider.new_id().unwrap_err();
+        let id_provider = IdProvider::new(Hash::default(), 1);
+        id_provider.new_id().unwrap();
+        id_provider.new_id().unwrap_err();
     }
 }

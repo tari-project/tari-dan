@@ -77,11 +77,15 @@ impl Transaction {
 #[derive(Debug, Clone, Default, Deserialize, Serialize, PartialEq)]
 pub struct TransactionMeta {
     involved_objects: HashMap<ShardId, (SubstateChange, ObjectClaim)>,
+    max_outputs: u32,
 }
 
 impl TransactionMeta {
-    pub fn new(involved_objects: HashMap<ShardId, (SubstateChange, ObjectClaim)>) -> Self {
-        Self { involved_objects }
+    pub fn new(involved_objects: HashMap<ShardId, (SubstateChange, ObjectClaim)>, max_outputs: u32) -> Self {
+        Self {
+            involved_objects,
+            max_outputs,
+        }
     }
 
     pub fn involved_objects_iter(&self) -> impl Iterator<Item = (&ShardId, &(SubstateChange, ObjectClaim))> + '_ {
@@ -94,6 +98,10 @@ impl TransactionMeta {
 
     pub fn objects_for_shard(&self, shard_id: ShardId) -> Option<(SubstateChange, ObjectClaim)> {
         self.involved_objects.get(&shard_id).cloned()
+    }
+
+    pub fn max_outputs(&self) -> u32 {
+        self.max_outputs
     }
 }
 

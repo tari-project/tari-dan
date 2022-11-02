@@ -83,7 +83,7 @@ struct WorkingState {
 }
 
 impl StateTracker {
-    pub fn new(state_store: MemoryStateStore, transaction_hash: Hash) -> Self {
+    pub fn new(state_store: MemoryStateStore, id_provider: IdProvider) -> Self {
         Self {
             state_store,
             working_state: Arc::new(RwLock::new(WorkingState {
@@ -96,7 +96,7 @@ impl StateTracker {
                 last_instruction_output: None,
                 workspace: HashMap::new(),
             })),
-            id_provider: IdProvider::new(transaction_hash),
+            id_provider,
         }
     }
 
@@ -119,7 +119,7 @@ impl StateTracker {
     }
 
     pub fn mint_resource(&self, mint_arg: MintResourceArg) -> Result<ResourceAddress, RuntimeError> {
-        let resource_address = self.id_provider.new_resource_address();
+        let resource_address = self.id_provider.new_resource_address()?;
         match mint_arg {
             MintResourceArg::Fungible { amount, metadata } => {
                 self.check_amount(amount)?;
@@ -161,12 +161,12 @@ impl StateTracker {
         })
     }
 
-    pub fn new_bucket(&self, resource: Resource) -> BucketId {
+    pub fn new_bucket(&self, resource: Resource) -> Result<BucketId, RuntimeError> {
         self.write_with(|state| {
-            let bucket_id = self.id_provider.new_bucket_id();
+            let bucket_id = self.id_provider.new_bucket_id()?;
             let bucket = Bucket::new(resource);
             state.buckets.insert(bucket_id, bucket);
-            bucket_id
+            Ok(bucket_id)
         })
     }
 
@@ -210,7 +210,7 @@ impl StateTracker {
             module_name,
             state,
         };
-        let component_address = self.id_provider().new_component_address();
+        let component_address = self.id_provider().new_component_address()?;
         let component = ComponentInstance::new(component_address, component);
         self.write_with(|state| {
             // New root component
@@ -263,8 +263,12 @@ impl StateTracker {
         self.write_with(|s| s.runtime_state = Some(state));
     }
 
-    pub fn new_vault(&self, resource_address: ResourceAddress, resource_type: ResourceType) -> VaultId {
-        let vault_id = self.id_provider.new_vault_id();
+    pub fn new_vault(
+        &self,
+        resource_address: ResourceAddress,
+        resource_type: ResourceType,
+    ) -> Result<VaultId, RuntimeError> {
+        let vault_id = self.id_provider.new_vault_id()?;
         let resource = match resource_type {
             ResourceType::Fungible => Resource::fungible(resource_address, 0.into(), Metadata::new()),
             ResourceType::NonFungible => Resource::non_fungible(resource_address, vec![], Metadata::new()),
@@ -276,7 +280,7 @@ impl StateTracker {
             state.new_vaults.insert(vault_id, vault.into());
         });
 
-        vault_id
+        Ok(vault_id)
     }
 
     pub fn borrow_vault_mut<R, F: FnOnce(&mut Vault) -> R>(&self, vault_id: &VaultId, f: F) -> Result<R, RuntimeError> {

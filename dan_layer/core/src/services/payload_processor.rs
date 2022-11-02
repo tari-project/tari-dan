@@ -23,7 +23,7 @@
 use std::collections::HashMap;
 
 use tari_dan_common_types::ShardId;
-use tari_dan_engine::transaction::TransactionError;
+use tari_dan_engine::{state_store::StateStoreError, transaction::TransactionError};
 use tari_engine_types::commit_result::FinalizeResult;
 
 use crate::models::{ObjectPledge, Payload};
@@ -44,4 +44,6 @@ pub enum PayloadProcessorError {
     // is in the bin)
     #[error("Failed to load template: {0}")]
     FailedToLoadTemplate(anyhow::Error),
+    #[error(transparent)]
+    StateStoreError(#[from] StateStoreError),
 }

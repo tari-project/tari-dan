@@ -547,7 +547,6 @@ where
             .await?;
 
         let mut votes_to_send = vec![];
-        // let mut finalize_result = None;
 
         {
             let mut tx = self.shard_store.create_tx()?;

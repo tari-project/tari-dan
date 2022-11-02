@@ -29,8 +29,8 @@ use tari_dan_core::{
 };
 use tari_dan_engine::{
     packager::{Package, TemplateModuleLoader},
-    runtime::{RuntimeInterfaceImpl, StateTracker},
-    state_store::{memory::MemoryStateStore, AtomicDb, StateWriter},
+    runtime::{IdProvider, RuntimeInterfaceImpl, StateTracker},
+    state_store::{memory::MemoryStateStore, AtomicDb, StateStoreError, StateWriter},
     transaction::TransactionProcessor,
 };
 use tari_engine_types::{
@@ -61,15 +61,11 @@ where TTemplateProvider: TemplateProvider
         let transaction = payload.into_payload();
         let template_addresses = transaction.required_templates();
 
-        let state_db = create_populated_state_store(pledges.into_values().flatten());
-        let tracker = StateTracker::new(state_db, *transaction.hash());
+        let state_db = create_populated_state_store(pledges.into_values().flatten())?;
+        let id_provider = IdProvider::new(*transaction.hash(), transaction.meta().max_outputs());
+        let tracker = StateTracker::new(state_db, id_provider);
         let runtime = RuntimeInterfaceImpl::new(tracker);
 
-        // let mut builder = Package::builder();
-        // for wasm in wasms {
-        //     builder.add_wasm_module(wasm);
-        // }
-        // let package = builder.build().unwrap();
         let mut builder = Package::builder();
 
         for addr in template_addresses {
@@ -90,11 +86,13 @@ where TTemplateProvider: TemplateProvider
     }
 }
 
-fn create_populated_state_store<I: IntoIterator<Item = ObjectPledge>>(inputs: I) -> MemoryStateStore {
+fn create_populated_state_store<I: IntoIterator<Item = ObjectPledge>>(
+    inputs: I,
+) -> Result<MemoryStateStore, StateStoreError> {
     let state_db = MemoryStateStore::default();
 
     // Populate state db with inputs
-    let mut tx = state_db.write_access().unwrap();
+    let mut tx = state_db.write_access()?;
     for input in inputs {
         match input.current_state {
             SubstateState::Up { data, .. } => {
@@ -126,7 +124,7 @@ fn create_populated_state_store<I: IntoIterator<Item = ObjectPledge>>(inputs: I)
             SubstateState::DoesNotExist | SubstateState::Down { .. } => { /* Do nothing */ },
         }
     }
-    tx.commit().unwrap();
+    tx.commit()?;
 
-    state_db
+    Ok(state_db)
 }

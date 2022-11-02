@@ -5,7 +5,7 @@
 use std::sync::{Arc, RwLock};
 
 use tari_dan_engine::{
-    runtime::{RuntimeError, RuntimeInterface, RuntimeInterfaceImpl, RuntimeState, StateTracker},
+    runtime::{IdProvider, RuntimeError, RuntimeInterface, RuntimeInterfaceImpl, RuntimeState, StateTracker},
     state_store::memory::MemoryStateStore,
 };
 use tari_engine_types::{
@@ -42,7 +42,7 @@ impl Default for MockRuntimeInterface {
         // TODO: We use a zero transaction hash for tests, however this isn't correct and won't always work.
         let tx_hash = Hash::default();
         let state = MemoryStateStore::default();
-        let tracker = StateTracker::new(state.clone(), tx_hash);
+        let tracker = StateTracker::new(state.clone(), IdProvider::new(tx_hash, 100));
         Self {
             state,
             calls: Arc::new(RwLock::new(vec![])),
