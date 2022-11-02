@@ -29,72 +29,53 @@ use tari_dan_core::{
 };
 use tokio::sync::{broadcast, mpsc::Sender, oneshot};
 
-use crate::p2p::services::epoch_manager::epoch_manager_service::{
-    EpochManagerEvent,
-    EpochManagerRequest,
-    EpochManagerResponse,
-};
+use crate::p2p::services::epoch_manager::epoch_manager_service::{EpochManagerEvent, EpochManagerRequest};
 
 #[derive(Clone)]
 pub struct EpochManagerHandle {
-    tx_request: Sender<(
-        EpochManagerRequest,
-        oneshot::Sender<Result<EpochManagerResponse, EpochManagerError>>,
-    )>,
+    tx_request: Sender<EpochManagerRequest>,
 }
 
 impl EpochManagerHandle {
-    pub fn new(
-        tx_request: Sender<(
-            EpochManagerRequest,
-            oneshot::Sender<Result<EpochManagerResponse, EpochManagerError>>,
-        )>,
-    ) -> Self {
+    pub fn new(tx_request: Sender<EpochManagerRequest>) -> Self {
         Self { tx_request }
     }
 
     pub async fn update_epoch(&self, height: u64) -> Result<(), EpochManagerError> {
         let (tx, rx) = oneshot::channel();
         self.tx_request
-            .send((EpochManagerRequest::UpdateEpoch { height }, tx))
+            .send(EpochManagerRequest::UpdateEpoch { height, reply: tx })
             .await
             .map_err(|_| EpochManagerError::SendError)?;
-        let _result = rx.await.map_err(|_| EpochManagerError::ReceiveError)??;
-        Ok(())
+        rx.await.map_err(|_| EpochManagerError::ReceiveError)?
     }
 
     pub async fn last_registration_epoch(&self) -> Result<Option<Epoch>, EpochManagerError> {
         let (tx, rx) = oneshot::channel();
         self.tx_request
-            .send((EpochManagerRequest::LastRegistrationEpoch, tx))
+            .send(EpochManagerRequest::LastRegistrationEpoch { reply: tx })
             .await
             .map_err(|_| EpochManagerError::SendError)?;
-        match rx.await.map_err(|_| EpochManagerError::ReceiveError)?? {
-            EpochManagerResponse::LastRegistrationEpoch { epoch } => Ok(epoch),
-            _ => Err(EpochManagerError::UnexpectedResponse),
-        }
+        rx.await.map_err(|_| EpochManagerError::ReceiveError)?
     }
 
     pub async fn update_last_registration_epoch(&self, epoch: Epoch) -> Result<(), EpochManagerError> {
         let (tx, rx) = oneshot::channel();
         self.tx_request
-            .send((EpochManagerRequest::UpdateLastRegistrationEpoch { epoch }, tx))
+            .send(EpochManagerRequest::UpdateLastRegistrationEpoch { epoch, reply: tx })
             .await
             .map_err(|_| EpochManagerError::SendError)?;
-        let _result = rx.await.map_err(|_| EpochManagerError::ReceiveError)??;
-        Ok(())
+
+        rx.await.map_err(|_| EpochManagerError::ReceiveError)?
     }
 
     pub async fn subscribe(&self) -> Result<broadcast::Receiver<EpochManagerEvent>, EpochManagerError> {
         let (tx, rx) = oneshot::channel();
         self.tx_request
-            .send((EpochManagerRequest::Subscribe, tx))
+            .send(EpochManagerRequest::Subscribe { reply: tx })
             .await
             .map_err(|_| EpochManagerError::SendError)?;
-        match rx.await.map_err(|_| EpochManagerError::ReceiveError)?? {
-            EpochManagerResponse::Subscribe { rx } => Ok(rx),
-            _ => Err(EpochManagerError::UnexpectedResponse),
-        }
+        rx.await.map_err(|_| EpochManagerError::ReceiveError)?
     }
 }
 #[async_trait]
@@ -102,25 +83,21 @@ impl EpochManager<CommsPublicKey> for EpochManagerHandle {
     async fn current_epoch(&self) -> Result<Epoch, EpochManagerError> {
         let (tx, rx) = oneshot::channel();
         self.tx_request
-            .send((EpochManagerRequest::CurrentEpoch, tx))
+            .send(EpochManagerRequest::CurrentEpoch { reply: tx })
             .await
             .map_err(|_| EpochManagerError::SendError)?;
-        match rx.await.map_err(|_| EpochManagerError::ReceiveError)?? {
-            EpochManagerResponse::CurrentEpoch { epoch } => Ok(epoch),
-            _ => Err(EpochManagerError::UnexpectedResponse),
-        }
+
+        rx.await.map_err(|_| EpochManagerError::ReceiveError)?
     }
 
     async fn is_epoch_valid(&self, epoch: Epoch) -> Result<bool, EpochManagerError> {
         let (tx, rx) = oneshot::channel();
         self.tx_request
-            .send((EpochManagerRequest::IsEpochValid { epoch }, tx))
+            .send(EpochManagerRequest::IsEpochValid { epoch, reply: tx })
             .await
             .map_err(|_| EpochManagerError::SendError)?;
-        match rx.await.map_err(|_| EpochManagerError::ReceiveError)?? {
-            EpochManagerResponse::IsEpochValid { is_valid } => Ok(is_valid),
-            _ => Err(EpochManagerError::UnexpectedResponse),
-        }
+
+        rx.await.map_err(|_| EpochManagerError::ReceiveError)?
     }
 
     async fn get_committees(
@@ -130,19 +107,15 @@ impl EpochManager<CommsPublicKey> for EpochManagerHandle {
     ) -> Result<Vec<ShardCommitteeAllocation<CommsPublicKey>>, EpochManagerError> {
         let (tx, rx) = oneshot::channel();
         self.tx_request
-            .send((
-                EpochManagerRequest::GetCommittees {
-                    epoch,
-                    shards: shards.to_vec(),
-                },
-                tx,
-            ))
+            .send(EpochManagerRequest::GetCommittees {
+                epoch,
+                shards: shards.to_vec(),
+                reply: tx,
+            })
             .await
             .map_err(|_| EpochManagerError::SendError)?;
-        match rx.await.map_err(|_| EpochManagerError::ReceiveError)?? {
-            EpochManagerResponse::GetCommittees { committees } => Ok(committees),
-            _ => Err(EpochManagerError::UnexpectedResponse),
-        }
+
+        rx.await.map_err(|_| EpochManagerError::ReceiveError)?
     }
 
     async fn get_committee(
@@ -152,13 +125,32 @@ impl EpochManager<CommsPublicKey> for EpochManagerHandle {
     ) -> Result<Committee<CommsPublicKey>, EpochManagerError> {
         let (tx, rx) = oneshot::channel();
         self.tx_request
-            .send((EpochManagerRequest::GetCommittee { epoch, shard }, tx))
+            .send(EpochManagerRequest::GetCommittee {
+                epoch,
+                shard,
+                reply: tx,
+            })
             .await
             .map_err(|_| EpochManagerError::SendError)?;
-        match rx.await.map_err(|_| EpochManagerError::ReceiveError)?? {
-            EpochManagerResponse::GetCommittee { committee } => Ok(committee),
-            _ => Err(EpochManagerError::UnexpectedResponse),
-        }
+
+        rx.await.map_err(|_| EpochManagerError::ReceiveError)?
+    }
+
+    async fn is_validator_in_committee_for_current_epoch(
+        &self,
+        shard: ShardId,
+        identity: CommsPublicKey,
+    ) -> Result<bool, EpochManagerError> {
+        let (tx, rx) = oneshot::channel();
+        self.tx_request
+            .send(EpochManagerRequest::IsValidatorInCommitteeForCurrentEpoch {
+                shard,
+                identity,
+                reply: tx,
+            })
+            .await
+            .map_err(|_| EpochManagerError::SendError)?;
+        rx.await.map_err(|_| EpochManagerError::ReceiveError)?
     }
 
     async fn filter_to_local_shards(
@@ -169,20 +161,15 @@ impl EpochManager<CommsPublicKey> for EpochManagerHandle {
     ) -> Result<Vec<ShardId>, EpochManagerError> {
         let (tx, rx) = oneshot::channel();
         self.tx_request
-            .send((
-                EpochManagerRequest::FilterToLocalShards {
-                    epoch,
-                    for_addr: for_addr.clone(),
-                    available_shards: available_shards.to_vec(),
-                },
-                tx,
-            ))
+            .send(EpochManagerRequest::FilterToLocalShards {
+                epoch,
+                for_addr: for_addr.clone(),
+                available_shards: available_shards.to_vec(),
+                reply: tx,
+            })
             .await
             .map_err(|_| EpochManagerError::SendError)?;
 
-        match rx.await.map_err(|_| EpochManagerError::ReceiveError)?? {
-            EpochManagerResponse::FilterToLocalShards { shards } => Ok(shards),
-            _ => Err(EpochManagerError::UnexpectedResponse),
-        }
+        rx.await.map_err(|_| EpochManagerError::ReceiveError)?
     }
 }
