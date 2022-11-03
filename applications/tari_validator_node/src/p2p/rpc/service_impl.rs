@@ -158,7 +158,7 @@ where TPeerProvider: PeerProvider + Clone + Send + Sync + 'static
             .and_then(|s| ShardId::try_from(s).ok())
             .ok_or_else(|| RpcStatus::bad_request("Invalid gRPC request: end_shard_id not provided"))?;
 
-        let stored_shards = msg
+        let excluded_shards = msg
             .inventory
             .iter()
             .map(|s| {
@@ -180,7 +180,7 @@ where TPeerProvider: PeerProvider + Clone + Send + Sync + 'static
                     shard_db
                         .lock()
                         .await
-                        .get_substate_states(start_shard_id, end_shard_id, stored_shards.as_slice());
+                        .get_substate_states(start_shard_id, end_shard_id, excluded_shards.as_slice());
                 let substates_data = match shards_substates_data {
                     Ok(s) => s,
                     Err(err) => {

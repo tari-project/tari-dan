@@ -107,7 +107,7 @@ pub trait ShardStoreTransaction<TAddr: NodeAddressable, TPayload: Payload> {
         &self,
         start_shard_id: ShardId,
         end_shard_id: ShardId,
-        stored_shards: &[ShardId],
+        excluded_shards: &[ShardId],
     ) -> Result<Vec<SubstateShardData>, Self::Error>;
     fn get_last_voted_height(&self, shard: ShardId) -> Result<NodeHeight, Self::Error>;
     fn set_last_voted_height(&mut self, shard: ShardId, height: NodeHeight) -> Result<(), Self::Error>;
