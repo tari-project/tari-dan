@@ -108,13 +108,13 @@ impl PeerSyncManagerService {
                         .map_err(|_| EpochManagerError::UnexpectedResponse)?;
                 let sync_vn_node_height = NodeHeight::from(msg.node_height);
 
-                let sync_vn_tree_node_hash = if !msg.tree_node_hash.is_empty() {
+                let sync_vn_tree_node_hash = if msg.tree_node_hash.is_empty() {
+                    None
+                } else {
                     Some(
                         TreeNodeHash::try_from(msg.tree_node_hash)
                             .map_err(|_| EpochManagerError::UnexpectedResponse)?,
                     )
-                } else {
-                    None
                 };
 
                 let sync_vn_payload_id =
