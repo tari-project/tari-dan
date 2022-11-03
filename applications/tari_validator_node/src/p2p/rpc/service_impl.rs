@@ -158,16 +158,7 @@ where TPeerProvider: PeerProvider + Clone + Send + Sync + 'static
             .and_then(|s| ShardId::try_from(s).ok())
             .ok_or_else(|| RpcStatus::bad_request("Invalid gRPC request: end_shard_id not provided"))?;
 
-        let shard_db = self
-            .shard_state_store
-            .create_tx()
-            .map_err(RpcStatus::log_internal_error(LOG_TARGET))?;
-
-        let current_inventory = shard_db
-            .get_state_inventory(start_shard_id, end_shard_id)
-            .map_err(RpcStatus::log_internal_error(LOG_TARGET))?;
-
-        let request_inventory = msg
+        let stored_shards = msg
             .inventory
             .iter()
             .map(|s| {
@@ -176,26 +167,20 @@ where TPeerProvider: PeerProvider + Clone + Send + Sync + 'static
             })
             .collect::<Vec<ShardId>>();
 
-        if request_inventory.is_empty() {
-            return Err(RpcStatus::bad_request(
-                "Invalid gRPC request: request should contain at least one shard id available",
-            ));
-        }
-
-        let missing_shard_ids = current_inventory
-            .into_iter()
-            .filter(|sid| !request_inventory.contains(sid))
-            .collect::<Vec<_>>();
-
-        if missing_shard_ids.is_empty() {
-            return Ok(Streaming::new(rx));
-        }
+        let shard_db = self
+            .shard_state_store
+            .create_tx()
+            .map_err(RpcStatus::log_internal_error(LOG_TARGET))?;
 
         let shard_db = Arc::new(Mutex::new(shard_db));
 
         task::spawn(async move {
             loop {
-                let shards_substates_data = shard_db.lock().await.get_substate_states(missing_shard_ids.as_slice());
+                let shards_substates_data =
+                    shard_db
+                        .lock()
+                        .await
+                        .get_substate_states(start_shard_id, end_shard_id, stored_shards.as_slice());
                 let substates_data = match shards_substates_data {
                     Ok(s) => s,
                     Err(err) => {

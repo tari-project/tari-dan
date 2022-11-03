@@ -852,15 +852,8 @@ impl ShardStoreTransaction<PublicKey, TariDanPayload> for SqliteShardStoreTransa
         Ok(())
     }
 
-    fn get_state_inventory(&self, start_shard: ShardId, end_shard: ShardId) -> Result<Vec<ShardId>, Self::Error> {
-        use crate::schema::substates::shard_id;
-
+    fn get_state_inventory(&self) -> Result<Vec<ShardId>, Self::Error> {
         let substate_states: Option<Vec<crate::models::substate::Substate>> = substates
-            .filter(
-                shard_id
-                    .gt(Vec::from(start_shard.as_bytes()))
-                    .and(shard_id.lt(Vec::from(end_shard.as_bytes()))),
-            )
             .get_results(&self.connection)
             .optional()
             .map_err(|e| Self::Error::QueryError {
@@ -878,15 +871,25 @@ impl ShardStoreTransaction<PublicKey, TariDanPayload> for SqliteShardStoreTransa
         }
     }
 
-    fn get_substate_states(&self, shards: &[ShardId]) -> Result<Vec<SubstateShardData>, Self::Error> {
+    fn get_substate_states(
+        &self,
+        start_shard_id: ShardId,
+        end_shard_id: ShardId,
+        stored_shards: &[ShardId],
+    ) -> Result<Vec<SubstateShardData>, Self::Error> {
         use crate::schema::substates::shard_id;
-        let shards = shards
+        let stored_shards = stored_shards
             .iter()
             .map(|sh| Vec::from(sh.as_bytes()))
             .collect::<Vec<Vec<u8>>>();
 
         let substate_states: Option<Vec<crate::models::substate::Substate>> = substates
-            .filter(shard_id.eq_any(shards))
+            .filter(
+                shard_id
+                    .gt(Vec::from(start_shard_id.as_bytes()))
+                    .and(shard_id.lt(Vec::from(end_shard_id.as_bytes())))
+                    .and(shard_id.ne_all(stored_shards)),
+            )
             .get_results(&self.connection)
             .optional()
             .map_err(|e| Self::Error::QueryError {

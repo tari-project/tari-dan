@@ -67,7 +67,7 @@ impl PeerSyncManagerService {
         let mut shard_db = self.get_vn_shard_db()?;
 
         let inventory = shard_db
-            .get_state_inventory(start_shard_id, end_shard_id)
+            .get_state_inventory()
             .map_err(EpochManagerError::StorageError)?;
 
         let start_shard_id = p2p::proto::common::ShardId::from(start_shard_id);
