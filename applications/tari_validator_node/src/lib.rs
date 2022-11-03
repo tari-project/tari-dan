@@ -63,11 +63,10 @@ use tokio::task;
 use crate::{
     bootstrap::{spawn_services, Services},
     cli::Cli,
-    comms::initialize,
     dan_node::DanNode,
     http_ui::server::run_http_ui_server,
     json_rpc::{run_json_rpc, JsonRpcHandlers},
-    p2p::services::{networking::DAN_PEER_FEATURES, rpc_client::TariCommsValidatorNodeClientFactory},
+    p2p::services::networking::DAN_PEER_FEATURES,
 };
 pub use crate::{
     config::{ApplicationConfig, ValidatorNodeConfig},
@@ -130,12 +129,6 @@ pub async fn run_validator_node_with_cli(config: &ApplicationConfig, cli: &Cli) 
     );
 
     let (base_node_client, wallet_client) = create_base_layer_clients(config).await?;
-    let connectivity = initialize(node_identity.clone(), config, shutdown.to_signal())
-        .await?
-        .0
-        .connectivity();
-    let validator_node_client_factory = TariCommsValidatorNodeClientFactory::new(connectivity);
-
     let services = spawn_services(
         config,
         shutdown.to_signal(),
@@ -143,7 +136,6 @@ pub async fn run_validator_node_with_cli(config: &ApplicationConfig, cli: &Cli) 
         global_db,
         db_factory,
         ConsensusConstants::devnet(), // TODO: change this eventually
-        validator_node_client_factory,
     )
     .await?;
 

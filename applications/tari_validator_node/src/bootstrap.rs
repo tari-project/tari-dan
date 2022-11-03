@@ -81,7 +81,6 @@ pub async fn spawn_services(
     global_db: GlobalDb<SqliteGlobalDbAdapter>,
     sqlite_db: SqliteDbFactory,
     consensus_constants: ConsensusConstants,
-    validator_node_client_factory: TariCommsValidatorNodeClientFactory,
 ) -> Result<Services, anyhow::Error> {
     let mut p2p_config = config.validator_node.p2p.clone();
     p2p_config.transport.tor.identity = load_from_json(&config.validator_node.tor_identity_file)
@@ -116,6 +115,7 @@ pub async fn spawn_services(
 
     // Epoch manager
     let validator_node_config = config.validator_node.clone();
+    let validator_node_client_factory = TariCommsValidatorNodeClientFactory::new(comms.connectivity());
     let epoch_manager = epoch_manager::spawn(
         sqlite_db.clone(),
         base_node_client.clone(),
