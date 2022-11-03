@@ -22,7 +22,6 @@
 
 use std::collections::HashMap;
 
-use futures::future::join_all;
 use log::*;
 use tari_dan_common_types::{Epoch, PayloadId, ShardId, SubstateState};
 use tari_engine_types::commit_result::{FinalizeResult, RejectResult, TransactionResult};
@@ -39,6 +38,7 @@ use crate::{
     consensus_constants::ConsensusConstants,
     models::{
         vote_message::VoteMessage,
+        Committee,
         HotStuffMessage,
         HotStuffMessageType,
         HotStuffTreeNode,
@@ -154,7 +154,6 @@ where
         }
     }
 
-    // pacemaker
     async fn on_receive_new_view(
         &mut self,
         from: TAddr,
@@ -164,16 +163,18 @@ where
     ) -> Result<(), HotStuffError> {
         info!(
             target: LOG_TARGET,
-            "🔥 Receive NewView for payload {} and shard {}",
+            "🔥 Receive NewView for payload {}, shard {} and height {}",
             payload.to_id(),
-            shard
+            shard,
+            qc.local_node_height()
         );
-        // TODO: Validate who message is from
+
         let epoch = self.epoch_manager.current_epoch().await?;
         self.validate_from_committee(&from, epoch, shard).await?;
         self.validate_qc(&qc)?;
+
         let mut tx = self.shard_store.create_tx()?;
-        tx.update_high_qc(shard, qc)
+        tx.update_high_qc(from, shard, qc)
             .map_err(|e| HotStuffError::UpdateHighQcError(e.to_string()))?;
         tx.set_payload(payload).map_err(|e| e.into())?;
         tx.commit().map_err(|e| e.into())?;
@@ -182,13 +183,30 @@ where
 
     // pacemaker
     async fn on_beat(&mut self, shard: ShardId, payload_id: PayloadId) -> Result<(), HotStuffError> {
-        // TODO: the leader is only known after the leaf is determines
+        // TODO: the leader is only known after the leaf is determined
         // TODO: Review if this is correct. The epoch should stay the same for all epochs
+
         let epoch = self.epoch_manager.current_epoch().await?;
-        if self.is_leader(payload_id, shard, epoch).await? {
-            self.on_propose(shard, payload_id).await?;
+        let committee = self.epoch_manager.get_committee(epoch, shard).await?;
+        if self.is_leader(payload_id, shard, &committee)? {
+            let min_required_new_views = committee.consensus_threshold();
+            let num_new_views = self.count_new_views_for(shard)?;
+            if num_new_views >= min_required_new_views {
+                self.on_propose(shard, payload_id).await?;
+            } else {
+                info!(
+                    target: LOG_TARGET,
+                    "🔥 Waiting for more NEWVIEW messages ({}/{})", num_new_views, min_required_new_views
+                );
+            }
         }
         Ok(())
+    }
+
+    fn count_new_views_for(&self, shard: ShardId) -> Result<usize, HotStuffError> {
+        let tx = self.shard_store.create_tx()?;
+        let count = tx.count_high_qc_for(shard).map_err(|e| e.into())?;
+        Ok(count)
     }
 
     async fn on_propose(&mut self, shard: ShardId, payload_id: PayloadId) -> Result<(), HotStuffError> {
@@ -215,6 +233,7 @@ where
             .into_iter()
             .flat_map(|allocation| allocation.committee.map(|c| c.members).unwrap_or_default())
             .collect();
+
         {
             let mut tx = self.shard_store.create_tx()?;
 
@@ -320,14 +339,15 @@ where
         )
     }
 
-    async fn is_leader(&self, payload: PayloadId, shard: ShardId, epoch: Epoch) -> Result<bool, HotStuffError> {
-        Ok(self.leader_strategy.is_leader(
-            &self.identity,
-            &self.epoch_manager.get_committee(epoch, shard).await?,
-            payload,
-            shard,
-            0,
-        ))
+    fn is_leader(
+        &self,
+        payload: PayloadId,
+        shard: ShardId,
+        committee: &Committee<TAddr>,
+    ) -> Result<bool, HotStuffError> {
+        Ok(self
+            .leader_strategy
+            .is_leader(&self.identity, committee, payload, shard, 0))
     }
 
     async fn validate_from_committee(
@@ -395,10 +415,10 @@ where
         }
 
         let mut tx = self.shard_store.create_tx()?;
-        tx.update_high_qc(shard, node.justify().clone())
+        tx.update_high_qc(node.proposed_by().clone(), shard, node.justify().clone())
             .map_err(|e| HotStuffError::UpdateHighQcError(e.to_string()))?;
-        let b_two = tx.get_node(&node.justify().local_node_hash()).map_err(|e| e.into())?;
 
+        let b_two = tx.get_node(&node.justify().local_node_hash()).map_err(|e| e.into())?;
         if b_two.justify().local_node_hash() == TreeNodeHash::zero() {
             dbg!("b one is genesis, nothing to do");
             return Ok(());
@@ -530,7 +550,6 @@ where
             .await?;
 
         let mut votes_to_send = vec![];
-        // let mut finalize_result = None;
 
         {
             let mut tx = self.shard_store.create_tx()?;
@@ -595,10 +614,7 @@ where
                             &finalize_result,
                         )?;
 
-                        votes_to_send.push(self.tx_vote_message.send((
-                            vote_msg,
-                            local_node.proposed_by().clone(), // self.get_leader(),
-                        )));
+                        votes_to_send.push((vote_msg, local_node.proposed_by().clone()));
                     }
 
                     // finalize_result = Some(execution_result);
@@ -616,8 +632,11 @@ where
             tx.commit().map_err(|e| e.into())?;
         }
 
-        for res in join_all(votes_to_send).await {
-            res.map_err(|_| HotStuffError::SendError)?;
+        for res in votes_to_send {
+            self.tx_vote_message
+                .send(res)
+                .await
+                .map_err(|_| HotStuffError::SendError)?;
         }
         self.update_nodes(node.clone()).await?;
         Ok(())
@@ -802,7 +821,7 @@ where
                             main_vote.all_shard_nodes().clone(),
                             signatures,
                         );
-                        tx.update_high_qc(msg.shard(), qc)
+                        tx.update_high_qc(node.proposed_by().clone(), msg.shard(), qc)
                             .map_err(|e| HotStuffError::UpdateHighQcError(e.to_string()))?; // TODO: is there a better alternative to handle error?
 
                         // Should be the pace maker actually
@@ -854,8 +873,8 @@ where
         loop {
             tokio::select! {
                 msg = self.rx_new.recv() => {
-                    if let Some((p, shard)) = msg {
-                        if let Err(e) = self.on_next_sync_view(p, shard).await {
+                    if let Some((payload, shard)) = msg {
+                        if let Err(e) = self.on_next_sync_view(payload, shard).await {
                            error!(target: LOG_TARGET, "Error while processing new payload (on_next_sync_view): {}", e);
                         }
                         // self.on_beat(0, msg);
