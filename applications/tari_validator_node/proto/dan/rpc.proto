@@ -91,7 +91,12 @@ message VNStateSyncRequest {
 }
 
 message VNStateSyncResponse {
-  tari.dan.consensus.SubstateState substate_state = 1;
+  tari.dan.common.ShardId shard_id = 1;
+  tari.dan.consensus.SubstateState substate_state = 2;
+  uint64 node_height = 3;
+  bytes tree_node_hash = 4;
+  bytes payload_id = 5;
+  tari.dan.consensus.QuorumCertificate certificate = 6;
 }
 
 message GetVnStateInventoryRequest {

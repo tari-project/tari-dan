@@ -29,18 +29,24 @@ use std::ops::RangeInclusive;
 
 pub use initializer::spawn;
 use tari_dan_common_types::ShardId;
-use tari_dan_core::{models::ValidatorNode, services::epoch_manager::EpochManagerError};
+use tari_dan_core::models::ValidatorNode;
 
-pub fn get_committee_shard_ids(vns: &[ValidatorNode]) -> Result<RangeInclusive<ShardId>, EpochManagerError> {
+fn get_committee_shard_range(committee_vns: &[ValidatorNode]) -> RangeInclusive<ShardId> {
     // TODO: add this committee_size to ConsensusConstants
     let committee_size = 7;
-    if vns.len() < committee_size {
+    if committee_vns.len() < committee_size {
         let min_shard_id = ShardId::zero();
         let max_shard_id = ShardId([u8::MAX; 32]);
-        Ok(RangeInclusive::new(min_shard_id, max_shard_id))
+        RangeInclusive::new(min_shard_id, max_shard_id)
     } else {
-        let min_shard_id = vns.first().ok_or(EpochManagerError::ValidatorNodesNotFound)?.shard_key;
-        let max_shard_id = vns.last().ok_or(EpochManagerError::ValidatorNodesNotFound)?.shard_key;
-        Ok(RangeInclusive::new(min_shard_id, max_shard_id))
+        let min_shard_id = committee_vns
+            .first()
+            .expect("Commitee VNs cannot be empty, at this point")
+            .shard_key;
+        let max_shard_id = committee_vns
+            .last()
+            .expect("Commitee VNs cannot be empty, at this point")
+            .shard_key;
+        min_shard_id..=max_shard_id
     }
 }

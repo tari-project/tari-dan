@@ -29,7 +29,10 @@ use tokio::sync::mpsc;
 
 use crate::{
     grpc::services::base_node_client::GrpcBaseNodeClient,
-    p2p::services::epoch_manager::{epoch_manager_service::EpochManagerService, handle::EpochManagerHandle},
+    p2p::services::{
+        epoch_manager::{epoch_manager_service::EpochManagerService, handle::EpochManagerHandle},
+        rpc_client::TariCommsValidatorNodeClientFactory,
+    },
     ValidatorNodeConfig,
 };
 
@@ -40,6 +43,7 @@ pub fn spawn(
     shutdown: ShutdownSignal,
     node_identity: Arc<NodeIdentity>,
     validator_node_config: ValidatorNodeConfig,
+    validator_node_client_factory: TariCommsValidatorNodeClientFactory,
 ) -> EpochManagerHandle {
     let (tx_request, rx_request) = mpsc::channel(10);
     let handle = EpochManagerHandle::new(tx_request);
@@ -51,6 +55,7 @@ pub fn spawn(
         base_node_client,
         node_identity,
         validator_node_config,
+        validator_node_client_factory,
     );
     handle
 }

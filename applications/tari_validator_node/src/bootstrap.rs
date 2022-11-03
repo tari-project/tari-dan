@@ -62,6 +62,7 @@ use crate::{
             messaging::{DanMessageReceivers, DanMessageSenders},
             networking,
             networking::NetworkingHandle,
+            rpc_client::TariCommsValidatorNodeClientFactory,
             template_manager,
             template_manager::{TemplateManager, TemplateManagerHandle},
         },
@@ -80,6 +81,7 @@ pub async fn spawn_services(
     global_db: GlobalDb<SqliteGlobalDbAdapter>,
     sqlite_db: SqliteDbFactory,
     consensus_constants: ConsensusConstants,
+    validator_node_client_factory: TariCommsValidatorNodeClientFactory,
 ) -> Result<Services, anyhow::Error> {
     let mut p2p_config = config.validator_node.p2p.clone();
     p2p_config.transport.tor.identity = load_from_json(&config.validator_node.tor_identity_file)
@@ -121,6 +123,7 @@ pub async fn spawn_services(
         shutdown.clone(),
         node_identity.clone(),
         validator_node_config,
+        validator_node_client_factory,
     );
 
     // Mempool

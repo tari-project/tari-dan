@@ -37,7 +37,10 @@ use tokio::{
 
 use crate::{
     grpc::services::base_node_client::GrpcBaseNodeClient,
-    p2p::services::epoch_manager::base_layer_epoch_manager::BaseLayerEpochManager,
+    p2p::services::{
+        epoch_manager::base_layer_epoch_manager::BaseLayerEpochManager,
+        rpc_client::TariCommsValidatorNodeClientFactory,
+    },
     ValidatorNodeConfig,
 };
 // const LOG_TARGET: &str = "tari::validator_node::epoch_manager";
@@ -126,6 +129,7 @@ impl EpochManagerService {
         base_node_client: GrpcBaseNodeClient,
         node_identity: Arc<NodeIdentity>,
         validator_node_config: ValidatorNodeConfig,
+        validator_node_client_factory: TariCommsValidatorNodeClientFactory,
     ) -> JoinHandle<Result<(), EpochManagerError>> {
         tokio::spawn(async move {
             let (tx, rx) = broadcast::channel(10);
@@ -138,6 +142,7 @@ impl EpochManagerService {
                     tx.clone(),
                     node_identity,
                     validator_node_config,
+                    validator_node_client_factory,
                 ),
                 events: (tx, rx),
             }
