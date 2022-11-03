@@ -230,7 +230,7 @@ async fn handle_submit(
         println!();
     }
 
-    dbg!(&request);
+    // dbg!(&request);
     let resp = client.submit_transaction(request).await?;
     if let Some(result) = resp.result {
         summarize(&result);

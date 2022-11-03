@@ -170,10 +170,11 @@ impl SqliteShardStoreTransaction {
     }
 
     fn create_pledge(&mut self, shard: ShardId, obj: Substate) -> Result<ObjectPledge, StorageError> {
-        use crate::schema::substates::{is_draft, node_height, shard_id};
+        use crate::schema::substates::{id, is_draft, node_height, shard_id};
         let current_state: Option<Substate> = substates
             .filter(shard_id.eq(shard.as_bytes()).and(is_draft.eq(false)))
             .order_by(node_height.desc())
+            .then_order_by(id.desc())
             .first(&self.connection)
             .optional()
             .map_err(|e| StorageError::QueryError {
@@ -621,13 +622,14 @@ impl ShardStoreTransaction<PublicKey, TariDanPayload> for SqliteShardStoreTransa
         change: SubstateChange,
         current_height: NodeHeight,
     ) -> Result<ObjectPledge, Self::Error> {
-        use crate::schema::substates::{is_draft, node_height, shard_id};
+        use crate::schema::substates::{id, is_draft, node_height, shard_id};
         let shard_vec = Vec::from(shard.as_bytes());
         let f_payload = Vec::from(payload.as_slice());
 
         let draft_object: Option<Substate> = substates
             .filter(shard_id.eq(&shard_vec).and(is_draft.eq(true)))
             .order_by(node_height.desc())
+            .then_order_by(id.desc())
             .first(&self.connection)
             .optional()
             .map_err(|e| Self::Error::QueryError {
@@ -680,6 +682,7 @@ impl ShardStoreTransaction<PublicKey, TariDanPayload> for SqliteShardStoreTransa
                     .and(pledged_to_payload_id.eq(f_payload)),
             )
             .order_by(node_height.desc())
+            .then_order_by(id.desc())
             .first(&self.connection)
             .map_err(|e| Self::Error::QueryError {
                 reason: format!("Pledge object error: {}", e),
