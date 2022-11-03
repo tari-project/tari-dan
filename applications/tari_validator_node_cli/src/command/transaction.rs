@@ -26,7 +26,7 @@ use clap::{Args, Subcommand};
 use tari_dan_common_types::ShardId;
 use tari_dan_engine::transaction::Transaction;
 use tari_engine_types::{
-    commit_result::{FinalizeResult, TransactionResult},
+    commit_result::TransactionResult,
     execution_result::Type,
     instruction::Instruction,
     substate::SubstateValue,
@@ -34,7 +34,10 @@ use tari_engine_types::{
 };
 use tari_template_lib::{args::Arg, models::ComponentAddress};
 use tari_utilities::hex::to_hex;
-use tari_validator_node_client::{types::SubmitTransactionRequest, ValidatorNodeClient};
+use tari_validator_node_client::{
+    types::{SubmitTransactionRequest, TransactionFinalizeResult},
+    ValidatorNodeClient,
+};
 
 use crate::{account_manager::AccountFileManager, from_hex::FromHex};
 
@@ -51,6 +54,8 @@ pub struct SubmitArgs {
     wait_for_result: bool,
     #[clap(long, short = 'n')]
     num_outputs: Option<u8>,
+    #[clap(long, short = 'v')]
+    version: Option<u8>,
 }
 
 #[derive(Debug, Clone)]
@@ -190,7 +195,12 @@ async fn handle_submit(
 
     // TODO: this is a little clunky
     let mut builder = Transaction::builder();
-    builder.add_instruction(instruction).sign(&account.secret_key).fee(1);
+    builder
+        .with_input_refs(inputs.clone())
+        .with_num_outputs(args.num_outputs.unwrap_or(0))
+        .add_instruction(instruction)
+        .sign(&account.secret_key)
+        .fee(1);
     let transaction = builder.build();
     let tx_hash = *transaction.hash();
 
@@ -216,11 +226,22 @@ async fn handle_submit(
     Ok(())
 }
 
-fn summarize(result: &FinalizeResult) {
-    match result.result {
+fn summarize(result: &TransactionFinalizeResult) {
+    println!("✅️ Transaction finalized",);
+    println!();
+    println!("Epoch: {}", result.qc.epoch());
+    println!("Payload height: {}", result.qc.payload_height());
+    println!("Signed by: {} validator nodes", result.qc.signature().len());
+    println!();
+    println!("========= Substates =========");
+    match result.finalize.result {
         TransactionResult::Accept(ref diff) => {
             for (address, substate) in diff.up_iter() {
-                println!("️🌲 New substate {}", ShardId::from(address.into_shard_id()));
+                println!(
+                    "️🌲 UP substate {} (v{})",
+                    ShardId::from_address(address),
+                    substate.version()
+                );
                 match substate.substate_value() {
                     SubstateValue::Component(component) => {
                         println!(
@@ -231,11 +252,14 @@ fn summarize(result: &FinalizeResult) {
                     SubstateValue::Resource(resource) => {
                         println!("       ▶ resource: {}", resource.address());
                     },
+                    SubstateValue::Vault(vault) => {
+                        println!("       ▶ vault: {} {}", vault.id(), vault.resource_address());
+                    },
                 }
                 println!();
             }
             for address in diff.down_iter() {
-                println!("🗑️ Destroyed substate {}", ShardId::from(address.into_shard_id()));
+                println!("🗑️ DOWN substate {}", ShardId::from_address(address));
                 println!();
             }
         },
@@ -244,7 +268,7 @@ fn summarize(result: &FinalizeResult) {
         },
     }
     println!("========= Return Values =========");
-    for result in &result.execution_results {
+    for result in &result.finalize.execution_results {
         match result.return_type {
             Type::Unit => {},
             Type::Bool => {
@@ -291,7 +315,7 @@ fn summarize(result: &FinalizeResult) {
 
     println!();
     println!("========= LOGS =========");
-    for log in &result.logs {
+    for log in &result.finalize.logs {
         println!("{}", log);
     }
 }

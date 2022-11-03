@@ -23,7 +23,7 @@
 use std::{convert::TryInto, net::SocketAddr};
 
 use async_trait::async_trait;
-use log::info;
+use log::trace;
 use tari_app_grpc::tari_rpc::{self as grpc, GetCommitteeRequest, GetShardKeyRequest};
 use tari_base_node_grpc_client::BaseNodeGrpcClient;
 use tari_common_types::types::{FixedHash, PublicKey};
@@ -32,6 +32,7 @@ use tari_core::{blocks::BlockHeader, transactions::transaction_components::CodeT
 use tari_crypto::tari_utilities::ByteArray;
 use tari_dan_common_types::ShardId;
 use tari_dan_core::{
+    consensus_constants::BaseLayerConsensusConstants,
     models::{BaseLayerMetadata, ValidatorNode},
     services::{base_node_error::BaseNodeError, BaseNodeClient, BlockInfo, SideChainUtxos},
 };
@@ -58,6 +59,19 @@ impl GrpcBaseNodeClient {
             self.client = Some(inner);
         }
         self.client.as_mut().ok_or(BaseNodeError::ConnectionError)
+    }
+
+    pub async fn get_consensus_constants(
+        &mut self,
+        block_height: u64,
+    ) -> Result<BaseLayerConsensusConstants, BaseNodeError> {
+        let inner = self.connection().await?;
+
+        let request = grpc::BlockHeight { block_height };
+        let result = inner.get_constants(request).await?.into_inner();
+
+        let consensus_constants = BaseLayerConsensusConstants::new(result.validator_node_timeout);
+        Ok(consensus_constants)
     }
 }
 
@@ -87,7 +101,6 @@ impl BaseNodeClient for GrpcBaseNodeClient {
     async fn get_validator_nodes(&mut self, height: u64) -> Result<Vec<ValidatorNode>, BaseNodeError> {
         let inner = self.connection().await?;
         let request = grpc::GetActiveValidatorNodesRequest { height };
-        dbg!(&request);
         let mut vns = vec![];
         let mut stream = inner.get_active_validator_nodes(request).await?.into_inner();
         loop {
@@ -103,7 +116,7 @@ impl BaseNodeClient for GrpcBaseNodeClient {
                     });
                 },
                 Ok(None) => {
-                    info!(target: LOG_TARGET, "No new validator nodes for this epoch");
+                    trace!(target: LOG_TARGET, "No new validator nodes for this epoch");
                     break;
                 },
                 Err(e) => {
@@ -155,7 +168,6 @@ impl BaseNodeClient for GrpcBaseNodeClient {
             start_hash: start_hash.map(|v| v.to_vec()).unwrap_or_default(),
             count,
         };
-        dbg!(&request);
         let mut templates = vec![];
         let mut stream = inner.get_template_registrations(request).await?.into_inner();
         loop {

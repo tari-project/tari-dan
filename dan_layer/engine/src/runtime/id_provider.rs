@@ -43,7 +43,7 @@ impl IdProvider {
         }
     }
 
-    fn next_id(&self) -> u32 {
+    fn next(&self) -> u32 {
         self.current_id.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
     }
 
@@ -51,28 +51,32 @@ impl IdProvider {
         self.transaction_hash
     }
 
-    pub fn new_resource_address(&self) -> ResourceAddress {
+    /// Generates a new unique id H(tx_hash || n).
+    /// NOTE: we rely on IDs being predictable for all outputs (components, resources, vaults).
+    fn new_id(&self) -> Hash {
         hasher("output")
             .chain(&self.transaction_hash)
-            .chain(&self.next_id())
+            .chain(&self.next())
             .result()
     }
 
+    pub fn new_resource_address(&self) -> ResourceAddress {
+        self.new_id()
+    }
+
     pub fn new_component_address(&self) -> ComponentAddress {
-        // Note: we rely on component and resource addresses being constructed in the same way.
-        self.new_resource_address()
+        self.new_id()
     }
 
     pub fn new_output_shard(&self) -> ShardId {
-        // Note: we rely on component and resource addresses being constructed in the same way.
-        self.new_resource_address().into_array().into()
+        self.new_id().into_array().into()
     }
 
     pub fn new_vault_id(&self) -> VaultId {
-        (self.transaction_hash, self.next_id())
+        self.new_id()
     }
 
     pub fn new_bucket_id(&self) -> BucketId {
-        self.next_id()
+        self.next()
     }
 }

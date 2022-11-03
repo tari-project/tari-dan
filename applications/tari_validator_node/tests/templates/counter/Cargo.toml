@@ -1,0 +1,28 @@
+[workspace]
+[package]
+name = "counter"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+tari_template_abi = { git = "https://github.com/tari-project/tari-dan.git", branch="development", package="tari_template_abi" }
+tari_template_lib = { git = "https://github.com/tari-project/tari-dan.git", branch="development", package="tari_template_lib" }
+tari_template_macros = {git = "https://github.com/tari-project/tari-dan.git", branch="development", package="tari_template_macros" }
+
+[profile.release]
+opt-level = 's'     # Optimize for size.
+lto = true          # Enable Link Time Optimization.
+codegen-units = 1   # Reduce number of codegen units to increase optimizations.
+panic = 'abort'     # Abort on panic.
+strip = "debuginfo" # Strip debug info.
+
+[lib]
+crate-type = ["cdylib", "lib"]
+
+[dev-dependencies]
+tari_dan_engine = {git = "https://github.com/tari-project/tari-dan.git", branch="development", package="tari_dan_engine" }
+tari_crypto = {git = "https://github.com/tari-project/tari-crypto.git", tag="v0.15.6" }
+tari_dan_common_types = {git = "https://github.com/tari-project/tari-dan.git", branch="development", package="tari_dan_common_types" }
+tari_common_types = {git = "https://github.com/tari-project/tari.git", branch="development", package="tari_common_types" }

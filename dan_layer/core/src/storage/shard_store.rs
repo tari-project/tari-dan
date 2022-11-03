@@ -38,7 +38,7 @@ use crate::{
         TreeNodeHash,
     },
     services::infrastructure_services::NodeAddressable,
-    storage::{shard_db::MemoryShardDb, StorageError},
+    storage::StorageError,
 };
 
 pub trait ShardStoreFactory {
@@ -130,27 +130,4 @@ pub trait ShardStoreTransaction<TAddr: NodeAddressable, TPayload: Payload> {
 
     fn get_received_votes_for(&self, node_hash: TreeNodeHash, shard: ShardId) -> Result<Vec<VoteMessage>, Self::Error>;
     fn get_recent_transactions(&self) -> Result<Vec<RecentTransaction>, Self::Error>;
-}
-
-#[derive(Debug, Default)]
-pub struct MemoryShardStoreFactory<TAddr, TPayload> {
-    inner: MemoryShardDb<TAddr, TPayload>,
-}
-
-impl<TAddr: NodeAddressable, TPayload: Payload> MemoryShardStoreFactory<TAddr, TPayload> {
-    pub fn new() -> Self {
-        Self {
-            inner: MemoryShardDb::new(),
-        }
-    }
-}
-
-impl<TAddr: NodeAddressable, TPayload: Payload> ShardStoreFactory for MemoryShardStoreFactory<TAddr, TPayload> {
-    type Addr = TAddr;
-    type Payload = TPayload;
-    type Transaction = MemoryShardDb<TAddr, TPayload>;
-
-    fn create_tx(&self) -> Result<Self::Transaction, StorageError> {
-        Ok(self.inner.clone())
-    }
 }

@@ -60,16 +60,18 @@ use tari_dan_storage_sqlite::SqliteDbFactory;
 use tari_shutdown::{Shutdown, ShutdownSignal};
 use tokio::task;
 
-pub use crate::config::{ApplicationConfig, ValidatorNodeConfig};
 use crate::{
     bootstrap::{spawn_services, Services},
     cli::Cli,
     comms::initialize,
     dan_node::DanNode,
-    grpc::services::{base_node_client::GrpcBaseNodeClient, wallet_client::GrpcWalletClient},
     http_ui::server::run_http_ui_server,
     json_rpc::{run_json_rpc, JsonRpcHandlers},
     p2p::services::{networking::DAN_PEER_FEATURES, rpc_client::TariCommsValidatorNodeClientFactory},
+};
+pub use crate::{
+    config::{ApplicationConfig, ValidatorNodeConfig},
+    grpc::services::{base_node_client::GrpcBaseNodeClient, wallet_client::GrpcWalletClient},
 };
 
 const LOG_TARGET: &str = "tari::validator_node::app";
@@ -101,10 +103,11 @@ pub struct ShardKey {
 }
 
 pub async fn run_validator_node_with_cli(config: &ApplicationConfig, cli: &Cli) -> Result<(), ExitError> {
-    initialize_logging(
+    let _ = initialize_logging(
         &cli.common.log_config_path("validator"),
         include_str!("../log4rs_sample.yml"),
-    )?;
+    )
+    .map_err(|e| error!("{}", e));
 
     let shutdown = Shutdown::new();
 

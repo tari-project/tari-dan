@@ -30,7 +30,7 @@ use tari_core::transactions::transaction_components::{
     ValidatorNodeRegistration,
 };
 use tari_crypto::tari_utilities::ByteArray;
-use tari_dan_common_types::optional::Optional;
+use tari_dan_common_types::{optional::Optional, Epoch};
 use tari_dan_core::{
     consensus_constants::ConsensusConstants,
     models::BaseLayerMetadata,
@@ -181,6 +181,7 @@ impl BaseLayerScanner {
     async fn scan_blockchain(&mut self) -> Result<(), BaseLayerScannerError> {
         // fetch the new base layer info since the previous scan
         let tip = self.base_node_client.get_tip_info().await?;
+
         match self.get_blockchain_progression(&tip).await? {
             BlockchainProgression::Progressed => {
                 info!(
@@ -261,7 +262,7 @@ impl BaseLayerScanner {
                     ))
                 })?;
             let block_info = utxos.block_info;
-            // TODO: Because we dont know the next hash when we're done scanning to the tip, we need to load the
+            // TODO: Because we don't know the next hash when we're done scanning to the tip, we need to load the
             //       previous scanned block again to get it.  This isn't ideal, but won't be an issue when we scan a few
             //       blocks back.
             if self.last_scanned_hash.map(|h| h == block_info.hash).unwrap_or(false) {
@@ -334,8 +335,10 @@ impl BaseLayerScanner {
             target: LOG_TARGET,
             "⛓️ Validator node registration UTXO found at height {}", height,
         );
-        // todo: maybe register? idk
-        // self.epoch_manager.update_epoch(height).await?;
+
+        let epoch_height = Epoch::from_block_height(height); // epoch duration corresponds to 10 blocks
+        self.epoch_manager.update_last_registration_epoch(epoch_height).await?;
+
         Ok(())
     }
 

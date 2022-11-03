@@ -24,6 +24,7 @@ pub mod memory;
 
 use std::{error::Error, io};
 
+use tari_dan_common_types::optional::IsNotFoundError;
 use tari_template_abi::{encode, Decode, Encode};
 
 // pub trait StateStorage<'a>: AtomicDb<'a, Error = StateStoreError> + Send + Sync {}
@@ -50,11 +51,11 @@ pub trait AtomicDb<'a> {
 }
 
 pub trait StateReader {
-    fn get_state_raw(&self, key: &[u8]) -> Result<Option<Vec<u8>>, StateStoreError>;
+    fn get_state_raw(&self, key: &[u8]) -> Result<Vec<u8>, StateStoreError>;
 
-    fn get_state<K: Encode, V: Decode>(&self, key: &K) -> Result<Option<V>, StateStoreError> {
+    fn get_state<K: Encode, V: Decode>(&self, key: &K) -> Result<V, StateStoreError> {
         let value = self.get_state_raw(&encode(key)?)?;
-        let value = value.map(|v| V::deserialize(&mut v.as_slice())).transpose()?;
+        let value = V::deserialize(&mut value.as_slice())?;
         Ok(value)
     }
 
@@ -81,8 +82,8 @@ pub enum StateStoreError {
     Custom(#[from] anyhow::Error),
     #[error("Error: {0}")]
     CustomStr(String),
-    #[error("{kind} not found with id {id}")]
-    NotFound { kind: &'static str, id: String },
+    #[error("{kind} not found with key {key}")]
+    NotFound { kind: &'static str, key: String },
     #[error("Substate has already been destroyed")]
     SubstateDestroyed,
 }
@@ -94,5 +95,11 @@ impl StateStoreError {
 
     pub fn custom_str(e: &str) -> Self {
         StateStoreError::CustomStr(e.to_string())
+    }
+}
+
+impl IsNotFoundError for StateStoreError {
+    fn is_not_found_error(&self) -> bool {
+        matches!(self, StateStoreError::NotFound { .. })
     }
 }

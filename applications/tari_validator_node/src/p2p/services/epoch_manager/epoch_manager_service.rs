@@ -63,8 +63,8 @@ pub enum EpochManagerRequest {
     UpdateEpoch {
         height: u64,
     },
-    NextRegistrationEpoch,
-    UpdateNextRegistrationEpoch {
+    LastRegistrationEpoch,
+    UpdateLastRegistrationEpoch {
         epoch: Epoch,
     },
     IsEpochValid {
@@ -91,10 +91,10 @@ pub enum EpochManagerResponse {
         epoch: Epoch,
     },
     UpdateEpoch,
-    NextRegistrationEpoch {
+    LastRegistrationEpoch {
         epoch: Option<Epoch>,
     },
-    UpdateNextRegistrationEpoch,
+    UpdateLastRegistrationEpoch,
     IsEpochValid {
         is_valid: bool,
     },
@@ -178,12 +178,12 @@ impl EpochManagerService {
                 self.inner.update_epoch(height).await?;
                 Ok(EpochManagerResponse::UpdateEpoch)
             },
-            EpochManagerRequest::NextRegistrationEpoch => Ok(EpochManagerResponse::NextRegistrationEpoch {
-                epoch: self.inner.next_registration_epoch().await?,
+            EpochManagerRequest::LastRegistrationEpoch => Ok(EpochManagerResponse::LastRegistrationEpoch {
+                epoch: self.inner.last_registration_epoch().await?,
             }),
-            EpochManagerRequest::UpdateNextRegistrationEpoch { epoch } => {
-                self.inner.update_next_registration_epoch(epoch).await?;
-                Ok(EpochManagerResponse::UpdateNextRegistrationEpoch)
+            EpochManagerRequest::UpdateLastRegistrationEpoch { epoch } => {
+                self.inner.update_last_registration_epoch(epoch).await?;
+                Ok(EpochManagerResponse::UpdateLastRegistrationEpoch)
             },
             EpochManagerRequest::IsEpochValid { epoch } => {
                 let is_valid = self.inner.is_epoch_valid(epoch);

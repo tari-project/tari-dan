@@ -55,7 +55,7 @@ pub fn try_spawn(
     shutdown: ShutdownSignal,
 ) -> Result<(EventSubscription<HotStuffEvent>, SqliteShardStoreFactory), anyhow::Error> {
     let db = SqliteShardStoreFactory::try_create(config.data_dir.join("state.db"))?;
-    // let db = MemoryShardStoreFactory::new();
+
     let events = HotstuffService::spawn(
         node_identity.public_key().clone(),
         epoch_manager,

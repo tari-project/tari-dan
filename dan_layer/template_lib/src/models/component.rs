@@ -45,7 +45,7 @@ impl ComponentInstance {
         }
     }
 
-    pub fn id(&self) -> ComponentAddress {
+    pub fn address(&self) -> ComponentAddress {
         self.component_address
     }
 

@@ -23,6 +23,7 @@
 use thiserror::Error;
 
 use crate::{
+    models::NodeHeight,
     services::{epoch_manager::EpochManagerError, PayloadProcessorError},
     storage::{shard_store::StoreError, StorageError},
 };
@@ -53,8 +54,8 @@ pub enum HotStuffError {
     TransactionRejected(String),
     #[error("Storage Error: `{0}`")]
     StorageError(#[from] StorageError),
-    #[error("Payload height is too high")]
-    PayloadHeightIsTooHigh,
+    #[error("Payload height is too high. Actual: {actual}, expected: {max}")]
+    PayloadHeightIsTooHigh { actual: NodeHeight, max: NodeHeight },
     #[error("Received generic message without node")]
     RecvGenericMessageWithoutNode,
     #[error("Shard has no data, when it was expected to")]

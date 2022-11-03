@@ -42,12 +42,33 @@ impl FinalizeResult {
             result,
         }
     }
+
+    pub fn errored(transaction_hash: Hash, reason: String) -> Self {
+        Self::new(
+            transaction_hash,
+            Vec::new(),
+            TransactionResult::Reject(RejectResult {
+                reason: format!("Transaction errored: {}", reason),
+            }),
+        )
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum TransactionResult {
     Accept(SubstateDiff),
     Reject(RejectResult),
+}
+
+impl TransactionResult {
+    pub fn expect(self, msg: &str) -> SubstateDiff {
+        match self {
+            Self::Accept(substate_diff) => substate_diff,
+            Self::Reject(reject_result) => {
+                panic!("{}: {}", msg, reject_result.reason);
+            },
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

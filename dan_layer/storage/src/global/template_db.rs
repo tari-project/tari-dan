@@ -71,7 +71,7 @@ pub struct DbTemplateUpdate {
     pub status: Option<TemplateStatus>,
 }
 
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone, Copy, Default)]
 pub enum TemplateStatus {
     /// Template has been registered but has not completed
     #[default]

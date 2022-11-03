@@ -40,7 +40,7 @@ pub use processor::TransactionProcessor;
 #[derive(Debug, Clone)]
 pub struct BalanceProof {}
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct Transaction {
     hash: Hash,
     instructions: Vec<Instruction>,
@@ -74,7 +74,7 @@ impl Transaction {
     }
 }
 
-#[derive(Debug, Clone, Default, Deserialize, Serialize)]
+#[derive(Debug, Clone, Default, Deserialize, Serialize, PartialEq)]
 pub struct TransactionMeta {
     involved_objects: HashMap<ShardId, (SubstateChange, ObjectClaim)>,
 }

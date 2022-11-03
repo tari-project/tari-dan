@@ -33,3 +33,19 @@ impl ConsensusConstants {
         }
     }
 }
+
+pub struct BaseLayerConsensusConstants {
+    validator_node_registration_expiry: u64,
+}
+
+impl BaseLayerConsensusConstants {
+    pub fn new(validator_node_registration_expiry: u64) -> Self {
+        Self {
+            validator_node_registration_expiry,
+        }
+    }
+
+    pub fn get_validator_node_registration_expiry(&self) -> u64 {
+        self.validator_node_registration_expiry
+    }
+}
