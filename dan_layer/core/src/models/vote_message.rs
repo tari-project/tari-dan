@@ -96,17 +96,14 @@ impl VoteMessage {
         for ShardVote {
             shard_id,
             node_hash,
-            pledges,
+            pledge,
         } in &self.all_shard_nodes
         {
             result = result
                 .chain(shard_id.0)
                 .chain(node_hash.as_bytes())
-                .chain((pledges.len() as u32).to_le_bytes());
-
-            for p in pledges {
-                result = result.chain(p.shard_id.0)
-            }
+                // TODO: borsh serialize pledge
+                .chain(pledge.as_ref().map(|p| p.shard_id.0).unwrap_or_default());
         }
         result.finalize_fixed().into()
     }

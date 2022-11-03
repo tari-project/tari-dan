@@ -23,7 +23,7 @@ message HotStuffMessage {
 message ShardVote {
   bytes shard_id = 1;
   bytes node_hash = 2;
-  repeated ObjectPledge pledges = 3;
+  ObjectPledge pledge = 3;
 }
 
 message QuorumCertificate {
@@ -48,7 +48,7 @@ message HotStuffTreeNode {
   uint64 height = 3;
   bytes shard = 4;
   uint64 payload_height = 5;
-  repeated ObjectPledge local_pledges = 6;
+  ObjectPledge local_pledge = 6;
   uint64 epoch = 7;
   bytes proposed_by = 8;
   QuorumCertificate justify = 9;

@@ -117,11 +117,7 @@ impl TryFrom<proto::consensus::HotStuffTreeNode> for HotStuffTreeNode<CommsPubli
             value.payload_id.try_into()?,
             value.payload.map(|a| a.try_into().unwrap()),
             value.payload_height.into(),
-            value
-                .local_pledges
-                .iter()
-                .map(|lp| lp.clone().try_into())
-                .collect::<Result<_, _>>()?,
+            value.local_pledge.map(|lp| lp.try_into()).transpose()?,
             value.epoch.into(),
             PublicKey::from_bytes(value.proposed_by.as_slice())?,
             value
@@ -142,7 +138,7 @@ impl From<HotStuffTreeNode<CommsPublicKey, TariDanPayload>> for proto::consensus
             shard: source.shard().as_bytes().to_vec(),
             payload_id: source.payload_id().as_bytes().to_vec(),
             payload_height: source.payload_height().as_u64(),
-            local_pledges: source.local_pledges().iter().map(|p| p.clone().into()).collect(),
+            local_pledge: source.local_pledge().map(|p| p.clone().into()),
             epoch: source.epoch().as_u64(),
             proposed_by: source.proposed_by().as_bytes().to_vec(),
             justify: Some(source.justify().clone().into()),
@@ -208,7 +204,7 @@ impl From<ShardVote> for proto::consensus::ShardVote {
         Self {
             shard_id: s.shard_id.into(),
             node_hash: s.node_hash.into(),
-            pledges: s.pledges.into_iter().map(Into::into).collect(),
+            pledge: s.pledge.map(Into::into),
         }
     }
 }
@@ -220,11 +216,7 @@ impl TryFrom<proto::consensus::ShardVote> for ShardVote {
         Ok(Self {
             shard_id: value.shard_id.try_into()?,
             node_hash: value.node_hash.try_into()?,
-            pledges: value
-                .pledges
-                .iter()
-                .map(|p| p.clone().try_into())
-                .collect::<Result<_, _>>()?,
+            pledge: value.pledge.map(|p| p.try_into()).transpose()?,
         })
     }
 }
