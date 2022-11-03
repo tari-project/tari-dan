@@ -50,6 +50,8 @@ pub enum EpochManagerError {
     NoEpochFound(Epoch),
     #[error("No committee found for shard {0:?}")]
     NoCommitteeFound(ShardId),
+    #[error("Unexpected request")]
+    UnexpectedRequest,
     #[error("Unexpected response")]
     UnexpectedResponse,
     #[error("Storage error: {0}")]

@@ -45,12 +45,6 @@ pub trait ValidatorNodeRpcService: Send + Sync + 'static {
     ) -> Result<Streaming<proto::rpc::GetPeersResponse>, RpcStatus>;
 
     #[rpc(method = 3)]
-    async fn get_vn_state_inventory(
-        &self,
-        request: Request<proto::rpc::GetVnStateInventoryRequest>,
-    ) -> Result<Response<proto::rpc::GetVnStateInventoryResponse>, RpcStatus>;
-
-    #[rpc(method = 4)]
     async fn vn_state_sync(
         &self,
         request: Request<proto::rpc::VnStateSyncRequest>,

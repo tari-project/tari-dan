@@ -41,7 +41,7 @@ use tokio::{
 
 use crate::p2p::proto::{
     consensus::QuorumCertificate,
-    rpc::{GetVnStateInventoryRequest, GetVnStateInventoryResponse, VnStateSyncRequest, VnStateSyncResponse},
+    rpc::{VnStateSyncRequest, VnStateSyncResponse},
 };
 
 const LOG_TARGET: &str = "vn::p2p::rpc";
@@ -142,33 +142,6 @@ where TPeerProvider: PeerProvider + Clone + Send + Sync + 'static
         Ok(Streaming::new(rx))
     }
 
-    async fn get_vn_state_inventory(
-        &self,
-        request: Request<GetVnStateInventoryRequest>,
-    ) -> Result<Response<GetVnStateInventoryResponse>, RpcStatus> {
-        let request = request.into_message();
-        let start_shard_id = request
-            .start_shard_id
-            .and_then(|s| ShardId::try_from(s).ok())
-            .ok_or_else(|| RpcStatus::bad_request("Invalid gRPC request: start_shard_id not provided"))?;
-        let end_shard_id = request
-            .end_shard_id
-            .and_then(|s| ShardId::try_from(s).ok())
-            .ok_or_else(|| RpcStatus::bad_request("Invalid gRPC request: end_shard_id not provided"))?;
-
-        let store_tx = self
-            .shard_state_store
-            .create_tx()
-            .map_err(RpcStatus::log_internal_error(LOG_TARGET))?;
-        let inventory = store_tx
-            .get_state_inventory(start_shard_id, end_shard_id)
-            .map_err(RpcStatus::log_internal_error(LOG_TARGET))?;
-
-        Ok(Response::new(GetVnStateInventoryResponse {
-            inventory: inventory.into_iter().map(|item| item.into()).collect(),
-        }))
-    }
-
     async fn vn_state_sync(
         &self,
         request: Request<VnStateSyncRequest>,
@@ -176,8 +149,26 @@ where TPeerProvider: PeerProvider + Clone + Send + Sync + 'static
         let (tx, rx) = mpsc::channel(100);
         let msg = request.into_message();
 
-        let missing_shard_ids = msg
-            .missing_shard_state_ids
+        let start_shard_id = msg
+            .start_shard_id
+            .and_then(|s| ShardId::try_from(s).ok())
+            .ok_or_else(|| RpcStatus::bad_request("Invalid gRPC request: start_shard_id not provided"))?;
+        let end_shard_id = msg
+            .end_shard_id
+            .and_then(|s| ShardId::try_from(s).ok())
+            .ok_or_else(|| RpcStatus::bad_request("Invalid gRPC request: end_shard_id not provided"))?;
+
+        let shard_db = self
+            .shard_state_store
+            .create_tx()
+            .map_err(RpcStatus::log_internal_error(LOG_TARGET))?;
+
+        let current_inventory = shard_db
+            .get_state_inventory(start_shard_id, end_shard_id)
+            .map_err(RpcStatus::log_internal_error(LOG_TARGET))?;
+
+        let request_inventory = msg
+            .inventory
             .iter()
             .map(|s| {
                 ShardId::try_from(s.bytes.as_slice())
@@ -185,23 +176,26 @@ where TPeerProvider: PeerProvider + Clone + Send + Sync + 'static
             })
             .collect::<Vec<ShardId>>();
 
-        if missing_shard_ids.is_empty() {
+        if request_inventory.is_empty() {
             return Err(RpcStatus::bad_request(
                 "Invalid gRPC request: request should contain at least one shard id available",
             ));
         }
 
-        let shard_store = self.shard_state_store.clone();
+        let missing_shard_ids = current_inventory
+            .into_iter()
+            .filter(|sid| !request_inventory.contains(sid))
+            .collect::<Vec<_>>();
 
-        let store_tx = Arc::new(Mutex::new(
-            shard_store
-                .create_tx()
-                .map_err(RpcStatus::log_internal_error(LOG_TARGET))?,
-        ));
+        if missing_shard_ids.is_empty() {
+            return Ok(Streaming::new(rx));
+        }
+
+        let shard_db = Arc::new(Mutex::new(shard_db));
 
         task::spawn(async move {
             loop {
-                let shards_substates_data = store_tx.lock().await.get_substate_states(missing_shard_ids.as_slice());
+                let shards_substates_data = shard_db.lock().await.get_substate_states(missing_shard_ids.as_slice());
                 let substates_data = match shards_substates_data {
                     Ok(s) => s,
                     Err(err) => {

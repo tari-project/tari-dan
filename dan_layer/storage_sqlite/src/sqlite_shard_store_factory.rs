@@ -934,7 +934,7 @@ impl ShardStoreTransaction<PublicKey, TariDanPayload> for SqliteShardStoreTransa
                             source,
                             operation: "get_substate_states".to_string(),
                             data: qc,
-                        })?) 
+                        })?)
                     } else {
                         None
                     };

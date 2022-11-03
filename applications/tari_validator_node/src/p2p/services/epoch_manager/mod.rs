@@ -25,6 +25,7 @@ pub mod epoch_manager_service;
 pub mod handle;
 
 mod initializer;
+mod sync_peers;
 use std::ops::RangeInclusive;
 
 pub use initializer::spawn;

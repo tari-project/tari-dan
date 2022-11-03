@@ -20,40 +20,29 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use std::{
-    convert::{TryFrom, TryInto},
-    sync::Arc,
-};
+use std::{convert::TryInto, sync::Arc};
 
-use futures::StreamExt;
 use tari_comms::{types::CommsPublicKey, NodeIdentity};
 use tari_crypto::tari_utilities::ByteArray;
-use tari_dan_common_types::{Epoch, PayloadId, ShardId, SubstateState};
+use tari_dan_common_types::{Epoch, ShardId};
 use tari_dan_core::{
-    models::{Committee, NodeHeight, QuorumCertificate, SubstateShardData, TreeNodeHash, ValidatorNode},
+    models::{Committee, ValidatorNode},
     services::{
         epoch_manager::{EpochManagerError, ShardCommitteeAllocation},
         BaseNodeClient,
-        ValidatorNodeClientFactory,
     },
-    storage::{
-        shard_store::{ShardStoreFactory, ShardStoreTransaction},
-        DbFactory,
-    },
+    storage::DbFactory,
 };
 use tari_dan_storage::global::{DbValidatorNode, MetadataKey};
-use tari_dan_storage_sqlite::{sqlite_shard_store_factory::SqliteShardStoreFactory, SqliteDbFactory};
+use tari_dan_storage_sqlite::SqliteDbFactory;
 use tokio::sync::broadcast;
 
-use super::get_committee_shard_range;
+use super::{get_committee_shard_range, sync_peers::PeerSyncManagerService};
 use crate::{
     grpc::services::base_node_client::GrpcBaseNodeClient,
-    p2p::{
-        self,
-        services::{
-            epoch_manager::epoch_manager_service::EpochManagerEvent,
-            rpc_client::TariCommsValidatorNodeClientFactory,
-        },
+    p2p::services::{
+        epoch_manager::epoch_manager_service::EpochManagerEvent,
+        rpc_client::TariCommsValidatorNodeClientFactory,
     },
     ValidatorNodeConfig,
 };
@@ -124,107 +113,25 @@ impl BaseLayerEpochManager {
         let mut vns = base_node_client.get_validator_nodes(height).await?;
         vns.sort_by(|a, b| a.shard_key.partial_cmp(&b.shard_key).unwrap());
 
-        let current_shard_key = vns
+        let vn_shard_key = vns
             .iter()
             .find(|v| v.public_key == *self.node_identity.public_key())
             .ok_or(EpochManagerError::UnexpectedResponse)?
             .shard_key;
 
         // from current_shard_key we can get the corresponding vns committee
-        let committee_vns = self.get_committee_vns_from_shard_key(epoch, current_shard_key)?;
-        // shard space:
-        // vn_0 -- vn1_0 --- infinity --- our_vn -- vn_2 -- vn_3
-        let (start_shard, end_shard) = get_committee_shard_range(&committee_vns).into_inner();
+        let committee_vns = self.get_committee_vns_from_shard_key(epoch, vn_shard_key)?;
+        let (start_shard_id, end_shard_id) = get_committee_shard_range(&committee_vns).into_inner();
 
-        let data_dir = self.validator_node_config.data_dir.clone();
-        let shard_db_factory =
-            SqliteShardStoreFactory::try_create(data_dir).map_err(EpochManagerError::StorageError)?;
-        let mut shard_db = shard_db_factory.create_tx().map_err(EpochManagerError::StorageError)?;
+        let peer_sync_service_manager = PeerSyncManagerService::new(
+            self.validator_node_config.clone(),
+            self.validator_node_client_factory.clone(),
+        );
 
-        // query the shard store transaction db to get inventory
-        let mut inventory = shard_db
-            .get_state_inventory(start_shard, end_shard)
-            .map_err(EpochManagerError::StorageError)?;
-
-        // shards in the committee inventory but not in the current node inventory have to be synced
-        for sync_vn in committee_vns {
-            if sync_vn.shard_key == current_shard_key {
-                continue;
-            }
-            let mut sync_vn_client = self.validator_node_client_factory.create_client(&sync_vn.public_key);
-            let mut sync_vn_rpc_client = sync_vn_client
-                .create_connection()
-                .await
-                .map_err(EpochManagerError::ValidatorNodeClientError)?;
-            let request = crate::p2p::proto::rpc::GetVnStateInventoryRequest {
-                start_shard_id: Some(p2p::proto::common::ShardId::from(start_shard)),
-                end_shard_id: Some(p2p::proto::common::ShardId::from(end_shard)),
-            };
-            let sync_vn_inventory_response = sync_vn_rpc_client
-                .get_vn_state_inventory(request)
-                .await
-                .map_err(EpochManagerError::RpcError)?;
-            let sync_vn_inventory = sync_vn_inventory_response.inventory;
-            let missing_shard_state_ids = sync_vn_inventory
-                .into_iter()
-                .filter(|s| {
-                    let shard = ShardId::try_from(s.clone()).expect("Invalid received ShardId from VN committee");
-                    !inventory.contains(&shard)
-                })
-                .collect::<Vec<_>>();
-
-            let request = crate::p2p::proto::rpc::VnStateSyncRequest {
-                missing_shard_state_ids,
-            };
-            let mut vn_state_stream = sync_vn_rpc_client
-                .vn_state_sync(request)
-                .await
-                .map_err(EpochManagerError::RpcError)?;
-
-            while let Some(resp) = vn_state_stream.next().await {
-                let msg = resp.map_err(EpochManagerError::RpcStatus)?;
-                let sync_vn_shard = ShardId::try_from(msg.shard_id.ok_or(EpochManagerError::UnexpectedResponse)?)
-                    .map_err(|_| EpochManagerError::UnexpectedResponse)?;
-                let sync_vn_substate =
-                    SubstateState::try_from(msg.substate_state.ok_or(EpochManagerError::UnexpectedResponse)?)
-                        .map_err(|_| EpochManagerError::UnexpectedResponse)?;
-                let sync_vn_node_height = NodeHeight::from(msg.node_height);
-
-                let sync_vn_tree_node_hash = if !msg.tree_node_hash.is_empty() {
-                    Some(
-                        TreeNodeHash::try_from(msg.tree_node_hash)
-                            .map_err(|_| EpochManagerError::UnexpectedResponse)?,
-                    )
-                } else {
-                    None
-                };
-
-                let sync_vn_payload_id =
-                    PayloadId::try_from(msg.payload_id).map_err(|_| EpochManagerError::UnexpectedResponse)?;
-
-                let sync_vn_certificate = if let Some(qc) = msg.certificate {
-                    Some(QuorumCertificate::try_from(qc).map_err(|_| EpochManagerError::UnexpectedResponse)?)
-                } else {
-                    None
-                };
-
-                let substate_shard_data = SubstateShardData::new(
-                    sync_vn_shard,
-                    sync_vn_substate,
-                    sync_vn_node_height,
-                    sync_vn_tree_node_hash,
-                    sync_vn_payload_id,
-                    sync_vn_certificate,
-                );
-
-                shard_db
-                    .insert_substates(substate_shard_data)
-                    .map_err(EpochManagerError::StorageError)?;
-
-                // increase node inventory
-                inventory.push(sync_vn_shard);
-            }
-        }
+        // synchronize state with committee validator nodes
+        peer_sync_service_manager
+            .sync_peers_state(committee_vns, start_shard_id, end_shard_id, vn_shard_key)
+            .await?;
 
         // insert the new VNs for this epoch in the database
         self.insert_validator_nodes(epoch, vns)?;

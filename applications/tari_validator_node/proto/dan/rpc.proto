@@ -86,8 +86,9 @@ message GetPeersResponse {
 }
 
 message VNStateSyncRequest {
-  // Specific shard ids
-  repeated tari.dan.common.ShardId missing_shard_state_ids = 1;
+  tari.dan.common.ShardId start_shard_id = 1;
+  tari.dan.common.ShardId end_shard_id = 2;
+  repeated tari.dan.common.ShardId inventory = 3;
 }
 
 message VNStateSyncResponse {
@@ -97,13 +98,4 @@ message VNStateSyncResponse {
   bytes tree_node_hash = 4;
   bytes payload_id = 5;
   tari.dan.consensus.QuorumCertificate certificate = 6;
-}
-
-message GetVnStateInventoryRequest {
-  tari.dan.common.ShardId start_shard_id = 1;
-  tari.dan.common.ShardId end_shard_id = 2;
-}
-
-message GetVnStateInventoryResponse {
-  repeated tari.dan.common.ShardId inventory = 1;
 }
