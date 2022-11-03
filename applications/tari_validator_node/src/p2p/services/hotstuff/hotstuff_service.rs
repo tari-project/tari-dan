@@ -23,7 +23,10 @@
 use std::{fmt::Display, sync::Arc};
 
 use log::*;
-use tari_comms::{types::CommsPublicKey, NodeIdentity};
+use tari_comms::{
+    types::{CommsPublicKey, CommsSecretKey},
+    NodeIdentity,
+};
 use tari_dan_common_types::ShardId;
 use tari_dan_core::{
     consensus_constants::ConsensusConstants,
@@ -80,6 +83,7 @@ impl HotstuffService {
     pub fn spawn(
         node_identity: Arc<NodeIdentity>,
         node_public_key: CommsPublicKey,
+        node_secret_key: CommsSecretKey,
         epoch_manager: EpochManagerHandle,
         mempool: MempoolHandle,
         outbound: OutboundMessaging,
@@ -103,6 +107,7 @@ impl HotstuffService {
         HotStuffWaiter::spawn(
             node_identity,
             node_public_key.clone(),
+            node_secret_key,
             epoch_manager.clone(),
             leader_strategy,
             rx_new,

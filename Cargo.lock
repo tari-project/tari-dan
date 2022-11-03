@@ -6001,7 +6001,7 @@ dependencies = [
  "num-traits",
  "prost",
  "prost-types",
- "rand 0.8.5",
+ "rand 0.7.3",
  "serde",
  "serde_json",
  "tari_common",

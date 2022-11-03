@@ -135,6 +135,7 @@ impl HsTestHarness {
     pub fn new<TEpochManager, TLeader>(
         private_key: PrivateKey,
         identity: PublicKey,
+        secret_key: RistrettoSecretKey,
         epoch_manager: TEpochManager,
         leader: TLeader,
     ) -> Self
@@ -162,6 +163,7 @@ impl HsTestHarness {
         let hs_waiter = HotStuffWaiter::spawn(
             Arc::new(node_identity),
             identity.clone(),
+            secret_key,
             epoch_manager,
             leader,
             rx_new,

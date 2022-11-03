@@ -59,6 +59,7 @@ pub fn try_spawn(
     let events = HotstuffService::spawn(
         node_identity.clone(),
         node_identity.public_key().clone(),
+        node_identity.secret_key().clone(),
         epoch_manager,
         mempool,
         outbound,

@@ -21,6 +21,7 @@
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 use digest::{Digest, FixedOutput};
+use rand::rngs::OsRng;
 use serde::{Deserialize, Serialize};
 use tari_common_types::types::{FixedHash, PrivateKey, PublicKey};
 use tari_core::{consensus::DomainSeparatedConsensusHasher, transactions::TransactionHashDomain, ValidatorNodeMmr};
@@ -115,6 +116,43 @@ impl VoteMessage {
         );
 
         self.validator_metadata = Some(validator_metadata);
+    }
+
+    pub fn sign(&mut self, secret_key: RistrettoSecretKey) {
+        let (secret_nonce, public_nonce) = PublicKey::random_keypair(&mut OsRng);
+        let challenge = self.get_challenge();
+        let signature = Signature::sign(secret_key, secret_nonce, &challenge).unwrap();
+        self.signature = Some(
+            ValidatorSignature::from_bytes(
+                [public_nonce.as_bytes(), signature.get_signature().as_bytes()]
+                    .concat()
+                    .as_bytes(),
+            )
+            .unwrap(),
+        );
+    }
+
+    pub fn check_signature(&self, public_key: &PublicKey) -> bool {
+        let challenge = self.get_challenge();
+        if self.signature().to_bytes().len() != 64 {
+            return false;
+        }
+        let b = self.signature().to_bytes();
+        let (public_nonce, signature) = b.split_at(32);
+        let signature = Signature::new(
+            RistrettoPublicKey::from_bytes(public_nonce).unwrap(),
+            RistrettoSecretKey::from_bytes(signature).unwrap(),
+        );
+        signature.verify_challenge(public_key, &challenge)
+    }
+
+    fn get_challenge(&self) -> [u8; 32] {
+        DomainSeparatedConsensusHasher::<TariEngineHashDomain>::new("vote_message")
+        .chain(&self.local_node_hash.as_bytes())
+        .chain(&self.shard.to_le_bytes())
+        .chain(&[self.decision.as_u8()])
+        // .chain(&self.all_shard_nodes.into_iter().map(|node| node).collect())
+        .finalize()
     }
 
     pub fn construct_challenge(&self, public_key: &PublicKey, public_nonce: &PublicKey) -> FixedHash {

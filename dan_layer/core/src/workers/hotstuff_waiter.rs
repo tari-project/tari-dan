@@ -74,6 +74,7 @@ const LOG_TARGET: &str = "tari::dan_layer::hotstuff_waiter";
 pub struct HotStuffWaiter<TPayload, TAddr, TLeaderStrategy, TEpochManager, TPayloadProcessor, TShardStore> {
     node_identity: Arc<NodeIdentity>,
     public_key: TAddr,
+    secret_key: CommsSecretKey,
     leader_strategy: TLeaderStrategy,
     /// The epoch manager
     epoch_manager: TEpochManager,
@@ -113,6 +114,7 @@ where
     pub fn spawn(
         node_identity: Arc<NodeIdentity>,
         public_key: TAddr,
+        secret_key: CommsSecretKey,
         epoch_manager: TEpochManager,
         leader_strategy: TLeaderStrategy,
         rx_new: Receiver<(TPayload, ShardId)>,
@@ -130,6 +132,7 @@ where
         let waiter = HotStuffWaiter::new(
             node_identity,
             public_key,
+            secret_key,
             epoch_manager,
             leader_strategy,
             rx_new,
@@ -149,6 +152,7 @@ where
     pub fn new(
         node_identity: Arc<NodeIdentity>,
         public_key: TAddr,
+        secret_key: CommsSecretKey,
         epoch_manager: TEpochManager,
         leader_strategy: TLeaderStrategy,
         rx_new: Receiver<(TPayload, ShardId)>,
@@ -165,6 +169,7 @@ where
         Self {
             node_identity,
             public_key,
+            secret_key,
             epoch_manager,
             leader_strategy,
             rx_new,
@@ -497,6 +502,39 @@ where
 
     /// Step 6: The leader receives votes from the local shard, and once it has enough ($n - f$) votes, it commits a
     /// high QC and sends the next round of proposals.
+    // fn sign(&self, _node_hash: &TreeNodeHash, _shard: ShardId) -> ValidatorSignature {
+    //     // todo!();
+    //     ValidatorSignature::from_bytes(&[]).unwrap()
+    // }
+
+    // fn decide(
+    //     &self,
+    //     local_node: TreeNodeHash,
+    //     local_shard: ShardId,
+    //     votes: Vec<ShardVote>,
+    //     finalize_result: &FinalizeResult,
+    // ) -> Result<VoteMessage, HotStuffError> {
+    //     let mut vote_msg = match finalize_result.result {
+    //         TransactionResult::Accept(ref accept) => {
+    //             info!(
+    //                 target: LOG_TARGET,
+    //                 "💚 Vote to ACCEPT payload. Up substate(s): {}, down substate(s): {}",
+    //                 accept.up_iter().count(),
+    //                 accept.down_iter().count(),
+    //             );
+    //             VoteMessage::accept(local_node, local_shard, votes)
+    //         },
+    //         TransactionResult::Reject(ref reject) => {
+    //             info!(target: LOG_TARGET, "⚔ Vote to REJECT payload: {}", reject.reason);
+    //             VoteMessage::reject(local_node, local_shard, votes)
+    //         },
+    //     };
+
+    //     vote_msg.sign(self.secret_key.clone());
+    //     Ok(vote_msg)
+    // }
+
+    // The leader receives votes from his local shard, and forwards it to all other shards
     async fn on_receive_vote(&mut self, from: TAddr, msg: VoteMessage) -> Result<(), HotStuffError> {
         info!(
             target: LOG_TARGET,
@@ -505,6 +543,9 @@ where
             msg.shard(),
             from,
         );
+        if !msg.check_signature(&RistrettoPublicKey::from_bytes(from.as_bytes()).unwrap()) {
+            return Ok(());
+        }
         // TODO: Only do this if you're the leader
         let mut on_beat_future = None;
         let node;
