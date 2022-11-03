@@ -731,16 +731,16 @@ impl ShardStoreTransaction<PublicKey, TariDanPayload> for SqliteShardStoreTransa
 
     fn save_substate_changes(
         &mut self,
-        changes: &HashMap<ShardId, SubstateState>,
+        changes: &HashMap<ShardId, Vec<SubstateState>>,
         node: &HotStuffTreeNode<PublicKey, TariDanPayload>,
     ) -> Result<(), Self::Error> {
         use crate::schema::substates::{data, is_draft, justify, node_height, shard_id, substate_type, tree_node_hash};
         let payload_id = Vec::from(node.payload_id().as_slice());
-        for (sid, st_change) in changes {
+        for (sid, st_changes) in changes {
             let shard = Vec::from(sid.as_bytes());
 
-            let rows_affected =
-                diesel::update(
+            for st_change in st_changes {
+                let rows_affected = diesel::update(
                     substates.filter(
                         shard_id
                             .eq(shard.clone())
@@ -770,37 +770,38 @@ impl ShardStoreTransaction<PublicKey, TariDanPayload> for SqliteShardStoreTransa
                 .map_err(|e| Self::Error::QueryError {
                     reason: format!("Save substate changes error: {}", e),
                 })?;
-            if rows_affected == 0 {
-                let new_row = NewSubstate {
-                    substate_type: st_change.as_str().to_string(),
-                    shard_id: shard.clone(),
-                    node_height: node.height().as_u64() as i64,
-                    data: match st_change {
-                        SubstateState::DoesNotExist => None,
-                        SubstateState::Up { data: d, .. } => Some(serde_json::to_string_pretty(d).map_err(
-                            |source| StorageError::SerdeJson {
-                                source,
-                                operation: "save_substate_changes".to_string(),
-                                data: "substate data".to_string(),
-                            },
-                        )?),
-                        SubstateState::Down { .. } => None,
-                    },
-                    created_by_payload_id: payload_id.clone(),
-                    justify: Some(json!(node.justify()).to_string()),
-                    is_draft: false,
-                    tree_node_hash: Some(Vec::from(node.hash().as_bytes())),
-                    pledged_to_payload_id: None,
-                    deleted_by_payload_id: None,
-                    pledged_until_height: None,
-                };
+                if rows_affected == 0 {
+                    let new_row = NewSubstate {
+                        substate_type: st_change.as_str().to_string(),
+                        shard_id: shard.clone(),
+                        node_height: node.height().as_u64() as i64,
+                        data: match st_change {
+                            SubstateState::DoesNotExist => None,
+                            SubstateState::Up { data: d, .. } => Some(serde_json::to_string_pretty(d).map_err(
+                                |source| StorageError::SerdeJson {
+                                    source,
+                                    operation: "save_substate_changes".to_string(),
+                                    data: "substate data".to_string(),
+                                },
+                            )?),
+                            SubstateState::Down { .. } => None,
+                        },
+                        created_by_payload_id: payload_id.clone(),
+                        justify: Some(json!(node.justify()).to_string()),
+                        is_draft: false,
+                        tree_node_hash: Some(Vec::from(node.hash().as_bytes())),
+                        pledged_to_payload_id: None,
+                        deleted_by_payload_id: None,
+                        pledged_until_height: None,
+                    };
 
-                diesel::insert_into(substates)
-                    .values(&new_row)
-                    .execute(&self.connection)
-                    .map_err(|e| Self::Error::QueryError {
-                        reason: format!("Save substate change: {}", e),
-                    })?;
+                    diesel::insert_into(substates)
+                        .values(&new_row)
+                        .execute(&self.connection)
+                        .map_err(|e| Self::Error::QueryError {
+                            reason: format!("Save substate change: {}", e),
+                        })?;
+                }
             }
         }
         Ok(())

@@ -163,7 +163,7 @@ async fn handle_submit(
     client: &mut ValidatorNodeClient,
 ) -> Result<(), anyhow::Error> {
     let mut input_refs = vec![];
-    let mut inputs = vec![];
+    let inputs = vec![];
     let instruction = match args.instruction {
         CliInstruction::CallFunction {
             template_address,

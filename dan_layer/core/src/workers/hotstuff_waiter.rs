@@ -440,7 +440,7 @@ where
     fn on_commit(
         &mut self,
         node: HotStuffTreeNode<TAddr, TPayload>,
-        changes: &HashMap<ShardId, SubstateState>,
+        changes: &HashMap<ShardId, Vec<SubstateState>>,
         tx: &mut TShardStore::Transaction,
     ) -> Result<(), HotStuffError> {
         let shard = node.shard();
@@ -626,51 +626,75 @@ where
     fn validate_pledges(
         shard_pledges: &HashMap<ShardId, Option<ObjectPledge>>,
         finalize_result: &mut FinalizeResult,
-        changes: HashMap<ShardId, SubstateState>,
+        changes: HashMap<ShardId, Vec<SubstateState>>,
     ) {
-        for (shard_changed, substate) in changes {
-            let pledged_object = shard_pledges.get(&shard_changed);
-            if let Some(Some(pledge)) = pledged_object {
-                match substate {
-                    SubstateState::DoesNotExist => match pledge.current_state {
-                        SubstateState::DoesNotExist => (),
-                        _ => {
-                            finalize_result.result = TransactionResult::Reject(RejectResult {
-                                reason: format!("Shard {} was required to not exist, but it does", shard_changed,),
-                            });
-                            break;
+        for (shard_changed, substates) in changes {
+            // TODO: Is this statement correct?
+            // If there are multiple changes to the substate, only the first one needs to be pledged for.
+            if let Some(substate) = substates.first() {
+                let pledged_object = shard_pledges.get(&shard_changed);
+                if let Some(Some(pledge)) = pledged_object {
+                    match substate {
+                        SubstateState::DoesNotExist => match pledge.current_state {
+                            SubstateState::DoesNotExist => {
+                                debug!(
+                                    target: LOG_TARGET,
+                                    "Pledge requires object to not exist, and it does not exist - ok"
+                                );
+                            },
+                            _ => {
+                                finalize_result.result = TransactionResult::Reject(RejectResult {
+                                    reason: format!("Shard {} was required to not exist, but it does", shard_changed,),
+                                });
+                                break;
+                            },
                         },
-                    },
-                    SubstateState::Up { .. } => match pledge.current_state {
-                        SubstateState::DoesNotExist => (),
-                        _ => {
-                            finalize_result.result = TransactionResult::Reject(RejectResult {
-                                reason: format!(
-                                    "Shard {} was required to not exist, but it is {}",
-                                    shard_changed,
-                                    pledge.current_state.as_str(),
-                                ),
-                            });
-                            break;
+                        SubstateState::Up { .. } => match pledge.current_state {
+                            SubstateState::DoesNotExist => {
+                                debug!(
+                                    target: LOG_TARGET,
+                                    "Pledge requires object to not exist and will be UPPED, and it does not exist - ok"
+                                );
+                            },
+                            _ => {
+                                finalize_result.result = TransactionResult::Reject(RejectResult {
+                                    reason: format!(
+                                        "Shard {} was required to not exist, but it is {}",
+                                        shard_changed,
+                                        pledge.current_state.as_str(),
+                                    ),
+                                });
+                                break;
+                            },
                         },
-                    },
-                    SubstateState::Down { .. } => match pledge.current_state {
-                        SubstateState::Up { .. } => (),
-                        _ => {
-                            finalize_result.result = TransactionResult::Reject(RejectResult {
-                                reason: format!(
-                                    "Shard {} was required to be up, but it is {}",
-                                    shard_changed,
-                                    pledge.current_state.as_str(),
-                                ),
-                            });
-                            break;
+                        SubstateState::Down { .. } => match pledge.current_state {
+                            SubstateState::Up { .. } => {
+                                debug!(
+                                    target: LOG_TARGET,
+                                    "Pledge requires object to be DOWNED, and it is UP - Ok"
+                                );
+                            },
+                            _ => {
+                                finalize_result.result = TransactionResult::Reject(RejectResult {
+                                    reason: format!(
+                                        "Shard {} was required to be up, but it is {}",
+                                        shard_changed,
+                                        pledge.current_state.as_str(),
+                                    ),
+                                });
+                                break;
+                            },
                         },
-                    },
+                    }
+                } else {
+                    finalize_result.result = TransactionResult::Reject(RejectResult {
+                        reason: format!("Shard {} was not pledged", shard_changed),
+                    });
+                    break;
                 }
             } else {
                 finalize_result.result = TransactionResult::Reject(RejectResult {
-                    reason: format!("Shard {} was not pledged", shard_changed),
+                    reason: format!("Shard {} had no substate changes - this is not correct", shard_changed),
                 });
                 break;
             }
@@ -866,24 +890,26 @@ where
 fn extract_changes(
     payload_id: PayloadId,
     finalize: &FinalizeResult,
-) -> Result<HashMap<ShardId, SubstateState>, HotStuffError> {
+) -> Result<HashMap<ShardId, Vec<SubstateState>>, HotStuffError> {
     let mut changes = HashMap::new();
     match finalize.result {
         TransactionResult::Accept(ref diff) => {
-            changes.extend(
-                diff.up_iter()
-                    .map(|(address, substate)| {
-                        (ShardId::from_address(address), SubstateState::Up {
-                            created_by: payload_id,
-                            data: substate.clone(),
-                        })
-                    })
-                    .chain(diff.down_iter().map(|address| {
-                        (ShardId::from_address(address), SubstateState::Down {
-                            deleted_by: payload_id,
-                        })
-                    })),
-            );
+            // down first, then up
+            for address in diff.down_iter() {
+                changes
+                    .entry(ShardId::from_address(address))
+                    .or_insert(vec![])
+                    .push(SubstateState::Down { deleted_by: payload_id });
+            }
+            for (address, substate) in diff.up_iter() {
+                changes
+                    .entry(ShardId::from_address(address))
+                    .or_insert(vec![])
+                    .push(SubstateState::Up {
+                        created_by: payload_id,
+                        data: substate.clone(),
+                    });
+            }
         },
         TransactionResult::Reject(ref reject) => return Err(HotStuffError::TransactionRejected(reject.reason.clone())),
     }

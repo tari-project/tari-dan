@@ -97,7 +97,7 @@ pub trait ShardStoreTransaction<TAddr: NodeAddressable, TPayload: Payload> {
     fn get_last_executed_height(&self, shard: ShardId) -> Result<NodeHeight, Self::Error>;
     fn save_substate_changes(
         &mut self,
-        changes: &HashMap<ShardId, SubstateState>,
+        changes: &HashMap<ShardId, Vec<SubstateState>>,
         node: &HotStuffTreeNode<TAddr, TPayload>,
     ) -> Result<(), Self::Error>;
     fn get_state_inventory(&self, start_shard: ShardId, end_shard: ShardId) -> Result<Vec<ShardId>, Self::Error>;
