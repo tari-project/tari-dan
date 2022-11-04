@@ -121,7 +121,12 @@ pub async fn spawn_services(
     );
 
     // Mempool
-    let mempool = mempool::spawn(rx_new_transaction_message, mempool_new_tx, outbound_messaging.clone());
+    let mempool = mempool::spawn(
+        rx_new_transaction_message,
+        mempool_new_tx,
+        outbound_messaging.clone(),
+        rx_consensus_message,
+    );
 
     // Networking
     let peer_provider = CommsPeerProvider::new(comms.peer_manager());

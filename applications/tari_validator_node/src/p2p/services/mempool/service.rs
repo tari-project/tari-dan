@@ -23,10 +23,11 @@
 use std::sync::{Arc, Mutex};
 
 use log::*;
+use tari_crypto::ristretto::RistrettoPublicKey;
 use tari_dan_common_types::ShardId;
 use tari_dan_core::{
     message::DanMessage,
-    models::{Payload, TariDanPayload},
+    models::{HotStuffMessage, Payload, TariDanPayload},
     services::infrastructure_services::OutboundService,
 };
 use tari_dan_engine::transaction::Transaction;
@@ -43,6 +44,7 @@ pub struct MempoolService {
     new_transactions: mpsc::Receiver<Transaction>,
     outbound: OutboundMessaging,
     tx_valid_transactions: broadcast::Sender<(Transaction, ShardId)>,
+    rx_consensus_message: Receiver<(RistrettoPublicKey, HotStuffMessage<TariDanPayload, RistrettoPublicKey>)>,
 }
 
 impl MempoolService {
@@ -50,12 +52,14 @@ impl MempoolService {
         new_transactions: mpsc::Receiver<Transaction>,
         outbound: OutboundMessaging,
         tx_valid_transactions: broadcast::Sender<(Transaction, ShardId)>,
+        rx_consensus_message: Receiver<(RistrettoPublicKey, HotStuffMessage<TariDanPayload, RistrettoPublicKey>)>,
     ) -> Self {
         Self {
             transactions: Arc::new(Mutex::new(Vec::new())),
             new_transactions,
             outbound,
             tx_valid_transactions,
+            rx_consensus_message,
         }
     }
 
@@ -64,6 +68,10 @@ impl MempoolService {
             tokio::select! {
                 Some(transaction) = self.new_transactions.recv() => {
                     self.handle_new_transaction(transaction).await;
+                }
+
+                Some(message) = self.rx_consensus_message.recv() => {
+
                 }
 
                 else => {
@@ -115,6 +123,11 @@ impl MempoolService {
                 );
             }
         }
+    }
+
+    pub fn remove_finalized_transaction(&mut self, transaction: Transaction) {
+        let mut access = self.transactions.lock().unwrap();
+        let transactions = access.iter().remove()
     }
 
     pub fn get_transaction(&self) -> TransactionVecMutex {
