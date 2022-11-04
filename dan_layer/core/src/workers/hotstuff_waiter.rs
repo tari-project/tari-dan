@@ -67,7 +67,7 @@ pub struct HotStuffWaiter<TPayload, TAddr, TLeaderStrategy, TEpochManager, TPayl
     leader_strategy: TLeaderStrategy,
     epoch_manager: TEpochManager,
     rx_new: Receiver<(TPayload, ShardId)>,
-    rx_hs_message: Receiver<(TAddr, HotStuffMessage<TPayload, TAddr>)>,
+    rx_hs_message: broadcast::Receiver<(TAddr, HotStuffMessage<TPayload, TAddr>)>,
     rx_votes: Receiver<(TAddr, VoteMessage)>,
     tx_leader: Sender<(TAddr, HotStuffMessage<TPayload, TAddr>)>,
     tx_broadcast: Sender<(HotStuffMessage<TPayload, TAddr>, Vec<TAddr>)>,
@@ -93,7 +93,7 @@ where
         epoch_manager: TEpochManager,
         leader_strategy: TLeaderStrategy,
         rx_new: Receiver<(TPayload, ShardId)>,
-        rx_hs_message: Receiver<(TAddr, HotStuffMessage<TPayload, TAddr>)>,
+        rx_hs_message: broadcast::Receiver<(TAddr, HotStuffMessage<TPayload, TAddr>)>,
         rx_votes: Receiver<(TAddr, VoteMessage)>,
         tx_leader: Sender<(TAddr, HotStuffMessage<TPayload, TAddr>)>,
         tx_broadcast: Sender<(HotStuffMessage<TPayload, TAddr>, Vec<TAddr>)>,
@@ -127,7 +127,7 @@ where
         epoch_manager: TEpochManager,
         leader_strategy: TLeaderStrategy,
         rx_new: Receiver<(TPayload, ShardId)>,
-        rx_hs_message: Receiver<(TAddr, HotStuffMessage<TPayload, TAddr>)>,
+        rx_hs_message: broadcast::Receiver<(TAddr, HotStuffMessage<TPayload, TAddr>)>,
         rx_votes: Receiver<(TAddr, VoteMessage)>,
         tx_leader: Sender<(TAddr, HotStuffMessage<TPayload, TAddr>)>,
         tx_broadcast: Sender<(HotStuffMessage<TPayload, TAddr>, Vec<TAddr>)>,
@@ -865,7 +865,7 @@ where
                         break;
                     }
                 },
-                Some((from, msg)) = self.rx_hs_message.recv() => {
+                Ok((from, msg)) = self.rx_hs_message.recv() => {
                     if let Err(e) = self.on_new_hs_message(from, msg).await {
                         // self.publish_event(HotStuffEvent::Failed(e.to_string()));
                         error!(target: LOG_TARGET, "Error while processing new hotstuff message (on_new_hs_message): {}", e);

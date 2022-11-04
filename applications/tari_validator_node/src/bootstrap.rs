@@ -35,7 +35,6 @@ use tari_common::{
 use tari_comms::{protocol::rpc::RpcServer, CommsNode, NodeIdentity, UnspawnedCommsNode};
 use tari_dan_core::{
     consensus_constants::ConsensusConstants,
-    models::HotStuffMessage,
     workers::events::{EventSubscription, HotStuffEvent},
 };
 use tari_dan_storage::global::GlobalDb;
@@ -128,11 +127,12 @@ pub async fn spawn_services(
     );
 
     // Mempool
+    let rx2_consensus_message = rx_consensus_message.resubscribe();
     let mempool = mempool::spawn(
         rx_new_transaction_message,
         mempool_new_tx,
         outbound_messaging.clone(),
-        rx_consensus_message,
+        rx2_consensus_message,
     );
 
     // Networking

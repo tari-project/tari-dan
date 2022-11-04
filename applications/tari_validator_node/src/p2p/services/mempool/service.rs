@@ -44,7 +44,8 @@ pub struct MempoolService {
     new_transactions: mpsc::Receiver<Transaction>,
     outbound: OutboundMessaging,
     tx_valid_transactions: broadcast::Sender<(Transaction, ShardId)>,
-    rx_consensus_message: mpsc::Receiver<HotStuffMessage<TariDanPayload, RistrettoPublicKey>>,
+    rx_consensus_message:
+        broadcast::Receiver<(RistrettoPublicKey, HotStuffMessage<TariDanPayload, RistrettoPublicKey>)>,
 }
 
 impl MempoolService {
@@ -52,7 +53,10 @@ impl MempoolService {
         new_transactions: mpsc::Receiver<Transaction>,
         outbound: OutboundMessaging,
         tx_valid_transactions: broadcast::Sender<(Transaction, ShardId)>,
-        rx_consensus_message: mpsc::Receiver<HotStuffMessage<TariDanPayload, RistrettoPublicKey>>,
+        rx_consensus_message: broadcast::Receiver<(
+            RistrettoPublicKey,
+            HotStuffMessage<TariDanPayload, RistrettoPublicKey>,
+        )>,
     ) -> Self {
         Self {
             transactions: Arc::new(Mutex::new(Vec::new())),
@@ -70,7 +74,8 @@ impl MempoolService {
                     self.handle_new_transaction(transaction).await;
                 }
 
-                Some(message) = self.rx_consensus_message.recv() => {
+                Ok(message) = self.rx_consensus_message.recv() => {
+                    let message = message.1;
                     // we want to remove this transaction from mempool if message has a node and the payload height is 4
                     let node = if let Some(node) = message.node() {
                         node
@@ -85,7 +90,8 @@ impl MempoolService {
                         } else {
                             continue
                         };
-
+                        // at this point the transaction should have been committed,
+                        // so we can safely assume it is finalized
                         self.remove_finalized_transaction(transaction)
                     }
                 }

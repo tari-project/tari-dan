@@ -36,7 +36,7 @@ use tari_dan_core::{
     models::{vote_message::VoteMessage, HotStuffMessage, TariDanPayload},
 };
 use tari_dan_engine::transaction::Transaction;
-use tokio::sync::mpsc;
+use tokio::sync::{broadcast, mpsc};
 
 use crate::comms::MessageChannel;
 
@@ -55,7 +55,7 @@ pub fn spawn(
 
 #[derive(Debug, Clone)]
 pub struct DanMessageSenders {
-    pub tx_consensus_message: mpsc::Sender<(CommsPublicKey, HotStuffMessage<TariDanPayload, CommsPublicKey>)>,
+    pub tx_consensus_message: broadcast::Sender<(CommsPublicKey, HotStuffMessage<TariDanPayload, CommsPublicKey>)>,
     pub tx_vote_message: mpsc::Sender<(CommsPublicKey, VoteMessage)>,
     pub tx_new_transaction_message: mpsc::Sender<Transaction>,
     pub tx_network_announce: mpsc::Sender<(CommsPublicKey, NetworkAnnounce<CommsPublicKey>)>,
@@ -63,14 +63,14 @@ pub struct DanMessageSenders {
 
 #[derive(Debug)]
 pub struct DanMessageReceivers {
-    pub rx_consensus_message: mpsc::Receiver<(CommsPublicKey, HotStuffMessage<TariDanPayload, CommsPublicKey>)>,
+    pub rx_consensus_message: broadcast::Receiver<(CommsPublicKey, HotStuffMessage<TariDanPayload, CommsPublicKey>)>,
     pub rx_vote_message: mpsc::Receiver<(CommsPublicKey, VoteMessage)>,
     pub rx_new_transaction_message: mpsc::Receiver<Transaction>,
     pub rx_network_announce: mpsc::Receiver<(CommsPublicKey, NetworkAnnounce<CommsPublicKey>)>,
 }
 
 pub fn new_messaging_channel(size: usize) -> (DanMessageSenders, DanMessageReceivers) {
-    let (tx_consensus_message, rx_consensus_message) = mpsc::channel(size);
+    let (tx_consensus_message, rx_consensus_message) = broadcast::channel(size);
     let (tx_vote_message, rx_vote_message) = mpsc::channel(size);
     let (tx_new_transaction_message, rx_new_transaction_message) = mpsc::channel(size);
     let (tx_network_announce, rx_network_announce) = mpsc::channel(size);
