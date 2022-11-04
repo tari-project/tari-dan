@@ -62,6 +62,7 @@ use crate::{
             messaging::{DanMessageReceivers, DanMessageSenders},
             networking,
             networking::NetworkingHandle,
+            rpc_client::TariCommsValidatorNodeClientFactory,
             template_manager,
             template_manager::{TemplateManager, TemplateManagerHandle},
         },
@@ -113,11 +114,16 @@ pub async fn spawn_services(
     } = message_receivers;
 
     // Epoch manager
+    let validator_node_config = config.validator_node.clone();
+    let validator_node_client_factory = TariCommsValidatorNodeClientFactory::new(comms.connectivity());
     let epoch_manager = epoch_manager::spawn(
         sqlite_db.clone(),
         base_node_client.clone(),
         node_identity.public_key().clone(),
         shutdown.clone(),
+        node_identity.clone(),
+        validator_node_config,
+        validator_node_client_factory,
     );
 
     // Mempool
