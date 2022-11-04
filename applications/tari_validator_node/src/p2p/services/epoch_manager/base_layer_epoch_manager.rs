@@ -113,6 +113,25 @@ impl BaseLayerEpochManager {
         let mut vns = base_node_client.get_validator_nodes(height).await?;
         vns.sort_by(|a, b| a.shard_key.partial_cmp(&b.shard_key).unwrap());
 
+        // insert the new VNs for this epoch in the database
+        self.insert_validator_nodes(epoch, vns.clone())?;
+        {
+            // after the end of the scope both db and tx are cleaned up
+            let db = self.db_factory.get_or_create_global_db()?;
+            let tx = db
+                .create_transaction()
+                .map_err(|e| EpochManagerError::StorageError(e.into()))?;
+            let metadata = db.metadata(&tx);
+            metadata
+                .set_metadata(MetadataKey::CurrentEpoch, &epoch.0.to_le_bytes())
+                .map_err(|e| EpochManagerError::StorageError(e.into()))?;
+            db.commit(tx).map_err(|e| EpochManagerError::StorageError(e.into()))?;
+        }
+        self.current_epoch = epoch;
+        self.tx_events
+            .send(EpochManagerEvent::EpochChanged(epoch))
+            .map_err(|_| EpochManagerError::SendError)?;
+
         let vn_shard_key = vns
             .iter()
             .find(|v| v.public_key == *self.node_identity.public_key())
@@ -132,22 +151,6 @@ impl BaseLayerEpochManager {
         peer_sync_service_manager
             .sync_peers_state(committee_vns, start_shard_id, end_shard_id, vn_shard_key)
             .await?;
-
-        // insert the new VNs for this epoch in the database
-        self.insert_validator_nodes(epoch, vns)?;
-        let db = self.db_factory.get_or_create_global_db()?;
-        let tx = db
-            .create_transaction()
-            .map_err(|e| EpochManagerError::StorageError(e.into()))?;
-        let metadata = db.metadata(&tx);
-        metadata
-            .set_metadata(MetadataKey::CurrentEpoch, &epoch.0.to_le_bytes())
-            .map_err(|e| EpochManagerError::StorageError(e.into()))?;
-        db.commit(tx).map_err(|e| EpochManagerError::StorageError(e.into()))?;
-        self.current_epoch = epoch;
-        self.tx_events
-            .send(EpochManagerEvent::EpochChanged(epoch))
-            .map_err(|_| EpochManagerError::SendError)?;
 
         Ok(())
     }
