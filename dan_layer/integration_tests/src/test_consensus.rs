@@ -283,10 +283,14 @@ async fn test_hs_waiter_leader_proposes() {
     dbg!(payload.to_id());
     // Send a new view message
     let new_view_message = HotStuffMessage::new_view(QuorumCertificate::genesis(), *SHARD0, Some(payload));
-
     instance
         .tx_hs_messages
-        .send((node1.clone(), new_view_message))
+        .send((node1.clone(), new_view_message.clone()))
+        .await
+        .unwrap();
+    instance
+        .tx_hs_messages
+        .send((node2.clone(), new_view_message))
         .await
         .unwrap();
 
@@ -316,6 +320,11 @@ async fn test_hs_waiter_replica_sends_vote_for_proposal() {
     instance
         .tx_hs_messages
         .send((node2, new_view_message.clone()))
+        .await
+        .unwrap();
+    instance
+        .tx_hs_messages
+        .send((node1.clone(), new_view_message.clone()))
         .await
         .unwrap();
 
@@ -356,6 +365,11 @@ async fn test_hs_waiter_leader_sends_new_proposal_when_enough_votes_are_received
     instance
         .tx_hs_messages
         .send((node2.clone(), new_view_message.clone()))
+        .await
+        .unwrap();
+    instance
+        .tx_hs_messages
+        .send((node1.clone(), new_view_message.clone()))
         .await
         .unwrap();
 
