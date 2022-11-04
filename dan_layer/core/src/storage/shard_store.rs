@@ -34,6 +34,7 @@ use crate::{
         Payload,
         QuorumCertificate,
         RecentTransaction,
+        SubstateShardData,
         TreeNodeHash,
     },
     services::infrastructure_services::NodeAddressable,
@@ -97,11 +98,17 @@ pub trait ShardStoreTransaction<TAddr: NodeAddressable, TPayload: Payload> {
     fn get_last_executed_height(&self, shard: ShardId) -> Result<NodeHeight, Self::Error>;
     fn save_substate_changes(
         &mut self,
-        changes: &HashMap<ShardId, SubstateState>,
+        changes: &HashMap<ShardId, Vec<SubstateState>>,
         node: &HotStuffTreeNode<TAddr, TPayload>,
     ) -> Result<(), Self::Error>;
-    fn get_state_inventory(&self, start_shard: ShardId, end_shard: ShardId) -> Result<Vec<ShardId>, Self::Error>;
-    fn get_substate_states(&self, shards: &[ShardId]) -> Result<Vec<SubstateState>, Self::Error>;
+    fn insert_substates(&mut self, substate_data: SubstateShardData) -> Result<(), Self::Error>;
+    fn get_state_inventory(&self) -> Result<Vec<ShardId>, Self::Error>;
+    fn get_substate_states(
+        &self,
+        start_shard_id: ShardId,
+        end_shard_id: ShardId,
+        excluded_shards: &[ShardId],
+    ) -> Result<Vec<SubstateShardData>, Self::Error>;
     fn get_last_voted_height(&self, shard: ShardId) -> Result<NodeHeight, Self::Error>;
     fn set_last_voted_height(&mut self, shard: ShardId, height: NodeHeight) -> Result<(), Self::Error>;
     fn get_leader_proposals(

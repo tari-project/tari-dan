@@ -20,7 +20,9 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use tari_comms::types::CommsPublicKey;
+use std::sync::Arc;
+
+use tari_comms::{types::CommsPublicKey, NodeIdentity};
 use tari_dan_common_types::{Epoch, ShardId};
 use tari_dan_core::{
     models::Committee,
@@ -35,7 +37,11 @@ use tokio::{
 
 use crate::{
     grpc::services::base_node_client::GrpcBaseNodeClient,
-    p2p::services::epoch_manager::base_layer_epoch_manager::BaseLayerEpochManager,
+    p2p::services::{
+        epoch_manager::base_layer_epoch_manager::BaseLayerEpochManager,
+        rpc_client::TariCommsValidatorNodeClientFactory,
+    },
+    ValidatorNodeConfig,
 };
 // const LOG_TARGET: &str = "tari::validator_node::epoch_manager";
 
@@ -121,12 +127,23 @@ impl EpochManagerService {
         shutdown: ShutdownSignal,
         db_factory: SqliteDbFactory,
         base_node_client: GrpcBaseNodeClient,
+        node_identity: Arc<NodeIdentity>,
+        validator_node_config: ValidatorNodeConfig,
+        validator_node_client_factory: TariCommsValidatorNodeClientFactory,
     ) -> JoinHandle<Result<(), EpochManagerError>> {
         tokio::spawn(async move {
             let (tx, rx) = broadcast::channel(10);
             EpochManagerService {
                 rx_request,
-                inner: BaseLayerEpochManager::new(db_factory, base_node_client, id, tx.clone()),
+                inner: BaseLayerEpochManager::new(
+                    db_factory,
+                    base_node_client,
+                    id,
+                    tx.clone(),
+                    node_identity,
+                    validator_node_config,
+                    validator_node_client_factory,
+                ),
                 events: (tx, rx),
             }
             .run(shutdown)

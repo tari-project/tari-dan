@@ -64,8 +64,8 @@ use tokio::{
 use crate::TempShardStoreFactory;
 
 pub struct PayloadProcessorListener {
-    receiver: broadcast::Receiver<(TariDanPayload, HashMap<ShardId, Vec<ObjectPledge>>)>,
-    sender: broadcast::Sender<(TariDanPayload, HashMap<ShardId, Vec<ObjectPledge>>)>,
+    receiver: broadcast::Receiver<(TariDanPayload, HashMap<ShardId, Option<ObjectPledge>>)>,
+    sender: broadcast::Sender<(TariDanPayload, HashMap<ShardId, Option<ObjectPledge>>)>,
 }
 
 impl PayloadProcessorListener {
@@ -79,7 +79,7 @@ impl PayloadProcessor<TariDanPayload> for PayloadProcessorListener {
     fn process_payload(
         &self,
         payload: TariDanPayload,
-        pledges: HashMap<ShardId, Vec<ObjectPledge>>,
+        pledges: HashMap<ShardId, Option<ObjectPledge>>,
     ) -> Result<FinalizeResult, PayloadProcessorError> {
         self.sender.send((payload, pledges)).unwrap();
         Ok(FinalizeResult::new(
@@ -96,7 +96,7 @@ impl PayloadProcessor<TariDanPayload> for NullPayloadProcessor {
     fn process_payload(
         &self,
         payload: TariDanPayload,
-        _pledges: HashMap<ShardId, Vec<ObjectPledge>>,
+        _pledges: HashMap<ShardId, Option<ObjectPledge>>,
     ) -> Result<FinalizeResult, PayloadProcessorError> {
         Ok(FinalizeResult::new(
             payload.to_id().into_array().into(),
@@ -126,7 +126,7 @@ pub struct HsTestHarness {
     rx_broadcast: Receiver<(HotStuffMessage<TariDanPayload, PublicKey>, Vec<PublicKey>)>,
     rx_vote_message: Receiver<(VoteMessage, PublicKey)>,
     tx_votes: Sender<(PublicKey, VoteMessage)>,
-    rx_execute: broadcast::Receiver<(TariDanPayload, HashMap<ShardId, Vec<ObjectPledge>>)>,
+    rx_execute: broadcast::Receiver<(TariDanPayload, HashMap<ShardId, Option<ObjectPledge>>)>,
     hs_waiter: Option<JoinHandle<Result<(), HotStuffError>>>,
 }
 
@@ -222,7 +222,7 @@ impl HsTestHarness {
         }
     }
 
-    async fn recv_execute(&mut self) -> (TariDanPayload, HashMap<ShardId, Vec<ObjectPledge>>) {
+    async fn recv_execute(&mut self) -> (TariDanPayload, HashMap<ShardId, Option<ObjectPledge>>) {
         if let Ok(msg) = timeout(Duration::from_secs(10), self.rx_execute.recv())
             .await
             .expect("timed out")
