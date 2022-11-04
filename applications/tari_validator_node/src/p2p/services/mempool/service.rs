@@ -74,10 +74,9 @@ impl MempoolService {
                     self.handle_new_transaction(transaction).await;
                 }
 
-                Ok(message) = self.rx_consensus_message.recv() => {
-                    let message = message.1;
+                Ok((_, msg)) = self.rx_consensus_message.recv() => {
                     // we want to remove this transaction from mempool if message has a node and the payload height is 4
-                    let node = if let Some(node) = message.node() {
+                    let node = if let Some(node) = msg.node() {
                         node
                     } else {
                         // message can't be finalized at this stage
