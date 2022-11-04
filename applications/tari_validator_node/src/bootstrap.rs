@@ -35,6 +35,7 @@ use tari_common::{
 use tari_comms::{protocol::rpc::RpcServer, CommsNode, NodeIdentity, UnspawnedCommsNode};
 use tari_dan_core::{
     consensus_constants::ConsensusConstants,
+    models::HotStuffMessage,
     workers::events::{EventSubscription, HotStuffEvent},
 };
 use tari_dan_storage::global::GlobalDb;

@@ -44,7 +44,7 @@ pub struct MempoolService {
     new_transactions: mpsc::Receiver<Transaction>,
     outbound: OutboundMessaging,
     tx_valid_transactions: broadcast::Sender<(Transaction, ShardId)>,
-    rx_consensus_message: Receiver<(RistrettoPublicKey, HotStuffMessage<TariDanPayload, RistrettoPublicKey>)>,
+    rx_consensus_message: mpsc::Receiver<HotStuffMessage<TariDanPayload, RistrettoPublicKey>>,
 }
 
 impl MempoolService {
@@ -52,7 +52,7 @@ impl MempoolService {
         new_transactions: mpsc::Receiver<Transaction>,
         outbound: OutboundMessaging,
         tx_valid_transactions: broadcast::Sender<(Transaction, ShardId)>,
-        rx_consensus_message: Receiver<(RistrettoPublicKey, HotStuffMessage<TariDanPayload, RistrettoPublicKey>)>,
+        rx_consensus_message: mpsc::Receiver<HotStuffMessage<TariDanPayload, RistrettoPublicKey>>,
     ) -> Self {
         Self {
             transactions: Arc::new(Mutex::new(Vec::new())),
@@ -71,7 +71,23 @@ impl MempoolService {
                 }
 
                 Some(message) = self.rx_consensus_message.recv() => {
+                    // we want to remove this transaction from mempool if message has a node and the payload height is 4
+                    let node = if let Some(node) = message.node() {
+                        node
+                    } else {
+                        // message can't be finalized at this stage
+                        continue
+                    };
 
+                    if node.payload_height().as_u64() >= 4u64 {
+                        let transaction = if let Some(payload) = node.payload() {
+                            payload.transaction()
+                        } else {
+                            continue
+                        };
+
+                        self.remove_finalized_transaction(transaction)
+                    }
                 }
 
                 else => {
@@ -125,9 +141,9 @@ impl MempoolService {
         }
     }
 
-    pub fn remove_finalized_transaction(&mut self, transaction: Transaction) {
+    pub fn remove_finalized_transaction(&mut self, transaction: &Transaction) {
         let mut access = self.transactions.lock().unwrap();
-        let transactions = access.iter().remove()
+        access.retain(|(tx, _)| tx.hash() != transaction.hash());
     }
 
     pub fn get_transaction(&self) -> TransactionVecMutex {

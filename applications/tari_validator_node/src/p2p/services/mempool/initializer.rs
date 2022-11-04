@@ -37,10 +37,10 @@ pub fn spawn(
     new_transactions: mpsc::Receiver<Transaction>,
     new_transactions_sender: mpsc::Sender<Transaction>,
     outbound: OutboundMessaging,
-    rx_consensus_message: Receiver<(RistrettoPublicKey, HotStuffMessage<TariDanPayload, RistrettoPublicKey>)>,
+    rx_consensus_message: mpsc::Receiver<HotStuffMessage<TariDanPayload, RistrettoPublicKey>>,
 ) -> MempoolHandle {
     let (tx_valid_transactions, rx_valid_transactions) = broadcast::channel(100);
-    let mempool = MempoolService::new(new_transactions, outbound, tx_valid_transactions);
+    let mempool = MempoolService::new(new_transactions, outbound, tx_valid_transactions, rx_consensus_message);
     let handle = MempoolHandle::new(
         rx_valid_transactions,
         new_transactions_sender,
