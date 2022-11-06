@@ -68,7 +68,7 @@ impl<T: ResourceDefinition> FungibleResourceBuilder<T> {
         self
     }
 
-    pub fn build_bucket(self) -> Bucket<T> {
+    pub fn build_bucket(self) -> Bucket {
         crate::get_context().with_resource_manager(|manager| {
             manager.mint_resource(MintResourceArg::Fungible {
                 amount: self.initial_supply,

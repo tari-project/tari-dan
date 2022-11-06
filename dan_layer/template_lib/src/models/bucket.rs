@@ -32,15 +32,12 @@ use crate::{
 
 pub type BucketId = u32;
 
-pub type AnyBucket = Bucket<()>;
-
 #[derive(Debug, Clone, Decode, Encode)]
-pub struct Bucket<T> {
+pub struct Bucket {
     id: BucketId,
-    _t: PhantomData<T>,
 }
 
-impl<T: ResourceDefinition> Bucket<T> {
+impl Bucket {
     pub(crate) fn new(resource_addr: ResourceAddress) -> Self {
         let resp: InvokeResult = call_engine(EngineOp::BucketInvoke, &BucketInvokeArg {
             bucket_ref: BucketRef::Bucket(resource_addr),
@@ -52,7 +49,6 @@ impl<T: ResourceDefinition> Bucket<T> {
         // TODO: Create bucket with the given resource and get the id
         Self {
             id: resp.decode().expect("Create bucket returned invalid bucket id"),
-            _t: PhantomData,
         }
     }
 
