@@ -473,6 +473,7 @@ async fn wait_for_transaction_result(
                     let response = SubmitTransactionResponse {
                         hash: hash.into_array().into(),
                         result: Some(TransactionFinalizeResult {
+                            decision: *qc.decision(),
                             finalize: result,
                             qc: *qc,
                         }),

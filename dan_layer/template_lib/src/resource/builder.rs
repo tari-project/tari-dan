@@ -34,22 +34,20 @@ pub struct ResourceBuilder;
 
 #[cfg(target_arch = "wasm32")]
 impl ResourceBuilder {
-    pub fn fungible<T: ResourceDefinition>() -> FungibleResourceBuilder<T> {
+    pub fn fungible() -> FungibleResourceBuilder {
         FungibleResourceBuilder::new()
     }
 }
 
-pub struct FungibleResourceBuilder<T> {
+pub struct FungibleResourceBuilder {
     initial_supply: Amount,
     metadata: Metadata,
-    _t: PhantomData<T>,
 }
 
 #[cfg(target_arch = "wasm32")]
-impl<T: ResourceDefinition> FungibleResourceBuilder<T> {
+impl FungibleResourceBuilder {
     fn new() -> Self {
         Self {
-            _t: PhantomData,
             initial_supply: Amount::zero(),
             metadata: Metadata::new(),
         }

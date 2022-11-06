@@ -245,6 +245,7 @@ fn summarize(result: &TransactionFinalizeResult) {
     println!("Payload height: {}", result.qc.payload_height());
     println!("Signed by: {} validator nodes", result.qc.signature().len());
     println!();
+    // dbg!(&result.qc);
     println!("========= Substates =========");
     match result.finalize.result {
         TransactionResult::Accept(ref diff) => {
@@ -279,6 +280,19 @@ fn summarize(result: &TransactionFinalizeResult) {
             println!("❌️ Transaction rejected: {}", reject.reason);
         },
     }
+    println!("========= Pledges =========");
+    for p in result.qc.all_shard_nodes().iter() {
+        println!(
+            "Shard:{} Pledge:{}",
+            p.shard_id,
+            p.pledge
+                .as_ref()
+                .map(|pledge| pledge.current_state.as_str())
+                .unwrap_or("<Not pledged>")
+        );
+    }
+    println!();
+
     println!("========= Return Values =========");
     for result in &result.finalize.execution_results {
         match result.return_type {
@@ -330,4 +344,6 @@ fn summarize(result: &TransactionFinalizeResult) {
     for log in &result.finalize.logs {
         println!("{}", log);
     }
+    println!();
+    println!("OVERALL DECISION: {:?}", result.decision);
 }

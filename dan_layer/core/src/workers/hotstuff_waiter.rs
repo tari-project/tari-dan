@@ -46,6 +46,7 @@ use crate::{
         ObjectPledge,
         Payload,
         QuorumCertificate,
+        QuorumDecision,
         ShardVote,
         TreeNodeHash,
         ValidatorSignature,
@@ -420,6 +421,7 @@ where
                 .iter()
                 .map(|s| (s.shard_id, s.pledge.clone()))
                 .collect();
+            // TODO: Perhaps we should extract the data from the justify rather....
             let finalize_result = self.execute(shard_pledges, payload)?;
             let changes = extract_changes(node.payload_id(), &finalize_result)?;
             info!(
@@ -455,10 +457,13 @@ where
             if node.parent() != &TreeNodeHash::zero() {
                 let parent = tx.get_node(node.parent()).map_err(|e| e.into())?;
                 // TODO: this is not correct, the parent node has different changes
+                // It should probably read the changes from the justify....
                 self.on_commit(parent, changes, tx)?;
             }
 
-            if node.justify().payload_height() == NodeHeight(self.consensus_constants.hotstuff_rounds - 2) {
+            if node.justify().payload_height() == NodeHeight(self.consensus_constants.hotstuff_rounds - 2) &&
+                node.justify().decision() == &QuorumDecision::Accept
+            {
                 tx.save_substate_changes(changes, &node).map_err(|e| e.into())?;
             }
             tx.set_last_executed_height(shard, node.height())
@@ -628,6 +633,7 @@ where
         finalize_result: &mut FinalizeResult,
         changes: HashMap<ShardId, Vec<SubstateState>>,
     ) {
+        dbg!(&changes);
         for (shard_changed, substates) in changes {
             // TODO: Is this statement correct?
             // If there are multiple changes to the substate, only the first one needs to be pledged for.
