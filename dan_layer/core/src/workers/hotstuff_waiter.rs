@@ -633,7 +633,6 @@ where
         finalize_result: &mut FinalizeResult,
         changes: HashMap<ShardId, Vec<SubstateState>>,
     ) {
-        dbg!(&changes);
         for (shard_changed, substates) in changes {
             // TODO: Is this statement correct?
             // If there are multiple changes to the substate, only the first one needs to be pledged for.
