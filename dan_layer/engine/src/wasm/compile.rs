@@ -81,14 +81,18 @@ pub fn compile_template<P: AsRef<Path>>(package_dir: P, features: &[&str]) -> io
         args.extend(features.iter().map(ToString::to_string));
     }
 
-    let status = Command::new("cargo")
+    let output = Command::new("cargo")
         .current_dir(package_dir.as_ref())
         .args(args)
-        .status()?;
-    if !status.success() {
+        .output()?;
+    if !output.status.success() {
+        eprintln!("stdout:");
+        eprintln!("{}", String::from_utf8_lossy(&output.stdout));
+        eprintln!("stderr:");
+        eprintln!("{}", String::from_utf8_lossy(&output.stderr));
         return Err(io::Error::new(
             ErrorKind::Other,
-            format!("Failed to compile package: {:?}", package_dir.as_ref()),
+            format!("Failed to compile package: {:?}", package_dir.as_ref(),),
         ));
     }
 
