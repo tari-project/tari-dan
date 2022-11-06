@@ -27,9 +27,9 @@
 //! This library provides types and encoding that allow low-level communication between the Tari WASM runtime and the
 //! WASM modules.
 
-#[cfg(not(feature = "std"))]
+#[cfg(target_arch = "wasm32")]
 mod abi;
-#[cfg(not(feature = "std"))]
+#[cfg(target_arch = "wasm32")]
 pub use abi::*;
 pub use borsh::{BorshDeserialize as Decode, BorshSerialize as Encode};
 
