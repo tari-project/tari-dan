@@ -28,7 +28,9 @@ pub mod args;
 pub mod models;
 
 mod context;
-pub use context::{get_context, init_context, AbiContext};
+#[cfg(target_arch = "wasm32")]
+pub use context::init_context;
+pub use context::{get_context, AbiContext};
 
 pub mod resource;
 

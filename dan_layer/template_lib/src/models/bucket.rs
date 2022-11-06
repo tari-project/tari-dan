@@ -22,7 +22,9 @@
 
 use std::marker::PhantomData;
 
-use tari_template_abi::{call_engine, Decode, Encode, EngineOp};
+#[cfg(target_arch = "wasm32")]
+use tari_template_abi::call_engine;
+use tari_template_abi::{Decode, Encode, EngineOp};
 
 use crate::{
     args::{BucketAction, BucketInvokeArg, BucketRef, InvokeResult},
@@ -38,6 +40,7 @@ pub struct Bucket {
 }
 
 impl Bucket {
+    #[cfg(target_arch = "wasm32")]
     pub(crate) fn new(resource_addr: ResourceAddress) -> Self {
         let resp: InvokeResult = call_engine(EngineOp::BucketInvoke, &BucketInvokeArg {
             bucket_ref: BucketRef::Bucket(resource_addr),
@@ -56,6 +59,7 @@ impl Bucket {
         self.id
     }
 
+    #[cfg(target_arch = "wasm32")]
     pub fn resource_address(&self) -> ResourceAddress {
         let resp: InvokeResult = call_engine(EngineOp::BucketInvoke, &BucketInvokeArg {
             bucket_ref: BucketRef::Ref(self.id),
@@ -68,6 +72,7 @@ impl Bucket {
             .expect("Bucket GetResource returned invalid resource address")
     }
 
+    #[cfg(target_arch = "wasm32")]
     pub fn take(&mut self, amount: Amount) -> Self {
         assert!(!amount.is_zero() && amount.is_positive());
         let resp: InvokeResult = call_engine(EngineOp::BucketInvoke, &BucketInvokeArg {
@@ -80,6 +85,7 @@ impl Bucket {
         resp.decode().expect("Bucket Take returned invalid bucket")
     }
 
+    #[cfg(target_arch = "wasm32")]
     pub fn split(mut self, amount: Amount) -> (Self, Self) {
         let new_bucket = self.take(amount);
         (new_bucket, self)

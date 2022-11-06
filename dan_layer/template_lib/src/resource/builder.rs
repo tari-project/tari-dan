@@ -32,6 +32,7 @@ use crate::{
 
 pub struct ResourceBuilder;
 
+#[cfg(target_arch = "wasm32")]
 impl ResourceBuilder {
     pub fn fungible<T: ResourceDefinition>() -> FungibleResourceBuilder<T> {
         FungibleResourceBuilder::new()
@@ -44,6 +45,7 @@ pub struct FungibleResourceBuilder<T> {
     _t: PhantomData<T>,
 }
 
+#[cfg(target_arch = "wasm32")]
 impl<T: ResourceDefinition> FungibleResourceBuilder<T> {
     fn new() -> Self {
         Self {

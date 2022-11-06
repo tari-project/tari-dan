@@ -20,7 +20,9 @@
 //   WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //   USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use tari_template_abi::{call_engine, EngineOp};
+#[cfg(target_arch = "wasm32")]
+use tari_template_abi::call_engine;
+use tari_template_abi::EngineOp;
 
 use crate::{
     args::{InvokeResult, MintResourceArg, ResourceAction, ResourceInvokeArg, ResourceRef},
@@ -31,6 +33,7 @@ use crate::{
 #[derive(Debug)]
 pub struct ResourceManager;
 
+#[cfg(target_arch = "wasm32")]
 impl ResourceManager {
     pub(crate) fn new() -> Self {
         ResourceManager
