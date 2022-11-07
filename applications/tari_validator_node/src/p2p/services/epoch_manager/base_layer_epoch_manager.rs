@@ -20,7 +20,7 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use std::{convert::TryInto, ops::Div, sync::Arc};
+use std::{convert::TryInto, sync::Arc};
 
 use tari_comms::{types::CommsPublicKey, NodeIdentity};
 use tari_crypto::tari_utilities::ByteArray;
@@ -247,7 +247,14 @@ impl BaseLayerEpochManager {
         // retrieve the validator nodes for this epoch from database
         let vns = self.get_validator_nodes_per_epoch(epoch)?;
 
-        let half_committee_size = COMMITTEE_SIZE.div(2) + 1; // middle point of COMMITTEE_SIZE = 7
+        let half_committee_size = {
+            let v = COMMITTEE_SIZE / 2;
+            if COMMITTEE_SIZE % 2 > 0 {
+                v + 1
+            } else {
+                v
+            }
+        };
         if vns.len() < half_committee_size * 2 {
             return Ok(vns);
         }
