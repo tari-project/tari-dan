@@ -31,7 +31,10 @@ use tari_crypto::hash::blake2::Blake256;
 use tari_dan_common_types::ShardId;
 use tari_dan_engine::crypto::create_key_pair;
 
-use crate::models::{QuorumDecision, ShardVote, TreeNodeHash, ValidatorSignature};
+use crate::{
+    models::{QuorumDecision, ShardVote, TreeNodeHash, ValidatorSignature},
+    services::infrastructure_services::NodeAddressable,
+};
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct VoteMessage {
@@ -93,7 +96,7 @@ impl VoteMessage {
             .expect("Sign cannot fail with 32-byte challenge and a RistrettoPublicKey");
         let signature_bytes = signature.to_consensus_bytes();
 
-        self.signature = Some(ValidatorSignature::from_bytes(&signature_bytes).unwrap());
+        self.signature = Some(ValidatorSignature::from_bytes(public_key.as_bytes(), &signature_bytes).unwrap());
     }
 
     fn construct_challenge(&self, public_key: &PublicKey, public_nonce: &PublicKey) -> FixedHash {

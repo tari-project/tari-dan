@@ -219,14 +219,17 @@ pub enum ConsensusWorkerState {
 #[derive(Clone, Debug, PartialEq, Eq, Deserialize, Serialize)]
 pub struct ValidatorSignature {
     #[serde(with = "serde_with::hex")]
-    pub signer: Vec<u8>,
+    pub public_key: Vec<u8>,
+    #[serde(with = "serde_with::hex")]
+    pub signature: Vec<u8>,
 }
 
 impl ValidatorSignature {
     // TODO: implement from bytes with correct error
-    pub fn from_bytes(source: &[u8]) -> Result<Self, Infallible> {
+    pub fn from_bytes(public_key_bytes: &[u8], signature_bytes: &[u8]) -> Result<Self, Infallible> {
         Ok(Self {
-            signer: Vec::from(source),
+            public_key: Vec::from(public_key_bytes),
+            signature: Vec::from(signature_bytes),
         })
     }
 
@@ -235,7 +238,7 @@ impl ValidatorSignature {
     }
 
     pub fn to_bytes(&self) -> Vec<u8> {
-        self.signer.clone()
+        [self.public_key.clone(), self.signature.clone()].concat()
     }
 }
 

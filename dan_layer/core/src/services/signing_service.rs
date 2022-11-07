@@ -45,7 +45,8 @@ impl SigningService for NodeIdentitySigningService {
     fn sign(&self, _challenge: &[u8]) -> Result<ValidatorSignature, DigitalAssetError> {
         // TODO better sig
         Ok(ValidatorSignature {
-            signer: Vec::from(self.node_identity.public_key().as_bytes()),
+            public_key: Vec::from(self.node_identity.public_key().as_bytes()),
+            signature: Vec::new(),
         })
     }
 }

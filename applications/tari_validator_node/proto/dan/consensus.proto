@@ -56,7 +56,8 @@ message HotStuffTreeNode {
 }
 
 message ValidatorSignature {
-  bytes signer = 1;
+  bytes public_key = 1;
+  bytes signature = 2;
 }
 
 message TariDanPayload {
@@ -68,7 +69,7 @@ message VoteMessage {
   bytes shard_id = 2;
   QuorumDecision decision = 3;
   repeated ShardVote all_shard_nodes = 4;
-  bytes signature = 5;
+  ValidatorSignature signature = 5;
 }
 
 enum QuorumDecision {

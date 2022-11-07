@@ -53,7 +53,7 @@ impl From<VoteMessage> for proto::consensus::VoteMessage {
             shard_id: msg.shard().as_bytes().to_vec(),
             decision: i32::from(msg.decision().as_u8()),
             all_shard_nodes: msg.all_shard_nodes().iter().map(|n| n.clone().into()).collect(),
-            signature: msg.signature().to_bytes(),
+            signature: Some(msg.signature().to_owned().into()),
         }
     }
 }
@@ -71,7 +71,10 @@ impl TryFrom<proto::consensus::VoteMessage> for VoteMessage {
                 .into_iter()
                 .map(|n| n.try_into())
                 .collect::<Result<Vec<_>, _>>()?,
-            ValidatorSignature::from_bytes(&value.signature)?,
+            ValidatorSignature::from_bytes(
+                &value.signature.as_ref().unwrap().public_key,
+                &value.signature.as_ref().unwrap().signature,
+            )?,
         ))
     }
 }
@@ -297,13 +300,19 @@ impl TryFrom<proto::consensus::ValidatorSignature> for ValidatorSignature {
     type Error = anyhow::Error;
 
     fn try_from(value: proto::consensus::ValidatorSignature) -> Result<Self, Self::Error> {
-        Ok(Self { signer: value.signer })
+        Ok(Self {
+            public_key: value.public_key,
+            signature: value.signature,
+        })
     }
 }
 
 impl From<ValidatorSignature> for proto::consensus::ValidatorSignature {
     fn from(value: ValidatorSignature) -> Self {
-        Self { signer: value.signer }
+        Self {
+            public_key: value.public_key,
+            signature: value.signature,
+        }
     }
 }
 
