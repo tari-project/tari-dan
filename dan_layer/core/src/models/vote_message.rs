@@ -22,9 +22,14 @@
 
 use digest::{Digest, FixedOutput};
 use serde::{Deserialize, Serialize};
-use tari_common_types::types::FixedHash;
+use tari_common_types::types::{FixedHash, PrivateKey, PublicKey, Signature};
+use tari_core::{
+    consensus::{DomainSeparatedConsensusHasher, ToConsensusBytes},
+    transactions::TransactionHashDomain,
+};
 use tari_crypto::hash::blake2::Blake256;
 use tari_dan_common_types::ShardId;
+use tari_dan_engine::crypto::create_key_pair;
 
 use crate::models::{QuorumDecision, ShardVote, TreeNodeHash, ValidatorSignature};
 
@@ -81,9 +86,25 @@ impl VoteMessage {
         }
     }
 
-    pub fn sign(&mut self) {
-        // TODO: better signature
-        self.signature = Some(ValidatorSignature::from_bytes(&[9u8; 32]).unwrap())
+    pub fn sign(&mut self, public_key: &PublicKey, secret_key: &PrivateKey) {
+        let (secret_nonce, public_nonce) = create_key_pair();
+        let challenge = self.construct_challenge(public_key, &public_nonce);
+        let signature = Signature::sign(secret_key.clone(), secret_nonce, &*challenge)
+            .expect("Sign cannot fail with 32-byte challenge and a RistrettoPublicKey");
+        let signature_bytes = signature.to_consensus_bytes();
+
+        self.signature = Some(ValidatorSignature::from_bytes(&signature_bytes).unwrap());
+    }
+
+    fn construct_challenge(&self, public_key: &PublicKey, public_nonce: &PublicKey) -> FixedHash {
+        DomainSeparatedConsensusHasher::<TransactionHashDomain>::new("vote_message")
+            .chain(public_key)
+            .chain(public_nonce)
+            .chain(&self.local_node_hash.as_bytes())
+            .chain(&self.shard.as_bytes())
+            .chain(&[self.decision.as_u8()])
+            .finalize()
+            .into()
     }
 
     pub fn signature(&self) -> &ValidatorSignature {

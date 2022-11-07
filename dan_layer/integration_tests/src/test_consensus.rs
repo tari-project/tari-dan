@@ -350,7 +350,7 @@ async fn test_hs_waiter_replica_sends_vote_for_proposal() {
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn test_hs_waiter_leader_sends_new_proposal_when_enough_votes_are_received() {
     let (node1_pk, node1) = PublicKey::random_keypair(&mut OsRng);
-    let (_, node2) = PublicKey::random_keypair(&mut OsRng);
+    let (node2_pk, node2) = PublicKey::random_keypair(&mut OsRng);
     let epoch_manager = RangeEpochManager::new(*SHARD0..*SHARD1, vec![node1.clone(), node2.clone()]);
     let mut instance = HsTestHarness::new(node1_pk.clone(), node1.clone(), epoch_manager, AlwaysFirstLeader {});
     let payload = TariDanPayload::new(
@@ -382,7 +382,7 @@ async fn test_hs_waiter_leader_sends_new_proposal_when_enough_votes_are_received
     // Create some votes
     let mut vote = VoteMessage::new(*vote_hash, *SHARD0, QuorumDecision::Accept, Default::default());
 
-    vote.sign();
+    vote.sign(&node1, &node1_pk);
     instance.tx_votes.send((node1, vote.clone())).await.unwrap();
 
     // Should get no proposal
@@ -395,7 +395,7 @@ async fn test_hs_waiter_leader_sends_new_proposal_when_enough_votes_are_received
 
     // Send another vote
     let mut vote = VoteMessage::new(*vote_hash, *SHARD0, QuorumDecision::Accept, Default::default());
-    vote.sign();
+    vote.sign(&node2, &node2_pk);
     instance.tx_votes.send((node2, vote)).await.unwrap();
 
     // should get a proposal

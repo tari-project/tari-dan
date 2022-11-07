@@ -24,14 +24,8 @@ use std::{collections::HashMap, sync::Arc};
 
 use futures::future::join_all;
 use log::*;
-use tari_common_types::types::{FixedHash, PublicKey, Signature};
 use tari_comms::NodeIdentity;
-use tari_core::{
-    consensus::{DomainSeparatedConsensusHasher, ToConsensusBytes},
-    transactions::TransactionHashDomain,
-};
 use tari_dan_common_types::{Epoch, PayloadId, ShardId, SubstateState};
-use tari_dan_engine::crypto::create_key_pair;
 use tari_engine_types::commit_result::{FinalizeResult, RejectResult, TransactionResult};
 use tari_shutdown::ShutdownSignal;
 use tokio::{
@@ -55,7 +49,6 @@ use crate::{
         QuorumCertificate,
         ShardVote,
         TreeNodeHash,
-        ValidatorSignature,
     },
     services::{
         epoch_manager::EpochManager,
@@ -598,14 +591,14 @@ where
                         tx.set_last_voted_height(local_shard, local_node.height())
                             .map_err(|e| e.into())?;
 
-                        let _signature = self.sign(node.hash(), shard);
-
-                        let vote_msg = self.decide(
+                        let mut vote_msg = self.decide(
                             *local_node.hash(),
                             local_shard,
                             leader_proposals.clone(),
                             &finalize_result,
                         )?;
+
+                        vote_msg.sign(self.node_identity.public_key(), self.node_identity.secret_key());
 
                         votes_to_send.push(self.tx_vote_message.send((
                             vote_msg,
@@ -713,33 +706,6 @@ where
         }
     }
 
-    fn sign(&self, node_hash: &TreeNodeHash, shard: ShardId) -> ValidatorSignature {
-        let (secret_nonce, public_nonce) = create_key_pair();
-        let secret_key = self.node_identity.secret_key();
-        let public_key = self.node_identity.public_key();
-        let challenge = Self::construct_challenge(public_key, &public_nonce, node_hash, shard);
-        let signature = Signature::sign(secret_key.clone(), secret_nonce, &*challenge)
-            .expect("Sign cannot fail with 32-byte challenge and a RistrettoPublicKey");
-        let signature_bytes = signature.to_consensus_bytes();
-
-        ValidatorSignature::from_bytes(&signature_bytes).unwrap()
-    }
-
-    fn construct_challenge(
-        public_key: &PublicKey,
-        public_nonce: &PublicKey,
-        node_hash: &TreeNodeHash,
-        shard: ShardId,
-    ) -> FixedHash {
-        DomainSeparatedConsensusHasher::<TransactionHashDomain>::new("hotstuff_waiter")
-            .chain(public_key)
-            .chain(public_nonce)
-            .chain(&node_hash.as_bytes())
-            .chain(&shard.as_bytes())
-            .finalize()
-            .into()
-    }
-
     fn decide(
         &self,
         local_node: TreeNodeHash,
@@ -763,7 +729,7 @@ where
             },
         };
 
-        vote_msg.sign();
+        vote_msg.sign(self.node_identity.public_key(), self.node_identity.secret_key());
         Ok(vote_msg)
     }
 
