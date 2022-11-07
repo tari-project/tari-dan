@@ -32,10 +32,11 @@ pub use initializer::spawn;
 use tari_dan_common_types::ShardId;
 use tari_dan_core::models::ValidatorNode;
 
+const COMMITTEE_SIZE: usize = 7;
+
 fn get_committee_shard_range(committee_vns: &[ValidatorNode]) -> RangeInclusive<ShardId> {
     // TODO: add this committee_size to ConsensusConstants
-    let committee_size = 7;
-    if committee_vns.len() < committee_size {
+    if committee_vns.len() < COMMITTEE_SIZE {
         let min_shard_id = ShardId::zero();
         let max_shard_id = ShardId([u8::MAX; 32]);
         RangeInclusive::new(min_shard_id, max_shard_id)

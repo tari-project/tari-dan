@@ -20,7 +20,7 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use std::{convert::TryInto, sync::Arc};
+use std::{convert::TryInto, ops::Div, sync::Arc};
 
 use tari_comms::{types::CommsPublicKey, NodeIdentity};
 use tari_crypto::tari_utilities::ByteArray;
@@ -37,7 +37,7 @@ use tari_dan_storage::global::{DbValidatorNode, MetadataKey};
 use tari_dan_storage_sqlite::SqliteDbFactory;
 use tokio::sync::broadcast;
 
-use super::{get_committee_shard_range, sync_peers::PeerSyncManagerService};
+use super::{get_committee_shard_range, sync_peers::PeerSyncManagerService, COMMITTEE_SIZE};
 use crate::{
     grpc::services::base_node_client::GrpcBaseNodeClient,
     p2p::services::{
@@ -247,7 +247,7 @@ impl BaseLayerEpochManager {
         // retrieve the validator nodes for this epoch from database
         let vns = self.get_validator_nodes_per_epoch(epoch)?;
 
-        let half_committee_size = 4; // total committee = 7
+        let half_committee_size = COMMITTEE_SIZE.div(2) + 1; // total committee = 7
         if vns.len() < half_committee_size * 2 {
             return Ok(vns);
         }
