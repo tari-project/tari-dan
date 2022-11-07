@@ -23,12 +23,13 @@
 use std::{collections::HashMap, ops::Range};
 
 use async_trait::async_trait;
+use tari_comms::protocol::rpc::{RpcError, RpcStatus};
 use tari_dan_common_types::{Epoch, ShardId};
 use thiserror::Error;
 
 use crate::{
     models::Committee,
-    services::{base_node_error::BaseNodeError, infrastructure_services::NodeAddressable},
+    services::{base_node_error::BaseNodeError, infrastructure_services::NodeAddressable, ValidatorNodeClientError},
     storage::StorageError,
 };
 
@@ -49,10 +50,20 @@ pub enum EpochManagerError {
     NoEpochFound(Epoch),
     #[error("No committee found for shard {0:?}")]
     NoCommitteeFound(ShardId),
+    #[error("Unexpected request")]
+    UnexpectedRequest,
     #[error("Unexpected response")]
     UnexpectedResponse,
     #[error("Storage error: {0}")]
     StorageError(#[from] StorageError),
+    #[error("No validator nodes found for current shard key")]
+    ValidatorNodesNotFound,
+    #[error("Validator node client error: {0}")]
+    ValidatorNodeClientError(#[from] ValidatorNodeClientError),
+    #[error("Rpc error: {0}")]
+    RpcError(#[from] RpcError),
+    #[error("Rpc status error: {0}")]
+    RpcStatus(#[from] RpcStatus),
 }
 
 #[async_trait]

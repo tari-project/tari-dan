@@ -36,6 +36,10 @@ impl Epoch {
         self.0.to_le_bytes()
     }
 
+    pub fn to_height(self) -> u64 {
+        self.0 * 10
+    }
+
     pub fn from_block_height(bh: u64) -> Self {
         let e = bh / 10;
         Self(e)

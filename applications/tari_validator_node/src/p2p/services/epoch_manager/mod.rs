@@ -25,4 +25,29 @@ pub mod epoch_manager_service;
 pub mod handle;
 
 mod initializer;
+mod sync_peers;
+use std::ops::RangeInclusive;
+
 pub use initializer::spawn;
+use tari_dan_common_types::ShardId;
+use tari_dan_core::models::ValidatorNode;
+
+fn get_committee_shard_range(committee_vns: &[ValidatorNode]) -> RangeInclusive<ShardId> {
+    // TODO: add this committee_size to ConsensusConstants
+    let committee_size = 7;
+    if committee_vns.len() < committee_size {
+        let min_shard_id = ShardId::zero();
+        let max_shard_id = ShardId([u8::MAX; 32]);
+        RangeInclusive::new(min_shard_id, max_shard_id)
+    } else {
+        let min_shard_id = committee_vns
+            .first()
+            .expect("Commitee VNs cannot be empty, at this point")
+            .shard_key;
+        let max_shard_id = committee_vns
+            .last()
+            .expect("Commitee VNs cannot be empty, at this point")
+            .shard_key;
+        min_shard_id..=max_shard_id
+    }
+}

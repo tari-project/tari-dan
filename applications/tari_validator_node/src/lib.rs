@@ -129,7 +129,6 @@ pub async fn run_validator_node_with_cli(config: &ApplicationConfig, cli: &Cli) 
     );
 
     let (base_node_client, wallet_client) = create_base_layer_clients(config).await?;
-
     let services = spawn_services(
         config,
         shutdown.to_signal(),

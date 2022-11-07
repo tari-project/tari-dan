@@ -20,14 +20,20 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use tari_comms::types::CommsPublicKey;
+use std::sync::Arc;
+
+use tari_comms::{types::CommsPublicKey, NodeIdentity};
 use tari_dan_storage_sqlite::SqliteDbFactory;
 use tari_shutdown::ShutdownSignal;
 use tokio::sync::mpsc;
 
 use crate::{
     grpc::services::base_node_client::GrpcBaseNodeClient,
-    p2p::services::epoch_manager::{epoch_manager_service::EpochManagerService, handle::EpochManagerHandle},
+    p2p::services::{
+        epoch_manager::{epoch_manager_service::EpochManagerService, handle::EpochManagerHandle},
+        rpc_client::TariCommsValidatorNodeClientFactory,
+    },
+    ValidatorNodeConfig,
 };
 
 pub fn spawn(
@@ -35,9 +41,21 @@ pub fn spawn(
     base_node_client: GrpcBaseNodeClient,
     id: CommsPublicKey,
     shutdown: ShutdownSignal,
+    node_identity: Arc<NodeIdentity>,
+    validator_node_config: ValidatorNodeConfig,
+    validator_node_client_factory: TariCommsValidatorNodeClientFactory,
 ) -> EpochManagerHandle {
     let (tx_request, rx_request) = mpsc::channel(10);
     let handle = EpochManagerHandle::new(tx_request);
-    EpochManagerService::spawn(id, rx_request, shutdown, db_factory, base_node_client);
+    EpochManagerService::spawn(
+        id,
+        rx_request,
+        shutdown,
+        db_factory,
+        base_node_client,
+        node_identity,
+        validator_node_config,
+        validator_node_client_factory,
+    );
     handle
 }
