@@ -247,7 +247,7 @@ impl BaseLayerEpochManager {
         // retrieve the validator nodes for this epoch from database
         let vns = self.get_validator_nodes_per_epoch(epoch)?;
 
-        let half_committee_size = COMMITTEE_SIZE.div(2) + 1; // total committee = 7
+        let half_committee_size = COMMITTEE_SIZE.div(2) + 1; // middle point of COMMITTEE_SIZE = 7
         if vns.len() < half_committee_size * 2 {
             return Ok(vns);
         }
