@@ -20,16 +20,12 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use std::marker::PhantomData;
-
-#[cfg(target_arch = "wasm32")]
-use tari_template_abi::call_engine;
-use tari_template_abi::{Decode, Encode, EngineOp};
+use tari_template_abi::{call_engine, Decode, Encode, EngineOp};
 
 use crate::{
     args::{InvokeResult, VaultAction, VaultInvokeArg},
     models::{Amount, Bucket, ResourceAddress},
-    resource::{ResourceDefinition, ResourceType},
+    resource::ResourceType,
     Hash,
 };
 
@@ -71,7 +67,7 @@ impl VaultRef {
 pub struct Vault {
     vault_id: VaultId,
 }
-#[cfg(target_arch = "wasm32")]
+
 impl Vault {
     pub fn new_empty(resource_address: ResourceAddress) -> Self {
         let resp: InvokeResult = call_engine(EngineOp::VaultInvoke, &VaultInvokeArg {

@@ -20,28 +20,8 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-#![cfg_attr(not(feature = "std"), no_std)]
-
-//! # Tari WASM module ABI (application binary interface)
-//!
-//! This library provides types and encoding that allow low-level communication between the Tari WASM runtime and the
-//! WASM modules.
-
-pub use borsh::{BorshDeserialize as Decode, BorshSerialize as Encode};
-
-mod abi;
-pub use abi::*;
-
-mod call_info;
-pub use call_info::CallInfo;
-
-mod encoding;
-pub use encoding::{decode, decode_len, encode, encode_into, encode_with_len};
-
-mod ops;
-pub use ops::EngineOp;
-
-pub mod rust;
-
-mod types;
-pub use types::*;
+extern "C" {
+    pub fn tari_engine(op: i32, input_ptr: *const u8, input_len: usize) -> *mut u8;
+    pub fn debug(input_ptr: *const u8, input_len: usize);
+    pub fn on_panic(msg_ptr: *const u8, msg_len: u32, line: u32, column: u32);
+}

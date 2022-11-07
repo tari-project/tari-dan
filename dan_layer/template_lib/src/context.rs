@@ -58,7 +58,6 @@ pub struct SystemContext {
     resource_manager: ResourceManager,
 }
 
-#[cfg(target_arch = "wasm32")]
 pub fn init_context(call_info: &CallInfo) {
     let abi_context = decode(&call_info.abi_context).expect("Failed to decode ABI context");
     with_context(|ctx| {
@@ -76,7 +75,6 @@ pub fn get_context() -> Context {
 #[derive(Debug, Default)]
 pub struct Context;
 
-#[cfg(target_arch = "wasm32")]
 impl Context {
     // // pub fn package(&self) -> Package {
     // //     with_context(|ctx| ctx.as_ref().unwrap().abi_context.package.clone())

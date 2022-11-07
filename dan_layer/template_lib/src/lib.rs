@@ -28,9 +28,7 @@ pub mod args;
 pub mod models;
 
 mod context;
-#[cfg(target_arch = "wasm32")]
-pub use context::init_context;
-pub use context::{get_context, AbiContext};
+pub use context::{get_context, init_context, AbiContext};
 
 pub mod resource;
 
@@ -39,9 +37,7 @@ pub mod resource;
 #[cfg(target_arch = "wasm32")]
 pub mod template_dependencies;
 
-#[cfg(target_arch = "wasm32")]
 mod engine;
-#[cfg(target_arch = "wasm32")]
 pub use engine::engine;
 
 #[cfg(target_arch = "wasm32")]

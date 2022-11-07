@@ -238,6 +238,7 @@ async fn handle_submit(
     Ok(())
 }
 
+#[allow(clippy::too_many_lines)]
 fn summarize(result: &TransactionFinalizeResult) {
     println!("✅️ Transaction finalized",);
     println!();
