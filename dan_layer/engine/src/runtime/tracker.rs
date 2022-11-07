@@ -154,12 +154,11 @@ impl StateTracker {
                 Some(resource) => Ok(resource),
                 None => {
                     let tx = self.state_store.read_access()?;
-                    let resource = tx
-                        .get_state(address)
-                        .optional()?
-                        .ok_or(RuntimeError::ResourceNotFound {
+                    let resource = tx.get_state(&SubstateAddress::Resource(*address)).optional()?.ok_or(
+                        RuntimeError::ResourceNotFound {
                             resource_address: *address,
-                        })?;
+                        },
+                    )?;
                     Ok(resource)
                 },
             }
@@ -295,13 +294,18 @@ impl StateTracker {
                 Some(_) => unreachable!(),
                 None => {
                     // TODO: This is not correct
-                    let mut vault = self
+                    let substate: Substate = self
                         .state_store
                         .read_access()
                         .unwrap()
-                        .get_state(vault_id)
+                        .get_state(&SubstateAddress::Vault(*vault_id))
                         .optional()?
                         .ok_or(RuntimeError::VaultNotFound { vault_id: *vault_id })?;
+
+                    let mut vault = substate
+                        .into_substate()
+                        .into_vault()
+                        .expect("Vault key does not point to vault substate");
 
                     let ret = f(&mut vault);
                     state.new_vaults.insert(*vault_id, vault.into());
