@@ -20,11 +20,12 @@
 //   WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //   USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use std::{collections::HashMap, time::Duration};
+use std::{collections::HashMap, str::FromStr, sync::Arc, time::Duration};
 
 use lazy_static::lazy_static;
 use rand::rngs::OsRng;
 use tari_common_types::types::{PrivateKey, PublicKey};
+use tari_comms::{multiaddr::Multiaddr, peer_manager::PeerFeatures, NodeIdentity};
 use tari_crypto::keys::PublicKey as PublicKeyT;
 use tari_dan_common_types::ShardId;
 use tari_dan_core::{
@@ -131,7 +132,12 @@ pub struct HsTestHarness {
 }
 
 impl HsTestHarness {
-    pub fn new<TEpochManager, TLeader>(identity: PublicKey, epoch_manager: TEpochManager, leader: TLeader) -> Self
+    pub fn new<TEpochManager, TLeader>(
+        private_key: PrivateKey,
+        identity: PublicKey,
+        epoch_manager: TEpochManager,
+        leader: TLeader,
+    ) -> Self
     where
         TEpochManager: EpochManager<PublicKey> + Send + Sync + 'static,
         TLeader: LeaderStrategy<PublicKey> + Send + Sync + 'static,
@@ -150,7 +156,11 @@ impl HsTestHarness {
         let consensus_constants = ConsensusConstants::devnet();
         let shard_store = TempShardStoreFactory::new();
 
+        let public_address = Multiaddr::from_str("/ip4/127.0.0.1/tcp/48000").unwrap();
+        let node_identity = NodeIdentity::new(private_key, public_address, PeerFeatures::COMMUNICATION_NODE);
+
         let hs_waiter = HotStuffWaiter::spawn(
+            Arc::new(node_identity),
             identity.clone(),
             epoch_manager,
             leader,
@@ -252,11 +262,11 @@ lazy_static! {
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn test_receives_new_payload_starts_new_chain() {
-    // let node1 = "node1".to_string();
+    // let node1 = "node1".to_string()
     let (node1_pk, node1) = PublicKey::random_keypair(&mut OsRng);
 
     let epoch_manager = RangeEpochManager::new(*SHARD0..*SHARD1, vec![node1.clone()]);
-    let mut instance = HsTestHarness::new(node1.clone(), epoch_manager, AlwaysFirstLeader {});
+    let mut instance = HsTestHarness::new(node1_pk.clone(), node1.clone(), epoch_manager, AlwaysFirstLeader {});
 
     let new_payload = TariDanPayload::new(Transaction::builder().sign(&node1_pk).clone().build());
     instance.tx_new.send((new_payload, *SHARD0)).await.unwrap();
@@ -270,7 +280,7 @@ async fn test_hs_waiter_leader_proposes() {
     let (node1_pk, node1) = PublicKey::random_keypair(&mut OsRng);
     let (_, node2) = PublicKey::random_keypair(&mut OsRng);
     let epoch_manager = RangeEpochManager::new(*SHARD0..*SHARD1, vec![node1.clone(), node2.clone()]);
-    let mut instance = HsTestHarness::new(node1.clone(), epoch_manager, AlwaysFirstLeader {});
+    let mut instance = HsTestHarness::new(node1_pk.clone(), node1.clone(), epoch_manager, AlwaysFirstLeader {});
     // let payload = ("Hello World".to_string(), vec![*SHARD0]);
     let payload = TariDanPayload::new(
         Transaction::builder()
@@ -301,7 +311,7 @@ async fn test_hs_waiter_replica_sends_vote_for_proposal() {
     let (node1_pk, node1) = PublicKey::random_keypair(&mut OsRng);
     let (_, node2) = PublicKey::random_keypair(&mut OsRng);
     let epoch_manager = RangeEpochManager::new(*SHARD0..*SHARD1, vec![node1.clone(), node2.clone()]);
-    let mut instance = HsTestHarness::new(node1.clone(), epoch_manager, AlwaysFirstLeader {});
+    let mut instance = HsTestHarness::new(node1_pk.clone(), node1.clone(), epoch_manager, AlwaysFirstLeader {});
     // let payload = ("Hello World".to_string(), vec![*SHARD0]);
     let payload = TariDanPayload::new(
         Transaction::builder()
@@ -342,7 +352,7 @@ async fn test_hs_waiter_leader_sends_new_proposal_when_enough_votes_are_received
     let (node1_pk, node1) = PublicKey::random_keypair(&mut OsRng);
     let (_, node2) = PublicKey::random_keypair(&mut OsRng);
     let epoch_manager = RangeEpochManager::new(*SHARD0..*SHARD1, vec![node1.clone(), node2.clone()]);
-    let mut instance = HsTestHarness::new(node1.clone(), epoch_manager, AlwaysFirstLeader {});
+    let mut instance = HsTestHarness::new(node1_pk.clone(), node1.clone(), epoch_manager, AlwaysFirstLeader {});
     let payload = TariDanPayload::new(
         Transaction::builder()
             .add_input(*SHARD0)
@@ -403,7 +413,7 @@ async fn test_hs_waiter_leader_sends_new_proposal_when_enough_votes_are_received
 async fn test_hs_waiter_execute_called_when_consensus_reached() {
     let (node1_pk, node1) = PublicKey::random_keypair(&mut OsRng);
     let epoch_manager = RangeEpochManager::new(*SHARD0..*SHARD1, vec![node1.clone()]);
-    let mut instance = HsTestHarness::new(node1.clone(), epoch_manager, AlwaysFirstLeader {});
+    let mut instance = HsTestHarness::new(node1_pk.clone(), node1.clone(), epoch_manager, AlwaysFirstLeader {});
     let payload = TariDanPayload::new(
         Transaction::builder()
             .add_input(*SHARD0)
@@ -469,15 +479,20 @@ async fn test_hs_waiter_execute_called_when_consensus_reached() {
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn test_hs_waiter_multishard_votes() {
     let (node1_pk, node1) = PublicKey::random_keypair(&mut OsRng);
-    let (_, node2) = PublicKey::random_keypair(&mut OsRng);
+    let (node2_pk, node2) = PublicKey::random_keypair(&mut OsRng);
     let shard0_committee = vec![node1.clone()];
     let shard1_committee = vec![node2.clone()];
     let epoch_manager = RangeEpochManager::new_with_multiple(&[
         (*SHARD0..*SHARD1, shard0_committee),
         (*SHARD1..ShardId([2u8; 32]), shard1_committee),
     ]);
-    let mut node1_instance = HsTestHarness::new(node1.clone(), epoch_manager.clone(), AlwaysFirstLeader {});
-    let mut node2_instance = HsTestHarness::new(node2.clone(), epoch_manager, AlwaysFirstLeader {});
+    let mut node1_instance = HsTestHarness::new(
+        node1_pk.clone(),
+        node1.clone(),
+        epoch_manager.clone(),
+        AlwaysFirstLeader {},
+    );
+    let mut node2_instance = HsTestHarness::new(node2_pk, node2.clone(), epoch_manager, AlwaysFirstLeader {});
 
     let payload = TariDanPayload::new(
         Transaction::builder()
@@ -643,8 +658,8 @@ use tari_template_lib::{args::Arg, Hash};
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn test_kitchen_sink() {
-    let (_, node1) = PublicKey::random_keypair(&mut OsRng);
-    let (_, node2) = PublicKey::random_keypair(&mut OsRng);
+    let (node1_pk, node1) = PublicKey::random_keypair(&mut OsRng);
+    let (node2_pk, node2) = PublicKey::random_keypair(&mut OsRng);
     let shard0_committee = vec![node1.clone()];
     let shard1_committee = vec![node2.clone()];
 
@@ -710,8 +725,8 @@ async fn test_kitchen_sink() {
         (s2..ShardId([255u8; 32]), shard1_committee),
     ]);
     // Create 2x hotstuff waiters
-    let node1_instance = HsTestHarness::new(node1.clone(), epoch_manager.clone(), AlwaysFirstLeader {});
-    let node2_instance = HsTestHarness::new(node2.clone(), epoch_manager, AlwaysFirstLeader {});
+    let node1_instance = HsTestHarness::new(node1_pk, node1.clone(), epoch_manager.clone(), AlwaysFirstLeader {});
+    let node2_instance = HsTestHarness::new(node2_pk, node2.clone(), epoch_manager, AlwaysFirstLeader {});
 
     let payload = TariDanPayload::new(transaction);
 

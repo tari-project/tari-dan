@@ -20,11 +20,18 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use std::collections::HashMap;
+use std::{collections::HashMap, sync::Arc};
 
 use futures::future::join_all;
 use log::*;
+use tari_common_types::types::{FixedHash, PublicKey, Signature};
+use tari_comms::NodeIdentity;
+use tari_core::{
+    consensus::{DomainSeparatedConsensusHasher, ToConsensusBytes},
+    transactions::TransactionHashDomain,
+};
 use tari_dan_common_types::{Epoch, PayloadId, ShardId, SubstateState};
+use tari_dan_engine::crypto::create_key_pair;
 use tari_engine_types::commit_result::{FinalizeResult, RejectResult, TransactionResult};
 use tari_shutdown::ShutdownSignal;
 use tokio::{
@@ -63,7 +70,8 @@ use crate::{
 const LOG_TARGET: &str = "tari::dan_layer::hotstuff_waiter";
 
 pub struct HotStuffWaiter<TPayload, TAddr, TLeaderStrategy, TEpochManager, TPayloadProcessor, TShardStore> {
-    identity: TAddr,
+    node_identity: Arc<NodeIdentity>,
+    public_key: TAddr,
     leader_strategy: TLeaderStrategy,
     epoch_manager: TEpochManager,
     rx_new: Receiver<(TPayload, ShardId)>,
@@ -89,7 +97,8 @@ where
     TShardStore: ShardStoreFactory<Addr = TAddr, Payload = TPayload> + 'static + Send + Sync,
 {
     pub fn spawn(
-        identity: TAddr,
+        node_identity: Arc<NodeIdentity>,
+        public_key: TAddr,
         epoch_manager: TEpochManager,
         leader_strategy: TLeaderStrategy,
         rx_new: Receiver<(TPayload, ShardId)>,
@@ -105,7 +114,8 @@ where
         consensus_constants: ConsensusConstants,
     ) -> JoinHandle<Result<(), HotStuffError>> {
         let waiter = HotStuffWaiter::new(
-            identity,
+            node_identity,
+            public_key,
             epoch_manager,
             leader_strategy,
             rx_new,
@@ -123,7 +133,8 @@ where
     }
 
     pub fn new(
-        identity: TAddr,
+        node_identity: Arc<NodeIdentity>,
+        public_key: TAddr,
         epoch_manager: TEpochManager,
         leader_strategy: TLeaderStrategy,
         rx_new: Receiver<(TPayload, ShardId)>,
@@ -138,7 +149,8 @@ where
         consensus_constants: ConsensusConstants,
     ) -> Self {
         Self {
-            identity,
+            node_identity,
+            public_key,
             epoch_manager,
             leader_strategy,
             rx_new,
@@ -276,7 +288,7 @@ where
                 },
                 qc,
                 epoch,
-                self.identity.clone(),
+                self.public_key.clone(),
                 NodeHeight(leaf_height.0 + 1),
                 payload_height,
                 Some(local_pledge),
@@ -322,7 +334,7 @@ where
 
     async fn is_leader(&self, payload: PayloadId, shard: ShardId, epoch: Epoch) -> Result<bool, HotStuffError> {
         Ok(self.leader_strategy.is_leader(
-            &self.identity,
+            &self.public_key,
             &self.epoch_manager.get_committee(epoch, shard).await?,
             payload,
             shard,
@@ -526,7 +538,7 @@ where
         let involved_shards = payload.involved_shards();
         let local_shards = self
             .epoch_manager
-            .filter_to_local_shards(node.epoch(), &self.identity, &involved_shards)
+            .filter_to_local_shards(node.epoch(), &self.public_key, &involved_shards)
             .await?;
 
         let mut votes_to_send = vec![];
@@ -701,9 +713,31 @@ where
         }
     }
 
-    fn sign(&self, _node_hash: &TreeNodeHash, _shard: ShardId) -> ValidatorSignature {
-        // todo!();
-        ValidatorSignature::from_bytes(&[]).unwrap()
+    fn sign(&self, node_hash: &TreeNodeHash, shard: ShardId) -> ValidatorSignature {
+        let (secret_nonce, public_nonce) = create_key_pair();
+        let secret_key = self.node_identity.secret_key();
+        let public_key = self.node_identity.public_key();
+        let challenge = Self::construct_challenge(public_key, &public_nonce, node_hash, shard);
+        let signature = Signature::sign(secret_key.clone(), secret_nonce, &*challenge)
+            .expect("Sign cannot fail with 32-byte challenge and a RistrettoPublicKey");
+        let signature_bytes = signature.to_consensus_bytes();
+
+        ValidatorSignature::from_bytes(&signature_bytes).unwrap()
+    }
+
+    fn construct_challenge(
+        public_key: &PublicKey,
+        public_nonce: &PublicKey,
+        node_hash: &TreeNodeHash,
+        shard: ShardId,
+    ) -> FixedHash {
+        DomainSeparatedConsensusHasher::<TransactionHashDomain>::new("hotstuff_waiter")
+            .chain(public_key)
+            .chain(public_nonce)
+            .chain(&node_hash.as_bytes())
+            .chain(&shard.as_bytes())
+            .finalize()
+            .into()
     }
 
     fn decide(
@@ -756,7 +790,7 @@ where
 
             node = tx.get_node(&msg.local_node_hash()).map_err(|e| e.into())?;
 
-            if node.proposed_by() != &self.identity {
+            if node.proposed_by() != &self.public_key {
                 return Err(HotStuffError::NotTheLeader);
             }
         }
