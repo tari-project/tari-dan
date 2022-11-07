@@ -33,22 +33,6 @@ mod account_template {
     }
 
     impl Account {
-        // TODO: The faucet should not be defined here, but in a separate template. However,
-        // 1. define a builtin resource address for the tari token
-        // 2.
-        // pub fn init_faucet(amount: Amount) -> Self {
-        //     let coins = ResourceBuilder::fungible()
-        //         .with_token_symbol("🪙")
-        //         .initial_supply(initial_supply)
-        //         .build_bucket();
-        //
-        //     let vault = Vault::from_bucket(coins);
-        //
-        //     Self {
-        //         vaults: vec![(vault.resource_address(), vault)],
-        //     }
-        // }
-
         pub fn new() -> Self {
             Self { vaults: Vec::new() }
         }
