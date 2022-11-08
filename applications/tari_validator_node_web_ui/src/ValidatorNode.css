@@ -115,4 +115,9 @@ td {
 
 th {
   font-weight: bold;
+  user-select: none;
+}
+
+.sort-indicator {
+  position: absolute;
 }
