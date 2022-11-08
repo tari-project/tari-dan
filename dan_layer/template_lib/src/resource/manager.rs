@@ -25,7 +25,6 @@ use tari_template_abi::{call_engine, EngineOp};
 use crate::{
     args::{InvokeResult, MintResourceArg, ResourceAction, ResourceInvokeArg, ResourceRef},
     models::Bucket,
-    resource::ResourceDefinition,
 };
 
 #[derive(Debug)]
@@ -36,7 +35,7 @@ impl ResourceManager {
         ResourceManager
     }
 
-    pub(super) fn mint_resource<T: ResourceDefinition>(&mut self, arg: MintResourceArg) -> Bucket<T> {
+    pub(super) fn mint_resource(&mut self, arg: MintResourceArg) -> Bucket {
         let resp: InvokeResult = call_engine(EngineOp::ResourceInvoke, &ResourceInvokeArg {
             resource_ref: ResourceRef::Resource,
             action: ResourceAction::Mint,

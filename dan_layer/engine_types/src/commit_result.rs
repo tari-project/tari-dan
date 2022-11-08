@@ -61,6 +61,24 @@ pub enum TransactionResult {
 }
 
 impl TransactionResult {
+    pub fn is_accept(&self) -> bool {
+        matches!(self, Self::Accept(_))
+    }
+
+    pub fn accept(&self) -> Option<&SubstateDiff> {
+        match self {
+            Self::Accept(substate_diff) => Some(substate_diff),
+            Self::Reject(_) => None,
+        }
+    }
+
+    pub fn reject(&self) -> Option<&RejectResult> {
+        match self {
+            Self::Accept(_) => None,
+            Self::Reject(reject_result) => Some(reject_result),
+        }
+    }
+
     pub fn expect(self, msg: &str) -> SubstateDiff {
         match self {
             Self::Accept(substate_diff) => substate_diff,
