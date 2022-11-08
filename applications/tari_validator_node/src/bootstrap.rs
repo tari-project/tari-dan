@@ -119,6 +119,7 @@ pub async fn spawn_services(
     let epoch_manager = epoch_manager::spawn(
         sqlite_db.clone(),
         base_node_client.clone(),
+        consensus_constants.clone(),
         node_identity.public_key().clone(),
         shutdown.clone(),
         node_identity.clone(),

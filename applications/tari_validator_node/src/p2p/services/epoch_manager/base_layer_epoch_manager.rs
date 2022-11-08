@@ -26,6 +26,7 @@ use tari_comms::{types::CommsPublicKey, NodeIdentity};
 use tari_crypto::tari_utilities::ByteArray;
 use tari_dan_common_types::{Epoch, ShardId};
 use tari_dan_core::{
+    consensus_constants::ConsensusConstants,
     models::{Committee, ValidatorNode},
     services::{
         epoch_manager::{EpochManagerError, ShardCommitteeAllocation},
@@ -37,7 +38,7 @@ use tari_dan_storage::global::{DbValidatorNode, MetadataKey};
 use tari_dan_storage_sqlite::SqliteDbFactory;
 use tokio::sync::broadcast;
 
-use super::{get_committee_shard_range, sync_peers::PeerSyncManagerService, COMMITTEE_SIZE};
+use super::{get_committee_shard_range, sync_peers::PeerSyncManagerService};
 use crate::{
     grpc::services::base_node_client::GrpcBaseNodeClient,
     p2p::services::{
@@ -53,6 +54,7 @@ use crate::{
 pub struct BaseLayerEpochManager {
     db_factory: SqliteDbFactory,
     pub base_node_client: GrpcBaseNodeClient,
+    consensus_constants: ConsensusConstants,
     current_epoch: Epoch,
     tx_events: broadcast::Sender<EpochManagerEvent>,
     node_identity: Arc<NodeIdentity>,
@@ -64,6 +66,7 @@ impl BaseLayerEpochManager {
     pub fn new(
         db_factory: SqliteDbFactory,
         base_node_client: GrpcBaseNodeClient,
+        consensus_constants: ConsensusConstants,
         _id: CommsPublicKey,
         tx_events: broadcast::Sender<EpochManagerEvent>,
         node_identity: Arc<NodeIdentity>,
@@ -73,6 +76,7 @@ impl BaseLayerEpochManager {
         Self {
             db_factory,
             base_node_client,
+            consensus_constants,
             current_epoch: Epoch(0),
             tx_events,
             node_identity,
@@ -139,8 +143,9 @@ impl BaseLayerEpochManager {
             .shard_key;
 
         // from current_shard_key we can get the corresponding vns committee
+        let committee_size = self.consensus_constants.committee_size as usize;
         let committee_vns = self.get_committee_vns_from_shard_key(epoch, vn_shard_key)?;
-        let (start_shard_id, end_shard_id) = get_committee_shard_range(&committee_vns).into_inner();
+        let (start_shard_id, end_shard_id) = get_committee_shard_range(committee_size, &committee_vns).into_inner();
 
         let peer_sync_service_manager = PeerSyncManagerService::new(
             self.validator_node_config.clone(),
@@ -248,8 +253,9 @@ impl BaseLayerEpochManager {
         let vns = self.get_validator_nodes_per_epoch(epoch)?;
 
         let half_committee_size = {
-            let v = COMMITTEE_SIZE / 2;
-            if COMMITTEE_SIZE % 2 > 0 {
+            let committee_size = self.consensus_constants.committee_size as usize;
+            let v = committee_size / 2;
+            if committee_size % 2 > 0 {
                 v + 1
             } else {
                 v

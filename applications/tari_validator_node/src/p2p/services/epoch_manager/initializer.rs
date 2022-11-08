@@ -23,6 +23,7 @@
 use std::sync::Arc;
 
 use tari_comms::{types::CommsPublicKey, NodeIdentity};
+use tari_dan_core::consensus_constants::ConsensusConstants;
 use tari_dan_storage_sqlite::SqliteDbFactory;
 use tari_shutdown::ShutdownSignal;
 use tokio::sync::mpsc;
@@ -39,6 +40,7 @@ use crate::{
 pub fn spawn(
     db_factory: SqliteDbFactory,
     base_node_client: GrpcBaseNodeClient,
+    consensus_constants: ConsensusConstants,
     id: CommsPublicKey,
     shutdown: ShutdownSignal,
     node_identity: Arc<NodeIdentity>,
@@ -53,6 +55,7 @@ pub fn spawn(
         shutdown,
         db_factory,
         base_node_client,
+        consensus_constants,
         node_identity,
         validator_node_config,
         validator_node_client_factory,
