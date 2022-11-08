@@ -29,6 +29,7 @@ import { IEpoch, IIdentity } from "./interfaces";
 import { getEpochManagerStats, getIdentity, getRecentTransactions, getShardKey } from "./json_rpc";
 import Mempool from "./Mempool";
 import RecentTransactions from "./RecentTransactions";
+import Templates from "./Templates";
 import "./ValidatorNode.css";
 
 function ValidatorNode() {
@@ -94,6 +95,7 @@ function ValidatorNode() {
       <Connections />
       <Mempool />
       <RecentTransactions />
+      <Templates />
       <AllVNs epoch={epoch.current_epoch} />
     </div>
   );

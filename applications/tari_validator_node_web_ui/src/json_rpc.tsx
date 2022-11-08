@@ -75,6 +75,12 @@ async function registerValidatorNode() {
 async function getRecentTransactions() {
   return await jsonRpc("get_recent_transactions");
 }
+async function getTemplates(limit: number) {
+  return await jsonRpc("get_templates", [limit]);
+}
+async function getTemplate(address: string) {
+  return await jsonRpc("get_template", [address]);
+}
 
 export {
   getIdentity,
@@ -87,4 +93,6 @@ export {
   getConnections,
   getRecentTransactions,
   registerValidatorNode,
+  getTemplates,
+  getTemplate,
 };
