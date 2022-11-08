@@ -28,10 +28,6 @@ pub use builder::ResourceBuilder;
 mod manager;
 pub use manager::ResourceManager;
 
-pub trait ResourceDefinition {
-    fn resource_type() -> ResourceType;
-}
-
 #[derive(Clone, Copy, Debug, Decode, Encode)]
 pub enum ResourceType {
     Fungible,

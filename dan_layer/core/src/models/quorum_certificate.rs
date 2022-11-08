@@ -27,7 +27,7 @@ use tari_dan_common_types::{Epoch, PayloadId, ShardId};
 
 use crate::models::{NodeHeight, ShardVote, TreeNodeHash, ValidatorSignature};
 
-#[derive(Debug, Clone, Copy, Deserialize, Serialize)]
+#[derive(Debug, Clone, Copy, Deserialize, Serialize, PartialEq, Eq)]
 pub enum QuorumDecision {
     Accept,
     Reject,

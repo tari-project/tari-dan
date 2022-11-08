@@ -128,9 +128,24 @@ impl SubstateValue {
         }
     }
 
+    pub fn into_vault(self) -> Option<Vault> {
+        match self {
+            SubstateValue::Vault(vault) => Some(vault),
+            _ => None,
+        }
+    }
+
     pub fn into_resource(self) -> Option<Resource> {
         match self {
             SubstateValue::Resource(resource) => Some(resource),
+            _ => None,
+        }
+    }
+
+    pub fn resource_address(&self) -> Option<ResourceAddress> {
+        match self {
+            SubstateValue::Resource(resource) => Some(resource.address()),
+            SubstateValue::Vault(vault) => Some(vault.resource_address()),
             _ => None,
         }
     }

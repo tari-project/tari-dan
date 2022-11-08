@@ -20,27 +20,21 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use std::marker::PhantomData;
-
 use tari_template_abi::{call_engine, Decode, Encode, EngineOp};
 
 use crate::{
     args::{BucketAction, BucketInvokeArg, BucketRef, InvokeResult},
     models::{Amount, ResourceAddress},
-    resource::ResourceDefinition,
 };
 
 pub type BucketId = u32;
 
-pub type AnyBucket = Bucket<()>;
-
 #[derive(Debug, Clone, Decode, Encode)]
-pub struct Bucket<T> {
+pub struct Bucket {
     id: BucketId,
-    _t: PhantomData<T>,
 }
 
-impl<T: ResourceDefinition> Bucket<T> {
+impl Bucket {
     pub(crate) fn new(resource_addr: ResourceAddress) -> Self {
         let resp: InvokeResult = call_engine(EngineOp::BucketInvoke, &BucketInvokeArg {
             bucket_ref: BucketRef::Bucket(resource_addr),
@@ -52,7 +46,6 @@ impl<T: ResourceDefinition> Bucket<T> {
         // TODO: Create bucket with the given resource and get the id
         Self {
             id: resp.decode().expect("Create bucket returned invalid bucket id"),
-            _t: PhantomData,
         }
     }
 
