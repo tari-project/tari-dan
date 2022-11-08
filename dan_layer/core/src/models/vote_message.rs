@@ -99,7 +99,7 @@ impl VoteMessage {
         self.signature = Some(ValidatorSignature::from_bytes(public_key.as_bytes(), &signature_bytes).unwrap());
     }
 
-    fn construct_challenge(&self, public_key: &PublicKey, public_nonce: &PublicKey) -> FixedHash {
+    pub fn construct_challenge(&self, public_key: &PublicKey, public_nonce: &PublicKey) -> FixedHash {
         DomainSeparatedConsensusHasher::<TransactionHashDomain>::new("vote_message")
             .chain(public_key)
             .chain(public_nonce)

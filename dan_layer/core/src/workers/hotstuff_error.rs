@@ -60,4 +60,6 @@ pub enum HotStuffError {
     RecvGenericMessageWithoutNode,
     #[error("Shard has no data, when it was expected to")]
     ShardHasNoData,
+    #[error("Invalid qc error: `{0}`")]
+    InvalidQuorumCertificate(String),
 }

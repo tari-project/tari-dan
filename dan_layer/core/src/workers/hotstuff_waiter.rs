@@ -20,14 +20,21 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use std::{collections::HashMap, sync::Arc};
+use std::{
+    collections::{HashMap, HashSet},
+    iter::FromIterator,
+    sync::Arc,
+};
 
 use futures::future::join_all;
 use log::*;
+use tari_common_types::types::{PublicKey, Signature};
 use tari_comms::NodeIdentity;
+use tari_core::consensus::FromConsensusBytes;
 use tari_dan_common_types::{Epoch, PayloadId, ShardId, SubstateState};
 use tari_engine_types::commit_result::{FinalizeResult, RejectResult, TransactionResult};
 use tari_shutdown::ShutdownSignal;
+use tari_utilities::ByteArray;
 use tokio::{
     sync::{
         broadcast,
@@ -176,7 +183,7 @@ where
         // TODO: Validate who message is from
         let epoch = self.epoch_manager.current_epoch().await?;
         self.validate_from_committee(&from, epoch, shard).await?;
-        self.validate_qc(&qc)?;
+        self.validate_qc(&qc).await?;
         let mut tx = self.shard_store.create_tx()?;
         tx.update_high_qc(shard, qc)
             .map_err(|e| HotStuffError::UpdateHighQcError(e.to_string()))?;
@@ -348,10 +355,74 @@ where
         }
     }
 
-    fn validate_qc(&self, _qc: &QuorumCertificate) -> Result<(), HotStuffError> {
-        // TODO: get committee at epoch
-        // TODO: Validate committee signatures
+    async fn validate_qc(&self, qc: &QuorumCertificate) -> Result<(), HotStuffError> {
+        // extract all the pairs of signer-signature present in the QC
+        let signer_signatures = Self::extract_signer_signatures_from_qc(qc)?;
+
+        // the QC should not have repeated signers
+        let signers_vec: Vec<&[u8]> = signer_signatures
+            .iter()
+            .map(|s| NodeAddressable::as_bytes(&s.0))
+            .collect();
+        let signers_set: HashSet<&[u8]> = HashSet::from_iter(signers_vec.to_owned());
+        if signers_vec.len() != signers_set.len() {
+            return Err(HotStuffError::InvalidQuorumCertificate(
+                "duplicated signers".to_string(),
+            ));
+        }
+
+        // check that the minimum quorum has been reached
+        let committee = self.epoch_manager.get_committee(qc.epoch(), qc.shard()).await?;
+        if signers_set.len() < committee.consensus_threshold() {
+            return Err(HotStuffError::InvalidQuorumCertificate(
+                "insufficient quorum".to_string(),
+            ));
+        }
+
+        // All signers must be inclueded in the epoch commitee for the shard
+        let commitee_iter = committee.members.iter().map(|m| m.as_bytes());
+        let commitee_set: HashSet<&[u8]> = HashSet::from_iter(commitee_iter);
+        let all_signers_are_in_commitee = signers_set.iter().all(|s| commitee_set.contains(s));
+        if !all_signers_are_in_commitee {
+            return Err(HotStuffError::InvalidQuorumCertificate(
+                "some signers are not in committee".to_string(),
+            ));
+        }
+
+        // All signatures must be valid
+        let all_signatures_are_valid = signer_signatures.iter().all(|s| Self::validate_vote(qc, &s.0, &s.1));
+        if !all_signatures_are_valid {
+            return Err(HotStuffError::InvalidQuorumCertificate("invalid signature".to_string()));
+        }
+
         Ok(())
+    }
+
+    fn validate_vote(qc: &QuorumCertificate, public_key: &PublicKey, signature: &Signature) -> bool {
+        let vote = VoteMessage::new(
+            qc.local_node_hash(),
+            qc.shard(),
+            *qc.decision(),
+            qc.all_shard_nodes().to_vec(),
+        );
+        let challenge = vote.construct_challenge(public_key, signature.get_public_nonce());
+
+        signature.verify_challenge(public_key, &*challenge)
+    }
+
+    fn extract_signer_signatures_from_qc(qc: &QuorumCertificate) -> Result<Vec<(PublicKey, Signature)>, HotStuffError> {
+        let mut signatures: Vec<(PublicKey, Signature)> = vec![];
+
+        for s in qc.signatures() {
+            let public_key = PublicKey::from_bytes(&s.public_key)
+                .map_err(|e| HotStuffError::InvalidQuorumCertificate(e.to_string()))?;
+            let signature = Signature::from_consensus_bytes(&s.signature)
+                .map_err(|e| HotStuffError::InvalidQuorumCertificate(e.to_string()))?;
+
+            signatures.push((public_key, signature));
+        }
+
+        Ok(signatures)
     }
 
     async fn on_next_sync_view(&mut self, payload: TPayload, shard: ShardId) -> Result<(), HotStuffError> {
