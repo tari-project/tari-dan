@@ -39,7 +39,7 @@ pub struct HotStuffTreeNode<TAddr, TPayload> {
     height: NodeHeight,
     // The payload that the node is proposing
     payload_id: PayloadId,
-    payload: Option<TPayload>, // Option<TariDanPayload { Transaction }>
+    payload: Option<TPayload>,
     // How far in the consensus this payload is. It should be 4 in order to be committed.
     payload_height: NodeHeight,
     local_pledge: Option<ObjectPledge>,
