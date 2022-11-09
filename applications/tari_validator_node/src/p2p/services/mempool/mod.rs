@@ -24,6 +24,6 @@ mod initializer;
 pub use initializer::spawn;
 
 mod handle;
-pub use handle::MempoolHandle;
+pub use handle::{MempoolHandle, MempoolRequest};
 
 mod service;

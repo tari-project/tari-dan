@@ -31,7 +31,7 @@ message DanMessage {
   oneof message {
     tari.dan.consensus.HotStuffMessage hot_stuff = 1;
     tari.dan.consensus.VoteMessage vote = 2;
-    tari.dan.transaction.Transaction new_transaction = 3;
+    tari.dan.transaction.MempoolMessage new_mempool_message = 3;
     NetworkAnnounce network_announce = 4;
   }
 }

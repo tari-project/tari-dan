@@ -76,6 +76,16 @@ message Transaction {
   TransactionMeta meta = 9;
 }
 
+message MempoolMessage {
+  enum MempoolMessageType {
+    SUBMIT_TRANSACTION = 0;
+    REMOVE_TRANSACTION = 1;
+  }
+  MempoolMessageType mempool_message_type = 1;
+  Transaction submit_transaction = 2;
+  optional bytes transaction_hash = 3;
+}
+
 message Instruction {
   enum InstructionType {
     FUNCTION = 0;

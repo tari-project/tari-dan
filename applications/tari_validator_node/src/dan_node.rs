@@ -20,11 +20,18 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+use log::*;
 use tari_common::exit_codes::ExitError;
 use tari_dan_core::workers::events::HotStuffEvent;
 use tari_shutdown::ShutdownSignal;
+use tari_template_lib::Hash;
 
-use crate::{p2p::services::networking::NetworkingService, Services};
+use crate::{
+    p2p::services::{mempool::MempoolRequest, networking::NetworkingService},
+    Services,
+};
+
+const LOG_TARGET: &str = "tari::validator_node::dan_node";
 
 pub struct DanNode {
     services: Services,
@@ -38,7 +45,7 @@ impl DanNode {
     pub async fn start(mut self, mut shutdown: ShutdownSignal) -> Result<(), ExitError> {
         self.services.networking.announce().await?;
 
-        let hotstuff_events = self.services.hotstuff_events.subscribe();
+        let mut hotstuff_events = self.services.hotstuff_events.subscribe();
 
         loop {
             tokio::select! {
@@ -48,14 +55,13 @@ impl DanNode {
                 },
 
                 Ok(event) = hotstuff_events.recv() => {
-                      match event {
-                          HotStuffEvent::OnFinalized(qc, result) => {
-                             if let Err(err)  = self.services.mempool.remove_transaction(qc.payload()).await {
-                                error!(target: LOG_TARGET, "Failed to remove transaction from mempool: {}", err);
-                            }
-                          }
-                          _ => {}
-                     }
+                    if let HotStuffEvent::OnFinalized(qc, _) = event {
+                        let transaction_hash = Hash::from(qc.payload_id().into_array());
+                        let mempool_request = MempoolRequest::RemoveTransaction { transaction_hash };
+                        if let Err(err) = self.services.mempool.handle_mempool_request(mempool_request).await {
+                            error!(target: LOG_TARGET, "Failed to remove transaction from mempool: {}", err);
+                        }
+                    }
                 }
             }
         }

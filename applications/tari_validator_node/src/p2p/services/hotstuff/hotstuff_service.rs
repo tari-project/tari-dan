@@ -77,7 +77,7 @@ impl HotstuffService {
         outbound: OutboundMessaging,
         payload_processor: TariDanPayloadProcessor<TemplateManager>,
         shard_store_factory: SqliteShardStoreFactory,
-        rx_hotstuff_messages: broadcast::Receiver<(CommsPublicKey, HotStuffMessage<TariDanPayload, CommsPublicKey>)>,
+        rx_hotstuff_messages: Receiver<(CommsPublicKey, HotStuffMessage<TariDanPayload, CommsPublicKey>)>,
         rx_vote_messages: Receiver<(CommsPublicKey, VoteMessage)>,
         shutdown: ShutdownSignal,
     ) -> EventSubscription<HotStuffEvent> {

@@ -23,11 +23,10 @@
 use std::sync::{Arc, Mutex};
 
 use log::*;
-use tari_crypto::ristretto::RistrettoPublicKey;
 use tari_dan_common_types::ShardId;
 use tari_dan_core::{
-    message::DanMessage,
-    models::{HotStuffMessage, Payload, TariDanPayload},
+    message::{DanMessage, MempoolMessage},
+    models::{Payload, TariDanPayload},
     services::infrastructure_services::OutboundService,
 };
 use tari_dan_engine::transaction::Transaction;
@@ -41,59 +40,29 @@ const LOG_TARGET: &str = "dan::mempool::service";
 pub struct MempoolService {
     // TODO: Should be a HashSet
     transactions: TransactionVecMutex,
-    new_transactions: mpsc::Receiver<Transaction>,
+    new_mempool_requests: mpsc::Receiver<MempoolRequest>,
     outbound: OutboundMessaging,
     tx_valid_transactions: broadcast::Sender<(Transaction, ShardId)>,
-    rx_consensus_message:
-        broadcast::Receiver<(RistrettoPublicKey, HotStuffMessage<TariDanPayload, RistrettoPublicKey>)>,
 }
 
 impl MempoolService {
     pub(super) fn new(
-        new_transactions: mpsc::Receiver<Transaction>,
+        new_mempool_requests: mpsc::Receiver<MempoolRequest>,
         outbound: OutboundMessaging,
         tx_valid_transactions: broadcast::Sender<(Transaction, ShardId)>,
-        rx_consensus_message: broadcast::Receiver<(
-            RistrettoPublicKey,
-            HotStuffMessage<TariDanPayload, RistrettoPublicKey>,
-        )>,
     ) -> Self {
         Self {
             transactions: Arc::new(Mutex::new(Vec::new())),
-            new_transactions,
+            new_mempool_requests,
             outbound,
             tx_valid_transactions,
-            rx_consensus_message,
         }
     }
 
     pub async fn run(mut self) {
         loop {
             tokio::select! {
-                Some(transaction) = self.new_transactions.recv() => {
-                    self.handle_new_transaction(transaction).await;
-                }
-
-                Ok((_, msg)) = self.rx_consensus_message.recv() => {
-                    // we want to remove this transaction from mempool if message has a node and the payload height is 4
-                    let node = if let Some(node) = msg.node() {
-                        node
-                    } else {
-                        // message can't be finalized at this stage
-                        continue
-                    };
-
-                    if node.payload_height().as_u64() >= 4u64 {
-                        let transaction = if let Some(payload) = node.payload() {
-                            payload.transaction()
-                        } else {
-                            continue
-                        };
-                        // at this point the transaction should have been committed,
-                        // so we can safely assume it is finalized
-                        self.remove_finalized_transaction(transaction)
-                    }
-                }
+                Some(req) = self.new_mempool_requests.recv() => self.handle_request(req).await,
 
                 else => {
                     info!(target: LOG_TARGET, "Mempool service shutting down");
@@ -105,14 +74,16 @@ impl MempoolService {
 
     async fn handle_request(&mut self, request: MempoolRequest) {
         match request {
-            MempoolRequest::SubmitTransaction(transaction) => self.handle_new_transaction(transaction).await,
-            MempoolRequest::RemoveTransaction { hash } => self.remove_transaction(hash),
+            MempoolRequest::SubmitTransaction(transaction) => self.handle_new_transaction(*transaction).await,
+            MempoolRequest::RemoveTransaction { transaction_hash } => {
+                self.remove_transaction(Vec::from(transaction_hash.as_ref()))
+            },
         }
     }
 
     fn remove_transaction(&mut self, hash: Vec<u8>) {
         let mut transactions = self.transactions.lock().unwrap();
-        transactions.retain(|(transaction, _)| transaction.hash() != hash);
+        transactions.retain(|(transaction, _)| transaction.hash().into_array() != hash[..]);
     }
 
     async fn handle_new_transaction(&mut self, transaction: Transaction) {
@@ -143,7 +114,8 @@ impl MempoolService {
         info!(target: LOG_TARGET, "🎱 New transaction in mempool");
 
         // TODO: Should just propagate to shards involved
-        let msg = DanMessage::NewTransaction(transaction.clone());
+        let mempool_msg = MempoolMessage::SubmitTransaction(Box::new(transaction.clone()));
+        let msg = DanMessage::NewMempoolMessage(mempool_msg);
         if let Err(err) = self.outbound.flood(Default::default(), msg).await {
             error!(target: LOG_TARGET, "Failed to broadcast new transaction: {}", err);
         }
@@ -156,11 +128,6 @@ impl MempoolService {
                 );
             }
         }
-    }
-
-    pub fn remove_finalized_transaction(&mut self, transaction: &Transaction) {
-        let mut access = self.transactions.lock().unwrap();
-        access.retain(|(tx, _)| tx.hash() != transaction.hash());
     }
 
     pub fn get_transaction(&self) -> TransactionVecMutex {

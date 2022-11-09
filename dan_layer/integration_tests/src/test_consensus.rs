@@ -120,7 +120,7 @@ pub trait Consensus<TariDanPayload> {
 pub struct HsTestHarness {
     identity: PublicKey,
     tx_new: Sender<(TariDanPayload, ShardId)>,
-    tx_hs_messages: broadcast::Sender<(PublicKey, HotStuffMessage<TariDanPayload, PublicKey>)>,
+    tx_hs_messages: Sender<(PublicKey, HotStuffMessage<TariDanPayload, PublicKey>)>,
     rx_leader: Receiver<(PublicKey, HotStuffMessage<TariDanPayload, PublicKey>)>,
     shutdown: Shutdown,
     rx_broadcast: Receiver<(HotStuffMessage<TariDanPayload, PublicKey>, Vec<PublicKey>)>,
@@ -137,7 +137,7 @@ impl HsTestHarness {
         TLeader: LeaderStrategy<PublicKey> + Send + Sync + 'static,
     {
         let (tx_new, rx_new) = channel(1);
-        let (tx_hs_messages, rx_hs_messages) = broadcast::channel(1);
+        let (tx_hs_messages, rx_hs_messages) = channel(1);
         let (tx_leader, rx_leader) = channel(1);
         let (tx_broadcast, rx_broadcast) = channel(1);
         let (tx_vote_message, rx_vote_message) = channel(1);
@@ -284,7 +284,11 @@ async fn test_hs_waiter_leader_proposes() {
     // Send a new view message
     let new_view_message = HotStuffMessage::new_view(QuorumCertificate::genesis(), *SHARD0, Some(payload));
 
-    instance.tx_hs_messages.send((node1.clone(), new_view_message)).unwrap();
+    instance
+        .tx_hs_messages
+        .send((node1.clone(), new_view_message))
+        .await
+        .unwrap();
 
     let (_, broadcast_group) = instance.recv_broadcast().await;
 
@@ -309,7 +313,11 @@ async fn test_hs_waiter_replica_sends_vote_for_proposal() {
     let new_view_message = HotStuffMessage::new_view(QuorumCertificate::genesis(), *SHARD0, Some(payload));
 
     // Node 2 sends new view to node 1
-    instance.tx_hs_messages.send((node2, new_view_message.clone())).unwrap();
+    instance
+        .tx_hs_messages
+        .send((node2, new_view_message.clone()))
+        .await
+        .unwrap();
 
     // Should receive a proposal
     let (proposal_message, _broadcast_group) = instance.recv_broadcast().await;
@@ -318,6 +326,7 @@ async fn test_hs_waiter_replica_sends_vote_for_proposal() {
     instance
         .tx_hs_messages
         .send((node1.clone(), proposal_message))
+        .await
         .expect("Should not error");
 
     let (vote, from) = instance.recv_vote_message().await;
@@ -347,6 +356,7 @@ async fn test_hs_waiter_leader_sends_new_proposal_when_enough_votes_are_received
     instance
         .tx_hs_messages
         .send((node2.clone(), new_view_message.clone()))
+        .await
         .unwrap();
 
     // Get the node hash from the proposal
@@ -406,20 +416,21 @@ async fn test_hs_waiter_execute_called_when_consensus_reached() {
     instance
         .tx_hs_messages
         .send((node1.clone(), new_view_message.clone()))
+        .await
         .unwrap();
 
     // Get the node hash from the proposal
     let (proposal1, _broadcast_group) = instance.recv_broadcast().await;
 
     // loopback the proposal
-    instance.tx_hs_messages.send((node1.clone(), proposal1)).unwrap();
+    instance.tx_hs_messages.send((node1.clone(), proposal1)).await.unwrap();
     let (vote, _) = instance.recv_vote_message().await;
     // loopback the vote
     instance.tx_votes.send((node1.clone(), vote.clone())).await.unwrap();
     let (proposal2, _broadcast_group) = instance.recv_broadcast().await;
 
     // loopback the proposal
-    instance.tx_hs_messages.send((node1.clone(), proposal2)).unwrap();
+    instance.tx_hs_messages.send((node1.clone(), proposal2)).await.unwrap();
     let (vote, _) = instance.recv_vote_message().await;
 
     // Execute at h=0
@@ -431,7 +442,7 @@ async fn test_hs_waiter_execute_called_when_consensus_reached() {
     let (proposal3, _broadcast_group) = instance.recv_broadcast().await;
 
     // loopback the proposal
-    instance.tx_hs_messages.send((node1.clone(), proposal3)).unwrap();
+    instance.tx_hs_messages.send((node1.clone(), proposal3)).await.unwrap();
     let (vote, _) = instance.recv_vote_message().await;
 
     // Execute again at h=1
@@ -444,7 +455,7 @@ async fn test_hs_waiter_execute_called_when_consensus_reached() {
     let (proposal4, _broadcast_group) = instance.recv_broadcast().await;
 
     dbg!(&proposal4);
-    instance.tx_hs_messages.send((node1.clone(), proposal4)).unwrap();
+    instance.tx_hs_messages.send((node1.clone(), proposal4)).await.unwrap();
     let (vote, _) = instance.recv_vote_message().await;
     dbg!(&vote);
 
@@ -480,12 +491,14 @@ async fn test_hs_waiter_multishard_votes() {
     node1_instance
         .tx_hs_messages
         .send((node1.clone(), new_view_message.clone()))
+        .await
         .unwrap();
 
     let new_view_message = HotStuffMessage::new_view(QuorumCertificate::genesis(), *SHARD1, Some(payload.clone()));
     node2_instance
         .tx_hs_messages
         .send((node2.clone(), new_view_message.clone()))
+        .await
         .unwrap();
 
     let (proposal1_n1, _broadcast_group) = node1_instance.recv_broadcast().await;
@@ -493,10 +506,12 @@ async fn test_hs_waiter_multishard_votes() {
     node1_instance
         .tx_hs_messages
         .send((node1.clone(), proposal1_n1.clone()))
+        .await
         .unwrap();
     node2_instance
         .tx_hs_messages
         .send((node1.clone(), proposal1_n1))
+        .await
         .unwrap();
 
     // Node 2 also proposes
@@ -505,10 +520,12 @@ async fn test_hs_waiter_multishard_votes() {
     node1_instance
         .tx_hs_messages
         .send((node1.clone(), proposal1_n2.clone()))
+        .await
         .unwrap();
     node2_instance
         .tx_hs_messages
         .send((node1.clone(), proposal1_n2))
+        .await
         .unwrap();
 
     // Should get a vote from n1 and n2
@@ -702,12 +719,14 @@ async fn test_kitchen_sink() {
     node1_instance
         .tx_hs_messages
         .send((node1.clone(), new_view_message.clone()))
+        .await
         .unwrap();
 
     let new_view_message = HotStuffMessage::new_view(QuorumCertificate::genesis(), s2, Some(payload.clone()));
     node2_instance
         .tx_hs_messages
         .send((node2.clone(), new_view_message.clone()))
+        .await
         .unwrap();
 
     let mut nodes = vec![node1_instance, node2_instance];
@@ -765,7 +784,11 @@ async fn do_rounds_of_hotstuff(nodes: &mut [HsTestHarness], rounds: usize) {
 
         for other_node in nodes.iter() {
             for (addr, msg) in &proposals {
-                other_node.tx_hs_messages.send((addr.clone(), msg.clone())).unwrap();
+                other_node
+                    .tx_hs_messages
+                    .send((addr.clone(), msg.clone()))
+                    .await
+                    .unwrap();
             }
         }
 

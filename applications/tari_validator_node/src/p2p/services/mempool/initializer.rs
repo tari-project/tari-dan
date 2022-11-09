@@ -20,33 +20,27 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use tari_crypto::ristretto::RistrettoPublicKey;
-use tari_dan_core::models::{HotStuffMessage, TariDanPayload};
-use tari_dan_engine::transaction::Transaction;
 use tokio::{
     sync::{broadcast, mpsc},
     task,
 };
 
+use super::handle::MempoolRequest;
 use crate::p2p::services::{
     mempool::{handle::MempoolHandle, service::MempoolService},
     messaging::OutboundMessaging,
 };
 
 pub fn spawn(
-    new_transactions: mpsc::Receiver<Transaction>,
-    new_transactions_sender: mpsc::Sender<Transaction>,
+    new_transactions: mpsc::Receiver<MempoolRequest>,
+    new_mempool_request_sender: mpsc::Sender<MempoolRequest>,
     outbound: OutboundMessaging,
-    rx_consensus_message: broadcast::Receiver<(
-        RistrettoPublicKey,
-        HotStuffMessage<TariDanPayload, RistrettoPublicKey>,
-    )>,
 ) -> MempoolHandle {
     let (tx_valid_transactions, rx_valid_transactions) = broadcast::channel(100);
-    let mempool = MempoolService::new(new_transactions, outbound, tx_valid_transactions, rx_consensus_message);
+    let mempool = MempoolService::new(new_transactions, outbound, tx_valid_transactions);
     let handle = MempoolHandle::new(
         rx_valid_transactions,
-        new_transactions_sender,
+        new_mempool_request_sender,
         mempool.get_transaction(),
     );
 

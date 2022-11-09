@@ -39,9 +39,12 @@ use tokio::{
     task,
 };
 
-use crate::p2p::proto::{
-    consensus::QuorumCertificate,
-    rpc::{VnStateSyncRequest, VnStateSyncResponse},
+use crate::p2p::{
+    proto::{
+        consensus::QuorumCertificate,
+        rpc::{VnStateSyncRequest, VnStateSyncResponse},
+    },
+    services::mempool::MempoolRequest,
 };
 
 const LOG_TARGET: &str = "vn::p2p::rpc";
@@ -89,8 +92,10 @@ where TPeerProvider: PeerProvider + Clone + Send + Sync + 'static
             },
         };
 
+        let mempool_req = MempoolRequest::SubmitTransaction(Box::new(transaction));
+
         // TODO: Implement a mempool handle that returns if the transaction was accepted or not
-        match self.message_senders.tx_new_transaction_message.send(transaction).await {
+        match self.message_senders.tx_new_transaction_message.send(mempool_req).await {
             Ok(_) => {
                 debug!(target: LOG_TARGET, "Accepted instruction into mempool");
                 return Ok(Response::new(proto::rpc::SubmitTransactionResponse {

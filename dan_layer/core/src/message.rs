@@ -23,8 +23,15 @@
 use serde::Serialize;
 use tari_comms::{multiaddr::Multiaddr, peer_manager::IdentitySignature};
 use tari_dan_engine::transaction::Transaction;
+use tari_template_lib::Hash;
 
 use crate::models::{vote_message::VoteMessage, HotStuffMessage};
+
+#[derive(Debug, Clone, Serialize)]
+pub enum MempoolMessage {
+    SubmitTransaction(Box<Transaction>),
+    RemoveTransaction { transaction_hash: Hash },
+}
 
 #[derive(Debug, Clone, Serialize)]
 pub enum DanMessage<TPayload, TAddr> {
@@ -32,7 +39,7 @@ pub enum DanMessage<TPayload, TAddr> {
     HotStuffMessage(HotStuffMessage<TPayload, TAddr>),
     VoteMessage(VoteMessage),
     // Mempool
-    NewTransaction(Transaction),
+    NewMempoolMessage(MempoolMessage),
     // Network
     NetworkAnnounce(NetworkAnnounce<TAddr>),
 }
@@ -42,7 +49,7 @@ impl<TPayload, TAddr> DanMessage<TPayload, TAddr> {
         match self {
             Self::HotStuffMessage(_) => "HotStuffMessage",
             Self::VoteMessage(_) => "VoteMessage",
-            Self::NewTransaction(_) => "NewTransaction",
+            Self::NewMempoolMessage(_) => "NewMempoolMessage",
             Self::NetworkAnnounce(_) => "NetworkAnnounce",
         }
     }

@@ -64,7 +64,7 @@ use crate::{
     json_rpc::jrpc_errors::internal_error,
     p2p::services::{
         epoch_manager::handle::EpochManagerHandle,
-        mempool::MempoolHandle,
+        mempool::{MempoolHandle, MempoolRequest},
         template_manager::TemplateManagerHandle,
     },
     registration,
@@ -170,9 +170,11 @@ impl JsonRpcHandlers {
         let hash = *mempool_tx.hash();
 
         let subscription = self.hotstuff_events.subscribe();
+        // create a mempool request out of mempool_tx
+        let mempool_request = MempoolRequest::SubmitTransaction(Box::new(mempool_tx));
         // Submit to mempool.
         self.mempool
-            .new_transaction(mempool_tx)
+            .handle_mempool_request(mempool_request)
             .await
             .map_err(internal_error(answer_id))?;
 

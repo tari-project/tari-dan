@@ -29,7 +29,7 @@ use tari_dan_core::{
 };
 use tari_dan_storage_sqlite::sqlite_shard_store_factory::SqliteShardStoreFactory;
 use tari_shutdown::ShutdownSignal;
-use tokio::sync::{broadcast, mpsc};
+use tokio::sync::mpsc;
 
 use crate::{
     p2p::services::{
@@ -50,7 +50,7 @@ pub fn try_spawn(
     epoch_manager: EpochManagerHandle,
     mempool: MempoolHandle,
     payload_processor: TariDanPayloadProcessor<TemplateManager>,
-    rx_consensus_message: broadcast::Receiver<(CommsPublicKey, HotStuffMessage<TariDanPayload, CommsPublicKey>)>,
+    rx_consensus_message: mpsc::Receiver<(CommsPublicKey, HotStuffMessage<TariDanPayload, CommsPublicKey>)>,
     rx_vote_message: mpsc::Receiver<(CommsPublicKey, VoteMessage)>,
     shutdown: ShutdownSignal,
 ) -> Result<(EventSubscription<HotStuffEvent>, SqliteShardStoreFactory), anyhow::Error> {

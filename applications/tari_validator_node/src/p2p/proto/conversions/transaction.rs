@@ -30,6 +30,7 @@ use borsh::de::BorshDeserialize;
 use tari_common_types::types::{PublicKey, Signature};
 use tari_crypto::tari_utilities::ByteArray;
 use tari_dan_common_types::{ObjectClaim, ShardId, SubstateChange};
+use tari_dan_core::message::MempoolMessage;
 use tari_dan_engine::transaction::{Transaction, TransactionMeta};
 use tari_template_lib::{args::Arg, Hash};
 
@@ -262,6 +263,45 @@ impl From<SubstateChange> for proto::transaction::SubstateChange {
             SubstateChange::Create => proto::transaction::SubstateChange::Create,
             SubstateChange::Exists => proto::transaction::SubstateChange::Exists,
             SubstateChange::Destroy => proto::transaction::SubstateChange::Destroy,
+        }
+    }
+}
+
+// -------------------------------- MempoolMessage ----------------------------- //
+
+impl TryFrom<proto::transaction::MempoolMessage> for MempoolMessage {
+    type Error = anyhow::Error;
+
+    fn try_from(val: proto::transaction::MempoolMessage) -> Result<Self, Self::Error> {
+        match val.mempool_message_type {
+            0 => Ok(Self::SubmitTransaction(Box::new(Transaction::try_from(
+                val.submit_transaction
+                    .ok_or_else(|| anyhow!("invalid transaction to submit"))?,
+            )?))),
+            1 => Ok(Self::RemoveTransaction {
+                transaction_hash: Hash::try_from(
+                    val.transaction_hash
+                        .ok_or_else(|| anyhow!("invalid transaction hash to be removed"))?,
+                )?,
+            }),
+            _ => return Err(anyhow!("invalid mempool message type")),
+        }
+    }
+}
+
+impl From<MempoolMessage> for proto::transaction::MempoolMessage {
+    fn from(val: MempoolMessage) -> Self {
+        match val {
+            MempoolMessage::SubmitTransaction(tx) => proto::transaction::MempoolMessage {
+                mempool_message_type: 0,
+                submit_transaction: Some(proto::transaction::Transaction::from(*tx)),
+                transaction_hash: None,
+            },
+            MempoolMessage::RemoveTransaction { transaction_hash } => proto::transaction::MempoolMessage {
+                mempool_message_type: 1,
+                submit_transaction: None,
+                transaction_hash: Some(Vec::from(transaction_hash.as_ref())),
+            },
         }
     }
 }
