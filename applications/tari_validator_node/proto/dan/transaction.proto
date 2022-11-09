@@ -83,7 +83,7 @@ message MempoolMessage {
   }
   MempoolMessageType mempool_message_type = 1;
   Transaction submit_transaction = 2;
-  optional bytes transaction_hash = 3;
+  bytes transaction_hash = 3;
 }
 
 message Instruction {

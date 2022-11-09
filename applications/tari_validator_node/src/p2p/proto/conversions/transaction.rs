@@ -279,10 +279,7 @@ impl TryFrom<proto::transaction::MempoolMessage> for MempoolMessage {
                     .ok_or_else(|| anyhow!("invalid transaction to submit"))?,
             )?))),
             1 => Ok(Self::RemoveTransaction {
-                transaction_hash: Hash::try_from(
-                    val.transaction_hash
-                        .ok_or_else(|| anyhow!("invalid transaction hash to be removed"))?,
-                )?,
+                transaction_hash: Hash::try_from(val.transaction_hash)?,
             }),
             _ => return Err(anyhow!("invalid mempool message type")),
         }
@@ -295,12 +292,12 @@ impl From<MempoolMessage> for proto::transaction::MempoolMessage {
             MempoolMessage::SubmitTransaction(tx) => proto::transaction::MempoolMessage {
                 mempool_message_type: 0,
                 submit_transaction: Some(proto::transaction::Transaction::from(*tx)),
-                transaction_hash: None,
+                transaction_hash: vec![],
             },
             MempoolMessage::RemoveTransaction { transaction_hash } => proto::transaction::MempoolMessage {
                 mempool_message_type: 1,
                 submit_transaction: None,
-                transaction_hash: Some(Vec::from(transaction_hash.as_ref())),
+                transaction_hash: Vec::from(transaction_hash.as_ref()),
             },
         }
     }
