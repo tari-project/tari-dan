@@ -32,6 +32,7 @@ pub struct Payload {
     pub fee: i64,
     pub sender_public_key: Vec<u8>,
     pub meta: String,
+    pub timestamp: i64,
 }
 
 #[derive(Debug, Insertable)]
@@ -44,4 +45,5 @@ pub struct NewPayload {
     pub fee: i64,
     pub sender_public_key: Vec<u8>,
     pub meta: String,
+    pub timestamp: i64,
 }

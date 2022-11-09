@@ -406,6 +406,7 @@ impl ShardStoreTransaction<PublicKey, TariDanPayload> for SqliteShardStoreTransa
 
         let new_row = NewPayload {
             payload_id,
+            timestamp: payload.timestamp(),
             instructions,
             public_nonce,
             scalar,
