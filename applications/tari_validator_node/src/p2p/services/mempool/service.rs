@@ -34,7 +34,7 @@ use tari_dan_engine::transaction::Transaction;
 use tokio::sync::{broadcast, mpsc};
 
 use super::handle::TransactionVecMutex;
-use crate::p2p::services::messaging::OutboundMessaging;
+use crate::p2p::services::{mempool::handle::MempoolRequest, messaging::OutboundMessaging};
 
 const LOG_TARGET: &str = "dan::mempool::service";
 
@@ -101,6 +101,18 @@ impl MempoolService {
                 }
             }
         }
+    }
+
+    async fn handle_request(&mut self, request: MempoolRequest) {
+        match request {
+            MempoolRequest::SubmitTransaction(transaction) => self.handle_new_transaction(transaction).await,
+            MempoolRequest::RemoveTransaction { hash } => self.remove_transaction(hash),
+        }
+    }
+
+    fn remove_transaction(&mut self, hash: Vec<u8>) {
+        let mut transactions = self.transactions.lock().unwrap();
+        transactions.retain(|(transaction, _)| transaction.hash() != hash);
     }
 
     async fn handle_new_transaction(&mut self, transaction: Transaction) {

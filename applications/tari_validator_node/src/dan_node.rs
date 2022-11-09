@@ -21,6 +21,7 @@
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 use tari_common::exit_codes::ExitError;
+use tari_dan_core::workers::events::HotStuffEvent;
 use tari_shutdown::ShutdownSignal;
 
 use crate::{p2p::services::networking::NetworkingService, Services};
@@ -37,8 +38,27 @@ impl DanNode {
     pub async fn start(mut self, mut shutdown: ShutdownSignal) -> Result<(), ExitError> {
         self.services.networking.announce().await?;
 
-        // Wait until killed
-        shutdown.wait().await;
+        let hotstuff_events = self.services.hotstuff_events.subscribe();
+
+        loop {
+            tokio::select! {
+                // Wait until killed
+                _ = shutdown.wait() => {
+                     break;
+                },
+
+                Ok(event) = hotstuff_events.recv() => {
+                      match event {
+                          HotStuffEvent::OnFinalized(qc, result) => {
+                             if let Err(err)  = self.services.mempool.remove_transaction(qc.payload()).await {
+                                error!(target: LOG_TARGET, "Failed to remove transaction from mempool: {}", err);
+                            }
+                          }
+                          _ => {}
+                     }
+                }
+            }
+        }
 
         Ok(())
     }
