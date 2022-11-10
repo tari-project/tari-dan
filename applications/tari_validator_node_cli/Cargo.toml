@@ -21,6 +21,7 @@ anyhow = "1.0.65"
 clap = { version = "3.2.22", features = ["derive"] }
 dirs = "4.0.0"
 log = "0.4.17"
+jfs = "0.7.1"
 multiaddr = "0.14.0"
 reqwest = { version = "0.11.11", features = ["json"] }
 serde = "1.0.144"
