@@ -23,10 +23,10 @@
 use std::{convert::TryFrom, path::Path, str::FromStr};
 
 use clap::{Args, Subcommand};
-use tari_dan_common_types::ShardId;
+use tari_dan_common_types::{ShardId, SubstateChange};
 use tari_dan_engine::transaction::Transaction;
 use tari_engine_types::{
-    commit_result::{FinalizeResult, TransactionResult},
+    commit_result::TransactionResult,
     execution_result::Type,
     instruction::Instruction,
     substate::SubstateValue,
@@ -34,7 +34,10 @@ use tari_engine_types::{
 };
 use tari_template_lib::{args::Arg, models::ComponentAddress};
 use tari_utilities::hex::to_hex;
-use tari_validator_node_client::{types::SubmitTransactionRequest, ValidatorNodeClient};
+use tari_validator_node_client::{
+    types::{SubmitTransactionRequest, TransactionFinalizeResult},
+    ValidatorNodeClient,
+};
 
 use crate::{account_manager::AccountFileManager, from_hex::FromHex};
 
@@ -159,7 +162,8 @@ async fn handle_submit(
     base_dir: impl AsRef<Path>,
     client: &mut ValidatorNodeClient,
 ) -> Result<(), anyhow::Error> {
-    let mut inputs = vec![];
+    let mut input_refs = vec![];
+    let inputs = vec![];
     let instruction = match args.instruction {
         CliInstruction::CallFunction {
             template_address,
@@ -176,7 +180,8 @@ async fn handle_submit(
             method_name,
             args,
         } => {
-            inputs.push(component_address.into_inner().into_array().into());
+            input_refs.push(component_address.into_inner().into_array().into());
+            // inputs.push(component_address.into_inner().into_array().into());
             Instruction::CallMethod {
                 template_address: template_address.into_inner(),
                 component_address: component_address.into_inner(),
@@ -193,7 +198,8 @@ async fn handle_submit(
     // TODO: this is a little clunky
     let mut builder = Transaction::builder();
     builder
-        .with_input_refs(inputs.clone())
+        .with_input_refs(input_refs.clone())
+        .with_inputs(inputs.clone())
         .with_num_outputs(args.num_outputs.unwrap_or(0))
         .add_instruction(instruction)
         .sign(&account.secret_key)
@@ -201,21 +207,30 @@ async fn handle_submit(
     let transaction = builder.build();
     let tx_hash = *transaction.hash();
 
+    let mut input_data: Vec<(ShardId, SubstateChange)> =
+        input_refs.iter().map(|i| (*i, SubstateChange::Exists)).collect();
+    input_data.extend(inputs.iter().map(|i| (*i, SubstateChange::Destroy)));
     let request = SubmitTransactionRequest {
         instructions: transaction.instructions().to_vec(),
         signature: transaction.signature().clone(),
         fee: transaction.fee(),
         sender_public_key: transaction.sender_public_key().clone(),
-        inputs,
+        inputs: input_data,
         num_outputs: args.num_outputs.unwrap_or(0),
         wait_for_result: args.wait_for_result,
     };
 
+    if request.inputs.is_empty() && request.num_outputs == 0 {
+        println!("No inputs or outputs. This transaction will not be processed by the network.");
+        return Ok(());
+    }
     println!("✅ Transaction {} submitted.", tx_hash);
     if args.wait_for_result {
         println!("⏳️ Waiting for transaction result...");
         println!();
     }
+
+    // dbg!(&request);
     let resp = client.submit_transaction(request).await?;
     if let Some(result) = resp.result {
         summarize(&result);
@@ -223,12 +238,21 @@ async fn handle_submit(
     Ok(())
 }
 
-fn summarize(result: &FinalizeResult) {
-    match result.result {
+#[allow(clippy::too_many_lines)]
+fn summarize(result: &TransactionFinalizeResult) {
+    println!("✅️ Transaction finalized",);
+    println!();
+    println!("Epoch: {}", result.qc.epoch());
+    println!("Payload height: {}", result.qc.payload_height());
+    println!("Signed by: {} validator nodes", result.qc.signature().len());
+    println!();
+    // dbg!(&result.qc);
+    println!("========= Substates =========");
+    match result.finalize.result {
         TransactionResult::Accept(ref diff) => {
             for (address, substate) in diff.up_iter() {
                 println!(
-                    "️🌲 New substate {} (v{})",
+                    "️🌲 UP substate {} (v{})",
                     ShardId::from_address(address),
                     substate.version()
                 );
@@ -249,7 +273,7 @@ fn summarize(result: &FinalizeResult) {
                 println!();
             }
             for address in diff.down_iter() {
-                println!("🗑️ Destroyed substate {}", ShardId::from_address(address));
+                println!("🗑️ DOWN substate {}", ShardId::from_address(address));
                 println!();
             }
         },
@@ -257,8 +281,21 @@ fn summarize(result: &FinalizeResult) {
             println!("❌️ Transaction rejected: {}", reject.reason);
         },
     }
+    println!("========= Pledges =========");
+    for p in result.qc.all_shard_nodes().iter() {
+        println!(
+            "Shard:{} Pledge:{}",
+            p.shard_id,
+            p.pledge
+                .as_ref()
+                .map(|pledge| pledge.current_state.as_str())
+                .unwrap_or("<Not pledged>")
+        );
+    }
+    println!();
+
     println!("========= Return Values =========");
-    for result in &result.execution_results {
+    for result in &result.finalize.execution_results {
         match result.return_type {
             Type::Unit => {},
             Type::Bool => {
@@ -305,7 +342,9 @@ fn summarize(result: &FinalizeResult) {
 
     println!();
     println!("========= LOGS =========");
-    for log in &result.logs {
+    for log in &result.finalize.logs {
         println!("{}", log);
     }
+    println!();
+    println!("OVERALL DECISION: {:?}", result.decision);
 }

@@ -299,8 +299,6 @@ impl BaseLayerScanner {
                 }
             }
 
-            self.epoch_manager.update_epoch(block_info.height).await?;
-
             self.set_last_scanned_block(tip.tip_hash, block_info.height, block_info.hash)?;
             match block_info.next_block_hash {
                 Some(next_hash) => {
@@ -321,6 +319,9 @@ impl BaseLayerScanner {
                 },
             }
         }
+
+        // after scan has been completed by the vn, the epoch is updated
+        self.epoch_manager.update_epoch(tip.height_of_longest_chain).await?;
 
         Ok(())
     }

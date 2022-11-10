@@ -25,7 +25,7 @@ pub mod memory;
 use std::{error::Error, io};
 
 use tari_dan_common_types::optional::IsNotFoundError;
-use tari_template_abi::{encode, Decode, Encode};
+use tari_template_abi::{decode, encode, Decode, Encode};
 
 // pub trait StateStorage<'a>: AtomicDb<'a, Error = StateStoreError> + Send + Sync {}
 //
@@ -55,7 +55,7 @@ pub trait StateReader {
 
     fn get_state<K: Encode, V: Decode>(&self, key: &K) -> Result<V, StateStoreError> {
         let value = self.get_state_raw(&encode(key)?)?;
-        let value = V::deserialize(&mut value.as_slice())?;
+        let value = decode(&value)?;
         Ok(value)
     }
 

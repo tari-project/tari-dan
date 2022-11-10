@@ -20,6 +20,8 @@
 //   WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //   USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+use std::fmt::Display;
+
 use serde::{Deserialize, Serialize};
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Deserialize, Serialize)]
@@ -34,6 +36,10 @@ impl Epoch {
         self.0.to_le_bytes()
     }
 
+    pub fn to_height(self) -> u64 {
+        self.0 * 10
+    }
+
     pub fn from_block_height(bh: u64) -> Self {
         let e = bh / 10;
         Self(e)
@@ -43,5 +49,11 @@ impl Epoch {
 impl From<u64> for Epoch {
     fn from(e: u64) -> Self {
         Self(e)
+    }
+}
+
+impl Display for Epoch {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.0)
     }
 }

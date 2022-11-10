@@ -23,8 +23,8 @@
 use std::{convert::TryInto, net::SocketAddr};
 
 use async_trait::async_trait;
-use log::info;
-use tari_app_grpc::tari_rpc::{self as grpc, GetCommitteeRequest, GetShardKeyRequest};
+use log::trace;
+use tari_app_grpc::tari_rpc::{self as grpc, GetShardKeyRequest};
 use tari_base_node_grpc_client::BaseNodeGrpcClient;
 use tari_common_types::types::{FixedHash, PublicKey};
 use tari_comms::types::CommsPublicKey;
@@ -101,7 +101,6 @@ impl BaseNodeClient for GrpcBaseNodeClient {
     async fn get_validator_nodes(&mut self, height: u64) -> Result<Vec<ValidatorNode>, BaseNodeError> {
         let inner = self.connection().await?;
         let request = grpc::GetActiveValidatorNodesRequest { height };
-        dbg!(&request);
         let mut vns = vec![];
         let mut stream = inner.get_active_validator_nodes(request).await?.into_inner();
         loop {
@@ -117,7 +116,7 @@ impl BaseNodeClient for GrpcBaseNodeClient {
                     });
                 },
                 Ok(None) => {
-                    info!(target: LOG_TARGET, "No new validator nodes for this epoch");
+                    trace!(target: LOG_TARGET, "No new validator nodes for this epoch");
                     break;
                 },
                 Err(e) => {
@@ -129,20 +128,6 @@ impl BaseNodeClient for GrpcBaseNodeClient {
             }
         }
         Ok(vns)
-    }
-
-    async fn get_committee(&mut self, height: u64, shard_key: &[u8; 32]) -> Result<Vec<CommsPublicKey>, BaseNodeError> {
-        let inner = self.connection().await?;
-        let request = GetCommitteeRequest {
-            height,
-            shard_key: shard_key.to_vec(),
-        };
-        let result = inner.get_committee(request).await?.into_inner();
-        Ok(result
-            .public_key
-            .iter()
-            .map(|a| CommsPublicKey::from_vec(a).unwrap())
-            .collect())
     }
 
     async fn get_shard_key(&mut self, height: u64, public_key: &PublicKey) -> Result<Option<ShardId>, BaseNodeError> {
@@ -169,7 +154,6 @@ impl BaseNodeClient for GrpcBaseNodeClient {
             start_hash: start_hash.map(|v| v.to_vec()).unwrap_or_default(),
             count,
         };
-        dbg!(&request);
         let mut templates = vec![];
         let mut stream = inner.get_template_registrations(request).await?.into_inner();
         loop {

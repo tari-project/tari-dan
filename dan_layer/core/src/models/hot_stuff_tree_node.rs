@@ -42,7 +42,7 @@ pub struct HotStuffTreeNode<TAddr, TPayload> {
     payload: Option<TPayload>,
     // How far in the consensus this payload is. It should be 4 in order to be committed.
     payload_height: NodeHeight,
-    local_pledges: Vec<ObjectPledge>,
+    local_pledge: Option<ObjectPledge>,
     epoch: Epoch,
     // Mostly used for debugging
     proposed_by: TAddr,
@@ -57,7 +57,7 @@ impl<TAddr: NodeAddressable, TPayload: Payload> HotStuffTreeNode<TAddr, TPayload
         payload_id: PayloadId,
         payload: Option<TPayload>,
         payload_height: NodeHeight,
-        local_pledges: Vec<ObjectPledge>,
+        local_pledge: Option<ObjectPledge>,
         epoch: Epoch,
         proposed_by: TAddr,
         justify: QuorumCertificate,
@@ -72,7 +72,7 @@ impl<TAddr: NodeAddressable, TPayload: Payload> HotStuffTreeNode<TAddr, TPayload
             height,
             justify,
             payload_height,
-            local_pledges,
+            local_pledge,
             proposed_by,
         };
         s.hash = s.calculate_hash();
@@ -91,7 +91,7 @@ impl<TAddr: NodeAddressable, TPayload: Payload> HotStuffTreeNode<TAddr, TPayload
             epoch: Epoch(0),
             proposed_by: TAddr::zero(),
             justify: QuorumCertificate::genesis(),
-            local_pledges: vec![],
+            local_pledge: None,
         };
         s.hash = s.calculate_hash();
         s
@@ -157,8 +157,8 @@ impl<TAddr: NodeAddressable, TPayload: Payload> HotStuffTreeNode<TAddr, TPayload
         self.height
     }
 
-    pub fn local_pledges(&self) -> &[ObjectPledge] {
-        self.local_pledges.as_slice()
+    pub fn local_pledge(&self) -> Option<&ObjectPledge> {
+        self.local_pledge.as_ref()
     }
 }
 

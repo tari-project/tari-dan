@@ -56,7 +56,7 @@ where TTemplateProvider: TemplateProvider
     fn process_payload(
         &self,
         payload: TariDanPayload,
-        pledges: HashMap<ShardId, Vec<ObjectPledge>>,
+        pledges: HashMap<ShardId, Option<ObjectPledge>>,
     ) -> Result<FinalizeResult, PayloadProcessorError> {
         let transaction = payload.into_payload();
         let template_addresses = transaction.required_templates();
@@ -81,7 +81,11 @@ where TTemplateProvider: TemplateProvider
         let package = builder.build();
 
         let processor = TransactionProcessor::new(runtime, package);
-        let result = processor.execute(transaction)?;
+        let tx_hash = *transaction.hash();
+        let result = match processor.execute(transaction) {
+            Ok(result) => result,
+            Err(err) => FinalizeResult::errored(tx_hash, err.to_string()),
+        };
         Ok(result)
     }
 }

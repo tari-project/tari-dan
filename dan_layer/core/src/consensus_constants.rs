@@ -20,8 +20,10 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+#[derive(Clone)]
 pub struct ConsensusConstants {
     pub base_layer_confirmations: u64,
+    pub committee_size: u64,
     pub hotstuff_rounds: u64,
 }
 
@@ -29,6 +31,7 @@ impl ConsensusConstants {
     pub const fn devnet() -> Self {
         Self {
             base_layer_confirmations: 3,
+            committee_size: 7,
             hotstuff_rounds: 4,
         }
     }

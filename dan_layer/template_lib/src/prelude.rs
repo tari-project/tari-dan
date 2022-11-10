@@ -25,5 +25,5 @@ pub use tari_template_macros::template;
 
 pub use crate::{
     models::{Amount, Bucket, BucketId, ResourceAddress, Vault},
-    resource::{ResourceBuilder, ResourceDefinition, ResourceManager, ResourceType},
+    resource::{ResourceBuilder, ResourceManager, ResourceType},
 };

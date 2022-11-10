@@ -33,6 +33,7 @@ use serde::Serialize;
 use serde_json::{self as json, json};
 use tari_comms::{multiaddr::Multiaddr, peer_manager::NodeId, types::CommsPublicKey, CommsNode, NodeIdentity};
 use tari_crypto::tari_utilities::hex::Hex;
+use tari_dan_common_types::SubstateChange;
 use tari_dan_core::{
     services::{epoch_manager::EpochManager, BaseNodeClient},
     storage::shard_store::{ShardStoreFactory, ShardStoreTransaction},
@@ -54,6 +55,7 @@ use tari_validator_node_client::types::{
     TemplateMetadata,
     TemplateRegistrationRequest,
     TemplateRegistrationResponse,
+    TransactionFinalizeResult,
 };
 use tokio::sync::{broadcast, broadcast::error::RecvError};
 
@@ -129,7 +131,32 @@ impl JsonRpcHandlers {
 
         let mut builder = TransactionBuilder::new();
         builder
-            .with_input_refs(transaction.inputs)
+            .with_input_refs(
+                transaction
+                    .inputs
+                    .iter()
+                    .filter_map(|i| {
+                        if i.1.eq(&SubstateChange::Exists) {
+                            Some(i.0)
+                        } else {
+                            None
+                        }
+                    })
+                    .collect(),
+            )
+            .with_inputs(
+                transaction
+                    .inputs
+                    .iter()
+                    .filter_map(|i| {
+                        if i.1.ne(&SubstateChange::Exists) {
+                            Some(i.0)
+                        } else {
+                            None
+                        }
+                    })
+                    .collect(),
+            )
             .with_instructions(transaction.instructions)
             .with_num_outputs(transaction.num_outputs)
             .signature(transaction.signature)
@@ -150,7 +177,7 @@ impl JsonRpcHandlers {
             .map_err(internal_error(answer_id))?;
 
         if transaction.wait_for_result {
-            return wait_for_result(answer_id, hash, subscription, Duration::from_secs(30)).await;
+            return wait_for_transaction_result(answer_id, hash, subscription, Duration::from_secs(30)).await;
         }
 
         Ok(JsonRpcResponse::success(answer_id, SubmitTransactionResponse {
@@ -429,7 +456,7 @@ struct GetConnectionsResponse {
     connections: Vec<Connection>,
 }
 
-async fn wait_for_result(
+async fn wait_for_transaction_result(
     answer_id: i64,
     hash: Hash,
     mut subscription: broadcast::Receiver<HotStuffEvent>,
@@ -438,31 +465,21 @@ async fn wait_for_result(
     loop {
         match tokio::time::timeout(timeout, subscription.recv()).await {
             Ok(res) => match res {
-                Ok(HotStuffEvent::OnAccept(payload_id, result)) => {
-                    if payload_id.as_slice() != hash.as_ref() {
+                Ok(HotStuffEvent::OnFinalized(qc, result)) => {
+                    if qc.payload_id().as_slice() != hash.as_ref() {
                         continue;
                     }
 
                     let response = SubmitTransactionResponse {
                         hash: hash.into_array().into(),
-                        result: Some(result),
+                        result: Some(TransactionFinalizeResult {
+                            decision: *qc.decision(),
+                            finalize: result,
+                            qc: *qc,
+                        }),
                     };
-                    dbg!(&response);
+
                     return Ok(JsonRpcResponse::success(answer_id, response));
-                },
-                Ok(HotStuffEvent::OnReject(payload_id, reject)) => {
-                    if payload_id.as_slice() != hash.as_ref() {
-                        continue;
-                    }
-                    return Err(JsonRpcResponse::error(
-                        answer_id,
-                        JsonRpcError::new(
-                            // TODO: define error code
-                            JsonRpcErrorReason::ApplicationError(1),
-                            reject.reason,
-                            json!(null),
-                        ),
-                    ));
                 },
                 Ok(HotStuffEvent::Failed(err)) => {
                     // May not be our tx that failed
