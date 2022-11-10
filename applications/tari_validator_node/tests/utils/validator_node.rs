@@ -43,6 +43,7 @@ pub struct ValidatorNodeProcess {
     pub http_ui_port: u64,
     pub base_node_grpc_port: u64,
     pub handle: task::JoinHandle<()>,
+    pub temp_dir_path: String,
 }
 
 pub async fn spawn_validator_node(
@@ -59,6 +60,9 @@ pub async fn spawn_validator_node(
     let base_node_grpc_port = world.base_nodes.get(&base_node_name).unwrap().grpc_port;
     let wallet_grpc_port = world.wallets.get(&wallet_name).unwrap().grpc_port;
     let name = validator_node_name.clone();
+
+    let temp_dir = tempdir().unwrap().path().join(validator_node_name.clone());
+    let temp_dir_path = temp_dir.display().to_string();
 
     let handle = task::spawn(async move {
         let mut config = ApplicationConfig {
@@ -122,6 +126,7 @@ pub async fn spawn_validator_node(
         http_ui_port,
         handle,
         json_rpc_port,
+        temp_dir_path,
     };
     world.validator_nodes.insert(name, validator_node_process);
 
