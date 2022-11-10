@@ -30,10 +30,11 @@ use tari_dan_core::{
     services::infrastructure_services::OutboundService,
 };
 use tari_dan_engine::transaction::Transaction;
+use tari_template_lib::Hash;
 use tokio::sync::{broadcast, mpsc};
 
 use super::handle::TransactionVecMutex;
-use crate::p2p::services::messaging::OutboundMessaging;
+use crate::p2p::services::{mempool::handle::MempoolRequest, messaging::OutboundMessaging};
 
 const LOG_TARGET: &str = "dan::mempool::service";
 
@@ -41,6 +42,7 @@ pub struct MempoolService {
     // TODO: Should be a HashSet
     transactions: TransactionVecMutex,
     new_transactions: mpsc::Receiver<Transaction>,
+    mempool_requests: mpsc::Receiver<MempoolRequest>,
     outbound: OutboundMessaging,
     tx_valid_transactions: broadcast::Sender<(Transaction, ShardId)>,
 }
@@ -48,12 +50,14 @@ pub struct MempoolService {
 impl MempoolService {
     pub(super) fn new(
         new_transactions: mpsc::Receiver<Transaction>,
+        mempool_requests: mpsc::Receiver<MempoolRequest>,
         outbound: OutboundMessaging,
         tx_valid_transactions: broadcast::Sender<(Transaction, ShardId)>,
     ) -> Self {
         Self {
             transactions: Arc::new(Mutex::new(Vec::new())),
             new_transactions,
+            mempool_requests,
             outbound,
             tx_valid_transactions,
         }
@@ -62,9 +66,8 @@ impl MempoolService {
     pub async fn run(mut self) {
         loop {
             tokio::select! {
-                Some(transaction) = self.new_transactions.recv() => {
-                    self.handle_new_transaction(transaction).await;
-                }
+                Some(req) = self.mempool_requests.recv() => self.handle_request(req).await,
+                Some(tx) = self.new_transactions.recv() => self.handle_new_transaction(tx).await,
 
                 else => {
                     info!(target: LOG_TARGET, "Mempool service shutting down");
@@ -72,6 +75,18 @@ impl MempoolService {
                 }
             }
         }
+    }
+
+    async fn handle_request(&mut self, request: MempoolRequest) {
+        match request {
+            MempoolRequest::SubmitTransaction(transaction) => self.handle_new_transaction(*transaction).await,
+            MempoolRequest::RemoveTransaction { transaction_hash } => self.remove_transaction(transaction_hash),
+        }
+    }
+
+    fn remove_transaction(&mut self, hash: Hash) {
+        let mut transactions = self.transactions.lock().unwrap();
+        transactions.retain(|(transaction, _)| *transaction.hash() != hash);
     }
 
     async fn handle_new_transaction(&mut self, transaction: Transaction) {

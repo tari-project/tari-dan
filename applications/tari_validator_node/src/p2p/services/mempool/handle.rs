@@ -25,14 +25,20 @@ use std::sync::{Arc, Mutex};
 use tari_dan_common_types::ShardId;
 use tari_dan_core::models::TreeNodeHash;
 use tari_dan_engine::transaction::Transaction;
+use tari_template_lib::Hash;
 use tokio::sync::{broadcast, broadcast::error::RecvError, mpsc, mpsc::error::SendError};
 
 pub type TransactionVecMutex = Arc<Mutex<Vec<(Transaction, Option<TreeNodeHash>)>>>;
 
+pub enum MempoolRequest {
+    SubmitTransaction(Box<Transaction>),
+    RemoveTransaction { transaction_hash: Hash },
+}
+
 #[derive(Debug)]
 pub struct MempoolHandle {
     rx_valid_transactions: broadcast::Receiver<(Transaction, ShardId)>,
-    new_transactions: mpsc::Sender<Transaction>,
+    tx_mempool_request: mpsc::Sender<MempoolRequest>,
     transactions: TransactionVecMutex,
 }
 
@@ -40,7 +46,7 @@ impl Clone for MempoolHandle {
     fn clone(&self) -> Self {
         MempoolHandle {
             rx_valid_transactions: self.rx_valid_transactions.resubscribe(),
-            new_transactions: self.new_transactions.clone(),
+            tx_mempool_request: self.tx_mempool_request.clone(),
             transactions: self.transactions.clone(),
         }
     }
@@ -49,18 +55,26 @@ impl Clone for MempoolHandle {
 impl MempoolHandle {
     pub(super) fn new(
         rx_valid_transactions: broadcast::Receiver<(Transaction, ShardId)>,
-        new_transactions: mpsc::Sender<Transaction>,
+        tx_mempool_request: mpsc::Sender<MempoolRequest>,
         transactions: TransactionVecMutex,
     ) -> Self {
         Self {
             rx_valid_transactions,
-            new_transactions,
+            tx_mempool_request,
             transactions,
         }
     }
 
-    pub async fn new_transaction(&self, transaction: Transaction) -> Result<(), SendError<Transaction>> {
-        self.new_transactions.send(transaction).await
+    pub async fn submit_transaction(&self, transaction: Transaction) -> Result<(), SendError<MempoolRequest>> {
+        self.tx_mempool_request
+            .send(MempoolRequest::SubmitTransaction(Box::new(transaction)))
+            .await
+    }
+
+    pub async fn remove_transaction(&self, transaction_hash: Hash) -> Result<(), SendError<MempoolRequest>> {
+        self.tx_mempool_request
+            .send(MempoolRequest::RemoveTransaction { transaction_hash })
+            .await
     }
 
     pub async fn next_valid_transaction(&mut self) -> Result<(Transaction, ShardId), RecvError> {

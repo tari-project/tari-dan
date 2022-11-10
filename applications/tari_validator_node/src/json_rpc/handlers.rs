@@ -172,7 +172,7 @@ impl JsonRpcHandlers {
         let subscription = self.hotstuff_events.subscribe();
         // Submit to mempool.
         self.mempool
-            .new_transaction(mempool_tx)
+            .submit_transaction(mempool_tx)
             .await
             .map_err(internal_error(answer_id))?;
 

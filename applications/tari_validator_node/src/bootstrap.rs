@@ -59,7 +59,7 @@ use crate::{
             mempool,
             mempool::MempoolHandle,
             messaging,
-            messaging::{DanMessageReceivers, DanMessageSenders},
+            messaging::DanMessageReceivers,
             networking,
             networking::NetworkingHandle,
             rpc_client::TariCommsValidatorNodeClientFactory,
@@ -99,7 +99,6 @@ pub async fn spawn_services(
 
     // Spawn messaging
     let (message_senders, message_receivers) = messaging::new_messaging_channel(10);
-    let mempool_new_tx = message_senders.tx_new_transaction_message.clone();
     let outbound_messaging = messaging::spawn(
         node_identity.public_key().clone(),
         message_channel,
@@ -128,7 +127,7 @@ pub async fn spawn_services(
     );
 
     // Mempool
-    let mempool = mempool::spawn(rx_new_transaction_message, mempool_new_tx, outbound_messaging.clone());
+    let mempool = mempool::spawn(rx_new_transaction_message, outbound_messaging.clone());
 
     // Networking
     let peer_provider = CommsPeerProvider::new(comms.peer_manager());
@@ -174,7 +173,7 @@ pub async fn spawn_services(
 
     let shard_store_store = SqliteShardStoreFactory::try_create(config.validator_node.data_dir.join("state.db"))?;
 
-    let comms = setup_p2p_rpc(config, comms, message_senders, peer_provider, shard_store_store);
+    let comms = setup_p2p_rpc(config, comms, peer_provider, shard_store_store, mempool.clone());
     let comms = comms::spawn_comms_using_transport(comms, p2p_config.transport.clone())
         .await
         .map_err(|e| ExitError::new(ExitCode::ConfigError, format!("Could not spawn using transport: {}", e)))?;
@@ -227,17 +226,17 @@ pub struct Services {
 fn setup_p2p_rpc(
     config: &ApplicationConfig,
     comms: UnspawnedCommsNode,
-    message_senders: DanMessageSenders,
     peer_provider: CommsPeerProvider,
     shard_store_store: SqliteShardStoreFactory,
+    mempool: MempoolHandle,
 ) -> UnspawnedCommsNode {
     let rpc_server = RpcServer::builder()
         .with_maximum_simultaneous_sessions(config.validator_node.p2p.rpc_max_simultaneous_sessions)
         .finish()
         .add_service(create_validator_node_rpc_service(
-            message_senders,
             peer_provider,
             shard_store_store,
+            mempool,
         ));
 
     comms.add_protocol_extension(rpc_server)
