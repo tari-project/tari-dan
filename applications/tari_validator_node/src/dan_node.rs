@@ -54,6 +54,7 @@ impl DanNode {
                 Ok(event) = hotstuff_events.recv() => {
                     if let HotStuffEvent::OnFinalized(qc, _) = event {
                         let transaction_hash = Hash::from(qc.payload_id().into_array());
+                        info!(target: LOG_TARGET, "🏁 Removing finalized transaction {} from mempool", transaction_hash);
                         if let Err(err) = self.services.mempool.remove_transaction(transaction_hash).await {
                             error!(target: LOG_TARGET, "Failed to remove transaction from mempool: {}", err);
                         }
