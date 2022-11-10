@@ -39,11 +39,9 @@ use tokio::{
     task,
 };
 
-use crate::p2p::proto::rpc::{
-    GetVnStateInventoryRequest,
-    GetVnStateInventoryResponse,
-    VnStateSyncRequest,
-    VnStateSyncResponse,
+use crate::p2p::proto::{
+    consensus::QuorumCertificate,
+    rpc::{VnStateSyncRequest, VnStateSyncResponse},
 };
 
 const LOG_TARGET: &str = "vn::p2p::rpc";
@@ -144,33 +142,6 @@ where TPeerProvider: PeerProvider + Clone + Send + Sync + 'static
         Ok(Streaming::new(rx))
     }
 
-    async fn get_vn_state_inventory(
-        &self,
-        request: Request<GetVnStateInventoryRequest>,
-    ) -> Result<Response<GetVnStateInventoryResponse>, RpcStatus> {
-        let request = request.into_message();
-        let start_shard_id = request
-            .start_shard_id
-            .and_then(|s| ShardId::try_from(s).ok())
-            .ok_or_else(|| RpcStatus::bad_request("Invalid gRPC request: start_shard_id not provided"))?;
-        let end_shard_id = request
-            .end_shard_id
-            .and_then(|s| ShardId::try_from(s).ok())
-            .ok_or_else(|| RpcStatus::bad_request("Invalid gRPC request: end_shard_id not provided"))?;
-
-        let store_tx = self
-            .shard_state_store
-            .create_tx()
-            .map_err(RpcStatus::log_internal_error(LOG_TARGET))?;
-        let inventory = store_tx
-            .get_state_inventory(start_shard_id, end_shard_id)
-            .map_err(RpcStatus::log_internal_error(LOG_TARGET))?;
-
-        Ok(Response::new(GetVnStateInventoryResponse {
-            inventory: inventory.into_iter().map(|item| item.into()).collect(),
-        }))
-    }
-
     async fn vn_state_sync(
         &self,
         request: Request<VnStateSyncRequest>,
@@ -178,8 +149,17 @@ where TPeerProvider: PeerProvider + Clone + Send + Sync + 'static
         let (tx, rx) = mpsc::channel(100);
         let msg = request.into_message();
 
-        let missing_shard_ids = msg
-            .missing_shard_state_ids
+        let start_shard_id = msg
+            .start_shard_id
+            .and_then(|s| ShardId::try_from(s).ok())
+            .ok_or_else(|| RpcStatus::bad_request("Invalid gRPC request: start_shard_id not provided"))?;
+        let end_shard_id = msg
+            .end_shard_id
+            .and_then(|s| ShardId::try_from(s).ok())
+            .ok_or_else(|| RpcStatus::bad_request("Invalid gRPC request: end_shard_id not provided"))?;
+
+        let excluded_shards = msg
+            .inventory
             .iter()
             .map(|s| {
                 ShardId::try_from(s.bytes.as_slice())
@@ -187,25 +167,21 @@ where TPeerProvider: PeerProvider + Clone + Send + Sync + 'static
             })
             .collect::<Vec<ShardId>>();
 
-        if missing_shard_ids.is_empty() {
-            return Err(RpcStatus::bad_request(
-                "Invalid gRPC request: request should contain at least one shard id available",
-            ));
-        }
+        let shard_db = self
+            .shard_state_store
+            .create_tx()
+            .map_err(RpcStatus::log_internal_error(LOG_TARGET))?;
 
-        let shard_store = self.shard_state_store.clone();
-
-        let store_tx = Arc::new(Mutex::new(
-            shard_store
-                .create_tx()
-                .map_err(RpcStatus::log_internal_error(LOG_TARGET))?,
-        ));
+        let shard_db = Arc::new(Mutex::new(shard_db));
 
         task::spawn(async move {
             loop {
-                let substate_states = store_tx.lock().await.get_substate_states(missing_shard_ids.as_slice());
-
-                let states = match substate_states {
+                let shards_substates_data =
+                    shard_db
+                        .lock()
+                        .await
+                        .get_substate_states(start_shard_id, end_shard_id, excluded_shards.as_slice());
+                let substates_data = match shards_substates_data {
                     Ok(s) => s,
                     Err(err) => {
                         error!(target: LOG_TARGET, "{}", err);
@@ -215,10 +191,25 @@ where TPeerProvider: PeerProvider + Clone + Send + Sync + 'static
                 };
 
                 // select data from db where shard_id <= end_shard_id and shard_id >= start_shard_id
-                for state in states {
-                    let substate_state = proto::consensus::SubstateState::from(state);
+                for substate_data in substates_data {
+                    let shard_id = proto::common::ShardId::from(substate_data.shard());
+                    let substate_state = proto::consensus::SubstateState::from(substate_data.substate().clone());
+                    let node_height = substate_data.height().as_u64();
+                    let tree_node_hash = if let Some(h) = substate_data.tree_node_hash() {
+                        Vec::from(h.as_bytes())
+                    } else {
+                        vec![]
+                    };
+                    let payload_id = Vec::from(substate_data.payload_id().as_bytes());
+                    let certificate = substate_data.certificate().clone().map(QuorumCertificate::from);
+
                     let response = proto::rpc::VnStateSyncResponse {
+                        shard_id: Some(shard_id),
                         substate_state: Some(substate_state),
+                        node_height,
+                        tree_node_hash,
+                        payload_id,
+                        certificate,
                     };
                     // if send returns error, the client has closed the connection, so we break the loop
                     if tx.send(Ok(response)).await.is_err() {

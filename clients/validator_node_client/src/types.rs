@@ -22,8 +22,8 @@
 
 use serde::{Deserialize, Serialize};
 use tari_common_types::types::{FixedHash, PublicKey};
-use tari_dan_common_types::{serde_with, Epoch, ShardId};
-use tari_dan_core::models::QuorumCertificate;
+use tari_dan_common_types::{serde_with, Epoch, ShardId, SubstateChange};
+use tari_dan_core::models::{QuorumCertificate, QuorumDecision};
 use tari_engine_types::{
     commit_result::FinalizeResult,
     instruction::Instruction,
@@ -127,7 +127,7 @@ pub struct SubmitTransactionRequest {
     pub signature: InstructionSignature,
     pub fee: u64,
     pub sender_public_key: PublicKey,
-    pub inputs: Vec<ShardId>,
+    pub inputs: Vec<(ShardId, SubstateChange)>,
     pub num_outputs: u8,
     /// Set to true to wait for the transaction to complete before returning
     #[serde(default)]
@@ -144,6 +144,7 @@ pub struct SubmitTransactionResponse {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TransactionFinalizeResult {
     // TODO: we should not return the whole state but only the addresses and perhaps a hash of the state
+    pub decision: QuorumDecision,
     pub finalize: FinalizeResult,
     pub qc: QuorumCertificate,
 }

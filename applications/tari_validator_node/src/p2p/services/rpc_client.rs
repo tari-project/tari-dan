@@ -47,7 +47,7 @@ pub struct TariCommsValidatorNodeRpcClient {
 }
 
 impl TariCommsValidatorNodeRpcClient {
-    async fn create_connection(&mut self) -> Result<rpc::ValidatorNodeRpcClient, ValidatorNodeClientError> {
+    pub async fn create_connection(&mut self) -> Result<rpc::ValidatorNodeRpcClient, ValidatorNodeClientError> {
         let mut conn = self
             .connectivity
             .dial_peer(NodeId::from_public_key(&self.address))
@@ -201,11 +201,11 @@ pub struct TariCommsValidatorNodeClientFactory {
     connectivity: ConnectivityRequester,
 }
 
-// impl TariCommsValidatorNodeClientFactory {
-//     pub fn new(connectivity: ConnectivityRequester) -> Self {
-//         Self { connectivity }
-//     }
-// }
+impl TariCommsValidatorNodeClientFactory {
+    pub fn new(connectivity: ConnectivityRequester) -> Self {
+        Self { connectivity }
+    }
+}
 
 impl ValidatorNodeClientFactory for TariCommsValidatorNodeClientFactory {
     type Addr = PublicKey;

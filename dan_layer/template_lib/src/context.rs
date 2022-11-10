@@ -74,6 +74,7 @@ pub fn get_context() -> Context {
 
 #[derive(Debug, Default)]
 pub struct Context;
+
 impl Context {
     // // pub fn package(&self) -> Package {
     // //     with_context(|ctx| ctx.as_ref().unwrap().abi_context.package.clone())

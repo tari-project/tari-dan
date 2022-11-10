@@ -33,6 +33,7 @@ use serde::Serialize;
 use serde_json::{self as json, json};
 use tari_comms::{multiaddr::Multiaddr, peer_manager::NodeId, types::CommsPublicKey, CommsNode, NodeIdentity};
 use tari_crypto::tari_utilities::hex::Hex;
+use tari_dan_common_types::SubstateChange;
 use tari_dan_core::{
     services::{epoch_manager::EpochManager, BaseNodeClient},
     storage::shard_store::{ShardStoreFactory, ShardStoreTransaction},
@@ -130,7 +131,32 @@ impl JsonRpcHandlers {
 
         let mut builder = TransactionBuilder::new();
         builder
-            .with_input_refs(transaction.inputs)
+            .with_input_refs(
+                transaction
+                    .inputs
+                    .iter()
+                    .filter_map(|i| {
+                        if i.1.eq(&SubstateChange::Exists) {
+                            Some(i.0)
+                        } else {
+                            None
+                        }
+                    })
+                    .collect(),
+            )
+            .with_inputs(
+                transaction
+                    .inputs
+                    .iter()
+                    .filter_map(|i| {
+                        if i.1.ne(&SubstateChange::Exists) {
+                            Some(i.0)
+                        } else {
+                            None
+                        }
+                    })
+                    .collect(),
+            )
             .with_instructions(transaction.instructions)
             .with_num_outputs(transaction.num_outputs)
             .signature(transaction.signature)
@@ -447,6 +473,7 @@ async fn wait_for_transaction_result(
                     let response = SubmitTransactionResponse {
                         hash: hash.into_array().into(),
                         result: Some(TransactionFinalizeResult {
+                            decision: *qc.decision(),
                             finalize: result,
                             qc: *qc,
                         }),

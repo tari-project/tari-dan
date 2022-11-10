@@ -81,9 +81,10 @@ impl TemplateTest<MockRuntimeInterface> {
         self.runtime_interface.clear_calls();
     }
 
-    fn commit_diff(&self, diff: SubstateDiff) {
+    fn commit_diff(&self, diff: &SubstateDiff) {
         let store = self.runtime_interface.state_store();
         let mut tx = store.write_access().unwrap();
+        // TODO: Down should remove/set state to None
         for (address, substate) in diff.up_iter() {
             tx.set_state(address, substate).unwrap();
         }
@@ -108,12 +109,7 @@ impl TemplateTest<MockRuntimeInterface> {
             function: func_name.to_owned(),
             args,
         }]);
-        let ret = result.execution_results[0].decode().unwrap();
-        let diff = result.result.expect("Transaction was rejected");
-        // It is convenient to commit the state back to the staged state store in tests.
-        self.commit_diff(diff);
-
-        ret
+        result.execution_results[0].decode().unwrap()
     }
 
     pub fn call_method<T>(&self, component_address: ComponentAddress, method_name: &str, args: Vec<Arg>) -> T
@@ -130,12 +126,7 @@ impl TemplateTest<MockRuntimeInterface> {
             args,
         }]);
 
-        let ret = result.execution_results[0].decode().unwrap();
-        let diff = result.result.expect("Transaction was rejected");
-        // It is convenient to commit the state back to the staged state store in tests.
-        self.commit_diff(diff);
-
-        ret
+        result.execution_results[0].decode().unwrap()
     }
 
     pub fn execute(&self, instructions: Vec<Instruction>) -> FinalizeResult {
@@ -146,7 +137,16 @@ impl TemplateTest<MockRuntimeInterface> {
         builder.sign(&self.secret_key);
         let transaction = builder.build();
 
-        self.processor.execute(transaction).unwrap()
+        let result = self.processor.execute(transaction).unwrap();
+        let diff = result
+            .result
+            .accept()
+            .ok_or_else(|| panic!("Transaction was rejected: {}", result.result.reject().unwrap().reason))
+            .unwrap();
+        // It is convenient to commit the state back to the staged state store in tests.
+        self.commit_diff(diff);
+
+        result
     }
 }
 

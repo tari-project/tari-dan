@@ -27,9 +27,10 @@
 //! This library provides types and encoding that allow low-level communication between the Tari WASM runtime and the
 //! WASM modules.
 
+pub use borsh::{BorshDeserialize as Decode, BorshSerialize as Encode};
+
 mod abi;
 pub use abi::*;
-pub use borsh::{BorshDeserialize as Decode, BorshSerialize as Encode};
 
 mod call_info;
 pub use call_info::CallInfo;

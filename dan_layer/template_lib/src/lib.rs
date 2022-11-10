@@ -37,9 +37,7 @@ pub mod resource;
 #[cfg(target_arch = "wasm32")]
 pub mod template_dependencies;
 
-#[cfg(target_arch = "wasm32")]
 mod engine;
-#[cfg(target_arch = "wasm32")]
 pub use engine::engine;
 
 #[cfg(target_arch = "wasm32")]
