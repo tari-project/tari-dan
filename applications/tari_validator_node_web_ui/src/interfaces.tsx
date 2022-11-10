@@ -31,4 +31,20 @@ interface IIdentity {
   public_key: string;
 }
 
-export { type IEpoch, type IIdentity };
+interface IFunction {
+  name: string;
+  arguments: Array<string>;
+  output: string;
+}
+
+interface ITemplate {
+  registration_metadata: {
+    address: string;
+    url: string;
+    binary_sha: Array<number>;
+    height: number;
+  };
+  abi: { template_name: string; functions: Array<IFunction> };
+}
+
+export { type IEpoch, type IIdentity, type ITemplate };

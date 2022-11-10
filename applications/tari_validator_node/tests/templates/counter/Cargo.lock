@@ -382,8 +382,8 @@ dependencies = [
  "tari_crypto",
  "tari_dan_common_types",
  "tari_dan_engine",
- "tari_template_abi",
- "tari_template_lib",
+ "tari_template_abi 0.35.1",
+ "tari_template_lib 0.35.1",
  "tari_template_macros",
 ]
 
@@ -822,6 +822,12 @@ checksum = "62b467343b94ba476dcb2500d242dadbb39557df889310ac77c5d99100aaac33"
 dependencies = [
  "libc",
 ]
+
+[[package]]
+name = "hex"
+version = "0.4.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7f24254aa9a54b5c858eaee2f5bccdb46aaf0e486a595ed5fd8f86ba55232a70"
 
 [[package]]
 name = "humantime"
@@ -2007,8 +2013,8 @@ dependencies = [
  "tari_dan_common_types",
  "tari_engine_types",
  "tari_mmr",
- "tari_template_abi",
- "tari_template_lib",
+ "tari_template_abi 0.35.1 (git+https://github.com/tari-project/tari-dan.git?branch=development)",
+ "tari_template_lib 0.35.1 (git+https://github.com/tari-project/tari-dan.git?branch=development)",
  "tari_utilities",
  "tempfile",
  "thiserror",
@@ -2026,8 +2032,8 @@ dependencies = [
  "serde",
  "tari_common_types 0.38.7",
  "tari_crypto",
- "tari_template_abi",
- "tari_template_lib",
+ "tari_template_abi 0.35.1 (git+https://github.com/tari-project/tari-dan.git?branch=development)",
+ "tari_template_lib 0.35.1 (git+https://github.com/tari-project/tari-dan.git?branch=development)",
  "tari_utilities",
  "thiserror",
 ]
@@ -2049,9 +2055,27 @@ dependencies = [
 [[package]]
 name = "tari_template_abi"
 version = "0.35.1"
+dependencies = [
+ "borsh",
+]
+
+[[package]]
+name = "tari_template_abi"
+version = "0.35.1"
 source = "git+https://github.com/tari-project/tari-dan.git?branch=development#5930a3cd3f0a842f62aceadab66503dcf9a90f4f"
 dependencies = [
  "borsh",
+]
+
+[[package]]
+name = "tari_template_lib"
+version = "0.35.1"
+dependencies = [
+ "borsh",
+ "hex",
+ "newtype-ops",
+ "tari_template_abi 0.35.1",
+ "tari_template_macros",
 ]
 
 [[package]]
@@ -2062,14 +2086,12 @@ dependencies = [
  "borsh",
  "newtype-ops",
  "serde",
- "tari_template_abi",
- "tari_template_macros",
+ "tari_template_abi 0.35.1 (git+https://github.com/tari-project/tari-dan.git?branch=development)",
 ]
 
 [[package]]
 name = "tari_template_macros"
 version = "0.35.1"
-source = "git+https://github.com/tari-project/tari-dan.git?branch=development#5930a3cd3f0a842f62aceadab66503dcf9a90f4f"
 dependencies = [
  "proc-macro2",
  "quote",

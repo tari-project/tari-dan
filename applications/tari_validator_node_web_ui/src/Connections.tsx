@@ -36,7 +36,6 @@ function Connections() {
   const [connections, setConnections] = useState<IConnection[]>([]);
   useEffect(() => {
     getConnections().then((response) => {
-      console.log(response);
       setConnections(response.connections);
     });
   }, []);
