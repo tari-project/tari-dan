@@ -20,6 +20,8 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+use std::fmt::Display;
+
 use log::*;
 use tari_comms::types::CommsPublicKey;
 use tari_dan_common_types::ShardId;
@@ -180,9 +182,10 @@ impl HotstuffService {
             tokio::select! {
                 // Inbound
                 res = self.mempool.next_valid_transaction() => {
-                    let (tx, shard_id) = res?;
-                    debug!(target: LOG_TARGET, "Received new transaction {} for shard {}", tx.hash(), shard_id);
-                    log(self.handle_new_valid_transaction(tx, shard_id).await, "new valid transaction");
+                    if let Some((tx, shard_id)) = log(res, "new valid transaction") {
+                        debug!(target: LOG_TARGET, "Received new transaction {} for shard {}", tx.hash(), shard_id);
+                        log(self.handle_new_valid_transaction(tx, shard_id).await, "new valid transaction");
+                    }
                 }
                 // Outbound
                 Some((to, msg)) = self.rx_leader.recv() => {
@@ -208,8 +211,12 @@ impl HotstuffService {
     }
 }
 
-fn log(result: Result<(), anyhow::Error>, area: &str) {
-    if let Err(e) = result {
-        error!(target: LOG_TARGET, "Error in hotstuff service: {} [{}]", e, area);
+fn log<T, E: Display>(result: Result<T, E>, area: &str) -> Option<T> {
+    match result {
+        Ok(t) => Some(t),
+        Err(e) => {
+            error!(target: LOG_TARGET, "Error in hotstuff service: {} [{}]", e, area);
+            None
+        },
     }
 }

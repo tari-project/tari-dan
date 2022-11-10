@@ -44,6 +44,7 @@ impl<TAddr: NodeAddressable> Committee<TAddr> {
         &self.members[pos]
     }
 
+    /// Returns n - f where n is the number of committee members and f is the tolerated failure nodes.
     pub fn consensus_threshold(&self) -> usize {
         let len = self.members.len();
         let max_failures = (len - 1) / 3;

@@ -72,7 +72,8 @@ impl From<StorageError> for StoreError {
 pub trait ShardStoreTransaction<TAddr: NodeAddressable, TPayload: Payload> {
     type Error: Display + Into<StoreError>;
     fn commit(&mut self) -> Result<(), Self::Error>;
-    fn update_high_qc(&mut self, shard: ShardId, qc: QuorumCertificate) -> Result<(), Self::Error>;
+    fn count_high_qc_for(&self, shard_id: ShardId) -> Result<usize, Self::Error>;
+    fn update_high_qc(&mut self, from: TAddr, shard: ShardId, qc: QuorumCertificate) -> Result<(), Self::Error>;
     fn set_payload(&mut self, payload: TPayload) -> Result<(), Self::Error>;
     fn get_leaf_node(&self, shard: ShardId) -> Result<(TreeNodeHash, NodeHeight), Self::Error>;
     fn update_leaf_node(&mut self, shard: ShardId, node: TreeNodeHash, height: NodeHeight) -> Result<(), Self::Error>;

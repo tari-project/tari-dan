@@ -6,6 +6,7 @@ diesel::table! {
         shard_id -> Binary,
         height -> BigInt,
         qc_json -> Text,
+        identity -> Binary,
     }
 }
 
