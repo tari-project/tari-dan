@@ -56,6 +56,7 @@ pub struct BaseLayerEpochManager {
     pub base_node_client: GrpcBaseNodeClient,
     consensus_constants: ConsensusConstants,
     current_epoch: Epoch,
+    _identity: CommsPublicKey,
     tx_events: broadcast::Sender<EpochManagerEvent>,
     node_identity: Arc<NodeIdentity>,
     validator_node_config: ValidatorNodeConfig,
@@ -67,7 +68,7 @@ impl BaseLayerEpochManager {
         db_factory: SqliteDbFactory,
         base_node_client: GrpcBaseNodeClient,
         consensus_constants: ConsensusConstants,
-        _id: CommsPublicKey,
+        identity: CommsPublicKey,
         tx_events: broadcast::Sender<EpochManagerEvent>,
         node_identity: Arc<NodeIdentity>,
         validator_node_config: ValidatorNodeConfig,
@@ -78,6 +79,7 @@ impl BaseLayerEpochManager {
             base_node_client,
             consensus_constants,
             current_epoch: Epoch(0),
+            _identity: identity,
             tx_events,
             node_identity,
             validator_node_config,
@@ -227,7 +229,6 @@ impl BaseLayerEpochManager {
         current_epoch.0 <= epoch.0 + 10 && epoch.0 <= current_epoch.0 + 10
     }
 
-    #[allow(dead_code)]
     pub fn get_committees(
         &self,
         epoch: Epoch,
@@ -290,6 +291,17 @@ impl BaseLayerEpochManager {
     pub fn get_committee(&self, epoch: Epoch, shard: ShardId) -> Result<Committee<CommsPublicKey>, EpochManagerError> {
         let result = self.get_committee_vns_from_shard_key(epoch, shard)?;
         Ok(Committee::new(result.into_iter().map(|v| v.public_key).collect()))
+    }
+
+    pub fn is_validator_in_committee(
+        &self,
+        epoch: Epoch,
+        shard: ShardId,
+        identity: CommsPublicKey,
+    ) -> Result<bool, EpochManagerError> {
+        // TODO: This can be made more efficient by searching an index for the specific identity
+        let committee = self.get_committee(epoch, shard)?;
+        Ok(committee.contains(&identity))
     }
 
     pub fn get_validator_nodes_per_epoch(&self, epoch: Epoch) -> Result<Vec<ValidatorNode>, EpochManagerError> {

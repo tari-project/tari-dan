@@ -22,6 +22,7 @@
 
 use std::sync::Arc;
 
+use log::error;
 use tari_comms::{types::CommsPublicKey, NodeIdentity};
 use tari_dan_common_types::{Epoch, ShardId};
 use tari_dan_core::{
@@ -44,13 +45,11 @@ use crate::{
     },
     ValidatorNodeConfig,
 };
-// const LOG_TARGET: &str = "tari::validator_node::epoch_manager";
+
+const LOG_TARGET: &str = "tari::validator_node::epoch_manager";
 
 pub struct EpochManagerService {
-    rx_request: Receiver<(
-        EpochManagerRequest,
-        oneshot::Sender<Result<EpochManagerResponse, EpochManagerError>>,
-    )>,
+    rx_request: Receiver<EpochManagerRequest>,
     inner: BaseLayerEpochManager,
     events: (
         broadcast::Sender<EpochManagerEvent>,
@@ -58,58 +57,51 @@ pub struct EpochManagerService {
     ),
 }
 
-#[derive(Debug, Clone)]
+type Reply<T> = oneshot::Sender<Result<T, EpochManagerError>>;
+
+#[derive(Debug)]
 pub enum EpochManagerRequest {
-    CurrentEpoch,
+    CurrentEpoch {
+        reply: Reply<Epoch>,
+    },
     UpdateEpoch {
         height: u64,
+        reply: Reply<()>,
     },
-    LastRegistrationEpoch,
+    LastRegistrationEpoch {
+        reply: Reply<Option<Epoch>>,
+    },
     UpdateLastRegistrationEpoch {
         epoch: Epoch,
+        reply: Reply<()>,
     },
     IsEpochValid {
         epoch: Epoch,
+        reply: Reply<bool>,
     },
     GetCommittees {
         epoch: Epoch,
         shards: Vec<ShardId>,
+        reply: Reply<Vec<ShardCommitteeAllocation<CommsPublicKey>>>,
     },
     GetCommittee {
         epoch: Epoch,
         shard: ShardId,
+        reply: Reply<Committee<CommsPublicKey>>,
+    },
+    IsValidatorInCommitteeForCurrentEpoch {
+        shard: ShardId,
+        identity: CommsPublicKey,
+        reply: Reply<bool>,
     },
     FilterToLocalShards {
         epoch: Epoch,
         for_addr: CommsPublicKey,
         available_shards: Vec<ShardId>,
-    },
-    Subscribe,
-}
-
-pub enum EpochManagerResponse {
-    CurrentEpoch {
-        epoch: Epoch,
-    },
-    UpdateEpoch,
-    LastRegistrationEpoch {
-        epoch: Option<Epoch>,
-    },
-    UpdateLastRegistrationEpoch,
-    IsEpochValid {
-        is_valid: bool,
-    },
-    GetCommittees {
-        committees: Vec<ShardCommitteeAllocation<CommsPublicKey>>,
-    },
-    GetCommittee {
-        committee: Committee<CommsPublicKey>,
-    },
-    FilterToLocalShards {
-        shards: Vec<ShardId>,
+        reply: Reply<Vec<ShardId>>,
     },
     Subscribe {
-        rx: broadcast::Receiver<EpochManagerEvent>,
+        reply: Reply<broadcast::Receiver<EpochManagerEvent>>,
     },
 }
 
@@ -121,10 +113,7 @@ pub enum EpochManagerEvent {
 impl EpochManagerService {
     pub fn spawn(
         id: CommsPublicKey,
-        rx_request: Receiver<(
-            EpochManagerRequest,
-            oneshot::Sender<Result<EpochManagerResponse, EpochManagerError>>,
-        )>,
+        rx_request: Receiver<EpochManagerRequest>,
         shutdown: ShutdownSignal,
         db_factory: SqliteDbFactory,
         base_node_client: GrpcBaseNodeClient,
@@ -160,9 +149,7 @@ impl EpochManagerService {
 
         loop {
             tokio::select! {
-                Some((req, reply)) = self.rx_request.recv() => {
-                    let _ignore = reply.send(self.handle_request(req).await);
-                },
+                Some(req) = self.rx_request.recv() => self.handle_request(req).await,
                 _ = shutdown.wait() => {
                     dbg!("Shutting down epoch manager");
                     break;
@@ -172,45 +159,51 @@ impl EpochManagerService {
         Ok(())
     }
 
-    async fn handle_request(&mut self, req: EpochManagerRequest) -> Result<EpochManagerResponse, EpochManagerError> {
+    async fn handle_request(&mut self, req: EpochManagerRequest) {
         match req {
-            EpochManagerRequest::CurrentEpoch => Ok(EpochManagerResponse::CurrentEpoch {
-                epoch: self.inner.current_epoch(),
-            }),
-            EpochManagerRequest::UpdateEpoch { height } => {
-                self.inner.update_epoch(height).await?;
-                Ok(EpochManagerResponse::UpdateEpoch)
+            EpochManagerRequest::CurrentEpoch { reply } => handle(reply, Ok(self.inner.current_epoch())),
+            EpochManagerRequest::UpdateEpoch { height, reply } => {
+                handle(reply, self.inner.update_epoch(height).await);
             },
-            EpochManagerRequest::LastRegistrationEpoch => Ok(EpochManagerResponse::LastRegistrationEpoch {
-                epoch: self.inner.last_registration_epoch().await?,
-            }),
-            EpochManagerRequest::UpdateLastRegistrationEpoch { epoch } => {
-                self.inner.update_last_registration_epoch(epoch).await?;
-                Ok(EpochManagerResponse::UpdateLastRegistrationEpoch)
+            EpochManagerRequest::LastRegistrationEpoch { reply } => {
+                handle(reply, self.inner.last_registration_epoch().await)
             },
-            EpochManagerRequest::IsEpochValid { epoch } => {
-                let is_valid = self.inner.is_epoch_valid(epoch);
-                Ok(EpochManagerResponse::IsEpochValid { is_valid })
+
+            EpochManagerRequest::UpdateLastRegistrationEpoch { epoch, reply } => {
+                handle(reply, self.inner.update_last_registration_epoch(epoch).await);
             },
-            EpochManagerRequest::GetCommittees { epoch, shards } => {
-                let committees = self.inner.get_committees(epoch, &shards)?;
-                Ok(EpochManagerResponse::GetCommittees { committees })
+            EpochManagerRequest::IsEpochValid { epoch, reply } => handle(reply, Ok(self.inner.is_epoch_valid(epoch))),
+            EpochManagerRequest::GetCommittees { epoch, shards, reply } => {
+                handle(reply, self.inner.get_committees(epoch, &shards));
             },
-            EpochManagerRequest::GetCommittee { epoch, shard } => {
-                let committee = self.inner.get_committee(epoch, shard)?;
-                Ok(EpochManagerResponse::GetCommittee { committee })
+            EpochManagerRequest::GetCommittee { epoch, shard, reply } => {
+                handle(reply, self.inner.get_committee(epoch, shard));
+            },
+            EpochManagerRequest::IsValidatorInCommitteeForCurrentEpoch { shard, identity, reply } => {
+                let epoch = self.inner.current_epoch();
+                handle(reply, self.inner.is_validator_in_committee(epoch, shard, identity));
             },
             EpochManagerRequest::FilterToLocalShards {
                 epoch,
                 for_addr,
                 available_shards,
+                reply,
             } => {
-                let shards = self.inner.filter_to_local_shards(epoch, &for_addr, &available_shards)?;
-                Ok(EpochManagerResponse::FilterToLocalShards { shards })
+                handle(
+                    reply,
+                    self.inner.filter_to_local_shards(epoch, &for_addr, &available_shards),
+                );
             },
-            EpochManagerRequest::Subscribe => Ok(EpochManagerResponse::Subscribe {
-                rx: self.events.1.resubscribe(),
-            }),
+            EpochManagerRequest::Subscribe { reply } => handle(reply, Ok(self.events.1.resubscribe())),
         }
+    }
+}
+
+fn handle<T>(reply: oneshot::Sender<Result<T, EpochManagerError>>, result: Result<T, EpochManagerError>) {
+    if let Err(ref e) = result {
+        error!(target: LOG_TARGET, "Request failed with error: {}", e);
+    }
+    if reply.send(result).is_err() {
+        error!(target: LOG_TARGET, "Requester abandoned request");
     }
 }

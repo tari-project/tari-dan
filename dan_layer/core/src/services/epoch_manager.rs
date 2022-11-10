@@ -33,6 +33,7 @@ use crate::{
     storage::StorageError,
 };
 
+#[derive(Debug)]
 pub struct ShardCommitteeAllocation<TAddr: NodeAddressable> {
     pub shard_id: ShardId,
     pub committee: Option<Committee<TAddr>>,
@@ -78,6 +79,11 @@ pub trait EpochManager<TAddr: NodeAddressable>: Clone {
     ) -> Result<Vec<ShardCommitteeAllocation<TAddr>>, EpochManagerError>;
 
     async fn get_committee(&self, epoch: Epoch, shard: ShardId) -> Result<Committee<TAddr>, EpochManagerError>;
+    async fn is_validator_in_committee_for_current_epoch(
+        &self,
+        shard: ShardId,
+        identity: TAddr,
+    ) -> Result<bool, EpochManagerError>;
     // TODO: Get a better name
     async fn filter_to_local_shards(
         &self,
@@ -110,7 +116,8 @@ impl<TAddr: NodeAddressable> RangeEpochManager<TAddr> {
             Epoch(0),
             ranges
                 .iter()
-                .map(|r| (r.0.clone(), Committee::new(r.1.clone())))
+                .cloned()
+                .map(|(range, members)| (range, Committee::new(members)))
                 .collect(),
         );
         Self {
@@ -162,6 +169,23 @@ impl<TAddr: NodeAddressable> EpochManager<TAddr> for RangeEpochManager<TAddr> {
             }
         }
         Err(EpochManagerError::NoCommitteeFound(shard))
+    }
+
+    async fn is_validator_in_committee_for_current_epoch(
+        &self,
+        shard: ShardId,
+        identity: TAddr,
+    ) -> Result<bool, EpochManagerError> {
+        let epoch = self
+            .epochs
+            .get(&self.current_epoch)
+            .ok_or(EpochManagerError::NoEpochFound(self.current_epoch))?;
+        for (range, committee) in epoch {
+            if range.contains(&shard) && committee.members.contains(&identity) {
+                return Ok(true);
+            }
+        }
+        Ok(false)
     }
 
     async fn filter_to_local_shards(
