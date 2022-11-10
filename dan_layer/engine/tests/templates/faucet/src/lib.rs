@@ -20,55 +20,31 @@
 //   WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //   USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use tari_template_abi::{encode, Encode};
+use tari_template_lib::prelude::*;
 
-use crate::{
-    args::MintResourceArg,
-    models::{Amount, Bucket, Metadata},
-};
+#[template]
+mod faucet_template {
+    use super::*;
 
-pub struct ResourceBuilder;
-
-impl ResourceBuilder {
-    pub fn fungible() -> FungibleResourceBuilder {
-        FungibleResourceBuilder::new()
+    pub struct TestFaucet {
+        vault: Vault,
     }
-}
 
-pub struct FungibleResourceBuilder {
-    initial_supply: Amount,
-    metadata: Metadata,
-}
+    impl TestFaucet {
+        pub fn mint(initial_supply: Amount) -> Self {
+            let coins = ResourceBuilder::fungible()
+                .with_token_symbol("🪙")
+                .initial_supply(initial_supply)
+                .build_bucket();
 
-impl FungibleResourceBuilder {
-    fn new() -> Self {
-        Self {
-            initial_supply: Amount::zero(),
-            metadata: Metadata::new(),
+            Self {
+                vault: Vault::from_bucket(coins),
+            }
         }
-    }
 
-    pub fn with_token_symbol<S: Into<String>>(mut self, symbol: S) -> Self {
-        self.metadata.insert(b"SYMBOL".to_vec(), symbol.into().into_bytes());
-        self
-    }
-
-    pub fn with_metadata<K: Encode, V: Encode>(mut self, key: K, value: V) -> Self {
-        self.metadata.insert(encode(&key).unwrap(), encode(&value).unwrap());
-        self
-    }
-
-    pub fn initial_supply<A: Into<Amount>>(mut self, initial_supply: A) -> Self {
-        self.initial_supply = initial_supply.into();
-        self
-    }
-
-    pub fn build_bucket(self) -> Bucket {
-        crate::get_context().with_resource_manager(|manager| {
-            manager.mint_resource(MintResourceArg::Fungible {
-                amount: self.initial_supply,
-                metadata: self.metadata,
-            })
-        })
+        pub fn take_free_coins(&mut self) -> Bucket {
+            debug("Withdrawing 1000 coins from faucet");
+            self.vault.withdraw(Amount(1000))
+        }
     }
 }

@@ -140,52 +140,82 @@ fn test_dodgy_template() {
 }
 
 #[test]
-fn test_erc20() {
-    let template_test = TemplateTest::new(vec!["tests/templates/erc20"]);
+fn test_account() {
+    let template_test = TemplateTest::new(vec!["tests/templates/account", "tests/templates/faucet"]);
+
+    let account_template = template_test.get_template_address("Account");
+    let faucet_template = template_test.get_template_address("TestFaucet");
 
     let initial_supply = Amount(1_000_000_000_000);
-    let owner_address: ComponentAddress =
-        template_test.call_function("FungibleAccount", "initial_mint", args![initial_supply]);
+    let result = template_test.execute(vec![Instruction::CallFunction {
+        template_address: faucet_template,
+        function: "mint".to_string(),
+        args: args![initial_supply],
+    }]);
+    let faucet_component: ComponentAddress = result.execution_results[0].decode().unwrap();
+    let faucet_resource = result
+        .result
+        .expect("Faucet mint failed")
+        .up_iter()
+        .find_map(|(_, s)| s.substate_value().resource_address())
+        .unwrap();
 
-    let receiver_address: ComponentAddress = template_test.call_method(owner_address, "new_account", args![]);
+    // Create sender and receiver accounts
+    let sender_address: ComponentAddress = template_test.call_function("Account", "new", args![]);
+    let receiver_address: ComponentAddress = template_test.call_function("Account", "new", args![]);
+
+    let _result = template_test.execute(vec![
+        Instruction::CallMethod {
+            template_address: faucet_template,
+            component_address: faucet_component,
+            method: "take_free_coins".to_string(),
+            args: args![],
+        },
+        Instruction::PutLastInstructionOutputOnWorkspace {
+            key: b"free_coins".to_vec(),
+        },
+        Instruction::CallMethod {
+            template_address: account_template,
+            component_address: sender_address,
+            method: "deposit".to_string(),
+            args: args![Workspace(b"free_coins")],
+        },
+    ]);
 
     let result = template_test.execute(vec![
         Instruction::CallMethod {
-            template_address: template_test.get_template_address("FungibleAccount"),
-            component_address: owner_address,
+            template_address: account_template,
+            component_address: sender_address,
             method: "withdraw".to_string(),
-            args: args![Amount(100)],
+            args: args![faucet_resource, Amount(100)],
         },
         Instruction::PutLastInstructionOutputOnWorkspace {
             key: b"foo_bucket".to_vec(),
         },
         Instruction::CallMethod {
-            template_address: template_test.get_template_address("FungibleAccount"),
+            template_address: account_template,
             component_address: receiver_address,
             method: "deposit".to_string(),
             args: args![Workspace(b"foo_bucket")],
         },
         Instruction::CallMethod {
-            template_address: template_test.get_template_address("FungibleAccount"),
-            component_address: owner_address,
+            template_address: account_template,
+            component_address: sender_address,
             method: "balance".to_string(),
-            args: args![],
+            args: args![faucet_resource],
         },
         Instruction::CallMethod {
-            template_address: template_test.get_template_address("FungibleAccount"),
+            template_address: account_template,
             component_address: receiver_address,
             method: "balance".to_string(),
-            args: args![],
+            args: args![faucet_resource],
         },
     ]);
     for log in result.logs {
         eprintln!("LOG: {}", log);
     }
     eprintln!("{:?}", result.execution_results);
-    assert_eq!(
-        result.execution_results[3].decode::<Amount>().unwrap(),
-        initial_supply - 100
-    );
+    assert_eq!(result.execution_results[3].decode::<Amount>().unwrap(), 900);
     assert_eq!(result.execution_results[4].decode::<Amount>().unwrap(), 100);
 }
 

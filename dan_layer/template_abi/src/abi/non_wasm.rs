@@ -20,55 +20,20 @@
 //   WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //   USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use tari_template_abi::{encode, Encode};
-
-use crate::{
-    args::MintResourceArg,
-    models::{Amount, Bucket, Metadata},
-};
-
-pub struct ResourceBuilder;
-
-impl ResourceBuilder {
-    pub fn fungible() -> FungibleResourceBuilder {
-        FungibleResourceBuilder::new()
-    }
+/// # Safety
+/// This function should not be called
+pub unsafe fn tari_engine(_op: i32, _input_ptr: *const u8, _input_len: usize) -> *mut u8 {
+    todo!("tari_engine not implemented for non-wasm targets")
 }
 
-pub struct FungibleResourceBuilder {
-    initial_supply: Amount,
-    metadata: Metadata,
+/// # Safety
+/// This function should not be called
+pub unsafe fn debug(_input_ptr: *const u8, _input_len: usize) {
+    todo!("debug not implemented for non-wasm targets")
 }
 
-impl FungibleResourceBuilder {
-    fn new() -> Self {
-        Self {
-            initial_supply: Amount::zero(),
-            metadata: Metadata::new(),
-        }
-    }
-
-    pub fn with_token_symbol<S: Into<String>>(mut self, symbol: S) -> Self {
-        self.metadata.insert(b"SYMBOL".to_vec(), symbol.into().into_bytes());
-        self
-    }
-
-    pub fn with_metadata<K: Encode, V: Encode>(mut self, key: K, value: V) -> Self {
-        self.metadata.insert(encode(&key).unwrap(), encode(&value).unwrap());
-        self
-    }
-
-    pub fn initial_supply<A: Into<Amount>>(mut self, initial_supply: A) -> Self {
-        self.initial_supply = initial_supply.into();
-        self
-    }
-
-    pub fn build_bucket(self) -> Bucket {
-        crate::get_context().with_resource_manager(|manager| {
-            manager.mint_resource(MintResourceArg::Fungible {
-                amount: self.initial_supply,
-                metadata: self.metadata,
-            })
-        })
-    }
+/// # Safety
+/// This function should not be called
+pub unsafe fn on_panic(_msg_ptr: *const u8, _msg_len: u32, _line: u32, _column: u32) {
+    todo!("on_panic not implemented for non-wasm targets")
 }
