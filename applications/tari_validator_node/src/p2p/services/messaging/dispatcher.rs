@@ -22,16 +22,10 @@
 
 use log::*;
 use tari_comms::types::CommsPublicKey;
-use tari_dan_core::{
-    message::{DanMessage, MempoolMessage},
-    models::TariDanPayload,
-};
+use tari_dan_core::{message::DanMessage, models::TariDanPayload};
 use tokio::task;
 
-use crate::p2p::services::{
-    mempool::MempoolRequest,
-    messaging::{DanMessageSenders, InboundMessaging},
-};
+use crate::p2p::services::messaging::{DanMessageSenders, InboundMessaging};
 
 const LOG_TARGET: &str = "tari_validator_node::p2p::services::message_dispatcher";
 
@@ -59,15 +53,7 @@ impl MessageDispatcher {
                     self.message_senders.tx_consensus_message.send((from, msg)).await.ok()
                 },
                 DanMessage::VoteMessage(msg) => self.message_senders.tx_vote_message.send((from, msg)).await.ok(),
-                DanMessage::NewMempoolMessage(msg) => {
-                    let msg = match msg {
-                        MempoolMessage::SubmitTransaction(tx) => MempoolRequest::SubmitTransaction(tx),
-                        MempoolMessage::RemoveTransaction { transaction_hash } => {
-                            MempoolRequest::RemoveTransaction { transaction_hash }
-                        },
-                    };
-                    self.message_senders.tx_new_transaction_message.send(msg).await.ok()
-                },
+                DanMessage::NewTransaction(msg) => self.message_senders.tx_new_transaction_message.send(msg).await.ok(),
                 DanMessage::NetworkAnnounce(announce) => self
                     .message_senders
                     .tx_network_announce

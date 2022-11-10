@@ -65,11 +65,16 @@ impl MempoolHandle {
         }
     }
 
-    pub async fn handle_mempool_request(
-        &self,
-        mempool_request: MempoolRequest,
-    ) -> Result<(), SendError<MempoolRequest>> {
-        self.tx_mempool_request.send(mempool_request).await
+    pub async fn submit_transaction(&self, transaction: Transaction) -> Result<(), SendError<MempoolRequest>> {
+        self.tx_mempool_request
+            .send(MempoolRequest::SubmitTransaction(Box::new(transaction)))
+            .await
+    }
+
+    pub async fn remove_transaction(&self, transaction_hash: Hash) -> Result<(), SendError<MempoolRequest>> {
+        self.tx_mempool_request
+            .send(MempoolRequest::RemoveTransaction { transaction_hash })
+            .await
     }
 
     pub async fn next_valid_transaction(&mut self) -> Result<(Transaction, ShardId), RecvError> {

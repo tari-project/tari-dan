@@ -39,34 +39,31 @@ use tokio::{
     task,
 };
 
-use crate::p2p::{
-    proto::{
-        consensus::QuorumCertificate,
-        rpc::{VnStateSyncRequest, VnStateSyncResponse},
-    },
-    services::mempool::MempoolRequest,
+use crate::p2p::proto::{
+    consensus::QuorumCertificate,
+    rpc::{VnStateSyncRequest, VnStateSyncResponse},
 };
 
 const LOG_TARGET: &str = "vn::p2p::rpc";
 
-use crate::p2p::{proto, rpc::ValidatorNodeRpcService, services::messaging::DanMessageSenders};
+use crate::p2p::{proto, rpc::ValidatorNodeRpcService, services::mempool::MempoolHandle};
 
 pub struct ValidatorNodeRpcServiceImpl<TPeerProvider> {
-    message_senders: DanMessageSenders,
     peer_provider: TPeerProvider,
     shard_state_store: SqliteShardStoreFactory,
+    mempool: MempoolHandle,
 }
 
 impl<TPeerProvider: PeerProvider> ValidatorNodeRpcServiceImpl<TPeerProvider> {
     pub fn new(
-        message_senders: DanMessageSenders,
         peer_provider: TPeerProvider,
         shard_state_store: SqliteShardStoreFactory,
+        mempool: MempoolHandle,
     ) -> Self {
         Self {
-            message_senders,
             peer_provider,
             shard_state_store,
+            mempool,
         }
     }
 }
@@ -92,10 +89,8 @@ where TPeerProvider: PeerProvider + Clone + Send + Sync + 'static
             },
         };
 
-        let mempool_req = MempoolRequest::SubmitTransaction(Box::new(transaction));
-
         // TODO: Implement a mempool handle that returns if the transaction was accepted or not
-        match self.message_senders.tx_new_transaction_message.send(mempool_req).await {
+        match self.mempool.submit_transaction(transaction).await {
             Ok(_) => {
                 debug!(target: LOG_TARGET, "Accepted instruction into mempool");
                 return Ok(Response::new(proto::rpc::SubmitTransactionResponse {

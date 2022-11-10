@@ -26,10 +26,7 @@ use tari_dan_core::workers::events::HotStuffEvent;
 use tari_shutdown::ShutdownSignal;
 use tari_template_lib::Hash;
 
-use crate::{
-    p2p::services::{mempool::MempoolRequest, networking::NetworkingService},
-    Services,
-};
+use crate::{p2p::services::networking::NetworkingService, Services};
 
 const LOG_TARGET: &str = "tari::validator_node::dan_node";
 
@@ -57,8 +54,7 @@ impl DanNode {
                 Ok(event) = hotstuff_events.recv() => {
                     if let HotStuffEvent::OnFinalized(qc, _) = event {
                         let transaction_hash = Hash::from(qc.payload_id().into_array());
-                        let mempool_request = MempoolRequest::RemoveTransaction { transaction_hash };
-                        if let Err(err) = self.services.mempool.handle_mempool_request(mempool_request).await {
+                        if let Err(err) = self.services.mempool.remove_transaction(transaction_hash).await {
                             error!(target: LOG_TARGET, "Failed to remove transaction from mempool: {}", err);
                         }
                     }

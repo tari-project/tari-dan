@@ -20,29 +20,22 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+use tari_dan_engine::transaction::Transaction;
 use tokio::{
     sync::{broadcast, mpsc},
     task,
 };
 
-use super::handle::MempoolRequest;
 use crate::p2p::services::{
     mempool::{handle::MempoolHandle, service::MempoolService},
     messaging::OutboundMessaging,
 };
 
-pub fn spawn(
-    new_transactions: mpsc::Receiver<MempoolRequest>,
-    new_mempool_request_sender: mpsc::Sender<MempoolRequest>,
-    outbound: OutboundMessaging,
-) -> MempoolHandle {
+pub fn spawn(new_transactions: mpsc::Receiver<Transaction>, outbound: OutboundMessaging) -> MempoolHandle {
     let (tx_valid_transactions, rx_valid_transactions) = broadcast::channel(100);
-    let mempool = MempoolService::new(new_transactions, outbound, tx_valid_transactions);
-    let handle = MempoolHandle::new(
-        rx_valid_transactions,
-        new_mempool_request_sender,
-        mempool.get_transaction(),
-    );
+    let (tx_mempool_request, rx_mempool_request) = mpsc::channel(1);
+    let mempool = MempoolService::new(new_transactions, rx_mempool_request, outbound, tx_valid_transactions);
+    let handle = MempoolHandle::new(rx_valid_transactions, tx_mempool_request, mempool.get_transaction());
 
     task::spawn(mempool.run());
 
