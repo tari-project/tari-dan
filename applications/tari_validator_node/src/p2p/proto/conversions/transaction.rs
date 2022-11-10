@@ -210,22 +210,23 @@ impl TryFrom<proto::transaction::TransactionMeta> for TransactionMeta {
             ));
         }
 
-        Ok(TransactionMeta::new(
-            val.involved_shard_ids
-                .into_iter()
-                .map(|s| ShardId::try_from(s).map_err(|e| anyhow!("{}", e)))
-                .zip(val.involved_substates.into_iter().map(|c| {
-                    proto::transaction::SubstateChange::from_i32(c.change)
-                        .ok_or_else(|| anyhow!("invalid change"))
-                        .and_then(SubstateChange::try_from)
-                }))
-                .map(|(a, b)| {
-                    let a = a?;
-                    let b = b?;
-                    Result::<_, anyhow::Error>::Ok((a, (b, ObjectClaim {})))
-                })
-                .collect::<Result<_, _>>()?,
-        ))
+        let involved_objects = val
+            .involved_shard_ids
+            .into_iter()
+            .map(|s| ShardId::try_from(s).map_err(|e| anyhow!("{}", e)))
+            .zip(val.involved_substates.into_iter().map(|c| {
+                proto::transaction::SubstateChange::from_i32(c.change)
+                    .ok_or_else(|| anyhow!("invalid change"))
+                    .and_then(SubstateChange::try_from)
+            }))
+            .map(|(a, b)| {
+                let a = a?;
+                let b = b?;
+                Result::<_, anyhow::Error>::Ok((a, (b, ObjectClaim {})))
+            })
+            .collect::<Result<_, _>>()?;
+
+        Ok(TransactionMeta::new(involved_objects, val.max_outputs))
     }
 }
 

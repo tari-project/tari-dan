@@ -112,6 +112,7 @@ message TransactionMeta {
   repeated bytes involved_shard_ids = 1;
   // TODO: no idea what to call this ;)
   repeated SubstateRef involved_substates = 2;
+  uint32 max_outputs = 3;
 }
 
 message SubstateRef {

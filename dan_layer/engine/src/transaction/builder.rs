@@ -20,8 +20,6 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use std::collections::HashMap;
-
 use tari_common_types::types::{PrivateKey, PublicKey};
 use tari_crypto::{keys::PublicKey as PublicKeyTrait, ristretto::RistrettoPublicKey};
 use tari_dan_common_types::{ObjectClaim, ShardId, SubstateChange};
@@ -37,8 +35,6 @@ pub struct TransactionBuilder {
     sender_public_key: Option<RistrettoPublicKey>,
     fee: u64,
     meta: TransactionMeta,
-    num_outputs: u8,
-    // max_outputs: u8,
 }
 
 impl TransactionBuilder {
@@ -48,11 +44,7 @@ impl TransactionBuilder {
             signature: None,
             sender_public_key: None,
             fee: 0,
-            meta: TransactionMeta {
-                involved_objects: HashMap::new(),
-            },
-            // max_outputs: 0,
-            num_outputs: 0,
+            meta: TransactionMeta::default(),
         }
     }
 
@@ -122,7 +114,7 @@ impl TransactionBuilder {
     }
 
     pub fn with_num_outputs(&mut self, num_outputs: u8) -> &mut Self {
-        self.num_outputs = num_outputs;
+        self.meta.max_outputs = num_outputs.into();
         self
     }
 
@@ -134,13 +126,17 @@ impl TransactionBuilder {
             self.sender_public_key.take().expect("not signed"),
             self.meta,
         );
-
-        let id_provider = IdProvider::new(transaction.hash);
-
         let meta = transaction.meta.get_or_insert(TransactionMeta::default());
-        meta.involved_objects.extend(
-            (0..self.num_outputs).map(|_| (id_provider.new_output_shard(), (SubstateChange::Create, ObjectClaim {}))),
-        );
+
+        let id_provider = IdProvider::new(transaction.hash, meta.max_outputs);
+        meta.involved_objects.extend((0..meta.max_outputs).map(|_| {
+            (
+                id_provider
+                    .new_output_shard()
+                    .expect("id provider provides num_outputs IDs"),
+                (SubstateChange::Create, ObjectClaim {}),
+            )
+        }));
 
         transaction
     }

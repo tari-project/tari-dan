@@ -27,7 +27,7 @@ use tari_dan_common_types::optional::IsNotFoundError;
 use tari_engine_types::{resource::ResourceError, substate::SubstateAddress};
 use tari_template_lib::models::{Amount, BucketId, ComponentAddress, ResourceAddress, VaultId};
 
-use crate::state_store::StateStoreError;
+use crate::{runtime::id_provider::MaxIdsExceeded, state_store::StateStoreError};
 
 #[derive(Debug, thiserror::Error)]
 pub enum RuntimeError {
@@ -69,6 +69,8 @@ pub enum RuntimeError {
     WorkspaceItemKeyExists { key: String },
     #[error(transparent)]
     TransactionCommitError(#[from] TransactionCommitError),
+    #[error("Transaction generated too many outputs: {0}")]
+    TooManyOutputs(#[from] MaxIdsExceeded),
 }
 
 impl RuntimeError {

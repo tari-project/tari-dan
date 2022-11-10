@@ -195,7 +195,7 @@ impl RuntimeInterface for RuntimeInterfaceImpl {
                     reason: "Create vault action requires a resource type".to_string(),
                 })?;
 
-                let vault_id = self.tracker.new_vault(*resource_address, resource_type);
+                let vault_id = self.tracker.new_vault(*resource_address, resource_type)?;
                 Ok(InvokeResult::encode(&vault_id)?)
             },
             VaultAction::Deposit => {
@@ -232,7 +232,7 @@ impl RuntimeInterface for RuntimeInterfaceImpl {
                 let resource = self
                     .tracker
                     .borrow_vault_mut(&vault_id, |vault| vault.withdraw(amount))??;
-                let bucket = self.tracker.new_bucket(resource);
+                let bucket = self.tracker.new_bucket(resource)?;
                 Ok(InvokeResult::encode(&bucket)?)
             },
             VaultAction::GetBalance => {
@@ -273,7 +273,7 @@ impl RuntimeInterface for RuntimeInterfaceImpl {
                         reason: "Create bucket action requires a resource address".to_string(),
                     })?;
                 let resource = self.tracker.get_resource(&resource_address)?;
-                let bucket_id = self.tracker.new_bucket(resource);
+                let bucket_id = self.tracker.new_bucket(resource)?;
                 Ok(InvokeResult::encode(&bucket_id)?)
             },
             BucketAction::GetResourceAddress => {
@@ -299,7 +299,7 @@ impl RuntimeInterface for RuntimeInterfaceImpl {
                 let resource = self
                     .tracker
                     .with_bucket_mut(bucket_id, |bucket| bucket.take(amount))??;
-                let bucket_id = self.tracker.new_bucket(resource);
+                let bucket_id = self.tracker.new_bucket(resource)?;
                 Ok(InvokeResult::encode(&bucket_id)?)
             },
             BucketAction::Drop => {
