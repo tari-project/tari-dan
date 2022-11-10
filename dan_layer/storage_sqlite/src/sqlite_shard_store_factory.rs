@@ -402,46 +402,41 @@ impl ShardStoreTransaction<PublicKey, TariDanPayload> for SqliteShardStoreTransa
                 reason: format!("Get payload error: {}", e),
             })?;
 
-        if let Some(payload) = payload {
-            let instructions: Vec<Instruction> =
-                serde_json::from_str(&payload.instructions).map_err(|source| StorageError::SerdeJson {
-                    source,
-                    operation: "get_payload".to_string(),
-                    data: payload.instructions.to_string(),
-                })?;
+        let payload = payload.ok_or_else(|| Self::Error::NotFound {
+            item: "payload".to_string(),
+            key: id.to_string(),
+        })?;
 
-            let fee: u64 = payload.fee.try_into().map_err(|_| Self::Error::InvalidIntegerCast)?;
+        let instructions: Vec<Instruction> =
+            serde_json::from_str(&payload.instructions).map_err(|source| StorageError::SerdeJson {
+                source,
+                operation: "get_payload".to_string(),
+                data: payload.instructions.to_string(),
+            })?;
 
-            let public_nonce =
-                PublicKey::from_vec(&payload.public_nonce).map_err(Self::Error::InvalidByteArrayConversion)?;
-            let signature =
-                PrivateKey::from_bytes(payload.scalar.as_slice()).map_err(Self::Error::InvalidByteArrayConversion)?;
+        let fee: u64 = payload.fee.try_into().map_err(|_| Self::Error::InvalidIntegerCast)?;
 
-            let signature: InstructionSignature =
-                InstructionSignature::try_from(Signature::new(public_nonce, signature)).map_err(|e| {
-                    Self::Error::InvalidTypeCasting {
-                        reason: format!("Get payload error: {}", e),
-                    }
-                })?;
+        let public_nonce =
+            PublicKey::from_vec(&payload.public_nonce).map_err(Self::Error::InvalidByteArrayConversion)?;
+        let signature =
+            PrivateKey::from_bytes(payload.scalar.as_slice()).map_err(Self::Error::InvalidByteArrayConversion)?;
 
-            let sender_public_key =
-                PublicKey::from_vec(&payload.sender_public_key).map_err(Self::Error::InvalidByteArrayConversion)?;
-            let meta: TransactionMeta =
-                serde_json::from_str(&payload.meta).map_err(|source| StorageError::SerdeJson {
-                    source,
-                    operation: "get_payload".to_string(),
-                    data: payload.meta.to_string(),
-                })?;
+        let signature: InstructionSignature = InstructionSignature::try_from(Signature::new(public_nonce, signature))
+            .map_err(|e| Self::Error::InvalidTypeCasting {
+            reason: format!("Get payload error: {}", e),
+        })?;
 
-            let transaction = Transaction::new(fee, instructions, signature, sender_public_key, meta);
+        let sender_public_key =
+            PublicKey::from_vec(&payload.sender_public_key).map_err(Self::Error::InvalidByteArrayConversion)?;
+        let meta: TransactionMeta = serde_json::from_str(&payload.meta).map_err(|source| StorageError::SerdeJson {
+            source,
+            operation: "get_payload".to_string(),
+            data: payload.meta.to_string(),
+        })?;
 
-            Ok(TariDanPayload::new(transaction))
-        } else {
-            Err(Self::Error::NotFound {
-                item: "payload".to_string(),
-                key: id.to_string(),
-            })
-        }
+        let transaction = Transaction::new(fee, instructions, signature, sender_public_key, meta);
+
+        Ok(TariDanPayload::new(transaction))
     }
 
     fn get_node(&self, hash: &TreeNodeHash) -> Result<HotStuffTreeNode<PublicKey, TariDanPayload>, Self::Error> {

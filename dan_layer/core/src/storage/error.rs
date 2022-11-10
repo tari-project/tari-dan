@@ -24,6 +24,7 @@ use std::{io, sync::PoisonError};
 
 use lmdb_zero as lmdb;
 use tari_common_types::types::FixedHashSizeError;
+use tari_dan_common_types::optional::IsNotFoundError;
 use tari_storage::lmdb_store::LMDBError;
 use tari_utilities::ByteArrayError;
 
@@ -77,5 +78,11 @@ pub enum StorageError {
 impl<T> From<PoisonError<T>> for StorageError {
     fn from(_err: PoisonError<T>) -> Self {
         Self::LockError
+    }
+}
+
+impl IsNotFoundError for StorageError {
+    fn is_not_found_error(&self) -> bool {
+        matches!(self, Self::NotFound { .. })
     }
 }

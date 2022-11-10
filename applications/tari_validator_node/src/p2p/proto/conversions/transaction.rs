@@ -58,7 +58,7 @@ impl TryFrom<proto::transaction::Transaction> for Transaction {
             instructions,
             instruction_signature,
             sender_public_key,
-            meta.unwrap_or_default(),
+            meta.ok_or_else(|| anyhow!("meta not provided"))?,
         );
 
         Ok(transaction)
@@ -72,16 +72,15 @@ impl From<Transaction> for proto::transaction::Transaction {
         let (instructions, signature, sender_public_key) = transaction.destruct();
 
         proto::transaction::Transaction {
+            // TODO: Thaum inputs and outputs
+            inputs: vec![],
+            outputs: vec![],
             instructions: instructions.into_iter().map(Into::into).collect(),
             signature: Some(signature.signature().into()),
             sender_public_key: sender_public_key.to_vec(),
             fee,
             meta: Some(meta.into()),
-            // balance_proof: todo!(),
-            // inputs: todo!(),
-            // max_instruction_outputs: todo!(),
-            // outputs: todo!(),
-            ..Default::default()
+            balance_proof: vec![],
         }
     }
 }
@@ -239,6 +238,7 @@ impl<T: Borrow<TransactionMeta>> From<T> for proto::transaction::TransactionMeta
                 change: proto::transaction::SubstateChange::from(*ch) as i32,
             });
         }
+        meta.max_outputs = val.borrow().max_outputs();
         meta
     }
 }
