@@ -27,6 +27,7 @@ mod from_hex;
 mod prompt;
 #[macro_use]
 mod table;
+mod component_manager;
 
 use std::{error::Error, path::PathBuf};
 
