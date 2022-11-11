@@ -32,7 +32,10 @@ use tari_engine_types::{
     substate::SubstateValue,
     TemplateAddress,
 };
-use tari_template_lib::{args::Arg, models::ComponentAddress};
+use tari_template_lib::{
+    args::Arg,
+    models::{Amount, ComponentAddress},
+};
 use tari_utilities::hex::to_hex;
 use tari_validator_node_client::{
     types::{SubmitTransactionRequest, TransactionFinalizeResult},
@@ -342,6 +345,9 @@ fn summarize(result: &TransactionFinalizeResult) {
             },
             Type::String => {
                 println!("string: {}", result.decode::<String>().unwrap());
+            },
+            Type::Other { ref name } if name == "Amount" => {
+                println!("{}: {}", name, result.decode::<Amount>().unwrap());
             },
             Type::Other { ref name } => {
                 println!("{}: {}", name, to_hex(&result.raw));
