@@ -27,7 +27,7 @@ use tari_crypto::tari_utilities::ByteArray;
 use tari_dan_common_types::{Epoch, ShardId};
 use tari_dan_core::{
     consensus_constants::ConsensusConstants,
-    models::{Committee, ValidatorNode},
+    models::{BaseLayerMetadata, Committee, ValidatorNode},
     services::{
         epoch_manager::{EpochManagerError, ShardCommitteeAllocation},
         BaseNodeClient,
@@ -106,8 +106,8 @@ impl BaseLayerEpochManager {
         Ok(())
     }
 
-    pub async fn update_epoch(&mut self, tip: u64) -> Result<(), EpochManagerError> {
-        let epoch = Epoch::from_block_height(tip);
+    pub async fn update_epoch(&mut self, tip_info: BaseLayerMetadata) -> Result<(), EpochManagerError> {
+        let epoch = Epoch::from_block_height(tip_info.height_of_longest_chain);
         if self.current_epoch >= epoch {
             // no need to update the epoch
             return Ok(());
@@ -143,6 +143,10 @@ impl BaseLayerEpochManager {
             .find(|v| v.public_key == *self.node_identity.public_key())
             .ok_or(EpochManagerError::UnexpectedResponse)?
             .shard_key;
+
+        // extract the MMR of the epoch's validator nodes
+        let tip_header = base_node_client.get_header_by_hash(tip_info.tip_hash).await?;
+        let _validator_node_mr = tip_header.validator_node_mr;
 
         // from current_shard_key we can get the corresponding vns committee
         let committee_size = self.consensus_constants.committee_size as usize;

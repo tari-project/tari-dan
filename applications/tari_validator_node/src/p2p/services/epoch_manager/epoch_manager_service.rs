@@ -27,7 +27,7 @@ use tari_comms::{types::CommsPublicKey, NodeIdentity};
 use tari_dan_common_types::{Epoch, ShardId};
 use tari_dan_core::{
     consensus_constants::ConsensusConstants,
-    models::Committee,
+    models::{BaseLayerMetadata, Committee},
     services::epoch_manager::{EpochManagerError, ShardCommitteeAllocation},
 };
 use tari_dan_storage_sqlite::SqliteDbFactory;
@@ -65,7 +65,7 @@ pub enum EpochManagerRequest {
         reply: Reply<Epoch>,
     },
     UpdateEpoch {
-        height: u64,
+        tip_info: BaseLayerMetadata,
         reply: Reply<()>,
     },
     LastRegistrationEpoch {
@@ -162,8 +162,8 @@ impl EpochManagerService {
     async fn handle_request(&mut self, req: EpochManagerRequest) {
         match req {
             EpochManagerRequest::CurrentEpoch { reply } => handle(reply, Ok(self.inner.current_epoch())),
-            EpochManagerRequest::UpdateEpoch { height, reply } => {
-                handle(reply, self.inner.update_epoch(height).await);
+            EpochManagerRequest::UpdateEpoch { tip_info, reply } => {
+                handle(reply, self.inner.update_epoch(tip_info).await);
             },
             EpochManagerRequest::LastRegistrationEpoch { reply } => {
                 handle(reply, self.inner.last_registration_epoch().await)

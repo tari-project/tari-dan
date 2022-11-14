@@ -24,7 +24,7 @@ use async_trait::async_trait;
 use tari_comms::types::CommsPublicKey;
 use tari_dan_common_types::{Epoch, ShardId};
 use tari_dan_core::{
-    models::Committee,
+    models::{BaseLayerMetadata, Committee},
     services::epoch_manager::{EpochManager, EpochManagerError, ShardCommitteeAllocation},
 };
 use tokio::sync::{broadcast, mpsc::Sender, oneshot};
@@ -41,10 +41,10 @@ impl EpochManagerHandle {
         Self { tx_request }
     }
 
-    pub async fn update_epoch(&self, height: u64) -> Result<(), EpochManagerError> {
+    pub async fn update_epoch(&self, tip_info: BaseLayerMetadata) -> Result<(), EpochManagerError> {
         let (tx, rx) = oneshot::channel();
         self.tx_request
-            .send(EpochManagerRequest::UpdateEpoch { height, reply: tx })
+            .send(EpochManagerRequest::UpdateEpoch { tip_info, reply: tx })
             .await
             .map_err(|_| EpochManagerError::SendError)?;
         rx.await.map_err(|_| EpochManagerError::ReceiveError)?
