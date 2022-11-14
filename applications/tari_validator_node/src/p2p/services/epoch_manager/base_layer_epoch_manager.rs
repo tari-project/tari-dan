@@ -23,6 +23,7 @@
 use std::{convert::TryInto, sync::Arc};
 
 use tari_comms::{types::CommsPublicKey, NodeIdentity};
+use tari_core::blocks::BlockHeader;
 use tari_crypto::tari_utilities::ByteArray;
 use tari_dan_common_types::{Epoch, ShardId};
 use tari_dan_core::{
@@ -34,7 +35,7 @@ use tari_dan_core::{
     },
     storage::DbFactory,
 };
-use tari_dan_storage::global::{DbValidatorNode, MetadataKey};
+use tari_dan_storage::global::{DbEpoch, DbValidatorNode, MetadataKey};
 use tari_dan_storage_sqlite::SqliteDbFactory;
 use tokio::sync::broadcast;
 
@@ -119,20 +120,16 @@ impl BaseLayerEpochManager {
         let mut vns = base_node_client.get_validator_nodes(height).await?;
         vns.sort_by(|a, b| a.shard_key.partial_cmp(&b.shard_key).unwrap());
 
+        // extract and store in database the MMR of the epoch's validator nodes
+        let tip_header = base_node_client.get_header_by_hash(tip_info.tip_hash).await?;
+        self.insert_epoch(epoch, tip_header)?;
+
         // insert the new VNs for this epoch in the database
         self.insert_validator_nodes(epoch, vns.clone())?;
-        {
-            // after the end of the scope both db and tx are cleaned up
-            let db = self.db_factory.get_or_create_global_db()?;
-            let tx = db
-                .create_transaction()
-                .map_err(|e| EpochManagerError::StorageError(e.into()))?;
-            let metadata = db.metadata(&tx);
-            metadata
-                .set_metadata(MetadataKey::CurrentEpoch, &epoch.0.to_le_bytes())
-                .map_err(|e| EpochManagerError::StorageError(e.into()))?;
-            db.commit(tx).map_err(|e| EpochManagerError::StorageError(e.into()))?;
-        }
+
+        // set the current epoch in the database
+        self.insert_current_epoch(epoch)?;
+
         self.current_epoch = epoch;
         self.tx_events
             .send(EpochManagerEvent::EpochChanged(epoch))
@@ -143,10 +140,6 @@ impl BaseLayerEpochManager {
             .find(|v| v.public_key == *self.node_identity.public_key())
             .ok_or(EpochManagerError::UnexpectedResponse)?
             .shard_key;
-
-        // extract the MMR of the epoch's validator nodes
-        let tip_header = base_node_client.get_header_by_hash(tip_info.tip_hash).await?;
-        let _validator_node_mr = tip_header.validator_node_mr;
 
         // from current_shard_key we can get the corresponding vns committee
         let committee_size = self.consensus_constants.committee_size as usize;
@@ -162,6 +155,25 @@ impl BaseLayerEpochManager {
         peer_sync_service_manager
             .sync_peers_state(committee_vns, start_shard_id, end_shard_id, vn_shard_key)
             .await?;
+
+        Ok(())
+    }
+
+    fn insert_epoch(&self, epoch: Epoch, header: BlockHeader) -> Result<(), EpochManagerError> {
+        let epoch_height = epoch.0;
+        let db_epoch = DbEpoch {
+            epoch: epoch_height,
+            validator_node_mr: header.validator_node_mr.to_vec(),
+        };
+
+        let db = self.db_factory.get_or_create_global_db()?;
+        let tx = db
+            .create_transaction()
+            .map_err(|e| EpochManagerError::StorageError(e.into()))?;
+        db.epochs(&tx)
+            .insert_epoch(db_epoch)
+            .map_err(|e| EpochManagerError::StorageError(e.into()))?;
+        db.commit(tx).map_err(|e| EpochManagerError::StorageError(e.into()))?;
 
         Ok(())
     }
@@ -184,6 +196,20 @@ impl BaseLayerEpochManager {
             .insert_validator_nodes(new_vns)
             .map_err(|e| EpochManagerError::StorageError(e.into()))?;
         db.commit(tx).map_err(|e| EpochManagerError::StorageError(e.into()))?;
+        Ok(())
+    }
+
+    fn insert_current_epoch(&self, epoch: Epoch) -> Result<(), EpochManagerError> {
+        let db = self.db_factory.get_or_create_global_db()?;
+        let tx = db
+            .create_transaction()
+            .map_err(|e| EpochManagerError::StorageError(e.into()))?;
+        let metadata = db.metadata(&tx);
+        metadata
+            .set_metadata(MetadataKey::CurrentEpoch, &epoch.0.to_le_bytes())
+            .map_err(|e| EpochManagerError::StorageError(e.into()))?;
+        db.commit(tx).map_err(|e| EpochManagerError::StorageError(e.into()))?;
+
         Ok(())
     }
 

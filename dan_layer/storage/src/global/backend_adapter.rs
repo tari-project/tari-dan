@@ -20,7 +20,7 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use super::validator_node_db::DbValidatorNode;
+use super::{validator_node_db::DbValidatorNode, DbEpoch};
 use crate::{
     atomic::AtomicDb,
     global::{
@@ -54,4 +54,7 @@ pub trait GlobalDbAdapter: AtomicDb + Send + Sync + Clone {
         tx: &Self::DbTransaction,
         epoch: u64,
     ) -> Result<Vec<DbValidatorNode>, Self::Error>;
+
+    fn insert_epoch(&self, tx: &Self::DbTransaction, epoch: DbEpoch) -> Result<(), Self::Error>;
+    fn get_epoch(&self, tx: &Self::DbTransaction, epoch: u64) -> Result<Option<DbEpoch>, Self::Error>;
 }

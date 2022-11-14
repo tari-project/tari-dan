@@ -24,15 +24,18 @@ use std::convert::{TryFrom, TryInto};
 
 use diesel::{prelude::*, Connection, RunQueryDsl, SqliteConnection};
 use tari_dan_storage::{
-    global::{DbTemplate, DbTemplateUpdate, DbValidatorNode, GlobalDbAdapter, MetadataKey, TemplateStatus},
+    global::{DbEpoch, DbTemplate, DbTemplateUpdate, DbValidatorNode, GlobalDbAdapter, MetadataKey, TemplateStatus},
     AtomicDb,
 };
 
-use super::models::validator_node::{NewValidatorNode, ValidatorNode};
+use super::models::{
+    epoch::Epoch,
+    validator_node::{NewValidatorNode, ValidatorNode},
+};
 use crate::{
     error::SqliteStorageError,
     global::{
-        models::{MetadataModel, NewTemplateModel, TemplateModel, TemplateUpdateModel},
+        models::{epoch::NewEpoch, MetadataModel, NewTemplateModel, TemplateModel, TemplateUpdateModel},
         schema::templates,
     },
     SqliteTransaction,
@@ -253,5 +256,43 @@ impl GlobalDbAdapter for SqliteGlobalDbAdapter {
         let db_vns: Vec<DbValidatorNode> = sqlite_vns.into_iter().map(Into::into).collect();
 
         Ok(db_vns)
+    }
+
+    fn insert_epoch(
+        &self,
+        tx: &Self::DbTransaction,
+        epoch: tari_dan_storage::global::DbEpoch,
+    ) -> Result<(), Self::Error> {
+        use crate::global::schema::epochs;
+
+        let sqlite_epoch: NewEpoch = epoch.into();
+
+        diesel::insert_into(epochs::table)
+            .values(&sqlite_epoch)
+            .execute(tx.connection())
+            .map_err(|source| SqliteStorageError::DieselError {
+                source,
+                operation: "insert::epoch".to_string(),
+            })?;
+
+        Ok(())
+    }
+
+    fn get_epoch(&self, tx: &Self::DbTransaction, epoch: u64) -> Result<Option<DbEpoch>, Self::Error> {
+        use crate::global::schema::epochs::dsl;
+
+        let query_res: Option<Epoch> = dsl::epochs
+            .find(epoch as i32)
+            .first(tx.connection())
+            .optional()
+            .map_err(|source| SqliteStorageError::DieselError {
+                source,
+                operation: "get::epoch".to_string(),
+            })?;
+
+        match query_res {
+            Some(e) => Ok(Some(e.into())),
+            None => Ok(None),
+        }
     }
 }

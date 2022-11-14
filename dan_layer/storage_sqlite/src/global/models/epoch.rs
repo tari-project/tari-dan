@@ -19,20 +19,38 @@
 //  SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY,
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-mod global_db;
-pub use global_db::GlobalDb;
 
-mod backend_adapter;
-pub use backend_adapter::GlobalDbAdapter;
+use tari_dan_storage::global::DbEpoch;
 
-mod metadata_db;
-pub use metadata_db::{MetadataDb, MetadataKey};
+use crate::global::schema::*;
 
-mod template_db;
-pub use template_db::{DbTemplate, DbTemplateUpdate, TemplateDb, TemplateStatus};
+#[derive(Queryable)]
+pub struct Epoch {
+    pub epoch: i32,
+    pub validator_node_mr: Vec<u8>,
+}
 
-mod validator_node_db;
-pub use validator_node_db::{DbValidatorNode, ValidatorNodeDb};
+impl From<Epoch> for DbEpoch {
+    fn from(e: Epoch) -> Self {
+        Self {
+            epoch: e.epoch as u64,
+            validator_node_mr: e.validator_node_mr,
+        }
+    }
+}
 
-mod epoch_db;
-pub use epoch_db::{DbEpoch, EpochDb};
+#[derive(Insertable)]
+#[table_name = "epochs"]
+pub struct NewEpoch {
+    pub epoch: i32,
+    pub validator_node_mr: Vec<u8>,
+}
+
+impl From<DbEpoch> for NewEpoch {
+    fn from(e: DbEpoch) -> Self {
+        Self {
+            epoch: e.epoch as i32,
+            validator_node_mr: e.validator_node_mr,
+        }
+    }
+}
