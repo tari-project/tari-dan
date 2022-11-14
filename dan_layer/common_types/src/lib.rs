@@ -140,6 +140,7 @@ pub struct ObjectClaim {}
 
 impl ObjectClaim {
     pub fn is_valid(&self, _payload: PayloadId) -> bool {
+        // TODO: Implement this
         true
     }
 }

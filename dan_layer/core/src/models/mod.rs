@@ -38,6 +38,7 @@ pub mod domain_events;
 mod error;
 mod hot_stuff_message;
 mod hot_stuff_tree_node;
+mod leaf_node;
 mod node;
 mod payload;
 mod quorum_certificate;
@@ -55,6 +56,7 @@ pub use committee::Committee;
 pub use error::ModelError;
 pub use hot_stuff_message::HotStuffMessage;
 pub use hot_stuff_tree_node::HotStuffTreeNode;
+pub use leaf_node::LeafNode;
 pub use node::Node;
 pub use payload::Payload;
 pub use quorum_certificate::{QuorumCertificate, QuorumDecision};
@@ -109,6 +111,7 @@ impl Display for NodeHeight {
 pub struct ObjectPledge {
     pub shard_id: ShardId,
     pub current_state: SubstateState,
+    // pub current_state_hash: FixedHash,
     pub pledged_to_payload: PayloadId,
     pub pledged_until: NodeHeight,
 }
@@ -142,7 +145,7 @@ impl AsRef<[u8]> for TokenId {
 #[derive(Debug, Copy, Clone, Eq, PartialEq, Serialize)]
 pub enum HotStuffMessageType {
     NewView,
-    Generic,
+    Proposal,
 }
 
 impl Default for HotStuffMessageType {
@@ -155,7 +158,7 @@ impl HotStuffMessageType {
     pub fn as_u8(&self) -> u8 {
         match self {
             HotStuffMessageType::NewView => 0,
-            HotStuffMessageType::Generic => 1,
+            HotStuffMessageType::Proposal => 1,
         }
     }
 }
@@ -166,7 +169,7 @@ impl TryFrom<u8> for HotStuffMessageType {
     fn try_from(value: u8) -> Result<Self, Self::Error> {
         match value {
             0 => Ok(HotStuffMessageType::NewView),
-            1 => Ok(HotStuffMessageType::Generic),
+            1 => Ok(HotStuffMessageType::Proposal),
             _ => Err("Not a value message type".to_string()),
         }
     }
@@ -178,7 +181,7 @@ impl TryFrom<i32> for HotStuffMessageType {
     fn try_from(value: i32) -> Result<Self, Self::Error> {
         match value {
             0 => Ok(HotStuffMessageType::NewView),
-            1 => Ok(HotStuffMessageType::Generic),
+            1 => Ok(HotStuffMessageType::Proposal),
             _ => Err(anyhow!("Not a value message type")),
         }
     }
