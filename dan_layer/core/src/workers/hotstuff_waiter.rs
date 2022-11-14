@@ -380,12 +380,9 @@ where
         let signer_signatures = Self::extract_signer_signatures_from_qc(qc)?;
 
         // the QC should not have repeated signers
-        let signers_vec: Vec<&[u8]> = signer_signatures
-            .iter()
-            .map(|s| NodeAddressable::as_bytes(&s.0))
-            .collect();
-        let signers_set: HashSet<&[u8]> = HashSet::from_iter(signers_vec.to_owned());
-        if signers_vec.len() != signers_set.len() {
+        let signers_iter = signer_signatures.iter().map(|s| NodeAddressable::as_bytes(&s.0));
+        let signers_set: HashSet<&[u8]> = HashSet::from_iter(signers_iter);
+        if signer_signatures.len() != signers_set.len() {
             return Err(HotStuffError::InvalidQuorumCertificate(
                 "duplicated signers".to_string(),
             ));
