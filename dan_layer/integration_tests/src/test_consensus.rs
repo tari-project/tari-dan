@@ -459,9 +459,7 @@ async fn test_hs_waiter_execute_called_when_consensus_reached() {
     instance.tx_hs_messages.send((node1.clone(), proposal3)).await.unwrap();
     let (vote, _) = instance.recv_vote_message().await;
 
-    // Execute again at h=1
-    let (executed_payload, _) = instance.recv_execute().await;
-    assert_eq!(executed_payload, payload);
+    instance.assert_no_execute().await;
 
     // loopback the vote
     instance.tx_votes.send((node1.clone(), vote.clone())).await.unwrap();
