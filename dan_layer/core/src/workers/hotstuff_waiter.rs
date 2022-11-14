@@ -406,7 +406,6 @@ where
             qc.all_shard_nodes().to_vec(),
         );
         let challenge = vote.construct_challenge(public_key, signature.get_public_nonce());
-
         signature.verify_challenge(public_key, &*challenge)
     }
 
