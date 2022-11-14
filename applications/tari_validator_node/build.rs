@@ -29,6 +29,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .emit_rerun_if_changed_directives()
         .compile()
         .unwrap();
+
     println!("cargo:rerun-if-changed=../tari_validator_node_web_ui/src");
     println!("cargo:rerun-if-changed=../tari_validator_node_web_ui/public");
     let npm = if cfg!(windows) { "npm.cmd" } else { "npm" };

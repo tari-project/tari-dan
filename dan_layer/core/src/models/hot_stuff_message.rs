@@ -93,9 +93,9 @@ impl<TPayload: Payload, TAddr: NodeAddressable> HotStuffMessage<TPayload, TAddr>
         }
     }
 
-    pub fn generic(node: HotStuffTreeNode<TAddr, TPayload>, shard: ShardId) -> Self {
+    pub fn new_proposal(node: HotStuffTreeNode<TAddr, TPayload>, shard: ShardId) -> Self {
         Self {
-            message_type: HotStuffMessageType::Generic,
+            message_type: HotStuffMessageType::Proposal,
             shard: Some(shard),
             node: Some(node),
             ..Default::default()

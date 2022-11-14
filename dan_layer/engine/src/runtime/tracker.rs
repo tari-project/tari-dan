@@ -124,7 +124,7 @@ impl StateTracker {
     pub fn mint_resource(&self, mint_arg: MintResourceArg) -> Result<ResourceAddress, RuntimeError> {
         let resource_address = self.id_provider.new_resource_address()?;
         debug!(target: LOG_TARGET, "New resource minted: {}", resource_address);
-        dbg!(&resource_address);
+        dbg!(resource_address.to_string());
         match mint_arg {
             MintResourceArg::Fungible { amount, metadata } => {
                 self.check_amount(amount)?;

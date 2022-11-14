@@ -42,6 +42,7 @@ use crate::{
         HotStuffMessage,
         HotStuffMessageType,
         HotStuffTreeNode,
+        LeafNode,
         NodeHeight,
         ObjectPledge,
         Payload,
@@ -64,18 +65,32 @@ use crate::{
 const LOG_TARGET: &str = "tari::dan_layer::hotstuff_waiter";
 
 pub struct HotStuffWaiter<TPayload, TAddr, TLeaderStrategy, TEpochManager, TPayloadProcessor, TShardStore> {
+    /// The node's own address
     identity: TAddr,
+    /// The stragegy for selecting the leader for a <epoch, shard, round>
     leader_strategy: TLeaderStrategy,
+    /// The epoch manager
     epoch_manager: TEpochManager,
+    /// Received payloads that should be proposed. Only payloads that involve this node are pushed on this channel.
     rx_new: Receiver<(TPayload, ShardId)>,
+    /// Received replica hotstuff messages, namely Proposal messages from the leader or
+    /// NewView messages from replicas.
     rx_hs_message: Receiver<(TAddr, HotStuffMessage<TPayload, TAddr>)>,
+    /// Received vote messages
     rx_votes: Receiver<(TAddr, VoteMessage)>,
+    /// Hotstuff messages that should be delivered to the leader
     tx_leader: Sender<(TAddr, HotStuffMessage<TPayload, TAddr>)>,
+    /// Hotstuff messages that should be delivered to the replicas
     tx_broadcast: Sender<(HotStuffMessage<TPayload, TAddr>, Vec<TAddr>)>,
+    /// Vote messages that should be delivered to the leader
     tx_vote_message: Sender<(VoteMessage, TAddr)>,
+    /// HotstuffEvent channel
     tx_events: broadcast::Sender<HotStuffEvent>,
+    /// The payload processor. This determines whether a payload proposal results in an accepted or rejected vote.
     payload_processor: TPayloadProcessor,
+    /// Store used to persist consensus state.
     shard_store: TShardStore,
+    /// Network-wide constants
     consensus_constants: ConsensusConstants,
 }
 
@@ -155,6 +170,48 @@ where
         }
     }
 
+    /// Step 1: A new payload has been received. The payload is persisted and a NewView is sent to the leader.
+    async fn on_next_sync_view(&mut self, payload: TPayload, shard: ShardId) -> Result<(), HotStuffError> {
+        let epoch = self.epoch_manager.current_epoch().await?;
+        info!(
+            target: LOG_TARGET,
+            "🔥 [Epoch:{}] Send NEWVIEW for payload {} and shard {}",
+            epoch,
+            payload.to_id(),
+            shard
+        );
+        let payload_id = payload.to_id();
+        debug!(target: LOG_TARGET, "on_next_sync_view started: {:?}", payload_id);
+
+        let new_view;
+        {
+            let mut tx = self.shard_store.create_tx()?;
+
+            let high_qc = tx.get_high_qc_for(shard).map_err(|e| e.into())?;
+
+            //  Save the payload, because we will need it when the proposal comes back
+            tx.set_payload(payload.clone()).map_err(|e| e.into())?;
+            tx.commit().map_err(|e| e.into())?;
+            new_view = HotStuffMessage::new_view(high_qc, shard, Some(payload));
+        }
+
+        let committee = self.epoch_manager.get_committee(epoch, shard).await?;
+        let leader = self.leader_strategy.get_leader(&committee, payload_id, shard, 0);
+        debug!(
+            target: LOG_TARGET,
+            "Determined leader for this payload is: {:?}, sending new view", leader
+        );
+
+        self.tx_leader
+            .send((leader.clone(), new_view))
+            .await
+            .map_err(|_| HotStuffError::SendError)?;
+        Ok(())
+    }
+
+    /// Step 2: The leader receives a NewView from all committee members. The payload and QC are persisted.
+    ///         Once $n - f$ NewViews have been received, a Proposal is sent to the replicas, see
+    ///         [HotstuffWaiter::on_beat].
     async fn on_receive_new_view(
         &mut self,
         from: TAddr,
@@ -175,53 +232,25 @@ where
         self.validate_qc(&qc)?;
 
         let mut tx = self.shard_store.create_tx()?;
-        tx.update_high_qc(from, shard, qc)
-            .map_err(|e| HotStuffError::UpdateHighQcError(e.to_string()))?;
+        tx.update_high_qc(from, shard, qc).map_err(|e| e.into())?;
         tx.set_payload(payload).map_err(|e| e.into())?;
         tx.commit().map_err(|e| e.into())?;
         Ok(())
     }
 
-    // pacemaker
-    async fn on_beat(&mut self, shard: ShardId, payload_id: PayloadId) -> Result<(), HotStuffError> {
-        // TODO: the leader is only known after the leaf is determined
-        // TODO: Review if this is correct. The epoch should stay the same for all epochs
-
-        let epoch = self.epoch_manager.current_epoch().await?;
-        let committee = self.epoch_manager.get_committee(epoch, shard).await?;
-        if self.is_leader(payload_id, shard, &committee)? {
-            let min_required_new_views = committee.consensus_threshold();
-            let num_new_views = self.count_new_views_for(shard)?;
-            if num_new_views >= min_required_new_views {
-                self.on_propose(shard, payload_id).await?;
-            } else {
-                info!(
-                    target: LOG_TARGET,
-                    "🔥 Waiting for more NEWVIEW messages ({}/{})", num_new_views, min_required_new_views
-                );
-            }
-        }
-        Ok(())
-    }
-
-    fn count_new_views_for(&self, shard: ShardId) -> Result<usize, HotStuffError> {
-        let tx = self.shard_store.create_tx()?;
-        let count = tx.count_high_qc_for(shard).map_err(|e| e.into())?;
-        Ok(count)
-    }
-
+    /// Step 4: Sends a Proposal to replica. A new leaf node is created that builds
+    /// on the previous tree or else a genesis node is created and proposed.
     async fn on_propose(&mut self, shard: ShardId, payload_id: PayloadId) -> Result<(), HotStuffError> {
         let epoch = self.epoch_manager.current_epoch().await?;
 
-        let leaf_node;
         let qc;
         let actual_payload;
-        let leaf;
-        let leaf_height;
+        let parent_leaf_node;
         {
             let tx = self.shard_store.create_tx()?;
 
-            (leaf, leaf_height) = tx.get_leaf_node(shard).map_err(|e| e.into())?;
+            // get_leaf_node returns the leaf node if it exists, otherwise it returns the genesis hash and height
+            parent_leaf_node = tx.get_leaf_node(shard).map_err(|e| e.into())?;
             qc = tx.get_high_qc_for(shard).map_err(|e| e.into())?;
             actual_payload = tx.get_payload(&payload_id).map_err(|e| e.into())?;
         }
@@ -235,10 +264,11 @@ where
             .flat_map(|allocation| allocation.committee.map(|c| c.members).unwrap_or_default())
             .collect();
 
+        let leaf_node;
         {
             let mut tx = self.shard_store.create_tx()?;
 
-            let parent = tx.get_node(&leaf).map_err(|e| e.into())?;
+            let parent = tx.get_node(parent_leaf_node.hash()).map_err(|e| e.into())?;
             let payload_height = if parent.payload_id() == payload_id {
                 parent.payload_height() + NodeHeight(1)
             } else {
@@ -270,6 +300,7 @@ where
                 // No need to continue, we have already committed this node.
                 return Ok(());
             }
+
             let (change, claim) = actual_payload
                 .objects_for_shard(shard)
                 .ok_or(HotStuffError::ShardHasNoData)?;
@@ -278,26 +309,17 @@ where
                 return Err(HotStuffError::ClaimIsNotValid);
             }
             let local_pledge = tx
-                .pledge_object(shard, payload_id, change, leaf_height)
+                .pledge_object(shard, payload_id, change, parent_leaf_node.height())
                 .map_err(|e| e.into())?;
-            info!(
-                target: LOG_TARGET,
-                "🔥 PLEDGE: {}",
-                serde_json::to_string(&local_pledge).unwrap(),
-            );
+
             leaf_node = self.create_leaf(
-                leaf,
+                parent_leaf_node,
                 shard,
                 payload_id,
-                if payload_height.as_u64() == 0 {
-                    Some(actual_payload)
-                } else {
-                    None
-                },
+                actual_payload,
                 qc,
                 epoch,
                 self.identity.clone(),
-                NodeHeight(leaf_height.0 + 1),
                 payload_height,
                 Some(local_pledge),
             );
@@ -306,32 +328,299 @@ where
                 .map_err(|e| HotStuffError::UpdateLeafNode(e.to_string()))?;
             tx.commit().map_err(|e| e.into())?;
         }
+
         self.tx_broadcast
-            .send((HotStuffMessage::generic(leaf_node.clone(), shard), members))
+            .send((HotStuffMessage::new_proposal(leaf_node, shard), members))
             .await
             .unwrap();
+
         Ok(())
+    }
+
+    /// Step 5: A replica receives a Proposal from the leader. The replica validates the proposal, executes the payload
+    /// and sends a vote.
+    #[allow(clippy::too_many_lines)]
+    async fn on_receive_proposal(
+        &mut self,
+        from: TAddr,
+        node: HotStuffTreeNode<TAddr, TPayload>,
+    ) -> Result<(), HotStuffError> {
+        info!(
+            target: LOG_TARGET,
+            "🔥 Receive PROPOSAL for payload {} and shard {} from {}",
+            node.payload_id(),
+            node.shard(),
+            from,
+        );
+
+        // TODO: validate message from leader
+        // TODO: Validate I am processing this shard
+        // TODO: Validate the epoch is still valid
+        self.validate_proposal(&node)?;
+
+        let shard = node.shard();
+        let payload = if let Some(node_payload) = node.payload() {
+            let mut tx = self.shard_store.create_tx()?;
+            tx.set_payload(node_payload.clone()).map_err(|e| e.into())?;
+            tx.commit().map_err(|e| e.into())?;
+            node_payload.clone()
+        } else {
+            let tx = self.shard_store.create_tx()?;
+            tx.get_payload(&node.payload_id()).map_err(|e| e.into())?
+        };
+        let involved_shards = payload.involved_shards();
+        // Find the shards that this node is responsible for out of all the shards involved
+        let local_shards = self
+            .epoch_manager
+            .filter_to_local_shards(node.epoch(), &self.identity, &involved_shards)
+            .await?;
+
+        let mut votes_to_send = vec![];
+
+        {
+            let mut tx = self.shard_store.create_tx()?;
+            tx.save_node(node.clone()).map_err(|e| e.into())?;
+            let v_height = tx.get_last_voted_height(shard).map_err(|e| e.into())?;
+            // TODO: can also use the QC and committee to justify this....
+            let (locked_node, locked_height) = tx.get_locked_node_hash_and_height(shard).map_err(|e| e.into())?;
+            if node.height() <= v_height ||
+                (node.parent() != &locked_node && node.justify().local_node_height() <= locked_height)
+            {
+                error!(target: LOG_TARGET, "Received a proposal that is not valid");
+                tx.commit().map_err(|e| e.into())?;
+                return Ok(());
+            }
+
+            tx.save_leader_proposals(shard, node.payload_id(), node.payload_height(), node.clone())
+                .map_err(|e| e.into())?;
+
+            let mut leader_proposals = vec![];
+            for s in &involved_shards {
+                if let Some(leader_proposal) = tx
+                    .get_leader_proposals(node.payload_id(), node.payload_height(), *s)
+                    .map_err(|e| e.into())?
+                {
+                    leader_proposals.push(ShardVote {
+                        shard_id: *s,
+                        node_hash: *leader_proposal.hash(),
+                        pledge: leader_proposal.local_pledge().cloned(),
+                    });
+                } else {
+                    break;
+                }
+            }
+            if leader_proposals.len() == involved_shards.len() {
+                // Execute the payload!
+                let shard_pledges: HashMap<ShardId, Option<ObjectPledge>> = leader_proposals
+                    .iter()
+                    .map(|s| (s.shard_id, s.pledge.clone()))
+                    .collect();
+
+                // Execute for node 0. The rest we accept by default
+                let finalize_result = if node.payload_height() == NodeHeight(0) {
+                    let mut finalize_result = self.execute(shard_pledges.clone(), payload)?;
+                    // validate that correct objects have been pledged.
+                    let changes = extract_changes(node.payload_id(), &finalize_result)?;
+                    // Change the vote if we do not have all the objects pledged
+                    Self::validate_pledges(&shard_pledges, &mut finalize_result, changes);
+                    finalize_result
+                } else {
+                    FinalizeResult::new(
+                        node.payload_id().into_array().into(),
+                        vec![],
+                        TransactionResult::Accept(Default::default()),
+                    )
+                };
+
+                // It may happen that we are involved in more than one committee, in which case send the votes to
+                // each leader.
+                for local_shard in local_shards {
+                    dbg!("Can vote on the message");
+                    let local_node = tx
+                        .get_leader_proposals(node.payload_id(), node.payload_height(), local_shard)
+                        .map_err(|e| e.into())?
+                        .unwrap();
+
+                    tx.set_last_voted_height(local_shard, local_node.height())
+                        .map_err(|e| e.into())?;
+
+                    let _signature = self.sign(node.hash(), shard);
+
+                    let vote_msg = self.decide(
+                        *local_node.hash(),
+                        local_shard,
+                        leader_proposals.clone(),
+                        &finalize_result,
+                    )?;
+
+                    votes_to_send.push((vote_msg, local_node.proposed_by().clone()));
+                }
+            } else {
+                info!(
+                    target: LOG_TARGET,
+                    "🔥 Not enough votes to vote on the message, votes: {}, involved_shards: {}",
+                    leader_proposals.len(),
+                    involved_shards.len()
+                );
+            }
+            tx.commit().map_err(|e| e.into())?;
+        }
+
+        for msg in votes_to_send {
+            self.tx_vote_message
+                .send(msg)
+                .await
+                .map_err(|_| HotStuffError::SendError)?;
+        }
+        self.update_nodes(node.clone()).await?;
+        Ok(())
+    }
+
+    /// Step 6: The leader receives votes from the local shard, and once it has enough ($n - f$) votes, it commits a
+    /// high QC and sends the next round of proposals.
+    async fn on_receive_vote(&mut self, from: TAddr, msg: VoteMessage) -> Result<(), HotStuffError> {
+        info!(
+            target: LOG_TARGET,
+            "🔥 Receive {:?} VOTE for shard {} from {}",
+            msg.decision(),
+            msg.shard(),
+            from,
+        );
+        // TODO: Only do this if you're the leader
+        let mut on_beat_future = None;
+        let node;
+        {
+            let tx = self.shard_store.create_tx()?;
+            if tx
+                .has_vote_for(&from, msg.local_node_hash(), msg.shard())
+                .map_err(|e| e.into())?
+            {
+                return Ok(());
+            }
+
+            node = tx.get_node(&msg.local_node_hash()).map_err(|e| e.into())?;
+
+            if node.proposed_by() != &self.identity {
+                return Err(HotStuffError::NotTheLeader);
+            }
+        }
+
+        let valid_committee = self.epoch_manager.get_committee(node.epoch(), node.shard()).await?;
+        {
+            let mut tx = self.shard_store.create_tx()?;
+            if !valid_committee.contains(&from) {
+                return Err(HotStuffError::ReceivedMessageFromNonCommitteeMember);
+            }
+
+            let total_votes = tx
+                .save_received_vote_for(from, msg.local_node_hash(), msg.shard(), msg.clone())
+                .map_err(|e| e.into())?;
+            // Check for consensus
+            dbg!(&valid_committee);
+            dbg!(total_votes);
+            if total_votes >= valid_committee.consensus_threshold() {
+                let mut different_votes = HashMap::new();
+                for vote in tx
+                    .get_received_votes_for(msg.local_node_hash(), msg.shard())
+                    .map_err(|e| e.into())?
+                {
+                    let entry = different_votes.entry(vote.get_all_nodes_hash()).or_insert(vec![]);
+                    entry.push(vote);
+                }
+
+                // Check that there is sufficient votes for a single set of nodes that we can use to generate a qc
+                for (_hash, votes) in different_votes {
+                    if votes.len() >= valid_committee.consensus_threshold() {
+                        let signatures = votes.iter().map(|v| v.signature().clone()).collect();
+
+                        let main_vote = votes.get(0).unwrap();
+
+                        let qc = QuorumCertificate::new(
+                            node.payload_id(),
+                            node.payload_height(),
+                            main_vote.local_node_hash(),
+                            node.height(),
+                            node.shard(),
+                            node.epoch(),
+                            main_vote.decision(),
+                            main_vote.all_shard_nodes().clone(),
+                            signatures,
+                        );
+                        tx.update_high_qc(node.proposed_by().clone(), msg.shard(), qc)
+                            .map_err(|e| e.into())?;
+
+                        // Should be the pace maker actually
+                        on_beat_future = Some(self.on_beat(msg.shard(), node.payload_id()));
+                        break;
+                    }
+                }
+            }
+
+            // commit the transaction
+            tx.commit().map_err(|e| e.into())?;
+            // drop tx
+        }
+
+        if let Some(on_beat) = on_beat_future {
+            on_beat.await?;
+        }
+        Ok(())
+    }
+
+    /// A pacemaker beat has been triggered for a payload. If the leader has received enough NewViews, a Proposal is
+    /// sent to replicas.
+    async fn on_beat(&mut self, shard: ShardId, payload_id: PayloadId) -> Result<(), HotStuffError> {
+        // TODO: the leader is only known after the leaf is determined
+        // TODO: Review if this is correct. The epoch should stay the same for all epochs
+
+        let epoch = self.epoch_manager.current_epoch().await?;
+        let committee = self.epoch_manager.get_committee(epoch, shard).await?;
+        if self.is_leader(payload_id, shard, &committee)? {
+            let min_required_new_views = committee.consensus_threshold();
+            let num_new_views = self.count_new_views_for(shard)?;
+            if num_new_views >= min_required_new_views {
+                self.on_propose(shard, payload_id).await?;
+            } else {
+                info!(
+                    target: LOG_TARGET,
+                    "🔥 Waiting for more NEWVIEW messages ({}/{})", num_new_views, min_required_new_views
+                );
+            }
+        }
+        Ok(())
+    }
+
+    fn count_new_views_for(&self, shard: ShardId) -> Result<usize, HotStuffError> {
+        let tx = self.shard_store.create_tx()?;
+        let count = tx.count_high_qc_for(shard).map_err(|e| e.into())?;
+        Ok(count)
     }
 
     fn create_leaf(
         &self,
-        parent: TreeNodeHash,
+        parent: LeafNode,
         shard: ShardId,
         payload_id: PayloadId,
-        payload: Option<TPayload>,
+        payload: TPayload,
         qc: QuorumCertificate,
         epoch: Epoch,
         leader: TAddr,
-        height: NodeHeight,
         payload_height: NodeHeight,
         local_pledge: Option<ObjectPledge>,
     ) -> HotStuffTreeNode<TAddr, TPayload> {
+        // We only need to send the payload for the first round, otherwise we choose not to include it to reduce message
+        // size.
+        let maybe_payload = if payload_height.as_u64() == 0 {
+            Some(payload)
+        } else {
+            None
+        };
         HotStuffTreeNode::new(
-            parent,
+            *parent.hash(),
             shard,
-            height,
+            parent.height() + NodeHeight(1),
             payload_id,
-            payload,
+            maybe_payload,
             payload_height,
             local_pledge,
             epoch,
@@ -370,43 +659,10 @@ where
         Ok(())
     }
 
-    async fn on_next_sync_view(&mut self, payload: TPayload, shard: ShardId) -> Result<(), HotStuffError> {
-        info!(
-            target: LOG_TARGET,
-            "🔥 Send NEWVIEW for payload {} and shard {}",
-            payload.to_id(),
-            shard
-        );
-        let payload_id = payload.to_id();
-        debug!(target: LOG_TARGET, "on_next_sync_view started: {:?}", payload_id);
-
-        let new_view;
-        {
-            let mut tx = self.shard_store.create_tx()?;
-
-            let high_qc = tx.get_high_qc_for(shard).map_err(|e| e.into())?;
-
-            //  Save the payload, because we will need it when the proposal comes back
-            tx.set_payload(payload.clone()).map_err(|e| e.into())?;
-            tx.commit().map_err(|e| e.into())?;
-            new_view = HotStuffMessage::new_view(high_qc, shard, Some(payload));
-        }
-
-        let epoch = self.epoch_manager.current_epoch().await?;
-        let committee = self.epoch_manager.get_committee(epoch, shard).await?;
-        let leader = self.leader_strategy.get_leader(&committee, payload_id, shard, 0);
-        debug!(
-            target: LOG_TARGET,
-            "Determined leader for this payload is: {:?}, sending new view", leader
-        );
-
-        self.tx_leader
-            .send((leader.clone(), new_view))
-            .await
-            .map_err(|_| HotStuffError::SendError)?;
-        Ok(())
-    }
-
+    /// Performs the requisite state updates for a given tree node.
+    /// If the tree node is below height 2, nothing needs to happen.
+    /// If the tree node is at height 2, we lock the parent node.
+    /// And if at height 3 we execute and commit the state.
     async fn update_nodes(&mut self, node: HotStuffTreeNode<TAddr, TPayload>) -> Result<(), HotStuffError> {
         let shard = node.shard();
 
@@ -417,7 +673,7 @@ where
 
         let mut tx = self.shard_store.create_tx()?;
         tx.update_high_qc(node.proposed_by().clone(), shard, node.justify().clone())
-            .map_err(|e| HotStuffError::UpdateHighQcError(e.to_string()))?;
+            .map_err(|e| e.into())?;
 
         let b_two = tx.get_node(&node.justify().local_node_hash()).map_err(|e| e.into())?;
         if b_two.justify().local_node_hash() == TreeNodeHash::zero() {
@@ -449,9 +705,8 @@ where
                 "payload changeset: {}",
                 serde_json::to_string(&changes).unwrap()
             );
-
             let qc = node.justify().clone();
-            self.on_commit(node, &changes, &mut tx)?;
+            self.on_commit(&node, &changes, &mut tx)?;
             self.publish_event(HotStuffEvent::OnFinalized(Box::new(qc), finalize_result));
         }
         tx.commit().map_err(|e| e.into())?;
@@ -459,9 +714,10 @@ where
         Ok(())
     }
 
+    /// Commits the changeset and node including all parent nodes if not already done so.
     fn on_commit(
         &mut self,
-        node: HotStuffTreeNode<TAddr, TPayload>,
+        node: &HotStuffTreeNode<TAddr, TPayload>,
         changes: &HashMap<ShardId, Vec<SubstateState>>,
         tx: &mut TShardStore::Transaction,
     ) -> Result<(), HotStuffError> {
@@ -476,15 +732,14 @@ where
 
             if node.parent() != &TreeNodeHash::zero() {
                 let parent = tx.get_node(node.parent()).map_err(|e| e.into())?;
-                // TODO: this is not correct, the parent node has different changes
-                // It should probably read the changes from the justify....
-                self.on_commit(parent, changes, tx)?;
+                let changes = extract_changes_from_justify(parent.justify())?;
+                self.on_commit(&parent, &changes, tx)?;
             }
 
             if node.justify().payload_height() == NodeHeight(self.consensus_constants.hotstuff_rounds - 2) &&
-                node.justify().decision() == &QuorumDecision::Accept
+                *node.justify().decision() == QuorumDecision::Accept
             {
-                tx.save_substate_changes(changes, &node).map_err(|e| e.into())?;
+                tx.save_substate_changes(changes, node).map_err(|e| e.into())?;
             }
             tx.set_last_executed_height(shard, node.height())
                 .map_err(|e| e.into())?;
@@ -497,6 +752,7 @@ where
         shard_pledges: HashMap<ShardId, Option<ObjectPledge>>,
         payload: TPayload,
     ) -> Result<FinalizeResult, HotStuffError> {
+        info!(target: LOG_TARGET, "🔥 Executing payload: {}", payload.to_id());
         let finalize = self.payload_processor.process_payload(payload, shard_pledges)?;
         Ok(finalize)
     }
@@ -517,134 +773,6 @@ where
         } else {
             Err(HotStuffError::NodePayloadDoesNotMatchJustifyPayload)
         }
-    }
-
-    // TODO: needs some explanation of the process in docs here
-    async fn on_receive_proposal(
-        &mut self,
-        from: TAddr,
-        node: HotStuffTreeNode<TAddr, TPayload>,
-    ) -> Result<(), HotStuffError> {
-        info!(
-            target: LOG_TARGET,
-            "🔥 Receive PROPOSAL for payload {} and shard {} from {}",
-            node.payload_id(),
-            node.shard(),
-            from,
-        );
-
-        // TODO: validate message from leader
-        // TODO: Validate I am processing this shard
-        // TODO: Validate the epoch is still valid
-        self.validate_proposal(&node)?;
-
-        let shard = node.shard();
-        let payload = if let Some(node_payload) = node.payload() {
-            let mut tx = self.shard_store.create_tx()?;
-            tx.set_payload(node_payload.clone()).map_err(|e| e.into())?;
-            tx.commit().map_err(|e| e.into())?;
-            node_payload.clone()
-        } else {
-            let tx = self.shard_store.create_tx()?;
-            tx.get_payload(&node.payload_id()).map_err(|e| e.into())?
-        };
-        let involved_shards = payload.involved_shards();
-        let local_shards = self
-            .epoch_manager
-            .filter_to_local_shards(node.epoch(), &self.identity, &involved_shards)
-            .await?;
-
-        let mut votes_to_send = vec![];
-
-        {
-            let mut tx = self.shard_store.create_tx()?;
-            tx.save_node(node.clone()).map_err(|e| e.into())?;
-            let v_height = tx.get_last_voted_height(shard).map_err(|e| e.into())?;
-            // TODO: can also use the QC and committee to justify this....
-            let (locked_node, locked_height) = tx.get_locked_node_hash_and_height(shard).map_err(|e| e.into())?;
-            if node.height() > v_height &&
-                (node.parent() == &locked_node || node.justify().local_node_height() > locked_height)
-            {
-                tx.save_leader_proposals(shard, node.payload_id(), node.payload_height(), node.clone())
-                    .map_err(|e| e.into())?;
-
-                let mut leader_proposals = vec![];
-                for s in &involved_shards {
-                    if let Some(leader_proposal) = tx
-                        .get_leader_proposals(node.payload_id(), node.payload_height(), *s)
-                        .map_err(|e| e.into())?
-                    {
-                        leader_proposals.push(ShardVote {
-                            shard_id: *s,
-                            node_hash: *leader_proposal.hash(),
-                            pledge: leader_proposal.local_pledge().cloned(),
-                        });
-                    } else {
-                        break;
-                    }
-                }
-                if leader_proposals.len() == involved_shards.len() {
-                    // Execute the payload!
-                    let shard_pledges: HashMap<ShardId, Option<ObjectPledge>> = leader_proposals
-                        .iter()
-                        .map(|s| (s.shard_id, s.pledge.clone()))
-                        .collect();
-                    let mut finalize_result = self.execute(shard_pledges.clone(), payload)?;
-
-                    // validate that correct objects have been pledged.
-                    let changes = extract_changes(node.payload_id(), &finalize_result)?;
-
-                    // Change the vote if we do not have all the objects pledged
-                    Self::validate_pledges(&shard_pledges, &mut finalize_result, changes);
-
-                    // it may happen that we are involved in more than one committee, in which case send the votes to
-                    // each leader.
-
-                    for local_shard in local_shards {
-                        dbg!("Can vote on the message");
-                        let local_node = tx
-                            .get_leader_proposals(node.payload_id(), node.payload_height(), local_shard)
-                            .map_err(|e| e.into())?
-                            .unwrap();
-
-                        tx.set_last_voted_height(local_shard, local_node.height())
-                            .map_err(|e| e.into())?;
-
-                        let _signature = self.sign(node.hash(), shard);
-
-                        let vote_msg = self.decide(
-                            *local_node.hash(),
-                            local_shard,
-                            leader_proposals.clone(),
-                            &finalize_result,
-                        )?;
-
-                        votes_to_send.push((vote_msg, local_node.proposed_by().clone()));
-                    }
-
-                    // finalize_result = Some(execution_result);
-                } else {
-                    info!(
-                        target: LOG_TARGET,
-                        "🔥 Not enough votes to vote on the message, votes: {}, involved_shards: {}",
-                        leader_proposals.len(),
-                        involved_shards.len()
-                    );
-                }
-            } else {
-                error!(target: LOG_TARGET, "Received a proposal that is not valid");
-            }
-            tx.commit().map_err(|e| e.into())?;
-        }
-
-        for res in votes_to_send {
-            self.tx_vote_message
-                .send(res)
-                .await
-                .map_err(|_| HotStuffError::SendError)?;
-        }
-        self.update_nodes(node.clone()).await?;
-        Ok(())
     }
 
     fn validate_pledges(
@@ -757,96 +885,6 @@ where
         Ok(vote_msg)
     }
 
-    // The leader receives votes from his local shard, and forwards it to all other shards
-    async fn on_receive_vote(&mut self, from: TAddr, msg: VoteMessage) -> Result<(), HotStuffError> {
-        info!(
-            target: LOG_TARGET,
-            "🔥 Receive {:?} VOTE for shard {} from {}",
-            msg.decision(),
-            msg.shard(),
-            from,
-        );
-        // TODO: Only do this if you're the leader
-        let mut on_beat_future = None;
-        let node;
-        {
-            let tx = self.shard_store.create_tx()?;
-            if tx
-                .has_vote_for(&from, msg.local_node_hash(), msg.shard())
-                .map_err(|e| e.into())?
-            {
-                return Ok(());
-            }
-
-            node = tx.get_node(&msg.local_node_hash()).map_err(|e| e.into())?;
-
-            if node.proposed_by() != &self.identity {
-                return Err(HotStuffError::NotTheLeader);
-            }
-        }
-
-        let valid_committee = self.epoch_manager.get_committee(node.epoch(), node.shard()).await?;
-        {
-            let mut tx = self.shard_store.create_tx()?;
-            if !valid_committee.contains(&from) {
-                return Err(HotStuffError::ReceivedMessageFromNonCommitteeMember);
-            }
-
-            let total_votes = tx
-                .save_received_vote_for(from, msg.local_node_hash(), msg.shard(), msg.clone())
-                .map_err(|e| e.into())?;
-            // Check for consensus
-            dbg!(&valid_committee);
-            dbg!(total_votes);
-            if total_votes >= valid_committee.consensus_threshold() {
-                let mut different_votes = HashMap::new();
-                for vote in tx
-                    .get_received_votes_for(msg.local_node_hash(), msg.shard())
-                    .map_err(|e| e.into())?
-                {
-                    let entry = different_votes.entry(vote.get_all_nodes_hash()).or_insert(vec![]);
-                    entry.push(vote);
-                }
-
-                // Check that there is sufficient votes for a single set of nodes that we can use to generate a qc
-                for (_hash, votes) in different_votes {
-                    if votes.len() >= valid_committee.consensus_threshold() {
-                        let signatures = votes.iter().map(|v| v.signature().clone()).collect();
-
-                        let main_vote = votes.get(0).unwrap();
-
-                        let qc = QuorumCertificate::new(
-                            node.payload_id(),
-                            node.payload_height(),
-                            main_vote.local_node_hash(),
-                            node.height(),
-                            node.shard(),
-                            node.epoch(),
-                            main_vote.decision(),
-                            main_vote.all_shard_nodes().clone(),
-                            signatures,
-                        );
-                        tx.update_high_qc(node.proposed_by().clone(), msg.shard(), qc)
-                            .map_err(|e| HotStuffError::UpdateHighQcError(e.to_string()))?; // TODO: is there a better alternative to handle error?
-
-                        // Should be the pace maker actually
-                        on_beat_future = Some(self.on_beat(msg.shard(), node.payload_id()));
-                        break;
-                    }
-                }
-            }
-
-            // commit the transaction
-            tx.commit().map_err(|e| e.into())?;
-            // drop tx
-        }
-
-        if let Some(on_beat) = on_beat_future {
-            on_beat.await?;
-        }
-        Ok(())
-    }
-
     async fn on_new_hs_message(
         &mut self,
         from: TAddr,
@@ -862,8 +900,8 @@ where
                     self.on_beat(msg.shard(), payload.to_id()).await?;
                 }
             },
-            HotStuffMessageType::Generic => {
-                let node = msg.node().ok_or(HotStuffError::RecvGenericMessageWithoutNode)?;
+            HotStuffMessageType::Proposal => {
+                let node = msg.node().ok_or(HotStuffError::RecvProposalMessageWithoutNode)?;
                 self.on_receive_proposal(from, node.clone()).await?;
             },
         }
@@ -936,6 +974,22 @@ fn extract_changes(
             }
         },
         TransactionResult::Reject(ref reject) => return Err(HotStuffError::TransactionRejected(reject.reason.clone())),
+    }
+
+    Ok(changes)
+}
+
+fn extract_changes_from_justify(
+    justify: &QuorumCertificate,
+) -> Result<HashMap<ShardId, Vec<SubstateState>>, HotStuffError> {
+    let mut changes = HashMap::new();
+    for a in justify.all_shard_nodes() {
+        if let Some(ref p) = a.pledge {
+            changes
+                .entry(p.shard_id)
+                .or_insert(vec![])
+                .push(p.current_state.clone());
+        }
     }
 
     Ok(changes)

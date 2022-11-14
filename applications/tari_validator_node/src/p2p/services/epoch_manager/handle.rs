@@ -153,6 +153,8 @@ impl EpochManager<CommsPublicKey> for EpochManagerHandle {
         rx.await.map_err(|_| EpochManagerError::ReceiveError)?
     }
 
+    /// Filters out from the available_shards, returning the ShardIds for committees for each available_shard that
+    /// `for_addr` is part of.
     async fn filter_to_local_shards(
         &self,
         epoch: Epoch,

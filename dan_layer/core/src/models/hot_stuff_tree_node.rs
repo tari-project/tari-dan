@@ -37,16 +37,16 @@ pub struct HotStuffTreeNode<TAddr, TPayload> {
     parent: TreeNodeHash,
     shard: ShardId,
     height: NodeHeight,
-    // The payload that the node is proposing
+    /// The payload that the node is proposing
     payload_id: PayloadId,
     payload: Option<TPayload>,
-    // How far in the consensus this payload is. It should be 4 in order to be committed.
+    /// How far in the consensus this payload is. It should be 4 in order to be committed.
     payload_height: NodeHeight,
     local_pledge: Option<ObjectPledge>,
     epoch: Epoch,
+    justify: QuorumCertificate,
     // Mostly used for debugging
     proposed_by: TAddr,
-    justify: QuorumCertificate,
 }
 
 impl<TAddr: NodeAddressable, TPayload: Payload> HotStuffTreeNode<TAddr, TPayload> {
@@ -113,8 +113,7 @@ impl<TAddr: NodeAddressable, TPayload: Payload> HotStuffTreeNode<TAddr, TPayload
         //     acc.extend_from_slice(substate.as_bytes())
         // }));
 
-        let result = result.finalize_fixed();
-        result.into()
+        result.finalize_fixed().into()
     }
 
     pub fn hash(&self) -> &TreeNodeHash {
@@ -137,10 +136,12 @@ impl<TAddr: NodeAddressable, TPayload: Payload> HotStuffTreeNode<TAddr, TPayload
         self.payload.as_ref()
     }
 
+    /// The payload height corresponds to the round number.
     pub fn payload_height(&self) -> NodeHeight {
         self.payload_height
     }
 
+    /// The quorum certificate for this node
     pub fn justify(&self) -> &QuorumCertificate {
         &self.justify
     }

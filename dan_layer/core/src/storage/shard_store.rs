@@ -29,6 +29,7 @@ use crate::{
     models::{
         vote_message::VoteMessage,
         HotStuffTreeNode,
+        LeafNode,
         NodeHeight,
         ObjectPledge,
         Payload,
@@ -75,7 +76,8 @@ pub trait ShardStoreTransaction<TAddr: NodeAddressable, TPayload: Payload> {
     fn count_high_qc_for(&self, shard_id: ShardId) -> Result<usize, Self::Error>;
     fn update_high_qc(&mut self, from: TAddr, shard: ShardId, qc: QuorumCertificate) -> Result<(), Self::Error>;
     fn set_payload(&mut self, payload: TPayload) -> Result<(), Self::Error>;
-    fn get_leaf_node(&self, shard: ShardId) -> Result<(TreeNodeHash, NodeHeight), Self::Error>;
+    /// Returns the current leaf node for the shard, or the genesis node, height are returned.
+    fn get_leaf_node(&self, shard: ShardId) -> Result<LeafNode, Self::Error>;
     fn update_leaf_node(&mut self, shard: ShardId, node: TreeNodeHash, height: NodeHeight) -> Result<(), Self::Error>;
     fn get_high_qc_for(&self, shard: ShardId) -> Result<QuorumCertificate, Self::Error>;
     fn get_payload(&self, payload_id: &PayloadId) -> Result<TPayload, Self::Error>;

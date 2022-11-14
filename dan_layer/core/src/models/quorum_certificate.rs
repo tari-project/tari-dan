@@ -143,6 +143,7 @@ impl QuorumCertificate {
         self.payload_height
     }
 
+    /// The locally stable hash of the node
     pub fn local_node_hash(&self) -> TreeNodeHash {
         self.local_node_hash
     }

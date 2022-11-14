@@ -20,11 +20,7 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use std::{
-    collections::HashMap,
-    convert::{TryFrom, TryInto},
-    path::PathBuf,
-};
+use std::{collections::HashMap, convert::TryFrom, path::PathBuf};
 
 use diesel::{
     prelude::*,
@@ -41,6 +37,7 @@ use tari_dan_core::{
     models::{
         vote_message::VoteMessage,
         HotStuffTreeNode,
+        LeafNode,
         NodeHeight,
         ObjectPledge,
         Payload,
@@ -67,7 +64,7 @@ use crate::{
         last_executed_height::{LastExecutedHeight, NewLastExecutedHeight},
         last_voted_height::{LastVotedHeight, NewLastVotedHeight},
         leader_proposals::{LeaderProposal, NewLeaderProposal},
-        leaf_nodes::{LeafNode, NewLeafNode},
+        leaf_nodes::{LeafNode as DbLeafNode, NewLeafNode},
         lock_node_and_height::{LockNodeAndHeight, NewLockNodeAndHeight},
         node::{NewNode, Node},
         payload::{NewPayload, Payload as SqlPayload},
@@ -200,6 +197,7 @@ impl SqliteShardStoreTransaction {
                     "Down" => Ok(SubstateState::Down {
                         deleted_by: PayloadId::try_from(s.deleted_by_payload_id.unwrap_or_default())?,
                     }),
+                    "DoesNotExist" => Ok(SubstateState::DoesNotExist),
                     _ => Err(StorageError::InvalidSubStateType {
                         substate_type: s.substate_type,
                     }),
@@ -314,9 +312,9 @@ impl ShardStoreTransaction<PublicKey, TariDanPayload> for SqliteShardStoreTransa
         Ok(())
     }
 
-    fn get_leaf_node(&self, shard: ShardId) -> Result<(TreeNodeHash, NodeHeight), Self::Error> {
+    fn get_leaf_node(&self, shard: ShardId) -> Result<LeafNode, Self::Error> {
         use crate::schema::leaf_nodes::{node_height, shard_id};
-        let leaf_node: Option<LeafNode> = leaf_nodes
+        let leaf_node: Option<DbLeafNode> = leaf_nodes
             .filter(shard_id.eq(Vec::from(shard.as_bytes())))
             .order_by(node_height.desc())
             .first(&self.connection)
@@ -324,30 +322,23 @@ impl ShardStoreTransaction<PublicKey, TariDanPayload> for SqliteShardStoreTransa
             .map_err(|e| Self::Error::QueryError {
                 reason: format!("Get leaf node: {}", e),
             })?;
+
         if let Some(leaf_node) = leaf_node {
-            Ok((
+            Ok(LeafNode::new(
                 TreeNodeHash::try_from(leaf_node.tree_node_hash).unwrap(),
                 NodeHeight(leaf_node.node_height as u64),
             ))
         } else {
             // if no leaves, return genesis
-            Ok((TreeNodeHash::zero(), NodeHeight(0)))
+            Ok(LeafNode::genesis())
         }
     }
 
-    fn update_leaf_node(
-        &mut self,
-        shard: tari_dan_common_types::ShardId,
-        node: TreeNodeHash,
-        height: NodeHeight,
-    ) -> Result<(), Self::Error> {
+    fn update_leaf_node(&mut self, shard: ShardId, node: TreeNodeHash, height: NodeHeight) -> Result<(), Self::Error> {
         let shard = Vec::from(shard.0);
         let tree_node_hash = Vec::from(node.as_bytes());
-        let node_height = height
-            .0
-            .try_into()
-            .map_err(|_| Self::Error::InvalidIntegerCast)
-            .unwrap();
+        // This cast is lossless, it does not matter if the height wraps to a negative number
+        let node_height = height.as_u64() as i64;
 
         let new_row = NewLeafNode {
             shard_id: shard,
@@ -414,7 +405,7 @@ impl ShardStoreTransaction<PublicKey, TariDanPayload> for SqliteShardStoreTransa
                 data: payload.instructions.to_string(),
             })?;
 
-        let fee: u64 = payload.fee.try_into().map_err(|_| Self::Error::InvalidIntegerCast)?;
+        let fee = payload.fee as u64;
 
         let public_nonce =
             PublicKey::from_vec(&payload.public_nonce).map_err(Self::Error::InvalidByteArrayConversion)?;
@@ -422,7 +413,7 @@ impl ShardStoreTransaction<PublicKey, TariDanPayload> for SqliteShardStoreTransa
             PrivateKey::from_bytes(payload.scalar.as_slice()).map_err(Self::Error::InvalidByteArrayConversion)?;
 
         let signature: InstructionSignature = InstructionSignature::try_from(Signature::new(public_nonce, signature))
-            .map_err(|e| Self::Error::InvalidTypeCasting {
+            .map_err(|e| StorageError::InvalidTypeCasting {
             reason: format!("Get payload error: {}", e),
         })?;
 
@@ -462,15 +453,12 @@ impl ShardStoreTransaction<PublicKey, TariDanPayload> for SqliteShardStoreTransa
             parent.copy_from_slice(node.parent_node_hash.as_slice());
 
             let parent = TreeNodeHash::from(parent);
-            let hgt: u64 = node.height.try_into().map_err(|_| Self::Error::InvalidIntegerCast)?;
+            let hgt = node.height as u64;
 
             let shard = ShardId::from_bytes(&node.shard)?;
             let payload = PayloadId::try_from(node.payload_id)?;
 
-            let payload_hgt: u64 = node
-                .payload_height
-                .try_into()
-                .map_err(|_| Self::Error::InvalidIntegerCast)?;
+            let payload_hgt = node.payload_height as u64;
             let local_pledge: Option<ObjectPledge> =
                 serde_json::from_str(&node.local_pledges).map_err(|source| StorageError::SerdeJson {
                     source,
@@ -479,7 +467,7 @@ impl ShardStoreTransaction<PublicKey, TariDanPayload> for SqliteShardStoreTransa
                     data: "local_pledges".to_string(),
                 })?;
 
-            let epoch: u64 = node.epoch.try_into().map_err(|_| Self::Error::InvalidIntegerCast)?;
+            let epoch = node.epoch as u64;
             let proposed_by =
                 PublicKey::from_vec(&node.proposed_by).map_err(Self::Error::InvalidByteArrayConversion)?;
 
@@ -514,11 +502,7 @@ impl ShardStoreTransaction<PublicKey, TariDanPayload> for SqliteShardStoreTransa
         let node_hash = Vec::from(node.hash().as_bytes());
         let parent_node_hash = Vec::from(node.parent().as_bytes());
 
-        let height = node
-            .height()
-            .0
-            .try_into()
-            .map_err(|_| Self::Error::InvalidIntegerCast)?;
+        let height = node.height().as_u64() as i64;
         let shard = Vec::from(node.shard().as_bytes());
 
         let payload_id = Vec::from(node.payload_id().as_bytes());
@@ -582,15 +566,9 @@ impl ShardStoreTransaction<PublicKey, TariDanPayload> for SqliteShardStoreTransa
             })?;
 
         if let Some(data) = lock_node_hash_and_height {
-            let mut tree_node_hash = [0u8; 32];
-            tree_node_hash.copy_from_slice(data.tree_node_hash.as_slice());
-            let tree_node_hash = TreeNodeHash::from(tree_node_hash);
-
-            let height: u64 = data
-                .node_height
-                .try_into()
-                .map_err(|_| Self::Error::InvalidIntegerCast)?;
-
+            let tree_node_hash = TreeNodeHash::try_from(data.tree_node_hash).unwrap();
+            // This cast is lossless as i64 and u64 are both 64-bits
+            let height = data.node_height as u64;
             Ok((tree_node_hash, NodeHeight(height)))
         } else {
             Ok((TreeNodeHash::zero(), NodeHeight(0)))
@@ -729,10 +707,7 @@ impl ShardStoreTransaction<PublicKey, TariDanPayload> for SqliteShardStoreTransa
             })?;
 
         if let Some(last_exec_height) = last_executed_height {
-            let height = last_exec_height
-                .node_height
-                .try_into()
-                .map_err(|_| Self::Error::InvalidIntegerCast)?;
+            let height = last_exec_height.node_height as u64;
             Ok(NodeHeight(height))
         } else {
             Ok(NodeHeight(0))
@@ -927,6 +902,7 @@ impl ShardStoreTransaction<PublicKey, TariDanPayload> for SqliteShardStoreTransa
                         "Down" => Ok(SubstateState::Down {
                             deleted_by: PayloadId::try_from(ss.deleted_by_payload_id.clone().unwrap_or_default())?,
                         }),
+                        "DoesNotExist" => Ok(SubstateState::DoesNotExist),
                         _ => Err(StorageError::InvalidSubStateType {
                             substate_type: ss.substate_type.clone(),
                         }),
@@ -982,10 +958,7 @@ impl ShardStoreTransaction<PublicKey, TariDanPayload> for SqliteShardStoreTransa
             })?;
 
         if let Some(last_vote_height) = last_vote {
-            let height = last_vote_height
-                .node_height
-                .try_into()
-                .map_err(|_| Self::Error::InvalidIntegerCast)?;
+            let height = last_vote_height.node_height as u64;
             Ok(NodeHeight(height))
         } else {
             Ok(NodeHeight(0))
@@ -1144,7 +1117,8 @@ impl ShardStoreTransaction<PublicKey, TariDanPayload> for SqliteShardStoreTransa
                 reason: format!("Save received vote: {0}", source),
             })?;
 
-        count.try_into().map_err(|_| Self::Error::InvalidIntegerCast)
+        // TryFrom could fail for 32-bit environments
+        usize::try_from(count as u64).map_err(|_| StorageError::InvalidIntegerCast)
     }
 
     fn get_received_votes_for(&self, node_hash: TreeNodeHash, shard: ShardId) -> Result<Vec<VoteMessage>, Self::Error> {

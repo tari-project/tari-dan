@@ -1,4 +1,4 @@
-//  Copyright 2022. The Tari Project
+//  Copyright 2022, The Tari Project
 //
 //  Redistribution and use in source and binary forms, with or without modification, are permitted provided that the
 //  following conditions are met:
@@ -20,42 +20,31 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use thiserror::Error;
+use crate::models::{NodeHeight, TreeNodeHash};
 
-use crate::{
-    models::NodeHeight,
-    services::{epoch_manager::EpochManagerError, PayloadProcessorError},
-    storage::{shard_store::StoreError, StorageError},
-};
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct LeafNode {
+    hash: TreeNodeHash,
+    height: NodeHeight,
+}
 
-#[derive(Error, Debug)]
-pub enum HotStuffError {
-    #[error("Epoch manager error: {0}")]
-    EpochManagerError(#[from] EpochManagerError),
-    #[error("Received message from a node that is not in the committee")]
-    ReceivedMessageFromNonCommitteeMember,
-    #[error("Update leaf node error: `{0}`")]
-    UpdateLeafNode(String),
-    #[error("Store error: {0}")]
-    StoreError(#[from] StoreError),
-    #[error("Claim is not valid")]
-    ClaimIsNotValid,
-    #[error("Node payload does not match justify payload")]
-    NodePayloadDoesNotMatchJustifyPayload,
-    #[error("Send error")]
-    SendError,
-    #[error("Not the leader")]
-    NotTheLeader,
-    #[error("Payload failed to process: {0}")]
-    PayloadProcessorError(#[from] PayloadProcessorError),
-    #[error("Transaction rejected: {0}")]
-    TransactionRejected(String),
-    #[error("Storage Error: `{0}`")]
-    StorageError(#[from] StorageError),
-    #[error("Payload height is too high. Actual: {actual}, expected: {max}")]
-    PayloadHeightIsTooHigh { actual: NodeHeight, max: NodeHeight },
-    #[error("Received generic message without node")]
-    RecvProposalMessageWithoutNode,
-    #[error("Shard has no data, when it was expected to")]
-    ShardHasNoData,
+impl LeafNode {
+    pub fn genesis() -> Self {
+        Self {
+            hash: TreeNodeHash::zero(),
+            height: NodeHeight(0),
+        }
+    }
+
+    pub fn new(hash: TreeNodeHash, height: NodeHeight) -> Self {
+        Self { hash, height }
+    }
+
+    pub fn hash(&self) -> &TreeNodeHash {
+        &self.hash
+    }
+
+    pub fn height(&self) -> NodeHeight {
+        self.height
+    }
 }

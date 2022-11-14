@@ -84,7 +84,8 @@ pub trait EpochManager<TAddr: NodeAddressable>: Clone {
         shard: ShardId,
         identity: TAddr,
     ) -> Result<bool, EpochManagerError>;
-    // TODO: Get a better name
+    /// Filters out from the available_shards, returning the ShardIds for committees for each available_shard that
+    /// `for_addr` is part of.
     async fn filter_to_local_shards(
         &self,
         epoch: Epoch,
