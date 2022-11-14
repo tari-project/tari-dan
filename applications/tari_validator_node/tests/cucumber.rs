@@ -24,12 +24,15 @@ mod utils;
 
 use std::{
     convert::{Infallible, TryFrom},
+    io,
     time::Duration,
 };
 
 use async_trait::async_trait;
-use cucumber::{given, then, when, WorldInit};
+use cucumber::{given, then, when, writer, WorldInit, WriterExt};
 use indexmap::IndexMap;
+use tari_common_types::types::PublicKey;
+use tari_crypto::tari_utilities::hex::Hex;
 use tari_dan_core::services::BaseNodeClient;
 use tari_template_lib::Hash;
 use tari_validator_node::GrpcBaseNodeClient;
@@ -131,19 +134,23 @@ async fn register_template(world: &mut TariWorld, vn_name: String, template_name
 
 #[then(expr = "the validator node {word} is listed as registered")]
 async fn assert_vn_is_registered(world: &mut TariWorld, vn_name: String) {
+    // create a base node client
     let base_node_grpc_port = world.validator_nodes.get(&vn_name).unwrap().base_node_grpc_port;
     let mut base_node_client: GrpcBaseNodeClient = get_base_node_client(base_node_grpc_port).await;
 
+    // get the list of registered vns from the base node
     let height = base_node_client.get_tip_info().await.unwrap().height_of_longest_chain;
     let vns = base_node_client.get_validator_nodes(height).await.unwrap();
-    // FIXME: the base node returns an empty list of registered vns, but the registration tx is actually in a block
     assert!(!vns.is_empty());
 
-    let registered_vn = &vns[0];
+    // retrieve the VN's public key
     let jrpc_port = world.validator_nodes.get(&vn_name).unwrap().json_rpc_port;
     let mut client = get_vn_client(jrpc_port).await;
     let identity: GetIdentityResponse = client.get_identity().await.unwrap();
-    assert_eq!(identity.public_key, registered_vn.public_key.to_string());
+    let public_key: PublicKey = PublicKey::from_hex(&identity.public_key).unwrap();
+
+    // check that the vn's public key is in the list of registered vns
+    assert!(vns.iter().any(|vn| vn.public_key == public_key));
 }
 
 #[then(expr = "the template \"{word}\" is listed as registered by the validator node {word}")]
@@ -169,19 +176,68 @@ async fn assert_valid_vn_identity(world: &mut TariWorld, vn_name: String) {
     let mut client = get_vn_client(jrpc_port).await;
     let resp = client.get_identity().await.unwrap();
 
-    println!("VN identity response: {:?}", resp);
+    assert!(!resp.public_key.is_empty());
 }
 
-#[then(
-    expr = "the validator node {word} calls the function \"{word}\" on the template \"{word}\" and gets a valid \
-            response"
-)]
+#[when(expr = "the validator node {word} calls the function \"{word}\" on the template \"{word}\"")]
 async fn call_template_function(world: &mut TariWorld, vn_name: String, function_name: String, template_name: String) {
-    let _resp = send_template_transaction(world, vn_name, template_name, function_name).await;
+    let resp = send_template_transaction(world, vn_name, template_name, function_name).await;
+
+    eprintln!("Template call response: {:?}", resp);
+}
+
+#[when(expr = "I wait {int} seconds")]
+async fn wait_seconds(_world: &mut TariWorld, seconds: u64) {
+    tokio::time::sleep(Duration::from_secs(seconds)).await;
+}
+
+#[when(expr = "I print the cucumber world")]
+async fn print_world(world: &mut TariWorld) {
+    eprintln!();
+    eprintln!("======================================");
+    eprintln!("============= TEST NODES =============");
+    eprintln!("======================================");
+    eprintln!();
+
+    // base nodes
+    for (name, node) in world.base_nodes.iter() {
+        eprintln!(
+            "Base node \"{}\": grpc port \"{}\", temp dir path \"{}\"",
+            name, node.grpc_port, node.temp_dir_path
+        );
+    }
+
+    // wallets
+    for (name, node) in world.wallets.iter() {
+        eprintln!(
+            "Wallet \"{}\": grpc port \"{}\", temp dir path \"{}\"",
+            name, node.grpc_port, node.temp_dir_path
+        );
+    }
+
+    // vns
+    for (name, node) in world.validator_nodes.iter() {
+        eprintln!(
+            "Validator node \"{}\": json rpc port \"{}\", http ui port \"{}\", temp dir path \"{}\"",
+            name, node.json_rpc_port, node.http_ui_port, node.temp_dir_path
+        );
+    }
+
+    eprintln!();
+    eprintln!("======================================");
+    eprintln!();
 }
 
 #[tokio::main]
 async fn main() {
-    // env_logger::init();
-    TariWorld::run("tests/features/").await;
+    TariWorld::cucumber()
+        // following config needed to use eprint statements in the tests
+        .max_concurrent_scenarios(1)
+        .with_writer(
+            writer::Basic::raw(io::stdout(), writer::Coloring::Never, 0)
+                .summarized()
+                .assert_normalized(),
+        )
+        .run_and_exit("tests/features/")
+        .await;
 }

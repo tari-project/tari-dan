@@ -62,6 +62,10 @@ impl Payload for TariDanPayload {
     fn objects_for_shard(&self, shard: ShardId) -> Option<(SubstateChange, ObjectClaim)> {
         self.transaction.meta().objects_for_shard(shard)
     }
+
+    fn max_outputs(&self) -> u32 {
+        self.transaction.meta().max_outputs()
+    }
 }
 
 #[derive(Debug, Clone, Default)]

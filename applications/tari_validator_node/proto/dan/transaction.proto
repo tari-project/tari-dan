@@ -68,12 +68,11 @@ message Transaction {
   repeated ThaumInput inputs = 1;
   repeated ThaumOutput outputs = 2;
   repeated Instruction instructions = 3;
-  uint32 max_instruction_outputs = 4;
-  bytes balance_proof = 5;
-  tari.dan.common.Signature signature = 6;
-  uint64 fee = 7;
-  bytes sender_public_key = 8;
-  TransactionMeta meta = 9;
+  bytes balance_proof = 4;
+  tari.dan.common.Signature signature = 5;
+  uint64 fee = 6;
+  bytes sender_public_key = 7;
+  TransactionMeta meta = 8;
 }
 
 message Instruction {
@@ -112,6 +111,7 @@ message TransactionMeta {
   repeated bytes involved_shard_ids = 1;
   // TODO: no idea what to call this ;)
   repeated SubstateRef involved_substates = 2;
+  uint32 max_outputs = 3;
 }
 
 message SubstateRef {

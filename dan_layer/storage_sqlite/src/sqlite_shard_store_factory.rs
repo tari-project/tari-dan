@@ -75,13 +75,13 @@ use crate::{
         substate::{NewSubstate, Substate},
     },
     schema::{
-        high_qcs::{dsl::high_qcs, shard_id},
+        high_qcs::dsl::high_qcs,
         last_executed_heights::dsl::last_executed_heights,
         last_voted_heights::dsl::last_voted_heights,
         leader_proposals::dsl::leader_proposals,
         leaf_nodes::dsl::leaf_nodes,
         lock_node_and_heights::dsl::lock_node_and_heights,
-        nodes::dsl::nodes,
+        nodes,
         payloads::dsl::payloads,
         received_votes::dsl::received_votes,
         substates::{dsl::substates, pledged_to_payload_id},
@@ -225,7 +225,25 @@ impl ShardStoreTransaction<PublicKey, TariDanPayload> for SqliteShardStoreTransa
         Ok(())
     }
 
-    fn update_high_qc(&mut self, shard: ShardId, qc: QuorumCertificate) -> Result<(), Self::Error> {
+    fn count_high_qc_for(&self, shard_id: ShardId) -> Result<usize, Self::Error> {
+        use crate::schema::high_qcs::dsl;
+
+        high_qcs
+            .count()
+            .filter(dsl::shard_id.eq(shard_id.as_bytes()))
+            .get_result(&self.connection)
+            .map(|count: i64| count as usize)
+            .map_err(|e| StorageError::QueryError {
+                reason: format!("Failed to count high_qc: {}", e),
+            })
+    }
+
+    fn update_high_qc(
+        &mut self,
+        identity: PublicKey,
+        shard: ShardId,
+        qc: QuorumCertificate,
+    ) -> Result<(), Self::Error> {
         // update all others for this shard to highest == false
         let shard = Vec::from(shard.0);
 
@@ -233,28 +251,67 @@ impl ShardStoreTransaction<PublicKey, TariDanPayload> for SqliteShardStoreTransa
             shard_id: shard,
             height: qc.local_node_height().as_u64() as i64,
             qc_json: json!(qc).to_string(),
+            identity: identity.to_vec(),
         };
         match diesel::insert_into(high_qcs).values(&new_row).execute(&self.connection) {
             Ok(_) => Ok(()),
+            // (shard_id, height) is a unique index
+            Err(Error::DatabaseError(DatabaseErrorKind::UniqueViolation, _)) => {
+                debug!(target: LOG_TARGET, "High QC already exists");
+                Ok(())
+            },
+            Err(err) => Err(Self::Error::QueryError {
+                reason: format!("update high QC error: {}", err),
+            }),
+        }
+    }
+
+    fn set_payload(&mut self, payload: TariDanPayload) -> Result<(), Self::Error> {
+        let transaction = payload.transaction();
+        let instructions = json!(&transaction.instructions()).to_string();
+
+        let signature = transaction.signature();
+
+        let public_nonce = Vec::from(signature.signature().get_public_nonce().as_bytes());
+        let scalar = Vec::from(signature.signature().get_signature().as_bytes());
+
+        let fee = transaction.fee() as i64;
+        let sender_public_key = Vec::from(transaction.sender_public_key().as_bytes());
+
+        let meta = json!(transaction.meta()).to_string();
+
+        let payload_id = Vec::from(payload.to_id().as_slice());
+
+        let new_row = NewPayload {
+            payload_id,
+            instructions,
+            public_nonce,
+            scalar,
+            fee,
+            sender_public_key,
+            meta,
+        };
+
+        match diesel::insert_into(payloads).values(&new_row).execute(&self.connection) {
+            Ok(_) => {},
             Err(err) => {
                 // It can happen that we get this payload from two shards that we are responsible
                 match err {
                     Error::DatabaseError(kind, _) => {
                         if matches!(kind, DatabaseErrorKind::UniqueViolation) {
-                            debug!(target: LOG_TARGET, "High QC already exists");
-                            Ok(())
-                        } else {
-                            Err(StorageError::QueryError {
-                                reason: format!("Update high qc error: {}", err),
-                            })
+                            debug!(target: LOG_TARGET, "Payload already exists");
+                            return Ok(());
                         }
                     },
-                    _ => Err(Self::Error::QueryError {
-                        reason: format!("update high QC error: {}", err),
-                    }),
+                    _ => {
+                        return Err(Self::Error::QueryError {
+                            reason: format!("Set payload error: {}", err),
+                        })
+                    },
                 }
             },
         }
+        Ok(())
     }
 
     fn get_leaf_node(&self, shard: ShardId) -> Result<(TreeNodeHash, NodeHeight), Self::Error> {
@@ -311,11 +368,10 @@ impl ShardStoreTransaction<PublicKey, TariDanPayload> for SqliteShardStoreTransa
     }
 
     fn get_high_qc_for(&self, shard: ShardId) -> Result<QuorumCertificate, Self::Error> {
-        dbg!("get high qc");
-        use crate::schema::high_qcs::height;
-        let qc: Option<HighQc> = high_qcs
-            .filter(shard_id.eq(Vec::from(shard.0)))
-            .order_by(height.desc())
+        use crate::schema::high_qcs::dsl;
+        let qc: Option<HighQc> = dsl::high_qcs
+            .filter(dsl::shard_id.eq(Vec::from(shard.0)))
+            .order_by(dsl::height.desc())
             .first(&self.connection)
             .optional()
             .map_err(|e| Self::Error::QueryError {
@@ -346,94 +402,41 @@ impl ShardStoreTransaction<PublicKey, TariDanPayload> for SqliteShardStoreTransa
                 reason: format!("Get payload error: {}", e),
             })?;
 
-        if let Some(payload) = payload {
-            let instructions: Vec<Instruction> =
-                serde_json::from_str(&payload.instructions).map_err(|source| StorageError::SerdeJson {
-                    source,
-                    operation: "get_payload".to_string(),
-                    data: payload.instructions.to_string(),
-                })?;
+        let payload = payload.ok_or_else(|| Self::Error::NotFound {
+            item: "payload".to_string(),
+            key: id.to_string(),
+        })?;
 
-            let fee: u64 = payload.fee.try_into().map_err(|_| Self::Error::InvalidIntegerCast)?;
+        let instructions: Vec<Instruction> =
+            serde_json::from_str(&payload.instructions).map_err(|source| StorageError::SerdeJson {
+                source,
+                operation: "get_payload".to_string(),
+                data: payload.instructions.to_string(),
+            })?;
 
-            let public_nonce =
-                PublicKey::from_vec(&payload.public_nonce).map_err(Self::Error::InvalidByteArrayConversion)?;
-            let signature =
-                PrivateKey::from_bytes(payload.scalar.as_slice()).map_err(Self::Error::InvalidByteArrayConversion)?;
+        let fee: u64 = payload.fee.try_into().map_err(|_| Self::Error::InvalidIntegerCast)?;
 
-            let signature: InstructionSignature =
-                InstructionSignature::try_from(Signature::new(public_nonce, signature)).map_err(|e| {
-                    Self::Error::InvalidTypeCasting {
-                        reason: format!("Get payload error: {}", e),
-                    }
-                })?;
+        let public_nonce =
+            PublicKey::from_vec(&payload.public_nonce).map_err(Self::Error::InvalidByteArrayConversion)?;
+        let signature =
+            PrivateKey::from_bytes(payload.scalar.as_slice()).map_err(Self::Error::InvalidByteArrayConversion)?;
 
-            let sender_public_key =
-                PublicKey::from_vec(&payload.sender_public_key).map_err(Self::Error::InvalidByteArrayConversion)?;
-            let meta: TransactionMeta =
-                serde_json::from_str(&payload.meta).map_err(|source| StorageError::SerdeJson {
-                    source,
-                    operation: "get_payload".to_string(),
-                    data: payload.meta.to_string(),
-                })?;
+        let signature: InstructionSignature = InstructionSignature::try_from(Signature::new(public_nonce, signature))
+            .map_err(|e| Self::Error::InvalidTypeCasting {
+            reason: format!("Get payload error: {}", e),
+        })?;
 
-            let transaction = Transaction::new(fee, instructions, signature, sender_public_key, meta);
+        let sender_public_key =
+            PublicKey::from_vec(&payload.sender_public_key).map_err(Self::Error::InvalidByteArrayConversion)?;
+        let meta: TransactionMeta = serde_json::from_str(&payload.meta).map_err(|source| StorageError::SerdeJson {
+            source,
+            operation: "get_payload".to_string(),
+            data: payload.meta.to_string(),
+        })?;
 
-            Ok(TariDanPayload::new(transaction))
-        } else {
-            Err(Self::Error::NotFound {
-                item: "payload".to_string(),
-                key: id.to_string(),
-            })
-        }
-    }
+        let transaction = Transaction::new(fee, instructions, signature, sender_public_key, meta);
 
-    fn set_payload(&mut self, payload: TariDanPayload) -> Result<(), Self::Error> {
-        let transaction = payload.transaction();
-        let instructions = json!(&transaction.instructions()).to_string();
-
-        let signature = transaction.signature();
-
-        let public_nonce = Vec::from(signature.signature().get_public_nonce().as_bytes());
-        let scalar = Vec::from(signature.signature().get_signature().as_bytes());
-
-        let fee = transaction.fee() as i64;
-        let sender_public_key = Vec::from(transaction.sender_public_key().as_bytes());
-
-        let meta = json!(transaction.meta()).to_string();
-
-        let payload_id = Vec::from(payload.to_id().as_slice());
-
-        let new_row = NewPayload {
-            payload_id,
-            instructions,
-            public_nonce,
-            scalar,
-            fee,
-            sender_public_key,
-            meta,
-        };
-
-        match diesel::insert_into(payloads).values(&new_row).execute(&self.connection) {
-            Ok(_) => {},
-            Err(err) => {
-                // It can happen that we get this payload from two shards that we are responsible
-                match err {
-                    Error::DatabaseError(kind, _) => {
-                        if matches!(kind, DatabaseErrorKind::UniqueViolation) {
-                            debug!(target: LOG_TARGET, "Payload already exists");
-                            return Ok(());
-                        }
-                    },
-                    _ => {
-                        return Err(Self::Error::QueryError {
-                            reason: format!("Set payload error: {}", err),
-                        })
-                    },
-                }
-            },
-        }
-        Ok(())
+        Ok(TariDanPayload::new(transaction))
     }
 
     fn get_node(&self, hash: &TreeNodeHash) -> Result<HotStuffTreeNode<PublicKey, TariDanPayload>, Self::Error> {
@@ -446,7 +449,7 @@ impl ShardStoreTransaction<PublicKey, TariDanPayload> for SqliteShardStoreTransa
         let hash = Vec::from(hash.as_bytes());
         // TODO: Do we need to add an index to the table to order by `height` and `payload_height`
         // more efficiently ?
-        let node: Option<Node> = nodes
+        let node: Option<Node> = nodes::dsl::nodes
             .filter(node_hash.eq(hash.clone()))
             .first(&self.connection)
             .optional()
@@ -541,7 +544,10 @@ impl ShardStoreTransaction<PublicKey, TariDanPayload> for SqliteShardStoreTransa
             justify,
         };
 
-        match diesel::insert_into(nodes).values(&new_row).execute(&self.connection) {
+        match diesel::insert_into(nodes::dsl::nodes)
+            .values(&new_row)
+            .execute(&self.connection)
+        {
             Ok(_) => {},
             Err(err) => match err {
                 Error::DatabaseError(kind, _) => {

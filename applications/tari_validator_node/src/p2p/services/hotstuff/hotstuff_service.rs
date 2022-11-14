@@ -20,7 +20,7 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use std::sync::Arc;
+use std::{fmt::Display, sync::Arc};
 
 use log::*;
 use tari_comms::{types::CommsPublicKey, NodeIdentity};
@@ -29,7 +29,11 @@ use tari_dan_core::{
     consensus_constants::ConsensusConstants,
     message::DanMessage,
     models::{vote_message::VoteMessage, HotStuffMessage, TariDanPayload},
-    services::{infrastructure_services::OutboundService, leader_strategy::AlwaysFirstLeader},
+    services::{
+        epoch_manager::EpochManager,
+        infrastructure_services::OutboundService,
+        leader_strategy::AlwaysFirstLeader,
+    },
     workers::{
         events::{EventSubscription, HotStuffEvent},
         hotstuff_waiter::HotStuffWaiter,
@@ -68,6 +72,7 @@ pub struct HotstuffService {
     rx_broadcast: Receiver<(HotStuffMessage<TariDanPayload, CommsPublicKey>, Vec<CommsPublicKey>)>,
     /// Outgoing vote messages to be sent to the leader
     rx_vote_message: Receiver<(VoteMessage, CommsPublicKey)>,
+    epoch_manager: EpochManagerHandle,
     shutdown: ShutdownSignal, // waiter: HotstuffWaiter,
 }
 
@@ -98,7 +103,7 @@ impl HotstuffService {
         HotStuffWaiter::spawn(
             node_identity,
             node_public_key.clone(),
-            epoch_manager,
+            epoch_manager.clone(),
             leader_strategy,
             rx_new,
             rx_hotstuff_messages,
@@ -122,6 +127,7 @@ impl HotstuffService {
                 rx_leader,
                 rx_broadcast,
                 rx_vote_message,
+                epoch_manager,
                 shutdown,
             }
             .run(),
@@ -161,7 +167,15 @@ impl HotstuffService {
     }
 
     async fn handle_new_valid_transaction(&mut self, tx: Transaction, shard: ShardId) -> Result<(), anyhow::Error> {
-        self.tx_new.send((TariDanPayload::new(tx), shard)).await?;
+        if self
+            .epoch_manager
+            .is_validator_in_committee_for_current_epoch(shard, self.node_public_key.clone())
+            .await?
+        {
+            self.tx_new.send((TariDanPayload::new(tx), shard)).await?;
+        } else {
+            info!(target: LOG_TARGET, "🙇 Not in committee for transaction {}", tx.hash());
+        }
         Ok(())
     }
 
@@ -170,9 +184,10 @@ impl HotstuffService {
             tokio::select! {
                 // Inbound
                 res = self.mempool.next_valid_transaction() => {
-                    let (tx, shard_id) = res?;
-                    debug!(target: LOG_TARGET, "Received new transaction {} for shard {}", tx.hash(), shard_id);
-                    log(self.handle_new_valid_transaction(tx, shard_id).await, "new valid transaction");
+                    if let Some((tx, shard_id)) = log(res, "new valid transaction") {
+                        debug!(target: LOG_TARGET, "Received new transaction {} for shard {}", tx.hash(), shard_id);
+                        log(self.handle_new_valid_transaction(tx, shard_id).await, "new valid transaction");
+                    }
                 }
                 // Outbound
                 Some((to, msg)) = self.rx_leader.recv() => {
@@ -198,8 +213,12 @@ impl HotstuffService {
     }
 }
 
-fn log(result: Result<(), anyhow::Error>, area: &str) {
-    if let Err(e) = result {
-        error!(target: LOG_TARGET, "Error in hotstuff service: {} [{}]", e, area);
+fn log<T, E: Display>(result: Result<T, E>, area: &str) -> Option<T> {
+    match result {
+        Ok(t) => Some(t),
+        Err(e) => {
+            error!(target: LOG_TARGET, "Error in hotstuff service: {} [{}]", e, area);
+            None
+        },
     }
 }

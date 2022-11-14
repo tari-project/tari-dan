@@ -20,8 +20,15 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-// TODO: we should only use stdlib if the template dev needs to include it e.g. use core::mem when stdlib is not
-// available
+#[cfg(target_arch = "wasm32")]
+mod wasm;
+#[cfg(target_arch = "wasm32")]
+pub use wasm::*;
+#[cfg(not(target_arch = "wasm32"))]
+mod non_wasm;
+#[cfg(not(target_arch = "wasm32"))]
+pub use non_wasm::*;
+
 use crate::{
     decode,
     decode_len,
@@ -31,12 +38,6 @@ use crate::{
     Decode,
     Encode,
 };
-
-extern "C" {
-    pub fn tari_engine(op: i32, input_ptr: *const u8, input_len: usize) -> *mut u8;
-    pub fn debug(input_ptr: *const u8, input_len: usize);
-    pub fn on_panic(msg_ptr: *const u8, msg_len: u32, line: u32, column: u32);
-}
 
 pub fn wrap_ptr(mut v: Vec<u8>) -> *mut u8 {
     let ptr = v.as_mut_ptr();

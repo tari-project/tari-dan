@@ -34,6 +34,7 @@ pub trait Payload: Debug + Clone + Send + Sync + ConsensusHash {
         PayloadId::new(self.consensus_hash())
     }
     fn objects_for_shard(&self, shard: ShardId) -> Option<(SubstateChange, ObjectClaim)>;
+    fn max_outputs(&self) -> u32;
 }
 
 // impl Payload for &str {
@@ -65,5 +66,9 @@ impl Payload for (String, Vec<ShardId>) {
         } else {
             None
         }
+    }
+
+    fn max_outputs(&self) -> u32 {
+        100
     }
 }

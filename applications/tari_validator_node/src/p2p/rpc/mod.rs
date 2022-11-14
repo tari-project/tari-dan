@@ -28,7 +28,7 @@ use tari_comms_rpc_macros::tari_rpc;
 use tari_dan_core::services::PeerProvider;
 use tari_dan_storage_sqlite::sqlite_shard_store_factory::SqliteShardStoreFactory;
 
-use crate::p2p::{proto, services::messaging::DanMessageSenders};
+use crate::p2p::{proto, services::mempool::MempoolHandle};
 
 #[tari_rpc(protocol_name = b"t/vn/1", server_struct = ValidatorNodeRpcServer, client_struct = ValidatorNodeRpcClient)]
 pub trait ValidatorNodeRpcService: Send + Sync + 'static {
@@ -52,16 +52,16 @@ pub trait ValidatorNodeRpcService: Send + Sync + 'static {
 }
 
 pub fn create_validator_node_rpc_service<TPeerProvider>(
-    message_senders: DanMessageSenders,
     peer_provider: TPeerProvider,
     shard_store_store: SqliteShardStoreFactory,
+    mempool: MempoolHandle,
 ) -> ValidatorNodeRpcServer<ValidatorNodeRpcServiceImpl<TPeerProvider>>
 where
     TPeerProvider: PeerProvider + Clone + Send + Sync + 'static,
 {
     ValidatorNodeRpcServer::new(ValidatorNodeRpcServiceImpl::new(
-        message_senders,
         peer_provider,
         shard_store_store,
+        mempool,
     ))
 }

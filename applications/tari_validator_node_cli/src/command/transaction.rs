@@ -32,14 +32,17 @@ use tari_engine_types::{
     substate::SubstateValue,
     TemplateAddress,
 };
-use tari_template_lib::{args::Arg, models::ComponentAddress};
+use tari_template_lib::{
+    args::Arg,
+    models::{Amount, ComponentAddress},
+};
 use tari_utilities::hex::to_hex;
 use tari_validator_node_client::{
     types::{SubmitTransactionRequest, TransactionFinalizeResult},
     ValidatorNodeClient,
 };
 
-use crate::{account_manager::AccountFileManager, from_hex::FromHex};
+use crate::{account_manager::AccountFileManager, component_manager::ComponentManager, from_hex::FromHex};
 
 #[derive(Debug, Subcommand, Clone)]
 pub enum TransactionSubcommand {
@@ -151,7 +154,10 @@ impl TransactionSubcommand {
         mut client: ValidatorNodeClient,
     ) -> Result<(), anyhow::Error> {
         match self {
-            TransactionSubcommand::Submit(args) => handle_submit(args, base_dir, &mut client).await?,
+            TransactionSubcommand::Submit(args) => {
+                let component_manager = ComponentManager::init(base_dir.as_ref())?;
+                handle_submit(args, base_dir, &mut client, &component_manager).await?
+            },
         }
         Ok(())
     }
@@ -161,6 +167,7 @@ async fn handle_submit(
     args: SubmitArgs,
     base_dir: impl AsRef<Path>,
     client: &mut ValidatorNodeClient,
+    component_manager: &ComponentManager,
 ) -> Result<(), anyhow::Error> {
     let mut input_refs = vec![];
     let inputs = vec![];
@@ -181,7 +188,9 @@ async fn handle_submit(
             args,
         } => {
             input_refs.push(component_address.into_inner().into_array().into());
-            // inputs.push(component_address.into_inner().into_array().into());
+            let children = component_manager.get_component_childen(component_address.into_inner())?;
+            input_refs.extend(children.iter().map(ShardId::from_address));
+
             Instruction::CallMethod {
                 template_address: template_address.into_inner(),
                 component_address: component_address.into_inner(),
@@ -233,11 +242,15 @@ async fn handle_submit(
     // dbg!(&request);
     let resp = client.submit_transaction(request).await?;
     if let Some(result) = resp.result {
+        if let Some(diff) = result.finalize.result.accept() {
+            component_manager.commit_diff(diff)?;
+        }
         summarize(&result);
     }
     Ok(())
 }
 
+#[allow(clippy::too_many_lines)]
 fn summarize(result: &TransactionFinalizeResult) {
     println!("✅️ Transaction finalized",);
     println!();
@@ -245,6 +258,7 @@ fn summarize(result: &TransactionFinalizeResult) {
     println!("Payload height: {}", result.qc.payload_height());
     println!("Signed by: {} validator nodes", result.qc.signature().len());
     println!();
+    // dbg!(&result.qc);
     println!("========= Substates =========");
     match result.finalize.result {
         TransactionResult::Accept(ref diff) => {
@@ -279,6 +293,19 @@ fn summarize(result: &TransactionFinalizeResult) {
             println!("❌️ Transaction rejected: {}", reject.reason);
         },
     }
+    println!("========= Pledges =========");
+    for p in result.qc.all_shard_nodes().iter() {
+        println!(
+            "Shard:{} Pledge:{}",
+            p.shard_id,
+            p.pledge
+                .as_ref()
+                .map(|pledge| pledge.current_state.as_str())
+                .unwrap_or("<Not pledged>")
+        );
+    }
+    println!();
+
     println!("========= Return Values =========");
     for result in &result.finalize.execution_results {
         match result.return_type {
@@ -319,6 +346,9 @@ fn summarize(result: &TransactionFinalizeResult) {
             Type::String => {
                 println!("string: {}", result.decode::<String>().unwrap());
             },
+            Type::Other { ref name } if name == "Amount" => {
+                println!("{}: {}", name, result.decode::<Amount>().unwrap());
+            },
             Type::Other { ref name } => {
                 println!("{}: {}", name, to_hex(&result.raw));
             },
@@ -330,4 +360,6 @@ fn summarize(result: &TransactionFinalizeResult) {
     for log in &result.finalize.logs {
         println!("{}", log);
     }
+    println!();
+    println!("OVERALL DECISION: {:?}", result.decision);
 }

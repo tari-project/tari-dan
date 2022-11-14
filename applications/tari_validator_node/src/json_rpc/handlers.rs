@@ -172,7 +172,7 @@ impl JsonRpcHandlers {
         let subscription = self.hotstuff_events.subscribe();
         // Submit to mempool.
         self.mempool
-            .new_transaction(mempool_tx)
+            .submit_transaction(mempool_tx)
             .await
             .map_err(internal_error(answer_id))?;
 
@@ -473,6 +473,7 @@ async fn wait_for_transaction_result(
                     let response = SubmitTransactionResponse {
                         hash: hash.into_array().into(),
                         result: Some(TransactionFinalizeResult {
+                            decision: *qc.decision(),
                             finalize: result,
                             qc: *qc,
                         }),

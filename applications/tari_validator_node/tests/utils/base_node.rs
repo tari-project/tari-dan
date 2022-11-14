@@ -41,6 +41,7 @@ pub struct BaseNodeProcess {
     pub grpc_port: u64,
     pub identity: NodeIdentity,
     pub handle: task::JoinHandle<()>,
+    pub temp_dir_path: String,
 }
 
 pub async fn spawn_base_node(world: &mut TariWorld, bn_name: String) {
@@ -53,6 +54,8 @@ pub async fn spawn_base_node(world: &mut TariWorld, bn_name: String) {
     let base_node_identity = NodeIdentity::random(&mut OsRng, base_node_address, PeerFeatures::COMMUNICATION_NODE);
     println!("Base node identity: {}", base_node_identity);
     let identity = base_node_identity.clone();
+    let temp_dir = tempdir().unwrap();
+    let temp_dir_path = temp_dir.path().display().to_string();
 
     let handle = task::spawn(async move {
         let mut base_node_config = tari_base_node::ApplicationConfig {
@@ -63,7 +66,6 @@ pub async fn spawn_base_node(world: &mut TariWorld, bn_name: String) {
             metrics: MetricsConfig::default(),
         };
 
-        let temp_dir = tempdir().unwrap();
         println!("Using base_node temp_dir: {}", temp_dir.path().display());
         base_node_config.base_node.network = Network::LocalNet;
         base_node_config.base_node.grpc_enabled = true;
@@ -96,6 +98,7 @@ pub async fn spawn_base_node(world: &mut TariWorld, bn_name: String) {
         grpc_port,
         identity,
         handle,
+        temp_dir_path,
     };
     world.base_nodes.insert(bn_name, node_process);
 

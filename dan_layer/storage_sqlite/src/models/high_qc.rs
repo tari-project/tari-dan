@@ -28,6 +28,7 @@ pub struct HighQc {
     pub shard_id: Vec<u8>,
     pub height: i64,
     pub qc_json: String,
+    pub identity: Vec<u8>,
 }
 
 #[derive(Debug, Insertable)]
@@ -36,4 +37,5 @@ pub struct NewHighQc {
     pub shard_id: Vec<u8>,
     pub height: i64,
     pub qc_json: String,
+    pub identity: Vec<u8>,
 }

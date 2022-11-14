@@ -26,6 +26,7 @@ use std::{
     sync::{Arc, RwLock},
 };
 
+use log::debug;
 use tari_dan_common_types::optional::Optional;
 use tari_engine_types::{
     bucket::Bucket,
@@ -56,6 +57,8 @@ use crate::{
     state_store::{memory::MemoryStateStore, AtomicDb, StateReader},
 };
 
+const LOG_TARGET: &str = "tari::engine::runtime::state_tracker";
+
 #[derive(Debug, Clone)]
 pub struct StateTracker {
     state_store: MemoryStateStore,
@@ -83,7 +86,7 @@ struct WorkingState {
 }
 
 impl StateTracker {
-    pub fn new(state_store: MemoryStateStore, transaction_hash: Hash) -> Self {
+    pub fn new(state_store: MemoryStateStore, id_provider: IdProvider) -> Self {
         Self {
             state_store,
             working_state: Arc::new(RwLock::new(WorkingState {
@@ -96,7 +99,7 @@ impl StateTracker {
                 last_instruction_output: None,
                 workspace: HashMap::new(),
             })),
-            id_provider: IdProvider::new(transaction_hash),
+            id_provider,
         }
     }
 
@@ -119,7 +122,9 @@ impl StateTracker {
     }
 
     pub fn mint_resource(&self, mint_arg: MintResourceArg) -> Result<ResourceAddress, RuntimeError> {
-        let resource_address = self.id_provider.new_resource_address();
+        let resource_address = self.id_provider.new_resource_address()?;
+        debug!(target: LOG_TARGET, "New resource minted: {}", resource_address);
+        dbg!(&resource_address);
         match mint_arg {
             MintResourceArg::Fungible { amount, metadata } => {
                 self.check_amount(amount)?;
@@ -149,24 +154,24 @@ impl StateTracker {
                 Some(resource) => Ok(resource),
                 None => {
                     let tx = self.state_store.read_access()?;
-                    let resource = tx
-                        .get_state(address)
-                        .optional()?
-                        .ok_or(RuntimeError::ResourceNotFound {
+                    let resource = tx.get_state(&SubstateAddress::Resource(*address)).optional()?.ok_or(
+                        RuntimeError::ResourceNotFound {
                             resource_address: *address,
-                        })?;
+                        },
+                    )?;
                     Ok(resource)
                 },
             }
         })
     }
 
-    pub fn new_bucket(&self, resource: Resource) -> BucketId {
+    pub fn new_bucket(&self, resource: Resource) -> Result<BucketId, RuntimeError> {
         self.write_with(|state| {
             let bucket_id = self.id_provider.new_bucket_id();
+            debug!(target: LOG_TARGET, "New bucket: {}", bucket_id);
             let bucket = Bucket::new(resource);
             state.buckets.insert(bucket_id, bucket);
-            bucket_id
+            Ok(bucket_id)
         })
     }
 
@@ -210,7 +215,8 @@ impl StateTracker {
             module_name,
             state,
         };
-        let component_address = self.id_provider().new_component_address();
+        let component_address = self.id_provider().new_component_address()?;
+        debug!(target: LOG_TARGET, "New component created: {}", component_address);
         let component = ComponentInstance::new(component_address, component);
         self.write_with(|state| {
             // New root component
@@ -263,8 +269,13 @@ impl StateTracker {
         self.write_with(|s| s.runtime_state = Some(state));
     }
 
-    pub fn new_vault(&self, resource_address: ResourceAddress, resource_type: ResourceType) -> VaultId {
-        let vault_id = self.id_provider.new_vault_id();
+    pub fn new_vault(
+        &self,
+        resource_address: ResourceAddress,
+        resource_type: ResourceType,
+    ) -> Result<VaultId, RuntimeError> {
+        let vault_id = self.id_provider.new_vault_id()?;
+        debug!(target: LOG_TARGET, "New vault id: {}", vault_id);
         let resource = match resource_type {
             ResourceType::Fungible => Resource::fungible(resource_address, 0.into(), Metadata::new()),
             ResourceType::NonFungible => Resource::non_fungible(resource_address, vec![], Metadata::new()),
@@ -276,7 +287,7 @@ impl StateTracker {
             state.new_vaults.insert(vault_id, vault.into());
         });
 
-        vault_id
+        Ok(vault_id)
     }
 
     pub fn borrow_vault_mut<R, F: FnOnce(&mut Vault) -> R>(&self, vault_id: &VaultId, f: F) -> Result<R, RuntimeError> {
@@ -287,13 +298,18 @@ impl StateTracker {
                 Some(_) => unreachable!(),
                 None => {
                     // TODO: This is not correct
-                    let mut vault = self
+                    let substate: Substate = self
                         .state_store
                         .read_access()
                         .unwrap()
-                        .get_state(vault_id)
+                        .get_state(&SubstateAddress::Vault(*vault_id))
                         .optional()?
                         .ok_or(RuntimeError::VaultNotFound { vault_id: *vault_id })?;
+
+                    let mut vault = substate
+                        .into_substate()
+                        .into_vault()
+                        .expect("Vault key does not point to vault substate");
 
                     let ret = f(&mut vault);
                     state.new_vaults.insert(*vault_id, vault.into());
@@ -378,9 +394,17 @@ impl StateTracker {
 
             // Vaults are held within a component and contain a resource, so I dont think they are a substate in and of
             // themselves
-            // for (vault_id, vault) in state.new_vaults.drain() {
-            //   tx.set_state(&vault_id, vault)?;
-            // }
+            for (vault_id, substate) in state.new_vaults.drain() {
+                let addr = SubstateAddress::Vault(vault_id);
+                let new_substate = match tx.get_state::<_, Substate>(&addr).optional()? {
+                    Some(existing_state) => {
+                        substate_diff.down(addr);
+                        Substate::new(existing_state.version() + 1, substate)
+                    },
+                    None => Substate::new(0, substate),
+                };
+                substate_diff.up(addr, new_substate);
+            }
 
             for (resource_addr, substate) in state.new_resources.drain() {
                 let addr = SubstateAddress::Resource(resource_addr);

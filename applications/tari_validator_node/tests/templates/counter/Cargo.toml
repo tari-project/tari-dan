@@ -7,9 +7,9 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-tari_template_abi = { git = "https://github.com/tari-project/tari-dan.git", branch="development", package="tari_template_abi" }
-tari_template_lib = { git = "https://github.com/tari-project/tari-dan.git", branch="development", package="tari_template_lib" }
-tari_template_macros = {git = "https://github.com/tari-project/tari-dan.git", branch="development", package="tari_template_macros" }
+tari_template_abi = { path="../../../../../dan_layer/template_abi" }
+tari_template_lib = {path="../../../../../dan_layer/template_lib"}
+tari_template_macros = {path="../../../../../dan_layer/template_macros"}
 
 [profile.release]
 opt-level = 's'     # Optimize for size.
