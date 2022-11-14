@@ -36,8 +36,6 @@ pub enum HotStuffError {
     ReceivedMessageFromNonCommitteeMember,
     #[error("Update leaf node error: `{0}`")]
     UpdateLeafNode(String),
-    #[error("Update high qc error: `{0}`")]
-    UpdateHighQcError(String),
     #[error("Store error: {0}")]
     StoreError(#[from] StoreError),
     #[error("Claim is not valid")]
@@ -57,7 +55,7 @@ pub enum HotStuffError {
     #[error("Payload height is too high. Actual: {actual}, expected: {max}")]
     PayloadHeightIsTooHigh { actual: NodeHeight, max: NodeHeight },
     #[error("Received generic message without node")]
-    RecvGenericMessageWithoutNode,
+    RecvProposalMessageWithoutNode,
     #[error("Shard has no data, when it was expected to")]
     ShardHasNoData,
     #[error("Invalid qc error: `{0}`")]

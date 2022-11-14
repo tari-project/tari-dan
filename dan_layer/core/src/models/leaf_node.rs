@@ -1,4 +1,4 @@
-//  Copyright 2022. The Tari Project
+//  Copyright 2022, The Tari Project
 //
 //  Redistribution and use in source and binary forms, with or without modification, are permitted provided that the
 //  following conditions are met:
@@ -20,20 +20,31 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-const AUTOUPDATE_HASHES_TXT_URL =
-  "https://raw.githubusercontent.com/tari-project/tari/development/meta/hashes.txt";
-const AUTOUPDATE_HASHES_TXT_SIG_URL =
-  "https://raw.githubusercontent.com/tari-project/tari/development/meta/hashes.txt.sig";
-const AUTOUPDATE_HASHES_TXT_BAD_SIG_URL =
-  "https://raw.githubusercontent.com/tari-project/tari/development/meta/hashes.txt.bad.sig";
+use crate::models::{NodeHeight, TreeNodeHash};
 
-const BLOCK_REWARD = 5000;
-const CONFIRMATION_PERIOD = 4;
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct LeafNode {
+    hash: TreeNodeHash,
+    height: NodeHeight,
+}
 
-module.exports = {
-  AUTOUPDATE_HASHES_TXT_URL,
-  AUTOUPDATE_HASHES_TXT_BAD_SIG_URL,
-  AUTOUPDATE_HASHES_TXT_SIG_URL,
-  BLOCK_REWARD,
-  CONFIRMATION_PERIOD,
-};
+impl LeafNode {
+    pub fn genesis() -> Self {
+        Self {
+            hash: TreeNodeHash::zero(),
+            height: NodeHeight(0),
+        }
+    }
+
+    pub fn new(hash: TreeNodeHash, height: NodeHeight) -> Self {
+        Self { hash, height }
+    }
+
+    pub fn hash(&self) -> &TreeNodeHash {
+        &self.hash
+    }
+
+    pub fn height(&self) -> NodeHeight {
+        self.height
+    }
+}

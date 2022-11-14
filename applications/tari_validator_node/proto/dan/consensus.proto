@@ -8,8 +8,8 @@ package tari.dan.consensus;
 import "transaction.proto";
 
 enum HotStuffMessageType {
-  HOT_STUFF_MESSAGE_TYPE_NEW_VIEW = 0;
-  HOT_STUFF_MESSAGE_TYPE_GENERIC = 1;
+  NEW_VIEW = 0;
+  PROPOSAL = 1;
 }
 
 message HotStuffMessage {
