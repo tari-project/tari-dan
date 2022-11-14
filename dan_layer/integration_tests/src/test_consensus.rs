@@ -38,6 +38,7 @@ use tari_dan_core::{
         QuorumCertificate,
         QuorumDecision,
         TariDanPayload,
+        ValidatorSignature,
     },
     services::{
         epoch_manager::{EpochManager, RangeEpochManager},
@@ -255,6 +256,37 @@ impl HsTestHarness {
     }
 }
 
+fn create_test_qc(vn_keys: Vec<(PublicKey, PrivateKey)>) -> QuorumCertificate {
+    let qc = QuorumCertificate::genesis();
+    let vote = VoteMessage::new(
+        qc.local_node_hash(),
+        qc.shard(),
+        *qc.decision(),
+        qc.all_shard_nodes().to_vec(),
+    );
+
+    let signatures: Vec<ValidatorSignature> = vn_keys
+        .iter()
+        .map(|(public_key, secret_key)| {
+            let mut node_vote = vote.clone();
+            node_vote.sign(public_key, secret_key);
+            node_vote.signature().clone()
+        })
+        .collect();
+
+    QuorumCertificate::new(
+        qc.payload_id(),
+        qc.payload_height(),
+        qc.local_node_hash(),
+        qc.local_node_height(),
+        qc.shard(),
+        qc.epoch(),
+        *qc.decision(),
+        qc.all_shard_nodes().to_vec(),
+        signatures,
+    )
+}
+
 lazy_static! {
     static ref SHARD0: ShardId = ShardId::zero();
     static ref SHARD1: ShardId = ShardId([1u8; 32]);
@@ -278,7 +310,7 @@ async fn test_receives_new_payload_starts_new_chain() {
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn test_hs_waiter_leader_proposes() {
     let (node1_pk, node1) = PublicKey::random_keypair(&mut OsRng);
-    let (_, node2) = PublicKey::random_keypair(&mut OsRng);
+    let (node2_pk, node2) = PublicKey::random_keypair(&mut OsRng);
     let epoch_manager = RangeEpochManager::new(*SHARD0..*SHARD1, vec![node1.clone(), node2.clone()]);
     let mut instance = HsTestHarness::new(node1_pk.clone(), node1.clone(), epoch_manager, AlwaysFirstLeader {});
     // let payload = ("Hello World".to_string(), vec![*SHARD0]);
@@ -291,9 +323,11 @@ async fn test_hs_waiter_leader_proposes() {
     );
 
     dbg!(payload.to_id());
-    // Send a new view message
-    let new_view_message = HotStuffMessage::new_view(QuorumCertificate::genesis(), *SHARD0, Some(payload));
+    let qc = create_test_qc(vec![(node1.clone(), node1_pk), (node2.clone(), node2_pk)]);
 
+    let new_view_message = HotStuffMessage::new_view(qc, *SHARD0, Some(payload));
+
+    dbg!(new_view_message.clone());
     instance
         .tx_hs_messages
         .send((node1.clone(), new_view_message))
@@ -309,7 +343,7 @@ async fn test_hs_waiter_leader_proposes() {
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn test_hs_waiter_replica_sends_vote_for_proposal() {
     let (node1_pk, node1) = PublicKey::random_keypair(&mut OsRng);
-    let (_, node2) = PublicKey::random_keypair(&mut OsRng);
+    let (node2_pk, node2) = PublicKey::random_keypair(&mut OsRng);
     let epoch_manager = RangeEpochManager::new(*SHARD0..*SHARD1, vec![node1.clone(), node2.clone()]);
     let mut instance = HsTestHarness::new(node1_pk.clone(), node1.clone(), epoch_manager, AlwaysFirstLeader {});
     // let payload = ("Hello World".to_string(), vec![*SHARD0]);
@@ -320,7 +354,8 @@ async fn test_hs_waiter_replica_sends_vote_for_proposal() {
             .clone()
             .build(),
     );
-    let new_view_message = HotStuffMessage::new_view(QuorumCertificate::genesis(), *SHARD0, Some(payload));
+    let qc = create_test_qc(vec![(node1.clone(), node1_pk), (node2.clone(), node2_pk)]);
+    let new_view_message = HotStuffMessage::new_view(qc, *SHARD0, Some(payload));
 
     // Node 2 sends new view to node 1
     instance
@@ -362,7 +397,11 @@ async fn test_hs_waiter_leader_sends_new_proposal_when_enough_votes_are_received
     );
 
     // Start a new view
-    let new_view_message = HotStuffMessage::new_view(QuorumCertificate::genesis(), *SHARD0, Some(payload));
+    let qc = create_test_qc(vec![
+        (node1.clone(), node1_pk.clone()),
+        (node2.clone(), node2_pk.clone()),
+    ]);
+    let new_view_message = HotStuffMessage::new_view(qc, *SHARD0, Some(payload));
     instance
         .tx_hs_messages
         .send((node2.clone(), new_view_message.clone()))
@@ -422,7 +461,8 @@ async fn test_hs_waiter_execute_called_when_consensus_reached() {
             .build(),
     );
 
-    let new_view_message = HotStuffMessage::new_view(QuorumCertificate::genesis(), *SHARD0, Some(payload.clone()));
+    let qc = create_test_qc(vec![(node1.clone(), node1_pk.clone())]);
+    let new_view_message = HotStuffMessage::new_view(qc, *SHARD0, Some(payload.clone()));
     instance
         .tx_hs_messages
         .send((node1.clone(), new_view_message.clone()))
@@ -492,7 +532,7 @@ async fn test_hs_waiter_multishard_votes() {
         epoch_manager.clone(),
         AlwaysFirstLeader {},
     );
-    let mut node2_instance = HsTestHarness::new(node2_pk, node2.clone(), epoch_manager, AlwaysFirstLeader {});
+    let mut node2_instance = HsTestHarness::new(node2_pk.clone(), node2.clone(), epoch_manager, AlwaysFirstLeader {});
 
     let payload = TariDanPayload::new(
         Transaction::builder()
@@ -502,14 +542,18 @@ async fn test_hs_waiter_multishard_votes() {
             .build(),
     );
 
-    let new_view_message = HotStuffMessage::new_view(QuorumCertificate::genesis(), *SHARD0, Some(payload.clone()));
+    let qc = create_test_qc(vec![
+        (node1.clone(), node1_pk.clone()),
+        (node2.clone(), node2_pk.clone()),
+    ]);
+    let new_view_message = HotStuffMessage::new_view(qc.clone(), *SHARD0, Some(payload.clone()));
     node1_instance
         .tx_hs_messages
         .send((node1.clone(), new_view_message.clone()))
         .await
         .unwrap();
 
-    let new_view_message = HotStuffMessage::new_view(QuorumCertificate::genesis(), *SHARD1, Some(payload.clone()));
+    let new_view_message = HotStuffMessage::new_view(qc, *SHARD1, Some(payload.clone()));
     node2_instance
         .tx_hs_messages
         .send((node2.clone(), new_view_message.clone()))
@@ -725,19 +769,28 @@ async fn test_kitchen_sink() {
         (s2..ShardId([255u8; 32]), shard1_committee),
     ]);
     // Create 2x hotstuff waiters
-    let node1_instance = HsTestHarness::new(node1_pk, node1.clone(), epoch_manager.clone(), AlwaysFirstLeader {});
-    let node2_instance = HsTestHarness::new(node2_pk, node2.clone(), epoch_manager, AlwaysFirstLeader {});
+    let node1_instance = HsTestHarness::new(
+        node1_pk.clone(),
+        node1.clone(),
+        epoch_manager.clone(),
+        AlwaysFirstLeader {},
+    );
+    let node2_instance = HsTestHarness::new(node2_pk.clone(), node2.clone(), epoch_manager, AlwaysFirstLeader {});
 
     let payload = TariDanPayload::new(transaction);
 
-    let new_view_message = HotStuffMessage::new_view(QuorumCertificate::genesis(), s1, Some(payload.clone()));
+    let qc = create_test_qc(vec![
+        (node1.clone(), node1_pk.clone()),
+        (node2.clone(), node2_pk.clone()),
+    ]);
+    let new_view_message = HotStuffMessage::new_view(qc.clone(), s1, Some(payload.clone()));
     node1_instance
         .tx_hs_messages
         .send((node1.clone(), new_view_message.clone()))
         .await
         .unwrap();
 
-    let new_view_message = HotStuffMessage::new_view(QuorumCertificate::genesis(), s2, Some(payload.clone()));
+    let new_view_message = HotStuffMessage::new_view(qc, s2, Some(payload.clone()));
     node2_instance
         .tx_hs_messages
         .send((node2.clone(), new_view_message.clone()))

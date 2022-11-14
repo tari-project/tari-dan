@@ -379,7 +379,7 @@ where
             ));
         }
 
-        // All signers must be inclueded in the epoch commitee for the shard
+        // All signers must be included in the epoch commitee for the shard
         let commitee_iter = committee.members.iter().map(|m| m.as_bytes());
         let commitee_set: HashSet<&[u8]> = HashSet::from_iter(commitee_iter);
         let all_signers_are_in_commitee = signers_set.iter().all(|s| commitee_set.contains(s));
