@@ -88,6 +88,7 @@ diesel::table! {
         fee -> BigInt,
         sender_public_key -> Binary,
         meta -> Text,
+        timestamp -> BigInt,
     }
 }
 

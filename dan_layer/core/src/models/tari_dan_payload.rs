@@ -22,6 +22,7 @@
 
 use std::fmt::Debug;
 
+use chrono::Utc;
 use serde::{Deserialize, Serialize};
 use tari_common_types::types::FixedHash;
 use tari_dan_common_types::{ObjectClaim, ShardId, SubstateChange};
@@ -32,11 +33,15 @@ use crate::models::{ConsensusHash, Payload};
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct TariDanPayload {
     transaction: Transaction,
+    timestamp: i64,
 }
 
 impl TariDanPayload {
     pub fn new(transaction: Transaction) -> Self {
-        Self { transaction }
+        Self {
+            transaction,
+            timestamp: Utc::now().timestamp(),
+        }
     }
 
     pub fn transaction(&self) -> &Transaction {
@@ -45,6 +50,10 @@ impl TariDanPayload {
 
     pub fn into_payload(self) -> Transaction {
         self.transaction
+    }
+
+    pub fn timestamp(&self) -> i64 {
+        self.timestamp
     }
 }
 
