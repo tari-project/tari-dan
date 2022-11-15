@@ -371,4 +371,22 @@ impl BaseLayerEpochManager {
         }
         Ok(result)
     }
+
+    #[allow(dead_code)]
+    pub fn get_validator_node_merkle_root(&self, epoch: Epoch) -> Result<Option<Vec<u8>>, EpochManagerError> {
+        let db = self.db_factory.get_or_create_global_db()?;
+        let tx = db
+            .create_transaction()
+            .map_err(|e| EpochManagerError::StorageError(e.into()))?;
+
+        let query_res = db
+            .epochs(&tx)
+            .get_epoch_data(epoch.0)
+            .map_err(|e| EpochManagerError::StorageError(e.into()))?;
+
+        match query_res {
+            Some(db_epoch) => Ok(Some(db_epoch.validator_node_mr)),
+            None => Ok(None),
+        }
+    }
 }

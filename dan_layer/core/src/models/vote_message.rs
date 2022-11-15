@@ -30,9 +30,10 @@ use tari_core::{
 use tari_crypto::hash::blake2::Blake256;
 use tari_dan_common_types::ShardId;
 use tari_dan_engine::crypto::create_key_pair;
+use tari_mmr::MerkleProof;
 
 use crate::{
-    models::{QuorumDecision, ShardVote, TreeNodeHash, ValidatorSignature},
+    models::{QuorumDecision, ShardVote, TreeNodeHash, ValidatorMetadata},
     services::infrastructure_services::NodeAddressable,
 };
 
@@ -42,7 +43,7 @@ pub struct VoteMessage {
     shard: ShardId,
     decision: QuorumDecision,
     all_shard_nodes: Vec<ShardVote>,
-    signature: Option<ValidatorSignature>,
+    validator_metadata: Option<ValidatorMetadata>,
 }
 
 impl VoteMessage {
@@ -59,7 +60,7 @@ impl VoteMessage {
             shard,
             decision,
             all_shard_nodes,
-            signature: None,
+            validator_metadata: None,
         }
     }
 
@@ -71,12 +72,12 @@ impl VoteMessage {
         Self::new(local_node_hash, shard, QuorumDecision::Reject, all_shard_nodes)
     }
 
-    pub fn with_signature(
+    pub fn with_validator_metadata(
         local_node_hash: TreeNodeHash,
         shard: ShardId,
         decision: QuorumDecision,
         mut all_shard_nodes: Vec<ShardVote>,
-        signature: ValidatorSignature,
+        validator_metadata: ValidatorMetadata,
     ) -> Self {
         all_shard_nodes.sort_by(|a, b| a.shard_id.cmp(&b.shard_id));
 
@@ -85,18 +86,20 @@ impl VoteMessage {
             shard,
             decision,
             all_shard_nodes,
-            signature: Some(signature),
+            validator_metadata: Some(validator_metadata),
         }
     }
 
-    pub fn sign(&mut self, public_key: &PublicKey, secret_key: &PrivateKey) {
+    pub fn sign(&mut self, public_key: &PublicKey, secret_key: &PrivateKey, merkle_proof: &MerkleProof) {
         let (secret_nonce, public_nonce) = create_key_pair();
         let challenge = self.construct_challenge(public_key, &public_nonce);
         let signature = Signature::sign(secret_key.clone(), secret_nonce, &*challenge)
             .expect("Sign cannot fail with 32-byte challenge and a RistrettoPublicKey");
         let signature_bytes = signature.to_consensus_bytes();
+        let merkle_proof_bytes = bincode::serialize(merkle_proof).expect("Merkle proof serialization failed");
 
-        self.signature = Some(ValidatorSignature::from_bytes(public_key.as_bytes(), &signature_bytes).unwrap());
+        self.validator_metadata =
+            Some(ValidatorMetadata::from_bytes(public_key.as_bytes(), &signature_bytes, &merkle_proof_bytes).unwrap());
     }
 
     pub fn construct_challenge(&self, public_key: &PublicKey, public_nonce: &PublicKey) -> FixedHash {
@@ -110,8 +113,8 @@ impl VoteMessage {
             .into()
     }
 
-    pub fn signature(&self) -> &ValidatorSignature {
-        self.signature.as_ref().unwrap()
+    pub fn validator_metadata(&self) -> &ValidatorMetadata {
+        self.validator_metadata.as_ref().unwrap()
     }
 
     pub fn get_all_nodes_hash(&self) -> FixedHash {

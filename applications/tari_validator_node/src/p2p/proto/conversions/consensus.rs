@@ -38,7 +38,7 @@ use tari_dan_core::models::{
     ShardVote,
     TariDanPayload,
     TreeNodeHash,
-    ValidatorSignature,
+    ValidatorMetadata,
 };
 use tari_engine_types::substate::Substate;
 
@@ -53,7 +53,7 @@ impl From<VoteMessage> for proto::consensus::VoteMessage {
             shard_id: msg.shard().as_bytes().to_vec(),
             decision: i32::from(msg.decision().as_u8()),
             all_shard_nodes: msg.all_shard_nodes().iter().map(|n| n.clone().into()).collect(),
-            signature: Some(msg.signature().to_owned().into()),
+            validator_metadata: Some(msg.validator_metadata().to_owned().into()),
         }
     }
 }
@@ -62,7 +62,7 @@ impl TryFrom<proto::consensus::VoteMessage> for VoteMessage {
     type Error = anyhow::Error;
 
     fn try_from(value: proto::consensus::VoteMessage) -> Result<Self, Self::Error> {
-        Ok(VoteMessage::with_signature(
+        Ok(VoteMessage::with_validator_metadata(
             TreeNodeHash::try_from(value.local_node_hash)?,
             ShardId::from_bytes(&value.shard_id)?,
             QuorumDecision::from_u8(u8::try_from(value.decision)?)?,
@@ -71,9 +71,10 @@ impl TryFrom<proto::consensus::VoteMessage> for VoteMessage {
                 .into_iter()
                 .map(|n| n.try_into())
                 .collect::<Result<Vec<_>, _>>()?,
-            ValidatorSignature::from_bytes(
-                &value.signature.as_ref().unwrap().public_key,
-                &value.signature.as_ref().unwrap().signature,
+            ValidatorMetadata::from_bytes(
+                &value.validator_metadata.as_ref().unwrap().public_key,
+                &value.validator_metadata.as_ref().unwrap().signature,
+                &value.validator_metadata.as_ref().unwrap().merkle_proof,
             )?,
         ))
     }
@@ -165,7 +166,7 @@ impl From<QuorumCertificate> for proto::consensus::QuorumCertificate {
                 QuorumDecision::Reject => 0,
             },
             all_shard_nodes: source.all_shard_nodes().iter().map(|p| p.clone().into()).collect(),
-            signatures: source.signatures().iter().map(|p| p.clone().into()).collect(),
+            validators_metadata: source.validators_metadata().iter().map(|p| p.clone().into()).collect(),
         }
     }
 }
@@ -192,7 +193,7 @@ impl TryFrom<proto::consensus::QuorumCertificate> for QuorumCertificate {
                 .map(|s| s.clone().try_into())
                 .collect::<Result<_, _>>()?,
             value
-                .signatures
+                .validators_metadata
                 .iter()
                 .map(|v| v.clone().try_into())
                 .collect::<Result<_, _>>()?,
@@ -294,24 +295,26 @@ impl From<SubstateState> for proto::consensus::SubstateState {
     }
 }
 
-// -------------------------------- ValidatorSignature -------------------------------- //
+// -------------------------------- ValidatorMetadata -------------------------------- //
 
-impl TryFrom<proto::consensus::ValidatorSignature> for ValidatorSignature {
+impl TryFrom<proto::consensus::ValidatorMetadata> for ValidatorMetadata {
     type Error = anyhow::Error;
 
-    fn try_from(value: proto::consensus::ValidatorSignature) -> Result<Self, Self::Error> {
+    fn try_from(value: proto::consensus::ValidatorMetadata) -> Result<Self, Self::Error> {
         Ok(Self {
             public_key: value.public_key,
             signature: value.signature,
+            merkle_proof: value.merkle_proof,
         })
     }
 }
 
-impl From<ValidatorSignature> for proto::consensus::ValidatorSignature {
-    fn from(value: ValidatorSignature) -> Self {
+impl From<ValidatorMetadata> for proto::consensus::ValidatorMetadata {
+    fn from(value: ValidatorMetadata) -> Self {
         Self {
             public_key: value.public_key,
             signature: value.signature,
+            merkle_proof: value.merkle_proof,
         }
     }
 }

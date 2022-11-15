@@ -32,6 +32,7 @@ use tari_comms::NodeIdentity;
 use tari_core::consensus::FromConsensusBytes;
 use tari_dan_common_types::{Epoch, PayloadId, ShardId, SubstateState};
 use tari_engine_types::commit_result::{FinalizeResult, RejectResult, TransactionResult};
+use tari_mmr::MerkleProof;
 use tari_shutdown::ShutdownSignal;
 use tari_utilities::ByteArray;
 use tokio::{
@@ -460,7 +461,11 @@ where
                         &finalize_result,
                     )?;
 
-                    vote_msg.sign(self.node_identity.public_key(), self.node_identity.secret_key());
+                    vote_msg.sign(
+                        self.node_identity.public_key(),
+                        self.node_identity.secret_key(),
+                        &MerkleProof::default(),
+                    );
 
                     votes_to_send.push((vote_msg, local_node.proposed_by().clone()));
                 }
@@ -540,9 +545,14 @@ where
                 // Check that there is sufficient votes for a single set of nodes that we can use to generate a qc
                 for (_hash, votes) in different_votes {
                     if votes.len() >= valid_committee.consensus_threshold() {
-                        let signatures = votes.iter().map(|v| v.signature().clone()).collect();
+                        let validators_metadata = votes.iter().map(|v| v.validator_metadata().clone()).collect();
 
                         let main_vote = votes.get(0).unwrap();
+
+                        // let committee = self.epoch_manager.get_committee(node.epoch(), node.shard()).await?;
+                        // let committee_public_keys = committee.members.iter().map(|vn|
+                        // vn.as_bytes().to_vec()).collect(); let commitee_mmr =
+                        // ValidatorNodeMmr::new(committee_public_keys);
 
                         let qc = QuorumCertificate::new(
                             node.payload_id(),
@@ -553,7 +563,7 @@ where
                             node.epoch(),
                             main_vote.decision(),
                             main_vote.all_shard_nodes().clone(),
-                            signatures,
+                            validators_metadata,
                         );
                         tx.update_high_qc(node.proposed_by().clone(), msg.shard(), qc)
                             .map_err(|e| e.into())?;
@@ -716,7 +726,7 @@ where
     fn extract_signer_signatures_from_qc(qc: &QuorumCertificate) -> Result<Vec<(PublicKey, Signature)>, HotStuffError> {
         let mut signatures: Vec<(PublicKey, Signature)> = vec![];
 
-        for s in qc.signatures() {
+        for s in qc.validators_metadata() {
             let public_key = PublicKey::from_bytes(&s.public_key)
                 .map_err(|e| HotStuffError::InvalidQuorumCertificate(e.to_string()))?;
             let signature = Signature::from_consensus_bytes(&s.signature)
@@ -945,7 +955,11 @@ where
             },
         };
 
-        vote_msg.sign(self.node_identity.public_key(), self.node_identity.secret_key());
+        vote_msg.sign(
+            self.node_identity.public_key(),
+            self.node_identity.secret_key(),
+            &MerkleProof::default(),
+        );
         Ok(vote_msg)
     }
 

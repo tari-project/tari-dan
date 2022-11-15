@@ -38,7 +38,7 @@ use tari_dan_core::{
         QuorumCertificate,
         QuorumDecision,
         TariDanPayload,
-        ValidatorSignature,
+        ValidatorMetadata,
     },
     services::{
         epoch_manager::{EpochManager, RangeEpochManager},
@@ -52,6 +52,7 @@ use tari_engine_types::{
     instruction::Instruction,
     substate::SubstateDiff,
 };
+use tari_mmr::MerkleProof;
 use tari_shutdown::Shutdown;
 use tari_utilities::ByteArray;
 use tokio::{
@@ -265,12 +266,12 @@ fn create_test_qc(shard_id: ShardId, vn_keys: Vec<(PublicKey, PrivateKey)>) -> Q
         qc.all_shard_nodes().to_vec(),
     );
 
-    let signatures: Vec<ValidatorSignature> = vn_keys
+    let validators_metadata: Vec<ValidatorMetadata> = vn_keys
         .iter()
         .map(|(public_key, secret_key)| {
             let mut node_vote = vote.clone();
-            node_vote.sign(public_key, secret_key);
-            node_vote.signature().clone()
+            node_vote.sign(public_key, secret_key, &MerkleProof::default());
+            node_vote.validator_metadata().clone()
         })
         .collect();
 
@@ -283,7 +284,7 @@ fn create_test_qc(shard_id: ShardId, vn_keys: Vec<(PublicKey, PrivateKey)>) -> Q
         qc.epoch(),
         *qc.decision(),
         qc.all_shard_nodes().to_vec(),
-        signatures,
+        validators_metadata,
     )
 }
 
@@ -437,7 +438,7 @@ async fn test_hs_waiter_leader_sends_new_proposal_when_enough_votes_are_received
     // Create some votes
     let mut vote = VoteMessage::new(*vote_hash, *SHARD0, QuorumDecision::Accept, Default::default());
 
-    vote.sign(&node1, &node1_pk);
+    vote.sign(&node1, &node1_pk, &MerkleProof::default());
     instance.tx_votes.send((node1, vote.clone())).await.unwrap();
 
     // Should get no proposal
@@ -450,7 +451,7 @@ async fn test_hs_waiter_leader_sends_new_proposal_when_enough_votes_are_received
 
     // Send another vote
     let mut vote = VoteMessage::new(*vote_hash, *SHARD0, QuorumDecision::Accept, Default::default());
-    vote.sign(&node2, &node2_pk);
+    vote.sign(&node2, &node2_pk, &MerkleProof::default());
     instance.tx_votes.send((node2, vote)).await.unwrap();
 
     // should get a proposal
