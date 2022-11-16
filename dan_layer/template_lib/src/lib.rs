@@ -45,3 +45,5 @@ pub mod panic_hook;
 pub mod prelude;
 #[cfg(feature = "macro")]
 pub use prelude::template;
+// Re-export for macro
+pub use tari_template_abi::encode;

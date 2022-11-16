@@ -20,7 +20,7 @@
 //   WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //   USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use std::{convert::TryFrom, path::Path, str::FromStr};
+use std::{path::Path, str::FromStr};
 
 use clap::{Args, Subcommand};
 use tari_dan_common_types::{ShardId, SubstateChange};
@@ -33,6 +33,7 @@ use tari_engine_types::{
     TemplateAddress,
 };
 use tari_template_lib::{
+    arg,
     args::Arg,
     models::{Amount, ComponentAddress},
 };
@@ -111,21 +112,18 @@ impl FromStr for CliArg {
 }
 
 impl CliArg {
-    pub fn to_bytes(&self) -> Vec<u8> {
+    pub fn to_arg(&self) -> Arg {
         match self {
-            CliArg::String(s) => s.as_bytes().to_vec(),
-            CliArg::U64(v) => i64::try_from(*v)
-                .expect("Not a valid i64 number")
-                .to_le_bytes()
-                .to_vec(),
-            CliArg::U32(v) => i64::from(*v).to_le_bytes().to_vec(),
-            CliArg::U16(v) => i64::from(*v).to_le_bytes().to_vec(),
-            CliArg::U8(v) => i64::from(*v).to_le_bytes().to_vec(),
-            CliArg::I64(v) => v.to_le_bytes().to_vec(),
-            CliArg::I32(v) => i64::from(*v).to_le_bytes().to_vec(),
-            CliArg::I16(v) => i64::from(*v).to_le_bytes().to_vec(),
-            CliArg::I8(v) => i64::from(*v).to_le_bytes().to_vec(),
-            CliArg::Bool(v) => i64::from(*v).to_le_bytes().to_vec(),
+            CliArg::String(s) => arg!(s),
+            CliArg::U64(v) => arg!(*v),
+            CliArg::U32(v) => arg!(*v),
+            CliArg::U16(v) => arg!(*v),
+            CliArg::U8(v) => arg!(*v),
+            CliArg::I64(v) => arg!(*v),
+            CliArg::I32(v) => arg!(*v),
+            CliArg::I16(v) => arg!(*v),
+            CliArg::I8(v) => arg!(*v),
+            CliArg::Bool(v) => arg!(*v),
         }
     }
 }
@@ -179,7 +177,7 @@ async fn handle_submit(
         } => Instruction::CallFunction {
             template_address: template_address.into_inner(),
             function: function_name,
-            args: args.iter().map(|s| Arg::literal(s.to_bytes())).collect(),
+            args: args.iter().map(|s| s.to_arg()).collect(),
         },
         CliInstruction::CallMethod {
             template_address,
@@ -195,7 +193,7 @@ async fn handle_submit(
                 template_address: template_address.into_inner(),
                 component_address: component_address.into_inner(),
                 method: method_name,
-                args: args.iter().map(|s| Arg::literal(s.to_bytes())).collect(),
+                args: args.iter().map(|s| s.to_arg()).collect(),
             }
         },
     };
