@@ -32,7 +32,6 @@ use tari_comms::NodeIdentity;
 use tari_core::consensus::FromConsensusBytes;
 use tari_dan_common_types::{Epoch, PayloadId, ShardId, SubstateState};
 use tari_engine_types::commit_result::{FinalizeResult, RejectResult, TransactionResult};
-use tari_mmr::MerkleProof;
 use tari_shutdown::ShutdownSignal;
 use tari_utilities::ByteArray;
 use tokio::{
@@ -386,7 +385,7 @@ where
             .await?;
 
         let mut votes_to_send = vec![];
-
+        let validator_node_mmr = self.epoch_manager.get_validator_node_mmr(node.epoch()).await?;
         {
             let mut tx = self.shard_store.create_tx()?;
             tx.save_node(node.clone()).map_err(|e| e.into())?;
@@ -461,10 +460,10 @@ where
                         &finalize_result,
                     )?;
 
-                    vote_msg.sign(
+                    vote_msg.set_metadata(
                         self.node_identity.public_key(),
                         self.node_identity.secret_key(),
-                        &MerkleProof::default(),
+                        &validator_node_mmr,
                     );
 
                     votes_to_send.push((vote_msg, local_node.proposed_by().clone()));
@@ -548,11 +547,6 @@ where
                         let validators_metadata = votes.iter().map(|v| v.validator_metadata().clone()).collect();
 
                         let main_vote = votes.get(0).unwrap();
-
-                        // let committee = self.epoch_manager.get_committee(node.epoch(), node.shard()).await?;
-                        // let committee_public_keys = committee.members.iter().map(|vn|
-                        // vn.as_bytes().to_vec()).collect(); let commitee_mmr =
-                        // ValidatorNodeMmr::new(committee_public_keys);
 
                         let qc = QuorumCertificate::new(
                             node.payload_id(),
@@ -939,7 +933,7 @@ where
         votes: Vec<ShardVote>,
         finalize_result: &FinalizeResult,
     ) -> Result<VoteMessage, HotStuffError> {
-        let mut vote_msg = match finalize_result.result {
+        let vote_msg = match finalize_result.result {
             TransactionResult::Accept(ref accept) => {
                 info!(
                     target: LOG_TARGET,
@@ -955,11 +949,6 @@ where
             },
         };
 
-        vote_msg.sign(
-            self.node_identity.public_key(),
-            self.node_identity.secret_key(),
-            &MerkleProof::default(),
-        );
         Ok(vote_msg)
     }
 

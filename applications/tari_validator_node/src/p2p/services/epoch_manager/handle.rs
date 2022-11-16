@@ -22,6 +22,7 @@
 
 use async_trait::async_trait;
 use tari_comms::types::CommsPublicKey;
+use tari_core::ValidatorNodeMmr;
 use tari_dan_common_types::{Epoch, ShardId};
 use tari_dan_core::{
     models::{BaseLayerMetadata, Committee},
@@ -169,6 +170,16 @@ impl EpochManager<CommsPublicKey> for EpochManagerHandle {
                 available_shards: available_shards.to_vec(),
                 reply: tx,
             })
+            .await
+            .map_err(|_| EpochManagerError::SendError)?;
+
+        rx.await.map_err(|_| EpochManagerError::ReceiveError)?
+    }
+
+    async fn get_validator_node_mmr(&self, epoch: Epoch) -> Result<ValidatorNodeMmr, EpochManagerError> {
+        let (tx, rx) = oneshot::channel();
+        self.tx_request
+            .send(EpochManagerRequest::GetValidatorNodeMmr { epoch, reply: tx })
             .await
             .map_err(|_| EpochManagerError::SendError)?;
 

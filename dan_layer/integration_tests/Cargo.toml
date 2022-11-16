@@ -19,6 +19,7 @@ tari_template_lib = { path = "../template_lib" }
 tari_test_utils = { git = "https://github.com/tari-project/tari.git", branch = "feature-dan", package = "tari_test_utils" }
 tari_utilities = { git = "https://github.com/tari-project/tari_utilities.git", tag = "v0.4.7" }
 tari_mmr = { git = "https://github.com/tari-project/tari.git", branch = "feature-dan", package = "tari_mmr" }
+tari_core = { git = "https://github.com/tari-project/tari.git", branch = "feature-dan", package = "tari_core" }
 
 lazy_static = "1.4.0"
 rand = "0.7"

@@ -24,6 +24,7 @@ use std::sync::Arc;
 
 use log::error;
 use tari_comms::{types::CommsPublicKey, NodeIdentity};
+use tari_core::ValidatorNodeMmr;
 use tari_dan_common_types::{Epoch, ShardId};
 use tari_dan_core::{
     consensus_constants::ConsensusConstants,
@@ -88,6 +89,10 @@ pub enum EpochManagerRequest {
         epoch: Epoch,
         shard: ShardId,
         reply: Reply<Committee<CommsPublicKey>>,
+    },
+    GetValidatorNodeMmr {
+        epoch: Epoch,
+        reply: Reply<ValidatorNodeMmr>,
     },
     IsValidatorInCommitteeForCurrentEpoch {
         shard: ShardId,
@@ -195,6 +200,9 @@ impl EpochManagerService {
                 );
             },
             EpochManagerRequest::Subscribe { reply } => handle(reply, Ok(self.events.1.resubscribe())),
+            EpochManagerRequest::GetValidatorNodeMmr { epoch, reply } => {
+                handle(reply, self.inner.get_validator_node_mmr(epoch))
+            },
         }
     }
 }

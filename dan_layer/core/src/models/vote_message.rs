@@ -22,20 +22,13 @@
 
 use digest::{Digest, FixedOutput};
 use serde::{Deserialize, Serialize};
-use tari_common_types::types::{FixedHash, PrivateKey, PublicKey, Signature};
-use tari_core::{
-    consensus::{DomainSeparatedConsensusHasher, ToConsensusBytes},
-    transactions::TransactionHashDomain,
-};
+use tari_common_types::types::{FixedHash, PrivateKey, PublicKey};
+use tari_core::{consensus::DomainSeparatedConsensusHasher, transactions::TransactionHashDomain, ValidatorNodeMmr};
 use tari_crypto::hash::blake2::Blake256;
 use tari_dan_common_types::ShardId;
 use tari_dan_engine::crypto::create_key_pair;
-use tari_mmr::MerkleProof;
 
-use crate::{
-    models::{QuorumDecision, ShardVote, TreeNodeHash, ValidatorMetadata},
-    services::infrastructure_services::NodeAddressable,
-};
+use crate::models::{QuorumDecision, ShardVote, TreeNodeHash, ValidatorMetadata};
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct VoteMessage {
@@ -90,16 +83,12 @@ impl VoteMessage {
         }
     }
 
-    pub fn sign(&mut self, public_key: &PublicKey, secret_key: &PrivateKey, merkle_proof: &MerkleProof) {
+    pub fn set_metadata(&mut self, public_key: &PublicKey, secret_key: &PrivateKey, vn_mmr: &ValidatorNodeMmr) {
         let (secret_nonce, public_nonce) = create_key_pair();
         let challenge = self.construct_challenge(public_key, &public_nonce);
-        let signature = Signature::sign(secret_key.clone(), secret_nonce, &*challenge)
-            .expect("Sign cannot fail with 32-byte challenge and a RistrettoPublicKey");
-        let signature_bytes = signature.to_consensus_bytes();
-        let merkle_proof_bytes = bincode::serialize(merkle_proof).expect("Merkle proof serialization failed");
+        let validator_metadata = ValidatorMetadata::new(public_key, secret_key, secret_nonce, &*challenge, vn_mmr);
 
-        self.validator_metadata =
-            Some(ValidatorMetadata::from_bytes(public_key.as_bytes(), &signature_bytes, &merkle_proof_bytes).unwrap());
+        self.validator_metadata = Some(validator_metadata);
     }
 
     pub fn construct_challenge(&self, public_key: &PublicKey, public_nonce: &PublicKey) -> FixedHash {

@@ -23,7 +23,7 @@
 use std::{convert::TryInto, sync::Arc};
 
 use tari_comms::{types::CommsPublicKey, NodeIdentity};
-use tari_core::blocks::BlockHeader;
+use tari_core::{blocks::BlockHeader, ValidatorNodeMmr};
 use tari_crypto::tari_utilities::ByteArray;
 use tari_dan_common_types::{Epoch, ShardId};
 use tari_dan_core::{
@@ -388,5 +388,20 @@ impl BaseLayerEpochManager {
             Some(db_epoch) => Ok(Some(db_epoch.validator_node_mr)),
             None => Ok(None),
         }
+    }
+
+    pub fn get_validator_node_mmr(&self, epoch: Epoch) -> Result<ValidatorNodeMmr, EpochManagerError> {
+        // TODO: the MMR struct should be serializable to store it only once and avoid recalculating it every time
+        let mut vn_mmr = ValidatorNodeMmr::new(Vec::new());
+
+        let vns = self.get_validator_nodes_per_epoch(epoch)?;
+        let vn_public_keys: Vec<Vec<u8>> = vns.into_iter().map(|vn| vn.public_key.as_bytes().to_vec()).collect();
+        for pk in vn_public_keys {
+            vn_mmr
+                .push(pk)
+                .expect("Could not build the merkle mountain range of the VN set");
+        }
+
+        Ok(vn_mmr)
     }
 }
