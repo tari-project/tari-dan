@@ -48,6 +48,7 @@ impl SigningService for NodeIdentitySigningService {
             public_key: Vec::from(self.node_identity.public_key().as_bytes()),
             signature: Vec::new(),
             merkle_proof: Vec::new(),
+            merkle_leaf_index: 0,
         })
     }
 }

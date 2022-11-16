@@ -28,7 +28,7 @@ use tari_core::ValidatorNodeMmr;
 use tari_dan_common_types::{Epoch, ShardId};
 use tari_dan_core::{
     consensus_constants::ConsensusConstants,
-    models::{BaseLayerMetadata, Committee},
+    models::{BaseLayerMetadata, Committee, ValidatorNode},
     services::epoch_manager::{EpochManagerError, ShardCommitteeAllocation},
 };
 use tari_dan_storage_sqlite::SqliteDbFactory;
@@ -90,9 +90,17 @@ pub enum EpochManagerRequest {
         shard: ShardId,
         reply: Reply<Committee<CommsPublicKey>>,
     },
+    GetValidatorNodesPerEpoch {
+        epoch: Epoch,
+        reply: Reply<Vec<ValidatorNode>>,
+    },
     GetValidatorNodeMmr {
         epoch: Epoch,
         reply: Reply<ValidatorNodeMmr>,
+    },
+    GetValidatorNodeMerkleRoot {
+        epoch: Epoch,
+        reply: Reply<Vec<u8>>,
     },
     IsValidatorInCommitteeForCurrentEpoch {
         shard: ShardId,
@@ -202,6 +210,12 @@ impl EpochManagerService {
             EpochManagerRequest::Subscribe { reply } => handle(reply, Ok(self.events.1.resubscribe())),
             EpochManagerRequest::GetValidatorNodeMmr { epoch, reply } => {
                 handle(reply, self.inner.get_validator_node_mmr(epoch))
+            },
+            EpochManagerRequest::GetValidatorNodeMerkleRoot { epoch, reply } => {
+                handle(reply, self.inner.get_validator_node_merkle_root(epoch))
+            },
+            EpochManagerRequest::GetValidatorNodesPerEpoch { epoch, reply } => {
+                handle(reply, self.inner.get_validator_nodes_per_epoch(epoch))
             },
         }
     }

@@ -372,8 +372,7 @@ impl BaseLayerEpochManager {
         Ok(result)
     }
 
-    #[allow(dead_code)]
-    pub fn get_validator_node_merkle_root(&self, epoch: Epoch) -> Result<Option<Vec<u8>>, EpochManagerError> {
+    pub fn get_validator_node_merkle_root(&self, epoch: Epoch) -> Result<Vec<u8>, EpochManagerError> {
         let db = self.db_factory.get_or_create_global_db()?;
         let tx = db
             .create_transaction()
@@ -385,16 +384,16 @@ impl BaseLayerEpochManager {
             .map_err(|e| EpochManagerError::StorageError(e.into()))?;
 
         match query_res {
-            Some(db_epoch) => Ok(Some(db_epoch.validator_node_mr)),
-            None => Ok(None),
+            Some(db_epoch) => Ok(db_epoch.validator_node_mr),
+            None => Err(EpochManagerError::NoEpochFound(epoch)),
         }
     }
 
     pub fn get_validator_node_mmr(&self, epoch: Epoch) -> Result<ValidatorNodeMmr, EpochManagerError> {
+        let vns = self.get_validator_nodes_per_epoch(epoch)?;
+
         // TODO: the MMR struct should be serializable to store it only once and avoid recalculating it every time
         let mut vn_mmr = ValidatorNodeMmr::new(Vec::new());
-
-        let vns = self.get_validator_nodes_per_epoch(epoch)?;
         let vn_public_keys: Vec<Vec<u8>> = vns.into_iter().map(|vn| vn.public_key.as_bytes().to_vec()).collect();
         for pk in vn_public_keys {
             vn_mmr

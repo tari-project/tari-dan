@@ -29,9 +29,10 @@ use std::{
 use log::*;
 use tari_common_types::types::{PublicKey, Signature};
 use tari_comms::NodeIdentity;
-use tari_core::consensus::FromConsensusBytes;
+use tari_core::{consensus::FromConsensusBytes, ValidatorNodeMmrHasherBlake256};
 use tari_dan_common_types::{Epoch, PayloadId, ShardId, SubstateState};
 use tari_engine_types::commit_result::{FinalizeResult, RejectResult, TransactionResult};
+use tari_mmr::MerkleProof;
 use tari_shutdown::ShutdownSignal;
 use tari_utilities::ByteArray;
 use tokio::{
@@ -385,7 +386,12 @@ where
             .await?;
 
         let mut votes_to_send = vec![];
-        let validator_node_mmr = self.epoch_manager.get_validator_node_mmr(node.epoch()).await?;
+        let vn_mmr = self.epoch_manager.get_validator_node_mmr(node.epoch()).await?;
+        let vns = self.epoch_manager.get_validator_nodes_per_epoch(node.epoch()).await?;
+        let vn_mmr_leaf_index = vns
+            .iter()
+            .position(|vn| vn.public_key == *self.node_identity.public_key())
+            .expect("The VN is not registered");
         {
             let mut tx = self.shard_store.create_tx()?;
             tx.save_node(node.clone()).map_err(|e| e.into())?;
@@ -463,7 +469,8 @@ where
                     vote_msg.set_metadata(
                         self.node_identity.public_key(),
                         self.node_identity.secret_key(),
-                        &validator_node_mmr,
+                        &vn_mmr,
+                        vn_mmr_leaf_index as u64,
                     );
 
                     votes_to_send.push((vote_msg, local_node.proposed_by().clone()));
@@ -687,7 +694,22 @@ where
             ));
         }
 
-        // All signers must be included in the epoch commitee for the shard
+        // all merkle proofs for the signers must be valid
+        let validator_node_root = self.epoch_manager.get_validator_node_merkle_root(qc.epoch()).await?;
+        for md in qc.validators_metadata() {
+            let merkle_proof: MerkleProof = bincode::deserialize(&md.merkle_proof).map_err(|_| {
+                HotStuffError::InvalidQuorumCertificate("could not deserialize merkle proof".to_string())
+            })?;
+            merkle_proof
+                .verify_leaf::<ValidatorNodeMmrHasherBlake256>(
+                    &validator_node_root,
+                    &md.public_key,
+                    md.merkle_leaf_index as usize,
+                )
+                .map_err(|_| HotStuffError::InvalidQuorumCertificate("invalid merkle proof".to_string()))?;
+        }
+
+        // all signers must be included in the epoch commitee for the shard
         let commitee_iter = committee.members.iter().map(|m| m.as_bytes());
         let commitee_set: HashSet<&[u8]> = HashSet::from_iter(commitee_iter);
         let all_signers_are_in_commitee = signers_set.iter().all(|s| commitee_set.contains(s));
@@ -697,7 +719,7 @@ where
             ));
         }
 
-        // All signatures must be valid
+        // all signatures must be valid
         let all_signatures_are_valid = signer_signatures.iter().all(|s| Self::validate_vote(qc, &s.0, &s.1));
         if !all_signatures_are_valid {
             return Err(HotStuffError::InvalidQuorumCertificate("invalid signature".to_string()));

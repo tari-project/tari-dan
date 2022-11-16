@@ -75,6 +75,12 @@ impl TryFrom<proto::consensus::VoteMessage> for VoteMessage {
                 &value.validator_metadata.as_ref().unwrap().public_key,
                 &value.validator_metadata.as_ref().unwrap().signature,
                 &value.validator_metadata.as_ref().unwrap().merkle_proof,
+                &value
+                    .validator_metadata
+                    .as_ref()
+                    .unwrap()
+                    .merkle_leaf_index
+                    .to_le_bytes(),
             )?,
         ))
     }
@@ -305,6 +311,7 @@ impl TryFrom<proto::consensus::ValidatorMetadata> for ValidatorMetadata {
             public_key: value.public_key,
             signature: value.signature,
             merkle_proof: value.merkle_proof,
+            merkle_leaf_index: value.merkle_leaf_index,
         })
     }
 }
@@ -315,6 +322,7 @@ impl From<ValidatorMetadata> for proto::consensus::ValidatorMetadata {
             public_key: value.public_key,
             signature: value.signature,
             merkle_proof: value.merkle_proof,
+            merkle_leaf_index: value.merkle_leaf_index,
         }
     }
 }

@@ -59,6 +59,7 @@ message ValidatorMetadata {
   bytes public_key = 1;
   bytes signature = 2;
   bytes merkle_proof = 3;
+  uint64 merkle_leaf_index = 4;
 }
 
 message TariDanPayload {

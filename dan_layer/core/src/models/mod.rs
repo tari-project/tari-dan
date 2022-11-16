@@ -232,6 +232,7 @@ pub struct ValidatorMetadata {
     pub signature: Vec<u8>,
     #[serde(with = "serde_with::hex")]
     pub merkle_proof: Vec<u8>,
+    pub merkle_leaf_index: u64,
 }
 
 impl ValidatorMetadata {
@@ -241,6 +242,7 @@ impl ValidatorMetadata {
         secret_nonce: PrivateKey,
         challenge: &[u8],
         vn_mmr: &ValidatorNodeMmr,
+        vn_mmr_leaf_index: u64,
     ) -> Self {
         let public_key_bytes = ByteArray::as_bytes(public_key);
 
@@ -261,6 +263,7 @@ impl ValidatorMetadata {
             public_key: public_key_bytes.to_vec(),
             signature: signature.to_consensus_bytes(),
             merkle_proof: merkle_proof_bytes,
+            merkle_leaf_index: vn_mmr_leaf_index,
         }
     }
 
@@ -269,11 +272,18 @@ impl ValidatorMetadata {
         public_key_bytes: &[u8],
         signature_bytes: &[u8],
         merkle_proof_bytes: &[u8],
+        merkle_proof_index_bytes: &[u8],
     ) -> Result<Self, Infallible> {
+        // TODO: handle possible deserialization errors
+        let mut buf = [0u8; 8];
+        buf.copy_from_slice(merkle_proof_index_bytes);
+        let merkle_leaf_index = u64::from_le_bytes(buf);
+
         Ok(Self {
             public_key: Vec::from(public_key_bytes),
             signature: Vec::from(signature_bytes),
             merkle_proof: Vec::from(merkle_proof_bytes),
+            merkle_leaf_index,
         })
     }
 
@@ -282,7 +292,13 @@ impl ValidatorMetadata {
     }
 
     pub fn to_bytes(&self) -> Vec<u8> {
-        [self.public_key.clone(), self.signature.clone()].concat()
+        [
+            self.public_key.clone(),
+            self.signature.clone(),
+            self.merkle_proof.clone(),
+            self.merkle_leaf_index.to_le_bytes().to_vec(),
+        ]
+        .concat()
     }
 }
 

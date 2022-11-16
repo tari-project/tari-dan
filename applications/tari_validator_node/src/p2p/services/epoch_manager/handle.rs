@@ -25,7 +25,7 @@ use tari_comms::types::CommsPublicKey;
 use tari_core::ValidatorNodeMmr;
 use tari_dan_common_types::{Epoch, ShardId};
 use tari_dan_core::{
-    models::{BaseLayerMetadata, Committee},
+    models::{BaseLayerMetadata, Committee, ValidatorNode},
     services::epoch_manager::{EpochManager, EpochManagerError, ShardCommitteeAllocation},
 };
 use tokio::sync::{broadcast, mpsc::Sender, oneshot};
@@ -176,10 +176,30 @@ impl EpochManager<CommsPublicKey> for EpochManagerHandle {
         rx.await.map_err(|_| EpochManagerError::ReceiveError)?
     }
 
+    async fn get_validator_nodes_per_epoch(&self, epoch: Epoch) -> Result<Vec<ValidatorNode>, EpochManagerError> {
+        let (tx, rx) = oneshot::channel();
+        self.tx_request
+            .send(EpochManagerRequest::GetValidatorNodesPerEpoch { epoch, reply: tx })
+            .await
+            .map_err(|_| EpochManagerError::SendError)?;
+
+        rx.await.map_err(|_| EpochManagerError::ReceiveError)?
+    }
+
     async fn get_validator_node_mmr(&self, epoch: Epoch) -> Result<ValidatorNodeMmr, EpochManagerError> {
         let (tx, rx) = oneshot::channel();
         self.tx_request
             .send(EpochManagerRequest::GetValidatorNodeMmr { epoch, reply: tx })
+            .await
+            .map_err(|_| EpochManagerError::SendError)?;
+
+        rx.await.map_err(|_| EpochManagerError::ReceiveError)?
+    }
+
+    async fn get_validator_node_merkle_root(&self, epoch: Epoch) -> Result<Vec<u8>, EpochManagerError> {
+        let (tx, rx) = oneshot::channel();
+        self.tx_request
+            .send(EpochManagerRequest::GetValidatorNodeMerkleRoot { epoch, reply: tx })
             .await
             .map_err(|_| EpochManagerError::SendError)?;
 

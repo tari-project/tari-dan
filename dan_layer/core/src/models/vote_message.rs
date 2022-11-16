@@ -83,10 +83,23 @@ impl VoteMessage {
         }
     }
 
-    pub fn set_metadata(&mut self, public_key: &PublicKey, secret_key: &PrivateKey, vn_mmr: &ValidatorNodeMmr) {
+    pub fn set_metadata(
+        &mut self,
+        public_key: &PublicKey,
+        secret_key: &PrivateKey,
+        vn_mmr: &ValidatorNodeMmr,
+        vn_mmr_leaf_index: u64,
+    ) {
         let (secret_nonce, public_nonce) = create_key_pair();
         let challenge = self.construct_challenge(public_key, &public_nonce);
-        let validator_metadata = ValidatorMetadata::new(public_key, secret_key, secret_nonce, &*challenge, vn_mmr);
+        let validator_metadata = ValidatorMetadata::new(
+            public_key,
+            secret_key,
+            secret_nonce,
+            &*challenge,
+            vn_mmr,
+            vn_mmr_leaf_index,
+        );
 
         self.validator_metadata = Some(validator_metadata);
     }

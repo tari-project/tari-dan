@@ -257,7 +257,11 @@ impl HsTestHarness {
     }
 }
 
-fn create_test_qc(shard_id: ShardId, vn_keys: Vec<(PublicKey, PrivateKey)>) -> QuorumCertificate {
+fn create_test_qc(
+    shard_id: ShardId,
+    commitee_keys: Vec<(PublicKey, PrivateKey)>,
+    all_vn_keys: Vec<PublicKey>,
+) -> QuorumCertificate {
     let qc = QuorumCertificate::genesis();
     let vote = VoteMessage::new(
         qc.local_node_hash(),
@@ -267,18 +271,18 @@ fn create_test_qc(shard_id: ShardId, vn_keys: Vec<(PublicKey, PrivateKey)>) -> Q
     );
 
     let mut vn_mmr = ValidatorNodeMmr::new(Vec::new());
-    let vn_public_keys: Vec<Vec<u8>> = vn_keys.iter().map(|k| k.0.to_vec()).collect();
-    for pk in vn_public_keys {
+    for pk in &all_vn_keys {
         vn_mmr
-            .push(pk)
+            .push(pk.to_vec())
             .expect("Could not build the merkle mountain range of the VN set");
     }
 
-    let validators_metadata: Vec<ValidatorMetadata> = vn_keys
+    let validators_metadata: Vec<ValidatorMetadata> = commitee_keys
         .iter()
         .map(|(public_key, secret_key)| {
             let mut node_vote = vote.clone();
-            node_vote.set_metadata(public_key, secret_key, &vn_mmr);
+            let leaf_index = get_merkle_leaf_index(&all_vn_keys, public_key);
+            node_vote.set_metadata(public_key, secret_key, &vn_mmr, leaf_index as u64);
             node_vote.validator_metadata().clone()
         })
         .collect();
@@ -296,8 +300,15 @@ fn create_test_qc(shard_id: ShardId, vn_keys: Vec<(PublicKey, PrivateKey)>) -> Q
     )
 }
 
-fn create_test_default_qc(vn_keys: Vec<(PublicKey, PrivateKey)>) -> QuorumCertificate {
-    create_test_qc(ShardId::zero(), vn_keys)
+fn get_merkle_leaf_index(vn_pks: &[PublicKey], vn_pk: &PublicKey) -> usize {
+    vn_pks.iter().position(|pk| *pk == *vn_pk).unwrap()
+}
+
+fn create_test_default_qc(
+    commitee_keys: Vec<(PublicKey, PrivateKey)>,
+    all_vn_keys: Vec<PublicKey>,
+) -> QuorumCertificate {
+    create_test_qc(ShardId::zero(), commitee_keys, all_vn_keys)
 }
 
 lazy_static! {
@@ -337,7 +348,10 @@ async fn test_hs_waiter_leader_proposes() {
             .build(),
     );
 
-    let qc = create_test_default_qc(vec![(node1.clone(), node1_pk), (node2.clone(), node2_pk)]);
+    let qc = create_test_default_qc(vec![(node1.clone(), node1_pk), (node2.clone(), node2_pk)], vec![
+        node1.clone(),
+        node2.clone(),
+    ]);
     let new_view_message = HotStuffMessage::new_view(qc, *SHARD0, Some(payload));
 
     instance
@@ -373,7 +387,10 @@ async fn test_hs_waiter_replica_sends_vote_for_proposal() {
             .clone()
             .build(),
     );
-    let qc = create_test_default_qc(vec![(node1.clone(), node1_pk), (node2.clone(), node2_pk)]);
+    let qc = create_test_default_qc(vec![(node1.clone(), node1_pk), (node2.clone(), node2_pk)], vec![
+        node1.clone(),
+        node2.clone(),
+    ]);
     let new_view_message = HotStuffMessage::new_view(qc, *SHARD0, Some(payload));
 
     // Node 2 sends new view to node 1
@@ -429,10 +446,10 @@ async fn test_hs_waiter_leader_sends_new_proposal_when_enough_votes_are_received
     );
 
     // Start a new view
-    let qc = create_test_default_qc(vec![
-        (node1.clone(), node1_pk.clone()),
-        (node2.clone(), node2_pk.clone()),
-    ]);
+    let qc = create_test_default_qc(
+        vec![(node1.clone(), node1_pk.clone()), (node2.clone(), node2_pk.clone())],
+        vec![node1.clone(), node2.clone()],
+    );
     let new_view_message = HotStuffMessage::new_view(qc, *SHARD0, Some(payload));
     instance
         .tx_hs_messages
@@ -457,7 +474,7 @@ async fn test_hs_waiter_leader_sends_new_proposal_when_enough_votes_are_received
 
     // Create some votes
     let mut vote = VoteMessage::new(*vote_hash, *SHARD0, QuorumDecision::Accept, Default::default());
-    vote.set_metadata(&node1, &node1_pk, &vn_mmr);
+    vote.set_metadata(&node1, &node1_pk, &vn_mmr, 0);
     instance.tx_votes.send((node1, vote.clone())).await.unwrap();
 
     // Should get no proposal
@@ -470,7 +487,7 @@ async fn test_hs_waiter_leader_sends_new_proposal_when_enough_votes_are_received
 
     // Send another vote
     let mut vote = VoteMessage::new(*vote_hash, *SHARD0, QuorumDecision::Accept, Default::default());
-    vote.set_metadata(&node2, &node2_pk, &vn_mmr);
+    vote.set_metadata(&node2, &node2_pk, &vn_mmr, 1);
     instance.tx_votes.send((node2, vote)).await.unwrap();
 
     // should get a proposal
@@ -498,7 +515,7 @@ async fn test_hs_waiter_execute_called_when_consensus_reached() {
             .build(),
     );
 
-    let qc = create_test_default_qc(vec![(node1.clone(), node1_pk.clone())]);
+    let qc = create_test_default_qc(vec![(node1.clone(), node1_pk.clone())], vec![node1.clone()]);
     let new_view_message = HotStuffMessage::new_view(qc, *SHARD0, Some(payload.clone()));
     instance
         .tx_hs_messages
@@ -578,14 +595,20 @@ async fn test_hs_waiter_multishard_votes() {
             .build(),
     );
 
-    let qc_shard0 = create_test_qc(*SHARD0, vec![(node1.clone(), node1_pk.clone())]);
+    let qc_shard0 = create_test_qc(*SHARD0, vec![(node1.clone(), node1_pk.clone())], vec![
+        node1.clone(),
+        node2.clone(),
+    ]);
     let new_view_message = HotStuffMessage::new_view(qc_shard0, *SHARD0, Some(payload.clone()));
     node1_instance
         .tx_hs_messages
         .send((node1.clone(), new_view_message.clone()))
         .await
         .unwrap();
-    let qc_shard1 = create_test_qc(*SHARD1, vec![(node2.clone(), node2_pk.clone())]);
+    let qc_shard1 = create_test_qc(*SHARD1, vec![(node2.clone(), node2_pk.clone())], vec![
+        node1.clone(),
+        node2.clone(),
+    ]);
     let new_view_message = HotStuffMessage::new_view(qc_shard1, *SHARD1, Some(payload.clone()));
     node2_instance
         .tx_hs_messages
@@ -814,7 +837,10 @@ async fn test_kitchen_sink() {
 
     let payload = TariDanPayload::new(transaction);
 
-    let qc_s1 = create_test_qc(s1, vec![(node1.clone(), node1_pk.clone())]);
+    let qc_s1 = create_test_qc(s1, vec![(node1.clone(), node1_pk.clone())], vec![
+        node1.clone(),
+        node2.clone(),
+    ]);
     let new_view_message = HotStuffMessage::new_view(qc_s1, s1, Some(payload.clone()));
     node1_instance
         .tx_hs_messages
@@ -822,7 +848,10 @@ async fn test_kitchen_sink() {
         .await
         .unwrap();
 
-    let qc_s2 = create_test_qc(s2, vec![(node2.clone(), node2_pk.clone())]);
+    let qc_s2 = create_test_qc(s2, vec![(node2.clone(), node2_pk.clone())], vec![
+        node1.clone(),
+        node2.clone(),
+    ]);
     let new_view_message = HotStuffMessage::new_view(qc_s2, s2, Some(payload.clone()));
     node2_instance
         .tx_hs_messages
