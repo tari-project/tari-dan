@@ -20,21 +20,31 @@
 //   WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //   USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use std::sync::{Arc, Mutex};
+use std::{
+    collections::HashSet,
+    iter::FromIterator,
+    sync::{Arc, Mutex},
+};
 
 use log::*;
+use tari_comms::NodeIdentity;
+use tari_crypto::ristretto::RistrettoPublicKey;
 use tari_dan_common_types::ShardId;
 use tari_dan_core::{
     message::DanMessage,
     models::{Payload, TariDanPayload},
-    services::infrastructure_services::OutboundService,
+    services::{epoch_manager::EpochManager, infrastructure_services::OutboundService},
 };
 use tari_dan_engine::transaction::Transaction;
 use tari_template_lib::Hash;
 use tokio::sync::{broadcast, mpsc};
 
-use super::handle::TransactionVecMutex;
-use crate::p2p::services::{mempool::handle::MempoolRequest, messaging::OutboundMessaging};
+use super::{handle::TransactionVecMutex, MempoolError};
+use crate::p2p::services::{
+    epoch_manager::handle::EpochManagerHandle,
+    mempool::handle::MempoolRequest,
+    messaging::OutboundMessaging,
+};
 
 const LOG_TARGET: &str = "dan::mempool::service";
 
@@ -45,6 +55,8 @@ pub struct MempoolService {
     mempool_requests: mpsc::Receiver<MempoolRequest>,
     outbound: OutboundMessaging,
     tx_valid_transactions: broadcast::Sender<(Transaction, ShardId)>,
+    epoch_manager: EpochManagerHandle,
+    node_identity: Arc<NodeIdentity>,
 }
 
 impl MempoolService {
@@ -53,6 +65,8 @@ impl MempoolService {
         mempool_requests: mpsc::Receiver<MempoolRequest>,
         outbound: OutboundMessaging,
         tx_valid_transactions: broadcast::Sender<(Transaction, ShardId)>,
+        epoch_manager: EpochManagerHandle,
+        node_identity: Arc<NodeIdentity>,
     ) -> Self {
         Self {
             transactions: Arc::new(Mutex::new(Vec::new())),
@@ -60,14 +74,16 @@ impl MempoolService {
             mempool_requests,
             outbound,
             tx_valid_transactions,
+            epoch_manager,
+            node_identity,
         }
     }
 
-    pub async fn run(mut self) {
+    pub async fn run(mut self) -> Result<(), MempoolError> {
         loop {
             tokio::select! {
-                Some(req) = self.mempool_requests.recv() => self.handle_request(req).await,
-                Some(tx) = self.new_transactions.recv() => self.handle_new_transaction(tx).await,
+                Some(req) = self.mempool_requests.recv() => self.handle_request(req).await?,
+                Some(tx) = self.new_transactions.recv() => self.handle_new_transaction(tx).await?,
 
                 else => {
                     info!(target: LOG_TARGET, "Mempool service shutting down");
@@ -75,13 +91,17 @@ impl MempoolService {
                 }
             }
         }
+
+        Ok(())
     }
 
-    async fn handle_request(&mut self, request: MempoolRequest) {
+    async fn handle_request(&mut self, request: MempoolRequest) -> Result<(), MempoolError> {
         match request {
-            MempoolRequest::SubmitTransaction(transaction) => self.handle_new_transaction(*transaction).await,
+            MempoolRequest::SubmitTransaction(transaction) => self.handle_new_transaction(*transaction).await?,
             MempoolRequest::RemoveTransaction { transaction_hash } => self.remove_transaction(transaction_hash),
         }
+
+        Ok(())
     }
 
     fn remove_transaction(&mut self, hash: Hash) {
@@ -89,7 +109,7 @@ impl MempoolService {
         transactions.retain(|(transaction, _)| *transaction.hash() != hash);
     }
 
-    async fn handle_new_transaction(&mut self, transaction: Transaction) {
+    async fn handle_new_transaction(&mut self, transaction: Transaction) -> Result<(), MempoolError> {
         debug!(target: LOG_TARGET, "Received new transaction: {:?}", transaction);
         // TODO: validate transaction
         let payload = TariDanPayload::new(transaction.clone());
@@ -109,26 +129,64 @@ impl MempoolService {
                     "🎱 Transaction {} already in mempool",
                     transaction.hash()
                 );
-                return;
+                // TODO: return an error
+                return Err(MempoolError::TransactionNotProcessedByCurrentVN);
+            }
+            // TODO: add here
+            let current_node_pubkey = self.node_identity.public_key().clone();
+            let mut should_process_txn = false;
+            for sid in &shards {
+                if self
+                    .epoch_manager
+                    .is_validator_in_committee_for_current_epoch(*sid, current_node_pubkey.clone())
+                    .await
+                    .unwrap()
+                {
+                    should_process_txn = true;
+                    break;
+                }
             }
 
-            access.push((transaction.clone(), None));
+            if should_process_txn {
+                access.push((transaction.clone(), None));
+            } else {
+                return Err(MempoolError::TransactionNotProcessedByCurrentVN);
+            }
         }
         info!(target: LOG_TARGET, "🎱 New transaction in mempool");
 
-        // TODO: Should just propagate to shards involved
-        let msg = DanMessage::NewTransaction(transaction.clone());
-        if let Err(err) = self.outbound.flood(Default::default(), msg).await {
-            error!(target: LOG_TARGET, "Failed to broadcast new transaction: {}", err);
-        }
+        self.propagate_transaction(&transaction, &shards).await;
 
-        for shard_id in payload.involved_shards() {
+        for shard_id in shards {
             if let Err(err) = self.tx_valid_transactions.send((transaction.clone(), shard_id)) {
                 error!(
                     target: LOG_TARGET,
                     "Failed to send valid transaction to shard: {}: {}", shard_id, err
                 );
             }
+        }
+
+        Ok(())
+    }
+
+    pub async fn propagate_transaction(&mut self, transaction: &Transaction, shards: &[ShardId]) {
+        // TODO: unwrap !
+        let epoch = self.epoch_manager.current_epoch().await.unwrap();
+        let committees = self.epoch_manager.get_committees(epoch, shards).await.unwrap();
+
+        let msg = DanMessage::NewTransaction(transaction.clone());
+
+        // propagate over the involved shard ids
+        let committees_set =
+            HashSet::<RistrettoPublicKey>::from_iter(committees.into_iter().flat_map(|x| x.committee.unwrap().members));
+        let committees = committees_set.into_iter().collect::<Vec<_>>();
+
+        if let Err(err) = self
+            .outbound
+            .broadcast(self.node_identity.public_key().clone(), &committees, msg)
+            .await
+        {
+            error!(target: LOG_TARGET, "Failed to broadcast new transaction: {}", err);
         }
     }
 

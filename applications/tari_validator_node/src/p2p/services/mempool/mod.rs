@@ -25,5 +25,13 @@ pub use initializer::spawn;
 
 mod handle;
 pub use handle::{MempoolHandle, MempoolRequest};
+use thiserror::Error;
 
 mod service;
+
+// TODO: write this
+#[derive(Error, Debug)]
+pub enum MempoolError {
+    #[error("Transaction should not processed by current node")]
+    TransactionNotProcessedByCurrentVN,
+}
