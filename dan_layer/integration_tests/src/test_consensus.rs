@@ -449,7 +449,7 @@ async fn test_hs_waiter_execute_called_when_consensus_reached() {
 
     // Execute at h=0
     let (executed_payload, _) = instance.recv_execute().await;
-    assert_eq!(executed_payload, payload);
+    assert_eq!(executed_payload.transaction(), payload.transaction());
 
     instance.tx_votes.send((node1.clone(), vote.clone())).await.unwrap();
 
@@ -473,7 +473,7 @@ async fn test_hs_waiter_execute_called_when_consensus_reached() {
 
     // Execute again at h=2
     let (executed_payload, _) = instance.recv_execute().await;
-    assert_eq!(executed_payload, payload);
+    assert_eq!(executed_payload.transaction(), payload.transaction());
 
     instance.assert_shuts_down_safely().await
 }
