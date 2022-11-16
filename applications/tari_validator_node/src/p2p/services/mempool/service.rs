@@ -20,15 +20,10 @@
 //   WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //   USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use std::{
-    collections::HashSet,
-    iter::FromIterator,
-    sync::{Arc, Mutex},
-};
+use std::sync::{Arc, Mutex};
 
 use log::*;
 use tari_comms::NodeIdentity;
-use tari_crypto::ristretto::RistrettoPublicKey;
 use tari_dan_common_types::ShardId;
 use tari_dan_core::{
     message::DanMessage,
@@ -121,7 +116,7 @@ impl MempoolService {
         }
 
         {
-            let mut access = self.transactions.lock().unwrap();
+            let access = self.transactions.lock().unwrap();
             // TODO: O(n)
             if access.iter().any(|(tx, _)| tx.hash() == transaction.hash()) {
                 info!(
@@ -131,7 +126,9 @@ impl MempoolService {
                 );
                 return Err(MempoolError::TransactionAlreadyExists);
             }
+        }
 
+        {
             let current_node_pubkey = self.node_identity.public_key().clone();
             let mut should_process_txn = false;
 
@@ -139,12 +136,15 @@ impl MempoolService {
                 if self
                     .epoch_manager
                     .is_validator_in_committee_for_current_epoch(*sid, current_node_pubkey.clone())
-                    .await?
+                    .await
+                    .map_err(|e| MempoolError::EpochManagerError(Box::new(e)))?
                 {
                     should_process_txn = true;
                     break;
                 }
             }
+
+            let mut access = self.transactions.lock().unwrap();
 
             if should_process_txn {
                 access.push((transaction.clone(), None));
@@ -154,7 +154,7 @@ impl MempoolService {
         }
         info!(target: LOG_TARGET, "🎱 New transaction in mempool");
 
-        self.propagate_transaction(&transaction, &shards).await;
+        self.propagate_transaction(&transaction, &shards).await?;
 
         for shard_id in shards {
             if let Err(err) = self.tx_valid_transactions.send((transaction.clone(), shard_id)) {
@@ -173,19 +173,32 @@ impl MempoolService {
         transaction: &Transaction,
         shards: &[ShardId],
     ) -> Result<(), MempoolError> {
-        // TODO: unwrap !
-        let epoch = self.epoch_manager.current_epoch().await?;
-        let committees = self.epoch_manager.get_committees(epoch, shards).await?;
+        let epoch = self
+            .epoch_manager
+            .current_epoch()
+            .await
+            .map_err(|e| MempoolError::EpochManagerError(Box::new(e)))?;
+        let committees = self
+            .epoch_manager
+            .get_committees(epoch, shards)
+            .await
+            .map_err(|e| MempoolError::EpochManagerError(Box::new(e)))?;
 
         let msg = DanMessage::NewTransaction(transaction.clone());
 
         // propagate over the involved shard ids
-        let committees_set = HashSet::<RistrettoPublicKey>::from_iter(committees.into_iter().flat_map(|x| {
-            x.committee
+        let committees = committees.into_iter().rfold(vec![], |mut v, xs| {
+            let xs = xs
+                .committee
                 .expect("mempool_service::propagate_transaction::shard committee should be available")
-                .members
-        }));
-        let committees = committees_set.into_iter().collect::<Vec<_>>();
+                .members;
+            for x in xs {
+                if !v.contains(&x) {
+                    v.push(x);
+                }
+            }
+            v
+        });
 
         if let Err(err) = self
             .outbound

@@ -38,5 +38,5 @@ pub enum MempoolError {
     #[error("Transaction already exists in the mempool")]
     TransactionAlreadyExists,
     #[error("Epoch Manager Error: {0}")]
-    EpochManagerError(#[from] EpochManagerError),
+    EpochManagerError(#[from] Box<EpochManagerError>),
 }
