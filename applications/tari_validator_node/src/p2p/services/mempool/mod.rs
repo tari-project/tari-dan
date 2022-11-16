@@ -25,6 +25,7 @@ pub use initializer::spawn;
 
 mod handle;
 pub use handle::{MempoolHandle, MempoolRequest};
+use tari_dan_core::services::epoch_manager::EpochManagerError;
 use thiserror::Error;
 
 mod service;
@@ -34,4 +35,8 @@ mod service;
 pub enum MempoolError {
     #[error("Transaction should not processed by current node")]
     TransactionNotProcessedByCurrentVN,
+    #[error("Transaction already exists in the mempool")]
+    TransactionAlreadyExists,
+    #[error("Epoch Manager Error: {0}")]
+    EpochManagerError(#[from] EpochManagerError),
 }

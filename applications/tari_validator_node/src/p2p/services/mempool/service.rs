@@ -129,18 +129,17 @@ impl MempoolService {
                     "🎱 Transaction {} already in mempool",
                     transaction.hash()
                 );
-                // TODO: return an error
-                return Err(MempoolError::TransactionNotProcessedByCurrentVN);
+                return Err(MempoolError::TransactionAlreadyExists);
             }
-            // TODO: add here
+
             let current_node_pubkey = self.node_identity.public_key().clone();
             let mut should_process_txn = false;
+
             for sid in &shards {
                 if self
                     .epoch_manager
                     .is_validator_in_committee_for_current_epoch(*sid, current_node_pubkey.clone())
-                    .await
-                    .unwrap()
+                    .await?
                 {
                     should_process_txn = true;
                     break;
@@ -169,16 +168,23 @@ impl MempoolService {
         Ok(())
     }
 
-    pub async fn propagate_transaction(&mut self, transaction: &Transaction, shards: &[ShardId]) {
+    pub async fn propagate_transaction(
+        &mut self,
+        transaction: &Transaction,
+        shards: &[ShardId],
+    ) -> Result<(), MempoolError> {
         // TODO: unwrap !
-        let epoch = self.epoch_manager.current_epoch().await.unwrap();
-        let committees = self.epoch_manager.get_committees(epoch, shards).await.unwrap();
+        let epoch = self.epoch_manager.current_epoch().await?;
+        let committees = self.epoch_manager.get_committees(epoch, shards).await?;
 
         let msg = DanMessage::NewTransaction(transaction.clone());
 
         // propagate over the involved shard ids
-        let committees_set =
-            HashSet::<RistrettoPublicKey>::from_iter(committees.into_iter().flat_map(|x| x.committee.unwrap().members));
+        let committees_set = HashSet::<RistrettoPublicKey>::from_iter(committees.into_iter().flat_map(|x| {
+            x.committee
+                .expect("mempool_service::propagate_transaction::shard committee should be available")
+                .members
+        }));
         let committees = committees_set.into_iter().collect::<Vec<_>>();
 
         if let Err(err) = self
@@ -188,6 +194,8 @@ impl MempoolService {
         {
             error!(target: LOG_TARGET, "Failed to broadcast new transaction: {}", err);
         }
+
+        Ok(())
     }
 
     pub fn get_transaction(&self) -> TransactionVecMutex {
