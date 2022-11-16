@@ -105,4 +105,11 @@ function toHexString(byteArray: number[]) {
   }).join("");
 }
 
-export { U256, compare, toHexString };
+function fromHexString(hexString: string) {
+  let res = [];
+  for (let i = 0; i < hexString.length; i += 2) {
+    res.push(Number("0x" + hexString.substring(i, i + 2)));
+  }
+  return res;
+}
+export { U256, compare, toHexString, fromHexString };

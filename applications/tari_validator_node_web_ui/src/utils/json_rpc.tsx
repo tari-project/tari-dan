@@ -20,6 +20,8 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+import { fromHexString, toHexString } from "../routes/VN/Components/helpers";
+
 async function jsonRpc(method: string, params: any = null) {
   let id = 0;
   id += 1;
@@ -75,24 +77,33 @@ async function registerValidatorNode() {
 async function getRecentTransactions() {
   return await jsonRpc("get_recent_transactions");
 }
+async function getTransaction(payload_id: string) {
+  return await jsonRpc("get_transaction", [fromHexString(payload_id)]);
+}
+async function getSubstates(payload_id: string, shard_id: string) {
+  return await jsonRpc("get_substates", [fromHexString(payload_id), fromHexString(shard_id)]);
+}
 async function getTemplates(limit: number) {
   return await jsonRpc("get_templates", [limit]);
 }
 async function getTemplate(address: string) {
+  console.log(address);
   return await jsonRpc("get_template", [address]);
 }
 
 export {
-  getIdentity,
-  getEpochManagerStats,
-  getCommsStats,
-  getMempoolStats,
-  getShardKey,
-  getCommittee,
   getAllVns,
+  getCommittee,
+  getCommsStats,
   getConnections,
+  getEpochManagerStats,
+  getIdentity,
+  getMempoolStats,
   getRecentTransactions,
-  registerValidatorNode,
-  getTemplates,
+  getShardKey,
   getTemplate,
+  getTemplates,
+  getTransaction,
+  getSubstates,
+  registerValidatorNode,
 };

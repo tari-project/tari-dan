@@ -20,34 +20,53 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-import React from "react";
-import ReactDOM from "react-dom/client";
-import "./index.css";
-import reportWebVitals from "./reportWebVitals";
-import { createBrowserRouter, RouterProvider, Route } from "react-router-dom";
-import ValidatorNode from "./routes/VN/ValidatorNode";
-import Transaction, { transactionLoader } from "./routes/Transaction/Transaction";
+import { useEffect, useState } from "react";
+import { getConnections } from "../../../utils/json_rpc";
+import { toHexString } from "./helpers";
 
-const router = createBrowserRouter([
-  {
-    path: "/",
-    element: <ValidatorNode />,
-  },
-  {
-    path: "transaction/:payloadId",
-    element: <Transaction />,
-    loader: transactionLoader,
-  },
-]);
+interface IConnection {
+  address: string;
+  age: number;
+  direction: boolean;
+  node_id: number[];
+  public_key: string;
+}
 
-const root = ReactDOM.createRoot(document.getElementById("root") as HTMLElement);
-root.render(
-  <React.StrictMode>
-    <RouterProvider router={router} />
-  </React.StrictMode>
-);
+function Connections() {
+  const [connections, setConnections] = useState<IConnection[]>([]);
+  useEffect(() => {
+    getConnections().then((response) => {
+      setConnections(response.connections);
+    });
+  }, []);
 
-// If you want to start measuring performance in your app, pass a function
-// to log results (for example: reportWebVitals(console.log))
-// or send to an analytics endpoint. Learn more: https://bit.ly/CRA-vitals
-reportWebVitals();
+  return (
+    <div className="section">
+      <div className="caption">Connections</div>
+      <table className="connections-table">
+        <thead>
+          <tr>
+            <th>Address</th>
+            <th>Age</th>
+            <th>Direction</th>
+            <th>Node id</th>
+            <th>Public key</th>
+          </tr>
+        </thead>
+        <tbody>
+          {connections.map(({ address, age, direction, node_id, public_key }) => (
+            <tr key={public_key}>
+              <td>{address}</td>
+              <td>{age}</td>
+              <td>{direction ? "Inbound" : "Outbound"}</td>
+              <td>{toHexString(node_id)}</td>
+              <td>{public_key}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+export default Connections;

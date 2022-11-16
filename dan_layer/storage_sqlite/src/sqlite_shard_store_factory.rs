@@ -26,7 +26,7 @@ use diesel::{
     prelude::*,
     result::{DatabaseErrorKind, Error},
     sql_query,
-    sql_types::{BigInt, Binary},
+    sql_types::{BigInt, Binary, Nullable, Text},
     SqliteConnection,
 };
 use log::{debug, warn};
@@ -43,6 +43,8 @@ use tari_dan_core::{
         Payload,
         QuorumCertificate,
         RecentTransaction,
+        SQLSubstate,
+        SQLTransaction,
         SubstateShardData,
         TariDanPayload,
         TreeNodeHash,
@@ -91,6 +93,31 @@ const LOG_TARGET: &str = "tari::dan::storage::sqlite::shard_store";
 pub struct QueryableRecentTransaction {
     #[sql_type = "Binary"]
     pub payload_id: Vec<u8>,
+    #[sql_type = "BigInt"]
+    pub timestamp: i64,
+    #[sql_type = "Text"]
+    pub meta: String,
+    #[sql_type = "Text"]
+    pub instructions: String,
+}
+
+impl From<QueryableRecentTransaction> for RecentTransaction {
+    fn from(recent_transaction: QueryableRecentTransaction) -> Self {
+        Self {
+            payload_id: recent_transaction.payload_id,
+            timestamp: recent_transaction.timestamp,
+            meta: recent_transaction.meta,
+            instructions: recent_transaction.instructions,
+        }
+    }
+}
+
+#[derive(Debug, QueryableByName)]
+pub struct QueryableTransaction {
+    #[sql_type = "Binary"]
+    pub node_hash: Vec<u8>,
+    #[sql_type = "Binary"]
+    pub parent_node_hash: Vec<u8>,
     #[sql_type = "Binary"]
     pub shard: Vec<u8>,
     #[sql_type = "BigInt"]
@@ -103,15 +130,45 @@ pub struct QueryableRecentTransaction {
     pub total_leader_proposals: i64,
 }
 
-impl From<QueryableRecentTransaction> for RecentTransaction {
-    fn from(recent_transaction: QueryableRecentTransaction) -> Self {
+impl From<QueryableTransaction> for SQLTransaction {
+    fn from(transaction: QueryableTransaction) -> Self {
         Self {
-            payload_id: recent_transaction.payload_id,
-            shard: recent_transaction.shard,
-            height: recent_transaction.height,
-            payload_height: recent_transaction.payload_height,
-            total_votes: recent_transaction.total_votes,
-            total_leader_proposals: recent_transaction.total_leader_proposals,
+            node_hash: transaction.node_hash,
+            parent_node_hash: transaction.parent_node_hash,
+            shard: transaction.shard,
+            height: transaction.height,
+            payload_height: transaction.payload_height,
+            total_votes: transaction.total_votes,
+            total_leader_proposals: transaction.total_leader_proposals,
+        }
+    }
+}
+
+#[derive(Debug, QueryableByName)]
+pub struct QueryableSubstate {
+    #[sql_type = "Text"]
+    pub substate_type: String,
+    #[sql_type = "BigInt"]
+    pub node_height: i64,
+    #[sql_type = "Nullable<Text>"]
+    pub data: Option<String>,
+    #[sql_type = "Nullable<Text>"]
+    pub justify: Option<String>,
+    #[sql_type = "BigInt"]
+    pub is_draft: i64,
+    #[sql_type = "Nullable<Binary>"]
+    pub tree_node_hash: Option<Vec<u8>>,
+}
+
+impl From<QueryableSubstate> for SQLSubstate {
+    fn from(transaction: QueryableSubstate) -> Self {
+        Self {
+            substate_type: transaction.substate_type,
+            node_height: transaction.node_height,
+            data: transaction.data,
+            justify: transaction.justify,
+            is_draft: transaction.is_draft == 1,
+            tree_node_hash: transaction.tree_node_hash,
         }
     }
 }
@@ -1158,19 +1215,44 @@ impl ShardStoreTransaction<PublicKey, TariDanPayload> for SqliteShardStoreTransa
     }
 
     fn get_recent_transactions(&self) -> Result<Vec<RecentTransaction>, StorageError> {
-        let res = sql_query(
-            "select p.payload_id, n.shard, n.height, n.payload_height, (select count(*) from received_votes v where \
-             v.tree_node_hash = n.node_hash) as total_votes, (select count(*) from leader_proposals lp where \
-             lp.payload_id  = n.payload_id and lp.payload_height = n.payload_height) as total_leader_proposals from \
-             payloads p inner join nodes n on p.payload_id = n.payload_id order by n.shard, n.height",
-        )
-        .load::<QueryableRecentTransaction>(&self.connection)
-        .map_err(|e| StorageError::QueryError {
-            reason: format!("Get recent transactions: {}", e),
-        })?;
+        let res = sql_query("select payload_id,timestamp,meta,instructions from payloads")
+            .load::<QueryableRecentTransaction>(&self.connection)
+            .map_err(|e| StorageError::QueryError {
+                reason: format!("Get recent transactions: {}", e),
+            })?;
         Ok(res
             .into_iter()
             .map(|recent_transaction| recent_transaction.into())
             .collect())
+    }
+
+    fn get_transaction(&self, payload_id: Vec<u8>) -> Result<Vec<SQLTransaction>, StorageError> {
+        let res = sql_query(
+            "select node_hash, parent_node_hash, shard, height, payload_height, (select count(*) from received_votes \
+             v where v.tree_node_hash = node_hash) as total_votes, (select count(*) from leader_proposals lp where \
+             lp.payload_id  = n.payload_id and lp.payload_height = n.payload_height and lp.node_hash = n.node_hash) \
+             as total_leader_proposals from nodes as n where payload_id = ? order by shard",
+        )
+        .bind::<Binary, _>(payload_id)
+        .load::<QueryableTransaction>(&self.connection)
+        .map_err(|e| StorageError::QueryError {
+            reason: format!("Get transaction: {}", e),
+        })?;
+        Ok(res.into_iter().map(|transaction| transaction.into()).collect())
+    }
+
+    fn get_substates(&self, payload_id: Vec<u8>, shard_id: Vec<u8>) -> Result<Vec<SQLSubstate>, StorageError> {
+        let res = sql_query(
+            "select * from substates where shard_id == ? and (created_by_payload_id == ? or deleted_by_payload_id == \
+             ?);",
+        )
+        .bind::<Binary, _>(shard_id)
+        .bind::<Binary, _>(payload_id.clone())
+        .bind::<Binary, _>(payload_id)
+        .load::<QueryableSubstate>(&self.connection)
+        .map_err(|e| StorageError::QueryError {
+            reason: format!("Get substates: {}", e),
+        })?;
+        Ok(res.into_iter().map(|transaction| transaction.into()).collect())
     }
 }

@@ -1,0 +1,16 @@
+.transaction {
+  padding: 10px;
+}
+
+.payload-id {
+  text-align: center;
+  font-size: larger;
+}
+
+.payload-id > .key {
+  font-size: x-large;
+}
+
+.output {
+  padding-top: 10px;
+}

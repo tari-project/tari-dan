@@ -20,34 +20,38 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-import React from "react";
-import ReactDOM from "react-dom/client";
-import "./index.css";
-import reportWebVitals from "./reportWebVitals";
-import { createBrowserRouter, RouterProvider, Route } from "react-router-dom";
-import ValidatorNode from "./routes/VN/ValidatorNode";
-import Transaction, { transactionLoader } from "./routes/Transaction/Transaction";
+import React, { useEffect, useState } from "react";
+import { getAllVns } from "../../../utils/json_rpc";
 
-const router = createBrowserRouter([
-  {
-    path: "/",
-    element: <ValidatorNode />,
-  },
-  {
-    path: "transaction/:payloadId",
-    element: <Transaction />,
-    loader: transactionLoader,
-  },
-]);
+function AllVNs({ epoch }: { epoch: number }) {
+  const [vns, setVns] = useState([]);
+  useEffect(() => {
+    getAllVns(epoch).then((response) => {
+      setVns(response.vns);
+    });
+  }, [epoch]);
+  if (!(vns?.length > 0)) return <div>All VNS are loading</div>;
+  return (
+    <div className="section">
+      <div className="caption">VNs</div>
+      <table className="all-vns-table">
+        <thead>
+          <tr>
+            <th>Public key</th>
+            <th>Shard key</th>
+          </tr>
+        </thead>
+        <tbody>
+          {vns.map(({ public_key, shard_key }, i) => (
+            <tr key={public_key}>
+              <td className="key">{public_key}</td>
+              <td className="key">{shard_key}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
 
-const root = ReactDOM.createRoot(document.getElementById("root") as HTMLElement);
-root.render(
-  <React.StrictMode>
-    <RouterProvider router={router} />
-  </React.StrictMode>
-);
-
-// If you want to start measuring performance in your app, pass a function
-// to log results (for example: reportWebVitals(console.log))
-// or send to an analytics endpoint. Learn more: https://bit.ly/CRA-vitals
-reportWebVitals();
+export default AllVNs;
