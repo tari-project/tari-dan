@@ -22,7 +22,6 @@
 
 use std::{
     collections::{HashMap, HashSet},
-    iter::FromIterator,
     sync::Arc,
 };
 
@@ -678,8 +677,10 @@ where
         let signer_signatures = Self::extract_signer_signatures_from_qc(qc)?;
 
         // the QC should not have repeated signers
-        let signers_iter = signer_signatures.iter().map(|s| NodeAddressable::as_bytes(&s.0));
-        let signers_set: HashSet<&[u8]> = HashSet::from_iter(signers_iter);
+        let signers_set = signer_signatures
+            .iter()
+            .map(|s| NodeAddressable::as_bytes(&s.0))
+            .collect::<HashSet<_>>();
         if signer_signatures.len() != signers_set.len() {
             return Err(HotStuffError::InvalidQuorumCertificate(
                 "duplicated signers".to_string(),
@@ -710,8 +711,7 @@ where
         }
 
         // all signers must be included in the epoch commitee for the shard
-        let commitee_iter = committee.members.iter().map(|m| m.as_bytes());
-        let commitee_set: HashSet<&[u8]> = HashSet::from_iter(commitee_iter);
+        let commitee_set = committee.members.iter().map(|m| m.as_bytes()).collect::<HashSet<_>>();
         let all_signers_are_in_commitee = signers_set.iter().all(|s| commitee_set.contains(s));
         if !all_signers_are_in_commitee {
             return Err(HotStuffError::InvalidQuorumCertificate(
