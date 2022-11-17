@@ -208,8 +208,16 @@ pub enum BucketAction {
     Drop,
 }
 
+#[derive(Clone, Copy, Debug, Decode, Encode)]
 pub enum WorkspaceAction {
     Put,
     PutLastInstructionOutput,
     Take,
+    ListBuckets,
+}
+
+#[derive(Clone, Debug, Decode, Encode)]
+pub struct WorkspaceInvokeArg {
+    pub action: WorkspaceAction,
+    pub args: Vec<Vec<u8>>,
 }

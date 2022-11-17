@@ -37,6 +37,8 @@ use tari_common::{
 use tari_comms::multiaddr::Multiaddr;
 use tari_p2p::{P2pConfig, PeerSeedsConfig};
 
+use crate::p2p::services::template_manager::TemplateConfig;
+
 #[derive(Debug, Clone)]
 pub struct ApplicationConfig {
     pub common: CommonConfig,
@@ -91,6 +93,8 @@ pub struct ValidatorNodeConfig {
     pub http_ui_address: Option<SocketAddr>,
     /// The node will re-register each epoch
     pub auto_register: bool,
+    /// Template config
+    pub templates: TemplateConfig,
 }
 
 impl ValidatorNodeConfig {
@@ -134,6 +138,7 @@ impl Default for ValidatorNodeConfig {
             json_rpc_address: Some("127.0.0.1:18200".parse().unwrap()),
             http_ui_address: Some("127.0.0.1:5000".parse().unwrap()),
             auto_register: false,
+            templates: TemplateConfig::default(),
         }
     }
 }

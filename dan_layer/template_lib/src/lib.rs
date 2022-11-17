@@ -27,6 +27,9 @@ pub use hash::Hash;
 pub mod args;
 pub mod models;
 
+pub mod chain_time;
+pub mod component;
+
 mod context;
 pub use context::{get_context, init_context, AbiContext};
 
@@ -47,3 +50,6 @@ pub mod prelude;
 pub use prelude::template;
 // Re-export for macro
 pub use tari_template_abi::encode;
+
+#[cfg(target_arch = "wasm32")]
+pub mod workspace;

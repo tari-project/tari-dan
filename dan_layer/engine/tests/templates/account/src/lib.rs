@@ -20,10 +20,12 @@
 //   WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //   USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use tari_template_lib::prelude::*;
+use tari_template_lib::{prelude::*, workspace::WorkspaceManager};
 
 #[template]
 mod account_template {
+    use tari_template_lib::prelude::*;
+
     use super::*;
 
     pub struct Account {
@@ -76,5 +78,13 @@ mod account_template {
                 self.vaults.push((resource_address, new_vault));
             }
         }
+
+        // pub fn deposit_all_from_workspace(&mut self) {
+        //     for bucket_id in WorkspaceManager::list_buckets() {
+        //         debug(format!("bucket: {}", bucket_id));
+        //         let bucket = WorkspaceManager::take_bucket(bucket_id);
+        //         self.deposit(bucket);
+        //     }
+        // }
     }
 }

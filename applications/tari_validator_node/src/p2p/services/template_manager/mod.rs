@@ -33,3 +33,6 @@ mod service;
 
 mod error;
 pub use error::TemplateManagerError;
+
+mod template_config;
+pub use template_config::TemplateConfig;

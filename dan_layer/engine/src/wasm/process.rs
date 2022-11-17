@@ -24,7 +24,15 @@ use borsh::{BorshDeserialize, BorshSerialize};
 use tari_engine_types::execution_result::ExecutionResult;
 use tari_template_abi::{decode, encode, encode_into, encode_with_len, CallInfo, EngineOp};
 use tari_template_lib::{
-    args::{Arg, BucketInvokeArg, ComponentInvokeArg, EmitLogArg, ResourceInvokeArg, VaultInvokeArg},
+    args::{
+        Arg,
+        BucketInvokeArg,
+        ComponentInvokeArg,
+        EmitLogArg,
+        ResourceInvokeArg,
+        VaultInvokeArg,
+        WorkspaceInvokeArg,
+    },
     AbiContext,
 };
 use wasmer::{Function, Instance, Module, Val, WasmerEnv};
@@ -113,6 +121,9 @@ impl WasmProcess {
                 env.state()
                     .interface()
                     .bucket_invoke(arg.bucket_ref, arg.action, arg.args)
+            }),
+            EngineOp::WorkspaceInvoke => Self::handle(env, arg, |env, arg: WorkspaceInvokeArg| {
+                env.state().interface().workspace_invoke(arg.action, arg.args)
             }),
         };
 

@@ -41,6 +41,9 @@ pub struct Cli {
     /// Bind address for JSON-rpc server
     #[clap(long, alias = "rpc-address")]
     pub json_rpc_address: Option<SocketAddr>,
+    /// A replacement of a template address with a local WASM file, in the format <template_address>=<local file path>. FOR DEBUGGING PURPOSES ONLY
+    #[clap(long, alias= "debug")]
+    pub debug_template: Vec<String>,
 }
 
 impl ConfigOverrideProvider for Cli {

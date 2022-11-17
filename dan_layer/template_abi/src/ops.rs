@@ -30,6 +30,7 @@ pub enum EngineOp {
     ResourceInvoke = 0x02,
     VaultInvoke = 0x03,
     BucketInvoke = 0x04,
+    WorkspaceInvoke = 0x05,
 }
 
 impl EngineOp {
@@ -40,6 +41,7 @@ impl EngineOp {
             0x02 => Some(EngineOp::ResourceInvoke),
             0x03 => Some(EngineOp::VaultInvoke),
             0x04 => Some(EngineOp::BucketInvoke),
+            0x05 => Some(EngineOp::WorkspaceInvoke),
             _ => None,
         }
     }
