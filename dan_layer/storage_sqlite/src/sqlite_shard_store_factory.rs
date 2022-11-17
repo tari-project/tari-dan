@@ -373,13 +373,12 @@ impl ShardStoreTransaction<PublicKey, TariDanPayload> for SqliteShardStoreTransa
             key: shard.to_string(),
         })?;
 
-        Ok(
-            serde_json::from_str(&qc.qc_json).map_err(|source| StorageError::SerdeJson {
-                source,
-                operation: "get_high_qc_for".to_string(),
-                data: qc.qc_json.to_string(),
-            })?,
-        )
+        let qc = serde_json::from_str(&qc.qc_json).map_err(|source| StorageError::SerdeJson {
+            source,
+            operation: "get_high_qc_for".to_string(),
+            data: qc.qc_json.to_string(),
+        })?;
+        Ok(qc)
     }
 
     fn get_payload(&self, id: &PayloadId) -> Result<TariDanPayload, StorageError> {
