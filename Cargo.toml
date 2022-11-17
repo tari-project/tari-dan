@@ -41,8 +41,12 @@ liblmdb-sys = { git = "https://github.com/tari-project/lmdb-rs", tag = "0.7.6-ta
 #tari_shutdown = { git = "https://github.com/myfork/tari.git", branch = "mybranch" }
 #tari_storage = { git = "https://github.com/myfork/tari.git", branch = "mybranch" }
 #tari_wallet_grpc_client = { git = "https://github.com/myfork/tari.git", branch = "mybranch" }
+#tari_script = { git = "https://github.com/myfork/tari.git", branch = "mybranch" }
+#tari_wallet = { git = "https://github.com/myfork/tari.git", branch = "mybranch" }
+#tari_console_wallet = { git = "https://github.com/myfork/tari.git", branch = "mybranch" }
+#tari_service_framework = { git = "https://github.com/myfork/tari.git", branch = "mybranch" }
+#tari_comms_dht = { git = "https://github.com/myfork/tari.git", branch = "mybranch" }
 
-# Uncomment and replace myfork and mybranch with the name of your fork and the branch you want to temporarily use
 [patch."https://github.com/tari-project/tari.git"]
 tari_app_grpc = { git = "https://github.com/sdbondi/tari.git", branch = "core-vn-reg-impl-from-rfc" }
 tari_app_utilities = { git = "https://github.com/sdbondi/tari.git", branch = "core-vn-reg-impl-from-rfc" }
@@ -57,3 +61,8 @@ tari_p2p = { git = "https://github.com/sdbondi/tari.git", branch = "core-vn-reg-
 tari_shutdown = { git = "https://github.com/sdbondi/tari.git", branch = "core-vn-reg-impl-from-rfc" }
 tari_storage = { git = "https://github.com/sdbondi/tari.git", branch = "core-vn-reg-impl-from-rfc" }
 tari_wallet_grpc_client = { git = "https://github.com/sdbondi/tari.git", branch = "core-vn-reg-impl-from-rfc" }
+tari_script = { git = "https://github.com/sdbondi/tari.git", branch = "core-vn-reg-impl-from-rfc" }
+tari_wallet = { git = "https://github.com/sdbondi/tari.git", branch = "core-vn-reg-impl-from-rfc" }
+tari_console_wallet = { git = "https://github.com/sdbondi/tari.git", branch = "core-vn-reg-impl-from-rfc" }
+tari_service_framework = { git = "https://github.com/sdbondi/tari.git", branch = "core-vn-reg-impl-from-rfc" }
+tari_comms_dht = { git = "https://github.com/sdbondi/tari.git", branch = "core-vn-reg-impl-from-rfc" }

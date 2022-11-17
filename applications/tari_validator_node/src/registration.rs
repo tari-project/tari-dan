@@ -80,7 +80,7 @@ pub async fn register(
     let mut attempts = 1;
 
     loop {
-        match wallet_client.register_validator_node(&node_identity).await {
+        match wallet_client.register_validator_node(node_identity).await {
             Ok(resp) => {
                 let tx_id = resp.transaction_id;
                 info!(
@@ -165,10 +165,7 @@ async fn handle_epoch_changed(
     node_identity: &NodeIdentity,
     epoch_manager: &EpochManagerHandle,
 ) -> Result<(), AutoRegistrationError> {
-    let last_registration_epoch = epoch_manager
-        .last_registration_epoch()
-        .await?
-        .unwrap_or_else(|| Epoch(0));
+    let last_registration_epoch = epoch_manager.last_registration_epoch().await?.unwrap_or(Epoch(0));
 
     let mut base_node_client =
         GrpcBaseNodeClient::new(config.validator_node.base_node_grpc_address.unwrap_or_else(|| {
@@ -193,7 +190,7 @@ async fn handle_epoch_changed(
             SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), port)
         }));
 
-        register(wallet_client, &node_identity, &epoch_manager).await?;
+        register(wallet_client, node_identity, epoch_manager).await?;
     }
     Ok(())
 }
