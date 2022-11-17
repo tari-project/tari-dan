@@ -25,7 +25,7 @@ use serde::{Deserialize, Serialize};
 use tari_crypto::hash::blake2::Blake256;
 use tari_dan_common_types::{Epoch, PayloadId, ShardId};
 
-use crate::models::{NodeHeight, ShardVote, TreeNodeHash, ValidatorSignature};
+use crate::models::{NodeHeight, ShardVote, TreeNodeHash, ValidatorMetadata};
 
 #[derive(Debug, Clone, Copy, Deserialize, Serialize, PartialEq, Eq)]
 pub enum QuorumDecision {
@@ -63,7 +63,7 @@ pub struct QuorumCertificate {
     epoch: Epoch,
     decision: QuorumDecision,
     all_shard_nodes: Vec<ShardVote>,
-    signatures: Vec<ValidatorSignature>,
+    validators_metadata: Vec<ValidatorMetadata>,
 }
 
 impl QuorumCertificate {
@@ -76,7 +76,7 @@ impl QuorumCertificate {
         epoch: Epoch,
         decision: QuorumDecision,
         all_shard_nodes: Vec<ShardVote>,
-        signatures: Vec<ValidatorSignature>,
+        validators_metadata: Vec<ValidatorMetadata>,
     ) -> Self {
         Self {
             payload_id: payload,
@@ -87,7 +87,7 @@ impl QuorumCertificate {
             epoch,
             decision,
             all_shard_nodes,
-            signatures,
+            validators_metadata,
         }
     }
 
@@ -101,7 +101,7 @@ impl QuorumCertificate {
             epoch: Epoch(0),
             decision: QuorumDecision::Accept,
             all_shard_nodes: vec![],
-            signatures: vec![],
+            validators_metadata: vec![],
         }
     }
 
@@ -113,8 +113,8 @@ impl QuorumCertificate {
         self.epoch
     }
 
-    pub fn signature(&self) -> &[ValidatorSignature] {
-        self.signatures.as_slice()
+    pub fn validators_metadata(&self) -> &[ValidatorMetadata] {
+        self.validators_metadata.as_slice()
     }
 
     pub fn as_bytes(&self) -> Vec<u8> {
@@ -122,11 +122,11 @@ impl QuorumCertificate {
             .chain(self.local_node_hash.as_bytes())
             .chain(self.local_node_height.to_le_bytes())
             .chain(self.shard.to_le_bytes())
-            .chain((self.signatures.len() as u64).to_le_bytes());
+            .chain((self.validators_metadata.len() as u64).to_le_bytes());
         // TODO: add all fields
 
-        for sig in &self.signatures {
-            result = result.chain(sig.to_bytes());
+        for vm in &self.validators_metadata {
+            result = result.chain(vm.to_bytes());
         }
         // result = result.chain((self.involved_shards.len() as u32).to_le_bytes());
         // for shard in &self.involved_shards {
@@ -158,9 +158,5 @@ impl QuorumCertificate {
 
     pub fn all_shard_nodes(&self) -> &[ShardVote] {
         &self.all_shard_nodes
-    }
-
-    pub fn signatures(&self) -> &[ValidatorSignature] {
-        &self.signatures
     }
 }

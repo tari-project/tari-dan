@@ -254,7 +254,7 @@ fn summarize(result: &TransactionFinalizeResult) {
     println!();
     println!("Epoch: {}", result.qc.epoch());
     println!("Payload height: {}", result.qc.payload_height());
-    println!("Signed by: {} validator nodes", result.qc.signature().len());
+    println!("Signed by: {} validator nodes", result.qc.validators_metadata().len());
     println!();
     // dbg!(&result.qc);
     println!("========= Substates =========");

@@ -25,10 +25,10 @@ use std::sync::Arc;
 use tari_comms::NodeIdentity;
 use tari_utilities::ByteArray;
 
-use crate::{digital_assets_error::DigitalAssetError, models::ValidatorSignature};
+use crate::{digital_assets_error::DigitalAssetError, models::ValidatorMetadata};
 
 pub trait SigningService {
-    fn sign(&self, challenge: &[u8]) -> Result<ValidatorSignature, DigitalAssetError>;
+    fn sign(&self, challenge: &[u8]) -> Result<ValidatorMetadata, DigitalAssetError>;
 }
 
 pub struct NodeIdentitySigningService {
@@ -42,10 +42,13 @@ impl NodeIdentitySigningService {
 }
 
 impl SigningService for NodeIdentitySigningService {
-    fn sign(&self, _challenge: &[u8]) -> Result<ValidatorSignature, DigitalAssetError> {
+    fn sign(&self, _challenge: &[u8]) -> Result<ValidatorMetadata, DigitalAssetError> {
         // TODO better sig
-        Ok(ValidatorSignature {
-            signer: Vec::from(self.node_identity.public_key().as_bytes()),
+        Ok(ValidatorMetadata {
+            public_key: Vec::from(self.node_identity.public_key().as_bytes()),
+            signature: Vec::new(),
+            merkle_proof: Vec::new(),
+            merkle_leaf_index: 0,
         })
     }
 }

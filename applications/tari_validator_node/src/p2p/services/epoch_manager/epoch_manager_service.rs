@@ -24,10 +24,11 @@ use std::sync::Arc;
 
 use log::error;
 use tari_comms::{types::CommsPublicKey, NodeIdentity};
+use tari_core::ValidatorNodeMmr;
 use tari_dan_common_types::{Epoch, ShardId};
 use tari_dan_core::{
     consensus_constants::ConsensusConstants,
-    models::Committee,
+    models::{BaseLayerMetadata, Committee, ValidatorNode},
     services::epoch_manager::{EpochManagerError, ShardCommitteeAllocation},
 };
 use tari_dan_storage_sqlite::SqliteDbFactory;
@@ -65,7 +66,7 @@ pub enum EpochManagerRequest {
         reply: Reply<Epoch>,
     },
     UpdateEpoch {
-        height: u64,
+        tip_info: BaseLayerMetadata,
         reply: Reply<()>,
     },
     LastRegistrationEpoch {
@@ -88,6 +89,18 @@ pub enum EpochManagerRequest {
         epoch: Epoch,
         shard: ShardId,
         reply: Reply<Committee<CommsPublicKey>>,
+    },
+    GetValidatorNodesPerEpoch {
+        epoch: Epoch,
+        reply: Reply<Vec<ValidatorNode>>,
+    },
+    GetValidatorNodeMmr {
+        epoch: Epoch,
+        reply: Reply<ValidatorNodeMmr>,
+    },
+    GetValidatorNodeMerkleRoot {
+        epoch: Epoch,
+        reply: Reply<Vec<u8>>,
     },
     IsValidatorInCommitteeForCurrentEpoch {
         shard: ShardId,
@@ -162,8 +175,8 @@ impl EpochManagerService {
     async fn handle_request(&mut self, req: EpochManagerRequest) {
         match req {
             EpochManagerRequest::CurrentEpoch { reply } => handle(reply, Ok(self.inner.current_epoch())),
-            EpochManagerRequest::UpdateEpoch { height, reply } => {
-                handle(reply, self.inner.update_epoch(height).await);
+            EpochManagerRequest::UpdateEpoch { tip_info, reply } => {
+                handle(reply, self.inner.update_epoch(tip_info).await);
             },
             EpochManagerRequest::LastRegistrationEpoch { reply } => {
                 handle(reply, self.inner.last_registration_epoch().await)
@@ -195,6 +208,15 @@ impl EpochManagerService {
                 );
             },
             EpochManagerRequest::Subscribe { reply } => handle(reply, Ok(self.events.1.resubscribe())),
+            EpochManagerRequest::GetValidatorNodeMmr { epoch, reply } => {
+                handle(reply, self.inner.get_validator_node_mmr(epoch))
+            },
+            EpochManagerRequest::GetValidatorNodeMerkleRoot { epoch, reply } => {
+                handle(reply, self.inner.get_validator_node_merkle_root(epoch))
+            },
+            EpochManagerRequest::GetValidatorNodesPerEpoch { epoch, reply } => {
+                handle(reply, self.inner.get_validator_nodes_per_epoch(epoch))
+            },
         }
     }
 }

@@ -22,7 +22,7 @@
 
 use std::sync::Arc;
 
-use super::validator_node_db::ValidatorNodeDb;
+use super::{validator_node_db::ValidatorNodeDb, EpochDb};
 use crate::global::{backend_adapter::GlobalDbAdapter, metadata_db::MetadataDb, template_db::TemplateDb};
 
 #[derive(Debug, Clone)]
@@ -55,6 +55,10 @@ impl<TGlobalDbAdapter: GlobalDbAdapter> GlobalDb<TGlobalDbAdapter> {
         tx: &'a TGlobalDbAdapter::DbTransaction,
     ) -> ValidatorNodeDb<'a, TGlobalDbAdapter> {
         ValidatorNodeDb::new(&self.adapter, tx)
+    }
+
+    pub fn epochs<'a>(&'a self, tx: &'a TGlobalDbAdapter::DbTransaction) -> EpochDb<'a, TGlobalDbAdapter> {
+        EpochDb::new(&self.adapter, tx)
     }
 
     pub fn commit(&self, tx: TGlobalDbAdapter::DbTransaction) -> Result<(), TGlobalDbAdapter::Error> {

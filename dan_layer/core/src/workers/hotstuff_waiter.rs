@@ -20,12 +20,20 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use std::collections::HashMap;
+use std::{
+    collections::{HashMap, HashSet},
+    sync::Arc,
+};
 
 use log::*;
+use tari_common_types::types::{PublicKey, Signature};
+use tari_comms::NodeIdentity;
+use tari_core::{consensus::FromConsensusBytes, ValidatorNodeMmrHasherBlake256};
 use tari_dan_common_types::{Epoch, PayloadId, ShardId, SubstateState};
 use tari_engine_types::commit_result::{FinalizeResult, RejectResult, TransactionResult};
+use tari_mmr::MerkleProof;
 use tari_shutdown::ShutdownSignal;
+use tari_utilities::ByteArray;
 use tokio::{
     sync::{
         broadcast,
@@ -50,7 +58,6 @@ use crate::{
         QuorumDecision,
         ShardVote,
         TreeNodeHash,
-        ValidatorSignature,
     },
     services::{
         epoch_manager::EpochManager,
@@ -65,9 +72,8 @@ use crate::{
 const LOG_TARGET: &str = "tari::dan_layer::hotstuff_waiter";
 
 pub struct HotStuffWaiter<TPayload, TAddr, TLeaderStrategy, TEpochManager, TPayloadProcessor, TShardStore> {
-    /// The node's own address
-    identity: TAddr,
-    /// The stragegy for selecting the leader for a <epoch, shard, round>
+    node_identity: Arc<NodeIdentity>,
+    public_key: TAddr,
     leader_strategy: TLeaderStrategy,
     /// The epoch manager
     epoch_manager: TEpochManager,
@@ -105,7 +111,8 @@ where
     TShardStore: ShardStoreFactory<Addr = TAddr, Payload = TPayload> + 'static + Send + Sync,
 {
     pub fn spawn(
-        identity: TAddr,
+        node_identity: Arc<NodeIdentity>,
+        public_key: TAddr,
         epoch_manager: TEpochManager,
         leader_strategy: TLeaderStrategy,
         rx_new: Receiver<(TPayload, ShardId)>,
@@ -121,7 +128,8 @@ where
         consensus_constants: ConsensusConstants,
     ) -> JoinHandle<Result<(), HotStuffError>> {
         let waiter = HotStuffWaiter::new(
-            identity,
+            node_identity,
+            public_key,
             epoch_manager,
             leader_strategy,
             rx_new,
@@ -139,7 +147,8 @@ where
     }
 
     pub fn new(
-        identity: TAddr,
+        node_identity: Arc<NodeIdentity>,
+        public_key: TAddr,
         epoch_manager: TEpochManager,
         leader_strategy: TLeaderStrategy,
         rx_new: Receiver<(TPayload, ShardId)>,
@@ -154,7 +163,8 @@ where
         consensus_constants: ConsensusConstants,
     ) -> Self {
         Self {
-            identity,
+            node_identity,
+            public_key,
             epoch_manager,
             leader_strategy,
             rx_new,
@@ -229,8 +239,7 @@ where
 
         let epoch = self.epoch_manager.current_epoch().await?;
         self.validate_from_committee(&from, epoch, shard).await?;
-        self.validate_qc(&qc)?;
-
+        self.validate_qc(&qc).await?;
         let mut tx = self.shard_store.create_tx()?;
         tx.update_high_qc(from, shard, qc).map_err(|e| e.into())?;
         tx.set_payload(payload).map_err(|e| e.into())?;
@@ -319,7 +328,7 @@ where
                 actual_payload,
                 qc,
                 epoch,
-                self.identity.clone(),
+                self.public_key.clone(),
                 payload_height,
                 Some(local_pledge),
             );
@@ -372,11 +381,16 @@ where
         // Find the shards that this node is responsible for out of all the shards involved
         let local_shards = self
             .epoch_manager
-            .filter_to_local_shards(node.epoch(), &self.identity, &involved_shards)
+            .filter_to_local_shards(node.epoch(), &self.public_key, &involved_shards)
             .await?;
 
         let mut votes_to_send = vec![];
-
+        let vn_mmr = self.epoch_manager.get_validator_node_mmr(node.epoch()).await?;
+        let vns = self.epoch_manager.get_validator_nodes_per_epoch(node.epoch()).await?;
+        let vn_mmr_leaf_index = vns
+            .iter()
+            .position(|vn| vn.public_key == *self.node_identity.public_key())
+            .expect("The VN is not registered");
         {
             let mut tx = self.shard_store.create_tx()?;
             tx.save_node(node.clone()).map_err(|e| e.into())?;
@@ -444,14 +458,19 @@ where
                     tx.set_last_voted_height(local_shard, local_node.height())
                         .map_err(|e| e.into())?;
 
-                    let _signature = self.sign(node.hash(), shard);
-
-                    let vote_msg = self.decide(
+                    let mut vote_msg = self.decide(
                         *local_node.hash(),
                         local_shard,
                         leader_proposals.clone(),
                         &finalize_result,
                     )?;
+
+                    vote_msg.set_metadata(
+                        self.node_identity.public_key(),
+                        self.node_identity.secret_key(),
+                        &vn_mmr,
+                        vn_mmr_leaf_index as u64,
+                    );
 
                     votes_to_send.push((vote_msg, local_node.proposed_by().clone()));
                 }
@@ -500,7 +519,7 @@ where
 
             node = tx.get_node(&msg.local_node_hash()).map_err(|e| e.into())?;
 
-            if node.proposed_by() != &self.identity {
+            if node.proposed_by() != &self.public_key {
                 return Err(HotStuffError::NotTheLeader);
             }
         }
@@ -531,7 +550,7 @@ where
                 // Check that there is sufficient votes for a single set of nodes that we can use to generate a qc
                 for (_hash, votes) in different_votes {
                     if votes.len() >= valid_committee.consensus_threshold() {
-                        let signatures = votes.iter().map(|v| v.signature().clone()).collect();
+                        let validators_metadata = votes.iter().map(|v| v.validator_metadata().clone()).collect();
 
                         let main_vote = votes.get(0).unwrap();
 
@@ -544,7 +563,7 @@ where
                             node.epoch(),
                             main_vote.decision(),
                             main_vote.all_shard_nodes().clone(),
-                            signatures,
+                            validators_metadata,
                         );
                         tx.update_high_qc(node.proposed_by().clone(), msg.shard(), qc)
                             .map_err(|e| e.into())?;
@@ -637,7 +656,7 @@ where
     ) -> Result<bool, HotStuffError> {
         Ok(self
             .leader_strategy
-            .is_leader(&self.identity, committee, payload, shard, 0))
+            .is_leader(&self.public_key.clone(), committee, payload, shard, 0))
     }
 
     async fn validate_from_committee(
@@ -653,10 +672,86 @@ where
         }
     }
 
-    fn validate_qc(&self, _qc: &QuorumCertificate) -> Result<(), HotStuffError> {
-        // TODO: get committee at epoch
-        // TODO: Validate committee signatures
+    async fn validate_qc(&self, qc: &QuorumCertificate) -> Result<(), HotStuffError> {
+        // extract all the pairs of signer-signature present in the QC
+        let signer_signatures = Self::extract_signer_signatures_from_qc(qc)?;
+
+        // the QC should not have repeated signers
+        let signers_set = signer_signatures
+            .iter()
+            .map(|s| NodeAddressable::as_bytes(&s.0))
+            .collect::<HashSet<_>>();
+        if signer_signatures.len() != signers_set.len() {
+            return Err(HotStuffError::InvalidQuorumCertificate(
+                "duplicated signers".to_string(),
+            ));
+        }
+
+        // check that the minimum quorum has been reached
+        let committee = self.epoch_manager.get_committee(qc.epoch(), qc.shard()).await?;
+        if signers_set.len() < committee.consensus_threshold() {
+            return Err(HotStuffError::InvalidQuorumCertificate(
+                "insufficient quorum".to_string(),
+            ));
+        }
+
+        // all merkle proofs for the signers must be valid
+        let validator_node_root = self.epoch_manager.get_validator_node_merkle_root(qc.epoch()).await?;
+        for md in qc.validators_metadata() {
+            let merkle_proof: MerkleProof = bincode::deserialize(&md.merkle_proof).map_err(|_| {
+                HotStuffError::InvalidQuorumCertificate("could not deserialize merkle proof".to_string())
+            })?;
+            merkle_proof
+                .verify_leaf::<ValidatorNodeMmrHasherBlake256>(
+                    &validator_node_root,
+                    &md.public_key,
+                    md.merkle_leaf_index as usize,
+                )
+                .map_err(|_| HotStuffError::InvalidQuorumCertificate("invalid merkle proof".to_string()))?;
+        }
+
+        // all signers must be included in the epoch commitee for the shard
+        let commitee_set = committee.members.iter().map(|m| m.as_bytes()).collect::<HashSet<_>>();
+        let all_signers_are_in_commitee = signers_set.iter().all(|s| commitee_set.contains(s));
+        if !all_signers_are_in_commitee {
+            return Err(HotStuffError::InvalidQuorumCertificate(
+                "some signers are not in committee".to_string(),
+            ));
+        }
+
+        // all signatures must be valid
+        let all_signatures_are_valid = signer_signatures.iter().all(|s| Self::validate_vote(qc, &s.0, &s.1));
+        if !all_signatures_are_valid {
+            return Err(HotStuffError::InvalidQuorumCertificate("invalid signature".to_string()));
+        }
+
         Ok(())
+    }
+
+    fn validate_vote(qc: &QuorumCertificate, public_key: &PublicKey, signature: &Signature) -> bool {
+        let vote = VoteMessage::new(
+            qc.local_node_hash(),
+            qc.shard(),
+            *qc.decision(),
+            qc.all_shard_nodes().to_vec(),
+        );
+        let challenge = vote.construct_challenge(public_key, signature.get_public_nonce());
+        signature.verify_challenge(public_key, &*challenge)
+    }
+
+    fn extract_signer_signatures_from_qc(qc: &QuorumCertificate) -> Result<Vec<(PublicKey, Signature)>, HotStuffError> {
+        let mut signatures: Vec<(PublicKey, Signature)> = vec![];
+
+        for s in qc.validators_metadata() {
+            let public_key = PublicKey::from_bytes(&s.public_key)
+                .map_err(|e| HotStuffError::InvalidQuorumCertificate(e.to_string()))?;
+            let signature = Signature::from_consensus_bytes(&s.signature)
+                .map_err(|e| HotStuffError::InvalidQuorumCertificate(e.to_string()))?;
+
+            signatures.push((public_key, signature));
+        }
+
+        Ok(signatures)
     }
 
     /// Performs the requisite state updates for a given tree node.
@@ -853,11 +948,6 @@ where
         }
     }
 
-    fn sign(&self, _node_hash: &TreeNodeHash, _shard: ShardId) -> ValidatorSignature {
-        // todo!();
-        ValidatorSignature::from_bytes(&[]).unwrap()
-    }
-
     fn decide(
         &self,
         local_node: TreeNodeHash,
@@ -865,7 +955,7 @@ where
         votes: Vec<ShardVote>,
         finalize_result: &FinalizeResult,
     ) -> Result<VoteMessage, HotStuffError> {
-        let mut vote_msg = match finalize_result.result {
+        let vote_msg = match finalize_result.result {
             TransactionResult::Accept(ref accept) => {
                 info!(
                     target: LOG_TARGET,
@@ -881,7 +971,6 @@ where
             },
         };
 
-        vote_msg.sign();
         Ok(vote_msg)
     }
 
