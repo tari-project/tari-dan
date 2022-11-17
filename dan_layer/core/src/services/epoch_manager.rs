@@ -67,6 +67,8 @@ pub enum EpochManagerError {
     RpcError(#[from] RpcError),
     #[error("Rpc status error: {0}")]
     RpcStatus(#[from] RpcStatus),
+    #[error("No committee VNs found for shard {shard_id} and epoch {epoch}")]
+    NoCommitteeVns { shard_id: ShardId, epoch: Epoch },
 }
 
 #[async_trait]
