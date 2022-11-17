@@ -12,7 +12,7 @@ impl TemplateConfig {
     pub fn debug_replacements(&self) -> HashMap<TemplateAddress, PathBuf> {
         let mut result = HashMap::new();
         for row in &self.debug_replacements {
-            let parts: Vec<&str> = row.split("=").collect();
+            let parts: Vec<&str> = row.split('=').collect();
             let template_address = TemplateAddress::from_hex(parts[0]).expect("Not a valid template address");
             let path = PathBuf::from(parts[1]);
             result.insert(template_address, path);

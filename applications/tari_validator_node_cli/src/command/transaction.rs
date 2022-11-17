@@ -38,7 +38,7 @@ use tari_template_lib::{
     args::Arg,
     models::{Amount, ComponentAddress},
 };
-use tari_utilities::hex::{to_hex, Hex};
+use tari_utilities::hex::to_hex;
 use tari_validator_node_client::{
     types::{SubmitTransactionRequest, TransactionFinalizeResult},
     ValidatorNodeClient,
@@ -221,10 +221,10 @@ async fn handle_submit(
         let component_address = ComponentAddress::from_hex(&account_address)?;
         let account_template = args
             .account_template_address
-            .ok_or(anyhow!("No account template specified"))?;
+            .ok_or_else(|| anyhow!("No account template specified"))?;
         builder.add_instruction(Instruction::CallMethod {
             template_address: ComponentAddress::from_hex(&account_template)?,
-            component_address: component_address.clone(),
+            component_address,
             method: "deposit_all_from_workspace".to_string(),
             args: vec![],
         });

@@ -185,7 +185,7 @@ impl StateTracker {
     }
 
     pub fn list_buckets(&self) -> Vec<BucketId> {
-        self.read_with(|state| state.buckets.keys().map(|k| *k).collect())
+        self.read_with(|state| state.buckets.keys().copied().collect())
     }
 
     pub fn get_bucket(&self, bucket_id: BucketId) -> Result<Bucket, RuntimeError> {
