@@ -30,6 +30,7 @@ use log::{error, info, warn};
 use tari_app_grpc::tari_rpc::RegisterValidatorNodeResponse;
 use tari_common::configuration::bootstrap::{grpc_default_port, ApplicationType};
 use tari_comms::NodeIdentity;
+use tari_dan_common_types::Epoch;
 use tari_dan_core::{
     services::{
         base_node_error::BaseNodeError,
@@ -73,7 +74,7 @@ pub enum AutoRegistrationError {
 
 pub async fn register(
     mut wallet_client: GrpcWalletClient,
-    node_identity: Arc<NodeIdentity>,
+    node_identity: &NodeIdentity,
     epoch_manager: &EpochManagerHandle,
 ) -> Result<RegisterValidatorNodeResponse, AutoRegistrationError> {
     let mut attempts = 1;
@@ -147,32 +148,52 @@ async fn start(
         tokio::select! {
             Ok(event) = rx.recv() => {
                 match event {
-                    EpochManagerEvent::EpochChanged(current_epoch) => {
-                        if let Ok(Some(last_registration_epoch)) = epoch_manager.last_registration_epoch().await {
-                            let mut base_node_client = GrpcBaseNodeClient::new(config.validator_node.base_node_grpc_address.unwrap_or_else(|| {
-                                let port = grpc_default_port(ApplicationType::BaseNode, config.network);
-                                SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), port)
-                            }));
-
-                            let current_block_height = current_epoch.as_u64() * 10 + 1;
-                            let last_registration_height = last_registration_epoch.as_u64() * 10 + 1;
-                            let validator_node_registration_expiry = base_node_client.get_consensus_constants(current_block_height).await.map_err(AutoRegistrationError::BaseNodeError)?.get_validator_node_registration_expiry();
-
-                            if current_block_height.checked_sub(last_registration_height).ok_or(AutoRegistrationError::MathOverflow)? >= validator_node_registration_expiry {
-                                let wallet_client = GrpcWalletClient::new(config.validator_node.wallet_grpc_address.unwrap_or_else(|| {
-                                    let port = grpc_default_port(ApplicationType::ConsoleWallet, config.network);
-                                    SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), port)
-                                }));
-
-                                register(wallet_client, node_identity.clone(), &epoch_manager).await?;
-                            }
-                        }
-                    }
+                    EpochManagerEvent::EpochChanged(current_epoch) =>
+                        handle_epoch_changed(current_epoch, &config, &node_identity, &epoch_manager).await?,
                 }
             },
             _ = shutdown.wait() => break
         }
     }
 
+    Ok(())
+}
+
+async fn handle_epoch_changed(
+    current_epoch: Epoch,
+    config: &ApplicationConfig,
+    node_identity: &NodeIdentity,
+    epoch_manager: &EpochManagerHandle,
+) -> Result<(), AutoRegistrationError> {
+    let last_registration_epoch = epoch_manager
+        .last_registration_epoch()
+        .await?
+        .unwrap_or_else(|| Epoch(0));
+
+    let mut base_node_client =
+        GrpcBaseNodeClient::new(config.validator_node.base_node_grpc_address.unwrap_or_else(|| {
+            let port = grpc_default_port(ApplicationType::BaseNode, config.network);
+            SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), port)
+        }));
+
+    let current_block_height = current_epoch.as_u64() * 10 + 1;
+    let validator_node_registration_expiry = base_node_client
+        .get_consensus_constants(current_block_height)
+        .await
+        .map_err(AutoRegistrationError::BaseNodeError)?
+        .get_validator_node_registration_expiry();
+
+    let last_registration_height = last_registration_epoch.as_u64() * 10 + 1;
+    let num_blocks_since_last_reg = current_block_height
+        .checked_sub(last_registration_height)
+        .ok_or(AutoRegistrationError::MathOverflow)?;
+    if num_blocks_since_last_reg >= validator_node_registration_expiry {
+        let wallet_client = GrpcWalletClient::new(config.validator_node.wallet_grpc_address.unwrap_or_else(|| {
+            let port = grpc_default_port(ApplicationType::ConsoleWallet, config.network);
+            SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), port)
+        }));
+
+        register(wallet_client, &node_identity, &epoch_manager).await?;
+    }
     Ok(())
 }

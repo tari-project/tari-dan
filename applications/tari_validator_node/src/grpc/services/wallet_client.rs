@@ -39,10 +39,7 @@ use tari_dan_core::{services::WalletClient, DigitalAssetError};
 use tari_validator_node_client::types::TemplateRegistrationRequest;
 use tari_wallet_grpc_client::Client as GrpcWallet;
 
-use crate::{
-    template_registration_signing::sign_template_registration,
-    validator_node_registration_signing::sign_validator_node_registration,
-};
+use crate::template_registration_signing::sign_template_registration;
 
 const _LOG_TARGET: &str = "tari::validator_node::app";
 
@@ -76,10 +73,11 @@ impl GrpcWalletClient {
         node_identity: &NodeIdentity,
     ) -> Result<RegisterValidatorNodeResponse, DigitalAssetError> {
         let inner = self.connection().await?;
-        let signature = sign_validator_node_registration(node_identity.secret_key(), 123);
+        let signature =
+            tari_common_types::validator_node_signature::ValidatorNodeSignature::sign(node_identity.secret_key(), b"");
         let request = RegisterValidatorNodeRequest {
             validator_node_public_key: node_identity.public_key().to_vec(),
-            validator_node_signature: Some(signature.into()),
+            validator_node_signature: Some(signature.signature().into()),
             fee_per_gram: 1,
             message: "Registering VN".to_string(),
         };
