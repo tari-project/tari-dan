@@ -30,13 +30,8 @@ use thiserror::Error;
 
 mod service;
 
-// TODO: write this
 #[derive(Error, Debug)]
 pub enum MempoolError {
-    #[error("Transaction should not processed by current node")]
-    TransactionNotProcessedByCurrentVN,
-    #[error("Transaction already exists in the mempool")]
-    TransactionAlreadyExists,
     #[error("Epoch Manager Error: {0}")]
     EpochManagerError(#[from] Box<EpochManagerError>),
 }

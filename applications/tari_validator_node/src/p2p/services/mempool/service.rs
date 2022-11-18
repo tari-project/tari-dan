@@ -74,11 +74,11 @@ impl MempoolService {
         }
     }
 
-    pub async fn run(mut self) -> Result<(), MempoolError> {
+    pub async fn run(mut self) {
         loop {
             tokio::select! {
-                Some(req) = self.mempool_requests.recv() => self.handle_request(req).await?,
-                Some(tx) = self.new_transactions.recv() => self.handle_new_transaction(tx).await?,
+                Some(req) = self.mempool_requests.recv() => self.handle_request(req).await,
+                Some(tx) = self.new_transactions.recv() => self.handle_new_transaction(tx).await,
 
                 else => {
                     info!(target: LOG_TARGET, "Mempool service shutting down");
@@ -86,17 +86,13 @@ impl MempoolService {
                 }
             }
         }
-
-        Ok(())
     }
 
-    async fn handle_request(&mut self, request: MempoolRequest) -> Result<(), MempoolError> {
+    async fn handle_request(&mut self, request: MempoolRequest) {
         match request {
-            MempoolRequest::SubmitTransaction(transaction) => self.handle_new_transaction(*transaction).await?,
+            MempoolRequest::SubmitTransaction(transaction) => self.handle_new_transaction(*transaction).await,
             MempoolRequest::RemoveTransaction { transaction_hash } => self.remove_transaction(transaction_hash),
         }
-
-        Ok(())
     }
 
     fn remove_transaction(&mut self, hash: Hash) {
@@ -104,7 +100,7 @@ impl MempoolService {
         transactions.retain(|(transaction, _)| *transaction.hash() != hash);
     }
 
-    async fn handle_new_transaction(&mut self, transaction: Transaction) -> Result<(), MempoolError> {
+    async fn handle_new_transaction(&mut self, transaction: Transaction) {
         debug!(target: LOG_TARGET, "Received new transaction: {:?}", transaction);
         // TODO: validate transaction
         let payload = TariDanPayload::new(transaction.clone());
@@ -124,7 +120,7 @@ impl MempoolService {
                     "🎱 Transaction {} already in mempool",
                     transaction.hash()
                 );
-                return Err(MempoolError::TransactionAlreadyExists);
+                return;
             }
         }
 
@@ -133,14 +129,22 @@ impl MempoolService {
             let mut should_process_txn = false;
 
             for sid in &shards {
-                if self
+                match self
                     .epoch_manager
                     .is_validator_in_committee_for_current_epoch(*sid, current_node_pubkey.clone())
                     .await
-                    .map_err(|e| MempoolError::EpochManagerError(Box::new(e)))?
                 {
-                    should_process_txn = true;
-                    break;
+                    Ok(b) => {
+                        if b {
+                            should_process_txn = true;
+                            break;
+                        }
+                    },
+                    Err(e) => error!(
+                        target: LOG_TARGET,
+                        "Failed to retrieve validator in the committee for current epoch: {}",
+                        e.to_string(),
+                    ),
                 }
             }
 
@@ -149,12 +153,22 @@ impl MempoolService {
             if should_process_txn {
                 access.push((transaction.clone(), None));
             } else {
-                return Err(MempoolError::TransactionNotProcessedByCurrentVN);
+                info!(
+                    target: LOG_TARGET,
+                    "No validator in committee to process current transaction"
+                );
             }
         }
         info!(target: LOG_TARGET, "🎱 New transaction in mempool");
 
-        self.propagate_transaction(&transaction, &shards).await?;
+        match self.propagate_transaction(&transaction, &shards).await {
+            Ok(()) => (),
+            Err(e) => error!(
+                target: LOG_TARGET,
+                "Unable to propagate transaction among peers: {}",
+                e.to_string()
+            ),
+        }
 
         for shard_id in shards {
             if let Err(err) = self.tx_valid_transactions.send((transaction.clone(), shard_id)) {
@@ -164,8 +178,6 @@ impl MempoolService {
                 );
             }
         }
-
-        Ok(())
     }
 
     pub async fn propagate_transaction(
