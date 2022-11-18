@@ -20,6 +20,7 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+use tari_engine_types::commit_result::RejectReason;
 use thiserror::Error;
 
 use crate::{
@@ -49,7 +50,7 @@ pub enum HotStuffError {
     #[error("Payload failed to process: {0}")]
     PayloadProcessorError(#[from] PayloadProcessorError),
     #[error("Transaction rejected: {0}")]
-    TransactionRejected(String),
+    TransactionRejected(RejectReason),
     #[error("Storage Error: `{0}`")]
     StorageError(#[from] StorageError),
     #[error("Payload height is too high. Actual: {actual}, expected: {max}")]
@@ -58,4 +59,6 @@ pub enum HotStuffError {
     RecvProposalMessageWithoutNode,
     #[error("Shard has no data, when it was expected to")]
     ShardHasNoData,
+    #[error("Invalid qc error: `{0}`")]
+    InvalidQuorumCertificate(String),
 }

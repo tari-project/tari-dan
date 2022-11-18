@@ -33,7 +33,7 @@ use crate::{
         Payload,
         QuorumCertificate,
         TreeNodeHash,
-        ValidatorSignature,
+        ValidatorMetadata,
         ViewId,
     },
     services::infrastructure_services::NodeAddressable,
@@ -154,11 +154,11 @@ impl<TPayload: Payload, TAddr: NodeAddressable> HotStuffMessage<TPayload, TAddr>
         self.message_type() == message_type && view_id == self.view_number()
     }
 
-    pub fn add_partial_sig(&mut self, _signature: ValidatorSignature) {
+    pub fn add_partial_sig(&mut self, _validator_metadata: ValidatorMetadata) {
         todo!()
     }
 
-    pub fn partial_sig(&self) -> Option<&ValidatorSignature> {
+    pub fn partial_sig(&self) -> Option<&ValidatorMetadata> {
         todo!()
     }
 }

@@ -70,7 +70,7 @@ impl GrpcBaseNodeClient {
         let request = grpc::BlockHeight { block_height };
         let result = inner.get_constants(request).await?.into_inner();
 
-        let consensus_constants = BaseLayerConsensusConstants::new(result.validator_node_timeout);
+        let consensus_constants = BaseLayerConsensusConstants::new(result.validator_node_validity_period);
         Ok(consensus_constants)
     }
 }

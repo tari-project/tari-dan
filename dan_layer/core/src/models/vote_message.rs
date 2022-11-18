@@ -22,11 +22,15 @@
 
 use digest::{Digest, FixedOutput};
 use serde::{Deserialize, Serialize};
-use tari_common_types::types::FixedHash;
+use tari_common_types::types::{FixedHash, PrivateKey, PublicKey};
+use tari_core::{consensus::DomainSeparatedConsensusHasher, transactions::TransactionHashDomain, ValidatorNodeMmr};
 use tari_crypto::hash::blake2::Blake256;
 use tari_dan_common_types::ShardId;
+use tari_dan_engine::crypto::create_key_pair;
+use tari_engine_types::commit_result::RejectReason;
 
-use crate::models::{QuorumDecision, ShardVote, TreeNodeHash, ValidatorSignature};
+use super::quorum_certificate::QuorumRejectReason;
+use crate::models::{QuorumDecision, ShardVote, TreeNodeHash, ValidatorMetadata};
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct VoteMessage {
@@ -34,7 +38,7 @@ pub struct VoteMessage {
     shard: ShardId,
     decision: QuorumDecision,
     all_shard_nodes: Vec<ShardVote>,
-    signature: Option<ValidatorSignature>,
+    validator_metadata: Option<ValidatorMetadata>,
 }
 
 impl VoteMessage {
@@ -51,7 +55,7 @@ impl VoteMessage {
             shard,
             decision,
             all_shard_nodes,
-            signature: None,
+            validator_metadata: None,
         }
     }
 
@@ -59,16 +63,27 @@ impl VoteMessage {
         Self::new(local_node_hash, shard, QuorumDecision::Accept, all_shard_nodes)
     }
 
-    pub fn reject(local_node_hash: TreeNodeHash, shard: ShardId, all_shard_nodes: Vec<ShardVote>) -> Self {
-        Self::new(local_node_hash, shard, QuorumDecision::Reject, all_shard_nodes)
+    pub fn reject(
+        local_node_hash: TreeNodeHash,
+        shard: ShardId,
+        all_shard_nodes: Vec<ShardVote>,
+        reason: &RejectReason,
+    ) -> Self {
+        let quorum_reject_reason = match reason {
+            RejectReason::ShardNotPledged(_) => QuorumRejectReason::ShardNotPledged,
+            RejectReason::ExecutionFailure(_) => QuorumRejectReason::ExecutionFailure,
+        };
+        let decision = QuorumDecision::Reject(quorum_reject_reason);
+
+        Self::new(local_node_hash, shard, decision, all_shard_nodes)
     }
 
-    pub fn with_signature(
+    pub fn with_validator_metadata(
         local_node_hash: TreeNodeHash,
         shard: ShardId,
         decision: QuorumDecision,
         mut all_shard_nodes: Vec<ShardVote>,
-        signature: ValidatorSignature,
+        validator_metadata: ValidatorMetadata,
     ) -> Self {
         all_shard_nodes.sort_by(|a, b| a.shard_id.cmp(&b.shard_id));
 
@@ -77,17 +92,44 @@ impl VoteMessage {
             shard,
             decision,
             all_shard_nodes,
-            signature: Some(signature),
+            validator_metadata: Some(validator_metadata),
         }
     }
 
-    pub fn sign(&mut self) {
-        // TODO: better signature
-        self.signature = Some(ValidatorSignature::from_bytes(&[9u8; 32]).unwrap())
+    pub fn set_metadata(
+        &mut self,
+        public_key: &PublicKey,
+        secret_key: &PrivateKey,
+        vn_mmr: &ValidatorNodeMmr,
+        vn_mmr_leaf_index: u64,
+    ) {
+        let (secret_nonce, public_nonce) = create_key_pair();
+        let challenge = self.construct_challenge(public_key, &public_nonce);
+        let validator_metadata = ValidatorMetadata::new(
+            public_key,
+            secret_key,
+            secret_nonce,
+            &*challenge,
+            vn_mmr,
+            vn_mmr_leaf_index,
+        );
+
+        self.validator_metadata = Some(validator_metadata);
     }
 
-    pub fn signature(&self) -> &ValidatorSignature {
-        self.signature.as_ref().unwrap()
+    pub fn construct_challenge(&self, public_key: &PublicKey, public_nonce: &PublicKey) -> FixedHash {
+        DomainSeparatedConsensusHasher::<TransactionHashDomain>::new("vote_message")
+            .chain(public_key)
+            .chain(public_nonce)
+            .chain(&self.local_node_hash.as_bytes())
+            .chain(&self.shard.as_bytes())
+            .chain(&[self.decision.as_u8()])
+            .finalize()
+            .into()
+    }
+
+    pub fn validator_metadata(&self) -> &ValidatorMetadata {
+        self.validator_metadata.as_ref().unwrap()
     }
 
     pub fn get_all_nodes_hash(&self) -> FixedHash {

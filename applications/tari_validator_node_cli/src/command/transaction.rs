@@ -272,7 +272,7 @@ fn summarize(result: &TransactionFinalizeResult) {
     println!();
     println!("Epoch: {}", result.qc.epoch());
     println!("Payload height: {}", result.qc.payload_height());
-    println!("Signed by: {} validator nodes", result.qc.signature().len());
+    println!("Signed by: {} validator nodes", result.qc.validators_metadata().len());
     println!();
     // dbg!(&result.qc);
     println!("========= Substates =========");
@@ -305,8 +305,8 @@ fn summarize(result: &TransactionFinalizeResult) {
                 println!();
             }
         },
-        TransactionResult::Reject(ref reject) => {
-            println!("❌️ Transaction rejected: {}", reject.reason);
+        TransactionResult::Reject(ref reason) => {
+            println!("❌️ Transaction rejected: {}", reason);
         },
     }
     println!("========= Pledges =========");

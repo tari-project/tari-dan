@@ -21,7 +21,7 @@
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 use tari_dan_storage::{
-    global::{DbTemplate, DbTemplateUpdate, DbValidatorNode, GlobalDbAdapter, MetadataKey},
+    global::{DbEpoch, DbTemplate, DbTemplateUpdate, DbValidatorNode, GlobalDbAdapter, MetadataKey},
     AtomicDb,
 };
 
@@ -86,6 +86,14 @@ impl GlobalDbAdapter for MockGlobalDbBackupAdapter {
         _tx: &Self::DbTransaction,
         _epoch: u64,
     ) -> Result<Vec<DbValidatorNode>, Self::Error> {
+        todo!()
+    }
+
+    fn insert_epoch(&self, _tx: &Self::DbTransaction, _epoch: DbEpoch) -> Result<(), Self::Error> {
+        todo!()
+    }
+
+    fn get_epoch(&self, _tx: &Self::DbTransaction, _epoch: u64) -> Result<Option<DbEpoch>, Self::Error> {
         todo!()
     }
 }

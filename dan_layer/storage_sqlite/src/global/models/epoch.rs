@@ -20,13 +20,37 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-mod template;
+use tari_dan_storage::global::DbEpoch;
 
-use proc_macro::TokenStream;
+use crate::global::schema::*;
 
-#[proc_macro_attribute]
-pub fn template(_attr: TokenStream, item: TokenStream) -> TokenStream {
-    template::generate_template(proc_macro2::TokenStream::from(item))
-        .unwrap_or_else(|err| err.to_compile_error())
-        .into()
+#[derive(Queryable)]
+pub struct Epoch {
+    pub epoch: i32,
+    pub validator_node_mr: Vec<u8>,
+}
+
+impl From<Epoch> for DbEpoch {
+    fn from(e: Epoch) -> Self {
+        Self {
+            epoch: e.epoch as u64,
+            validator_node_mr: e.validator_node_mr,
+        }
+    }
+}
+
+#[derive(Insertable)]
+#[table_name = "epochs"]
+pub struct NewEpoch {
+    pub epoch: i32,
+    pub validator_node_mr: Vec<u8>,
+}
+
+impl From<DbEpoch> for NewEpoch {
+    fn from(e: DbEpoch) -> Self {
+        Self {
+            epoch: e.epoch as i32,
+            validator_node_mr: e.validator_node_mr,
+        }
+    }
 }

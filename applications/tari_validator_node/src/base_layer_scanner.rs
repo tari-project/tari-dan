@@ -321,7 +321,7 @@ impl BaseLayerScanner {
         }
 
         // after scan has been completed by the vn, the epoch is updated
-        self.epoch_manager.update_epoch(tip.height_of_longest_chain).await?;
+        self.epoch_manager.update_epoch(tip).await?;
 
         Ok(())
     }

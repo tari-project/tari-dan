@@ -28,8 +28,9 @@ message ShardVote {
 
 message QuorumCertificate {
   enum QuorumDecision {
-    QUORUM_DECISION_REJECT = 0;
-    QUORUM_DECISION_ACCEPT = 1;
+    QUORUM_DECISION_ACCEPT = 0;
+    QUORUM_DECISION_REJECT_SHARD_NOT_PLEDGED = 1;
+    QUORUM_DECISION_REJECT_EXECUTION_FAILURE = 2;
   }
   bytes payload_id = 1;
   uint64 payload_height = 2;
@@ -39,7 +40,7 @@ message QuorumCertificate {
   uint64 epoch = 6;
   QuorumDecision decision = 7;
   repeated ShardVote all_shard_nodes = 8;
-  repeated ValidatorSignature signatures = 9;
+  repeated ValidatorMetadata validators_metadata = 9;
 }
 
 message HotStuffTreeNode {
@@ -55,8 +56,11 @@ message HotStuffTreeNode {
   TariDanPayload payload = 10;
 }
 
-message ValidatorSignature {
-  bytes signer = 1;
+message ValidatorMetadata {
+  bytes public_key = 1;
+  bytes signature = 2;
+  bytes merkle_proof = 3;
+  uint64 merkle_leaf_index = 4;
 }
 
 message TariDanPayload {
@@ -68,7 +72,7 @@ message VoteMessage {
   bytes shard_id = 2;
   QuorumDecision decision = 3;
   repeated ShardVote all_shard_nodes = 4;
-  bytes signature = 5;
+  ValidatorMetadata validator_metadata = 5;
 }
 
 enum QuorumDecision {

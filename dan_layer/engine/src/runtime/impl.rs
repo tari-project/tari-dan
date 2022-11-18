@@ -21,7 +21,7 @@
 //   USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 use tari_engine_types::{
-    commit_result::{FinalizeResult, RejectResult, TransactionResult},
+    commit_result::{FinalizeResult, RejectReason, TransactionResult},
     logs::LogEntry,
     substate::{SubstateAddress, SubstateValue},
 };
@@ -359,10 +359,7 @@ impl RuntimeInterface for RuntimeInterfaceImpl {
     fn finalize(&self) -> Result<FinalizeResult, RuntimeError> {
         let result = match self.tracker.finalize() {
             Ok(substate_diff) => TransactionResult::Accept(substate_diff),
-            // TODO: we should differentiate between a system error and an explicit rejection vote
-            Err(err) => TransactionResult::Reject(RejectResult {
-                reason: err.to_string(),
-            }),
+            Err(err) => TransactionResult::Reject(RejectReason::ExecutionFailure(err.to_string())),
         };
         let logs = self.tracker.take_logs();
         let commit = FinalizeResult::new(self.tracker.transaction_hash(), logs, result);

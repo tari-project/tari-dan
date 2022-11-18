@@ -33,3 +33,6 @@ pub use template_db::{DbTemplate, DbTemplateUpdate, TemplateDb, TemplateStatus};
 
 mod validator_node_db;
 pub use validator_node_db::{DbValidatorNode, ValidatorNodeDb};
+
+mod epoch_db;
+pub use epoch_db::{DbEpoch, EpochDb};

@@ -34,7 +34,7 @@ use tari_dan_engine::{
     transaction::TransactionProcessor,
 };
 use tari_engine_types::{
-    commit_result::FinalizeResult,
+    commit_result::{FinalizeResult, RejectReason},
     substate::{SubstateAddress, SubstateValue},
 };
 use tari_template_lib::models::{ComponentAddress, ResourceAddress, VaultId};
@@ -84,7 +84,7 @@ where TTemplateProvider: TemplateProvider
         let tx_hash = *transaction.hash();
         let result = match processor.execute(transaction) {
             Ok(result) => result,
-            Err(err) => FinalizeResult::errored(tx_hash, err.to_string()),
+            Err(err) => FinalizeResult::errored(tx_hash, RejectReason::ExecutionFailure(err.to_string())),
         };
         Ok(result)
     }

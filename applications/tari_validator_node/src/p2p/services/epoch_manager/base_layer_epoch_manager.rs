@@ -23,18 +23,19 @@
 use std::{convert::TryInto, sync::Arc};
 
 use tari_comms::{types::CommsPublicKey, NodeIdentity};
+use tari_core::{blocks::BlockHeader, ValidatorNodeMmr};
 use tari_crypto::tari_utilities::ByteArray;
 use tari_dan_common_types::{Epoch, ShardId};
 use tari_dan_core::{
     consensus_constants::ConsensusConstants,
-    models::{Committee, ValidatorNode},
+    models::{BaseLayerMetadata, Committee, ValidatorNode},
     services::{
         epoch_manager::{EpochManagerError, ShardCommitteeAllocation},
         BaseNodeClient,
     },
     storage::DbFactory,
 };
-use tari_dan_storage::global::{DbValidatorNode, MetadataKey};
+use tari_dan_storage::global::{DbEpoch, DbValidatorNode, MetadataKey};
 use tari_dan_storage_sqlite::SqliteDbFactory;
 use tokio::sync::broadcast;
 
@@ -106,8 +107,8 @@ impl BaseLayerEpochManager {
         Ok(())
     }
 
-    pub async fn update_epoch(&mut self, tip: u64) -> Result<(), EpochManagerError> {
-        let epoch = Epoch::from_block_height(tip);
+    pub async fn update_epoch(&mut self, tip_info: BaseLayerMetadata) -> Result<(), EpochManagerError> {
+        let epoch = Epoch::from_block_height(tip_info.height_of_longest_chain);
         if self.current_epoch >= epoch {
             // no need to update the epoch
             return Ok(());
@@ -119,20 +120,16 @@ impl BaseLayerEpochManager {
         let mut vns = base_node_client.get_validator_nodes(height).await?;
         vns.sort_by(|a, b| a.shard_key.partial_cmp(&b.shard_key).unwrap());
 
+        // extract and store in database the MMR of the epoch's validator nodes
+        let tip_header = base_node_client.get_header_by_hash(tip_info.tip_hash).await?;
+        self.insert_epoch(epoch, tip_header)?;
+
         // insert the new VNs for this epoch in the database
         self.insert_validator_nodes(epoch, vns.clone())?;
-        {
-            // after the end of the scope both db and tx are cleaned up
-            let db = self.db_factory.get_or_create_global_db()?;
-            let tx = db
-                .create_transaction()
-                .map_err(|e| EpochManagerError::StorageError(e.into()))?;
-            let metadata = db.metadata(&tx);
-            metadata
-                .set_metadata(MetadataKey::CurrentEpoch, &epoch.0.to_le_bytes())
-                .map_err(|e| EpochManagerError::StorageError(e.into()))?;
-            db.commit(tx).map_err(|e| EpochManagerError::StorageError(e.into()))?;
-        }
+
+        // set the current epoch in the database
+        self.insert_current_epoch(epoch)?;
+
         self.current_epoch = epoch;
         self.tx_events
             .send(EpochManagerEvent::EpochChanged(epoch))
@@ -162,6 +159,25 @@ impl BaseLayerEpochManager {
         Ok(())
     }
 
+    fn insert_epoch(&self, epoch: Epoch, header: BlockHeader) -> Result<(), EpochManagerError> {
+        let epoch_height = epoch.0;
+        let db_epoch = DbEpoch {
+            epoch: epoch_height,
+            validator_node_mr: header.validator_node_mr.to_vec(),
+        };
+
+        let db = self.db_factory.get_or_create_global_db()?;
+        let tx = db
+            .create_transaction()
+            .map_err(|e| EpochManagerError::StorageError(e.into()))?;
+        db.epochs(&tx)
+            .insert_epoch(db_epoch)
+            .map_err(|e| EpochManagerError::StorageError(e.into()))?;
+        db.commit(tx).map_err(|e| EpochManagerError::StorageError(e.into()))?;
+
+        Ok(())
+    }
+
     fn insert_validator_nodes(&self, epoch: Epoch, vns: Vec<ValidatorNode>) -> Result<(), EpochManagerError> {
         let epoch_height = epoch.0;
         let new_vns = vns
@@ -180,6 +196,20 @@ impl BaseLayerEpochManager {
             .insert_validator_nodes(new_vns)
             .map_err(|e| EpochManagerError::StorageError(e.into()))?;
         db.commit(tx).map_err(|e| EpochManagerError::StorageError(e.into()))?;
+        Ok(())
+    }
+
+    fn insert_current_epoch(&self, epoch: Epoch) -> Result<(), EpochManagerError> {
+        let db = self.db_factory.get_or_create_global_db()?;
+        let tx = db
+            .create_transaction()
+            .map_err(|e| EpochManagerError::StorageError(e.into()))?;
+        let metadata = db.metadata(&tx);
+        metadata
+            .set_metadata(MetadataKey::CurrentEpoch, &epoch.0.to_le_bytes())
+            .map_err(|e| EpochManagerError::StorageError(e.into()))?;
+        db.commit(tx).map_err(|e| EpochManagerError::StorageError(e.into()))?;
+
         Ok(())
     }
 
@@ -340,5 +370,37 @@ impl BaseLayerEpochManager {
             }
         }
         Ok(result)
+    }
+
+    pub fn get_validator_node_merkle_root(&self, epoch: Epoch) -> Result<Vec<u8>, EpochManagerError> {
+        let db = self.db_factory.get_or_create_global_db()?;
+        let tx = db
+            .create_transaction()
+            .map_err(|e| EpochManagerError::StorageError(e.into()))?;
+
+        let query_res = db
+            .epochs(&tx)
+            .get_epoch_data(epoch.0)
+            .map_err(|e| EpochManagerError::StorageError(e.into()))?;
+
+        match query_res {
+            Some(db_epoch) => Ok(db_epoch.validator_node_mr),
+            None => Err(EpochManagerError::NoEpochFound(epoch)),
+        }
+    }
+
+    pub fn get_validator_node_mmr(&self, epoch: Epoch) -> Result<ValidatorNodeMmr, EpochManagerError> {
+        let vns = self.get_validator_nodes_per_epoch(epoch)?;
+
+        // TODO: the MMR struct should be serializable to store it only once and avoid recalculating it every time
+        let mut vn_mmr = ValidatorNodeMmr::new(Vec::new());
+        let vn_public_keys: Vec<Vec<u8>> = vns.into_iter().map(|vn| vn.public_key.as_bytes().to_vec()).collect();
+        for pk in vn_public_keys {
+            vn_mmr
+                .push(pk)
+                .expect("Could not build the merkle mountain range of the VN set");
+        }
+
+        Ok(vn_mmr)
     }
 }

@@ -21,6 +21,13 @@
 // USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 table! {
+    epochs (epoch) {
+        epoch -> Integer,
+        validator_node_mr -> Binary,
+    }
+}
+
+table! {
     validator_nodes (id) {
         id -> Integer,
         public_key -> Binary,

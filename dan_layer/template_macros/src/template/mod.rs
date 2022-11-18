@@ -21,6 +21,7 @@
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 mod abi;
+mod ast;
 mod definition;
 mod dependencies;
 mod dispatcher;
@@ -31,11 +32,11 @@ use syn::{parse2, Result};
 
 use self::{
     abi::generate_abi,
+    ast::TemplateAst,
     definition::generate_definition,
     dependencies::generate_dependencies,
     dispatcher::generate_dispatcher,
 };
-use crate::ast::TemplateAst;
 
 pub fn generate_template(input: TokenStream) -> Result<TokenStream> {
     let ast = parse2::<TemplateAst>(input).unwrap();
