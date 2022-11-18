@@ -24,7 +24,7 @@ use proc_macro2::{Ident, Span, TokenStream};
 use quote::{format_ident, quote};
 use syn::{parse_quote, token::Brace, Block, Expr, ExprBlock, ExprField, Result, Stmt, TypePath, TypeTuple};
 
-use crate::ast::{FunctionAst, TemplateAst, TypeAst};
+use crate::template::ast::{FunctionAst, TemplateAst, TypeAst};
 
 pub fn generate_dispatcher(ast: &TemplateAst) -> Result<TokenStream> {
     let dispatcher_function_name = format_ident!("{}_main", ast.template_name);

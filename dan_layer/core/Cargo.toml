@@ -11,7 +11,7 @@ tari_common = { git = "https://github.com/tari-project/tari.git", branch = "feat
 tari_comms = { git = "https://github.com/tari-project/tari.git", branch = "feature-dan", package = "tari_comms" }
 tari_comms_dht = { git = "https://github.com/tari-project/tari.git", branch = "feature-dan", package = "tari_comms_dht" }
 tari_comms_rpc_macros = { git = "https://github.com/tari-project/tari.git", branch = "feature-dan", package = "tari_comms_rpc_macros" }
-tari_crypto = { git = "https://github.com/tari-project/tari-crypto.git", tag = "v0.15.6" }
+tari_crypto = { git = "https://github.com/tari-project/tari-crypto.git", tag = "v0.15.7" }
 tari_mmr = { git = "https://github.com/tari-project/tari.git", branch = "feature-dan", package = "tari_mmr" }
 tari_p2p = { git = "https://github.com/tari-project/tari.git", branch = "feature-dan", package = "tari_p2p" }
 tari_service_framework = { git = "https://github.com/tari-project/tari.git", branch = "feature-dan", package = "tari_service_framework" }

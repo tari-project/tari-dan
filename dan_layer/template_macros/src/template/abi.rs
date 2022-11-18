@@ -24,7 +24,7 @@ use proc_macro2::TokenStream;
 use quote::{format_ident, quote};
 use syn::{parse_quote, Expr, Result};
 
-use crate::ast::{FunctionAst, TemplateAst, TypeAst};
+use crate::template::ast::{FunctionAst, TemplateAst, TypeAst};
 
 pub fn generate_abi(ast: &TemplateAst) -> Result<TokenStream> {
     let abi_function_name = format_ident!("{}_abi", ast.template_name);
@@ -115,7 +115,7 @@ mod tests {
     use syn::parse2;
 
     use super::generate_abi;
-    use crate::ast::TemplateAst;
+    use crate::template::ast::TemplateAst;
 
     #[test]
     fn test_signatures() {
