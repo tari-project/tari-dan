@@ -22,6 +22,7 @@
 
 use std::{path::Path, str::FromStr};
 
+use anyhow::anyhow;
 use clap::{Args, Subcommand};
 use tari_dan_common_types::{ShardId, SubstateChange};
 use tari_dan_engine::transaction::Transaction;
@@ -60,6 +61,10 @@ pub struct SubmitArgs {
     num_outputs: Option<u8>,
     #[clap(long, short = 'v')]
     version: Option<u8>,
+    #[clap(long, short = 'd')]
+    dump_outputs_into: Option<String>,
+    #[clap(long, short = 'a')]
+    account_template_address: Option<String>,
 }
 
 #[derive(Debug, Clone)]
@@ -208,15 +213,28 @@ async fn handle_submit(
         .with_input_refs(input_refs.clone())
         .with_inputs(inputs.clone())
         .with_num_outputs(args.num_outputs.unwrap_or(0))
-        .add_instruction(instruction)
-        .sign(&account.secret_key)
-        .fee(1);
-    let transaction = builder.build();
-    let tx_hash = *transaction.hash();
-
+        .add_instruction(instruction);
     let mut input_data: Vec<(ShardId, SubstateChange)> =
         input_refs.iter().map(|i| (*i, SubstateChange::Exists)).collect();
     input_data.extend(inputs.iter().map(|i| (*i, SubstateChange::Destroy)));
+    if let Some(account_address) = args.dump_outputs_into {
+        let component_address = ComponentAddress::from_hex(&account_address)?;
+        let account_template = args
+            .account_template_address
+            .ok_or_else(|| anyhow!("No account template specified"))?;
+        builder.add_instruction(Instruction::CallMethod {
+            template_address: ComponentAddress::from_hex(&account_template)?,
+            component_address,
+            method: "deposit_all_from_workspace".to_string(),
+            args: vec![],
+        });
+        input_data.push((ShardId::from(component_address.into_array()), SubstateChange::Destroy));
+    }
+    builder.sign(&account.secret_key).fee(1);
+
+    let transaction = builder.build();
+    let tx_hash = *transaction.hash();
+
     let request = SubmitTransactionRequest {
         instructions: transaction.instructions().to_vec(),
         signature: transaction.signature().clone(),

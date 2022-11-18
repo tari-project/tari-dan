@@ -141,7 +141,7 @@ pub async fn spawn_services(
 
     // Template manager
 
-    let template_manager = TemplateManager::new(sqlite_db.clone());
+    let template_manager = TemplateManager::new(sqlite_db.clone(), config.validator_node.templates.clone());
     let template_manager_service = template_manager::spawn(template_manager.clone(), shutdown.clone());
 
     // Base Node scanner

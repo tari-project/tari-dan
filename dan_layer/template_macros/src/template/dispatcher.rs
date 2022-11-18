@@ -85,7 +85,7 @@ fn get_function_block(template_ident: &Ident, ast: FunctionAst) -> Expr {
     let mut stmts = vec![];
     let mut should_set_state = false;
     stmts.push(parse_quote! {
-        assert_eq!(call_info.args.len(), #expected_num_args, "Call had unexpected number of args. Got = {} expected = {}", call_info.args.len(), #expected_num_args); 
+        assert_eq!(call_info.args.len(), #expected_num_args, "Call had unexpected number of args. Got = {} expected = {}", call_info.args.len(), #expected_num_args);
     });
     // encode all arguments of the functions
     for (i, input_type) in ast.input_types.iter().enumerate() {
@@ -174,7 +174,7 @@ fn replace_self_in_output(template_ident: &Ident, ast: &FunctionAst) -> Vec<Stmt
             TypeAst::Tuple(type_tuple) => {
                 stmts.push(replace_self_in_tuple(template_ident, type_tuple));
             },
-            _ => todo!(),
+            _ => todo!("replace_self_in_output only supports typed and tuple"),
         },
         None => {},
     }
@@ -215,7 +215,7 @@ fn replace_self_in_tuple(template_ident: &Ident, type_tuple: &TypeTuple) -> Stmt
                     field_expr
                 }
             },
-            _ => todo!(),
+            _ => todo!("replace_self_in_tuple only supports paths"),
         })
         .collect();
 
@@ -235,7 +235,7 @@ fn build_tuple_field_expr(name: String, i: u32) -> Expr {
         syn::Member::Unnamed(ref mut unnamed) => {
             unnamed.index = i as u32;
         },
-        _ => todo!(),
+        _ => todo!("build_tuple_field_expr only supports Unnamed"),
     }
 
     Expr::Field(field_expr)

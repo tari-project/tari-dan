@@ -20,19 +20,34 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-mod downloader;
-mod handle;
-pub use handle::{TemplateManagerHandle, TemplateRegistration};
+use tari_template_abi::{call_engine, EngineOp};
 
-mod initializer;
-pub use initializer::spawn;
+use crate::{
+    args::{InvokeResult, WorkspaceAction, WorkspaceInvokeArg},
+    prelude::{Bucket, BucketId},
+};
 
-mod manager;
-pub use manager::{Template, TemplateManager};
-mod service;
+pub struct WorkspaceManager {}
 
-mod error;
-pub use error::TemplateManagerError;
+impl WorkspaceManager {
+    pub fn list_buckets() -> Vec<BucketId> {
+        let resp: InvokeResult = call_engine(EngineOp::WorkspaceInvoke, &WorkspaceInvokeArg {
+            action: WorkspaceAction::ListBuckets,
+            args: vec![],
+        })
+        .expect("WorkspaceInvoke returned null");
+        let bucket_ids = resp.decode().expect("Failed to decode list of BucketIds");
+        bucket_ids
+    }
 
-mod template_config;
-pub use template_config::TemplateConfig;
+    pub fn take_bucket(bucket_id: BucketId) -> Bucket {
+        todo!("This does not work as expected");
+        let resp: InvokeResult = call_engine(EngineOp::WorkspaceInvoke, &WorkspaceInvokeArg {
+            action: WorkspaceAction::Take,
+            args: invoke_args!(bucket_id),
+        })
+        .expect("Workspace invoke returned null");
+        let bucket = resp.decode().expect("Failed to decode Bucket");
+        bucket
+    }
+}

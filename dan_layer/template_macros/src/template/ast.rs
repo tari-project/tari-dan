@@ -123,7 +123,7 @@ impl TemplateAst {
                 is_constructor: Self::is_constructor(&m.sig),
                 is_public: Self::is_public_function(m),
             },
-            _ => todo!(),
+            _ => todo!("get_function_from_item does not support anything other than methods"),
         }
     }
 
@@ -160,7 +160,10 @@ impl TemplateAst {
                 TypeAst::Typed(type_path.clone())
             },
             syn::Type::Tuple(tuple) => TypeAst::Tuple(tuple.clone()),
-            _ => todo!(),
+            _ => todo!(
+                "get_type_ast only supports paths and tuples. Encountered:{:?}",
+                syn_type
+            ),
         }
     }
 

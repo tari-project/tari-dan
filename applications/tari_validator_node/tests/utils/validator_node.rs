@@ -110,6 +110,7 @@ pub async fn spawn_validator_node(
             tracing_enabled: true,
             network: Some(Network::LocalNet.to_string()),
             json_rpc_address: Some(format!("127.0.0.1:{}", json_rpc_port).parse().unwrap()),
+            debug_templates: vec![],
         };
 
         let result = run_validator_node_with_cli(&config, &cli).await;

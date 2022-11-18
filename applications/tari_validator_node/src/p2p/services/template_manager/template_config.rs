@@ -20,19 +20,25 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-mod downloader;
-mod handle;
-pub use handle::{TemplateManagerHandle, TemplateRegistration};
+use std::{collections::HashMap, path::PathBuf};
 
-mod initializer;
-pub use initializer::spawn;
+use serde::{Deserialize, Serialize};
+use tari_engine_types::TemplateAddress;
 
-mod manager;
-pub use manager::{Template, TemplateManager};
-mod service;
+#[derive(Debug, Default, Serialize, Deserialize, Clone)]
+pub struct TemplateConfig {
+    debug_replacements: Vec<String>,
+}
 
-mod error;
-pub use error::TemplateManagerError;
-
-mod template_config;
-pub use template_config::TemplateConfig;
+impl TemplateConfig {
+    pub fn debug_replacements(&self) -> HashMap<TemplateAddress, PathBuf> {
+        let mut result = HashMap::new();
+        for row in &self.debug_replacements {
+            let parts: Vec<&str> = row.split('=').collect();
+            let template_address = TemplateAddress::from_hex(parts[0]).expect("Not a valid template address");
+            let path = PathBuf::from(parts[1]);
+            result.insert(template_address, path);
+        }
+        result
+    }
+}

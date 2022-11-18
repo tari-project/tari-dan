@@ -20,19 +20,4 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-mod downloader;
-mod handle;
-pub use handle::{TemplateManagerHandle, TemplateRegistration};
-
-mod initializer;
-pub use initializer::spawn;
-
-mod manager;
-pub use manager::{Template, TemplateManager};
-mod service;
-
-mod error;
-pub use error::TemplateManagerError;
-
-mod template_config;
-pub use template_config::TemplateConfig;
+pub struct ChainTime {}

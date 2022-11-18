@@ -20,13 +20,15 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+use std::fs;
+
 use tari_dan_core::{services::TemplateProvider, storage::DbFactory};
 use tari_dan_engine::wasm::WasmModule;
 use tari_dan_storage::global::{DbTemplate, DbTemplateUpdate, TemplateStatus};
 use tari_template_lib::models::TemplateAddress;
 
 use crate::{
-    p2p::services::template_manager::{handle::TemplateRegistration, TemplateManagerError},
+    p2p::services::template_manager::{handle::TemplateRegistration, TemplateConfig, TemplateManagerError},
     SqliteDbFactory,
 };
 
@@ -92,12 +94,13 @@ impl From<DbTemplate> for Template {
 #[derive(Debug, Clone)]
 pub struct TemplateManager {
     db_factory: SqliteDbFactory,
+    config: TemplateConfig,
 }
 
 impl TemplateManager {
-    pub fn new(db_factory: SqliteDbFactory) -> Self {
+    pub fn new(db_factory: SqliteDbFactory, config: TemplateConfig) -> Self {
         // TODO: preload some example templates
-        Self { db_factory }
+        Self { db_factory, config }
     }
 
     pub fn fetch_template(&self, address: &TemplateAddress) -> Result<Template, TemplateManagerError> {
@@ -112,7 +115,15 @@ impl TemplateManager {
             return Err(TemplateManagerError::TemplateUnavailable);
         }
 
-        Ok(template.into())
+        // first check debug
+        if let Some(dbg_replacement) = self.config.debug_replacements().get(address) {
+            let mut result: Template = template.into();
+            let binary = fs::read(dbg_replacement).expect("Could not read debug file");
+            result.compiled_code = binary;
+            Ok(result)
+        } else {
+            Ok(template.into())
+        }
     }
 
     pub fn fetch_template_metadata(&self, limit: usize) -> Result<Vec<TemplateMetadata>, TemplateManagerError> {

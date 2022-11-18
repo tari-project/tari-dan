@@ -318,6 +318,10 @@ impl RuntimeInterface for RuntimeInterfaceImpl {
 
     fn workspace_invoke(&self, action: WorkspaceAction, args: Vec<Vec<u8>>) -> Result<InvokeResult, RuntimeError> {
         match action {
+            WorkspaceAction::ListBuckets => {
+                let bucket_ids = self.tracker.list_buckets();
+                Ok(InvokeResult::encode(&bucket_ids)?)
+            },
             WorkspaceAction::Put => todo!(),
             WorkspaceAction::PutLastInstructionOutput => {
                 let key = args.get(0).and_then(|r| decode::<Vec<u8>>(r).ok()).ok_or_else(|| {

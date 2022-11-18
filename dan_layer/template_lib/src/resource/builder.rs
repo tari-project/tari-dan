@@ -24,7 +24,7 @@ use tari_template_abi::{encode, Encode};
 
 use crate::{
     args::MintResourceArg,
-    models::{Amount, Bucket, Metadata},
+    models::{Amount, Bucket, Metadata, ResourceAddress},
 };
 
 pub struct ResourceBuilder;
@@ -32,6 +32,10 @@ pub struct ResourceBuilder;
 impl ResourceBuilder {
     pub fn fungible() -> FungibleResourceBuilder {
         FungibleResourceBuilder::new()
+    }
+
+    pub fn non_fungible() -> NonFungibleResourceBuilder {
+        NonFungibleResourceBuilder::new()
     }
 }
 
@@ -67,6 +71,36 @@ impl FungibleResourceBuilder {
         crate::get_context().with_resource_manager(|manager| {
             manager.mint_resource(MintResourceArg::Fungible {
                 amount: self.initial_supply,
+                metadata: self.metadata,
+            })
+        })
+    }
+}
+
+pub struct NonFungibleResourceBuilder {
+    metadata: Metadata,
+}
+
+impl NonFungibleResourceBuilder {
+    fn new() -> Self {
+        Self {
+            metadata: Metadata::new(),
+        }
+    }
+
+    pub fn with_name(mut self, name: &str) -> Self {
+        self.metadata.insert(b"NAME".to_vec(), name.as_bytes().to_vec());
+        self
+    }
+
+    pub fn build(self) -> ResourceAddress {
+        crate::get_context().with_resource_manager(|manager| manager.register_non_fungible(self.metadata))
+    }
+
+    pub fn build_bucket(self) -> Bucket {
+        crate::get_context().with_resource_manager(|manager| {
+            manager.mint_resource(MintResourceArg::NonFungible {
+                token_ids: vec![],
                 metadata: self.metadata,
             })
         })
