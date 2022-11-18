@@ -41,7 +41,7 @@ macro_rules! arg {
     };
 
     (Literal($arg:expr)) => {
-        $crate::args::Arg::Literal(tari_template_abi::encode(&$arg).unwrap())
+        $crate::args::Arg::Literal($crate::encode(&$arg).unwrap())
     };
 
     ($arg:expr) => {

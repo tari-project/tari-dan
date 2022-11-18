@@ -20,53 +20,30 @@
 // WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 // USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use async_trait::async_trait;
-use tari_dan_engine::state::{models::StateRoot, StateDbUnitOfWork};
+use std::collections::HashMap;
 
-use crate::{
-    digital_assets_error::DigitalAssetError,
-    models::{Payload, TariDanPayload},
-    services::AssetProcessor,
-};
+use tari_dan_common_types::ShardId;
+use tari_dan_engine::{state_store::StateStoreError, transaction::TransactionError};
+use tari_engine_types::commit_result::FinalizeResult;
 
-#[async_trait]
+use crate::models::{ObjectPledge, Payload};
+
 pub trait PayloadProcessor<TPayload: Payload> {
-    async fn process_payload<TUnitOfWork: StateDbUnitOfWork>(
+    fn process_payload(
         &self,
-        payload: &TPayload,
-        unit_of_work: TUnitOfWork,
-    ) -> Result<StateRoot, DigitalAssetError>;
+        payload: TPayload,
+        pledges: HashMap<ShardId, Option<ObjectPledge>>,
+    ) -> Result<FinalizeResult, PayloadProcessorError>;
 }
 
-pub struct TariDanPayloadProcessor<TAssetProcessor>
-where TAssetProcessor: AssetProcessor
-{
-    asset_processor: TAssetProcessor,
-}
-
-impl<TAssetProcessor: AssetProcessor> TariDanPayloadProcessor<TAssetProcessor> {
-    pub fn new(asset_processor: TAssetProcessor) -> Self {
-        Self { asset_processor }
-    }
-}
-
-#[async_trait]
-impl<TAssetProcessor: AssetProcessor + Send + Sync> PayloadProcessor<TariDanPayload>
-    for TariDanPayloadProcessor<TAssetProcessor>
-{
-    async fn process_payload<TUnitOfWork: StateDbUnitOfWork>(
-        &self,
-        payload: &TariDanPayload,
-        state_tx: TUnitOfWork,
-    ) -> Result<StateRoot, DigitalAssetError> {
-        let mut state_tx = state_tx;
-        for instruction in payload.instructions() {
-            println!("Executing instruction");
-            println!("{:?}", instruction);
-            // TODO: Should we swallow + log the error instead of propagating it?
-            self.asset_processor.execute_instruction(instruction, &mut state_tx)?;
-        }
-
-        Ok(state_tx.calculate_root()?)
-    }
+#[derive(Debug, thiserror::Error)]
+pub enum PayloadProcessorError {
+    #[error(transparent)]
+    TransactionError(#[from] TransactionError),
+    // TODO: dont like the use of anyhow, but IMO preferable over a String (this is in core but the template manager
+    // is in the bin)
+    #[error("Failed to load template: {0}")]
+    FailedToLoadTemplate(anyhow::Error),
+    #[error(transparent)]
+    StateStoreError(#[from] StateStoreError),
 }

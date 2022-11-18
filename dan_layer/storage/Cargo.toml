@@ -1,0 +1,14 @@
+[package]
+name = "tari_dan_storage"
+version = "0.1.0"
+edition = "2021"
+license = "BSD-3-Clause"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+tari_common_types = { git = "https://github.com/tari-project/tari.git", branch = "feature-dan", package = "tari_common_types" }
+
+thiserror = "1"
+time = "0.3.15"
+serde = "1.0"

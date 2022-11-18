@@ -20,11 +20,55 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use std::{fs, io, io::ErrorKind, path::Path, process::Command};
+use std::{
+    fs,
+    fs::File,
+    io,
+    io::{ErrorKind, Write},
+    path::Path,
+    process::Command,
+};
 
 use cargo_toml::{Manifest, Product};
+use tempfile::tempdir;
 
 use super::module::WasmModule;
+
+// TODO: remove from main build
+pub fn compile_str<S: AsRef<str>>(source: S, features: &[&str]) -> Result<WasmModule, io::Error> {
+    let source = source.as_ref();
+    let temp_dir = tempdir()?;
+
+    fs::create_dir_all(temp_dir.path().join("src"))?;
+    File::create(temp_dir.path().join("src/lib.rs"))?.write_all(source.as_bytes())?;
+    // super hacky
+    File::create(temp_dir.path().join("Cargo.toml"))?.write_all(
+            br#"
+        [workspace]
+[package]
+name = "temp_crate_lib"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+tari_template_abi = { git="https://github.com/tari-project/tari-dan.git", package="tari_template_abi", default-features = false, rev="9ef9cccfed5390f61b1a28aa3e04cde6813016ef" }
+tari_template_lib = { git="https://github.com/tari-project/tari-dan.git", package="tari_template_lib", rev = "9ef9cccfed5390f61b1a28aa3e04cde6813016ef" }
+tari_template_macros = { git="https://github.com/tari-project/tari-dan.git", package="tari_template_macros", rev = "9ef9cccfed5390f61b1a28aa3e04cde6813016ef" }
+
+[profile.release]
+opt-level = 's'     # Optimize for size.
+lto = true          # Enable Link Time Optimization.
+codegen-units = 1   # Reduce number of codegen units to increase optimizations.
+panic = 'abort'     # Abort on panic.
+strip = "debuginfo" # Strip debug info.
+
+[lib]
+crate-type = ["cdylib", "lib"]
+        "#
+    )?;
+
+    compile_template(temp_dir.path(), features)
+}
 
 pub fn compile_template<P: AsRef<Path>>(package_dir: P, features: &[&str]) -> io::Result<WasmModule> {
     let mut args = ["build", "--target", "wasm32-unknown-unknown", "--release"]
@@ -37,14 +81,18 @@ pub fn compile_template<P: AsRef<Path>>(package_dir: P, features: &[&str]) -> io
         args.extend(features.iter().map(ToString::to_string));
     }
 
-    let status = Command::new("cargo")
+    let output = Command::new("cargo")
         .current_dir(package_dir.as_ref())
         .args(args)
-        .status()?;
-    if !status.success() {
+        .output()?;
+    if !output.status.success() {
+        eprintln!("stdout:");
+        eprintln!("{}", String::from_utf8_lossy(&output.stdout));
+        eprintln!("stderr:");
+        eprintln!("{}", String::from_utf8_lossy(&output.stderr));
         return Err(io::Error::new(
             ErrorKind::Other,
-            format!("Failed to compile package: {:?}", package_dir.as_ref()),
+            format!("Failed to compile package: {:?}", package_dir.as_ref(),),
         ));
     }
 

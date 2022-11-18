@@ -21,12 +21,18 @@
 // USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 table! {
-    contracts (id) {
+    epochs (epoch) {
+        epoch -> Integer,
+        validator_node_mr -> Binary,
+    }
+}
+
+table! {
+    validator_nodes (id) {
         id -> Integer,
-        contract_id -> Binary,
-        height -> BigInt,
-        state -> Integer,
-        constitution -> Binary,
+        public_key -> Binary,
+        shard_key -> Binary,
+        epoch -> Integer,
     }
 }
 
@@ -37,4 +43,18 @@ table! {
     }
 }
 
-allow_tables_to_appear_in_same_query!(contracts, metadata,);
+table! {
+    templates (id) {
+        id -> Integer,
+        template_name -> Text,
+        template_address -> Binary,
+        url -> Text,
+        height -> Integer,
+        compiled_code -> Binary,
+        status -> Text,
+        wasm_path -> Nullable<Text>,
+        added_at -> BigInt,
+    }
+}
+
+allow_tables_to_appear_in_same_query!(metadata, templates,);

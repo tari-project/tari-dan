@@ -23,135 +23,107 @@
 use std::net::SocketAddr;
 
 use async_trait::async_trait;
-use tari_app_grpc::{
-    tari_rpc as grpc,
-    tari_rpc::{
-        CreateFollowOnAssetCheckpointRequest,
-        CreateInitialAssetCheckpointRequest,
-        SubmitContractAcceptanceRequest,
-        SubmitContractUpdateProposalAcceptanceRequest,
-    },
+use tari_app_grpc::tari_rpc::{
+    BuildInfo,
+    CreateTemplateRegistrationRequest,
+    CreateTemplateRegistrationResponse,
+    RegisterValidatorNodeRequest,
+    RegisterValidatorNodeResponse,
+    TemplateRegistration,
+    TemplateType,
+    WasmInfo,
 };
-use tari_common_types::types::{FixedHash, PublicKey, Signature};
-use tari_core::transactions::transaction_components::SignerSignature;
+use tari_comms::NodeIdentity;
 use tari_crypto::tari_utilities::ByteArray;
 use tari_dan_core::{services::WalletClient, DigitalAssetError};
-use tari_dan_engine::state::models::StateRoot;
+use tari_validator_node_client::types::TemplateRegistrationRequest;
+use tari_wallet_grpc_client::Client as GrpcWallet;
 
-const _LOG_TARGET: &str = "tari::dan::wallet_grpc";
+use crate::{
+    template_registration_signing::sign_template_registration,
+    validator_node_registration_signing::sign_validator_node_registration,
+};
 
-type Inner = grpc::wallet_client::WalletClient<tonic::transport::Channel>;
+const _LOG_TARGET: &str = "tari::validator_node::app";
+
+type Client = GrpcWallet<tonic::transport::Channel>;
 
 #[derive(Clone)]
 pub struct GrpcWalletClient {
     endpoint: SocketAddr,
-    inner: Option<Inner>,
+    client: Option<Client>,
 }
 
 impl GrpcWalletClient {
     pub fn new(endpoint: SocketAddr) -> GrpcWalletClient {
-        Self { endpoint, inner: None }
+        Self { endpoint, client: None }
     }
 
-    pub async fn connection(&mut self) -> Result<&mut Inner, DigitalAssetError> {
-        if self.inner.is_none() {
+    pub async fn connection(&mut self) -> Result<&mut Client, DigitalAssetError> {
+        if self.client.is_none() {
             let url = format!("http://{}", self.endpoint);
-            let inner = Inner::connect(url).await?;
-            self.inner = Some(inner);
+            let inner = Client::connect(url).await?;
+            self.client = Some(inner);
         }
-        self.inner
+        dbg!(self.endpoint);
+        self.client
             .as_mut()
             .ok_or_else(|| DigitalAssetError::FatalError("no connection".into()))
+    }
+
+    pub async fn register_validator_node(
+        &mut self,
+        node_identity: &NodeIdentity,
+    ) -> Result<RegisterValidatorNodeResponse, DigitalAssetError> {
+        let inner = self.connection().await?;
+        let signature = sign_validator_node_registration(node_identity.secret_key(), 123);
+        let request = RegisterValidatorNodeRequest {
+            validator_node_public_key: node_identity.public_key().to_vec(),
+            validator_node_signature: Some(signature.into()),
+            fee_per_gram: 1,
+            message: "Registering VN".to_string(),
+        };
+        let result = inner.register_validator_node(request).await?.into_inner();
+
+        if result.is_success {
+            Ok(result)
+        } else {
+            Err(DigitalAssetError::NodeRegistration(result.failure_message))
+        }
+    }
+
+    pub async fn register_template(
+        &mut self,
+        node_identity: &NodeIdentity,
+        data: TemplateRegistrationRequest,
+    ) -> Result<CreateTemplateRegistrationResponse, DigitalAssetError> {
+        let inner = self.connection().await?;
+        let signature = sign_template_registration(node_identity.secret_key(), data.binary_sha.to_vec());
+        let request = CreateTemplateRegistrationRequest {
+            template_registration: Some(TemplateRegistration {
+                author_public_key: node_identity.public_key().to_vec(),
+                author_signature: Some(signature.into()),
+                template_name: data.template_name,
+                template_version: data.template_version.into(),
+                // TODO: fill real abi_version
+                template_type: Some(TemplateType {
+                    template_type: Some(tari_app_grpc::tari_rpc::template_type::TemplateType::Wasm(WasmInfo {
+                        abi_version: 1,
+                    })),
+                }),
+                build_info: Some(BuildInfo {
+                    repo_url: data.repo_url,
+                    commit_hash: data.commit_hash,
+                }),
+                binary_sha: data.binary_sha,
+                binary_url: data.binary_url,
+            }),
+            fee_per_gram: 1,
+        };
+        let result = inner.create_template_registration(request).await?.into_inner();
+        Ok(result)
     }
 }
 
 #[async_trait]
-impl WalletClient for GrpcWalletClient {
-    async fn create_new_checkpoint(
-        &mut self,
-        contract_id: &FixedHash,
-        state_root: &StateRoot,
-        checkpoint_number: u64,
-        checkpoint_signatures: &[SignerSignature],
-    ) -> Result<(), DigitalAssetError> {
-        let inner = self.connection().await?;
-        let committee_signatures = grpc::CommitteeSignatures {
-            signatures: checkpoint_signatures.iter().map(Into::into).collect(),
-        };
-
-        if checkpoint_number == 0 {
-            let request = CreateInitialAssetCheckpointRequest {
-                contract_id: contract_id.to_vec(),
-                merkle_root: state_root.as_bytes().to_vec(),
-                committee_signatures: Some(committee_signatures),
-            };
-
-            let _res = inner
-                .create_initial_asset_checkpoint(request)
-                .await
-                .map_err(|e| DigitalAssetError::FatalError(format!("Could not create checkpoint:{}", e)))?;
-        } else {
-            let request = CreateFollowOnAssetCheckpointRequest {
-                checkpoint_number,
-                contract_id: contract_id.to_vec(),
-                merkle_root: state_root.as_bytes().to_vec(),
-                committee_signatures: Some(committee_signatures),
-            };
-
-            let _res = inner
-                .create_follow_on_asset_checkpoint(request)
-                .await
-                .map_err(|e| DigitalAssetError::FatalError(format!("Could not create checkpoint:{}", e)))?;
-        }
-
-        Ok(())
-    }
-
-    async fn submit_contract_acceptance(
-        &mut self,
-        contract_id: &FixedHash,
-        validator_node_public_key: &PublicKey,
-        signature: &Signature,
-    ) -> Result<u64, DigitalAssetError> {
-        let inner = self.connection().await?;
-
-        let request = SubmitContractAcceptanceRequest {
-            contract_id: contract_id.as_bytes().to_vec(),
-            validator_node_public_key: validator_node_public_key.as_bytes().to_vec(),
-            signature: Some((*signature).clone().into()),
-        };
-
-        let res = inner
-            .submit_contract_acceptance(request)
-            .await
-            .map_err(|e| DigitalAssetError::FatalError(format!("Could not submit contract acceptance: {}", e)))?;
-
-        Ok(res.into_inner().tx_id)
-    }
-
-    async fn submit_contract_update_proposal_acceptance(
-        &mut self,
-        contract_id: &FixedHash,
-        proposal_id: u64,
-        validator_node_public_key: &PublicKey,
-        signature: &Signature,
-    ) -> Result<u64, DigitalAssetError> {
-        let inner = self.connection().await?;
-
-        let request = SubmitContractUpdateProposalAcceptanceRequest {
-            contract_id: contract_id.as_bytes().to_vec(),
-            proposal_id,
-            validator_node_public_key: validator_node_public_key.as_bytes().to_vec(),
-            signature: Some((*signature).clone().into()),
-        };
-
-        let res = inner
-            .submit_contract_update_proposal_acceptance(request)
-            .await
-            .map_err(|e| {
-                DigitalAssetError::FatalError(format!("Could not submit contract update proposal acceptance: {}", e))
-            })?;
-
-        Ok(res.into_inner().tx_id)
-    }
-}
+impl WalletClient for GrpcWalletClient {}

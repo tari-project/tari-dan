@@ -5,52 +5,102 @@ syntax = "proto3";
 
 package tari.dan.consensus;
 
-import "common.proto";
+import "transaction.proto";
 
 enum HotStuffMessageType {
-    HOT_STUFF_MESSAGE_TYPE_UNKNOWN = 0;
-    HOT_STUFF_MESSAGE_TYPE_NEW_VIEW = 1;
-    HOT_STUFF_MESSAGE_TYPE_PREPARE = 2;
-    HOT_STUFF_MESSAGE_TYPE_PRE_COMMIT = 3;
-    HOT_STUFF_MESSAGE_TYPE_COMMIT = 4;
-    HOT_STUFF_MESSAGE_TYPE_GENESIS = 255;
-
+  NEW_VIEW = 0;
+  PROPOSAL = 1;
 }
 
 message HotStuffMessage {
-    uint64 view_number = 1;
-    HotStuffMessageType message_type = 2;
-    QuorumCertificate justify = 3;
-    HotStuffTreeNode node= 4;
-    ValidatorSignature partial_sig = 5;
-    bytes node_hash = 6;
-    bytes contract_id = 7;
-    tari.dan.common.SignerSignature checkpoint_signature = 8;
+  HotStuffMessageType message_type = 1;
+  HotStuffTreeNode node = 2;
+  QuorumCertificate high_qc = 3;
+  bytes shard = 4;
+  TariDanPayload new_view_payload = 5;
+}
+
+message ShardVote {
+  bytes shard_id = 1;
+  bytes node_hash = 2;
+  ObjectPledge pledge = 3;
 }
 
 message QuorumCertificate {
-    HotStuffMessageType message_type = 1;
-    bytes node_hash = 2;
-    uint64 view_number = 3;
-    ValidatorSignature signature = 4;
+  enum QuorumDecision {
+    QUORUM_DECISION_ACCEPT = 0;
+    QUORUM_DECISION_REJECT_SHARD_NOT_PLEDGED = 1;
+    QUORUM_DECISION_REJECT_EXECUTION_FAILURE = 2;
+  }
+  bytes payload_id = 1;
+  uint64 payload_height = 2;
+  bytes local_node_hash = 3;
+  uint64 local_node_height = 4;
+  bytes shard = 5;
+  uint64 epoch = 6;
+  QuorumDecision decision = 7;
+  repeated ShardVote all_shard_nodes = 8;
+  repeated ValidatorMetadata validators_metadata = 9;
 }
 
 message HotStuffTreeNode {
-    bytes parent = 1;
-    TariDanPayload payload = 2;
-    uint32 height = 3;
-    bytes state_root =4;
+  bytes parent = 1;
+  bytes payload_id = 2;
+  uint64 height = 3;
+  bytes shard = 4;
+  uint64 payload_height = 5;
+  ObjectPledge local_pledge = 6;
+  uint64 epoch = 7;
+  bytes proposed_by = 8;
+  QuorumCertificate justify = 9;
+  TariDanPayload payload = 10;
 }
 
-message ValidatorSignature{
-
+message ValidatorMetadata {
+  bytes public_key = 1;
+  bytes signature = 2;
+  bytes merkle_proof = 3;
+  uint64 merkle_leaf_index = 4;
 }
 
 message TariDanPayload {
-    tari.dan.common.InstructionSet instruction_set = 1;
-    CheckpointData checkpoint = 2;
+  tari.dan.transaction.Transaction transaction = 1;
 }
 
-message CheckpointData {
-    // todo: fill this in
+message VoteMessage {
+  bytes local_node_hash = 1;
+  bytes shard_id = 2;
+  QuorumDecision decision = 3;
+  repeated ShardVote all_shard_nodes = 4;
+  ValidatorMetadata validator_metadata = 5;
+}
+
+enum QuorumDecision {
+  QUORUM_DECISION_UNKNOWN = 0;
+  QUORUM_DECISION_ACCEPT = 1;
+  QUORUM_DECISION_REJECT = 2;
+}
+
+message ObjectPledge {
+  bytes shard_id = 1;
+  SubstateState current_state = 2;
+  bytes pledged_to_payload = 3;
+  uint64 pledged_until = 4;
+}
+
+message SubstateState {
+  oneof state {
+    bool does_not_exist = 1;
+    UpState up = 2;
+    DownState down = 3;
+  }
+}
+
+message UpState {
+  bytes created_by = 1;
+  bytes data = 2;
+}
+
+message DownState {
+  bytes deleted_by = 1;
 }

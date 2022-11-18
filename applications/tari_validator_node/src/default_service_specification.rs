@@ -23,61 +23,35 @@
 use tari_common_types::types::PublicKey;
 use tari_dan_core::{
     models::{domain_events::ConsensusWorkerDomainEvent, TariDanPayload},
-    services::{
-        mempool::service::MempoolServiceHandle,
-        ConcreteAcceptanceManager,
-        ConcreteAssetProcessor,
-        ConcreteAssetProxy,
-        ConcreteCheckpointManager,
-        ConcreteCommitteeManager,
-        LoggingEventsPublisher,
-        NodeIdentitySigningService,
-        ServiceSpecification,
-        TariDanPayloadProcessor,
-        TariDanPayloadProvider,
-    },
+    services::{LoggingEventsPublisher, NodeIdentitySigningService, ServiceSpecification},
 };
-use tari_dan_storage_sqlite::{
-    global::SqliteGlobalDbBackendAdapter,
-    SqliteChainBackendAdapter,
-    SqliteDbFactory,
-    SqliteStateDbBackendAdapter,
-    SqliteStorageService,
-};
+use tari_dan_storage_sqlite::{global::SqliteGlobalDbAdapter, SqliteDbFactory};
 
 use crate::{
     grpc::services::{base_node_client::GrpcBaseNodeClient, wallet_client::GrpcWalletClient},
     p2p::services::{
-        inbound_connection_service::TariCommsInboundReceiverHandle,
-        outbound_connection_service::TariCommsOutboundService,
+        comms_peer_provider::CommsPeerProvider,
+        messaging::OutboundMessaging,
         rpc_client::TariCommsValidatorNodeClientFactory,
+        template_manager::TemplateManager,
     },
+    payload_processor::TariDanPayloadProcessor,
 };
 
 #[derive(Default, Clone)]
 pub struct DefaultServiceSpecification;
 
 impl ServiceSpecification for DefaultServiceSpecification {
-    type AcceptanceManager = ConcreteAcceptanceManager<Self::WalletClient, Self::BaseNodeClient>;
     type Addr = PublicKey;
-    type AssetProcessor = ConcreteAssetProcessor;
-    type AssetProxy = ConcreteAssetProxy<Self>;
     type BaseNodeClient = GrpcBaseNodeClient;
-    type ChainDbBackendAdapter = SqliteChainBackendAdapter;
-    type ChainStorageService = SqliteStorageService;
-    type CheckpointManager = ConcreteCheckpointManager<Self::WalletClient>;
-    type CommitteeManager = ConcreteCommitteeManager;
     type DbFactory = SqliteDbFactory;
     type EventsPublisher = LoggingEventsPublisher<ConsensusWorkerDomainEvent>;
-    type GlobalDbAdapter = SqliteGlobalDbBackendAdapter;
-    type InboundConnectionService = TariCommsInboundReceiverHandle;
-    type MempoolService = MempoolServiceHandle;
-    type OutboundService = TariCommsOutboundService<Self::Payload>;
+    type GlobalDbAdapter = SqliteGlobalDbAdapter;
+    type OutboundService = OutboundMessaging;
     type Payload = TariDanPayload;
-    type PayloadProcessor = TariDanPayloadProcessor<Self::AssetProcessor>;
-    type PayloadProvider = TariDanPayloadProvider<Self::MempoolService>;
+    type PayloadProcessor = TariDanPayloadProcessor<TemplateManager>;
+    type PeerProvider = CommsPeerProvider;
     type SigningService = NodeIdentitySigningService;
-    type StateDbBackendAdapter = SqliteStateDbBackendAdapter;
     type ValidatorNodeClientFactory = TariCommsValidatorNodeClientFactory;
     type WalletClient = GrpcWalletClient;
 }

@@ -20,20 +20,16 @@
 // WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 // USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-pub use chain_storage_service::ChainStorageService;
 pub use error::StorageError;
 pub use store::{AssetDataStore, AssetStore};
-pub mod chain;
-mod chain_storage_service;
 mod db_factory;
 mod error;
-pub mod global;
-mod metadata_backend_adapter;
 mod store;
 
-pub use atomic_db::AtomicDb;
 pub use db_factory::DbFactory;
-pub use metadata_backend_adapter::{AsKeyBytes, MetadataBackendAdapter};
 
-mod atomic_db;
 pub mod mocks;
+pub mod shard_store;
+
+pub mod encoding;
+pub use encoding::{deserialize, serialize};

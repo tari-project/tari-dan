@@ -22,54 +22,91 @@
 
 use std::sync::{atomic::AtomicU32, Arc};
 
+use tari_dan_common_types::ShardId;
+use tari_engine_types::hashing::hasher;
 use tari_template_lib::{
-    models::{BucketId, Component, ComponentAddress, ResourceAddress, VaultId},
+    models::{BucketId, ComponentAddress, ResourceAddress, VaultId},
     Hash,
 };
-
-use crate::hashing::hasher;
 
 #[derive(Debug, Clone)]
 pub struct IdProvider {
     current_id: Arc<AtomicU32>,
     transaction_hash: Hash,
+    max_ids: u32,
+    bucket_id: Arc<AtomicU32>,
+}
+
+#[derive(Debug, thiserror::Error)]
+#[error("Maximum ID allocation of {max} exceeded")]
+pub struct MaxIdsExceeded {
+    max: u32,
 }
 
 impl IdProvider {
-    pub fn new(transaction_hash: Hash) -> Self {
+    pub fn new(transaction_hash: Hash, max_ids: u32) -> Self {
         Self {
             current_id: Arc::new(AtomicU32::new(0)),
             transaction_hash,
+            bucket_id: Arc::new(AtomicU32::new(1000)),
+            max_ids,
         }
     }
 
-    fn next_id(&self) -> u32 {
-        self.current_id.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
+    fn next(&self) -> Result<u32, MaxIdsExceeded> {
+        let id = self.current_id.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        if id >= self.max_ids {
+            return Err(MaxIdsExceeded { max: self.max_ids });
+        }
+        Ok(id)
     }
 
     pub fn transaction_hash(&self) -> Hash {
         self.transaction_hash
     }
 
-    pub fn new_resource_address(&self) -> ResourceAddress {
-        hasher("resource")
+    /// Generates a new unique id H(tx_hash || n).
+    /// NOTE: we rely on IDs being predictable for all outputs (components, resources, vaults).
+    fn new_id(&self) -> Result<Hash, MaxIdsExceeded> {
+        let id = hasher("output")
             .chain(&self.transaction_hash)
-            .chain(&self.next_id())
-            .result()
+            .chain(&self.next()?)
+            .result();
+        Ok(id)
     }
 
-    pub fn new_component_address(&self, new_component: &Component) -> ComponentAddress {
-        hasher("component")
-            .chain(&new_component)
-            .chain(&self.next_id())
-            .result()
+    pub fn new_resource_address(&self) -> Result<ResourceAddress, MaxIdsExceeded> {
+        self.new_id()
     }
 
-    pub fn new_vault_id(&self) -> VaultId {
-        (self.transaction_hash, self.next_id())
+    pub fn new_component_address(&self) -> Result<ComponentAddress, MaxIdsExceeded> {
+        self.new_id()
+    }
+
+    pub fn new_output_shard(&self) -> Result<ShardId, MaxIdsExceeded> {
+        Ok(self.new_id()?.into_array().into())
+    }
+
+    pub fn new_vault_id(&self) -> Result<VaultId, MaxIdsExceeded> {
+        self.new_id()
     }
 
     pub fn new_bucket_id(&self) -> BucketId {
-        self.next_id()
+        // Buckets are not saved to shards, so should not increment the hashes
+        self.bucket_id.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn it_fails_if_generating_more_ids_than_the_max() {
+        let id_provider = IdProvider::new(Hash::default(), 0);
+        id_provider.new_id().unwrap_err();
+        let id_provider = IdProvider::new(Hash::default(), 1);
+        id_provider.new_id().unwrap();
+        id_provider.new_id().unwrap_err();
     }
 }

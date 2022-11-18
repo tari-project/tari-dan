@@ -20,34 +20,29 @@
 //   WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //   USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use std::marker::PhantomData;
-
 use tari_template_abi::{encode, Encode};
 
 use crate::{
     args::MintResourceArg,
     models::{Amount, Bucket, Metadata},
-    resource::ResourceDefinition,
 };
 
 pub struct ResourceBuilder;
 
 impl ResourceBuilder {
-    pub fn fungible<T: ResourceDefinition>() -> FungibleResourceBuilder<T> {
+    pub fn fungible() -> FungibleResourceBuilder {
         FungibleResourceBuilder::new()
     }
 }
 
-pub struct FungibleResourceBuilder<T> {
+pub struct FungibleResourceBuilder {
     initial_supply: Amount,
     metadata: Metadata,
-    _t: PhantomData<T>,
 }
 
-impl<T: ResourceDefinition> FungibleResourceBuilder<T> {
+impl FungibleResourceBuilder {
     fn new() -> Self {
         Self {
-            _t: PhantomData,
             initial_supply: Amount::zero(),
             metadata: Metadata::new(),
         }
@@ -68,7 +63,7 @@ impl<T: ResourceDefinition> FungibleResourceBuilder<T> {
         self
     }
 
-    pub fn build_bucket(self) -> Bucket<T> {
+    pub fn build_bucket(self) -> Bucket {
         crate::get_context().with_resource_manager(|manager| {
             manager.mint_resource(MintResourceArg::Fungible {
                 amount: self.initial_supply,

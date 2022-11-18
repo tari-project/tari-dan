@@ -21,14 +21,15 @@
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 use std::{
-    net::{IpAddr, Ipv4Addr, SocketAddr},
+    net::SocketAddr,
     path::{Path, PathBuf},
+    time::Duration,
 };
 
 use config::Config;
 use serde::{Deserialize, Serialize};
 use tari_common::{
-    configuration::{CommonConfig, Network},
+    configuration::{serializers, CommonConfig, Network},
     ConfigurationError,
     DefaultConfigLoader,
     SubConfigPath,
@@ -59,44 +60,44 @@ impl ApplicationConfig {
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(deny_unknown_fields)]
+#[allow(clippy::struct_excessive_bools)]
 pub struct ValidatorNodeConfig {
     override_from: Option<String>,
+    pub shard_key_file: PathBuf,
     /// A path to the file that stores your node identity and secret key
     pub identity_file: PathBuf,
     /// A path to the file that stores the tor hidden service private key, if using the tor transport
     pub tor_identity_file: PathBuf,
     /// The node's publicly-accessible hostname
     pub public_address: Option<Multiaddr>,
-    /// The asset worker will adhere to this phased timeout for the asset
-    pub phase_timeout: u64,
     /// The Tari base node's GRPC address
-    pub base_node_grpc_address: SocketAddr,
+    pub base_node_grpc_address: Option<SocketAddr>,
     /// The Tari console wallet's GRPC address
-    pub wallet_grpc_address: SocketAddr,
-    /// If set to false, there will be no scanning at all
-    pub scan_for_assets: bool,
+    pub wallet_grpc_address: Option<SocketAddr>,
+    /// If set to false, there will be no base layer scanning at all
+    pub scan_base_layer: bool,
     /// How often do we want to scan the base layer for changes
-    pub new_asset_scanning_interval: u64,
-    /// If set then only the specific assets will be checked
-    pub assets_allow_list: Option<Vec<String>>,
+    #[serde(with = "serializers::seconds")]
+    pub base_layer_scanning_interval: Duration,
     /// The relative path to store persistent data
     pub data_dir: PathBuf,
     /// The p2p configuration settings
     pub p2p: P2pConfig,
-    /// The constitution will auto accept contracts if true
-    pub constitution_auto_accept: bool,
-    /// Constitution confirmation time in block height
-    pub constitution_management_confirmation_time: u64,
-    /// Constitution polling interval in block height
-    pub constitution_management_polling_interval: u64,
-    /// Constitution polling interval in time (seconds)
-    pub constitution_management_polling_interval_in_seconds: u64,
     /// GRPC address of the validator node  application
     pub grpc_address: Option<Multiaddr>,
+    /// JSON-RPC address of the validator node  application
+    pub json_rpc_address: Option<SocketAddr>,
+    /// The address of the HTTP UI
+    pub http_ui_address: Option<SocketAddr>,
+    /// The node will re-register each epoch
+    pub auto_register: bool,
 }
 
 impl ValidatorNodeConfig {
     pub fn set_base_path<P: AsRef<Path>>(&mut self, base_path: P) {
+        if !self.shard_key_file.is_absolute() {
+            self.shard_key_file = base_path.as_ref().join(&self.shard_key_file);
+        }
         if !self.identity_file.is_absolute() {
             self.identity_file = base_path.as_ref().join(&self.identity_file);
         }
@@ -113,28 +114,26 @@ impl ValidatorNodeConfig {
 impl Default for ValidatorNodeConfig {
     fn default() -> Self {
         let p2p = P2pConfig {
-            datastore_path: PathBuf::from("peer_db/validator_node"),
+            datastore_path: PathBuf::from("data/peer_db"),
             ..Default::default()
         };
 
         Self {
             override_from: None,
+            shard_key_file: PathBuf::from("shard_key.json"),
             identity_file: PathBuf::from("validator_node_id.json"),
             tor_identity_file: PathBuf::from("validator_node_tor_id.json"),
             public_address: None,
-            phase_timeout: 30,
-            base_node_grpc_address: SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 18142),
-            wallet_grpc_address: SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 18143),
-            scan_for_assets: true,
-            new_asset_scanning_interval: 10,
-            assets_allow_list: None,
+            base_node_grpc_address: None,
+            wallet_grpc_address: None,
+            scan_base_layer: true,
+            base_layer_scanning_interval: Duration::from_secs(10),
             data_dir: PathBuf::from("data/validator_node"),
-            constitution_auto_accept: false,
-            constitution_management_confirmation_time: 20,
-            constitution_management_polling_interval: 120,
-            constitution_management_polling_interval_in_seconds: 60,
             p2p,
             grpc_address: Some("/ip4/127.0.0.1/tcp/18144".parse().unwrap()),
+            json_rpc_address: Some("127.0.0.1:18200".parse().unwrap()),
+            http_ui_address: Some("127.0.0.1:5000".parse().unwrap()),
+            auto_register: false,
         }
     }
 }

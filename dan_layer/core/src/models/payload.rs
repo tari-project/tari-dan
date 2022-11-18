@@ -22,10 +22,53 @@
 
 use std::fmt::Debug;
 
+use tari_common_types::types::FixedHash;
+use tari_dan_common_types::{ObjectClaim, PayloadId, ShardId, SubstateChange};
+
 use crate::models::ConsensusHash;
 
-pub trait Payload: Debug + Clone + Send + Sync + ConsensusHash {}
+// TODO: Rename to Command - most of the hotstuff docs refers to this as command
+pub trait Payload: Debug + Clone + Send + Sync + ConsensusHash {
+    fn involved_shards(&self) -> Vec<ShardId>;
+    fn to_id(&self) -> PayloadId {
+        PayloadId::new(self.consensus_hash())
+    }
+    fn objects_for_shard(&self, shard: ShardId) -> Option<(SubstateChange, ObjectClaim)>;
+    fn max_outputs(&self) -> u32;
+}
 
-impl Payload for &str {}
+// impl Payload for &str {
+//     fn involved_shards(&self) -> Vec<u32> {
+//         self.as_bytes()
+//     }
+// }
 
-impl Payload for String {}
+// impl Payload for String {
+//     fn involved_shards(&self) -> Vec<u32> {
+//         vec![0]
+//     }
+// }
+
+impl ConsensusHash for (String, Vec<ShardId>) {
+    fn consensus_hash(&self) -> FixedHash {
+        self.0.consensus_hash()
+    }
+}
+
+impl Payload for (String, Vec<ShardId>) {
+    fn involved_shards(&self) -> Vec<ShardId> {
+        self.1.clone()
+    }
+
+    fn objects_for_shard(&self, shard: ShardId) -> Option<(SubstateChange, ObjectClaim)> {
+        if self.1.contains(&shard) {
+            Some((SubstateChange::Create, ObjectClaim {}))
+        } else {
+            None
+        }
+    }
+
+    fn max_outputs(&self) -> u32 {
+        100
+    }
+}

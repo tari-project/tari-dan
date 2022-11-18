@@ -22,38 +22,45 @@
 
 use async_trait::async_trait;
 use tari_common_types::types::{FixedHash, PublicKey};
-use tari_core::{chain_storage::UtxoMinedInfo, transactions::transaction_components::OutputType};
+use tari_core::{
+    blocks::BlockHeader,
+    transactions::transaction_components::{CodeTemplateRegistration, TransactionOutput},
+};
+use tari_dan_common_types::ShardId;
 
 use crate::{
-    digital_assets_error::DigitalAssetError,
-    models::{BaseLayerMetadata, BaseLayerOutput},
+    models::{BaseLayerMetadata, ValidatorNode},
+    services::base_node_error::BaseNodeError,
 };
 
 #[async_trait]
-pub trait BaseNodeClient: Send + Sync {
-    async fn get_tip_info(&mut self) -> Result<BaseLayerMetadata, DigitalAssetError>;
-
-    async fn get_current_contract_outputs(
+pub trait BaseNodeClient: Send + Sync + Clone {
+    async fn test_connection(&mut self) -> Result<(), BaseNodeError>;
+    async fn get_tip_info(&mut self) -> Result<BaseLayerMetadata, BaseNodeError>;
+    async fn get_validator_nodes(&mut self, height: u64) -> Result<Vec<ValidatorNode>, BaseNodeError>;
+    async fn get_shard_key(&mut self, height: u64, public_key: &PublicKey) -> Result<Option<ShardId>, BaseNodeError>;
+    async fn get_template_registrations(
         &mut self,
-        height: u64,
-        contract_id: FixedHash,
-        output_type: OutputType,
-    ) -> Result<Vec<UtxoMinedInfo>, DigitalAssetError>;
-
-    async fn get_constitutions(
+        start_hash: Option<FixedHash>,
+        count: u64,
+    ) -> Result<Vec<CodeTemplateRegistration>, BaseNodeError>;
+    async fn get_header_by_hash(&mut self, block_hash: FixedHash) -> Result<BlockHeader, BaseNodeError>;
+    async fn get_sidechain_utxos(
         &mut self,
-        start_block_hash: Option<FixedHash>,
-        dan_node_public_key: &PublicKey,
-    ) -> Result<Vec<UtxoMinedInfo>, DigitalAssetError>;
+        start_hash: Option<FixedHash>,
+        count: u64,
+    ) -> Result<Vec<SideChainUtxos>, BaseNodeError>;
+}
 
-    async fn check_if_in_committee(
-        &mut self,
-        asset_public_key: PublicKey,
-        dan_node_public_key: PublicKey,
-    ) -> Result<(bool, u64), DigitalAssetError>;
+#[derive(Debug, Clone)]
+pub struct SideChainUtxos {
+    pub block_info: BlockInfo,
+    pub outputs: Vec<TransactionOutput>,
+}
 
-    async fn get_asset_registration(
-        &mut self,
-        asset_public_key: PublicKey,
-    ) -> Result<Option<BaseLayerOutput>, DigitalAssetError>;
+#[derive(Debug, Clone)]
+pub struct BlockInfo {
+    pub hash: FixedHash,
+    pub height: u64,
+    pub next_block_hash: Option<FixedHash>,
 }

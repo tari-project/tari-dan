@@ -23,6 +23,7 @@
 use std::{ops::Deref, path::Path, sync::Arc};
 
 use lmdb_zero::{db, put, ConstTransaction, LmdbResultExt, ReadTransaction, WriteTransaction};
+use tari_dan_common_types::optional::Optional;
 use tari_dan_engine::state_store::{AtomicDb, StateReader, StateStoreError, StateWriter};
 use tari_storage::lmdb_store::{DatabaseRef, LMDBBuilder};
 
@@ -79,17 +80,21 @@ impl<'a> AtomicDb<'a> for LmdbStateStore {
 }
 
 impl<'a, T: Deref<Target = ConstTransaction<'a>>> StateReader for LmdbTransaction<T> {
-    fn get_state_raw(&self, key: &[u8]) -> Result<Option<Vec<u8>>, StateStoreError> {
+    fn get_state_raw(&self, key: &[u8]) -> Result<Vec<u8>, StateStoreError> {
         let access = self.tx.access();
         access
-            .get::<_, [u8]>(&*self.db, key)
+            .get::<_, [u8]>(&self.db, key)
             .map(|data| data.to_vec())
             .to_opt()
-            .map_err(StateStoreError::custom)
+            .map_err(StateStoreError::custom)?
+            .ok_or_else(|| StateStoreError::NotFound {
+                kind: "state",
+                key: hex::encode(key),
+            })
     }
 
     fn exists(&self, key: &[u8]) -> Result<bool, StateStoreError> {
-        Ok(self.get_state_raw(key)?.is_some())
+        Ok(self.get_state_raw(key).optional()?.is_some())
     }
 }
 
@@ -97,7 +102,7 @@ impl<'a> StateWriter for LmdbTransaction<WriteTransaction<'a>> {
     fn set_state_raw(&mut self, key: &[u8], value: Vec<u8>) -> Result<(), StateStoreError> {
         let mut access = self.tx.access();
         access
-            .put(&*self.db, key, &value, put::Flags::empty())
+            .put(&self.db, key, &value, put::Flags::empty())
             .map_err(StateStoreError::custom)
     }
 
@@ -134,16 +139,16 @@ mod tests {
             let mut access = store.write_access().unwrap();
             access.set_state(b"abc", user_data.clone()).unwrap();
             assert!(access.exists(b"abc").unwrap());
-            let res = access.get_state(b"abc").unwrap();
-            assert_eq!(res, Some(user_data.clone()));
-            let res = access.get_state::<_, UserData>(b"def").unwrap();
+            let res: UserData = access.get_state(b"abc").unwrap();
+            assert_eq!(res, user_data);
+            let res = access.get_state::<_, UserData>(b"def").optional().unwrap();
             assert_eq!(res, None);
             // Drop without commit rolls back
         }
 
         {
             let access = store.read_access().unwrap();
-            let res = access.get_state::<_, UserData>(b"abc").unwrap();
+            let res = access.get_state::<_, UserData>(b"abc").optional().unwrap();
             assert_eq!(res, None);
             assert!(!access.exists(b"abc").unwrap());
         }
@@ -155,7 +160,7 @@ mod tests {
         }
 
         let access = store.read_access().unwrap();
-        let res = access.get_state(b"abc").unwrap();
-        assert_eq!(res, Some(user_data));
+        let res: UserData = access.get_state(b"abc").unwrap();
+        assert_eq!(res, user_data);
     }
 }

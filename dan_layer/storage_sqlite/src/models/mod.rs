@@ -20,10 +20,16 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-pub mod instruction;
+pub mod high_qc;
+pub mod last_executed_height;
+pub mod last_voted_height;
+pub mod leader_proposals;
+pub mod leaf_nodes;
+pub mod lock_node_and_height;
 pub mod locked_qc;
 pub mod metadata;
 pub mod node;
+pub mod payload;
 pub mod prepare_qc;
-pub mod state_key;
-pub mod state_op_log;
+pub mod received_votes;
+pub mod substate;

@@ -26,24 +26,20 @@ use crate::rust::fmt;
 #[repr(i32)]
 pub enum EngineOp {
     EmitLog = 0x00,
-    CreateComponent = 0x01,
-    GetComponent = 0x02,
-    SetComponentState = 0x03,
-    ResourceInvoke = 0x04,
-    VaultInvoke = 0x05,
-    BucketInvoke = 0x06,
+    ComponentInvoke = 0x01,
+    ResourceInvoke = 0x02,
+    VaultInvoke = 0x03,
+    BucketInvoke = 0x04,
 }
 
 impl EngineOp {
     pub fn from_i32(value: i32) -> Option<Self> {
         match value {
             0x00 => Some(EngineOp::EmitLog),
-            0x01 => Some(EngineOp::CreateComponent),
-            0x02 => Some(EngineOp::GetComponent),
-            0x03 => Some(EngineOp::SetComponentState),
-            0x04 => Some(EngineOp::ResourceInvoke),
-            0x05 => Some(EngineOp::VaultInvoke),
-            0x06 => Some(EngineOp::BucketInvoke),
+            0x01 => Some(EngineOp::ComponentInvoke),
+            0x02 => Some(EngineOp::ResourceInvoke),
+            0x03 => Some(EngineOp::VaultInvoke),
+            0x04 => Some(EngineOp::BucketInvoke),
             _ => None,
         }
     }

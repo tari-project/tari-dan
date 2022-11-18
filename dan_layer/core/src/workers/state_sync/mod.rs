@@ -25,24 +25,13 @@ pub use error::StateSyncError;
 use log::*;
 use rand::{rngs::OsRng, seq::SliceRandom};
 use tari_common_types::types::PublicKey;
-use tari_dan_engine::state::{
-    error::StateStorageError,
-    StateDb,
-    StateDbBackendAdapter,
-    StateDbUnitOfWork,
-    StateDbUnitOfWorkReader,
-};
-use tari_utilities::hex::Hex;
+use tari_dan_engine::state::{StateDb, StateDbBackendAdapter};
 
-use crate::{
-    models::CheckpointOutput,
-    services::{ValidatorNodeClientFactory, ValidatorNodeRpcClient},
-};
+use crate::services::ValidatorNodeClientFactory;
 
-const LOG_TARGET: &str = "tari::dan::workers::state_sync";
+// const LOG_TARGET: &str = "tari::dan::workers::state_sync";
 
 pub struct StateSynchronizer<'a, TStateDbBackendAdapter, TValidatorNodeClientFactory: ValidatorNodeClientFactory> {
-    last_checkpoint: &'a CheckpointOutput,
     state_db: &'a mut StateDb<TStateDbBackendAdapter>,
     validator_node_client_factory: &'a TValidatorNodeClientFactory,
     our_address: &'a TValidatorNodeClientFactory::Addr,
@@ -56,14 +45,12 @@ where
     TValidatorNodeClientFactory: ValidatorNodeClientFactory<Addr = PublicKey>,
 {
     pub fn new(
-        last_checkpoint: &'a CheckpointOutput,
         state_db: &'a mut StateDb<TStateDbBackendAdapter>,
         validator_node_client_factory: &'a TValidatorNodeClientFactory,
         our_address: &'a TValidatorNodeClientFactory::Addr,
         committee: &'a [TValidatorNodeClientFactory::Addr],
     ) -> Self {
         Self {
-            last_checkpoint,
             state_db,
             validator_node_client_factory,
             our_address,
@@ -100,45 +87,46 @@ where
         Ok(())
     }
 
-    async fn try_sync_from(&self, member: &TValidatorNodeClientFactory::Addr) -> Result<(), StateSyncError> {
-        info!(
-            target: LOG_TARGET,
-            "Attempting to sync asset '{}' from peer '{}'", self.last_checkpoint.contract_id, member
-        );
-        let mut client = self.validator_node_client_factory.create_client(member);
-        let tip_node = client
-            .get_tip_node(&self.last_checkpoint.contract_id)
-            .await?
-            .ok_or(StateSyncError::RemotePeerDoesNotHaveTipNode)?;
-
-        // TODO: should rather download the op logs for a checkpoint and reply over initial/current state
-        let state_schemas = client.get_sidechain_state(&self.last_checkpoint.contract_id).await?;
-
-        let mut uow = self.state_db.new_unit_of_work(u64::from(tip_node.height()));
-
-        for schema in state_schemas {
-            let name = schema.name;
-            for item in schema.items {
-                debug!(
-                    target: LOG_TARGET,
-                    "Adding schema={}, key={}, value={}",
-                    name,
-                    item.key.to_hex(),
-                    item.value.to_hex()
-                );
-                uow.set_value(name.clone(), item.key, item.value)?;
-            }
-        }
-        // TODO: Check merkle root before commit
-
-        uow.clear_all_state().map_err(StateStorageError::from)?;
-        uow.commit().map_err(StateStorageError::from)?;
-
-        let merkle_root = uow.calculate_root()?;
-        if self.last_checkpoint.merkle_root.as_slice() != merkle_root.as_bytes() {
-            return Err(StateSyncError::InvalidStateMerkleRoot);
-        }
-
-        Ok(())
+    async fn try_sync_from(&self, _member: &TValidatorNodeClientFactory::Addr) -> Result<(), StateSyncError> {
+        // info!(
+        //     target: LOG_TARGET,
+        //     "Attempting to sync asset '{}' from peer '{}'", self.last_checkpoint.contract_id, member
+        // );
+        // let mut client = self.validator_node_client_factory.create_client(member);
+        // let tip_node = client
+        //     .get_tip_node(&self.last_checkpoint.contract_id)
+        //     .await?
+        //     .ok_or(StateSyncError::RemotePeerDoesNotHaveTipNode)?;
+        //
+        // // TODO: should rather download the op logs for a checkpoint and reply over initial/current state
+        // let state_schemas = client.get_sidechain_state(&self.last_checkpoint.contract_id).await?;
+        //
+        // let mut uow = self.state_db.new_unit_of_work(u64::from(tip_node.height()));
+        //
+        // for schema in state_schemas {
+        //     let name = schema.name;
+        //     for item in schema.items {
+        //         debug!(
+        //             target: LOG_TARGET,
+        //             "Adding schema={}, key={}, value={}",
+        //             name,
+        //             item.key.to_hex(),
+        //             item.value.to_hex()
+        //         );
+        //         uow.set_value(name.clone(), item.key, item.value)?;
+        //     }
+        // }
+        // // TODO: Check merkle root before commit
+        //
+        // uow.clear_all_state().map_err(StateStorageError::from)?;
+        // uow.commit().map_err(StateStorageError::from)?;
+        //
+        // let merkle_root = uow.calculate_root()?;
+        // if self.last_checkpoint.merkle_root.as_slice() != merkle_root.as_bytes() {
+        //     return Err(StateSyncError::InvalidStateMerkleRoot);
+        // }
+        //
+        // Ok(())
+        todo!()
     }
 }

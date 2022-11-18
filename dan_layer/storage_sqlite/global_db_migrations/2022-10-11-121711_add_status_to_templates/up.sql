@@ -1,0 +1,9 @@
+ALTER TABLE templates
+    ADD COLUMN status VARCHAR(20) NOT NULL DEFAULT 'New';
+
+ALTER TABLE templates
+    ADD COLUMN wasm_path VARCHAR(255) NULL;
+
+ALTER TABLE templates
+    ADD COLUMN added_at INT(11) NOT NULL DEFAULT 0;
+

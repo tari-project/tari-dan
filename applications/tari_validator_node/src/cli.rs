@@ -20,6 +20,8 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+use std::net::SocketAddr;
+
 use clap::Parser;
 use tari_app_utilities::common_cli_args::CommonCliArgs;
 use tari_common::configuration::{ConfigOverrideProvider, Network};
@@ -27,7 +29,7 @@ use tari_common::configuration::{ConfigOverrideProvider, Network};
 #[derive(Parser, Debug)]
 #[clap(author, version, about, long_about = None)]
 #[clap(propagate_version = true)]
-pub(crate) struct Cli {
+pub struct Cli {
     #[clap(flatten)]
     pub common: CommonCliArgs,
     /// Enable tracing
@@ -36,6 +38,9 @@ pub(crate) struct Cli {
     /// Supply a network (overrides existing configuration)
     #[clap(long, env = "TARI_NETWORK")]
     pub network: Option<String>,
+    /// Bind address for JSON-rpc server
+    #[clap(long, alias = "rpc-address")]
+    pub json_rpc_address: Option<SocketAddr>,
 }
 
 impl ConfigOverrideProvider for Cli {
@@ -45,6 +50,10 @@ impl ConfigOverrideProvider for Cli {
         overrides.push(("network".to_string(), network.clone()));
         overrides.push(("validator_node.override_from".to_string(), network.clone()));
         overrides.push(("p2p.seeds.override_from".to_string(), network));
+
+        if let Some(ref addr) = self.json_rpc_address {
+            overrides.push(("validator_node.json_rpc_address".to_string(), addr.to_string()));
+        }
         overrides
     }
 }

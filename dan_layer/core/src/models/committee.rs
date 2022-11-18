@@ -20,15 +20,21 @@
 // WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 // USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+use serde::Serialize;
+
 use crate::{models::ViewId, services::infrastructure_services::NodeAddressable};
 
-#[derive(Clone)]
+#[derive(Debug, Clone, Serialize)]
 pub struct Committee<TAddr: NodeAddressable> {
     // TODO: encapsulate
     pub members: Vec<TAddr>,
 }
 
 impl<TAddr: NodeAddressable> Committee<TAddr> {
+    pub fn empty() -> Self {
+        Self::new(vec![])
+    }
+
     pub fn new(members: Vec<TAddr>) -> Self {
         Self { members }
     }
@@ -38,6 +44,7 @@ impl<TAddr: NodeAddressable> Committee<TAddr> {
         &self.members[pos]
     }
 
+    /// Returns n - f where n is the number of committee members and f is the tolerated failure nodes.
     pub fn consensus_threshold(&self) -> usize {
         let len = self.members.len();
         let max_failures = (len - 1) / 3;

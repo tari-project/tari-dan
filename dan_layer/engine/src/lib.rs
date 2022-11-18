@@ -1,18 +1,15 @@
 // Copyright 2022 The Tari Project
 // SPDX-License-Identifier: BSD-3-Clause
 
+pub mod crypto;
 pub mod flow;
 pub mod function_definitions;
-pub mod instructions;
-pub mod models;
-pub mod state;
-pub mod wasm;
-
-pub mod crypto;
-pub mod hashing;
-pub mod instruction;
 pub mod packager;
-// mod resource;
 pub mod runtime;
+pub mod state;
 pub mod state_store;
 pub mod traits;
+pub mod transaction;
+pub mod wasm;
+
+pub use tari_template_abi as abi;

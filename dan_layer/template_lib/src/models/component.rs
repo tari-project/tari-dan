@@ -22,15 +22,15 @@
 
 use tari_template_abi::{Decode, Encode};
 
-use crate::models::{ContractAddress, PackageAddress};
+use crate::models::TemplateAddress;
 
 pub type ComponentAddress = crate::Hash;
 
 #[derive(Debug, Clone, Encode, Decode)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct ComponentInstance {
     pub component_address: ComponentAddress,
-    pub contract_address: ContractAddress,
-    pub package_address: PackageAddress,
+    pub template_address: TemplateAddress,
     pub module_name: String,
     pub state: Vec<u8>,
 }
@@ -39,22 +39,28 @@ impl ComponentInstance {
     pub fn new(component_address: ComponentAddress, component: Component) -> Self {
         Self {
             component_address,
-            contract_address: component.contract_address,
-            package_address: component.package_address,
+            template_address: component.template_address,
             module_name: component.module_name,
             state: component.state,
         }
     }
 
-    pub fn id(&self) -> ComponentAddress {
+    pub fn address(&self) -> ComponentAddress {
         self.component_address
+    }
+
+    pub fn into_component(self) -> Component {
+        Component {
+            template_address: self.template_address,
+            module_name: self.module_name,
+            state: self.state,
+        }
     }
 }
 
 #[derive(Debug, Clone, Encode, Decode)]
 pub struct Component {
-    pub contract_address: ContractAddress,
-    pub package_address: PackageAddress,
+    pub template_address: TemplateAddress,
     pub module_name: String,
     pub state: Vec<u8>,
 }

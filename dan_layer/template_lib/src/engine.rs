@@ -23,10 +23,10 @@
 use tari_template_abi::{call_engine, decode, encode, Decode, Encode, EngineOp};
 
 use crate::{
-    args::{CreateComponentArg, EmitLogArg, GetComponentArg, LogLevel, SetComponentStateArg},
+    args::{ComponentAction, ComponentInvokeArg, ComponentRef, EmitLogArg, InvokeResult, LogLevel},
     context::Context,
     get_context,
-    models::{Component, ComponentAddress},
+    models::{ComponentAddress, ComponentInstance},
 };
 
 pub fn engine() -> TariEngine {
@@ -47,11 +47,14 @@ impl TariEngine {
     pub fn instantiate<T: Encode>(&self, template_name: String, initial_state: T) -> ComponentAddress {
         let encoded_state = encode(&initial_state).unwrap();
 
-        let component_address = call_engine::<_, ComponentAddress>(EngineOp::CreateComponent, &CreateComponentArg {
-            module_name: template_name,
-            state: encoded_state,
-        });
-        component_address.expect("no asset id returned")
+        let result = call_engine::<_, InvokeResult>(EngineOp::ComponentInvoke, &ComponentInvokeArg {
+            component_ref: ComponentRef::Component,
+            action: ComponentAction::Create,
+            args: invoke_args![template_name, encoded_state],
+        })
+        .expect("engine returned null component address");
+
+        result.decode().expect("failed to decode component address")
     }
 
     pub fn emit_log<T: Into<String>>(&self, level: LogLevel, msg: T) {
@@ -63,17 +66,24 @@ impl TariEngine {
 
     /// Get the component state
     pub fn get_component_state<T: Decode>(&self, component_address: ComponentAddress) -> T {
-        let component = call_engine::<_, Component>(EngineOp::GetComponent, &GetComponentArg { component_address })
-            .expect("Component not found");
+        let result = call_engine::<_, InvokeResult>(EngineOp::ComponentInvoke, &ComponentInvokeArg {
+            component_ref: ComponentRef::Ref(component_address),
+            action: ComponentAction::Get,
+            args: invoke_args![],
+        })
+        .expect("Component not found");
 
+        let component: ComponentInstance = result.decode().unwrap();
         decode(&component.state).expect("Failed to decode component state")
     }
 
     pub fn set_component_state<T: Encode>(&self, component_address: ComponentAddress, state: T) {
         let state = encode(&state).unwrap();
-        call_engine::<_, ()>(EngineOp::SetComponentState, &SetComponentStateArg {
-            component_address,
-            state,
-        });
+        let _result = call_engine::<_, InvokeResult>(EngineOp::ComponentInvoke, &ComponentInvokeArg {
+            component_ref: ComponentRef::Ref(component_address),
+            action: ComponentAction::SetState,
+            args: invoke_args![state],
+        })
+        .expect("ComponentAction::SetState failed");
     }
 }

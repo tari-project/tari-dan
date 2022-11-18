@@ -20,55 +20,80 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use tari_common_types::types::FixedHash;
-
-use crate::storage::{
-    global::{ContractState, GlobalDbBackendAdapter, GlobalDbMetadataKey},
-    StorageError,
+use tari_dan_storage::{
+    global::{DbEpoch, DbTemplate, DbTemplateUpdate, DbValidatorNode, GlobalDbAdapter, MetadataKey},
+    AtomicDb,
 };
+
+use crate::storage::StorageError;
 
 #[derive(Debug, Clone, Default)]
 pub struct MockGlobalDbBackupAdapter;
 
-impl GlobalDbBackendAdapter for MockGlobalDbBackupAdapter {
-    type BackendTransaction = ();
+impl AtomicDb for MockGlobalDbBackupAdapter {
+    type DbTransaction = ();
     type Error = StorageError;
-    type Model = ();
-    type NewModel = ();
 
-    fn create_transaction(&self) -> Result<Self::BackendTransaction, Self::Error> {
+    fn create_transaction(&self) -> Result<Self::DbTransaction, Self::Error> {
         todo!()
     }
 
-    fn get_data(&self, _key: GlobalDbMetadataKey) -> Result<Option<Vec<u8>>, Self::Error> {
+    fn commit(&self, _transaction: Self::DbTransaction) -> Result<(), Self::Error> {
+        todo!()
+    }
+}
+
+impl GlobalDbAdapter for MockGlobalDbBackupAdapter {
+    fn get_metadata(&self, _tx: &Self::DbTransaction, _key: &MetadataKey) -> Result<Option<Vec<u8>>, Self::Error> {
         todo!()
     }
 
-    fn set_data(&self, _key: GlobalDbMetadataKey, _value: &[u8]) -> Result<(), Self::Error> {
+    fn set_metadata(&self, _tx: &Self::DbTransaction, _key: MetadataKey, _value: &[u8]) -> Result<(), Self::Error> {
         todo!()
     }
 
-    fn commit(&self, _tx: &Self::BackendTransaction) -> Result<(), Self::Error> {
+    fn get_template(&self, _tx: &Self::DbTransaction, _key: &[u8]) -> Result<Option<DbTemplate>, Self::Error> {
         todo!()
     }
 
-    fn get_data_with_connection(
+    fn get_templates(&self, _tx: &Self::DbTransaction, _limit: usize) -> Result<Vec<DbTemplate>, Self::Error> {
+        todo!()
+    }
+
+    fn insert_template(&self, _tx: &Self::DbTransaction, _template: DbTemplate) -> Result<(), Self::Error> {
+        todo!()
+    }
+
+    fn update_template(
         &self,
-        _key: &GlobalDbMetadataKey,
-        _tx: &Self::BackendTransaction,
-    ) -> Result<Option<Vec<u8>>, Self::Error> {
+        _tx: &Self::DbTransaction,
+        _key: &[u8],
+        _template: DbTemplateUpdate,
+    ) -> Result<(), Self::Error> {
         todo!()
     }
 
-    fn save_contract(&self, _contract: Self::Model, _status: ContractState) -> Result<(), Self::Error> {
+    fn insert_validator_nodes(
+        &self,
+        _tx: &Self::DbTransaction,
+        _validator_nodes: Vec<DbValidatorNode>,
+    ) -> Result<(), Self::Error> {
         todo!()
     }
 
-    fn update_contract_state(&self, _contract_id: FixedHash, _state: ContractState) -> Result<(), Self::Error> {
+    fn get_validator_nodes_per_epoch(
+        &self,
+        _tx: &Self::DbTransaction,
+        _epoch: u64,
+    ) -> Result<Vec<DbValidatorNode>, Self::Error> {
         todo!()
     }
 
-    fn get_contracts_with_state(&self, _state: ContractState) -> Result<Vec<Self::Model>, Self::Error> {
+    fn insert_epoch(&self, _tx: &Self::DbTransaction, _epoch: DbEpoch) -> Result<(), Self::Error> {
+        todo!()
+    }
+
+    fn get_epoch(&self, _tx: &Self::DbTransaction, _epoch: u64) -> Result<Option<DbEpoch>, Self::Error> {
         todo!()
     }
 }

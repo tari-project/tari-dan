@@ -1,0 +1,101 @@
+// Copyright 2021. The Tari Project
+//
+// Redistribution and use in source and binary forms, with or without modification, are permitted provided that the
+// following conditions are met:
+//
+// 1. Redistributions of source code must retain the above copyright notice, this list of conditions and the following
+// disclaimer.
+//
+// 2. Redistributions in binary form must reproduce the above copyright notice, this list of conditions and the
+// following disclaimer in the documentation and/or other materials provided with the distribution.
+//
+// 3. Neither the name of the copyright holder nor the names of its contributors may be used to endorse or promote
+// products derived from this software without specific prior written permission.
+//
+// THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES,
+// INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+// DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
+// SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
+// SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY,
+// WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
+// USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+syntax = "proto3";
+
+package tari.dan.rpc;
+
+import "common.proto";
+import "consensus.proto";
+import "network.proto";
+import "transaction.proto";
+
+enum Status {
+  Accepted = 0;
+  Errored = 1;
+}
+
+message InvokeReadMethodRequest{
+  bytes contract_id = 1;
+  uint32 template_id = 2;
+  string method = 3;
+  bytes args = 4;
+  bytes sender = 5;
+}
+
+message InvokeReadMethodResponse {
+  bytes result = 1;
+}
+
+message InvokeMethodRequest{
+  bytes contract_id = 1;
+  uint32 template_id = 2;
+  string method = 3;
+  bytes args = 4;
+  bytes sender = 5;
+}
+
+message InvokeMethodResponse {
+  bytes result = 1;
+  Status status = 2;
+}
+
+message GetIdentityRequest {}
+
+message GetIdentityResponse {
+  bytes public_key = 1;
+  string public_address = 2;
+  bytes node_id = 3;
+}
+
+message SubmitTransactionRequest{
+  tari.dan.transaction.Transaction transaction = 1;
+}
+
+message SubmitTransactionResponse {
+  string status = 1;
+  bytes result = 2;
+}
+
+message GetPeersRequest {
+  uint64 since = 1;
+}
+
+message GetPeersResponse {
+  bytes identity = 1;
+  repeated bytes addresses = 2;
+  tari.dan.network.IdentitySignature identity_signature = 3;
+}
+
+message VNStateSyncRequest {
+  tari.dan.common.ShardId start_shard_id = 1;
+  tari.dan.common.ShardId end_shard_id = 2;
+  repeated tari.dan.common.ShardId inventory = 3;
+}
+
+message VNStateSyncResponse {
+  tari.dan.common.ShardId shard_id = 1;
+  tari.dan.consensus.SubstateState substate_state = 2;
+  uint64 node_height = 3;
+  bytes tree_node_hash = 4;
+  bytes payload_id = 5;
+  tari.dan.consensus.QuorumCertificate certificate = 6;
+}

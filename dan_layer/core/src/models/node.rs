@@ -20,9 +20,9 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use crate::{models::TreeNodeHash, storage::chain::DbNode};
+use crate::models::TreeNodeHash;
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Node {
     hash: TreeNodeHash,
     parent: TreeNodeHash,
@@ -54,11 +54,5 @@ impl Node {
 
     pub fn is_committed(&self) -> bool {
         self.is_committed
-    }
-}
-
-impl From<DbNode> for Node {
-    fn from(db_node: DbNode) -> Self {
-        Node::new(db_node.hash, db_node.parent, db_node.height, db_node.is_committed)
     }
 }

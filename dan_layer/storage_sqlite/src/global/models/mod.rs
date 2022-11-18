@@ -20,5 +20,11 @@
 // WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 // USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-pub mod contract;
-pub mod metadata;
+mod metadata;
+pub use metadata::*;
+
+mod template;
+pub use template::*;
+
+pub mod epoch;
+pub mod validator_node;

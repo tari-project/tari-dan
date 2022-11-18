@@ -23,11 +23,11 @@
 mod digital_assets_error;
 pub use digital_assets_error::DigitalAssetError;
 
-mod helpers;
+pub mod consensus_constants;
+pub mod message;
 pub mod models;
 pub mod services;
 pub mod storage;
 pub mod template_command;
-pub mod templates;
 pub mod types;
 pub mod workers;

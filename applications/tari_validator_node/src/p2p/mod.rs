@@ -24,4 +24,5 @@ pub mod proto;
 
 mod rpc;
 pub use rpc::create_validator_node_rpc_service;
+
 pub mod services;

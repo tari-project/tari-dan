@@ -21,18 +21,12 @@
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 use prost::DecodeError;
+use tari_common_types::types::FixedHashSizeError;
 use tari_comms_dht::outbound::DhtOutboundError;
-use tari_crypto::ristretto::RistrettoPublicKey;
 use tari_dan_engine::state::error::StateStorageError;
 use thiserror::Error;
-use tokio::sync::mpsc::error::SendError;
 
-use crate::{
-    models::{HotStuffMessage, ModelError, TariDanPayload},
-    services::ValidatorNodeClientError,
-    storage::StorageError,
-    workers::StateSyncError,
-};
+use crate::{models::ModelError, services::ValidatorNodeClientError, storage::StorageError};
 
 #[derive(Debug, Error)]
 pub enum DigitalAssetError {
@@ -42,8 +36,7 @@ pub enum DigitalAssetError {
     _MissingArgument { argument_name: String, position: usize },
     #[error("Invalid sig, TODO: fill in deets")]
     InvalidSignature,
-    #[error("Peer sent an invalid message: {0}")]
-    InvalidPeerMessage(String),
+
     #[error("Storage error: {0}")]
     StorageError(#[from] StorageError),
     #[error("Metadata was malformed: {0}")]
@@ -82,8 +75,8 @@ pub enum DigitalAssetError {
     ModelError(#[from] ModelError),
     #[error("UTXO missing checkpoint data")]
     UtxoNoCheckpointData,
-    #[error("Failed to synchronize state: {0}")]
-    StateSyncError(#[from] StateSyncError),
+    // #[error("Failed to synchronize state: {0}")]
+    // StateSyncError(#[from] StateSyncError),
     #[error("Validator node client error: {0}")]
     ValidatorNodeClientError(#[from] ValidatorNodeClientError),
     #[error("Peer did not send a quorum certificate in prepare phase")]
@@ -92,8 +85,6 @@ pub enum DigitalAssetError {
     PreparePhaseCertificateDoesNotExtendNode,
     #[error("Node not safe")]
     PreparePhaseNodeNotSafe,
-    #[error("Unsupported template method {name}")]
-    TemplateUnsupportedMethod { name: String },
     #[error("Connection error: {0}")]
     GrpcConnection(#[from] tonic::transport::Error),
     #[error("GRPC error: {0}")]
@@ -102,12 +93,16 @@ pub enum DigitalAssetError {
     DhtOutboundError(#[from] DhtOutboundError),
     #[error("Failed to decode message: {0}")]
     DecodeError(#[from] DecodeError),
-    #[error("Failed to send message: {0}")]
-    SendError(#[from] Box<SendError<(RistrettoPublicKey, HotStuffMessage<TariDanPayload>)>>),
+    #[error("Failed to send message: {context}")]
+    SendError { context: String },
     #[error("Invalid committee public key hex")]
     InvalidCommitteePublicKeyHex,
     #[error("State storage error:{0}")]
     StateStorageError(#[from] StateStorageError),
+    #[error("Hash size error: {0}")]
+    HashSizeError(#[from] FixedHashSizeError),
+    #[error("Failed to register the validator node: {0}")]
+    NodeRegistration(String),
 }
 
 impl From<lmdb_zero::Error> for DigitalAssetError {

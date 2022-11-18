@@ -20,18 +20,16 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use std::marker::PhantomData;
-
 use tari_template_abi::{call_engine, Decode, Encode, EngineOp};
 
 use crate::{
     args::{InvokeResult, VaultAction, VaultInvokeArg},
     models::{Amount, Bucket, ResourceAddress},
-    resource::{ResourceDefinition, ResourceType},
+    resource::ResourceType,
     Hash,
 };
 
-pub type VaultId = (Hash, u32);
+pub type VaultId = Hash;
 
 #[derive(Clone, Debug, Decode, Encode)]
 pub enum VaultRef {
@@ -66,17 +64,16 @@ impl VaultRef {
 }
 
 #[derive(Clone, Debug, Decode, Encode)]
-pub struct Vault<T> {
+pub struct Vault {
     vault_id: VaultId,
-    _t: PhantomData<T>,
 }
 
-impl<T: ResourceDefinition> Vault<T> {
+impl Vault {
     pub fn new_empty(resource_address: ResourceAddress) -> Self {
         let resp: InvokeResult = call_engine(EngineOp::VaultInvoke, &VaultInvokeArg {
             vault_ref: VaultRef::Vault {
                 address: resource_address,
-                resource_type: T::resource_type(),
+                resource_type: ResourceType::Fungible,
             },
             action: VaultAction::Create,
             args: args![],
@@ -85,17 +82,16 @@ impl<T: ResourceDefinition> Vault<T> {
 
         Self {
             vault_id: resp.decode().unwrap(),
-            _t: PhantomData,
         }
     }
 
-    pub fn from_bucket(bucket: Bucket<T>) -> Self {
+    pub fn from_bucket(bucket: Bucket) -> Self {
         let mut vault = Self::new_empty(bucket.resource_address());
         vault.deposit(bucket);
         vault
     }
 
-    pub fn deposit(&mut self, bucket: Bucket<T>) {
+    pub fn deposit(&mut self, bucket: Bucket) {
         call_engine::<_, ()>(EngineOp::VaultInvoke, &VaultInvokeArg {
             vault_ref: VaultRef::Ref(self.vault_id()),
             action: VaultAction::Deposit,
@@ -104,8 +100,7 @@ impl<T: ResourceDefinition> Vault<T> {
         .expect("VaultInvoke returned null");
     }
 
-    pub fn withdraw<A: Into<Amount>>(&mut self, amount: A) -> Bucket<T> {
-        let amount = amount.into();
+    pub fn withdraw(&mut self, amount: Amount) -> Bucket {
         assert!(
             amount.is_positive() && !amount.is_zero(),
             "Amount must be non-zero and positive"

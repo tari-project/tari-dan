@@ -23,9 +23,11 @@
 use std::{fmt::Display, io};
 
 use anyhow::anyhow;
+use tari_dan_common_types::optional::IsNotFoundError;
+use tari_engine_types::{resource::ResourceError, substate::SubstateAddress};
 use tari_template_lib::models::{Amount, BucketId, ComponentAddress, ResourceAddress, VaultId};
 
-use crate::{models::ResourceError, state_store::StateStoreError};
+use crate::{runtime::id_provider::MaxIdsExceeded, state_store::StateStoreError};
 
 #[derive(Debug, thiserror::Error)]
 pub enum RuntimeError {
@@ -35,15 +37,21 @@ pub enum RuntimeError {
     StateDbError(#[from] anyhow::Error),
     #[error("State storage error: {0}")]
     StateStoreError(#[from] StateStoreError),
+    #[error("Substate not found with address '{address}'")]
+    SubstateNotFound { address: SubstateAddress },
     #[error("Component not found with address '{address}'")]
     ComponentNotFound { address: ComponentAddress },
+    // #[error("Component does not yet exist at address '{address}'")]
+    // ComponentDoesNotExistYet { address: ComponentAddress },
+    // #[error("Component has been destroyed at address: {address}")]
+    // ComponentDestroyed { address: ComponentAddress },
     #[error("Invalid argument {argument}: {reason}")]
     InvalidArgument { argument: &'static str, reason: String },
     #[error("Invalid amount '{amount}': {reason}")]
     InvalidAmount { amount: Amount, reason: String },
     #[error("Illegal runtime state")]
     IllegalRuntimeState,
-    #[error("Vault not found with id ({}, {})", vault_id.0, vault_id.1)]
+    #[error("Vault not found with id ({vault_id})")]
     VaultNotFound { vault_id: VaultId },
     #[error("Bucket not found with id {bucket_id}")]
     BucketNotFound { bucket_id: BucketId },
@@ -61,11 +69,25 @@ pub enum RuntimeError {
     WorkspaceItemKeyExists { key: String },
     #[error(transparent)]
     TransactionCommitError(#[from] TransactionCommitError),
+    #[error("Transaction generated too many outputs: {0}")]
+    TooManyOutputs(#[from] MaxIdsExceeded),
 }
 
 impl RuntimeError {
     pub fn state_db_error<T: Display>(err: T) -> Self {
         RuntimeError::StateDbError(anyhow!("{}", err))
+    }
+}
+
+impl IsNotFoundError for RuntimeError {
+    fn is_not_found_error(&self) -> bool {
+        matches!(
+            self,
+            RuntimeError::ComponentNotFound { .. } |
+                RuntimeError::VaultNotFound { .. } |
+                RuntimeError::BucketNotFound { .. } |
+                RuntimeError::ResourceNotFound { .. }
+        )
     }
 }
 

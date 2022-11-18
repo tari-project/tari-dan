@@ -1,112 +1,134 @@
-//  Copyright 2022. The Tari Project
-//
-//  Redistribution and use in source and binary forms, with or without modification, are permitted provided that the
-//  following conditions are met:
-//
-//  1. Redistributions of source code must retain the above copyright notice, this list of conditions and the following
-//  disclaimer.
-//
-//  2. Redistributions in binary form must reproduce the above copyright notice, this list of conditions and the
-//  following disclaimer in the documentation and/or other materials provided with the distribution.
-//
-//  3. Neither the name of the copyright holder nor the names of its contributors may be used to endorse or promote
-//  products derived from this software without specific prior written permission.
-//
-//  THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES,
-//  INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
-//  DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
-//  SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
-//  SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY,
-//  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
-//  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+// @generated automatically by Diesel CLI.
 
-table! {
-    instructions (id) {
+diesel::table! {
+    high_qcs (id) {
         id -> Integer,
-        hash -> Binary,
-        node_id -> Integer,
-        template_id -> Integer,
-        method -> Text,
-        args -> Binary,
-        sender -> Binary,
+        shard_id -> Binary,
+        height -> BigInt,
+        qc_json -> Text,
+        identity -> Binary,
     }
 }
 
-table! {
-    locked_qc (id) {
+diesel::table! {
+    last_executed_heights (id) {
         id -> Integer,
-        message_type -> Integer,
-        view_number -> BigInt,
+        shard_id -> Binary,
+        node_height -> BigInt,
+    }
+}
+
+diesel::table! {
+    last_voted_heights (id) {
+        id -> Integer,
+        shard_id -> Binary,
+        node_height -> BigInt,
+    }
+}
+
+diesel::table! {
+    leader_proposals (id) {
+        id -> Integer,
+        payload_id -> Binary,
+        shard_id -> Binary,
+        payload_height -> BigInt,
         node_hash -> Binary,
-        signature -> Nullable<Binary>,
+        hotstuff_tree_node -> Text,
     }
 }
 
-table! {
+diesel::table! {
+    leaf_nodes (id) {
+        id -> Integer,
+        shard_id -> Binary,
+        tree_node_hash -> Binary,
+        node_height -> BigInt,
+    }
+}
+
+diesel::table! {
+    lock_node_and_heights (id) {
+        id -> Integer,
+        shard_id -> Binary,
+        tree_node_hash -> Binary,
+        node_height -> BigInt,
+    }
+}
+
+diesel::table! {
     metadata (key) {
         key -> Binary,
         value -> Binary,
     }
 }
 
-table! {
+diesel::table! {
     nodes (id) {
         id -> Integer,
-        hash -> Binary,
-        parent -> Binary,
-        height -> Integer,
-        is_committed -> Bool,
-    }
-}
-
-table! {
-    prepare_qc (id) {
-        id -> Integer,
-        message_type -> Integer,
-        view_number -> BigInt,
         node_hash -> Binary,
-        signature -> Nullable<Binary>,
-    }
-}
-
-table! {
-    state_keys (schema_name, key_name) {
-        schema_name -> Text,
-        key_name -> Binary,
-        value -> Binary,
-    }
-}
-
-table! {
-    state_op_log (id) {
-        id -> Integer,
+        parent_node_hash -> Binary,
         height -> BigInt,
-        merkle_root -> Nullable<Binary>,
-        operation -> Text,
-        schema -> Text,
-        key -> Binary,
-        value -> Nullable<Binary>,
+        shard -> Binary,
+        payload_id -> Binary,
+        payload_height -> BigInt,
+        local_pledges -> Text,
+        epoch -> BigInt,
+        proposed_by -> Binary,
+        justify -> Text,
     }
 }
 
-table! {
-    state_tree (id) {
+diesel::table! {
+    payloads (id) {
         id -> Integer,
-        version -> Integer,
-        is_current -> Bool,
-        data -> Binary,
+        payload_id -> Binary,
+        instructions -> Text,
+        public_nonce -> Binary,
+        scalar -> Binary,
+        fee -> BigInt,
+        sender_public_key -> Binary,
+        meta -> Text,
+        timestamp -> BigInt,
     }
 }
 
-joinable!(instructions -> nodes (node_id));
+diesel::table! {
+    received_votes (id) {
+        id -> Integer,
+        tree_node_hash -> Binary,
+        shard_id -> Binary,
+        address -> Binary,
+        vote_message -> Text,
+    }
+}
 
-allow_tables_to_appear_in_same_query!(
-    instructions,
-    locked_qc,
+diesel::table! {
+    substates (id) {
+        id -> Integer,
+        substate_type -> Text,
+        shard_id -> Binary,
+        node_height -> BigInt,
+        data -> Nullable<Text>,
+        created_by_payload_id -> Binary,
+        deleted_by_payload_id -> Nullable<Binary>,
+        justify -> Nullable<Text>,
+        is_draft -> Bool,
+        tree_node_hash -> Nullable<Binary>,
+        pledged_to_payload_id -> Nullable<Binary>,
+        pledged_until_height -> Nullable<BigInt>,
+    }
+}
+
+diesel::allow_tables_to_appear_in_same_query!(
+    high_qcs,
+    last_executed_heights,
+    last_voted_heights,
+    leader_proposals,
+    leaf_nodes,
+    lock_node_and_heights,
     metadata,
     nodes,
-    prepare_qc,
-    state_keys,
-    state_op_log,
-    state_tree,
+    payloads,
+    received_votes,
+    substates,
 );

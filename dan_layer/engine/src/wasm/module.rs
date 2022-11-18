@@ -26,11 +26,25 @@ use std::sync::{
 };
 
 use tari_template_abi::{FunctionDef, TemplateDef};
-use wasmer::{Extern, Function, Instance, Module, Store, Val, WasmerEnv};
+use wasmer::{
+    BaseTunables,
+    CompilerConfig,
+    Cranelift,
+    CraneliftOptLevel,
+    Engine,
+    Extern,
+    Function,
+    Instance,
+    Module,
+    Store,
+    Universal,
+    Val,
+    WasmerEnv,
+};
 
 use crate::{
-    packager::{PackageError, PackageModuleLoader},
-    wasm::{environment::WasmEnv, WasmExecutionError},
+    packager::{LoadedTemplate, PackageError, TemplateModuleLoader},
+    wasm::{environment::WasmEnv, metering, WasmExecutionError},
 };
 
 #[derive(Debug, Clone)]
@@ -46,14 +60,21 @@ impl WasmModule {
     pub fn code(&self) -> &[u8] {
         &self.code
     }
+
+    fn create_store(&self) -> Store {
+        let mut cranelift = Cranelift::new();
+        cranelift.opt_level(CraneliftOptLevel::Speed).canonicalize_nans(true);
+        // TODO: Configure metering limit
+        cranelift.push_middleware(Arc::new(metering::middleware(1_000_000)));
+        let engine = Universal::new(cranelift).engine();
+        let tunables = BaseTunables::for_target(engine.target());
+        Store::new_with_tunables(&engine, tunables)
+    }
 }
 
-impl PackageModuleLoader for WasmModule {
-    type Error = PackageError;
-    type Loaded = LoadedWasmModule;
-
-    fn load_module(&self) -> Result<Self::Loaded, Self::Error> {
-        let store = Store::default();
+impl TemplateModuleLoader for WasmModule {
+    fn load_template(&self) -> Result<LoadedTemplate, PackageError> {
+        let store = self.create_store();
         let module = Module::new(&store, &self.code)?;
         let violation_flag = Arc::new(AtomicBool::new(false));
         let mut env = WasmEnv::new(violation_flag.clone());
@@ -74,7 +95,7 @@ impl PackageModuleLoader for WasmModule {
         if violation_flag.load(Ordering::Relaxed) {
             return Err(PackageError::TemplateCalledEngineDuringInitialization);
         }
-        Ok(LoadedWasmModule::new(template, module))
+        Ok(LoadedWasmTemplate::new(template, module).into())
     }
 }
 
@@ -105,12 +126,12 @@ fn initialize_and_load_template_abi(
 }
 
 #[derive(Debug, Clone)]
-pub struct LoadedWasmModule {
+pub struct LoadedWasmTemplate {
     template: TemplateDef,
     module: wasmer::Module,
 }
 
-impl LoadedWasmModule {
+impl LoadedWasmTemplate {
     pub fn new(template: TemplateDef, module: wasmer::Module) -> Self {
         Self { template, module }
     }

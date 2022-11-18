@@ -20,75 +20,48 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use std::sync::Arc;
-
-use tari_common::exit_codes::{ExitCode, ExitError};
-use tari_comms::NodeIdentity;
-use tari_dan_core::{
-    services::{mempool::service::MempoolServiceHandle, ConcreteAcceptanceManager},
-    storage::global::GlobalDb,
-};
-use tari_dan_storage_sqlite::{global::SqliteGlobalDbBackendAdapter, SqliteDbFactory};
-use tari_p2p::comms_connector::SubscriptionFactory;
-use tari_service_framework::ServiceHandles;
+use log::*;
+use tari_common::exit_codes::ExitError;
+use tari_dan_core::workers::events::HotStuffEvent;
 use tari_shutdown::ShutdownSignal;
+use tari_template_lib::Hash;
 
-use crate::{
-    config::ValidatorNodeConfig,
-    contract_worker_manager::ContractWorkerManager,
-    grpc::services::{base_node_client::GrpcBaseNodeClient, wallet_client::GrpcWalletClient},
-};
+use crate::{p2p::services::networking::NetworkingService, Services};
 
-const _LOG_TARGET: &str = "tari::validator_node::app";
+const LOG_TARGET: &str = "tari::validator_node::dan_node";
 
-#[derive(Clone)]
 pub struct DanNode {
-    config: ValidatorNodeConfig,
-    identity: Arc<NodeIdentity>,
-    global_db: GlobalDb<SqliteGlobalDbBackendAdapter>,
+    services: Services,
 }
 
 impl DanNode {
-    pub fn new(
-        config: ValidatorNodeConfig,
-        identity: Arc<NodeIdentity>,
-        global_db: GlobalDb<SqliteGlobalDbBackendAdapter>,
-    ) -> Self {
-        Self {
-            config,
-            identity,
-            global_db,
-        }
+    pub fn new(services: Services) -> Self {
+        Self { services }
     }
 
-    pub async fn start(
-        &self,
-        shutdown: ShutdownSignal,
-        mempool_service: MempoolServiceHandle,
-        db_factory: SqliteDbFactory,
-        handles: ServiceHandles,
-        subscription_factory: Arc<SubscriptionFactory>,
-    ) -> Result<(), ExitError> {
-        let base_node_client = GrpcBaseNodeClient::new(self.config.base_node_grpc_address);
-        let wallet_client = GrpcWalletClient::new(self.config.wallet_grpc_address);
-        let acceptance_manager = ConcreteAcceptanceManager::new(wallet_client, base_node_client.clone());
-        let workers = ContractWorkerManager::new(
-            self.config.clone(),
-            self.identity.clone(),
-            self.global_db.clone(),
-            base_node_client,
-            acceptance_manager,
-            mempool_service,
-            handles,
-            subscription_factory,
-            db_factory,
-            shutdown.clone(),
-        );
+    pub async fn start(mut self, mut shutdown: ShutdownSignal) -> Result<(), ExitError> {
+        self.services.networking.announce().await?;
 
-        workers
-            .start()
-            .await
-            .map_err(|err| ExitError::new(ExitCode::DigitalAssetError, err))?;
+        let mut hotstuff_events = self.services.hotstuff_events.subscribe();
+
+        loop {
+            tokio::select! {
+                // Wait until killed
+                _ = shutdown.wait() => {
+                     break;
+                },
+
+                Ok(event) = hotstuff_events.recv() => {
+                    if let HotStuffEvent::OnFinalized(qc, _) = event {
+                        let transaction_hash = Hash::from(qc.payload_id().into_array());
+                        info!(target: LOG_TARGET, "🏁 Removing finalized transaction {} from mempool", transaction_hash);
+                        if let Err(err) = self.services.mempool.remove_transaction(transaction_hash).await {
+                            error!(target: LOG_TARGET, "Failed to remove transaction from mempool: {}", err);
+                        }
+                    }
+                }
+            }
+        }
 
         Ok(())
     }

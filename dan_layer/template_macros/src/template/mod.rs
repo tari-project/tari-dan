@@ -153,7 +153,8 @@ mod tests {
             #[no_mangle]
             pub extern "C" fn State_main(call_info: *mut u8, call_info_len: usize) -> *mut u8 {
                 use ::tari_template_abi::{decode, encode_with_len, CallInfo, wrap_ptr};
-                use ::tari_template_lib::init_context;
+                use ::tari_template_lib::{init_context, panic_hook::register_panic_hook};
+                register_panic_hook();
 
                 if call_info.is_null() {
                     panic!("call_info is null");
@@ -168,6 +169,7 @@ mod tests {
                 let result;
                 match call_info.func_name.as_str() {
                     "new" => {
+                        assert_eq ! (call_info . args . len () , 0usize , "Call had unexpected number of args. Got = {} expected = {}" , call_info . args . len () , 0usize) ;
                         let rtn = State_template::State::new();
                         let rtn = engine().instantiate("State".to_string(), rtn);
                         result = encode_with_len(&rtn);
@@ -183,11 +185,10 @@ mod tests {
                         assert_eq ! (call_info . args . len () , 2usize , "Call had unexpected number of args. Got = {} expected = {}" , call_info . args . len () , 2usize) ;
                         let component = decode::<::tari_template_lib::models::ComponentInstance>(&call_info.args[0usize]).unwrap();
                         let mut state = decode::<State_template::State>(&component.state).unwrap();
-                        assert_eq ! (call_info . args . len () , 2usize , "Call had unexpected number of args. Got = {} expected = {}" , call_info . args . len () , 2usize) ;
                         let arg_1 = decode::<u32>(&call_info.args[1usize]).unwrap();
                         let rtn = State_template::State::set(&mut state, arg_1);
                         result = encode_with_len(&rtn);
-                        engine().set_component_state(component.id(), state);
+                        engine().set_component_state(component.address(), state);
                     },
                     _ => panic!("invalid function name")
                 };

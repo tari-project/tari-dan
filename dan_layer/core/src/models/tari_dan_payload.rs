@@ -22,63 +22,60 @@
 
 use std::fmt::Debug;
 
+use chrono::Utc;
+use serde::{Deserialize, Serialize};
 use tari_common_types::types::FixedHash;
-use tari_crypto::hash::blake2::Blake256;
-use tari_dan_engine::instructions::Instruction;
+use tari_dan_common_types::{ObjectClaim, ShardId, SubstateChange};
+use tari_dan_engine::transaction::Transaction;
 
-use super::{dan_layer_models_hasher, hashing::TARI_DAN_PAYLOAD_LABEL};
-use crate::models::{ConsensusHash, InstructionSet, Payload};
+use crate::models::{ConsensusHash, Payload};
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct TariDanPayload {
-    hash: FixedHash,
-    instruction_set: InstructionSet,
-    checkpoint: Option<CheckpointData>,
+    transaction: Transaction,
+    timestamp: i64,
 }
 
 impl TariDanPayload {
-    pub fn new(instruction_set: InstructionSet, checkpoint: Option<CheckpointData>) -> Self {
-        let mut result = Self {
-            hash: FixedHash::zero(),
-            instruction_set,
-            checkpoint,
-        };
-        result.hash = result.calculate_hash();
-        result
+    pub fn new(transaction: Transaction) -> Self {
+        Self {
+            transaction,
+            timestamp: Utc::now().timestamp(),
+        }
     }
 
-    pub fn destruct(self) -> (InstructionSet, Option<CheckpointData>) {
-        (self.instruction_set, self.checkpoint)
+    pub fn transaction(&self) -> &Transaction {
+        &self.transaction
     }
 
-    pub fn instructions(&self) -> &[Instruction] {
-        self.instruction_set.instructions()
+    pub fn into_payload(self) -> Transaction {
+        self.transaction
     }
 
-    fn calculate_hash(&self) -> FixedHash {
-        let result =
-            dan_layer_models_hasher::<Blake256>(TARI_DAN_PAYLOAD_LABEL).chain(self.instruction_set.consensus_hash());
-
-        let mut out = [0u8; 32];
-
-        let result = if let Some(ref ck) = self.checkpoint {
-            result.chain(ck.consensus_hash()).finalize()
-        } else {
-            result.finalize()
-        };
-
-        out.copy_from_slice(result.as_ref());
-        out.into()
+    pub fn timestamp(&self) -> i64 {
+        self.timestamp
     }
 }
 
 impl ConsensusHash for TariDanPayload {
-    fn consensus_hash(&self) -> &[u8] {
-        self.hash.as_slice()
+    fn consensus_hash(&self) -> FixedHash {
+        self.transaction.hash().into_array().into()
     }
 }
 
-impl Payload for TariDanPayload {}
+impl Payload for TariDanPayload {
+    fn involved_shards(&self) -> Vec<ShardId> {
+        self.transaction.meta().involved_shards()
+    }
+
+    fn objects_for_shard(&self, shard: ShardId) -> Option<(SubstateChange, ObjectClaim)> {
+        self.transaction.meta().objects_for_shard(shard)
+    }
+
+    fn max_outputs(&self) -> u32 {
+        self.transaction.meta().max_outputs()
+    }
+}
 
 #[derive(Debug, Clone, Default)]
 pub struct CheckpointData {
@@ -86,7 +83,7 @@ pub struct CheckpointData {
 }
 
 impl ConsensusHash for CheckpointData {
-    fn consensus_hash(&self) -> &[u8] {
-        self.hash.as_slice()
+    fn consensus_hash(&self) -> FixedHash {
+        self.hash
     }
 }

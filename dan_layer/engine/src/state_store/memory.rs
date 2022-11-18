@@ -25,18 +25,46 @@ use std::{
 };
 
 use anyhow::anyhow;
+use tari_dan_common_types::SubstateState;
+use tari_template_abi::encode;
+use tari_utilities::hex::to_hex;
 
 use crate::state_store::{AtomicDb, StateReader, StateStoreError, StateWriter};
 
 type InnerKvMap = HashMap<Vec<u8>, Vec<u8>>;
 
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone)]
 pub struct MemoryStateStore {
+    pub allow_creation_of_non_existent_shards: bool,
     state: Arc<RwLock<InnerKvMap>>,
+}
+
+impl Default for MemoryStateStore {
+    fn default() -> Self {
+        Self {
+            allow_creation_of_non_existent_shards: true,
+            state: Arc::new(RwLock::new(HashMap::new())),
+        }
+    }
+}
+
+impl MemoryStateStore {
+    pub fn load<K: Into<Vec<u8>>>(values: Vec<(K, SubstateState)>) -> Self {
+        let mut state = HashMap::new();
+        for (k, v) in values {
+            state.insert(k.into(), encode(&v).expect("Could not encode substate"));
+        }
+        Self {
+            allow_creation_of_non_existent_shards: false,
+            state: Arc::new(RwLock::new(state)),
+        }
+    }
 }
 
 pub struct MemoryTransaction<T> {
     pending: InnerKvMap,
+    // TODO: this is copied from the state store, there's probably a better way
+    allow_creation_of_non_existent_shards: bool,
     guard: T,
 }
 
@@ -50,6 +78,7 @@ impl<'a> AtomicDb<'a> for MemoryStateStore {
 
         Ok(MemoryTransaction {
             pending: HashMap::default(),
+            allow_creation_of_non_existent_shards: self.allow_creation_of_non_existent_shards,
             guard,
         })
     }
@@ -59,14 +88,22 @@ impl<'a> AtomicDb<'a> for MemoryStateStore {
 
         Ok(MemoryTransaction {
             pending: HashMap::default(),
+            allow_creation_of_non_existent_shards: self.allow_creation_of_non_existent_shards,
             guard,
         })
     }
 }
 
 impl<'a> StateReader for MemoryTransaction<RwLockReadGuard<'a, InnerKvMap>> {
-    fn get_state_raw(&self, key: &[u8]) -> Result<Option<Vec<u8>>, StateStoreError> {
-        Ok(self.pending.get(key).cloned().or_else(|| self.guard.get(key).cloned()))
+    fn get_state_raw(&self, key: &[u8]) -> Result<Vec<u8>, StateStoreError> {
+        self.pending
+            .get(key)
+            .cloned()
+            .or_else(|| self.guard.get(key).cloned())
+            .ok_or_else(|| StateStoreError::NotFound {
+                kind: "state",
+                key: to_hex(key),
+            })
     }
 
     fn exists(&self, key: &[u8]) -> Result<bool, StateStoreError> {
@@ -75,8 +112,15 @@ impl<'a> StateReader for MemoryTransaction<RwLockReadGuard<'a, InnerKvMap>> {
 }
 
 impl<'a> StateReader for MemoryTransaction<RwLockWriteGuard<'a, InnerKvMap>> {
-    fn get_state_raw(&self, key: &[u8]) -> Result<Option<Vec<u8>>, StateStoreError> {
-        Ok(self.pending.get(key).cloned().or_else(|| self.guard.get(key).cloned()))
+    fn get_state_raw(&self, key: &[u8]) -> Result<Vec<u8>, StateStoreError> {
+        self.pending
+            .get(key)
+            .cloned()
+            .or_else(|| self.guard.get(key).cloned())
+            .ok_or_else(|| StateStoreError::NotFound {
+                kind: "state",
+                key: to_hex(key),
+            })
     }
 
     fn exists(&self, key: &[u8]) -> Result<bool, StateStoreError> {
@@ -91,13 +135,25 @@ impl<'a> StateWriter for MemoryTransaction<RwLockWriteGuard<'a, InnerKvMap>> {
     }
 
     fn commit(mut self) -> Result<(), StateStoreError> {
-        self.guard.extend(self.pending.into_iter());
+        if self.allow_creation_of_non_existent_shards {
+            self.guard.extend(self.pending);
+        } else {
+            for (k, v) in self.pending {
+                if let Some(val) = self.guard.get_mut(&k) {
+                    *val = v;
+                } else {
+                    return Err(StateStoreError::NonExistentShard { shard: k });
+                }
+            }
+        }
+        // self.guard.extend(self.pending.into_iter());
         Ok(())
     }
 }
 
 #[cfg(test)]
 mod tests {
+    use tari_dan_common_types::optional::Optional;
     use tari_template_abi::{Decode, Encode};
 
     use super::*;
@@ -108,8 +164,8 @@ mod tests {
         let mut access = store.write_access().unwrap();
         access.set_state_raw(b"abc", vec![1, 2, 3]).unwrap();
         let res = access.get_state_raw(b"abc").unwrap();
-        assert_eq!(res, Some(vec![1, 2, 3]));
-        let res = access.get_state_raw(b"def").unwrap();
+        assert_eq!(res, vec![1, 2, 3]);
+        let res = access.get_state_raw(b"def").optional().unwrap();
         assert_eq!(res, None);
     }
 
@@ -130,16 +186,16 @@ mod tests {
         {
             let mut access = store.write_access().unwrap();
             access.set_state(b"abc", user_data.clone()).unwrap();
-            let res = access.get_state(b"abc").unwrap();
-            assert_eq!(res, Some(user_data.clone()));
-            let res = access.get_state::<_, UserData>(b"def").unwrap();
+            let res: UserData = access.get_state(b"abc").unwrap();
+            assert_eq!(res, user_data);
+            let res = access.get_state::<_, UserData>(b"def").optional().unwrap();
             assert_eq!(res, None);
             // Drop without commit rolls back
         }
 
         {
             let access = store.read_access().unwrap();
-            let res = access.get_state::<_, UserData>(b"abc").unwrap();
+            let res = access.get_state::<_, UserData>(b"abc").optional().unwrap();
             assert_eq!(res, None);
         }
 
@@ -150,7 +206,7 @@ mod tests {
         }
 
         let access = store.read_access().unwrap();
-        let res = access.get_state(b"abc").unwrap();
-        assert_eq!(res, Some(user_data));
+        let res: UserData = access.get_state(b"abc").unwrap();
+        assert_eq!(res, user_data);
     }
 }

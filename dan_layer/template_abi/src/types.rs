@@ -62,3 +62,25 @@ pub enum Type {
     String,
     Other { name: String },
 }
+
+#[cfg(feature = "std")]
+impl std::fmt::Display for Type {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Type::Unit => write!(f, "Unit"),
+            Type::Bool => write!(f, "Bool"),
+            Type::I8 => write!(f, "I8"),
+            Type::I16 => write!(f, "I16"),
+            Type::I32 => write!(f, "I32"),
+            Type::I64 => write!(f, "I64"),
+            Type::I128 => write!(f, "I128"),
+            Type::U8 => write!(f, "U8"),
+            Type::U16 => write!(f, "U16"),
+            Type::U32 => write!(f, "U32"),
+            Type::U64 => write!(f, "U64"),
+            Type::U128 => write!(f, "U128"),
+            Type::String => write!(f, "String"),
+            Type::Other { name } => write!(f, "{}", name),
+        }
+    }
+}
