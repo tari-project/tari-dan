@@ -28,8 +28,9 @@ message ShardVote {
 
 message QuorumCertificate {
   enum QuorumDecision {
-    QUORUM_DECISION_REJECT = 0;
-    QUORUM_DECISION_ACCEPT = 1;
+    QUORUM_DECISION_ACCEPT = 0;
+    QUORUM_DECISION_REJECT_SHARD_NOT_PLEDGED = 1;
+    QUORUM_DECISION_REJECT_EXECUTION_FAILURE = 2;
   }
   bytes payload_id = 1;
   uint64 payload_height = 2;

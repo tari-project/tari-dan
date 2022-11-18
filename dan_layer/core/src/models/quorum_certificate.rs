@@ -30,21 +30,31 @@ use crate::models::{NodeHeight, ShardVote, TreeNodeHash, ValidatorMetadata};
 #[derive(Debug, Clone, Copy, Deserialize, Serialize, PartialEq, Eq)]
 pub enum QuorumDecision {
     Accept,
-    Reject,
+    Reject(QuorumRejectReason),
+}
+
+#[derive(Debug, Clone, Copy, Deserialize, Serialize, PartialEq, Eq)]
+pub enum QuorumRejectReason {
+    ShardNotPledged,
+    ExecutionFailure,
 }
 
 impl QuorumDecision {
     pub fn as_u8(&self) -> u8 {
         match self {
-            QuorumDecision::Accept => 1,
-            QuorumDecision::Reject => 0,
+            QuorumDecision::Accept => 0,
+            QuorumDecision::Reject(reason) => match reason {
+                QuorumRejectReason::ShardNotPledged => 1,
+                QuorumRejectReason::ExecutionFailure => 2,
+            },
         }
     }
 
     pub fn from_u8(v: u8) -> Result<Self, anyhow::Error> {
         match v {
-            1 => Ok(QuorumDecision::Accept),
-            0 => Ok(QuorumDecision::Reject),
+            0 => Ok(QuorumDecision::Accept),
+            1 => Ok(QuorumDecision::Reject(QuorumRejectReason::ShardNotPledged)),
+            2 => Ok(QuorumDecision::Reject(QuorumRejectReason::ExecutionFailure)),
             // TODO: Add error type
             _ => Err(anyhow::anyhow!("Invalid QuorumDecision")),
         }

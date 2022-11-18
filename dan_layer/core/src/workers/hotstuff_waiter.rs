@@ -974,7 +974,7 @@ where
                         info!(target: LOG_TARGET, "Payload execution failure: {}", msg);
                     },
                 }
-                VoteMessage::reject(local_node, local_shard, votes)
+                VoteMessage::reject(local_node, local_shard, votes, reason)
             },
         };
 

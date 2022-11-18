@@ -59,7 +59,7 @@ pub use hot_stuff_tree_node::HotStuffTreeNode;
 pub use leaf_node::LeafNode;
 pub use node::Node;
 pub use payload::Payload;
-pub use quorum_certificate::{QuorumCertificate, QuorumDecision};
+pub use quorum_certificate::{QuorumCertificate, QuorumDecision, QuorumRejectReason};
 pub use sidechain_metadata::SidechainMetadata;
 use tari_core::{consensus::ToConsensusBytes, ValidatorNodeMmr};
 use tari_dan_common_types::{serde_with, PayloadId, ShardId, SubstateState};

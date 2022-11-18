@@ -27,7 +27,9 @@ use tari_core::{consensus::DomainSeparatedConsensusHasher, transactions::Transac
 use tari_crypto::hash::blake2::Blake256;
 use tari_dan_common_types::ShardId;
 use tari_dan_engine::crypto::create_key_pair;
+use tari_engine_types::commit_result::RejectReason;
 
+use super::quorum_certificate::QuorumRejectReason;
 use crate::models::{QuorumDecision, ShardVote, TreeNodeHash, ValidatorMetadata};
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -61,8 +63,19 @@ impl VoteMessage {
         Self::new(local_node_hash, shard, QuorumDecision::Accept, all_shard_nodes)
     }
 
-    pub fn reject(local_node_hash: TreeNodeHash, shard: ShardId, all_shard_nodes: Vec<ShardVote>) -> Self {
-        Self::new(local_node_hash, shard, QuorumDecision::Reject, all_shard_nodes)
+    pub fn reject(
+        local_node_hash: TreeNodeHash,
+        shard: ShardId,
+        all_shard_nodes: Vec<ShardVote>,
+        reason: &RejectReason,
+    ) -> Self {
+        let quorum_reject_reason = match reason {
+            RejectReason::ShardNotPledged(_) => QuorumRejectReason::ShardNotPledged,
+            RejectReason::ExecutionFailure(_) => QuorumRejectReason::ExecutionFailure,
+        };
+        let decision = QuorumDecision::Reject(quorum_reject_reason);
+
+        Self::new(local_node_hash, shard, decision, all_shard_nodes)
     }
 
     pub fn with_validator_metadata(
