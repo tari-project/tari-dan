@@ -49,7 +49,7 @@ use tari_dan_core::{
 };
 use tari_dan_engine::transaction::{Transaction, TransactionBuilder};
 use tari_engine_types::{
-    commit_result::{FinalizeResult, RejectResult, TransactionResult},
+    commit_result::{FinalizeResult, RejectReason, TransactionResult},
     instruction::Instruction,
     substate::SubstateDiff,
 };
@@ -104,9 +104,7 @@ impl PayloadProcessor<TariDanPayload> for NullPayloadProcessor {
         Ok(FinalizeResult::new(
             payload.to_id().into_array().into(),
             vec![],
-            TransactionResult::Reject(RejectResult {
-                reason: "NullPayloadProcessor".to_string(),
-            }),
+            TransactionResult::Reject(RejectReason::ExecutionFailure("NullPayloadProcessor".to_string())),
         ))
     }
 }

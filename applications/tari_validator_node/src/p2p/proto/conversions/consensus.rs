@@ -35,6 +35,7 @@ use tari_dan_core::models::{
     ObjectPledge,
     QuorumCertificate,
     QuorumDecision,
+    QuorumRejectReason,
     ShardVote,
     TariDanPayload,
     TreeNodeHash,
@@ -168,8 +169,11 @@ impl From<QuorumCertificate> for proto::consensus::QuorumCertificate {
             shard: source.shard().as_bytes().to_vec(),
             epoch: source.epoch().as_u64(),
             decision: match source.decision() {
-                QuorumDecision::Accept => 1,
-                QuorumDecision::Reject => 0,
+                QuorumDecision::Accept => 0,
+                QuorumDecision::Reject(ref reason) => match reason {
+                    QuorumRejectReason::ShardNotPledged => 1,
+                    QuorumRejectReason::ExecutionFailure => 2,
+                },
             },
             all_shard_nodes: source.all_shard_nodes().iter().map(|p| p.clone().into()).collect(),
             validators_metadata: source.validators_metadata().iter().map(|p| p.clone().into()).collect(),
@@ -189,8 +193,9 @@ impl TryFrom<proto::consensus::QuorumCertificate> for QuorumCertificate {
             value.shard.try_into()?,
             value.epoch.into(),
             match value.decision {
-                0 => QuorumDecision::Reject,
-                1 => QuorumDecision::Accept,
+                0 => QuorumDecision::Accept,
+                1 => QuorumDecision::Reject(QuorumRejectReason::ShardNotPledged),
+                2 => QuorumDecision::Reject(QuorumRejectReason::ExecutionFailure),
                 _ => return Err(anyhow!("Invalid decision")),
             },
             value

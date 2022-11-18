@@ -141,7 +141,7 @@ impl TemplateTest<MockRuntimeInterface> {
         let diff = result
             .result
             .accept()
-            .ok_or_else(|| panic!("Transaction was rejected: {}", result.result.reject().unwrap().reason))
+            .ok_or_else(|| panic!("Transaction was rejected: {}", result.result.reject().unwrap()))
             .unwrap();
         // It is convenient to commit the state back to the staged state store in tests.
         self.commit_diff(diff);
