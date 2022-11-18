@@ -30,7 +30,7 @@ use tari_common_types::types::{PublicKey, Signature};
 use tari_comms::NodeIdentity;
 use tari_core::{consensus::FromConsensusBytes, ValidatorNodeMmrHasherBlake256};
 use tari_dan_common_types::{Epoch, PayloadId, ShardId, SubstateState};
-use tari_engine_types::commit_result::{FinalizeResult, RejectResult, TransactionResult};
+use tari_engine_types::commit_result::{FinalizeResult, RejectReason, TransactionResult};
 use tari_mmr::MerkleProof;
 use tari_shutdown::ShutdownSignal;
 use tari_utilities::ByteArray;
@@ -890,9 +890,9 @@ where
                                 );
                             },
                             _ => {
-                                finalize_result.result = TransactionResult::Reject(RejectResult {
-                                    reason: format!("Shard {} was required to not exist, but it does", shard_changed,),
-                                });
+                                finalize_result.result = TransactionResult::Reject(RejectReason::ShardNotPledged(
+                                    format!("Shard {} was required to not exist, but it does", shard_changed),
+                                ));
                                 break;
                             },
                         },
@@ -904,13 +904,12 @@ where
                                 );
                             },
                             _ => {
-                                finalize_result.result = TransactionResult::Reject(RejectResult {
-                                    reason: format!(
+                                finalize_result.result =
+                                    TransactionResult::Reject(RejectReason::ShardNotPledged(format!(
                                         "Shard {} was required to not exist, but it is {}",
                                         shard_changed,
                                         pledge.current_state.as_str(),
-                                    ),
-                                });
+                                    )));
                                 break;
                             },
                         },
@@ -922,27 +921,28 @@ where
                                 );
                             },
                             _ => {
-                                finalize_result.result = TransactionResult::Reject(RejectResult {
-                                    reason: format!(
+                                finalize_result.result =
+                                    TransactionResult::Reject(RejectReason::ShardNotPledged(format!(
                                         "Shard {} was required to be up, but it is {}",
                                         shard_changed,
                                         pledge.current_state.as_str(),
-                                    ),
-                                });
+                                    )));
                                 break;
                             },
                         },
                     }
                 } else {
-                    finalize_result.result = TransactionResult::Reject(RejectResult {
-                        reason: format!("Shard {} was not pledged", shard_changed),
-                    });
+                    finalize_result.result = TransactionResult::Reject(RejectReason::ShardNotPledged(format!(
+                        "Shard {} was not pledged",
+                        shard_changed
+                    )));
                     break;
                 }
             } else {
-                finalize_result.result = TransactionResult::Reject(RejectResult {
-                    reason: format!("Shard {} had no substate changes - this is not correct", shard_changed),
-                });
+                finalize_result.result = TransactionResult::Reject(RejectReason::ShardNotPledged(format!(
+                    "Shard {} had no substate changes - this is not correct",
+                    shard_changed
+                )));
                 break;
             }
         }
@@ -965,8 +965,15 @@ where
                 );
                 VoteMessage::accept(local_node, local_shard, votes)
             },
-            TransactionResult::Reject(ref reject) => {
-                info!(target: LOG_TARGET, "⚔ Vote to REJECT payload: {}", reject.reason);
+            TransactionResult::Reject(ref reason) => {
+                match reason {
+                    RejectReason::ShardNotPledged(msg) => {
+                        info!(target: LOG_TARGET, "⚔ Vote to REJECT payload: {}", msg);
+                    },
+                    RejectReason::ExecutionFailure(msg) => {
+                        info!(target: LOG_TARGET, "Payload execution failure: {}", msg);
+                    },
+                }
                 VoteMessage::reject(local_node, local_shard, votes)
             },
         };
@@ -1062,7 +1069,7 @@ fn extract_changes(
                     });
             }
         },
-        TransactionResult::Reject(ref reject) => return Err(HotStuffError::TransactionRejected(reject.reason.clone())),
+        TransactionResult::Reject(ref reason) => return Err(HotStuffError::TransactionRejected(reason.clone())),
     }
 
     Ok(changes)

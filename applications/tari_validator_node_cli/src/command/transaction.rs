@@ -287,8 +287,8 @@ fn summarize(result: &TransactionFinalizeResult) {
                 println!();
             }
         },
-        TransactionResult::Reject(ref reject) => {
-            println!("❌️ Transaction rejected: {}", reject.reason);
+        TransactionResult::Reject(ref reason) => {
+            println!("❌️ Transaction rejected: {}", reason);
         },
     }
     println!("========= Pledges =========");

@@ -43,21 +43,15 @@ impl FinalizeResult {
         }
     }
 
-    pub fn errored(transaction_hash: Hash, reason: String) -> Self {
-        Self::new(
-            transaction_hash,
-            Vec::new(),
-            TransactionResult::Reject(RejectResult {
-                reason: format!("Transaction errored: {}", reason),
-            }),
-        )
+    pub fn errored(transaction_hash: Hash, reason: RejectReason) -> Self {
+        Self::new(transaction_hash, Vec::new(), TransactionResult::Reject(reason))
     }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum TransactionResult {
     Accept(SubstateDiff),
-    Reject(RejectResult),
+    Reject(RejectReason),
 }
 
 impl TransactionResult {
@@ -72,7 +66,7 @@ impl TransactionResult {
         }
     }
 
-    pub fn reject(&self) -> Option<&RejectResult> {
+    pub fn reject(&self) -> Option<&RejectReason> {
         match self {
             Self::Accept(_) => None,
             Self::Reject(reject_result) => Some(reject_result),
@@ -83,13 +77,23 @@ impl TransactionResult {
         match self {
             Self::Accept(substate_diff) => substate_diff,
             Self::Reject(reject_result) => {
-                panic!("{}: {}", msg, reject_result.reason);
+                panic!("{}: {:?}", msg, reject_result);
             },
         }
     }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct RejectResult {
-    pub reason: String,
+pub enum RejectReason {
+    ShardNotPledged(String),
+    ExecutionFailure(String),
+}
+
+impl std::fmt::Display for RejectReason {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        match self {
+            RejectReason::ShardNotPledged(msg) => write!(f, "Shard not pledged: {}", msg),
+            RejectReason::ExecutionFailure(msg) => write!(f, "Execution failure: {}", msg),
+        }
+    }
 }

@@ -21,7 +21,7 @@
 //   USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 use tari_engine_types::{
-    commit_result::{FinalizeResult, RejectResult, TransactionResult},
+    commit_result::{FinalizeResult, RejectReason, TransactionResult},
     logs::LogEntry,
     substate::{SubstateAddress, SubstateValue},
 };
@@ -43,6 +43,7 @@ use tari_template_lib::{
     models::{Amount, BucketId, VaultRef},
 };
 
+use super::TransactionCommitError;
 use crate::runtime::{
     tracker::{RuntimeState, StateTracker},
     RuntimeError,
@@ -355,10 +356,19 @@ impl RuntimeInterface for RuntimeInterfaceImpl {
     fn finalize(&self) -> Result<FinalizeResult, RuntimeError> {
         let result = match self.tracker.finalize() {
             Ok(substate_diff) => TransactionResult::Accept(substate_diff),
-            // TODO: we should differentiate between a system error and an explicit rejection vote
-            Err(err) => TransactionResult::Reject(RejectResult {
-                reason: err.to_string(),
-            }),
+            Err(err) => {
+                let reason = match err {
+                    TransactionCommitError::DanglingBuckets { count: _ } |
+                    TransactionCommitError::WorkspaceNotEmpty { count: _ } => {
+                        RejectReason::ShardNotPledged(err.to_string())
+                    },
+                    TransactionCommitError::StateStoreError(_) |
+                    TransactionCommitError::StateStoreTransactionError(_) => {
+                        RejectReason::ExecutionFailure(err.to_string())
+                    },
+                };
+                TransactionResult::Reject(reason)
+            },
         };
         let logs = self.tracker.take_logs();
         let commit = FinalizeResult::new(self.tracker.transaction_hash(), logs, result);
