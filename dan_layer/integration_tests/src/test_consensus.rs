@@ -28,7 +28,7 @@ use tari_common_types::types::{PrivateKey, PublicKey};
 use tari_comms::{multiaddr::Multiaddr, peer_manager::PeerFeatures, NodeIdentity};
 use tari_core::ValidatorNodeMmr;
 use tari_crypto::keys::PublicKey as PublicKeyT;
-use tari_dan_common_types::ShardId;
+use tari_dan_common_types::{Epoch, ShardId};
 use tari_dan_core::{
     consensus_constants::ConsensusConstants,
     models::{
@@ -260,7 +260,7 @@ fn create_test_qc(
     commitee_keys: Vec<(PublicKey, PrivateKey)>,
     all_vn_keys: Vec<PublicKey>,
 ) -> QuorumCertificate {
-    let qc = QuorumCertificate::genesis();
+    let qc = QuorumCertificate::genesis(Epoch(0));
     let vote = VoteMessage::new(
         qc.local_node_hash(),
         shard_id,

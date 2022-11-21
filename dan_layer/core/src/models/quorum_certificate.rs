@@ -101,14 +101,14 @@ impl QuorumCertificate {
         }
     }
 
-    pub fn genesis() -> Self {
+    pub fn genesis(epoch: Epoch) -> Self {
         Self {
             payload_id: PayloadId::zero(),
             payload_height: NodeHeight(0),
             local_node_hash: TreeNodeHash::zero(),
             local_node_height: NodeHeight(0),
             shard: ShardId::zero(),
-            epoch: Epoch(0),
+            epoch,
             decision: QuorumDecision::Accept,
             all_shard_nodes: vec![],
             validators_metadata: vec![],

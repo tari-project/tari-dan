@@ -29,7 +29,7 @@ use log::*;
 use tari_common_types::types::{PublicKey, Signature};
 use tari_comms::NodeIdentity;
 use tari_core::{consensus::FromConsensusBytes, ValidatorNodeMmrHasherBlake256};
-use tari_dan_common_types::{Epoch, PayloadId, ShardId, SubstateState};
+use tari_dan_common_types::{optional::Optional, Epoch, PayloadId, ShardId, SubstateState};
 use tari_engine_types::commit_result::{FinalizeResult, RejectReason, TransactionResult};
 use tari_mmr::MerkleProof;
 use tari_shutdown::ShutdownSignal;
@@ -197,11 +197,14 @@ where
         {
             let mut tx = self.shard_store.create_tx()?;
 
-            let high_qc = tx.get_high_qc_for(shard).map_err(|e| e.into())?;
+            let high_qc = tx.get_high_qc_for(shard).optional()?.unwrap_or_else(|| {
+                // TODO: sign genesis
+                QuorumCertificate::genesis(epoch)
+            });
 
             //  Save the payload, because we will need it when the proposal comes back
-            tx.set_payload(payload.clone()).map_err(|e| e.into())?;
-            tx.commit().map_err(|e| e.into())?;
+            tx.set_payload(payload.clone())?;
+            tx.commit()?;
             new_view = HotStuffMessage::new_view(high_qc, shard, Some(payload));
         }
 
@@ -239,11 +242,13 @@ where
 
         let epoch = self.epoch_manager.current_epoch().await?;
         self.validate_from_committee(&from, epoch, shard).await?;
-        self.validate_qc(&qc).await?;
+        // We dont expect signatures from other VNs at this point
+        // TODO: should be 1, we expect the sender to sign their QC
+        self.validate_qc(&qc, 0).await?;
         let mut tx = self.shard_store.create_tx()?;
-        tx.update_high_qc(from, shard, qc).map_err(|e| e.into())?;
-        tx.set_payload(payload).map_err(|e| e.into())?;
-        tx.commit().map_err(|e| e.into())?;
+        tx.update_high_qc(from, shard, qc)?;
+        tx.set_payload(payload)?;
+        tx.commit()?;
         Ok(())
     }
 
@@ -259,9 +264,12 @@ where
             let tx = self.shard_store.create_tx()?;
 
             // get_leaf_node returns the leaf node if it exists, otherwise it returns the genesis hash and height
-            parent_leaf_node = tx.get_leaf_node(shard).map_err(|e| e.into())?;
-            qc = tx.get_high_qc_for(shard).map_err(|e| e.into())?;
-            actual_payload = tx.get_payload(&payload_id).map_err(|e| e.into())?;
+            parent_leaf_node = tx.get_leaf_node(shard)?;
+            qc = tx
+                .get_high_qc_for(shard)
+                .optional()?
+                .unwrap_or_else(|| QuorumCertificate::genesis(epoch));
+            actual_payload = tx.get_payload(&payload_id)?;
         }
 
         let involved_shards = actual_payload.involved_shards();
@@ -277,7 +285,7 @@ where
         {
             let mut tx = self.shard_store.create_tx()?;
 
-            let parent = tx.get_node(parent_leaf_node.hash()).map_err(|e| e.into())?;
+            let parent = tx.get_node(parent_leaf_node.hash())?;
             let payload_height = if parent.payload_id() == payload_id {
                 parent.payload_height() + NodeHeight(1)
             } else {
@@ -317,9 +325,7 @@ where
             if !claim.is_valid(payload_id) {
                 return Err(HotStuffError::ClaimIsNotValid);
             }
-            let local_pledge = tx
-                .pledge_object(shard, payload_id, change, parent_leaf_node.height())
-                .map_err(|e| e.into())?;
+            let local_pledge = tx.pledge_object(shard, payload_id, change, parent_leaf_node.height())?;
 
             leaf_node = self.create_leaf(
                 parent_leaf_node,
@@ -332,10 +338,10 @@ where
                 payload_height,
                 Some(local_pledge),
             );
-            tx.save_node(leaf_node.clone()).map_err(|e| e.into())?;
+            tx.save_node(leaf_node.clone())?;
             tx.update_leaf_node(shard, *leaf_node.hash(), leaf_node.height())
                 .map_err(|e| HotStuffError::UpdateLeafNode(e.to_string()))?;
-            tx.commit().map_err(|e| e.into())?;
+            tx.commit()?;
         }
 
         self.tx_broadcast
@@ -370,12 +376,12 @@ where
         let shard = node.shard();
         let payload = if let Some(node_payload) = node.payload() {
             let mut tx = self.shard_store.create_tx()?;
-            tx.set_payload(node_payload.clone()).map_err(|e| e.into())?;
-            tx.commit().map_err(|e| e.into())?;
+            tx.set_payload(node_payload.clone())?;
+            tx.commit()?;
             node_payload.clone()
         } else {
             let tx = self.shard_store.create_tx()?;
-            tx.get_payload(&node.payload_id()).map_err(|e| e.into())?
+            tx.get_payload(&node.payload_id())?
         };
         let involved_shards = payload.involved_shards();
         // Find the shards that this node is responsible for out of all the shards involved
@@ -393,27 +399,23 @@ where
             .expect("The VN is not registered");
         {
             let mut tx = self.shard_store.create_tx()?;
-            tx.save_node(node.clone()).map_err(|e| e.into())?;
-            let v_height = tx.get_last_voted_height(shard).map_err(|e| e.into())?;
+            tx.save_node(node.clone())?;
+            let v_height = tx.get_last_voted_height(shard)?;
             // TODO: can also use the QC and committee to justify this....
-            let (locked_node, locked_height) = tx.get_locked_node_hash_and_height(shard).map_err(|e| e.into())?;
+            let (locked_node, locked_height) = tx.get_locked_node_hash_and_height(shard)?;
             if node.height() <= v_height ||
                 (node.parent() != &locked_node && node.justify().local_node_height() <= locked_height)
             {
                 error!(target: LOG_TARGET, "Received a proposal that is not valid");
-                tx.commit().map_err(|e| e.into())?;
+                tx.commit()?;
                 return Ok(());
             }
 
-            tx.save_leader_proposals(shard, node.payload_id(), node.payload_height(), node.clone())
-                .map_err(|e| e.into())?;
+            tx.save_leader_proposals(shard, node.payload_id(), node.payload_height(), node.clone())?;
 
             let mut leader_proposals = vec![];
             for s in &involved_shards {
-                if let Some(leader_proposal) = tx
-                    .get_leader_proposals(node.payload_id(), node.payload_height(), *s)
-                    .map_err(|e| e.into())?
-                {
+                if let Some(leader_proposal) = tx.get_leader_proposals(node.payload_id(), node.payload_height(), *s)? {
                     leader_proposals.push(ShardVote {
                         shard_id: *s,
                         node_hash: *leader_proposal.hash(),
@@ -451,12 +453,10 @@ where
                 for local_shard in local_shards {
                     dbg!("Can vote on the message");
                     let local_node = tx
-                        .get_leader_proposals(node.payload_id(), node.payload_height(), local_shard)
-                        .map_err(|e| e.into())?
+                        .get_leader_proposals(node.payload_id(), node.payload_height(), local_shard)?
                         .unwrap();
 
-                    tx.set_last_voted_height(local_shard, local_node.height())
-                        .map_err(|e| e.into())?;
+                    tx.set_last_voted_height(local_shard, local_node.height())?;
 
                     let mut vote_msg = self.decide(
                         *local_node.hash(),
@@ -482,7 +482,7 @@ where
                     involved_shards.len()
                 );
             }
-            tx.commit().map_err(|e| e.into())?;
+            tx.commit()?;
         }
 
         for msg in votes_to_send {
@@ -510,14 +510,11 @@ where
         let node;
         {
             let tx = self.shard_store.create_tx()?;
-            if tx
-                .has_vote_for(&from, msg.local_node_hash(), msg.shard())
-                .map_err(|e| e.into())?
-            {
+            if tx.has_vote_for(&from, msg.local_node_hash(), msg.shard())? {
                 return Ok(());
             }
 
-            node = tx.get_node(&msg.local_node_hash()).map_err(|e| e.into())?;
+            node = tx.get_node(&msg.local_node_hash())?;
 
             if node.proposed_by() != &self.public_key {
                 return Err(HotStuffError::NotTheLeader);
@@ -531,18 +528,13 @@ where
                 return Err(HotStuffError::ReceivedMessageFromNonCommitteeMember);
             }
 
-            let total_votes = tx
-                .save_received_vote_for(from, msg.local_node_hash(), msg.shard(), msg.clone())
-                .map_err(|e| e.into())?;
+            let total_votes = tx.save_received_vote_for(from, msg.local_node_hash(), msg.shard(), msg.clone())?;
             // Check for consensus
             dbg!(&valid_committee);
             dbg!(total_votes);
             if total_votes >= valid_committee.consensus_threshold() {
                 let mut different_votes = HashMap::new();
-                for vote in tx
-                    .get_received_votes_for(msg.local_node_hash(), msg.shard())
-                    .map_err(|e| e.into())?
-                {
+                for vote in tx.get_received_votes_for(msg.local_node_hash(), msg.shard())? {
                     let entry = different_votes.entry(vote.get_all_nodes_hash()).or_insert(vec![]);
                     entry.push(vote);
                 }
@@ -565,8 +557,7 @@ where
                             main_vote.all_shard_nodes().clone(),
                             validators_metadata,
                         );
-                        tx.update_high_qc(node.proposed_by().clone(), msg.shard(), qc)
-                            .map_err(|e| e.into())?;
+                        tx.update_high_qc(node.proposed_by().clone(), msg.shard(), qc)?;
 
                         // Should be the pace maker actually
                         on_beat_future = Some(self.on_beat(msg.shard(), node.payload_id()));
@@ -576,7 +567,7 @@ where
             }
 
             // commit the transaction
-            tx.commit().map_err(|e| e.into())?;
+            tx.commit()?;
             // drop tx
         }
 
@@ -611,7 +602,7 @@ where
 
     fn count_new_views_for(&self, shard: ShardId) -> Result<usize, HotStuffError> {
         let tx = self.shard_store.create_tx()?;
-        let count = tx.count_high_qc_for(shard).map_err(|e| e.into())?;
+        let count = tx.count_high_qc_for(shard)?;
         Ok(count)
     }
 
@@ -672,7 +663,7 @@ where
         }
     }
 
-    async fn validate_qc(&self, qc: &QuorumCertificate) -> Result<(), HotStuffError> {
+    async fn validate_qc(&self, qc: &QuorumCertificate, min_signers: usize) -> Result<(), HotStuffError> {
         // extract all the pairs of signer-signature present in the QC
         let signer_signatures = Self::extract_signer_signatures_from_qc(qc)?;
 
@@ -688,8 +679,7 @@ where
         }
 
         // check that the minimum quorum has been reached
-        let committee = self.epoch_manager.get_committee(qc.epoch(), qc.shard()).await?;
-        if signers_set.len() < committee.consensus_threshold() {
+        if signers_set.len() < min_signers {
             return Err(HotStuffError::InvalidQuorumCertificate(
                 "insufficient quorum".to_string(),
             ));
@@ -711,16 +701,19 @@ where
         }
 
         // all signers must be included in the epoch commitee for the shard
+        let committee = self.epoch_manager.get_committee(qc.epoch(), qc.shard()).await?;
         let commitee_set = committee.members.iter().map(|m| m.as_bytes()).collect::<HashSet<_>>();
-        let all_signers_are_in_commitee = signers_set.iter().all(|s| commitee_set.contains(s));
-        if !all_signers_are_in_commitee {
+        let all_signers_are_in_committee = signers_set.iter().all(|s| commitee_set.contains(s));
+        if !all_signers_are_in_committee {
             return Err(HotStuffError::InvalidQuorumCertificate(
                 "some signers are not in committee".to_string(),
             ));
         }
 
         // all signatures must be valid
-        let all_signatures_are_valid = signer_signatures.iter().all(|s| Self::validate_vote(qc, &s.0, &s.1));
+        let all_signatures_are_valid = signer_signatures
+            .iter()
+            .all(|(public_key, signature)| Self::validate_vote(qc, public_key, signature));
         if !all_signatures_are_valid {
             return Err(HotStuffError::InvalidQuorumCertificate("invalid signature".to_string()));
         }
@@ -767,25 +760,23 @@ where
         }
 
         let mut tx = self.shard_store.create_tx()?;
-        tx.update_high_qc(node.proposed_by().clone(), shard, node.justify().clone())
-            .map_err(|e| e.into())?;
+        tx.update_high_qc(node.proposed_by().clone(), shard, node.justify().clone())?;
 
-        let b_two = tx.get_node(&node.justify().local_node_hash()).map_err(|e| e.into())?;
+        let b_two = tx.get_node(&node.justify().local_node_hash())?;
         if b_two.justify().local_node_hash() == TreeNodeHash::zero() {
             dbg!("b one is genesis, nothing to do");
             return Ok(());
         }
-        let b_one = tx.get_node(&b_two.justify().local_node_hash()).map_err(|e| e.into())?;
+        let b_one = tx.get_node(&b_two.justify().local_node_hash())?;
 
-        let (_b_lock, b_lock_height) = tx.get_locked_node_hash_and_height(shard).map_err(|e| e.into())?;
+        let (_b_lock, b_lock_height) = tx.get_locked_node_hash_and_height(shard)?;
         if b_one.height() > b_lock_height {
             info!(target: LOG_TARGET, "Updating locked node to: {:?}", b_one.hash());
-            tx.set_locked(shard, *b_one.hash(), b_one.height())
-                .map_err(|e| e.into())?;
+            tx.set_locked(shard, *b_one.hash(), b_one.height())?;
         }
 
         if node.justify().payload_height() == NodeHeight(self.consensus_constants.hotstuff_rounds - 2) {
-            let payload = tx.get_payload(&node.payload_id()).map_err(|e| e.into())?;
+            let payload = tx.get_payload(&node.payload_id())?;
             let shard_pledges = node
                 .justify()
                 .all_shard_nodes()
@@ -804,7 +795,7 @@ where
             self.on_commit(&node, &changes, &mut tx)?;
             self.publish_event(HotStuffEvent::OnFinalized(Box::new(qc), finalize_result));
         }
-        tx.commit().map_err(|e| e.into())?;
+        tx.commit()?;
 
         Ok(())
     }
@@ -817,7 +808,7 @@ where
         tx: &mut TShardStore::Transaction,
     ) -> Result<(), HotStuffError> {
         let shard = node.shard();
-        if tx.get_last_executed_height(shard).map_err(|e| e.into())? < node.height() {
+        if tx.get_last_executed_height(shard)? < node.height() {
             info!(
                 target: LOG_TARGET,
                 "🔥 OnCommit for payload {} and shard {}",
@@ -826,7 +817,7 @@ where
             );
 
             if node.parent() != &TreeNodeHash::zero() {
-                let parent = tx.get_node(node.parent()).map_err(|e| e.into())?;
+                let parent = tx.get_node(node.parent())?;
                 let changes = extract_changes_from_justify(parent.justify())?;
                 self.on_commit(&parent, &changes, tx)?;
             }
@@ -834,10 +825,9 @@ where
             if node.justify().payload_height() == NodeHeight(self.consensus_constants.hotstuff_rounds - 2) &&
                 *node.justify().decision() == QuorumDecision::Accept
             {
-                tx.save_substate_changes(changes, node).map_err(|e| e.into())?;
+                tx.save_substate_changes(changes, node)?;
             }
-            tx.set_last_executed_height(shard, node.height())
-                .map_err(|e| e.into())?;
+            tx.set_last_executed_height(shard, node.height())?;
         }
         Ok(())
     }

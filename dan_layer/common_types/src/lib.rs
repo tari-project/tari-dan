@@ -158,8 +158,8 @@ impl PayloadId {
         Self { id: v }
     }
 
-    pub fn zero() -> Self {
-        Self::new(FixedHash::default())
+    pub const fn zero() -> Self {
+        Self { id: [0u8; 32] }
     }
 
     pub fn as_slice(&self) -> &[u8] {

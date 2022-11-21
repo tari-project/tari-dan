@@ -209,7 +209,7 @@ impl JsonRpcHandlers {
     pub async fn register_validator_node(&self, value: JsonRpcExtractor) -> JrpcResult {
         let answer_id = value.get_answer_id();
 
-        let resp = registration::register(self.wallet_client(), self.node_identity.clone(), &self.epoch_manager)
+        let resp = registration::register(self.wallet_client(), &self.node_identity, &self.epoch_manager)
             .await
             .map_err(internal_error(answer_id))?;
 
