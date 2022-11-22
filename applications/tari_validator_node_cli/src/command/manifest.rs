@@ -2,11 +2,14 @@
 //   SPDX-License-Identifier: BSD-3-Claus
 
 use std::{
+    collections::HashMap,
     io::{stdin, Read},
     path::PathBuf,
 };
 
+use anyhow::anyhow;
 use clap::{Args, Subcommand};
+use tari_transaction_manifest::ManifestValue;
 
 #[derive(Debug, Subcommand, Clone)]
 pub enum ManifestSubcommand {
@@ -78,4 +81,18 @@ fn get_contents(manifest: Option<PathBuf>) -> Result<String, anyhow::Error> {
             Ok(buf)
         },
     }
+}
+
+pub fn parse_globals(globals: Vec<String>) -> Result<HashMap<String, ManifestValue>, anyhow::Error> {
+    let mut result = HashMap::new();
+    for global in globals {
+        let mut parts = global.splitn(2, '=');
+        let name = parts.next().ok_or_else(|| anyhow!("Invalid global: {}", global))?;
+        let value = parts.next().ok_or_else(|| anyhow!("Invalid global: {}", global))?;
+        let value = value
+            .parse()
+            .map_err(|err| anyhow!("Failed to parse global '{}': {}", name, err))?;
+        result.insert(name.to_string(), value);
+    }
+    Ok(result)
 }

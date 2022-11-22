@@ -47,7 +47,12 @@ use tari_validator_node_client::{
     ValidatorNodeClient,
 };
 
-use crate::{account_manager::AccountFileManager, component_manager::ComponentManager, from_hex::FromHex};
+use crate::{
+    account_manager::AccountFileManager,
+    command::manifest,
+    component_manager::ComponentManager,
+    from_hex::FromHex,
+};
 
 #[derive(Debug, Subcommand, Clone)]
 pub enum TransactionSubcommand {
@@ -81,6 +86,8 @@ pub struct CommonSubmitArgs {
 pub struct SubmitManifestArgs {
     #[clap(long, short = 'p')]
     manifest: PathBuf,
+    #[clap(long, short = 'g')]
+    globals: Vec<String>,
     #[clap(flatten)]
     common: CommonSubmitArgs,
 }
@@ -120,8 +127,6 @@ async fn handle_submit(
     base_dir: impl AsRef<Path>,
     client: &mut ValidatorNodeClient,
 ) -> Result<(), anyhow::Error> {
-    let component_manager = ComponentManager::init(base_dir.as_ref())?;
-    let mut input_refs = vec![];
     let SubmitArgs { instruction, common } = args;
     let instruction = match instruction {
         CliInstruction::CallFunction {
@@ -137,20 +142,14 @@ async fn handle_submit(
             component_address,
             method_name,
             args,
-        } => {
-            input_refs.push(component_address.into_inner().into_array().into());
-            let children = component_manager.get_component_childen(component_address.into_inner())?;
-            input_refs.extend(children.iter().map(ShardId::from_address));
-
-            Instruction::CallMethod {
-                component_address: component_address.into_inner(),
-                method: method_name,
-                args: args.iter().map(|s| s.to_arg()).collect(),
-            }
+        } => Instruction::CallMethod {
+            component_address: component_address.into_inner(),
+            method: method_name,
+            args: args.iter().map(|s| s.to_arg()).collect(),
         },
     };
 
-    submit_transaction(vec![instruction], common, input_refs, base_dir, client).await
+    submit_transaction(vec![instruction], common, base_dir, client).await
 }
 
 async fn handle_submit_manifest(
@@ -159,26 +158,25 @@ async fn handle_submit_manifest(
     client: &mut ValidatorNodeClient,
 ) -> Result<(), anyhow::Error> {
     let contents = std::fs::read_to_string(&args.manifest)?;
-    // TODO: Define globals
-    let instructions = parse_manifest(&contents, Default::default())?;
+    let instructions = parse_manifest(&contents, manifest::parse_globals(args.globals)?)?;
     // TODO: improve output
     println!("Instructions: {:?}", instructions);
-    submit_transaction(instructions, args.common, vec![], base_dir, client).await
+    submit_transaction(instructions, args.common, base_dir, client).await
 }
 
 async fn submit_transaction(
     instructions: Vec<Instruction>,
     common: CommonSubmitArgs,
-    input_refs: Vec<ShardId>,
     base_dir: impl AsRef<Path>,
     client: &mut ValidatorNodeClient,
 ) -> Result<(), anyhow::Error> {
     let component_manager = ComponentManager::init(base_dir.as_ref())?;
-
     let account_manager = AccountFileManager::init(base_dir.as_ref().to_path_buf())?;
     let account = account_manager
         .get_active_account()
         .ok_or_else(|| anyhow::anyhow!("No active account. Use `accounts use [public key hex]` to set one."))?;
+
+    let input_refs = extract_input_refs(&instructions, &component_manager)?;
 
     // TODO: this is a little clunky
     let mut builder = Transaction::builder();
@@ -345,6 +343,21 @@ fn summarize(result: &TransactionFinalizeResult) {
     }
     println!();
     println!("OVERALL DECISION: {:?}", result.decision);
+}
+
+fn extract_input_refs(
+    instructions: &[Instruction],
+    component_manager: &ComponentManager,
+) -> Result<Vec<ShardId>, anyhow::Error> {
+    let mut input_refs = Vec::new();
+    for instruction in instructions {
+        if let Instruction::CallMethod { component_address, .. } = instruction {
+            input_refs.push(component_address.into_array().into());
+            let children = component_manager.get_component_childen(component_address)?;
+            input_refs.extend(children.iter().map(ShardId::from_address));
+        }
+    }
+    Ok(input_refs)
 }
 
 #[derive(Debug, Clone)]

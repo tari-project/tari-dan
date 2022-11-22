@@ -149,7 +149,7 @@ impl ManifestInstructionGenerator {
                         .or_else(|| self.global_aliases.get(&ident.to_string()))
                         .map(|v| match v {
                             ManifestValue::Address(addr) => Ok(arg!(*addr)),
-                            ManifestValue::Constant(lit) => lit_to_arg(lit),
+                            ManifestValue::Literal(lit) => lit_to_arg(lit),
                         })
                         .or_else(|| {
                             // Or is it a variable on the worktop?

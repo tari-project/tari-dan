@@ -75,8 +75,8 @@ impl ComponentManager {
     //     Ok(())
     // }
 
-    pub fn get_component_childen(&self, address: ComponentAddress) -> anyhow::Result<Vec<SubstateAddress>> {
-        let children = self.store.get::<Vec<SubstateAddress>>(&to_hex(&address))?;
+    pub fn get_component_childen(&self, address: &ComponentAddress) -> anyhow::Result<Vec<SubstateAddress>> {
+        let children = self.store.get::<Vec<SubstateAddress>>(&to_hex(address))?;
         Ok(children)
     }
 }
