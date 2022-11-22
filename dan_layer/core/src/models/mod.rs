@@ -28,6 +28,7 @@ use std::{
 };
 
 use anyhow::anyhow;
+use borsh::BorshSerialize;
 use serde::{Deserialize, Serialize};
 use tari_common_types::types::{FixedHash, PrivateKey, PublicKey, Signature};
 
@@ -73,7 +74,7 @@ pub use view_id::ViewId;
 
 use crate::services::infrastructure_services::NodeAddressable;
 
-#[derive(Copy, Clone, Debug, PartialEq, Eq, Hash, Deserialize, Serialize)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Hash, Deserialize, Serialize, BorshSerialize)]
 pub struct NodeHeight(pub u64);
 
 impl NodeHeight {
@@ -112,7 +113,7 @@ impl Display for NodeHeight {
     }
 }
 
-#[derive(Debug, Clone, Deserialize, Serialize)]
+#[derive(Debug, Clone, Deserialize, Serialize, BorshSerialize)]
 pub struct ObjectPledge {
     pub shard_id: ShardId,
     pub current_state: SubstateState,
@@ -317,7 +318,7 @@ impl From<u64> for ChainHeight {
     }
 }
 
-#[derive(Debug, Clone, Deserialize, Serialize)]
+#[derive(Debug, Clone, Deserialize, Serialize, BorshSerialize)]
 pub struct ShardVote {
     pub shard_id: ShardId,
     pub node_hash: TreeNodeHash,
