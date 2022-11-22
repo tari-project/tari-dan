@@ -35,7 +35,7 @@ pub use no_std::*;
 
 #[cfg(feature = "std")]
 mod rust_std {
-    pub use ::std::{fmt, io, mem, ptr, slice, string, vec};
+    pub use ::std::{fmt, format, io, mem, ptr, slice, string, vec};
 }
 
 #[cfg(feature = "std")]

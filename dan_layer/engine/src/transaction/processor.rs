@@ -92,30 +92,30 @@ where TRuntimeInterface: RuntimeInterface + Clone + 'static
                     .interface()
                     .set_current_runtime_state(RuntimeState { template_address });
 
-                let module = self.package.get_template_by_address(&template_address).ok_or(
+                let template = self.package.get_template_by_address(&template_address).ok_or(
                     TransactionError::TemplateNotFound {
                         address: template_address,
                     },
                 )?;
 
-                let result = self.invoke_template(module.clone(), runtime.clone(), &function, args)?;
+                let result = self.invoke_template(template.clone(), runtime.clone(), &function, args)?;
                 Ok(result)
             },
             Instruction::CallMethod {
-                template_address,
                 component_address,
                 method,
                 args,
             } => {
-                let module = self.package.get_template_by_address(&template_address).ok_or(
-                    TransactionError::TemplateNotFound {
-                        address: template_address,
-                    },
-                )?;
                 let substate = self
                     .runtime_interface
                     .get_substate(&SubstateAddress::Component(component_address))?;
                 let component = substate.into_component().expect("Runtime must return a component");
+                let template = self
+                    .package
+                    .get_template_by_address(&component.template_address)
+                    .ok_or(TransactionError::TemplateNotFound {
+                        address: component.template_address,
+                    })?;
 
                 runtime.interface().set_current_runtime_state(RuntimeState {
                     template_address: component.template_address,
@@ -125,7 +125,7 @@ where TRuntimeInterface: RuntimeInterface + Clone + 'static
                 final_args.push(arg![component]);
                 final_args.extend(args);
 
-                let result = self.invoke_template(module.clone(), runtime.clone(), &method, final_args)?;
+                let result = self.invoke_template(template.clone(), runtime.clone(), &method, final_args)?;
                 Ok(result)
             },
             Instruction::PutLastInstructionOutputOnWorkspace { key } => {

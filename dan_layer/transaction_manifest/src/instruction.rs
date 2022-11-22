@@ -38,16 +38,6 @@ pub enum Instruction {
         args: Vec<Arg>,
         return_variables: Vec<VariableIdent>,
     },
-    BucketSplit {
-        input: VariableIdent,
-        amount: u32,                  // TODO: use an amount type
-        output_main: VariableIdent,   // name of the new variable with the specified amount
-        output_change: VariableIdent, // name of the new variable that will hold the change
-    },
-    BucketJoin {
-        inputs: Vec<VariableIdent>, // names of all the bucket variables to join
-        output: VariableIdent,      // name of the new output variable
-    },
     GenerateBadgeProof {
         input: VariableIdent, // must be a bucket variable
         output: VariableIdent,

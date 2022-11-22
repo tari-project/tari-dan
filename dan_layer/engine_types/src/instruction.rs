@@ -20,7 +20,6 @@ pub enum Instruction {
         args: Vec<Arg>,
     },
     CallMethod {
-        template_address: TemplateAddress,
         component_address: ComponentAddress,
         method: String,
         args: Vec<Arg>,

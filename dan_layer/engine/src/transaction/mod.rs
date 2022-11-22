@@ -36,6 +36,7 @@ pub use error::TransactionError;
 
 mod processor;
 pub use processor::TransactionProcessor;
+use tari_template_lib::models::ComponentAddress;
 
 #[derive(Debug, Clone)]
 pub struct BalanceProof {}
@@ -64,10 +65,16 @@ impl Transaction {
                     template_address: package_address,
                     ..
                 } => Some(*package_address),
-                Instruction::CallMethod {
-                    template_address: package_address,
-                    ..
-                } => Some(*package_address),
+                _ => None,
+            })
+            .collect()
+    }
+
+    pub fn required_components(&self) -> Vec<ComponentAddress> {
+        self.instructions
+            .iter()
+            .filter_map(|instruction| match instruction {
+                Instruction::CallMethod { component_address, .. } => Some(*component_address),
                 _ => None,
             })
             .collect()

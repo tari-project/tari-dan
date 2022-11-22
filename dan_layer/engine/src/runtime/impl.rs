@@ -345,7 +345,6 @@ impl RuntimeInterface for RuntimeInterfaceImpl {
                     }
                 })?;
                 let value = self.tracker.take_from_workspace(&key)?;
-
                 Ok(InvokeResult::encode(&value)?)
             },
         }
