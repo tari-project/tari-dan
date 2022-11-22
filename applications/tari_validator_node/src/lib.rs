@@ -34,7 +34,6 @@ mod p2p;
 mod payload_processor;
 mod registration;
 mod template_registration_signing;
-mod validator_node_registration_signing;
 
 use std::{
     io,

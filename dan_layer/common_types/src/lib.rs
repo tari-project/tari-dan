@@ -23,7 +23,7 @@ use tari_engine_types::substate::{Substate, SubstateAddress};
 use tari_utilities::{byte_array::ByteArray, hex::Hex};
 pub use template_id::TemplateId;
 
-#[derive(Copy, Clone, Debug, Eq, PartialEq, Hash, Serialize, Deserialize)]
+#[derive(Copy, Clone, Debug, Eq, PartialEq, Hash, Serialize, Deserialize, BorshSerialize)]
 pub struct ShardId(#[serde(with = "serde_with::hex")] pub [u8; 32]);
 
 impl ShardId {
@@ -158,8 +158,8 @@ impl PayloadId {
         Self { id: v }
     }
 
-    pub fn zero() -> Self {
-        Self::new(FixedHash::default())
+    pub const fn zero() -> Self {
+        Self { id: [0u8; 32] }
     }
 
     pub fn as_slice(&self) -> &[u8] {

@@ -90,7 +90,7 @@ impl<TAddr: NodeAddressable, TPayload: Payload> HotStuffTreeNode<TAddr, TPayload
             height: NodeHeight(0),
             epoch: Epoch(0),
             proposed_by: TAddr::zero(),
-            justify: QuorumCertificate::genesis(),
+            justify: QuorumCertificate::genesis(Epoch(0)),
             local_pledge: None,
         };
         s.hash = s.calculate_hash();

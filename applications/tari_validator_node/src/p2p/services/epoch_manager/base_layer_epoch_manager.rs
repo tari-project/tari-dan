@@ -22,6 +22,7 @@
 
 use std::{convert::TryInto, sync::Arc};
 
+use log::info;
 use tari_comms::{types::CommsPublicKey, NodeIdentity};
 use tari_core::{blocks::BlockHeader, ValidatorNodeMmr};
 use tari_crypto::tari_utilities::ByteArray;
@@ -49,7 +50,7 @@ use crate::{
     ValidatorNodeConfig,
 };
 
-// const LOG_TARGET: &str = "tari_validator_node::epoch_manager::base_layer_epoch_manager";
+const LOG_TARGET: &str = "tari::validator_node::epoch_manager::base_layer_epoch_manager";
 
 #[derive(Clone)]
 pub struct BaseLayerEpochManager {
@@ -94,7 +95,7 @@ impl BaseLayerEpochManager {
             .create_transaction()
             .map_err(|e| EpochManagerError::StorageError(e.into()))?;
         let metadata = db.metadata(&tx);
-        let current_epoch = metadata
+        self.current_epoch = metadata
             .get_metadata(MetadataKey::CurrentEpoch)
             .map_err(|e| EpochManagerError::StorageError(e.into()))?
             .map(|v| {
@@ -102,7 +103,6 @@ impl BaseLayerEpochManager {
                 Epoch(u64::from_le_bytes(v2))
             })
             .unwrap_or_else(|| Epoch(0));
-        self.current_epoch = current_epoch;
 
         Ok(())
     }
@@ -135,15 +135,33 @@ impl BaseLayerEpochManager {
             .send(EpochManagerEvent::EpochChanged(epoch))
             .map_err(|_| EpochManagerError::SendError)?;
 
-        let vn_shard_key = vns
-            .iter()
-            .find(|v| v.public_key == *self.node_identity.public_key())
-            .ok_or(EpochManagerError::UnexpectedResponse)?
-            .shard_key;
+        let vn_shard_key = vns.iter().find(|v| v.public_key == *self.node_identity.public_key());
+
+        let vn_shard_key = match vn_shard_key {
+            Some(vn) => vn.shard_key,
+            None => {
+                info!(
+                    target: LOG_TARGET,
+                    "🖊 Validator node is NOT registered for epoch {} ", epoch,
+                );
+                // This node is not currently registered
+                return Ok(());
+            },
+        };
+        info!(
+            target: LOG_TARGET,
+            "🖊 Validator node is registered for epoch {}, shard key: {} ", epoch, vn_shard_key
+        );
 
         // from current_shard_key we can get the corresponding vns committee
         let committee_size = self.consensus_constants.committee_size as usize;
         let committee_vns = self.get_committee_vns_from_shard_key(epoch, vn_shard_key)?;
+        if committee_vns.is_empty() {
+            return Err(EpochManagerError::NoCommitteeVns {
+                epoch,
+                shard_id: vn_shard_key,
+            });
+        }
         let (start_shard_id, end_shard_id) = get_committee_shard_range(committee_size, &committee_vns).into_inner();
 
         let peer_sync_service_manager = PeerSyncManagerService::new(
@@ -343,16 +361,11 @@ impl BaseLayerEpochManager {
             .validator_nodes(&tx)
             .get_validator_nodes_per_epoch(epoch.0)
             .map_err(|e| EpochManagerError::StorageError(e.into()))?;
-        if db_vns.is_empty() {
-            return Err(EpochManagerError::NoEpochFound(epoch));
-        }
-        let mut vns: Vec<ValidatorNode> = db_vns
+        let vns = db_vns
             .into_iter()
             .map(TryInto::try_into)
-            .collect::<Result<Vec<_>, _>>()
-            .unwrap();
-        // TODO: sort on the db instead
-        vns.sort_by(|a, b| a.shard_key.partial_cmp(&b.shard_key).unwrap());
+            .collect::<Result<_, _>>()
+            .expect("get_validator_nodes_per_epoch: Database is corrupt");
         Ok(vns)
     }
 

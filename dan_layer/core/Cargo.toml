@@ -29,6 +29,7 @@ tari_engine_types = { path = "../engine_types" }
 anyhow = "1.0.53"
 async-trait = "0.1.50"
 blake2 = "0.9.2"
+borsh = "0.9.3"
 bincode = "1.0"
 chrono = { version = "0.4.19", default-features = false }
 clap = "3.1.8"

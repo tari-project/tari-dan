@@ -36,12 +36,12 @@ pub struct ValidatorNode {
 }
 
 impl TryFrom<DbValidatorNode> for ValidatorNode {
-    type Error = String;
+    type Error = anyhow::Error;
 
     fn try_from(db_vn: DbValidatorNode) -> Result<Self, Self::Error> {
         Ok(Self {
-            shard_key: ShardId::from_bytes(&db_vn.shard_key).map_err(|e| e.to_string())?,
-            public_key: PublicKey::from_bytes(&db_vn.public_key).map_err(|e| e.to_string())?,
+            shard_key: ShardId::from_bytes(&db_vn.shard_key)?,
+            public_key: PublicKey::from_bytes(&db_vn.public_key)?,
         })
     }
 }

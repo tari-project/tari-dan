@@ -20,6 +20,7 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+use borsh::BorshSerialize;
 use digest::{Digest, FixedOutput};
 use serde::{Deserialize, Serialize};
 use tari_common_types::types::{FixedHash, PrivateKey, PublicKey};
@@ -118,12 +119,17 @@ impl VoteMessage {
     }
 
     pub fn construct_challenge(&self, public_key: &PublicKey, public_nonce: &PublicKey) -> FixedHash {
+        // TODO remove this when we switch from consensus to Borsh. Hasher will do serialize instead of consesus so no
+        // need to serialize it here.
+        let mut serialized_all_shard_nodes = Vec::new();
+        BorshSerialize::serialize(self.all_shard_nodes(), &mut serialized_all_shard_nodes).unwrap();
         DomainSeparatedConsensusHasher::<TransactionHashDomain>::new("vote_message")
             .chain(public_key)
             .chain(public_nonce)
             .chain(&self.local_node_hash.as_bytes())
             .chain(&self.shard.as_bytes())
             .chain(&[self.decision.as_u8()])
+            .chain(&serialized_all_shard_nodes)
             .finalize()
             .into()
     }
