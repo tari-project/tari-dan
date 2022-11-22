@@ -23,6 +23,7 @@
 use std::{collections::HashMap, fmt::Display};
 
 use tari_dan_common_types::{PayloadId, ShardId, SubstateChange, SubstateState};
+use tari_engine_types::commit_result::FinalizeResult;
 use thiserror::Error;
 
 use crate::{
@@ -138,4 +139,6 @@ pub trait ShardStoreTransaction<TAddr: NodeAddressable, TPayload: Payload> {
 
     fn get_received_votes_for(&self, node_hash: TreeNodeHash, shard: ShardId) -> Result<Vec<VoteMessage>, Self::Error>;
     fn get_recent_transactions(&self) -> Result<Vec<RecentTransaction>, Self::Error>;
+    fn insert_transaction_result(&self, payload_id: PayloadId, result: FinalizeResult) -> Result<(), Self::Error>;
+    fn get_transaction_result(&self, requested_payload_id: PayloadId) -> Result<Option<FinalizeResult>, Self::Error>;
 }

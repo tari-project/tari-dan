@@ -33,3 +33,4 @@ pub mod payload;
 pub mod prepare_qc;
 pub mod received_votes;
 pub mod substate;
+pub mod transaction_result;

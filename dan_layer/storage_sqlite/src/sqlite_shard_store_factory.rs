@@ -54,7 +54,7 @@ use tari_dan_core::{
     },
 };
 use tari_dan_engine::transaction::{Transaction, TransactionMeta};
-use tari_engine_types::{instruction::Instruction, signature::InstructionSignature};
+use tari_engine_types::{commit_result::FinalizeResult, instruction::Instruction, signature::InstructionSignature};
 use tari_utilities::{hex::Hex, ByteArray};
 
 use crate::{
@@ -70,6 +70,7 @@ use crate::{
         payload::{NewPayload, Payload as SqlPayload},
         received_votes::{NewReceivedVote, ReceivedVote},
         substate::{NewSubstate, Substate},
+        transaction_result::{NewTransactionResult, TransactionResult},
     },
     schema::{
         high_qcs::dsl::high_qcs,
@@ -1169,5 +1170,60 @@ impl ShardStoreTransaction<PublicKey, TariDanPayload> for SqliteShardStoreTransa
             .into_iter()
             .map(|recent_transaction| recent_transaction.into())
             .collect())
+    }
+
+    fn insert_transaction_result(&self, payload_id: PayloadId, result: FinalizeResult) -> Result<(), Self::Error> {
+        use crate::schema::transaction_results;
+
+        let result_bytes = bincode::serialize(&result).map_err(|_| StorageError::EncodingError)?;
+        let new_result = NewTransactionResult {
+            payload_id: payload_id.as_bytes().to_vec(),
+            result_bytes,
+        };
+
+        match diesel::insert_into(transaction_results::dsl::transaction_results)
+            .values(&new_result)
+            .execute(&self.connection)
+        {
+            Ok(_) => {},
+            Err(err) => match err {
+                Error::DatabaseError(kind, _) => {
+                    if matches!(kind, DatabaseErrorKind::UniqueViolation) {
+                        debug!(target: LOG_TARGET, "Transaction result already exists");
+                        return Ok(());
+                    }
+                },
+                _ => {
+                    return Err(Self::Error::QueryError {
+                        reason: format!("Insert transaction result error: {}", err),
+                    })
+                },
+            },
+        }
+
+        Ok(())
+    }
+
+    fn get_transaction_result(&self, requested_payload_id: PayloadId) -> Result<Option<FinalizeResult>, Self::Error> {
+        use crate::schema::transaction_results::{dsl::transaction_results, payload_id};
+
+        let result: Option<TransactionResult> = transaction_results
+            .filter(payload_id.eq(requested_payload_id.as_bytes()))
+            .first(&self.connection)
+            .optional()
+            .map_err(|e| Self::Error::QueryError {
+                reason: format!("Get transaction result: {}", e),
+            })?;
+
+        match result {
+            Some(transaction_result) => {
+                let result_bytes = transaction_result.result_bytes;
+                let finalize_result: FinalizeResult =
+                    bincode::deserialize(&result_bytes).map_err(|_| StorageError::DecodingError)?;
+
+                Ok(Some(finalize_result))
+            },
+            None => Ok(None),
+        }
     }
 }

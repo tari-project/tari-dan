@@ -119,6 +119,14 @@ diesel::table! {
     }
 }
 
+diesel::table! {
+    transaction_results (id) {
+        id -> Integer,
+        payload_id -> Binary,
+        result_bytes -> Binary,
+    }
+}
+
 diesel::allow_tables_to_appear_in_same_query!(
     high_qcs,
     last_executed_heights,
