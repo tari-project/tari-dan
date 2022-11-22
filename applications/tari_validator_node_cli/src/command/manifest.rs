@@ -1,9 +1,11 @@
 //   Copyright 2022 The Tari Project
 //   SPDX-License-Identifier: BSD-3-Claus
 
-use std::{io::stdin, path::PathBuf};
+use std::{
+    io::{stdin, Read},
+    path::PathBuf,
+};
 
-use anyhow::anyhow;
 use clap::{Args, Subcommand};
 
 #[derive(Debug, Subcommand, Clone)]
@@ -70,6 +72,10 @@ impl ManifestSubcommand {
 fn get_contents(manifest: Option<PathBuf>) -> Result<String, anyhow::Error> {
     match manifest {
         Some(manifest) => Ok(std::fs::read_to_string(manifest)?),
-        None => stdin().lines().map(|l| l.map_err(|e| anyhow!(e))).collect(),
+        None => {
+            let mut buf = String::new();
+            stdin().read_to_string(&mut buf)?;
+            Ok(buf)
+        },
     }
 }
