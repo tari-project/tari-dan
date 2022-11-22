@@ -24,6 +24,7 @@ use std::{path::Path, str::FromStr};
 
 use anyhow::anyhow;
 use clap::{Args, Subcommand};
+use tari_common_types::types::FixedHash;
 use tari_dan_common_types::{ShardId, SubstateChange};
 use tari_dan_engine::transaction::Transaction;
 use tari_engine_types::{
@@ -40,7 +41,7 @@ use tari_template_lib::{
 };
 use tari_utilities::hex::to_hex;
 use tari_validator_node_client::{
-    types::{SubmitTransactionRequest, TransactionFinalizeResult},
+    types::{GetTransactionRequest, SubmitTransactionRequest, TransactionFinalizeResult},
     ValidatorNodeClient,
 };
 
@@ -48,7 +49,14 @@ use crate::{account_manager::AccountFileManager, component_manager::ComponentMan
 
 #[derive(Debug, Subcommand, Clone)]
 pub enum TransactionSubcommand {
+    Get(GetArgs),
     Submit(SubmitArgs),
+}
+
+#[derive(Debug, Args, Clone)]
+pub struct GetArgs {
+    #[clap(long, short = 'h')]
+    transaction_hash: FromHex<FixedHash>,
 }
 
 #[derive(Debug, Args, Clone)]
@@ -161,9 +169,71 @@ impl TransactionSubcommand {
                 let component_manager = ComponentManager::init(base_dir.as_ref())?;
                 handle_submit(args, base_dir, &mut client, &component_manager).await?
             },
+            TransactionSubcommand::Get(args) => handle_get(args, &mut client).await?,
         }
         Ok(())
     }
+}
+
+async fn handle_get(args: GetArgs, client: &mut ValidatorNodeClient) -> Result<(), anyhow::Error> {
+    let request = GetTransactionRequest {
+        hash: args.transaction_hash.0,
+    };
+    let resp = client.get_transaction(request).await?;
+
+    if let Some(result) = resp.result {
+        // TODO: integrate with the "summarize" function
+        println!("========= Return Values =========");
+        for result in &result.finalize.execution_results {
+            match result.return_type {
+                Type::Unit => {},
+                Type::Bool => {
+                    println!("bool: {}", result.decode::<bool>().unwrap());
+                },
+                Type::I8 => {
+                    println!("i8: {}", result.decode::<i8>().unwrap());
+                },
+                Type::I16 => {
+                    println!("i16: {}", result.decode::<i16>().unwrap());
+                },
+                Type::I32 => {
+                    println!("i32: {}", result.decode::<i32>().unwrap());
+                },
+                Type::I64 => {
+                    println!("i64: {}", result.decode::<i64>().unwrap());
+                },
+                Type::I128 => {
+                    println!("i128: {}", result.decode::<i128>().unwrap());
+                },
+                Type::U8 => {
+                    println!("u8: {}", result.decode::<u8>().unwrap());
+                },
+                Type::U16 => {
+                    println!("u16: {}", result.decode::<u16>().unwrap());
+                },
+                Type::U32 => {
+                    println!("u32: {}", result.decode::<u32>().unwrap());
+                },
+                Type::U64 => {
+                    println!("u64: {}", result.decode::<u64>().unwrap());
+                },
+                Type::U128 => {
+                    println!("u128: {}", result.decode::<u128>().unwrap());
+                },
+                Type::String => {
+                    println!("string: {}", result.decode::<String>().unwrap());
+                },
+                Type::Other { ref name } if name == "Amount" => {
+                    println!("{}: {}", name, result.decode::<Amount>().unwrap());
+                },
+                Type::Other { ref name } => {
+                    println!("{}: {}", name, to_hex(&result.raw));
+                },
+            }
+        }
+    }
+
+    Ok(())
 }
 
 async fn handle_submit(

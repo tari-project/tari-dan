@@ -157,7 +157,7 @@ pub struct GetTransactionRequest {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct GetTransactionResponse {
-    result: Option<TransactionFinalizeResult>,
+    pub result: Option<TransactionFinalizeResult>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
