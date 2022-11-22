@@ -33,7 +33,7 @@ use serde::Serialize;
 use serde_json::{self as json, json};
 use tari_comms::{multiaddr::Multiaddr, peer_manager::NodeId, types::CommsPublicKey, CommsNode, NodeIdentity};
 use tari_crypto::tari_utilities::hex::Hex;
-use tari_dan_common_types::SubstateChange;
+use tari_dan_common_types::{PayloadId, SubstateChange};
 use tari_dan_core::{
     services::{epoch_manager::EpochManager, BaseNodeClient},
     storage::shard_store::{ShardStoreFactory, ShardStoreTransaction},
@@ -50,6 +50,7 @@ use tari_validator_node_client::types::{
     GetTemplateResponse,
     GetTemplatesRequest,
     GetTemplatesResponse,
+    GetTransactionRequest,
     SubmitTransactionRequest,
     SubmitTransactionResponse,
     TemplateMetadata,
@@ -193,6 +194,29 @@ impl JsonRpcHandlers {
             Ok(JsonRpcResponse::success(
                 answer_id,
                 json!({ "transactions": recent_transactions }),
+            ))
+        } else {
+            Err(JsonRpcResponse::error(
+                answer_id,
+                JsonRpcError::new(
+                    JsonRpcErrorReason::InvalidParams,
+                    "Something went wrong".to_string(),
+                    json::Value::Null,
+                ),
+            ))
+        }
+    }
+
+    pub async fn get_transaction(&self, value: JsonRpcExtractor) -> JrpcResult {
+        let answer_id = value.get_answer_id();
+        let request: GetTransactionRequest = value.parse_params()?;
+        let payload_id = PayloadId::new(request.hash);
+
+        let tx = self.db.create_tx().unwrap();
+        if let Ok(transaction_result) = tx.get_transaction_result(payload_id) {
+            Ok(JsonRpcResponse::success(
+                answer_id,
+                json!({ "transaction_result": transaction_result }),
             ))
         } else {
             Err(JsonRpcResponse::error(
