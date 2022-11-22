@@ -213,11 +213,8 @@ impl JsonRpcHandlers {
         let payload_id = PayloadId::new(request.hash);
 
         let tx = self.db.create_tx().unwrap();
-        if let Ok(transaction_result) = tx.get_transaction_result(payload_id) {
-            Ok(JsonRpcResponse::success(
-                answer_id,
-                json!({ "transaction_result": transaction_result }),
-            ))
+        if let Ok(payload) = tx.get_payload(&payload_id) {
+            Ok(JsonRpcResponse::success(answer_id, json!({ "transaction": payload })))
         } else {
             Err(JsonRpcResponse::error(
                 answer_id,

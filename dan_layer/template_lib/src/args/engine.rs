@@ -39,7 +39,7 @@ pub struct EmitLogArg {
     pub level: LogLevel,
 }
 
-#[derive(Debug, Clone, Copy, Encode, Decode)]
+#[derive(Debug, Clone, Copy, Encode, Decode, PartialEq)]
 #[cfg_attr(feature = "serde", derive(serde::Deserialize, serde::Serialize))]
 pub enum LogLevel {
     Error,

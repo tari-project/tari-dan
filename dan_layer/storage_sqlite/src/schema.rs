@@ -89,6 +89,7 @@ diesel::table! {
         sender_public_key -> Binary,
         meta -> Text,
         timestamp -> BigInt,
+        result -> Nullable<Binary>,
     }
 }
 
@@ -116,14 +117,6 @@ diesel::table! {
         tree_node_hash -> Nullable<Binary>,
         pledged_to_payload_id -> Nullable<Binary>,
         pledged_until_height -> Nullable<BigInt>,
-    }
-}
-
-diesel::table! {
-    transaction_results (id) {
-        id -> Integer,
-        payload_id -> Binary,
-        result_bytes -> Binary,
     }
 }
 

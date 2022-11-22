@@ -25,7 +25,7 @@ use std::io;
 use serde::{Deserialize, Serialize};
 use tari_template_abi::Decode;
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct ExecutionResult {
     pub raw: Vec<u8>,
     pub return_type: Type,

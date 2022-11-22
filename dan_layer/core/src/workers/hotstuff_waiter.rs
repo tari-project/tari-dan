@@ -439,6 +439,7 @@ where
                     let changes = extract_changes(node.payload_id(), &finalize_result)?;
                     // Change the vote if we do not have all the objects pledged
                     Self::validate_pledges(&shard_pledges, &mut finalize_result, changes);
+                    tx.update_payload_result(&node.payload_id(), finalize_result.clone())?;
                     finalize_result
                 } else {
                     FinalizeResult::new(
@@ -785,6 +786,7 @@ where
                 .collect();
             // TODO: Perhaps we should extract the data from the justify rather....
             let finalize_result = self.execute(shard_pledges, payload)?;
+            tx.update_payload_result(&node.payload_id(), finalize_result.clone())?;
             let changes = extract_changes(node.payload_id(), &finalize_result)?;
             info!(
                 target: LOG_TARGET,
@@ -839,15 +841,7 @@ where
     ) -> Result<FinalizeResult, HotStuffError> {
         let payload_id = payload.to_id();
         info!(target: LOG_TARGET, "🔥 Executing payload: {}", payload_id);
-
-        // execute the payload in the engine
         let finalize = self.payload_processor.process_payload(payload, shard_pledges)?;
-
-        // store the result in database
-        let mut tx = self.shard_store.create_tx()?;
-        tx.insert_transaction_result(payload_id, finalize.clone())?;
-        tx.commit()?;
-
         Ok(finalize)
     }
 

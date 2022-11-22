@@ -139,6 +139,5 @@ pub trait ShardStoreTransaction<TAddr: NodeAddressable, TPayload: Payload> {
     fn get_received_votes_for(&self, node_hash: TreeNodeHash, shard: ShardId)
         -> Result<Vec<VoteMessage>, StorageError>;
     fn get_recent_transactions(&self) -> Result<Vec<RecentTransaction>, StorageError>;
-    fn insert_transaction_result(&self, payload_id: PayloadId, result: FinalizeResult) -> Result<(), StorageError>;
-    fn get_transaction_result(&self, requested_payload_id: PayloadId) -> Result<Option<FinalizeResult>, StorageError>;
+    fn update_payload_result(&self, payload_id: &PayloadId, result: FinalizeResult) -> Result<(), StorageError>;
 }

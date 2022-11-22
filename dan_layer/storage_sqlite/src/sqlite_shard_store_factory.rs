@@ -70,7 +70,6 @@ use crate::{
         payload::{NewPayload, Payload as SqlPayload},
         received_votes::{NewReceivedVote, ReceivedVote},
         substate::{NewSubstate, Substate},
-        transaction_result::{NewTransactionResult, TransactionResult},
     },
     schema::{
         high_qcs::dsl::high_qcs,
@@ -288,6 +287,7 @@ impl ShardStoreTransaction<PublicKey, TariDanPayload> for SqliteShardStoreTransa
             fee,
             sender_public_key,
             meta,
+            result: None,
         };
 
         match diesel::insert_into(payloads).values(&new_row).execute(&self.connection) {
@@ -427,8 +427,22 @@ impl ShardStoreTransaction<PublicKey, TariDanPayload> for SqliteShardStoreTransa
         })?;
 
         let transaction = Transaction::new(fee, instructions, signature, sender_public_key, meta);
+        let mut tari_dan_payload = TariDanPayload::new(transaction);
 
-        Ok(TariDanPayload::new(transaction))
+        // deserialize the transaction result
+        let result_field: Option<FinalizeResult> = match payload.result {
+            Some(result_bytes) => {
+                let result: FinalizeResult =
+                    bincode::deserialize(&result_bytes).map_err(|_| StorageError::DecodingError)?;
+                Some(result)
+            },
+            None => None,
+        };
+        if let Some(result) = result_field {
+            tari_dan_payload.set_result(result);
+        }
+
+        Ok(tari_dan_payload)
     }
 
     fn get_node(&self, hash: &TreeNodeHash) -> Result<HotStuffTreeNode<PublicKey, TariDanPayload>, StorageError> {
@@ -1175,58 +1189,24 @@ impl ShardStoreTransaction<PublicKey, TariDanPayload> for SqliteShardStoreTransa
             .collect())
     }
 
-    fn insert_transaction_result(&self, payload_id: PayloadId, result: FinalizeResult) -> Result<(), StorageError> {
-        use crate::schema::transaction_results;
+    fn update_payload_result(
+        &self,
+        requested_payload_id: &PayloadId,
+        result: FinalizeResult,
+    ) -> Result<(), StorageError> {
+        use crate::schema::payloads;
 
         let result_bytes = bincode::serialize(&result).map_err(|_| StorageError::EncodingError)?;
-        let new_result = NewTransactionResult {
-            payload_id: payload_id.as_bytes().to_vec(),
-            result_bytes,
-        };
 
-        match diesel::insert_into(transaction_results::dsl::transaction_results)
-            .values(&new_result)
+        diesel::update(payloads::table)
+            .filter(payloads::payload_id.eq(requested_payload_id.as_bytes()))
+            .set(payloads::result.eq(result_bytes))
             .execute(&self.connection)
-        {
-            Ok(_) => {},
-            Err(err) => match err {
-                Error::DatabaseError(kind, _) => {
-                    if matches!(kind, DatabaseErrorKind::UniqueViolation) {
-                        debug!(target: LOG_TARGET, "Transaction result already exists");
-                        return Ok(());
-                    }
-                },
-                _ => {
-                    return Err(StorageError::QueryError {
-                        reason: format!("Insert transaction result error: {}", err),
-                    })
-                },
-            },
-        }
-
-        Ok(())
-    }
-
-    fn get_transaction_result(&self, requested_payload_id: PayloadId) -> Result<Option<FinalizeResult>, StorageError> {
-        use crate::schema::transaction_results::{dsl::transaction_results, payload_id};
-
-        let result: Option<TransactionResult> = transaction_results
-            .filter(payload_id.eq(requested_payload_id.as_bytes()))
-            .first(&self.connection)
-            .optional()
-            .map_err(|e| StorageError::QueryError {
-                reason: format!("Get transaction result: {}", e),
+            .map_err(|source| SqliteStorageError::DieselError {
+                source,
+                operation: "update_payload_result".to_string(),
             })?;
 
-        match result {
-            Some(transaction_result) => {
-                let result_bytes = transaction_result.result_bytes;
-                let finalize_result: FinalizeResult =
-                    bincode::deserialize(&result_bytes).map_err(|_| StorageError::DecodingError)?;
-
-                Ok(Some(finalize_result))
-            },
-            None => Ok(None),
-        }
+        Ok(())
     }
 }
