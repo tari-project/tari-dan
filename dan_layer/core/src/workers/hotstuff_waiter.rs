@@ -847,8 +847,18 @@ where
         shard_pledges: HashMap<ShardId, Option<ObjectPledge>>,
         payload: TPayload,
     ) -> Result<FinalizeResult, HotStuffError> {
-        info!(target: LOG_TARGET, "🔥 Executing payload: {}", payload.to_id());
+        let payload_id = payload.to_id();
+        info!(target: LOG_TARGET, "🔥 Executing payload: {}", payload_id);
+
+        // execute the payload in the engine
         let finalize = self.payload_processor.process_payload(payload, shard_pledges)?;
+
+        // store the result in database
+        let mut tx = self.shard_store.create_tx()?;
+        tx.insert_transaction_result(payload_id, finalize.clone())
+            .map_err(|e| e.into())?;
+        tx.commit().map_err(|e| e.into())?;
+
         Ok(finalize)
     }
 
