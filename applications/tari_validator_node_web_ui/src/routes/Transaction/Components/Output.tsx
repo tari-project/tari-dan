@@ -20,38 +20,40 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-import React, { useEffect, useState } from "react";
-import { getAllVns } from "./json_rpc";
+import React from "react";
+import { toHexString } from "../../VN/Components/helpers";
 
-function AllVNs({ epoch }: { epoch: number }) {
-  const [vns, setVns] = useState([]);
-  useEffect(() => {
-    getAllVns(epoch).then((response) => {
-      setVns(response.vns);
-    });
-  }, [epoch]);
-  if (!(vns?.length > 0)) return <div>All VNS are loading</div>;
+export default function Output({ shard, output }: { shard: string; output: any[] }) {
   return (
-    <div className="section">
-      <div className="caption">VNs</div>
-      <table className="all-vns-table">
+    <div id={shard} className="output">
+      <b>Shard : </b>
+      <span className="key">{shard}</span>
+      <table>
         <thead>
           <tr>
-            <th>Public key</th>
-            <th>Shard key</th>
+            <th>Height</th>
+            <th>Payload height</th>
+            <th>Total leader proposals</th>
+            <th>Total votes</th>
+            <th>Parent node hash</th>
+            <th>Node hash</th>
           </tr>
         </thead>
         <tbody>
-          {vns.map(({ public_key, shard_key }, i) => (
-            <tr key={public_key}>
-              <td className="key">{public_key}</td>
-              <td className="key">{shard_key}</td>
-            </tr>
-          ))}
+          {output.map((row) => {
+            return (
+              <tr key={toHexString(row.node_hash)}>
+                <td>{row.height}</td>
+                <td>{row.payload_height}</td>
+                <td>{row.total_leader_proposals}</td>
+                <td>{row.total_votes}</td>
+                <td className="key">{toHexString(row.parent_node_hash)}</td>
+                <td className="key">{toHexString(row.node_hash)}</td>
+              </tr>
+            );
+          })}
         </tbody>
       </table>
     </div>
   );
 }
-
-export default AllVNs;

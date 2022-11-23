@@ -20,53 +20,37 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-import { useEffect, useState } from "react";
-import { toHexString } from "./helpers";
-import { getConnections } from "./json_rpc";
-
-interface IConnection {
-  address: string;
-  age: number;
-  direction: boolean;
-  node_id: number[];
-  public_key: string;
-}
-
-function Connections() {
-  const [connections, setConnections] = useState<IConnection[]>([]);
-  useEffect(() => {
-    getConnections().then((response) => {
-      setConnections(response.connections);
-    });
-  }, []);
-
-  return (
-    <div className="section">
-      <div className="caption">Connections</div>
-      <table className="connections-table">
-        <thead>
-          <tr>
-            <th>Address</th>
-            <th>Age</th>
-            <th>Direction</th>
-            <th>Node id</th>
-            <th>Public key</th>
-          </tr>
-        </thead>
-        <tbody>
-          {connections.map(({ address, age, direction, node_id, public_key }) => (
-            <tr key={public_key}>
-              <td>{address}</td>
-              <td>{age}</td>
-              <td>{direction ? "Inbound" : "Outbound"}</td>
-              <td>{toHexString(node_id)}</td>
-              <td>{public_key}</td>
-            </tr>
+const renderJson = (json: any) => {
+  if (Array.isArray(json)) {
+    return (
+      <>
+        [
+        <ol>
+          {json.map((val) => (
+            <li>{renderJson(val)},</li>
           ))}
-        </tbody>
-      </table>
-    </div>
-  );
-}
+        </ol>
+        ],
+      </>
+    );
+  } else if (typeof json === "object") {
+    return (
+      <>
+        {"{"}
+        <ul>
+          {Object.keys(json).map((key) => (
+            <li>
+              <b>"{key}"</b>:{renderJson(json[key])}
+            </li>
+          ))}
+        </ul>
+        {"}"}
+      </>
+    );
+  } else {
+    if (typeof json === "string") return <span className="string">"{json}"</span>;
+    return <span className="other">{json}</span>;
+  }
+};
 
-export default Connections;
+export { renderJson };

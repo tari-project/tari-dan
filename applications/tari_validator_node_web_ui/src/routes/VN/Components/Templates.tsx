@@ -21,8 +21,8 @@
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 import { useEffect, useState } from "react";
-import { ITemplate } from "./interfaces";
-import { getTemplate, getTemplates } from "./json_rpc";
+import { ITemplate } from "../../../utils/interfaces";
+import { getTemplate, getTemplates } from "../../../utils/json_rpc";
 import "./Templates.css";
 
 function Templates() {

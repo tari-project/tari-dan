@@ -21,9 +21,9 @@
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 import { useEffect, useState } from "react";
+import { getCommittee, getShardKey } from "../../../utils/json_rpc";
 import Committee from "./Committee";
 import { U256 } from "./helpers";
-import { getCommittee, getShardKey } from "./json_rpc";
 
 async function get_all_committees(currentEpoch: number, shardKey: string, publicKey: string) {
   let shardKeyMap: { [id: string]: string } = { [publicKey]: shardKey };

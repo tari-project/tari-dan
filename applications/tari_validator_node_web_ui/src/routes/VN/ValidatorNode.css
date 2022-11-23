@@ -74,12 +74,12 @@
   display: inline-block;
   margin-right: auto;
   padding: 6px 14px;
-  margin-right: 10px;
   border: 1px solid black;
   border-radius: 6px;
   background-origin: border-box;
   box-shadow: 3px 3px 2px grey;
   user-select: none;
+  width: 150px;
 }
 
 .disabled-button {
@@ -106,7 +106,7 @@
 }
 
 table {
-  border-spacing: 50px 0;
+  border-spacing: 10px 0;
 }
 
 td {
@@ -120,4 +120,50 @@ th {
 
 .sort-indicator {
   position: absolute;
+}
+
+.tooltip {
+  position: relative;
+}
+
+.tooltip .tooltiptext {
+  visibility: hidden;
+  /* width: 120px; */
+  padding: 5px;
+  border-radius: 5px;
+  position: absolute;
+  z-index: 1;
+  background-color: white;
+  border: 1px solid black;
+}
+
+.json {
+  text-align: left;
+}
+
+.tooltip:hover {
+  text-decoration: underline;
+}
+
+.tooltip:hover .tooltiptext {
+  visibility: visible;
+}
+
+ol li,
+ul li {
+  list-style-type: none;
+}
+
+ol,
+ul {
+  margin: 0px;
+  padding-inline-start: 20px;
+}
+
+.string {
+  color: green;
+}
+
+.other {
+  color: red;
 }

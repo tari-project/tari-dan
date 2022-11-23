@@ -21,15 +21,15 @@
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 import { useEffect, useState } from "react";
-import AllVNs from "./AllVNs";
-import Committees from "./Committees";
-import Connections from "./Connections";
-import Info from "./Info";
-import { IEpoch, IIdentity } from "./interfaces";
-import { getEpochManagerStats, getIdentity, getRecentTransactions, getShardKey } from "./json_rpc";
-import Mempool from "./Mempool";
-import RecentTransactions from "./RecentTransactions";
-import Templates from "./Templates";
+import AllVNs from "./Components/AllVNs";
+import Committees from "./Components/Committees";
+import Connections from "./Components/Connections";
+import Info from "./Components/Info";
+import { IEpoch, IIdentity } from "../../utils/interfaces";
+import { getEpochManagerStats, getIdentity, getRecentTransactions, getShardKey } from "../../utils/json_rpc";
+import Mempool from "./Components/Mempool";
+import RecentTransactions from "./Components/RecentTransactions";
+import Templates from "./Components/Templates";
 import "./ValidatorNode.css";
 
 function ValidatorNode() {

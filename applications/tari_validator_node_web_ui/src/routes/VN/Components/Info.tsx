@@ -21,8 +21,8 @@
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 import { useState } from "react";
-import { IEpoch, IIdentity } from "./interfaces";
-import { registerValidatorNode } from "./json_rpc";
+import { IEpoch, IIdentity } from "../../../utils/interfaces";
+import { registerValidatorNode } from "../../../utils/json_rpc";
 import "./Info.css";
 
 function Info({ epoch, identity, shardKey }: { epoch: IEpoch; identity: IIdentity; shardKey: string | null }) {

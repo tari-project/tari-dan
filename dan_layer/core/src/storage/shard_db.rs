@@ -36,6 +36,7 @@ use crate::{
         Payload,
         QuorumCertificate,
         RecentTransaction,
+        SQLTransaction,
         SubstateShardData,
         TreeNodeHash,
     },
@@ -367,6 +368,10 @@ impl<TAddr: NodeAddressable, TPayload: Payload> ShardStoreTransaction<TAddr, TPa
 
     fn get_recent_transactions(&self) -> Result<Vec<RecentTransaction>, Self::Error> {
         // todo!()
+        Ok(vec![])
+    }
+
+    fn get_transaction(&self, _payload_id: Vec<u8>) -> Result<Vec<SQLTransaction>, Self::Error> {
         Ok(vec![])
     }
 }
