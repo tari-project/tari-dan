@@ -22,7 +22,7 @@
 
 pub mod memory;
 
-use std::{error::Error, io};
+use std::{error::Error, fmt::Debug, io};
 
 use tari_dan_common_types::optional::IsNotFoundError;
 use tari_template_abi::{decode, encode, Decode, Encode};
@@ -53,9 +53,13 @@ pub trait AtomicDb<'a> {
 pub trait StateReader {
     fn get_state_raw(&self, key: &[u8]) -> Result<Vec<u8>, StateStoreError>;
 
-    fn get_state<K: Encode, V: Decode>(&self, key: &K) -> Result<V, StateStoreError> {
+    fn get_state<K: Encode + Debug, V: Decode>(&self, key: &K) -> Result<V, StateStoreError> {
         let value = self.get_state_raw(&encode(key)?)?;
-        let value = decode(&value)?;
+        let value = decode(&value).map_err(|err| StateStoreError::ValueDecodeError {
+            key: format!("{:?}", key),
+            value_type: std::any::type_name::<V>(),
+            err,
+        })?;
         Ok(value)
     }
 
@@ -76,7 +80,13 @@ pub trait StateWriter: StateReader {
 pub enum StateStoreError {
     #[error("Non existent shard: {shard:?}")]
     NonExistentShard { shard: Vec<u8> },
-    #[error("Encoding error: {0}")]
+    #[error("State store decode error for {value_type} at key '{key}': {err}")]
+    ValueDecodeError {
+        key: String,
+        value_type: &'static str,
+        err: io::Error,
+    },
+    #[error("State store encoding error: {0}")]
     EncodingError(#[from] io::Error),
     #[error(transparent)]
     Custom(#[from] anyhow::Error),

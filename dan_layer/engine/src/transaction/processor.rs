@@ -134,6 +134,10 @@ where TRuntimeInterface: RuntimeInterface + Clone + 'static
                     .workspace_invoke(WorkspaceAction::PutLastInstructionOutput, invoke_args![key])?;
                 Ok(ExecutionResult::empty())
             },
+            Instruction::EmitLog { level, message } => {
+                runtime.interface().emit_log(level, message);
+                Ok(ExecutionResult::empty())
+            },
         }
     }
 

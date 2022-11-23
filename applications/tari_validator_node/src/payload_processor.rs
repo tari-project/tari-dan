@@ -38,9 +38,9 @@ use tari_dan_engine::{
 };
 use tari_engine_types::{
     commit_result::{FinalizeResult, RejectReason},
-    substate::{SubstateAddress, SubstateValue},
+    substate::{Substate, SubstateAddress, SubstateValue},
 };
-use tari_template_lib::models::{ComponentAddress, ComponentInstance, ResourceAddress, TemplateAddress, VaultId};
+use tari_template_lib::models::{ComponentAddress, ResourceAddress, TemplateAddress, VaultId};
 
 #[derive(Debug, Default)]
 pub struct TariDanPayloadProcessor<TTemplateProvider> {
@@ -105,7 +105,11 @@ fn load_template_addresses_for_components(
         .map_err(PayloadProcessorError::FailedToLoadTemplate)?;
     let mut template_addresses = Vec::with_capacity(components.len());
     for component in components {
-        let component = access.get_state::<_, ComponentInstance>(&SubstateAddress::Component(*component))?;
+        let component = access.get_state::<_, Substate>(&SubstateAddress::Component(*component))?;
+        let component = component
+            .into_substate()
+            .into_component()
+            .expect("Component substate should be a component");
         template_addresses.push(component.template_address);
     }
     Ok(template_addresses)

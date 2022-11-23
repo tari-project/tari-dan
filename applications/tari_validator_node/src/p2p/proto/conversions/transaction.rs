@@ -31,6 +31,7 @@ use tari_common_types::types::{PublicKey, Signature};
 use tari_crypto::tari_utilities::ByteArray;
 use tari_dan_common_types::{ObjectClaim, ShardId, SubstateChange};
 use tari_dan_engine::transaction::{Transaction, TransactionMeta};
+use tari_engine_types::instruction::Instruction;
 use tari_template_lib::{args::Arg, Hash};
 
 use crate::p2p::proto;
@@ -119,7 +120,11 @@ impl TryFrom<proto::transaction::Instruction> for tari_engine_types::instruction
                     args,
                 }
             },
-            2 => tari_engine_types::instruction::Instruction::PutLastInstructionOutputOnWorkspace { key: request.key },
+            2 => Instruction::PutLastInstructionOutputOnWorkspace { key: request.key },
+            3 => Instruction::EmitLog {
+                level: request.log_level.parse()?,
+                message: request.log_message,
+            },
             _ => return Err(anyhow!("invalid instruction_type")),
         };
 
@@ -132,7 +137,7 @@ impl From<tari_engine_types::instruction::Instruction> for proto::transaction::I
         let mut result = proto::transaction::Instruction::default();
 
         match instruction {
-            tari_engine_types::instruction::Instruction::CallFunction {
+            Instruction::CallFunction {
                 template_address,
                 function,
                 args,
@@ -142,7 +147,7 @@ impl From<tari_engine_types::instruction::Instruction> for proto::transaction::I
                 result.function = function;
                 result.args = args.into_iter().map(|a| a.into()).collect();
             },
-            tari_engine_types::instruction::Instruction::CallMethod {
+            Instruction::CallMethod {
                 component_address,
                 method,
                 args,
@@ -152,9 +157,14 @@ impl From<tari_engine_types::instruction::Instruction> for proto::transaction::I
                 result.method = method;
                 result.args = args.into_iter().map(|a| a.into()).collect();
             },
-            tari_engine_types::instruction::Instruction::PutLastInstructionOutputOnWorkspace { key } => {
+            Instruction::PutLastInstructionOutputOnWorkspace { key } => {
                 result.instruction_type = 2;
                 result.key = key;
+            },
+            Instruction::EmitLog { level, message } => {
+                result.instruction_type = 3;
+                result.log_level = level.to_string();
+                result.log_message = message;
             },
         }
         result

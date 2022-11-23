@@ -27,8 +27,8 @@ fn main() {
     let XTR = global!["xtr_resource"];
 
     // buy a picture
-    let payment = account.withdraw(XTR, 1_000);
-    let picture = picture_seller.buy(payment);
+    let bucket = account.withdraw(XTR, 1_000);
+    let picture = picture_seller.buy(bucket);
 
     // store our brand new picture in our account
     account.deposit(picture);

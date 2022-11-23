@@ -30,7 +30,7 @@ use tari_dan_engine::transaction::Transaction;
 
 use crate::models::{ConsensusHash, Payload};
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TariDanPayload {
     transaction: Transaction,
     timestamp: i64,

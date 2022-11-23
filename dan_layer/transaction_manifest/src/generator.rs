@@ -116,6 +116,10 @@ impl ManifestInstructionGenerator {
                 );
                 Ok(vec![])
             },
+            ManifestIntent::Log(log) => Ok(vec![Instruction::EmitLog {
+                level: log.level,
+                message: log.message,
+            }]),
         }
     }
 

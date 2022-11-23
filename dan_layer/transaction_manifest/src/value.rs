@@ -35,22 +35,21 @@ impl FromStr for ManifestValue {
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s.split_once('_') {
             Some(("component", addr)) => {
-                let addr = ComponentAddress::from_hex(addr)
-                    .map_err(|e| ManifestParseError::InvalidAddressFormat(e.to_string()))?;
+                let addr =
+                    ComponentAddress::from_hex(addr).map_err(|e| ManifestParseError::AddressFormat(e.to_string()))?;
                 Ok(ManifestValue::Address(SubstateAddress::Component(addr)))
             },
             Some(("resource", addr)) => {
-                let addr = ResourceAddress::from_hex(addr)
-                    .map_err(|e| ManifestParseError::InvalidAddressFormat(e.to_string()))?;
+                let addr =
+                    ResourceAddress::from_hex(addr).map_err(|e| ManifestParseError::AddressFormat(e.to_string()))?;
                 Ok(ManifestValue::Address(SubstateAddress::Resource(addr)))
             },
             Some(("vault", addr)) => {
-                let id =
-                    VaultId::from_hex(addr).map_err(|e| ManifestParseError::InvalidAddressFormat(e.to_string()))?;
+                let id = VaultId::from_hex(addr).map_err(|e| ManifestParseError::AddressFormat(e.to_string()))?;
                 Ok(ManifestValue::Address(SubstateAddress::Vault(id)))
             },
 
-            Some((_, _)) => Err(ManifestParseError::InvalidAddressFormat(s.to_string())),
+            Some((_, _)) => Err(ManifestParseError::AddressFormat(s.to_string())),
             None => {
                 let tokens = s.parse()?;
                 let lit = parse2(tokens)?;
@@ -63,23 +62,23 @@ impl FromStr for ManifestValue {
 #[derive(Debug, thiserror::Error)]
 pub enum ManifestParseError {
     #[error("Invalid address format: {0}")]
-    InvalidAddressFormat(String),
+    AddressFormat(String),
     #[error("Invalid constant: {0}")]
-    InvalidConstant(String),
+    Constant(String),
     #[error("Invalid tokens: {0}")]
-    InvalidTokens(String),
+    Tokens(String),
 }
 
 // syn::Error and LexError use Rc's which are not Sync or Send
 impl From<syn::Error> for ManifestParseError {
     fn from(e: syn::Error) -> Self {
-        Self::InvalidConstant(e.to_string())
+        Self::Constant(e.to_string())
     }
 }
 
 impl From<LexError> for ManifestParseError {
     fn from(e: LexError) -> Self {
-        Self::InvalidTokens(e.to_string())
+        Self::Tokens(e.to_string())
     }
 }
 

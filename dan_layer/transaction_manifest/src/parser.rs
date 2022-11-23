@@ -26,6 +26,7 @@ use syn::{
     UseTree,
 };
 use tari_engine_types::TemplateAddress;
+use tari_template_lib::args::LogLevel;
 
 #[derive(Debug, Clone)]
 pub enum ManifestIntent {
@@ -36,6 +37,7 @@ pub enum ManifestIntent {
     InvokeTemplate(InvokeIntent),
     InvokeComponent(InvokeIntent),
     AssignInput(AssignInputStmt),
+    Log(LogIntent),
 }
 
 #[derive(Debug, Clone)]
@@ -54,6 +56,12 @@ pub struct AssignInputStmt {
 }
 
 #[derive(Debug, Clone)]
+pub struct LogIntent {
+    pub level: LogLevel,
+    pub message: String,
+}
+
+#[derive(Debug, Clone)]
 pub enum LiteralOrVariable {
     Lit(Lit),
     Variable(Ident),
@@ -63,7 +71,7 @@ pub struct ManifestParser;
 
 impl ManifestParser {
     pub fn new() -> Self {
-        Self {}
+        Self
     }
 
     pub fn parse(&self, input: ParseStream) -> Result<Vec<ManifestIntent>, syn::Error> {
@@ -200,7 +208,7 @@ impl ManifestParser {
                     return Err(syn::Error::new_spanned(path, "Invalid macro path"));
                 }
 
-                self.assignment_from_macro(var_ident.clone(), &path.segments[0].ident, tokens)?
+                assignment_from_macro(var_ident.clone(), &path.segments[0].ident, tokens)?
             },
             _ => {
                 return Err(syn::Error::new_spanned(
@@ -250,6 +258,18 @@ impl ManifestParser {
                     arguments: build_arguments(args)?,
                 }))
             },
+            Expr::Macro(ExprMacro {
+                mac: Macro { path, tokens, .. },
+                ..
+            }) => {
+                if path.segments.len() != 1 {
+                    // TODO: improve error
+                    return Err(syn::Error::new_spanned(path, "Invalid macro path"));
+                }
+
+                let mac = &path.segments[0].ident;
+                macro_call(mac, tokens)
+            },
             _ => {
                 return Err(syn::Error::new_spanned(
                     expr.clone(),
@@ -258,20 +278,38 @@ impl ManifestParser {
             },
         }
     }
+}
 
-    fn assignment_from_macro(
-        &self,
-        var_name: Ident,
-        mac: &Ident,
-        tokens: TokenStream,
-    ) -> Result<ManifestIntent, syn::Error> {
-        match mac.to_string().as_str() {
-            "global" => Ok(ManifestIntent::AssignInput(AssignInputStmt {
-                variable_name: var_name,
-                global_variable_name: parse2(tokens)?,
-            })),
-            _ => Err(syn::Error::new_spanned(mac, "Invalid macro name")),
-        }
+fn assignment_from_macro(var_name: Ident, mac: &Ident, tokens: TokenStream) -> Result<ManifestIntent, syn::Error> {
+    match mac.to_string().as_str() {
+        "global" => Ok(ManifestIntent::AssignInput(AssignInputStmt {
+            variable_name: var_name,
+            global_variable_name: parse2(tokens)?,
+        })),
+        _ => Err(syn::Error::new_spanned(mac, "Invalid macro name")),
+    }
+}
+
+fn macro_call(mac: &Ident, tokens: TokenStream) -> Result<ManifestIntent, syn::Error> {
+    match mac.to_string().as_str() {
+        "info" => Ok(ManifestIntent::Log(LogIntent {
+            level: LogLevel::Info,
+            // TODO: Support format args - of course, this requires runtime support so is quite a heavy lift.
+            message: parse2::<LitStr>(tokens)?.value(),
+        })),
+        "debug" => Ok(ManifestIntent::Log(LogIntent {
+            level: LogLevel::Debug,
+            message: parse2::<LitStr>(tokens)?.value(),
+        })),
+        "warn" => Ok(ManifestIntent::Log(LogIntent {
+            level: LogLevel::Warn,
+            message: parse2::<LitStr>(tokens)?.value(),
+        })),
+        "error" => Ok(ManifestIntent::Log(LogIntent {
+            level: LogLevel::Error,
+            message: parse2::<LitStr>(tokens)?.value(),
+        })),
+        _ => Err(syn::Error::new_spanned(mac, "Invalid macro name")),
     }
 }
 

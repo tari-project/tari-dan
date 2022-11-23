@@ -41,7 +41,7 @@ use tari_template_lib::models::ComponentAddress;
 #[derive(Debug, Clone)]
 pub struct BalanceProof {}
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Transaction {
     hash: Hash,
     instructions: Vec<Instruction>,

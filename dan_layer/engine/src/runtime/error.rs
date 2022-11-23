@@ -31,7 +31,7 @@ use crate::{runtime::id_provider::MaxIdsExceeded, state_store::StateStoreError};
 
 #[derive(Debug, thiserror::Error)]
 pub enum RuntimeError {
-    #[error("Encoding error: {0}")]
+    #[error("Runtime encoding error: {0}")]
     EncodingError(#[from] io::Error),
     #[error("State DB error: {0}")]
     StateDbError(#[from] anyhow::Error),

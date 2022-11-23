@@ -86,9 +86,9 @@ fn get_contents(manifest: Option<PathBuf>) -> Result<String, anyhow::Error> {
 pub fn parse_globals(globals: Vec<String>) -> Result<HashMap<String, ManifestValue>, anyhow::Error> {
     let mut result = HashMap::new();
     for global in globals {
-        let mut parts = global.splitn(2, '=');
-        let name = parts.next().ok_or_else(|| anyhow!("Invalid global: {}", global))?;
-        let value = parts.next().ok_or_else(|| anyhow!("Invalid global: {}", global))?;
+        let (name, value) = global
+            .split_once('=')
+            .ok_or_else(|| anyhow!("Invalid global: {}", global))?;
         let value = value
             .parse()
             .map_err(|err| anyhow!("Failed to parse global '{}': {}", name, err))?;
