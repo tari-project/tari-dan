@@ -74,6 +74,8 @@ pub struct CommonSubmitArgs {
     wait_for_result: bool,
     #[clap(long, short = 'n')]
     num_outputs: Option<u8>,
+    #[clap(long, short = 'i')]
+    inputs: Vec<String>,
     #[clap(long, short = 'v')]
     version: Option<u8>,
     #[clap(long, short = 'd')]
@@ -177,10 +179,16 @@ async fn submit_transaction(
         .ok_or_else(|| anyhow::anyhow!("No active account. Use `accounts use [public key hex]` to set one."))?;
 
     let input_refs = extract_input_refs(&instructions, &component_manager)?;
+    let inputs = common
+        .inputs
+        .into_iter()
+        .map(|s| s.parse())
+        .collect::<Result<Vec<_>, _>>()?;
 
     // TODO: this is a little clunky
     let mut builder = Transaction::builder();
     builder
+        .with_inputs(inputs)
         .with_input_refs(input_refs.clone())
         .with_num_outputs(common.num_outputs.unwrap_or(0))
         .with_instructions(instructions);

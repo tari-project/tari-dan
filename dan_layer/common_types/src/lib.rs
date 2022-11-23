@@ -13,6 +13,7 @@ use std::{
     cmp::Ordering,
     fmt,
     fmt::{Display, Formatter},
+    str::FromStr,
 };
 
 use ::serde::{Deserialize, Serialize};
@@ -20,7 +21,10 @@ use borsh::{BorshDeserialize, BorshSerialize};
 pub use epoch::Epoch;
 use tari_common_types::types::{FixedHash, FixedHashSizeError};
 use tari_engine_types::substate::{Substate, SubstateAddress};
-use tari_utilities::{byte_array::ByteArray, hex::Hex};
+use tari_utilities::{
+    byte_array::ByteArray,
+    hex::{from_hex, Hex},
+};
 pub use template_id::TemplateId;
 
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Hash, Serialize, Deserialize, BorshSerialize)]
@@ -105,6 +109,16 @@ impl Ord for ShardId {
 impl Display for ShardId {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         write!(f, "{}", self.0.to_hex())
+    }
+}
+
+impl FromStr for ShardId {
+    type Err = FixedHashSizeError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        // TODO: error isnt correct
+        let bytes = from_hex(s).map_err(|_| FixedHashSizeError)?;
+        Self::from_bytes(&bytes)
     }
 }
 

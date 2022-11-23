@@ -86,12 +86,12 @@ fn manifest_smoke_test() {
             args: args![SubstateAddress::Resource(xtr_resource), Amount(1_000)],
         },
         Instruction::PutLastInstructionOutputOnWorkspace {
-            key: b"payment".to_vec(),
+            key: b"bucket".to_vec(),
         },
         Instruction::CallMethod {
             component_address: picture_seller_component,
             method: "buy".to_string(),
-            args: args![Variable("payment")],
+            args: args![Variable("bucket")],
         },
         Instruction::PutLastInstructionOutputOnWorkspace {
             key: b"picture".to_vec(),
