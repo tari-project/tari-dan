@@ -28,10 +28,9 @@ use std::{
 use log::*;
 use tari_common_types::types::{PublicKey, Signature};
 use tari_comms::NodeIdentity;
-use tari_core::{consensus::FromConsensusBytes, ValidatorNodeMmrHasherBlake256};
+use tari_core::consensus::FromConsensusBytes;
 use tari_dan_common_types::{optional::Optional, Epoch, PayloadId, ShardId, SubstateState};
 use tari_engine_types::commit_result::{FinalizeResult, RejectReason, TransactionResult};
-use tari_mmr::MerkleProof;
 use tari_shutdown::ShutdownSignal;
 use tari_utilities::ByteArray;
 use tokio::{
@@ -685,6 +684,7 @@ where
             ));
         }
 
+        // TODO: Fix merkle proof verification
         // all merkle proofs for the signers must be valid
         // let validator_node_root = self.epoch_manager.get_validator_node_merkle_root(qc.epoch()).await?;
         // for md in qc.validators_metadata() {
