@@ -20,32 +20,17 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-import { useEffect, useState } from "react";
-import Error from "./Error";
-import { getMempoolStats } from "./json_rpc";
+import React from "react";
+import { renderJson } from "../utils/helpers";
 
-function Mempool() {
-  const [state, setState] = useState();
-  const [error, setError] = useState<String>();
-  useEffect(() => {
-    getMempoolStats()
-      .then((response) => {
-        setState(response.size);
-        setError(undefined);
-      })
-      .catch((reason) => {
-        setError(reason);
-      });
-  }, []);
-  if (error) {
-    return <Error component="Mempool" message={error} />;
+export default function JsonTooltip({ jsonText, children }: { jsonText: string; children: string }) {
+  if (jsonText === null) {
+    return <>No data</>;
   }
   return (
-    <div className="section">
-      <div className="caption">Mempool</div>
-      <div className="label">Size {state === undefined ? "checking..." : state}</div>
+    <div className="tooltip">
+      {children}
+      <span className="tooltiptext json">{renderJson(JSON.parse(jsonText))}</span>
     </div>
   );
 }
-
-export default Mempool;

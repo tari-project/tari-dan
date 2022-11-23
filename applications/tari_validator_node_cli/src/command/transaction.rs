@@ -55,7 +55,7 @@ pub enum TransactionSubcommand {
 
 #[derive(Debug, Args, Clone)]
 pub struct GetArgs {
-    #[clap(long )]
+    #[clap(long)]
     transaction_hash: FromHex<FixedHash>,
 }
 
@@ -179,7 +179,7 @@ async fn handle_get(args: GetArgs, client: &mut ValidatorNodeClient) -> Result<(
     let request = GetTransactionRequest {
         hash: args.transaction_hash.0,
     };
-    let resp = client.get_transaction(request).await?;
+    let resp = client.get_transaction_result(request).await?;
 
     if let Some(result) = resp.result {
         println!("✅️ Transaction finalized",);

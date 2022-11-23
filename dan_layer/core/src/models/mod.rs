@@ -328,11 +328,30 @@ pub struct ShardVote {
 #[derive(Debug, Serialize)]
 pub struct RecentTransaction {
     pub payload_id: Vec<u8>,
+    pub timestamp: i64,
+    pub meta: String,
+    pub instructions: String,
+}
+
+#[derive(Debug, Serialize)]
+pub struct SQLTransaction {
+    pub node_hash: Vec<u8>,
+    pub parent_node_hash: Vec<u8>,
     pub shard: Vec<u8>,
     pub height: i64,
     pub payload_height: i64,
     pub total_votes: i64,
     pub total_leader_proposals: i64,
+}
+
+#[derive(Debug, Serialize)]
+pub struct SQLSubstate {
+    pub substate_type: String,
+    pub node_height: i64,
+    pub data: Option<String>,
+    pub justify: Option<String>,
+    pub is_draft: bool,
+    pub tree_node_hash: Option<Vec<u8>>,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]

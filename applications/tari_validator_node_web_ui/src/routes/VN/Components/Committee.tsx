@@ -41,7 +41,7 @@ function Committee({
   return (
     <div className="committee-wrapper">
       <div className="button" onClick={toggle}>
-        {visible ? "Hide members" : "Show  members"}
+        {visible ? "Hide members" : "Show members"}
       </div>
       <div className="committee">
         <div className="committee-range">

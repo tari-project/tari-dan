@@ -104,6 +104,13 @@ impl ValidatorNodeClient {
         self.send_request("get_transaction", request).await
     }
 
+    pub async fn get_transaction_result(
+        &mut self,
+        request: GetTransactionRequest,
+    ) -> Result<GetTransactionResponse, anyhow::Error> {
+        self.send_request("get_transaction_result", request).await
+    }
+
     pub async fn submit_transaction(
         &mut self,
         request: SubmitTransactionRequest,

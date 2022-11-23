@@ -21,33 +21,46 @@
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 import React from "react";
-import ReactDOM from "react-dom/client";
-import "./index.css";
-import reportWebVitals from "./reportWebVitals";
-import { createBrowserRouter, RouterProvider, Route } from "react-router-dom";
-import ValidatorNode from "./routes/VN/ValidatorNode";
-import Transaction, { transactionLoader } from "./routes/Transaction/Transaction";
+import JsonTooltip from "../../../Components/JsonTooltip";
+import { renderJson } from "../../../utils/helpers";
 
-const router = createBrowserRouter([
-  {
-    path: "/",
-    element: <ValidatorNode />,
-  },
-  {
-    path: "transaction/:payloadId",
-    element: <Transaction />,
-    loader: transactionLoader,
-  },
-]);
-
-const root = ReactDOM.createRoot(document.getElementById("root") as HTMLElement);
-root.render(
-  <React.StrictMode>
-    <RouterProvider router={router} />
-  </React.StrictMode>
-);
-
-// If you want to start measuring performance in your app, pass a function
-// to log results (for example: reportWebVitals(console.log))
-// or send to an analytics endpoint. Learn more: https://bit.ly/CRA-vitals
-reportWebVitals();
+export default function Substates({ substates }: any) {
+  if (substates.size == 0) {
+    return <div className="caption">No substates</div>;
+  }
+  substates.map((substate: any) => {
+    console.log("parsing json", substate.justify, JSON.parse(substate.justify));
+  });
+  return (
+    <>
+      <div className="caption">Substates</div>
+      <table>
+        <thead>
+          <tr>
+            <th>Substate type</th>
+            <th>Is draft?</th>
+            <th>Node height</th>
+            <th>Justify</th>
+            <th>Data</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+          {substates.map((substate: any) => (
+            <tr>
+              <td>{substate.substate_type}</td>
+              <td>{substate.is_draft ? "Yes" : "No"}</td>
+              <td>{substate.node_height}</td>
+              <td>
+                <JsonTooltip jsonText={substate.justify}>Hover here</JsonTooltip>
+              </td>
+              <td>
+                <JsonTooltip jsonText={substate.data}>Hover here</JsonTooltip>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </>
+  );
+}

@@ -21,26 +21,25 @@
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 import { useEffect, useState } from "react";
+import { getRecentTransactions } from "../../../utils/json_rpc";
 import { toHexString } from "./helpers";
-import { getRecentTransactions } from "./json_rpc";
+import { Outlet, Link } from "react-router-dom";
+import { renderJson } from "../../../utils/helpers";
+import JsonTooltip from "../../../Components/JsonTooltip";
 
 interface IRecentTransaction {
-  height: number;
-  payload_height: number;
   payload_id: number[];
-  shard: number[];
-  total_leader_proposals: number;
-  total_votes: number;
+  timestamp: number;
+  instructions: string;
+  meta: string;
 }
 
 interface ITableRecentTransaction {
   id: string;
-  height: number;
-  payload_height: number;
   payload_id: string;
-  shard: string;
-  total_leader_proposals: number;
-  total_votes: number;
+  timestamp: Date;
+  instructions: string;
+  meta: string;
 }
 
 type ColumnKey = keyof ITableRecentTransaction;
@@ -49,19 +48,15 @@ function RecentTransactions() {
   const [recentTransacations, setRecentTransacations] = useState<ITableRecentTransaction[]>([]);
   const [lastSort, setLastSort] = useState({ column: "", order: -1 });
   useEffect(() => {
-    getRecentTransactions().then((response) => {
+    getRecentTransactions().then((recentTransactions) => {
       setRecentTransacations(
-        response.transactions.map(
-          ({ height, payload_height, payload_id, shard, total_leader_proposals, total_votes }: IRecentTransaction) => ({
-            id: payload_height + toHexString(payload_id),
-            height,
-            payload_height,
-            payload_id: toHexString(payload_id),
-            shard: toHexString(shard),
-            total_leader_proposals,
-            total_votes,
-          })
-        )
+        recentTransactions.map(({ instructions, meta, payload_id, timestamp }: IRecentTransaction) => ({
+          id: toHexString(payload_id),
+          payload_id: toHexString(payload_id),
+          timestamp: new Date(timestamp * 1000),
+          meta: meta,
+          instructions: instructions,
+        }))
       );
     });
   }, []);
@@ -84,63 +79,44 @@ function RecentTransactions() {
       </div>
     );
   }
+
   return (
     <div className="section">
       <div className="caption">Recent transactions</div>
       <table className="recent-transactions-table">
         <thead>
           <tr>
-            <th className="column" onClick={() => sort("height")}>
-              Height
-              <span className="sort-indicator">
-                {lastSort.column === "height" ? (lastSort.order === 1 ? "▲" : "▼") : ""}
-              </span>
-            </th>
-            <th className="column" onClick={() => sort("payload_height")}>
-              Payload height
-              <span className="sort-indicator">
-                {lastSort.column === "payload_height" ? (lastSort.order === 1 ? "▲" : "▼") : ""}
-              </span>
-            </th>
             <th className="column" onClick={() => sort("payload_id")}>
               Payload id
               <span className="sort-indicator">
                 {lastSort.column === "payload_id" ? (lastSort.order === 1 ? "▲" : "▼") : ""}
               </span>
             </th>
-            <th className="column" onClick={() => sort("shard")}>
-              Shard
+            <th className="column" onClick={() => sort("timestamp")}>
+              Timestamp
               <span className="sort-indicator">
                 {lastSort.column === "shard" ? (lastSort.order === 1 ? "▲" : "▼") : ""}
               </span>
             </th>
-            <th className="column" onClick={() => sort("total_leader_proposals")}>
-              Total leader proposal
-              <span className="sort-indicator">
-                {lastSort.column === "total_leader_proposals" ? (lastSort.order === 1 ? "▲" : "▼") : ""}
-              </span>
-            </th>
-            <th className="column" onClick={() => sort("total_votes")}>
-              Total votes
-              <span className="sort-indicator">
-                {lastSort.column === "total_votes" ? (lastSort.order === 1 ? "▲" : "▼") : ""}
-              </span>
-            </th>
+            <th className="column">Meta</th>
+            <th className="column">Instructions</th>
           </tr>
         </thead>
         <tbody>
-          {recentTransacations.map(
-            ({ id, height, payload_height, payload_id, shard, total_leader_proposals, total_votes }) => (
-              <tr key={id}>
-                <td>{height}</td>
-                <td>{payload_height}</td>
-                <td className="key">{payload_id}</td>
-                <td className="key">{shard}</td>
-                <td>{total_leader_proposals}</td>
-                <td>{total_votes}</td>
-              </tr>
-            )
-          )}
+          {recentTransacations.map(({ id, payload_id, timestamp, instructions, meta }) => (
+            <tr key={id}>
+              <td className="key">
+                <Link to={`transaction/${payload_id}`}>{payload_id}</Link>
+              </td>
+              <td>{timestamp.toUTCString()}</td>
+              <td>
+                <JsonTooltip jsonText={meta}>Hover here</JsonTooltip>
+              </td>
+              <td>
+                <JsonTooltip jsonText={instructions}>Hover here</JsonTooltip>
+              </td>
+            </tr>
+          ))}
         </tbody>
       </table>
     </div>

@@ -54,10 +54,12 @@ use tari_validator_node_client::types::{
     GetTransactionResponse,
     SubmitTransactionRequest,
     SubmitTransactionResponse,
+    SubstatesRequest,
     TemplateMetadata,
     TemplateRegistrationRequest,
     TemplateRegistrationResponse,
     TransactionFinalizeResult,
+    TransactionRequest,
 };
 use tokio::sync::{broadcast, broadcast::error::RecvError};
 
@@ -192,10 +194,7 @@ impl JsonRpcHandlers {
         let answer_id = value.get_answer_id();
         let tx = self.db.create_tx().unwrap();
         if let Ok(recent_transactions) = tx.get_recent_transactions() {
-            Ok(JsonRpcResponse::success(
-                answer_id,
-                json!({ "transactions": recent_transactions }),
-            ))
+            Ok(JsonRpcResponse::success(answer_id, json!(recent_transactions)))
         } else {
             Err(JsonRpcResponse::error(
                 answer_id,
@@ -208,7 +207,7 @@ impl JsonRpcHandlers {
         }
     }
 
-    pub async fn get_transaction(&self, value: JsonRpcExtractor) -> JrpcResult {
+    pub async fn get_transaction_result(&self, value: JsonRpcExtractor) -> JrpcResult {
         let answer_id = value.get_answer_id();
         let request: GetTransactionRequest = value.parse_params()?;
         let payload_id = PayloadId::new(request.hash);
@@ -228,6 +227,46 @@ impl JsonRpcHandlers {
                     json::Value::Null,
                 ),
             ))
+        }
+    }
+
+    pub async fn get_transaction(&self, value: JsonRpcExtractor) -> JrpcResult {
+        let answer_id = value.get_answer_id();
+        let data: TransactionRequest = value.parse_params()?;
+        let tx = self.db.create_tx().unwrap();
+        match tx.get_transaction(data.payload_id) {
+            Ok(transaction) => Ok(JsonRpcResponse::success(answer_id, json!(transaction))),
+            Err(err) => {
+                println!("error {:?}", err);
+                Err(JsonRpcResponse::error(
+                    answer_id,
+                    JsonRpcError::new(
+                        JsonRpcErrorReason::InvalidParams,
+                        "Something went wrong".to_string(),
+                        json::Value::Null,
+                    ),
+                ))
+            },
+        }
+    }
+
+    pub async fn get_substates(&self, value: JsonRpcExtractor) -> JrpcResult {
+        let answer_id = value.get_answer_id();
+        let data: SubstatesRequest = value.parse_params()?;
+        let tx = self.db.create_tx().unwrap();
+        match tx.get_substates(data.payload_id, data.shard_id) {
+            Ok(substates) => Ok(JsonRpcResponse::success(answer_id, json!(substates))),
+            Err(err) => {
+                println!("error {:?}", err);
+                Err(JsonRpcResponse::error(
+                    answer_id,
+                    JsonRpcError::new(
+                        JsonRpcErrorReason::InvalidParams,
+                        "Something went wrong".to_string(),
+                        json::Value::Null,
+                    ),
+                ))
+            },
         }
     }
 

@@ -150,6 +150,17 @@ pub struct TransactionFinalizeResult {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TransactionRequest {
+    pub payload_id: Vec<u8>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SubstatesRequest {
+    pub payload_id: Vec<u8>,
+    pub shard_id: Vec<u8>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct GetTransactionRequest {
     #[serde(with = "serde_with::hex")]
     pub hash: FixedHash,
