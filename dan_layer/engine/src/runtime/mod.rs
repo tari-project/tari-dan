@@ -108,7 +108,7 @@ impl Runtime {
         let mut resolved = Vec::with_capacity(args.len());
         for arg in args {
             match arg {
-                Arg::FromWorkspace(key) => {
+                Arg::Variable(key) => {
                     let value = self
                         .interface
                         .workspace_invoke(WorkspaceAction::Take, invoke_args![key])?;

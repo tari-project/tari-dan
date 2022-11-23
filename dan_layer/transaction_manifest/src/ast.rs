@@ -22,19 +22,20 @@
 
 use syn::{
     parse::{Parse, ParseStream},
-    Block,
     Result,
-    Stmt,
 };
 
+use crate::parser::{ManifestIntent, ManifestParser};
+
+#[derive(Debug, Clone)]
 pub struct ManifestAst {
-    pub stmts: Vec<Stmt>,
+    pub intents: Vec<ManifestIntent>,
 }
 
 impl Parse for ManifestAst {
     fn parse(input: ParseStream) -> Result<Self> {
-        let stmts = Block::parse_within(input)?;
-
-        Ok(Self { stmts })
+        let parser = ManifestParser::new();
+        let intents = parser.parse(input)?;
+        Ok(Self { intents })
     }
 }

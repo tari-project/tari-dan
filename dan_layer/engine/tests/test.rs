@@ -143,7 +143,6 @@ fn test_dodgy_template() {
 fn test_account() {
     let template_test = TemplateTest::new(vec!["tests/templates/account", "tests/templates/faucet"]);
 
-    let account_template = template_test.get_template_address("Account");
     let faucet_template = template_test.get_template_address("TestFaucet");
 
     let initial_supply = Amount(1_000_000_000_000);
@@ -166,7 +165,6 @@ fn test_account() {
 
     let _result = template_test.execute(vec![
         Instruction::CallMethod {
-            template_address: faucet_template,
             component_address: faucet_component,
             method: "take_free_coins".to_string(),
             args: args![],
@@ -175,16 +173,14 @@ fn test_account() {
             key: b"free_coins".to_vec(),
         },
         Instruction::CallMethod {
-            template_address: account_template,
             component_address: sender_address,
             method: "deposit".to_string(),
-            args: args![Workspace(b"free_coins")],
+            args: args![Variable("free_coins")],
         },
     ]);
 
     let result = template_test.execute(vec![
         Instruction::CallMethod {
-            template_address: account_template,
             component_address: sender_address,
             method: "withdraw".to_string(),
             args: args![faucet_resource, Amount(100)],
@@ -193,19 +189,16 @@ fn test_account() {
             key: b"foo_bucket".to_vec(),
         },
         Instruction::CallMethod {
-            template_address: account_template,
             component_address: receiver_address,
             method: "deposit".to_string(),
-            args: args![Workspace(b"foo_bucket")],
+            args: args![Variable("foo_bucket")],
         },
         Instruction::CallMethod {
-            template_address: account_template,
             component_address: sender_address,
             method: "balance".to_string(),
             args: args![faucet_resource],
         },
         Instruction::CallMethod {
-            template_address: account_template,
             component_address: receiver_address,
             method: "balance".to_string(),
             args: args![faucet_resource],

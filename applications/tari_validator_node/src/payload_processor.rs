@@ -20,7 +20,10 @@
 //   WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //   USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use std::collections::HashMap;
+use std::{
+    collections::{hash_map::RandomState, HashMap, HashSet},
+    iter::FromIterator,
+};
 
 use tari_dan_common_types::{ShardId, SubstateState};
 use tari_dan_core::{
@@ -30,14 +33,14 @@ use tari_dan_core::{
 use tari_dan_engine::{
     packager::{Package, TemplateModuleLoader},
     runtime::{IdProvider, RuntimeInterfaceImpl, StateTracker},
-    state_store::{memory::MemoryStateStore, AtomicDb, StateStoreError, StateWriter},
+    state_store::{memory::MemoryStateStore, AtomicDb, StateReader, StateStoreError, StateWriter},
     transaction::TransactionProcessor,
 };
 use tari_engine_types::{
     commit_result::{FinalizeResult, RejectReason},
-    substate::{SubstateAddress, SubstateValue},
+    substate::{Substate, SubstateAddress, SubstateValue},
 };
-use tari_template_lib::models::{ComponentAddress, ResourceAddress, VaultId};
+use tari_template_lib::models::{ComponentAddress, ResourceAddress, TemplateAddress, VaultId};
 
 #[derive(Debug, Default)]
 pub struct TariDanPayloadProcessor<TTemplateProvider> {
@@ -59,9 +62,12 @@ where TTemplateProvider: TemplateProvider
         pledges: HashMap<ShardId, Option<ObjectPledge>>,
     ) -> Result<FinalizeResult, PayloadProcessorError> {
         let transaction = payload.into_payload();
-        let template_addresses = transaction.required_templates();
+        let mut template_addresses = HashSet::<_, RandomState>::from_iter(transaction.required_templates());
+        let components = transaction.required_components();
 
         let state_db = create_populated_state_store(pledges.into_values().flatten())?;
+        template_addresses.extend(load_template_addresses_for_components(&state_db, &components)?);
+
         let id_provider = IdProvider::new(*transaction.hash(), transaction.meta().max_outputs());
         let tracker = StateTracker::new(state_db, id_provider);
         let runtime = RuntimeInterfaceImpl::new(tracker);
@@ -88,6 +94,25 @@ where TTemplateProvider: TemplateProvider
         };
         Ok(result)
     }
+}
+
+fn load_template_addresses_for_components(
+    state_db: &MemoryStateStore,
+    components: &[ComponentAddress],
+) -> Result<Vec<TemplateAddress>, PayloadProcessorError> {
+    let access = state_db
+        .read_access()
+        .map_err(PayloadProcessorError::FailedToLoadTemplate)?;
+    let mut template_addresses = Vec::with_capacity(components.len());
+    for component in components {
+        let component = access.get_state::<_, Substate>(&SubstateAddress::Component(*component))?;
+        let component = component
+            .into_substate()
+            .into_component()
+            .expect("Component substate should be a component");
+        template_addresses.push(component.template_address);
+    }
+    Ok(template_addresses)
 }
 
 fn create_populated_state_store<I: IntoIterator<Item = ObjectPledge>>(

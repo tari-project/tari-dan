@@ -114,13 +114,7 @@ impl TemplateTest<MockRuntimeInterface> {
 
     pub fn call_method<T>(&self, component_address: ComponentAddress, method_name: &str, args: Vec<Arg>) -> T
     where T: BorshDeserialize {
-        let substate = self
-            .runtime_interface
-            .get_substate(&SubstateAddress::Component(component_address))
-            .unwrap();
-        let component = substate.into_component().unwrap();
         let result = self.execute(vec![Instruction::CallMethod {
-            template_address: component.template_address,
             component_address,
             method: method_name.to_owned(),
             args,

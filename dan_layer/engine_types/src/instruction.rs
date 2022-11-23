@@ -4,7 +4,7 @@
 use serde::{Deserialize, Serialize};
 use tari_template_abi::Encode;
 use tari_template_lib::{
-    args::Arg,
+    args::{Arg, LogLevel},
     models::{ComponentAddress, TemplateAddress},
     Hash,
 };
@@ -20,13 +20,16 @@ pub enum Instruction {
         args: Vec<Arg>,
     },
     CallMethod {
-        template_address: TemplateAddress,
         component_address: ComponentAddress,
         method: String,
         args: Vec<Arg>,
     },
     PutLastInstructionOutputOnWorkspace {
         key: Vec<u8>,
+    },
+    EmitLog {
+        level: LogLevel,
+        message: String,
     },
 }
 

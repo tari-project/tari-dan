@@ -80,6 +80,7 @@ message Instruction {
     FUNCTION = 0;
     METHOD = 1;
     PUT_OUTPUT_IN_WORKSPACE = 2;
+    EMIT_LOG = 3;
   }
   InstructionType instruction_type = 1;
 
@@ -96,6 +97,9 @@ message Instruction {
 
   // PutLastInstructionOutputOnWorkspace
   bytes key = 7;
+
+  string log_level = 8;
+  string log_message = 9;
 }
 
 message Arg {

@@ -20,9 +20,11 @@
 //   WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //   USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use std::{path::Path, str::FromStr};
+use std::{
+    path::{Path, PathBuf},
+    str::FromStr,
+};
 
-use anyhow::anyhow;
 use clap::{Args, Subcommand};
 use tari_common_types::types::FixedHash;
 use tari_dan_common_types::{ShardId, SubstateChange};
@@ -39,18 +41,25 @@ use tari_template_lib::{
     args::Arg,
     models::{Amount, ComponentAddress},
 };
+use tari_transaction_manifest::parse_manifest;
 use tari_utilities::hex::to_hex;
 use tari_validator_node_client::{
     types::{GetTransactionRequest, SubmitTransactionRequest, TransactionFinalizeResult},
     ValidatorNodeClient,
 };
 
-use crate::{account_manager::AccountFileManager, component_manager::ComponentManager, from_hex::FromHex};
+use crate::{
+    account_manager::AccountFileManager,
+    command::manifest,
+    component_manager::ComponentManager,
+    from_hex::FromHex,
+};
 
 #[derive(Debug, Subcommand, Clone)]
 pub enum TransactionSubcommand {
     Get(GetArgs),
     Submit(SubmitArgs),
+    SubmitManifest(SubmitManifestArgs),
 }
 
 #[derive(Debug, Args, Clone)]
@@ -63,10 +72,18 @@ pub struct GetArgs {
 pub struct SubmitArgs {
     #[clap(subcommand)]
     instruction: CliInstruction,
+    #[clap(flatten)]
+    common: CommonSubmitArgs,
+}
+
+#[derive(Debug, Args, Clone)]
+pub struct CommonSubmitArgs {
     #[clap(long, short = 'w')]
     wait_for_result: bool,
     #[clap(long, short = 'n')]
     num_outputs: Option<u8>,
+    #[clap(long, short = 'i')]
+    inputs: Vec<String>,
     #[clap(long, short = 'v')]
     version: Option<u8>,
     #[clap(long, short = 'd')]
@@ -75,70 +92,14 @@ pub struct SubmitArgs {
     account_template_address: Option<String>,
 }
 
-#[derive(Debug, Clone)]
-pub enum CliArg {
-    String(String),
-    U64(u64),
-    U32(u32),
-    U16(u16),
-    U8(u8),
-    I64(i64),
-    I32(i32),
-    I16(i16),
-    I8(i8),
-    Bool(bool),
-}
-
-impl FromStr for CliArg {
-    type Err = String;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        if let Ok(v) = s.parse::<u64>() {
-            return Ok(CliArg::U64(v));
-        }
-        if let Ok(v) = s.parse::<u32>() {
-            return Ok(CliArg::U32(v));
-        }
-        if let Ok(v) = s.parse::<u16>() {
-            return Ok(CliArg::U16(v));
-        }
-        if let Ok(v) = s.parse::<u8>() {
-            return Ok(CliArg::U8(v));
-        }
-        if let Ok(v) = s.parse::<i64>() {
-            return Ok(CliArg::I64(v));
-        }
-        if let Ok(v) = s.parse::<i32>() {
-            return Ok(CliArg::I32(v));
-        }
-        if let Ok(v) = s.parse::<i16>() {
-            return Ok(CliArg::I16(v));
-        }
-        if let Ok(v) = s.parse::<i8>() {
-            return Ok(CliArg::I8(v));
-        }
-        if let Ok(v) = s.parse::<bool>() {
-            return Ok(CliArg::Bool(v));
-        }
-        Ok(CliArg::String(s.to_string()))
-    }
-}
-
-impl CliArg {
-    pub fn to_arg(&self) -> Arg {
-        match self {
-            CliArg::String(s) => arg!(s),
-            CliArg::U64(v) => arg!(*v),
-            CliArg::U32(v) => arg!(*v),
-            CliArg::U16(v) => arg!(*v),
-            CliArg::U8(v) => arg!(*v),
-            CliArg::I64(v) => arg!(*v),
-            CliArg::I32(v) => arg!(*v),
-            CliArg::I16(v) => arg!(*v),
-            CliArg::I8(v) => arg!(*v),
-            CliArg::Bool(v) => arg!(*v),
-        }
-    }
+#[derive(Debug, Args, Clone)]
+pub struct SubmitManifestArgs {
+    #[clap(long, short = 'p')]
+    manifest: PathBuf,
+    #[clap(long, short = 'g')]
+    globals: Vec<String>,
+    #[clap(flatten)]
+    common: CommonSubmitArgs,
 }
 
 #[derive(Debug, Subcommand, Clone)]
@@ -150,7 +111,6 @@ pub enum CliInstruction {
         args: Vec<CliArg>,
     },
     CallMethod {
-        template_address: FromHex<TemplateAddress>,
         component_address: FromHex<ComponentAddress>,
         method_name: String,
         #[clap(long, short = 'a')]
@@ -165,10 +125,8 @@ impl TransactionSubcommand {
         mut client: ValidatorNodeClient,
     ) -> Result<(), anyhow::Error> {
         match self {
-            TransactionSubcommand::Submit(args) => {
-                let component_manager = ComponentManager::init(base_dir.as_ref())?;
-                handle_submit(args, base_dir, &mut client, &component_manager).await?
-            },
+            TransactionSubcommand::Submit(args) => handle_submit(args, base_dir, &mut client).await?,
+            TransactionSubcommand::SubmitManifest(args) => handle_submit_manifest(args, base_dir, &mut client).await?,
             TransactionSubcommand::Get(args) => handle_get(args, &mut client).await?,
         }
         Ok(())
@@ -196,11 +154,9 @@ async fn handle_submit(
     args: SubmitArgs,
     base_dir: impl AsRef<Path>,
     client: &mut ValidatorNodeClient,
-    component_manager: &ComponentManager,
 ) -> Result<(), anyhow::Error> {
-    let mut input_refs = vec![];
-    let inputs = vec![];
-    let instruction = match args.instruction {
+    let SubmitArgs { instruction, common } = args;
+    let instruction = match instruction {
         CliInstruction::CallFunction {
             template_address,
             function_name,
@@ -211,45 +167,62 @@ async fn handle_submit(
             args: args.iter().map(|s| s.to_arg()).collect(),
         },
         CliInstruction::CallMethod {
-            template_address,
             component_address,
             method_name,
             args,
-        } => {
-            input_refs.push(component_address.into_inner().into_array().into());
-            let children = component_manager.get_component_childen(component_address.into_inner())?;
-            input_refs.extend(children.iter().map(ShardId::from_address));
-
-            Instruction::CallMethod {
-                template_address: template_address.into_inner(),
-                component_address: component_address.into_inner(),
-                method: method_name,
-                args: args.iter().map(|s| s.to_arg()).collect(),
-            }
+        } => Instruction::CallMethod {
+            component_address: component_address.into_inner(),
+            method: method_name,
+            args: args.iter().map(|s| s.to_arg()).collect(),
         },
     };
+
+    submit_transaction(vec![instruction], common, base_dir, client).await
+}
+
+async fn handle_submit_manifest(
+    args: SubmitManifestArgs,
+    base_dir: impl AsRef<Path>,
+    client: &mut ValidatorNodeClient,
+) -> Result<(), anyhow::Error> {
+    let contents = std::fs::read_to_string(&args.manifest)?;
+    let instructions = parse_manifest(&contents, manifest::parse_globals(args.globals)?)?;
+    // TODO: improve output
+    println!("Instructions: {:?}", instructions);
+    submit_transaction(instructions, args.common, base_dir, client).await
+}
+
+async fn submit_transaction(
+    instructions: Vec<Instruction>,
+    common: CommonSubmitArgs,
+    base_dir: impl AsRef<Path>,
+    client: &mut ValidatorNodeClient,
+) -> Result<(), anyhow::Error> {
+    let component_manager = ComponentManager::init(base_dir.as_ref())?;
     let account_manager = AccountFileManager::init(base_dir.as_ref().to_path_buf())?;
     let account = account_manager
         .get_active_account()
         .ok_or_else(|| anyhow::anyhow!("No active account. Use `accounts use [public key hex]` to set one."))?;
 
+    let input_refs = extract_input_refs(&instructions, &component_manager)?;
+    let inputs = common
+        .inputs
+        .into_iter()
+        .map(|s| s.parse())
+        .collect::<Result<Vec<_>, _>>()?;
+
     // TODO: this is a little clunky
     let mut builder = Transaction::builder();
     builder
+        .with_inputs(inputs)
         .with_input_refs(input_refs.clone())
-        .with_inputs(inputs.clone())
-        .with_num_outputs(args.num_outputs.unwrap_or(0))
-        .add_instruction(instruction);
+        .with_num_outputs(common.num_outputs.unwrap_or(0))
+        .with_instructions(instructions);
     let mut input_data: Vec<(ShardId, SubstateChange)> =
         input_refs.iter().map(|i| (*i, SubstateChange::Exists)).collect();
-    input_data.extend(inputs.iter().map(|i| (*i, SubstateChange::Destroy)));
-    if let Some(account_address) = args.dump_outputs_into {
+    if let Some(account_address) = common.dump_outputs_into {
         let component_address = ComponentAddress::from_hex(&account_address)?;
-        let account_template = args
-            .account_template_address
-            .ok_or_else(|| anyhow!("No account template specified"))?;
         builder.add_instruction(Instruction::CallMethod {
-            template_address: ComponentAddress::from_hex(&account_template)?,
             component_address,
             method: "deposit_all_from_workspace".to_string(),
             args: vec![],
@@ -267,8 +240,8 @@ async fn handle_submit(
         fee: transaction.fee(),
         sender_public_key: transaction.sender_public_key().clone(),
         inputs: input_data,
-        num_outputs: args.num_outputs.unwrap_or(0),
-        wait_for_result: args.wait_for_result,
+        num_outputs: common.num_outputs.unwrap_or(0),
+        wait_for_result: common.wait_for_result,
     };
 
     if request.inputs.is_empty() && request.num_outputs == 0 {
@@ -276,7 +249,7 @@ async fn handle_submit(
         return Ok(());
     }
     println!("✅ Transaction {} submitted.", tx_hash);
-    if args.wait_for_result {
+    if common.wait_for_result {
         println!("⏳️ Waiting for transaction result...");
         println!();
     }
@@ -406,6 +379,87 @@ fn summarize_result(result: &FinalizeResult) {
             Type::Other { ref name } => {
                 println!("{}: {}", name, to_hex(&result.raw));
             },
+        }
+    }
+}
+
+fn extract_input_refs(
+    instructions: &[Instruction],
+    component_manager: &ComponentManager,
+) -> Result<Vec<ShardId>, anyhow::Error> {
+    let mut input_refs = Vec::new();
+    for instruction in instructions {
+        if let Instruction::CallMethod { component_address, .. } = instruction {
+            input_refs.push(component_address.into_array().into());
+            let children = component_manager.get_component_childen(component_address)?;
+            input_refs.extend(children.iter().map(ShardId::from_address));
+        }
+    }
+    Ok(input_refs)
+}
+
+#[derive(Debug, Clone)]
+pub enum CliArg {
+    String(String),
+    U64(u64),
+    U32(u32),
+    U16(u16),
+    U8(u8),
+    I64(i64),
+    I32(i32),
+    I16(i16),
+    I8(i8),
+    Bool(bool),
+}
+
+impl FromStr for CliArg {
+    type Err = String;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        if let Ok(v) = s.parse::<u64>() {
+            return Ok(CliArg::U64(v));
+        }
+        if let Ok(v) = s.parse::<u32>() {
+            return Ok(CliArg::U32(v));
+        }
+        if let Ok(v) = s.parse::<u16>() {
+            return Ok(CliArg::U16(v));
+        }
+        if let Ok(v) = s.parse::<u8>() {
+            return Ok(CliArg::U8(v));
+        }
+        if let Ok(v) = s.parse::<i64>() {
+            return Ok(CliArg::I64(v));
+        }
+        if let Ok(v) = s.parse::<i32>() {
+            return Ok(CliArg::I32(v));
+        }
+        if let Ok(v) = s.parse::<i16>() {
+            return Ok(CliArg::I16(v));
+        }
+        if let Ok(v) = s.parse::<i8>() {
+            return Ok(CliArg::I8(v));
+        }
+        if let Ok(v) = s.parse::<bool>() {
+            return Ok(CliArg::Bool(v));
+        }
+        Ok(CliArg::String(s.to_string()))
+    }
+}
+
+impl CliArg {
+    pub fn to_arg(&self) -> Arg {
+        match self {
+            CliArg::String(s) => arg!(s),
+            CliArg::U64(v) => arg!(*v),
+            CliArg::U32(v) => arg!(*v),
+            CliArg::U16(v) => arg!(*v),
+            CliArg::U8(v) => arg!(*v),
+            CliArg::I64(v) => arg!(*v),
+            CliArg::I32(v) => arg!(*v),
+            CliArg::I16(v) => arg!(*v),
+            CliArg::I8(v) => arg!(*v),
+            CliArg::Bool(v) => arg!(*v),
         }
     }
 }

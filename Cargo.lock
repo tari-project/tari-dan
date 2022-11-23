@@ -2495,9 +2495,6 @@ name = "hex"
 version = "0.4.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7f24254aa9a54b5c858eaee2f5bccdb46aaf0e486a595ed5fd8f86ba55232a70"
-dependencies = [
- "serde",
-]
 
 [[package]]
 name = "hex-literal"
@@ -6116,10 +6113,12 @@ dependencies = [
 name = "tari_transaction_manifest"
 version = "0.35.1"
 dependencies = [
- "indoc",
  "proc-macro2",
  "quote",
  "syn",
+ "tari_engine_types",
+ "tari_template_lib",
+ "thiserror",
 ]
 
 [[package]]
@@ -6227,6 +6226,7 @@ dependencies = [
  "tari_dan_engine",
  "tari_engine_types",
  "tari_template_lib",
+ "tari_transaction_manifest",
  "tari_utilities",
  "tari_validator_node_client",
  "thiserror",
