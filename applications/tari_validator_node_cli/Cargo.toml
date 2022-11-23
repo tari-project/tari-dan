@@ -16,9 +16,10 @@ tari_engine_types = { path = "../../dan_layer/engine_types" }
 tari_utilities = { git = "https://github.com/tari-project/tari_utilities.git", tag = "v0.4.7" }
 tari_validator_node_client = { path = "../../clients/validator_node_client" }
 tari_template_lib = { path = "../../dan_layer/template_lib" }
+tari_transaction_manifest = { path = "../../dan_layer/transaction_manifest" }
 
 anyhow = "1.0.65"
-clap = { version = "3.2.22", features = ["derive"] }
+clap = { version = "3.2.22", features = ["derive", "env"] }
 dirs = "4.0.0"
 log = "0.4.17"
 jfs = "0.7.1"

@@ -74,6 +74,13 @@ pub enum SubstateAddress {
 }
 
 impl SubstateAddress {
+    pub fn as_component_address(&self) -> Option<ComponentAddress> {
+        match self {
+            Self::Component(addr) => Some(*addr),
+            _ => None,
+        }
+    }
+
     pub fn into_hash(self) -> Hash {
         match self {
             SubstateAddress::Component(address) => address,

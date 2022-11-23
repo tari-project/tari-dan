@@ -20,6 +20,8 @@
 //   WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //   USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+use std::{fmt::Formatter, str::FromStr};
+
 use tari_template_abi::{
     decode,
     encode,
@@ -39,7 +41,7 @@ pub struct EmitLogArg {
     pub level: LogLevel,
 }
 
-#[derive(Debug, Clone, Copy, Encode, Decode)]
+#[derive(Debug, Clone, Copy, Encode, Decode, PartialEq)]
 #[cfg_attr(feature = "serde", derive(serde::Deserialize, serde::Serialize))]
 pub enum LogLevel {
     Error,
@@ -58,6 +60,31 @@ impl Display for LogLevel {
         }
     }
 }
+
+impl FromStr for LogLevel {
+    type Err = LogLevelParseError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "ERROR" => Ok(LogLevel::Error),
+            "WARN" => Ok(LogLevel::Warn),
+            "INFO" => Ok(LogLevel::Info),
+            "DEBUG" => Ok(LogLevel::Debug),
+            _ => Err(LogLevelParseError(s.to_string())),
+        }
+    }
+}
+
+#[derive(Debug)]
+pub struct LogLevelParseError(String);
+
+impl Display for LogLevelParseError {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(f, "Failed to parse log level '{}'", self.0)
+    }
+}
+
+impl std::error::Error for LogLevelParseError {}
 
 #[derive(Debug, Clone, Encode, Decode)]
 pub struct ComponentInvokeArg {

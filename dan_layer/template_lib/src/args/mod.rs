@@ -27,6 +27,9 @@ pub use engine::*;
 mod arg;
 pub use arg::Arg;
 
+// mod value;
+// pub use value::Value;
+
 #[macro_export]
 macro_rules! __expr_counter {
     () => (0usize);
@@ -36,8 +39,8 @@ macro_rules! __expr_counter {
 
 #[macro_export]
 macro_rules! arg {
-    (Workspace($arg:expr)) => {
-        $crate::args::Arg::from_workspace($arg.as_slice())
+    (Variable($arg:expr)) => {
+        $crate::args::Arg::variable($arg)
     };
 
     (Literal($arg:expr)) => {
@@ -51,13 +54,13 @@ macro_rules! arg {
 
 #[macro_export]
 macro_rules! __args_inner {
-    (@ { $this:ident } Workspace($e:expr), $($tail:tt)*) => {
-        $crate::args::__push(&mut $this, $crate::arg!(Workspace($e)));
+    (@ { $this:ident } Variable($e:expr), $($tail:tt)*) => {
+        $crate::args::__push(&mut $this, $crate::arg!(Variable($e)));
         $crate::__args_inner!(@ { $this } $($tail)*);
     };
 
-    (@ { $this:ident } Workspace($e:expr) $(,)?) => {
-        $crate::args::__push(&mut $this, $crate::arg!(Workspace($e)));
+    (@ { $this:ident } Variable($e:expr) $(,)?) => {
+        $crate::args::__push(&mut $this, $crate::arg!(Variable($e)));
     };
 
     (@ { $this:ident } Literal($e:expr), $($tail:tt)*) => {
@@ -138,8 +141,8 @@ mod tests {
 
     #[test]
     fn args_macro() {
-        let args = args![Workspace(b"foo")];
-        assert_eq!(args[0], Arg::FromWorkspace("foo".into()));
+        let args = args![Variable("foo")];
+        assert_eq!(args[0], Arg::Variable("foo".into()));
 
         let args = args!["foo".to_string()];
         assert!(matches!(args[0], Arg::Literal(_)));
@@ -148,19 +151,19 @@ mod tests {
         assert!(matches!(args[0], Arg::Literal(_)));
         assert!(matches!(args[1], Arg::Literal(_)));
 
-        let args = args![Workspace(b"foo"), "bar".to_string()];
-        assert_eq!(args[0], Arg::FromWorkspace("foo".into()));
+        let args = args![Variable("foo"), "bar".to_string()];
+        assert_eq!(args[0], Arg::Variable("foo".into()));
         assert_eq!(
             args[1],
             Arg::Literal(tari_template_abi::encode(&"bar".to_string()).unwrap())
         );
 
-        let args = args!["foo".to_string(), Workspace(b"bar"), 123u64];
+        let args = args!["foo".to_string(), Variable("bar"), 123u64];
         assert_eq!(
             args[0],
             Arg::Literal(tari_template_abi::encode(&"foo".to_string()).unwrap())
         );
-        assert_eq!(args[1], Arg::FromWorkspace("bar".into()));
+        assert_eq!(args[1], Arg::Variable("bar".into()));
         assert_eq!(args[2], Arg::Literal(tari_template_abi::encode(&123u64).unwrap()));
     }
 }

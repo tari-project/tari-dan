@@ -31,6 +31,7 @@ use tari_common_types::types::{PublicKey, Signature};
 use tari_crypto::tari_utilities::ByteArray;
 use tari_dan_common_types::{ObjectClaim, ShardId, SubstateChange};
 use tari_dan_engine::transaction::{Transaction, TransactionMeta};
+use tari_engine_types::instruction::Instruction;
 use tari_template_lib::{args::Arg, Hash};
 
 use crate::p2p::proto;
@@ -91,8 +92,6 @@ impl TryFrom<proto::transaction::Instruction> for tari_engine_types::instruction
     type Error = anyhow::Error;
 
     fn try_from(request: proto::transaction::Instruction) -> Result<Self, Self::Error> {
-        let template_address =
-            Hash::deserialize(&mut &request.template_address[..]).map_err(|_| anyhow!("invalid package_addresss"))?;
         let args = request
             .args
             .into_iter()
@@ -101,6 +100,8 @@ impl TryFrom<proto::transaction::Instruction> for tari_engine_types::instruction
         let instruction = match request.instruction_type {
             // function
             0 => {
+                let template_address = Hash::deserialize(&mut &request.template_address[..])
+                    .map_err(|_| anyhow!("invalid package_addresss"))?;
                 let function = request.function;
                 tari_engine_types::instruction::Instruction::CallFunction {
                     template_address,
@@ -114,13 +115,16 @@ impl TryFrom<proto::transaction::Instruction> for tari_engine_types::instruction
                     .map_err(|_| anyhow!("invalid component_address"))?;
                 let method = request.method;
                 tari_engine_types::instruction::Instruction::CallMethod {
-                    template_address,
                     component_address,
                     method,
                     args,
                 }
             },
-            // 2 => tari_dan_engine::instruction::Instruction::PutLastInstructionOutputOnWorkspace { key: request.key },
+            2 => Instruction::PutLastInstructionOutputOnWorkspace { key: request.key },
+            3 => Instruction::EmitLog {
+                level: request.log_level.parse()?,
+                message: request.log_message,
+            },
             _ => return Err(anyhow!("invalid instruction_type")),
         };
 
@@ -133,7 +137,7 @@ impl From<tari_engine_types::instruction::Instruction> for proto::transaction::I
         let mut result = proto::transaction::Instruction::default();
 
         match instruction {
-            tari_engine_types::instruction::Instruction::CallFunction {
+            Instruction::CallFunction {
                 template_address,
                 function,
                 args,
@@ -143,19 +147,25 @@ impl From<tari_engine_types::instruction::Instruction> for proto::transaction::I
                 result.function = function;
                 result.args = args.into_iter().map(|a| a.into()).collect();
             },
-            tari_engine_types::instruction::Instruction::CallMethod {
-                template_address,
+            Instruction::CallMethod {
                 component_address,
                 method,
                 args,
             } => {
                 result.instruction_type = 1;
-                result.template_address = template_address.to_vec();
                 result.component_address = component_address.to_vec();
                 result.method = method;
                 result.args = args.into_iter().map(|a| a.into()).collect();
             },
-            _ => todo!(),
+            Instruction::PutLastInstructionOutputOnWorkspace { key } => {
+                result.instruction_type = 2;
+                result.key = key;
+            },
+            Instruction::EmitLog { level, message } => {
+                result.instruction_type = 3;
+                result.log_level = level.to_string();
+                result.log_message = message;
+            },
         }
         result
     }
@@ -170,7 +180,7 @@ impl TryFrom<proto::transaction::Arg> for Arg {
         let data = request.data.clone();
         let arg = match request.arg_type {
             0 => Arg::Literal(data),
-            1 => Arg::FromWorkspace(data),
+            1 => Arg::Variable(data),
             _ => return Err(anyhow!("invalid arg_type")),
         };
 
@@ -187,7 +197,7 @@ impl From<Arg> for proto::transaction::Arg {
                 result.arg_type = 0;
                 result.data = data;
             },
-            Arg::FromWorkspace(data) => {
+            Arg::Variable(data) => {
                 result.arg_type = 1;
                 result.data = data;
             },

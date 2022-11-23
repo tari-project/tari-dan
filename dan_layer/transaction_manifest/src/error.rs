@@ -20,34 +20,22 @@
 //   WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //   USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use tari_template_abi::{decode, encode, rust::io, Decode, Encode};
-
-#[derive(Debug, Clone, PartialEq, Eq, Decode, Encode)]
-#[cfg_attr(
-    feature = "serde",
-    derive(serde::Deserialize, serde::Serialize),
-    serde(tag = "type", content = "value")
-)]
-pub enum Arg {
-    Variable(Vec<u8>),
-    // TODO: this should be a `Value` instead of a `Vec<u8>`, but that is a larger refactor
-    Literal(Vec<u8>),
-}
-
-impl Arg {
-    pub fn literal(value: Vec<u8>) -> Self {
-        Arg::Literal(value)
-    }
-
-    pub fn variable<T: Into<Vec<u8>>>(key: T) -> Self {
-        Arg::Variable(key.into())
-    }
-
-    pub fn from_bytes(bytes: &[u8]) -> io::Result<Self> {
-        decode(bytes)
-    }
-
-    pub fn to_bytes(&self) -> Vec<u8> {
-        encode(self).unwrap()
-    }
+#[derive(Debug, thiserror::Error)]
+pub enum ManifestError {
+    #[error("Lex error: {0}")]
+    LexError(String),
+    #[error("Syntax error: {0}")]
+    SyntaxError(#[from] syn::Error),
+    #[error("Missing expression")]
+    MissingExpr,
+    #[error("Unsupported expression {0}")]
+    UnsupportedExpr(String),
+    #[error("Template '{name}' is not imported")]
+    TemplateNotImported { name: String },
+    #[error("Global '{name}' is not defined")]
+    UndefinedGlobal { name: String },
+    #[error("Variable '{name}' is not defined")]
+    UndefinedVariable { name: String },
+    #[error("Invalid variable type: {0}")]
+    InvalidVariableType(String),
 }
