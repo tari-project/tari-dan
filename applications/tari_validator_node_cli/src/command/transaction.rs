@@ -28,7 +28,7 @@ use tari_common_types::types::FixedHash;
 use tari_dan_common_types::{ShardId, SubstateChange};
 use tari_dan_engine::transaction::Transaction;
 use tari_engine_types::{
-    commit_result::TransactionResult,
+    commit_result::{FinalizeResult, TransactionResult},
     execution_result::Type,
     instruction::Instruction,
     substate::SubstateValue,
@@ -182,55 +182,11 @@ async fn handle_get(args: GetArgs, client: &mut ValidatorNodeClient) -> Result<(
     let resp = client.get_transaction(request).await?;
 
     if let Some(result) = resp.result {
-        // TODO: integrate with the "summarize" function
-        println!("========= Return Values =========");
-        for result in &result.finalize.execution_results {
-            match result.return_type {
-                Type::Unit => {},
-                Type::Bool => {
-                    println!("bool: {}", result.decode::<bool>().unwrap());
-                },
-                Type::I8 => {
-                    println!("i8: {}", result.decode::<i8>().unwrap());
-                },
-                Type::I16 => {
-                    println!("i16: {}", result.decode::<i16>().unwrap());
-                },
-                Type::I32 => {
-                    println!("i32: {}", result.decode::<i32>().unwrap());
-                },
-                Type::I64 => {
-                    println!("i64: {}", result.decode::<i64>().unwrap());
-                },
-                Type::I128 => {
-                    println!("i128: {}", result.decode::<i128>().unwrap());
-                },
-                Type::U8 => {
-                    println!("u8: {}", result.decode::<u8>().unwrap());
-                },
-                Type::U16 => {
-                    println!("u16: {}", result.decode::<u16>().unwrap());
-                },
-                Type::U32 => {
-                    println!("u32: {}", result.decode::<u32>().unwrap());
-                },
-                Type::U64 => {
-                    println!("u64: {}", result.decode::<u64>().unwrap());
-                },
-                Type::U128 => {
-                    println!("u128: {}", result.decode::<u128>().unwrap());
-                },
-                Type::String => {
-                    println!("string: {}", result.decode::<String>().unwrap());
-                },
-                Type::Other { ref name } if name == "Amount" => {
-                    println!("{}: {}", name, result.decode::<Amount>().unwrap());
-                },
-                Type::Other { ref name } => {
-                    println!("{}: {}", name, to_hex(&result.raw));
-                },
-            }
-        }
+        println!("✅️ Transaction finalized",);
+        println!();
+        summarize_result(&result);
+    } else {
+        println!("Transaction not finalized",);
     }
 
     Ok(())
@@ -392,8 +348,20 @@ fn summarize(result: &TransactionFinalizeResult) {
     }
     println!();
 
+    summarize_result(&result.finalize);
+
+    println!();
+    println!("========= LOGS =========");
+    for log in &result.finalize.logs {
+        println!("{}", log);
+    }
+    println!();
+    println!("OVERALL DECISION: {:?}", result.decision);
+}
+
+fn summarize_result(result: &FinalizeResult) {
     println!("========= Return Values =========");
-    for result in &result.finalize.execution_results {
+    for result in &result.execution_results {
         match result.return_type {
             Type::Unit => {},
             Type::Bool => {
@@ -440,12 +408,4 @@ fn summarize(result: &TransactionFinalizeResult) {
             },
         }
     }
-
-    println!();
-    println!("========= LOGS =========");
-    for log in &result.finalize.logs {
-        println!("{}", log);
-    }
-    println!();
-    println!("OVERALL DECISION: {:?}", result.decision);
 }

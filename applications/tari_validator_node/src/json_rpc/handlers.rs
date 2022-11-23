@@ -51,6 +51,7 @@ use tari_validator_node_client::types::{
     GetTemplatesRequest,
     GetTemplatesResponse,
     GetTransactionRequest,
+    GetTransactionResponse,
     SubmitTransactionRequest,
     SubmitTransactionResponse,
     TemplateMetadata,
@@ -214,7 +215,10 @@ impl JsonRpcHandlers {
 
         let tx = self.db.create_tx().unwrap();
         if let Ok(payload) = tx.get_payload(&payload_id) {
-            Ok(JsonRpcResponse::success(answer_id, json!({ "transaction": payload })))
+            let response = GetTransactionResponse {
+                result: payload.result().clone(),
+            };
+            Ok(JsonRpcResponse::success(answer_id, response))
         } else {
             Err(JsonRpcResponse::error(
                 answer_id,
