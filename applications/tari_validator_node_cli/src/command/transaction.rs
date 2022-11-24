@@ -82,6 +82,8 @@ pub struct CommonSubmitArgs {
     dump_outputs_into: Option<String>,
     #[clap(long, short = 'a')]
     account_template_address: Option<String>,
+    #[clap(long)]
+    is_dry_run: bool,
 }
 
 #[derive(Debug, Args, Clone)]
@@ -216,6 +218,7 @@ async fn submit_transaction(
         inputs: input_data,
         num_outputs: common.num_outputs.unwrap_or(0),
         wait_for_result: common.wait_for_result,
+        is_dry_run: common.is_dry_run,
     };
 
     if request.inputs.is_empty() && request.num_outputs == 0 {
