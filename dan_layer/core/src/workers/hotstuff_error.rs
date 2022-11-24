@@ -61,4 +61,8 @@ pub enum HotStuffError {
     ShardHasNoData,
     #[error("Invalid qc error: `{0}`")]
     InvalidQuorumCertificate(String),
+    #[error("Failed to sign QC")]
+    FailedToSignQc,
+    #[error("This validator node is not included in the MMR")]
+    ValidatorNodeNotIncludedInMmr,
 }

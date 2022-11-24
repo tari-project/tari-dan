@@ -22,6 +22,7 @@
 
 use digest::Digest;
 use serde::{Deserialize, Serialize};
+use tari_common_types::types::FixedHash;
 use tari_crypto::hash::blake2::Blake256;
 use tari_dan_common_types::{Epoch, PayloadId, ShardId};
 
@@ -127,7 +128,7 @@ impl QuorumCertificate {
         self.validators_metadata.as_slice()
     }
 
-    pub fn as_bytes(&self) -> Vec<u8> {
+    pub fn to_hash(&self) -> FixedHash {
         let mut result = Blake256::new()
             .chain(self.local_node_hash.as_bytes())
             .chain(self.local_node_height.to_le_bytes())
@@ -142,7 +143,7 @@ impl QuorumCertificate {
         // for shard in &self.involved_shards {
         //     result = result.chain((*shard).to_le_bytes());
         // }
-        result.finalize().to_vec()
+        result.finalize().into()
     }
 
     pub fn payload_id(&self) -> PayloadId {

@@ -28,7 +28,7 @@ use std::{
     ops::{Deref, DerefMut},
 };
 
-use tari_template_abi::{Decode, Encode};
+use tari_bor::{Decode, Encode};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
 #[cfg_attr(feature = "serde", derive(serde::Deserialize, serde::Serialize))]

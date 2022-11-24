@@ -25,7 +25,7 @@ use serde::Serialize;
 use crate::{models::ViewId, services::infrastructure_services::NodeAddressable};
 
 #[derive(Debug, Clone, Serialize)]
-pub struct Committee<TAddr: NodeAddressable> {
+pub struct Committee<TAddr> {
     // TODO: encapsulate
     pub members: Vec<TAddr>,
 }

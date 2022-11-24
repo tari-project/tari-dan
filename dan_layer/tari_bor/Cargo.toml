@@ -1,0 +1,11 @@
+[package]
+name = "tari_bor"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+borsh = { version ="0.9.3", default-features = false }
+
+[features]
+default = ["std"]
+std = ["borsh/std"]

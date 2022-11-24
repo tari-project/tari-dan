@@ -51,6 +51,10 @@ impl NodeAddressable for &str {
     fn as_bytes(&self) -> &[u8] {
         str::as_bytes(self)
     }
+
+    // fn try_from_bytes(bytes: &[u8]) -> Option<Self> {
+    //     Some(std::str::from_utf8(bytes).ok()?)
+    // }
 }
 
 impl NodeAddressable for CommsPublicKey {
@@ -61,4 +65,8 @@ impl NodeAddressable for CommsPublicKey {
     fn as_bytes(&self) -> &[u8] {
         <CommsPublicKey as ByteArray>::as_bytes(self)
     }
+
+    // fn try_from_bytes(bytes: &[u8]) -> Option<Self> {
+    //     Some(CommsPublicKey::from_bytes(bytes).ok()?)
+    // }
 }

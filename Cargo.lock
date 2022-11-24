@@ -2003,6 +2003,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "env_logger"
+version = "0.9.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a12e6657c4c97ebab115a42dcee77225f7f482cdd841cf7088c657a42e9e00e7"
+dependencies = [
+ "atty",
+ "humantime",
+ "log",
+ "regex",
+ "termcolor",
+]
+
+[[package]]
 name = "errno"
 version = "0.2.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5400,6 +5413,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "tari_bor"
+version = "0.1.0"
+dependencies = [
+ "borsh",
+]
+
+[[package]]
 name = "tari_bulletproofs"
 version = "4.3.0"
 source = "git+https://github.com/tari-project/bulletproofs?tag=v4.3.0#02d5cb51d7fdaabf0e2523d45afed8b3d206c402"
@@ -5735,10 +5755,11 @@ name = "tari_dan_common_types"
 version = "0.35.1"
 dependencies = [
  "base64 0.20.0-alpha.1",
- "borsh",
+ "digest 0.9.0",
  "prost",
  "prost-types",
  "serde",
+ "tari_bor",
  "tari_common",
  "tari_common_types",
  "tari_crypto",
@@ -5769,6 +5790,7 @@ dependencies = [
  "rand 0.8.5",
  "serde",
  "serde_json",
+ "tari_bor",
  "tari_common",
  "tari_common_types",
  "tari_comms",
@@ -5799,7 +5821,6 @@ name = "tari_dan_engine"
 version = "0.35.1"
 dependencies = [
  "anyhow",
- "borsh",
  "cargo_toml",
  "d3ne",
  "digest 0.9.0",
@@ -5807,6 +5828,7 @@ dependencies = [
  "rand 0.7.3",
  "serde",
  "serde_json",
+ "tari_bor",
  "tari_common",
  "tari_common_types",
  "tari_crypto",
@@ -5874,6 +5896,7 @@ dependencies = [
 name = "tari_dan_tests"
 version = "0.35.1"
 dependencies = [
+ "env_logger",
  "lazy_static",
  "rand 0.7.3",
  "tari_common",
@@ -5898,9 +5921,9 @@ dependencies = [
 name = "tari_engine_types"
 version = "0.1.0"
 dependencies = [
- "borsh",
  "digest 0.9.0",
  "serde",
+ "tari_bor",
  "tari_common_types",
  "tari_crypto",
  "tari_template_abi",
@@ -6057,18 +6080,18 @@ dependencies = [
 name = "tari_template_abi"
 version = "0.35.1"
 dependencies = [
- "borsh",
+ "tari_bor",
 ]
 
 [[package]]
 name = "tari_template_lib"
 version = "0.35.1"
 dependencies = [
- "borsh",
  "hex",
  "newtype-ops",
  "serde",
  "serde_json",
+ "tari_bor",
  "tari_template_abi",
  "tari_template_macros",
 ]

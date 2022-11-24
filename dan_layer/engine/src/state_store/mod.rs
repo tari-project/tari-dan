@@ -24,8 +24,8 @@ pub mod memory;
 
 use std::{error::Error, fmt::Debug, io};
 
+use tari_bor::{decode, encode, Decode, Encode};
 use tari_dan_common_types::optional::IsNotFoundError;
-use tari_template_abi::{decode, encode, Decode, Encode};
 
 // pub trait StateStorage<'a>: AtomicDb<'a, Error = StateStoreError> + Send + Sync {}
 //

@@ -22,7 +22,7 @@
 
 //! Public types that are available to all template authors.
 
-pub use borsh;
-pub use tari_template_abi::{call_debug as debug, Decode, Encode};
+pub use tari_bor::{borsh, decode, encode_with_len, Decode, Encode};
+pub use tari_template_abi::call_debug as debug;
 
 pub use crate::{args::LogLevel, engine, get_context as context};

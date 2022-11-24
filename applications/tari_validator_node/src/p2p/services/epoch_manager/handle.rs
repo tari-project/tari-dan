@@ -91,6 +91,16 @@ impl EpochManager<CommsPublicKey> for EpochManagerHandle {
         rx.await.map_err(|_| EpochManagerError::ReceiveError)?
     }
 
+    async fn get_shard_id(&self, epoch: Epoch, addr: CommsPublicKey) -> Result<ShardId, EpochManagerError> {
+        let (tx, rx) = oneshot::channel();
+        self.tx_request
+            .send(EpochManagerRequest::GetShardId { epoch, addr, reply: tx })
+            .await
+            .map_err(|_| EpochManagerError::SendError)?;
+
+        rx.await.map_err(|_| EpochManagerError::ReceiveError)?
+    }
+
     async fn is_epoch_valid(&self, epoch: Epoch) -> Result<bool, EpochManagerError> {
         let (tx, rx) = oneshot::channel();
         self.tx_request
@@ -176,7 +186,10 @@ impl EpochManager<CommsPublicKey> for EpochManagerHandle {
         rx.await.map_err(|_| EpochManagerError::ReceiveError)?
     }
 
-    async fn get_validator_nodes_per_epoch(&self, epoch: Epoch) -> Result<Vec<ValidatorNode>, EpochManagerError> {
+    async fn get_validator_nodes_per_epoch(
+        &self,
+        epoch: Epoch,
+    ) -> Result<Vec<ValidatorNode<CommsPublicKey>>, EpochManagerError> {
         let (tx, rx) = oneshot::channel();
         self.tx_request
             .send(EpochManagerRequest::GetValidatorNodesPerEpoch { epoch, reply: tx })

@@ -21,7 +21,7 @@
 //   USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 use serde::{Deserialize, Serialize};
-use tari_template_abi::{Decode, Encode};
+use tari_bor::{borsh, Decode, Encode};
 use tari_template_lib::models::{Amount, Metadata, ResourceAddress};
 
 #[derive(Debug, Clone, Encode, Decode, Serialize, Deserialize)]

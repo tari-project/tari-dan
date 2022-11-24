@@ -25,8 +25,8 @@ use std::{
 };
 
 use anyhow::anyhow;
+use tari_bor::encode;
 use tari_dan_common_types::SubstateState;
-use tari_template_abi::encode;
 use tari_utilities::hex::to_hex;
 
 use crate::state_store::{AtomicDb, StateReader, StateStoreError, StateWriter};
@@ -153,8 +153,8 @@ impl<'a> StateWriter for MemoryTransaction<RwLockWriteGuard<'a, InnerKvMap>> {
 
 #[cfg(test)]
 mod tests {
+    use tari_bor::{borsh, Decode, Encode};
     use tari_dan_common_types::optional::Optional;
-    use tari_template_abi::{Decode, Encode};
 
     use super::*;
 

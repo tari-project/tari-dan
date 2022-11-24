@@ -33,6 +33,7 @@ use tari_dan_core::{
         epoch_manager::EpochManager,
         infrastructure_services::OutboundService,
         leader_strategy::AlwaysFirstLeader,
+        NodeIdentitySigningService,
     },
     workers::{
         events::{EventSubscription, HotStuffEvent},
@@ -79,7 +80,6 @@ pub struct HotstuffService {
 impl HotstuffService {
     pub fn spawn(
         node_identity: Arc<NodeIdentity>,
-        node_public_key: CommsPublicKey,
         epoch_manager: EpochManagerHandle,
         mempool: MempoolHandle,
         outbound: OutboundMessaging,
@@ -100,8 +100,12 @@ impl HotstuffService {
 
         let consensus_constants = ConsensusConstants::devnet();
 
+        let node_public_key = node_identity.public_key().clone();
+
         HotStuffWaiter::spawn(
-            node_identity,
+            NodeIdentitySigningService::new(node_identity),
+            // TODO: we still need this because The signing service is not generic. Abstracting signatures and public
+            // keys may add a lot of type complexity.
             node_public_key.clone(),
             epoch_manager.clone(),
             leader_strategy,
