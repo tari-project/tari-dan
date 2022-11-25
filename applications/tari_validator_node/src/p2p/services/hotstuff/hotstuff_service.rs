@@ -32,7 +32,7 @@ use tari_dan_core::{
     services::{
         epoch_manager::EpochManager,
         infrastructure_services::OutboundService,
-        leader_strategy::AlwaysFirstLeader,
+        leader_strategy::PayloadSpecificLeaderStrategy,
         NodeIdentitySigningService,
     },
     workers::{
@@ -96,7 +96,7 @@ impl HotstuffService {
         let (tx_vote_message, rx_vote_message) = channel(100);
         let (tx_events, _) = broadcast::channel(100);
 
-        let leader_strategy = AlwaysFirstLeader {};
+        let leader_strategy = PayloadSpecificLeaderStrategy {};
 
         let consensus_constants = ConsensusConstants::devnet();
 

@@ -179,7 +179,13 @@ impl JsonRpcHandlers {
             .map_err(internal_error(answer_id))?;
 
         if transaction.wait_for_result {
-            return wait_for_transaction_result(answer_id, hash, subscription, Duration::from_secs(30)).await;
+            return wait_for_transaction_result(
+                answer_id,
+                hash,
+                subscription,
+                Duration::from_secs(transaction.wait_for_result_timeout.unwrap_or(30)),
+            )
+            .await;
         }
 
         Ok(JsonRpcResponse::success(answer_id, SubmitTransactionResponse {

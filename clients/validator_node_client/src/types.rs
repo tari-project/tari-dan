@@ -132,6 +132,8 @@ pub struct SubmitTransactionRequest {
     /// Set to true to wait for the transaction to complete before returning
     #[serde(default)]
     pub wait_for_result: bool,
+    #[serde(default)]
+    pub wait_for_result_timeout: Option<u64>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

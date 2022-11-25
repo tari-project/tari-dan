@@ -47,6 +47,7 @@ pub async fn send_template_transaction(
         fee: transaction.fee(),
         sender_public_key: transaction.sender_public_key().clone(),
         wait_for_result: true,
+        wait_for_result_timeout: None,
         inputs: vec![],
         num_outputs: 0,
     };
