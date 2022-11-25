@@ -132,16 +132,19 @@ mod tests {
                             name: "new".to_string(),
                             arguments: vec![],
                             output: Type::U32,
+                            is_mut: false,
                         },
                         FunctionDef {
                             name: "get".to_string(),
                             arguments: vec![Type::U32],
                             output: Type::U32,
+                            is_mut: false,
                         },
                         FunctionDef {
                             name: "set".to_string(),
                             arguments: vec![Type::U32, Type::U32],
                             output: Type::Unit,
+                            is_mut: true,
                         }
                     ],
                 };
