@@ -23,7 +23,7 @@
 use std::fmt::{Display, Formatter};
 
 use serde::{Deserialize, Serialize};
-use tari_template_abi::{decode, encode, Decode, Encode};
+use tari_bor::{borsh, decode, encode, Decode, Encode};
 use tari_template_lib::{
     models::{ComponentAddress, ComponentInstance, ResourceAddress, VaultId},
     Hash,

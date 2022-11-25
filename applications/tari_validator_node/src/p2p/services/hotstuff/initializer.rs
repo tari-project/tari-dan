@@ -57,8 +57,7 @@ pub fn try_spawn(
     let db = SqliteShardStoreFactory::try_create(config.data_dir.join("state.db"))?;
 
     let events = HotstuffService::spawn(
-        node_identity.clone(),
-        node_identity.public_key().clone(),
+        node_identity,
         epoch_manager,
         mempool,
         outbound,

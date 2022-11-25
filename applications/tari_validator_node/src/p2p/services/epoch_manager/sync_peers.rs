@@ -23,6 +23,7 @@
 use std::convert::TryFrom;
 
 use futures::StreamExt;
+use tari_comms::types::CommsPublicKey;
 use tari_dan_common_types::{PayloadId, ShardId, SubstateState};
 use tari_dan_core::{
     models::{NodeHeight, QuorumCertificate, SubstateShardData, TreeNodeHash, ValidatorNode},
@@ -59,7 +60,7 @@ impl PeerSyncManagerService {
 
     pub(crate) async fn sync_peers_state(
         &self,
-        committee_vns: Vec<ValidatorNode>,
+        committee_vns: Vec<ValidatorNode<CommsPublicKey>>,
         start_shard_id: ShardId,
         end_shard_id: ShardId,
         vn_shard_key: ShardId,

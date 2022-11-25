@@ -28,15 +28,11 @@ pub use wasm::*;
 mod non_wasm;
 #[cfg(not(target_arch = "wasm32"))]
 pub use non_wasm::*;
+use tari_bor::{decode, decode_len, encode_into, Decode, Encode};
 
 use crate::{
-    decode,
-    decode_len,
-    encode_into,
     ops::EngineOp,
     rust::{fmt, mem, ptr::copy, slice, vec::Vec},
-    Decode,
-    Encode,
 };
 
 pub fn wrap_ptr(mut v: Vec<u8>) -> *mut u8 {

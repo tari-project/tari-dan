@@ -12,6 +12,7 @@ members = [
     "dan_layer/transaction_manifest",
     "dan_layer/template_test_tooling",
     "dan_layer/integration_tests",
+    "dan_layer/tari_bor",
     "applications/tari_validator_node",
     "applications/tari_validator_node_cli",
 ]

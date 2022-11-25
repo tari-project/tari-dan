@@ -22,15 +22,17 @@
 
 use std::{
     cmp::Ordering,
-    convert::{Infallible, TryFrom},
+    convert::TryFrom,
     fmt::{Debug, Display, Formatter},
+    io,
     ops::Add,
 };
 
 use anyhow::anyhow;
 use borsh::BorshSerialize;
+use digest::Digest;
 use serde::{Deserialize, Serialize};
-use tari_common_types::types::{FixedHash, PrivateKey, PublicKey, Signature};
+use tari_common_types::types::{FixedHash, PublicKey, Signature};
 
 mod base_layer_metadata;
 mod base_layer_output;
@@ -62,7 +64,7 @@ pub use node::Node;
 pub use payload::Payload;
 pub use quorum_certificate::{QuorumCertificate, QuorumDecision, QuorumRejectReason};
 pub use sidechain_metadata::SidechainMetadata;
-use tari_core::{consensus::ToConsensusBytes, ValidatorNodeMmr};
+use tari_crypto::hash::blake2::Blake256;
 use tari_dan_common_types::{serde_with, PayloadId, ShardId, SubstateState};
 pub use tari_dan_payload::{CheckpointData, TariDanPayload};
 use tari_mmr::MerkleProof;
@@ -227,80 +229,67 @@ pub enum ConsensusWorkerState {
 
 #[derive(Clone, Debug, PartialEq, Eq, Deserialize, Serialize)]
 pub struct ValidatorMetadata {
+    pub public_key: PublicKey,
     #[serde(with = "serde_with::hex")]
-    pub public_key: Vec<u8>,
-    #[serde(with = "serde_with::hex")]
-    pub signature: Vec<u8>,
-    #[serde(with = "serde_with::hex")]
-    pub merkle_proof: Vec<u8>,
+    pub vn_shard_key: ShardId,
+    pub signature: Signature,
+    pub merkle_proof: MerkleProof,
     pub merkle_leaf_index: u64,
 }
 
 impl ValidatorMetadata {
     pub fn new(
-        public_key: &PublicKey,
-        secret_key: &PrivateKey,
-        secret_nonce: PrivateKey,
-        challenge: &[u8],
-        vn_mmr: &ValidatorNodeMmr,
-        vn_mmr_leaf_index: u64,
+        public_key: PublicKey,
+        vn_shard_key: ShardId,
+        signature: Signature,
+        merkle_proof: MerkleProof,
+        merkle_leaf_index: u64,
     ) -> Self {
-        let public_key_bytes = ByteArray::as_bytes(public_key);
-
-        // calculate the signature
-        let signature = Signature::sign(secret_key.clone(), secret_nonce, &*challenge)
-            .expect("Sign cannot fail with 32-byte challenge and a RistrettoPublicKey");
-
-        // construct the merkle proof for the inclusion of the VN's public key in the epoch
-        let leaf_pos = vn_mmr
-            .find_leaf_index(public_key_bytes)
-            .expect("Unexpected Merkle Mountain Range error")
-            .expect("The VN's public key is not listed for the epoch");
-        let merkle_proof =
-            MerkleProof::for_leaf_node(vn_mmr, leaf_pos as usize).expect("Merkle proof generation failed");
-        let merkle_proof_bytes = bincode::serialize(&merkle_proof).expect("Merkle proof serialization failed");
-
         Self {
-            public_key: public_key_bytes.to_vec(),
-            signature: signature.to_consensus_bytes(),
-            merkle_proof: merkle_proof_bytes,
-            merkle_leaf_index: vn_mmr_leaf_index,
+            public_key,
+            vn_shard_key,
+            signature,
+            merkle_proof,
+            merkle_leaf_index,
         }
     }
 
-    // TODO: implement from bytes with correct error
-    pub fn from_bytes(
-        public_key_bytes: &[u8],
-        signature_bytes: &[u8],
-        merkle_proof_bytes: &[u8],
-        merkle_proof_index_bytes: &[u8],
-    ) -> Result<Self, Infallible> {
-        // TODO: handle possible deserialization errors
-        let mut buf = [0u8; 8];
-        buf.copy_from_slice(merkle_proof_index_bytes);
-        let merkle_leaf_index = u64::from_le_bytes(buf);
-
-        Ok(Self {
-            public_key: Vec::from(public_key_bytes),
-            signature: Vec::from(signature_bytes),
-            merkle_proof: Vec::from(merkle_proof_bytes),
-            merkle_leaf_index,
-        })
+    pub fn get_node_hash(&self) -> FixedHash {
+        // Each node is defined as H(V_i || S_i)
+        vn_mmr_node_hash(&self.public_key, &self.vn_shard_key)
     }
 
-    pub fn combine(&self, other: &ValidatorMetadata) -> ValidatorMetadata {
-        other.clone()
+    // TODO: impl Borsh for merkle proof
+    pub fn encode_merkle_proof(&self) -> Vec<u8> {
+        bincode::serialize(&self.merkle_proof).unwrap()
     }
 
+    // TODO: impl Borsh for merkle proof
+    pub fn decode_merkle_proof(bytes: &[u8]) -> Result<MerkleProof, io::Error> {
+        // Map to an io error because borsh uses that
+        bincode::deserialize(bytes).map_err(|e| io::Error::new(io::ErrorKind::Other, e))
+    }
+
+    // TODO: once this type implements borsh we can use the consensus hashing to hash this type directly
     pub fn to_bytes(&self) -> Vec<u8> {
         [
-            self.public_key.clone(),
-            self.signature.clone(),
-            self.merkle_proof.clone(),
+            self.public_key.to_vec(),
+            self.vn_shard_key.as_bytes().to_vec(),
+            self.signature.get_public_nonce().to_vec(),
+            self.signature.get_signature().to_vec(),
+            self.encode_merkle_proof(),
             self.merkle_leaf_index.to_le_bytes().to_vec(),
         ]
         .concat()
     }
+}
+
+pub fn vn_mmr_node_hash<TAddr: NodeAddressable>(public_key: &TAddr, shard_id: &ShardId) -> FixedHash {
+    Blake256::new()
+        .chain(public_key.as_bytes())
+        .chain(shard_id.as_bytes())
+        .finalize()
+        .into()
 }
 
 #[derive(Copy, Clone, Debug)]

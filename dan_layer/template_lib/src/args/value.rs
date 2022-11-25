@@ -1,5 +1,5 @@
 //   Copyright 2022 The Tari Project
-//   SPDX-License-Identifier: BSD-3-Claus
+//   SPDX-License-Identifier: BSD-3-clause
 
 use tari_template_abi::{
     rust::{format, io},

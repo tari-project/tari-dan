@@ -238,6 +238,26 @@ impl GlobalDbAdapter for SqliteGlobalDbAdapter {
         Ok(())
     }
 
+    fn get_validator_node(
+        &self,
+        tx: &Self::DbTransaction,
+        epoch: u64,
+        public_key: &[u8],
+    ) -> Result<DbValidatorNode, Self::Error> {
+        use crate::global::schema::{validator_nodes, validator_nodes::dsl};
+
+        let vn = dsl::validator_nodes
+            .filter(validator_nodes::epoch.eq(epoch as i64))
+            .filter(validator_nodes::public_key.eq(public_key))
+            .first::<ValidatorNode>(tx.connection())
+            .map_err(|source| SqliteStorageError::DieselError {
+                source,
+                operation: "get::validator_nodes_per_epoch".to_string(),
+            })?;
+
+        Ok(vn.into())
+    }
+
     fn get_validator_nodes_per_epoch(
         &self,
         tx: &Self::DbTransaction,
@@ -246,7 +266,7 @@ impl GlobalDbAdapter for SqliteGlobalDbAdapter {
         use crate::global::schema::{validator_nodes, validator_nodes::dsl};
 
         let sqlite_vns = dsl::validator_nodes
-            .filter(validator_nodes::epoch.eq(epoch as i32))
+            .filter(validator_nodes::epoch.eq(epoch as i64))
             .load::<ValidatorNode>(tx.connection())
             .map_err(|source| SqliteStorageError::DieselError {
                 source,
@@ -282,7 +302,7 @@ impl GlobalDbAdapter for SqliteGlobalDbAdapter {
         use crate::global::schema::epochs::dsl;
 
         let query_res: Option<Epoch> = dsl::epochs
-            .find(epoch as i32)
+            .find(epoch as i64)
             .first(tx.connection())
             .optional()
             .map_err(|source| SqliteStorageError::DieselError {

@@ -1,5 +1,5 @@
 //   Copyright 2022 The Tari Project
-//   SPDX-License-Identifier: BSD-3-Claus
+//   SPDX-License-Identifier: BSD-3-clause
 
 // These mappings can be provided to the parser context or defined inline in the manifest
 // TODO: Account builtin should not have to be explicitly defined

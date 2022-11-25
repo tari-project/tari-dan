@@ -5,6 +5,7 @@ pub mod proto;
 pub mod storage;
 
 mod epoch;
+pub mod hashing;
 pub mod optional;
 pub mod serde_with;
 mod template_id;
@@ -17,8 +18,8 @@ use std::{
 };
 
 use ::serde::{Deserialize, Serialize};
-use borsh::{BorshDeserialize, BorshSerialize};
 pub use epoch::Epoch;
+use tari_bor::{borsh, Decode, Encode};
 use tari_common_types::types::{FixedHash, FixedHashSizeError};
 use tari_engine_types::substate::{Substate, SubstateAddress};
 use tari_utilities::{
@@ -27,7 +28,7 @@ use tari_utilities::{
 };
 pub use template_id::TemplateId;
 
-#[derive(Copy, Clone, Debug, Eq, PartialEq, Hash, Serialize, Deserialize, BorshSerialize)]
+#[derive(Copy, Clone, Debug, Eq, PartialEq, Hash, Serialize, Deserialize, Encode)]
 pub struct ShardId(#[serde(with = "serde_with::hex")] pub [u8; 32]);
 
 impl ShardId {
@@ -94,6 +95,12 @@ impl TryFrom<&[u8]> for ShardId {
     }
 }
 
+impl AsRef<[u8]> for ShardId {
+    fn as_ref(&self) -> &[u8] {
+        self.as_bytes()
+    }
+}
+
 impl PartialOrd for ShardId {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
         self.0.partial_cmp(&other.0)
@@ -132,7 +139,7 @@ pub enum SubstateChange {
     Destroy,
 }
 
-#[derive(Debug, Clone, BorshSerialize, BorshDeserialize, Deserialize, Serialize)]
+#[derive(Debug, Clone, Encode, Decode, Deserialize, Serialize)]
 pub enum SubstateState {
     DoesNotExist,
     Up { created_by: PayloadId, data: Substate },
@@ -159,7 +166,7 @@ impl ObjectClaim {
     }
 }
 
-#[derive(Copy, Clone, Debug, PartialEq, Eq, Hash, BorshSerialize, BorshDeserialize, Deserialize, Serialize)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Hash, Encode, Decode, Deserialize, Serialize)]
 pub struct PayloadId {
     #[serde(with = "serde_with::hex")]
     id: [u8; 32],

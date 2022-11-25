@@ -21,7 +21,9 @@
 // USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #![allow(clippy::too_many_arguments)]
 mod digital_assets_error;
+
 pub use digital_assets_error::DigitalAssetError;
+use tari_crypto::hash_domain;
 
 pub mod consensus_constants;
 pub mod message;
@@ -31,3 +33,5 @@ pub mod storage;
 pub mod template_command;
 pub mod types;
 pub mod workers;
+
+hash_domain!(TariDanCoreHashDomain, "tari.dan.core", 0);

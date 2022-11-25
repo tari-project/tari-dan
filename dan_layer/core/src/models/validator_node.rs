@@ -23,25 +23,33 @@
 use std::convert::TryFrom;
 
 use serde::Serialize;
-use tari_common_types::types::PublicKey;
+use tari_common_types::types::FixedHash;
 use tari_comms::types::CommsPublicKey;
 use tari_dan_common_types::ShardId;
 use tari_dan_storage::global::DbValidatorNode;
 use tari_utilities::ByteArray;
 
-#[derive(Clone, Debug, Serialize)]
-pub struct ValidatorNode {
+use crate::{models::vn_mmr_node_hash, services::infrastructure_services::NodeAddressable};
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
+pub struct ValidatorNode<TAddr> {
     pub shard_key: ShardId,
-    pub public_key: CommsPublicKey,
+    pub public_key: TAddr,
 }
 
-impl TryFrom<DbValidatorNode> for ValidatorNode {
+impl<TAddr: NodeAddressable> ValidatorNode<TAddr> {
+    pub fn node_hash(&self) -> FixedHash {
+        vn_mmr_node_hash(&self.public_key, &self.shard_key)
+    }
+}
+
+impl TryFrom<DbValidatorNode> for ValidatorNode<CommsPublicKey> {
     type Error = anyhow::Error;
 
     fn try_from(db_vn: DbValidatorNode) -> Result<Self, Self::Error> {
         Ok(Self {
             shard_key: ShardId::from_bytes(&db_vn.shard_key)?,
-            public_key: PublicKey::from_bytes(&db_vn.public_key)?,
+            public_key: CommsPublicKey::from_bytes(&db_vn.public_key)?,
         })
     }
 }

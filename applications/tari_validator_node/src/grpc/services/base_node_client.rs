@@ -101,7 +101,7 @@ impl BaseNodeClient for GrpcBaseNodeClient {
         })
     }
 
-    async fn get_validator_nodes(&mut self, height: u64) -> Result<Vec<ValidatorNode>, BaseNodeError> {
+    async fn get_validator_nodes(&mut self, height: u64) -> Result<Vec<ValidatorNode<CommsPublicKey>>, BaseNodeError> {
         let inner = self.connection().await?;
         let request = grpc::GetActiveValidatorNodesRequest { height };
         let mut vns = vec![];

@@ -62,6 +62,7 @@ dependencies = [
 name = "buggy"
 version = "0.1.0"
 dependencies = [
+ "tari_bor",
  "tari_template_abi",
  "wee_alloc",
 ]
@@ -161,10 +162,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "tari_bor"
+version = "0.1.0"
+dependencies = [
+ "borsh",
+]
+
+[[package]]
 name = "tari_template_abi"
 version = "0.35.1"
 dependencies = [
- "borsh",
+ "tari_bor",
 ]
 
 [[package]]

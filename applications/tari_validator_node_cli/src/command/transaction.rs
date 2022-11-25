@@ -26,6 +26,7 @@ use std::{
     time::{Duration, Instant},
 };
 
+use anyhow::anyhow;
 use clap::{Args, Subcommand};
 use tari_dan_common_types::{ShardId, SubstateChange};
 use tari_dan_engine::transaction::Transaction;
@@ -163,7 +164,7 @@ async fn handle_submit_manifest(
     base_dir: impl AsRef<Path>,
     client: &mut ValidatorNodeClient,
 ) -> Result<(), anyhow::Error> {
-    let contents = std::fs::read_to_string(&args.manifest)?;
+    let contents = std::fs::read_to_string(&args.manifest).map_err(|e| anyhow!("Failed to read manifest: {}", e))?;
     let instructions = parse_manifest(&contents, manifest::parse_globals(args.globals)?)?;
     // TODO: improve output
     println!("Instructions: {:?}", instructions);

@@ -22,13 +22,8 @@
 
 use std::{fmt::Formatter, str::FromStr};
 
-use tari_template_abi::{
-    decode,
-    encode,
-    rust::{fmt::Display, io},
-    Decode,
-    Encode,
-};
+use tari_bor::{borsh, decode, encode, Decode, Encode};
+use tari_template_abi::rust::{fmt::Display, io};
 
 use crate::{
     models::{Amount, BucketId, ComponentAddress, Metadata, ResourceAddress, VaultRef},
