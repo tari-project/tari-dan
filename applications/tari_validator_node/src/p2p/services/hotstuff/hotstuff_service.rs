@@ -30,7 +30,6 @@ use tari_dan_core::{
     message::DanMessage,
     models::{vote_message::VoteMessage, HotStuffMessage, TariDanPayload},
     services::{
-        epoch_manager::EpochManager,
         infrastructure_services::OutboundService,
         leader_strategy::PayloadSpecificLeaderStrategy,
         NodeIdentitySigningService,
@@ -40,7 +39,6 @@ use tari_dan_core::{
         hotstuff_waiter::HotStuffWaiter,
     },
 };
-use tari_dan_engine::transaction::Transaction;
 use tari_dan_storage_sqlite::sqlite_shard_store_factory::SqliteShardStoreFactory;
 use tari_shutdown::ShutdownSignal;
 use tokio::sync::{
@@ -170,19 +168,6 @@ impl HotstuffService {
         Ok(())
     }
 
-    async fn handle_new_valid_transaction(&mut self, tx: Transaction, shard: ShardId) -> Result<(), anyhow::Error> {
-        if self
-            .epoch_manager
-            .is_validator_in_committee_for_current_epoch(shard, self.node_public_key.clone())
-            .await?
-        {
-            self.tx_new.send((TariDanPayload::new(tx), shard)).await?;
-        } else {
-            info!(target: LOG_TARGET, "🙇 Not in committee for transaction {}", tx.hash());
-        }
-        Ok(())
-    }
-
     pub async fn run(mut self) -> Result<(), anyhow::Error> {
         loop {
             tokio::select! {
@@ -190,7 +175,7 @@ impl HotstuffService {
                 res = self.mempool.next_valid_transaction() => {
                     if let Some((tx, shard_id)) = log(res, "new valid transaction") {
                         debug!(target: LOG_TARGET, "Received new transaction {} for shard {}", tx.hash(), shard_id);
-                        log(self.handle_new_valid_transaction(tx, shard_id).await, "new valid transaction");
+                        self.tx_new.send((TariDanPayload::new(tx), shard_id)).await?;
                     }
                 }
                 // Outbound
