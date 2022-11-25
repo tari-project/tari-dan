@@ -62,7 +62,7 @@ async fn handler(
     Extension(handlers): Extension<Arc<JsonRpcHandlers>>,
     ContentLengthLimit(value): ContentLengthLimit<JsonRpcExtractor, JSON_SIZE_LIMIT_BYTES>,
 ) -> JrpcResult {
-    info!(target: LOG_TARGET, "🌐 JSON-RPC request: {}", value.method);
+    debug!(target: LOG_TARGET, "🌐 JSON-RPC request: {}", value.method);
     match value.method.as_str() {
         // Transaction
         // "get_transaction_status" => handlers.get_transaction_status(value).await,
