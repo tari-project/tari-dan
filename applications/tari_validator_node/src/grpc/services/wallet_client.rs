@@ -62,7 +62,6 @@ impl GrpcWalletClient {
             let inner = Client::connect(url).await?;
             self.client = Some(inner);
         }
-        dbg!(self.endpoint);
         self.client
             .as_mut()
             .ok_or_else(|| DigitalAssetError::FatalError("no connection".into()))

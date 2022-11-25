@@ -94,6 +94,7 @@ pub struct GetTemplatesResponse {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TemplateMetadata {
+    pub name: String,
     pub address: TemplateAddress,
     pub url: String,
     /// SHA hash of binary

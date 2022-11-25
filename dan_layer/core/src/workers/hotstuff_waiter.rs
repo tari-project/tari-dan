@@ -283,7 +283,7 @@ where
             .get_committees(epoch, &involved_shards)
             .await?
             .into_iter()
-            .flat_map(|allocation| allocation.committee.map(|c| c.members).unwrap_or_default())
+            .flat_map(|allocation| allocation.committee.members)
             .collect();
 
         let leaf_node;

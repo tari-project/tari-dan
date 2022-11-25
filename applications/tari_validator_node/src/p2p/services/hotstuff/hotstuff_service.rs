@@ -72,7 +72,6 @@ pub struct HotstuffService {
     rx_broadcast: Receiver<(HotStuffMessage<TariDanPayload, CommsPublicKey>, Vec<CommsPublicKey>)>,
     /// Outgoing vote messages to be sent to the leader
     rx_vote_message: Receiver<(VoteMessage, CommsPublicKey)>,
-    epoch_manager: EpochManagerHandle,
     shutdown: ShutdownSignal, // waiter: HotstuffWaiter,
 }
 
@@ -106,7 +105,7 @@ impl HotstuffService {
             // TODO: we still need this because The signing service is not generic. Abstracting signatures and public
             // keys may add a lot of type complexity.
             node_public_key.clone(),
-            epoch_manager.clone(),
+            epoch_manager,
             leader_strategy,
             rx_new,
             rx_hotstuff_messages,
@@ -130,7 +129,6 @@ impl HotstuffService {
                 rx_leader,
                 rx_broadcast,
                 rx_vote_message,
-                epoch_manager,
                 shutdown,
             }
             .run(),

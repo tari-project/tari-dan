@@ -37,7 +37,7 @@ use crate::{
 #[derive(Debug)]
 pub struct ShardCommitteeAllocation<TAddr: NodeAddressable> {
     pub shard_id: ShardId,
-    pub committee: Option<Committee<TAddr>>,
+    pub committee: Committee<TAddr>,
 }
 
 #[derive(Error, Debug)]
@@ -208,7 +208,7 @@ impl<TAddr: NodeAddressable> EpochManager<TAddr> for RangeEpochManager<TAddr> {
             }
             result.push(ShardCommitteeAllocation {
                 shard_id: *shard,
-                committee: found_committee.clone(),
+                committee: found_committee.unwrap_or_else(Committee::empty),
             });
         }
 
