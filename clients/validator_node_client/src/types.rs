@@ -79,6 +79,7 @@ pub struct FunctionDef {
     pub name: String,
     pub arguments: Vec<String>,
     pub output: String,
+    pub is_mut: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

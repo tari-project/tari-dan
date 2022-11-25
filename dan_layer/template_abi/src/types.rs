@@ -41,6 +41,7 @@ pub struct FunctionDef {
     pub name: String,
     pub arguments: Vec<Type>,
     pub output: Type,
+    pub is_mut: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Encode, Decode)]
