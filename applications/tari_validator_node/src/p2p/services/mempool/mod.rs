@@ -25,5 +25,13 @@ pub use initializer::spawn;
 
 mod handle;
 pub use handle::{MempoolHandle, MempoolRequest};
+use tari_dan_core::services::epoch_manager::EpochManagerError;
+use thiserror::Error;
 
 mod service;
+
+#[derive(Error, Debug)]
+pub enum MempoolError {
+    #[error("Epoch Manager Error: {0}")]
+    EpochManagerError(#[from] Box<EpochManagerError>),
+}
