@@ -231,7 +231,7 @@ pub enum ConsensusWorkerState {
 pub struct ValidatorMetadata {
     pub public_key: PublicKey,
     #[serde(with = "serde_with::hex")]
-    pub shard_id: ShardId,
+    pub vn_shard_key: ShardId,
     pub signature: Signature,
     pub merkle_proof: MerkleProof,
     pub merkle_leaf_index: u64,
@@ -240,14 +240,14 @@ pub struct ValidatorMetadata {
 impl ValidatorMetadata {
     pub fn new(
         public_key: PublicKey,
-        shard_id: ShardId,
+        vn_shard_key: ShardId,
         signature: Signature,
         merkle_proof: MerkleProof,
         merkle_leaf_index: u64,
     ) -> Self {
         Self {
             public_key,
-            shard_id,
+            vn_shard_key,
             signature,
             merkle_proof,
             merkle_leaf_index,
@@ -256,7 +256,7 @@ impl ValidatorMetadata {
 
     pub fn get_node_hash(&self) -> FixedHash {
         // Each node is defined as H(V_i || S_i)
-        vn_mmr_node_hash(&self.public_key, &self.shard_id)
+        vn_mmr_node_hash(&self.public_key, &self.vn_shard_key)
     }
 
     // TODO: impl Borsh for merkle proof
@@ -274,7 +274,7 @@ impl ValidatorMetadata {
     pub fn to_bytes(&self) -> Vec<u8> {
         [
             self.public_key.to_vec(),
-            self.shard_id.as_bytes().to_vec(),
+            self.vn_shard_key.as_bytes().to_vec(),
             self.signature.get_public_nonce().to_vec(),
             self.signature.get_signature().to_vec(),
             self.encode_merkle_proof(),

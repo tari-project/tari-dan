@@ -241,6 +241,7 @@ impl BaseLayerEpochManager {
     }
 
     pub async fn get_shard_id(&mut self, epoch: Epoch, public_key: &PublicKey) -> Result<ShardId, EpochManagerError> {
+        // TODO: Cache the assigned shard key for the epoch (ideally the epoch validity range)
         let shard_id = self
             .base_node_client
             .get_shard_key(epoch.to_height(), public_key)

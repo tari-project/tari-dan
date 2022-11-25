@@ -209,6 +209,7 @@ where
             //  Save the payload, because we will need it when the proposal comes back
             tx.set_payload(payload.clone())?;
             tx.commit()?;
+            // TODO: combine merkle proofs into one before sending
             new_view = HotStuffMessage::new_view(high_qc, shard, Some(payload));
         }
 
@@ -692,9 +693,9 @@ where
             ));
         }
 
-        // TODO: Fix merkle proof verification
         // all merkle proofs for the signers must be valid
         let validator_node_root = self.epoch_manager.get_validator_node_merkle_root(qc.epoch()).await?;
+        // TODO: Combine all validator merkle proofs before sending them
         for md in qc.validators_metadata() {
             md.merkle_proof
                 .verify_leaf::<ValidatorNodeMmrHasherBlake256>(

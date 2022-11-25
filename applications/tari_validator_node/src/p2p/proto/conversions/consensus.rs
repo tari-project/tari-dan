@@ -306,7 +306,7 @@ impl From<ValidatorMetadata> for proto::consensus::ValidatorMetadata {
         let merkle_proof = msg.encode_merkle_proof();
         Self {
             public_key: msg.public_key.to_vec(),
-            shard_id: msg.shard_id.as_bytes().to_vec(),
+            vn_shard_key: msg.vn_shard_key.as_bytes().to_vec(),
             signature: Some(msg.signature.into()),
             merkle_proof,
             merkle_leaf_index: msg.merkle_leaf_index,
@@ -320,14 +320,14 @@ impl TryFrom<proto::consensus::ValidatorMetadata> for ValidatorMetadata {
     fn try_from(value: proto::consensus::ValidatorMetadata) -> Result<Self, Self::Error> {
         Ok(ValidatorMetadata {
             public_key: PublicKey::from_bytes(&value.public_key)?,
-            shard_id: value.shard_id.try_into()?,
+            vn_shard_key: value.vn_shard_key.try_into()?,
             signature: value
                 .signature
                 .map(TryFrom::try_from)
                 .transpose()?
                 .ok_or_else(|| anyhow!("ValidatorMetadata missing signature"))?,
             merkle_proof: ValidatorMetadata::decode_merkle_proof(&value.merkle_proof)?,
-            merkle_leaf_index: 0,
+            merkle_leaf_index: value.merkle_leaf_index,
         })
     }
 }

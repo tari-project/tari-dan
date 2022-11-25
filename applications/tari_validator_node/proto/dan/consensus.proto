@@ -59,7 +59,7 @@ message HotStuffTreeNode {
 
 message ValidatorMetadata {
   bytes public_key = 1;
-  bytes shard_id = 2;
+  bytes vn_shard_key = 2;
   tari.dan.common.Signature signature = 3;
   bytes merkle_proof = 4;
   uint64 merkle_leaf_index = 5;
