@@ -20,8 +20,9 @@
 //   WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //   USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use std::{fs, path::Path};
+use std::{fs, io, path::Path};
 
+use anyhow::anyhow;
 use tari_engine_types::substate::{SubstateAddress, SubstateDiff};
 use tari_template_lib::models::ComponentAddress;
 use tari_utilities::hex::to_hex;
@@ -33,8 +34,8 @@ pub struct ComponentManager {
 impl ComponentManager {
     pub fn init<P: AsRef<Path>>(base_path: P) -> anyhow::Result<Self> {
         let path = base_path.as_ref().join("components");
-        fs::create_dir_all(&path)?;
-        let store = jfs::Store::new(path)?;
+        fs::create_dir_all(&path).map_err(|e| anyhow!("Failed to create component store dir: {}", e))?;
+        let store = jfs::Store::new(path).map_err(|e| anyhow!("Failed to create component store: {}", e))?;
         Ok(Self { store })
     }
 
@@ -76,7 +77,10 @@ impl ComponentManager {
     // }
 
     pub fn get_component_childen(&self, address: &ComponentAddress) -> anyhow::Result<Vec<SubstateAddress>> {
-        let children = self.store.get::<Vec<SubstateAddress>>(&to_hex(address))?;
-        Ok(children)
+        match self.store.get::<Vec<SubstateAddress>>(&to_hex(address)) {
+            Ok(children) => Ok(children),
+            Err(e) if e.kind() == io::ErrorKind::NotFound => Err(anyhow!("Component {} not found", address)),
+            Err(e) => Err(anyhow!("Failed to get component children: {}", e)),
+        }
     }
 }
