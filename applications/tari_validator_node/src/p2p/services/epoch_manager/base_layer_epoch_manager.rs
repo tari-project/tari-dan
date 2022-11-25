@@ -38,7 +38,7 @@ use tari_dan_core::{
     storage::DbFactory,
 };
 use tari_dan_storage::global::{DbEpoch, DbValidatorNode, MetadataKey};
-use tari_dan_storage_sqlite::SqliteDbFactory;
+use tari_dan_storage_sqlite::{sqlite_shard_store_factory::SqliteShardStoreFactory, SqliteDbFactory};
 use tokio::sync::broadcast;
 
 use super::{get_committee_shard_range, sync_peers::PeerSyncManagerService};
@@ -168,10 +168,11 @@ impl BaseLayerEpochManager {
         }
         let (start_shard_id, end_shard_id) = get_committee_shard_range(committee_size, &committee_vns).into_inner();
 
-        let peer_sync_service_manager = PeerSyncManagerService::new(
-            self.validator_node_config.clone(),
-            self.validator_node_client_factory.clone(),
-        );
+        let shard_store_factory = SqliteShardStoreFactory::try_create(self.validator_node_config.state_db_path())?;
+
+        // TODO: I think this should be part of a state machine for the VN
+        let peer_sync_service_manager =
+            PeerSyncManagerService::new(self.validator_node_client_factory.clone(), shard_store_factory);
 
         // synchronize state with committee validator nodes
         peer_sync_service_manager

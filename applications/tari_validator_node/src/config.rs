@@ -98,6 +98,10 @@ pub struct ValidatorNodeConfig {
 }
 
 impl ValidatorNodeConfig {
+    pub fn state_db_path(&self) -> PathBuf {
+        self.data_dir.join("state.db")
+    }
+
     pub fn set_base_path<P: AsRef<Path>>(&mut self, base_path: P) {
         if !self.shard_key_file.is_absolute() {
             self.shard_key_file = base_path.as_ref().join(&self.shard_key_file);
