@@ -39,6 +39,7 @@ use tari_dan_core::{
         hotstuff_waiter::HotStuffWaiter,
     },
 };
+use tari_dan_engine::transaction::Transaction;
 use tari_dan_storage_sqlite::sqlite_shard_store_factory::SqliteShardStoreFactory;
 use tari_shutdown::ShutdownSignal;
 use tokio::sync::{
@@ -168,6 +169,11 @@ impl HotstuffService {
         Ok(())
     }
 
+    async fn handle_new_valid_transaction(&mut self, tx: Transaction, shard: ShardId) -> Result<(), anyhow::Error> {
+        self.tx_new.send((TariDanPayload::new(tx), shard)).await?;
+        Ok(())
+    }
+
     pub async fn run(mut self) -> Result<(), anyhow::Error> {
         loop {
             tokio::select! {
@@ -175,7 +181,7 @@ impl HotstuffService {
                 res = self.mempool.next_valid_transaction() => {
                     if let Some((tx, shard_id)) = log(res, "new valid transaction") {
                         debug!(target: LOG_TARGET, "Received new transaction {} for shard {}", tx.hash(), shard_id);
-                        self.tx_new.send((TariDanPayload::new(tx), shard_id)).await?;
+                        log(self.handle_new_valid_transaction(tx, shard_id).await, "new valid transaction");
                     }
                 }
                 // Outbound
