@@ -64,6 +64,7 @@ pub struct BaseLayerEpochManager {
     node_identity: Arc<NodeIdentity>,
     validator_node_config: ValidatorNodeConfig,
     validator_node_client_factory: TariCommsValidatorNodeClientFactory,
+    current_shard_key: Option<ShardId>,
 }
 
 impl BaseLayerEpochManager {
@@ -87,6 +88,7 @@ impl BaseLayerEpochManager {
             node_identity,
             validator_node_config,
             validator_node_client_factory,
+            current_shard_key: None,
         }
     }
 
@@ -149,6 +151,7 @@ impl BaseLayerEpochManager {
                 return Ok(());
             },
         };
+        self.current_shard_key = Some(vn_shard_key);
         info!(
             target: LOG_TARGET,
             "🖊 Validator node is registered for epoch {}, shard key: {} ", epoch, vn_shard_key
@@ -240,14 +243,21 @@ impl BaseLayerEpochManager {
         self.current_epoch
     }
 
-    pub async fn get_shard_id(&mut self, epoch: Epoch, public_key: &PublicKey) -> Result<ShardId, EpochManagerError> {
-        // TODO: Cache the assigned shard key for the epoch (ideally the epoch validity range)
-        let shard_id = self
-            .base_node_client
-            .get_shard_key(epoch.to_height(), public_key)
-            .await?
-            .ok_or(EpochManagerError::ValidatorNodeNotRegistered)?;
-        Ok(shard_id)
+    pub fn get_validator_shard_key(
+        &mut self,
+        epoch: Epoch,
+        public_key: &PublicKey,
+    ) -> Result<ShardId, EpochManagerError> {
+        let db = self.db_factory.get_or_create_global_db()?;
+        let tx = db
+            .create_transaction()
+            .map_err(|e| EpochManagerError::StorageError(e.into()))?;
+        let vn = db
+            .validator_nodes(&tx)
+            .get(epoch.0, public_key.as_bytes())
+            .map_err(|e| EpochManagerError::StorageError(e.into()))?;
+
+        Ok(ShardId::from_bytes(&vn.shard_key).expect("Invalid Shard Key, Database is corrupt"))
     }
 
     pub async fn last_registration_epoch(&self) -> Result<Option<Epoch>, EpochManagerError> {
@@ -369,7 +379,7 @@ impl BaseLayerEpochManager {
             .map_err(|e| EpochManagerError::StorageError(e.into()))?;
         let db_vns = db
             .validator_nodes(&tx)
-            .get_validator_nodes_per_epoch(epoch.0)
+            .get_all_per_epoch(epoch.0)
             .map_err(|e| EpochManagerError::StorageError(e.into()))?;
         let vns = db_vns
             .into_iter()

@@ -91,10 +91,10 @@ impl EpochManager<CommsPublicKey> for EpochManagerHandle {
         rx.await.map_err(|_| EpochManagerError::ReceiveError)?
     }
 
-    async fn get_shard_id(&self, epoch: Epoch, addr: CommsPublicKey) -> Result<ShardId, EpochManagerError> {
+    async fn get_validator_shard_key(&self, epoch: Epoch, addr: CommsPublicKey) -> Result<ShardId, EpochManagerError> {
         let (tx, rx) = oneshot::channel();
         self.tx_request
-            .send(EpochManagerRequest::GetShardId { epoch, addr, reply: tx })
+            .send(EpochManagerRequest::GetValidatorShardKey { epoch, addr, reply: tx })
             .await
             .map_err(|_| EpochManagerError::SendError)?;
 

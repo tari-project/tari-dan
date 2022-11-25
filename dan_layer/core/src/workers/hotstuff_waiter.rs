@@ -402,7 +402,10 @@ where
             .position(|vn| vn.public_key == self.public_key)
             .expect("The VN is not registered");
 
-        let node_shard_id = self.get_shard_id(node.epoch(), self.public_key.clone()).await?;
+        let node_shard_key = self
+            .epoch_manager
+            .get_validator_shard_key(node.epoch(), self.public_key.clone())
+            .await?;
         let vn_mmr = self.epoch_manager.get_validator_node_mmr(node.epoch()).await?;
 
         {
@@ -419,7 +422,7 @@ where
                 return Ok(());
             }
 
-            tx.save_leader_proposals(shard, node.payload_id(), node.payload_height(), node.clone())?;
+            tx.save_leader_proposals(node.shard(), node.payload_id(), node.payload_height(), node.clone())?;
 
             let mut leader_proposals = vec![];
             for s in &involved_shards {
@@ -434,6 +437,11 @@ where
                 }
             }
             if leader_proposals.len() == involved_shards.len() {
+                info!(
+                    target: LOG_TARGET,
+                    "🔥 Received enough proposals to vote on the message: {}",
+                    leader_proposals.len()
+                );
                 // Execute the payload!
                 let shard_pledges: HashMap<ShardId, Option<ObjectPledge>> = leader_proposals
                     .iter()
@@ -473,14 +481,14 @@ where
                         &finalize_result,
                     )?;
 
-                    vote_msg.sign_vote(&self.signing_service, node_shard_id, &vn_mmr, vn_mmr_leaf_index as u64)?;
+                    vote_msg.sign_vote(&self.signing_service, node_shard_key, &vn_mmr, vn_mmr_leaf_index as u64)?;
 
                     votes_to_send.push((vote_msg, local_node.proposed_by().clone()));
                 }
             } else {
                 info!(
                     target: LOG_TARGET,
-                    "🔥 Not enough votes to vote on the message, votes: {}, involved_shards: {}",
+                    "🔥 Not enough proposals to vote on the message, num proposals: {}, involved_shards: {}",
                     leader_proposals.len(),
                     involved_shards.len()
                 );
@@ -496,11 +504,6 @@ where
         }
         self.update_nodes(node.clone()).await?;
         Ok(())
-    }
-
-    async fn get_shard_id(&self, epoch: Epoch, addr: TAddr) -> Result<ShardId, HotStuffError> {
-        let shard_id = self.epoch_manager.get_shard_id(epoch, addr).await?;
-        Ok(shard_id)
     }
 
     /// Step 6: The leader receives votes from the local shard, and once it has enough ($n - f$) votes, it commits a

@@ -65,7 +65,7 @@ pub enum EpochManagerRequest {
     CurrentEpoch {
         reply: Reply<Epoch>,
     },
-    GetShardId {
+    GetValidatorShardKey {
         epoch: Epoch,
         addr: CommsPublicKey,
         reply: Reply<ShardId>,
@@ -180,8 +180,8 @@ impl EpochManagerService {
     async fn handle_request(&mut self, req: EpochManagerRequest) {
         match req {
             EpochManagerRequest::CurrentEpoch { reply } => handle(reply, Ok(self.inner.current_epoch())),
-            EpochManagerRequest::GetShardId { epoch, addr, reply } => {
-                handle(reply, self.inner.get_shard_id(epoch, &addr).await)
+            EpochManagerRequest::GetValidatorShardKey { epoch, addr, reply } => {
+                handle(reply, self.inner.get_validator_shard_key(epoch, &addr))
             },
             EpochManagerRequest::UpdateEpoch { tip_info, reply } => {
                 handle(reply, self.inner.update_epoch(tip_info).await);

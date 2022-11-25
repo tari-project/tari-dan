@@ -76,7 +76,7 @@ pub enum EpochManagerError {
 // TODO: Rename to reflect that it's a read only interface (e.g. EpochReader, EpochQuery)
 pub trait EpochManager<TAddr: NodeAddressable>: Clone {
     async fn current_epoch(&self) -> Result<Epoch, EpochManagerError>;
-    async fn get_shard_id(&self, epoch: Epoch, addr: TAddr) -> Result<ShardId, EpochManagerError>;
+    async fn get_validator_shard_key(&self, epoch: Epoch, addr: TAddr) -> Result<ShardId, EpochManagerError>;
     async fn is_epoch_valid(&self, epoch: Epoch) -> Result<bool, EpochManagerError>;
     async fn get_committees(
         &self,
@@ -168,7 +168,7 @@ impl<TAddr: NodeAddressable> EpochManager<TAddr> for RangeEpochManager<TAddr> {
         Ok(self.current_epoch)
     }
 
-    async fn get_shard_id(&self, epoch: Epoch, addr: TAddr) -> Result<ShardId, EpochManagerError> {
+    async fn get_validator_shard_key(&self, epoch: Epoch, addr: TAddr) -> Result<ShardId, EpochManagerError> {
         self.registered_vns
             .iter()
             .find_map(|(e, vns)| {
