@@ -112,7 +112,7 @@ impl MempoolService {
 
         {
             let access = self.transactions.lock().unwrap();
-            if access.contains_key(&transaction.hash()) {
+            if access.contains_key(transaction.hash()) {
                 info!(
                     target: LOG_TARGET,
                     "🎱 Transaction {} already in mempool",
@@ -198,6 +198,7 @@ impl MempoolService {
         let msg = DanMessage::NewTransaction(transaction.clone());
 
         // propagate over the involved shard ids
+        #[allow(clippy::mutable_key_type)]
         let unique_members = committees
             .into_iter()
             .flat_map(|s| s.committee.members)

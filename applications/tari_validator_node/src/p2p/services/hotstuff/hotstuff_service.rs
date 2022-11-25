@@ -57,7 +57,6 @@ use crate::{
     payload_processor::TariDanPayloadProcessor,
 };
 
-#[allow(dead_code)]
 const LOG_TARGET: &str = "tari::validator_node::hotstuff_service";
 
 pub struct HotstuffService {

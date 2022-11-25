@@ -49,8 +49,6 @@ mod sidechain_metadata;
 mod tari_dan_payload;
 mod tree_node_hash;
 mod validator_node;
-mod view;
-mod view_id;
 pub mod vote_message;
 
 pub use base_layer_metadata::BaseLayerMetadata;
@@ -71,8 +69,6 @@ use tari_mmr::MerkleProof;
 use tari_utilities::ByteArray;
 pub use tree_node_hash::TreeNodeHash;
 pub use validator_node::ValidatorNode;
-pub use view::View;
-pub use view_id::ViewId;
 
 use crate::services::infrastructure_services::NodeAddressable;
 

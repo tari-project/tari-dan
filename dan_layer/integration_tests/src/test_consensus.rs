@@ -252,7 +252,6 @@ impl HsTestHarness {
         }
     }
 
-    #[allow(dead_code)]
     async fn assert_no_execute(&mut self) {
         assert!(
             timeout(Duration::from_secs(1), self.rx_execute.recv()).await.is_err(),
