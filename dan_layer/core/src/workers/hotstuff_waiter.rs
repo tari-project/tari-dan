@@ -596,6 +596,9 @@ where
 
         let epoch = self.epoch_manager.current_epoch().await?;
         let committee = self.epoch_manager.get_committee(epoch, shard).await?;
+        if committee.is_empty() {
+            return Err(HotStuffError::NoCommitteeForShard { shard, epoch });
+        }
         if self.is_leader(payload_id, shard, &committee)? {
             let min_required_new_views = committee.consensus_threshold();
             let num_new_views = self.count_new_views_for(shard)?;
