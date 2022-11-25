@@ -30,7 +30,6 @@ use tari_dan_core::{
     message::DanMessage,
     models::{vote_message::VoteMessage, HotStuffMessage, TariDanPayload},
     services::{
-        epoch_manager::EpochManager,
         infrastructure_services::OutboundService,
         leader_strategy::PayloadSpecificLeaderStrategy,
         NodeIdentitySigningService,
@@ -171,15 +170,7 @@ impl HotstuffService {
     }
 
     async fn handle_new_valid_transaction(&mut self, tx: Transaction, shard: ShardId) -> Result<(), anyhow::Error> {
-        if self
-            .epoch_manager
-            .is_validator_in_committee_for_current_epoch(shard, self.node_public_key.clone())
-            .await?
-        {
-            self.tx_new.send((TariDanPayload::new(tx), shard)).await?;
-        } else {
-            info!(target: LOG_TARGET, "🙇 Not in committee for transaction {}", tx.hash());
-        }
+        self.tx_new.send((TariDanPayload::new(tx), shard)).await?;
         Ok(())
     }
 
