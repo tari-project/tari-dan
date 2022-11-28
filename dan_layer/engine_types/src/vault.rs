@@ -29,7 +29,7 @@ use crate::{
     resource::{Resource, ResourceError},
 };
 
-#[derive(Debug, Clone, Encode, Decode, Serialize, Deserialize)]
+#[derive(Debug, Clone, Encode, Decode, Serialize, Deserialize, PartialEq)]
 pub struct Vault {
     vault_id: VaultId,
     resource: Resource,

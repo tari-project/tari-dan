@@ -165,6 +165,17 @@ pub struct SubstatesRequest {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct GetTransactionRequest {
+    #[serde(with = "serde_with::hex")]
+    pub hash: FixedHash,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct GetTransactionResponse {
+    pub result: Option<FinalizeResult>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct LogEntry {
     pub timestamp: u64,
     pub message: String,

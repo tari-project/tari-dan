@@ -24,7 +24,7 @@ use serde::{Deserialize, Serialize};
 use tari_bor::{borsh, Decode, Encode};
 use tari_template_lib::models::{Amount, Metadata, ResourceAddress};
 
-#[derive(Debug, Clone, Encode, Decode, Serialize, Deserialize)]
+#[derive(Debug, Clone, Encode, Decode, Serialize, Deserialize, PartialEq)]
 pub struct Resource {
     resource_address: ResourceAddress,
     state: ResourceState,
@@ -107,7 +107,7 @@ impl Resource {
     }
 }
 
-#[derive(Debug, Clone, Encode, Decode, Serialize, Deserialize)]
+#[derive(Debug, Clone, Encode, Decode, Serialize, Deserialize, PartialEq)]
 pub enum ResourceState {
     Fungible { amount: Amount },
     NonFungible { token_ids: Vec<u64> },

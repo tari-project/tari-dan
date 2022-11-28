@@ -69,6 +69,7 @@ async fn handler(
         "submit_transaction" => handlers.submit_transaction(value).await,
         "get_recent_transactions" => handlers.get_recent_transactions(value).await,
         "get_transaction" => handlers.get_transaction(value).await,
+        "get_transaction_result" => handlers.get_transaction_result(value).await,
         "get_substates" => handlers.get_substates(value).await,
         // Template
         "get_template" => handlers.get_template(value).await,

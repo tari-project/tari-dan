@@ -56,7 +56,7 @@ use tari_dan_core::{
     },
 };
 use tari_dan_engine::transaction::{Transaction, TransactionMeta};
-use tari_engine_types::{instruction::Instruction, signature::InstructionSignature};
+use tari_engine_types::{commit_result::FinalizeResult, instruction::Instruction, signature::InstructionSignature};
 use tari_utilities::{hex::Hex, ByteArray};
 
 use crate::{
@@ -344,6 +344,7 @@ impl ShardStoreTransaction<PublicKey, TariDanPayload> for SqliteShardStoreTransa
             fee,
             sender_public_key,
             meta,
+            result: None,
         };
 
         match diesel::insert_into(payloads)
@@ -486,8 +487,22 @@ impl ShardStoreTransaction<PublicKey, TariDanPayload> for SqliteShardStoreTransa
         })?;
 
         let transaction = Transaction::new(fee, instructions, signature, sender_public_key, meta);
+        let mut tari_dan_payload = TariDanPayload::new(transaction);
 
-        Ok(TariDanPayload::new(transaction))
+        // deserialize the transaction result
+        let result_field: Option<FinalizeResult> = match payload.result {
+            Some(result_json) => {
+                let result: FinalizeResult =
+                    serde_json::from_str(&result_json).map_err(|_| StorageError::DecodingError)?;
+                Some(result)
+            },
+            None => None,
+        };
+        if let Some(result) = result_field {
+            tari_dan_payload.set_result(result);
+        }
+
+        Ok(tari_dan_payload)
     }
 
     fn get_node(&self, hash: &TreeNodeHash) -> Result<HotStuffTreeNode<PublicKey, TariDanPayload>, StorageError> {
@@ -1227,6 +1242,27 @@ impl ShardStoreTransaction<PublicKey, TariDanPayload> for SqliteShardStoreTransa
             .into_iter()
             .map(|recent_transaction| recent_transaction.into())
             .collect())
+    }
+
+    fn update_payload_result(
+        &self,
+        requested_payload_id: &PayloadId,
+        result: FinalizeResult,
+    ) -> Result<(), StorageError> {
+        use crate::schema::payloads;
+
+        let result_json = serde_json::to_string(&result).map_err(|_| StorageError::EncodingError)?;
+
+        diesel::update(payloads::table)
+            .filter(payloads::payload_id.eq(requested_payload_id.as_bytes()))
+            .set(payloads::result.eq(result_json))
+            .execute(self.transaction.connection())
+            .map_err(|source| SqliteStorageError::DieselError {
+                source,
+                operation: "update_payload_result".to_string(),
+            })?;
+
+        Ok(())
     }
 
     fn get_transaction(&self, payload_id: Vec<u8>) -> Result<Vec<SQLTransaction>, StorageError> {

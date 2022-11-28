@@ -28,7 +28,7 @@ use std::{
 use serde::{Deserialize, Serialize};
 pub use tari_template_lib::args::LogLevel;
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct LogEntry {
     pub timestamp: u64,
     pub message: String,

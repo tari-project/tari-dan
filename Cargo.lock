@@ -6166,6 +6166,7 @@ dependencies = [
  "async-trait",
  "axum",
  "axum-jrpc",
+ "bincode",
  "blake2 0.9.2",
  "borsh",
  "bytes 1.2.1",

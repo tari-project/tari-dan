@@ -25,7 +25,7 @@ use tari_template_lib::Hash;
 
 use crate::{execution_result::ExecutionResult, logs::LogEntry, substate::SubstateDiff};
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct FinalizeResult {
     pub transaction_hash: Hash,
     pub logs: Vec<LogEntry>,
@@ -48,7 +48,7 @@ impl FinalizeResult {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub enum TransactionResult {
     Accept(SubstateDiff),
     Reject(RejectReason),
@@ -83,7 +83,7 @@ impl TransactionResult {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub enum RejectReason {
     ShardNotPledged(String),
     ExecutionFailure(String),

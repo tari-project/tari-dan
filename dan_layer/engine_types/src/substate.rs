@@ -31,7 +31,7 @@ use tari_template_lib::{
 
 use crate::{resource::Resource, vault::Vault};
 
-#[derive(Debug, Clone, Encode, Decode, Serialize, Deserialize)]
+#[derive(Debug, Clone, Encode, Decode, Serialize, Deserialize, PartialEq)]
 pub struct Substate {
     substate: SubstateValue,
     version: u32,
@@ -113,7 +113,7 @@ impl Display for SubstateAddress {
     }
 }
 
-#[derive(Debug, Clone, Encode, Decode, Serialize, Deserialize)]
+#[derive(Debug, Clone, Encode, Decode, Serialize, Deserialize, PartialEq)]
 pub enum SubstateValue {
     Component(ComponentInstance),
     Resource(Resource),
@@ -176,7 +176,7 @@ impl From<Vault> for SubstateValue {
     }
 }
 
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
 pub struct SubstateDiff {
     up_substates: Vec<(SubstateAddress, Substate)>,
     down_substates: Vec<SubstateAddress>,

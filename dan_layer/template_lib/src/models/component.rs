@@ -26,7 +26,7 @@ use crate::models::TemplateAddress;
 
 pub type ComponentAddress = crate::Hash;
 
-#[derive(Debug, Clone, Encode, Decode)]
+#[derive(Debug, Clone, Encode, Decode, PartialEq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct ComponentInstance {
     pub component_address: ComponentAddress,
