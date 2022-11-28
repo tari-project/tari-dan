@@ -66,7 +66,6 @@ pub enum TransactionSubcommand {
 
 #[derive(Debug, Args, Clone)]
 pub struct GetArgs {
-    #[clap(long)]
     transaction_hash: FromHex<FixedHash>,
 }
 
