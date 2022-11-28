@@ -23,78 +23,12 @@
 use async_trait::async_trait;
 use log::*;
 use tari_comms::types::CommsPublicKey;
-use tari_dan_core::{
-    message::DanMessage,
-    models::TariDanPayload,
-    services::infrastructure_services::OutboundService,
-    DigitalAssetError,
-};
+use tari_dan_core::{message::DanMessage, models::TariDanPayload, services::infrastructure_services::OutboundService};
 use tokio::sync::mpsc;
 
-use crate::comms::Destination;
+use crate::{comms::Destination, p2p::services::messaging::MessagingError};
 
 const LOG_TARGET: &str = "tari::validator_node::messages::outbound::validator_node";
-
-// pub struct TariCommsOutboundService {
-//     outbound_messaging: OutboundMessaging,
-//     loopback: mpsc::Sender<(CommsPublicKey, DanMessage<TariDanPayload, CommsPublicKey>)>,
-// }
-//
-// impl TariCommsOutboundService {
-//     #[allow(dead_code)]
-//     pub fn new(
-//         outbound_messaging: OutboundMessaging,
-//         loopback: mpsc::Sender<(CommsPublicKey, DanMessage<TariDanPayload, CommsPublicKey>)>,
-//     ) -> Self {
-//         Self {
-//             outbound_messaging,
-//             loopback,
-//         }
-//     }
-// }
-//
-// #[async_trait]
-// impl OutboundService for TariCommsOutboundService {
-//     type Addr = CommsPublicKey;
-//     type Payload = TariDanPayload;
-//
-//     async fn send(
-//         &mut self,
-//         from: CommsPublicKey,
-//         to: CommsPublicKey,
-//         message: DanMessage<TariDanPayload, CommsPublicKey>,
-//     ) -> Result<(), DigitalAssetError> {
-//         debug!(target: LOG_TARGET, "Outbound message to be sent:{} {:?}", to, message);
-//
-//         // Messages destined to ourselves are added to the loopback queue
-//         if from == to {
-//             debug!(target: LOG_TARGET, "Sending {:?} to self", message.message_type());
-//             self.loopback
-//                 .send((from, dan_message))
-//                 .await
-//                 .map_err(|_| DigitalAssetError::SendError {
-//                     context: "Sending to loopback".to_string(),
-//                 })?;
-//             return Ok(());
-//         }
-//
-//         self.outbound_messaging.send(to, tari_message).await?;
-//         Ok(())
-//     }
-//
-//     async fn broadcast(
-//         &mut self,
-//         from: CommsPublicKey,
-//         committee: &[CommsPublicKey],
-//         message: DanMessage<TariDanPayload, CommsPublicKey>,
-//     ) -> Result<(), DigitalAssetError> {
-//         for committee_member in committee {
-//             self.send(from.clone(), committee_member.clone(), message.clone())
-//                 .await?;
-//         }
-//         Ok(())
-//     }
-// }
 
 #[derive(Debug, Clone)]
 pub struct OutboundMessaging {
@@ -120,6 +54,7 @@ impl OutboundMessaging {
 #[async_trait]
 impl OutboundService for OutboundMessaging {
     type Addr = CommsPublicKey;
+    type Error = MessagingError;
     type Payload = TariDanPayload;
 
     async fn send(
@@ -127,24 +62,20 @@ impl OutboundService for OutboundMessaging {
         _from: Self::Addr,
         to: Self::Addr,
         message: DanMessage<Self::Payload, Self::Addr>,
-    ) -> Result<(), DigitalAssetError> {
+    ) -> Result<(), MessagingError> {
         if to == self.our_node_addr {
             trace!(target: LOG_TARGET, "Sending {:?} to self", message);
             self.loopback_sender
                 .send(message)
                 .await
-                .map_err(|_| DigitalAssetError::SendError {
-                    context: "Sending to loopback".to_string(),
-                })?;
+                .map_err(|_| MessagingError::LoopbackSendFailed)?;
             return Ok(());
         }
 
         self.sender
             .send((Destination::Peer(to), message))
             .await
-            .map_err(|_| DigitalAssetError::SendError {
-                context: "Sending to outbound messaging".to_string(),
-            })?;
+            .map_err(|_| MessagingError::MessageSendFailed)?;
         Ok(())
     }
 
@@ -153,7 +84,7 @@ impl OutboundService for OutboundMessaging {
         _from: Self::Addr,
         committee: &[Self::Addr],
         message: DanMessage<Self::Payload, Self::Addr>,
-    ) -> Result<(), DigitalAssetError> {
+    ) -> Result<(), MessagingError> {
         let (ours, theirs) = committee
             .iter()
             .cloned()
@@ -165,17 +96,13 @@ impl OutboundService for OutboundMessaging {
             self.loopback_sender
                 .send(message.clone())
                 .await
-                .map_err(|_| DigitalAssetError::SendError {
-                    context: "Sending to loopback".to_string(),
-                })?;
+                .map_err(|_| MessagingError::LoopbackSendFailed)?;
         }
 
         self.sender
             .send((Destination::Selected(theirs), message))
             .await
-            .map_err(|_| DigitalAssetError::SendError {
-                context: "Sending to outbound messaging".to_string(),
-            })?;
+            .map_err(|_| MessagingError::MessageSendFailed)?;
         Ok(())
     }
 
@@ -183,13 +110,11 @@ impl OutboundService for OutboundMessaging {
         &mut self,
         _from: Self::Addr,
         message: DanMessage<Self::Payload, Self::Addr>,
-    ) -> Result<(), DigitalAssetError> {
+    ) -> Result<(), MessagingError> {
         self.sender
             .send((Destination::Flood, message))
             .await
-            .map_err(|_| DigitalAssetError::SendError {
-                context: "Sending to outbound messaging".to_string(),
-            })?;
+            .map_err(|_| MessagingError::MessageSendFailed)?;
         Ok(())
     }
 }

@@ -305,6 +305,7 @@ impl JsonRpcHandlers {
             templates: templates
                 .into_iter()
                 .map(|t| TemplateMetadata {
+                    name: t.name,
                     address: t.address,
                     url: t.url,
                     binary_sha: t.binary_sha,
@@ -332,6 +333,7 @@ impl JsonRpcHandlers {
 
         Ok(JsonRpcResponse::success(answer_id, GetTemplateResponse {
             registration_metadata: TemplateMetadata {
+                name: template.metadata.name,
                 address: template.metadata.address,
                 url: template.metadata.url,
                 binary_sha: template.metadata.binary_sha,

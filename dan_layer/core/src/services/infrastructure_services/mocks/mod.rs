@@ -25,11 +25,7 @@ use std::collections::HashMap;
 use async_trait::async_trait;
 use tokio::sync::mpsc::{channel, Receiver, Sender};
 
-use crate::{
-    digital_assets_error::DigitalAssetError,
-    models::HotStuffMessage,
-    services::infrastructure_services::{InboundConnectionService, NodeAddressable, OutboundService},
-};
+use crate::services::infrastructure_services::{NodeAddressable, OutboundService};
 
 pub fn mock_inbound<TAddr: NodeAddressable, TPayload: Payload>() -> MockInboundConnectionService<TAddr, TPayload> {
     MockInboundConnectionService::default()
@@ -45,29 +41,6 @@ pub struct MockInboundConnectionService<TAddr: NodeAddressable, TPayload: Payloa
     messages: Messages<TAddr, TPayload>,
 }
 
-#[async_trait]
-impl<TAddr: NodeAddressable + Send, TPayload: Payload> InboundConnectionService
-    for MockInboundConnectionService<TAddr, TPayload>
-{
-    type Addr = TAddr;
-    type Payload = TPayload;
-
-    async fn wait_for_message(
-        &self,
-        _message_type: HotStuffMessageType,
-        _for_view: ViewId,
-    ) -> Result<(TAddr, HotStuffMessage<TPayload, TAddr>), DigitalAssetError> {
-        todo!()
-    }
-
-    async fn wait_for_qc(
-        &self,
-        _message_type: HotStuffMessageType,
-        _for_view: ViewId,
-    ) -> Result<(TAddr, HotStuffMessage<TPayload, TAddr>), DigitalAssetError> {
-        todo!()
-    }
-}
 impl<TAddr: NodeAddressable, TPayload: Payload> Default for MockInboundConnectionService<TAddr, TPayload> {
     fn default() -> Self {
         Self { messages: channel(10) }
@@ -126,16 +99,14 @@ impl<TAddr: NodeAddressable, TPayload: Payload> MockOutboundService<TAddr, TPayl
 
 use std::fmt::Debug;
 
-use crate::{
-    message::DanMessage,
-    models::{HotStuffMessageType, Payload, ViewId},
-};
+use crate::{message::DanMessage, models::Payload};
 
 #[async_trait]
 impl<TAddr: NodeAddressable + Send + Sync + Debug, TPayload: Payload> OutboundService
     for MockOutboundService<TAddr, TPayload>
 {
     type Addr = TAddr;
+    type Error = anyhow::Error;
     type Payload = TPayload;
 
     async fn send(
@@ -143,7 +114,7 @@ impl<TAddr: NodeAddressable + Send + Sync + Debug, TPayload: Payload> OutboundSe
         _from: TAddr,
         to: TAddr,
         message: DanMessage<Self::Payload, Self::Addr>,
-    ) -> Result<(), DigitalAssetError> {
+    ) -> Result<(), Self::Error> {
         // intentionally swallow error here because the other end can die in tests
         let _result = self.inbound_senders.get_mut(&to).unwrap().send((to, message)).await;
         Ok(())
@@ -154,7 +125,7 @@ impl<TAddr: NodeAddressable + Send + Sync + Debug, TPayload: Payload> OutboundSe
         from: TAddr,
         _committee: &[TAddr],
         message: DanMessage<Self::Payload, Self::Addr>,
-    ) -> Result<(), DigitalAssetError> {
+    ) -> Result<(), Self::Error> {
         let receivers: Vec<TAddr> = self.inbound_senders.keys().cloned().collect();
         for receiver in receivers {
             self.send(from.clone(), receiver.clone(), message.clone()).await?
@@ -166,7 +137,7 @@ impl<TAddr: NodeAddressable + Send + Sync + Debug, TPayload: Payload> OutboundSe
         &mut self,
         from: Self::Addr,
         message: DanMessage<Self::Payload, Self::Addr>,
-    ) -> Result<(), DigitalAssetError> {
+    ) -> Result<(), Self::Error> {
         let receivers: Vec<TAddr> = self.inbound_senders.keys().cloned().collect();
         for receiver in receivers {
             self.send(from.clone(), receiver.clone(), message.clone()).await?

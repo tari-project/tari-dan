@@ -20,7 +20,7 @@
 //   WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //   USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use std::sync::{Arc, Mutex};
+use std::{collections::HashSet, sync::Arc};
 
 use log::*;
 use tari_comms::NodeIdentity;
@@ -34,7 +34,7 @@ use tari_dan_engine::transaction::Transaction;
 use tari_template_lib::Hash;
 use tokio::sync::{broadcast, mpsc};
 
-use super::{handle::TransactionVecMutex, MempoolError};
+use super::{handle::TransactionPool, MempoolError};
 use crate::p2p::services::{
     epoch_manager::handle::EpochManagerHandle,
     mempool::handle::MempoolRequest,
@@ -44,8 +44,7 @@ use crate::p2p::services::{
 const LOG_TARGET: &str = "dan::mempool::service";
 
 pub struct MempoolService {
-    // TODO: Should be a HashSet
-    transactions: TransactionVecMutex,
+    transactions: TransactionPool,
     new_transactions: mpsc::Receiver<Transaction>,
     mempool_requests: mpsc::Receiver<MempoolRequest>,
     outbound: OutboundMessaging,
@@ -64,7 +63,7 @@ impl MempoolService {
         node_identity: Arc<NodeIdentity>,
     ) -> Self {
         Self {
-            transactions: Arc::new(Mutex::new(Vec::new())),
+            transactions: Default::default(),
             new_transactions,
             mempool_requests,
             outbound,
@@ -91,13 +90,13 @@ impl MempoolService {
     async fn handle_request(&mut self, request: MempoolRequest) {
         match request {
             MempoolRequest::SubmitTransaction(transaction) => self.handle_new_transaction(*transaction).await,
-            MempoolRequest::RemoveTransaction { transaction_hash } => self.remove_transaction(transaction_hash),
+            MempoolRequest::RemoveTransaction { transaction_hash } => self.remove_transaction(&transaction_hash),
         }
     }
 
-    fn remove_transaction(&mut self, hash: Hash) {
+    fn remove_transaction(&mut self, hash: &Hash) {
         let mut transactions = self.transactions.lock().unwrap();
-        transactions.retain(|(transaction, _)| *transaction.hash() != hash);
+        transactions.remove(hash);
     }
 
     async fn handle_new_transaction(&mut self, transaction: Transaction) {
@@ -113,8 +112,7 @@ impl MempoolService {
 
         {
             let access = self.transactions.lock().unwrap();
-            // TODO: O(n)
-            if access.iter().any(|(tx, _)| tx.hash() == transaction.hash()) {
+            if access.contains_key(transaction.hash()) {
                 info!(
                     target: LOG_TARGET,
                     "🎱 Transaction {} already in mempool",
@@ -151,15 +149,16 @@ impl MempoolService {
             let mut access = self.transactions.lock().unwrap();
 
             if should_process_txn {
-                access.push((transaction.clone(), None));
+                info!(target: LOG_TARGET, "🎱 New transaction in mempool");
+                access.insert(*transaction.hash(), (transaction.clone(), None));
             } else {
                 info!(
                     target: LOG_TARGET,
-                    "No validator in committee to process current transaction"
+                    "🙇 Not in committee for transaction {}",
+                    transaction.hash()
                 );
             }
         }
-        info!(target: LOG_TARGET, "🎱 New transaction in mempool");
 
         match self.propagate_transaction(&transaction, &shards).await {
             Ok(()) => (),
@@ -199,31 +198,21 @@ impl MempoolService {
         let msg = DanMessage::NewTransaction(transaction.clone());
 
         // propagate over the involved shard ids
-        let committees = committees.into_iter().rfold(vec![], |mut v, xs| {
-            let xs = xs
-                .committee
-                .expect("mempool_service::propagate_transaction::shard committee should be available")
-                .members;
-            for x in xs {
-                if !v.contains(&x) {
-                    v.push(x);
-                }
-            }
-            v
-        });
+        #[allow(clippy::mutable_key_type)]
+        let unique_members = committees
+            .into_iter()
+            .flat_map(|s| s.committee.members)
+            .collect::<HashSet<_>>();
+        let committees = unique_members.into_iter().collect::<Vec<_>>();
 
-        if let Err(err) = self
-            .outbound
+        self.outbound
             .broadcast(self.node_identity.public_key().clone(), &committees, msg)
-            .await
-        {
-            error!(target: LOG_TARGET, "Failed to broadcast new transaction: {}", err);
-        }
+            .await?;
 
         Ok(())
     }
 
-    pub fn get_transaction(&self) -> TransactionVecMutex {
+    pub fn get_transaction(&self) -> TransactionPool {
         self.transactions.clone()
     }
 }

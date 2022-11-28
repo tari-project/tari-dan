@@ -301,7 +301,7 @@ impl BaseLayerEpochManager {
     ) -> Result<Vec<ShardCommitteeAllocation<CommsPublicKey>>, EpochManagerError> {
         let mut result = vec![];
         for &shard in shards {
-            let committee = self.get_committee(epoch, shard).ok();
+            let committee = self.get_committee(epoch, shard)?;
             result.push(ShardCommitteeAllocation {
                 shard_id: shard,
                 committee,

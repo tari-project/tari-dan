@@ -23,8 +23,11 @@
 mod dispatcher;
 pub use dispatcher::MessageDispatcher;
 
+mod error;
 mod inbound;
 mod outbound;
+
+pub use error::MessagingError;
 pub use inbound::InboundMessaging;
 pub use outbound::OutboundMessaging;
 // -----------------------
