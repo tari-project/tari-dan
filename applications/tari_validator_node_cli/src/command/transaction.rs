@@ -139,14 +139,15 @@ impl TransactionSubcommand {
 
 async fn handle_get(args: GetArgs, client: &mut ValidatorNodeClient) -> Result<(), anyhow::Error> {
     let request = GetTransactionRequest {
-        hash: args.transaction_hash.0,
+        hash: args.transaction_hash.into_inner(),
     };
     let resp = client.get_transaction_result(request).await?;
 
     if let Some(result) = resp.result {
-        println!("✅️ Transaction finalized",);
+        println!("Transaction {}", args.transaction_hash);
         println!();
-        summarize_return_values(&result);
+
+        summarize_finalize_result(&result);
     } else {
         println!("Transaction not finalized",);
     }
@@ -279,9 +280,31 @@ fn summarize(result: &TransactionFinalizeResult, time_taken: Duration) {
     println!("Payload height: {}", result.qc.payload_height());
     println!("Signed by: {} validator nodes", result.qc.validators_metadata().len());
     println!();
-    // dbg!(&result.qc);
+
+    summarize_finalize_result(&result.finalize);
+
+    println!();
+    println!("========= Pledges =========");
+    for p in result.qc.all_shard_nodes().iter() {
+        println!(
+            "Shard:{} Pledge:{}",
+            p.shard_id,
+            p.pledge
+                .as_ref()
+                .map(|pledge| pledge.current_state.as_str())
+                .unwrap_or("<Not pledged>")
+        );
+    }
+
+    println!();
+    println!("Time taken: {:?}", time_taken);
+    println!();
+    println!("OVERALL DECISION: {:?}", result.decision);
+}
+
+fn summarize_finalize_result(finalize: &FinalizeResult) {
     println!("========= Substates =========");
-    match result.finalize.result {
+    match finalize.result {
         TransactionResult::Accept(ref diff) => {
             for (address, substate) in diff.up_iter() {
                 println!(
@@ -314,34 +337,9 @@ fn summarize(result: &TransactionFinalizeResult, time_taken: Duration) {
             println!("❌️ Transaction rejected: {}", reason);
         },
     }
-    println!("========= Pledges =========");
-    for p in result.qc.all_shard_nodes().iter() {
-        println!(
-            "Shard:{} Pledge:{}",
-            p.shard_id,
-            p.pledge
-                .as_ref()
-                .map(|pledge| pledge.current_state.as_str())
-                .unwrap_or("<Not pledged>")
-        );
-    }
-    println!();
 
-    summarize_return_values(&result.finalize);
-
-    println!();
-    println!("========= LOGS =========");
-    for log in &result.finalize.logs {
-        println!("{}", log);
-    }
-    println!("Time taken: {:?}", time_taken);
-    println!();
-    println!("OVERALL DECISION: {:?}", result.decision);
-}
-
-fn summarize_return_values(result: &FinalizeResult) {
     println!("========= Return Values =========");
-    for result in &result.execution_results {
+    for result in &finalize.execution_results {
         match result.return_type {
             Type::Unit => {},
             Type::Bool => {
@@ -387,6 +385,12 @@ fn summarize_return_values(result: &FinalizeResult) {
                 println!("{}: {}", name, to_hex(&result.raw));
             },
         }
+    }
+
+    println!();
+    println!("========= LOGS =========");
+    for log in &finalize.logs {
+        println!("{}", log);
     }
 }
 
