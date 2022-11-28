@@ -26,7 +26,6 @@ use axum::{
     http::{Response, Uri},
     response::IntoResponse,
     routing::get,
-    Extension,
     Router,
 };
 use include_dir::{include_dir, Dir};
@@ -36,9 +35,19 @@ use reqwest::StatusCode;
 const LOG_TARGET: &str = "tari_validator_node::http_ui::server";
 
 pub async fn run_http_ui_server(address: SocketAddr, json_rpc_address: Option<String>) -> Result<(), anyhow::Error> {
+    let json_rpc_address = Arc::new(json_rpc_address);
     let router = Router::new()
-        .nest("/", get(handler))
-        .layer(Extension(Arc::new(json_rpc_address)));
+        .route(
+            "/json_rpc_address",
+            get(|| async move {
+                json_rpc_address
+                    .as_ref()
+                    .as_ref()
+                    .map(|s| s.to_string())
+                    .unwrap_or("NOT CONFIGURED".to_string())
+            }),
+        )
+        .fallback(handler);
 
     info!(target: LOG_TARGET, "🌐 HTTP UI started at {}", address);
     axum::Server::bind(&address)
@@ -55,27 +64,17 @@ pub async fn run_http_ui_server(address: SocketAddr, json_rpc_address: Option<St
 
 static PROJECT_DIR: Dir<'_> = include_dir!("$CARGO_MANIFEST_DIR/../tari_validator_node_web_ui/build");
 
-async fn handler(uri: Uri, Extension(json_rpc_address): Extension<Arc<Option<String>>>) -> impl IntoResponse {
+async fn handler(uri: Uri) -> impl IntoResponse {
     let path = uri.path();
+
     // If path starts with /, strip it.
-    let path = match path.strip_prefix('/') {
-        Some(path) => path,
-        None => path,
-    };
-    // If there is no path, we want index.html
-    let path = match path {
-        "" => "index.html",
-        path => path,
-    };
-    if path == "json_rpc_address" {
-        if let Some(ref json_rpc_address) = *json_rpc_address {
-            return Response::builder()
-                .status(StatusCode::OK)
-                .body(json_rpc_address.clone())
-                .unwrap();
-        }
-    }
-    if let Some(lib_rs) = PROJECT_DIR.get_file(path) {
+    let path = path.strip_prefix('/').unwrap_or(path);
+
+    // If the path is a file, return it. Otherwise use index.html (SPA)
+    if let Some(lib_rs) = PROJECT_DIR
+        .get_file(path)
+        .or_else(|| PROJECT_DIR.get_file("index.html"))
+    {
         if let Some(body) = lib_rs.contents_utf8() {
             return Response::builder()
                 .status(StatusCode::OK)
