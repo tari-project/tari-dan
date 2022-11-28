@@ -30,32 +30,23 @@ use tari_dan_core::{
     services::{epoch_manager::EpochManagerError, ValidatorNodeClientFactory},
     storage::shard_store::{ShardStoreFactory, ShardStoreTransaction},
 };
-use tari_dan_storage_sqlite::sqlite_shard_store_factory::{SqliteShardStoreFactory, SqliteShardStoreTransaction};
 
-use crate::{p2p, p2p::services::rpc_client::TariCommsValidatorNodeClientFactory, ValidatorNodeConfig};
+use crate::{p2p, p2p::services::rpc_client::TariCommsValidatorNodeClientFactory};
 
-pub struct PeerSyncManagerService {
-    validator_node_config: ValidatorNodeConfig,
+pub struct PeerSyncManagerService<TShardStore> {
     validator_node_client_factory: TariCommsValidatorNodeClientFactory,
+    shard_store: TShardStore,
 }
 
-impl PeerSyncManagerService {
+impl<TShardStore: ShardStoreFactory> PeerSyncManagerService<TShardStore> {
     pub(crate) fn new(
-        validator_node_config: ValidatorNodeConfig,
         validator_node_client_factory: TariCommsValidatorNodeClientFactory,
+        shard_store: TShardStore,
     ) -> Self {
         Self {
-            validator_node_config,
             validator_node_client_factory,
+            shard_store,
         }
-    }
-
-    fn get_vn_shard_db(&self) -> Result<SqliteShardStoreTransaction, EpochManagerError> {
-        let data_dir = self.validator_node_config.data_dir.clone();
-        let shard_db_factory =
-            SqliteShardStoreFactory::try_create(data_dir).map_err(EpochManagerError::StorageError)?;
-        let shard_db = shard_db_factory.create_tx().map_err(EpochManagerError::StorageError)?;
-        Ok(shard_db)
     }
 
     pub(crate) async fn sync_peers_state(
@@ -65,7 +56,7 @@ impl PeerSyncManagerService {
         end_shard_id: ShardId,
         vn_shard_key: ShardId,
     ) -> Result<(), EpochManagerError> {
-        let mut shard_db = self.get_vn_shard_db()?;
+        let mut shard_db = self.shard_store.create_tx()?;
 
         let inventory = shard_db
             .get_state_inventory()
