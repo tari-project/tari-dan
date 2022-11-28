@@ -22,7 +22,6 @@
 use diesel;
 use tari_common_types::types::FixedHashSizeError;
 use tari_dan_core::{models::ModelError, storage::StorageError};
-use tari_dan_engine::state::error::StateStorageError;
 use thiserror::Error;
 
 #[derive(Debug, Error)]
@@ -67,25 +66,6 @@ impl From<SqliteStorageError> for StorageError {
                 reason: source.to_string(),
             },
             other => StorageError::General {
-                details: other.to_string(),
-            },
-        }
-    }
-}
-
-impl From<SqliteStorageError> for StateStorageError {
-    fn from(source: SqliteStorageError) -> Self {
-        match source {
-            SqliteStorageError::ConnectionError { .. } => StateStorageError::ConnectionError {
-                reason: source.to_string(),
-            },
-            SqliteStorageError::DieselError { .. } => StateStorageError::QueryError {
-                reason: source.to_string(),
-            },
-            SqliteStorageError::MigrationError { .. } => StateStorageError::MigrationError {
-                reason: source.to_string(),
-            },
-            other => StateStorageError::General {
                 details: other.to_string(),
             },
         }

@@ -27,9 +27,9 @@ use std::{
 
 use log::*;
 use tari_comms::protocol::rpc::{Request, Response, RpcStatus, Streaming};
-use tari_dan_common_types::ShardId;
+use tari_dan_common_types::{NodeAddressable, ShardId};
 use tari_dan_core::{
-    services::{infrastructure_services::NodeAddressable, PeerProvider},
+    services::PeerProvider,
     storage::shard_store::{ShardStoreFactory, ShardStoreTransaction},
 };
 use tari_dan_engine::transaction::Transaction;

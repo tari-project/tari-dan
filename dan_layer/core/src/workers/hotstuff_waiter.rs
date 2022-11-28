@@ -25,7 +25,20 @@ use std::collections::{HashMap, HashSet};
 use log::*;
 use tari_common_types::types::{PublicKey, Signature};
 use tari_core::ValidatorNodeMmrHasherBlake256;
-use tari_dan_common_types::{optional::Optional, Epoch, PayloadId, ShardId, SubstateState};
+use tari_dan_common_types::{
+    optional::Optional,
+    Epoch,
+    NodeAddressable,
+    NodeHeight,
+    ObjectPledge,
+    PayloadId,
+    QuorumCertificate,
+    QuorumDecision,
+    ShardId,
+    ShardVote,
+    SubstateState,
+    TreeNodeHash,
+};
 use tari_engine_types::commit_result::{FinalizeResult, RejectReason, TransactionResult};
 use tari_shutdown::ShutdownSignal;
 use tokio::{
@@ -45,21 +58,9 @@ use crate::{
         HotStuffMessageType,
         HotStuffTreeNode,
         LeafNode,
-        NodeHeight,
-        ObjectPledge,
         Payload,
-        QuorumCertificate,
-        QuorumDecision,
-        ShardVote,
-        TreeNodeHash,
     },
-    services::{
-        epoch_manager::EpochManager,
-        infrastructure_services::NodeAddressable,
-        leader_strategy::LeaderStrategy,
-        PayloadProcessor,
-        SigningService,
-    },
+    services::{epoch_manager::EpochManager, leader_strategy::LeaderStrategy, PayloadProcessor, SigningService},
     storage::shard_store::{ShardStoreFactory, ShardStoreTransaction},
     workers::{events::HotStuffEvent, hotstuff_error::HotStuffError},
 };
@@ -503,7 +504,8 @@ where
                 .await
                 .map_err(|_| HotStuffError::SendError)?;
         }
-        self.update_nodes(node.clone()).await?;
+
+        self.update_nodes(node).await?;
         Ok(())
     }
 
@@ -566,7 +568,7 @@ where
                             node.shard(),
                             node.epoch(),
                             main_vote.decision(),
-                            main_vote.all_shard_nodes().clone(),
+                            main_vote.all_shard_nodes().to_vec(),
                             validators_metadata,
                         );
                         tx.update_high_qc(node.proposed_by().clone(), msg.shard(), qc)?;
@@ -823,7 +825,7 @@ where
                 shard,
             );
 
-            if node.parent() != &TreeNodeHash::zero() {
+            if *node.parent() != TreeNodeHash::zero() {
                 let parent = tx.get_node(node.parent())?;
                 let changes = extract_changes_from_justify(parent.justify())?;
                 self.on_commit(&parent, &changes, tx)?;

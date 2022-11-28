@@ -25,9 +25,9 @@ use std::{
     iter::FromIterator,
 };
 
-use tari_dan_common_types::{ShardId, SubstateState};
+use tari_dan_common_types::{ObjectPledge, ShardId, SubstateState};
 use tari_dan_core::{
-    models::{ObjectPledge, TariDanPayload},
+    models::TariDanPayload,
     services::{PayloadProcessor, PayloadProcessorError, TemplateProvider},
 };
 use tari_dan_engine::{

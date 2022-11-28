@@ -25,17 +25,20 @@ use serde::{Deserialize, Serialize};
 use tari_common_types::types::FixedHash;
 use tari_core::ValidatorNodeMmr;
 use tari_crypto::hash::blake2::Blake256;
-use tari_dan_common_types::{hashing::tari_hasher, ShardId};
+use tari_dan_common_types::{
+    hashing::tari_hasher,
+    vn_mmr_node_hash,
+    QuorumDecision,
+    QuorumRejectReason,
+    ShardId,
+    ShardVote,
+    TreeNodeHash,
+    ValidatorMetadata,
+};
 use tari_engine_types::commit_result::RejectReason;
 use tari_mmr::MerkleProof;
 
-use super::quorum_certificate::QuorumRejectReason;
-use crate::{
-    models::{vn_mmr_node_hash, QuorumDecision, ShardVote, TreeNodeHash, ValidatorMetadata},
-    services::SigningService,
-    workers::hotstuff_error::HotStuffError,
-    TariDanCoreHashDomain,
-};
+use crate::{services::SigningService, workers::hotstuff_error::HotStuffError, TariDanCoreHashDomain};
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct VoteMessage {
@@ -174,7 +177,7 @@ impl VoteMessage {
         self.decision
     }
 
-    pub fn all_shard_nodes(&self) -> &Vec<ShardVote> {
+    pub fn all_shard_nodes(&self) -> &[ShardVote] {
         &self.all_shard_nodes
     }
 }

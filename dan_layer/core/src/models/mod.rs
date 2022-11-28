@@ -20,19 +20,11 @@
 // WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 // USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use std::{
-    cmp::Ordering,
-    convert::TryFrom,
-    fmt::{Debug, Display, Formatter},
-    io,
-    ops::Add,
-};
+use std::{convert::TryFrom, fmt::Debug};
 
 use anyhow::anyhow;
-use borsh::BorshSerialize;
-use digest::Digest;
-use serde::{Deserialize, Serialize};
-use tari_common_types::types::{FixedHash, PublicKey, Signature};
+use serde::Serialize;
+use tari_common_types::types::FixedHash;
 
 mod base_layer_metadata;
 mod base_layer_output;
@@ -44,10 +36,9 @@ mod hot_stuff_tree_node;
 mod leaf_node;
 mod node;
 mod payload;
-mod quorum_certificate;
 mod sidechain_metadata;
+mod substate_shard_data;
 mod tari_dan_payload;
-mod tree_node_hash;
 mod validator_node;
 pub mod vote_message;
 
@@ -60,76 +51,11 @@ pub use hot_stuff_tree_node::HotStuffTreeNode;
 pub use leaf_node::LeafNode;
 pub use node::Node;
 pub use payload::Payload;
-pub use quorum_certificate::{QuorumCertificate, QuorumDecision, QuorumRejectReason};
 pub use sidechain_metadata::SidechainMetadata;
-use tari_crypto::hash::blake2::Blake256;
-use tari_dan_common_types::{serde_with, PayloadId, ShardId, SubstateState};
+pub use substate_shard_data::SubstateShardData;
+use tari_dan_common_types::{NodeHeight, TreeNodeHash};
 pub use tari_dan_payload::{CheckpointData, TariDanPayload};
-use tari_mmr::MerkleProof;
-use tari_utilities::ByteArray;
-pub use tree_node_hash::TreeNodeHash;
 pub use validator_node::ValidatorNode;
-
-use crate::services::infrastructure_services::NodeAddressable;
-
-#[derive(Copy, Clone, Debug, PartialEq, Eq, Hash, Deserialize, Serialize, BorshSerialize)]
-pub struct NodeHeight(pub u64);
-
-impl NodeHeight {
-    pub fn as_u64(self) -> u64 {
-        self.0
-    }
-
-    fn to_le_bytes(self) -> [u8; 8] {
-        self.0.to_le_bytes()
-    }
-}
-
-impl Add for NodeHeight {
-    type Output = NodeHeight;
-
-    fn add(self, rhs: Self) -> Self::Output {
-        NodeHeight(self.0 + rhs.0)
-    }
-}
-
-impl PartialOrd for NodeHeight {
-    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-        self.0.partial_cmp(&other.0)
-    }
-}
-
-impl From<u64> for NodeHeight {
-    fn from(height: u64) -> Self {
-        NodeHeight(height)
-    }
-}
-
-impl Display for NodeHeight {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(f, "NodeHeight({})", self.0)
-    }
-}
-
-#[derive(Debug, Clone, Deserialize, Serialize, BorshSerialize)]
-pub struct ObjectPledge {
-    pub shard_id: ShardId,
-    pub current_state: SubstateState,
-    // pub current_state_hash: FixedHash,
-    pub pledged_to_payload: PayloadId,
-    pub pledged_until: NodeHeight,
-}
-
-// TODO: encapsulate
-pub struct InstructionCaller {
-    pub owner_token_id: TokenId,
-}
-
-impl InstructionCaller {
-    pub fn _owner_token_id(&self) -> &TokenId {
-        &self.owner_token_id
-    }
-}
 
 #[derive(Clone, Debug, Hash)]
 pub struct TokenId(pub Vec<u8>);
@@ -223,71 +149,6 @@ pub enum ConsensusWorkerState {
     Idle,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Deserialize, Serialize)]
-pub struct ValidatorMetadata {
-    pub public_key: PublicKey,
-    #[serde(with = "serde_with::hex")]
-    pub vn_shard_key: ShardId,
-    pub signature: Signature,
-    pub merkle_proof: MerkleProof,
-    pub merkle_leaf_index: u64,
-}
-
-impl ValidatorMetadata {
-    pub fn new(
-        public_key: PublicKey,
-        vn_shard_key: ShardId,
-        signature: Signature,
-        merkle_proof: MerkleProof,
-        merkle_leaf_index: u64,
-    ) -> Self {
-        Self {
-            public_key,
-            vn_shard_key,
-            signature,
-            merkle_proof,
-            merkle_leaf_index,
-        }
-    }
-
-    pub fn get_node_hash(&self) -> FixedHash {
-        // Each node is defined as H(V_i || S_i)
-        vn_mmr_node_hash(&self.public_key, &self.vn_shard_key)
-    }
-
-    // TODO: impl Borsh for merkle proof
-    pub fn encode_merkle_proof(&self) -> Vec<u8> {
-        bincode::serialize(&self.merkle_proof).unwrap()
-    }
-
-    // TODO: impl Borsh for merkle proof
-    pub fn decode_merkle_proof(bytes: &[u8]) -> Result<MerkleProof, io::Error> {
-        // Map to an io error because borsh uses that
-        bincode::deserialize(bytes).map_err(|e| io::Error::new(io::ErrorKind::Other, e))
-    }
-
-    // TODO: once this type implements borsh we can use the consensus hashing to hash this type directly
-    pub fn to_bytes(&self) -> Vec<u8> {
-        [
-            self.public_key.to_vec(),
-            self.vn_shard_key.as_bytes().to_vec(),
-            self.signature.get_public_nonce().to_vec(),
-            self.signature.get_signature().to_vec(),
-            self.encode_merkle_proof(),
-            self.merkle_leaf_index.to_le_bytes().to_vec(),
-        ]
-        .concat()
-    }
-}
-
-pub fn vn_mmr_node_hash<TAddr: NodeAddressable>(public_key: &TAddr, shard_id: &ShardId) -> FixedHash {
-    Blake256::new()
-        .chain(public_key.as_bytes())
-        .chain(shard_id.as_bytes())
-        .finalize()
-        .into()
-}
-
 #[derive(Copy, Clone, Debug)]
 pub struct ChainHeight(u64);
 
@@ -301,13 +162,6 @@ impl From<u64> for ChainHeight {
     fn from(v: u64) -> Self {
         ChainHeight(v)
     }
-}
-
-#[derive(Debug, Clone, Deserialize, Serialize, BorshSerialize)]
-pub struct ShardVote {
-    pub shard_id: ShardId,
-    pub node_hash: TreeNodeHash,
-    pub pledge: Option<ObjectPledge>,
 }
 
 #[derive(Debug, Serialize)]
@@ -337,58 +191,4 @@ pub struct SQLSubstate {
     pub justify: Option<String>,
     pub is_draft: bool,
     pub tree_node_hash: Option<Vec<u8>>,
-}
-
-#[derive(Debug, Clone, Deserialize, Serialize)]
-pub struct SubstateShardData {
-    shard: ShardId,
-    substate: SubstateState,
-    height: NodeHeight,
-    tree_node_hash: Option<TreeNodeHash>,
-    payload_id: PayloadId,
-    certificate: Option<QuorumCertificate>,
-}
-
-impl SubstateShardData {
-    pub fn new(
-        shard: ShardId,
-        substate: SubstateState,
-        height: NodeHeight,
-        tree_node_hash: Option<TreeNodeHash>,
-        payload_id: PayloadId,
-        certificate: Option<QuorumCertificate>,
-    ) -> Self {
-        Self {
-            shard,
-            substate,
-            height,
-            tree_node_hash,
-            payload_id,
-            certificate,
-        }
-    }
-
-    pub fn shard(&self) -> ShardId {
-        self.shard
-    }
-
-    pub fn substate(&self) -> &SubstateState {
-        &self.substate
-    }
-
-    pub fn height(&self) -> NodeHeight {
-        self.height
-    }
-
-    pub fn tree_node_hash(&self) -> Option<TreeNodeHash> {
-        self.tree_node_hash
-    }
-
-    pub fn payload_id(&self) -> PayloadId {
-        self.payload_id
-    }
-
-    pub fn certificate(&self) -> &Option<QuorumCertificate> {
-        &self.certificate
-    }
 }

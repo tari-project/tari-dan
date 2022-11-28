@@ -11,13 +11,11 @@ use tari_common_types::types::PublicKey;
 use tari_template_lib::{args::ResourceRef, models::ResourceAddress};
 use tari_utilities::{hex::Hex, ByteArray};
 
-use crate::state::StateDbUnitOfWork;
-
 pub struct CreateBucketWorker<TUnitOfWork: StateDbUnitOfWork> {
     pub state_db: Arc<RwLock<TUnitOfWork>>,
 }
 
-impl<TUnitOfWork: StateDbUnitOfWork> Worker for CreateBucketWorker<TUnitOfWork> {
+impl<TUnitOfWork> Worker for CreateBucketWorker<TUnitOfWork> {
     fn name(&self) -> &str {
         "tari::create_bucket"
     }

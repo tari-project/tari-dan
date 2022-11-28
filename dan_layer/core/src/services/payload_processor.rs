@@ -22,11 +22,11 @@
 
 use std::collections::HashMap;
 
-use tari_dan_common_types::ShardId;
+use tari_dan_common_types::{ObjectPledge, ShardId};
 use tari_dan_engine::{state_store::StateStoreError, transaction::TransactionError};
 use tari_engine_types::commit_result::FinalizeResult;
 
-use crate::models::{ObjectPledge, Payload};
+use crate::models::Payload;
 
 pub trait PayloadProcessor<TPayload: Payload> {
     fn process_payload(

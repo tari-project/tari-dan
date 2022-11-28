@@ -22,7 +22,17 @@
 
 use std::collections::HashMap;
 
-use tari_dan_common_types::{PayloadId, ShardId, SubstateChange, SubstateState};
+use tari_dan_common_types::{
+    NodeAddressable,
+    NodeHeight,
+    ObjectPledge,
+    PayloadId,
+    QuorumCertificate,
+    ShardId,
+    SubstateChange,
+    SubstateState,
+    TreeNodeHash,
+};
 use tari_engine_types::commit_result::FinalizeResult;
 use thiserror::Error;
 
@@ -31,17 +41,12 @@ use crate::{
         vote_message::VoteMessage,
         HotStuffTreeNode,
         LeafNode,
-        NodeHeight,
-        ObjectPledge,
         Payload,
-        QuorumCertificate,
         RecentTransaction,
         SQLSubstate,
         SQLTransaction,
         SubstateShardData,
-        TreeNodeHash,
     },
-    services::infrastructure_services::NodeAddressable,
     storage::StorageError,
 };
 

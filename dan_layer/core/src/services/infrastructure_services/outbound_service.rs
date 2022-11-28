@@ -21,8 +21,9 @@
 // USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 use async_trait::async_trait;
+use tari_dan_common_types::NodeAddressable;
 
-use crate::{message::DanMessage, models::Payload, services::infrastructure_services::NodeAddressable};
+use crate::{message::DanMessage, models::Payload};
 
 #[async_trait]
 pub trait OutboundService {

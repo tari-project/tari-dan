@@ -27,10 +27,10 @@ use tari_common_types::types::PublicKey;
 use tari_comms::{types::CommsPublicKey, NodeIdentity};
 use tari_core::{blocks::BlockHeader, ValidatorNodeMmr};
 use tari_crypto::tari_utilities::ByteArray;
-use tari_dan_common_types::{Epoch, ShardId};
+use tari_dan_common_types::{vn_mmr_node_hash, Epoch, ShardId};
 use tari_dan_core::{
     consensus_constants::ConsensusConstants,
-    models::{vn_mmr_node_hash, BaseLayerMetadata, Committee, ValidatorNode},
+    models::{BaseLayerMetadata, Committee, ValidatorNode},
     services::{
         epoch_manager::{EpochManagerError, ShardCommitteeAllocation},
         BaseNodeClient,

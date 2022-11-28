@@ -21,8 +21,7 @@
 // USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 use serde::Serialize;
-
-use crate::services::infrastructure_services::NodeAddressable;
+use tari_dan_common_types::NodeAddressable;
 
 #[derive(Debug, Clone, Serialize, Default)]
 pub struct Committee<TAddr> {

@@ -28,8 +28,7 @@ use tari_comms::{
     peer_manager::{IdentitySignature, Peer, PeerFeatures},
     types::CommsPublicKey,
 };
-
-use crate::services::infrastructure_services::NodeAddressable;
+use tari_dan_common_types::NodeAddressable;
 
 #[async_trait]
 pub trait PeerProvider {

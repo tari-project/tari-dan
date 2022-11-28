@@ -25,11 +25,9 @@ use std::convert::TryFrom;
 use serde::Serialize;
 use tari_common_types::types::FixedHash;
 use tari_comms::types::CommsPublicKey;
-use tari_dan_common_types::ShardId;
+use tari_dan_common_types::{vn_mmr_node_hash, NodeAddressable, ShardId};
 use tari_dan_storage::global::DbValidatorNode;
 use tari_utilities::ByteArray;
-
-use crate::{models::vn_mmr_node_hash, services::infrastructure_services::NodeAddressable};
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize)]
 pub struct ValidatorNode<TAddr> {

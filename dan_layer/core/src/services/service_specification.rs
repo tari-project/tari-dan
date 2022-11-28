@@ -20,13 +20,14 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+use tari_dan_common_types::NodeAddressable;
 use tari_dan_storage::global::GlobalDbAdapter;
 
 use super::WalletClient;
 use crate::{
     models::{domain_events::ConsensusWorkerDomainEvent, Payload},
     services::{
-        infrastructure_services::{NodeAddressable, OutboundService},
+        infrastructure_services::OutboundService,
         BaseNodeClient,
         EventsPublisher,
         PayloadProcessor,
