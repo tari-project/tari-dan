@@ -147,7 +147,7 @@ async fn handle_get(args: GetArgs, client: &mut ValidatorNodeClient) -> Result<(
     if let Some(result) = resp.result {
         println!("✅️ Transaction finalized",);
         println!();
-        summarize_result(&result);
+        summarize_return_values(&result);
     } else {
         println!("Transaction not finalized",);
     }
@@ -328,18 +328,19 @@ fn summarize(result: &TransactionFinalizeResult, time_taken: Duration) {
     }
     println!();
 
-    summarize_result(&result.finalize);
+    summarize_return_values(&result.finalize);
 
     println!();
     println!("========= LOGS =========");
     for log in &result.finalize.logs {
         println!("{}", log);
     }
+    println!("Time taken: {:?}", time_taken);
     println!();
     println!("OVERALL DECISION: {:?}", result.decision);
 }
 
-fn summarize_result(result: &FinalizeResult) {
+fn summarize_return_values(result: &FinalizeResult) {
     println!("========= Return Values =========");
     for result in &result.execution_results {
         match result.return_type {
@@ -388,15 +389,6 @@ fn summarize_result(result: &FinalizeResult) {
             },
         }
     }
-
-    println!();
-    println!("========= LOGS =========");
-    for log in &result.finalize.logs {
-        println!("{}", log);
-    }
-    println!("Time taken: {:?}", time_taken);
-    println!();
-    println!("OVERALL DECISION: {:?}", result.decision);
 }
 
 fn extract_input_refs(

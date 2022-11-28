@@ -89,7 +89,7 @@ diesel::table! {
         sender_public_key -> Binary,
         meta -> Text,
         timestamp -> BigInt,
-        result -> Nullable<Binary>,
+        result -> Nullable<Text>,
     }
 }
 

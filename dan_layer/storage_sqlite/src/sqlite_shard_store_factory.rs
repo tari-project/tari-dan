@@ -491,9 +491,9 @@ impl ShardStoreTransaction<PublicKey, TariDanPayload> for SqliteShardStoreTransa
 
         // deserialize the transaction result
         let result_field: Option<FinalizeResult> = match payload.result {
-            Some(result_bytes) => {
+            Some(result_json) => {
                 let result: FinalizeResult =
-                    bincode::deserialize(&result_bytes).map_err(|_| StorageError::DecodingError)?;
+                    serde_json::from_str(&result_json).map_err(|_| StorageError::DecodingError)?;
                 Some(result)
             },
             None => None,
@@ -1251,12 +1251,12 @@ impl ShardStoreTransaction<PublicKey, TariDanPayload> for SqliteShardStoreTransa
     ) -> Result<(), StorageError> {
         use crate::schema::payloads;
 
-        let result_bytes = bincode::serialize(&result).map_err(|_| StorageError::EncodingError)?;
+        let result_json = serde_json::to_string(&result).map_err(|_| StorageError::EncodingError)?;
 
         diesel::update(payloads::table)
             .filter(payloads::payload_id.eq(requested_payload_id.as_bytes()))
-            .set(payloads::result.eq(result_bytes))
-            .execute(&self.connection)
+            .set(payloads::result.eq(result_json))
+            .execute(self.transaction.connection())
             .map_err(|source| SqliteStorageError::DieselError {
                 source,
                 operation: "update_payload_result".to_string(),
