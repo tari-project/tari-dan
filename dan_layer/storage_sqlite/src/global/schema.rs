@@ -22,7 +22,7 @@
 
 table! {
     epochs (epoch) {
-        epoch -> Integer,
+        epoch -> BigInt,
         validator_node_mr -> Binary,
     }
 }
@@ -32,7 +32,7 @@ table! {
         id -> Integer,
         public_key -> Binary,
         shard_key -> Binary,
-        epoch -> Integer,
+        epoch -> BigInt,
     }
 }
 

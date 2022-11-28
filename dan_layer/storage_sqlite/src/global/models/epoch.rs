@@ -26,7 +26,7 @@ use crate::global::schema::*;
 
 #[derive(Queryable)]
 pub struct Epoch {
-    pub epoch: i32,
+    pub epoch: i64,
     pub validator_node_mr: Vec<u8>,
 }
 
@@ -42,14 +42,14 @@ impl From<Epoch> for DbEpoch {
 #[derive(Insertable)]
 #[table_name = "epochs"]
 pub struct NewEpoch {
-    pub epoch: i32,
+    pub epoch: i64,
     pub validator_node_mr: Vec<u8>,
 }
 
 impl From<DbEpoch> for NewEpoch {
     fn from(e: DbEpoch) -> Self {
         Self {
-            epoch: e.epoch as i32,
+            epoch: e.epoch as i64,
             validator_node_mr: e.validator_node_mr,
         }
     }

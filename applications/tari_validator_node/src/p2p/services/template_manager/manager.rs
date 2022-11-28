@@ -36,6 +36,7 @@ const _LOG_TARGET: &str = "tari::validator_node::template_manager";
 
 #[derive(Debug, Clone)]
 pub struct TemplateMetadata {
+    pub name: String,
     pub address: TemplateAddress,
     // this must be in the form of "https://example.com/my_template.wasm"
     pub url: String,
@@ -48,6 +49,7 @@ pub struct TemplateMetadata {
 impl From<TemplateRegistration> for TemplateMetadata {
     fn from(reg: TemplateRegistration) -> Self {
         TemplateMetadata {
+            name: reg.template_name,
             address: reg.template_address,
             url: reg.registration.binary_url.into_string(),
             binary_sha: reg.registration.binary_sha.into_vec(),
@@ -60,6 +62,7 @@ impl From<TemplateRegistration> for TemplateMetadata {
 impl From<DbTemplate> for TemplateMetadata {
     fn from(record: DbTemplate) -> Self {
         TemplateMetadata {
+            name: record.template_name,
             address: (*record.template_address).into(),
             url: record.url,
             binary_sha: vec![],
@@ -79,6 +82,7 @@ impl From<DbTemplate> for Template {
     fn from(record: DbTemplate) -> Self {
         Template {
             metadata: TemplateMetadata {
+                name: record.template_name,
                 // TODO: this will change when common engine types are moved around
                 address: (*record.template_address).into(),
                 url: record.url,

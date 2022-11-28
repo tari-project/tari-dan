@@ -79,6 +79,7 @@ pub struct FunctionDef {
     pub name: String,
     pub arguments: Vec<String>,
     pub output: String,
+    pub is_mut: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -93,6 +94,7 @@ pub struct GetTemplatesResponse {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TemplateMetadata {
+    pub name: String,
     pub address: TemplateAddress,
     pub url: String,
     /// SHA hash of binary
@@ -132,6 +134,8 @@ pub struct SubmitTransactionRequest {
     /// Set to true to wait for the transaction to complete before returning
     #[serde(default)]
     pub wait_for_result: bool,
+    #[serde(default)]
+    pub wait_for_result_timeout: Option<u64>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

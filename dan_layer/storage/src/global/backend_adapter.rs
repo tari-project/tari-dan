@@ -55,6 +55,12 @@ pub trait GlobalDbAdapter: AtomicDb + Send + Sync + Clone {
         epoch: u64,
     ) -> Result<Vec<DbValidatorNode>, Self::Error>;
 
+    fn get_validator_node(
+        &self,
+        tx: &Self::DbTransaction,
+        epoch: u64,
+        public_key: &[u8],
+    ) -> Result<DbValidatorNode, Self::Error>;
     fn insert_epoch(&self, tx: &Self::DbTransaction, epoch: DbEpoch) -> Result<(), Self::Error>;
     fn get_epoch(&self, tx: &Self::DbTransaction, epoch: u64) -> Result<Option<DbEpoch>, Self::Error>;
 }

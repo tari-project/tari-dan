@@ -20,9 +20,9 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use borsh::{BorshDeserialize, BorshSerialize};
+use tari_bor::{decode, encode, encode_into, encode_with_len, Decode, Encode};
 use tari_engine_types::execution_result::ExecutionResult;
-use tari_template_abi::{decode, encode, encode_into, encode_with_len, CallInfo, EngineOp};
+use tari_template_abi::{CallInfo, EngineOp};
 use tari_template_lib::{
     args::{
         Arg,
@@ -67,7 +67,7 @@ impl WasmProcess {
         Ok(Self { module, env, instance })
     }
 
-    fn alloc_and_write<T: BorshSerialize>(&self, val: &T) -> Result<AllocPtr, WasmExecutionError> {
+    fn alloc_and_write<T: Encode>(&self, val: &T) -> Result<AllocPtr, WasmExecutionError> {
         let mut buf = Vec::with_capacity(512);
         encode_into(val, &mut buf).unwrap();
         let ptr = self.env.alloc(buf.len() as u32)?;
@@ -140,8 +140,8 @@ impl WasmProcess {
         f: fn(&WasmEnv<Runtime>, T) -> Result<U, E>,
     ) -> Result<i32, WasmExecutionError>
     where
-        T: BorshDeserialize,
-        U: BorshSerialize,
+        T: Decode,
+        U: Encode,
         WasmExecutionError: From<E>,
     {
         let decoded = decode(&args).map_err(WasmExecutionError::EngineArgDecodeFailed)?;

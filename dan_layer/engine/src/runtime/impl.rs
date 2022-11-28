@@ -20,12 +20,12 @@
 //   WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //   USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+use tari_bor::decode;
 use tari_engine_types::{
     commit_result::{FinalizeResult, RejectReason, TransactionResult},
     logs::LogEntry,
     substate::{SubstateAddress, SubstateValue},
 };
-use tari_template_abi::decode;
 use tari_template_lib::{
     args::{
         BucketAction,

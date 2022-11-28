@@ -20,7 +20,8 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use tari_template_abi::{decode, CallInfo, Decode, Encode};
+use tari_bor::{borsh, decode, Decode, Encode};
+use tari_template_abi::CallInfo;
 
 use crate::resource::ResourceManager;
 

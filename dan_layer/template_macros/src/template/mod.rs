@@ -123,7 +123,8 @@ mod tests {
 
             #[no_mangle]
             pub extern "C" fn State_abi() -> *mut u8 {
-                use ::tari_template_abi::{encode_with_len, FunctionDef, TemplateDef, Type, wrap_ptr};
+                use ::tari_template_abi::{ FunctionDef, TemplateDef, Type, wrap_ptr};
+                use :: tari_template_lib :: template_dependencies :: encode_with_len ;
 
                 let template = TemplateDef {
                     template_name: "State".to_string(),
@@ -132,16 +133,19 @@ mod tests {
                             name: "new".to_string(),
                             arguments: vec![],
                             output: Type::U32,
+                            is_mut: false,
                         },
                         FunctionDef {
                             name: "get".to_string(),
                             arguments: vec![Type::U32],
                             output: Type::U32,
+                            is_mut: false,
                         },
                         FunctionDef {
                             name: "set".to_string(),
                             arguments: vec![Type::U32, Type::U32],
                             output: Type::Unit,
+                            is_mut: true,
                         }
                     ],
                 };
@@ -152,8 +156,8 @@ mod tests {
 
             #[no_mangle]
             pub extern "C" fn State_main(call_info: *mut u8, call_info_len: usize) -> *mut u8 {
-                use ::tari_template_abi::{decode, encode_with_len, CallInfo, wrap_ptr};
-                use ::tari_template_lib::{init_context, panic_hook::register_panic_hook};
+                use ::tari_template_abi::{CallInfo, wrap_ptr};
+                use ::tari_template_lib::{template_dependencies::{decode, encode_with_len}, init_context, panic_hook::register_panic_hook};
                 register_panic_hook();
 
                 if call_info.is_null() {

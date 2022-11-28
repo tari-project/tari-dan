@@ -181,7 +181,13 @@ impl JsonRpcHandlers {
             .map_err(internal_error(answer_id))?;
 
         if transaction.wait_for_result {
-            return wait_for_transaction_result(answer_id, hash, subscription, Duration::from_secs(30)).await;
+            return wait_for_transaction_result(
+                answer_id,
+                hash,
+                subscription,
+                Duration::from_secs(transaction.wait_for_result_timeout.unwrap_or(30)),
+            )
+            .await;
         }
 
         Ok(JsonRpcResponse::success(answer_id, SubmitTransactionResponse {
@@ -324,6 +330,7 @@ impl JsonRpcHandlers {
             templates: templates
                 .into_iter()
                 .map(|t| TemplateMetadata {
+                    name: t.name,
                     address: t.address,
                     url: t.url,
                     binary_sha: t.binary_sha,
@@ -351,6 +358,7 @@ impl JsonRpcHandlers {
 
         Ok(JsonRpcResponse::success(answer_id, GetTemplateResponse {
             registration_metadata: TemplateMetadata {
+                name: template.metadata.name,
                 address: template.metadata.address,
                 url: template.metadata.url,
                 binary_sha: template.metadata.binary_sha,

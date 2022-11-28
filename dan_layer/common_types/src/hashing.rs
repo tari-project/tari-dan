@@ -1,3 +1,6 @@
+//   Copyright 2022 The Tari Project
+//   SPDX-License-Identifier: BSD-3-clause
+
 //  Copyright 2022. The Tari Project
 //
 //  Redistribution and use in source and binary forms, with or without modification, are permitted provided that the
@@ -24,24 +27,22 @@ use std::{io, io::Write};
 
 use digest::Digest;
 use tari_bor::{encode_into, Encode};
-use tari_crypto::{hash::blake2::Blake256, hash_domain, hashing::DomainSeparation};
-use tari_template_lib::Hash;
+use tari_common_types::types::FixedHash;
+use tari_crypto::{hash::blake2::Blake256, hashing::DomainSeparation};
 
-hash_domain!(TariEngineHashDomain, "tari.dan.engine", 0);
-
-pub fn hasher(label: &'static str) -> TariEngineHasher {
-    TariEngineHasher::new_with_label(label)
+pub fn tari_hasher<D: DomainSeparation>(label: &'static str) -> TariHasher {
+    TariHasher::new_with_label::<D>(label)
 }
 
 #[derive(Debug, Clone)]
-pub struct TariEngineHasher {
+pub struct TariHasher {
     hasher: Blake256,
 }
 
-impl TariEngineHasher {
-    pub fn new_with_label(label: &'static str) -> Self {
+impl TariHasher {
+    pub fn new_with_label<D: DomainSeparation>(label: &'static str) -> Self {
         let mut hasher = Blake256::new();
-        TariEngineHashDomain::add_domain_separation_tag(&mut hasher, label);
+        D::add_domain_separation_tag(&mut hasher, label);
         Self { hasher }
     }
 
@@ -58,11 +59,11 @@ impl TariEngineHasher {
         self
     }
 
-    pub fn digest<T: Encode + ?Sized>(self, data: &T) -> Hash {
+    pub fn digest<T: Encode + ?Sized>(self, data: &T) -> FixedHash {
         self.chain(data).result()
     }
 
-    pub fn result(self) -> Hash {
+    pub fn result(self) -> FixedHash {
         let hash: [u8; 32] = self.hasher.finalize().into();
         hash.into()
     }

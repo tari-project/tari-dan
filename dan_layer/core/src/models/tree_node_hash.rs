@@ -26,9 +26,9 @@ use std::{
     io::{self, Write},
 };
 
-use borsh::BorshSerialize;
 use digest::{consts::U32, generic_array};
 use serde::{Deserialize, Serialize};
+use tari_bor::Encode;
 use tari_common_types::types::{FixedHash, FixedHashSizeError};
 use tari_dan_common_types::serde_with;
 use tari_utilities::hex::{Hex, HexError};
@@ -37,9 +37,9 @@ use tari_utilities::hex::{Hex, HexError};
 pub struct TreeNodeHash(#[serde(with = "serde_with::hex")] FixedHash);
 
 // TODO: remove this implementation once the Borsh is on FixedHash
-impl BorshSerialize for TreeNodeHash {
+impl Encode for TreeNodeHash {
     fn serialize<W: Write>(&self, writer: &mut W) -> io::Result<()> {
-        BorshSerialize::serialize(&self.as_bytes(), writer)
+        Encode::serialize(&self.as_bytes(), writer)
     }
 }
 

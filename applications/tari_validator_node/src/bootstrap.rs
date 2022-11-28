@@ -127,7 +127,12 @@ pub async fn spawn_services(
     );
 
     // Mempool
-    let mempool = mempool::spawn(rx_new_transaction_message, outbound_messaging.clone());
+    let mempool = mempool::spawn(
+        rx_new_transaction_message,
+        outbound_messaging.clone(),
+        epoch_manager.clone(),
+        node_identity.clone(),
+    );
 
     // Networking
     let peer_provider = CommsPeerProvider::new(comms.peer_manager());
@@ -171,7 +176,7 @@ pub async fn spawn_services(
         shutdown.clone(),
     )?;
 
-    let shard_store_store = SqliteShardStoreFactory::try_create(config.validator_node.data_dir.join("state.db"))?;
+    let shard_store_store = SqliteShardStoreFactory::try_create(config.validator_node.state_db_path())?;
 
     let comms = setup_p2p_rpc(config, comms, peer_provider, shard_store_store, mempool.clone());
     let comms = comms::spawn_comms_using_transport(comms, p2p_config.transport.clone())

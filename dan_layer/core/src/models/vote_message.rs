@@ -20,18 +20,22 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use borsh::BorshSerialize;
 use digest::{Digest, FixedOutput};
 use serde::{Deserialize, Serialize};
-use tari_common_types::types::{FixedHash, PrivateKey, PublicKey};
-use tari_core::{consensus::DomainSeparatedConsensusHasher, transactions::TransactionHashDomain, ValidatorNodeMmr};
+use tari_common_types::types::FixedHash;
+use tari_core::ValidatorNodeMmr;
 use tari_crypto::hash::blake2::Blake256;
-use tari_dan_common_types::ShardId;
-use tari_dan_engine::crypto::create_key_pair;
+use tari_dan_common_types::{hashing::tari_hasher, ShardId};
 use tari_engine_types::commit_result::RejectReason;
+use tari_mmr::MerkleProof;
 
 use super::quorum_certificate::QuorumRejectReason;
-use crate::models::{QuorumDecision, ShardVote, TreeNodeHash, ValidatorMetadata};
+use crate::{
+    models::{vn_mmr_node_hash, QuorumDecision, ShardVote, TreeNodeHash, ValidatorMetadata},
+    services::SigningService,
+    workers::hotstuff_error::HotStuffError,
+    TariDanCoreHashDomain,
+};
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct VoteMessage {
@@ -97,41 +101,43 @@ impl VoteMessage {
         }
     }
 
-    pub fn set_metadata(
+    pub fn sign_vote<TSigningService: SigningService>(
         &mut self,
-        public_key: &PublicKey,
-        secret_key: &PrivateKey,
+        signing_service: &TSigningService,
+        shard_id: ShardId,
         vn_mmr: &ValidatorNodeMmr,
         vn_mmr_leaf_index: u64,
-    ) {
-        let (secret_nonce, public_nonce) = create_key_pair();
-        let challenge = self.construct_challenge(public_key, &public_nonce);
+    ) -> Result<(), HotStuffError> {
+        // calculate the signature
+        let challenge = self.construct_challenge();
+        let signature = signing_service.sign(&*challenge).ok_or(HotStuffError::FailedToSignQc)?;
+        // construct the merkle proof for the inclusion of the VN's public key in the epoch
+        let leaf_pos = vn_mmr
+            .find_leaf_index(&*vn_mmr_node_hash(signing_service.public_key(), &shard_id))
+            .expect("Unexpected Merkle Mountain Range error")
+            .ok_or(HotStuffError::ValidatorNodeNotIncludedInMmr)?;
+        let merkle_proof =
+            MerkleProof::for_leaf_node(vn_mmr, leaf_pos as usize).expect("Merkle proof generation failed");
+
         let validator_metadata = ValidatorMetadata::new(
-            public_key,
-            secret_key,
-            secret_nonce,
-            &*challenge,
-            vn_mmr,
+            signing_service.public_key().clone(),
+            shard_id,
+            signature,
+            merkle_proof,
             vn_mmr_leaf_index,
         );
 
         self.validator_metadata = Some(validator_metadata);
+        Ok(())
     }
 
-    pub fn construct_challenge(&self, public_key: &PublicKey, public_nonce: &PublicKey) -> FixedHash {
-        // TODO remove this when we switch from consensus to Borsh. Hasher will do serialize instead of consesus so no
-        // need to serialize it here.
-        let mut serialized_all_shard_nodes = Vec::new();
-        BorshSerialize::serialize(self.all_shard_nodes(), &mut serialized_all_shard_nodes).unwrap();
-        DomainSeparatedConsensusHasher::<TransactionHashDomain>::new("vote_message")
-            .chain(public_key)
-            .chain(public_nonce)
-            .chain(&self.local_node_hash.as_bytes())
-            .chain(&self.shard.as_bytes())
+    pub fn construct_challenge(&self) -> FixedHash {
+        tari_hasher::<TariDanCoreHashDomain>("vote_message")
+            .chain(self.local_node_hash.as_bytes())
+            .chain(self.shard.as_bytes())
             .chain(&[self.decision.as_u8()])
-            .chain(&serialized_all_shard_nodes)
-            .finalize()
-            .into()
+            .chain(self.all_shard_nodes())
+            .result()
     }
 
     pub fn validator_metadata(&self) -> &ValidatorMetadata {

@@ -39,7 +39,6 @@ use tari_dan_core::{
         QuorumCertificate,
         QuorumDecision,
         TariDanPayload,
-        ValidatorMetadata,
     },
     services::{
         epoch_manager::{EpochManager, RangeEpochManager},
@@ -129,6 +128,7 @@ pub struct HsTestHarness {
     tx_votes: Sender<(PublicKey, VoteMessage)>,
     rx_execute: broadcast::Receiver<(TariDanPayload, HashMap<ShardId, Option<ObjectPledge>>)>,
     hs_waiter: Option<JoinHandle<Result<(), HotStuffError>>>,
+    signing_service: NodeIdentitySigningService,
 }
 
 impl HsTestHarness {
@@ -159,8 +159,9 @@ impl HsTestHarness {
         let public_address = Multiaddr::from_str("/ip4/127.0.0.1/tcp/48000").unwrap();
         let node_identity = NodeIdentity::new(private_key, public_address, PeerFeatures::COMMUNICATION_NODE);
 
+        let signing_service = NodeIdentitySigningService::new(Arc::new(node_identity));
         let hs_waiter = HotStuffWaiter::spawn(
-            Arc::new(node_identity),
+            signing_service.clone(),
             identity.clone(),
             epoch_manager,
             leader,
@@ -187,11 +188,16 @@ impl HsTestHarness {
             tx_votes,
             rx_execute,
             hs_waiter: Some(hs_waiter),
+            signing_service,
         }
     }
 
     fn identity(&self) -> PublicKey {
         self.identity.clone()
+    }
+
+    pub fn signing_service(&self) -> &impl SigningService {
+        &self.signing_service
     }
 
     async fn assert_shuts_down_safely(&mut self) {
@@ -246,7 +252,6 @@ impl HsTestHarness {
         }
     }
 
-    #[allow(dead_code)]
     async fn assert_no_execute(&mut self) {
         assert!(
             timeout(Duration::from_secs(1), self.rx_execute.recv()).await.is_err(),
@@ -271,16 +276,28 @@ fn create_test_qc(
     let mut vn_mmr = ValidatorNodeMmr::new(Vec::new());
     for pk in &all_vn_keys {
         vn_mmr
-            .push(pk.to_vec())
+            .push(vn_mmr_node_hash(pk, &ShardId::zero()).to_vec())
             .expect("Could not build the merkle mountain range of the VN set");
     }
 
-    let validators_metadata: Vec<ValidatorMetadata> = commitee_keys
-        .iter()
-        .map(|(public_key, secret_key)| {
+    let validators_metadata: Vec<_> = commitee_keys
+        .into_iter()
+        .map(|(public_key, secret)| {
             let mut node_vote = vote.clone();
-            let leaf_index = get_merkle_leaf_index(&all_vn_keys, public_key);
-            node_vote.set_metadata(public_key, secret_key, &vn_mmr, leaf_index as u64);
+            let leaf_index = get_merkle_leaf_index(&all_vn_keys, &public_key);
+            let node_identity = Arc::new(NodeIdentity::new(
+                secret,
+                Multiaddr::empty(),
+                PeerFeatures::COMMUNICATION_NODE,
+            ));
+            node_vote
+                .sign_vote(
+                    &NodeIdentitySigningService::new(node_identity),
+                    ShardId::zero(),
+                    &vn_mmr,
+                    leaf_index as u64,
+                )
+                .unwrap();
             node_vote.validator_metadata().clone()
         })
         .collect();
@@ -429,8 +446,12 @@ async fn test_hs_waiter_leader_sends_new_proposal_when_enough_votes_are_received
 
     // create the VN set mmr
     let mut vn_mmr = ValidatorNodeMmr::new(Vec::new());
-    vn_mmr.push(node1.to_vec()).unwrap();
-    vn_mmr.push(node2.to_vec()).unwrap();
+    vn_mmr
+        .push(vn_mmr_node_hash(&node1, &ShardId::zero()).to_vec())
+        .unwrap();
+    vn_mmr
+        .push(vn_mmr_node_hash(&node2, &ShardId::zero()).to_vec())
+        .unwrap();
 
     let epoch_manager =
         RangeEpochManager::new(registered_vn_keys, *SHARD0..*SHARD1, vec![node1.clone(), node2.clone()]);
@@ -463,16 +484,17 @@ async fn test_hs_waiter_leader_sends_new_proposal_when_enough_votes_are_received
     // Get the node hash from the proposal
     let (proposal_message, _broadcast_group) = instance.recv_broadcast().await;
 
-    // tx_hs_messages
-    //     .send((node1.clone(), proposal_message))
-    //     .await
-    //     .expect("Should not error");
-
     let vote_hash = proposal_message.node().unwrap().hash();
 
     // Create some votes
-    let mut vote = VoteMessage::new(*vote_hash, *SHARD0, QuorumDecision::Accept, Default::default());
-    vote.set_metadata(&node1, &node1_pk, &vn_mmr, 0);
+    let mut vote = VoteMessage::new(
+        *vote_hash,
+        *SHARD0,
+        QuorumDecision::Accept,
+        new_view_message.high_qc().unwrap().all_shard_nodes().to_vec(),
+    );
+    vote.sign_vote(instance.signing_service(), ShardId::zero(), &vn_mmr, 0)
+        .unwrap();
     instance.tx_votes.send((node1, vote.clone())).await.unwrap();
 
     // Should get no proposal
@@ -485,7 +507,8 @@ async fn test_hs_waiter_leader_sends_new_proposal_when_enough_votes_are_received
 
     // Send another vote
     let mut vote = VoteMessage::new(*vote_hash, *SHARD0, QuorumDecision::Accept, Default::default());
-    vote.set_metadata(&node2, &node2_pk, &vn_mmr, 1);
+    vote.sign_vote(instance.signing_service(), ShardId::zero(), &vn_mmr, 1)
+        .unwrap();
     instance.tx_votes.send((node2, vote)).await.unwrap();
 
     // should get a proposal
@@ -750,7 +773,8 @@ async fn test_hs_waiter_cannot_spend_until_it_is_proven_committed() {
 }
 
 use tari_dan_core::{
-    services::{PayloadProcessor, PayloadProcessorError},
+    models::vn_mmr_node_hash,
+    services::{NodeIdentitySigningService, PayloadProcessor, PayloadProcessorError, SigningService},
     workers::hotstuff_error::HotStuffError,
 };
 use tari_template_lib::{args::Arg, Hash};

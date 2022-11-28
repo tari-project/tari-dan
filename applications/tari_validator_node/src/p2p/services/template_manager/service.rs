@@ -138,6 +138,7 @@ impl TemplateManagerService {
                     name: f.name.clone(),
                     arguments: f.arguments.iter().map(|a| a.to_string()).collect(),
                     output: f.output.to_string(),
+                    is_mut: f.is_mut,
                 })
                 .collect(),
         })

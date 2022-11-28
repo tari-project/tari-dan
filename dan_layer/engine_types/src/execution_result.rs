@@ -23,7 +23,7 @@
 use std::io;
 
 use serde::{Deserialize, Serialize};
-use tari_template_abi::Decode;
+use tari_bor::Decode;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct ExecutionResult {
@@ -40,7 +40,7 @@ impl ExecutionResult {
     }
 
     pub fn decode<T: Decode>(&self) -> io::Result<T> {
-        tari_template_abi::decode(&self.raw)
+        tari_bor::decode(&self.raw)
     }
 }
 

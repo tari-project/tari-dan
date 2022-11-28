@@ -24,3 +24,6 @@ tari_core = { git = "https://github.com/tari-project/tari.git", branch = "featur
 lazy_static = "1.4.0"
 rand = "0.7"
 tokio = { version = "1.10", features = ["macros", "time"] }
+
+[dev-dependencies]
+env_logger = "0.9.3"

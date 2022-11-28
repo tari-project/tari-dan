@@ -22,6 +22,7 @@
 
 use async_trait::async_trait;
 use tari_common_types::types::{FixedHash, PublicKey};
+use tari_comms::types::CommsPublicKey;
 use tari_core::{
     blocks::BlockHeader,
     transactions::transaction_components::{CodeTemplateRegistration, TransactionOutput},
@@ -37,7 +38,7 @@ use crate::{
 pub trait BaseNodeClient: Send + Sync + Clone {
     async fn test_connection(&mut self) -> Result<(), BaseNodeError>;
     async fn get_tip_info(&mut self) -> Result<BaseLayerMetadata, BaseNodeError>;
-    async fn get_validator_nodes(&mut self, height: u64) -> Result<Vec<ValidatorNode>, BaseNodeError>;
+    async fn get_validator_nodes(&mut self, height: u64) -> Result<Vec<ValidatorNode<CommsPublicKey>>, BaseNodeError>;
     async fn get_shard_key(&mut self, height: u64, public_key: &PublicKey) -> Result<Option<ShardId>, BaseNodeError>;
     async fn get_template_registrations(
         &mut self,

@@ -98,10 +98,16 @@ async fn handle_list(mut client: ValidatorNodeClient) -> Result<(), anyhow::Erro
 
     let mut table = Table::new();
     table
-        .set_titles(vec!["Address", "Download Url", "Mined Height", "Status"])
+        .set_titles(vec!["Name", "Address", "Download Url", "Mined Height", "Status"])
         .enable_row_count();
     for template in templates.templates {
-        table.add_row(table_row![template.address, template.url, template.height, "Active"]);
+        table.add_row(table_row![
+            template.name,
+            template.address,
+            template.url,
+            template.height,
+            "Active"
+        ]);
     }
     table.print_stdout();
     Ok(())

@@ -20,6 +20,7 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+use tari_dan_common_types::{Epoch, ShardId};
 use tari_engine_types::commit_result::RejectReason;
 use thiserror::Error;
 
@@ -61,4 +62,10 @@ pub enum HotStuffError {
     ShardHasNoData,
     #[error("Invalid qc error: `{0}`")]
     InvalidQuorumCertificate(String),
+    #[error("Failed to sign QC")]
+    FailedToSignQc,
+    #[error("This validator node is not included in the MMR")]
+    ValidatorNodeNotIncludedInMmr,
+    #[error("No committee for shard {shard} and epoch {epoch}")]
+    NoCommitteeForShard { shard: ShardId, epoch: Epoch },
 }

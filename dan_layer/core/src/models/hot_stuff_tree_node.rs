@@ -102,7 +102,7 @@ impl<TAddr: NodeAddressable, TPayload: Payload> HotStuffTreeNode<TAddr, TPayload
             .chain(self.parent.as_bytes())
             .chain(self.epoch.to_le_bytes())
             .chain(self.height.to_le_bytes())
-            .chain(self.justify.as_bytes())
+            .chain(self.justify.to_hash())
             .chain(self.shard.to_le_bytes())
             .chain(self.payload_id.as_slice())
             .chain(self.payload_height.to_le_bytes())

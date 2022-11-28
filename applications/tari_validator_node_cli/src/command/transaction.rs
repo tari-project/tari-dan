@@ -23,8 +23,10 @@
 use std::{
     path::{Path, PathBuf},
     str::FromStr,
+    time::{Duration, Instant},
 };
 
+use anyhow::anyhow;
 use clap::{Args, Subcommand};
 use tari_common_types::types::FixedHash;
 use tari_dan_common_types::{ShardId, SubstateChange};
@@ -80,6 +82,9 @@ pub struct SubmitArgs {
 pub struct CommonSubmitArgs {
     #[clap(long, short = 'w')]
     wait_for_result: bool,
+    /// Timeout in seconds
+    #[clap(long, short = 't')]
+    wait_for_result_timeout: Option<u64>,
     #[clap(long, short = 'n')]
     num_outputs: Option<u8>,
     #[clap(long, short = 'i')]
@@ -185,7 +190,7 @@ async fn handle_submit_manifest(
     base_dir: impl AsRef<Path>,
     client: &mut ValidatorNodeClient,
 ) -> Result<(), anyhow::Error> {
-    let contents = std::fs::read_to_string(&args.manifest)?;
+    let contents = std::fs::read_to_string(&args.manifest).map_err(|e| anyhow!("Failed to read manifest: {}", e))?;
     let instructions = parse_manifest(&contents, manifest::parse_globals(args.globals)?)?;
     // TODO: improve output
     println!("Instructions: {:?}", instructions);
@@ -242,6 +247,7 @@ async fn submit_transaction(
         inputs: input_data,
         num_outputs: common.num_outputs.unwrap_or(0),
         wait_for_result: common.wait_for_result,
+        wait_for_result_timeout: common.wait_for_result_timeout,
     };
 
     if request.inputs.is_empty() && request.num_outputs == 0 {
@@ -249,6 +255,7 @@ async fn submit_transaction(
         return Ok(());
     }
     println!("✅ Transaction {} submitted.", tx_hash);
+    let timer = Instant::now();
     if common.wait_for_result {
         println!("⏳️ Waiting for transaction result...");
         println!();
@@ -260,13 +267,13 @@ async fn submit_transaction(
         if let Some(diff) = result.finalize.result.accept() {
             component_manager.commit_diff(diff)?;
         }
-        summarize(&result);
+        summarize(&result, timer.elapsed());
     }
     Ok(())
 }
 
 #[allow(clippy::too_many_lines)]
-fn summarize(result: &TransactionFinalizeResult) {
+fn summarize(result: &TransactionFinalizeResult, time_taken: Duration) {
     println!("✅️ Transaction finalized",);
     println!();
     println!("Epoch: {}", result.qc.epoch());
@@ -381,6 +388,15 @@ fn summarize_result(result: &FinalizeResult) {
             },
         }
     }
+
+    println!();
+    println!("========= LOGS =========");
+    for log in &result.finalize.logs {
+        println!("{}", log);
+    }
+    println!("Time taken: {:?}", time_taken);
+    println!();
+    println!("OVERALL DECISION: {:?}", result.decision);
 }
 
 fn extract_input_refs(

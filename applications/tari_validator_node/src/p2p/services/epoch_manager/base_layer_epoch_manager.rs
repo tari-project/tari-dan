@@ -23,13 +23,14 @@
 use std::{convert::TryInto, sync::Arc};
 
 use log::info;
+use tari_common_types::types::PublicKey;
 use tari_comms::{types::CommsPublicKey, NodeIdentity};
 use tari_core::{blocks::BlockHeader, ValidatorNodeMmr};
 use tari_crypto::tari_utilities::ByteArray;
 use tari_dan_common_types::{Epoch, ShardId};
 use tari_dan_core::{
     consensus_constants::ConsensusConstants,
-    models::{BaseLayerMetadata, Committee, ValidatorNode},
+    models::{vn_mmr_node_hash, BaseLayerMetadata, Committee, ValidatorNode},
     services::{
         epoch_manager::{EpochManagerError, ShardCommitteeAllocation},
         BaseNodeClient,
@@ -37,7 +38,7 @@ use tari_dan_core::{
     storage::DbFactory,
 };
 use tari_dan_storage::global::{DbEpoch, DbValidatorNode, MetadataKey};
-use tari_dan_storage_sqlite::SqliteDbFactory;
+use tari_dan_storage_sqlite::{sqlite_shard_store_factory::SqliteShardStoreFactory, SqliteDbFactory};
 use tokio::sync::broadcast;
 
 use super::{get_committee_shard_range, sync_peers::PeerSyncManagerService};
@@ -63,6 +64,7 @@ pub struct BaseLayerEpochManager {
     node_identity: Arc<NodeIdentity>,
     validator_node_config: ValidatorNodeConfig,
     validator_node_client_factory: TariCommsValidatorNodeClientFactory,
+    current_shard_key: Option<ShardId>,
 }
 
 impl BaseLayerEpochManager {
@@ -86,6 +88,7 @@ impl BaseLayerEpochManager {
             node_identity,
             validator_node_config,
             validator_node_client_factory,
+            current_shard_key: None,
         }
     }
 
@@ -116,16 +119,18 @@ impl BaseLayerEpochManager {
 
         // If the committee size is bigger than vns.len() then this function is broken.
         let height = epoch.to_height();
-        let mut base_node_client = self.base_node_client.clone();
-        let mut vns = base_node_client.get_validator_nodes(height).await?;
-        vns.sort_by(|a, b| a.shard_key.partial_cmp(&b.shard_key).unwrap());
+        let vns = self.base_node_client.get_validator_nodes(height).await?;
 
+        let vn_shard_key = vns
+            .iter()
+            .find(|v| v.public_key == *self.node_identity.public_key())
+            .map(|v| v.shard_key);
         // extract and store in database the MMR of the epoch's validator nodes
-        let tip_header = base_node_client.get_header_by_hash(tip_info.tip_hash).await?;
+        let tip_header = self.base_node_client.get_header_by_hash(tip_info.tip_hash).await?;
         self.insert_epoch(epoch, tip_header)?;
 
         // insert the new VNs for this epoch in the database
-        self.insert_validator_nodes(epoch, vns.clone())?;
+        self.insert_validator_nodes(epoch, vns)?;
 
         // set the current epoch in the database
         self.insert_current_epoch(epoch)?;
@@ -135,10 +140,8 @@ impl BaseLayerEpochManager {
             .send(EpochManagerEvent::EpochChanged(epoch))
             .map_err(|_| EpochManagerError::SendError)?;
 
-        let vn_shard_key = vns.iter().find(|v| v.public_key == *self.node_identity.public_key());
-
         let vn_shard_key = match vn_shard_key {
-            Some(vn) => vn.shard_key,
+            Some(shard_key) => shard_key,
             None => {
                 info!(
                     target: LOG_TARGET,
@@ -148,6 +151,7 @@ impl BaseLayerEpochManager {
                 return Ok(());
             },
         };
+        self.current_shard_key = Some(vn_shard_key);
         info!(
             target: LOG_TARGET,
             "🖊 Validator node is registered for epoch {}, shard key: {} ", epoch, vn_shard_key
@@ -164,10 +168,11 @@ impl BaseLayerEpochManager {
         }
         let (start_shard_id, end_shard_id) = get_committee_shard_range(committee_size, &committee_vns).into_inner();
 
-        let peer_sync_service_manager = PeerSyncManagerService::new(
-            self.validator_node_config.clone(),
-            self.validator_node_client_factory.clone(),
-        );
+        let shard_store_factory = SqliteShardStoreFactory::try_create(self.validator_node_config.state_db_path())?;
+
+        // TODO: I think this should be part of a state machine for the VN
+        let peer_sync_service_manager =
+            PeerSyncManagerService::new(self.validator_node_client_factory.clone(), shard_store_factory);
 
         // synchronize state with committee validator nodes
         peer_sync_service_manager
@@ -196,7 +201,11 @@ impl BaseLayerEpochManager {
         Ok(())
     }
 
-    fn insert_validator_nodes(&self, epoch: Epoch, vns: Vec<ValidatorNode>) -> Result<(), EpochManagerError> {
+    fn insert_validator_nodes(
+        &self,
+        epoch: Epoch,
+        vns: Vec<ValidatorNode<CommsPublicKey>>,
+    ) -> Result<(), EpochManagerError> {
         let epoch_height = epoch.0;
         let new_vns = vns
             .into_iter()
@@ -232,15 +241,24 @@ impl BaseLayerEpochManager {
     }
 
     pub fn current_epoch(&self) -> Epoch {
-        // let tip = self
-        //     .base_node_client
-        //     .clone()
-        //     .get_tip_info()
-        //     .await
-        //     .unwrap()
-        //     .height_of_longest_chain;
-        // Epoch(tip - 100)
         self.current_epoch
+    }
+
+    pub fn get_validator_shard_key(
+        &mut self,
+        epoch: Epoch,
+        public_key: &PublicKey,
+    ) -> Result<ShardId, EpochManagerError> {
+        let db = self.db_factory.get_or_create_global_db()?;
+        let tx = db
+            .create_transaction()
+            .map_err(|e| EpochManagerError::StorageError(e.into()))?;
+        let vn = db
+            .validator_nodes(&tx)
+            .get(epoch.0, public_key.as_bytes())
+            .map_err(|e| EpochManagerError::StorageError(e.into()))?;
+
+        Ok(ShardId::from_bytes(&vn.shard_key).expect("Invalid Shard Key, Database is corrupt"))
     }
 
     pub async fn last_registration_epoch(&self) -> Result<Option<Epoch>, EpochManagerError> {
@@ -284,7 +302,7 @@ impl BaseLayerEpochManager {
     ) -> Result<Vec<ShardCommitteeAllocation<CommsPublicKey>>, EpochManagerError> {
         let mut result = vec![];
         for &shard in shards {
-            let committee = self.get_committee(epoch, shard).ok();
+            let committee = self.get_committee(epoch, shard)?;
             result.push(ShardCommitteeAllocation {
                 shard_id: shard,
                 committee,
@@ -297,7 +315,7 @@ impl BaseLayerEpochManager {
         &self,
         epoch: Epoch,
         shard: ShardId,
-    ) -> Result<Vec<ValidatorNode>, EpochManagerError> {
+    ) -> Result<Vec<ValidatorNode<CommsPublicKey>>, EpochManagerError> {
         // retrieve the validator nodes for this epoch from database
         let vns = self.get_validator_nodes_per_epoch(epoch)?;
 
@@ -352,14 +370,17 @@ impl BaseLayerEpochManager {
         Ok(committee.contains(&identity))
     }
 
-    pub fn get_validator_nodes_per_epoch(&self, epoch: Epoch) -> Result<Vec<ValidatorNode>, EpochManagerError> {
+    pub fn get_validator_nodes_per_epoch(
+        &self,
+        epoch: Epoch,
+    ) -> Result<Vec<ValidatorNode<CommsPublicKey>>, EpochManagerError> {
         let db = self.db_factory.get_or_create_global_db()?;
         let tx = db
             .create_transaction()
             .map_err(|e| EpochManagerError::StorageError(e.into()))?;
         let db_vns = db
             .validator_nodes(&tx)
-            .get_validator_nodes_per_epoch(epoch.0)
+            .get_all_per_epoch(epoch.0)
             .map_err(|e| EpochManagerError::StorageError(e.into()))?;
         let vns = db_vns
             .into_iter()
@@ -405,12 +426,12 @@ impl BaseLayerEpochManager {
     pub fn get_validator_node_mmr(&self, epoch: Epoch) -> Result<ValidatorNodeMmr, EpochManagerError> {
         let vns = self.get_validator_nodes_per_epoch(epoch)?;
 
-        // TODO: the MMR struct should be serializable to store it only once and avoid recalculating it every time
+        // TODO: the MMR struct should be serializable to store it only once and avoid recalculating it every time per
+        // epoch
         let mut vn_mmr = ValidatorNodeMmr::new(Vec::new());
-        let vn_public_keys: Vec<Vec<u8>> = vns.into_iter().map(|vn| vn.public_key.as_bytes().to_vec()).collect();
-        for pk in vn_public_keys {
+        for vn in vns {
             vn_mmr
-                .push(pk)
+                .push(vn_mmr_node_hash(&vn.public_key, &vn.shard_key).to_vec())
                 .expect("Could not build the merkle mountain range of the VN set");
         }
 

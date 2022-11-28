@@ -27,7 +27,7 @@ mod no_std {
     pub use alloc::{string, vec};
     pub use core::{fmt, mem, ptr, slice};
 
-    pub use borsh::maybestd::io;
+    pub use tari_bor::borsh::maybestd::io;
 }
 
 #[cfg(not(feature = "std"))]

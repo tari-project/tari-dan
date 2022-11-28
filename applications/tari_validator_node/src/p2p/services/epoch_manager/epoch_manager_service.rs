@@ -65,6 +65,11 @@ pub enum EpochManagerRequest {
     CurrentEpoch {
         reply: Reply<Epoch>,
     },
+    GetValidatorShardKey {
+        epoch: Epoch,
+        addr: CommsPublicKey,
+        reply: Reply<ShardId>,
+    },
     UpdateEpoch {
         tip_info: BaseLayerMetadata,
         reply: Reply<()>,
@@ -92,7 +97,7 @@ pub enum EpochManagerRequest {
     },
     GetValidatorNodesPerEpoch {
         epoch: Epoch,
-        reply: Reply<Vec<ValidatorNode>>,
+        reply: Reply<Vec<ValidatorNode<CommsPublicKey>>>,
     },
     GetValidatorNodeMmr {
         epoch: Epoch,
@@ -175,6 +180,9 @@ impl EpochManagerService {
     async fn handle_request(&mut self, req: EpochManagerRequest) {
         match req {
             EpochManagerRequest::CurrentEpoch { reply } => handle(reply, Ok(self.inner.current_epoch())),
+            EpochManagerRequest::GetValidatorShardKey { epoch, addr, reply } => {
+                handle(reply, self.inner.get_validator_shard_key(epoch, &addr))
+            },
             EpochManagerRequest::UpdateEpoch { tip_info, reply } => {
                 handle(reply, self.inner.update_epoch(tip_info).await);
             },

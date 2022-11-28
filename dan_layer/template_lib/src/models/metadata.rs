@@ -23,7 +23,7 @@
 use std::collections::HashMap;
 
 use hex;
-use tari_template_abi::{Decode, Encode};
+use tari_bor::{borsh, Decode, Encode};
 
 #[derive(Clone, Debug, Decode, Encode, Default, PartialEq)]
 #[cfg_attr(feature = "serde", derive(serde::Deserialize, serde::Serialize))]

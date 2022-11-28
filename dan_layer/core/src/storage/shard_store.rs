@@ -74,7 +74,7 @@ impl From<StorageError> for StoreError {
 }
 
 pub trait ShardStoreTransaction<TAddr: NodeAddressable, TPayload: Payload> {
-    fn commit(&mut self) -> Result<(), StorageError>;
+    fn commit(self) -> Result<(), StorageError>;
     fn count_high_qc_for(&self, shard_id: ShardId) -> Result<usize, StorageError>;
     fn update_high_qc(&mut self, from: TAddr, shard: ShardId, qc: QuorumCertificate) -> Result<(), StorageError>;
     fn set_payload(&mut self, payload: TPayload) -> Result<(), StorageError>;

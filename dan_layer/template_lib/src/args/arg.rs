@@ -20,7 +20,8 @@
 //   WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //   USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use tari_template_abi::{decode, encode, rust::io, Decode, Encode};
+use tari_bor::{borsh, decode, encode, Decode, Encode};
+use tari_template_abi::rust::io;
 
 #[derive(Debug, Clone, PartialEq, Eq, Decode, Encode)]
 #[cfg_attr(

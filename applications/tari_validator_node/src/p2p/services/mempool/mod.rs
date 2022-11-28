@@ -25,5 +25,17 @@ pub use initializer::spawn;
 
 mod handle;
 pub use handle::{MempoolHandle, MempoolRequest};
+use tari_dan_core::services::epoch_manager::EpochManagerError;
+use thiserror::Error;
+
+use crate::p2p::services::messaging::MessagingError;
 
 mod service;
+
+#[derive(Error, Debug)]
+pub enum MempoolError {
+    #[error("Epoch Manager Error: {0}")]
+    EpochManagerError(#[from] Box<EpochManagerError>),
+    #[error("Broadcast failed: {0}")]
+    BroadcastFailed(#[from] MessagingError),
+}

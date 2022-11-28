@@ -31,6 +31,7 @@ static ALLOC: wee_alloc::WeeAlloc = wee_alloc::WeeAlloc::INIT;
 #[cfg(any(feature = "call_engine_in_abi", feature = "unexpected_export_function"))]
 #[no_mangle]
 pub extern "C" fn Buggy_abi() -> *mut u8 {
+    use tari_bor::encode_with_len;
     use tari_template_abi::*;
     // Call the engine in the ABI code, you aren't allowed to do that *shakes head*
     #[cfg(feature = "call_engine_in_abi")]

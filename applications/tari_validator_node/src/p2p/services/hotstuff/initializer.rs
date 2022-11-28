@@ -54,11 +54,10 @@ pub fn try_spawn(
     rx_vote_message: mpsc::Receiver<(CommsPublicKey, VoteMessage)>,
     shutdown: ShutdownSignal,
 ) -> Result<(EventSubscription<HotStuffEvent>, SqliteShardStoreFactory), anyhow::Error> {
-    let db = SqliteShardStoreFactory::try_create(config.data_dir.join("state.db"))?;
+    let db = SqliteShardStoreFactory::try_create(config.state_db_path())?;
 
     let events = HotstuffService::spawn(
-        node_identity.clone(),
-        node_identity.public_key().clone(),
+        node_identity,
         epoch_manager,
         mempool,
         outbound,
