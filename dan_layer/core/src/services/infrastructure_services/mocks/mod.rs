@@ -25,7 +25,7 @@ use std::collections::HashMap;
 use async_trait::async_trait;
 use tokio::sync::mpsc::{channel, Receiver, Sender};
 
-use crate::services::infrastructure_services::{NodeAddressable, OutboundService};
+use crate::services::infrastructure_services::OutboundService;
 
 pub fn mock_inbound<TAddr: NodeAddressable, TPayload: Payload>() -> MockInboundConnectionService<TAddr, TPayload> {
     MockInboundConnectionService::default()
@@ -98,6 +98,8 @@ impl<TAddr: NodeAddressable, TPayload: Payload> MockOutboundService<TAddr, TPayl
 }
 
 use std::fmt::Debug;
+
+use tari_dan_common_types::NodeAddressable;
 
 use crate::{message::DanMessage, models::Payload};
 

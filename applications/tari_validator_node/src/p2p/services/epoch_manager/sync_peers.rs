@@ -24,9 +24,9 @@ use std::convert::TryFrom;
 
 use futures::StreamExt;
 use tari_comms::types::CommsPublicKey;
-use tari_dan_common_types::{PayloadId, ShardId, SubstateState};
+use tari_dan_common_types::{NodeHeight, PayloadId, QuorumCertificate, ShardId, SubstateState, TreeNodeHash};
 use tari_dan_core::{
-    models::{NodeHeight, QuorumCertificate, SubstateShardData, TreeNodeHash, ValidatorNode},
+    models::{SubstateShardData, ValidatorNode},
     services::{epoch_manager::EpochManagerError, ValidatorNodeClientFactory},
     storage::shard_store::{ShardStoreFactory, ShardStoreTransaction},
 };

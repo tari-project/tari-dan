@@ -24,12 +24,15 @@ use std::fmt::{Display, Formatter};
 
 use serde::Serialize;
 use tari_common_types::types::FixedHash;
-use tari_dan_common_types::ShardId;
-
-use crate::{
-    models::{HotStuffMessageType, HotStuffTreeNode, Payload, QuorumCertificate, TreeNodeHash, ValidatorMetadata},
-    services::infrastructure_services::NodeAddressable,
+use tari_dan_common_types::{
+    quorum_certificate::QuorumCertificate,
+    NodeAddressable,
+    ShardId,
+    TreeNodeHash,
+    ValidatorMetadata,
 };
+
+use crate::models::{HotStuffMessageType, HotStuffTreeNode, Payload};
 
 // TODO: convert to enum
 #[derive(Debug, Clone, Serialize)]

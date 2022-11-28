@@ -21,15 +21,10 @@
 // USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 pub use error::StorageError;
-pub use store::{AssetDataStore, AssetStore};
 mod db_factory;
 mod error;
-mod store;
 
 pub use db_factory::DbFactory;
 
 pub mod mocks;
 pub mod shard_store;
-
-pub mod encoding;
-pub use encoding::{deserialize, serialize};

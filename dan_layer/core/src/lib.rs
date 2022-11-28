@@ -30,7 +30,6 @@ pub mod message;
 pub mod models;
 pub mod services;
 pub mod storage;
-pub mod template_command;
 pub mod types;
 pub mod workers;
 

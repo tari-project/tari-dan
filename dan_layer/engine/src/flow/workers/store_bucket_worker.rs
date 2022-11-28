@@ -5,13 +5,11 @@ use std::sync::{Arc, RwLock};
 
 use d3ne::{InputData, Node, OutputData, Worker};
 
-use crate::state::StateDbUnitOfWork;
-
 pub struct StoreBucketWorker<TUnitOfWork: StateDbUnitOfWork> {
     pub state_db: Arc<RwLock<TUnitOfWork>>,
 }
 
-impl<TUnitOfWork: StateDbUnitOfWork> Worker for StoreBucketWorker<TUnitOfWork> {
+impl<TUnitOfWork> Worker for StoreBucketWorker<TUnitOfWork> {
     // fn call(&self, node: Node, inputs: InputData) -> OutputData {
     //     let mut map = HashMap::new();
     //     let bucket: Bucket = match node.get_field_t("bucket", &inputs) {

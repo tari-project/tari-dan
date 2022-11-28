@@ -28,18 +28,10 @@ use tari_common_types::types::{PrivateKey, PublicKey};
 use tari_comms::{multiaddr::Multiaddr, peer_manager::PeerFeatures, NodeIdentity};
 use tari_core::ValidatorNodeMmr;
 use tari_crypto::keys::PublicKey as PublicKeyT;
-use tari_dan_common_types::{Epoch, ShardId};
+use tari_dan_common_types::{vn_mmr_node_hash, Epoch, ObjectPledge, QuorumCertificate, QuorumDecision, ShardId};
 use tari_dan_core::{
     consensus_constants::ConsensusConstants,
-    models::{
-        vote_message::VoteMessage,
-        HotStuffMessage,
-        ObjectPledge,
-        Payload,
-        QuorumCertificate,
-        QuorumDecision,
-        TariDanPayload,
-    },
+    models::{vote_message::VoteMessage, HotStuffMessage, Payload, TariDanPayload},
     services::{
         epoch_manager::{EpochManager, RangeEpochManager},
         leader_strategy::{AlwaysFirstLeader, LeaderStrategy},
@@ -773,7 +765,6 @@ async fn test_hs_waiter_cannot_spend_until_it_is_proven_committed() {
 }
 
 use tari_dan_core::{
-    models::vn_mmr_node_hash,
     services::{NodeIdentitySigningService, PayloadProcessor, PayloadProcessorError, SigningService},
     workers::hotstuff_error::HotStuffError,
 };

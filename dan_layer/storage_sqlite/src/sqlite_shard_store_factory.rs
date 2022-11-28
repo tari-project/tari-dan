@@ -32,25 +32,30 @@ use diesel::{
 use log::{debug, warn};
 use serde_json::json;
 use tari_common_types::types::{PrivateKey, PublicKey, Signature};
-use tari_dan_common_types::{Epoch, PayloadId, ShardId, SubstateChange, SubstateState};
+use tari_dan_common_types::{
+    Epoch,
+    NodeHeight,
+    ObjectPledge,
+    PayloadId,
+    QuorumCertificate,
+    ShardId,
+    SubstateChange,
+    SubstateState,
+    TreeNodeHash,
+};
 use tari_dan_core::{
     models::{
         vote_message::VoteMessage,
         HotStuffTreeNode,
         LeafNode,
-        NodeHeight,
-        ObjectPledge,
         Payload,
-        QuorumCertificate,
         RecentTransaction,
         SQLSubstate,
         SQLTransaction,
         SubstateShardData,
         TariDanPayload,
-        TreeNodeHash,
     },
     storage::{
-        deserialize,
         shard_store::{ShardStoreFactory, ShardStoreTransaction},
         StorageError,
     },
@@ -912,7 +917,7 @@ impl ShardStoreTransaction<PublicKey, TariDanPayload> for SqliteShardStoreTransa
     }
 
     fn get_state_inventory(&self) -> Result<Vec<ShardId>, StorageError> {
-        let substate_states: Option<Vec<crate::models::substate::Substate>> = substates
+        let substate_states: Option<Vec<Substate>> = substates
             .get_results(self.transaction.connection())
             .optional()
             .map_err(|e| StorageError::QueryError {
@@ -923,7 +928,7 @@ impl ShardStoreTransaction<PublicKey, TariDanPayload> for SqliteShardStoreTransa
         if let Some(substate_states) = substate_states {
             substate_states
                 .iter()
-                .map(|ss| deserialize::<ShardId>(ss.shard_id.as_slice()))
+                .map(|ss| ShardId::from_bytes(ss.shard_id.as_slice()).map_err(|_| StorageError::DecodingError))
                 .collect::<Result<Vec<_>, _>>()
         } else {
             Ok(vec![])

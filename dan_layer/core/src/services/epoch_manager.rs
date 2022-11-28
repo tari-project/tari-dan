@@ -25,12 +25,12 @@ use std::{collections::HashMap, ops::Range};
 use async_trait::async_trait;
 use tari_comms::protocol::rpc::{RpcError, RpcStatus};
 use tari_core::ValidatorNodeMmr;
-use tari_dan_common_types::{Epoch, ShardId};
+use tari_dan_common_types::{Epoch, NodeAddressable, ShardId};
 use thiserror::Error;
 
 use crate::{
     models::{Committee, ValidatorNode},
-    services::{base_node_error::BaseNodeError, infrastructure_services::NodeAddressable, ValidatorNodeClientError},
+    services::{base_node_error::BaseNodeError, ValidatorNodeClientError},
     storage::StorageError,
 };
 

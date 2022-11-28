@@ -13,8 +13,13 @@ tari_utilities = { git = "https://github.com/tari-project/tari_utilities.git", t
 tari_crypto = { git = "https://github.com/tari-project/tari-crypto.git", tag = "v0.15.7" }
 tari_engine_types = { path = "../engine_types"}
 tari_bor = { path = "../tari_bor" }
+tari_mmr = { git = "https://github.com/tari-project/tari.git", branch = "feature-dan", package = "tari_mmr" }
 
+anyhow = "1.0"
+# TODO: remove once we use borsh for all serialization
+bincode = "1.0"
 base64 = "0.20.0-alpha.1"
+borsh = "0.9"
 digest = "0.9"
 serde = "1.0.126"
 prost = "0.9"

@@ -20,10 +20,8 @@
 // WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 // USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-mod node_addressable;
 mod outbound_service;
 
-pub use node_addressable::NodeAddressable;
 pub use outbound_service::OutboundService;
 
 #[cfg(test)]
