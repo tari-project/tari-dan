@@ -7,7 +7,7 @@ license = "BSD-3-Clause"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-tari_common_types = { git = "https://github.com/tari-project/tari.git", branch = "feature-dan", package = "tari_common_types" }
+tari_common_types = { git = "https://github.com/tari-project/tari.git", branch = "development", package = "tari_common_types" }
 
 thiserror = "1"
 time = "0.3.15"
