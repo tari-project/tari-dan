@@ -31,42 +31,42 @@ use crate::storage::StorageError;
 pub struct MockGlobalDbBackupAdapter;
 
 impl AtomicDb for MockGlobalDbBackupAdapter {
-    type DbTransaction = ();
+    type DbTransaction<'a> = ();
     type Error = StorageError;
 
-    fn create_transaction(&self) -> Result<Self::DbTransaction, Self::Error> {
+    fn create_transaction<'a>(&'a self) -> Result<Self::DbTransaction<'a>, Self::Error> {
         todo!()
     }
 
-    fn commit(&self, _transaction: Self::DbTransaction) -> Result<(), Self::Error> {
+    fn commit(&self, _transaction: Self::DbTransaction<'_>) -> Result<(), Self::Error> {
         todo!()
     }
 }
 
 impl GlobalDbAdapter for MockGlobalDbBackupAdapter {
-    fn get_metadata(&self, _tx: &Self::DbTransaction, _key: &MetadataKey) -> Result<Option<Vec<u8>>, Self::Error> {
+    fn get_metadata(&self, _tx: &Self::DbTransaction<'_>, _key: &MetadataKey) -> Result<Option<Vec<u8>>, Self::Error> {
         todo!()
     }
 
-    fn set_metadata(&self, _tx: &Self::DbTransaction, _key: MetadataKey, _value: &[u8]) -> Result<(), Self::Error> {
+    fn set_metadata(&self, _tx: &Self::DbTransaction<'_>, _key: MetadataKey, _value: &[u8]) -> Result<(), Self::Error> {
         todo!()
     }
 
-    fn get_template(&self, _tx: &Self::DbTransaction, _key: &[u8]) -> Result<Option<DbTemplate>, Self::Error> {
+    fn get_template(&self, _tx: &Self::DbTransaction<'_>, _key: &[u8]) -> Result<Option<DbTemplate>, Self::Error> {
         todo!()
     }
 
-    fn get_templates(&self, _tx: &Self::DbTransaction, _limit: usize) -> Result<Vec<DbTemplate>, Self::Error> {
+    fn get_templates(&self, _tx: &Self::DbTransaction<'_>, _limit: usize) -> Result<Vec<DbTemplate>, Self::Error> {
         todo!()
     }
 
-    fn insert_template(&self, _tx: &Self::DbTransaction, _template: DbTemplate) -> Result<(), Self::Error> {
+    fn insert_template(&self, _tx: &Self::DbTransaction<'_>, _template: DbTemplate) -> Result<(), Self::Error> {
         todo!()
     }
 
     fn update_template(
         &self,
-        _tx: &Self::DbTransaction,
+        _tx: &Self::DbTransaction<'_>,
         _key: &[u8],
         _template: DbTemplateUpdate,
     ) -> Result<(), Self::Error> {
@@ -75,7 +75,7 @@ impl GlobalDbAdapter for MockGlobalDbBackupAdapter {
 
     fn insert_validator_nodes(
         &self,
-        _tx: &Self::DbTransaction,
+        _tx: &Self::DbTransaction<'_>,
         _validator_nodes: Vec<DbValidatorNode>,
     ) -> Result<(), Self::Error> {
         todo!()
@@ -83,7 +83,7 @@ impl GlobalDbAdapter for MockGlobalDbBackupAdapter {
 
     fn get_validator_nodes_per_epoch(
         &self,
-        _tx: &Self::DbTransaction,
+        _tx: &Self::DbTransaction<'_>,
         _epoch: u64,
     ) -> Result<Vec<DbValidatorNode>, Self::Error> {
         todo!()
@@ -91,18 +91,18 @@ impl GlobalDbAdapter for MockGlobalDbBackupAdapter {
 
     fn get_validator_node(
         &self,
-        _tx: &Self::DbTransaction,
+        _tx: &Self::DbTransaction<'_>,
         _epoch: u64,
         _public_key: &[u8],
     ) -> Result<DbValidatorNode, Self::Error> {
         todo!()
     }
 
-    fn insert_epoch(&self, _tx: &Self::DbTransaction, _epoch: DbEpoch) -> Result<(), Self::Error> {
+    fn insert_epoch(&self, _tx: &Self::DbTransaction<'_>, _epoch: DbEpoch) -> Result<(), Self::Error> {
         todo!()
     }
 
-    fn get_epoch(&self, _tx: &Self::DbTransaction, _epoch: u64) -> Result<Option<DbEpoch>, Self::Error> {
+    fn get_epoch(&self, _tx: &Self::DbTransaction<'_>, _epoch: u64) -> Result<Option<DbEpoch>, Self::Error> {
         todo!()
     }
 }

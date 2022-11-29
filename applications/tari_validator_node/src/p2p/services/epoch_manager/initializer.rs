@@ -24,7 +24,7 @@ use std::sync::Arc;
 
 use tari_comms::{types::CommsPublicKey, NodeIdentity};
 use tari_dan_core::consensus_constants::ConsensusConstants;
-use tari_dan_storage_sqlite::SqliteDbFactory;
+use tari_dan_storage_sqlite::{sqlite_shard_store_factory::SqliteShardStore, SqliteDbFactory};
 use tari_shutdown::ShutdownSignal;
 use tokio::sync::mpsc;
 
@@ -34,17 +34,16 @@ use crate::{
         epoch_manager::{epoch_manager_service::EpochManagerService, handle::EpochManagerHandle},
         rpc_client::TariCommsValidatorNodeClientFactory,
     },
-    ValidatorNodeConfig,
 };
 
 pub fn spawn(
     db_factory: SqliteDbFactory,
+    shard_store: SqliteShardStore,
     base_node_client: GrpcBaseNodeClient,
     consensus_constants: ConsensusConstants,
     id: CommsPublicKey,
     shutdown: ShutdownSignal,
     node_identity: Arc<NodeIdentity>,
-    validator_node_config: ValidatorNodeConfig,
     validator_node_client_factory: TariCommsValidatorNodeClientFactory,
 ) -> EpochManagerHandle {
     let (tx_request, rx_request) = mpsc::channel(10);
@@ -54,10 +53,10 @@ pub fn spawn(
         rx_request,
         shutdown,
         db_factory,
+        shard_store,
         base_node_client,
         consensus_constants,
         node_identity,
-        validator_node_config,
         validator_node_client_factory,
     );
     handle

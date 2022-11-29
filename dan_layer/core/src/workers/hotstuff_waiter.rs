@@ -61,7 +61,7 @@ use crate::{
         Payload,
     },
     services::{epoch_manager::EpochManager, leader_strategy::LeaderStrategy, PayloadProcessor, SigningService},
-    storage::shard_store::{ShardStoreFactory, ShardStoreTransaction},
+    storage::shard_store::{ShardStore, ShardStoreTransaction},
     workers::{events::HotStuffEvent, hotstuff_error::HotStuffError},
 };
 
@@ -112,7 +112,7 @@ where
     TLeaderStrategy: LeaderStrategy<TAddr> + 'static + Send + Sync,
     TEpochManager: EpochManager<TAddr> + 'static + Send + Sync,
     TPayloadProcessor: PayloadProcessor<TPayload> + 'static + Send + Sync,
-    TShardStore: ShardStoreFactory<Addr = TAddr, Payload = TPayload> + 'static + Send + Sync,
+    TShardStore: ShardStore<Addr = TAddr, Payload = TPayload> + 'static + Send + Sync,
     TSigningService: SigningService + Sync + Send + 'static,
 {
     pub fn spawn(
@@ -260,7 +260,7 @@ where
 
     /// Step 4: Sends a Proposal to replica. A new leaf node is created that builds
     /// on the previous tree or else a genesis node is created and proposed.
-    async fn on_propose(&mut self, shard: ShardId, payload_id: PayloadId) -> Result<(), HotStuffError> {
+    async fn on_propose(&self, shard: ShardId, payload_id: PayloadId) -> Result<(), HotStuffError> {
         let epoch = self.epoch_manager.current_epoch().await?;
 
         let qc;
@@ -593,7 +593,7 @@ where
 
     /// A pacemaker beat has been triggered for a payload. If the leader has received enough NewViews, a Proposal is
     /// sent to replicas.
-    async fn on_beat(&mut self, shard: ShardId, payload_id: PayloadId) -> Result<(), HotStuffError> {
+    async fn on_beat(&self, shard: ShardId, payload_id: PayloadId) -> Result<(), HotStuffError> {
         // TODO: the leader is only known after the leaf is determined
         // TODO: Review if this is correct. The epoch should stay the same for all epochs
 
@@ -811,10 +811,10 @@ where
 
     /// Commits the changeset and node including all parent nodes if not already done so.
     fn on_commit(
-        &mut self,
+        &self,
         node: &HotStuffTreeNode<TAddr, TPayload>,
         changes: &HashMap<ShardId, Vec<SubstateState>>,
-        tx: &mut TShardStore::Transaction,
+        tx: &mut TShardStore::Transaction<'_>,
     ) -> Result<(), HotStuffError> {
         let shard = node.shard();
         if tx.get_last_executed_height(shard)? < node.height() {

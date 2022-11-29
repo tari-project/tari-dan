@@ -42,4 +42,8 @@ impl DbFactory for MockDbFactory {
         // Ok(GlobalDb::new(entry))
         todo!()
     }
+
+    fn migrate(&self) -> Result<(), StorageError> {
+        todo!()
+    }
 }

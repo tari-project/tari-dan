@@ -50,12 +50,13 @@ use crate::{
     storage::StorageError,
 };
 
-pub trait ShardStoreFactory {
+pub trait ShardStore {
     type Addr: NodeAddressable;
     type Payload: Payload;
 
-    type Transaction: ShardStoreTransaction<Self::Addr, Self::Payload>;
-    fn create_tx(&self) -> Result<Self::Transaction, StorageError>;
+    type Transaction<'a>: ShardStoreTransaction<Self::Addr, Self::Payload>
+    where Self: 'a;
+    fn create_tx<'a>(&'a self) -> Result<Self::Transaction<'a>, StorageError>;
 }
 
 #[derive(Debug, Error)]

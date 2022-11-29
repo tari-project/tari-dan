@@ -28,12 +28,12 @@ use std::{
 use tari_common_types::types::PublicKey;
 use tari_dan_core::{
     models::TariDanPayload,
-    storage::{shard_store::ShardStoreFactory, StorageError},
+    storage::{shard_store::ShardStore, StorageError},
 };
-use tari_dan_storage_sqlite::sqlite_shard_store_factory::{SqliteShardStoreFactory, SqliteShardStoreTransaction};
+use tari_dan_storage_sqlite::sqlite_shard_store_factory::{SqliteShardStore, SqliteShardStoreTransaction};
 use tari_test_utils::paths::create_temporary_data_path;
 pub struct TempShardStoreFactory {
-    sqlite: SqliteShardStoreFactory,
+    sqlite: SqliteShardStore,
     path: PathBuf,
     delete_on_drop: bool,
 }
@@ -41,7 +41,7 @@ pub struct TempShardStoreFactory {
 impl TempShardStoreFactory {
     pub fn new() -> Self {
         let temp_path = create_temporary_data_path();
-        let sqlite = SqliteShardStoreFactory::try_create(temp_path.join("state.db")).unwrap();
+        let sqlite = SqliteShardStore::try_create(temp_path.join("state.db")).unwrap();
         Self {
             sqlite,
             path: temp_path,
@@ -61,7 +61,7 @@ impl Default for TempShardStoreFactory {
     }
 }
 
-impl ShardStoreFactory for TempShardStoreFactory {
+impl ShardStore for TempShardStoreFactory {
     type Addr = PublicKey;
     type Payload = TariDanPayload;
     type Transaction = SqliteShardStoreTransaction;

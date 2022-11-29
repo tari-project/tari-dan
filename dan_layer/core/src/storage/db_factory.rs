@@ -28,4 +28,6 @@ pub trait DbFactory: Sync + Send + 'static {
     type GlobalDbAdapter: GlobalDbAdapter;
 
     fn get_or_create_global_db(&self) -> Result<GlobalDb<Self::GlobalDbAdapter>, StorageError>;
+
+    fn migrate(&self) -> Result<(), StorageError>;
 }

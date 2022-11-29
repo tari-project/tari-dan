@@ -36,11 +36,11 @@ use tari_crypto::tari_utilities::hex::Hex;
 use tari_dan_common_types::{PayloadId, SubstateChange};
 use tari_dan_core::{
     services::{epoch_manager::EpochManager, BaseNodeClient},
-    storage::shard_store::{ShardStoreFactory, ShardStoreTransaction},
+    storage::shard_store::{ShardStore, ShardStoreTransaction},
     workers::events::{EventSubscription, HotStuffEvent},
 };
 use tari_dan_engine::transaction::TransactionBuilder;
-use tari_dan_storage_sqlite::sqlite_shard_store_factory::SqliteShardStoreFactory;
+use tari_dan_storage_sqlite::sqlite_shard_store_factory::SqliteShardStore;
 use tari_template_lib::Hash;
 use tari_validator_node_client::types::{
     GetCommitteeRequest,
@@ -86,7 +86,7 @@ pub struct JsonRpcHandlers {
     comms: CommsNode,
     hotstuff_events: EventSubscription<HotStuffEvent>,
     base_node_client: GrpcBaseNodeClient,
-    db: SqliteShardStoreFactory,
+    shard_store: SqliteShardStore,
 }
 
 impl JsonRpcHandlers {
@@ -104,7 +104,7 @@ impl JsonRpcHandlers {
             comms: services.comms.clone(),
             hotstuff_events: services.hotstuff_events.clone(),
             base_node_client,
-            db: services.db.clone(),
+            shard_store: services.shard_store.clone(),
         }
     }
 
@@ -198,7 +198,7 @@ impl JsonRpcHandlers {
 
     pub async fn get_recent_transactions(&self, value: JsonRpcExtractor) -> JrpcResult {
         let answer_id = value.get_answer_id();
-        let tx = self.db.create_tx().unwrap();
+        let tx = self.shard_store.create_tx().unwrap();
         if let Ok(recent_transactions) = tx.get_recent_transactions() {
             Ok(JsonRpcResponse::success(answer_id, json!(recent_transactions)))
         } else {
@@ -218,7 +218,7 @@ impl JsonRpcHandlers {
         let request: GetTransactionRequest = value.parse_params()?;
         let payload_id = PayloadId::new(request.hash);
 
-        let tx = self.db.create_tx().unwrap();
+        let tx = self.shard_store.create_tx().unwrap();
         if let Ok(payload) = tx.get_payload(&payload_id) {
             let response = GetTransactionResponse {
                 result: payload.result().clone(),
@@ -239,7 +239,7 @@ impl JsonRpcHandlers {
     pub async fn get_transaction(&self, value: JsonRpcExtractor) -> JrpcResult {
         let answer_id = value.get_answer_id();
         let data: TransactionRequest = value.parse_params()?;
-        let tx = self.db.create_tx().unwrap();
+        let tx = self.shard_store.create_tx().unwrap();
         match tx.get_transaction(data.payload_id) {
             Ok(transaction) => Ok(JsonRpcResponse::success(answer_id, json!(transaction))),
             Err(err) => {
@@ -259,7 +259,7 @@ impl JsonRpcHandlers {
     pub async fn get_substates(&self, value: JsonRpcExtractor) -> JrpcResult {
         let answer_id = value.get_answer_id();
         let data: SubstatesRequest = value.parse_params()?;
-        let tx = self.db.create_tx().unwrap();
+        let tx = self.shard_store.create_tx().unwrap();
         match tx.get_substates(data.payload_id, data.shard_id) {
             Ok(substates) => Ok(JsonRpcResponse::success(answer_id, json!(substates))),
             Err(err) => {
