@@ -6,7 +6,7 @@ edition = "2021"
 
 [dependencies]
 tari_bor = { path = "../tari_bor" }
-tari_common_types = { git = "https://github.com/tari-project/tari.git", branch = "feature-dan" }
+tari_common_types = { git = "https://github.com/tari-project/tari.git", branch = "development" }
 tari_crypto = { git = "https://github.com/tari-project/tari-crypto.git", tag = "v0.16.5" }
 tari_template_abi = { path = "../template_abi", features = ["std"] }
 tari_template_lib = { path = "../template_lib", default-features = false, features = ["serde"] }
