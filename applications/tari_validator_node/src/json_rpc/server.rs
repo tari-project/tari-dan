@@ -22,11 +22,7 @@
 
 use std::{net::SocketAddr, sync::Arc};
 
-use axum::{
-    extract::{ContentLengthLimit, Extension},
-    routing::post,
-    Router,
-};
+use axum::{extract::Extension, routing::post, Router};
 use axum_jrpc::{JrpcResult, JsonRpcExtractor};
 use log::*;
 use tower_http::cors::CorsLayer;
@@ -34,7 +30,6 @@ use tower_http::cors::CorsLayer;
 use super::handlers::JsonRpcHandlers;
 
 const LOG_TARGET: &str = "tari::validator_node::json_rpc";
-const JSON_SIZE_LIMIT_BYTES: u64 = 25 * 1024; // 25 kb
 
 pub async fn run_json_rpc(preferred_address: SocketAddr, handlers: JsonRpcHandlers) -> Result<(), anyhow::Error> {
     let router = Router::new()
@@ -58,10 +53,7 @@ pub async fn run_json_rpc(preferred_address: SocketAddr, handlers: JsonRpcHandle
     Ok(())
 }
 
-async fn handler(
-    Extension(handlers): Extension<Arc<JsonRpcHandlers>>,
-    ContentLengthLimit(value): ContentLengthLimit<JsonRpcExtractor, JSON_SIZE_LIMIT_BYTES>,
-) -> JrpcResult {
+async fn handler(Extension(handlers): Extension<Arc<JsonRpcHandlers>>, value: JsonRpcExtractor) -> JrpcResult {
     debug!(target: LOG_TARGET, "🌐 JSON-RPC request: {}", value.method);
     match value.method.as_str() {
         // Transaction
