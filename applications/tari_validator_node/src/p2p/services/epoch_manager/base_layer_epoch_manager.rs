@@ -38,7 +38,7 @@ use tari_dan_core::{
     storage::DbFactory,
 };
 use tari_dan_storage::global::{DbEpoch, DbValidatorNode, MetadataKey};
-use tari_dan_storage_sqlite::{sqlite_shard_store_factory::SqliteShardStoreFactory, SqliteDbFactory};
+use tari_dan_storage_sqlite::{sqlite_shard_store_factory::SqliteShardStore, SqliteDbFactory};
 use tokio::sync::broadcast;
 
 use super::{get_committee_shard_range, sync_peers::PeerSyncManagerService};
@@ -48,7 +48,6 @@ use crate::{
         epoch_manager::epoch_manager_service::EpochManagerEvent,
         rpc_client::TariCommsValidatorNodeClientFactory,
     },
-    ValidatorNodeConfig,
 };
 
 const LOG_TARGET: &str = "tari::validator_node::epoch_manager::base_layer_epoch_manager";
@@ -56,13 +55,13 @@ const LOG_TARGET: &str = "tari::validator_node::epoch_manager::base_layer_epoch_
 #[derive(Clone)]
 pub struct BaseLayerEpochManager {
     db_factory: SqliteDbFactory,
+    shard_store: SqliteShardStore,
     pub base_node_client: GrpcBaseNodeClient,
     consensus_constants: ConsensusConstants,
     current_epoch: Epoch,
     _identity: CommsPublicKey,
     tx_events: broadcast::Sender<EpochManagerEvent>,
     node_identity: Arc<NodeIdentity>,
-    validator_node_config: ValidatorNodeConfig,
     validator_node_client_factory: TariCommsValidatorNodeClientFactory,
     current_shard_key: Option<ShardId>,
 }
@@ -70,23 +69,23 @@ pub struct BaseLayerEpochManager {
 impl BaseLayerEpochManager {
     pub fn new(
         db_factory: SqliteDbFactory,
+        shard_store: SqliteShardStore,
         base_node_client: GrpcBaseNodeClient,
         consensus_constants: ConsensusConstants,
         identity: CommsPublicKey,
         tx_events: broadcast::Sender<EpochManagerEvent>,
         node_identity: Arc<NodeIdentity>,
-        validator_node_config: ValidatorNodeConfig,
         validator_node_client_factory: TariCommsValidatorNodeClientFactory,
     ) -> Self {
         Self {
             db_factory,
+            shard_store,
             base_node_client,
             consensus_constants,
             current_epoch: Epoch(0),
             _identity: identity,
             tx_events,
             node_identity,
-            validator_node_config,
             validator_node_client_factory,
             current_shard_key: None,
         }
@@ -168,11 +167,9 @@ impl BaseLayerEpochManager {
         }
         let (start_shard_id, end_shard_id) = get_committee_shard_range(committee_size, &committee_vns).into_inner();
 
-        let shard_store_factory = SqliteShardStoreFactory::try_create(self.validator_node_config.state_db_path())?;
-
         // TODO: I think this should be part of a state machine for the VN
         let peer_sync_service_manager =
-            PeerSyncManagerService::new(self.validator_node_client_factory.clone(), shard_store_factory);
+            PeerSyncManagerService::new(self.validator_node_client_factory.clone(), self.shard_store.clone());
 
         // synchronize state with committee validator nodes
         peer_sync_service_manager
@@ -339,16 +336,16 @@ impl BaseLayerEpochManager {
         let mut result = Vec::with_capacity(half_committee_size * 2);
         if begin > mid_point {
             result.extend_from_slice(&vns[begin..]);
-            result.extend_from_slice(&vns[0..mid_point as usize]);
+            result.extend_from_slice(&vns[0..mid_point]);
         } else {
-            result.extend_from_slice(&vns[begin..mid_point as usize]);
+            result.extend_from_slice(&vns[begin..mid_point]);
         }
 
         if end < mid_point {
-            result.extend_from_slice(&vns[mid_point as usize..]);
+            result.extend_from_slice(&vns[mid_point..]);
             result.extend_from_slice(&vns[0..end]);
         } else {
-            result.extend_from_slice(&vns[mid_point as usize..end]);
+            result.extend_from_slice(&vns[mid_point..end]);
         }
 
         Ok(result)

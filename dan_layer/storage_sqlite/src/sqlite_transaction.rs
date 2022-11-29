@@ -20,35 +20,27 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+use std::sync::MutexGuard;
+
 use diesel::{Connection, SqliteConnection};
 
 use crate::error::SqliteStorageError;
 
-const LOG_TARGET: &str = "tari::dan::storage::sqlite::transaction";
+const _LOG_TARGET: &str = "tari::dan::storage::sqlite::transaction";
 
-pub struct SqliteTransaction {
-    connection: SqliteConnection,
+pub struct SqliteTransaction<'a> {
+    connection: MutexGuard<'a, SqliteConnection>,
     is_done: bool,
 }
 
-impl SqliteTransaction {
-    pub fn begin(connection: SqliteConnection) -> Result<Self, SqliteStorageError> {
-        // TODO: This busy wait sucks and there is definitely a better way, but we care more about the SQLite DB working
-        //       than performance
-        // NOTE: We use an EXCLUSIVE transaction because sometimes transaction commits fail otherwise. Need to
-        // investigate.
-        while let Err(err) = connection.execute("BEGIN EXCLUSIVE;") {
-            if err.to_string().contains("database is locked") {
-                log::warn!(target: LOG_TARGET, "Database is locked, retrying in 100ms");
-                std::thread::sleep(std::time::Duration::from_millis(100));
-            } else {
-                return Err(SqliteStorageError::DieselError {
-                    source: err,
-                    operation: "begin transaction".to_string(),
-                });
-            }
-        }
-
+impl<'a> SqliteTransaction<'a> {
+    pub fn begin(connection: MutexGuard<'a, SqliteConnection>) -> Result<Self, SqliteStorageError> {
+        connection
+            .execute("BEGIN TRANSACTION;")
+            .map_err(|err| SqliteStorageError::DieselError {
+                source: err,
+                operation: "begin transaction".to_string(),
+            })?;
         Ok(Self {
             connection,
             is_done: false,
@@ -60,7 +52,7 @@ impl SqliteTransaction {
     }
 
     pub fn commit(mut self) -> Result<(), SqliteStorageError> {
-        self.connection
+        self.connection()
             .execute("COMMIT")
             .map_err(|source| SqliteStorageError::DieselError {
                 source,
@@ -76,7 +68,7 @@ impl SqliteTransaction {
     }
 
     fn rollback_inner(&mut self) -> Result<(), SqliteStorageError> {
-        self.connection
+        self.connection()
             .execute("ROLLBACK")
             .map_err(|source| SqliteStorageError::DieselError {
                 source,
@@ -88,7 +80,7 @@ impl SqliteTransaction {
     }
 }
 
-impl Drop for SqliteTransaction {
+impl Drop for SqliteTransaction<'_> {
     fn drop(&mut self) {
         if !self.is_done {
             // TODO: Read transactions dont need to be explicitly committed/rolled back. I think we should differentiate

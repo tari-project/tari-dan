@@ -20,7 +20,13 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use std::{collections::HashMap, convert::TryFrom, fs::create_dir_all, path::PathBuf};
+use std::{
+    collections::HashMap,
+    convert::TryFrom,
+    fs::create_dir_all,
+    path::PathBuf,
+    sync::{Arc, Mutex},
+};
 
 use diesel::{
     prelude::*,
@@ -56,7 +62,7 @@ use tari_dan_core::{
         TariDanPayload,
     },
     storage::{
-        shard_store::{ShardStoreFactory, ShardStoreTransaction},
+        shard_store::{ShardStore, ShardStoreTransaction},
         StorageError,
     },
 };
@@ -179,12 +185,12 @@ impl From<QueryableSubstate> for SQLSubstate {
     }
 }
 
-#[derive(Debug, Clone)]
-pub struct SqliteShardStoreFactory {
-    url: PathBuf,
+#[derive(Clone)]
+pub struct SqliteShardStore {
+    connection: Arc<Mutex<SqliteConnection>>,
 }
 
-impl SqliteShardStoreFactory {
+impl SqliteShardStore {
     pub fn try_create(path: PathBuf) -> Result<Self, StorageError> {
         create_dir_all(path.parent().unwrap()).map_err(|_| StorageError::FileSystemPathDoesNotExist)?;
 
@@ -202,31 +208,28 @@ impl SqliteShardStoreFactory {
                 operation: "set pragma".to_string(),
             })?;
 
-        Ok(Self { url: path })
+        Ok(Self {
+            connection: Arc::new(Mutex::new(connection)),
+        })
     }
 }
-impl ShardStoreFactory for SqliteShardStoreFactory {
+impl ShardStore for SqliteShardStore {
     type Addr = PublicKey;
     type Payload = TariDanPayload;
-    type Transaction = SqliteShardStoreTransaction;
+    type Transaction<'a> = SqliteShardStoreTransaction<'a>;
 
-    fn create_tx(&self) -> Result<Self::Transaction, StorageError> {
-        match SqliteConnection::establish(self.url.to_str().expect("database_url utf-8 error")) {
-            Ok(connection) => {
-                let tx = SqliteTransaction::begin(connection)?;
-                Ok(SqliteShardStoreTransaction::new(tx))
-            },
-            Err(err) => Err(SqliteStorageError::from(err).into()),
-        }
+    fn create_tx(&self) -> Result<Self::Transaction<'_>, StorageError> {
+        let tx = SqliteTransaction::begin(self.connection.lock().unwrap())?;
+        Ok(SqliteShardStoreTransaction::new(tx))
     }
 }
 
-pub struct SqliteShardStoreTransaction {
-    transaction: SqliteTransaction,
+pub struct SqliteShardStoreTransaction<'a> {
+    transaction: SqliteTransaction<'a>,
 }
 
-impl SqliteShardStoreTransaction {
-    fn new(transaction: SqliteTransaction) -> Self {
+impl<'a> SqliteShardStoreTransaction<'a> {
+    fn new(transaction: SqliteTransaction<'a>) -> Self {
         Self { transaction }
     }
 
@@ -274,7 +277,7 @@ impl SqliteShardStoreTransaction {
     }
 }
 
-impl ShardStoreTransaction<PublicKey, TariDanPayload> for SqliteShardStoreTransaction {
+impl ShardStoreTransaction<PublicKey, TariDanPayload> for SqliteShardStoreTransaction<'_> {
     fn commit(self) -> Result<(), StorageError> {
         self.transaction.commit()?;
         Ok(())

@@ -24,11 +24,11 @@ use crate::global::GlobalDbAdapter;
 
 pub struct ValidatorNodeDb<'a, TGlobalDbAdapter: GlobalDbAdapter> {
     backend: &'a TGlobalDbAdapter,
-    tx: &'a TGlobalDbAdapter::DbTransaction,
+    tx: &'a TGlobalDbAdapter::DbTransaction<'a>,
 }
 
 impl<'a, TGlobalDbAdapter: GlobalDbAdapter> ValidatorNodeDb<'a, TGlobalDbAdapter> {
-    pub fn new(backend: &'a TGlobalDbAdapter, tx: &'a TGlobalDbAdapter::DbTransaction) -> Self {
+    pub fn new(backend: &'a TGlobalDbAdapter, tx: &'a TGlobalDbAdapter::DbTransaction<'a>) -> Self {
         Self { backend, tx }
     }
 

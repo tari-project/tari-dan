@@ -97,7 +97,7 @@ pub fn compile_template<P: AsRef<Path>>(package_dir: P, features: &[&str]) -> io
     }
 
     // resolve wasm name
-    let manifest = Manifest::from_path(&package_dir.as_ref().join("Cargo.toml")).unwrap();
+    let manifest = Manifest::from_path(package_dir.as_ref().join("Cargo.toml")).unwrap();
     let wasm_name = if let Some(Product { name: Some(name), .. }) = manifest.lib {
         // lib name
         name

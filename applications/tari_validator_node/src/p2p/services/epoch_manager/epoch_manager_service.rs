@@ -31,7 +31,7 @@ use tari_dan_core::{
     models::{BaseLayerMetadata, Committee, ValidatorNode},
     services::epoch_manager::{EpochManagerError, ShardCommitteeAllocation},
 };
-use tari_dan_storage_sqlite::SqliteDbFactory;
+use tari_dan_storage_sqlite::{sqlite_shard_store_factory::SqliteShardStore, SqliteDbFactory};
 use tari_shutdown::ShutdownSignal;
 use tokio::{
     sync::{broadcast, mpsc::Receiver, oneshot},
@@ -44,7 +44,6 @@ use crate::{
         epoch_manager::base_layer_epoch_manager::BaseLayerEpochManager,
         rpc_client::TariCommsValidatorNodeClientFactory,
     },
-    ValidatorNodeConfig,
 };
 
 const LOG_TARGET: &str = "tari::validator_node::epoch_manager";
@@ -134,10 +133,10 @@ impl EpochManagerService {
         rx_request: Receiver<EpochManagerRequest>,
         shutdown: ShutdownSignal,
         db_factory: SqliteDbFactory,
+        shard_store: SqliteShardStore,
         base_node_client: GrpcBaseNodeClient,
         consensus_constants: ConsensusConstants,
         node_identity: Arc<NodeIdentity>,
-        validator_node_config: ValidatorNodeConfig,
         validator_node_client_factory: TariCommsValidatorNodeClientFactory,
     ) -> JoinHandle<Result<(), EpochManagerError>> {
         tokio::spawn(async move {
@@ -146,12 +145,12 @@ impl EpochManagerService {
                 rx_request,
                 inner: BaseLayerEpochManager::new(
                     db_factory,
+                    shard_store,
                     base_node_client,
                     consensus_constants,
                     id,
                     tx.clone(),
                     node_identity,
-                    validator_node_config,
                     validator_node_client_factory,
                 ),
                 events: (tx, rx),

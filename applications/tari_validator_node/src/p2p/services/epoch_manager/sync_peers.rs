@@ -28,7 +28,7 @@ use tari_dan_common_types::{NodeHeight, PayloadId, QuorumCertificate, ShardId, S
 use tari_dan_core::{
     models::{SubstateShardData, ValidatorNode},
     services::{epoch_manager::EpochManagerError, ValidatorNodeClientFactory},
-    storage::shard_store::{ShardStoreFactory, ShardStoreTransaction},
+    storage::shard_store::{ShardStore, ShardStoreTransaction},
 };
 
 use crate::{p2p, p2p::services::rpc_client::TariCommsValidatorNodeClientFactory};
@@ -38,7 +38,7 @@ pub struct PeerSyncManagerService<TShardStore> {
     shard_store: TShardStore,
 }
 
-impl<TShardStore: ShardStoreFactory> PeerSyncManagerService<TShardStore> {
+impl<TShardStore: ShardStore> PeerSyncManagerService<TShardStore> {
     pub(crate) fn new(
         validator_node_client_factory: TariCommsValidatorNodeClientFactory,
         shard_store: TShardStore,
@@ -56,11 +56,12 @@ impl<TShardStore: ShardStoreFactory> PeerSyncManagerService<TShardStore> {
         end_shard_id: ShardId,
         vn_shard_key: ShardId,
     ) -> Result<(), EpochManagerError> {
-        let mut shard_db = self.shard_store.create_tx()?;
-
-        let inventory = shard_db
-            .get_state_inventory()
-            .map_err(EpochManagerError::StorageError)?;
+        let inventory = {
+            let shard_db = self.shard_store.create_tx()?;
+            shard_db
+                .get_state_inventory()
+                .map_err(EpochManagerError::StorageError)?
+        };
 
         let start_shard_id = p2p::proto::common::ShardId::from(start_shard_id);
         let end_shard_id = p2p::proto::common::ShardId::from(end_shard_id);
@@ -128,9 +129,13 @@ impl<TShardStore: ShardStoreFactory> PeerSyncManagerService<TShardStore> {
                 );
 
                 // insert response state values in the shard db
-                shard_db
-                    .insert_substates(substate_shard_data)
-                    .map_err(EpochManagerError::StorageError)?;
+
+                {
+                    let mut shard_db = self.shard_store.create_tx()?;
+                    shard_db
+                        .insert_substates(substate_shard_data)
+                        .map_err(EpochManagerError::StorageError)?;
+                }
 
                 // increase node inventory
                 inventory.push(p2p::proto::common::ShardId::from(sync_vn_shard));

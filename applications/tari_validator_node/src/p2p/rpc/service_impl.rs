@@ -20,24 +20,18 @@
 // CAUSED AND ON ANY THEORY OF LIABILITY,  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR
 // OTHERWISE) ARISING IN ANY WAY OUT OF THE  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH
 // DAMAGE.
-use std::{
-    convert::{TryFrom, TryInto},
-    sync::Arc,
-};
+use std::convert::{TryFrom, TryInto};
 
 use log::*;
 use tari_comms::protocol::rpc::{Request, Response, RpcStatus, Streaming};
 use tari_dan_common_types::{NodeAddressable, ShardId};
 use tari_dan_core::{
     services::PeerProvider,
-    storage::shard_store::{ShardStoreFactory, ShardStoreTransaction},
+    storage::shard_store::{ShardStore, ShardStoreTransaction},
 };
 use tari_dan_engine::transaction::Transaction;
-use tari_dan_storage_sqlite::sqlite_shard_store_factory::SqliteShardStoreFactory;
-use tokio::{
-    sync::{mpsc, Mutex},
-    task,
-};
+use tari_dan_storage_sqlite::sqlite_shard_store_factory::SqliteShardStore;
+use tokio::{sync::mpsc, task};
 
 use crate::p2p::proto::{
     consensus::QuorumCertificate,
@@ -50,16 +44,12 @@ use crate::p2p::{proto, rpc::ValidatorNodeRpcService, services::mempool::Mempool
 
 pub struct ValidatorNodeRpcServiceImpl<TPeerProvider> {
     peer_provider: TPeerProvider,
-    shard_state_store: SqliteShardStoreFactory,
+    shard_state_store: SqliteShardStore,
     mempool: MempoolHandle,
 }
 
 impl<TPeerProvider: PeerProvider> ValidatorNodeRpcServiceImpl<TPeerProvider> {
-    pub fn new(
-        peer_provider: TPeerProvider,
-        shard_state_store: SqliteShardStoreFactory,
-        mempool: MempoolHandle,
-    ) -> Self {
+    pub fn new(peer_provider: TPeerProvider, shard_state_store: SqliteShardStore, mempool: MempoolHandle) -> Self {
         Self {
             peer_provider,
             shard_state_store,
@@ -167,20 +157,15 @@ where TPeerProvider: PeerProvider + Clone + Send + Sync + 'static
             })
             .collect::<Vec<ShardId>>();
 
-        let shard_db = self
-            .shard_state_store
-            .create_tx()
-            .map_err(RpcStatus::log_internal_error(LOG_TARGET))?;
-
-        let shard_db = Arc::new(Mutex::new(shard_db));
+        let shard_db = self.shard_state_store.clone();
 
         task::spawn(async move {
             loop {
-                let shards_substates_data =
-                    shard_db
-                        .lock()
-                        .await
-                        .get_substate_states(start_shard_id, end_shard_id, excluded_shards.as_slice());
+                let shards_substates_data = shard_db.create_tx().unwrap().get_substate_states(
+                    start_shard_id,
+                    end_shard_id,
+                    excluded_shards.as_slice(),
+                );
                 let substates_data = match shards_substates_data {
                     Ok(s) => s,
                     Err(err) => {

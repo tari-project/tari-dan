@@ -40,30 +40,38 @@ impl SqliteDbFactory {
     pub fn new(data_dir: PathBuf) -> Self {
         Self { data_dir }
     }
+
+    fn connect(&self) -> Result<SqliteConnection, StorageError> {
+        let database_url = self.data_dir.join("global_storage.sqlite");
+        create_dir_all(database_url.parent().unwrap()).map_err(|_| StorageError::FileSystemPathDoesNotExist)?;
+        let database_url = database_url.to_str().expect("database_url utf-8 error").to_string();
+        let connection = SqliteConnection::establish(&database_url).map_err(SqliteStorageError::from)?;
+        Ok(connection)
+    }
 }
 
 impl DbFactory for SqliteDbFactory {
     type GlobalDbAdapter = SqliteGlobalDbAdapter;
 
     fn get_or_create_global_db(&self) -> Result<GlobalDb<Self::GlobalDbAdapter>, StorageError> {
-        let database_url = self.data_dir.join("global_storage.sqlite");
-
-        create_dir_all(database_url.parent().unwrap()).map_err(|_| StorageError::FileSystemPathDoesNotExist)?;
-
-        let database_url = database_url.to_str().expect("database_url utf-8 error").to_string();
-        let connection = SqliteConnection::establish(&database_url).map_err(SqliteStorageError::from)?;
-
-        embed_migrations!("./global_db_migrations");
-        // embedded_migrations::run(&connection).map_err(SqliteStorageError::from)?;
-        if let Err(err) = embedded_migrations::run_with_output(&connection, &mut std::io::stdout()) {
-            log::error!(target: LOG_TARGET, "Error running migrations: {}", err);
-        }
+        let connection = self.connect()?;
         connection
             .execute("PRAGMA foreign_keys = ON;")
             .map_err(|source| SqliteStorageError::DieselError {
                 source,
                 operation: "set pragma".to_string(),
             })?;
-        Ok(GlobalDb::new(SqliteGlobalDbAdapter::new(database_url)))
+        Ok(GlobalDb::new(SqliteGlobalDbAdapter::new(connection)))
+    }
+
+    fn migrate(&self) -> Result<(), StorageError> {
+        let connection = self.connect()?;
+        embed_migrations!("./global_db_migrations");
+        // embedded_migrations::run(&connection).map_err(SqliteStorageError::from)?;
+        if let Err(err) = embedded_migrations::run_with_output(&connection, &mut std::io::stdout()) {
+            log::error!(target: LOG_TARGET, "Error running migrations: {}", err);
+        }
+
+        Ok(())
     }
 }

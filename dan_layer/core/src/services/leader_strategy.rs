@@ -84,7 +84,7 @@ impl<TAddr: NodeAddressable> LeaderStrategy<TAddr> for PayloadSpecificLeaderStra
             .finalize()
             .into();
         let hash = u32::from_le_bytes([hash[0], hash[1], hash[2], hash[3]]);
-        let first = (hash % committee.members.len() as u32) as u32;
+        let first = hash % committee.members.len() as u32;
         (first + round) % committee.members.len() as u32
     }
 }

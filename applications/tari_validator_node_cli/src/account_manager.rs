@@ -78,7 +78,7 @@ impl AccountFileManager {
         };
         dir.filter_map(|entry| {
             let entry = entry.ok()?;
-            let key = read_account_key(&entry.path()).ok()?;
+            let key = read_account_key(entry.path()).ok()?;
             let public_key = PublicKey::from_secret_key(&key);
             Some(Account {
                 secret_key: key,
