@@ -63,7 +63,7 @@ impl SigningService for NodeIdentitySigningService {
     fn sign(&self, challenge: &[u8]) -> Option<Signature> {
         let (nonce, public_nonce) = create_key_pair();
         let challenge = Self::create_challenge(&public_nonce, self.node_identity.public_key(), challenge);
-        let sig = Signature::sign(self.node_identity.secret_key().clone(), nonce, &*challenge).ok()?;
+        let sig = Signature::sign_raw(self.node_identity.secret_key(), nonce, &*challenge).ok()?;
         Some(sig)
     }
 

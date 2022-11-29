@@ -44,7 +44,7 @@ pub async fn run_http_ui_server(address: SocketAddr, json_rpc_address: Option<St
                     .as_ref()
                     .as_ref()
                     .map(|s| s.to_string())
-                    .unwrap_or("NOT CONFIGURED".to_string())
+                    .unwrap_or_else(|| "NOT CONFIGURED".to_string())
             }),
         )
         .fallback(handler);
@@ -71,16 +71,15 @@ async fn handler(uri: Uri) -> impl IntoResponse {
     let path = path.strip_prefix('/').unwrap_or(path);
 
     // If the path is a file, return it. Otherwise use index.html (SPA)
-    if let Some(lib_rs) = PROJECT_DIR
+    if let Some(body) = PROJECT_DIR
         .get_file(path)
         .or_else(|| PROJECT_DIR.get_file("index.html"))
+        .and_then(|file| file.contents_utf8())
     {
-        if let Some(body) = lib_rs.contents_utf8() {
-            return Response::builder()
-                .status(StatusCode::OK)
-                .body(body.to_owned())
-                .unwrap();
-        }
+        return Response::builder()
+            .status(StatusCode::OK)
+            .body(body.to_owned())
+            .unwrap();
     }
     println!("Not found {:?}", path);
     Response::builder()
