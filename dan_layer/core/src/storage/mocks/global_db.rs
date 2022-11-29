@@ -34,7 +34,7 @@ impl AtomicDb for MockGlobalDbBackupAdapter {
     type DbTransaction<'a> = ();
     type Error = StorageError;
 
-    fn create_transaction<'a>(&'a self) -> Result<Self::DbTransaction<'a>, Self::Error> {
+    fn create_transaction(&self) -> Result<Self::DbTransaction<'_>, Self::Error> {
         todo!()
     }
 

@@ -233,7 +233,7 @@ fn build_tuple_field_expr(name: String, i: u32) -> Expr {
 
     match field_expr.member {
         syn::Member::Unnamed(ref mut unnamed) => {
-            unnamed.index = i as u32;
+            unnamed.index = i;
         },
         _ => todo!("build_tuple_field_expr only supports Unnamed"),
     }

@@ -56,7 +56,8 @@ pub trait ShardStore {
 
     type Transaction<'a>: ShardStoreTransaction<Self::Addr, Self::Payload>
     where Self: 'a;
-    fn create_tx<'a>(&'a self) -> Result<Self::Transaction<'a>, StorageError>;
+
+    fn create_tx(&self) -> Result<Self::Transaction<'_>, StorageError>;
 }
 
 #[derive(Debug, Error)]

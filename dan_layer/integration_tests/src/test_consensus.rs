@@ -936,10 +936,10 @@ async fn do_rounds_of_hotstuff(nodes: &mut [HsTestHarness], rounds: usize) {
         }
 
         #[allow(clippy::mutable_key_type)]
-        let mut votes = HashMap::new();
+        let mut votes = HashMap::<_, Vec<_>>::new();
         for node in nodes.iter_mut() {
             let (vote1, leader) = node.recv_vote_message().await;
-            votes.entry(leader).or_insert(Vec::new()).push((vote1, node.identity()));
+            votes.entry(leader).or_default().push((vote1, node.identity()));
         }
         for leader in votes.keys() {
             for vote in votes.get(leader).unwrap() {

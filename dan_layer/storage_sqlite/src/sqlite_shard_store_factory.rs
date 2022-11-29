@@ -218,7 +218,7 @@ impl ShardStore for SqliteShardStore {
     type Payload = TariDanPayload;
     type Transaction<'a> = SqliteShardStoreTransaction<'a>;
 
-    fn create_tx<'a>(&'a self) -> Result<Self::Transaction<'a>, StorageError> {
+    fn create_tx(&self) -> Result<Self::Transaction<'_>, StorageError> {
         let tx = SqliteTransaction::begin(self.connection.lock().unwrap())?;
         Ok(SqliteShardStoreTransaction::new(tx))
     }

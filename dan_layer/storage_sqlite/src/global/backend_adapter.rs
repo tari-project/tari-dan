@@ -61,7 +61,7 @@ impl AtomicDb for SqliteGlobalDbAdapter {
     type DbTransaction<'a> = SqliteTransaction<'a>;
     type Error = SqliteStorageError;
 
-    fn create_transaction<'a>(&'a self) -> Result<Self::DbTransaction<'a>, Self::Error> {
+    fn create_transaction(&self) -> Result<Self::DbTransaction<'_>, Self::Error> {
         let tx = SqliteTransaction::begin(self.connection.lock().unwrap())?;
         Ok(tx)
     }

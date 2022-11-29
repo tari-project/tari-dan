@@ -24,7 +24,7 @@ pub trait AtomicDb {
     type Error;
     type DbTransaction<'a>;
 
-    fn create_transaction<'a>(&'a self) -> Result<Self::DbTransaction<'a>, Self::Error>;
+    fn create_transaction(&self) -> Result<Self::DbTransaction<'_>, Self::Error>;
 
     fn commit(&self, transaction: Self::DbTransaction<'_>) -> Result<(), Self::Error>;
 }

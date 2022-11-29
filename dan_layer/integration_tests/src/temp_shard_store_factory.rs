@@ -64,9 +64,9 @@ impl Default for TempShardStoreFactory {
 impl ShardStore for TempShardStoreFactory {
     type Addr = PublicKey;
     type Payload = TariDanPayload;
-    type Transaction = SqliteShardStoreTransaction;
+    type Transaction<'a> = SqliteShardStoreTransaction<'a>;
 
-    fn create_tx(&self) -> Result<Self::Transaction, StorageError> {
+    fn create_tx(&self) -> Result<Self::Transaction<'_>, StorageError> {
         self.sqlite.create_tx()
     }
 }

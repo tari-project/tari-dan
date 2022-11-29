@@ -37,7 +37,7 @@ impl<TGlobalDbAdapter: GlobalDbAdapter> GlobalDb<TGlobalDbAdapter> {
         }
     }
 
-    pub fn create_transaction<'a>(&'a self) -> Result<TGlobalDbAdapter::DbTransaction<'a>, TGlobalDbAdapter::Error> {
+    pub fn create_transaction(&self) -> Result<TGlobalDbAdapter::DbTransaction<'_>, TGlobalDbAdapter::Error> {
         let tx = self.adapter.create_transaction()?;
         Ok(tx)
     }

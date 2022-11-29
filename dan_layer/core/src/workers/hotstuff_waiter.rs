@@ -186,7 +186,7 @@ where
     }
 
     /// Step 1: A new payload has been received. The payload is persisted and a NewView is sent to the leader.
-    async fn on_next_sync_view(&mut self, payload: TPayload, shard: ShardId) -> Result<(), HotStuffError> {
+    async fn on_next_sync_view(&self, payload: TPayload, shard: ShardId) -> Result<(), HotStuffError> {
         let epoch = self.epoch_manager.current_epoch().await?;
         info!(
             target: LOG_TARGET,
@@ -232,7 +232,7 @@ where
     ///         Once $n - f$ NewViews have been received, a Proposal is sent to the replicas, see
     ///         [HotstuffWaiter::on_beat].
     async fn on_receive_new_view(
-        &mut self,
+        &self,
         from: TAddr,
         shard: ShardId,
         qc: QuorumCertificate,
@@ -362,7 +362,7 @@ where
     /// and sends a vote.
     #[allow(clippy::too_many_lines)]
     async fn on_receive_proposal(
-        &mut self,
+        &self,
         from: TAddr,
         node: HotStuffTreeNode<TAddr, TPayload>,
     ) -> Result<(), HotStuffError> {
@@ -511,7 +511,7 @@ where
 
     /// Step 6: The leader receives votes from the local shard, and once it has enough ($n - f$) votes, it commits a
     /// high QC and sends the next round of proposals.
-    async fn on_receive_vote(&mut self, from: TAddr, msg: VoteMessage) -> Result<(), HotStuffError> {
+    async fn on_receive_vote(&self, from: TAddr, msg: VoteMessage) -> Result<(), HotStuffError> {
         info!(
             target: LOG_TARGET,
             "🔥 Receive {:?} VOTE for shard {} from {}",
@@ -547,9 +547,9 @@ where
             dbg!(&valid_committee);
             dbg!(total_votes);
             if total_votes >= valid_committee.consensus_threshold() {
-                let mut different_votes = HashMap::new();
+                let mut different_votes = HashMap::<_, Vec<_>>::new();
                 for vote in tx.get_received_votes_for(msg.local_node_hash(), msg.shard())? {
-                    let entry = different_votes.entry(vote.get_all_nodes_hash()).or_insert(vec![]);
+                    let entry = different_votes.entry(vote.get_all_nodes_hash()).or_default();
                     entry.push(vote);
                 }
 
@@ -667,12 +667,7 @@ where
             .is_leader(&self.public_key, committee, payload, shard, 0))
     }
 
-    async fn validate_from_committee(
-        &mut self,
-        from: &TAddr,
-        epoch: Epoch,
-        shard: ShardId,
-    ) -> Result<(), HotStuffError> {
+    async fn validate_from_committee(&self, from: &TAddr, epoch: Epoch, shard: ShardId) -> Result<(), HotStuffError> {
         if self.epoch_manager.get_committee(epoch, shard).await?.contains(from) {
             Ok(())
         } else {
@@ -759,7 +754,7 @@ where
     /// If the tree node is below height 2, nothing needs to happen.
     /// If the tree node is at height 2, we lock the parent node.
     /// And if at height 3 we execute and commit the state.
-    async fn update_nodes(&mut self, node: HotStuffTreeNode<TAddr, TPayload>) -> Result<(), HotStuffError> {
+    async fn update_nodes(&self, node: HotStuffTreeNode<TAddr, TPayload>) -> Result<(), HotStuffError> {
         let shard = node.shard();
 
         if node.justify().local_node_hash() == TreeNodeHash::zero() {
@@ -981,11 +976,7 @@ where
         Ok(vote_msg)
     }
 
-    async fn on_new_hs_message(
-        &mut self,
-        from: TAddr,
-        msg: HotStuffMessage<TPayload, TAddr>,
-    ) -> Result<(), HotStuffError> {
+    async fn on_new_hs_message(&self, from: TAddr, msg: HotStuffMessage<TPayload, TAddr>) -> Result<(), HotStuffError> {
         match msg.message_type() {
             HotStuffMessageType::NewView => {
                 if let Some(payload) = msg.new_view_payload() {
@@ -1049,20 +1040,20 @@ fn extract_changes(
     payload_id: PayloadId,
     finalize: &FinalizeResult,
 ) -> Result<HashMap<ShardId, Vec<SubstateState>>, HotStuffError> {
-    let mut changes = HashMap::new();
+    let mut changes = HashMap::<_, Vec<_>>::new();
     match finalize.result {
         TransactionResult::Accept(ref diff) => {
             // down first, then up
             for address in diff.down_iter() {
                 changes
                     .entry(ShardId::from_address(address))
-                    .or_insert(vec![])
+                    .or_default()
                     .push(SubstateState::Down { deleted_by: payload_id });
             }
             for (address, substate) in diff.up_iter() {
                 changes
                     .entry(ShardId::from_address(address))
-                    .or_insert(vec![])
+                    .or_default()
                     .push(SubstateState::Up {
                         created_by: payload_id,
                         data: substate.clone(),
@@ -1078,13 +1069,10 @@ fn extract_changes(
 fn extract_changes_from_justify(
     justify: &QuorumCertificate,
 ) -> Result<HashMap<ShardId, Vec<SubstateState>>, HotStuffError> {
-    let mut changes = HashMap::new();
+    let mut changes = HashMap::<_, Vec<_>>::new();
     for a in justify.all_shard_nodes() {
         if let Some(ref p) = a.pledge {
-            changes
-                .entry(p.shard_id)
-                .or_insert(vec![])
-                .push(p.current_state.clone());
+            changes.entry(p.shard_id).or_default().push(p.current_state.clone());
         }
     }
 

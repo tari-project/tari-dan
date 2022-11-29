@@ -34,7 +34,7 @@ pub fn sign_template_registration(private_key: &PrivateKey, binary_hash: Vec<u8>
     // TODO: epoch should be committed to, but this is currently not the case on the base node, so we leave it out for
     //       now so that the transaction passes validation.
     let challenge = construct_challenge(&public_key, &public_nonce, &binary_hash, b"");
-    Signature::sign(private_key.clone(), secret_nonce, &*challenge)
+    Signature::sign_raw(private_key, secret_nonce, &*challenge)
         .expect("Sign cannot fail with 32-byte challenge and a RistrettoPublicKey")
 }
 

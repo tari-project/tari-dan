@@ -48,7 +48,7 @@ impl<'a> SqliteTransaction<'a> {
     }
 
     pub fn connection(&self) -> &SqliteConnection {
-        &*self.connection
+        &self.connection
     }
 
     pub fn commit(mut self) -> Result<(), SqliteStorageError> {
