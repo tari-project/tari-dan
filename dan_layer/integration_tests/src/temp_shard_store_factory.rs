@@ -31,27 +31,20 @@ use tari_dan_core::{
     storage::{shard_store::ShardStore, StorageError},
 };
 use tari_dan_storage_sqlite::sqlite_shard_store_factory::{SqliteShardStore, SqliteShardStoreTransaction};
-use tari_test_utils::paths::create_temporary_data_path;
+use tempdir::TempDir;
 pub struct TempShardStoreFactory {
     sqlite: SqliteShardStore,
-    path: PathBuf,
-    delete_on_drop: bool,
+    path: TempDir,
 }
 
 impl TempShardStoreFactory {
     pub fn new() -> Self {
-        let temp_path = create_temporary_data_path();
-        let sqlite = SqliteShardStore::try_create(temp_path.join("state.db")).unwrap();
+        let temp_path = TempDir::new("tempshardstore").unwrap();
+        let sqlite = SqliteShardStore::try_create(temp_path.path().join("state.db")).unwrap();
         Self {
             sqlite,
             path: temp_path,
-            delete_on_drop: true,
         }
-    }
-
-    pub fn disable_delete_on_drop(&mut self) -> &mut Self {
-        self.delete_on_drop = false;
-        self
     }
 }
 
@@ -71,10 +64,10 @@ impl ShardStore for TempShardStoreFactory {
     }
 }
 
-impl Drop for TempShardStoreFactory {
-    fn drop(&mut self) {
-        if self.delete_on_drop && Path::new(&self.path).exists() {
-            fs::remove_dir_all(&self.path).expect("Could not delete temporary file");
-        }
-    }
-}
+// impl Drop for TempShardStoreFactory {
+//     fn drop(&mut self) {
+//         if self.delete_on_drop && Path::new(&self.path).exists() {
+//             fs::remove_dir_all(&self.path).expect("Could not delete temporary file");
+//         }
+//     }
+// }
