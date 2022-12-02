@@ -43,6 +43,9 @@ function Templates() {
       setInfo({ ...info, [address]: response });
     });
   };
+  const toHex = (str: Uint8Array) => {
+    return "0x" + Array.prototype.map.call(str, (x: number) => ("00" + x.toString(16)).slice(-2)).join("");
+  }
   const renderFunctions = (template: ITemplate) => {
     return (
       <div>
@@ -82,7 +85,7 @@ function Templates() {
           {templates.map(({ address, binary_sha, height, url }) => (
             <tr key={address}>
               <td onMouseOver={() => load(address)} className="tooltip">
-                <span className="key">{address}</span>
+                <span className="key">{ toHex(address) }</span>
                 {info?.[address] !== undefined ? (
                   <span className="tooltiptext">{renderFunctions(info[address])}</span>
                 ) : (
