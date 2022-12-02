@@ -48,6 +48,7 @@ use tari_shutdown::ShutdownSignal;
 use crate::{
     base_layer_scanner,
     comms,
+    dry_run_transaction_processor::DryRunTransactionProcessor,
     grpc::services::base_node_client::GrpcBaseNodeClient,
     p2p::{
         create_validator_node_rpc_service,
@@ -165,13 +166,16 @@ pub async fn spawn_services(
         outbound_messaging,
         epoch_manager.clone(),
         mempool.clone(),
-        payload_processor,
+        payload_processor.clone(),
         rx_consensus_message,
         rx_vote_message,
         shutdown.clone(),
     )?;
 
     let shard_store_store = SqliteShardStoreFactory::try_create(config.validator_node.data_dir.join("state.db"))?;
+
+    let dry_run_transaction_processor =
+        DryRunTransactionProcessor::new(epoch_manager.clone(), payload_processor, shard_store_store.clone());
 
     let comms = setup_p2p_rpc(config, comms, peer_provider, shard_store_store, mempool.clone());
     let comms = comms::spawn_comms_using_transport(comms, p2p_config.transport.clone())
@@ -193,6 +197,7 @@ pub async fn spawn_services(
         template_manager: template_manager_service,
         hotstuff_events,
         db,
+        dry_run_transaction_processor,
     })
 }
 
@@ -221,6 +226,7 @@ pub struct Services {
     pub template_manager: TemplateManagerHandle,
     pub hotstuff_events: EventSubscription<HotStuffEvent>,
     pub db: SqliteShardStoreFactory,
+    pub dry_run_transaction_processor: DryRunTransactionProcessor,
 }
 
 fn setup_p2p_rpc(

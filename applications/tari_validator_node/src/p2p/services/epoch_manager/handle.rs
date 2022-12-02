@@ -32,7 +32,7 @@ use tokio::sync::{broadcast, mpsc::Sender, oneshot};
 
 use crate::p2p::services::epoch_manager::epoch_manager_service::{EpochManagerEvent, EpochManagerRequest};
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct EpochManagerHandle {
     tx_request: Sender<EpochManagerRequest>,
 }

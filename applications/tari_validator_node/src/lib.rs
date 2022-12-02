@@ -27,6 +27,7 @@ mod comms;
 mod config;
 mod dan_node;
 mod default_service_specification;
+mod dry_run_transaction_processor;
 mod grpc;
 mod http_ui;
 mod json_rpc;

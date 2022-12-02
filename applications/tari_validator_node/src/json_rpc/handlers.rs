@@ -35,6 +35,7 @@ use tari_comms::{multiaddr::Multiaddr, peer_manager::NodeId, types::CommsPublicK
 use tari_crypto::tari_utilities::hex::Hex;
 use tari_dan_common_types::SubstateChange;
 use tari_dan_core::{
+    models::{QuorumCertificate, QuorumDecision},
     services::{epoch_manager::EpochManager, BaseNodeClient},
     storage::shard_store::{ShardStoreFactory, ShardStoreTransaction},
     workers::events::{EventSubscription, HotStuffEvent},
@@ -62,6 +63,7 @@ use tari_validator_node_client::types::{
 use tokio::sync::{broadcast, broadcast::error::RecvError};
 
 use crate::{
+    dry_run_transaction_processor::DryRunTransactionProcessor,
     grpc::services::{base_node_client::GrpcBaseNodeClient, wallet_client::GrpcWalletClient},
     json_rpc::jrpc_errors::internal_error,
     p2p::services::{
@@ -85,6 +87,7 @@ pub struct JsonRpcHandlers {
     hotstuff_events: EventSubscription<HotStuffEvent>,
     base_node_client: GrpcBaseNodeClient,
     db: SqliteShardStoreFactory,
+    dry_run_transaction_processor: DryRunTransactionProcessor,
 }
 
 impl JsonRpcHandlers {
@@ -103,6 +106,7 @@ impl JsonRpcHandlers {
             hotstuff_events: services.hotstuff_events.clone(),
             base_node_client,
             db: services.db.clone(),
+            dry_run_transaction_processor: services.dry_run_transaction_processor.clone(),
         }
     }
 
@@ -172,11 +176,38 @@ impl JsonRpcHandlers {
         let hash = *transaction.hash();
 
         if request.is_dry_run {
-            // TODO
-            Ok(JsonRpcResponse::success(answer_id, SubmitTransactionResponse {
-                hash: hash.into_array().into(),
-                result: None,
-            }))
+            let result = self
+                .dry_run_transaction_processor
+                .process_transaction(transaction)
+                .await;
+            match result {
+                Ok(finalize_result) => {
+                    let epoch = match self.epoch_manager.current_epoch().await {
+                        Ok(epoch) => epoch,
+                        Err(e) => {
+                            return Err(JsonRpcResponse::error(
+                                answer_id,
+                                JsonRpcError::new(JsonRpcErrorReason::ApplicationError(1), e.to_string(), json!(null)),
+                            ))
+                        },
+                    };
+
+                    let response = SubmitTransactionResponse {
+                        hash: hash.into_array().into(),
+                        result: Some(TransactionFinalizeResult {
+                            decision: QuorumDecision::Accept,
+                            finalize: finalize_result,
+                            qc: QuorumCertificate::genesis(epoch),
+                        }),
+                    };
+
+                    Ok(JsonRpcResponse::success(answer_id, response))
+                },
+                Err(e) => Err(JsonRpcResponse::error(
+                    answer_id,
+                    JsonRpcError::new(JsonRpcErrorReason::ApplicationError(1), e, json!(null)),
+                )),
+            }
         } else {
             let subscription = self.hotstuff_events.subscribe();
             // Submit to mempool.
