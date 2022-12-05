@@ -46,6 +46,10 @@ impl FinalizeResult {
     pub fn errored(transaction_hash: Hash, reason: RejectReason) -> Self {
         Self::new(transaction_hash, Vec::new(), TransactionResult::Reject(reason))
     }
+
+    pub fn is_accept(&self) -> bool {
+        matches!(self.result, TransactionResult::Accept(_))
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]

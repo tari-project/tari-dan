@@ -67,4 +67,6 @@ pub enum HotStuffError {
     ValidatorNodeNotIncludedInMmr,
     #[error("No committee for shard {shard} and epoch {epoch}")]
     NoCommitteeForShard { shard: ShardId, epoch: Epoch },
+    #[error("Cannot vote on a proposal that has been rejected")]
+    JustifyIsNotAccepted,
 }

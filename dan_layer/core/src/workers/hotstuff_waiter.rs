@@ -452,13 +452,23 @@ where
                 // Execute for node 0. The rest we accept by default
                 let finalize_result = if node.payload_height() == NodeHeight(0) {
                     let mut finalize_result = self.execute(shard_pledges.clone(), payload)?;
-                    // validate that correct objects have been pledged.
-                    let changes = extract_changes(node.payload_id(), &finalize_result)?;
-                    // Change the vote if we do not have all the objects pledged
-                    Self::validate_pledges(&shard_pledges, &mut finalize_result, changes);
+                    dbg!(finalize_result.clone());
+                    if finalize_result.is_accept() {
+                        // validate that correct objects have been pledged.
+                        let changes = extract_changes(node.payload_id(), &finalize_result)?;
+                        // Change the vote if we do not have all the objects pledged
+                        Self::validate_pledges(&shard_pledges, &mut finalize_result, changes);
+                    } else {
+                        self.publish_event(HotStuffEvent::Failed(format!(
+                            "Failed to execute payload:{:?}",
+                            finalize_result.result
+                        )));
+                    }
                     tx.update_payload_result(&node.payload_id(), finalize_result.clone())?;
                     finalize_result
                 } else {
+                    // TODO: If we decide to vote on rejections as well as acceptances, then this should be changed
+                    // to use the previous justify's QuorumDecision
                     FinalizeResult::new(
                         node.payload_id().into_array().into(),
                         vec![],
@@ -858,6 +868,9 @@ where
                     actual: node.payload_height(),
                     max: max_node_height,
                 });
+            }
+            if node.payload_height() > NodeHeight(0) && node.justify().decision() != &QuorumDecision::Accept {
+                return Err(HotStuffError::JustifyIsNotAccepted);
             }
             Ok(())
         } else {
