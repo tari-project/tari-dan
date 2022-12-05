@@ -206,7 +206,7 @@ impl JsonRpcHandlers {
                 },
                 Err(e) => Err(JsonRpcResponse::error(
                     answer_id,
-                    JsonRpcError::new(JsonRpcErrorReason::ApplicationError(1), e, json!(null)),
+                    JsonRpcError::new(JsonRpcErrorReason::ApplicationError(1), e.to_string(), json!(null)),
                 )),
             }
         } else {

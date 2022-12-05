@@ -3,17 +3,31 @@ use std::collections::HashMap;
 use tari_dan_common_types::{ObjectPledge, ShardId};
 use tari_dan_core::{
     models::{Payload, TariDanPayload},
-    services::{epoch_manager::EpochManager, PayloadProcessor},
-    storage::shard_store::{ShardStore, ShardStoreTransaction},
+    services::{epoch_manager::EpochManager, PayloadProcessor, PayloadProcessorError},
+    storage::{
+        shard_store::{ShardStore, ShardStoreTransaction},
+        StorageError,
+    },
 };
 use tari_dan_engine::transaction::Transaction;
 use tari_dan_storage_sqlite::sqlite_shard_store_factory::SqliteShardStore;
 use tari_engine_types::commit_result::FinalizeResult;
+use thiserror::Error;
 
 use crate::{
     p2p::services::{epoch_manager::handle::EpochManagerHandle, template_manager::TemplateManager},
     payload_processor::TariDanPayloadProcessor,
 };
+
+#[derive(Error, Debug)]
+pub enum DryRunTransactionProcessorError {
+    #[error("PayloadProcessor error: {0}")]
+    PayloadProcessorError(#[from] PayloadProcessorError),
+    #[error("Storage error: {0}")]
+    StorageError(#[from] StorageError),
+    #[error("No substate found for shard id {shard_id}")]
+    SubstateNotFound { shard_id: ShardId },
+}
 
 #[derive(Clone)]
 pub struct DryRunTransactionProcessor {
@@ -39,7 +53,10 @@ impl DryRunTransactionProcessor {
     }
 
     // TODO: create a error enum
-    pub async fn process_transaction(&self, transaction: Transaction) -> Result<FinalizeResult, String> {
+    pub async fn process_transaction(
+        &self,
+        transaction: Transaction,
+    ) -> Result<FinalizeResult, DryRunTransactionProcessorError> {
         // get the list of involved shards for the transaction
         let payload = TariDanPayload::new(transaction.clone());
         let involved_shards = payload.involved_shards();
@@ -52,17 +69,14 @@ impl DryRunTransactionProcessor {
 
         // TODO: get non local shard pledges
 
-        let result = self
-            .payload_processor
-            .process_payload(payload, shard_pledges)
-            .map_err(|e| e.to_string())?;
+        let result = self.payload_processor.process_payload(payload, shard_pledges)?;
         Ok(result)
     }
 
     async fn get_local_pledges(
         &self,
         involved_shards: Vec<ShardId>,
-    ) -> Result<HashMap<ShardId, Option<ObjectPledge>>, String> {
+    ) -> Result<HashMap<ShardId, Option<ObjectPledge>>, DryRunTransactionProcessorError> {
         dbg!(&involved_shards);
         let tx = self.shard_store.create_tx().unwrap();
         let inventory = tx.get_state_inventory().unwrap();
@@ -71,13 +85,12 @@ impl DryRunTransactionProcessor {
         let local_shard_ids: Vec<ShardId> = involved_shards.into_iter().filter(|s| inventory.contains(s)).collect();
         dbg!(&local_shard_ids);
         let mut local_pledges = HashMap::new();
+        // TODO: create a DB method to get the substates of a list of shards in a single transaction
         for shard_id in local_shard_ids {
-            // TODO: create a DB method to get the substates of a list of shards
             let substate_data = tx
-                .get_substate_states(shard_id, shard_id, &[])
-                .unwrap()
+                .get_substate_states(shard_id, shard_id, &[])?
                 .first()
-                .unwrap()
+                .ok_or(DryRunTransactionProcessorError::SubstateNotFound { shard_id })?
                 .clone();
             dbg!(&substate_data);
             let local_pledge = ObjectPledge {
@@ -92,39 +105,3 @@ impl DryRunTransactionProcessor {
         Ok(local_pledges)
     }
 }
-
-// let mut tx = self.shard_store.create_tx()?;
-// let high_qc = tx.get_high_qc_for(shard).optional()?.unwrap_or_else(|| {
-// TODO: sign genesis
-// QuorumCertificate::genesis(epoch)
-// });
-//
-// let committee = self.epoch_manager.get_committee(epoch, shard).await?;
-// let leader = self.leader_strategy.get_leader(&committee, payload_id, shard, 0);
-//
-//
-// GET THE LOCAL SHARD STATE
-// fn pledge_object(
-// &mut self,
-// shard: ShardId,
-// payload: PayloadId,
-// change: SubstateChange,
-// current_height: NodeHeight,
-// ) -> Result<ObjectPledge, StorageError>;
-// let local_pledge = tx.pledge_object(shard, payload_id, change, parent_leaf_node.height())?;
-//
-//
-// GET EXTERNAL SHARD STATE
-// let epoch = self.epoch_manager.current_epoch().await?;
-//
-//
-//
-// EXECUTE THE PAYLOAD AND GET THE RESULT (+ SUBSTATE CHANGES)
-// fn process_payload(
-// &self,
-// payload: TPayload,
-// pledges: HashMap<ShardId, Option<ObjectPledge>>,
-// ) -> Result<FinalizeResult, PayloadProcessorError>;
-// let finalize_result = self.payload_processor.process_payload(payload, shard_pledges)?;
-//
-//
