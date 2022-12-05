@@ -22,8 +22,13 @@
 
 use serde::{Deserialize, Serialize};
 use tari_common_types::types::{FixedHash, PublicKey};
-use tari_dan_common_types::{serde_with, Epoch, ShardId, SubstateChange};
-use tari_dan_core::models::{QuorumCertificate, QuorumDecision};
+use tari_dan_common_types::{
+    quorum_certificate::{QuorumCertificate, QuorumDecision},
+    serde_with,
+    Epoch,
+    ShardId,
+    SubstateChange,
+};
 use tari_engine_types::{
     commit_result::FinalizeResult,
     instruction::Instruction,
@@ -79,6 +84,7 @@ pub struct FunctionDef {
     pub name: String,
     pub arguments: Vec<String>,
     pub output: String,
+    pub is_mut: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -93,6 +99,7 @@ pub struct GetTemplatesResponse {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TemplateMetadata {
+    pub name: String,
     pub address: TemplateAddress,
     pub url: String,
     /// SHA hash of binary
@@ -132,6 +139,8 @@ pub struct SubmitTransactionRequest {
     /// Set to true to wait for the transaction to complete before returning
     #[serde(default)]
     pub wait_for_result: bool,
+    #[serde(default)]
+    pub wait_for_result_timeout: Option<u64>,
     pub is_dry_run: bool,
 }
 
@@ -159,6 +168,17 @@ pub struct TransactionRequest {
 pub struct SubstatesRequest {
     pub payload_id: Vec<u8>,
     pub shard_id: Vec<u8>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct GetTransactionRequest {
+    #[serde(with = "serde_with::hex")]
+    pub hash: FixedHash,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct GetTransactionResponse {
+    pub result: Option<FinalizeResult>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

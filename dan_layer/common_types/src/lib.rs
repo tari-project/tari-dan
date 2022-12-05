@@ -1,126 +1,49 @@
 // Copyright 2022 The Tari Project
 // SPDX-License-Identifier: BSD-3-Clause
 
-pub mod proto;
-pub mod storage;
-
-mod epoch;
-pub mod optional;
-pub mod serde_with;
-mod template_id;
-
 use std::{
-    cmp::Ordering,
     fmt,
     fmt::{Display, Formatter},
-    str::FromStr,
 };
 
 use ::serde::{Deserialize, Serialize};
-use borsh::{BorshDeserialize, BorshSerialize};
-pub use epoch::Epoch;
+use tari_bor::{borsh, Decode, Encode};
 use tari_common_types::types::{FixedHash, FixedHashSizeError};
-use tari_engine_types::substate::{Substate, SubstateAddress};
-use tari_utilities::{
-    byte_array::ByteArray,
-    hex::{from_hex, Hex},
-};
-pub use template_id::TemplateId;
+use tari_engine_types::substate::Substate;
+use tari_utilities::hex::Hex;
 
-#[derive(Copy, Clone, Debug, Eq, PartialEq, Hash, Serialize, Deserialize, BorshSerialize)]
-pub struct ShardId(#[serde(with = "serde_with::hex")] pub [u8; 32]);
+pub mod proto;
 
-impl ShardId {
-    pub fn from_address(addr: &SubstateAddress) -> Self {
-        match addr {
-            SubstateAddress::Component(addr) => addr.into_array().into(),
-            SubstateAddress::Resource(addr) => addr.into_array().into(),
-            SubstateAddress::Vault(vault_id) => vault_id.into_array().into(),
-        }
-    }
+mod epoch;
+pub use epoch::Epoch;
 
-    pub fn to_le_bytes(&self) -> &[u8] {
-        self.0.as_bytes()
-    }
+pub mod hashing;
+pub mod optional;
+pub mod serde_with;
 
-    pub fn new(id: FixedHash) -> Self {
-        let mut v = [0u8; 32];
-        v.copy_from_slice(id.as_slice());
-        Self(v)
-    }
+pub mod quorum_certificate;
+pub use quorum_certificate::{QuorumCertificate, QuorumDecision, QuorumRejectReason};
 
-    pub fn as_bytes(&self) -> &[u8] {
-        &self.0
-    }
+mod node_height;
+pub use node_height::NodeHeight;
 
-    pub fn from_bytes(bytes: &[u8]) -> Result<Self, FixedHashSizeError> {
-        FixedHash::try_from(bytes).map(Self::new)
-    }
+mod shard_vote;
+pub use shard_vote::ShardVote;
 
-    pub fn into_array(self) -> [u8; 32] {
-        self.0
-    }
+mod tree_node_hash;
+pub use tree_node_hash::TreeNodeHash;
 
-    pub fn zero() -> Self {
-        Self::new(FixedHash::default())
-    }
-}
+mod validator_metadata;
+pub use validator_metadata::{vn_mmr_node_hash, ValidatorMetadata};
 
-impl From<[u8; 32]> for ShardId {
-    fn from(bytes: [u8; 32]) -> Self {
-        Self(bytes)
-    }
-}
+mod object_pledge;
+pub use object_pledge::ObjectPledge;
 
-impl From<ShardId> for Vec<u8> {
-    fn from(s: ShardId) -> Self {
-        s.as_bytes().to_vec()
-    }
-}
+mod node_addressable;
+pub use node_addressable::NodeAddressable;
 
-impl TryFrom<Vec<u8>> for ShardId {
-    type Error = FixedHashSizeError;
-
-    fn try_from(value: Vec<u8>) -> Result<Self, Self::Error> {
-        Self::from_bytes(&value)
-    }
-}
-
-impl TryFrom<&[u8]> for ShardId {
-    type Error = FixedHashSizeError;
-
-    fn try_from(value: &[u8]) -> Result<Self, Self::Error> {
-        Self::from_bytes(value)
-    }
-}
-
-impl PartialOrd for ShardId {
-    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-        self.0.partial_cmp(&other.0)
-    }
-}
-
-impl Ord for ShardId {
-    fn cmp(&self, other: &Self) -> Ordering {
-        self.0.cmp(&other.0)
-    }
-}
-
-impl Display for ShardId {
-    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", self.0.to_hex())
-    }
-}
-
-impl FromStr for ShardId {
-    type Err = FixedHashSizeError;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        // TODO: error isnt correct
-        let bytes = from_hex(s).map_err(|_| FixedHashSizeError)?;
-        Self::from_bytes(&bytes)
-    }
-}
+mod shard_id;
+pub use shard_id::ShardId;
 
 #[derive(Clone, Debug, Copy, PartialEq, Eq, Hash, Deserialize, Serialize)]
 pub enum SubstateChange {
@@ -132,7 +55,7 @@ pub enum SubstateChange {
     Destroy,
 }
 
-#[derive(Debug, Clone, BorshSerialize, BorshDeserialize, Deserialize, Serialize)]
+#[derive(Debug, Clone, Encode, Decode, Deserialize, Serialize)]
 pub enum SubstateState {
     DoesNotExist,
     Up { created_by: PayloadId, data: Substate },
@@ -159,7 +82,7 @@ impl ObjectClaim {
     }
 }
 
-#[derive(Copy, Clone, Debug, PartialEq, Eq, Hash, BorshSerialize, BorshDeserialize, Deserialize, Serialize)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Hash, Encode, Decode, Deserialize, Serialize)]
 pub struct PayloadId {
     #[serde(with = "serde_with::hex")]
     id: [u8; 32],

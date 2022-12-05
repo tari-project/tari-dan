@@ -27,9 +27,10 @@ use tari_comms::{
     types::CommsPublicKey,
 };
 use tari_comms_dht::DhtActorError;
+use tari_dan_common_types::NodeAddressable;
 use tari_dan_engine::transaction::Transaction;
 
-use crate::services::{infrastructure_services::NodeAddressable, DanPeer};
+use crate::services::DanPeer;
 
 pub trait ValidatorNodeClientFactory: Send + Sync {
     type Addr: NodeAddressable;

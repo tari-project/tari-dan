@@ -34,8 +34,8 @@ pub fn generate_dispatcher(ast: &TemplateAst) -> Result<TokenStream> {
     let output = quote! {
         #[no_mangle]
         pub extern "C" fn #dispatcher_function_name(call_info: *mut u8, call_info_len: usize) -> *mut u8 {
-            use ::tari_template_abi::{decode, encode_with_len, CallInfo, wrap_ptr};
-            use ::tari_template_lib::{init_context, panic_hook::register_panic_hook};
+            use ::tari_template_abi::{CallInfo, wrap_ptr};
+            use ::tari_template_lib::{template_dependencies::{decode, encode_with_len},init_context, panic_hook::register_panic_hook};
 
             register_panic_hook();
 
@@ -233,7 +233,7 @@ fn build_tuple_field_expr(name: String, i: u32) -> Expr {
 
     match field_expr.member {
         syn::Member::Unnamed(ref mut unnamed) => {
-            unnamed.index = i as u32;
+            unnamed.index = i;
         },
         _ => todo!("build_tuple_field_expr only supports Unnamed"),
     }

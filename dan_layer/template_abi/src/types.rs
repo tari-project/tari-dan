@@ -20,11 +20,9 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use crate::{
-    rust::{string::String, vec::Vec},
-    Decode,
-    Encode,
-};
+use tari_bor::{borsh, Decode, Encode};
+
+use crate::rust::{string::String, vec::Vec};
 
 #[derive(Debug, Clone, Encode, Decode)]
 pub struct TemplateDef {
@@ -43,6 +41,7 @@ pub struct FunctionDef {
     pub name: String,
     pub arguments: Vec<Type>,
     pub output: Type,
+    pub is_mut: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Encode, Decode)]

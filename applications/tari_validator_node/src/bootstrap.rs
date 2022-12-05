@@ -40,7 +40,7 @@ use tari_dan_core::{
 use tari_dan_storage::global::GlobalDb;
 use tari_dan_storage_sqlite::{
     global::SqliteGlobalDbAdapter,
-    sqlite_shard_store_factory::SqliteShardStoreFactory,
+    sqlite_shard_store_factory::SqliteShardStore,
     SqliteDbFactory,
 };
 use tari_shutdown::ShutdownSignal;
@@ -113,22 +113,29 @@ pub async fn spawn_services(
         rx_network_announce,
     } = message_receivers;
 
+    // Connect to shard db
+    let shard_store = SqliteShardStore::try_create(config.validator_node.state_db_path())?;
+
     // Epoch manager
-    let validator_node_config = config.validator_node.clone();
     let validator_node_client_factory = TariCommsValidatorNodeClientFactory::new(comms.connectivity());
     let epoch_manager = epoch_manager::spawn(
         sqlite_db.clone(),
+        shard_store.clone(),
         base_node_client.clone(),
         consensus_constants.clone(),
         node_identity.public_key().clone(),
         shutdown.clone(),
         node_identity.clone(),
-        validator_node_config,
         validator_node_client_factory,
     );
 
     // Mempool
-    let mempool = mempool::spawn(rx_new_transaction_message, outbound_messaging.clone());
+    let mempool = mempool::spawn(
+        rx_new_transaction_message,
+        outbound_messaging.clone(),
+        epoch_manager.clone(),
+        node_identity.clone(),
+    );
 
     // Networking
     let peer_provider = CommsPeerProvider::new(comms.peer_manager());
@@ -160,9 +167,9 @@ pub async fn spawn_services(
     let payload_processor = TariDanPayloadProcessor::new(template_manager);
 
     // Consensus
-    let (hotstuff_events, db) = hotstuff::try_spawn(
+    let hotstuff_events = hotstuff::try_spawn(
         node_identity.clone(),
-        &config.validator_node,
+        shard_store.clone(),
         outbound_messaging,
         epoch_manager.clone(),
         mempool.clone(),
@@ -170,14 +177,12 @@ pub async fn spawn_services(
         rx_consensus_message,
         rx_vote_message,
         shutdown.clone(),
-    )?;
-
-    let shard_store_store = SqliteShardStoreFactory::try_create(config.validator_node.data_dir.join("state.db"))?;
+    );
 
     let dry_run_transaction_processor =
-        DryRunTransactionProcessor::new(epoch_manager.clone(), payload_processor, shard_store_store.clone());
+        DryRunTransactionProcessor::new(epoch_manager.clone(), payload_processor, shard_store.clone());
 
-    let comms = setup_p2p_rpc(config, comms, peer_provider, shard_store_store, mempool.clone());
+    let comms = setup_p2p_rpc(config, comms, peer_provider, shard_store.clone(), mempool.clone());
     let comms = comms::spawn_comms_using_transport(comms, p2p_config.transport.clone())
         .await
         .map_err(|e| ExitError::new(ExitCode::ConfigError, format!("Could not spawn using transport: {}", e)))?;
@@ -196,7 +201,7 @@ pub async fn spawn_services(
         epoch_manager,
         template_manager: template_manager_service,
         hotstuff_events,
-        db,
+        shard_store,
         dry_run_transaction_processor,
     })
 }
@@ -225,7 +230,7 @@ pub struct Services {
     pub epoch_manager: EpochManagerHandle,
     pub template_manager: TemplateManagerHandle,
     pub hotstuff_events: EventSubscription<HotStuffEvent>,
-    pub db: SqliteShardStoreFactory,
+    pub shard_store: SqliteShardStore,
     pub dry_run_transaction_processor: DryRunTransactionProcessor,
 }
 
@@ -233,7 +238,7 @@ fn setup_p2p_rpc(
     config: &ApplicationConfig,
     comms: UnspawnedCommsNode,
     peer_provider: CommsPeerProvider,
-    shard_store_store: SqliteShardStoreFactory,
+    shard_store_store: SqliteShardStore,
     mempool: MempoolHandle,
 ) -> UnspawnedCommsNode {
     let rpc_server = RpcServer::builder()

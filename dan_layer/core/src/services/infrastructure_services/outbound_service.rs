@@ -21,16 +21,13 @@
 // USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 use async_trait::async_trait;
+use tari_dan_common_types::NodeAddressable;
 
-use crate::{
-    digital_assets_error::DigitalAssetError,
-    message::DanMessage,
-    models::Payload,
-    services::infrastructure_services::NodeAddressable,
-};
+use crate::{message::DanMessage, models::Payload};
 
 #[async_trait]
 pub trait OutboundService {
+    type Error;
     type Addr: NodeAddressable + Send;
     type Payload: Payload;
 
@@ -39,18 +36,18 @@ pub trait OutboundService {
         from: Self::Addr,
         to: Self::Addr,
         message: DanMessage<Self::Payload, Self::Addr>,
-    ) -> Result<(), DigitalAssetError>;
+    ) -> Result<(), Self::Error>;
 
     async fn broadcast(
         &mut self,
         from: Self::Addr,
         committee: &[Self::Addr],
         message: DanMessage<Self::Payload, Self::Addr>,
-    ) -> Result<(), DigitalAssetError>;
+    ) -> Result<(), Self::Error>;
 
     async fn flood(
         &mut self,
         from: Self::Addr,
         message: DanMessage<Self::Payload, Self::Addr>,
-    ) -> Result<(), DigitalAssetError>;
+    ) -> Result<(), Self::Error>;
 }

@@ -23,13 +23,18 @@
 use digest::{Digest, FixedOutput};
 use serde::{Deserialize, Serialize};
 use tari_crypto::hash::blake2::Blake256;
-use tari_dan_common_types::{Epoch, PayloadId, ShardId};
+use tari_dan_common_types::{
+    Epoch,
+    NodeAddressable,
+    NodeHeight,
+    ObjectPledge,
+    PayloadId,
+    QuorumCertificate,
+    ShardId,
+    TreeNodeHash,
+};
 
 use super::Payload;
-use crate::{
-    models::{NodeHeight, ObjectPledge, QuorumCertificate, TreeNodeHash},
-    services::infrastructure_services::NodeAddressable,
-};
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct HotStuffTreeNode<TAddr, TPayload> {
@@ -102,8 +107,8 @@ impl<TAddr: NodeAddressable, TPayload: Payload> HotStuffTreeNode<TAddr, TPayload
             .chain(self.parent.as_bytes())
             .chain(self.epoch.to_le_bytes())
             .chain(self.height.to_le_bytes())
-            .chain(self.justify.as_bytes())
-            .chain(self.shard.to_le_bytes())
+            .chain(self.justify.to_hash())
+            .chain(self.shard.as_bytes())
             .chain(self.payload_id.as_slice())
             .chain(self.payload_height.to_le_bytes())
             .chain(self.proposed_by.as_bytes());

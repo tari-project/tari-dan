@@ -8,11 +8,7 @@ edition = "2021"
 [dependencies]
 tari_dan_common_types = { path = "../../dan_layer/common_types" }
 tari_engine_types = { path = "../../dan_layer/engine_types" }
-tari_common_types = { git = "https://github.com/tari-project/tari.git", branch = "feature-dan" }
-
-# TODO: I don't like that the whole of core with services/workers/storage is compiled in. Currently used for the QuorumCertificate type.
-#       We should split core up into core/models, core/services or workers, core/storage crates.
-tari_dan_core = { path = "../../dan_layer/core"}
+tari_common_types = { git = "https://github.com/tari-project/tari.git", branch = "development" }
 
 anyhow = "1.0.65"
 reqwest = { version = "0.11.11", features = ["json"] }

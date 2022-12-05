@@ -1,7 +1,12 @@
 //  Copyright 2022 The Tari Project
 //  SPDX-License-Identifier: BSD-3-Clause
 
-use std::{fs::create_dir_all, path::PathBuf};
+use std::{
+    fmt::{Debug, Formatter},
+    fs::create_dir_all,
+    path::PathBuf,
+    sync::{Arc, Mutex, MutexGuard},
+};
 
 use diesel::prelude::*;
 use log::error;
@@ -30,18 +35,39 @@ struct NewInboundMessage {
     message_json: String,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct SqliteMessageLog {
-    path: PathBuf,
+    connection: Option<Arc<Mutex<SqliteConnection>>>,
 }
 
 impl SqliteMessageLog {
-    pub fn new(path: PathBuf) -> Self {
-        Self {
-            path: if path.is_dir() {
-                path.join("message_log.sqlite")
-            } else {
-                path
+    pub fn new(mut path: PathBuf) -> Self {
+        if path.is_dir() {
+            path = path.join("message_log.sqlite");
+        }
+
+        let _ = create_dir_all(path.parent().unwrap()).map_err(|e| {
+            error!(
+                target: LOG_TARGET,
+                "Could not create message_logging_dir directory: {}", e
+            )
+        });
+
+        let path = path.to_str().expect("path utf-8 error").to_string();
+        match SqliteConnection::establish(&path) {
+            Ok(connection) => {
+                embed_migrations!("./migrations");
+                if let Err(err) = embedded_migrations::run_with_output(&connection, &mut std::io::stdout()) {
+                    log::error!(target: LOG_TARGET, "Error running migrations: {}", err);
+                }
+
+                Self {
+                    connection: Some(Arc::new(Mutex::new(connection))),
+                }
+            },
+            Err(e) => {
+                error!(target: LOG_TARGET, "Could not connect to message log database: {}", e);
+                Self { connection: None }
             },
         }
     }
@@ -61,7 +87,7 @@ impl SqliteMessageLog {
                     message_type: message_type.to_string(),
                     message_json: serde_json::to_string_pretty(message).unwrap(),
                 })
-                .execute(&conn)
+                .execute(&*conn)
                 .map_err(|e| {
                     error!(target: LOG_TARGET, "Failed to log outbound message: {}", e);
                 });
@@ -78,7 +104,7 @@ impl SqliteMessageLog {
                     message_type: message_type.to_string(),
                     message_json: serde_json::to_string_pretty(message).unwrap(),
                 })
-                .execute(&conn)
+                .execute(&*conn)
                 .map_err(|e| {
                     error!(target: LOG_TARGET, "Failed to log inbound message: {}", e);
                 });
@@ -87,27 +113,13 @@ impl SqliteMessageLog {
         }
     }
 
-    fn connect(&self) -> Option<SqliteConnection> {
-        let database_url = &self.path;
+    fn connect(&self) -> Option<MutexGuard<SqliteConnection>> {
+        Some(self.connection.as_ref()?.lock().unwrap())
+    }
+}
 
-        let _ = create_dir_all(database_url.parent().unwrap()).map_err(|e| {
-            error!(
-                target: LOG_TARGET,
-                "Could not create message_logging_dir directory: {}", e
-            )
-        });
-
-        let database_url = database_url.to_str().expect("database_url utf-8 error").to_string();
-        if let Ok(connection) = SqliteConnection::establish(&database_url)
-            .map_err(|e| error!(target: LOG_TARGET, "Could not connect to message_log database: {}", e))
-        {
-            embed_migrations!("./migrations");
-            if let Err(err) = embedded_migrations::run_with_output(&connection, &mut std::io::stdout()) {
-                log::error!(target: LOG_TARGET, "Error running migrations: {}", err);
-            }
-            Some(connection)
-        } else {
-            None
-        }
+impl Debug for SqliteMessageLog {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        f.write_str("SqliteMessageLog")
     }
 }

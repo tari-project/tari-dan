@@ -27,6 +27,7 @@ use serde::{Deserialize, Serialize};
 use tari_common_types::types::FixedHash;
 use tari_dan_common_types::{ObjectClaim, ShardId, SubstateChange};
 use tari_dan_engine::transaction::Transaction;
+use tari_engine_types::commit_result::FinalizeResult;
 
 use crate::models::{ConsensusHash, Payload};
 
@@ -34,6 +35,7 @@ use crate::models::{ConsensusHash, Payload};
 pub struct TariDanPayload {
     transaction: Transaction,
     timestamp: i64,
+    result: Option<FinalizeResult>,
 }
 
 impl TariDanPayload {
@@ -41,6 +43,7 @@ impl TariDanPayload {
         Self {
             transaction,
             timestamp: Utc::now().timestamp(),
+            result: None,
         }
     }
 
@@ -54,6 +57,14 @@ impl TariDanPayload {
 
     pub fn timestamp(&self) -> i64 {
         self.timestamp
+    }
+
+    pub fn result(&self) -> &Option<FinalizeResult> {
+        &self.result
+    }
+
+    pub fn set_result(&mut self, result: FinalizeResult) {
+        self.result = Some(result);
     }
 }
 

@@ -1,9 +1,6 @@
 // Copyright 2022 The Tari Project
 // SPDX-License-Identifier: BSD-3-Clause
 
-mod state_db_unit_of_work;
-pub use state_db_unit_of_work::{StateDbUnitOfWork, StateDbUnitOfWorkImpl, StateDbUnitOfWorkReader, UnitOfWorkContext};
-
 mod db_key_value;
 pub use db_key_value::DbKeyValue;
 

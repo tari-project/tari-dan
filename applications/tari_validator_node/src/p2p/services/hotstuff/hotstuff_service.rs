@@ -30,9 +30,9 @@ use tari_dan_core::{
     message::DanMessage,
     models::{vote_message::VoteMessage, HotStuffMessage, TariDanPayload},
     services::{
-        epoch_manager::EpochManager,
         infrastructure_services::OutboundService,
-        leader_strategy::AlwaysFirstLeader,
+        leader_strategy::PayloadSpecificLeaderStrategy,
+        NodeIdentitySigningService,
     },
     workers::{
         events::{EventSubscription, HotStuffEvent},
@@ -40,7 +40,7 @@ use tari_dan_core::{
     },
 };
 use tari_dan_engine::transaction::Transaction;
-use tari_dan_storage_sqlite::sqlite_shard_store_factory::SqliteShardStoreFactory;
+use tari_dan_storage_sqlite::sqlite_shard_store_factory::SqliteShardStore;
 use tari_shutdown::ShutdownSignal;
 use tokio::sync::{
     broadcast,
@@ -57,7 +57,6 @@ use crate::{
     payload_processor::TariDanPayloadProcessor,
 };
 
-#[allow(dead_code)]
 const LOG_TARGET: &str = "tari::validator_node::hotstuff_service";
 
 pub struct HotstuffService {
@@ -72,19 +71,17 @@ pub struct HotstuffService {
     rx_broadcast: Receiver<(HotStuffMessage<TariDanPayload, CommsPublicKey>, Vec<CommsPublicKey>)>,
     /// Outgoing vote messages to be sent to the leader
     rx_vote_message: Receiver<(VoteMessage, CommsPublicKey)>,
-    epoch_manager: EpochManagerHandle,
     shutdown: ShutdownSignal, // waiter: HotstuffWaiter,
 }
 
 impl HotstuffService {
     pub fn spawn(
         node_identity: Arc<NodeIdentity>,
-        node_public_key: CommsPublicKey,
         epoch_manager: EpochManagerHandle,
         mempool: MempoolHandle,
         outbound: OutboundMessaging,
         payload_processor: TariDanPayloadProcessor<TemplateManager>,
-        shard_store_factory: SqliteShardStoreFactory,
+        shard_store_factory: SqliteShardStore,
         rx_hotstuff_messages: Receiver<(CommsPublicKey, HotStuffMessage<TariDanPayload, CommsPublicKey>)>,
         rx_vote_messages: Receiver<(CommsPublicKey, VoteMessage)>,
         shutdown: ShutdownSignal,
@@ -96,14 +93,18 @@ impl HotstuffService {
         let (tx_vote_message, rx_vote_message) = channel(100);
         let (tx_events, _) = broadcast::channel(100);
 
-        let leader_strategy = AlwaysFirstLeader {};
+        let leader_strategy = PayloadSpecificLeaderStrategy {};
 
         let consensus_constants = ConsensusConstants::devnet();
 
+        let node_public_key = node_identity.public_key().clone();
+
         HotStuffWaiter::spawn(
-            node_identity,
+            NodeIdentitySigningService::new(node_identity),
+            // TODO: we still need this because The signing service is not generic. Abstracting signatures and public
+            // keys may add a lot of type complexity.
             node_public_key.clone(),
-            epoch_manager.clone(),
+            epoch_manager,
             leader_strategy,
             rx_new,
             rx_hotstuff_messages,
@@ -127,7 +128,6 @@ impl HotstuffService {
                 rx_leader,
                 rx_broadcast,
                 rx_vote_message,
-                epoch_manager,
                 shutdown,
             }
             .run(),
@@ -167,15 +167,7 @@ impl HotstuffService {
     }
 
     async fn handle_new_valid_transaction(&mut self, tx: Transaction, shard: ShardId) -> Result<(), anyhow::Error> {
-        if self
-            .epoch_manager
-            .is_validator_in_committee_for_current_epoch(shard, self.node_public_key.clone())
-            .await?
-        {
-            self.tx_new.send((TariDanPayload::new(tx), shard)).await?;
-        } else {
-            info!(target: LOG_TARGET, "🙇 Not in committee for transaction {}", tx.hash());
-        }
+        self.tx_new.send((TariDanPayload::new(tx), shard)).await?;
         Ok(())
     }
 

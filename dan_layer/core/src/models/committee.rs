@@ -21,11 +21,10 @@
 // USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 use serde::Serialize;
+use tari_dan_common_types::NodeAddressable;
 
-use crate::{models::ViewId, services::infrastructure_services::NodeAddressable};
-
-#[derive(Debug, Clone, Serialize)]
-pub struct Committee<TAddr: NodeAddressable> {
+#[derive(Debug, Clone, Serialize, Default)]
+pub struct Committee<TAddr> {
     // TODO: encapsulate
     pub members: Vec<TAddr>,
 }
@@ -37,11 +36,6 @@ impl<TAddr: NodeAddressable> Committee<TAddr> {
 
     pub fn new(members: Vec<TAddr>) -> Self {
         Self { members }
-    }
-
-    pub fn leader_for_view(&self, view_id: ViewId) -> &TAddr {
-        let pos = view_id.current_leader(self.members.len());
-        &self.members[pos]
     }
 
     /// Returns n - f where n is the number of committee members and f is the tolerated failure nodes.

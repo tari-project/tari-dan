@@ -26,21 +26,18 @@ use anyhow::anyhow;
 use tari_common_types::types::PublicKey;
 use tari_comms::types::CommsPublicKey;
 use tari_crypto::tari_utilities::ByteArray;
-use tari_dan_common_types::{ShardId, SubstateState};
-use tari_dan_core::models::{
-    vote_message::VoteMessage,
-    HotStuffMessage,
-    HotStuffTreeNode,
-    Node,
+use tari_dan_common_types::{
     ObjectPledge,
     QuorumCertificate,
     QuorumDecision,
     QuorumRejectReason,
+    ShardId,
     ShardVote,
-    TariDanPayload,
+    SubstateState,
     TreeNodeHash,
     ValidatorMetadata,
 };
+use tari_dan_core::models::{vote_message::VoteMessage, HotStuffMessage, HotStuffTreeNode, Node, TariDanPayload};
 use tari_engine_types::substate::Substate;
 
 use crate::p2p::proto;
@@ -54,7 +51,7 @@ impl From<VoteMessage> for proto::consensus::VoteMessage {
             shard_id: msg.shard().as_bytes().to_vec(),
             decision: i32::from(msg.decision().as_u8()),
             all_shard_nodes: msg.all_shard_nodes().iter().map(|n| n.clone().into()).collect(),
-            validator_metadata: Some(msg.validator_metadata().to_owned().into()),
+            validator_metadata: Some(msg.validator_metadata().clone().into()),
         }
     }
 }
@@ -63,6 +60,9 @@ impl TryFrom<proto::consensus::VoteMessage> for VoteMessage {
     type Error = anyhow::Error;
 
     fn try_from(value: proto::consensus::VoteMessage) -> Result<Self, Self::Error> {
+        let metadata = value
+            .validator_metadata
+            .ok_or_else(|| anyhow!("Validator metadata is missing"))?;
         Ok(VoteMessage::with_validator_metadata(
             TreeNodeHash::try_from(value.local_node_hash)?,
             ShardId::from_bytes(&value.shard_id)?,
@@ -72,17 +72,7 @@ impl TryFrom<proto::consensus::VoteMessage> for VoteMessage {
                 .into_iter()
                 .map(|n| n.try_into())
                 .collect::<Result<Vec<_>, _>>()?,
-            ValidatorMetadata::from_bytes(
-                &value.validator_metadata.as_ref().unwrap().public_key,
-                &value.validator_metadata.as_ref().unwrap().signature,
-                &value.validator_metadata.as_ref().unwrap().merkle_proof,
-                &value
-                    .validator_metadata
-                    .as_ref()
-                    .unwrap()
-                    .merkle_leaf_index
-                    .to_le_bytes(),
-            )?,
+            metadata.try_into()?,
         ))
     }
 }
@@ -308,27 +298,34 @@ impl From<SubstateState> for proto::consensus::SubstateState {
 
 // -------------------------------- ValidatorMetadata -------------------------------- //
 
+impl From<ValidatorMetadata> for proto::consensus::ValidatorMetadata {
+    fn from(msg: ValidatorMetadata) -> Self {
+        let merkle_proof = msg.encode_merkle_proof();
+        Self {
+            public_key: msg.public_key.to_vec(),
+            vn_shard_key: msg.vn_shard_key.as_bytes().to_vec(),
+            signature: Some(msg.signature.into()),
+            merkle_proof,
+            merkle_leaf_index: msg.merkle_leaf_index,
+        }
+    }
+}
+
 impl TryFrom<proto::consensus::ValidatorMetadata> for ValidatorMetadata {
     type Error = anyhow::Error;
 
     fn try_from(value: proto::consensus::ValidatorMetadata) -> Result<Self, Self::Error> {
-        Ok(Self {
-            public_key: value.public_key,
-            signature: value.signature,
-            merkle_proof: value.merkle_proof,
+        Ok(ValidatorMetadata {
+            public_key: PublicKey::from_bytes(&value.public_key)?,
+            vn_shard_key: value.vn_shard_key.try_into()?,
+            signature: value
+                .signature
+                .map(TryFrom::try_from)
+                .transpose()?
+                .ok_or_else(|| anyhow!("ValidatorMetadata missing signature"))?,
+            merkle_proof: ValidatorMetadata::decode_merkle_proof(&value.merkle_proof)?,
             merkle_leaf_index: value.merkle_leaf_index,
         })
-    }
-}
-
-impl From<ValidatorMetadata> for proto::consensus::ValidatorMetadata {
-    fn from(value: ValidatorMetadata) -> Self {
-        Self {
-            public_key: value.public_key,
-            signature: value.signature,
-            merkle_proof: value.merkle_proof,
-            merkle_leaf_index: value.merkle_leaf_index,
-        }
     }
 }
 

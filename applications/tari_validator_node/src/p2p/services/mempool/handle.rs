@@ -20,15 +20,17 @@
 //   WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //   USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use std::sync::{Arc, Mutex};
+use std::{
+    collections::HashMap,
+    sync::{Arc, Mutex},
+};
 
-use tari_dan_common_types::ShardId;
-use tari_dan_core::models::TreeNodeHash;
+use tari_dan_common_types::{ShardId, TreeNodeHash};
 use tari_dan_engine::transaction::Transaction;
 use tari_template_lib::Hash;
 use tokio::sync::{broadcast, broadcast::error::RecvError, mpsc, mpsc::error::SendError};
 
-pub type TransactionVecMutex = Arc<Mutex<Vec<(Transaction, Option<TreeNodeHash>)>>>;
+pub type TransactionPool = Arc<Mutex<HashMap<Hash, (Transaction, Option<TreeNodeHash>)>>>;
 
 pub enum MempoolRequest {
     SubmitTransaction(Box<Transaction>),
@@ -39,7 +41,7 @@ pub enum MempoolRequest {
 pub struct MempoolHandle {
     rx_valid_transactions: broadcast::Receiver<(Transaction, ShardId)>,
     tx_mempool_request: mpsc::Sender<MempoolRequest>,
-    transactions: TransactionVecMutex,
+    transactions: TransactionPool,
 }
 
 impl Clone for MempoolHandle {
@@ -56,7 +58,7 @@ impl MempoolHandle {
     pub(super) fn new(
         rx_valid_transactions: broadcast::Receiver<(Transaction, ShardId)>,
         tx_mempool_request: mpsc::Sender<MempoolRequest>,
-        transactions: TransactionVecMutex,
+        transactions: TransactionPool,
     ) -> Self {
         Self {
             rx_valid_transactions,

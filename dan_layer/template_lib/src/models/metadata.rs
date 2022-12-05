@@ -23,9 +23,9 @@
 use std::collections::HashMap;
 
 use hex;
-use tari_template_abi::{Decode, Encode};
+use tari_bor::{borsh, Decode, Encode};
 
-#[derive(Clone, Debug, Decode, Encode, Default)]
+#[derive(Clone, Debug, Decode, Encode, Default, PartialEq)]
 #[cfg_attr(feature = "serde", derive(serde::Deserialize, serde::Serialize))]
 pub struct Metadata {
     // TODO: Serialize as hex so that this can be serialized. In future this should be optimized.

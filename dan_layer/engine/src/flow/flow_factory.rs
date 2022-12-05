@@ -9,7 +9,6 @@ use tari_engine_types::instruction::Instruction;
 use crate::{
     flow::{FlowEngineError, FlowInstance},
     function_definitions::{FlowFunctionDefinition, FunctionArgDefinition},
-    state::StateDbUnitOfWork,
 };
 
 #[derive(Clone, Default)]
@@ -33,7 +32,7 @@ impl FlowFactory {
         Self { _flows: flows }
     }
 
-    pub fn invoke_write_method<TUnitOfWork: StateDbUnitOfWork + 'static>(
+    pub fn invoke_write_method<TUnitOfWork>(
         &self,
         _name: String,
         _instruction: &Instruction,

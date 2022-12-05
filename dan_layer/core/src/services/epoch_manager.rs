@@ -23,22 +23,21 @@
 use std::{collections::HashMap, ops::Range};
 
 use async_trait::async_trait;
-use tari_common_types::types::PublicKey;
 use tari_comms::protocol::rpc::{RpcError, RpcStatus};
 use tari_core::ValidatorNodeMmr;
-use tari_dan_common_types::{Epoch, ShardId};
+use tari_dan_common_types::{Epoch, NodeAddressable, ShardId};
 use thiserror::Error;
 
 use crate::{
     models::{Committee, ValidatorNode},
-    services::{base_node_error::BaseNodeError, infrastructure_services::NodeAddressable, ValidatorNodeClientError},
+    services::{base_node_error::BaseNodeError, ValidatorNodeClientError},
     storage::StorageError,
 };
 
 #[derive(Debug)]
 pub struct ShardCommitteeAllocation<TAddr: NodeAddressable> {
     pub shard_id: ShardId,
-    pub committee: Option<Committee<TAddr>>,
+    pub committee: Committee<TAddr>,
 }
 
 #[derive(Error, Debug)]
@@ -69,12 +68,15 @@ pub enum EpochManagerError {
     RpcStatus(#[from] RpcStatus),
     #[error("No committee VNs found for shard {shard_id} and epoch {epoch}")]
     NoCommitteeVns { shard_id: ShardId, epoch: Epoch },
+    #[error("This validator node is not registered")]
+    ValidatorNodeNotRegistered,
 }
 
 #[async_trait]
 // TODO: Rename to reflect that it's a read only interface (e.g. EpochReader, EpochQuery)
 pub trait EpochManager<TAddr: NodeAddressable>: Clone {
     async fn current_epoch(&self) -> Result<Epoch, EpochManagerError>;
+    async fn get_validator_shard_key(&self, epoch: Epoch, addr: TAddr) -> Result<ShardId, EpochManagerError>;
     async fn is_epoch_valid(&self, epoch: Epoch) -> Result<bool, EpochManagerError>;
     async fn get_committees(
         &self,
@@ -97,26 +99,27 @@ pub trait EpochManager<TAddr: NodeAddressable>: Clone {
         available_shards: &[ShardId],
     ) -> Result<Vec<ShardId>, EpochManagerError>;
 
-    async fn get_validator_nodes_per_epoch(&self, epoch: Epoch) -> Result<Vec<ValidatorNode>, EpochManagerError>;
+    async fn get_validator_nodes_per_epoch(&self, epoch: Epoch)
+        -> Result<Vec<ValidatorNode<TAddr>>, EpochManagerError>;
     async fn get_validator_node_mmr(&self, epoch: Epoch) -> Result<ValidatorNodeMmr, EpochManagerError>;
     async fn get_validator_node_merkle_root(&self, epoch: Epoch) -> Result<Vec<u8>, EpochManagerError>;
 }
 
 #[derive(Debug, Clone)]
-pub struct RangeEpochManager<TAddr: NodeAddressable> {
+pub struct RangeEpochManager<TAddr> {
     current_epoch: Epoch,
     #[allow(clippy::type_complexity)]
     epochs: HashMap<Epoch, Vec<(Range<ShardId>, Committee<TAddr>)>>,
-    registered_vns: HashMap<Epoch, Vec<ValidatorNode>>,
+    registered_vns: HashMap<Epoch, Vec<ValidatorNode<TAddr>>>,
 }
 
 impl<TAddr: NodeAddressable> RangeEpochManager<TAddr> {
-    pub fn new(vn_keys: Vec<PublicKey>, current: Range<ShardId>, committee: Vec<TAddr>) -> Self {
+    pub fn new(vn_keys: Vec<TAddr>, current: Range<ShardId>, committee: Vec<TAddr>) -> Self {
         let mut epochs = HashMap::new();
         epochs.insert(Epoch(0), vec![(current, Committee::new(committee))]);
 
         let mut registered_vns = HashMap::new();
-        let vns: Vec<ValidatorNode> = vn_keys
+        let vns: Vec<_> = vn_keys
             .into_iter()
             .map(|k| ValidatorNode {
                 shard_key: ShardId::zero(),
@@ -132,7 +135,7 @@ impl<TAddr: NodeAddressable> RangeEpochManager<TAddr> {
         }
     }
 
-    pub fn new_with_multiple(vn_keys: Vec<PublicKey>, ranges: &[(Range<ShardId>, Vec<TAddr>)]) -> Self {
+    pub fn new_with_multiple(vn_keys: Vec<TAddr>, ranges: &[(Range<ShardId>, Vec<TAddr>)]) -> Self {
         let mut epochs = HashMap::new();
         epochs.insert(
             Epoch(0),
@@ -143,7 +146,7 @@ impl<TAddr: NodeAddressable> RangeEpochManager<TAddr> {
                 .collect(),
         );
         let mut registered_vns = HashMap::new();
-        let vns: Vec<ValidatorNode> = vn_keys
+        let vns: Vec<_> = vn_keys
             .into_iter()
             .map(|k| ValidatorNode {
                 shard_key: ShardId::zero(),
@@ -163,6 +166,25 @@ impl<TAddr: NodeAddressable> RangeEpochManager<TAddr> {
 impl<TAddr: NodeAddressable> EpochManager<TAddr> for RangeEpochManager<TAddr> {
     async fn current_epoch(&self) -> Result<Epoch, EpochManagerError> {
         Ok(self.current_epoch)
+    }
+
+    async fn get_validator_shard_key(&self, epoch: Epoch, addr: TAddr) -> Result<ShardId, EpochManagerError> {
+        self.registered_vns
+            .iter()
+            .find_map(|(e, vns)| {
+                if *e == epoch {
+                    vns.iter().find_map(|vn| {
+                        if vn.public_key == addr {
+                            Some(vn.shard_key)
+                        } else {
+                            None
+                        }
+                    })
+                } else {
+                    None
+                }
+            })
+            .ok_or(EpochManagerError::ValidatorNodeNotRegistered)
     }
 
     async fn is_epoch_valid(&self, epoch: Epoch) -> Result<bool, EpochManagerError> {
@@ -186,7 +208,7 @@ impl<TAddr: NodeAddressable> EpochManager<TAddr> for RangeEpochManager<TAddr> {
             }
             result.push(ShardCommitteeAllocation {
                 shard_id: *shard,
-                committee: found_committee.clone(),
+                committee: found_committee.unwrap_or_else(Committee::empty),
             });
         }
 
@@ -239,23 +261,23 @@ impl<TAddr: NodeAddressable> EpochManager<TAddr> for RangeEpochManager<TAddr> {
         Ok(result)
     }
 
-    async fn get_validator_nodes_per_epoch(&self, epoch: Epoch) -> Result<Vec<ValidatorNode>, EpochManagerError> {
+    async fn get_validator_nodes_per_epoch(
+        &self,
+        epoch: Epoch,
+    ) -> Result<Vec<ValidatorNode<TAddr>>, EpochManagerError> {
         let vns = self.registered_vns.get(&epoch).unwrap();
         Ok(vns.clone())
     }
 
     async fn get_validator_node_mmr(&self, epoch: Epoch) -> Result<ValidatorNodeMmr, EpochManagerError> {
-        let mut vn_mmr = ValidatorNodeMmr::new(Vec::new());
-        let public_keys: Vec<Vec<u8>> = self
+        let mut vn_mmr = ValidatorNodeMmr::new(Vec::with_capacity(self.registered_vns.len()));
+        let vns = self
             .registered_vns
             .get(&epoch)
-            .unwrap()
-            .iter()
-            .map(|vn| vn.public_key.as_bytes().to_vec())
-            .collect();
-        for pk in public_keys {
+            .ok_or(EpochManagerError::NoEpochFound(epoch))?;
+        for vn in vns {
             vn_mmr
-                .push(pk)
+                .push(vn.node_hash().to_vec())
                 .expect("Could not build the merkle mountain range of the VN set");
         }
 

@@ -20,19 +20,27 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use std::{
-    collections::{HashMap, HashSet},
-    sync::Arc,
-};
+use std::collections::{HashMap, HashSet};
 
 use log::*;
 use tari_common_types::types::{PublicKey, Signature};
-use tari_comms::NodeIdentity;
-use tari_core::consensus::FromConsensusBytes;
-use tari_dan_common_types::{optional::Optional, Epoch, PayloadId, ShardId, SubstateState};
+use tari_core::ValidatorNodeMmrHasherBlake256;
+use tari_dan_common_types::{
+    optional::Optional,
+    Epoch,
+    NodeAddressable,
+    NodeHeight,
+    ObjectPledge,
+    PayloadId,
+    QuorumCertificate,
+    QuorumDecision,
+    ShardId,
+    ShardVote,
+    SubstateState,
+    TreeNodeHash,
+};
 use tari_engine_types::commit_result::{FinalizeResult, RejectReason, TransactionResult};
 use tari_shutdown::ShutdownSignal;
-use tari_utilities::ByteArray;
 use tokio::{
     sync::{
         broadcast,
@@ -50,28 +58,25 @@ use crate::{
         HotStuffMessageType,
         HotStuffTreeNode,
         LeafNode,
-        NodeHeight,
-        ObjectPledge,
         Payload,
-        QuorumCertificate,
-        QuorumDecision,
-        ShardVote,
-        TreeNodeHash,
     },
-    services::{
-        epoch_manager::EpochManager,
-        infrastructure_services::NodeAddressable,
-        leader_strategy::LeaderStrategy,
-        PayloadProcessor,
-    },
-    storage::shard_store::{ShardStoreFactory, ShardStoreTransaction},
+    services::{epoch_manager::EpochManager, leader_strategy::LeaderStrategy, PayloadProcessor, SigningService},
+    storage::shard_store::{ShardStore, ShardStoreTransaction},
     workers::{events::HotStuffEvent, hotstuff_error::HotStuffError},
 };
 
 const LOG_TARGET: &str = "tari::dan_layer::hotstuff_waiter";
 
-pub struct HotStuffWaiter<TPayload, TAddr, TLeaderStrategy, TEpochManager, TPayloadProcessor, TShardStore> {
-    node_identity: Arc<NodeIdentity>,
+pub struct HotStuffWaiter<
+    TPayload,
+    TAddr,
+    TLeaderStrategy,
+    TEpochManager,
+    TPayloadProcessor,
+    TShardStore,
+    TSigningService,
+> {
+    signing_service: TSigningService,
     public_key: TAddr,
     leader_strategy: TLeaderStrategy,
     /// The epoch manager
@@ -99,18 +104,19 @@ pub struct HotStuffWaiter<TPayload, TAddr, TLeaderStrategy, TEpochManager, TPayl
     consensus_constants: ConsensusConstants,
 }
 
-impl<TPayload, TAddr, TLeaderStrategy, TEpochManager, TPayloadProcessor, TShardStore>
-    HotStuffWaiter<TPayload, TAddr, TLeaderStrategy, TEpochManager, TPayloadProcessor, TShardStore>
+impl<TPayload, TAddr, TLeaderStrategy, TEpochManager, TPayloadProcessor, TShardStore, TSigningService>
+    HotStuffWaiter<TPayload, TAddr, TLeaderStrategy, TEpochManager, TPayloadProcessor, TShardStore, TSigningService>
 where
     TPayload: Payload + 'static,
     TAddr: NodeAddressable + 'static,
     TLeaderStrategy: LeaderStrategy<TAddr> + 'static + Send + Sync,
     TEpochManager: EpochManager<TAddr> + 'static + Send + Sync,
     TPayloadProcessor: PayloadProcessor<TPayload> + 'static + Send + Sync,
-    TShardStore: ShardStoreFactory<Addr = TAddr, Payload = TPayload> + 'static + Send + Sync,
+    TShardStore: ShardStore<Addr = TAddr, Payload = TPayload> + 'static + Send + Sync,
+    TSigningService: SigningService + Sync + Send + 'static,
 {
     pub fn spawn(
-        node_identity: Arc<NodeIdentity>,
+        signing_service: TSigningService,
         public_key: TAddr,
         epoch_manager: TEpochManager,
         leader_strategy: TLeaderStrategy,
@@ -127,7 +133,7 @@ where
         consensus_constants: ConsensusConstants,
     ) -> JoinHandle<Result<(), HotStuffError>> {
         let waiter = HotStuffWaiter::new(
-            node_identity,
+            signing_service,
             public_key,
             epoch_manager,
             leader_strategy,
@@ -146,7 +152,7 @@ where
     }
 
     pub fn new(
-        node_identity: Arc<NodeIdentity>,
+        signing_service: TSigningService,
         public_key: TAddr,
         epoch_manager: TEpochManager,
         leader_strategy: TLeaderStrategy,
@@ -162,7 +168,7 @@ where
         consensus_constants: ConsensusConstants,
     ) -> Self {
         Self {
-            node_identity,
+            signing_service,
             public_key,
             epoch_manager,
             leader_strategy,
@@ -180,7 +186,7 @@ where
     }
 
     /// Step 1: A new payload has been received. The payload is persisted and a NewView is sent to the leader.
-    async fn on_next_sync_view(&mut self, payload: TPayload, shard: ShardId) -> Result<(), HotStuffError> {
+    async fn on_next_sync_view(&self, payload: TPayload, shard: ShardId) -> Result<(), HotStuffError> {
         let epoch = self.epoch_manager.current_epoch().await?;
         info!(
             target: LOG_TARGET,
@@ -204,6 +210,7 @@ where
             //  Save the payload, because we will need it when the proposal comes back
             tx.set_payload(payload.clone())?;
             tx.commit()?;
+            // TODO: combine merkle proofs into one before sending
             new_view = HotStuffMessage::new_view(high_qc, shard, Some(payload));
         }
 
@@ -225,7 +232,7 @@ where
     ///         Once $n - f$ NewViews have been received, a Proposal is sent to the replicas, see
     ///         [HotstuffWaiter::on_beat].
     async fn on_receive_new_view(
-        &mut self,
+        &self,
         from: TAddr,
         shard: ShardId,
         qc: QuorumCertificate,
@@ -253,7 +260,7 @@ where
 
     /// Step 4: Sends a Proposal to replica. A new leaf node is created that builds
     /// on the previous tree or else a genesis node is created and proposed.
-    async fn on_propose(&mut self, shard: ShardId, payload_id: PayloadId) -> Result<(), HotStuffError> {
+    async fn on_propose(&self, shard: ShardId, payload_id: PayloadId) -> Result<(), HotStuffError> {
         let epoch = self.epoch_manager.current_epoch().await?;
 
         let qc;
@@ -277,7 +284,7 @@ where
             .get_committees(epoch, &involved_shards)
             .await?
             .into_iter()
-            .flat_map(|allocation| allocation.committee.map(|c| c.members).unwrap_or_default())
+            .flat_map(|allocation| allocation.committee.members)
             .collect();
 
         let leaf_node;
@@ -355,7 +362,7 @@ where
     /// and sends a vote.
     #[allow(clippy::too_many_lines)]
     async fn on_receive_proposal(
-        &mut self,
+        &self,
         from: TAddr,
         node: HotStuffTreeNode<TAddr, TPayload>,
     ) -> Result<(), HotStuffError> {
@@ -390,12 +397,18 @@ where
             .await?;
 
         let mut votes_to_send = vec![];
-        let vn_mmr = self.epoch_manager.get_validator_node_mmr(node.epoch()).await?;
         let vns = self.epoch_manager.get_validator_nodes_per_epoch(node.epoch()).await?;
         let vn_mmr_leaf_index = vns
             .iter()
-            .position(|vn| vn.public_key == *self.node_identity.public_key())
+            .position(|vn| vn.public_key == self.public_key)
             .expect("The VN is not registered");
+
+        let node_shard_key = self
+            .epoch_manager
+            .get_validator_shard_key(node.epoch(), self.public_key.clone())
+            .await?;
+        let vn_mmr = self.epoch_manager.get_validator_node_mmr(node.epoch()).await?;
+
         {
             let mut tx = self.shard_store.create_tx()?;
             tx.save_node(node.clone())?;
@@ -410,7 +423,7 @@ where
                 return Ok(());
             }
 
-            tx.save_leader_proposals(shard, node.payload_id(), node.payload_height(), node.clone())?;
+            tx.save_leader_proposals(node.shard(), node.payload_id(), node.payload_height(), node.clone())?;
 
             let mut leader_proposals = vec![];
             for s in &involved_shards {
@@ -425,6 +438,11 @@ where
                 }
             }
             if leader_proposals.len() == involved_shards.len() {
+                info!(
+                    target: LOG_TARGET,
+                    "🔥 Received enough proposals to vote on the message: {}",
+                    leader_proposals.len()
+                );
                 // Execute the payload!
                 let shard_pledges: HashMap<ShardId, Option<ObjectPledge>> = leader_proposals
                     .iter()
@@ -438,6 +456,7 @@ where
                     let changes = extract_changes(node.payload_id(), &finalize_result)?;
                     // Change the vote if we do not have all the objects pledged
                     Self::validate_pledges(&shard_pledges, &mut finalize_result, changes);
+                    tx.update_payload_result(&node.payload_id(), finalize_result.clone())?;
                     finalize_result
                 } else {
                     FinalizeResult::new(
@@ -464,19 +483,14 @@ where
                         &finalize_result,
                     )?;
 
-                    vote_msg.set_metadata(
-                        self.node_identity.public_key(),
-                        self.node_identity.secret_key(),
-                        &vn_mmr,
-                        vn_mmr_leaf_index as u64,
-                    );
+                    vote_msg.sign_vote(&self.signing_service, node_shard_key, &vn_mmr, vn_mmr_leaf_index as u64)?;
 
                     votes_to_send.push((vote_msg, local_node.proposed_by().clone()));
                 }
             } else {
                 info!(
                     target: LOG_TARGET,
-                    "🔥 Not enough votes to vote on the message, votes: {}, involved_shards: {}",
+                    "🔥 Not enough proposals to vote on the message, num proposals: {}, involved_shards: {}",
                     leader_proposals.len(),
                     involved_shards.len()
                 );
@@ -490,13 +504,14 @@ where
                 .await
                 .map_err(|_| HotStuffError::SendError)?;
         }
-        self.update_nodes(node.clone()).await?;
+
+        self.update_nodes(node).await?;
         Ok(())
     }
 
     /// Step 6: The leader receives votes from the local shard, and once it has enough ($n - f$) votes, it commits a
     /// high QC and sends the next round of proposals.
-    async fn on_receive_vote(&mut self, from: TAddr, msg: VoteMessage) -> Result<(), HotStuffError> {
+    async fn on_receive_vote(&self, from: TAddr, msg: VoteMessage) -> Result<(), HotStuffError> {
         info!(
             target: LOG_TARGET,
             "🔥 Receive {:?} VOTE for shard {} from {}",
@@ -515,7 +530,7 @@ where
 
             node = tx.get_node(&msg.local_node_hash())?;
 
-            if node.proposed_by() != &self.public_key {
+            if *node.proposed_by() != self.public_key {
                 return Err(HotStuffError::NotTheLeader);
             }
         }
@@ -532,9 +547,9 @@ where
             dbg!(&valid_committee);
             dbg!(total_votes);
             if total_votes >= valid_committee.consensus_threshold() {
-                let mut different_votes = HashMap::new();
+                let mut different_votes = HashMap::<_, Vec<_>>::new();
                 for vote in tx.get_received_votes_for(msg.local_node_hash(), msg.shard())? {
-                    let entry = different_votes.entry(vote.get_all_nodes_hash()).or_insert(vec![]);
+                    let entry = different_votes.entry(vote.get_all_nodes_hash()).or_default();
                     entry.push(vote);
                 }
 
@@ -553,7 +568,7 @@ where
                             node.shard(),
                             node.epoch(),
                             main_vote.decision(),
-                            main_vote.all_shard_nodes().clone(),
+                            main_vote.all_shard_nodes().to_vec(),
                             validators_metadata,
                         );
                         tx.update_high_qc(node.proposed_by().clone(), msg.shard(), qc)?;
@@ -578,12 +593,15 @@ where
 
     /// A pacemaker beat has been triggered for a payload. If the leader has received enough NewViews, a Proposal is
     /// sent to replicas.
-    async fn on_beat(&mut self, shard: ShardId, payload_id: PayloadId) -> Result<(), HotStuffError> {
+    async fn on_beat(&self, shard: ShardId, payload_id: PayloadId) -> Result<(), HotStuffError> {
         // TODO: the leader is only known after the leaf is determined
         // TODO: Review if this is correct. The epoch should stay the same for all epochs
 
         let epoch = self.epoch_manager.current_epoch().await?;
         let committee = self.epoch_manager.get_committee(epoch, shard).await?;
+        if committee.is_empty() {
+            return Err(HotStuffError::NoCommitteeForShard { shard, epoch });
+        }
         if self.is_leader(payload_id, shard, &committee)? {
             let min_required_new_views = committee.consensus_threshold();
             let num_new_views = self.count_new_views_for(shard)?;
@@ -646,15 +664,10 @@ where
     ) -> Result<bool, HotStuffError> {
         Ok(self
             .leader_strategy
-            .is_leader(&self.public_key.clone(), committee, payload, shard, 0))
+            .is_leader(&self.public_key, committee, payload, shard, 0))
     }
 
-    async fn validate_from_committee(
-        &mut self,
-        from: &TAddr,
-        epoch: Epoch,
-        shard: ShardId,
-    ) -> Result<(), HotStuffError> {
+    async fn validate_from_committee(&self, from: &TAddr, epoch: Epoch, shard: ShardId) -> Result<(), HotStuffError> {
         if self.epoch_manager.get_committee(epoch, shard).await?.contains(from) {
             Ok(())
         } else {
@@ -664,7 +677,7 @@ where
 
     async fn validate_qc(&self, qc: &QuorumCertificate, min_signers: usize) -> Result<(), HotStuffError> {
         // extract all the pairs of signer-signature present in the QC
-        let signer_signatures = Self::extract_signer_signatures_from_qc(qc)?;
+        let signer_signatures = Self::extract_signer_signatures_from_qc(qc);
 
         // the QC should not have repeated signers
         let signers_set = signer_signatures
@@ -684,21 +697,18 @@ where
             ));
         }
 
-        // TODO: Fix merkle proof verification
         // all merkle proofs for the signers must be valid
-        // let validator_node_root = self.epoch_manager.get_validator_node_merkle_root(qc.epoch()).await?;
-        // for md in qc.validators_metadata() {
-        //     let merkle_proof: MerkleProof = bincode::deserialize(&md.merkle_proof).map_err(|_| {
-        //         HotStuffError::InvalidQuorumCertificate("could not deserialize merkle proof".to_string())
-        //     })?;
-        //     merkle_proof
-        //         .verify_leaf::<ValidatorNodeMmrHasherBlake256>(
-        //             &validator_node_root,
-        //             &md.public_key,
-        //             md.merkle_leaf_index as usize,
-        //         )
-        //         .map_err(|_| HotStuffError::InvalidQuorumCertificate("invalid merkle proof".to_string()))?;
-        // }
+        let validator_node_root = self.epoch_manager.get_validator_node_merkle_root(qc.epoch()).await?;
+        // TODO: Combine all validator merkle proofs before sending them
+        for md in qc.validators_metadata() {
+            md.merkle_proof
+                .verify_leaf::<ValidatorNodeMmrHasherBlake256>(
+                    &validator_node_root,
+                    &*md.get_node_hash(),
+                    md.merkle_leaf_index as usize,
+                )
+                .map_err(|_| HotStuffError::InvalidQuorumCertificate("invalid merkle proof".to_string()))?;
+        }
 
         // all signers must be included in the epoch commitee for the shard
         let committee = self.epoch_manager.get_committee(qc.epoch(), qc.shard()).await?;
@@ -713,7 +723,7 @@ where
         // all signatures must be valid
         let all_signatures_are_valid = signer_signatures
             .iter()
-            .all(|(public_key, signature)| Self::validate_vote(qc, public_key, signature));
+            .all(|(public_key, signature)| self.validate_vote(qc, public_key, signature));
         if !all_signatures_are_valid {
             return Err(HotStuffError::InvalidQuorumCertificate("invalid signature".to_string()));
         }
@@ -721,37 +731,30 @@ where
         Ok(())
     }
 
-    fn validate_vote(qc: &QuorumCertificate, public_key: &PublicKey, signature: &Signature) -> bool {
+    fn validate_vote(&self, qc: &QuorumCertificate, public_key: &PublicKey, signature: &Signature) -> bool {
         let vote = VoteMessage::new(
             qc.local_node_hash(),
             qc.shard(),
             *qc.decision(),
             qc.all_shard_nodes().to_vec(),
         );
-        let challenge = vote.construct_challenge(public_key, signature.get_public_nonce());
-        signature.verify_challenge(public_key, &*challenge)
+        let challenge = vote.construct_challenge();
+        self.signing_service
+            .verify_for_public_key(public_key, signature, &*challenge)
     }
 
-    fn extract_signer_signatures_from_qc(qc: &QuorumCertificate) -> Result<Vec<(PublicKey, Signature)>, HotStuffError> {
-        let mut signatures: Vec<(PublicKey, Signature)> = vec![];
-
-        for s in qc.validators_metadata() {
-            let public_key = PublicKey::from_bytes(&s.public_key)
-                .map_err(|e| HotStuffError::InvalidQuorumCertificate(e.to_string()))?;
-            let signature = Signature::from_consensus_bytes(&s.signature)
-                .map_err(|e| HotStuffError::InvalidQuorumCertificate(e.to_string()))?;
-
-            signatures.push((public_key, signature));
-        }
-
-        Ok(signatures)
+    fn extract_signer_signatures_from_qc(qc: &QuorumCertificate) -> Vec<(PublicKey, Signature)> {
+        qc.validators_metadata()
+            .iter()
+            .map(|md| (md.public_key.clone(), md.signature.clone()))
+            .collect()
     }
 
     /// Performs the requisite state updates for a given tree node.
     /// If the tree node is below height 2, nothing needs to happen.
     /// If the tree node is at height 2, we lock the parent node.
     /// And if at height 3 we execute and commit the state.
-    async fn update_nodes(&mut self, node: HotStuffTreeNode<TAddr, TPayload>) -> Result<(), HotStuffError> {
+    async fn update_nodes(&self, node: HotStuffTreeNode<TAddr, TPayload>) -> Result<(), HotStuffError> {
         let shard = node.shard();
 
         if node.justify().local_node_hash() == TreeNodeHash::zero() {
@@ -785,6 +788,7 @@ where
                 .collect();
             // TODO: Perhaps we should extract the data from the justify rather....
             let finalize_result = self.execute(shard_pledges, payload)?;
+            tx.update_payload_result(&node.payload_id(), finalize_result.clone())?;
             let changes = extract_changes(node.payload_id(), &finalize_result)?;
             info!(
                 target: LOG_TARGET,
@@ -802,10 +806,10 @@ where
 
     /// Commits the changeset and node including all parent nodes if not already done so.
     fn on_commit(
-        &mut self,
+        &self,
         node: &HotStuffTreeNode<TAddr, TPayload>,
         changes: &HashMap<ShardId, Vec<SubstateState>>,
-        tx: &mut TShardStore::Transaction,
+        tx: &mut TShardStore::Transaction<'_>,
     ) -> Result<(), HotStuffError> {
         let shard = node.shard();
         if tx.get_last_executed_height(shard)? < node.height() {
@@ -816,7 +820,7 @@ where
                 shard,
             );
 
-            if node.parent() != &TreeNodeHash::zero() {
+            if *node.parent() != TreeNodeHash::zero() {
                 let parent = tx.get_node(node.parent())?;
                 let changes = extract_changes_from_justify(parent.justify())?;
                 self.on_commit(&parent, &changes, tx)?;
@@ -837,7 +841,8 @@ where
         shard_pledges: HashMap<ShardId, Option<ObjectPledge>>,
         payload: TPayload,
     ) -> Result<FinalizeResult, HotStuffError> {
-        info!(target: LOG_TARGET, "🔥 Executing payload: {}", payload.to_id());
+        let payload_id = payload.to_id();
+        info!(target: LOG_TARGET, "🔥 Executing payload: {}", payload_id);
         let finalize = self.payload_processor.process_payload(payload, shard_pledges)?;
         Ok(finalize)
     }
@@ -971,11 +976,7 @@ where
         Ok(vote_msg)
     }
 
-    async fn on_new_hs_message(
-        &mut self,
-        from: TAddr,
-        msg: HotStuffMessage<TPayload, TAddr>,
-    ) -> Result<(), HotStuffError> {
+    async fn on_new_hs_message(&self, from: TAddr, msg: HotStuffMessage<TPayload, TAddr>) -> Result<(), HotStuffError> {
         match msg.message_type() {
             HotStuffMessageType::NewView => {
                 if let Some(payload) = msg.new_view_payload() {
@@ -1039,20 +1040,20 @@ fn extract_changes(
     payload_id: PayloadId,
     finalize: &FinalizeResult,
 ) -> Result<HashMap<ShardId, Vec<SubstateState>>, HotStuffError> {
-    let mut changes = HashMap::new();
+    let mut changes = HashMap::<_, Vec<_>>::new();
     match finalize.result {
         TransactionResult::Accept(ref diff) => {
             // down first, then up
             for address in diff.down_iter() {
                 changes
                     .entry(ShardId::from_address(address))
-                    .or_insert(vec![])
+                    .or_default()
                     .push(SubstateState::Down { deleted_by: payload_id });
             }
             for (address, substate) in diff.up_iter() {
                 changes
                     .entry(ShardId::from_address(address))
-                    .or_insert(vec![])
+                    .or_default()
                     .push(SubstateState::Up {
                         created_by: payload_id,
                         data: substate.clone(),
@@ -1068,13 +1069,10 @@ fn extract_changes(
 fn extract_changes_from_justify(
     justify: &QuorumCertificate,
 ) -> Result<HashMap<ShardId, Vec<SubstateState>>, HotStuffError> {
-    let mut changes = HashMap::new();
+    let mut changes = HashMap::<_, Vec<_>>::new();
     for a in justify.all_shard_nodes() {
         if let Some(ref p) = a.pledge {
-            changes
-                .entry(p.shard_id)
-                .or_insert(vec![])
-                .push(p.current_state.clone());
+            changes.entry(p.shard_id).or_default().push(p.current_state.clone());
         }
     }
 

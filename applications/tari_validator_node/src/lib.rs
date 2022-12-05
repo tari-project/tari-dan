@@ -117,6 +117,9 @@ pub async fn run_validator_node_with_cli(config: &ApplicationConfig, cli: &Cli) 
         DAN_PEER_FEATURES,
     )?;
     let db_factory = SqliteDbFactory::new(config.validator_node.data_dir.clone());
+    db_factory
+        .migrate()
+        .map_err(|e| ExitError::new(ExitCode::DatabaseError, e))?;
     let global_db = db_factory
         .get_or_create_global_db()
         .map_err(|e| ExitError::new(ExitCode::DatabaseError, e))?;

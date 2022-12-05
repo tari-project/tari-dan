@@ -5,22 +5,25 @@ edition = "2018"
 license = "BSD-3-Clause"
 
 [dependencies]
-tari_common = { git = "https://github.com/tari-project/tari.git", branch = "feature-dan", package = "tari_common", features = ["build"] }
-tari_common_types = { git = "https://github.com/tari-project/tari.git", branch = "feature-dan", package = "tari_common_types" }
-tari_comms = { git = "https://github.com/tari-project/tari.git", branch = "feature-dan", package = "tari_comms" }
-tari_crypto = { git = "https://github.com/tari-project/tari-crypto.git", tag = "v0.15.7" }
+tari_common = { git = "https://github.com/tari-project/tari.git", branch = "development", package = "tari_common", features = ["build"] }
+tari_common_types = { git = "https://github.com/tari-project/tari.git", branch = "development", package = "tari_common_types" }
+tari_comms = { git = "https://github.com/tari-project/tari.git", branch = "development", package = "tari_comms" }
+tari_crypto = { git = "https://github.com/tari-project/tari-crypto.git", tag = "v0.16.5" }
 tari_dan_common_types = { path = "../common_types" }
 tari_dan_core = { path = "../core" }
 tari_dan_engine = { path = "../engine" }
 tari_dan_storage_sqlite = { path = "../storage_sqlite" }
 tari_engine_types = { path = "../engine_types" }
-tari_shutdown = { git = "https://github.com/tari-project/tari.git", branch = "feature-dan", package = "tari_shutdown" }
+tari_shutdown = { git = "https://github.com/tari-project/tari.git", branch = "development", package = "tari_shutdown" }
 tari_template_lib = { path = "../template_lib" }
-tari_test_utils = { git = "https://github.com/tari-project/tari.git", branch = "feature-dan", package = "tari_test_utils" }
-tari_utilities = { git = "https://github.com/tari-project/tari_utilities.git", tag = "v0.4.7" }
-tari_mmr = { git = "https://github.com/tari-project/tari.git", branch = "feature-dan", package = "tari_mmr" }
-tari_core = { git = "https://github.com/tari-project/tari.git", branch = "feature-dan", package = "tari_core" }
+tari_test_utils = { git = "https://github.com/tari-project/tari.git", branch = "development", package = "tari_test_utils" }
+tari_utilities = { git = "https://github.com/tari-project/tari_utilities.git", tag = "v0.4.10" }
+tari_mmr = { git = "https://github.com/tari-project/tari.git", branch = "development", package = "tari_mmr" }
+tari_core = { git = "https://github.com/tari-project/tari.git", branch = "development", package = "tari_core" }
 
 lazy_static = "1.4.0"
 rand = "0.7"
 tokio = { version = "1.10", features = ["macros", "time"] }
+
+[dev-dependencies]
+env_logger = "0.9.3"

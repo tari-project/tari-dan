@@ -23,8 +23,8 @@
 use std::{io, io::Write};
 
 use digest::Digest;
+use tari_bor::{encode_into, Encode};
 use tari_crypto::{hash::blake2::Blake256, hash_domain, hashing::DomainSeparation};
-use tari_template_abi::{encode_into, Encode};
 use tari_template_lib::Hash;
 
 hash_domain!(TariEngineHashDomain, "tari.dan.engine", 0);

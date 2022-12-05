@@ -23,7 +23,6 @@
 use prost::DecodeError;
 use tari_common_types::types::FixedHashSizeError;
 use tari_comms_dht::outbound::DhtOutboundError;
-use tari_dan_engine::state::error::StateStorageError;
 use thiserror::Error;
 
 use crate::{models::ModelError, services::ValidatorNodeClientError, storage::StorageError};
@@ -93,12 +92,8 @@ pub enum DigitalAssetError {
     DhtOutboundError(#[from] DhtOutboundError),
     #[error("Failed to decode message: {0}")]
     DecodeError(#[from] DecodeError),
-    #[error("Failed to send message: {context}")]
-    SendError { context: String },
     #[error("Invalid committee public key hex")]
     InvalidCommitteePublicKeyHex,
-    #[error("State storage error:{0}")]
-    StateStorageError(#[from] StateStorageError),
     #[error("Hash size error: {0}")]
     HashSizeError(#[from] FixedHashSizeError),
     #[error("Failed to register the validator node: {0}")]

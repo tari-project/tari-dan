@@ -29,7 +29,7 @@ impl InstructionSignature {
             .chain(public_key.as_bytes())
             .chain(instructions)
             .result();
-        Self(RistrettoSchnorr::sign(secret_key.clone(), secret_nonce, &challenge).unwrap())
+        Self(RistrettoSchnorr::sign_raw(secret_key, secret_nonce, &challenge).unwrap())
     }
 
     pub fn signature(&self) -> RistrettoSchnorr {

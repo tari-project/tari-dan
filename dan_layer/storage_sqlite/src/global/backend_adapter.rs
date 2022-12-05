@@ -20,9 +20,12 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use std::convert::{TryFrom, TryInto};
+use std::{
+    convert::{TryFrom, TryInto},
+    sync::{Arc, Mutex},
+};
 
-use diesel::{prelude::*, Connection, RunQueryDsl, SqliteConnection};
+use diesel::{prelude::*, RunQueryDsl, SqliteConnection};
 use tari_dan_storage::{
     global::{DbEpoch, DbTemplate, DbTemplateUpdate, DbValidatorNode, GlobalDbAdapter, MetadataKey, TemplateStatus},
     AtomicDb,
@@ -43,39 +46,33 @@ use crate::{
 
 #[derive(Clone)]
 pub struct SqliteGlobalDbAdapter {
-    database_url: String,
+    connection: Arc<Mutex<SqliteConnection>>,
 }
 
 impl SqliteGlobalDbAdapter {
-    pub fn new(database_url: String) -> Self {
-        SqliteGlobalDbAdapter { database_url }
+    pub fn new(connection: SqliteConnection) -> Self {
+        Self {
+            connection: Arc::new(Mutex::new(connection)),
+        }
     }
 }
 
 impl AtomicDb for SqliteGlobalDbAdapter {
-    type DbTransaction = SqliteTransaction;
+    type DbTransaction<'a> = SqliteTransaction<'a>;
     type Error = SqliteStorageError;
 
-    fn create_transaction(&self) -> Result<Self::DbTransaction, Self::Error> {
-        let connection = SqliteConnection::establish(self.database_url.as_str())?;
-        connection
-            .execute("PRAGMA foreign_keys = ON;")
-            .map_err(|source| SqliteStorageError::DieselError {
-                source,
-                operation: "set pragma".to_string(),
-            })?;
-
-        let tx = SqliteTransaction::begin(connection)?;
+    fn create_transaction(&self) -> Result<Self::DbTransaction<'_>, Self::Error> {
+        let tx = SqliteTransaction::begin(self.connection.lock().unwrap())?;
         Ok(tx)
     }
 
-    fn commit(&self, transaction: Self::DbTransaction) -> Result<(), Self::Error> {
+    fn commit(&self, transaction: Self::DbTransaction<'_>) -> Result<(), Self::Error> {
         transaction.commit()
     }
 }
 
 impl GlobalDbAdapter for SqliteGlobalDbAdapter {
-    fn set_metadata(&self, tx: &Self::DbTransaction, key: MetadataKey, value: &[u8]) -> Result<(), Self::Error> {
+    fn set_metadata(&self, tx: &Self::DbTransaction<'_>, key: MetadataKey, value: &[u8]) -> Result<(), Self::Error> {
         use crate::global::schema::metadata;
         match self.get_metadata(tx, &key) {
             Ok(Some(r)) => diesel::update(&MetadataModel {
@@ -101,7 +98,7 @@ impl GlobalDbAdapter for SqliteGlobalDbAdapter {
         Ok(())
     }
 
-    fn get_metadata(&self, tx: &Self::DbTransaction, key: &MetadataKey) -> Result<Option<Vec<u8>>, Self::Error> {
+    fn get_metadata(&self, tx: &Self::DbTransaction<'_>, key: &MetadataKey) -> Result<Option<Vec<u8>>, Self::Error> {
         use crate::global::schema::metadata::dsl;
 
         let row: Option<MetadataModel> = dsl::metadata
@@ -116,7 +113,7 @@ impl GlobalDbAdapter for SqliteGlobalDbAdapter {
         Ok(row.map(|r| r.value))
     }
 
-    fn get_template(&self, tx: &Self::DbTransaction, key: &[u8]) -> Result<Option<DbTemplate>, Self::Error> {
+    fn get_template(&self, tx: &Self::DbTransaction<'_>, key: &[u8]) -> Result<Option<DbTemplate>, Self::Error> {
         use crate::global::schema::templates::dsl;
         let template: Option<TemplateModel> = dsl::templates
             .filter(templates::template_address.eq(key))
@@ -141,7 +138,7 @@ impl GlobalDbAdapter for SqliteGlobalDbAdapter {
         }
     }
 
-    fn get_templates(&self, tx: &Self::DbTransaction, limit: usize) -> Result<Vec<DbTemplate>, Self::Error> {
+    fn get_templates(&self, tx: &Self::DbTransaction<'_>, limit: usize) -> Result<Vec<DbTemplate>, Self::Error> {
         use crate::global::schema::templates::dsl;
         let templates = dsl::templates
             .filter(templates::status.eq(TemplateStatus::Active.as_str()))
@@ -169,7 +166,7 @@ impl GlobalDbAdapter for SqliteGlobalDbAdapter {
             .collect()
     }
 
-    fn insert_template(&self, tx: &Self::DbTransaction, item: DbTemplate) -> Result<(), Self::Error> {
+    fn insert_template(&self, tx: &Self::DbTransaction<'_>, item: DbTemplate) -> Result<(), Self::Error> {
         let new_template = NewTemplateModel {
             template_name: item.template_name,
             template_address: item.template_address.to_vec(),
@@ -194,7 +191,7 @@ impl GlobalDbAdapter for SqliteGlobalDbAdapter {
 
     fn update_template(
         &self,
-        tx: &Self::DbTransaction,
+        tx: &Self::DbTransaction<'_>,
         key: &[u8],
         template: DbTemplateUpdate,
     ) -> Result<(), Self::Error> {
@@ -217,7 +214,7 @@ impl GlobalDbAdapter for SqliteGlobalDbAdapter {
 
     fn insert_validator_nodes(
         &self,
-        tx: &Self::DbTransaction,
+        tx: &Self::DbTransaction<'_>,
         validator_nodes: Vec<DbValidatorNode>,
     ) -> Result<(), Self::Error> {
         use crate::global::schema::validator_nodes;
@@ -238,15 +235,35 @@ impl GlobalDbAdapter for SqliteGlobalDbAdapter {
         Ok(())
     }
 
+    fn get_validator_node(
+        &self,
+        tx: &Self::DbTransaction<'_>,
+        epoch: u64,
+        public_key: &[u8],
+    ) -> Result<DbValidatorNode, Self::Error> {
+        use crate::global::schema::{validator_nodes, validator_nodes::dsl};
+
+        let vn = dsl::validator_nodes
+            .filter(validator_nodes::epoch.eq(epoch as i64))
+            .filter(validator_nodes::public_key.eq(public_key))
+            .first::<ValidatorNode>(tx.connection())
+            .map_err(|source| SqliteStorageError::DieselError {
+                source,
+                operation: "get::validator_nodes_per_epoch".to_string(),
+            })?;
+
+        Ok(vn.into())
+    }
+
     fn get_validator_nodes_per_epoch(
         &self,
-        tx: &Self::DbTransaction,
+        tx: &Self::DbTransaction<'_>,
         epoch: u64,
     ) -> Result<Vec<DbValidatorNode>, Self::Error> {
         use crate::global::schema::{validator_nodes, validator_nodes::dsl};
 
         let sqlite_vns = dsl::validator_nodes
-            .filter(validator_nodes::epoch.eq(epoch as i32))
+            .filter(validator_nodes::epoch.eq(epoch as i64))
             .load::<ValidatorNode>(tx.connection())
             .map_err(|source| SqliteStorageError::DieselError {
                 source,
@@ -260,7 +277,7 @@ impl GlobalDbAdapter for SqliteGlobalDbAdapter {
 
     fn insert_epoch(
         &self,
-        tx: &Self::DbTransaction,
+        tx: &Self::DbTransaction<'_>,
         epoch: tari_dan_storage::global::DbEpoch,
     ) -> Result<(), Self::Error> {
         use crate::global::schema::epochs;
@@ -278,11 +295,11 @@ impl GlobalDbAdapter for SqliteGlobalDbAdapter {
         Ok(())
     }
 
-    fn get_epoch(&self, tx: &Self::DbTransaction, epoch: u64) -> Result<Option<DbEpoch>, Self::Error> {
+    fn get_epoch(&self, tx: &Self::DbTransaction<'_>, epoch: u64) -> Result<Option<DbEpoch>, Self::Error> {
         use crate::global::schema::epochs::dsl;
 
         let query_res: Option<Epoch> = dsl::epochs
-            .find(epoch as i32)
+            .find(epoch as i64)
             .first(tx.connection())
             .optional()
             .map_err(|source| SqliteStorageError::DieselError {

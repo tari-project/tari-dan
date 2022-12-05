@@ -200,3 +200,12 @@ pub enum TypeAst {
     Typed(TypePath),
     Tuple(TypeTuple),
 }
+
+impl TypeAst {
+    pub fn is_mut(&self) -> bool {
+        match self {
+            TypeAst::Receiver { mutability } => *mutability,
+            _ => false,
+        }
+    }
+}

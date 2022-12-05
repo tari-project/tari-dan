@@ -26,7 +26,13 @@ use serde_json as json;
 use serde_json::json;
 
 pub mod types;
-use types::{SubmitTransactionRequest, TemplateRegistrationRequest, TemplateRegistrationResponse};
+use types::{
+    GetTransactionRequest,
+    GetTransactionResponse,
+    SubmitTransactionRequest,
+    TemplateRegistrationRequest,
+    TemplateRegistrationResponse,
+};
 
 use crate::types::{
     GetIdentityResponse,
@@ -89,6 +95,20 @@ impl ValidatorNodeClient {
 
     pub async fn get_template(&mut self, request: GetTemplateRequest) -> Result<GetTemplateResponse, anyhow::Error> {
         self.send_request("get_template", request).await
+    }
+
+    pub async fn get_transaction(
+        &mut self,
+        request: GetTransactionRequest,
+    ) -> Result<GetTransactionResponse, anyhow::Error> {
+        self.send_request("get_transaction", request).await
+    }
+
+    pub async fn get_transaction_result(
+        &mut self,
+        request: GetTransactionRequest,
+    ) -> Result<GetTransactionResponse, anyhow::Error> {
+        self.send_request("get_transaction_result", request).await
     }
 
     pub async fn submit_transaction(

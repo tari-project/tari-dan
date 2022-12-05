@@ -23,52 +23,45 @@
 use std::convert::TryFrom;
 
 use futures::StreamExt;
-use tari_dan_common_types::{PayloadId, ShardId, SubstateState};
+use tari_comms::types::CommsPublicKey;
+use tari_dan_common_types::{NodeHeight, PayloadId, QuorumCertificate, ShardId, SubstateState, TreeNodeHash};
 use tari_dan_core::{
-    models::{NodeHeight, QuorumCertificate, SubstateShardData, TreeNodeHash, ValidatorNode},
+    models::{SubstateShardData, ValidatorNode},
     services::{epoch_manager::EpochManagerError, ValidatorNodeClientFactory},
-    storage::shard_store::{ShardStoreFactory, ShardStoreTransaction},
+    storage::shard_store::{ShardStore, ShardStoreTransaction},
 };
-use tari_dan_storage_sqlite::sqlite_shard_store_factory::{SqliteShardStoreFactory, SqliteShardStoreTransaction};
 
-use crate::{p2p, p2p::services::rpc_client::TariCommsValidatorNodeClientFactory, ValidatorNodeConfig};
+use crate::{p2p, p2p::services::rpc_client::TariCommsValidatorNodeClientFactory};
 
-pub struct PeerSyncManagerService {
-    validator_node_config: ValidatorNodeConfig,
+pub struct PeerSyncManagerService<TShardStore> {
     validator_node_client_factory: TariCommsValidatorNodeClientFactory,
+    shard_store: TShardStore,
 }
 
-impl PeerSyncManagerService {
+impl<TShardStore: ShardStore> PeerSyncManagerService<TShardStore> {
     pub(crate) fn new(
-        validator_node_config: ValidatorNodeConfig,
         validator_node_client_factory: TariCommsValidatorNodeClientFactory,
+        shard_store: TShardStore,
     ) -> Self {
         Self {
-            validator_node_config,
             validator_node_client_factory,
+            shard_store,
         }
-    }
-
-    fn get_vn_shard_db(&self) -> Result<SqliteShardStoreTransaction, EpochManagerError> {
-        let data_dir = self.validator_node_config.data_dir.clone();
-        let shard_db_factory =
-            SqliteShardStoreFactory::try_create(data_dir).map_err(EpochManagerError::StorageError)?;
-        let shard_db = shard_db_factory.create_tx().map_err(EpochManagerError::StorageError)?;
-        Ok(shard_db)
     }
 
     pub(crate) async fn sync_peers_state(
         &self,
-        committee_vns: Vec<ValidatorNode>,
+        committee_vns: Vec<ValidatorNode<CommsPublicKey>>,
         start_shard_id: ShardId,
         end_shard_id: ShardId,
         vn_shard_key: ShardId,
     ) -> Result<(), EpochManagerError> {
-        let mut shard_db = self.get_vn_shard_db()?;
-
-        let inventory = shard_db
-            .get_state_inventory()
-            .map_err(EpochManagerError::StorageError)?;
+        let inventory = {
+            let shard_db = self.shard_store.create_tx()?;
+            shard_db
+                .get_state_inventory()
+                .map_err(EpochManagerError::StorageError)?
+        };
 
         let start_shard_id = p2p::proto::common::ShardId::from(start_shard_id);
         let end_shard_id = p2p::proto::common::ShardId::from(end_shard_id);
@@ -136,9 +129,13 @@ impl PeerSyncManagerService {
                 );
 
                 // insert response state values in the shard db
-                shard_db
-                    .insert_substates(substate_shard_data)
-                    .map_err(EpochManagerError::StorageError)?;
+
+                {
+                    let mut shard_db = self.shard_store.create_tx()?;
+                    shard_db
+                        .insert_substates(substate_shard_data)
+                        .map_err(EpochManagerError::StorageError)?;
+                }
 
                 // increase node inventory
                 inventory.push(p2p::proto::common::ShardId::from(sync_vn_shard));

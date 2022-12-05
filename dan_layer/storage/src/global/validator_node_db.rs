@@ -24,11 +24,11 @@ use crate::global::GlobalDbAdapter;
 
 pub struct ValidatorNodeDb<'a, TGlobalDbAdapter: GlobalDbAdapter> {
     backend: &'a TGlobalDbAdapter,
-    tx: &'a TGlobalDbAdapter::DbTransaction,
+    tx: &'a TGlobalDbAdapter::DbTransaction<'a>,
 }
 
 impl<'a, TGlobalDbAdapter: GlobalDbAdapter> ValidatorNodeDb<'a, TGlobalDbAdapter> {
-    pub fn new(backend: &'a TGlobalDbAdapter, tx: &'a TGlobalDbAdapter::DbTransaction) -> Self {
+    pub fn new(backend: &'a TGlobalDbAdapter, tx: &'a TGlobalDbAdapter::DbTransaction<'a>) -> Self {
         Self { backend, tx }
     }
 
@@ -38,7 +38,13 @@ impl<'a, TGlobalDbAdapter: GlobalDbAdapter> ValidatorNodeDb<'a, TGlobalDbAdapter
             .map_err(TGlobalDbAdapter::Error::into)
     }
 
-    pub fn get_validator_nodes_per_epoch(&self, epoch: u64) -> Result<Vec<DbValidatorNode>, TGlobalDbAdapter::Error> {
+    pub fn get(&self, epoch: u64, public_key: &[u8]) -> Result<DbValidatorNode, TGlobalDbAdapter::Error> {
+        self.backend
+            .get_validator_node(self.tx, epoch, public_key)
+            .map_err(TGlobalDbAdapter::Error::into)
+    }
+
+    pub fn get_all_per_epoch(&self, epoch: u64) -> Result<Vec<DbValidatorNode>, TGlobalDbAdapter::Error> {
         self.backend
             .get_validator_nodes_per_epoch(self.tx, epoch)
             .map_err(TGlobalDbAdapter::Error::into)

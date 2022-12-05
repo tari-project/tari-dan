@@ -19,13 +19,10 @@
 //   SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY,
 //   WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //   USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-
-use tari_template_lib::{prelude::*, workspace::WorkspaceManager};
+use tari_template_lib::prelude::*;
 
 #[template]
 mod account_template {
-    use tari_template_lib::prelude::*;
-
     use super::*;
 
     pub struct Account {
@@ -58,9 +55,9 @@ mod account_template {
             v.balance()
         }
 
-        //        // #[access_rules(requires(owner_badge))]
+        // #[access_rules(requires(owner_badge))]
         pub fn withdraw(&mut self, resource: ResourceAddress, amount: Amount) -> Bucket {
-            let mut v = self
+            let v = self
                 .get_vault_mut(resource)
                 .expect("This account does not have any of that resource");
 
@@ -70,7 +67,7 @@ mod account_template {
         // #[access_rules(allow_all)]
         pub fn deposit(&mut self, bucket: Bucket) {
             let resource_address = bucket.resource_address();
-            if let Some(mut v) = self.get_vault_mut(resource_address) {
+            if let Some(v) = self.get_vault_mut(resource_address) {
                 v.deposit(bucket);
             } else {
                 let mut new_vault = Vault::new_empty(resource_address);

@@ -5,6 +5,7 @@ syntax = "proto3";
 
 package tari.dan.consensus;
 
+import "common.proto";
 import "transaction.proto";
 
 enum HotStuffMessageType {
@@ -58,9 +59,10 @@ message HotStuffTreeNode {
 
 message ValidatorMetadata {
   bytes public_key = 1;
-  bytes signature = 2;
-  bytes merkle_proof = 3;
-  uint64 merkle_leaf_index = 4;
+  bytes vn_shard_key = 2;
+  tari.dan.common.Signature signature = 3;
+  bytes merkle_proof = 4;
+  uint64 merkle_leaf_index = 5;
 }
 
 message TariDanPayload {

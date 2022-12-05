@@ -24,20 +24,15 @@ use std::fmt::{Display, Formatter};
 
 use serde::Serialize;
 use tari_common_types::types::FixedHash;
-use tari_dan_common_types::ShardId;
-
-use crate::{
-    models::{
-        HotStuffMessageType,
-        HotStuffTreeNode,
-        Payload,
-        QuorumCertificate,
-        TreeNodeHash,
-        ValidatorMetadata,
-        ViewId,
-    },
-    services::infrastructure_services::NodeAddressable,
+use tari_dan_common_types::{
+    quorum_certificate::QuorumCertificate,
+    NodeAddressable,
+    ShardId,
+    TreeNodeHash,
+    ValidatorMetadata,
 };
+
+use crate::models::{HotStuffMessageType, HotStuffTreeNode, Payload};
 
 // TODO: convert to enum
 #[derive(Debug, Clone, Serialize)]
@@ -102,24 +97,6 @@ impl<TPayload: Payload, TAddr: NodeAddressable> HotStuffMessage<TPayload, TAddr>
         }
     }
 
-    pub fn create_signature_challenge(&self) -> Vec<u8> {
-        todo!()
-        // let mut b = dan_layer_models_hasher::<Blake256>(HOT_STUFF_MESSAGE_LABEL)
-        //     .chain(&[self.message_type.as_u8()])
-        //     .chain(self.view_number.as_u64().to_le_bytes());
-        // if let Some(ref node) = self.node {
-        //     b = b.chain(node.calculate_hash().as_bytes());
-        // } else if let Some(ref node_hash) = self.node_hash {
-        //     b = b.chain(node_hash.as_bytes());
-        // } else {
-        // }
-        // b.finalize().as_ref().to_vec()
-    }
-
-    pub fn view_number(&self) -> ViewId {
-        todo!()
-    }
-
     pub fn high_qc(&self) -> Option<QuorumCertificate> {
         self.high_qc.clone()
     }
@@ -147,11 +124,6 @@ impl<TPayload: Payload, TAddr: NodeAddressable> HotStuffMessage<TPayload, TAddr>
 
     pub fn message_type(&self) -> HotStuffMessageType {
         self.message_type
-    }
-
-    pub fn matches(&self, message_type: HotStuffMessageType, view_id: ViewId) -> bool {
-        // from hotstuf spec
-        self.message_type() == message_type && view_id == self.view_number()
     }
 
     pub fn add_partial_sig(&mut self, _validator_metadata: ValidatorMetadata) {

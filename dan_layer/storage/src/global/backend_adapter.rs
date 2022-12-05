@@ -30,31 +30,37 @@ use crate::{
 };
 
 pub trait GlobalDbAdapter: AtomicDb + Send + Sync + Clone {
-    fn get_metadata(&self, tx: &Self::DbTransaction, key: &MetadataKey) -> Result<Option<Vec<u8>>, Self::Error>;
-    fn set_metadata(&self, tx: &Self::DbTransaction, key: MetadataKey, value: &[u8]) -> Result<(), Self::Error>;
+    fn get_metadata(&self, tx: &Self::DbTransaction<'_>, key: &MetadataKey) -> Result<Option<Vec<u8>>, Self::Error>;
+    fn set_metadata(&self, tx: &Self::DbTransaction<'_>, key: MetadataKey, value: &[u8]) -> Result<(), Self::Error>;
 
-    fn get_template(&self, tx: &Self::DbTransaction, key: &[u8]) -> Result<Option<DbTemplate>, Self::Error>;
-    fn get_templates(&self, tx: &Self::DbTransaction, limit: usize) -> Result<Vec<DbTemplate>, Self::Error>;
+    fn get_template(&self, tx: &Self::DbTransaction<'_>, key: &[u8]) -> Result<Option<DbTemplate>, Self::Error>;
+    fn get_templates(&self, tx: &Self::DbTransaction<'_>, limit: usize) -> Result<Vec<DbTemplate>, Self::Error>;
 
-    fn insert_template(&self, tx: &Self::DbTransaction, template: DbTemplate) -> Result<(), Self::Error>;
+    fn insert_template(&self, tx: &Self::DbTransaction<'_>, template: DbTemplate) -> Result<(), Self::Error>;
     fn update_template(
         &self,
-        tx: &Self::DbTransaction,
+        tx: &Self::DbTransaction<'_>,
         key: &[u8],
         template: DbTemplateUpdate,
     ) -> Result<(), Self::Error>;
 
     fn insert_validator_nodes(
         &self,
-        tx: &Self::DbTransaction,
+        tx: &Self::DbTransaction<'_>,
         validator_nodes: Vec<DbValidatorNode>,
     ) -> Result<(), Self::Error>;
     fn get_validator_nodes_per_epoch(
         &self,
-        tx: &Self::DbTransaction,
+        tx: &Self::DbTransaction<'_>,
         epoch: u64,
     ) -> Result<Vec<DbValidatorNode>, Self::Error>;
 
-    fn insert_epoch(&self, tx: &Self::DbTransaction, epoch: DbEpoch) -> Result<(), Self::Error>;
-    fn get_epoch(&self, tx: &Self::DbTransaction, epoch: u64) -> Result<Option<DbEpoch>, Self::Error>;
+    fn get_validator_node(
+        &self,
+        tx: &Self::DbTransaction<'_>,
+        epoch: u64,
+        public_key: &[u8],
+    ) -> Result<DbValidatorNode, Self::Error>;
+    fn insert_epoch(&self, tx: &Self::DbTransaction<'_>, epoch: DbEpoch) -> Result<(), Self::Error>;
+    fn get_epoch(&self, tx: &Self::DbTransaction<'_>, epoch: u64) -> Result<Option<DbEpoch>, Self::Error>;
 }

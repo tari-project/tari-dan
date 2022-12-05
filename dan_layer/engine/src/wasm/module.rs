@@ -121,7 +121,7 @@ fn initialize_and_load_template_abi(
 
     // Load ABI from memory
     let data = env.read_memory_with_embedded_len(ptr)?;
-    let decoded = tari_template_abi::decode(&data).map_err(|_| WasmExecutionError::AbiDecodeError)?;
+    let decoded = tari_bor::decode(&data).map_err(|_| WasmExecutionError::AbiDecodeError)?;
     Ok(decoded)
 }
 

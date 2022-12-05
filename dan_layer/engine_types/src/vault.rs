@@ -21,7 +21,7 @@
 //   USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 use serde::{Deserialize, Serialize};
-use tari_template_abi::{Decode, Encode};
+use tari_bor::{borsh, Decode, Encode};
 use tari_template_lib::models::{Amount, ResourceAddress, VaultId};
 
 use crate::{
@@ -29,7 +29,7 @@ use crate::{
     resource::{Resource, ResourceError},
 };
 
-#[derive(Debug, Clone, Encode, Decode, Serialize, Deserialize)]
+#[derive(Debug, Clone, Encode, Decode, Serialize, Deserialize, PartialEq)]
 pub struct Vault {
     vault_id: VaultId,
     resource: Resource,

@@ -1,5 +1,5 @@
 //   Copyright 2022 The Tari Project
-//   SPDX-License-Identifier: BSD-3-Claus
+//   SPDX-License-Identifier: BSD-3-clause
 
 use proc_macro2::{Ident, TokenStream};
 use syn::{
@@ -190,7 +190,7 @@ impl ManifestParser {
             Expr::MethodCall(ExprMethodCall {
                 receiver, method, args, ..
             }) => {
-                let receiver = extract_single_var_name(&*receiver)?;
+                let receiver = extract_single_var_name(&receiver)?;
                 ManifestIntent::InvokeComponent(InvokeIntent {
                     output_variable: Some(var_ident.clone()),
                     component_variable: Some(receiver),
@@ -249,7 +249,7 @@ impl ManifestParser {
             Expr::MethodCall(ExprMethodCall {
                 receiver, method, args, ..
             }) => {
-                let receiver = extract_single_var_name(&*receiver)?;
+                let receiver = extract_single_var_name(&receiver)?;
                 Ok(ManifestIntent::InvokeComponent(InvokeIntent {
                     output_variable: None,
                     component_variable: Some(receiver),

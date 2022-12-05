@@ -15,7 +15,7 @@ on:
       - synchronize
 
 env:
-  toolchain: nightly-2022-05-01
+  toolchain: nightly-2022-11-03
   CARGO_HTTP_MULTIPLEXING: false
   CARGO_TERM_COLOR: always
   PROTOC: protoc

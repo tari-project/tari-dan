@@ -22,7 +22,18 @@
 
 use std::collections::HashMap;
 
-use tari_dan_common_types::{PayloadId, ShardId, SubstateChange, SubstateState};
+use tari_dan_common_types::{
+    NodeAddressable,
+    NodeHeight,
+    ObjectPledge,
+    PayloadId,
+    QuorumCertificate,
+    ShardId,
+    SubstateChange,
+    SubstateState,
+    TreeNodeHash,
+};
+use tari_engine_types::commit_result::FinalizeResult;
 use thiserror::Error;
 
 use crate::{
@@ -30,26 +41,23 @@ use crate::{
         vote_message::VoteMessage,
         HotStuffTreeNode,
         LeafNode,
-        NodeHeight,
-        ObjectPledge,
         Payload,
-        QuorumCertificate,
         RecentTransaction,
         SQLSubstate,
         SQLTransaction,
         SubstateShardData,
-        TreeNodeHash,
     },
-    services::infrastructure_services::NodeAddressable,
     storage::StorageError,
 };
 
-pub trait ShardStoreFactory {
+pub trait ShardStore {
     type Addr: NodeAddressable;
     type Payload: Payload;
 
-    type Transaction: ShardStoreTransaction<Self::Addr, Self::Payload>;
-    fn create_tx(&self) -> Result<Self::Transaction, StorageError>;
+    type Transaction<'a>: ShardStoreTransaction<Self::Addr, Self::Payload>
+    where Self: 'a;
+
+    fn create_tx(&self) -> Result<Self::Transaction<'_>, StorageError>;
 }
 
 #[derive(Debug, Error)]
@@ -73,7 +81,7 @@ impl From<StorageError> for StoreError {
 }
 
 pub trait ShardStoreTransaction<TAddr: NodeAddressable, TPayload: Payload> {
-    fn commit(&mut self) -> Result<(), StorageError>;
+    fn commit(self) -> Result<(), StorageError>;
     fn count_high_qc_for(&self, shard_id: ShardId) -> Result<usize, StorageError>;
     fn update_high_qc(&mut self, from: TAddr, shard: ShardId, qc: QuorumCertificate) -> Result<(), StorageError>;
     fn set_payload(&mut self, payload: TPayload) -> Result<(), StorageError>;
@@ -142,4 +150,5 @@ pub trait ShardStoreTransaction<TAddr: NodeAddressable, TPayload: Payload> {
     fn get_recent_transactions(&self) -> Result<Vec<RecentTransaction>, StorageError>;
     fn get_transaction(&self, payload_id: Vec<u8>) -> Result<Vec<SQLTransaction>, StorageError>;
     fn get_substates(&self, payload_id: Vec<u8>, shard_id: Vec<u8>) -> Result<Vec<SQLSubstate>, StorageError>;
+    fn update_payload_result(&self, payload_id: &PayloadId, result: FinalizeResult) -> Result<(), StorageError>;
 }

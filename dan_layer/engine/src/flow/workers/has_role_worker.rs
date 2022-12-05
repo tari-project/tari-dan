@@ -5,8 +5,6 @@ use std::sync::{Arc, RwLock};
 
 use d3ne::{InputData, Node, OutputData, OutputDataBuilder, Worker};
 
-use crate::state::StateDbUnitOfWork;
-
 pub struct HasRoleWorker<TUnitOfWork: StateDbUnitOfWork> {
     pub state_db: Arc<RwLock<TUnitOfWork>>,
 }

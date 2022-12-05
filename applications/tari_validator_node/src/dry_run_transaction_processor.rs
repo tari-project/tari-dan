@@ -1,13 +1,13 @@
 use std::collections::HashMap;
 
-use tari_dan_common_types::ShardId;
+use tari_dan_common_types::{ObjectPledge, ShardId};
 use tari_dan_core::{
-    models::{ObjectPledge, Payload, TariDanPayload},
+    models::{Payload, TariDanPayload},
     services::{epoch_manager::EpochManager, PayloadProcessor},
-    storage::shard_store::{ShardStoreFactory, ShardStoreTransaction},
+    storage::shard_store::{ShardStore, ShardStoreTransaction},
 };
 use tari_dan_engine::transaction::Transaction;
-use tari_dan_storage_sqlite::sqlite_shard_store_factory::SqliteShardStoreFactory;
+use tari_dan_storage_sqlite::sqlite_shard_store_factory::SqliteShardStore;
 use tari_engine_types::commit_result::FinalizeResult;
 
 use crate::{
@@ -22,14 +22,14 @@ pub struct DryRunTransactionProcessor {
     /// The payload processor. This determines whether a payload proposal results in an accepted or rejected vote.
     payload_processor: TariDanPayloadProcessor<TemplateManager>,
     /// Store used to persist consensus state.
-    shard_store: SqliteShardStoreFactory,
+    shard_store: SqliteShardStore,
 }
 
 impl DryRunTransactionProcessor {
     pub fn new(
         epoch_manager: EpochManagerHandle,
         payload_processor: TariDanPayloadProcessor<TemplateManager>,
-        shard_store: SqliteShardStoreFactory,
+        shard_store: SqliteShardStore,
     ) -> Self {
         Self {
             epoch_manager,

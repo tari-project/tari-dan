@@ -34,6 +34,7 @@ use tari_app_grpc::tari_rpc::{
     WasmInfo,
 };
 use tari_comms::NodeIdentity;
+use tari_core::transactions::transaction_components::ValidatorNodeSignature;
 use tari_crypto::tari_utilities::ByteArray;
 use tari_dan_core::{services::WalletClient, DigitalAssetError};
 use tari_validator_node_client::types::TemplateRegistrationRequest;
@@ -56,13 +57,12 @@ impl GrpcWalletClient {
         Self { endpoint, client: None }
     }
 
-    pub async fn connection(&mut self) -> Result<&mut Client, DigitalAssetError> {
+    async fn connection(&mut self) -> Result<&mut Client, DigitalAssetError> {
         if self.client.is_none() {
             let url = format!("http://{}", self.endpoint);
             let inner = Client::connect(url).await?;
             self.client = Some(inner);
         }
-        dbg!(self.endpoint);
         self.client
             .as_mut()
             .ok_or_else(|| DigitalAssetError::FatalError("no connection".into()))
@@ -73,8 +73,7 @@ impl GrpcWalletClient {
         node_identity: &NodeIdentity,
     ) -> Result<RegisterValidatorNodeResponse, DigitalAssetError> {
         let inner = self.connection().await?;
-        let signature =
-            tari_common_types::validator_node_signature::ValidatorNodeSignature::sign(node_identity.secret_key(), b"");
+        let signature = ValidatorNodeSignature::sign(node_identity.secret_key(), b"");
         let request = RegisterValidatorNodeRequest {
             validator_node_public_key: node_identity.public_key().to_vec(),
             validator_node_signature: Some(signature.signature().into()),

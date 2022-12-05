@@ -29,7 +29,7 @@ pub struct ValidatorNode {
     pub id: i32,
     pub public_key: Vec<u8>,
     pub shard_key: Vec<u8>,
-    pub epoch: i32,
+    pub epoch: i64,
 }
 
 impl From<ValidatorNode> for DbValidatorNode {
@@ -47,7 +47,7 @@ impl From<ValidatorNode> for DbValidatorNode {
 pub struct NewValidatorNode {
     pub public_key: Vec<u8>,
     pub shard_key: Vec<u8>,
-    pub epoch: i32,
+    pub epoch: i64,
 }
 
 impl From<DbValidatorNode> for NewValidatorNode {
@@ -55,7 +55,7 @@ impl From<DbValidatorNode> for NewValidatorNode {
         Self {
             shard_key: vn.shard_key,
             public_key: vn.public_key,
-            epoch: vn.epoch as i32,
+            epoch: vn.epoch as i64,
         }
     }
 }

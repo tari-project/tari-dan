@@ -34,7 +34,8 @@ pub fn generate_abi(ast: &TemplateAst) -> Result<TokenStream> {
     let output = quote! {
         #[no_mangle]
         pub extern "C" fn #abi_function_name() -> *mut u8 {
-            use ::tari_template_abi::{encode_with_len, FunctionDef, TemplateDef, Type, wrap_ptr};
+            use ::tari_template_abi::{FunctionDef, TemplateDef, Type, wrap_ptr};
+            use ::tari_template_lib::template_dependencies::encode_with_len;
 
             let template = TemplateDef {
                 template_name: #template_name_as_str.to_string(),
@@ -52,6 +53,7 @@ pub fn generate_abi(ast: &TemplateAst) -> Result<TokenStream> {
 fn generate_function_def(f: &FunctionAst) -> Expr {
     let name = f.name.clone();
 
+    let is_mut = f.input_types.first().map(|a| a.is_mut()).unwrap_or(false);
     let arguments: Vec<Expr> = f.input_types.iter().map(generate_abi_type).collect();
 
     let output = match &f.output_type {
@@ -64,6 +66,7 @@ fn generate_function_def(f: &FunctionAst) -> Expr {
             name: #name.to_string(),
             arguments: vec![ #(#arguments),* ],
             output: #output,
+            is_mut: #is_mut,
         }
     )
 }
@@ -118,7 +121,7 @@ mod tests {
     use crate::template::ast::TemplateAst;
 
     #[test]
-    fn test_signatures() {
+    fn test_codegen() {
         let input = TokenStream::from_str(indoc! {"
             mod foo {
                 struct Foo {}
@@ -145,7 +148,8 @@ mod tests {
         assert_code_eq(output, quote! {
             #[no_mangle]
             pub extern "C" fn Foo_abi() -> *mut u8 {
-                use ::tari_template_abi::{encode_with_len, FunctionDef, TemplateDef, Type, wrap_ptr};
+                use ::tari_template_abi::{FunctionDef, TemplateDef, Type, wrap_ptr};
+                use ::tari_template_lib::template_dependencies::encode_with_len;
 
                 let template = TemplateDef {
                     template_name: "Foo".to_string(),
@@ -154,26 +158,31 @@ mod tests {
                             name: "no_args_function".to_string(),
                             arguments: vec![],
                             output: Type::String,
+                            is_mut: false,
                         },
                         FunctionDef {
                             name: "some_args_function".to_string(),
                             arguments: vec![Type::I8, Type::String],
                             output: Type::U32,
+                            is_mut: false,
                         },
                         FunctionDef {
                             name: "no_return_function".to_string(),
                             arguments: vec![],
                             output: Type::Unit,
+                            is_mut: false,
                         },
                         FunctionDef {
                             name: "constructor".to_string(),
                             arguments: vec![],
                             output: Type::U32,
+                            is_mut: false,
                         },
                         FunctionDef {
                             name: "method".to_string(),
                             arguments: vec![Type::U32],
                             output: Type::Unit,
+                            is_mut: false,
                         }
                     ],
                 };

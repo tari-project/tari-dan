@@ -33,15 +33,14 @@ use serde::Serialize;
 use serde_json::{self as json, json};
 use tari_comms::{multiaddr::Multiaddr, peer_manager::NodeId, types::CommsPublicKey, CommsNode, NodeIdentity};
 use tari_crypto::tari_utilities::hex::Hex;
-use tari_dan_common_types::SubstateChange;
+use tari_dan_common_types::{PayloadId, QuorumCertificate, QuorumDecision, SubstateChange};
 use tari_dan_core::{
-    models::{QuorumCertificate, QuorumDecision},
     services::{epoch_manager::EpochManager, BaseNodeClient},
-    storage::shard_store::{ShardStoreFactory, ShardStoreTransaction},
+    storage::shard_store::{ShardStore, ShardStoreTransaction},
     workers::events::{EventSubscription, HotStuffEvent},
 };
 use tari_dan_engine::transaction::TransactionBuilder;
-use tari_dan_storage_sqlite::sqlite_shard_store_factory::SqliteShardStoreFactory;
+use tari_dan_storage_sqlite::sqlite_shard_store_factory::SqliteShardStore;
 use tari_template_lib::Hash;
 use tari_validator_node_client::types::{
     GetCommitteeRequest,
@@ -51,6 +50,8 @@ use tari_validator_node_client::types::{
     GetTemplateResponse,
     GetTemplatesRequest,
     GetTemplatesResponse,
+    GetTransactionRequest,
+    GetTransactionResponse,
     SubmitTransactionRequest,
     SubmitTransactionResponse,
     SubstatesRequest,
@@ -86,7 +87,7 @@ pub struct JsonRpcHandlers {
     comms: CommsNode,
     hotstuff_events: EventSubscription<HotStuffEvent>,
     base_node_client: GrpcBaseNodeClient,
-    db: SqliteShardStoreFactory,
+    shard_store: SqliteShardStore,
     dry_run_transaction_processor: DryRunTransactionProcessor,
 }
 
@@ -105,7 +106,7 @@ impl JsonRpcHandlers {
             comms: services.comms.clone(),
             hotstuff_events: services.hotstuff_events.clone(),
             base_node_client,
-            db: services.db.clone(),
+            shard_store: services.shard_store.clone(),
             dry_run_transaction_processor: services.dry_run_transaction_processor.clone(),
         }
     }
@@ -217,7 +218,13 @@ impl JsonRpcHandlers {
                 .map_err(internal_error(answer_id))?;
 
             if request.wait_for_result {
-                return wait_for_transaction_result(answer_id, hash, subscription, Duration::from_secs(30)).await;
+                return wait_for_transaction_result(
+                    answer_id,
+                    hash,
+                    subscription,
+                    Duration::from_secs(request.wait_for_result_timeout.unwrap_or(30)),
+                )
+                .await;
             }
 
             Ok(JsonRpcResponse::success(answer_id, SubmitTransactionResponse {
@@ -229,9 +236,32 @@ impl JsonRpcHandlers {
 
     pub async fn get_recent_transactions(&self, value: JsonRpcExtractor) -> JrpcResult {
         let answer_id = value.get_answer_id();
-        let tx = self.db.create_tx().unwrap();
+        let tx = self.shard_store.create_tx().unwrap();
         if let Ok(recent_transactions) = tx.get_recent_transactions() {
             Ok(JsonRpcResponse::success(answer_id, json!(recent_transactions)))
+        } else {
+            Err(JsonRpcResponse::error(
+                answer_id,
+                JsonRpcError::new(
+                    JsonRpcErrorReason::InvalidParams,
+                    "Something went wrong".to_string(),
+                    json::Value::Null,
+                ),
+            ))
+        }
+    }
+
+    pub async fn get_transaction_result(&self, value: JsonRpcExtractor) -> JrpcResult {
+        let answer_id = value.get_answer_id();
+        let request: GetTransactionRequest = value.parse_params()?;
+        let payload_id = PayloadId::new(request.hash);
+
+        let tx = self.shard_store.create_tx().unwrap();
+        if let Ok(payload) = tx.get_payload(&payload_id) {
+            let response = GetTransactionResponse {
+                result: payload.result().clone(),
+            };
+            Ok(JsonRpcResponse::success(answer_id, response))
         } else {
             Err(JsonRpcResponse::error(
                 answer_id,
@@ -247,7 +277,7 @@ impl JsonRpcHandlers {
     pub async fn get_transaction(&self, value: JsonRpcExtractor) -> JrpcResult {
         let answer_id = value.get_answer_id();
         let data: TransactionRequest = value.parse_params()?;
-        let tx = self.db.create_tx().unwrap();
+        let tx = self.shard_store.create_tx().unwrap();
         match tx.get_transaction(data.payload_id) {
             Ok(transaction) => Ok(JsonRpcResponse::success(answer_id, json!(transaction))),
             Err(err) => {
@@ -267,7 +297,7 @@ impl JsonRpcHandlers {
     pub async fn get_substates(&self, value: JsonRpcExtractor) -> JrpcResult {
         let answer_id = value.get_answer_id();
         let data: SubstatesRequest = value.parse_params()?;
-        let tx = self.db.create_tx().unwrap();
+        let tx = self.shard_store.create_tx().unwrap();
         match tx.get_substates(data.payload_id, data.shard_id) {
             Ok(substates) => Ok(JsonRpcResponse::success(answer_id, json!(substates))),
             Err(err) => {
@@ -338,6 +368,7 @@ impl JsonRpcHandlers {
             templates: templates
                 .into_iter()
                 .map(|t| TemplateMetadata {
+                    name: t.name,
                     address: t.address,
                     url: t.url,
                     binary_sha: t.binary_sha,
@@ -365,6 +396,7 @@ impl JsonRpcHandlers {
 
         Ok(JsonRpcResponse::success(answer_id, GetTemplateResponse {
             registration_metadata: TemplateMetadata {
+                name: template.metadata.name,
                 address: template.metadata.address,
                 url: template.metadata.url,
                 binary_sha: template.metadata.binary_sha,

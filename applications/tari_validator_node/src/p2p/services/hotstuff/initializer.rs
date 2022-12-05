@@ -27,7 +27,7 @@ use tari_dan_core::{
     models::{vote_message::VoteMessage, HotStuffMessage, TariDanPayload},
     workers::events::{EventSubscription, HotStuffEvent},
 };
-use tari_dan_storage_sqlite::sqlite_shard_store_factory::SqliteShardStoreFactory;
+use tari_dan_storage_sqlite::sqlite_shard_store_factory::SqliteShardStore;
 use tari_shutdown::ShutdownSignal;
 use tokio::sync::mpsc;
 
@@ -40,12 +40,11 @@ use crate::{
         template_manager::TemplateManager,
     },
     payload_processor::TariDanPayloadProcessor,
-    ValidatorNodeConfig,
 };
 
 pub fn try_spawn(
     node_identity: Arc<NodeIdentity>,
-    config: &ValidatorNodeConfig,
+    shard_store: SqliteShardStore,
     outbound: OutboundMessaging,
     epoch_manager: EpochManagerHandle,
     mempool: MempoolHandle,
@@ -53,20 +52,16 @@ pub fn try_spawn(
     rx_consensus_message: mpsc::Receiver<(CommsPublicKey, HotStuffMessage<TariDanPayload, CommsPublicKey>)>,
     rx_vote_message: mpsc::Receiver<(CommsPublicKey, VoteMessage)>,
     shutdown: ShutdownSignal,
-) -> Result<(EventSubscription<HotStuffEvent>, SqliteShardStoreFactory), anyhow::Error> {
-    let db = SqliteShardStoreFactory::try_create(config.data_dir.join("state.db"))?;
-
-    let events = HotstuffService::spawn(
-        node_identity.clone(),
-        node_identity.public_key().clone(),
+) -> EventSubscription<HotStuffEvent> {
+    HotstuffService::spawn(
+        node_identity,
         epoch_manager,
         mempool,
         outbound,
         payload_processor,
-        db.clone(),
+        shard_store,
         rx_consensus_message,
         rx_vote_message,
         shutdown,
-    );
-    Ok((events, db))
+    )
 }
