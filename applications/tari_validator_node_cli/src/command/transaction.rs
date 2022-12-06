@@ -214,7 +214,7 @@ async fn submit_transaction(
         .ok_or_else(|| anyhow::anyhow!("No active account. Use `accounts use [public key hex]` to set one."))?;
 
     let input_refs = if common.input_refs.is_empty() {
-        extract_input_refs(&instructions, &component_manager)?;
+        extract_input_refs(&instructions, &component_manager)?
     } else {
         let mut input_refs = common.input_refs;
         input_refs.extend(
