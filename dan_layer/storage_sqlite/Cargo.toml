@@ -15,10 +15,11 @@ tari_dan_storage = { path = "../storage" }
 tari_engine_types = { path = "../engine_types" }
 
 borsh = "0.9.3"
-diesel = { version = "1.4.8", default-features = false, features = ["sqlite"] }
+diesel = { version = "1.4.8", default-features = false, features = ["sqlite", "chrono"] }
 diesel_migrations = "1.4.0"
 thiserror = "1.0.30"
 async-trait = "0.1.50"
+chrono = "0.4.19"
 tokio = { version = "1.10", features = ["macros", "time"] }
 tokio-stream = { version = "0.1.7", features = ["sync"] }
 log = { version = "0.4.8", features = ["std"] }

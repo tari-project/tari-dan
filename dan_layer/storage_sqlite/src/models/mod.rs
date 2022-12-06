@@ -30,6 +30,7 @@ pub mod locked_qc;
 pub mod metadata;
 pub mod node;
 pub mod payload;
+pub mod pledge;
 pub mod prepare_qc;
 pub mod received_votes;
 pub mod substate;

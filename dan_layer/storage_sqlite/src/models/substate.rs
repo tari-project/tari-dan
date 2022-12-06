@@ -20,36 +20,41 @@
 //   WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //   USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 //
-use crate::schema::*;
+use chrono::NaiveDateTime;
 
+use crate::schema::*;
 #[derive(Debug, Identifiable, Queryable)]
 pub struct Substate {
     pub id: i32,
-    pub substate_type: String,
     pub shard_id: Vec<u8>,
-    pub node_height: i64,
-    pub data: Option<String>,
+    pub version: i64,
+    pub data: String,
     pub created_by_payload_id: Vec<u8>,
-    pub deleted_by_payload_id: Option<Vec<u8>>,
-    pub justify: Option<String>,
-    pub is_draft: bool,
-    pub tree_node_hash: Option<Vec<u8>>,
-    pub pledged_to_payload_id: Option<Vec<u8>>,
-    pub pledged_until_height: Option<i64>,
+    pub created_justify: String,
+    pub created_node_hash: Vec<u8>,
+    pub created_height: i64,
+    pub destroyed_by_payload_id: Option<Vec<u8>>,
+    pub destroyed_justify: Option<String>,
+    pub destroyed_node_hash: Option<Vec<u8>>,
+    pub destroyed_height: Option<i64>,
+    pub created_timestamp: NaiveDateTime,
+    pub destroyed_timestamp: Option<NaiveDateTime>,
 }
 
 #[derive(Debug, Insertable)]
 #[table_name = "substates"]
 pub struct NewSubstate {
-    pub substate_type: String,
     pub shard_id: Vec<u8>,
-    pub node_height: i64,
-    pub data: Option<String>,
+    pub version: i64,
+    pub data: String,
     pub created_by_payload_id: Vec<u8>,
-    pub deleted_by_payload_id: Option<Vec<u8>>,
-    pub justify: Option<String>,
-    pub is_draft: bool,
-    pub tree_node_hash: Option<Vec<u8>>,
-    pub pledged_to_payload_id: Option<Vec<u8>>,
-    pub pledged_until_height: Option<i64>,
+    pub created_justify: String,
+    pub created_node_hash: Vec<u8>,
+    pub created_height: i64,
+}
+
+impl Substate {
+    pub fn is_destroyed(&self) -> bool {
+        self.destroyed_by_payload_id.is_some()
+    }
 }
