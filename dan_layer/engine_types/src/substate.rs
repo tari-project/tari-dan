@@ -106,9 +106,9 @@ impl SubstateAddress {
 impl Display for SubstateAddress {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
-            SubstateAddress::Component(addr) => write!(f, "Component({})", addr),
-            SubstateAddress::Resource(addr) => write!(f, "Resource({})", addr),
-            SubstateAddress::Vault(addr) => write!(f, "Vault({})", addr),
+            SubstateAddress::Component(addr) => write!(f, "component_{}", addr),
+            SubstateAddress::Resource(addr) => write!(f, "resource_{}", addr),
+            SubstateAddress::Vault(addr) => write!(f, "vault_{}", addr),
         }
     }
 }

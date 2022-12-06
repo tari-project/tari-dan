@@ -23,6 +23,7 @@
 use std::convert::TryFrom;
 
 use futures::StreamExt;
+use log::info;
 use tari_comms::types::CommsPublicKey;
 use tari_dan_common_types::{NodeHeight, PayloadId, QuorumCertificate, ShardId, SubstateState, TreeNodeHash};
 use tari_dan_core::{
@@ -32,6 +33,8 @@ use tari_dan_core::{
 };
 
 use crate::{p2p, p2p::services::rpc_client::TariCommsValidatorNodeClientFactory};
+
+const LOG_TARGET: &str = "tari::validator_node::state_sync";
 
 pub struct PeerSyncManagerService<TShardStore> {
     validator_node_client_factory: TariCommsValidatorNodeClientFactory,
@@ -63,28 +66,26 @@ impl<TShardStore: ShardStore> PeerSyncManagerService<TShardStore> {
                 .map_err(EpochManagerError::StorageError)?
         };
 
-        let start_shard_id = p2p::proto::common::ShardId::from(start_shard_id);
-        let end_shard_id = p2p::proto::common::ShardId::from(end_shard_id);
-
         let mut inventory = inventory
             .into_iter()
             .map(p2p::proto::common::ShardId::from)
-            .collect::<Vec<p2p::proto::common::ShardId>>();
+            .collect::<Vec<_>>();
 
         // the validator node has to sync state with vn's in the committee
         for sync_vn in committee_vns {
             if sync_vn.shard_key == vn_shard_key {
                 continue;
             }
+            info!(target: LOG_TARGET, "🌍 Connecting to sync peer: {}", sync_vn.public_key);
             let mut sync_vn_client = self.validator_node_client_factory.create_client(&sync_vn.public_key);
             let mut sync_vn_rpc_client = sync_vn_client
                 .create_connection()
                 .await
                 .map_err(EpochManagerError::ValidatorNodeClientError)?;
 
-            let request = crate::p2p::proto::rpc::VnStateSyncRequest {
-                start_shard_id: Some(start_shard_id.clone()),
-                end_shard_id: Some(end_shard_id.clone()),
+            let request = p2p::proto::rpc::VnStateSyncRequest {
+                start_shard_id: Some(start_shard_id.into()),
+                end_shard_id: Some(end_shard_id.into()),
                 inventory: inventory.clone(),
             };
             let mut vn_state_stream = sync_vn_rpc_client
@@ -92,10 +93,19 @@ impl<TShardStore: ShardStore> PeerSyncManagerService<TShardStore> {
                 .await
                 .map_err(EpochManagerError::RpcError)?;
 
+            info!(target: LOG_TARGET, "🌍 Syncing...");
+            let mut substate_count = 0;
             while let Some(resp) = vn_state_stream.next().await {
                 let msg = resp.map_err(EpochManagerError::RpcStatus)?;
                 let sync_vn_shard = ShardId::try_from(msg.shard_id.ok_or(EpochManagerError::UnexpectedResponse)?)
                     .map_err(|_| EpochManagerError::UnexpectedResponse)?;
+                if msg.substate_state.is_none() {
+                    info!(
+                        target: LOG_TARGET,
+                        "🌍 Nothing to sync from peer {}", sync_vn.public_key
+                    );
+                    continue;
+                }
                 let sync_vn_substate =
                     SubstateState::try_from(msg.substate_state.ok_or(EpochManagerError::UnexpectedResponse)?)
                         .map_err(|_| EpochManagerError::UnexpectedResponse)?;
@@ -113,11 +123,13 @@ impl<TShardStore: ShardStore> PeerSyncManagerService<TShardStore> {
                 let sync_vn_payload_id =
                     PayloadId::try_from(msg.payload_id).map_err(|_| EpochManagerError::UnexpectedResponse)?;
 
-                let sync_vn_certificate = if let Some(qc) = msg.certificate {
-                    Some(QuorumCertificate::try_from(qc).map_err(|_| EpochManagerError::UnexpectedResponse)?)
-                } else {
-                    None
-                };
+                let sync_vn_certificate = msg
+                    .certificate
+                    .map(QuorumCertificate::try_from)
+                    .transpose()
+                    .map_err(|_| EpochManagerError::UnexpectedResponse)?;
+
+                // TODO: Validate QC
 
                 let substate_shard_data = SubstateShardData::new(
                     sync_vn_shard,
@@ -129,7 +141,6 @@ impl<TShardStore: ShardStore> PeerSyncManagerService<TShardStore> {
                 );
 
                 // insert response state values in the shard db
-
                 {
                     let mut shard_db = self.shard_store.create_tx()?;
                     shard_db
@@ -138,9 +149,17 @@ impl<TShardStore: ShardStore> PeerSyncManagerService<TShardStore> {
                 }
 
                 // increase node inventory
-                inventory.push(p2p::proto::common::ShardId::from(sync_vn_shard));
+                inventory.push(sync_vn_shard.into());
+                substate_count += 1;
             }
+
+            info!(
+                target: LOG_TARGET,
+                "🌍 Sync from peer {} complete. {} substate(s)", sync_vn.public_key, substate_count
+            );
         }
+
+        info!(target: LOG_TARGET, "🌍 Sync complete.");
 
         Ok(())
     }

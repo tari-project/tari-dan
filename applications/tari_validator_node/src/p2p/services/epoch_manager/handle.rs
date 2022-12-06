@@ -21,11 +21,12 @@
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 use async_trait::async_trait;
+use tari_common_types::types::FixedHash;
 use tari_comms::types::CommsPublicKey;
-use tari_core::ValidatorNodeMmr;
+use tari_core::{transactions::transaction_components::ValidatorNodeRegistration, ValidatorNodeMmr};
 use tari_dan_common_types::{Epoch, ShardId};
 use tari_dan_core::{
-    models::{BaseLayerMetadata, Committee, ValidatorNode},
+    models::{Committee, ValidatorNode},
     services::epoch_manager::{EpochManager, EpochManagerError, ShardCommitteeAllocation},
 };
 use tokio::sync::{broadcast, mpsc::Sender, oneshot};
@@ -42,10 +43,14 @@ impl EpochManagerHandle {
         Self { tx_request }
     }
 
-    pub async fn update_epoch(&self, tip_info: BaseLayerMetadata) -> Result<(), EpochManagerError> {
+    pub async fn update_epoch(&self, block_height: u64, block_hash: FixedHash) -> Result<(), EpochManagerError> {
         let (tx, rx) = oneshot::channel();
         self.tx_request
-            .send(EpochManagerRequest::UpdateEpoch { tip_info, reply: tx })
+            .send(EpochManagerRequest::UpdateEpoch {
+                block_height,
+                block_hash,
+                reply: tx,
+            })
             .await
             .map_err(|_| EpochManagerError::SendError)?;
         rx.await.map_err(|_| EpochManagerError::ReceiveError)?
@@ -70,6 +75,23 @@ impl EpochManagerHandle {
         rx.await.map_err(|_| EpochManagerError::ReceiveError)?
     }
 
+    pub async fn add_validator_node_registration(
+        &self,
+        block_height: u64,
+        registration: ValidatorNodeRegistration,
+    ) -> Result<(), EpochManagerError> {
+        let (tx, rx) = oneshot::channel();
+        self.tx_request
+            .send(EpochManagerRequest::AddValidatorNodeRegistration {
+                block_height,
+                registration,
+                reply: tx,
+            })
+            .await
+            .map_err(|_| EpochManagerError::SendError)?;
+        rx.await.map_err(|_| EpochManagerError::ReceiveError)?
+    }
+
     pub async fn subscribe(&self) -> Result<broadcast::Receiver<EpochManagerEvent>, EpochManagerError> {
         let (tx, rx) = oneshot::channel();
         self.tx_request
@@ -79,6 +101,7 @@ impl EpochManagerHandle {
         rx.await.map_err(|_| EpochManagerError::ReceiveError)?
     }
 }
+
 #[async_trait]
 impl EpochManager<CommsPublicKey> for EpochManagerHandle {
     async fn current_epoch(&self) -> Result<Epoch, EpochManagerError> {
@@ -213,6 +236,17 @@ impl EpochManager<CommsPublicKey> for EpochManagerHandle {
         let (tx, rx) = oneshot::channel();
         self.tx_request
             .send(EpochManagerRequest::GetValidatorNodeMerkleRoot { epoch, reply: tx })
+            .await
+            .map_err(|_| EpochManagerError::SendError)?;
+
+        rx.await.map_err(|_| EpochManagerError::ReceiveError)?
+    }
+
+    /// Note: this awaits until scanning is complete.
+    async fn notify_scanning_complete(&self) -> Result<(), EpochManagerError> {
+        let (tx, rx) = oneshot::channel();
+        self.tx_request
+            .send(EpochManagerRequest::NotifyScanningComplete { reply: tx })
             .await
             .map_err(|_| EpochManagerError::SendError)?;
 
