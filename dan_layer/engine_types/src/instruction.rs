@@ -1,6 +1,8 @@
 //  Copyright 2022 The Tari Project
 //  SPDX-License-Identifier: BSD-3-Clause
 
+use std::fmt::{Display, Formatter};
+
 use serde::{Deserialize, Serialize};
 use tari_bor::{borsh, Encode};
 use tari_template_lib::{
@@ -36,5 +38,36 @@ pub enum Instruction {
 impl Instruction {
     pub fn hash(&self) -> Hash {
         hasher("instruction").chain(self).result()
+    }
+}
+
+impl Display for Instruction {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::CallFunction {
+                template_address,
+                function,
+                args,
+            } => write!(
+                f,
+                "CallFunction {{ template_address: {}, function: {}, args: {:?} }}",
+                template_address, function, args
+            ),
+            Self::CallMethod {
+                component_address,
+                method,
+                args,
+            } => write!(
+                f,
+                "CallMethod {{ component_address: {}, method: {}, args: {:?} }}",
+                component_address, method, args
+            ),
+            Self::PutLastInstructionOutputOnWorkspace { key } => {
+                write!(f, "PutLastInstructionOutputOnWorkspace {{ key: {:?} }}", key)
+            },
+            Self::EmitLog { level, message } => {
+                write!(f, "EmitLog {{ level: {:?}, message: {:?} }}", level, message)
+            },
+        }
     }
 }
