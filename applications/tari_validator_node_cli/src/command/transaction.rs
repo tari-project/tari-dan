@@ -213,22 +213,26 @@ async fn submit_transaction(
         .get_active_account()
         .ok_or_else(|| anyhow::anyhow!("No active account. Use `accounts use [public key hex]` to set one."))?;
 
-    // let input_refs = extract_input_refs(&instructions, &component_manager)?;
-    let mut input_refs = common.input_refs;
-    input_refs.extend(
-        instructions
-            .iter()
-            .map(|i| match i {
-                Instruction::CallFunction { template_address, .. } => {
-                    vec![]
-                },
-                Instruction::CallMethod { component_address, .. } => {
-                    vec![ShardId::from_bytes(&component_address.into_array()).expect("Not a valid shardid")]
-                },
-                _ => vec![],
-            })
-            .flatten(),
-    );
+    let input_refs = if common.input_refs.is_empty() {
+        extract_input_refs(&instructions, &component_manager)?;
+    } else {
+        let mut input_refs = common.input_refs;
+        input_refs.extend(
+            instructions
+                .iter()
+                .map(|i| match i {
+                    Instruction::CallFunction { template_address, .. } => {
+                        vec![]
+                    },
+                    Instruction::CallMethod { component_address, .. } => {
+                        vec![ShardId::from_bytes(&component_address.into_array()).expect("Not a valid shardid")]
+                    },
+                    _ => vec![],
+                })
+                .flatten(),
+        );
+        input_refs
+    };
     let inputs = common
         .inputs
         .into_iter()
