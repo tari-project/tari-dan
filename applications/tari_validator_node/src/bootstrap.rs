@@ -126,7 +126,7 @@ pub async fn spawn_services(
         node_identity.public_key().clone(),
         shutdown.clone(),
         node_identity.clone(),
-        validator_node_client_factory,
+        validator_node_client_factory.clone(),
     );
 
     // Mempool
@@ -179,8 +179,12 @@ pub async fn spawn_services(
         shutdown.clone(),
     );
 
-    let dry_run_transaction_processor =
-        DryRunTransactionProcessor::new(epoch_manager.clone(), payload_processor, shard_store.clone());
+    let dry_run_transaction_processor = DryRunTransactionProcessor::new(
+        epoch_manager.clone(),
+        payload_processor,
+        shard_store.clone(),
+        validator_node_client_factory,
+    );
 
     let comms = setup_p2p_rpc(config, comms, peer_provider, shard_store.clone(), mempool.clone());
     let comms = comms::spawn_comms_using_transport(comms, p2p_config.transport.clone())
