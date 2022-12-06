@@ -115,7 +115,8 @@ pub trait ShardStoreTransaction<TAddr: NodeAddressable, TPayload: Payload> {
     ) -> Result<(), StorageError>;
     fn insert_substates(&mut self, substate_data: SubstateShardData) -> Result<(), StorageError>;
     fn get_state_inventory(&self) -> Result<Vec<ShardId>, StorageError>;
-    fn get_substate_states(
+    fn get_substate_states(&self, shards: &[ShardId]) -> Result<Vec<SubstateShardData>, StorageError>;
+    fn get_substate_states_by_range(
         &self,
         start_shard_id: ShardId,
         end_shard_id: ShardId,

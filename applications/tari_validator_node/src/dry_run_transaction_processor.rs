@@ -25,8 +25,6 @@ pub enum DryRunTransactionProcessorError {
     PayloadProcessorError(#[from] PayloadProcessorError),
     #[error("Storage error: {0}")]
     StorageError(#[from] StorageError),
-    #[error("No substate found for shard id {shard_id}")]
-    SubstateNotFound { shard_id: ShardId },
 }
 
 #[derive(Clone)]
@@ -84,22 +82,18 @@ impl DryRunTransactionProcessor {
         let local_shard_ids: Vec<ShardId> = involved_shards.into_iter().filter(|s| inventory.contains(s)).collect();
         dbg!(&local_shard_ids);
         let mut local_pledges = HashMap::new();
-        // TODO: create a DB method to get the substates of a list of shards in a single transaction
-        for shard_id in local_shard_ids {
-            let substate_data = tx
-                .get_substate_states(shard_id, shard_id, &[])?
-                .first()
-                .ok_or(DryRunTransactionProcessorError::SubstateNotFound { shard_id })?
-                .clone();
-            dbg!(&substate_data);
+        let local_substates = tx.get_substate_states(&local_shard_ids)?;
+        dbg!(&local_substates);
+        for substate in local_substates {
             let local_pledge = ObjectPledge {
-                shard_id,
-                current_state: substate_data.substate().clone(),
-                pledged_to_payload: substate_data.payload_id(),
-                pledged_until: substate_data.height(),
+                shard_id: substate.shard(),
+                current_state: substate.substate().clone(),
+                pledged_to_payload: substate.payload_id(),
+                pledged_until: substate.height(),
             };
-            local_pledges.insert(shard_id, Some(local_pledge));
+            local_pledges.insert(substate.shard(), Some(local_pledge));
         }
+
         dbg!(&local_pledges);
         Ok(local_pledges)
     }

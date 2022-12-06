@@ -275,6 +275,61 @@ impl<'a> SqliteShardStoreTransaction<'a> {
         };
         Ok(pledge)
     }
+
+    fn map_substate_to_shard_data(ss: &Substate) -> Result<SubstateShardData, StorageError> {
+        let shard = ShardId::from_bytes(ss.shard_id.as_slice()).map_err(StorageError::FixedHashSizeError)?;
+        let substate = match ss.substate_type.as_str() {
+            "Up" => Ok(SubstateState::Up {
+                created_by: PayloadId::try_from(ss.created_by_payload_id.clone())?,
+                data: ss
+                                .data
+                                .as_ref()
+                                .map(|json| serde_json::from_str(json))
+                                .transpose().map_err(
+                            |source| StorageError::SerdeJson { source, operation: "get_substate_states".to_string(), data: "substate data".to_string() },
+                        )?
+                                // TODO: substate data should not be an option?
+                                .expect("substate without data"),
+            }),
+            "Down" => Ok(SubstateState::Down {
+                deleted_by: PayloadId::try_from(ss.deleted_by_payload_id.clone().unwrap_or_default())?,
+            }),
+            "DoesNotExist" => Ok(SubstateState::DoesNotExist),
+            _ => Err(StorageError::InvalidSubStateType {
+                substate_type: ss.substate_type.clone(),
+            }),
+        }?;
+
+        let height = NodeHeight::from(ss.node_height as u64);
+        let tree_node_hash = if let Some(h) = ss.tree_node_hash.clone() {
+            Some(TreeNodeHash::try_from(h).map_err(StorageError::FixedHashSizeError)?)
+        } else {
+            None
+        };
+
+        let payload_id =
+            PayloadId::try_from(ss.created_by_payload_id.clone()).map_err(StorageError::FixedHashSizeError)?;
+        let certificate = if let Some(qc) = ss.justify.clone() {
+            Some(
+                serde_json::from_str::<QuorumCertificate>(&qc).map_err(|source| StorageError::SerdeJson {
+                    source,
+                    operation: "get_substate_states".to_string(),
+                    data: qc,
+                })?,
+            )
+        } else {
+            None
+        };
+
+        Ok(SubstateShardData::new(
+            shard,
+            substate,
+            height,
+            tree_node_hash,
+            payload_id,
+            certificate,
+        ))
+    }
 }
 
 impl ShardStoreTransaction<PublicKey, TariDanPayload> for SqliteShardStoreTransaction<'_> {
@@ -938,7 +993,36 @@ impl ShardStoreTransaction<PublicKey, TariDanPayload> for SqliteShardStoreTransa
         }
     }
 
-    fn get_substate_states(
+    fn get_substate_states(&self, shard_ids: &[ShardId]) -> Result<Vec<SubstateShardData>, StorageError> {
+        use crate::schema::substates::shard_id;
+        let shard_ids = shard_ids
+            .iter()
+            .map(|sh| Vec::from(sh.as_bytes()))
+            .collect::<Vec<Vec<u8>>>();
+
+        let substate_states: Option<Vec<crate::models::substate::Substate>> = substates
+            .filter(shard_id.eq_any(shard_ids))
+            .get_results(self.transaction.connection())
+            .optional()
+            .map_err(|e| StorageError::QueryError {
+                reason: format!("Get substate change error: {}", e),
+            })
+            .unwrap();
+
+        if let Some(substate_states) = substate_states {
+            substate_states
+                .iter()
+                .map(Self::map_substate_to_shard_data)
+                .collect::<Result<_, _>>()
+        } else {
+            Err(StorageError::NotFound {
+                item: "substate".to_string(),
+                key: "No data found for available shards".to_string(),
+            })
+        }
+    }
+
+    fn get_substate_states_by_range(
         &self,
         start_shard_id: ShardId,
         end_shard_id: ShardId,
@@ -967,58 +1051,7 @@ impl ShardStoreTransaction<PublicKey, TariDanPayload> for SqliteShardStoreTransa
         if let Some(substate_states) = substate_states {
             substate_states
                 .iter()
-                .map(|ss| {
-                    let shard = ShardId::from_bytes(ss.shard_id.as_slice()).map_err(StorageError::FixedHashSizeError)?;
-                    let substate = match ss.substate_type.as_str() {
-                        "Up" => Ok(SubstateState::Up {
-                            created_by: PayloadId::try_from(ss.created_by_payload_id.clone())?,
-                            data: ss
-                                .data
-                                .as_ref()
-                                .map(|json| serde_json::from_str(json))
-                                .transpose().map_err(
-                            |source| StorageError::SerdeJson { source, operation: "get_substate_states".to_string(), data: "substate data".to_string() },
-                        )?
-                                // TODO: substate data should not be an option?
-                                .expect("substate without data"),
-                        }),
-                        "Down" => Ok(SubstateState::Down {
-                            deleted_by: PayloadId::try_from(ss.deleted_by_payload_id.clone().unwrap_or_default())?,
-                        }),
-                        "DoesNotExist" => Ok(SubstateState::DoesNotExist),
-                        _ => Err(StorageError::InvalidSubStateType {
-                            substate_type: ss.substate_type.clone(),
-                        }),
-                    }?;
-
-                    let height = NodeHeight::from(ss.node_height as u64);
-                    let tree_node_hash = if let Some(h) = ss.tree_node_hash.clone() {
-                        Some(TreeNodeHash::try_from(h).map_err(StorageError::FixedHashSizeError)?)
-                    } else {
-                        None
-                    };
-
-                    let payload_id = PayloadId::try_from(ss.created_by_payload_id.clone()).map_err(StorageError::FixedHashSizeError)?;
-                    let certificate = if let Some(qc) = ss.justify.clone() {
-                        Some(serde_json::from_str::<QuorumCertificate>(&qc).map_err(
-                        |source| StorageError::SerdeJson {
-                            source,
-                            operation: "get_substate_states".to_string(),
-                            data: qc,
-                        })?)
-                    } else {
-                        None
-                    };
-
-                Ok(SubstateShardData::new(
-                    shard,
-                    substate,
-                    height,
-                    tree_node_hash,
-                    payload_id,
-                    certificate
-                ))
-            })
+                .map(Self::map_substate_to_shard_data)
                 .collect::<Result<_, _>>()
         } else {
             Err(StorageError::NotFound {
