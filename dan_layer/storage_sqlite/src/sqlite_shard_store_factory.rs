@@ -1038,8 +1038,8 @@ impl ShardStoreTransaction<PublicKey, TariDanPayload> for SqliteShardStoreTransa
         let substate_states: Option<Vec<crate::models::substate::Substate>> = substates
             .filter(
                 shard_id
-                    .gt(Vec::from(start_shard_id.as_bytes()))
-                    .and(shard_id.lt(Vec::from(end_shard_id.as_bytes())))
+                    .ge(Vec::from(start_shard_id.as_bytes()))
+                    .and(shard_id.le(Vec::from(end_shard_id.as_bytes())))
                     .and(shard_id.ne_all(excluded_shards)),
             )
             .get_results(self.transaction.connection())
