@@ -39,5 +39,7 @@ mod package;
 pub use package::TemplateAddress;
 
 mod vault;
-
 pub use vault::{Vault, VaultId, VaultRef};
+
+mod substate_address;
+pub use substate_address::SubstateAddress;
