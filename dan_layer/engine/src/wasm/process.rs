@@ -29,6 +29,7 @@ use tari_template_lib::{
         BucketInvokeArg,
         ComponentInvokeArg,
         EmitLogArg,
+        LogLevel,
         ResourceInvokeArg,
         VaultInvokeArg,
         WorkspaceInvokeArg,
@@ -128,6 +129,9 @@ impl WasmProcess {
         };
 
         result.unwrap_or_else(|err| {
+            env.state()
+                .interface()
+                .emit_log(LogLevel::Error, format!("Execution error:{}", err));
             eprintln!("{}", err);
             log::error!(target: LOG_TARGET, "{}", err);
             0

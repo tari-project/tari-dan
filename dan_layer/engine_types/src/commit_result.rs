@@ -89,14 +89,14 @@ impl TransactionResult {
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub enum RejectReason {
-    ShardNotPledged(String),
+    ShardsNotPledged(String),
     ExecutionFailure(String),
 }
 
 impl std::fmt::Display for RejectReason {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         match self {
-            RejectReason::ShardNotPledged(msg) => write!(f, "Shard not pledged: {}", msg),
+            RejectReason::ShardsNotPledged(msg) => write!(f, "Shards not pledged: {}", msg),
             RejectReason::ExecutionFailure(msg) => write!(f, "Execution failure: {}", msg),
         }
     }

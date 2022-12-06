@@ -122,26 +122,43 @@ impl StateTracker {
     }
 
     pub fn mint_resource(&self, mint_arg: MintResourceArg) -> Result<ResourceAddress, RuntimeError> {
-        let resource_address = self.id_provider.new_resource_address()?;
-        debug!(target: LOG_TARGET, "New resource minted: {}", resource_address);
-        dbg!(resource_address.to_string());
         match mint_arg {
-            MintResourceArg::Fungible { amount, metadata } => {
+            MintResourceArg::Fungible {
+                resource_address,
+                amount,
+                metadata,
+            } => {
+                let resource_address = resource_address
+                    .map(|r| Ok(r))
+                    .unwrap_or_else(|| self.id_provider.new_resource_address())?;
+                debug!(target: LOG_TARGET, "New resource minted: {}", resource_address);
+                dbg!(resource_address.to_string());
                 self.check_amount(amount)?;
                 self.write_with(|state| {
                     let resource = Resource::fungible(resource_address, amount, metadata);
                     state.new_resources.insert(resource.address(), resource.into());
                 });
+
+                Ok(resource_address)
             },
-            MintResourceArg::NonFungible { token_ids, metadata } => {
+            MintResourceArg::NonFungible {
+                resource_address,
+                token_ids,
+                metadata,
+            } => {
+                let resource_address = resource_address
+                    .map(|r| Ok(r))
+                    .unwrap_or_else(|| self.id_provider.new_resource_address())?;
+                debug!(target: LOG_TARGET, "New resource minted: {}", resource_address);
+                dbg!(resource_address.to_string());
                 self.write_with(|state| {
                     let resource = Resource::non_fungible(resource_address, token_ids, metadata);
                     state.new_resources.insert(resource.address(), resource.into());
                 });
+
+                Ok(resource_address)
             },
         }
-
-        Ok(resource_address)
     }
 
     pub fn get_resource(&self, address: &ResourceAddress) -> Result<Resource, RuntimeError> {

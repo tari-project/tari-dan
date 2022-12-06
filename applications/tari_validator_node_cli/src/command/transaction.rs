@@ -88,6 +88,8 @@ pub struct CommonSubmitArgs {
     num_outputs: Option<u8>,
     #[clap(long, short = 'i')]
     inputs: Vec<String>,
+    #[clap(long, short = 'r')]
+    input_refs: Vec<ShardId>,
     #[clap(long, short = 'v')]
     version: Option<u8>,
     #[clap(long, short = 'd')]
@@ -210,19 +212,21 @@ async fn submit_transaction(
         .ok_or_else(|| anyhow::anyhow!("No active account. Use `accounts use [public key hex]` to set one."))?;
 
     // let input_refs = extract_input_refs(&instructions, &component_manager)?;
-    let input_refs: Vec<ShardId> = instructions
-        .iter()
-        .map(|i| match i {
-            Instruction::CallFunction { template_address, .. } => {
-                vec![]
-            },
-            Instruction::CallMethod { component_address, .. } => {
-                vec![ShardId::from_bytes(&component_address.into_array()).expect("Not a valid shardid")]
-            },
-            _ => vec![],
-        })
-        .flatten()
-        .collect();
+    let mut input_refs = common.input_refs;
+    input_refs.extend(
+        instructions
+            .iter()
+            .map(|i| match i {
+                Instruction::CallFunction { template_address, .. } => {
+                    vec![]
+                },
+                Instruction::CallMethod { component_address, .. } => {
+                    vec![ShardId::from_bytes(&component_address.into_array()).expect("Not a valid shardid")]
+                },
+                _ => vec![],
+            })
+            .flatten(),
+    );
     let inputs = common
         .inputs
         .into_iter()
@@ -262,6 +266,7 @@ async fn submit_transaction(
         wait_for_result: common.wait_for_result,
         wait_for_result_timeout: common.wait_for_result_timeout,
     };
+    dbg!(&request);
 
     if request.inputs.is_empty() && request.num_outputs == 0 {
         println!("No inputs or outputs. This transaction will not be processed by the network.");

@@ -55,6 +55,16 @@ pub enum SubstateChange {
     Destroy,
 }
 
+impl Display for SubstateChange {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        match self {
+            SubstateChange::Create => write!(f, "Create"),
+            SubstateChange::Exists => write!(f, "Exists"),
+            SubstateChange::Destroy => write!(f, "Destroy"),
+        }
+    }
+}
+
 #[derive(Debug, Clone, Encode, Decode, Deserialize, Serialize)]
 pub enum SubstateState {
     DoesNotExist,
