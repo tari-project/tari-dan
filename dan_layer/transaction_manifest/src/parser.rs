@@ -282,7 +282,7 @@ impl ManifestParser {
 
 fn assignment_from_macro(var_name: Ident, mac: &Ident, tokens: TokenStream) -> Result<ManifestIntent, syn::Error> {
     match mac.to_string().as_str() {
-        "global" => Ok(ManifestIntent::AssignInput(AssignInputStmt {
+        "global" | "var" => Ok(ManifestIntent::AssignInput(AssignInputStmt {
             variable_name: var_name,
             global_variable_name: parse2(tokens)?,
         })),

@@ -21,9 +21,10 @@ bincode = "1.0"
 base64 = "0.20.0-alpha.1"
 borsh = "0.9"
 digest = "0.9"
-serde = "1.0.126"
+newtype-ops = "0.1.4"
 prost = "0.9"
 prost-types = "0.9"
+serde = "1.0.126"
 
 [build-dependencies]
 tari_common = { git = "https://github.com/tari-project/tari.git", branch = "development", package = "tari_common", features = ["build"] }

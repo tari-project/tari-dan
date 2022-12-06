@@ -1,10 +1,11 @@
 //   Copyright 2022 The Tari Project
 //   SPDX-License-Identifier: BSD-3-clause
 
-// TODO: Improve this template
-use template_bc617551fc331bb5ebc12943c1456dbf8fbd0ae4e950b2ffc28a6b89ce040382 as Account;
+use template_7c793e0e945c10228ceb08bfa7ccd1e673ba609dc7200f6a7721278de6231625 as Account;
 
 fn main() {
-    let mut account = global!["account"];
+    info!("Hello, world!");
+    // Account::new();
+    // let mut account = global!["account"];
     // account.deposit(funds);
 }

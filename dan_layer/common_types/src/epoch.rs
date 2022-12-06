@@ -22,6 +22,7 @@
 
 use std::fmt::Display;
 
+use newtype_ops::newtype_ops;
 use serde::{Deserialize, Serialize};
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Deserialize, Serialize)]
@@ -36,13 +37,8 @@ impl Epoch {
         self.0.to_le_bytes()
     }
 
-    pub fn to_height(self) -> u64 {
-        self.0 * 10
-    }
-
-    pub fn from_block_height(bh: u64) -> Self {
-        let e = bh / 10;
-        Self(e)
+    pub fn saturating_sub(&self, other: Epoch) -> Epoch {
+        Epoch(self.0.saturating_sub(other.0))
     }
 }
 
@@ -57,3 +53,7 @@ impl Display for Epoch {
         write!(f, "{}", self.0)
     }
 }
+
+newtype_ops! { [Epoch] {add sub mul div} {:=} Self Self }
+newtype_ops! { [Epoch] {add sub mul div} {:=} &Self &Self }
+newtype_ops! { [Epoch] {add sub mul div} {:=} Self &Self }

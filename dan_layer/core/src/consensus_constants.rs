@@ -20,6 +20,9 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+use serde::{Deserialize, Serialize};
+use tari_dan_common_types::Epoch;
+
 #[derive(Clone)]
 pub struct ConsensusConstants {
     pub base_layer_confirmations: u64,
@@ -37,14 +40,23 @@ impl ConsensusConstants {
     }
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct BaseLayerConsensusConstants {
     pub validator_node_registration_expiry: u64,
     pub epoch_length: u64,
 }
 
 impl BaseLayerConsensusConstants {
-    pub fn get_validator_node_registration_expiry(&self) -> u64 {
-        self.validator_node_registration_expiry
+    pub fn height_to_epoch(&self, height: u64) -> Epoch {
+        Epoch(height / self.epoch_length)
+    }
+
+    pub fn epoch_to_height(&self, epoch: Epoch) -> u64 {
+        epoch.0 * self.epoch_length
+    }
+
+    pub fn validator_node_registration_expiry(&self) -> Epoch {
+        Epoch(self.validator_node_registration_expiry)
     }
 
     pub fn epoch_length(&self) -> u64 {

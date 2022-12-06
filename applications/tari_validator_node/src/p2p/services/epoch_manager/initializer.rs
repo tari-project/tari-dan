@@ -22,7 +22,7 @@
 
 use std::sync::Arc;
 
-use tari_comms::{types::CommsPublicKey, NodeIdentity};
+use tari_comms::NodeIdentity;
 use tari_dan_core::consensus_constants::ConsensusConstants;
 use tari_dan_storage_sqlite::{sqlite_shard_store_factory::SqliteShardStore, SqliteDbFactory};
 use tari_shutdown::ShutdownSignal;
@@ -41,7 +41,6 @@ pub fn spawn(
     shard_store: SqliteShardStore,
     base_node_client: GrpcBaseNodeClient,
     consensus_constants: ConsensusConstants,
-    id: CommsPublicKey,
     shutdown: ShutdownSignal,
     node_identity: Arc<NodeIdentity>,
     validator_node_client_factory: TariCommsValidatorNodeClientFactory,
@@ -49,7 +48,6 @@ pub fn spawn(
     let (tx_request, rx_request) = mpsc::channel(10);
     let handle = EpochManagerHandle::new(tx_request);
     EpochManagerService::spawn(
-        id,
         rx_request,
         shutdown,
         db_factory,
