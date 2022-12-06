@@ -13,7 +13,9 @@ use tari_transaction_manifest::ManifestValue;
 
 #[derive(Debug, Subcommand, Clone)]
 pub enum ManifestSubcommand {
+    /// Creates a new manifest template
     New(NewArgs),
+    /// Parses the manifest for errors
     Check(CheckArgs),
 }
 
