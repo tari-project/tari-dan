@@ -31,7 +31,7 @@ use tari_core::{
     ValidatorNodeMmr,
 };
 use tari_crypto::tari_utilities::ByteArray;
-use tari_dan_common_types::{vn_mmr_node_hash, Epoch, ShardId};
+use tari_dan_common_types::{optional::Optional, vn_mmr_node_hash, Epoch, ShardId};
 use tari_dan_core::{
     consensus_constants::{BaseLayerConsensusConstants, ConsensusConstants},
     models::{Committee, ValidatorNode},
@@ -112,6 +112,7 @@ impl BaseLayerEpochManager {
             return Ok(());
         }
 
+        info!(target: LOG_TARGET, "🌟 A new epoch {} is upon us", epoch);
         // extract and store in database the MMR of the epoch's validator nodes
         let epoch_header = self.base_node_client.get_header_by_hash(block_hash).await?;
 
@@ -126,17 +127,32 @@ impl BaseLayerEpochManager {
         Ok(())
     }
 
+    async fn get_base_layer_consensus_constants(&mut self) -> Result<&BaseLayerConsensusConstants, EpochManagerError> {
+        if let Some(ref constants) = self.base_layer_consensus_constants {
+            return Ok(constants);
+        }
+
+        let tip = self.base_node_client.get_tip_info().await?;
+        let dan_tip = tip
+            .height_of_longest_chain
+            .saturating_sub(self.consensus_constants.base_layer_confirmations);
+
+        let constants = self.base_node_client.get_consensus_constants(dan_tip).await?;
+        self.update_base_layer_consensus_constants(constants)?;
+        Ok(self
+            .base_layer_consensus_constants
+            .as_ref()
+            .expect("update_base_layer_consensus_constants did not set constants"))
+    }
+
     pub async fn add_validator_node_registration(
         &mut self,
         block_height: u64,
         registration: ValidatorNodeRegistration,
     ) -> Result<(), EpochManagerError> {
-        let constants = self
-            .base_layer_consensus_constants
-            .as_ref()
-            .ok_or(EpochManagerError::BaseLayerConsensusConstantsNotSet)?;
-        let epoch = constants.height_to_epoch(block_height);
-        let next_epoch_height = constants.epoch_to_height(epoch + Epoch(1));
+        let constants = self.get_base_layer_consensus_constants().await?;
+        let next_epoch = constants.height_to_epoch(block_height) + Epoch(1);
+        let next_epoch_height = constants.epoch_to_height(next_epoch);
 
         let shard_key = self
             .base_node_client
@@ -149,7 +165,7 @@ impl BaseLayerEpochManager {
         let new_vns = vec![DbValidatorNode {
             public_key: registration.public_key().to_vec(),
             shard_key: shard_key.as_bytes().to_vec(),
-            epoch: epoch + Epoch(1),
+            epoch: next_epoch,
         }];
         let db = self.db_factory.get_or_create_global_db()?;
         let tx = db.create_transaction()?;
@@ -161,13 +177,13 @@ impl BaseLayerEpochManager {
             let last_registration_epoch = metadata
                 .get_metadata::<Epoch>(MetadataKey::LastEpochRegistration)?
                 .unwrap_or(Epoch(0));
-            if last_registration_epoch < epoch {
-                metadata.set_metadata(MetadataKey::LastEpochRegistration, &epoch)?;
+            if last_registration_epoch < next_epoch {
+                metadata.set_metadata(MetadataKey::LastEpochRegistration, &next_epoch)?;
             }
             self.current_shard_key = Some(shard_key);
             info!(
                 target: LOG_TARGET,
-                "🖊 This validator node is registered for epoch {}, shard key: {} ", epoch, shard_key
+                "📋️ This validator node is registered for epoch {}, shard key: {} ", next_epoch, shard_key
             );
         }
 
@@ -211,15 +227,20 @@ impl BaseLayerEpochManager {
         self.current_epoch
     }
 
-    pub fn get_validator_shard_key(&self, epoch: Epoch, public_key: &PublicKey) -> Result<ShardId, EpochManagerError> {
+    pub fn get_validator_shard_key(
+        &self,
+        epoch: Epoch,
+        public_key: &PublicKey,
+    ) -> Result<Option<ShardId>, EpochManagerError> {
         let (start_epoch, end_epoch) = self.get_epoch_range(epoch)?;
         let db = self.db_factory.get_or_create_global_db()?;
         let tx = db.create_transaction()?;
         let vn = db
             .validator_nodes(&tx)
-            .get(start_epoch.as_u64(), end_epoch.as_u64(), public_key.as_bytes())?;
+            .get(start_epoch.as_u64(), end_epoch.as_u64(), public_key.as_bytes())
+            .optional()?;
 
-        Ok(ShardId::from_bytes(&vn.shard_key).expect("Invalid Shard Key, Database is corrupt"))
+        Ok(vn.map(|vn| ShardId::from_bytes(&vn.shard_key).expect("Invalid Shard Key, Database is corrupt")))
     }
 
     pub fn last_registration_epoch(&self) -> Result<Option<Epoch>, EpochManagerError> {
@@ -379,10 +400,6 @@ impl BaseLayerEpochManager {
     pub fn get_validator_node_mmr(&self, epoch: Epoch) -> Result<ValidatorNodeMmr, EpochManagerError> {
         let vns = self.get_validator_nodes_per_epoch(epoch)?;
 
-        // let mut a = vns.clone();
-        // a.sort_by(|a, b| a.shard_key.0.cmp(&b.shard_key.0));
-        // assert_eq!(a, vns, "NOT SORTED");
-
         // TODO: the MMR struct should be serializable to store it only once and avoid recalculating it every time per
         // epoch
         let mut vn_mmr = ValidatorNodeMmr::new(Vec::new());
@@ -392,26 +409,31 @@ impl BaseLayerEpochManager {
                 .expect("Could not build the merkle mountain range of the VN set");
         }
 
-        // let root = self.get_validator_node_merkle_root(epoch)?;
-        // if vn_mmr.get_merkle_root().unwrap() == root {
-        //     eprintln!("OK =!!!!!!!!!!!!!!!!!!!",);
-        // } else {
-        //     panic!("Invalid MR");
-        // }
-
         Ok(vn_mmr)
     }
 
     pub async fn on_scanning_complete(&self) -> Result<(), EpochManagerError> {
-        if self.last_registration_epoch()?.is_none() {
-            info!(
-                target: LOG_TARGET,
-                "📋 Validator is not registered, Skipping state sync"
-            );
-            return Ok(());
+        let db = self.db_factory.get_or_create_global_db()?;
+        {
+            let tx = db.create_transaction()?;
+            let last_sync_epoch = db.metadata(&tx).get_metadata::<Epoch>(MetadataKey::LastSyncedEpoch)?;
+            if last_sync_epoch.map(|e| e == self.current_epoch).unwrap_or(false) {
+                info!(target: LOG_TARGET, "🌍️ Already synced for epoch {}", self.current_epoch);
+                return Ok(());
+            }
         }
 
-        let vn_shard_key = self.get_validator_shard_key(self.current_epoch, self.node_identity.public_key())?;
+        let vn_shard_key = match self.get_validator_shard_key(self.current_epoch, self.node_identity.public_key())? {
+            Some(vn_shard_key) => vn_shard_key,
+            None => {
+                info!(
+                    target: LOG_TARGET,
+                    "📋 Validator is not registered for epoch {}, Skipping state sync", self.current_epoch
+                );
+                return Ok(());
+            },
+        };
+
         // from current_shard_key we can get the corresponding vns committee
         let committee_size = self.consensus_constants.committee_size as usize;
         let committee_vns = self.get_committee_vns_from_shard_key(self.current_epoch, vn_shard_key)?;
@@ -433,6 +455,11 @@ impl BaseLayerEpochManager {
         PeerSyncManagerService::new(self.validator_node_client_factory.clone(), self.shard_store.clone())
             .sync_peers_state(committee_vns, start_shard_id, end_shard_id, vn_shard_key)
             .await?;
+
+        let tx = db.create_transaction()?;
+        db.metadata(&tx)
+            .set_metadata(MetadataKey::LastSyncedEpoch, &self.current_epoch)?;
+        tx.commit()?;
 
         Ok(())
     }

@@ -24,6 +24,7 @@ use std::collections::{HashMap, HashSet};
 
 use log::*;
 use tari_common_types::types::{PublicKey, Signature};
+use tari_core::ValidatorNodeMmrHasherBlake256;
 use tari_dan_common_types::{
     optional::Optional,
     Epoch,
@@ -407,10 +408,11 @@ where
             .get_validator_shard_key(node.epoch(), self.public_key.clone())
             .await?;
         let vn_mmr = self.epoch_manager.get_validator_node_mmr(node.epoch()).await?;
-        // let mr = self.epoch_manager.get_validator_node_merkle_root(node.epoch()).await?;
-        // if vn_mmr.get_merkle_root().unwrap() != mr {
-        //     error!(target: LOG_TARGET, "🔥 Merkle root mismatch for epoch {}", node.epoch());
-        // }
+        // TODO: remove
+        let mr = self.epoch_manager.get_validator_node_merkle_root(node.epoch()).await?;
+        if vn_mmr.get_merkle_root().unwrap() != mr {
+            error!(target: LOG_TARGET, "🔥 Merkle root mismatch for epoch {}", node.epoch());
+        }
 
         {
             let mut tx = self.shard_store.create_tx()?;
@@ -717,17 +719,17 @@ where
         }
 
         // all merkle proofs for the signers must be valid
-        // let validator_node_root = self.epoch_manager.get_validator_node_merkle_root(qc.epoch()).await?;
-        // // TODO: Combine all validator merkle proofs before sending them
-        // for md in qc.validators_metadata() {
-        //     md.merkle_proof
-        //         .verify_leaf::<ValidatorNodeMmrHasherBlake256>(
-        //             &validator_node_root,
-        //             &*md.get_node_hash(),
-        //             md.merkle_leaf_index as usize,
-        //         )
-        //         .map_err(|e| HotStuffError::InvalidQuorumCertificate(format!("invalid merkle proof: {}", e)))?;
-        // }
+        let validator_node_root = self.epoch_manager.get_validator_node_merkle_root(qc.epoch()).await?;
+        // TODO: Combine all validator merkle proofs before sending them
+        for md in qc.validators_metadata() {
+            md.merkle_proof
+                .verify_leaf::<ValidatorNodeMmrHasherBlake256>(
+                    &validator_node_root,
+                    &*md.get_node_hash(),
+                    md.merkle_leaf_index as usize,
+                )
+                .map_err(|e| HotStuffError::InvalidQuorumCertificate(format!("invalid merkle proof: {}", e)))?;
+        }
 
         // all signers must be included in the epoch committee for the shard
         let committee = self.epoch_manager.get_committee(qc.epoch(), qc.shard()).await?;

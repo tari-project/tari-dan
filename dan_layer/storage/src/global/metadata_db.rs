@@ -55,6 +55,7 @@ pub enum MetadataKey {
     CurrentEpoch,
     CurrentShardKey,
     LastEpochRegistration,
+    LastSyncedEpoch,
 }
 
 impl MetadataKey {
@@ -68,6 +69,7 @@ impl MetadataKey {
             MetadataKey::CurrentEpoch => b"current_epoch",
             MetadataKey::LastEpochRegistration => b"last_registered_epoch",
             MetadataKey::CurrentShardKey => b"current_shard_key",
+            MetadataKey::LastSyncedEpoch => b"last_synced_epoch",
         }
     }
 }

@@ -276,7 +276,7 @@ impl GlobalDbAdapter for SqliteGlobalDbAdapter {
             .first::<ValidatorNode>(tx.connection())
             .map_err(|source| SqliteStorageError::DieselError {
                 source,
-                operation: "get::validator_nodes_per_epoch".to_string(),
+                operation: "get::validator_node".to_string(),
             })?;
 
         Ok(vn.into())
@@ -294,10 +294,12 @@ impl GlobalDbAdapter for SqliteGlobalDbAdapter {
             .filter(validator_nodes::epoch.ge(start_epoch as i64))
             .filter(validator_nodes::epoch.le(end_epoch as i64))
             .load::<ValidatorNode>(tx.connection())
+            .optional()
             .map_err(|source| SqliteStorageError::DieselError {
                 source,
-                operation: format!("get::validator_nodes_per_epoch({}, {})", start_epoch, end_epoch),
+                operation: format!("get::get_validator_nodes_within_epochs({}, {})", start_epoch, end_epoch),
             })?;
+        let sqlite_vns = sqlite_vns.unwrap_or_default();
 
         // TODO: Perhaps we should overwrite duplicate validator node entries for the epoch validity period
         let mut db_vns = Vec::with_capacity(sqlite_vns.len());

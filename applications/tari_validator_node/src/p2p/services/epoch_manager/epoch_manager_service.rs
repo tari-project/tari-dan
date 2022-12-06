@@ -191,9 +191,12 @@ impl EpochManagerService {
     async fn handle_request(&mut self, req: EpochManagerRequest) {
         match req {
             EpochManagerRequest::CurrentEpoch { reply } => handle(reply, Ok(self.inner.current_epoch())),
-            EpochManagerRequest::GetValidatorShardKey { epoch, addr, reply } => {
-                handle(reply, self.inner.get_validator_shard_key(epoch, &addr))
-            },
+            EpochManagerRequest::GetValidatorShardKey { epoch, addr, reply } => handle(
+                reply,
+                self.inner
+                    .get_validator_shard_key(epoch, &addr)
+                    .and_then(|x| x.ok_or(EpochManagerError::ValidatorNodeNotRegistered)),
+            ),
             EpochManagerRequest::UpdateEpoch {
                 block_height,
                 block_hash,

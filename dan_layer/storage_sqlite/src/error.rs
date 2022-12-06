@@ -21,6 +21,7 @@
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 use diesel;
 use tari_common_types::types::FixedHashSizeError;
+use tari_dan_common_types::optional::IsNotFoundError;
 use tari_dan_core::{models::ModelError, storage::StorageError};
 use thiserror::Error;
 
@@ -77,5 +78,11 @@ impl From<SqliteStorageError> for StorageError {
 impl From<FixedHashSizeError> for SqliteStorageError {
     fn from(_: FixedHashSizeError) -> Self {
         SqliteStorageError::MalformedHashData
+    }
+}
+
+impl IsNotFoundError for SqliteStorageError {
+    fn is_not_found_error(&self) -> bool {
+        matches!(self, SqliteStorageError::DieselError { source, .. } if matches!(source, diesel::result::Error::NotFound))
     }
 }
