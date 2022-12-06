@@ -957,7 +957,7 @@ impl ShardStoreTransaction<PublicKey, TariDanPayload> for SqliteShardStoreTransa
                     .gt(Vec::from(start_shard_id.as_bytes()))
                     .and(substates::shard_id.lt(Vec::from(end_shard_id.as_bytes())))
                     .and(substates::shard_id.ne_all(excluded_shards))
-                    .and(substates::data.is_not_null()),
+                    .and(substates::is_draft.eq(false)),
             )
             .get_results(self.transaction.connection())
             .optional()
