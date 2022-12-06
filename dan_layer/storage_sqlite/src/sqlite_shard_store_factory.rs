@@ -804,7 +804,8 @@ impl ShardStoreTransaction<PublicKey, TariDanPayload> for SqliteShardStoreTransa
     ) -> Result<(), StorageError> {
         use crate::schema::substates::{data, is_draft, justify, node_height, shard_id, substate_type, tree_node_hash};
         let payload_id = Vec::from(node.payload_id().as_slice());
-        for (sid, st_changes) in changes {
+        // Only save this node's shard state
+        for (sid, st_changes) in changes.iter().filter(|(s, _)| *s == &node.shard()) {
             let shard = Vec::from(sid.as_bytes());
 
             for st_change in st_changes {
