@@ -51,6 +51,8 @@ pub enum SqliteStorageError {
     ConversionError { reason: String },
     #[error("Malformed metadata for key '{key}'")]
     MalformedMetadata { key: String },
+    #[error("Serialization failed")]
+    SerializationFailed(#[from] serde_json::Error),
 }
 
 impl From<SqliteStorageError> for StorageError {

@@ -21,11 +21,13 @@
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 use std::{
+    collections::HashMap,
     convert::{TryFrom, TryInto},
     sync::{Arc, Mutex},
 };
 
 use diesel::{prelude::*, RunQueryDsl, SqliteConnection};
+use serde::{de::DeserializeOwned, Serialize};
 use tari_dan_storage::{
     global::{DbEpoch, DbTemplate, DbTemplateUpdate, DbValidatorNode, GlobalDbAdapter, MetadataKey, TemplateStatus},
     AtomicDb,
@@ -55,6 +57,20 @@ impl SqliteGlobalDbAdapter {
             connection: Arc::new(Mutex::new(connection)),
         }
     }
+
+    fn exists(&self, tx: &SqliteTransaction<'_>, key: MetadataKey) -> Result<bool, SqliteStorageError> {
+        use crate::global::schema::metadata;
+        let result = metadata::table
+            .filter(metadata::key_name.eq(key.as_key_bytes()))
+            .count()
+            .limit(1)
+            .get_result::<i64>(tx.connection())
+            .map_err(|source| SqliteStorageError::DieselError {
+                source,
+                operation: "exists::metadata".to_string(),
+            })?;
+        Ok(result > 0)
+    }
 }
 
 impl AtomicDb for SqliteGlobalDbAdapter {
@@ -72,20 +88,24 @@ impl AtomicDb for SqliteGlobalDbAdapter {
 }
 
 impl GlobalDbAdapter for SqliteGlobalDbAdapter {
-    fn set_metadata(&self, tx: &Self::DbTransaction<'_>, key: MetadataKey, value: &[u8]) -> Result<(), Self::Error> {
+    fn set_metadata<T: Serialize>(
+        &self,
+        tx: &Self::DbTransaction<'_>,
+        key: MetadataKey,
+        value: &T,
+    ) -> Result<(), Self::Error> {
         use crate::global::schema::metadata;
-        match self.get_metadata(tx, &key) {
-            Ok(Some(r)) => diesel::update(&MetadataModel {
-                key_name: key.as_key_bytes().to_vec(),
-                value: r,
-            })
-            .set(metadata::value.eq(value))
-            .execute(tx.connection())
-            .map_err(|source| SqliteStorageError::DieselError {
-                source,
-                operation: "update::metadata".to_string(),
-            })?,
-            Ok(None) => diesel::insert_into(metadata::table)
+        let value = serde_json::to_vec(value)?;
+        match self.exists(tx, key) {
+            Ok(true) => diesel::update(metadata::table)
+                .filter(metadata::key_name.eq(key.as_key_bytes()))
+                .set(metadata::value.eq(value))
+                .execute(tx.connection())
+                .map_err(|source| SqliteStorageError::DieselError {
+                    source,
+                    operation: "update::metadata".to_string(),
+                })?,
+            Ok(false) => diesel::insert_into(metadata::table)
                 .values((metadata::key_name.eq(key.as_key_bytes()), metadata::value.eq(value)))
                 .execute(tx.connection())
                 .map_err(|source| SqliteStorageError::DieselError {
@@ -98,7 +118,11 @@ impl GlobalDbAdapter for SqliteGlobalDbAdapter {
         Ok(())
     }
 
-    fn get_metadata(&self, tx: &Self::DbTransaction<'_>, key: &MetadataKey) -> Result<Option<Vec<u8>>, Self::Error> {
+    fn get_metadata<T: DeserializeOwned>(
+        &self,
+        tx: &Self::DbTransaction<'_>,
+        key: &MetadataKey,
+    ) -> Result<Option<T>, Self::Error> {
         use crate::global::schema::metadata::dsl;
 
         let row: Option<MetadataModel> = dsl::metadata
@@ -110,7 +134,8 @@ impl GlobalDbAdapter for SqliteGlobalDbAdapter {
                 operation: "get::metadata_key".to_string(),
             })?;
 
-        Ok(row.map(|r| r.value))
+        let v = row.map(|r| serde_json::from_slice(&r.value)).transpose()?;
+        Ok(v)
     }
 
     fn get_template(&self, tx: &Self::DbTransaction<'_>, key: &[u8]) -> Result<Option<DbTemplate>, Self::Error> {
@@ -238,13 +263,15 @@ impl GlobalDbAdapter for SqliteGlobalDbAdapter {
     fn get_validator_node(
         &self,
         tx: &Self::DbTransaction<'_>,
-        epoch: u64,
+        start_epoch: u64,
+        end_epoch: u64,
         public_key: &[u8],
     ) -> Result<DbValidatorNode, Self::Error> {
         use crate::global::schema::{validator_nodes, validator_nodes::dsl};
 
         let vn = dsl::validator_nodes
-            .filter(validator_nodes::epoch.eq(epoch as i64))
+            .filter(validator_nodes::epoch.ge(start_epoch as i64))
+            .filter(validator_nodes::epoch.le(end_epoch as i64))
             .filter(validator_nodes::public_key.eq(public_key))
             .first::<ValidatorNode>(tx.connection())
             .map_err(|source| SqliteStorageError::DieselError {
@@ -255,23 +282,35 @@ impl GlobalDbAdapter for SqliteGlobalDbAdapter {
         Ok(vn.into())
     }
 
-    fn get_validator_nodes_per_epoch(
+    fn get_validator_nodes_within_epochs(
         &self,
         tx: &Self::DbTransaction<'_>,
-        epoch: u64,
+        start_epoch: u64,
+        end_epoch: u64,
     ) -> Result<Vec<DbValidatorNode>, Self::Error> {
         use crate::global::schema::{validator_nodes, validator_nodes::dsl};
 
         let sqlite_vns = dsl::validator_nodes
-            .filter(validator_nodes::epoch.eq(epoch as i64))
+            .filter(validator_nodes::epoch.ge(start_epoch as i64))
+            .filter(validator_nodes::epoch.le(end_epoch as i64))
             .load::<ValidatorNode>(tx.connection())
             .map_err(|source| SqliteStorageError::DieselError {
                 source,
-                operation: "get::validator_nodes_per_epoch".to_string(),
+                operation: format!("get::validator_nodes_per_epoch({}, {})", start_epoch, end_epoch),
             })?;
 
-        let db_vns: Vec<DbValidatorNode> = sqlite_vns.into_iter().map(Into::into).collect();
+        // TODO: Perhaps we should overwrite duplicate validator node entries for the epoch validity period
+        let mut db_vns = Vec::with_capacity(sqlite_vns.len());
+        let mut dedup_map = HashMap::with_capacity(sqlite_vns.len());
+        for (i, vn) in sqlite_vns.into_iter().enumerate() {
+            if let Some(idx) = dedup_map.insert(vn.public_key.clone(), i) {
+                *db_vns.get_mut(idx).unwrap() = None;
+            }
+            db_vns.push(Some(DbValidatorNode::from(vn)));
+        }
 
+        let mut db_vns = db_vns.into_iter().flatten().collect::<Vec<_>>();
+        db_vns.sort_by(|a, b| a.shard_key.cmp(&b.shard_key));
         Ok(db_vns)
     }
 

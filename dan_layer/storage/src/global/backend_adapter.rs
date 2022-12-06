@@ -20,6 +20,8 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+use serde::{de::DeserializeOwned, Serialize};
+
 use super::{validator_node_db::DbValidatorNode, DbEpoch};
 use crate::{
     atomic::AtomicDb,
@@ -30,8 +32,17 @@ use crate::{
 };
 
 pub trait GlobalDbAdapter: AtomicDb + Send + Sync + Clone {
-    fn get_metadata(&self, tx: &Self::DbTransaction<'_>, key: &MetadataKey) -> Result<Option<Vec<u8>>, Self::Error>;
-    fn set_metadata(&self, tx: &Self::DbTransaction<'_>, key: MetadataKey, value: &[u8]) -> Result<(), Self::Error>;
+    fn get_metadata<T: DeserializeOwned>(
+        &self,
+        tx: &Self::DbTransaction<'_>,
+        key: &MetadataKey,
+    ) -> Result<Option<T>, Self::Error>;
+    fn set_metadata<T: Serialize>(
+        &self,
+        tx: &Self::DbTransaction<'_>,
+        key: MetadataKey,
+        value: &T,
+    ) -> Result<(), Self::Error>;
 
     fn get_template(&self, tx: &Self::DbTransaction<'_>, key: &[u8]) -> Result<Option<DbTemplate>, Self::Error>;
     fn get_templates(&self, tx: &Self::DbTransaction<'_>, limit: usize) -> Result<Vec<DbTemplate>, Self::Error>;
@@ -49,16 +60,18 @@ pub trait GlobalDbAdapter: AtomicDb + Send + Sync + Clone {
         tx: &Self::DbTransaction<'_>,
         validator_nodes: Vec<DbValidatorNode>,
     ) -> Result<(), Self::Error>;
-    fn get_validator_nodes_per_epoch(
+    fn get_validator_nodes_within_epochs(
         &self,
         tx: &Self::DbTransaction<'_>,
-        epoch: u64,
+        start_epoch: u64,
+        end_epoch: u64,
     ) -> Result<Vec<DbValidatorNode>, Self::Error>;
 
     fn get_validator_node(
         &self,
         tx: &Self::DbTransaction<'_>,
-        epoch: u64,
+        start_epoch: u64,
+        end_epoch: u64,
         public_key: &[u8],
     ) -> Result<DbValidatorNode, Self::Error>;
     fn insert_epoch(&self, tx: &Self::DbTransaction<'_>, epoch: DbEpoch) -> Result<(), Self::Error>;

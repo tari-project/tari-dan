@@ -20,6 +20,8 @@
 //   WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //   USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+use serde::{de::DeserializeOwned, Serialize};
+
 use crate::global::GlobalDbAdapter;
 
 pub struct MetadataDb<'a, TGlobalDbAdapter: GlobalDbAdapter> {
@@ -32,12 +34,12 @@ impl<'a, TGlobalDbAdapter: GlobalDbAdapter> MetadataDb<'a, TGlobalDbAdapter> {
         Self { backend, tx }
     }
 
-    pub fn set_metadata(&self, key: MetadataKey, value: &[u8]) -> Result<(), TGlobalDbAdapter::Error> {
+    pub fn set_metadata<T: Serialize>(&self, key: MetadataKey, value: &T) -> Result<(), TGlobalDbAdapter::Error> {
         self.backend.set_metadata(self.tx, key, value)?;
         Ok(())
     }
 
-    pub fn get_metadata(&self, key: MetadataKey) -> Result<Option<Vec<u8>>, TGlobalDbAdapter::Error> {
+    pub fn get_metadata<T: DeserializeOwned>(&self, key: MetadataKey) -> Result<Option<T>, TGlobalDbAdapter::Error> {
         let data = self.backend.get_metadata(self.tx, &key)?;
         Ok(data)
     }
@@ -48,7 +50,10 @@ pub enum MetadataKey {
     BaseLayerScannerLastScannedTip,
     BaseLayerScannerLastScannedBlockHeight,
     BaseLayerScannerLastScannedBlockHash,
+    BaseLayerScannerNextBlockHash,
+    BaseLayerConsensusConstants,
     CurrentEpoch,
+    CurrentShardKey,
     LastEpochRegistration,
 }
 
@@ -58,8 +63,11 @@ impl MetadataKey {
             MetadataKey::BaseLayerScannerLastScannedTip => b"base_layer_scanner.last_scanned_tip",
             MetadataKey::BaseLayerScannerLastScannedBlockHash => b"base_layer_scanner.last_scanned_block_hash",
             MetadataKey::BaseLayerScannerLastScannedBlockHeight => b"base_layer_scanner.last_scanned_block_height",
+            MetadataKey::BaseLayerScannerNextBlockHash => b"base_layer_scanner.next_block_hash",
+            MetadataKey::BaseLayerConsensusConstants => b"base_layer.consensus_constants",
             MetadataKey::CurrentEpoch => b"current_epoch",
             MetadataKey::LastEpochRegistration => b"last_registered_epoch",
+            MetadataKey::CurrentShardKey => b"current_shard_key",
         }
     }
 }
