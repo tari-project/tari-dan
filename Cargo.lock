@@ -5978,6 +5978,7 @@ dependencies = [
  "diesel",
  "diesel_migrations",
  "log",
+ "serde",
  "serde_json",
  "tari_common",
  "tari_common_types",
