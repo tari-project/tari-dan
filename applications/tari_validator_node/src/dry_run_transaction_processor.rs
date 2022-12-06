@@ -52,7 +52,6 @@ impl DryRunTransactionProcessor {
         }
     }
 
-    // TODO: create a error enum
     pub async fn process_transaction(
         &self,
         transaction: Transaction,
