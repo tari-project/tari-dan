@@ -851,6 +851,7 @@ where
                 *node.justify().decision() == QuorumDecision::Accept
             {
                 tx.save_substate_changes(changes, node)?;
+                tx.complete_pledges(node.shard(), node.payload_id(), node.hash())?;
             }
             tx.set_last_executed_height(shard, node.height())?;
         }

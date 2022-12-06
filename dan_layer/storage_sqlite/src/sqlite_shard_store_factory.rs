@@ -898,6 +898,7 @@ impl ShardStoreTransaction<PublicKey, TariDanPayload> for SqliteShardStoreTransa
     }
 
     fn insert_substates(&mut self, substate_data: SubstateShardData) -> Result<(), StorageError> {
+        todo!()
         // let shard = Vec::from(substate_data.shard().as_bytes());
         // let substate = substate_data.substate();
         // let height = substate_data.height();
@@ -1325,5 +1326,40 @@ impl ShardStoreTransaction<PublicKey, TariDanPayload> for SqliteShardStoreTransa
             reason: format!("Get substates: {}", e),
         })?;
         Ok(res.into_iter().map(|transaction| transaction.into()).collect())
+    }
+
+    fn complete_pledges(
+        &self,
+        shard: ShardId,
+        payload: PayloadId,
+        node_hash: &TreeNodeHash,
+    ) -> Result<(), StorageError> {
+        use crate::schema::shard_pledges::{
+            completed_by_tree_node_hash,
+            dsl::shard_pledges,
+            is_active,
+            pledged_to_payload_id,
+            shard_id,
+            updated_timestamp,
+        };
+        let rows_affected = diesel::update(shard_pledges)
+            .filter(shard_id.eq(shard.as_bytes()))
+            .filter(pledged_to_payload_id.eq(payload.as_bytes()))
+            .filter(is_active.eq(true))
+            .set((
+                is_active.eq(false),
+                completed_by_tree_node_hash.eq(node_hash.as_bytes()),
+                updated_timestamp.eq(now),
+            ))
+            .execute(self.transaction.connection())
+            .map_err(|e| StorageError::QueryError {
+                reason: format!("Complete pledges: {}", e),
+            })?;
+        if rows_affected == 0 {
+            return Err(StorageError::QueryError {
+                reason: format!("Complete pledges: No rows affected"),
+            });
+        }
+        Ok(())
     }
 }
