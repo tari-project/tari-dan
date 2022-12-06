@@ -20,8 +20,6 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use std::convert::TryInto;
-
 use log::*;
 use tari_common_types::types::{FixedHash, FixedHashSizeError};
 use tari_core::transactions::transaction_components::{
@@ -29,12 +27,16 @@ use tari_core::transactions::transaction_components::{
     SideChainFeature,
     ValidatorNodeRegistration,
 };
-use tari_crypto::tari_utilities::ByteArray;
-use tari_dan_common_types::{optional::Optional, Epoch};
+use tari_dan_common_types::optional::Optional;
 use tari_dan_core::{
     consensus_constants::ConsensusConstants,
     models::BaseLayerMetadata,
-    services::{base_node_error::BaseNodeError, epoch_manager::EpochManagerError, BaseNodeClient, BlockInfo},
+    services::{
+        base_node_error::BaseNodeError,
+        epoch_manager::{EpochManager, EpochManagerError},
+        BaseNodeClient,
+        BlockInfo,
+    },
     DigitalAssetError,
 };
 use tari_dan_storage::global::{GlobalDb, MetadataKey};
@@ -86,6 +88,7 @@ pub struct BaseLayerScanner {
     last_scanned_height: u64,
     last_scanned_tip: Option<FixedHash>,
     last_scanned_hash: Option<FixedHash>,
+    next_block_hash: Option<FixedHash>,
     base_node_client: GrpcBaseNodeClient,
     epoch_manager: EpochManagerHandle,
     template_manager: TemplateManagerHandle,
@@ -109,6 +112,7 @@ impl BaseLayerScanner {
             last_scanned_tip: None,
             last_scanned_height: 0,
             last_scanned_hash: None,
+            next_block_hash: None,
             base_node_client,
             epoch_manager,
             template_manager,
@@ -147,34 +151,15 @@ impl BaseLayerScanner {
     }
 
     fn load_initial_state(&mut self) -> Result<(), BaseLayerScannerError> {
-        self.last_scanned_hash = None;
-        self.last_scanned_height = 0;
         let tx = self.global_db.create_transaction()?;
         let metadata = self.global_db.metadata(&tx);
 
-        self.last_scanned_tip = metadata
-            .get_metadata(MetadataKey::BaseLayerScannerLastScannedTip)?
-            .map(TryInto::try_into)
-            .transpose()?;
-        self.last_scanned_hash = metadata
-            .get_metadata(MetadataKey::BaseLayerScannerLastScannedBlockHash)?
-            .map(TryInto::try_into)
-            .transpose()?;
+        self.last_scanned_tip = metadata.get_metadata(MetadataKey::BaseLayerScannerLastScannedTip)?;
+        self.last_scanned_hash = metadata.get_metadata(MetadataKey::BaseLayerScannerLastScannedBlockHash)?;
         self.last_scanned_height = metadata
             .get_metadata(MetadataKey::BaseLayerScannerLastScannedBlockHeight)?
-            .map(|data| {
-                if data.len() == 8 {
-                    let mut buf = [0u8; 8];
-                    buf.copy_from_slice(&data);
-                    Ok(u64::from_le_bytes(buf))
-                } else {
-                    Err(BaseLayerScannerError::DataCorruption {
-                        details: "LastScannedBaseLayerBlockHeight did not contain little-endian u64 data".to_string(),
-                    })
-                }
-            })
-            .transpose()?
             .unwrap_or(0);
+        self.next_block_hash = metadata.get_metadata(MetadataKey::BaseLayerScannerNextBlockHash)?;
         Ok(())
     }
 
@@ -194,6 +179,7 @@ impl BaseLayerScanner {
                         .saturating_sub(self.consensus_constants.base_layer_confirmations)
                 );
                 self.sync_blockchain().await?;
+                self.epoch_manager.notify_scanning_complete().await?;
             },
             BlockchainProgression::Reorged => {
                 warn!(
@@ -204,6 +190,7 @@ impl BaseLayerScanner {
                 self.last_scanned_hash = None;
                 self.last_scanned_height = 0;
                 self.sync_blockchain().await?;
+                self.epoch_manager.notify_scanning_complete().await?;
             },
             BlockchainProgression::NoProgress => {
                 trace!(target: LOG_TARGET, "No new blocks to scan.");
@@ -276,6 +263,10 @@ impl BaseLayerScanner {
                 target: LOG_TARGET,
                 "⛓️ Scanning base layer block {} of {}", block_info.height, end_height
             );
+            self.epoch_manager
+                .update_epoch(block_info.height, block_info.hash)
+                .await?;
+
             for output in utxos.outputs {
                 let output_hash = output.hash();
                 let sidechain_feature = output.features.sidechain_feature.ok_or_else(|| {
@@ -299,7 +290,8 @@ impl BaseLayerScanner {
                 }
             }
 
-            self.set_last_scanned_block(tip.tip_hash, block_info.height, block_info.hash)?;
+            self.set_last_scanned_block(tip.tip_hash, &block_info)?;
+
             match block_info.next_block_hash {
                 Some(next_hash) => {
                     current_hash = Some(next_hash);
@@ -320,25 +312,22 @@ impl BaseLayerScanner {
             }
         }
 
-        // after scan has been completed by the vn, the epoch is updated
-        self.epoch_manager.update_epoch(tip).await?;
-
         Ok(())
     }
 
     async fn register_validator_node_registration(
         &mut self,
         height: u64,
-        _registration: ValidatorNodeRegistration,
+        registration: ValidatorNodeRegistration,
     ) -> Result<(), BaseLayerScannerError> {
-        // TODO: add to VN registry
         info!(
             target: LOG_TARGET,
             "⛓️ Validator node registration UTXO found at height {}", height,
         );
 
-        let epoch_height = Epoch::from_block_height(height); // epoch duration corresponds to 10 blocks
-        self.epoch_manager.update_last_registration_epoch(epoch_height).await?;
+        self.epoch_manager
+            .add_validator_node_registration(height, registration)
+            .await?;
 
         Ok(())
     }
@@ -366,24 +355,18 @@ impl BaseLayerScanner {
         Ok(())
     }
 
-    fn set_last_scanned_block(
-        &mut self,
-        tip: FixedHash,
-        height: u64,
-        hash: FixedHash,
-    ) -> Result<(), BaseLayerScannerError> {
+    fn set_last_scanned_block(&mut self, tip: FixedHash, block_info: &BlockInfo) -> Result<(), BaseLayerScannerError> {
         let tx = self.global_db.create_transaction()?;
         let metadata = self.global_db.metadata(&tx);
-        metadata.set_metadata(MetadataKey::BaseLayerScannerLastScannedTip, tip.as_bytes())?;
-        metadata.set_metadata(MetadataKey::BaseLayerScannerLastScannedBlockHash, hash.as_bytes())?;
-        metadata.set_metadata(
-            MetadataKey::BaseLayerScannerLastScannedBlockHeight,
-            &height.to_le_bytes(),
-        )?;
+        metadata.set_metadata(MetadataKey::BaseLayerScannerLastScannedTip, &tip)?;
+        metadata.set_metadata(MetadataKey::BaseLayerScannerLastScannedBlockHash, &block_info.hash)?;
+        metadata.set_metadata(MetadataKey::BaseLayerScannerNextBlockHash, &block_info.next_block_hash)?;
+        metadata.set_metadata(MetadataKey::BaseLayerScannerLastScannedBlockHeight, &block_info.height)?;
         self.global_db.commit(tx)?;
         self.last_scanned_tip = Some(tip);
-        self.last_scanned_hash = Some(hash);
-        self.last_scanned_height = height;
+        self.last_scanned_hash = Some(block_info.hash);
+        self.next_block_hash = block_info.next_block_hash;
+        self.last_scanned_height = block_info.height;
         Ok(())
     }
 }
@@ -396,8 +379,6 @@ pub enum BaseLayerScannerError {
     SqliteStorageError(#[from] SqliteStorageError),
     #[error("DigitalAsset error: {0}")]
     DigitalAssetError(#[from] DigitalAssetError),
-    #[error("Data corruption: {details}")]
-    DataCorruption { details: String },
     #[error("Epoch manager error: {0}")]
     EpochManagerError(#[from] EpochManagerError),
     #[error("Template manager error: {0}")]

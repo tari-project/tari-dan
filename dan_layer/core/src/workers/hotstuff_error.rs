@@ -20,7 +20,7 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use tari_dan_common_types::{Epoch, NodeHeight, ShardId};
+use tari_dan_common_types::{Epoch, NodeHeight, PayloadId, ShardId};
 use tari_engine_types::commit_result::RejectReason;
 use thiserror::Error;
 
@@ -41,8 +41,11 @@ pub enum HotStuffError {
     StoreError(#[from] StoreError),
     #[error("Claim is not valid")]
     ClaimIsNotValid,
-    #[error("Node payload does not match justify payload")]
-    NodePayloadDoesNotMatchJustifyPayload,
+    #[error("Node payload {node_payload} does not match justify payload {justify_payload}")]
+    NodePayloadDoesNotMatchJustifyPayload {
+        node_payload: PayloadId,
+        justify_payload: PayloadId,
+    },
     #[error("Send error")]
     SendError,
     #[error("Not the leader")]
@@ -67,4 +70,11 @@ pub enum HotStuffError {
     ValidatorNodeNotIncludedInMmr,
     #[error("No committee for shard {shard} and epoch {epoch}")]
     NoCommitteeForShard { shard: ShardId, epoch: Epoch },
+    #[error(
+        "Node payload height ({node_payload_height}) does not match justify payload height ({justify_payload_height})"
+    )]
+    NodePayloadHeightIncorrect {
+        node_payload_height: NodeHeight,
+        justify_payload_height: NodeHeight,
+    },
 }

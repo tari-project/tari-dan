@@ -122,7 +122,6 @@ pub async fn spawn_services(
         shard_store.clone(),
         base_node_client.clone(),
         consensus_constants.clone(),
-        node_identity.public_key().clone(),
         shutdown.clone(),
         node_identity.clone(),
         validator_node_client_factory,

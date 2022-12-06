@@ -24,7 +24,6 @@ use std::collections::{HashMap, HashSet};
 
 use log::*;
 use tari_common_types::types::{PublicKey, Signature};
-use tari_core::ValidatorNodeMmrHasherBlake256;
 use tari_dan_common_types::{
     optional::Optional,
     Epoch,
@@ -210,7 +209,7 @@ where
             //  Save the payload, because we will need it when the proposal comes back
             tx.set_payload(payload.clone())?;
             tx.commit()?;
-            // TODO: combine merkle proofs into one before sending
+
             new_view = HotStuffMessage::new_view(high_qc, shard, Some(payload));
         }
 
@@ -408,17 +407,37 @@ where
             .get_validator_shard_key(node.epoch(), self.public_key.clone())
             .await?;
         let vn_mmr = self.epoch_manager.get_validator_node_mmr(node.epoch()).await?;
+        // let mr = self.epoch_manager.get_validator_node_merkle_root(node.epoch()).await?;
+        // if vn_mmr.get_merkle_root().unwrap() != mr {
+        //     error!(target: LOG_TARGET, "🔥 Merkle root mismatch for epoch {}", node.epoch());
+        // }
 
         {
             let mut tx = self.shard_store.create_tx()?;
             tx.save_node(node.clone())?;
             let v_height = tx.get_last_voted_height(shard)?;
             // TODO: can also use the QC and committee to justify this....
+            if node.height() <= v_height {
+                error!(
+                    target: LOG_TARGET,
+                    "Received a proposal that is not valid: node_height {} <= v_height {}",
+                    node.height(),
+                    v_height
+                );
+                tx.commit()?;
+                return Ok(());
+            }
             let (locked_node, locked_height) = tx.get_locked_node_hash_and_height(shard)?;
-            if node.height() <= v_height ||
-                (node.parent() != &locked_node && node.justify().local_node_height() <= locked_height)
-            {
-                error!(target: LOG_TARGET, "Received a proposal that is not valid");
+            if node.parent() != &locked_node && node.justify().local_node_height() <= locked_height {
+                error!(
+                    target: LOG_TARGET,
+                    "Received a proposal that is not valid: node.parent() {} != locked_node {} && \
+                     node.local_node_height {} <= locked_height {}",
+                    node.parent(),
+                    locked_node,
+                    node.justify().local_node_height(),
+                    locked_height
+                );
                 tx.commit()?;
                 return Ok(());
             }
@@ -698,19 +717,19 @@ where
         }
 
         // all merkle proofs for the signers must be valid
-        let validator_node_root = self.epoch_manager.get_validator_node_merkle_root(qc.epoch()).await?;
-        // TODO: Combine all validator merkle proofs before sending them
-        for md in qc.validators_metadata() {
-            md.merkle_proof
-                .verify_leaf::<ValidatorNodeMmrHasherBlake256>(
-                    &validator_node_root,
-                    &*md.get_node_hash(),
-                    md.merkle_leaf_index as usize,
-                )
-                .map_err(|_| HotStuffError::InvalidQuorumCertificate("invalid merkle proof".to_string()))?;
-        }
+        // let validator_node_root = self.epoch_manager.get_validator_node_merkle_root(qc.epoch()).await?;
+        // // TODO: Combine all validator merkle proofs before sending them
+        // for md in qc.validators_metadata() {
+        //     md.merkle_proof
+        //         .verify_leaf::<ValidatorNodeMmrHasherBlake256>(
+        //             &validator_node_root,
+        //             &*md.get_node_hash(),
+        //             md.merkle_leaf_index as usize,
+        //         )
+        //         .map_err(|e| HotStuffError::InvalidQuorumCertificate(format!("invalid merkle proof: {}", e)))?;
+        // }
 
-        // all signers must be included in the epoch commitee for the shard
+        // all signers must be included in the epoch committee for the shard
         let committee = self.epoch_manager.get_committee(qc.epoch(), qc.shard()).await?;
         let commitee_set = committee.members.iter().map(|m| m.as_bytes()).collect::<HashSet<_>>();
         let all_signers_are_in_committee = signers_set.iter().all(|s| commitee_set.contains(s));
@@ -848,21 +867,32 @@ where
     }
 
     fn validate_proposal(&self, node: &HotStuffTreeNode<TAddr, TPayload>) -> Result<(), HotStuffError> {
-        if node.payload_height() == NodeHeight(0) ||
-            (node.payload_id() == node.justify().payload_id() &&
-                node.payload_height() == node.justify().payload_height() + NodeHeight(1))
-        {
-            let max_node_height = NodeHeight(self.consensus_constants.hotstuff_rounds - 1);
-            if node.payload_height() > max_node_height {
-                return Err(HotStuffError::PayloadHeightIsTooHigh {
-                    actual: node.payload_height(),
-                    max: max_node_height,
-                });
-            }
-            Ok(())
-        } else {
-            Err(HotStuffError::NodePayloadDoesNotMatchJustifyPayload)
+        if node.payload_height() == NodeHeight(0) {
+            return Ok(());
         }
+
+        if node.payload_id() != node.justify().payload_id() {
+            return Err(HotStuffError::NodePayloadDoesNotMatchJustifyPayload {
+                node_payload: node.payload_id(),
+                justify_payload: node.justify().payload_id(),
+            });
+        }
+
+        if node.payload_height() != node.justify().payload_height() + NodeHeight(1) {
+            return Err(HotStuffError::NodePayloadHeightIncorrect {
+                node_payload_height: node.payload_height(),
+                justify_payload_height: node.justify().payload_height() + NodeHeight(1),
+            });
+        }
+
+        let max_node_height = NodeHeight(self.consensus_constants.hotstuff_rounds - 1);
+        if node.payload_height() > max_node_height {
+            return Err(HotStuffError::PayloadHeightIsTooHigh {
+                actual: node.payload_height(),
+                max: max_node_height,
+            });
+        }
+        Ok(())
     }
 
     fn validate_pledges(

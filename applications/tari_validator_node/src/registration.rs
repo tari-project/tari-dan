@@ -124,6 +124,7 @@ pub fn spawn(
     shutdown: ShutdownSignal,
 ) {
     if !config.validator_node.auto_register {
+        info!(target: LOG_TARGET, "♽️ Node auto registration is disabled");
         return;
     }
 
@@ -149,7 +150,7 @@ async fn start(
             Ok(event) = rx.recv() => {
                 match event {
                     EpochManagerEvent::EpochChanged(current_epoch) =>
-                        handle_epoch_changed(current_epoch, &config, &node_identity, &epoch_manager).await?,
+                        handle_epoch_changed(current_epoch, &config, &node_identity, &epoch_manager, ).await?,
                 }
             },
             _ = shutdown.wait() => break
@@ -167,18 +168,26 @@ async fn handle_epoch_changed(
 ) -> Result<(), AutoRegistrationError> {
     let last_registration_epoch = epoch_manager.last_registration_epoch().await?.unwrap_or(Epoch(0));
 
+    // TODO: This need to consider the validator node confirmation period and submit a reregistration which the tip
+    //       has progressed to the last valid epoch for this node
+
     let mut base_node_client =
         GrpcBaseNodeClient::new(config.validator_node.base_node_grpc_address.unwrap_or_else(|| {
             let port = grpc_default_port(ApplicationType::BaseNode, config.network);
-            SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), port)
+            ([127, 0, 0, 1], port).into()
         }));
 
+    // TODO: This logic probably need to move into the epoch manager because it is aware of the base layer consensus
+    //       constants
+    // e.g. if epoch_manager.epochs_until_next_registration() <= 1 { ... }
     let current_block_height = current_epoch.as_u64() * 10 + 1;
     let validator_node_registration_expiry = base_node_client
         .get_consensus_constants(current_block_height)
         .await
         .map_err(AutoRegistrationError::BaseNodeError)?
-        .get_validator_node_registration_expiry();
+        .validator_node_registration_expiry()
+        .as_u64() *
+        10;
 
     let last_registration_height = last_registration_epoch.as_u64() * 10 + 1;
     let num_blocks_since_last_reg = current_block_height
