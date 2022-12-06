@@ -51,7 +51,7 @@ impl AccountsSubcommand {
                 println!("Accounts:");
                 for (i, account) in account_manager.all().into_iter().enumerate() {
                     if account.is_active {
-                        println!("{}. (active) {}", i, account);
+                        println!("{}. {} (active)", i, account);
                     } else {
                         println!("{}. {}", i, account);
                     }

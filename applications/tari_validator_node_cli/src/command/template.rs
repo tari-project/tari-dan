@@ -94,7 +94,6 @@ async fn handle_get(template_address: TemplateAddress, mut client: ValidatorNode
 
 async fn handle_list(mut client: ValidatorNodeClient) -> Result<(), anyhow::Error> {
     let templates = client.get_active_templates(GetTemplatesRequest { limit: 10 }).await?;
-    println!("Templates:");
 
     let mut table = Table::new();
     table

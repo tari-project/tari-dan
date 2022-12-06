@@ -43,8 +43,7 @@ impl TempShardStoreFactory {
     }
 }
 
-impl Default for TempShardStoreFactory {g st
-
+impl Default for TempShardStoreFactory {
     fn default() -> Self {
         Self::new()
     }

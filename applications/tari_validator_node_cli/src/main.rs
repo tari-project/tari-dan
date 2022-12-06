@@ -66,7 +66,7 @@ async fn handle_command(command: Command, base_dir: PathBuf, client: ValidatorNo
         Command::Templates(cmd) => cmd.handle(client).await?,
         Command::Accounts(cmd) => cmd.handle(base_dir).await?,
         Command::Transactions(cmd) => cmd.handle(base_dir, client).await?,
-        Command::Manifest(cmd) => cmd.handle()?,
+        Command::Manifests(cmd) => cmd.handle()?,
     }
 
     Ok(())

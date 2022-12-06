@@ -26,7 +26,7 @@ mod account;
 pub use account::AccountsSubcommand;
 
 mod template;
-pub use template::{PublishTemplateArgs, TemplateSubcommand};
+pub use template::TemplateSubcommand;
 
 mod vn;
 pub use vn::VnSubcommand;
@@ -41,12 +41,12 @@ mod transaction;
 pub enum Command {
     #[clap(subcommand)]
     Vn(VnSubcommand),
-    #[clap(subcommand)]
+    #[clap(subcommand, alias = "template")]
     Templates(TemplateSubcommand),
-    #[clap(subcommand)]
+    #[clap(subcommand, alias = "account")]
     Accounts(AccountsSubcommand),
-    #[clap(subcommand)]
+    #[clap(subcommand, alias = "transaction")]
     Transactions(TransactionSubcommand),
-    #[clap(subcommand)]
-    Manifest(ManifestSubcommand),
+    #[clap(subcommand, alias = "manifest")]
+    Manifests(ManifestSubcommand),
 }
