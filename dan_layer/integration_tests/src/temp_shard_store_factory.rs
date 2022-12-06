@@ -20,11 +20,6 @@
 //   WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //   USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use std::{
-    fs,
-    path::{Path, PathBuf},
-};
-
 use tari_common_types::types::PublicKey;
 use tari_dan_core::{
     models::TariDanPayload,
@@ -34,7 +29,7 @@ use tari_dan_storage_sqlite::sqlite_shard_store_factory::{SqliteShardStore, Sqli
 use tempdir::TempDir;
 pub struct TempShardStoreFactory {
     sqlite: SqliteShardStore,
-    path: TempDir,
+    _path: TempDir,
 }
 
 impl TempShardStoreFactory {
@@ -43,7 +38,7 @@ impl TempShardStoreFactory {
         let sqlite = SqliteShardStore::try_create(temp_path.path().join("state.db")).unwrap();
         Self {
             sqlite,
-            path: temp_path,
+            _path: temp_path,
         }
     }
 }
