@@ -70,6 +70,8 @@ pub enum HotStuffError {
     ValidatorNodeNotIncludedInMmr,
     #[error("No committee for shard {shard} and epoch {epoch}")]
     NoCommitteeForShard { shard: ShardId, epoch: Epoch },
+    #[error("Cannot vote on a proposal that has been rejected")]
+    JustifyIsNotAccepted,
     #[error(
         "Node payload height ({node_payload_height}) does not match justify payload height ({justify_payload_height})"
     )]

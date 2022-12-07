@@ -62,6 +62,7 @@ impl ResourceManager {
     // Register, but don't mind any tokens
     pub fn register_non_fungible(&mut self, metadata: Metadata) -> ResourceAddress {
         let arg = MintResourceArg::NonFungible {
+            resource_address: None,
             token_ids: vec![],
             metadata,
         };
@@ -85,6 +86,7 @@ impl ResourceManager {
         metadata.insert(b"IMAGE_URL".to_vec(), image_url.as_bytes().to_vec());
 
         let arg = MintResourceArg::NonFungible {
+            resource_address: self.for_specific,
             token_ids: ids,
             metadata,
         };

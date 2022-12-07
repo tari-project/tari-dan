@@ -88,6 +88,8 @@ pub struct CommonSubmitArgs {
     num_outputs: Option<u8>,
     #[clap(long, short = 'i')]
     inputs: Vec<String>,
+    #[clap(long, short = 'r')]
+    input_refs: Vec<ShardId>,
     #[clap(long, short = 'v')]
     version: Option<u8>,
     #[clap(long, short = 'd')]
@@ -211,7 +213,18 @@ async fn submit_transaction(
         .get_active_account()
         .ok_or_else(|| anyhow::anyhow!("No active account. Use `accounts use [public key hex]` to set one."))?;
 
-    let input_refs = extract_input_refs(&instructions, &component_manager)?;
+    let input_refs = if common.input_refs.is_empty() {
+        extract_input_refs(&instructions, &component_manager)?
+    } else {
+        let mut input_refs = common.input_refs;
+        input_refs.extend(instructions.iter().filter_map(|i| match i {
+            Instruction::CallMethod { component_address, .. } => {
+                Some(ShardId::from_bytes(&component_address.into_array()).expect("Not a valid shardid"))
+            },
+            _ => None,
+        }));
+        input_refs
+    };
     let inputs = common
         .inputs
         .into_iter()
@@ -240,6 +253,10 @@ async fn submit_transaction(
 
     let transaction = builder.build();
     let tx_hash = *transaction.hash();
+
+    for instruction in transaction.instructions() {
+        println!("- {}", instruction);
+    }
 
     let request = SubmitTransactionRequest {
         instructions: transaction.instructions().to_vec(),
