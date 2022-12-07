@@ -129,7 +129,7 @@ impl StateTracker {
                 metadata,
             } => {
                 let resource_address = resource_address
-                    .map(|r| Ok(r))
+                    .map(Ok)
                     .unwrap_or_else(|| self.id_provider.new_resource_address())?;
                 debug!(target: LOG_TARGET, "New resource minted: {}", resource_address);
                 dbg!(resource_address.to_string());
@@ -147,7 +147,7 @@ impl StateTracker {
                 metadata,
             } => {
                 let resource_address = resource_address
-                    .map(|r| Ok(r))
+                    .map(Ok)
                     .unwrap_or_else(|| self.id_provider.new_resource_address())?;
                 debug!(target: LOG_TARGET, "New resource minted: {}", resource_address);
                 dbg!(resource_address.to_string());

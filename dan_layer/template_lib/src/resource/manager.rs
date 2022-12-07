@@ -86,7 +86,7 @@ impl ResourceManager {
         metadata.insert(b"IMAGE_URL".to_vec(), image_url.as_bytes().to_vec());
 
         let arg = MintResourceArg::NonFungible {
-            resource_address: self.for_specific.clone(),
+            resource_address: self.for_specific,
             token_ids: ids,
             metadata,
         };
