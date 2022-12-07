@@ -75,6 +75,8 @@ pub enum EpochManagerError {
     BaseLayerConsensusConstantsNotSet,
     #[error("Base layer could not return shard key for {public_key} at height {block_height}")]
     ShardKeyNotFound { public_key: PublicKey, block_height: u64 },
+    #[error("Received invalid state sync data from peer:{0}")]
+    InvalidStateSyncData(#[from] anyhow::Error),
 }
 
 impl<T: Into<StorageError>> From<T> for EpochManagerError {

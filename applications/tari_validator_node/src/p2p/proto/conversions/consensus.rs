@@ -238,7 +238,6 @@ impl TryFrom<proto::consensus::ObjectPledge> for ObjectPledge {
                 .map(|s| s.try_into())
                 .ok_or_else(|| anyhow!("current_state is required"))??,
             pledged_to_payload: value.pledged_to_payload.try_into()?,
-            pledged_until: value.pledged_until.into(),
         })
     }
 }
@@ -249,7 +248,6 @@ impl From<ObjectPledge> for proto::consensus::ObjectPledge {
             shard_id: source.shard_id.as_bytes().to_vec(),
             current_state: Some(source.current_state.into()),
             pledged_to_payload: source.pledged_to_payload.as_bytes().to_vec(),
-            pledged_until: source.pledged_until.as_u64(),
         }
     }
 }

@@ -20,6 +20,8 @@
 //   WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //   USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 //
+use chrono::NaiveDateTime;
+
 use crate::schema::*;
 
 #[derive(Debug, Identifiable, Queryable)]
@@ -32,7 +34,7 @@ pub struct Payload {
     pub fee: i64,
     pub sender_public_key: Vec<u8>,
     pub meta: String,
-    pub timestamp: i64,
+    pub timestamp: NaiveDateTime,
     pub result: Option<String>,
 }
 
@@ -46,6 +48,5 @@ pub struct NewPayload {
     pub fee: i64,
     pub sender_public_key: Vec<u8>,
     pub meta: String,
-    pub timestamp: i64,
     pub result: Option<String>,
 }

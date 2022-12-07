@@ -325,14 +325,14 @@ where
                 return Ok(());
             }
 
-            let (change, claim) = actual_payload
+            let (_change, claim) = actual_payload
                 .objects_for_shard(shard)
                 .ok_or(HotStuffError::ShardHasNoData)?;
 
             if !claim.is_valid(payload_id) {
                 return Err(HotStuffError::ClaimIsNotValid);
             }
-            let local_pledge = tx.pledge_object(shard, payload_id, change, parent_leaf_node.height())?;
+            let local_pledge = tx.pledge_object(shard, payload_id, parent_leaf_node.height())?;
 
             leaf_node = self.create_leaf(
                 parent_leaf_node,
@@ -870,6 +870,7 @@ where
                 *node.justify().decision() == QuorumDecision::Accept
             {
                 tx.save_substate_changes(changes, node)?;
+                tx.complete_pledges(node.shard(), node.payload_id(), node.hash())?;
             }
             tx.set_last_executed_height(shard, node.height())?;
         }

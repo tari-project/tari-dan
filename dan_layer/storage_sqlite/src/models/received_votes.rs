@@ -20,6 +20,8 @@
 //   WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //   USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 //
+use chrono::NaiveDateTime;
+
 use crate::schema::*;
 
 #[derive(Debug, Identifiable, Queryable)]
@@ -29,6 +31,7 @@ pub struct ReceivedVote {
     pub shard_id: Vec<u8>,
     pub address: Vec<u8>,
     pub vote_message: String,
+    pub timestamp: NaiveDateTime,
 }
 
 #[derive(Debug, Insertable)]

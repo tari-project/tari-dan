@@ -87,7 +87,6 @@ message ObjectPledge {
   bytes shard_id = 1;
   SubstateState current_state = 2;
   bytes pledged_to_payload = 3;
-  uint64 pledged_until = 4;
 }
 
 message SubstateState {

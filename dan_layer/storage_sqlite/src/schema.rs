@@ -1,32 +1,33 @@
-// @generated automatically by Diesel CLI.
-
-diesel::table! {
+table! {
     high_qcs (id) {
         id -> Integer,
         shard_id -> Binary,
         height -> BigInt,
         qc_json -> Text,
         identity -> Binary,
+        timestamp -> Timestamp,
     }
 }
 
-diesel::table! {
+table! {
     last_executed_heights (id) {
         id -> Integer,
         shard_id -> Binary,
         node_height -> BigInt,
+        timestamp -> Timestamp,
     }
 }
 
-diesel::table! {
+table! {
     last_voted_heights (id) {
         id -> Integer,
         shard_id -> Binary,
         node_height -> BigInt,
+        timestamp -> Timestamp,
     }
 }
 
-diesel::table! {
+table! {
     leader_proposals (id) {
         id -> Integer,
         payload_id -> Binary,
@@ -34,35 +35,38 @@ diesel::table! {
         payload_height -> BigInt,
         node_hash -> Binary,
         hotstuff_tree_node -> Text,
+        timestamp -> Timestamp,
     }
 }
 
-diesel::table! {
+table! {
     leaf_nodes (id) {
         id -> Integer,
         shard_id -> Binary,
         tree_node_hash -> Binary,
         node_height -> BigInt,
+        timestamp -> Timestamp,
     }
 }
 
-diesel::table! {
+table! {
     lock_node_and_heights (id) {
         id -> Integer,
         shard_id -> Binary,
         tree_node_hash -> Binary,
         node_height -> BigInt,
+        timestamp -> Timestamp,
     }
 }
 
-diesel::table! {
+table! {
     metadata (key) {
         key -> Binary,
         value -> Binary,
     }
 }
 
-diesel::table! {
+table! {
     nodes (id) {
         id -> Integer,
         node_hash -> Binary,
@@ -75,10 +79,11 @@ diesel::table! {
         epoch -> BigInt,
         proposed_by -> Binary,
         justify -> Text,
+        timestamp -> Timestamp,
     }
 }
 
-diesel::table! {
+table! {
     payloads (id) {
         id -> Integer,
         payload_id -> Binary,
@@ -88,39 +93,56 @@ diesel::table! {
         fee -> BigInt,
         sender_public_key -> Binary,
         meta -> Text,
-        timestamp -> BigInt,
+        timestamp -> Timestamp,
         result -> Nullable<Text>,
     }
 }
 
-diesel::table! {
+table! {
     received_votes (id) {
         id -> Integer,
         tree_node_hash -> Binary,
         shard_id -> Binary,
         address -> Binary,
         vote_message -> Text,
+        timestamp -> Timestamp,
     }
 }
 
-diesel::table! {
+table! {
+    shard_pledges (id) {
+        id -> Integer,
+        shard_id -> Binary,
+        created_height -> BigInt,
+        pledged_to_payload_id -> Binary,
+        is_active -> Bool,
+        completed_by_tree_node_hash -> Nullable<Binary>,
+        abandoned_by_tree_node_hash -> Nullable<Binary>,
+        timestamp -> Timestamp,
+        updated_timestamp -> Nullable<Timestamp>,
+    }
+}
+
+table! {
     substates (id) {
         id -> Integer,
-        substate_type -> Text,
         shard_id -> Binary,
-        node_height -> BigInt,
-        data -> Nullable<Text>,
+        version -> BigInt,
+        data -> Text,
         created_by_payload_id -> Binary,
-        deleted_by_payload_id -> Nullable<Binary>,
-        justify -> Nullable<Text>,
-        is_draft -> Bool,
-        tree_node_hash -> Nullable<Binary>,
-        pledged_to_payload_id -> Nullable<Binary>,
-        pledged_until_height -> Nullable<BigInt>,
+        created_justify -> Text,
+        created_node_hash -> Binary,
+        created_height -> BigInt,
+        destroyed_by_payload_id -> Nullable<Binary>,
+        destroyed_justify -> Nullable<Text>,
+        destroyed_node_hash -> Nullable<Binary>,
+        destroyed_height -> Nullable<BigInt>,
+        created_timestamp -> Timestamp,
+        destroyed_timestamp -> Nullable<Timestamp>,
     }
 }
 
-diesel::allow_tables_to_appear_in_same_query!(
+allow_tables_to_appear_in_same_query!(
     high_qcs,
     last_executed_heights,
     last_voted_heights,
@@ -131,5 +153,6 @@ diesel::allow_tables_to_appear_in_same_query!(
     nodes,
     payloads,
     received_votes,
+    shard_pledges,
     substates,
 );

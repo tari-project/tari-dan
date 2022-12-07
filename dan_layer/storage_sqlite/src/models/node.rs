@@ -20,6 +20,8 @@
 //   WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //   USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 //
+use chrono::NaiveDateTime;
+
 use crate::schema::*;
 
 #[derive(Debug, Identifiable, Queryable)]
@@ -35,6 +37,7 @@ pub struct Node {
     pub epoch: i64,
     pub proposed_by: Vec<u8>,
     pub justify: String,
+    pub timestamp: NaiveDateTime,
 }
 
 #[derive(Debug, Insertable)]
