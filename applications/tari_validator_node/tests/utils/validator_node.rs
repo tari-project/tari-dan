@@ -24,7 +24,7 @@ use std::{path::PathBuf, str::FromStr, time::Duration};
 
 use reqwest::Url;
 use tari_app_utilities::common_cli_args::CommonCliArgs;
-use tari_common::configuration::CommonConfig;
+use tari_common::configuration::{CommonConfig, StringList};
 use tari_comms::multiaddr::Multiaddr;
 use tari_comms_dht::DhtConfig;
 use tari_p2p::{Network, PeerSeedsConfig, TransportType};
@@ -38,6 +38,7 @@ use crate::TariWorld;
 #[derive(Debug)]
 pub struct ValidatorNodeProcess {
     pub name: String,
+    pub public_key: String,
     pub port: u64,
     pub json_rpc_port: u64,
     pub http_ui_port: u64,
@@ -63,6 +64,11 @@ pub async fn spawn_validator_node(
 
     let temp_dir = tempdir().unwrap().path().join(validator_node_name.clone());
     let temp_dir_path = temp_dir.display().to_string();
+    let peer_seeds: Vec<String> = world
+        .validator_nodes
+        .values()
+        .map(|vn| format!("{}::/ip4/127.0.0.1/tcp/{}", vn.public_key, vn.port))
+        .collect();
 
     let handle = task::spawn(async move {
         let mut config = ApplicationConfig {
@@ -96,6 +102,9 @@ pub async fn spawn_validator_node(
         // The VNS will try to auto register upon startup
         config.validator_node.auto_register = false;
 
+        // Add all other VNs as peer seeds
+        config.peer_seeds.peer_seeds = StringList::from(peer_seeds);
+
         let data_dir = config.validator_node.data_dir.clone();
         let data_dir_str = data_dir.clone().into_os_string().into_string().unwrap();
         let config_path = data_dir.join("config.toml");
@@ -119,9 +128,17 @@ pub async fn spawn_validator_node(
         }
     });
 
+    // We need to give it time for the VN to startup
+    // TODO: it would be better to scan the VN to detect when it has started
+    tokio::time::sleep(Duration::from_secs(5)).await;
+
+    // get the public key of the VN
+    let public_key = get_vn_identity(json_rpc_port).await;
+
     // make the new vn able to be referenced by other processes
     let validator_node_process = ValidatorNodeProcess {
         name: name.clone(),
+        public_key,
         port,
         base_node_grpc_port,
         http_ui_port,
@@ -130,10 +147,6 @@ pub async fn spawn_validator_node(
         temp_dir_path,
     };
     world.validator_nodes.insert(name, validator_node_process);
-
-    // We need to give it time for the VN to startup
-    // TODO: it would be better to scan the VN to detect when it has started
-    tokio::time::sleep(Duration::from_secs(5)).await;
 }
 
 fn get_config_file_path() -> PathBuf {
@@ -145,4 +158,13 @@ fn get_config_file_path() -> PathBuf {
 pub async fn get_vn_client(port: u64) -> ValidatorNodeClient {
     let endpoint: Url = Url::parse(&format!("http://localhost:{}", port)).unwrap();
     ValidatorNodeClient::connect(endpoint).unwrap()
+}
+
+async fn get_vn_identity(jrpc_port: u64) -> String {
+    // send the JSON RPC "get_identity" request to the VN
+    let mut client = get_vn_client(jrpc_port).await;
+    let resp = client.get_identity().await.unwrap();
+
+    assert!(!resp.public_key.is_empty());
+    resp.public_key
 }

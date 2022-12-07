@@ -168,17 +168,6 @@ async fn assert_template_is_registered(world: &mut TariWorld, template_name: Str
     assert_eq!(resp.registration_metadata.address, template_address);
 }
 
-#[then(expr = "the validator node {word} returns a valid identity")]
-async fn assert_valid_vn_identity(world: &mut TariWorld, vn_name: String) {
-    let jrpc_port = world.validator_nodes.get(&vn_name).unwrap().json_rpc_port;
-
-    // send the JSON RPC "get_identity" request to the VN
-    let mut client = get_vn_client(jrpc_port).await;
-    let resp = client.get_identity().await.unwrap();
-
-    assert!(!resp.public_key.is_empty());
-}
-
 #[when(expr = "the validator node {word} calls the function \"{word}\" on the template \"{word}\"")]
 async fn call_template_function(world: &mut TariWorld, vn_name: String, function_name: String, template_name: String) {
     let resp = send_template_transaction(world, vn_name, template_name, function_name).await;
