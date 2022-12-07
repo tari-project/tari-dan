@@ -39,10 +39,9 @@ use tari_dan_core::{
         epoch_manager::{EpochManagerError, ShardCommitteeAllocation},
         BaseNodeClient,
     },
-    storage::DbFactory,
 };
-use tari_dan_storage::global::{DbEpoch, DbValidatorNode, MetadataKey};
-use tari_dan_storage_sqlite::{sqlite_shard_store_factory::SqliteShardStore, SqliteDbFactory};
+use tari_dan_storage::global::{DbEpoch, DbValidatorNode, GlobalDb, MetadataKey};
+use tari_dan_storage_sqlite::{global::SqliteGlobalDbAdapter, sqlite_shard_store_factory::SqliteShardStore};
 use tokio::sync::broadcast;
 
 use crate::{
@@ -57,7 +56,7 @@ const LOG_TARGET: &str = "tari::validator_node::epoch_manager::base_layer_epoch_
 
 #[derive(Clone)]
 pub struct BaseLayerEpochManager {
-    db_factory: SqliteDbFactory,
+    global_db: GlobalDb<SqliteGlobalDbAdapter>,
     shard_store: SqliteShardStore,
     pub base_node_client: GrpcBaseNodeClient,
     consensus_constants: ConsensusConstants,
@@ -71,7 +70,7 @@ pub struct BaseLayerEpochManager {
 
 impl BaseLayerEpochManager {
     pub fn new(
-        db_factory: SqliteDbFactory,
+        global_db: GlobalDb<SqliteGlobalDbAdapter>,
         shard_store: SqliteShardStore,
         base_node_client: GrpcBaseNodeClient,
         consensus_constants: ConsensusConstants,
@@ -80,7 +79,7 @@ impl BaseLayerEpochManager {
         validator_node_client_factory: TariCommsValidatorNodeClientFactory,
     ) -> Self {
         Self {
-            db_factory,
+            global_db,
             shard_store,
             base_node_client,
             consensus_constants,
@@ -94,9 +93,8 @@ impl BaseLayerEpochManager {
     }
 
     pub async fn load_initial_state(&mut self) -> Result<(), EpochManagerError> {
-        let db = self.db_factory.get_or_create_global_db()?;
-        let tx = db.create_transaction()?;
-        let metadata = db.metadata(&tx);
+        let tx = self.global_db.create_transaction()?;
+        let metadata = self.global_db.metadata(&tx);
         self.current_epoch = metadata.get_metadata(MetadataKey::CurrentEpoch)?.unwrap_or(Epoch(0));
         self.current_shard_key = metadata.get_metadata(MetadataKey::CurrentShardKey)?;
         self.base_layer_consensus_constants = metadata.get_metadata(MetadataKey::BaseLayerConsensusConstants)?;
@@ -167,12 +165,12 @@ impl BaseLayerEpochManager {
             shard_key: shard_key.as_bytes().to_vec(),
             epoch: next_epoch,
         }];
-        let db = self.db_factory.get_or_create_global_db()?;
-        let tx = db.create_transaction()?;
-        db.validator_nodes(&tx).insert_validator_nodes(new_vns)?;
+
+        let tx = self.global_db.create_transaction()?;
+        self.global_db.validator_nodes(&tx).insert_validator_nodes(new_vns)?;
 
         if registration.public_key() == self.node_identity.public_key() {
-            let metadata = db.metadata(&tx);
+            let metadata = self.global_db.metadata(&tx);
             metadata.set_metadata(MetadataKey::CurrentShardKey, &shard_key)?;
             let last_registration_epoch = metadata
                 .get_metadata::<Epoch>(MetadataKey::LastEpochRegistration)?
@@ -199,13 +197,14 @@ impl BaseLayerEpochManager {
             validator_node_mr: header.validator_node_mr.to_vec(),
         };
 
-        let db = self.db_factory.get_or_create_global_db()?;
-        let tx = db.create_transaction()?;
+        let tx = self.global_db.create_transaction()?;
 
-        db.epochs(&tx).insert_epoch(db_epoch)?;
-        db.metadata(&tx).set_metadata(MetadataKey::CurrentEpoch, &epoch)?;
+        self.global_db.epochs(&tx).insert_epoch(db_epoch)?;
+        self.global_db
+            .metadata(&tx)
+            .set_metadata(MetadataKey::CurrentEpoch, &epoch)?;
 
-        db.commit(tx)?;
+        tx.commit()?;
         self.current_epoch = epoch;
         Ok(())
     }
@@ -214,9 +213,9 @@ impl BaseLayerEpochManager {
         &mut self,
         base_layer_constants: BaseLayerConsensusConstants,
     ) -> Result<(), EpochManagerError> {
-        let db = self.db_factory.get_or_create_global_db()?;
-        let tx = db.create_transaction()?;
-        db.metadata(&tx)
+        let tx = self.global_db.create_transaction()?;
+        self.global_db
+            .metadata(&tx)
             .set_metadata(MetadataKey::BaseLayerConsensusConstants, &base_layer_constants)?;
         tx.commit()?;
         self.base_layer_consensus_constants = Some(base_layer_constants);
@@ -233,9 +232,9 @@ impl BaseLayerEpochManager {
         public_key: &PublicKey,
     ) -> Result<Option<ShardId>, EpochManagerError> {
         let (start_epoch, end_epoch) = self.get_epoch_range(epoch)?;
-        let db = self.db_factory.get_or_create_global_db()?;
-        let tx = db.create_transaction()?;
-        let vn = db
+        let tx = self.global_db.create_transaction()?;
+        let vn = self
+            .global_db
             .validator_nodes(&tx)
             .get(start_epoch.as_u64(), end_epoch.as_u64(), public_key.as_bytes())
             .optional()?;
@@ -244,19 +243,18 @@ impl BaseLayerEpochManager {
     }
 
     pub fn last_registration_epoch(&self) -> Result<Option<Epoch>, EpochManagerError> {
-        let db = self.db_factory.get_or_create_global_db()?;
-        let tx = db.create_transaction()?;
-        let metadata = db.metadata(&tx);
+        let tx = self.global_db.create_transaction()?;
+        let metadata = self.global_db.metadata(&tx);
         let last_registration_epoch = metadata.get_metadata(MetadataKey::LastEpochRegistration)?;
         Ok(last_registration_epoch)
     }
 
     pub fn update_last_registration_epoch(&self, epoch: Epoch) -> Result<(), EpochManagerError> {
-        let db = self.db_factory.get_or_create_global_db()?;
-        let tx = db.create_transaction()?;
-        let metadata = db.metadata(&tx);
-        metadata.set_metadata(MetadataKey::LastEpochRegistration, &epoch)?;
-        db.commit(tx)?;
+        let tx = self.global_db.create_transaction()?;
+        self.global_db
+            .metadata(&tx)
+            .set_metadata(MetadataKey::LastEpochRegistration, &epoch)?;
+        tx.commit()?;
         Ok(())
     }
 
@@ -356,9 +354,9 @@ impl BaseLayerEpochManager {
     ) -> Result<Vec<ValidatorNode<CommsPublicKey>>, EpochManagerError> {
         let (start_epoch, end_epoch) = self.get_epoch_range(epoch)?;
 
-        let db = self.db_factory.get_or_create_global_db()?;
-        let tx = db.create_transaction()?;
-        let db_vns = db
+        let tx = self.global_db.create_transaction()?;
+        let db_vns = self
+            .global_db
             .validator_nodes(&tx)
             .get_all_within_epochs(start_epoch.as_u64(), end_epoch.as_u64())?;
         let vns = db_vns
@@ -386,10 +384,9 @@ impl BaseLayerEpochManager {
     }
 
     pub fn get_validator_node_merkle_root(&self, epoch: Epoch) -> Result<Vec<u8>, EpochManagerError> {
-        let db = self.db_factory.get_or_create_global_db()?;
-        let tx = db.create_transaction()?;
+        let tx = self.global_db.create_transaction()?;
 
-        let query_res = db.epochs(&tx).get_epoch_data(epoch.0)?;
+        let query_res = self.global_db.epochs(&tx).get_epoch_data(epoch.0)?;
 
         match query_res {
             Some(db_epoch) => Ok(db_epoch.validator_node_mr),
@@ -413,10 +410,12 @@ impl BaseLayerEpochManager {
     }
 
     pub async fn on_scanning_complete(&self) -> Result<(), EpochManagerError> {
-        let db = self.db_factory.get_or_create_global_db()?;
         {
-            let tx = db.create_transaction()?;
-            let last_sync_epoch = db.metadata(&tx).get_metadata::<Epoch>(MetadataKey::LastSyncedEpoch)?;
+            let tx = self.global_db.create_transaction()?;
+            let last_sync_epoch = self
+                .global_db
+                .metadata(&tx)
+                .get_metadata::<Epoch>(MetadataKey::LastSyncedEpoch)?;
             if last_sync_epoch.map(|e| e == self.current_epoch).unwrap_or(false) {
                 info!(target: LOG_TARGET, "🌍️ Already synced for epoch {}", self.current_epoch);
                 return Ok(());
@@ -456,8 +455,9 @@ impl BaseLayerEpochManager {
             .sync_peers_state(committee_vns, start_shard_id, end_shard_id, vn_shard_key)
             .await?;
 
-        let tx = db.create_transaction()?;
-        db.metadata(&tx)
+        let tx = self.global_db.create_transaction()?;
+        self.global_db
+            .metadata(&tx)
             .set_metadata(MetadataKey::LastSyncedEpoch, &self.current_epoch)?;
         tx.commit()?;
 

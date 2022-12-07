@@ -136,7 +136,6 @@ pub async fn run_validator_node_with_cli(config: &ApplicationConfig, cli: &Cli) 
         shutdown.to_signal(),
         node_identity.clone(),
         global_db,
-        db_factory,
         ConsensusConstants::devnet(), // TODO: change this eventually
     )
     .await?;
