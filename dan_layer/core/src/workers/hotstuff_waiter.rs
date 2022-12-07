@@ -36,6 +36,7 @@ use tari_dan_common_types::{
     QuorumDecision,
     ShardId,
     ShardVote,
+    SubstateChange,
     SubstateState,
     TreeNodeHash,
 };
@@ -210,7 +211,7 @@ where
             //  Save the payload, because we will need it when the proposal comes back
             tx.set_payload(payload.clone())?;
             tx.commit()?;
-            // TODO: combine merkle proofs into one before sending
+
             new_view = HotStuffMessage::new_view(high_qc, shard, Some(payload));
         }
 
@@ -408,17 +409,38 @@ where
             .get_validator_shard_key(node.epoch(), self.public_key.clone())
             .await?;
         let vn_mmr = self.epoch_manager.get_validator_node_mmr(node.epoch()).await?;
+        // TODO: remove
+        let mr = self.epoch_manager.get_validator_node_merkle_root(node.epoch()).await?;
+        if vn_mmr.get_merkle_root().unwrap() != mr {
+            error!(target: LOG_TARGET, "🔥 Merkle root mismatch for epoch {}", node.epoch());
+        }
 
         {
             let mut tx = self.shard_store.create_tx()?;
             tx.save_node(node.clone())?;
             let v_height = tx.get_last_voted_height(shard)?;
             // TODO: can also use the QC and committee to justify this....
+            if node.height() <= v_height {
+                error!(
+                    target: LOG_TARGET,
+                    "Received a proposal that is not valid: node_height {} <= v_height {}",
+                    node.height(),
+                    v_height
+                );
+                tx.commit()?;
+                return Ok(());
+            }
             let (locked_node, locked_height) = tx.get_locked_node_hash_and_height(shard)?;
-            if node.height() <= v_height ||
-                (node.parent() != &locked_node && node.justify().local_node_height() <= locked_height)
-            {
-                error!(target: LOG_TARGET, "Received a proposal that is not valid");
+            if node.parent() != &locked_node && node.justify().local_node_height() <= locked_height {
+                error!(
+                    target: LOG_TARGET,
+                    "Received a proposal that is not valid: node.parent() {} != locked_node {} && \
+                     node.local_node_height {} <= locked_height {}",
+                    node.parent(),
+                    locked_node,
+                    node.justify().local_node_height(),
+                    locked_height
+                );
                 tx.commit()?;
                 return Ok(());
             }
@@ -452,13 +474,33 @@ where
                 // Execute for node 0. The rest we accept by default
                 let finalize_result = if node.payload_height() == NodeHeight(0) {
                     let mut finalize_result = self.execute(shard_pledges.clone(), payload)?;
-                    // validate that correct objects have been pledged.
-                    let changes = extract_changes(node.payload_id(), &finalize_result)?;
-                    // Change the vote if we do not have all the objects pledged
-                    Self::validate_pledges(&shard_pledges, &mut finalize_result, changes);
+                    if finalize_result.is_accept() {
+                        // validate that correct objects have been pledged.
+                        let changes = extract_changes(node.payload_id(), &finalize_result)?;
+                        // Change the vote if we do not have all the objects pledged
+                        if let Err(missing_shards) =
+                            Self::validate_pledges(&shard_pledges, &mut finalize_result, changes)
+                        {
+                            self.publish_event(HotStuffEvent::Failed(format!(
+                                "Failed due to the following missing shards: {}",
+                                missing_shards
+                                    .iter()
+                                    .map(|(s, change)| format!("{}:{}", s, change))
+                                    .collect::<Vec<String>>()
+                                    .join(", ")
+                            )));
+                        }
+                    } else {
+                        self.publish_event(HotStuffEvent::Failed(format!(
+                            "Failed to execute payload:{:?}",
+                            finalize_result.result
+                        )));
+                    }
                     tx.update_payload_result(&node.payload_id(), finalize_result.clone())?;
                     finalize_result
                 } else {
+                    // TODO: If we decide to vote on rejections as well as acceptances, then this should be changed
+                    // to use the previous justify's QuorumDecision
                     FinalizeResult::new(
                         node.payload_id().into_array().into(),
                         vec![],
@@ -544,8 +586,6 @@ where
 
             let total_votes = tx.save_received_vote_for(from, msg.local_node_hash(), msg.shard(), msg.clone())?;
             // Check for consensus
-            dbg!(&valid_committee);
-            dbg!(total_votes);
             if total_votes >= valid_committee.consensus_threshold() {
                 let mut different_votes = HashMap::<_, Vec<_>>::new();
                 for vote in tx.get_received_votes_for(msg.local_node_hash(), msg.shard())? {
@@ -707,10 +747,10 @@ where
                     &*md.get_node_hash(),
                     md.merkle_leaf_index as usize,
                 )
-                .map_err(|_| HotStuffError::InvalidQuorumCertificate("invalid merkle proof".to_string()))?;
+                .map_err(|e| HotStuffError::InvalidQuorumCertificate(format!("invalid merkle proof: {}", e)))?;
         }
 
-        // all signers must be included in the epoch commitee for the shard
+        // all signers must be included in the epoch committee for the shard
         let committee = self.epoch_manager.get_committee(qc.epoch(), qc.shard()).await?;
         let commitee_set = committee.members.iter().map(|m| m.as_bytes()).collect::<HashSet<_>>();
         let all_signers_are_in_committee = signers_set.iter().all(|s| commitee_set.contains(s));
@@ -848,28 +888,45 @@ where
     }
 
     fn validate_proposal(&self, node: &HotStuffTreeNode<TAddr, TPayload>) -> Result<(), HotStuffError> {
-        if node.payload_height() == NodeHeight(0) ||
-            (node.payload_id() == node.justify().payload_id() &&
-                node.payload_height() == node.justify().payload_height() + NodeHeight(1))
-        {
-            let max_node_height = NodeHeight(self.consensus_constants.hotstuff_rounds - 1);
-            if node.payload_height() > max_node_height {
-                return Err(HotStuffError::PayloadHeightIsTooHigh {
-                    actual: node.payload_height(),
-                    max: max_node_height,
-                });
-            }
-            Ok(())
-        } else {
-            Err(HotStuffError::NodePayloadDoesNotMatchJustifyPayload)
+        if node.payload_height() == NodeHeight(0) {
+            return Ok(());
         }
+
+        if node.payload_id() != node.justify().payload_id() {
+            return Err(HotStuffError::NodePayloadDoesNotMatchJustifyPayload {
+                node_payload: node.payload_id(),
+                justify_payload: node.justify().payload_id(),
+            });
+        }
+
+        if node.payload_height() != node.justify().payload_height() + NodeHeight(1) {
+            return Err(HotStuffError::NodePayloadHeightIncorrect {
+                node_payload_height: node.payload_height(),
+                justify_payload_height: node.justify().payload_height() + NodeHeight(1),
+            });
+        }
+
+        let max_node_height = NodeHeight(self.consensus_constants.hotstuff_rounds - 1);
+        if node.payload_height() > max_node_height {
+            return Err(HotStuffError::PayloadHeightIsTooHigh {
+                actual: node.payload_height(),
+                max: max_node_height,
+            });
+        }
+        if node.payload_height() > NodeHeight(0) && node.justify().decision() != &QuorumDecision::Accept {
+            return Err(HotStuffError::JustifyIsNotAccepted);
+        }
+        Ok(())
     }
 
+    /// Checks that all shards have been pledged correctly, if not, will return the list of shards that
+    /// were not pledged
     fn validate_pledges(
         shard_pledges: &HashMap<ShardId, Option<ObjectPledge>>,
         finalize_result: &mut FinalizeResult,
         changes: HashMap<ShardId, Vec<SubstateState>>,
-    ) {
+    ) -> Result<(), Vec<(ShardId, SubstateChange)>> {
+        let mut missing_pledges = vec![];
         for (shard_changed, substates) in changes {
             // TODO: Is this statement correct?
             // If there are multiple changes to the substate, only the first one needs to be pledged for.
@@ -885,10 +942,10 @@ where
                                 );
                             },
                             _ => {
-                                finalize_result.result = TransactionResult::Reject(RejectReason::ShardNotPledged(
-                                    format!("Shard {} was required to not exist, but it does", shard_changed),
-                                ));
-                                break;
+                                // finalize_result.result = TransactionResult::Reject(RejectReason::ShardNotPledged(
+                                //     format!("Shard {} was required to not exist, but it does", shard_changed),
+                                // ));
+                                missing_pledges.push((shard_changed, SubstateChange::Exists));
                             },
                         },
                         SubstateState::Up { .. } => match pledge.current_state {
@@ -899,13 +956,14 @@ where
                                 );
                             },
                             _ => {
-                                finalize_result.result =
-                                    TransactionResult::Reject(RejectReason::ShardNotPledged(format!(
-                                        "Shard {} was required to not exist, but it is {}",
-                                        shard_changed,
-                                        pledge.current_state.as_str(),
-                                    )));
-                                break;
+                                // finalize_result.result =
+                                //     TransactionResult::Reject(RejectReason::ShardNotPledged(format!(
+                                //         "Shard {} was required to not exist, but it is {}",
+                                //         shard_changed,
+                                //         pledge.current_state.as_str(),
+                                //     )));
+                                // break;
+                                missing_pledges.push((shard_changed, SubstateChange::Create));
                             },
                         },
                         SubstateState::Down { .. } => match pledge.current_state {
@@ -916,30 +974,48 @@ where
                                 );
                             },
                             _ => {
-                                finalize_result.result =
-                                    TransactionResult::Reject(RejectReason::ShardNotPledged(format!(
-                                        "Shard {} was required to be up, but it is {}",
-                                        shard_changed,
-                                        pledge.current_state.as_str(),
-                                    )));
-                                break;
+                                // finalize_result.result =
+                                //     TransactionResult::Reject(RejectReason::ShardNotPledged(format!(
+                                //         "Shard {} was required to be up, but it is {}",
+                                //         shard_changed,
+                                //         pledge.current_state.as_str(),
+                                //     )));
+                                // break;
+                                missing_pledges.push((shard_changed, SubstateChange::Destroy));
                             },
                         },
                     }
                 } else {
-                    finalize_result.result = TransactionResult::Reject(RejectReason::ShardNotPledged(format!(
-                        "Shard {} was not pledged",
-                        shard_changed
-                    )));
-                    break;
+                    // finalize_result.result = TransactionResult::Reject(RejectReason::ShardNotPledged(format!(
+                    //     "Shard {} was not pledged",
+                    //     shard_changed
+                    // )));
+                    // break;
+                    missing_pledges.push((shard_changed, SubstateChange::Exists));
                 }
             } else {
-                finalize_result.result = TransactionResult::Reject(RejectReason::ShardNotPledged(format!(
-                    "Shard {} had no substate changes - this is not correct",
-                    shard_changed
-                )));
-                break;
+                // finalize_result.result = TransactionResult::Reject(RejectReason::ShardNotPledged(format!(
+                //     "Shard {} had no substate changes - this is not correct",
+                //     shard_changed
+                // )));
+                // break;
+                missing_pledges.push((shard_changed, SubstateChange::Exists));
             }
+        }
+        if missing_pledges.is_empty() {
+            Ok(())
+        } else {
+            // Sort them so that they are the same for all VNs.
+            missing_pledges.sort_by(|a, b| a.0.cmp(&b.0));
+            finalize_result.result = TransactionResult::Reject(RejectReason::ShardsNotPledged(format!(
+                "Shards {} was not pledged",
+                missing_pledges
+                    .iter()
+                    .map(|(shard, change)| format!("{}:{}", shard, change))
+                    .collect::<Vec<String>>()
+                    .join(",")
+            )));
+            Err(missing_pledges)
         }
     }
 
@@ -962,7 +1038,7 @@ where
             },
             TransactionResult::Reject(ref reason) => {
                 match reason {
-                    RejectReason::ShardNotPledged(msg) => {
+                    RejectReason::ShardsNotPledged(msg) => {
                         info!(target: LOG_TARGET, "⚔ Vote to REJECT payload: {}", msg);
                     },
                     RejectReason::ExecutionFailure(msg) => {

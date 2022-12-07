@@ -26,6 +26,6 @@ pub use tari_template_macros::template;
 pub use crate::{
     chain_time::ChainTime,
     component::ComponentManager,
-    models::{Amount, Bucket, BucketId, ResourceAddress, Vault},
+    models::{Amount, Bucket, BucketId, ResourceAddress, SubstateAddress, Vault},
     resource::{ResourceBuilder, ResourceManager, ResourceType},
 };

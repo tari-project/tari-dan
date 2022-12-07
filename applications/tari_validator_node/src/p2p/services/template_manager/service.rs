@@ -155,13 +155,20 @@ impl TemplateManagerService {
                 // validation of the downloaded template binary hash
                 let actual_binary_hash = calculate_template_binary_hash(&bytes);
                 let template_status = if actual_binary_hash == download.expected_binary_hash {
+                    info!(
+                        target: LOG_TARGET,
+                        "✅ Template {} is active", download.template_address,
+                    );
                     TemplateStatus::Active
                 } else {
                     warn!(
                         target: LOG_TARGET,
                         "⚠️ Template {} hash mismatch", download.template_address
                     );
-                    TemplateStatus::Invalid
+                    // TODO: For now, let's just accept this so that we can update the binary at the URL without
+                    // re-registering
+                    TemplateStatus::Active
+                    // TemplateStatus::Invalid
                 };
 
                 self.manager
@@ -169,11 +176,6 @@ impl TemplateManagerService {
                         compiled_code: Some(bytes.to_vec()),
                         status: Some(template_status),
                     })?;
-
-                info!(
-                    target: LOG_TARGET,
-                    "✅ Template {} has status {:?}", download.template_address, template_status
-                );
             },
             Err(err) => {
                 warn!(target: LOG_TARGET, "🚨 Failed to download template: {}", err);

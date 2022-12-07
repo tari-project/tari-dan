@@ -1029,7 +1029,7 @@ impl ShardStoreTransaction<PublicKey, TariDanPayload> for SqliteShardStoreTransa
         end_shard_id: ShardId,
         excluded_shards: &[ShardId],
     ) -> Result<Vec<SubstateShardData>, StorageError> {
-        use crate::schema::substates::shard_id;
+        use crate::schema::substates;
         let excluded_shards = excluded_shards
             .iter()
             .map(|sh| Vec::from(sh.as_bytes()))
@@ -1037,10 +1037,11 @@ impl ShardStoreTransaction<PublicKey, TariDanPayload> for SqliteShardStoreTransa
 
         let substate_states: Option<Vec<crate::models::substate::Substate>> = substates
             .filter(
-                shard_id
+                substates::shard_id
                     .ge(Vec::from(start_shard_id.as_bytes()))
-                    .and(shard_id.le(Vec::from(end_shard_id.as_bytes())))
-                    .and(shard_id.ne_all(excluded_shards)),
+                    .and(substates::shard_id.le(Vec::from(end_shard_id.as_bytes())))
+                    .and(substates::shard_id.ne_all(excluded_shards))
+                    .and(substates::is_draft.eq(false)),
             )
             .get_results(self.transaction.connection())
             .optional()

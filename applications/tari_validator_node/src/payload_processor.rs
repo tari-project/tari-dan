@@ -68,7 +68,9 @@ where TTemplateProvider: TemplateProvider
         let state_db = create_populated_state_store(pledges.into_values().flatten())?;
         template_addresses.extend(load_template_addresses_for_components(&state_db, &components)?);
 
-        let id_provider = IdProvider::new(*transaction.hash(), transaction.meta().max_outputs());
+        // let id_provider = IdProvider::new(*transaction.hash(), transaction.meta().max_outputs());
+        // The consensus will fail if not enough ids are pledged
+        let id_provider = IdProvider::new(*transaction.hash(), 64);
         let tracker = StateTracker::new(state_db, id_provider);
         let runtime = RuntimeInterfaceImpl::new(tracker);
 

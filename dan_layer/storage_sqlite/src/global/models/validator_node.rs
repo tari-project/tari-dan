@@ -20,6 +20,7 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+use tari_dan_common_types::Epoch;
 use tari_dan_storage::global::DbValidatorNode;
 
 use crate::global::schema::*;
@@ -37,7 +38,7 @@ impl From<ValidatorNode> for DbValidatorNode {
         Self {
             shard_key: vn.shard_key,
             public_key: vn.public_key,
-            epoch: vn.epoch as u64,
+            epoch: Epoch(vn.epoch as u64),
         }
     }
 }
@@ -55,7 +56,7 @@ impl From<DbValidatorNode> for NewValidatorNode {
         Self {
             shard_key: vn.shard_key,
             public_key: vn.public_key,
-            epoch: vn.epoch as i64,
+            epoch: vn.epoch.as_u64() as i64,
         }
     }
 }

@@ -78,7 +78,7 @@ impl VoteMessage {
         reason: &RejectReason,
     ) -> Self {
         let quorum_reject_reason = match reason {
-            RejectReason::ShardNotPledged(_) => QuorumRejectReason::ShardNotPledged,
+            RejectReason::ShardsNotPledged(_) => QuorumRejectReason::ShardNotPledged,
             RejectReason::ExecutionFailure(_) => QuorumRejectReason::ExecutionFailure,
         };
         let decision = QuorumDecision::Reject(quorum_reject_reason);
@@ -121,6 +121,21 @@ impl VoteMessage {
             .ok_or(HotStuffError::ValidatorNodeNotIncludedInMmr)?;
         let merkle_proof =
             MerkleProof::for_leaf_node(vn_mmr, leaf_pos as usize).expect("Merkle proof generation failed");
+
+        let hash = vn_mmr_node_hash(signing_service.public_key(), &shard_id);
+        let root = vn_mmr.get_merkle_root().unwrap();
+        let idx = vn_mmr.find_leaf_index(&*hash).unwrap();
+        if let Err(err) =
+            merkle_proof.verify::<tari_core::ValidatorNodeMmrHasherBlake256>(&root, &*hash, leaf_pos as usize)
+        {
+            log::warn!(
+                target: "tari::dan_layer::votemessage",
+                "Merkle proof verification failed for validator node {:?} at index {:?} with error: {}",
+                hash,
+                idx,
+                err
+            );
+        }
 
         let validator_metadata = ValidatorMetadata::new(
             signing_service.public_key().clone(),

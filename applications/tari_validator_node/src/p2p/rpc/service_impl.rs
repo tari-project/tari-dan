@@ -160,46 +160,40 @@ where TPeerProvider: PeerProvider + Clone + Send + Sync + 'static
         let shard_db = self.shard_state_store.clone();
 
         task::spawn(async move {
-            loop {
-                let shards_substates_data = shard_db.create_tx().unwrap().get_substate_states_by_range(
-                    start_shard_id,
-                    end_shard_id,
-                    excluded_shards.as_slice(),
-                );
-                let substates_data = match shards_substates_data {
-                    Ok(s) => s,
-                    Err(err) => {
-                        error!(target: LOG_TARGET, "{}", err);
-                        let _ignore = tx.send(Err(RpcStatus::general(&err))).await;
-                        return;
-                    },
+            let shards_substates_data = shard_db.create_tx().unwrap().get_substate_states_by_range(
+                start_shard_id,
+                end_shard_id,
+                excluded_shards.as_slice(),
+            );
+            let substates = match shards_substates_data {
+                Ok(s) => s,
+                Err(err) => {
+                    error!(target: LOG_TARGET, "{}", err);
+                    let _ignore = tx.send(Err(RpcStatus::general(&err))).await;
+                    return;
+                },
+            };
+
+            if substates.is_empty() {
+                return;
+            }
+
+            // select data from db where shard_id <= end_shard_id and shard_id >= start_shard_id
+            for substate in substates {
+                let response = proto::rpc::VnStateSyncResponse {
+                    shard_id: Some(substate.shard().into()),
+                    substate_state: Some(substate.substate().clone().into()),
+                    node_height: substate.height().as_u64(),
+                    tree_node_hash: substate
+                        .tree_node_hash()
+                        .map(|h| h.as_bytes().to_vec())
+                        .unwrap_or_default(),
+                    payload_id: substate.payload_id().as_bytes().to_vec(),
+                    certificate: substate.certificate().clone().map(QuorumCertificate::from),
                 };
-
-                // select data from db where shard_id <= end_shard_id and shard_id >= start_shard_id
-                for substate_data in substates_data {
-                    let shard_id = proto::common::ShardId::from(substate_data.shard());
-                    let substate_state = proto::consensus::SubstateState::from(substate_data.substate().clone());
-                    let node_height = substate_data.height().as_u64();
-                    let tree_node_hash = if let Some(h) = substate_data.tree_node_hash() {
-                        Vec::from(h.as_bytes())
-                    } else {
-                        vec![]
-                    };
-                    let payload_id = Vec::from(substate_data.payload_id().as_bytes());
-                    let certificate = substate_data.certificate().clone().map(QuorumCertificate::from);
-
-                    let response = proto::rpc::VnStateSyncResponse {
-                        shard_id: Some(shard_id),
-                        substate_state: Some(substate_state),
-                        node_height,
-                        tree_node_hash,
-                        payload_id,
-                        certificate,
-                    };
-                    // if send returns error, the client has closed the connection, so we break the loop
-                    if tx.send(Ok(response)).await.is_err() {
-                        break;
-                    }
+                // if send returns error, the client has closed the connection, so we break the loop
+                if tx.send(Ok(response)).await.is_err() {
+                    break;
                 }
             }
         });

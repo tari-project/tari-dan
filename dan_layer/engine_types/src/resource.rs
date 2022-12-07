@@ -68,7 +68,10 @@ impl Resource {
 
     pub fn deposit(&mut self, other: Resource) -> Result<(), ResourceError> {
         if self.resource_address != other.resource_address {
-            return Err(ResourceError::ResourceAddressMismatch);
+            return Err(ResourceError::ResourceAddressMismatch {
+                expected: self.resource_address,
+                actual: other.resource_address,
+            });
         }
 
         #[allow(clippy::enum_glob_use)]
@@ -122,8 +125,11 @@ pub enum ResourceState {
 pub enum ResourceError {
     #[error("Resource fungibility does not match")]
     FungibilityMismatch,
-    #[error("Resource addresses do not match")]
-    ResourceAddressMismatch,
+    #[error("Resource addresses do not match: expected:{expected}, actual:{actual}")]
+    ResourceAddressMismatch {
+        expected: ResourceAddress,
+        actual: ResourceAddress,
+    },
     #[error("Resource did not contain sufficient balance: {details}")]
     InsufficientBalance { details: String },
 }

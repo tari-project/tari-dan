@@ -20,6 +20,7 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+use serde::{de::DeserializeOwned, Serialize};
 use tari_dan_storage::{
     global::{DbEpoch, DbTemplate, DbTemplateUpdate, DbValidatorNode, GlobalDbAdapter, MetadataKey},
     AtomicDb,
@@ -44,11 +45,20 @@ impl AtomicDb for MockGlobalDbBackupAdapter {
 }
 
 impl GlobalDbAdapter for MockGlobalDbBackupAdapter {
-    fn get_metadata(&self, _tx: &Self::DbTransaction<'_>, _key: &MetadataKey) -> Result<Option<Vec<u8>>, Self::Error> {
+    fn get_metadata<T: DeserializeOwned>(
+        &self,
+        _tx: &Self::DbTransaction<'_>,
+        _key: &MetadataKey,
+    ) -> Result<Option<T>, Self::Error> {
         todo!()
     }
 
-    fn set_metadata(&self, _tx: &Self::DbTransaction<'_>, _key: MetadataKey, _value: &[u8]) -> Result<(), Self::Error> {
+    fn set_metadata<T: Serialize>(
+        &self,
+        _tx: &Self::DbTransaction<'_>,
+        _key: MetadataKey,
+        _value: &T,
+    ) -> Result<(), Self::Error> {
         todo!()
     }
 
@@ -81,10 +91,11 @@ impl GlobalDbAdapter for MockGlobalDbBackupAdapter {
         todo!()
     }
 
-    fn get_validator_nodes_per_epoch(
+    fn get_validator_nodes_within_epochs(
         &self,
         _tx: &Self::DbTransaction<'_>,
-        _epoch: u64,
+        _start_epoch: u64,
+        _end_epoch: u64,
     ) -> Result<Vec<DbValidatorNode>, Self::Error> {
         todo!()
     }
@@ -92,7 +103,8 @@ impl GlobalDbAdapter for MockGlobalDbBackupAdapter {
     fn get_validator_node(
         &self,
         _tx: &Self::DbTransaction<'_>,
-        _epoch: u64,
+        _start_epoch: u64,
+        _end_epoch: u64,
         _public_key: &[u8],
     ) -> Result<DbValidatorNode, Self::Error> {
         todo!()

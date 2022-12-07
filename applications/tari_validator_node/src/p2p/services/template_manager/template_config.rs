@@ -34,10 +34,9 @@ impl TemplateConfig {
     pub fn debug_replacements(&self) -> HashMap<TemplateAddress, PathBuf> {
         let mut result = HashMap::new();
         for row in &self.debug_replacements {
-            let parts: Vec<&str> = row.split('=').collect();
-            let template_address = TemplateAddress::from_hex(parts[0]).expect("Not a valid template address");
-            let path = PathBuf::from(parts[1]);
-            result.insert(template_address, path);
+            let (template_address, path) = row.split_once('=').expect("USAGE: [templateaddress]=[path]");
+            let template_address = TemplateAddress::from_hex(template_address).expect("Not a valid template address");
+            result.insert(template_address, path.into());
         }
         result
     }
