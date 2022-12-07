@@ -70,6 +70,7 @@ impl FungibleResourceBuilder {
     pub fn build_bucket(self) -> Bucket {
         crate::get_context().with_resource_manager(|manager| {
             manager.mint_resource(MintResourceArg::Fungible {
+                resource_address: None,
                 amount: self.initial_supply,
                 metadata: self.metadata,
             })
@@ -100,6 +101,7 @@ impl NonFungibleResourceBuilder {
     pub fn build_bucket(self) -> Bucket {
         crate::get_context().with_resource_manager(|manager| {
             manager.mint_resource(MintResourceArg::NonFungible {
+                resource_address: None,
                 token_ids: vec![],
                 metadata: self.metadata,
             })

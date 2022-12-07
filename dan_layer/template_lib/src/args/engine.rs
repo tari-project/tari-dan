@@ -140,8 +140,16 @@ pub enum ResourceAction {
 
 #[derive(Clone, Debug, Decode, Encode)]
 pub enum MintResourceArg {
-    Fungible { amount: Amount, metadata: Metadata },
-    NonFungible { token_ids: Vec<u64>, metadata: Metadata },
+    Fungible {
+        resource_address: Option<ResourceAddress>,
+        amount: Amount,
+        metadata: Metadata,
+    },
+    NonFungible {
+        resource_address: Option<ResourceAddress>,
+        token_ids: Vec<u64>,
+        metadata: Metadata,
+    },
     // Confidential
 }
 impl MintResourceArg {

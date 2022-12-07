@@ -70,11 +70,11 @@ pub struct Vault {
 }
 
 impl Vault {
-    pub fn new_empty(resource_address: ResourceAddress) -> Self {
+    pub fn new_empty(resource_address: ResourceAddress, resource_type: ResourceType) -> Self {
         let resp: InvokeResult = call_engine(EngineOp::VaultInvoke, &VaultInvokeArg {
             vault_ref: VaultRef::Vault {
                 address: resource_address,
-                resource_type: ResourceType::Fungible,
+                resource_type,
             },
             action: VaultAction::Create,
             args: args![],
@@ -86,8 +86,8 @@ impl Vault {
         }
     }
 
-    pub fn from_bucket(bucket: Bucket) -> Self {
-        let mut vault = Self::new_empty(bucket.resource_address());
+    pub fn from_bucket(bucket: Bucket, resource_type: ResourceType) -> Self {
+        let mut vault = Self::new_empty(bucket.resource_address(), resource_type);
         vault.deposit(bucket);
         vault
     }
