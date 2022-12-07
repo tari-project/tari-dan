@@ -449,7 +449,6 @@ impl ShardStoreTransaction<PublicKey, TariDanPayload> for SqliteShardStoreTransa
     }
 
     fn get_payload(&self, id: &PayloadId) -> Result<TariDanPayload, StorageError> {
-        dbg!("get payload");
         use crate::schema::payloads::payload_id;
 
         let payload: Option<SqlPayload> = payloads
@@ -806,6 +805,13 @@ impl ShardStoreTransaction<PublicKey, TariDanPayload> for SqliteShardStoreTransa
             version,
         };
         let payload_id = Vec::from(node.payload_id().as_slice());
+        dbg!(&changes
+            .iter()
+            .map(|(k, v)| (
+                Hex::to_hex(&k.as_bytes().to_vec()),
+                v.iter().map(|vi| vi.as_str()).collect::<Vec<_>>()
+            ))
+            .collect::<Vec<_>>());
         // Only save this node's shard state
         for (sid, st_changes) in changes.iter().filter(|(s, _)| *s == &node.shard()) {
             let shard = Vec::from(sid.as_bytes());
@@ -818,6 +824,8 @@ impl ShardStoreTransaction<PublicKey, TariDanPayload> for SqliteShardStoreTransa
                 .map_err(|e| StorageError::QueryError {
                     reason: format!("Save substate changes error. Could not retrieve current state: {}", e),
                 })?;
+
+            dbg!(sid);
 
             for st_change in st_changes {
                 match st_change {
