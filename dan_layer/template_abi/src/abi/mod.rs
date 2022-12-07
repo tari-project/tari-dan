@@ -28,7 +28,7 @@ pub use wasm::*;
 mod non_wasm;
 #[cfg(not(target_arch = "wasm32"))]
 pub use non_wasm::*;
-use tari_bor::{decode, decode_len, encode_into, Decode, Encode};
+use tari_bor::{decode_exact, decode_len, encode_into, Decode, Encode};
 
 use crate::{
     ops::EngineOp,
@@ -41,21 +41,25 @@ pub fn wrap_ptr(mut v: Vec<u8>) -> *mut u8 {
     ptr
 }
 
-pub fn call_engine<T: Encode, U: Decode + fmt::Debug>(op: EngineOp, input: &T) -> Option<U> {
+pub fn call_engine<T: Encode + fmt::Debug, U: Decode>(op: EngineOp, input: &T) -> U {
     let mut encoded = Vec::with_capacity(512);
     encode_into(input, &mut encoded).unwrap();
     let len = encoded.len();
     let input_ptr = wrap_ptr(encoded) as *const _;
     let ptr = unsafe { tari_engine(op.as_i32(), input_ptr, len) };
     if ptr.is_null() {
-        return None;
+        panic!("Engine call returned null for op {:?}", op);
     }
 
     let slice = unsafe { slice::from_raw_parts(ptr as *const _, 4) };
     let len = decode_len(slice).unwrap();
     let slice = unsafe { slice::from_raw_parts(ptr.offset(4), len) };
-    let ret = decode(slice).unwrap();
-    Some(ret)
+    decode_exact(slice).unwrap_or_else(|e| {
+        panic!(
+            "Failed to decode response from engine for op {:?} with input: {:?}: {}",
+            op, input, e,
+        )
+    })
 }
 
 pub fn call_debug<T: AsRef<[u8]>>(data: T) {

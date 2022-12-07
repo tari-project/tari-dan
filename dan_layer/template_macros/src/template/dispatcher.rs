@@ -35,7 +35,7 @@ pub fn generate_dispatcher(ast: &TemplateAst) -> Result<TokenStream> {
         #[no_mangle]
         pub extern "C" fn #dispatcher_function_name(call_info: *mut u8, call_info_len: usize) -> *mut u8 {
             use ::tari_template_abi::{CallInfo, wrap_ptr};
-            use ::tari_template_lib::{template_dependencies::{decode, encode_with_len},init_context, panic_hook::register_panic_hook};
+            use ::tari_template_lib::{template_dependencies::{decode_exact, encode_with_len},init_context, panic_hook::register_panic_hook};
 
             register_panic_hook();
 
@@ -44,7 +44,7 @@ pub fn generate_dispatcher(ast: &TemplateAst) -> Result<TokenStream> {
             }
 
             let call_data = unsafe { Vec::from_raw_parts(call_info, call_info_len, call_info_len) };
-            let call_info: CallInfo = decode(&call_data).unwrap();
+            let call_info: CallInfo = decode_exact(&call_data).expect("Failed to decode CallArgs");
 
             init_context(&call_info);
             // TODO: wrap this in a nice macro
@@ -87,6 +87,7 @@ fn get_function_block(template_ident: &Ident, ast: FunctionAst) -> Expr {
     stmts.push(parse_quote! {
         assert_eq!(call_info.args.len(), #expected_num_args, "Call had unexpected number of args. Got = {} expected = {}", call_info.args.len(), #expected_num_args);
     });
+    let func_name = ast.name.clone();
     // encode all arguments of the functions
     for (i, input_type) in ast.input_types.iter().enumerate() {
         let arg_ident = format_ident!("arg_{}", i);
@@ -99,11 +100,12 @@ fn get_function_block(template_ident: &Ident, ast: FunctionAst) -> Expr {
                 vec![
                     parse_quote! {
                         let component =
-                            decode::<::tari_template_lib::models::ComponentInstance>(&call_info.args[#i])
-                            .unwrap();
+                            decode_exact::<::tari_template_lib::models::ComponentInstance>(&call_info.args[#i])
+                            .expect("failed to decode component instance for function #func_name.");
                     },
                     parse_quote! {
-                        let mut state = decode::<#template_mod_name::#template_ident>(&component.state).unwrap();
+                        let mut state = decode_exact::<#template_mod_name::#template_ident>(&component.state)
+                            .expect("failed to decode component for function #func_name.");
                     },
                 ]
             },
@@ -111,17 +113,15 @@ fn get_function_block(template_ident: &Ident, ast: FunctionAst) -> Expr {
             TypeAst::Typed(type_ident) => {
                 args.push(parse_quote! { #arg_ident });
                 vec![parse_quote! {
-                    let #arg_ident =
-                        decode::<#type_ident>(&call_info.args[#i])
-                        .unwrap();
+                    let #arg_ident = decode_exact::<#type_ident>(&call_info.args[#i])
+                        .unwrap_or_else(|e| panic!("failed to decode argument at position {} for function '{}': {}", #i, #func_name, e));
                 }]
             },
             TypeAst::Tuple(tuple) => {
                 args.push(parse_quote! { #arg_ident });
                 vec![parse_quote! {
-                    let #arg_ident =
-                        decode::<#tuple>(&call_info.args[#i])
-                        .unwrap();
+                    let #arg_ident = decode_exact::<#tuple>(&call_info.args[#i])
+                        .unwrap_or_else(|e| panic!("failed to decode tuple argument at position {} for function '{}'.", #i, #func_name, e));
                 }]
             },
         };

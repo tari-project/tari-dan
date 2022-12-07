@@ -78,8 +78,7 @@ impl Vault {
             },
             action: VaultAction::Create,
             args: args![],
-        })
-        .expect("OP_CREATE_VAULT returned null");
+        });
 
         Self {
             vault_id: resp.decode().unwrap(),
@@ -93,12 +92,13 @@ impl Vault {
     }
 
     pub fn deposit(&mut self, bucket: Bucket) {
-        call_engine::<_, ()>(EngineOp::VaultInvoke, &VaultInvokeArg {
+        let result: InvokeResult = call_engine(EngineOp::VaultInvoke, &VaultInvokeArg {
             vault_ref: VaultRef::Ref(self.vault_id()),
             action: VaultAction::Deposit,
             args: invoke_args![bucket.id()],
-        })
-        .expect("VaultInvoke returned null");
+        });
+
+        result.decode::<()>().expect("deposit failed");
     }
 
     pub fn withdraw(&mut self, amount: Amount) -> Bucket {
@@ -110,8 +110,7 @@ impl Vault {
             vault_ref: VaultRef::Ref(self.vault_id()),
             action: VaultAction::WithdrawFungible,
             args: invoke_args![amount],
-        })
-        .expect("VaultInvoke returned null");
+        });
 
         resp.decode().expect("failed to decode Bucket")
     }
@@ -121,8 +120,7 @@ impl Vault {
             vault_ref: VaultRef::Ref(self.vault_id()),
             action: VaultAction::GetBalance,
             args: args![],
-        })
-        .expect("VaultInvoke returned null");
+        });
 
         resp.decode().expect("failed to decode Amount")
     }
@@ -132,8 +130,7 @@ impl Vault {
             vault_ref: VaultRef::Ref(self.vault_id()),
             action: VaultAction::GetResourceAddress,
             args: invoke_args![],
-        })
-        .expect("GetResourceAddress returned null");
+        });
 
         resp.decode()
             .expect("GetResourceAddress returned invalid resource address")

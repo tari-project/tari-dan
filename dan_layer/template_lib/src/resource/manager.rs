@@ -52,8 +52,7 @@ impl ResourceManager {
             },
             action: ResourceAction::Mint,
             args: invoke_args![arg],
-        })
-        .expect("ResourceInvoke returned null");
+        });
 
         let resource_address = resp.decode().expect("Failed to decode Bucket");
         Bucket::new(resource_address)
@@ -74,8 +73,7 @@ impl ResourceManager {
             },
             action: ResourceAction::Mint,
             args: invoke_args![arg],
-        })
-        .expect("ResourceInvoke returned null");
+        });
 
         resp.decode().expect("Failed to decode ResourceAddress")
     }
@@ -98,8 +96,7 @@ impl ResourceManager {
             },
             action: ResourceAction::Mint,
             args: invoke_args![arg],
-        })
-        .expect("ResourceInvoke returned null");
+        });
 
         let resource_address = resp.decode().expect("Failed to decode Bucket");
         Bucket::new(resource_address)

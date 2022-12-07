@@ -162,26 +162,27 @@ impl MintResourceArg {
 }
 
 #[derive(Clone, Debug, Decode, Encode)]
-pub struct InvokeResult {
-    output: Vec<u8>,
-}
+pub struct InvokeResult(Result<Vec<u8>, String>);
 
 impl InvokeResult {
     pub fn encode<T: Encode>(output: &T) -> io::Result<Self> {
         let output = encode(output)?;
-        Ok(Self { output })
+        Ok(Self(Ok(output)))
     }
 
-    pub fn decode<T: Decode>(&self) -> io::Result<T> {
-        decode(&self.output)
+    pub fn decode<T: Decode>(self) -> io::Result<T> {
+        match self.0 {
+            Ok(output) => decode(&output),
+            Err(err) => Err(io::Error::new(io::ErrorKind::Other, err)),
+        }
     }
 
-    pub fn unwrap_decoded<T: Decode>(&self) -> T {
+    pub fn unwrap_decode<T: Decode>(self) -> T {
         self.decode().unwrap()
     }
 
     pub fn unit() -> Self {
-        Self { output: vec![] }
+        Self(Ok(encode(&()).unwrap()))
     }
 }
 

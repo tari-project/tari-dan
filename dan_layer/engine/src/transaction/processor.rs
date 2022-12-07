@@ -70,9 +70,7 @@ where TRuntimeInterface: RuntimeInterface + Clone + 'static
             .collect::<Result<Vec<_>, _>>()?;
 
         let mut finalize_result = runtime.interface().finalize()?;
-        // TODO: We probably dont need this
         finalize_result.execution_results = exec_results;
-
         Ok(finalize_result)
     }
 

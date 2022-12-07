@@ -54,4 +54,9 @@ pub enum WasmExecutionError {
     NoAbiDefinition,
     #[error("Unexpected ABI function {name}")]
     UnexpectedAbiFunction { name: String },
+    #[error("Panic! {message}")]
+    Panic {
+        message: String,
+        runtime_error: wasmer::RuntimeError,
+    },
 }

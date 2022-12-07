@@ -20,8 +20,11 @@
 //   WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //   USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+use std::mem::size_of;
+
 use tari_dan_engine::{
     packager::{PackageError, TemplateModuleLoader},
+    transaction::TransactionError,
     wasm::{compile::compile_template, WasmExecutionError},
 };
 use tari_engine_types::instruction::Instruction;
@@ -146,7 +149,7 @@ fn test_account() {
     let faucet_template = template_test.get_template_address("TestFaucet");
 
     let initial_supply = Amount(1_000_000_000_000);
-    let result = template_test.execute(vec![Instruction::CallFunction {
+    let result = template_test.execute_and_commit(vec![Instruction::CallFunction {
         template_address: faucet_template,
         function: "mint".to_string(),
         args: args![initial_supply],
@@ -163,7 +166,7 @@ fn test_account() {
     let sender_address: ComponentAddress = template_test.call_function("Account", "new", args![]);
     let receiver_address: ComponentAddress = template_test.call_function("Account", "new", args![]);
 
-    let _result = template_test.execute(vec![
+    let _result = template_test.execute_and_commit(vec![
         Instruction::CallMethod {
             component_address: faucet_component,
             method: "take_free_coins".to_string(),
@@ -179,7 +182,7 @@ fn test_account() {
         },
     ]);
 
-    let result = template_test.execute(vec![
+    let result = template_test.execute_and_commit(vec![
         Instruction::CallMethod {
             component_address: sender_address,
             method: "withdraw".to_string(),
@@ -253,4 +256,54 @@ fn test_tuples() {
     template_test.call_method::<()>(component_id, "set", args![new_value]);
     let value: u32 = template_test.call_method(component_id, "get", args![]);
     assert_eq!(value, new_value);
+}
+
+mod errors {
+    use super::*;
+
+    #[test]
+    fn panic() {
+        let template_test = TemplateTest::new(vec!["tests/templates/errors"]);
+
+        let err = template_test
+            .try_execute(vec![Instruction::CallFunction {
+                template_address: template_test.get_template_address("Errors"),
+                function: "panic".to_string(),
+                args: args![],
+            }])
+            .unwrap_err();
+        match err {
+            TransactionError::WasmExecutionError(WasmExecutionError::Panic { message, .. }) => {
+                assert_eq!(message, "This error message should be included in the execution result");
+            },
+            _ => panic!("Unexpected error: {}", err),
+        }
+    }
+
+    #[test]
+    fn invalid_args() {
+        let template_test = TemplateTest::new(vec!["tests/templates/errors"]);
+
+        let text = "this isn't an amount";
+        let err = template_test
+            .try_execute(vec![Instruction::CallFunction {
+                template_address: template_test.get_template_address("Errors"),
+                function: "please_pass_invalid_args".to_string(),
+                args: args![text],
+            }])
+            .unwrap_err();
+        match err {
+            TransactionError::WasmExecutionError(WasmExecutionError::Panic { message, .. }) => {
+                assert_eq!(
+                    message,
+                    format!(
+                        "failed to decode argument at position 0 for function 'please_pass_invalid_args': \
+                         decode_exact: {} bytes remaining on input",
+                        text.len() - size_of::<i64>() + size_of::<u32>()
+                    )
+                );
+            },
+            _ => panic!("Unexpected error: {}", err),
+        }
+    }
 }
