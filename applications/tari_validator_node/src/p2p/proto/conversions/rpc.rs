@@ -18,11 +18,23 @@ impl TryFrom<p2p::proto::rpc::VnStateSyncResponse> for SubstateShardData {
             value.version,
             Substate::from_bytes(&value.substate)?,
             value.created_height.try_into()?,
-            value.destroyed_height.map(|v| v.try_into()).transpose()?,
+            if value.destroyed_height == 0 {
+                None
+            } else {
+                Some(value.destroyed_height.try_into()?)
+            },
             value.created_node_hash.try_into()?,
-            value.destroyed_node_hash.map(|v| v.try_into()).transpose()?,
+            if value.destroyed_node_hash.is_empty() {
+                None
+            } else {
+                Some(value.destroyed_node_hash.try_into()?)
+            },
             value.created_payload_id.try_into()?,
-            value.destroyed_payload_id.map(|v| v.try_into()).transpose()?,
+            if value.destroyed_payload_id.is_empty() {
+                None
+            } else {
+                Some(value.destroyed_payload_id.try_into()?)
+            },
             value
                 .created_justify
                 .map(|v| v.try_into())
@@ -42,11 +54,17 @@ impl TryFrom<SubstateShardData> for p2p::proto::rpc::VnStateSyncResponse {
             version: value.version(),
             substate: value.substate().to_bytes(),
             created_height: value.created_height().as_u64(),
-            destroyed_height: value.destroyed_height().map(|v| v.as_u64()),
+            destroyed_height: value.destroyed_height().map(|v| v.as_u64()).unwrap_or(0),
             created_node_hash: value.created_node_hash().as_bytes().to_vec(),
-            destroyed_node_hash: value.destroyed_node_hash().map(|v| v.as_bytes().to_vec()),
+            destroyed_node_hash: value
+                .destroyed_node_hash()
+                .map(|v| v.as_bytes().to_vec())
+                .unwrap_or_default(),
             created_payload_id: value.created_payload_id().as_bytes().to_vec(),
-            destroyed_payload_id: value.destroyed_payload_id().map(|v| v.as_bytes().to_vec()),
+            destroyed_payload_id: value
+                .destroyed_payload_id()
+                .map(|v| v.as_bytes().to_vec())
+                .unwrap_or_default(),
             created_justify: Some(value.created_justify().clone().try_into()?),
             destroyed_justify: value
                 .destroyed_justify()

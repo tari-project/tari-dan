@@ -96,11 +96,11 @@ message VNStateSyncResponse {
   uint32 version = 2;
   bytes substate =3;
   uint64 created_height = 4;
-  optional uint64 destroyed_height = 5;
+  uint64 destroyed_height = 5;
   bytes created_node_hash = 6;
-  optional bytes destroyed_node_hash = 7;
+  bytes destroyed_node_hash = 7;
   bytes created_payload_id = 8;
-  optional bytes destroyed_payload_id = 9;
+  bytes destroyed_payload_id = 9;
   tari.dan.consensus.QuorumCertificate created_justify = 10;
-  optional tari.dan.consensus.QuorumCertificate destroyed_justify = 11;
+  tari.dan.consensus.QuorumCertificate destroyed_justify = 11;
 }
