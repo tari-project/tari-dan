@@ -40,14 +40,14 @@ impl WorkspaceManager {
         bucket_ids
     }
 
-    pub fn take_bucket(bucket_id: BucketId) -> Bucket {
+    pub fn take_bucket(_bucket_id: BucketId) -> Bucket {
         todo!("This does not work as expected");
-        let resp: InvokeResult = call_engine(EngineOp::WorkspaceInvoke, &WorkspaceInvokeArg {
-            action: WorkspaceAction::Take,
-            args: invoke_args!(bucket_id),
-        })
-        .expect("Workspace invoke returned null");
-        let bucket = resp.decode().expect("Failed to decode Bucket");
-        bucket
+        // let resp: InvokeResult = call_engine(EngineOp::WorkspaceInvoke, &WorkspaceInvokeArg {
+        //     action: WorkspaceAction::Take,
+        //     args: invoke_args!(bucket_id),
+        // })
+        // .expect("Workspace invoke returned null");
+        // let bucket = resp.decode().expect("Failed to decode Bucket");
+        // bucket
     }
 }

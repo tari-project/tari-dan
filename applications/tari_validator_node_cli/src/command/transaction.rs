@@ -254,6 +254,10 @@ async fn submit_transaction(
     let transaction = builder.build();
     let tx_hash = *transaction.hash();
 
+    for instruction in transaction.instructions() {
+        println!("- {}", instruction);
+    }
+
     let request = SubmitTransactionRequest {
         instructions: transaction.instructions().to_vec(),
         signature: transaction.signature().clone(),
@@ -264,7 +268,6 @@ async fn submit_transaction(
         wait_for_result: common.wait_for_result,
         wait_for_result_timeout: common.wait_for_result_timeout,
     };
-    dbg!(&request);
 
     if request.inputs.is_empty() && request.num_outputs == 0 {
         println!("No inputs or outputs. This transaction will not be processed by the network.");
