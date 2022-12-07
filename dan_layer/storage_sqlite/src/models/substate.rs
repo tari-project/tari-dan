@@ -53,6 +53,22 @@ pub struct NewSubstate {
     pub created_height: i64,
 }
 
+#[derive(Debug, Insertable)]
+#[table_name = "substates"]
+pub struct ImportedSubstate {
+    pub shard_id: Vec<u8>,
+    pub version: i64,
+    pub data: String,
+    pub created_by_payload_id: Vec<u8>,
+    pub created_justify: String,
+    pub created_node_hash: Vec<u8>,
+    pub created_height: i64,
+    pub destroyed_by_payload_id: Option<Vec<u8>>,
+    pub destroyed_justify: Option<String>,
+    pub destroyed_node_hash: Option<Vec<u8>>,
+    pub destroyed_height: Option<i64>,
+}
+
 impl Substate {
     pub fn is_destroyed(&self) -> bool {
         self.destroyed_by_payload_id.is_some()

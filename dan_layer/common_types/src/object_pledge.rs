@@ -4,7 +4,7 @@
 use serde::{Deserialize, Serialize};
 use tari_bor::borsh::BorshSerialize;
 
-use crate::{NodeHeight, PayloadId, ShardId, SubstateState};
+use crate::{PayloadId, ShardId, SubstateState};
 
 #[derive(Debug, Clone, Deserialize, Serialize, BorshSerialize)]
 pub struct ObjectPledge {

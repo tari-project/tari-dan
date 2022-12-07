@@ -29,7 +29,6 @@ use tari_dan_common_types::{
     PayloadId,
     QuorumCertificate,
     ShardId,
-    SubstateChange,
     SubstateState,
     TreeNodeHash,
 };
@@ -103,7 +102,6 @@ pub trait ShardStoreTransaction<TAddr: NodeAddressable, TPayload: Payload> {
         &mut self,
         shard: ShardId,
         payload: PayloadId,
-        change: SubstateChange,
         current_height: NodeHeight,
     ) -> Result<ObjectPledge, StorageError>;
     fn set_last_executed_height(&mut self, shard: ShardId, height: NodeHeight) -> Result<(), StorageError>;
@@ -149,7 +147,11 @@ pub trait ShardStoreTransaction<TAddr: NodeAddressable, TPayload: Payload> {
         -> Result<Vec<VoteMessage>, StorageError>;
     fn get_recent_transactions(&self) -> Result<Vec<RecentTransaction>, StorageError>;
     fn get_transaction(&self, payload_id: Vec<u8>) -> Result<Vec<SQLTransaction>, StorageError>;
-    fn get_substates(&self, payload_id: Vec<u8>, shard_id: Vec<u8>) -> Result<Vec<SQLSubstate>, StorageError>;
+    fn get_substates_for_payload(
+        &self,
+        payload_id: Vec<u8>,
+        shard_id: Vec<u8>,
+    ) -> Result<Vec<SQLSubstate>, StorageError>;
     fn update_payload_result(&self, payload_id: &PayloadId, result: FinalizeResult) -> Result<(), StorageError>;
     fn complete_pledges(
         &self,

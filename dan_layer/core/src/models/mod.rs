@@ -185,10 +185,9 @@ pub struct SQLTransaction {
 
 #[derive(Debug, Serialize)]
 pub struct SQLSubstate {
-    pub substate_type: String,
-    pub node_height: i64,
-    pub data: Option<String>,
-    pub justify: Option<String>,
-    pub is_draft: bool,
-    pub tree_node_hash: Option<Vec<u8>>,
+    pub shard_id: Vec<u8>,
+    pub version: i64,
+    pub data: String,
+    pub created_justify: String,
+    pub destroyed_justify: Option<String>,
 }

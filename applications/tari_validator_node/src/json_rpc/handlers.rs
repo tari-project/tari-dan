@@ -260,7 +260,7 @@ impl JsonRpcHandlers {
         let answer_id = value.get_answer_id();
         let data: SubstatesRequest = value.parse_params()?;
         let tx = self.shard_store.create_tx().unwrap();
-        match tx.get_substates(data.payload_id, data.shard_id) {
+        match tx.get_substates_for_payload(data.payload_id, data.shard_id) {
             Ok(substates) => Ok(JsonRpcResponse::success(answer_id, json!(substates))),
             Err(err) => {
                 println!("error {:?}", err);

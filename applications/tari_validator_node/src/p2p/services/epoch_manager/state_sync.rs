@@ -20,12 +20,12 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use std::convert::TryFrom;
+use std::convert::TryInto;
 
 use futures::StreamExt;
 use log::info;
 use tari_comms::types::CommsPublicKey;
-use tari_dan_common_types::{NodeHeight, PayloadId, QuorumCertificate, ShardId, SubstateState, TreeNodeHash};
+use tari_dan_common_types::ShardId;
 use tari_dan_core::{
     models::{SubstateShardData, ValidatorNode},
     services::{epoch_manager::EpochManagerError, ValidatorNodeClientFactory},
@@ -66,7 +66,7 @@ impl<TShardStore: ShardStore> PeerSyncManagerService<TShardStore> {
                 .map_err(EpochManagerError::StorageError)?
         };
 
-        let mut inventory = inventory
+        let inventory = inventory
             .into_iter()
             .map(p2p::proto::common::ShardId::from)
             .collect::<Vec<_>>();
@@ -97,48 +97,8 @@ impl<TShardStore: ShardStore> PeerSyncManagerService<TShardStore> {
             let mut substate_count = 0;
             while let Some(resp) = vn_state_stream.next().await {
                 let msg = resp.map_err(EpochManagerError::RpcStatus)?;
-                let sync_vn_shard = ShardId::try_from(msg.shard_id.ok_or(EpochManagerError::UnexpectedResponse)?)
-                    .map_err(|_| EpochManagerError::UnexpectedResponse)?;
-                if msg.substate_state.is_none() {
-                    info!(
-                        target: LOG_TARGET,
-                        "🌍 Nothing to sync from peer {}", sync_vn.public_key
-                    );
-                    continue;
-                }
-                let sync_vn_substate =
-                    SubstateState::try_from(msg.substate_state.ok_or(EpochManagerError::UnexpectedResponse)?)
-                        .map_err(|_| EpochManagerError::UnexpectedResponse)?;
-                let sync_vn_node_height = NodeHeight::from(msg.node_height);
-
-                let sync_vn_tree_node_hash = if msg.tree_node_hash.is_empty() {
-                    None
-                } else {
-                    Some(
-                        TreeNodeHash::try_from(msg.tree_node_hash)
-                            .map_err(|_| EpochManagerError::UnexpectedResponse)?,
-                    )
-                };
-
-                let sync_vn_payload_id =
-                    PayloadId::try_from(msg.payload_id).map_err(|_| EpochManagerError::UnexpectedResponse)?;
-
-                let sync_vn_certificate = msg
-                    .certificate
-                    .map(QuorumCertificate::try_from)
-                    .transpose()
-                    .map_err(|_| EpochManagerError::UnexpectedResponse)?;
-
-                // TODO: Validate QC
-
-                let substate_shard_data = SubstateShardData::new(
-                    sync_vn_shard,
-                    sync_vn_substate,
-                    sync_vn_node_height,
-                    sync_vn_tree_node_hash,
-                    sync_vn_payload_id,
-                    sync_vn_certificate,
-                );
+                let substate_shard_data: SubstateShardData =
+                    msg.try_into().map_err(EpochManagerError::InvalidStateSyncData)?;
 
                 // insert response state values in the shard db
                 {
@@ -149,7 +109,7 @@ impl<TShardStore: ShardStore> PeerSyncManagerService<TShardStore> {
                 }
 
                 // increase node inventory
-                inventory.push(sync_vn_shard.into());
+                // inventory.push(sync_vn_shard.into());
                 substate_count += 1;
             }
 

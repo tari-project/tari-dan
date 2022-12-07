@@ -26,7 +26,6 @@ use std::{
     fs::create_dir_all,
     path::PathBuf,
     sync::{Arc, Mutex},
-    thread::current,
 };
 
 use diesel::{
@@ -47,7 +46,6 @@ use tari_dan_common_types::{
     PayloadId,
     QuorumCertificate,
     ShardId,
-    SubstateChange,
     SubstateState,
     TreeNodeHash,
 };
@@ -85,7 +83,7 @@ use crate::{
         payload::{NewPayload, Payload as SqlPayload},
         pledge::{NewShardPledge, ShardPledge},
         received_votes::{NewReceivedVote, ReceivedVote},
-        substate::{NewSubstate, Substate},
+        substate::{ImportedSubstate, NewSubstate, Substate},
     },
     schema::{
         high_qcs::dsl::high_qcs,
@@ -161,29 +159,30 @@ impl From<QueryableTransaction> for SQLTransaction {
 
 #[derive(Debug, QueryableByName)]
 pub struct QueryableSubstate {
+    #[sql_type = "Binary"]
+    pub shard_id: Vec<u8>,
+    #[sql_type = "BigInt"]
+    pub version: i64,
     #[sql_type = "Text"]
-    pub substate_type: String,
-    #[sql_type = "BigInt"]
-    pub node_height: i64,
+    pub data: String,
+    #[sql_type = "Text"]
+    pub created_justify: String,
+    #[sql_type = "Binary"]
+    pub created_node_hash: Vec<u8>,
     #[sql_type = "Nullable<Text>"]
-    pub data: Option<String>,
-    #[sql_type = "Nullable<Text>"]
-    pub justify: Option<String>,
-    #[sql_type = "BigInt"]
-    pub is_draft: i64,
+    pub destroyed_justify: Option<String>,
     #[sql_type = "Nullable<Binary>"]
-    pub tree_node_hash: Option<Vec<u8>>,
+    pub destroyed_node_hash: Option<Vec<u8>>,
 }
 
 impl From<QueryableSubstate> for SQLSubstate {
     fn from(transaction: QueryableSubstate) -> Self {
         Self {
-            substate_type: transaction.substate_type,
-            node_height: transaction.node_height,
+            shard_id: transaction.shard_id,
+            version: transaction.version,
             data: transaction.data,
-            justify: transaction.justify,
-            is_draft: transaction.is_draft == 1,
-            tree_node_hash: transaction.tree_node_hash,
+            created_justify: transaction.created_justify,
+            destroyed_justify: transaction.destroyed_justify,
         }
     }
 }
@@ -686,7 +685,6 @@ impl ShardStoreTransaction<PublicKey, TariDanPayload> for SqliteShardStoreTransa
         &mut self,
         shard: ShardId,
         payload: PayloadId,
-        change: SubstateChange,
         current_height: NodeHeight,
     ) -> Result<ObjectPledge, StorageError> {
         use crate::schema::shard_pledges::{
@@ -898,48 +896,48 @@ impl ShardStoreTransaction<PublicKey, TariDanPayload> for SqliteShardStoreTransa
     }
 
     fn insert_substates(&mut self, substate_data: SubstateShardData) -> Result<(), StorageError> {
-        todo!()
-        // let shard = Vec::from(substate_data.shard().as_bytes());
-        // let substate = substate_data.substate();
-        // let height = substate_data.height();
-        // let node_hash = substate_data.tree_node_hash().map(|h| Vec::from(h.as_bytes()));
-        // let payload_id = Vec::from(substate_data.payload_id().as_bytes());
-        // let certificate = substate_data.certificate();
-        //
-        // let new_row = NewSubstate {
-        //     substate_type: substate.as_str().to_string(),
-        //     shard_id: shard,
-        //     node_height: height.as_u64() as i64,
-        //     data: match substate {
-        //         SubstateState::DoesNotExist => None,
-        //         SubstateState::Up { data: d, .. } => {
-        //             Some(
-        //                 serde_json::to_string_pretty(d).map_err(|source| StorageError::SerdeJson {
-        //                     source,
-        //                     operation: "save_substate_changes".to_string(),
-        //                     data: "substate data".to_string(),
-        //                 })?,
-        //             )
-        //         },
-        //         SubstateState::Down { .. } => None,
-        //     },
-        //     created_by_payload_id: payload_id,
-        //     justify: Some(json!(certificate).to_string()),
-        //     is_draft: false,
-        //     tree_node_hash: node_hash,
-        //     pledged_to_payload_id: None,
-        //     deleted_by_payload_id: None,
-        //     pledged_until_height: None,
-        // };
-        //
-        // diesel::insert_into(substates)
-        //     .values(&new_row)
-        //     .execute(self.transaction.connection())
-        //     .map_err(|e| StorageError::QueryError {
-        //         reason: format!("Insert substates: {}", e),
-        //     })?;
-        //
-        // Ok(())
+        let new_row = ImportedSubstate {
+            shard_id: substate_data.shard_id().as_bytes().to_vec(),
+            version: substate_data.version() as i64,
+            data: serde_json::to_string_pretty(substate_data.substate()).map_err(|source| StorageError::SerdeJson {
+                source,
+                operation: "insert_substates".to_string(),
+                data: "substate data".to_string(),
+            })?,
+            created_by_payload_id: substate_data.created_payload_id().as_bytes().to_vec(),
+            created_justify: serde_json::to_string_pretty(substate_data.created_justify()).map_err(|source| {
+                StorageError::SerdeJson {
+                    source,
+                    operation: "insert_substates".to_string(),
+                    data: "created_justify".to_string(),
+                }
+            })?,
+            created_height: substate_data.created_height().as_u64() as i64,
+            created_node_hash: substate_data.created_node_hash().as_bytes().to_vec(),
+            destroyed_by_payload_id: substate_data.destroyed_payload_id().map(|v| v.as_bytes().to_vec()),
+            destroyed_justify: substate_data
+                .destroyed_justify()
+                .as_ref()
+                .map(|v| {
+                    serde_json::to_string_pretty(&v).map_err(|source| StorageError::SerdeJson {
+                        source,
+                        operation: "insert_substates".to_string(),
+                        data: "destroyed_justify".to_string(),
+                    })
+                })
+                .transpose()?,
+            destroyed_height: substate_data.destroyed_height().map(|v| v.as_u64() as i64),
+            destroyed_node_hash: substate_data.destroyed_node_hash().map(|v| v.as_bytes().to_vec()),
+        };
+
+        diesel::insert_into(substates)
+            .values(&new_row)
+            .execute(self.transaction.connection())
+            .map_err(|e| StorageError::QueryError {
+                reason: format!("Insert substates: {}", e),
+            })?;
+
+        Ok(())
     }
 
     fn get_state_inventory(&self) -> Result<Vec<ShardId>, StorageError> {
@@ -967,90 +965,76 @@ impl ShardStoreTransaction<PublicKey, TariDanPayload> for SqliteShardStoreTransa
         end_shard_id: ShardId,
         excluded_shards: &[ShardId],
     ) -> Result<Vec<SubstateShardData>, StorageError> {
-        todo!()
-        // use crate::schema::substates;
-        // let excluded_shards = excluded_shards
-        //     .iter()
-        //     .map(|sh| Vec::from(sh.as_bytes()))
-        //     .collect::<Vec<Vec<u8>>>();
-        //
-        // let substate_states: Option<Vec<Substate>> = substates
-        //     .filter(
-        //         substates::shard_id
-        //             .gt(Vec::from(start_shard_id.as_bytes()))
-        //             .and(substates::shard_id.lt(Vec::from(end_shard_id.as_bytes())))
-        //             .and(substates::shard_id.ne_all(excluded_shards)),
-        //     )
-        //     .get_results(self.transaction.connection())
-        //     .optional()
-        //     .map_err(|e| StorageError::QueryError {
-        //         reason: format!("Get substate change error: {}", e),
-        //     })
-        //     .unwrap();
-        //
-        // if let Some(substate_states) = substate_states {
-        //     substate_states
-        //         .iter()
-        //         .map(|ss| {
-        //             let shard =
-        // ShardId::from_bytes(ss.shard_id.as_slice()).map_err(StorageError::FixedHashSizeError)?;
-        // let substate = match ss.substate_type.as_str() {                 "Up" => Ok(SubstateState::Up {
-        //                     created_by: PayloadId::try_from(ss.created_by_payload_id.clone())?,
-        //                     data: ss
-        //                         .data
-        //                         .as_ref()
-        //                         .map(|json| serde_json::from_str(json))
-        //                         .transpose().map_err(
-        //                     |source| StorageError::SerdeJson { source, operation: "get_substate_states".to_string(),
-        // data: "substate data".to_string() },                 )?
-        //                         // TODO: substate data should not be an option?
-        //                         .expect("substate without data"),
-        //                 }),
-        //                 "Down" => Ok(SubstateState::Down {
-        //                     deleted_by: PayloadId::try_from(ss.deleted_by_payload_id.clone().unwrap_or_default())?,
-        //                 }),
-        //                 "DoesNotExist" => Ok(SubstateState::DoesNotExist),
-        //                 _ => Err(StorageError::InvalidSubStateType {
-        //                     substate_type: ss.substate_type.clone(),
-        //                 }),
-        //             }?;
-        //
-        //             let height = NodeHeight::from(ss.node_height as u64);
-        //             let tree_node_hash = if let Some(h) = ss.tree_node_hash.clone() {
-        //                 Some(TreeNodeHash::try_from(h).map_err(StorageError::FixedHashSizeError)?)
-        //             } else {
-        //                 None
-        //             };
-        //
-        //             let payload_id =
-        // PayloadId::try_from(ss.created_by_payload_id.clone()).map_err(StorageError::FixedHashSizeError)?;
-        //             let certificate = if let Some(qc) = ss.justify.clone() {
-        //                 Some(serde_json::from_str::<QuorumCertificate>(&qc).map_err(
-        //                 |source| StorageError::SerdeJson {
-        //                     source,
-        //                     operation: "get_substate_states".to_string(),
-        //                     data: qc,
-        //                 })?)
-        //             } else {
-        //                 None
-        //             };
-        //
-        //         Ok(SubstateShardData::new(
-        //             shard,
-        //             substate,
-        //             height,
-        //             tree_node_hash,
-        //             payload_id,
-        //             certificate
-        //         ))
-        //     })
-        //         .collect::<Result<_, _>>()
-        // } else {
-        //     Err(StorageError::NotFound {
-        //         item: "substate".to_string(),
-        //         key: "No data found for available shards".to_string(),
-        //     })
-        // }
+        use crate::schema::substates;
+        let excluded_shards = excluded_shards
+            .iter()
+            .map(|sh| Vec::from(sh.as_bytes()))
+            .collect::<Vec<Vec<u8>>>();
+
+        let substate_states: Option<Vec<Substate>> = substates
+            .filter(
+                substates::shard_id
+                    .ge(Vec::from(start_shard_id.as_bytes()))
+                    .and(substates::shard_id.lt(Vec::from(end_shard_id.as_bytes())))
+                    .and(substates::shard_id.ne_all(excluded_shards)),
+            )
+            .get_results(self.transaction.connection())
+            .optional()
+            .map_err(|e| StorageError::QueryError {
+                reason: format!("Get substate change error: {}", e),
+            })
+            .unwrap();
+
+        if let Some(substate_states) = substate_states {
+            substate_states
+                .iter()
+                .map(|ss| {
+                    Ok(SubstateShardData::new(
+                        ShardId::try_from(ss.shard_id.clone())?,
+                        ss.version as u32,
+                        serde_json::from_str(&ss.data).map_err(|source| StorageError::SerdeJson {
+                            source,
+                            operation: "get_substate_states".to_string(),
+                            data: "substate data".to_string(),
+                        })?,
+                        NodeHeight(ss.created_height as u64),
+                        ss.destroyed_height.map(|v| NodeHeight(v as u64)),
+                        TreeNodeHash::try_from(ss.created_node_hash.clone())
+                            .map_err(|_| StorageError::DecodingError)?,
+                        ss.destroyed_node_hash
+                            .as_ref()
+                            .map(|v| TreeNodeHash::try_from(v.clone()).map_err(|_| StorageError::DecodingError))
+                            .transpose()?,
+                        PayloadId::try_from(ss.created_by_payload_id.clone())
+                            .map_err(|_| StorageError::DecodingError)?,
+                        ss.destroyed_by_payload_id
+                            .as_ref()
+                            .map(|v| PayloadId::try_from(v.clone()).map_err(|_| StorageError::DecodingError))
+                            .transpose()?,
+                        serde_json::from_str(&ss.created_justify).map_err(|source| StorageError::SerdeJson {
+                            source,
+                            operation: "get_substate_states".to_string(),
+                            data: "created_justify".to_string(),
+                        })?,
+                        ss.destroyed_justify
+                            .as_ref()
+                            .map(|v| {
+                                serde_json::from_str(v).map_err(|source| StorageError::SerdeJson {
+                                    source,
+                                    operation: "get_substate_states".to_string(),
+                                    data: "destroyed_justify".to_string(),
+                                })
+                            })
+                            .transpose()?,
+                    ))
+                })
+                .collect::<Result<_, _>>()
+        } else {
+            Err(StorageError::NotFound {
+                item: "substate".to_string(),
+                key: "No data found for available shards".to_string(),
+            })
+        }
     }
 
     fn get_last_voted_height(&self, shard: ShardId) -> Result<NodeHeight, StorageError> {
@@ -1313,10 +1297,14 @@ impl ShardStoreTransaction<PublicKey, TariDanPayload> for SqliteShardStoreTransa
         Ok(res.into_iter().map(|transaction| transaction.into()).collect())
     }
 
-    fn get_substates(&self, payload_id: Vec<u8>, shard_id: Vec<u8>) -> Result<Vec<SQLSubstate>, StorageError> {
+    fn get_substates_for_payload(
+        &self,
+        payload_id: Vec<u8>,
+        shard_id: Vec<u8>,
+    ) -> Result<Vec<SQLSubstate>, StorageError> {
         let res = sql_query(
-            "select * from substates where shard_id == ? and (created_by_payload_id == ? or deleted_by_payload_id == \
-             ?);",
+            "select * from substates where shard_id == ? and (created_by_payload_id == ? or destroyed_by_payload_id \
+             == ?);",
         )
         .bind::<Binary, _>(shard_id)
         .bind::<Binary, _>(payload_id.clone())
@@ -1357,7 +1345,7 @@ impl ShardStoreTransaction<PublicKey, TariDanPayload> for SqliteShardStoreTransa
             })?;
         if rows_affected == 0 {
             return Err(StorageError::QueryError {
-                reason: format!("Complete pledges: No rows affected"),
+                reason: "Complete pledges: No rows affected".to_string(),
             });
         }
         Ok(())
