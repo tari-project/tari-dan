@@ -34,7 +34,8 @@ use tari_dan_engine::{
     packager::{Package, TemplateModuleLoader},
     runtime::{IdProvider, RuntimeInterfaceImpl, StateTracker},
     state_store::{memory::MemoryStateStore, AtomicDb, StateReader, StateStoreError, StateWriter},
-    transaction::TransactionProcessor,
+    transaction::{TransactionError, TransactionProcessor},
+    wasm::WasmExecutionError,
 };
 use tari_engine_types::{
     commit_result::{FinalizeResult, RejectReason},
@@ -90,11 +91,16 @@ where TTemplateProvider: TemplateProvider
 
         let processor = TransactionProcessor::new(runtime, package);
         let tx_hash = *transaction.hash();
-        let result = match processor.execute(transaction) {
-            Ok(result) => result,
-            Err(err) => FinalizeResult::errored(tx_hash, RejectReason::ExecutionFailure(err.to_string())),
-        };
-        Ok(result)
+        match processor.execute(transaction) {
+            Ok(result) => Ok(result),
+            Err(TransactionError::WasmExecutionError(WasmExecutionError::Panic { message, .. })) => Ok(
+                FinalizeResult::errored(tx_hash, RejectReason::ExecutionFailure(message)),
+            ),
+            Err(err) => Ok(FinalizeResult::errored(
+                tx_hash,
+                RejectReason::ExecutionFailure(err.to_string()),
+            )),
+        }
     }
 }
 

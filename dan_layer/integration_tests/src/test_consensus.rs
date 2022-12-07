@@ -768,7 +768,7 @@ use tari_dan_core::{
     services::{NodeIdentitySigningService, PayloadProcessor, PayloadProcessorError, SigningService},
     workers::hotstuff_error::HotStuffError,
 };
-use tari_template_lib::{args::Arg, Hash};
+use tari_template_lib::{args, Hash};
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn test_kitchen_sink() {
@@ -810,7 +810,7 @@ async fn test_kitchen_sink() {
     let instruction = Instruction::CallFunction {
         template_address: Hash::default(),
         function: "new".to_string(),
-        args: vec![Arg::Literal(b"Kitchen Sink".to_vec())],
+        args: args![b"Kitchen Sink"],
     };
     let secret_key = PrivateKey::from_bytes(&[1; 32]).unwrap();
 

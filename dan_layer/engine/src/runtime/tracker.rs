@@ -132,7 +132,6 @@ impl StateTracker {
                     .map(Ok)
                     .unwrap_or_else(|| self.id_provider.new_resource_address())?;
                 debug!(target: LOG_TARGET, "New resource minted: {}", resource_address);
-                dbg!(resource_address.to_string());
                 self.check_amount(amount)?;
                 self.write_with(|state| {
                     let resource = Resource::fungible(resource_address, amount, metadata);

@@ -23,6 +23,7 @@
 use std::{
     cell::Cell,
     fmt::{Debug, Formatter},
+    sync::{Arc, Mutex},
 };
 
 use wasmer::{
@@ -47,6 +48,7 @@ pub struct WasmEnv<T> {
     mem_alloc: LazyInit<NativeFunc<i32, i32>>,
     mem_free: LazyInit<NativeFunc<i32>>,
     state: T,
+    last_panic: Arc<Mutex<Option<String>>>,
 }
 
 impl<T: Clone + Sync + Send + 'static> WasmEnv<T> {
@@ -56,6 +58,7 @@ impl<T: Clone + Sync + Send + 'static> WasmEnv<T> {
             memory: LazyInit::new(),
             mem_alloc: LazyInit::new(),
             mem_free: LazyInit::new(),
+            last_panic: Arc::new(Mutex::new(None)),
         }
     }
 
@@ -71,6 +74,10 @@ impl<T: Clone + Sync + Send + 'static> WasmEnv<T> {
     pub(super) fn free(&self, ptr: AllocPtr) -> Result<(), WasmExecutionError> {
         self.get_mem_free_func()?.call(ptr.as_i32())?;
         Ok(())
+    }
+
+    pub(super) fn take_last_panic_message(&self) -> Option<String> {
+        self.last_panic.lock().unwrap().take()
     }
 
     pub(super) fn write_to_memory(&self, ptr: &AllocPtr, data: &[u8]) -> Result<(), WasmExecutionError> {
@@ -180,17 +187,22 @@ impl<T: Clone + Sync + Send + 'static> WasmEnv<T> {
         const WASM_DEBUG_LOG_TARGET: &str = "tari::dan::wasm";
         match env.read_from_memory(msg_ptr as u32, msg_len as u32) {
             Ok(msg) => {
-                eprintln!("📣 PANIC: ({}:{}) {}", line, col, String::from_utf8_lossy(&msg));
-                log::error!(
-                    target: WASM_DEBUG_LOG_TARGET,
-                    "📣 PANIC: ({}:{}) {}",
-                    line,
-                    col,
-                    String::from_utf8_lossy(&msg)
-                );
+                let msg = String::from_utf8_lossy(&msg);
+                eprintln!("📣 PANIC: ({}:{}) {}", line, col, msg);
+                log::error!(target: WASM_DEBUG_LOG_TARGET, "📣 PANIC: ({}:{}) {}", line, col, msg);
+                *env.last_panic.lock().unwrap() = Some(msg.to_string());
             },
             Err(err) => {
-                log::error!(target: WASM_DEBUG_LOG_TARGET, "Failed to read from memory: {}", err);
+                log::error!(
+                    target: WASM_DEBUG_LOG_TARGET,
+                    "📣 PANIC: WASM template panicked but did not provide a valid memory pointer to on_panic \
+                     callback: {}",
+                    err
+                );
+                *env.last_panic.lock().unwrap() = Some(format!(
+                    "WASM panicked but did not provide a valid message pointer to on_panic callback: {}",
+                    err
+                ));
             },
         }
     }
