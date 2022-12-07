@@ -250,7 +250,11 @@ impl<'a> SqliteShardStoreTransaction<'a> {
             Ok(ObjectPledge {
                 shard_id: shard,
                 pledged_to_payload: PayloadId::try_from(obj.pledged_to_payload_id)?,
-                current_state: if !current_state.is_destroyed() {
+                current_state: if current_state.is_destroyed() {
+                    SubstateState::Down {
+                        deleted_by: PayloadId::try_from(current_state.destroyed_by_payload_id.unwrap_or_default())?,
+                    }
+                } else {
                     SubstateState::Up {
                         created_by: PayloadId::try_from(current_state.created_by_payload_id)?,
                         data: serde_json::from_str::<tari_engine_types::substate::Substate>(&current_state.data)
@@ -259,10 +263,6 @@ impl<'a> SqliteShardStoreTransaction<'a> {
                                 operation: "create_pledge".to_string(),
                                 data: "pledge".to_string(),
                             })?,
-                    }
-                } else {
-                    SubstateState::Down {
-                        deleted_by: PayloadId::try_from(current_state.destroyed_by_payload_id.unwrap_or_default())?,
                     }
                 },
             })
@@ -789,6 +789,7 @@ impl ShardStoreTransaction<PublicKey, TariDanPayload> for SqliteShardStoreTransa
     }
 
     // TODO: the version number should be passed in here, or alternatively, the version number should be removed
+    #[allow(clippy::too_many_lines)]
     fn save_substate_changes(
         &mut self,
         changes: &HashMap<ShardId, Vec<SubstateState>>,
@@ -906,7 +907,7 @@ impl ShardStoreTransaction<PublicKey, TariDanPayload> for SqliteShardStoreTransa
     fn insert_substates(&mut self, substate_data: SubstateShardData) -> Result<(), StorageError> {
         let new_row = ImportedSubstate {
             shard_id: substate_data.shard_id().as_bytes().to_vec(),
-            version: substate_data.version() as i64,
+            version: i64::from(substate_data.version()),
             data: serde_json::to_string_pretty(substate_data.substate()).map_err(|source| StorageError::SerdeJson {
                 source,
                 operation: "insert_substates".to_string(),
