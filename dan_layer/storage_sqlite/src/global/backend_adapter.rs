@@ -23,6 +23,7 @@
 use std::{
     collections::HashMap,
     convert::{TryFrom, TryInto},
+    fmt::{Debug, Formatter},
     sync::{Arc, Mutex},
 };
 
@@ -352,5 +353,13 @@ impl GlobalDbAdapter for SqliteGlobalDbAdapter {
             Some(e) => Ok(Some(e.into())),
             None => Ok(None),
         }
+    }
+}
+
+impl Debug for SqliteGlobalDbAdapter {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("SqliteGlobalDbAdapter")
+            .field("db", &"Arc<Mutex<SqliteConnection>>")
+            .finish()
     }
 }

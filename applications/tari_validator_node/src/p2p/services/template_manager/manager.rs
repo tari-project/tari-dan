@@ -22,15 +22,13 @@
 
 use std::fs;
 
-use tari_dan_core::{services::TemplateProvider, storage::DbFactory};
+use tari_dan_core::services::TemplateProvider;
 use tari_dan_engine::wasm::WasmModule;
-use tari_dan_storage::global::{DbTemplate, DbTemplateUpdate, TemplateStatus};
+use tari_dan_storage::global::{DbTemplate, DbTemplateUpdate, GlobalDb, TemplateStatus};
+use tari_dan_storage_sqlite::global::SqliteGlobalDbAdapter;
 use tari_template_lib::models::TemplateAddress;
 
-use crate::{
-    p2p::services::template_manager::{handle::TemplateRegistration, TemplateConfig, TemplateManagerError},
-    SqliteDbFactory,
-};
+use crate::p2p::services::template_manager::{handle::TemplateRegistration, TemplateConfig, TemplateManagerError};
 
 const _LOG_TARGET: &str = "tari::validator_node::template_manager";
 
@@ -97,20 +95,20 @@ impl From<DbTemplate> for Template {
 
 #[derive(Debug, Clone)]
 pub struct TemplateManager {
-    db_factory: SqliteDbFactory,
+    global_db: GlobalDb<SqliteGlobalDbAdapter>,
     config: TemplateConfig,
 }
 
 impl TemplateManager {
-    pub fn new(db_factory: SqliteDbFactory, config: TemplateConfig) -> Self {
+    pub fn new(global_db: GlobalDb<SqliteGlobalDbAdapter>, config: TemplateConfig) -> Self {
         // TODO: preload some example templates
-        Self { db_factory, config }
+        Self { global_db, config }
     }
 
     pub fn fetch_template(&self, address: &TemplateAddress) -> Result<Template, TemplateManagerError> {
-        let db = self.db_factory.get_or_create_global_db()?;
-        let tx = db.create_transaction()?;
-        let template = db
+        let tx = self.global_db.create_transaction()?;
+        let template = self
+            .global_db
             .templates(&tx)
             .get_template(address)?
             .ok_or(TemplateManagerError::TemplateNotFound { address: *address })?;
@@ -131,10 +129,9 @@ impl TemplateManager {
     }
 
     pub fn fetch_template_metadata(&self, limit: usize) -> Result<Vec<TemplateMetadata>, TemplateManagerError> {
-        let db = self.db_factory.get_or_create_global_db()?;
-        let tx = db.create_transaction()?;
+        let tx = self.global_db.create_transaction()?;
         // TODO: we should be able to fetch just the metadata and not the compiled code
-        let templates = db.templates(&tx).get_templates(limit)?;
+        let templates = self.global_db.templates(&tx).get_templates(limit)?;
         Ok(templates.into_iter().map(Into::into).collect())
     }
 
@@ -149,14 +146,13 @@ impl TemplateManager {
             added_at: time::OffsetDateTime::now_utc(),
         };
 
-        let db = self.db_factory.get_or_create_global_db()?;
-        let tx = db.create_transaction()?;
-        if db.templates(&tx).get_template(&*template.template_address)?.is_some() {
+        let tx = self.global_db.create_transaction()?;
+        let templates_db = self.global_db.templates(&tx);
+        if templates_db.get_template(&*template.template_address)?.is_some() {
             return Ok(());
         }
-        let template_db = db.templates(&tx);
-        template_db.insert_template(template)?;
-        db.commit(tx)?;
+        templates_db.insert_template(template)?;
+        tx.commit()?;
 
         Ok(())
     }
@@ -166,11 +162,10 @@ impl TemplateManager {
         address: TemplateAddress,
         update: DbTemplateUpdate,
     ) -> Result<(), TemplateManagerError> {
-        let db = self.db_factory.get_or_create_global_db()?;
-        let tx = db.create_transaction()?;
-        let template_db = db.templates(&tx);
+        let tx = self.global_db.create_transaction()?;
+        let template_db = self.global_db.templates(&tx);
         template_db.update_template(&address, update)?;
-        db.commit(tx)?;
+        tx.commit()?;
 
         Ok(())
     }

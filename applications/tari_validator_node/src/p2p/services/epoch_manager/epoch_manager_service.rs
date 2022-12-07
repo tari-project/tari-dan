@@ -32,7 +32,8 @@ use tari_dan_core::{
     models::{Committee, ValidatorNode},
     services::epoch_manager::{EpochManagerError, ShardCommitteeAllocation},
 };
-use tari_dan_storage_sqlite::{sqlite_shard_store_factory::SqliteShardStore, SqliteDbFactory};
+use tari_dan_storage::global::GlobalDb;
+use tari_dan_storage_sqlite::{global::SqliteGlobalDbAdapter, sqlite_shard_store_factory::SqliteShardStore};
 use tari_shutdown::ShutdownSignal;
 use tokio::{
     sync::{broadcast, mpsc::Receiver, oneshot},
@@ -141,7 +142,7 @@ impl EpochManagerService {
     pub fn spawn(
         rx_request: Receiver<EpochManagerRequest>,
         shutdown: ShutdownSignal,
-        db_factory: SqliteDbFactory,
+        global_db: GlobalDb<SqliteGlobalDbAdapter>,
         shard_store: SqliteShardStore,
         base_node_client: GrpcBaseNodeClient,
         consensus_constants: ConsensusConstants,
@@ -153,7 +154,7 @@ impl EpochManagerService {
             let result = EpochManagerService {
                 rx_request,
                 inner: BaseLayerEpochManager::new(
-                    db_factory,
+                    global_db,
                     shard_store,
                     base_node_client,
                     consensus_constants,

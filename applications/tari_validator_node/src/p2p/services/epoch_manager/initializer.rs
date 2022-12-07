@@ -24,7 +24,8 @@ use std::sync::Arc;
 
 use tari_comms::NodeIdentity;
 use tari_dan_core::consensus_constants::ConsensusConstants;
-use tari_dan_storage_sqlite::{sqlite_shard_store_factory::SqliteShardStore, SqliteDbFactory};
+use tari_dan_storage::global::GlobalDb;
+use tari_dan_storage_sqlite::{global::SqliteGlobalDbAdapter, sqlite_shard_store_factory::SqliteShardStore};
 use tari_shutdown::ShutdownSignal;
 use tokio::sync::mpsc;
 
@@ -37,7 +38,7 @@ use crate::{
 };
 
 pub fn spawn(
-    db_factory: SqliteDbFactory,
+    global_db: GlobalDb<SqliteGlobalDbAdapter>,
     shard_store: SqliteShardStore,
     base_node_client: GrpcBaseNodeClient,
     consensus_constants: ConsensusConstants,
@@ -50,7 +51,7 @@ pub fn spawn(
     EpochManagerService::spawn(
         rx_request,
         shutdown,
-        db_factory,
+        global_db,
         shard_store,
         base_node_client,
         consensus_constants,
