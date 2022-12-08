@@ -179,7 +179,6 @@ impl BaseLayerScanner {
                         .saturating_sub(self.consensus_constants.base_layer_confirmations)
                 );
                 self.sync_blockchain().await?;
-                self.epoch_manager.notify_scanning_complete().await?;
             },
             BlockchainProgression::Reorged => {
                 warn!(
@@ -190,7 +189,6 @@ impl BaseLayerScanner {
                 self.last_scanned_hash = None;
                 self.last_scanned_height = 0;
                 self.sync_blockchain().await?;
-                self.epoch_manager.notify_scanning_complete().await?;
             },
             BlockchainProgression::NoProgress => {
                 trace!(target: LOG_TARGET, "No new blocks to scan.");
@@ -312,6 +310,8 @@ impl BaseLayerScanner {
             }
         }
 
+        self.epoch_manager.notify_scanning_complete().await?;
+
         Ok(())
     }
 
@@ -322,7 +322,9 @@ impl BaseLayerScanner {
     ) -> Result<(), BaseLayerScannerError> {
         info!(
             target: LOG_TARGET,
-            "⛓️ Validator node registration UTXO found at height {}", height,
+            "⛓️ Validator node registration UTXO for {} found at height {}",
+            registration.public_key(),
+            height,
         );
 
         self.epoch_manager
