@@ -97,7 +97,7 @@ pub struct CommonSubmitArgs {
     #[clap(long, short = 'a')]
     account_template_address: Option<String>,
     #[clap(long)]
-    is_dry_run: bool,
+    dry_run: bool,
 }
 
 #[derive(Debug, Args, Clone)]
@@ -268,7 +268,7 @@ async fn submit_transaction(
         inputs: input_data,
         num_outputs: common.num_outputs.unwrap_or(0),
         wait_for_result: common.wait_for_result,
-        is_dry_run: common.is_dry_run,
+        is_dry_run: common.dry_run,
         wait_for_result_timeout: common.wait_for_result_timeout,
     };
 

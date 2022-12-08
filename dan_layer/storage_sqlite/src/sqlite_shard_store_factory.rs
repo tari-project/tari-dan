@@ -276,95 +276,41 @@ impl<'a> SqliteShardStoreTransaction<'a> {
     }
 
     fn map_substate_to_shard_data(ss: &Substate) -> Result<SubstateShardData, StorageError> {
-        // Ok(SubstateShardData::new(
-        //     ShardId::try_from(ss.shard_id.clone())?,
-        //     ss.version as u32,
-        //     serde_json::from_str(&ss.data).map_err(|source| StorageError::SerdeJson {
-        //         source,
-        //         operation: "get_substate_states".to_string(),
-        //         data: "substate data".to_string(),
-        //     })?,
-        //     NodeHeight(ss.created_height as u64),
-        //     ss.destroyed_height.map(|v| NodeHeight(v as u64)),
-        //     TreeNodeHash::try_from(ss.created_node_hash.clone())
-        //         .map_err(|_| StorageError::DecodingError)?,
-        //     ss.destroyed_node_hash
-        //         .as_ref()
-        //         .map(|v| TreeNodeHash::try_from(v.clone()).map_err(|_| StorageError::DecodingError))
-        //         .transpose()?,
-        //     PayloadId::try_from(ss.created_by_payload_id.clone())
-        //         .map_err(|_| StorageError::DecodingError)?,
-        //     ss.destroyed_by_payload_id
-        //         .as_ref()
-        //         .map(|v| PayloadId::try_from(v.clone()).map_err(|_| StorageError::DecodingError))
-        //         .transpose()?,
-        //     serde_json::from_str(&ss.created_justify).map_err(|source| StorageError::SerdeJson {
-        //         source,
-        //         operation: "get_substate_states".to_string(),
-        //         data: "created_justify".to_string(),
-        //     })?,
-        //     ss.destroyed_justify
-        //         .as_ref()
-        //         .map(|v| {
-        //             serde_json::from_str(v).map_err(|source| StorageError::SerdeJson {
-        //                 source,
-        //                 operation: "get_substate_states".to_string(),
-        //                 data: "destroyed_justify".to_string(),
-        //             })
-        //         })
-        //         .transpose()?,
-        // ))
-        let shard = ShardId::from_bytes(ss.shard_id.as_slice()).map_err(StorageError::FixedHashSizeError)?;
-        let substate = match ss.substate_type.as_str() {
-            "Up" => Ok(SubstateState::Up {
-                created_by: PayloadId::try_from(ss.created_by_payload_id.clone())?,
-                data: ss
-                                .data
-                                .as_ref()
-                                .map(|json| serde_json::from_str(json))
-                                .transpose().map_err(
-                            |source| StorageError::SerdeJson { source, operation: "get_substate_states".to_string(), data: "substate data".to_string() },
-                        )?
-                                // TODO: substate data should not be an option?
-                                .expect("substate without data"),
-            }),
-            "Down" => Ok(SubstateState::Down {
-                deleted_by: PayloadId::try_from(ss.deleted_by_payload_id.clone().unwrap_or_default())?,
-            }),
-            "DoesNotExist" => Ok(SubstateState::DoesNotExist),
-            _ => Err(StorageError::InvalidSubStateType {
-                substate_type: ss.substate_type.clone(),
-            }),
-        }?;
-
-        let height = NodeHeight::from(ss.node_height as u64);
-        let tree_node_hash = if let Some(h) = ss.tree_node_hash.clone() {
-            Some(TreeNodeHash::try_from(h).map_err(StorageError::FixedHashSizeError)?)
-        } else {
-            None
-        };
-
-        let payload_id =
-            PayloadId::try_from(ss.created_by_payload_id.clone()).map_err(StorageError::FixedHashSizeError)?;
-        let certificate = if let Some(qc) = ss.justify.clone() {
-            Some(
-                serde_json::from_str::<QuorumCertificate>(&qc).map_err(|source| StorageError::SerdeJson {
-                    source,
-                    operation: "get_substate_states".to_string(),
-                    data: qc,
-                })?,
-            )
-        } else {
-            None
-        };
-
         Ok(SubstateShardData::new(
-            shard,
-            substate,
-            height,
-            tree_node_hash,
-            payload_id,
-            certificate,
+            ShardId::try_from(ss.shard_id.clone())?,
+            ss.version as u32,
+            serde_json::from_str(&ss.data).map_err(|source| StorageError::SerdeJson {
+                source,
+                operation: "get_substate_states".to_string(),
+                data: "substate data".to_string(),
+            })?,
+            NodeHeight(ss.created_height as u64),
+            ss.destroyed_height.map(|v| NodeHeight(v as u64)),
+            TreeNodeHash::try_from(ss.created_node_hash.clone()).map_err(|_| StorageError::DecodingError)?,
+            ss.destroyed_node_hash
+                .as_ref()
+                .map(|v| TreeNodeHash::try_from(v.clone()).map_err(|_| StorageError::DecodingError))
+                .transpose()?,
+            PayloadId::try_from(ss.created_by_payload_id.clone()).map_err(|_| StorageError::DecodingError)?,
+            ss.destroyed_by_payload_id
+                .as_ref()
+                .map(|v| PayloadId::try_from(v.clone()).map_err(|_| StorageError::DecodingError))
+                .transpose()?,
+            serde_json::from_str(&ss.created_justify).map_err(|source| StorageError::SerdeJson {
+                source,
+                operation: "get_substate_states".to_string(),
+                data: "created_justify".to_string(),
+            })?,
+            ss.destroyed_justify
+                .as_ref()
+                .map(|v| {
+                    serde_json::from_str(v).map_err(|source| StorageError::SerdeJson {
+                        source,
+                        operation: "get_substate_states".to_string(),
+                        data: "destroyed_justify".to_string(),
+                    })
+                })
+                .transpose()?,
         ))
     }
 }

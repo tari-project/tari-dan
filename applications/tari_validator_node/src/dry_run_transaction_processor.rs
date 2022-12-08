@@ -20,12 +20,15 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use std::{collections::HashMap, convert::TryFrom};
+use std::{
+    collections::HashMap,
+    convert::{TryFrom, TryInto},
+};
 
 use futures::StreamExt;
 use log::info;
 use tari_comms::protocol::rpc::RpcStatus;
-use tari_dan_common_types::{Epoch, NodeHeight, ObjectPledge, PayloadId, ShardId, SubstateState};
+use tari_dan_common_types::{Epoch, ObjectPledge, PayloadId, ShardId, SubstateState};
 use tari_dan_core::{
     models::{Payload, TariDanPayload},
     services::{
@@ -42,7 +45,7 @@ use tari_dan_core::{
 };
 use tari_dan_engine::transaction::Transaction;
 use tari_dan_storage_sqlite::sqlite_shard_store_factory::SqliteShardStore;
-use tari_engine_types::commit_result::FinalizeResult;
+use tari_engine_types::{commit_result::FinalizeResult, substate::Substate};
 use thiserror::Error;
 
 use crate::{
@@ -69,6 +72,8 @@ pub enum DryRunTransactionProcessorError {
     EpochManager(#[from] EpochManagerError),
     #[error("Validator node client error: {0}")]
     ValidatorNodeClient(#[from] ValidatorNodeClientError),
+    #[error("Rpc error: {0}")]
+    RpcRequestFailed(#[from] RpcStatus),
 }
 
 #[derive(Clone)]
@@ -107,12 +112,12 @@ impl DryRunTransactionProcessor {
 
         // get non local shard pledges
         let epoch = self.epoch_manager.current_epoch().await?;
-        let local_involved_shards: Vec<ShardId> = shard_pledges.keys().copied().collect();
-        let remote_involved_shards: Vec<ShardId> = involved_shards
+        let missing_involved_shards: Vec<ShardId> = involved_shards
             .into_iter()
-            .filter(|s| !local_involved_shards.contains(s))
+            .filter(|s| !shard_pledges.contains_key(s))
             .collect();
-        for shard_id in remote_involved_shards {
+        shard_pledges.reserve(missing_involved_shards.len());
+        for shard_id in missing_involved_shards {
             let pledge = self.get_remote_pledge(shard_id, epoch).await?;
             shard_pledges.insert(shard_id, pledge);
         }
@@ -130,16 +135,16 @@ impl DryRunTransactionProcessor {
         let inventory = tx.get_state_inventory().unwrap();
 
         let local_shard_ids: Vec<ShardId> = involved_shards.into_iter().filter(|s| inventory.contains(s)).collect();
-        let mut local_pledges = HashMap::new();
         let local_substates = tx.get_substate_states(&local_shard_ids)?;
+        let mut local_pledges = HashMap::with_capacity(local_substates.len());
         for substate in local_substates {
+            let shard_id = substate.shard_id();
             let local_pledge = ObjectPledge {
-                shard_id: substate.shard(),
-                current_state: substate.substate().clone(),
-                pledged_to_payload: substate.payload_id(),
-                pledged_until: substate.height(),
+                shard_id,
+                pledged_to_payload: substate.created_payload_id(),
+                current_state: substate.into_substate_state(),
             };
-            local_pledges.insert(substate.shard(), Some(local_pledge));
+            local_pledges.insert(shard_id, Some(local_pledge));
         }
 
         Ok(local_pledges)
@@ -177,10 +182,11 @@ impl DryRunTransactionProcessor {
 
             // extract the shard pledge from the response
             if let Some(resp) = vn_state_stream.next().await {
+                let resp = resp?;
                 match Self::extract_pledge_from_vn_sync_response(resp) {
                     Ok(pledge) => return Ok(Some(pledge)),
                     Err(error_msg) => {
-                        info!(target: LOG_TARGET, "Unable to extract pledge from peer: {} ", error_msg,);
+                        info!(target: LOG_TARGET, "Unable to extract pledge from peer: {} ", error_msg);
                         // we do not stop when an indiviual VN does not respond correctly, we try all Vns
                         continue;
                     },
@@ -192,22 +198,26 @@ impl DryRunTransactionProcessor {
         Ok(None)
     }
 
-    fn extract_pledge_from_vn_sync_response(
-        resp: Result<VnStateSyncResponse, RpcStatus>,
-    ) -> Result<ObjectPledge, String> {
-        let msg = resp.map_err(|e| e.to_string())?;
+    fn extract_pledge_from_vn_sync_response(msg: VnStateSyncResponse) -> Result<ObjectPledge, anyhow::Error> {
+        let shard_id = ShardId::try_from(msg.shard_id)?;
+        let pledged_to_payload = PayloadId::try_from(msg.created_payload_id.as_slice())?;
 
-        let shard_id = ShardId::try_from(msg.shard_id.ok_or("Unexpected response")?).map_err(|e| e.to_string())?;
-        let current_state =
-            SubstateState::try_from(msg.substate_state.ok_or("Unexpected response")?).map_err(|e| e.to_string())?;
-        let pledged_to_payload = PayloadId::try_from(msg.payload_id).map_err(|e| e.to_string())?;
-        let pledged_until = NodeHeight::from(msg.node_height);
+        let current_state = if let Some(deleted_by) = Some(msg.destroyed_payload_id).filter(|p| !p.is_empty()) {
+            SubstateState::Down {
+                deleted_by: deleted_by.try_into()?,
+            }
+        } else {
+            let substate = Substate::from_bytes(&msg.substate)?;
+            SubstateState::Up {
+                created_by: msg.created_payload_id.try_into()?,
+                data: substate,
+            }
+        };
 
         let pledge = ObjectPledge {
             shard_id,
             current_state,
             pledged_to_payload,
-            pledged_until,
         };
 
         Ok(pledge)
