@@ -33,10 +33,7 @@ use tari_dan_engine::transaction::Transaction;
 use tari_dan_storage_sqlite::sqlite_shard_store_factory::SqliteShardStore;
 use tokio::{sync::mpsc, task};
 
-use crate::p2p::proto::{
-    consensus::QuorumCertificate,
-    rpc::{VnStateSyncRequest, VnStateSyncResponse},
-};
+use crate::p2p::proto::rpc::{VnStateSyncRequest, VnStateSyncResponse};
 
 const LOG_TARGET: &str = "vn::p2p::rpc";
 
@@ -180,20 +177,21 @@ where TPeerProvider: PeerProvider + Clone + Send + Sync + 'static
 
             // select data from db where shard_id <= end_shard_id and shard_id >= start_shard_id
             for substate in substates {
-                let response = proto::rpc::VnStateSyncResponse {
-                    shard_id: Some(substate.shard().into()),
-                    substate_state: Some(substate.substate().clone().into()),
-                    node_height: substate.height().as_u64(),
-                    tree_node_hash: substate
-                        .tree_node_hash()
-                        .map(|h| h.as_bytes().to_vec())
-                        .unwrap_or_default(),
-                    payload_id: substate.payload_id().as_bytes().to_vec(),
-                    certificate: substate.certificate().clone().map(QuorumCertificate::from),
-                };
-                // if send returns error, the client has closed the connection, so we break the loop
-                if tx.send(Ok(response)).await.is_err() {
-                    break;
+                match proto::rpc::VnStateSyncResponse::try_from(substate) {
+                    Ok(r) => {
+                        if tx.send(Ok(r)).await.is_err() {
+                            debug!(
+                                target: LOG_TARGET,
+                                "Peer stream closed by client before completing. Aborting"
+                            );
+                            break;
+                        }
+                    },
+                    Err(e) => {
+                        error!(target: LOG_TARGET, "{}", e);
+                        let _ignore = tx.send(Err(RpcStatus::general(&e))).await;
+                        return;
+                    },
                 }
             }
         });

@@ -29,6 +29,7 @@ use std::{
 };
 
 use diesel::{
+    dsl::now,
     prelude::*,
     result::{DatabaseErrorKind, Error},
     sql_query,
@@ -45,7 +46,6 @@ use tari_dan_common_types::{
     PayloadId,
     QuorumCertificate,
     ShardId,
-    SubstateChange,
     SubstateState,
     TreeNodeHash,
 };
@@ -81,8 +81,9 @@ use crate::{
         lock_node_and_height::{LockNodeAndHeight, NewLockNodeAndHeight},
         node::{NewNode, Node},
         payload::{NewPayload, Payload as SqlPayload},
+        pledge::{NewShardPledge, ShardPledge},
         received_votes::{NewReceivedVote, ReceivedVote},
-        substate::{NewSubstate, Substate},
+        substate::{ImportedSubstate, NewSubstate, Substate},
     },
     schema::{
         high_qcs::dsl::high_qcs,
@@ -94,7 +95,7 @@ use crate::{
         nodes,
         payloads::dsl::payloads,
         received_votes::dsl::received_votes,
-        substates::{dsl::substates, pledged_to_payload_id},
+        substates::dsl::substates,
     },
     SqliteTransaction,
 };
@@ -158,29 +159,30 @@ impl From<QueryableTransaction> for SQLTransaction {
 
 #[derive(Debug, QueryableByName)]
 pub struct QueryableSubstate {
+    #[sql_type = "Binary"]
+    pub shard_id: Vec<u8>,
+    #[sql_type = "BigInt"]
+    pub version: i64,
     #[sql_type = "Text"]
-    pub substate_type: String,
-    #[sql_type = "BigInt"]
-    pub node_height: i64,
+    pub data: String,
+    #[sql_type = "Text"]
+    pub created_justify: String,
+    #[sql_type = "Binary"]
+    pub created_node_hash: Vec<u8>,
     #[sql_type = "Nullable<Text>"]
-    pub data: Option<String>,
-    #[sql_type = "Nullable<Text>"]
-    pub justify: Option<String>,
-    #[sql_type = "BigInt"]
-    pub is_draft: i64,
+    pub destroyed_justify: Option<String>,
     #[sql_type = "Nullable<Binary>"]
-    pub tree_node_hash: Option<Vec<u8>>,
+    pub destroyed_node_hash: Option<Vec<u8>>,
 }
 
 impl From<QueryableSubstate> for SQLSubstate {
     fn from(transaction: QueryableSubstate) -> Self {
         Self {
-            substate_type: transaction.substate_type,
-            node_height: transaction.node_height,
+            shard_id: transaction.shard_id,
+            version: transaction.version,
             data: transaction.data,
-            justify: transaction.justify,
-            is_draft: transaction.is_draft == 1,
-            tree_node_hash: transaction.tree_node_hash,
+            created_justify: transaction.created_justify,
+            destroyed_justify: transaction.destroyed_justify,
         }
     }
 }
@@ -233,50 +235,85 @@ impl<'a> SqliteShardStoreTransaction<'a> {
         Self { transaction }
     }
 
-    fn create_pledge(&mut self, shard: ShardId, obj: Substate) -> Result<ObjectPledge, StorageError> {
-        use crate::schema::substates::{id, is_draft, node_height, shard_id};
+    fn create_pledge(&mut self, shard: ShardId, obj: ShardPledge) -> Result<ObjectPledge, StorageError> {
+        use crate::schema::substates::{shard_id, version};
         let current_state: Option<Substate> = substates
-            .filter(shard_id.eq(shard.as_bytes()).and(is_draft.eq(false)))
-            .order_by(node_height.desc())
-            .then_order_by(id.desc())
+            .filter(shard_id.eq(shard.as_bytes()))
+            .order_by(version.desc())
             .first(self.transaction.connection())
             .optional()
             .map_err(|e| StorageError::QueryError {
-                reason: format!("Pledge object error: {}", e),
+                reason: format!("Create object pledge error: {}", e),
             })?;
 
-        let pledge = ObjectPledge {
-            shard_id: shard,
-            current_state: current_state
-                .map(|s| match s.substate_type.as_str() {
-                    "Up" => Ok(SubstateState::Up {
-                        created_by: PayloadId::try_from(s.created_by_payload_id)?,
-                        data: s
-                            .data
-                            .map(|json| serde_json::from_str(&json))
-                            .transpose().map_err(|source| StorageError::SerdeJson {
-                            source, operation: "create_pledge".to_string(), data: "pledge".to_string()
-                        })?
-                            // TODO: substate data should not be an option?
-                            .expect("substate without data"),
-                    }),
-                    "Down" => Ok(SubstateState::Down {
-                        deleted_by: PayloadId::try_from(s.deleted_by_payload_id.unwrap_or_default())?,
-                    }),
-                    "DoesNotExist" => Ok(SubstateState::DoesNotExist),
-                    _ => Err(StorageError::InvalidSubStateType {
-                        substate_type: s.substate_type,
-                    }),
-                })
-                .transpose()?
-                .unwrap_or(SubstateState::DoesNotExist),
-            pledged_to_payload: PayloadId::try_from(obj.pledged_to_payload_id.unwrap_or_default())?,
-            pledged_until: NodeHeight(obj.pledged_until_height.unwrap_or_default() as u64),
-        };
-        Ok(pledge)
+        if let Some(current_state) = current_state {
+            Ok(ObjectPledge {
+                shard_id: shard,
+                pledged_to_payload: PayloadId::try_from(obj.pledged_to_payload_id)?,
+                current_state: if current_state.is_destroyed() {
+                    SubstateState::Down {
+                        deleted_by: PayloadId::try_from(current_state.destroyed_by_payload_id.unwrap_or_default())?,
+                    }
+                } else {
+                    SubstateState::Up {
+                        created_by: PayloadId::try_from(current_state.created_by_payload_id)?,
+                        data: serde_json::from_str::<tari_engine_types::substate::Substate>(&current_state.data)
+                            .map_err(|source| StorageError::SerdeJson {
+                                source,
+                                operation: "create_pledge".to_string(),
+                                data: "pledge".to_string(),
+                            })?,
+                    }
+                },
+            })
+        } else {
+            Ok(ObjectPledge {
+                shard_id: shard,
+                pledged_to_payload: PayloadId::try_from(obj.pledged_to_payload_id)?,
+                current_state: SubstateState::DoesNotExist,
+            })
+        }
     }
 
     fn map_substate_to_shard_data(ss: &Substate) -> Result<SubstateShardData, StorageError> {
+        // Ok(SubstateShardData::new(
+        //     ShardId::try_from(ss.shard_id.clone())?,
+        //     ss.version as u32,
+        //     serde_json::from_str(&ss.data).map_err(|source| StorageError::SerdeJson {
+        //         source,
+        //         operation: "get_substate_states".to_string(),
+        //         data: "substate data".to_string(),
+        //     })?,
+        //     NodeHeight(ss.created_height as u64),
+        //     ss.destroyed_height.map(|v| NodeHeight(v as u64)),
+        //     TreeNodeHash::try_from(ss.created_node_hash.clone())
+        //         .map_err(|_| StorageError::DecodingError)?,
+        //     ss.destroyed_node_hash
+        //         .as_ref()
+        //         .map(|v| TreeNodeHash::try_from(v.clone()).map_err(|_| StorageError::DecodingError))
+        //         .transpose()?,
+        //     PayloadId::try_from(ss.created_by_payload_id.clone())
+        //         .map_err(|_| StorageError::DecodingError)?,
+        //     ss.destroyed_by_payload_id
+        //         .as_ref()
+        //         .map(|v| PayloadId::try_from(v.clone()).map_err(|_| StorageError::DecodingError))
+        //         .transpose()?,
+        //     serde_json::from_str(&ss.created_justify).map_err(|source| StorageError::SerdeJson {
+        //         source,
+        //         operation: "get_substate_states".to_string(),
+        //         data: "created_justify".to_string(),
+        //     })?,
+        //     ss.destroyed_justify
+        //         .as_ref()
+        //         .map(|v| {
+        //             serde_json::from_str(v).map_err(|source| StorageError::SerdeJson {
+        //                 source,
+        //                 operation: "get_substate_states".to_string(),
+        //                 data: "destroyed_justify".to_string(),
+        //             })
+        //         })
+        //         .transpose()?,
+        // ))
         let shard = ShardId::from_bytes(ss.shard_id.as_slice()).map_err(StorageError::FixedHashSizeError)?;
         let substate = match ss.substate_type.as_str() {
             "Up" => Ok(SubstateState::Up {
@@ -400,7 +437,6 @@ impl ShardStoreTransaction<PublicKey, TariDanPayload> for SqliteShardStoreTransa
 
         let new_row = NewPayload {
             payload_id,
-            timestamp: payload.timestamp(),
             instructions,
             public_nonce,
             scalar,
@@ -506,7 +542,6 @@ impl ShardStoreTransaction<PublicKey, TariDanPayload> for SqliteShardStoreTransa
     }
 
     fn get_payload(&self, id: &PayloadId) -> Result<TariDanPayload, StorageError> {
-        dbg!("get payload");
         use crate::schema::payloads::payload_id;
 
         let payload: Option<SqlPayload> = payloads
@@ -742,76 +777,70 @@ impl ShardStoreTransaction<PublicKey, TariDanPayload> for SqliteShardStoreTransa
         &mut self,
         shard: ShardId,
         payload: PayloadId,
-        change: SubstateChange,
         current_height: NodeHeight,
     ) -> Result<ObjectPledge, StorageError> {
-        use crate::schema::substates::{id, is_draft, node_height, shard_id};
+        use crate::schema::shard_pledges::{
+            created_height,
+            dsl::shard_pledges,
+            id,
+            is_active,
+            pledged_to_payload_id,
+            shard_id,
+        };
         let shard_vec = Vec::from(shard.as_bytes());
         let f_payload = Vec::from(payload.as_slice());
 
-        let draft_object: Option<Substate> = substates
-            .filter(shard_id.eq(&shard_vec).and(is_draft.eq(true)))
-            .order_by(node_height.desc())
-            .then_order_by(id.desc())
+        let existing_pledge: Option<ShardPledge> = shard_pledges
+            .filter(shard_id.eq(shard_vec.clone()))
+            .filter(is_active.eq(true))
+            .order_by(created_height.desc())
             .first(self.transaction.connection())
             .optional()
             .map_err(|e| StorageError::QueryError {
                 reason: format!("Pledge object error: {}", e),
             })?;
 
-        if let Some(obj) = draft_object {
+        if let Some(obj) = existing_pledge {
             // TODO: write test for this logic
-            if obj.pledged_until_height.unwrap_or_default() as u64 >= current_height.as_u64() {
-                return self.create_pledge(shard, obj);
-            }
+            // if obj.pledged_until_height.unwrap_or_default() as u64 >= current_height.as_u64() {
+            return self.create_pledge(shard, obj);
+            // }
         }
 
         // otherwise save pledge
-        let new_row = NewSubstate {
-            substate_type: match change {
-                SubstateChange::Create => "Up".to_string(),
-                SubstateChange::Exists => "Exists".to_string(),
-                SubstateChange::Destroy => "Down".to_string(),
-            },
+        let new_row = NewShardPledge {
             shard_id: shard_vec.clone(),
-            node_height: current_height.as_u64() as i64,
-            data: None,
-            created_by_payload_id: f_payload.clone(),
-            deleted_by_payload_id: None,
-            justify: None,
-            is_draft: true,
-            tree_node_hash: None,
-            pledged_to_payload_id: Some(f_payload.clone()),
-            pledged_until_height: Some(current_height.as_u64() as i64 + 3),
+            created_height: current_height.as_u64() as i64,
+            pledged_to_payload_id: f_payload.clone(),
+            is_active: true,
         };
-        let num_affected = diesel::insert_into(substates)
+        let num_affected = diesel::insert_into(shard_pledges)
             .values(new_row)
             .execute(self.transaction.connection())
             .map_err(|e| StorageError::QueryError {
-                reason: format!("Pledge object error: {}", e),
+                reason: format!("Pledge insert error: {}", e),
             })?;
 
         if num_affected != 1 {
             return Err(StorageError::QueryError {
-                reason: "Pledge object error: no substate returned".to_string(),
+                reason: "Pledge object error: no pledge created".to_string(),
             });
         }
 
-        let draft_object: Substate = substates
+        let new_pledge: ShardPledge = shard_pledges
             .filter(
                 shard_id
                     .eq(&shard_vec)
-                    .and(is_draft.eq(true))
+                    .and(is_active.eq(true))
                     .and(pledged_to_payload_id.eq(f_payload)),
             )
-            .order_by(node_height.desc())
             .then_order_by(id.desc())
             .first(self.transaction.connection())
             .map_err(|e| StorageError::QueryError {
                 reason: format!("Pledge object error: {}", e),
             })?;
 
-        self.create_pledge(shard, draft_object)
+        self.create_pledge(shard, new_pledge)
     }
 
     fn set_last_executed_height(&mut self, shard: ShardId, height: NodeHeight) -> Result<(), StorageError> {
@@ -852,79 +881,116 @@ impl ShardStoreTransaction<PublicKey, TariDanPayload> for SqliteShardStoreTransa
         }
     }
 
+    // TODO: the version number should be passed in here, or alternatively, the version number should be removed
+    #[allow(clippy::too_many_lines)]
     fn save_substate_changes(
         &mut self,
         changes: &HashMap<ShardId, Vec<SubstateState>>,
         node: &HotStuffTreeNode<PublicKey, TariDanPayload>,
     ) -> Result<(), StorageError> {
-        use crate::schema::substates::{data, is_draft, justify, node_height, shard_id, substate_type, tree_node_hash};
+        use crate::schema::substates::{
+            destroyed_by_payload_id,
+            destroyed_height,
+            destroyed_justify,
+            destroyed_node_hash,
+            destroyed_timestamp,
+            id,
+            shard_id,
+            version,
+        };
         let payload_id = Vec::from(node.payload_id().as_slice());
+        dbg!(&changes
+            .iter()
+            .map(|(k, v)| (
+                Hex::to_hex(&k.as_bytes().to_vec()),
+                v.iter().map(|vi| vi.as_str()).collect::<Vec<_>>()
+            ))
+            .collect::<Vec<_>>());
         // Only save this node's shard state
         for (sid, st_changes) in changes.iter().filter(|(s, _)| *s == &node.shard()) {
             let shard = Vec::from(sid.as_bytes());
 
+            let current_state = substates
+                .filter(shard_id.eq(shard.clone()))
+                .order_by(version.desc())
+                .first::<Substate>(self.transaction.connection())
+                .optional()
+                .map_err(|e| StorageError::QueryError {
+                    reason: format!("Save substate changes error. Could not retrieve current state: {}", e),
+                })?;
+
+            dbg!(sid);
+
             for st_change in st_changes {
-                let rows_affected = diesel::update(
-                    substates.filter(
-                        shard_id
-                            .eq(shard.clone())
-                            .and(is_draft.eq(true))
-                            .and(pledged_to_payload_id.eq(&payload_id)),
-                    ),
-                )
-                .set((
-                    tree_node_hash.eq(Some(node.hash().as_bytes())),
-                    node_height.eq(node.height().as_u64() as i64),
-                    is_draft.eq(false),
-                    substate_type.eq(st_change.as_str().to_string()),
-                    data.eq(match st_change {
-                        SubstateState::DoesNotExist => None,
-                        SubstateState::Up { data: d, .. } => Some(serde_json::to_string_pretty(d).map_err(
-                            |source| StorageError::SerdeJson {
+                match st_change {
+                    SubstateState::DoesNotExist => (),
+                    SubstateState::Up { data: d, .. } => {
+                        if let Some(s) = &current_state {
+                            if !s.is_destroyed() {
+                                return Err(StorageError::QueryError {
+                                    reason: "Save substate changes error. Cannot create a substate that has not been \
+                                             destroyed"
+                                        .to_string(),
+                                });
+                            }
+                        }
+
+                        let pretty_data =
+                            serde_json::to_string_pretty(d).map_err(|source| StorageError::SerdeJson {
                                 source,
                                 operation: "save_substate_changes".to_string(),
                                 data: "substate data".to_string(),
-                            },
-                        )?),
-                        SubstateState::Down { .. } => None,
-                    }),
-                    justify.eq(Some(json!(node.justify()).to_string())),
-                ))
-                .execute(self.transaction.connection())
-                .map_err(|e| StorageError::QueryError {
-                    reason: format!("Save substate changes error: {}", e),
-                })?;
-                if rows_affected == 0 {
-                    let new_row = NewSubstate {
-                        substate_type: st_change.as_str().to_string(),
-                        shard_id: shard.clone(),
-                        node_height: node.height().as_u64() as i64,
-                        data: match st_change {
-                            SubstateState::DoesNotExist => None,
-                            SubstateState::Up { data: d, .. } => Some(serde_json::to_string_pretty(d).map_err(
-                                |source| StorageError::SerdeJson {
-                                    source,
-                                    operation: "save_substate_changes".to_string(),
-                                    data: "substate data".to_string(),
-                                },
-                            )?),
-                            SubstateState::Down { .. } => None,
-                        },
-                        created_by_payload_id: payload_id.clone(),
-                        justify: Some(json!(node.justify()).to_string()),
-                        is_draft: false,
-                        tree_node_hash: Some(Vec::from(node.hash().as_bytes())),
-                        pledged_to_payload_id: None,
-                        deleted_by_payload_id: None,
-                        pledged_until_height: None,
-                    };
+                            })?;
+                        let new_row = NewSubstate {
+                            shard_id: shard.clone(),
+                            version: current_state.as_ref().map(|s| s.version).unwrap_or(0) + 1,
+                            data: pretty_data,
+                            created_by_payload_id: payload_id.clone(),
+                            created_justify: json!(node.justify()).to_string(),
+                            created_height: node.height().as_u64() as i64,
+                            created_node_hash: node.hash().as_bytes().to_vec(),
+                        };
+                        diesel::insert_into(substates)
+                            .values(&new_row)
+                            .execute(self.transaction.connection())
+                            .map_err(|e| StorageError::QueryError {
+                                reason: format!("Save substate changes error. Could not insert new substate: {}", e),
+                            })?;
+                    },
+                    SubstateState::Down { .. } => {
+                        if let Some(s) = &current_state {
+                            if s.is_destroyed() {
+                                return Err(StorageError::QueryError {
+                                    reason: "Save substate changes error. Cannot destroy a substate that has already \
+                                             been destroyed"
+                                        .to_string(),
+                                });
+                            }
 
-                    diesel::insert_into(substates)
-                        .values(&new_row)
-                        .execute(self.transaction.connection())
-                        .map_err(|e| StorageError::QueryError {
-                            reason: format!("Save substate change: {}", e),
-                        })?;
+                            let rows_affected = diesel::update(substates.filter(id.eq(s.id)))
+                                .set((
+                                    destroyed_by_payload_id.eq(payload_id.clone()),
+                                    destroyed_justify.eq(json!(node.justify()).to_string()),
+                                    destroyed_height.eq(node.height().as_u64() as i64),
+                                    destroyed_node_hash.eq(node.hash().as_bytes()),
+                                    destroyed_timestamp.eq(now),
+                                ))
+                                .execute(self.transaction.connection())
+                                .map_err(|e| StorageError::QueryError {
+                                    reason: format!("Save substate changes error. Could not destroy substate: {}", e),
+                                })?;
+                            if rows_affected != 1 {
+                                return Err(StorageError::QueryError {
+                                    reason: "Save substate changes error. More or less than 1 row affected".to_string(),
+                                });
+                            }
+                        } else {
+                            return Err(StorageError::QueryError {
+                                reason: "Save substate changes error. Cannot destroy a substate that does not exist"
+                                    .to_string(),
+                            });
+                        }
+                    },
                 }
             }
         }
@@ -932,37 +998,38 @@ impl ShardStoreTransaction<PublicKey, TariDanPayload> for SqliteShardStoreTransa
     }
 
     fn insert_substates(&mut self, substate_data: SubstateShardData) -> Result<(), StorageError> {
-        let shard = Vec::from(substate_data.shard().as_bytes());
-        let substate = substate_data.substate();
-        let height = substate_data.height();
-        let node_hash = substate_data.tree_node_hash().map(|h| Vec::from(h.as_bytes()));
-        let payload_id = Vec::from(substate_data.payload_id().as_bytes());
-        let certificate = substate_data.certificate();
-
-        let new_row = NewSubstate {
-            substate_type: substate.as_str().to_string(),
-            shard_id: shard,
-            node_height: height.as_u64() as i64,
-            data: match substate {
-                SubstateState::DoesNotExist => None,
-                SubstateState::Up { data: d, .. } => {
-                    Some(
-                        serde_json::to_string_pretty(d).map_err(|source| StorageError::SerdeJson {
-                            source,
-                            operation: "save_substate_changes".to_string(),
-                            data: "substate data".to_string(),
-                        })?,
-                    )
-                },
-                SubstateState::Down { .. } => None,
-            },
-            created_by_payload_id: payload_id,
-            justify: Some(json!(certificate).to_string()),
-            is_draft: false,
-            tree_node_hash: node_hash,
-            pledged_to_payload_id: None,
-            deleted_by_payload_id: None,
-            pledged_until_height: None,
+        let new_row = ImportedSubstate {
+            shard_id: substate_data.shard_id().as_bytes().to_vec(),
+            version: i64::from(substate_data.version()),
+            data: serde_json::to_string_pretty(substate_data.substate()).map_err(|source| StorageError::SerdeJson {
+                source,
+                operation: "insert_substates".to_string(),
+                data: "substate data".to_string(),
+            })?,
+            created_by_payload_id: substate_data.created_payload_id().as_bytes().to_vec(),
+            created_justify: serde_json::to_string_pretty(substate_data.created_justify()).map_err(|source| {
+                StorageError::SerdeJson {
+                    source,
+                    operation: "insert_substates".to_string(),
+                    data: "created_justify".to_string(),
+                }
+            })?,
+            created_height: substate_data.created_height().as_u64() as i64,
+            created_node_hash: substate_data.created_node_hash().as_bytes().to_vec(),
+            destroyed_by_payload_id: substate_data.destroyed_payload_id().map(|v| v.as_bytes().to_vec()),
+            destroyed_justify: substate_data
+                .destroyed_justify()
+                .as_ref()
+                .map(|v| {
+                    serde_json::to_string_pretty(&v).map_err(|source| StorageError::SerdeJson {
+                        source,
+                        operation: "insert_substates".to_string(),
+                        data: "destroyed_justify".to_string(),
+                    })
+                })
+                .transpose()?,
+            destroyed_height: substate_data.destroyed_height().map(|v| v.as_u64() as i64),
+            destroyed_node_hash: substate_data.destroyed_node_hash().map(|v| v.as_bytes().to_vec()),
         };
 
         diesel::insert_into(substates)
@@ -1035,13 +1102,12 @@ impl ShardStoreTransaction<PublicKey, TariDanPayload> for SqliteShardStoreTransa
             .map(|sh| Vec::from(sh.as_bytes()))
             .collect::<Vec<Vec<u8>>>();
 
-        let substate_states: Option<Vec<crate::models::substate::Substate>> = substates
+        let substate_states: Option<Vec<Substate>> = substates
             .filter(
                 substates::shard_id
                     .ge(Vec::from(start_shard_id.as_bytes()))
                     .and(substates::shard_id.le(Vec::from(end_shard_id.as_bytes())))
-                    .and(substates::shard_id.ne_all(excluded_shards))
-                    .and(substates::is_draft.eq(false)),
+                    .and(substates::shard_id.ne_all(excluded_shards)),
             )
             .get_results(self.transaction.connection())
             .optional()
@@ -1323,10 +1389,14 @@ impl ShardStoreTransaction<PublicKey, TariDanPayload> for SqliteShardStoreTransa
         Ok(res.into_iter().map(|transaction| transaction.into()).collect())
     }
 
-    fn get_substates(&self, payload_id: Vec<u8>, shard_id: Vec<u8>) -> Result<Vec<SQLSubstate>, StorageError> {
+    fn get_substates_for_payload(
+        &self,
+        payload_id: Vec<u8>,
+        shard_id: Vec<u8>,
+    ) -> Result<Vec<SQLSubstate>, StorageError> {
         let res = sql_query(
-            "select * from substates where shard_id == ? and (created_by_payload_id == ? or deleted_by_payload_id == \
-             ?);",
+            "select * from substates where shard_id == ? and (created_by_payload_id == ? or destroyed_by_payload_id \
+             == ?);",
         )
         .bind::<Binary, _>(shard_id)
         .bind::<Binary, _>(payload_id.clone())
@@ -1336,5 +1406,40 @@ impl ShardStoreTransaction<PublicKey, TariDanPayload> for SqliteShardStoreTransa
             reason: format!("Get substates: {}", e),
         })?;
         Ok(res.into_iter().map(|transaction| transaction.into()).collect())
+    }
+
+    fn complete_pledges(
+        &self,
+        shard: ShardId,
+        payload: PayloadId,
+        node_hash: &TreeNodeHash,
+    ) -> Result<(), StorageError> {
+        use crate::schema::shard_pledges::{
+            completed_by_tree_node_hash,
+            dsl::shard_pledges,
+            is_active,
+            pledged_to_payload_id,
+            shard_id,
+            updated_timestamp,
+        };
+        let rows_affected = diesel::update(shard_pledges)
+            .filter(shard_id.eq(shard.as_bytes()))
+            .filter(pledged_to_payload_id.eq(payload.as_bytes()))
+            .filter(is_active.eq(true))
+            .set((
+                is_active.eq(false),
+                completed_by_tree_node_hash.eq(node_hash.as_bytes()),
+                updated_timestamp.eq(now),
+            ))
+            .execute(self.transaction.connection())
+            .map_err(|e| StorageError::QueryError {
+                reason: format!("Complete pledges: {}", e),
+            })?;
+        if rows_affected == 0 {
+            return Err(StorageError::QueryError {
+                reason: "Complete pledges: No rows affected".to_string(),
+            });
+        }
+        Ok(())
     }
 }

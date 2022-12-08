@@ -20,8 +20,9 @@
 //   WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //   USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 //
-use crate::schema::*;
+use chrono::NaiveDateTime;
 
+use crate::schema::*;
 #[derive(Debug, Identifiable, Queryable)]
 pub struct LeaderProposal {
     pub id: i32,
@@ -30,6 +31,7 @@ pub struct LeaderProposal {
     pub payload_height: i64,
     pub node_hash: Vec<u8>,
     pub hotstuff_tree_node: String,
+    pub timestamp: NaiveDateTime,
 }
 
 #[derive(Debug, Insertable)]

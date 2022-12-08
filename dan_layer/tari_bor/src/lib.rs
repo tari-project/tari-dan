@@ -2,7 +2,7 @@
 //   SPDX-License-Identifier: BSD-3-Clause
 #![cfg_attr(not(feature = "std"), no_std)]
 
-use borsh::maybestd::{io, vec::Vec};
+use borsh::maybestd::{format, io, vec::Vec};
 // This is to make the borsh macros happy
 pub use borsh::{self, BorshDeserialize as Decode, BorshSerialize as Encode};
 
@@ -29,9 +29,23 @@ pub fn encode<T: Encode>(val: &T) -> io::Result<Vec<u8>> {
 }
 
 pub fn decode<T: Decode>(mut input: &[u8]) -> io::Result<T> {
-    let result = T::deserialize(&mut input)?;
-    // assert!(input.is_empty());
+    decode_inner(&mut input)
+}
+
+fn decode_inner<T: Decode>(input: &mut &[u8]) -> io::Result<T> {
+    let result = T::deserialize(input)?;
     Ok(result)
+}
+
+pub fn decode_exact<T: Decode>(mut input: &[u8]) -> io::Result<T> {
+    let val = decode_inner(&mut input)?;
+    if !input.is_empty() {
+        return Err(io::Error::new(
+            io::ErrorKind::Other,
+            format!("decode_exact: {} bytes remaining on input", input.len()),
+        ));
+    }
+    Ok(val)
 }
 
 pub fn decode_len(input: &[u8]) -> io::Result<usize> {

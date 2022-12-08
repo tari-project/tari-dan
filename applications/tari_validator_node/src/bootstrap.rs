@@ -38,11 +38,7 @@ use tari_dan_core::{
     workers::events::{EventSubscription, HotStuffEvent},
 };
 use tari_dan_storage::global::GlobalDb;
-use tari_dan_storage_sqlite::{
-    global::SqliteGlobalDbAdapter,
-    sqlite_shard_store_factory::SqliteShardStore,
-    SqliteDbFactory,
-};
+use tari_dan_storage_sqlite::{global::SqliteGlobalDbAdapter, sqlite_shard_store_factory::SqliteShardStore};
 use tari_shutdown::ShutdownSignal;
 
 use crate::{
@@ -80,7 +76,6 @@ pub async fn spawn_services(
     shutdown: ShutdownSignal,
     node_identity: Arc<NodeIdentity>,
     global_db: GlobalDb<SqliteGlobalDbAdapter>,
-    sqlite_db: SqliteDbFactory,
     consensus_constants: ConsensusConstants,
 ) -> Result<Services, anyhow::Error> {
     let mut p2p_config = config.validator_node.p2p.clone();
@@ -119,7 +114,7 @@ pub async fn spawn_services(
     // Epoch manager
     let validator_node_client_factory = TariCommsValidatorNodeClientFactory::new(comms.connectivity());
     let epoch_manager = epoch_manager::spawn(
-        sqlite_db.clone(),
+        global_db.clone(),
         shard_store.clone(),
         base_node_client.clone(),
         consensus_constants.clone(),
@@ -148,13 +143,13 @@ pub async fn spawn_services(
 
     // Template manager
 
-    let template_manager = TemplateManager::new(sqlite_db.clone(), config.validator_node.templates.clone());
+    let template_manager = TemplateManager::new(global_db.clone(), config.validator_node.templates.clone());
     let template_manager_service = template_manager::spawn(template_manager.clone(), shutdown.clone());
 
     // Base Node scanner
     base_layer_scanner::spawn(
         config.validator_node.clone(),
-        global_db.clone(),
+        global_db,
         base_node_client.clone(),
         epoch_manager.clone(),
         template_manager_service.clone(),

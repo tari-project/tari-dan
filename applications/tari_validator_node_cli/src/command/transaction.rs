@@ -218,39 +218,39 @@ async fn submit_transaction(
     let input_refs = if common.input_refs.is_empty() {
         extract_input_refs(&instructions, &component_manager)?
     } else {
-        let mut input_refs = common.input_refs;
-        input_refs.extend(instructions.iter().filter_map(|i| match i {
-            Instruction::CallMethod { component_address, .. } => {
-                Some(ShardId::from_bytes(&component_address.into_array()).expect("Not a valid shardid"))
-            },
-            _ => None,
-        }));
-        input_refs
+        common.input_refs
+        // input_refs.extend(instructions.iter().filter_map(|i| match i {
+        //     Instruction::CallMethod { component_address, .. } => {
+        //         Some(ShardId::from_bytes(&component_address.into_array()).expect("Not a valid shardid"))
+        //     },
+        //     _ => None,
+        // }));
+        // input_refs
     };
-    let inputs = common
+    let mut inputs = common
         .inputs
         .into_iter()
         .map(|s| s.parse())
         .collect::<Result<Vec<_>, _>>()?;
 
+    // include the component
+    inputs.extend(instructions.iter().filter_map(|i| match i {
+        Instruction::CallMethod { component_address, .. } => {
+            Some(ShardId::from_bytes(&component_address.into_array()).expect("Not a valid shardid"))
+        },
+        _ => None,
+    }));
+
     // TODO: this is a little clunky
     let mut builder = Transaction::builder();
     builder
-        .with_inputs(inputs)
+        .with_inputs(inputs.clone())
         .with_input_refs(input_refs.clone())
         .with_num_outputs(common.num_outputs.unwrap_or(0))
         .with_instructions(instructions);
     let mut input_data: Vec<(ShardId, SubstateChange)> =
         input_refs.iter().map(|i| (*i, SubstateChange::Exists)).collect();
-    if let Some(account_address) = common.dump_outputs_into {
-        let component_address = ComponentAddress::from_hex(&account_address)?;
-        builder.add_instruction(Instruction::CallMethod {
-            component_address,
-            method: "deposit_all_from_workspace".to_string(),
-            args: vec![],
-        });
-        input_data.push((ShardId::from(component_address.into_array()), SubstateChange::Destroy));
-    }
+    input_data.extend(inputs.iter().map(|i| (*i, SubstateChange::Destroy)));
     builder.sign(&account.secret_key).fee(1);
 
     let transaction = builder.build();
@@ -276,6 +276,7 @@ async fn submit_transaction(
         println!("No inputs or outputs. This transaction will not be processed by the network.");
         return Ok(());
     }
+    dbg!(&request);
     println!("✅ Transaction {} submitted.", tx_hash);
     let timer = Instant::now();
     if common.wait_for_result {

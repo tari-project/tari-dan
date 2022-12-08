@@ -5996,6 +5996,7 @@ version = "0.35.1"
 dependencies = [
  "async-trait",
  "borsh",
+ "chrono",
  "diesel",
  "diesel_migrations",
  "log",

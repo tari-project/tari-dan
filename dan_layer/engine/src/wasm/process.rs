@@ -20,7 +20,7 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use tari_bor::{decode, encode, encode_into, encode_with_len, Decode, Encode};
+use tari_bor::{decode_exact, encode, encode_into, encode_with_len, Decode, Encode};
 use tari_engine_types::execution_result::ExecutionResult;
 use tari_template_abi::{CallInfo, EngineOp};
 use tari_template_lib::{
@@ -148,7 +148,7 @@ impl WasmProcess {
         U: Encode,
         WasmExecutionError: From<E>,
     {
-        let decoded = decode(&args).map_err(WasmExecutionError::EngineArgDecodeFailed)?;
+        let decoded = decode_exact(&args).map_err(WasmExecutionError::EngineArgDecodeFailed)?;
         let resp = f(env, decoded)?;
         let encoded = encode_with_len(&resp);
         let ptr = env.alloc(encoded.len() as u32)?;
@@ -184,9 +184,22 @@ impl Invokable for WasmProcess {
         let func = self.instance.exports.get_function(&main_name)?;
 
         let call_info_ptr = self.alloc_and_write(&call_info)?;
-        let res = func.call(&[call_info_ptr.as_i32().into(), Val::I32(call_info_ptr.len() as i32)])?;
+        let res = func.call(&[Val::I32(call_info_ptr.as_i32()), Val::I32(call_info_ptr.len() as i32)]);
         self.env.free(call_info_ptr)?;
-        let ptr = res
+        let val = match res {
+            Ok(res) => res,
+            Err(err) => {
+                if let Some(message) = self.env.take_last_panic_message() {
+                    return Err(WasmExecutionError::Panic {
+                        message,
+                        runtime_error: err,
+                    });
+                }
+                eprintln!("Error calling function: {}", err);
+                return Err(err.into());
+            },
+        };
+        let ptr = val
             .get(0)
             .and_then(|v| v.i32())
             .ok_or(WasmExecutionError::ExpectedPointerReturn { function: main_name })?;
@@ -203,7 +216,6 @@ impl Invokable for WasmProcess {
                 .set_last_instruction_output(Some(raw.clone()))?;
         }
 
-        // TODO: decode raw as per function def
         Ok(ExecutionResult {
             raw,
             return_type: func_def.output.clone().into(),

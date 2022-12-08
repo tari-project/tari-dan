@@ -52,8 +52,7 @@ impl TariEngine {
             component_ref: ComponentRef::Component,
             action: ComponentAction::Create,
             args: invoke_args![template_name, encoded_state],
-        })
-        .expect("engine returned null component address");
+        });
 
         result.decode().expect("failed to decode component address")
     }
@@ -71,8 +70,7 @@ impl TariEngine {
             component_ref: ComponentRef::Ref(component_address),
             action: ComponentAction::Get,
             args: invoke_args![],
-        })
-        .expect("Component not found");
+        });
 
         let component: ComponentInstance = result.decode().unwrap();
         decode(&component.state).expect("Failed to decode component state")
@@ -84,7 +82,6 @@ impl TariEngine {
             component_ref: ComponentRef::Ref(component_address),
             action: ComponentAction::SetState,
             args: invoke_args![state],
-        })
-        .expect("ComponentAction::SetState failed");
+        });
     }
 }

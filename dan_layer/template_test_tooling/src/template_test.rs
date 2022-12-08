@@ -11,7 +11,7 @@ use tari_dan_engine::{
     packager::{LoadedTemplate, Package, TemplateModuleLoader},
     runtime::RuntimeInterface,
     state_store::{memory::MemoryStateStore, AtomicDb, StateReader, StateStoreError, StateWriter},
-    transaction::{Transaction, TransactionProcessor},
+    transaction::{Transaction, TransactionError, TransactionProcessor},
     wasm::{compile::compile_template, LoadedWasmTemplate},
 };
 use tari_engine_types::{
@@ -104,7 +104,7 @@ impl TemplateTest<MockRuntimeInterface> {
 
     pub fn call_function<T>(&self, template_name: &str, func_name: &str, args: Vec<Arg>) -> T
     where T: BorshDeserialize {
-        let result = self.execute(vec![Instruction::CallFunction {
+        let result = self.execute_and_commit(vec![Instruction::CallFunction {
             template_address: self.get_template_address(template_name),
             function: func_name.to_owned(),
             args,
@@ -114,7 +114,7 @@ impl TemplateTest<MockRuntimeInterface> {
 
     pub fn call_method<T>(&self, component_address: ComponentAddress, method_name: &str, args: Vec<Arg>) -> T
     where T: BorshDeserialize {
-        let result = self.execute(vec![Instruction::CallMethod {
+        let result = self.execute_and_commit(vec![Instruction::CallMethod {
             component_address,
             method: method_name.to_owned(),
             args,
@@ -123,7 +123,7 @@ impl TemplateTest<MockRuntimeInterface> {
         result.execution_results[0].decode().unwrap()
     }
 
-    pub fn execute(&self, instructions: Vec<Instruction>) -> FinalizeResult {
+    pub fn try_execute(&self, instructions: Vec<Instruction>) -> Result<FinalizeResult, TransactionError> {
         let mut builder = Transaction::builder();
         for instruction in instructions {
             builder.add_instruction(instruction);
@@ -131,7 +131,11 @@ impl TemplateTest<MockRuntimeInterface> {
         builder.sign(&self.secret_key);
         let transaction = builder.build();
 
-        let result = self.processor.execute(transaction).unwrap();
+        self.processor.execute(transaction)
+    }
+
+    pub fn execute_and_commit(&self, instructions: Vec<Instruction>) -> FinalizeResult {
+        let result = self.try_execute(instructions).unwrap();
         let diff = result
             .result
             .accept()

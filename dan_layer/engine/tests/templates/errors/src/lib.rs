@@ -19,38 +19,21 @@
 //   SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY,
 //   WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //   USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-//
-use chrono::NaiveDateTime;
+use tari_template_lib::prelude::*;
 
-use crate::schema::*;
+#[template]
+mod template {
+    use super::*;
 
-#[derive(Debug, Identifiable, Queryable)]
-pub struct Node {
-    pub id: i32,
-    pub node_hash: Vec<u8>,
-    pub parent_node_hash: Vec<u8>,
-    pub height: i64,
-    pub shard: Vec<u8>,
-    pub payload_id: Vec<u8>,
-    pub payload_height: i64,
-    pub local_pledges: String,
-    pub epoch: i64,
-    pub proposed_by: Vec<u8>,
-    pub justify: String,
-    pub timestamp: NaiveDateTime,
-}
+    pub struct Errors;
 
-#[derive(Debug, Insertable)]
-#[table_name = "nodes"]
-pub struct NewNode {
-    pub node_hash: Vec<u8>,
-    pub parent_node_hash: Vec<u8>,
-    pub height: i64,
-    pub shard: Vec<u8>,
-    pub payload_id: Vec<u8>,
-    pub payload_height: i64,
-    pub local_pledges: String,
-    pub epoch: i64,
-    pub proposed_by: Vec<u8>,
-    pub justify: String,
+    impl Errors {
+        pub fn panic() {
+            panic!("This error message should be included in the execution result")
+        }
+
+        pub fn please_pass_invalid_args(amount: Amount) {
+            panic!("You didn't pass an invalid arg! {}", amount);
+        }
+    }
 }

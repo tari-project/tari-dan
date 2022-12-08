@@ -41,8 +41,7 @@ impl Bucket {
             bucket_ref: BucketRef::Bucket(resource_addr),
             action: BucketAction::Create,
             args: invoke_args![],
-        })
-        .expect("Create bucket returned null");
+        });
 
         // TODO: Create bucket with the given resource and get the id
         Self {
@@ -59,8 +58,7 @@ impl Bucket {
             bucket_ref: BucketRef::Ref(self.id),
             action: BucketAction::GetResourceAddress,
             args: invoke_args![],
-        })
-        .expect("Bucket GetResource returned null");
+        });
 
         resp.decode()
             .expect("Bucket GetResource returned invalid resource address")
@@ -72,8 +70,7 @@ impl Bucket {
             bucket_ref: BucketRef::Ref(self.id),
             action: BucketAction::Take,
             args: invoke_args![amount],
-        })
-        .expect("Bucket Take returned null");
+        });
 
         resp.decode().expect("Bucket Take returned invalid bucket")
     }
