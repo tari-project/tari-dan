@@ -30,7 +30,7 @@ use tokio_stream::StreamExt;
 
 use crate::p2p::{proto, rpc};
 
-const LOG_TARGET: &str = "tari::validator::networking::peer_sync";
+const LOG_TARGET: &str = "tari::validator_node::networking::peer_sync";
 
 pub struct PeerSyncProtocol<TPeerProvider> {
     conn: PeerConnection,
@@ -48,10 +48,16 @@ impl<TPeerProvider: PeerProvider<Addr = CommsPublicKey>> PeerSyncProtocol<TPeerP
     }
 
     pub async fn run(mut self) -> Result<(), anyhow::Error> {
+        info!(
+            target: LOG_TARGET,
+            "🫂 Peer sync protocol starting with {}",
+            self.conn.peer_node_id()
+        );
         let mut client = self.conn.connect_rpc::<rpc::ValidatorNodeRpcClient>().await?;
 
         // TODO: limit peer sync to current epoch
         let mut stream = client.get_peers(proto::rpc::GetPeersRequest::default()).await?;
+        let mut count = 0usize;
         while let Some(resp) = stream.next().await {
             let resp = resp?;
             let identity = CommsPublicKey::from_bytes(&resp.identity)?;
@@ -75,7 +81,10 @@ impl<TPeerProvider: PeerProvider<Addr = CommsPublicKey>> PeerSyncProtocol<TPeerP
             }
 
             self.peer_provider.add_peer(peer).await?;
+            count += 1;
         }
+
+        info!(target: LOG_TARGET, "🫂 Peer sync protocol synced {} peers", count);
 
         Ok(())
     }

@@ -108,6 +108,16 @@ pub async fn spawn_services(
         rx_network_announce,
     } = message_receivers;
 
+    // Networking
+    let peer_provider = CommsPeerProvider::new(comms.peer_manager());
+    let networking = networking::spawn(
+        rx_network_announce,
+        node_identity.clone(),
+        outbound_messaging.clone(),
+        peer_provider.clone(),
+        comms.connectivity(),
+    );
+
     // Connect to shard db
     let shard_store = SqliteShardStore::try_create(config.validator_node.state_db_path())?;
 
@@ -129,16 +139,6 @@ pub async fn spawn_services(
         outbound_messaging.clone(),
         epoch_manager.clone(),
         node_identity.clone(),
-    );
-
-    // Networking
-    let peer_provider = CommsPeerProvider::new(comms.peer_manager());
-    let networking = networking::spawn(
-        rx_network_announce,
-        node_identity.clone(),
-        outbound_messaging.clone(),
-        peer_provider.clone(),
-        comms.connectivity(),
     );
 
     // Template manager
@@ -178,6 +178,7 @@ pub async fn spawn_services(
         payload_processor,
         shard_store.clone(),
         validator_node_client_factory,
+        node_identity.clone(),
     );
 
     let comms = setup_p2p_rpc(config, comms, peer_provider, shard_store.clone(), mempool.clone());

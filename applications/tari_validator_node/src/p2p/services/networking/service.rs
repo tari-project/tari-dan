@@ -231,7 +231,7 @@ impl Networking {
             };
             let protocol = PeerSyncProtocol::new(conn, our_identity, peer_provider);
             if let Err(err) = protocol.run().await {
-                error!(target: LOG_TARGET, "Peer sync protocol failed: {}", err);
+                error!(target: LOG_TARGET, "🫂 Peer sync protocol failed: {}", err);
             }
         });
     }

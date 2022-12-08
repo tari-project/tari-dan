@@ -23,11 +23,12 @@
 use std::{
     collections::HashMap,
     convert::{TryFrom, TryInto},
+    sync::Arc,
 };
 
 use futures::StreamExt;
 use log::info;
-use tari_comms::protocol::rpc::RpcStatus;
+use tari_comms::{protocol::rpc::RpcStatus, NodeIdentity};
 use tari_dan_common_types::{Epoch, ObjectPledge, PayloadId, ShardId, SubstateState};
 use tari_dan_core::{
     models::{Payload, TariDanPayload},
@@ -82,6 +83,7 @@ pub struct DryRunTransactionProcessor {
     payload_processor: TariDanPayloadProcessor<TemplateManager>,
     shard_store: SqliteShardStore,
     validator_node_client_factory: TariCommsValidatorNodeClientFactory,
+    node_identity: Arc<NodeIdentity>,
 }
 
 impl DryRunTransactionProcessor {
@@ -90,12 +92,14 @@ impl DryRunTransactionProcessor {
         payload_processor: TariDanPayloadProcessor<TemplateManager>,
         shard_store: SqliteShardStore,
         validator_node_client_factory: TariCommsValidatorNodeClientFactory,
+        node_identity: Arc<NodeIdentity>,
     ) -> Self {
         Self {
             epoch_manager,
             payload_processor,
             shard_store,
             validator_node_client_factory,
+            node_identity,
         }
     }
 
@@ -158,6 +162,10 @@ impl DryRunTransactionProcessor {
         let committee = self.epoch_manager.get_committee(epoch, shard_id).await?;
 
         for vn_public_key in committee.members {
+            if vn_public_key == *self.node_identity.public_key() {
+                continue;
+            }
+
             // build a client with the VN
             let mut sync_vn_client = self.validator_node_client_factory.create_client(&vn_public_key);
             let mut sync_vn_rpc_client = sync_vn_client.create_connection().await?;
@@ -174,7 +182,7 @@ impl DryRunTransactionProcessor {
             let mut vn_state_stream = match sync_vn_rpc_client.vn_state_sync(request).await {
                 Ok(stream) => stream,
                 Err(e) => {
-                    info!(target: LOG_TARGET, "Unable to connect to peer: {} ", e.to_string(),);
+                    info!(target: LOG_TARGET, "Unable to connect to peer: {} ", e);
                     // we do not stop when an indiviual VN does not respond, we try all VNs
                     continue;
                 },
