@@ -141,7 +141,7 @@ impl Default for ValidatorNodeConfig {
             grpc_address: Some("/ip4/127.0.0.1/tcp/18144".parse().unwrap()),
             json_rpc_address: Some("127.0.0.1:18200".parse().unwrap()),
             http_ui_address: Some("127.0.0.1:5000".parse().unwrap()),
-            auto_register: false,
+            auto_register: true,
             templates: TemplateConfig::default(),
         }
     }
