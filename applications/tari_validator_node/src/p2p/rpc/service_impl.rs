@@ -157,7 +157,7 @@ where TPeerProvider: PeerProvider + Clone + Send + Sync + 'static
         let shard_db = self.shard_state_store.clone();
 
         task::spawn(async move {
-            let shards_substates_data = shard_db.create_tx().unwrap().get_substate_states(
+            let shards_substates_data = shard_db.create_tx().unwrap().get_substate_states_by_range(
                 start_shard_id,
                 end_shard_id,
                 excluded_shards.as_slice(),

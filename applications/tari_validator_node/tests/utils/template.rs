@@ -50,6 +50,7 @@ pub async fn send_template_transaction(
         wait_for_result_timeout: None,
         inputs: vec![],
         num_outputs: 0,
+        is_dry_run: false,
     };
 
     // send the template transaction request

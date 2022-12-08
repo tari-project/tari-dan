@@ -274,6 +274,45 @@ impl<'a> SqliteShardStoreTransaction<'a> {
             })
         }
     }
+
+    fn map_substate_to_shard_data(ss: &Substate) -> Result<SubstateShardData, StorageError> {
+        Ok(SubstateShardData::new(
+            ShardId::try_from(ss.shard_id.clone())?,
+            ss.version as u32,
+            serde_json::from_str(&ss.data).map_err(|source| StorageError::SerdeJson {
+                source,
+                operation: "get_substate_states".to_string(),
+                data: "substate data".to_string(),
+            })?,
+            NodeHeight(ss.created_height as u64),
+            ss.destroyed_height.map(|v| NodeHeight(v as u64)),
+            TreeNodeHash::try_from(ss.created_node_hash.clone()).map_err(|_| StorageError::DecodingError)?,
+            ss.destroyed_node_hash
+                .as_ref()
+                .map(|v| TreeNodeHash::try_from(v.clone()).map_err(|_| StorageError::DecodingError))
+                .transpose()?,
+            PayloadId::try_from(ss.created_by_payload_id.clone()).map_err(|_| StorageError::DecodingError)?,
+            ss.destroyed_by_payload_id
+                .as_ref()
+                .map(|v| PayloadId::try_from(v.clone()).map_err(|_| StorageError::DecodingError))
+                .transpose()?,
+            serde_json::from_str(&ss.created_justify).map_err(|source| StorageError::SerdeJson {
+                source,
+                operation: "get_substate_states".to_string(),
+                data: "created_justify".to_string(),
+            })?,
+            ss.destroyed_justify
+                .as_ref()
+                .map(|v| {
+                    serde_json::from_str(v).map_err(|source| StorageError::SerdeJson {
+                        source,
+                        operation: "get_substate_states".to_string(),
+                        data: "destroyed_justify".to_string(),
+                    })
+                })
+                .transpose()?,
+        ))
+    }
 }
 
 impl ShardStoreTransaction<PublicKey, TariDanPayload> for SqliteShardStoreTransaction<'_> {
@@ -968,7 +1007,36 @@ impl ShardStoreTransaction<PublicKey, TariDanPayload> for SqliteShardStoreTransa
         }
     }
 
-    fn get_substate_states(
+    fn get_substate_states(&self, shard_ids: &[ShardId]) -> Result<Vec<SubstateShardData>, StorageError> {
+        use crate::schema::substates::shard_id;
+        let shard_ids = shard_ids
+            .iter()
+            .map(|sh| Vec::from(sh.as_bytes()))
+            .collect::<Vec<Vec<u8>>>();
+
+        let substate_states: Option<Vec<crate::models::substate::Substate>> = substates
+            .filter(shard_id.eq_any(shard_ids))
+            .get_results(self.transaction.connection())
+            .optional()
+            .map_err(|e| StorageError::QueryError {
+                reason: format!("Get substate change error: {}", e),
+            })
+            .unwrap();
+
+        if let Some(substate_states) = substate_states {
+            substate_states
+                .iter()
+                .map(Self::map_substate_to_shard_data)
+                .collect::<Result<_, _>>()
+        } else {
+            Err(StorageError::NotFound {
+                item: "substate".to_string(),
+                key: "No data found for available shards".to_string(),
+            })
+        }
+    }
+
+    fn get_substate_states_by_range(
         &self,
         start_shard_id: ShardId,
         end_shard_id: ShardId,
@@ -984,7 +1052,7 @@ impl ShardStoreTransaction<PublicKey, TariDanPayload> for SqliteShardStoreTransa
             .filter(
                 substates::shard_id
                     .ge(Vec::from(start_shard_id.as_bytes()))
-                    .and(substates::shard_id.lt(Vec::from(end_shard_id.as_bytes())))
+                    .and(substates::shard_id.le(Vec::from(end_shard_id.as_bytes())))
                     .and(substates::shard_id.ne_all(excluded_shards)),
             )
             .get_results(self.transaction.connection())
@@ -997,46 +1065,7 @@ impl ShardStoreTransaction<PublicKey, TariDanPayload> for SqliteShardStoreTransa
         if let Some(substate_states) = substate_states {
             substate_states
                 .iter()
-                .map(|ss| {
-                    Ok(SubstateShardData::new(
-                        ShardId::try_from(ss.shard_id.clone())?,
-                        ss.version as u32,
-                        serde_json::from_str(&ss.data).map_err(|source| StorageError::SerdeJson {
-                            source,
-                            operation: "get_substate_states".to_string(),
-                            data: "substate data".to_string(),
-                        })?,
-                        NodeHeight(ss.created_height as u64),
-                        ss.destroyed_height.map(|v| NodeHeight(v as u64)),
-                        TreeNodeHash::try_from(ss.created_node_hash.clone())
-                            .map_err(|_| StorageError::DecodingError)?,
-                        ss.destroyed_node_hash
-                            .as_ref()
-                            .map(|v| TreeNodeHash::try_from(v.clone()).map_err(|_| StorageError::DecodingError))
-                            .transpose()?,
-                        PayloadId::try_from(ss.created_by_payload_id.clone())
-                            .map_err(|_| StorageError::DecodingError)?,
-                        ss.destroyed_by_payload_id
-                            .as_ref()
-                            .map(|v| PayloadId::try_from(v.clone()).map_err(|_| StorageError::DecodingError))
-                            .transpose()?,
-                        serde_json::from_str(&ss.created_justify).map_err(|source| StorageError::SerdeJson {
-                            source,
-                            operation: "get_substate_states".to_string(),
-                            data: "created_justify".to_string(),
-                        })?,
-                        ss.destroyed_justify
-                            .as_ref()
-                            .map(|v| {
-                                serde_json::from_str(v).map_err(|source| StorageError::SerdeJson {
-                                    source,
-                                    operation: "get_substate_states".to_string(),
-                                    data: "destroyed_justify".to_string(),
-                                })
-                            })
-                            .transpose()?,
-                    ))
-                })
+                .map(Self::map_substate_to_shard_data)
                 .collect::<Result<_, _>>()
         } else {
             Err(StorageError::NotFound {

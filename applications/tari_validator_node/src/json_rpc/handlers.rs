@@ -33,7 +33,7 @@ use serde::Serialize;
 use serde_json::{self as json, json};
 use tari_comms::{multiaddr::Multiaddr, peer_manager::NodeId, types::CommsPublicKey, CommsNode, NodeIdentity};
 use tari_crypto::tari_utilities::hex::Hex;
-use tari_dan_common_types::{PayloadId, SubstateChange};
+use tari_dan_common_types::{PayloadId, QuorumCertificate, QuorumDecision, SubstateChange};
 use tari_dan_core::{
     services::{epoch_manager::EpochManager, BaseNodeClient},
     storage::shard_store::{ShardStore, ShardStoreTransaction},
@@ -64,6 +64,7 @@ use tari_validator_node_client::types::{
 use tokio::sync::{broadcast, broadcast::error::RecvError};
 
 use crate::{
+    dry_run_transaction_processor::DryRunTransactionProcessor,
     grpc::services::{base_node_client::GrpcBaseNodeClient, wallet_client::GrpcWalletClient},
     json_rpc::jrpc_errors::internal_error,
     p2p::services::{
@@ -87,6 +88,7 @@ pub struct JsonRpcHandlers {
     hotstuff_events: EventSubscription<HotStuffEvent>,
     base_node_client: GrpcBaseNodeClient,
     shard_store: SqliteShardStore,
+    dry_run_transaction_processor: DryRunTransactionProcessor,
 }
 
 impl JsonRpcHandlers {
@@ -105,6 +107,7 @@ impl JsonRpcHandlers {
             hotstuff_events: services.hotstuff_events.clone(),
             base_node_client,
             shard_store: services.shard_store.clone(),
+            dry_run_transaction_processor: services.dry_run_transaction_processor.clone(),
         }
     }
 
@@ -131,12 +134,12 @@ impl JsonRpcHandlers {
 
     pub async fn submit_transaction(&self, value: JsonRpcExtractor) -> JrpcResult {
         let answer_id = value.get_answer_id();
-        let transaction: SubmitTransactionRequest = value.parse_params()?;
+        let request: SubmitTransactionRequest = value.parse_params()?;
 
         let mut builder = TransactionBuilder::new();
         builder
             .with_input_refs(
-                transaction
+                request
                     .inputs
                     .iter()
                     .filter_map(|i| {
@@ -149,7 +152,7 @@ impl JsonRpcHandlers {
                     .collect(),
             )
             .with_inputs(
-                transaction
+                request
                     .inputs
                     .iter()
                     .filter_map(|i| {
@@ -161,39 +164,74 @@ impl JsonRpcHandlers {
                     })
                     .collect(),
             )
-            .with_instructions(transaction.instructions)
-            .with_num_outputs(transaction.num_outputs)
-            .signature(transaction.signature)
-            .sender_public_key(transaction.sender_public_key);
+            .with_instructions(request.instructions)
+            .with_num_outputs(request.num_outputs)
+            .signature(request.signature)
+            .sender_public_key(request.sender_public_key);
 
-        let mempool_tx = builder.build();
+        let transaction = builder.build();
 
         // Pass to translation engine to translate into Shards and Substates.
 
         // TODO: submit the transaction to the wasm engine and return the result data
-        let hash = *mempool_tx.hash();
+        let hash = *transaction.hash();
 
-        let subscription = self.hotstuff_events.subscribe();
-        // Submit to mempool.
-        self.mempool
-            .submit_transaction(mempool_tx)
-            .await
-            .map_err(internal_error(answer_id))?;
+        if request.is_dry_run {
+            let result = self
+                .dry_run_transaction_processor
+                .process_transaction(transaction)
+                .await;
+            match result {
+                Ok(finalize_result) => {
+                    let epoch = match self.epoch_manager.current_epoch().await {
+                        Ok(epoch) => epoch,
+                        Err(e) => {
+                            return Err(JsonRpcResponse::error(
+                                answer_id,
+                                JsonRpcError::new(JsonRpcErrorReason::ApplicationError(1), e.to_string(), json!(null)),
+                            ))
+                        },
+                    };
 
-        if transaction.wait_for_result {
-            return wait_for_transaction_result(
-                answer_id,
-                hash,
-                subscription,
-                Duration::from_secs(transaction.wait_for_result_timeout.unwrap_or(30)),
-            )
-            .await;
+                    let response = SubmitTransactionResponse {
+                        hash: hash.into_array().into(),
+                        result: Some(TransactionFinalizeResult {
+                            decision: QuorumDecision::Accept,
+                            finalize: finalize_result,
+                            qc: QuorumCertificate::genesis(epoch),
+                        }),
+                    };
+
+                    Ok(JsonRpcResponse::success(answer_id, response))
+                },
+                Err(e) => Err(JsonRpcResponse::error(
+                    answer_id,
+                    JsonRpcError::new(JsonRpcErrorReason::ApplicationError(1), e.to_string(), json!(null)),
+                )),
+            }
+        } else {
+            let subscription = self.hotstuff_events.subscribe();
+            // Submit to mempool.
+            self.mempool
+                .submit_transaction(transaction)
+                .await
+                .map_err(internal_error(answer_id))?;
+
+            if request.wait_for_result {
+                return wait_for_transaction_result(
+                    answer_id,
+                    hash,
+                    subscription,
+                    Duration::from_secs(request.wait_for_result_timeout.unwrap_or(30)),
+                )
+                .await;
+            }
+
+            Ok(JsonRpcResponse::success(answer_id, SubmitTransactionResponse {
+                hash: hash.into_array().into(),
+                result: None,
+            }))
         }
-
-        Ok(JsonRpcResponse::success(answer_id, SubmitTransactionResponse {
-            hash: hash.into_array().into(),
-            result: None,
-        }))
     }
 
     pub async fn get_recent_transactions(&self, value: JsonRpcExtractor) -> JrpcResult {

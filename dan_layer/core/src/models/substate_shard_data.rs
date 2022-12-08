@@ -2,7 +2,14 @@
 //   SPDX-License-Identifier: BSD-3-Clause
 
 use serde::{Deserialize, Serialize};
-use tari_dan_common_types::{quorum_certificate::QuorumCertificate, NodeHeight, PayloadId, ShardId, TreeNodeHash};
+use tari_dan_common_types::{
+    quorum_certificate::QuorumCertificate,
+    NodeHeight,
+    PayloadId,
+    ShardId,
+    SubstateState,
+    TreeNodeHash,
+};
 use tari_engine_types::substate::Substate;
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -57,6 +64,10 @@ impl SubstateShardData {
         &self.substate
     }
 
+    pub fn into_substate(self) -> Substate {
+        self.substate
+    }
+
     pub fn version(&self) -> u32 {
         self.version
     }
@@ -91,5 +102,16 @@ impl SubstateShardData {
 
     pub fn destroyed_justify(&self) -> &Option<QuorumCertificate> {
         &self.destroyed_justify
+    }
+
+    pub fn into_substate_state(self) -> SubstateState {
+        if let Some(payload_id) = self.destroyed_payload_id() {
+            SubstateState::Down { deleted_by: payload_id }
+        } else {
+            SubstateState::Up {
+                created_by: self.created_payload_id(),
+                data: self.into_substate(),
+            }
+        }
     }
 }

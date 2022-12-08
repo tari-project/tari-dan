@@ -141,6 +141,7 @@ pub struct SubmitTransactionRequest {
     pub wait_for_result: bool,
     #[serde(default)]
     pub wait_for_result_timeout: Option<u64>,
+    pub is_dry_run: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

@@ -12,8 +12,6 @@ Feature: Basic scenarios
     # Initialize two validator nodes
     Given a validator node VAL_1 connected to base node BASE and wallet WALLET
     Given a validator node VAL_2 connected to base node BASE and wallet WALLET
-    Then the validator node VAL_1 returns a valid identity
-    Then the validator node VAL_2 returns a valid identity
 
     # The wallet must have some funds before the VN sends transactions
     When miner MINER mines 12 new blocks
@@ -26,9 +24,9 @@ Feature: Basic scenarios
     Then the validator node VAL_2 is listed as registered
 
     # Register the "counter" template
-    When validator node VAL_1 registers the template "counter"
-    When miner MINER mines 20 new blocks
-    Then the template "counter" is listed as registered by the validator node VAL_1
+    # When validator node VAL_1 registers the template "counter"
+    # When miner MINER mines 20 new blocks
+    # Then the template "counter" is listed as registered by the validator node VAL_1
     # FIXME: In GitHub actions, we get a "Template not found" error in VN2
     # Then the template "counter" is listed as registered by the validator node VAL_2
 
@@ -38,6 +36,6 @@ Feature: Basic scenarios
 
     # Uncomment the following lines to stop execution for manual inspection of the nodes
     # When I print the cucumber world
-    # When I wait 1000 seconds
+    # When I wait 5000 seconds
     
 

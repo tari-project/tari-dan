@@ -43,7 +43,7 @@ use tari_engine_types::{
 };
 use tari_template_lib::models::{ComponentAddress, ResourceAddress, TemplateAddress, VaultId};
 
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone)]
 pub struct TariDanPayloadProcessor<TTemplateProvider> {
     template_provider: TTemplateProvider,
 }
