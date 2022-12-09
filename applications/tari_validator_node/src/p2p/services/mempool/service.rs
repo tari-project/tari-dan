@@ -22,6 +22,7 @@
 
 use std::{collections::HashSet, sync::Arc};
 
+use async_trait::async_trait;
 use log::*;
 use tari_comms::NodeIdentity;
 use tari_dan_common_types::ShardId;
@@ -31,14 +32,16 @@ use tari_dan_core::{
     services::{epoch_manager::EpochManager, infrastructure_services::OutboundService},
 };
 use tari_dan_engine::transaction::Transaction;
+use tari_engine_types::instruction::Instruction;
 use tari_template_lib::Hash;
 use tokio::sync::{broadcast, mpsc};
 
 use super::{handle::TransactionPool, MempoolError};
 use crate::p2p::services::{
     epoch_manager::handle::EpochManagerHandle,
-    mempool::handle::MempoolRequest,
+    mempool::{handle::MempoolRequest, Validator},
     messaging::OutboundMessaging,
+    template_manager::TemplateManager,
 };
 
 const LOG_TARGET: &str = "dan::mempool::service";
@@ -51,6 +54,39 @@ pub struct MempoolService {
     tx_valid_transactions: broadcast::Sender<(Transaction, ShardId)>,
     epoch_manager: EpochManagerHandle,
     node_identity: Arc<NodeIdentity>,
+    validator: MempoolTransactionValidator,
+}
+
+pub struct MempoolTransactionValidator {
+    template_manager: TemplateManager,
+}
+
+impl MempoolTransactionValidator {
+    pub(crate) fn new(template_manager: TemplateManager) -> Self {
+        Self { template_manager }
+    }
+}
+#[async_trait]
+impl Validator<Transaction> for MempoolTransactionValidator {
+    type Error = MempoolError;
+
+    async fn validate(&self, inner: &Transaction) -> Result<(), MempoolError> {
+        let instructions = inner.instructions();
+
+        for instruction in instructions {
+            match instruction {
+                Instruction::CallFunction { template_address, .. } => {
+                    match self.template_manager.fetch_template(template_address) {
+                        Ok(_) => (),
+                        Err(e) => return Err(MempoolError::InvalidTemplateAddress(e)),
+                    }
+                },
+                _ => continue,
+            }
+        }
+
+        Ok(())
+    }
 }
 
 impl MempoolService {
@@ -61,6 +97,7 @@ impl MempoolService {
         tx_valid_transactions: broadcast::Sender<(Transaction, ShardId)>,
         epoch_manager: EpochManagerHandle,
         node_identity: Arc<NodeIdentity>,
+        validator: MempoolTransactionValidator,
     ) -> Self {
         Self {
             transactions: Default::default(),
@@ -70,6 +107,7 @@ impl MempoolService {
             tx_valid_transactions,
             epoch_manager,
             node_identity,
+            validator,
         }
     }
 
@@ -101,7 +139,18 @@ impl MempoolService {
 
     async fn handle_new_transaction(&mut self, transaction: Transaction) {
         debug!(target: LOG_TARGET, "Received new transaction: {:?}", transaction);
-        // TODO: validate transaction
+
+        match self.validator.validate(&transaction).await {
+            Ok(()) => (),
+            Err(e) => {
+                error!(
+                    target: LOG_TARGET,
+                    "⚠ Invalid templates found for transaction: {}",
+                    e.to_string(),
+                );
+            },
+        }
+
         let payload = TariDanPayload::new(transaction.clone());
 
         let shards = payload.involved_shards();

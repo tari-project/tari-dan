@@ -24,11 +24,12 @@ mod initializer;
 pub use initializer::spawn;
 
 mod handle;
+use async_trait::async_trait;
 pub use handle::{MempoolHandle, MempoolRequest};
 use tari_dan_core::services::epoch_manager::EpochManagerError;
 use thiserror::Error;
 
-use crate::p2p::services::messaging::MessagingError;
+use crate::p2p::services::{messaging::MessagingError, template_manager::TemplateManagerError};
 
 mod service;
 
@@ -38,4 +39,13 @@ pub enum MempoolError {
     EpochManagerError(#[from] Box<EpochManagerError>),
     #[error("Broadcast failed: {0}")]
     BroadcastFailed(#[from] MessagingError),
+    #[error("Invalid template address: {0}")]
+    InvalidTemplateAddress(#[from] TemplateManagerError),
+}
+
+#[async_trait]
+pub trait Validator<T> {
+    type Error;
+
+    async fn validate(&self, input: &T) -> Result<(), Self::Error>;
 }
