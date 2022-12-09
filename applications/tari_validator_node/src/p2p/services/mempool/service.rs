@@ -85,7 +85,7 @@ impl Validator<Transaction> for MempoolTransactionValidator {
                                 },
                             ))
                         },
-                        _ => (),
+                        _ => continue,
                     }
                 },
                 _ => continue,
