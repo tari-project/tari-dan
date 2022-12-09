@@ -561,7 +561,7 @@ where
             msg.shard(),
             from,
         );
-        // TODO: Only do this if you're the leader
+
         let mut on_beat_future = None;
         let node;
         {
