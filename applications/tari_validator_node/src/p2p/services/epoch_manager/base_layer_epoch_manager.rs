@@ -130,6 +130,15 @@ impl BaseLayerEpochManager {
             return Ok(constants);
         }
 
+        self.refresh_base_layer_consensus_constants().await?;
+
+        Ok(self
+            .base_layer_consensus_constants
+            .as_ref()
+            .expect("update_base_layer_consensus_constants did not set constants"))
+    }
+
+    async fn refresh_base_layer_consensus_constants(&mut self) -> Result<(), EpochManagerError> {
         let tip = self.base_node_client.get_tip_info().await?;
         let dan_tip = tip
             .height_of_longest_chain
@@ -137,10 +146,7 @@ impl BaseLayerEpochManager {
 
         let constants = self.base_node_client.get_consensus_constants(dan_tip).await?;
         self.update_base_layer_consensus_constants(constants)?;
-        Ok(self
-            .base_layer_consensus_constants
-            .as_ref()
-            .expect("update_base_layer_consensus_constants did not set constants"))
+        Ok(())
     }
 
     pub async fn add_validator_node_registration(
@@ -409,7 +415,7 @@ impl BaseLayerEpochManager {
         Ok(vn_mmr)
     }
 
-    pub async fn on_scanning_complete(&self) -> Result<(), EpochManagerError> {
+    pub async fn on_scanning_complete(&mut self) -> Result<(), EpochManagerError> {
         {
             let tx = self.global_db.create_transaction()?;
             let last_sync_epoch = self
@@ -421,6 +427,8 @@ impl BaseLayerEpochManager {
                 return Ok(());
             }
         }
+
+        self.refresh_base_layer_consensus_constants().await?;
 
         let vn_shard_key = match self.get_validator_shard_key(self.current_epoch, self.node_identity.public_key())? {
             Some(vn_shard_key) => vn_shard_key,
