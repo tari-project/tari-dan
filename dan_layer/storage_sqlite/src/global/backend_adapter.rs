@@ -238,6 +238,20 @@ impl GlobalDbAdapter for SqliteGlobalDbAdapter {
         Ok(())
     }
 
+    fn template_exists(&self, tx: &Self::DbTransaction<'_>, key: &[u8]) -> Result<bool, Self::Error> {
+        use crate::global::schema::templates::dsl;
+        let result = dsl::templates
+            .filter(templates::template_address.eq(key))
+            .count()
+            .limit(1)
+            .get_result::<i64>(tx.connection())
+            .map_err(|source| SqliteStorageError::DieselError {
+                source,
+                operation: "exists::metadata".to_string(),
+            })?;
+        Ok(result > 0)
+    }
+
     fn insert_validator_nodes(
         &self,
         tx: &Self::DbTransaction<'_>,

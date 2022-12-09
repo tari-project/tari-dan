@@ -83,6 +83,10 @@ impl GlobalDbAdapter for MockGlobalDbBackupAdapter {
         todo!()
     }
 
+    fn template_exists(&self, _tx: &Self::DbTransaction<'_>, _key: &[u8]) -> Result<bool, Self::Error> {
+        todo!()
+    }
+
     fn insert_validator_nodes(
         &self,
         _tx: &Self::DbTransaction<'_>,

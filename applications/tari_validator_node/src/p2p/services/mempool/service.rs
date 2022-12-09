@@ -41,7 +41,7 @@ use crate::p2p::services::{
     epoch_manager::handle::EpochManagerHandle,
     mempool::{handle::MempoolRequest, Validator},
     messaging::OutboundMessaging,
-    template_manager::TemplateManager,
+    template_manager::{TemplateManager, TemplateManagerError},
 };
 
 const LOG_TARGET: &str = "dan::mempool::service";
@@ -72,13 +72,20 @@ impl Validator<Transaction> for MempoolTransactionValidator {
 
     async fn validate(&self, inner: &Transaction) -> Result<(), MempoolError> {
         let instructions = inner.instructions();
-
         for instruction in instructions {
             match instruction {
                 Instruction::CallFunction { template_address, .. } => {
-                    match self.template_manager.fetch_template(template_address) {
-                        Ok(_) => (),
+                    let template_exists = self.template_manager.template_exists(template_address);
+                    match template_exists {
                         Err(e) => return Err(MempoolError::InvalidTemplateAddress(e)),
+                        Ok(false) => {
+                            return Err(MempoolError::InvalidTemplateAddress(
+                                TemplateManagerError::TemplateNotFound {
+                                    address: *template_address,
+                                },
+                            ))
+                        },
+                        _ => (),
                     }
                 },
                 _ => continue,
@@ -140,15 +147,13 @@ impl MempoolService {
     async fn handle_new_transaction(&mut self, transaction: Transaction) {
         debug!(target: LOG_TARGET, "Received new transaction: {:?}", transaction);
 
-        match self.validator.validate(&transaction).await {
-            Ok(()) => (),
-            Err(e) => {
-                error!(
-                    target: LOG_TARGET,
-                    "⚠ Invalid templates found for transaction: {}",
-                    e.to_string(),
-                );
-            },
+        if let Err(e) = self.validator.validate(&transaction).await {
+            error!(
+                target: LOG_TARGET,
+                "⚠ Invalid templates found for transaction: {}",
+                e.to_string(),
+            );
+            return;
         }
 
         let payload = TariDanPayload::new(transaction.clone());
