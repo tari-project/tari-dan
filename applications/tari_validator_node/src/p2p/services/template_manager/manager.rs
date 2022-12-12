@@ -121,28 +121,32 @@ impl TemplateManager {
 
         // get the builtin WASM code of the account template
         let compiled_code = account_wasm();
+        let address = TemplateAddress::from([0; 32]);
+        let template = Self::load_builtin_template("account", address, compiled_code);
+        builtin_templates.insert(address, template);
+
+        builtin_templates
+    }
+
+    fn load_builtin_template(name: &str, address: TemplateAddress, compiled_code: Vec<u8>) -> Template {
         let compiled_code_len = compiled_code.len();
         info!(
             target: LOG_TARGET,
-            "Loading builtin account template: {} bytes", compiled_code_len
+            "Loading builtin {} template: {} bytes", name, compiled_code_len
         );
 
         // build the template object of the account template
-        let address = TemplateAddress::from([0; 32]);
         let binary_sha = calculate_template_binary_hash(&compiled_code);
-        let template = Template {
+        Template {
             metadata: TemplateMetadata {
-                name: "account".to_string(),
+                name: name.to_string(),
                 address,
                 url: "".to_string(),
                 binary_sha: binary_sha.to_vec(),
                 height: 0,
             },
             compiled_code,
-        };
-        builtin_templates.insert(address, template);
-
-        builtin_templates
+        }
     }
 
     pub fn fetch_template(&self, address: &TemplateAddress) -> Result<Template, TemplateManagerError> {
