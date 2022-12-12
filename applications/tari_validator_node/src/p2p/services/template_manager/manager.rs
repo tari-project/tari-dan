@@ -181,7 +181,12 @@ impl TemplateManager {
         let tx = self.global_db.create_transaction()?;
         // TODO: we should be able to fetch just the metadata and not the compiled code
         let templates = self.global_db.templates(&tx).get_templates(limit)?;
-        Ok(templates.into_iter().map(Into::into).collect())
+        let mut templates: Vec<TemplateMetadata> = templates.into_iter().map(Into::into).collect();
+        let mut builtin_metadata: Vec<TemplateMetadata> =
+            self.builtin_templates.values().map(|t| t.metadata.to_owned()).collect();
+        templates.append(&mut builtin_metadata);
+
+        Ok(templates)
     }
 
     pub(super) fn add_template(&self, template: TemplateRegistration) -> Result<(), TemplateManagerError> {
@@ -225,7 +230,6 @@ impl TemplateProvider for TemplateManager {
     type Template = WasmModule;
 
     fn get_template_module(&self, address: &TemplateAddress) -> Result<Self::Template, Self::Error> {
-        let _account_wasm = account_wasm();
         let template = self.fetch_template(address)?;
         Ok(WasmModule::from_code(template.compiled_code))
     }
