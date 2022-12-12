@@ -1,0 +1,21 @@
+[workspace]
+[package]
+name = "account"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+tari_template_abi = { git = "https://github.com/tari-project/tari-dan.git", branch="development", package="tari_template_abi" }
+tari_template_lib = { git = "https://github.com/tari-project/tari-dan.git", branch="development", package="tari_template_lib" }
+tari_template_macros = {git = "https://github.com/tari-project/tari-dan.git", branch="development", package="tari_template_macros" }
+log = "*"
+
+[profile.release]
+opt-level = 's'     # Optimize for size.
+lto = true          # Enable Link Time Optimization.
+codegen-units = 1   # Reduce number of codegen units to increase optimizations.
+panic = 'abort'     # Abort on panic.
+strip = "debuginfo" # Strip debug info.
+
+[lib]
+crate-type = ["cdylib", "lib"]
