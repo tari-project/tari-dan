@@ -20,47 +20,41 @@
 //   WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //   USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use serde::Serialize;
-use tari_comms::{multiaddr::Multiaddr, peer_manager::IdentitySignature};
-use tari_dan_common_types::NodeAddressable;
-use tari_dan_engine::transaction::Transaction;
+use clap::{Args, Subcommand};
+use tari_validator_node_client::ValidatorNodeClient;
 
-use crate::models::{vote_message::VoteMessage, HotStuffMessage};
-
-#[derive(Debug, Clone, Serialize)]
-pub enum DanMessage<TPayload, TAddr> {
-    // Consensus
-    HotStuffMessage(HotStuffMessage<TPayload, TAddr>),
-    VoteMessage(VoteMessage),
-    // Mempool
-    NewTransaction(Transaction),
-    // Network
-    NetworkAnnounce(NetworkAnnounce<TAddr>),
+#[derive(Debug, Subcommand, Clone)]
+pub enum DebugSubcommand {
+    ShowMessages(ShowMessagesArgs),
 }
 
-impl<TPayload, TAddr: NodeAddressable> DanMessage<TPayload, TAddr> {
-    pub fn as_type_str(&self) -> &'static str {
-        match self {
-            Self::HotStuffMessage(_) => "HotStuffMessage",
-            Self::VoteMessage(_) => "VoteMessage",
-            Self::NewTransaction(_) => "NewTransaction",
-            Self::NetworkAnnounce(_) => "NetworkAnnounce",
-        }
-    }
+#[derive(Debug, Args, Clone)]
+pub struct ShowMessagesArgs {
+    pub message_tag: String,
+}
 
-    pub fn get_message_tag(&self) -> String {
+impl DebugSubcommand {
+    pub async fn handle(self, client: ValidatorNodeClient) -> Result<(), anyhow::Error> {
+        #[allow(clippy::enum_glob_use)]
+        use DebugSubcommand::*;
         match self {
-            Self::HotStuffMessage(msg) => format!("shard_{}", msg.shard()),
-            Self::VoteMessage(msg) => format!("shard_{}", msg.shard()),
-            Self::NewTransaction(tx) => format!("hash_{}", tx.hash()),
-            Self::NetworkAnnounce(msg) => format!("pk_{}", msg.identity),
+            ShowMessages(args) => handle_list_messages(client, args).await?,
         }
+        Ok(())
     }
 }
 
-#[derive(Debug, Clone, Serialize)]
-pub struct NetworkAnnounce<TAddr> {
-    pub identity: TAddr,
-    pub addresses: Vec<Multiaddr>,
-    pub identity_signature: IdentitySignature,
+async fn handle_list_messages(mut client: ValidatorNodeClient, args: ShowMessagesArgs) -> Result<(), anyhow::Error> {
+    let logs = client.get_message_logs(&args.message_tag).await?;
+    if logs.is_empty() {
+        println!("No messages found for tag '{}'", args.message_tag);
+        return Ok(());
+    }
+
+    println!("Messages for tag '{}':", args.message_tag);
+    for log in logs {
+        println!("{}", log);
+        println!();
+    }
+    Ok(())
 }

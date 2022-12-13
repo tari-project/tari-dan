@@ -154,9 +154,7 @@ impl TemplateManager {
         self.global_db
             .templates(&tx)
             .template_exists(address)
-            .map_err(|_| TemplateManagerError::TemplateNotFound {
-                address: address.clone(),
-            })
+            .map_err(|_| TemplateManagerError::TemplateNotFound { address: *address })
     }
 
     pub fn fetch_template(&self, address: &TemplateAddress) -> Result<Template, TemplateManagerError> {

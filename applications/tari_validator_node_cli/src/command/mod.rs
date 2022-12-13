@@ -31,8 +31,9 @@ pub use template::TemplateSubcommand;
 mod vn;
 pub use vn::VnSubcommand;
 
-use crate::command::{manifest::ManifestSubcommand, transaction::TransactionSubcommand};
+use crate::command::{debug::DebugSubcommand, manifest::ManifestSubcommand, transaction::TransactionSubcommand};
 
+mod debug;
 mod manifest;
 mod transaction;
 
@@ -49,4 +50,6 @@ pub enum Command {
     Transactions(TransactionSubcommand),
     #[clap(subcommand, alias = "manifest")]
     Manifests(ManifestSubcommand),
+    #[clap(subcommand)]
+    Debug(DebugSubcommand),
 }

@@ -120,7 +120,9 @@ impl<TAddr: NodeAddressable, TPayload: Payload> HotStuffTreeNode<TAddr, TPayload
 
         result.finalize_fixed().into()
     }
+}
 
+impl<TAddr, TPayload> HotStuffTreeNode<TAddr, TPayload> {
     pub fn hash(&self) -> &TreeNodeHash {
         &self.hash
     }

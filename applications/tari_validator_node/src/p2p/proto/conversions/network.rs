@@ -38,18 +38,23 @@ use crate::p2p::proto;
 
 impl From<DanMessage<TariDanPayload, CommsPublicKey>> for proto::network::DanMessage {
     fn from(msg: DanMessage<TariDanPayload, CommsPublicKey>) -> Self {
+        let message_tag = msg.get_message_tag();
         match msg {
             DanMessage::HotStuffMessage(hot_stuff_msg) => Self {
                 message: Some(proto::network::dan_message::Message::HotStuff(hot_stuff_msg.into())),
+                message_tag,
             },
             DanMessage::VoteMessage(vote_msg) => Self {
                 message: Some(proto::network::dan_message::Message::Vote(vote_msg.into())),
+                message_tag,
             },
             DanMessage::NewTransaction(transaction) => Self {
                 message: Some(proto::network::dan_message::Message::NewTransaction(transaction.into())),
+                message_tag,
             },
             DanMessage::NetworkAnnounce(announce) => Self {
                 message: Some(proto::network::dan_message::Message::NetworkAnnounce(announce.into())),
+                message_tag,
             },
         }
     }

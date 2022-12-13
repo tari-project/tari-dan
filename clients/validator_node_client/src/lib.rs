@@ -19,13 +19,14 @@
 //   SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY,
 //   WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //   USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+pub mod types;
+
 use anyhow::anyhow;
 use reqwest::{header, header::HeaderMap, IntoUrl, Url};
 use serde::{de::DeserializeOwned, Serialize};
 use serde_json as json;
 use serde_json::json;
-
-pub mod types;
+use tari_comms_logging::LoggedMessage;
 use types::{
     GetTransactionRequest,
     GetTransactionResponse,
@@ -116,6 +117,18 @@ impl ValidatorNodeClient {
         request: SubmitTransactionRequest,
     ) -> Result<SubmitTransactionResponse, anyhow::Error> {
         self.send_request("submit_transaction", request).await
+    }
+
+    pub async fn get_message_logs(&mut self, message_tag: &str) -> Result<Vec<LoggedMessage>, anyhow::Error> {
+        let resp = self
+            .send_request::<_, json::Value>("get_logged_messages", json!({ "message_tag": message_tag }))
+            .await?;
+        let messages = json::from_value(
+            resp.get("messages")
+                .cloned()
+                .ok_or_else(|| anyhow!("Invalid response: messages was not provided"))?,
+        )?;
+        Ok(messages)
     }
 
     fn next_request_id(&mut self) -> i64 {

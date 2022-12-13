@@ -99,7 +99,7 @@ impl TryFrom<proto::consensus::HotStuffMessage> for HotStuffMessage<TariDanPaylo
             value.message_type.try_into()?,
             value.high_qc.map(|h| h.try_into()).transpose()?,
             value.node.map(|n| n.try_into()).transpose()?,
-            Some(value.shard.try_into()?),
+            value.shard.try_into()?,
             value.new_view_payload.map(|p| p.try_into()).transpose()?,
         ))
     }
