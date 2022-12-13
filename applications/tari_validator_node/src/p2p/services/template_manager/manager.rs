@@ -20,17 +20,20 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use std::fs;
+use std::{collections::HashMap, fs};
 
+use log::info;
 use tari_dan_core::services::TemplateProvider;
 use tari_dan_engine::wasm::WasmModule;
 use tari_dan_storage::global::{DbTemplate, DbTemplateUpdate, GlobalDb, TemplateStatus};
 use tari_dan_storage_sqlite::global::SqliteGlobalDbAdapter;
+use tari_engine_types::calculate_template_binary_hash;
+use tari_template_builtin::account_wasm;
 use tari_template_lib::models::TemplateAddress;
 
 use crate::p2p::services::template_manager::{handle::TemplateRegistration, TemplateConfig, TemplateManagerError};
 
-const _LOG_TARGET: &str = "tari::validator_node::template_manager";
+const LOG_TARGET: &str = "tari::validator_node::template_manager";
 
 #[derive(Debug, Clone)]
 pub struct TemplateMetadata {
@@ -97,12 +100,53 @@ impl From<DbTemplate> for Template {
 pub struct TemplateManager {
     global_db: GlobalDb<SqliteGlobalDbAdapter>,
     config: TemplateConfig,
+    builtin_templates: HashMap<TemplateAddress, Template>,
 }
 
 impl TemplateManager {
     pub fn new(global_db: GlobalDb<SqliteGlobalDbAdapter>, config: TemplateConfig) -> Self {
-        // TODO: preload some example templates
-        Self { global_db, config }
+        // load the builtin account templates
+        let builtin_templates = Self::load_builtin_templates();
+
+        Self {
+            global_db,
+            config,
+            builtin_templates,
+        }
+    }
+
+    fn load_builtin_templates() -> HashMap<TemplateAddress, Template> {
+        // for now, we only load the "account" template
+        let mut builtin_templates = HashMap::new();
+
+        // get the builtin WASM code of the account template
+        let compiled_code = account_wasm();
+        let address = TemplateAddress::from([0; 32]);
+        let template = Self::load_builtin_template("account", address, compiled_code);
+        builtin_templates.insert(address, template);
+
+        builtin_templates
+    }
+
+    fn load_builtin_template(name: &str, address: TemplateAddress, compiled_code: Vec<u8>) -> Template {
+        let compiled_code_len = compiled_code.len();
+        info!(
+            target: LOG_TARGET,
+            "Loading builtin {} template: {} bytes", name, compiled_code_len
+        );
+
+        // build the template object of the account template
+        let binary_sha = calculate_template_binary_hash(&compiled_code);
+        Template {
+            metadata: TemplateMetadata {
+                name: name.to_string(),
+                address,
+                url: "".to_string(),
+                binary_sha: binary_sha.to_vec(),
+                height: 0,
+            },
+            compiled_code,
+        }
     }
 
     pub fn template_exists(&self, address: &TemplateAddress) -> Result<bool, TemplateManagerError> {
@@ -116,6 +160,11 @@ impl TemplateManager {
     }
 
     pub fn fetch_template(&self, address: &TemplateAddress) -> Result<Template, TemplateManagerError> {
+        // first of all, check if the address is for a bulitin template
+        if let Some(template) = self.builtin_templates.get(address) {
+            return Ok(template.to_owned());
+        }
+
         let tx = self.global_db.create_transaction()?;
         let template = self
             .global_db
@@ -142,7 +191,12 @@ impl TemplateManager {
         let tx = self.global_db.create_transaction()?;
         // TODO: we should be able to fetch just the metadata and not the compiled code
         let templates = self.global_db.templates(&tx).get_templates(limit)?;
-        Ok(templates.into_iter().map(Into::into).collect())
+        let mut templates: Vec<TemplateMetadata> = templates.into_iter().map(Into::into).collect();
+        let mut builtin_metadata: Vec<TemplateMetadata> =
+            self.builtin_templates.values().map(|t| t.metadata.to_owned()).collect();
+        templates.append(&mut builtin_metadata);
+
+        Ok(templates)
     }
 
     pub(super) fn add_template(&self, template: TemplateRegistration) -> Result<(), TemplateManagerError> {

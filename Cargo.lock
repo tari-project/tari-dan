@@ -6210,6 +6210,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "tari_template_builtin"
+version = "0.35.1"
+
+[[package]]
 name = "tari_template_lib"
 version = "0.35.1"
 dependencies = [
@@ -6342,6 +6346,7 @@ dependencies = [
  "tari_p2p",
  "tari_shutdown",
  "tari_storage",
+ "tari_template_builtin",
  "tari_template_lib",
  "tari_test_utils",
  "tari_validator_node_client",
