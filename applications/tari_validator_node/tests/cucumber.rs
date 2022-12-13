@@ -155,6 +155,9 @@ async fn assert_vn_is_registered(world: &mut TariWorld, vn_name: String) {
 
 #[then(expr = "the template \"{word}\" is listed as registered by the validator node {word}")]
 async fn assert_template_is_registered(world: &mut TariWorld, template_name: String, vn_name: String) {
+    // give it some time for the template tx to be picked up by the VNs
+    tokio::time::sleep(Duration::from_secs(4)).await;
+
     // retrieve the template address
     let template_address = world.templates.get(&template_name).unwrap().address;
 

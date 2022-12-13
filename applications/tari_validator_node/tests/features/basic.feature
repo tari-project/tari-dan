@@ -24,11 +24,10 @@ Feature: Basic scenarios
     Then the validator node VAL_2 is listed as registered
 
     # Register the "counter" template
-    # When validator node VAL_1 registers the template "counter"
-    # When miner MINER mines 20 new blocks
-    # Then the template "counter" is listed as registered by the validator node VAL_1
-    # FIXME: In GitHub actions, we get a "Template not found" error in VN2
-    # Then the template "counter" is listed as registered by the validator node VAL_2
+    When validator node VAL_1 registers the template "counter"
+    When miner MINER mines 20 new blocks
+    Then the template "counter" is listed as registered by the validator node VAL_1
+    Then the template "counter" is listed as registered by the validator node VAL_2
 
     # Call the constructor in the "counter" template
     # FIXME: The VN does not return a valid response
