@@ -160,10 +160,7 @@ impl From<QuorumCertificate> for proto::consensus::QuorumCertificate {
             epoch: source.epoch().as_u64(),
             decision: match source.decision() {
                 QuorumDecision::Accept => 0,
-                QuorumDecision::Reject(ref reason) => match reason {
-                    QuorumRejectReason::ShardNotPledged => 1,
-                    QuorumRejectReason::ExecutionFailure => 2,
-                },
+                QuorumDecision::Reject(ref reason) => reason.as_u8().into(),
             },
             all_shard_nodes: source.all_shard_nodes().iter().map(|p| p.clone().into()).collect(),
             validators_metadata: source.validators_metadata().iter().map(|p| p.clone().into()).collect(),

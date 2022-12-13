@@ -26,7 +26,6 @@ use std::{
 };
 
 use anyhow::anyhow;
-use borsh::de::BorshDeserialize;
 use tari_common_types::types::{PublicKey, Signature};
 use tari_crypto::tari_utilities::ByteArray;
 use tari_dan_common_types::{ObjectClaim, ShardId, SubstateChange};
@@ -100,22 +99,18 @@ impl TryFrom<proto::transaction::Instruction> for tari_engine_types::instruction
         let instruction = match request.instruction_type {
             // function
             0 => {
-                let template_address = Hash::deserialize(&mut &request.template_address[..])
-                    .map_err(|_| anyhow!("invalid package_addresss"))?;
                 let function = request.function;
-                tari_engine_types::instruction::Instruction::CallFunction {
-                    template_address,
+                Instruction::CallFunction {
+                    template_address: request.template_address.try_into()?,
                     function,
                     args,
                 }
             },
             // method
             1 => {
-                let component_address = Hash::deserialize(&mut &request.component_address[..])
-                    .map_err(|_| anyhow!("invalid component_address"))?;
                 let method = request.method;
-                tari_engine_types::instruction::Instruction::CallMethod {
-                    component_address,
+                Instruction::CallMethod {
+                    component_address: Hash::try_from(request.component_address)?.into(),
                     method,
                     args,
                 }

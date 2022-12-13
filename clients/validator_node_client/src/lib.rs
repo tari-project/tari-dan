@@ -146,18 +146,9 @@ impl ValidatorNodeClient {
         let val = resp.json().await?;
         let resp = jsonrpc_result(val)?;
         // Response might not deserialize to R....
-        match serde_json::from_value(resp.clone()) {
+        match serde_json::from_value(resp) {
             Ok(r) => Ok(r),
-            Err(e) => {
-                let code = resp.get("code");
-                let message = resp.get("message");
-                Err(anyhow!(
-                    "Failed to deserialize response: {}: code:{:?} message:{:?}",
-                    e,
-                    code,
-                    message
-                ))
-            },
+            Err(e) => Err(anyhow!("Failed to deserialize response: {}", e)),
         }
     }
 }

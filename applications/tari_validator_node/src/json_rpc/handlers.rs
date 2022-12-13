@@ -138,26 +138,26 @@ impl JsonRpcHandlers {
 
         let mut builder = TransactionBuilder::new();
         builder
-            .with_input_refs(
+            .with_inputs(
                 request
                     .inputs
                     .iter()
-                    .filter_map(|i| {
-                        if i.1.eq(&SubstateChange::Exists) {
-                            Some(i.0)
+                    .filter_map(|(shard, change)| {
+                        if *change == SubstateChange::Destroy {
+                            Some(*shard)
                         } else {
                             None
                         }
                     })
                     .collect(),
             )
-            .with_inputs(
+            .with_outputs(
                 request
                     .inputs
                     .iter()
-                    .filter_map(|i| {
-                        if i.1.ne(&SubstateChange::Exists) {
-                            Some(i.0)
+                    .filter_map(|(shard, change)| {
+                        if *change == SubstateChange::Create {
+                            Some(*shard)
                         } else {
                             None
                         }
@@ -165,14 +165,23 @@ impl JsonRpcHandlers {
                     .collect(),
             )
             .with_instructions(request.instructions)
-            .with_num_outputs(request.num_outputs)
-            .signature(request.signature)
-            .sender_public_key(request.sender_public_key);
+            .with_new_outputs(request.num_outputs)
+            .with_signature(request.signature)
+            .with_sender_public_key(request.sender_public_key);
 
         let transaction = builder.build();
+        info!(
+            target: LOG_TARGET,
+            "Transaction {} has involved shards {:?}",
+            transaction.hash(),
+            transaction
+                .meta()
+                .involved_objects_iter()
+                .map(|(s, (ch, _))| format!("{}:{}", s, ch))
+                .collect::<Vec<_>>()
+        );
 
         // Pass to translation engine to translate into Shards and Substates.
-
         // TODO: submit the transaction to the wasm engine and return the result data
         let hash = *transaction.hash();
 

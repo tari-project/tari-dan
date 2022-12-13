@@ -29,13 +29,13 @@ use std::{
 use anyhow::anyhow;
 use clap::{Args, Subcommand};
 use tari_common_types::types::FixedHash;
-use tari_dan_common_types::{ShardId, SubstateChange};
+use tari_dan_common_types::ShardId;
 use tari_dan_engine::transaction::Transaction;
 use tari_engine_types::{
     commit_result::{FinalizeResult, TransactionResult},
     execution_result::Type,
     instruction::Instruction,
-    substate::SubstateValue,
+    substate::{SubstateAddress, SubstateValue},
     TemplateAddress,
 };
 use tari_template_lib::{
@@ -55,6 +55,7 @@ use crate::{
     command::manifest,
     component_manager::ComponentManager,
     from_hex::FromHex,
+    versioned_substate_address::VersionedSubstateAddress,
 };
 
 #[derive(Debug, Subcommand, Clone)]
@@ -87,9 +88,7 @@ pub struct CommonSubmitArgs {
     #[clap(long, short = 'n')]
     pub num_outputs: Option<u8>,
     #[clap(long, short = 'i')]
-    pub inputs: Vec<String>,
-    #[clap(long, short = 'r')]
-    pub input_refs: Vec<ShardId>,
+    inputs: Vec<VersionedSubstateAddress>,
     #[clap(long, short = 'v')]
     pub version: Option<u8>,
     #[clap(long, short = 'd')]
@@ -199,11 +198,6 @@ async fn handle_submit_manifest(
 ) -> Result<Option<SubmitTransactionResponse>, anyhow::Error> {
     let contents = std::fs::read_to_string(&args.manifest).map_err(|e| anyhow!("Failed to read manifest: {}", e))?;
     let instructions = parse_manifest(&contents, manifest::parse_globals(args.input_variables)?)?;
-    println!("🌟 Submitting instructions:");
-    for instruction in &instructions {
-        println!("- {}", instruction);
-    }
-    println!();
     submit_transaction(instructions, args.common, base_dir, client).await
 }
 
@@ -219,57 +213,51 @@ async fn submit_transaction(
         .get_active_account()
         .ok_or_else(|| anyhow::anyhow!("No active account. Use `accounts use [public key hex]` to set one."))?;
 
-    let input_refs = if common.input_refs.is_empty() {
-        extract_input_refs(&instructions, &component_manager)?
+    let inputs = if common.inputs.is_empty() {
+        load_inputs(&instructions, &component_manager)?
     } else {
-        common.input_refs
-        // input_refs.extend(instructions.iter().filter_map(|i| match i {
-        //     Instruction::CallMethod { component_address, .. } => {
-        //         Some(ShardId::from_bytes(&component_address.into_array()).expect("Not a valid shardid"))
-        //     },
-        //     _ => None,
-        // }));
-        // input_refs
+        common.inputs
     };
-    let mut inputs = common
-        .inputs
+
+    // TODO: we assume that all inputs will be consumed and produce a new output however this is only the case when the
+    //       object is mutated
+    let outputs = inputs
+        .iter()
+        .map(|versioned_addr| ShardId::from_address(&versioned_addr.address, versioned_addr.version + 1))
+        .collect();
+
+    // Convert to shard id
+    let inputs = inputs
         .into_iter()
-        .map(|s| s.parse())
-        .collect::<Result<Vec<_>, _>>()?;
+        .map(|versioned_addr| ShardId::from_address(&versioned_addr.address, versioned_addr.version))
+        .collect();
 
-    // include the component
-    inputs.extend(instructions.iter().filter_map(|i| match i {
-        Instruction::CallMethod { component_address, .. } => {
-            Some(ShardId::from_bytes(&component_address.into_array()).expect("Not a valid shardid"))
-        },
-        _ => None,
-    }));
-
-    // TODO: this is a little clunky
     let mut builder = Transaction::builder();
+
     builder
-        .with_inputs(inputs.clone())
-        .with_input_refs(input_refs.clone())
-        .with_num_outputs(common.num_outputs.unwrap_or(0))
-        .with_instructions(instructions);
-    let mut input_data: Vec<(ShardId, SubstateChange)> =
-        input_refs.iter().map(|i| (*i, SubstateChange::Exists)).collect();
-    input_data.extend(inputs.iter().map(|i| (*i, SubstateChange::Destroy)));
-    builder.sign(&account.secret_key).fee(1);
+        .with_instructions(instructions)
+        .with_inputs(inputs)
+        .with_new_outputs(common.num_outputs.unwrap_or(0))
+        .with_outputs(outputs)
+        .with_fee(1)
+        .sign(&account.secret_key);
 
     let transaction = builder.build();
-    let tx_hash = *transaction.hash();
 
-    for instruction in transaction.instructions() {
-        println!("- {}", instruction);
-    }
+    let inputs = transaction
+        .meta()
+        .involved_objects_iter()
+        .map(|(shard_id, (change, _))| (*shard_id, *change))
+        .collect();
 
     let request = SubmitTransactionRequest {
+        // TODO: just pass the whole transaction in this request
+        // transaction,
         instructions: transaction.instructions().to_vec(),
         signature: transaction.signature().clone(),
         fee: transaction.fee(),
         sender_public_key: transaction.sender_public_key().clone(),
-        inputs: input_data,
+        inputs,
         num_outputs: common.num_outputs.unwrap_or(0),
         wait_for_result: common.wait_for_result,
         is_dry_run: common.dry_run,
@@ -280,8 +268,17 @@ async fn submit_transaction(
         println!("No inputs or outputs. This transaction will not be processed by the network.");
         return Ok(None);
     }
-    dbg!(&request);
-    println!("✅ Transaction {} submitted.", tx_hash);
+    println!("Request:");
+    println!("{}", serde_json::to_string_pretty(&request).unwrap());
+    println!();
+
+    println!("🌟 Submitting instructions:");
+    for instruction in &request.instructions {
+        println!("- {}", instruction);
+    }
+    println!();
+
+    println!("✅ Transaction {} submitted.", transaction.hash());
     let timer = Instant::now();
     if common.wait_for_result {
         println!("⏳️ Waiting for transaction result...");
@@ -351,8 +348,8 @@ fn summarize_finalize_result(finalize: &FinalizeResult) {
                 }
                 println!();
             }
-            for address in diff.down_iter() {
-                println!("🗑️ DOWN substate {}", address);
+            for (address, version) in diff.down_iter() {
+                println!("🗑️ DOWN substate {} v{}", address, version);
                 println!();
             }
         },
@@ -417,19 +414,33 @@ fn summarize_finalize_result(finalize: &FinalizeResult) {
     }
 }
 
-fn extract_input_refs(
+fn load_inputs(
     instructions: &[Instruction],
     component_manager: &ComponentManager,
-) -> Result<Vec<ShardId>, anyhow::Error> {
-    let mut input_refs = Vec::new();
+) -> Result<Vec<VersionedSubstateAddress>, anyhow::Error> {
+    let mut inputs = Vec::new();
     for instruction in instructions {
         if let Instruction::CallMethod { component_address, .. } = instruction {
-            input_refs.push(component_address.into_array().into());
-            let children = component_manager.get_component_childen(component_address)?;
-            input_refs.extend(children.iter().map(ShardId::from_address));
+            let addr = SubstateAddress::Component(*component_address);
+            if inputs.iter().any(|a: &VersionedSubstateAddress| a.address == addr) {
+                continue;
+            }
+            let component = component_manager
+                .get_root_substate(&addr)?
+                .ok_or_else(|| anyhow!("Component {} not found", component_address))?;
+            println!("Loaded inputs");
+            println!("- {} v{}", addr, component.latest_version());
+            inputs.push(VersionedSubstateAddress {
+                address: addr,
+                version: component.latest_version(),
+            });
+            for child in component.get_children() {
+                println!("  - {} v{}", child.address, child.version);
+            }
+            inputs.extend(component.get_children());
         }
     }
-    Ok(input_refs)
+    Ok(inputs)
 }
 
 #[derive(Debug, Clone)]
