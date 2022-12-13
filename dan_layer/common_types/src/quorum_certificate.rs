@@ -18,16 +18,24 @@ pub enum QuorumDecision {
 pub enum QuorumRejectReason {
     ShardNotPledged,
     ExecutionFailure,
+    PreviousQcRejection,
+}
+
+impl QuorumRejectReason {
+    pub fn as_u8(&self) -> u8 {
+        match self {
+            QuorumRejectReason::ShardNotPledged => 1,
+            QuorumRejectReason::ExecutionFailure => 2,
+            QuorumRejectReason::PreviousQcRejection => 3,
+        }
+    }
 }
 
 impl QuorumDecision {
     pub fn as_u8(&self) -> u8 {
         match self {
             QuorumDecision::Accept => 0,
-            QuorumDecision::Reject(reason) => match reason {
-                QuorumRejectReason::ShardNotPledged => 1,
-                QuorumRejectReason::ExecutionFailure => 2,
-            },
+            QuorumDecision::Reject(reason) => reason.as_u8(),
         }
     }
 
@@ -36,6 +44,7 @@ impl QuorumDecision {
             0 => Ok(QuorumDecision::Accept),
             1 => Ok(QuorumDecision::Reject(QuorumRejectReason::ShardNotPledged)),
             2 => Ok(QuorumDecision::Reject(QuorumRejectReason::ExecutionFailure)),
+            3 => Ok(QuorumDecision::Reject(QuorumRejectReason::PreviousQcRejection)),
             // TODO: Add error type
             _ => Err(anyhow::anyhow!("Invalid QuorumDecision")),
         }

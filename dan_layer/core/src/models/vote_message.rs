@@ -80,6 +80,7 @@ impl VoteMessage {
         let quorum_reject_reason = match reason {
             RejectReason::ShardsNotPledged(_) => QuorumRejectReason::ShardNotPledged,
             RejectReason::ExecutionFailure(_) => QuorumRejectReason::ExecutionFailure,
+            RejectReason::PreviousQcRejection => QuorumRejectReason::PreviousQcRejection,
         };
         let decision = QuorumDecision::Reject(quorum_reject_reason);
 

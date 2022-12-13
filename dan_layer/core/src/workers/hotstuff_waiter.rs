@@ -1038,14 +1038,7 @@ where
                 VoteMessage::accept(local_node, local_shard, votes)
             },
             TransactionResult::Reject(ref reason) => {
-                match reason {
-                    RejectReason::ShardsNotPledged(msg) => {
-                        info!(target: LOG_TARGET, "⚔ Vote to REJECT payload: {}", msg);
-                    },
-                    RejectReason::ExecutionFailure(msg) => {
-                        info!(target: LOG_TARGET, "Payload execution failure: {}", msg);
-                    },
-                }
+                info!(target: LOG_TARGET, "⚔ Vote to REJECT payload: {}", reason);
                 VoteMessage::reject(local_node, local_shard, votes, reason)
             },
         };
@@ -1121,15 +1114,15 @@ fn extract_changes(
     match finalize.result {
         TransactionResult::Accept(ref diff) => {
             // down first, then up
-            for address in diff.down_iter() {
+            for (address, version) in diff.down_iter() {
                 changes
-                    .entry(ShardId::from_address(address))
+                    .entry(ShardId::from_address(address, *version))
                     .or_default()
                     .push(SubstateState::Down { deleted_by: payload_id });
             }
             for (address, substate) in diff.up_iter() {
                 changes
-                    .entry(ShardId::from_address(address))
+                    .entry(ShardId::from_address(address, substate.version()))
                     .or_default()
                     .push(SubstateState::Up {
                         created_by: payload_id,
