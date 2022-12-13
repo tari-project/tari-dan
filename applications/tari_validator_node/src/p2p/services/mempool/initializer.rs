@@ -31,8 +31,12 @@ use tokio::{
 
 use crate::p2p::services::{
     epoch_manager::handle::EpochManagerHandle,
-    mempool::{handle::MempoolHandle, service::MempoolService},
+    mempool::{
+        handle::MempoolHandle,
+        service::{MempoolService, MempoolTransactionValidator},
+    },
     messaging::OutboundMessaging,
+    template_manager::TemplateManager,
 };
 
 pub fn spawn(
@@ -40,9 +44,12 @@ pub fn spawn(
     outbound: OutboundMessaging,
     epoch_manager: EpochManagerHandle,
     node_identity: Arc<NodeIdentity>,
+    template_manager: TemplateManager,
 ) -> MempoolHandle {
     let (tx_valid_transactions, rx_valid_transactions) = broadcast::channel(100);
     let (tx_mempool_request, rx_mempool_request) = mpsc::channel(1);
+
+    let validator = MempoolTransactionValidator::new(template_manager);
     let mempool = MempoolService::new(
         new_transactions,
         rx_mempool_request,
@@ -50,6 +57,7 @@ pub fn spawn(
         tx_valid_transactions,
         epoch_manager,
         node_identity,
+        validator,
     );
     let handle = MempoolHandle::new(rx_valid_transactions, tx_mempool_request, mempool.get_transaction());
 

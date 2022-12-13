@@ -51,6 +51,10 @@ impl<'a, TGlobalDbAdapter: GlobalDbAdapter> TemplateDb<'a, TGlobalDbAdapter> {
     pub fn update_template(&self, key: &[u8], update: DbTemplateUpdate) -> Result<(), TGlobalDbAdapter::Error> {
         self.backend.update_template(self.tx, key, update)
     }
+
+    pub fn template_exists(&self, key: &[u8]) -> Result<bool, TGlobalDbAdapter::Error> {
+        self.backend.template_exists(self.tx, key)
+    }
 }
 
 #[derive(Debug, Clone)]

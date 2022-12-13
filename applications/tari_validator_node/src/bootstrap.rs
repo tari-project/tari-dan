@@ -133,18 +133,19 @@ pub async fn spawn_services(
         validator_node_client_factory.clone(),
     );
 
+    // Template manager
+
+    let template_manager = TemplateManager::new(global_db.clone(), config.validator_node.templates.clone());
+    let template_manager_service = template_manager::spawn(template_manager.clone(), shutdown.clone());
+
     // Mempool
     let mempool = mempool::spawn(
         rx_new_transaction_message,
         outbound_messaging.clone(),
         epoch_manager.clone(),
         node_identity.clone(),
+        template_manager.clone(),
     );
-
-    // Template manager
-
-    let template_manager = TemplateManager::new(global_db.clone(), config.validator_node.templates.clone());
-    let template_manager_service = template_manager::spawn(template_manager.clone(), shutdown.clone());
 
     // Base Node scanner
     base_layer_scanner::spawn(

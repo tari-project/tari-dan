@@ -105,6 +105,16 @@ impl TemplateManager {
         Self { global_db, config }
     }
 
+    pub fn template_exists(&self, address: &TemplateAddress) -> Result<bool, TemplateManagerError> {
+        let tx = self.global_db.create_transaction()?;
+        self.global_db
+            .templates(&tx)
+            .template_exists(address)
+            .map_err(|_| TemplateManagerError::TemplateNotFound {
+                address: address.clone(),
+            })
+    }
+
     pub fn fetch_template(&self, address: &TemplateAddress) -> Result<Template, TemplateManagerError> {
         let tx = self.global_db.create_transaction()?;
         let template = self
