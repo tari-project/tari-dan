@@ -107,6 +107,8 @@ jobs:
           libssl-dev \
           sqlite3 \
           libsqlite3-dev
+      - name: wasm target install
+        run: rustup target add wasm32-unknown-unknown
       - name: cargo check
         uses: actions-rs/cargo@v1
         with:
@@ -148,6 +150,8 @@ jobs:
           libssl-dev \
           sqlite3 \
           libsqlite3-dev
+      - name: wasm target install
+        run: rustup target add wasm32-unknown-unknown
       - name: rustup show
         run: |
           rustup show
