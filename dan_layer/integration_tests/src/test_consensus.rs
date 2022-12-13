@@ -35,8 +35,12 @@ use tari_dan_core::{
     services::{
         epoch_manager::{EpochManager, RangeEpochManager},
         leader_strategy::{AlwaysFirstLeader, LeaderStrategy},
+        NodeIdentitySigningService,
+        PayloadProcessor,
+        PayloadProcessorError,
+        SigningService,
     },
-    workers::hotstuff_waiter::HotStuffWaiter,
+    workers::{hotstuff_error::HotStuffError, hotstuff_waiter::HotStuffWaiter},
 };
 use tari_dan_engine::transaction::{Transaction, TransactionBuilder};
 use tari_engine_types::{
@@ -45,6 +49,7 @@ use tari_engine_types::{
     substate::SubstateDiff,
 };
 use tari_shutdown::Shutdown;
+use tari_template_lib::{args, Hash};
 use tari_utilities::ByteArray;
 use tokio::{
     sync::{
@@ -764,14 +769,9 @@ async fn test_hs_waiter_cannot_spend_until_it_is_proven_committed() {
     todo!()
 }
 
-use tari_dan_core::{
-    services::{NodeIdentitySigningService, PayloadProcessor, PayloadProcessorError, SigningService},
-    workers::hotstuff_error::HotStuffError,
-};
-use tari_template_lib::{args, Hash};
-
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn test_kitchen_sink() {
+    env_logger::init();
     let (node1_pk, node1) = PublicKey::random_keypair(&mut OsRng);
     let (node2_pk, node2) = PublicKey::random_keypair(&mut OsRng);
     let shard0_committee = vec![node1.clone()];
@@ -820,20 +820,15 @@ async fn test_kitchen_sink() {
     // This tells us which shards are involved in the transaction
     // Because there are no inputs, we need to say that there are 2 components
     // being created, so that two shards are involved, not just one.
-    builder.with_num_outputs(2).sign(&secret_key);
+    builder.with_new_outputs(2).sign(&secret_key);
     let transaction = builder.build();
 
-    let involved_shards = transaction.meta().involved_shards();
-    let s1;
-    let s2;
+    let mut involved_shards = transaction.meta().involved_shards();
     // Sort the shards so that we can create a range epoch manager
-    if involved_shards[0].0 < involved_shards[1].0 {
-        s1 = involved_shards[0];
-        s2 = involved_shards[1];
-    } else {
-        s1 = involved_shards[1];
-        s2 = involved_shards[0];
-    }
+    involved_shards.sort();
+    let s1 = involved_shards[0];
+    let s2 = involved_shards[1];
+
     let registered_vn_keys = vec![node1.clone(), node2.clone()];
     let epoch_manager = RangeEpochManager::new_with_multiple(registered_vn_keys, &[
         (s1..s2, shard0_committee),

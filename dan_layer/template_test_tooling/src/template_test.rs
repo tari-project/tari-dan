@@ -22,7 +22,7 @@ use tari_engine_types::{
 };
 use tari_template_lib::{
     args::Arg,
-    models::{ComponentAddress, ComponentInstance, TemplateAddress},
+    models::{ComponentAddress, ComponentHeader, TemplateAddress},
 };
 
 use super::MockRuntimeInterface;
@@ -84,10 +84,17 @@ impl TemplateTest<MockRuntimeInterface> {
     fn commit_diff(&self, diff: &SubstateDiff) {
         let store = self.runtime_interface.state_store();
         let mut tx = store.write_access().unwrap();
-        // TODO: Down should remove/set state to None
+
+        for (address, _) in diff.down_iter() {
+            eprintln!("DOWN substate: {}", address);
+            tx.delete_state(address).unwrap();
+        }
+
         for (address, substate) in diff.up_iter() {
+            eprintln!("UP substate: {}", address);
             tx.set_state(address, substate).unwrap();
         }
+
         tx.commit().unwrap();
     }
 
@@ -156,7 +163,7 @@ impl ReadOnlyStateStore {
         Self { store }
     }
 
-    pub fn get_component(&self, component_address: ComponentAddress) -> Result<ComponentInstance, StateStoreError> {
+    pub fn get_component(&self, component_address: ComponentAddress) -> Result<ComponentHeader, StateStoreError> {
         let tx = self.store.read_access()?;
         let substate = tx.get_state::<_, Substate>(&SubstateAddress::Component(component_address))?;
         Ok(substate.into_substate().into_component().unwrap())

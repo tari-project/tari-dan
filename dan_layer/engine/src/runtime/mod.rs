@@ -31,12 +31,12 @@ pub use error::{RuntimeError, TransactionCommitError};
 
 mod tracker;
 
+#[cfg(test)]
+mod tests;
+
 use std::{fmt::Debug, sync::Arc};
 
-use tari_engine_types::{
-    commit_result::FinalizeResult,
-    substate::{SubstateAddress, SubstateValue},
-};
+use tari_engine_types::{commit_result::FinalizeResult, resource::Resource};
 use tari_template_lib::{
     args::{
         Arg,
@@ -52,7 +52,7 @@ use tari_template_lib::{
         WorkspaceAction,
     },
     invoke_args,
-    models::VaultRef,
+    models::{ComponentAddress, ComponentHeader, ResourceAddress, VaultRef},
 };
 pub use tracker::{RuntimeState, StateTracker};
 
@@ -61,7 +61,8 @@ pub trait RuntimeInterface: Send + Sync {
 
     fn emit_log(&self, level: LogLevel, message: String);
 
-    fn get_substate(&self, address: &SubstateAddress) -> Result<SubstateValue, RuntimeError>;
+    fn get_component(&self, address: &ComponentAddress) -> Result<ComponentHeader, RuntimeError>;
+    fn get_resource(&self, address: &ResourceAddress) -> Result<Resource, RuntimeError>;
 
     fn component_invoke(
         &self,

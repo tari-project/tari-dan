@@ -20,18 +20,21 @@
 //   WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //   USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use std::fmt::{Display, Formatter};
+use std::{
+    fmt::{Display, Formatter},
+    str::FromStr,
+};
 
 use serde::{Deserialize, Serialize};
 use tari_bor::{borsh, decode, encode, Decode, Encode};
 use tari_template_lib::{
-    models::{ComponentAddress, ComponentInstance, ResourceAddress, VaultId},
+    models::{ComponentAddress, ComponentHeader, ResourceAddress, VaultId},
     Hash,
 };
 
 use crate::{resource::Resource, vault::Vault};
 
-#[derive(Debug, Clone, Encode, Decode, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Encode, Decode, Serialize, Deserialize)]
 pub struct Substate {
     substate: SubstateValue,
     version: u32,
@@ -66,6 +69,7 @@ impl Substate {
     }
 }
 
+/// Base object address, version tuples
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Encode, Decode, Serialize, Deserialize)]
 pub enum SubstateAddress {
     Component(ComponentAddress),
@@ -81,54 +85,90 @@ impl SubstateAddress {
         }
     }
 
-    pub fn into_hash(self) -> Hash {
+    pub fn hash(&self) -> &Hash {
         match self {
-            SubstateAddress::Component(address) => address,
-            SubstateAddress::Resource(address) => address,
-            SubstateAddress::Vault(id) => id,
+            SubstateAddress::Component(address) => address.hash(),
+            SubstateAddress::Resource(address) => address.hash(),
+            SubstateAddress::Vault(id) => id.hash(),
+        }
+    }
+
+    // TODO: look at using BECH32 standard
+    pub fn to_address_string(&self) -> String {
+        match self {
+            Self::Component(addr) => addr.to_string(),
+            Self::Resource(addr) => addr.to_string(),
+            Self::Vault(addr) => addr.to_string(),
         }
     }
 }
 
-// TODO: ComponentAddress and ResourceAddress should probably be newtypes
-// impl From<ComponentAddress> for SubstateAddress {
-//     fn from(address: ComponentAddress) -> Self {
-//         Self::Component(address)
-//     }
-// }
+impl From<ComponentAddress> for SubstateAddress {
+    fn from(address: ComponentAddress) -> Self {
+        Self::Component(address)
+    }
+}
 
-// impl From<ResourceAddress> for SubstateAddress {
-//     fn from(address: ResourceAddress) -> Self {
-//         Self::Resource(address)
-//     }
-// }
+impl From<ResourceAddress> for SubstateAddress {
+    fn from(address: ResourceAddress) -> Self {
+        Self::Resource(address)
+    }
+}
+
+impl From<VaultId> for SubstateAddress {
+    fn from(address: VaultId) -> Self {
+        Self::Vault(address)
+    }
+}
 
 impl Display for SubstateAddress {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        match self {
-            SubstateAddress::Component(addr) => write!(f, "component_{}", addr),
-            SubstateAddress::Resource(addr) => write!(f, "resource_{}", addr),
-            SubstateAddress::Vault(addr) => write!(f, "vault_{}", addr),
+        write!(f, "{}", self.to_address_string())
+    }
+}
+
+#[derive(Debug, thiserror::Error)]
+#[error("Invalid substate address '{0}'")]
+pub struct InvalidSubstateAddressFormat(String);
+
+impl FromStr for SubstateAddress {
+    type Err = InvalidSubstateAddressFormat;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s.split_once('_') {
+            Some(("component", addr)) => {
+                let addr = ComponentAddress::from_hex(addr).map_err(|_| InvalidSubstateAddressFormat(s.to_string()))?;
+                Ok(SubstateAddress::Component(addr))
+            },
+            Some(("resource", addr)) => {
+                let addr = ResourceAddress::from_hex(addr).map_err(|_| InvalidSubstateAddressFormat(s.to_string()))?;
+                Ok(SubstateAddress::Resource(addr))
+            },
+            Some(("vault", addr)) => {
+                let id = VaultId::from_hex(addr).map_err(|_| InvalidSubstateAddressFormat(s.to_string()))?;
+                Ok(SubstateAddress::Vault(id))
+            },
+            Some(_) | None => Err(InvalidSubstateAddressFormat(s.to_string())),
         }
     }
 }
 
-#[derive(Debug, Clone, Encode, Decode, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Encode, Decode, Serialize, Deserialize)]
 pub enum SubstateValue {
-    Component(ComponentInstance),
+    Component(ComponentHeader),
     Resource(Resource),
     Vault(Vault),
 }
 
 impl SubstateValue {
-    pub fn into_component(self) -> Option<ComponentInstance> {
+    pub fn into_component(self) -> Option<ComponentHeader> {
         match self {
             SubstateValue::Component(component) => Some(component),
             _ => None,
         }
     }
 
-    pub fn component_mut(&mut self) -> Option<&mut ComponentInstance> {
+    pub fn component_mut(&mut self) -> Option<&mut ComponentHeader> {
         match self {
             SubstateValue::Component(component) => Some(component),
             _ => None,
@@ -151,15 +191,15 @@ impl SubstateValue {
 
     pub fn resource_address(&self) -> Option<ResourceAddress> {
         match self {
-            SubstateValue::Resource(resource) => Some(resource.address()),
-            SubstateValue::Vault(vault) => Some(vault.resource_address()),
+            SubstateValue::Resource(resource) => Some(*resource.address()),
+            SubstateValue::Vault(vault) => Some(*vault.resource_address()),
             _ => None,
         }
     }
 }
 
-impl From<ComponentInstance> for SubstateValue {
-    fn from(component: ComponentInstance) -> Self {
+impl From<ComponentHeader> for SubstateValue {
+    fn from(component: ComponentHeader) -> Self {
         Self::Component(component)
     }
 }
@@ -176,10 +216,10 @@ impl From<Vault> for SubstateValue {
     }
 }
 
-#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct SubstateDiff {
     up_substates: Vec<(SubstateAddress, Substate)>,
-    down_substates: Vec<SubstateAddress>,
+    down_substates: Vec<(SubstateAddress, u32)>,
 }
 
 impl SubstateDiff {
@@ -194,15 +234,19 @@ impl SubstateDiff {
         self.up_substates.push((address, value));
     }
 
-    pub fn down(&mut self, address: SubstateAddress) {
-        self.down_substates.push(address);
+    pub fn down(&mut self, address: SubstateAddress, version: u32) {
+        self.down_substates.push((address, version));
     }
 
     pub fn up_iter(&self) -> impl Iterator<Item = &(SubstateAddress, Substate)> + '_ {
         self.up_substates.iter()
     }
 
-    pub fn down_iter(&self) -> impl Iterator<Item = &SubstateAddress> + '_ {
+    pub fn into_up_iter(self) -> impl Iterator<Item = (SubstateAddress, Substate)> {
+        self.up_substates.into_iter()
+    }
+
+    pub fn down_iter(&self) -> impl Iterator<Item = &(SubstateAddress, u32)> + '_ {
         self.down_substates.iter()
     }
 }

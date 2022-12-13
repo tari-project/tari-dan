@@ -21,16 +21,53 @@
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 use tari_bor::{borsh, Decode, Encode};
-use tari_template_abi::{call_engine, EngineOp};
+use tari_template_abi::{
+    call_engine,
+    rust::{
+        fmt,
+        fmt::{Display, Formatter},
+    },
+    EngineOp,
+};
 
 use crate::{
     args::{InvokeResult, VaultAction, VaultInvokeArg},
+    hash::HashParseError,
     models::{Amount, Bucket, ResourceAddress},
     resource::ResourceType,
     Hash,
 };
 
-pub type VaultId = Hash;
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Encode, Decode)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+pub struct VaultId(Hash);
+
+impl VaultId {
+    pub fn new(address: Hash) -> Self {
+        Self(address)
+    }
+
+    pub fn hash(&self) -> &Hash {
+        &self.0
+    }
+
+    pub fn from_hex(hex: &str) -> Result<Self, HashParseError> {
+        let hash = Hash::from_hex(hex)?;
+        Ok(Self::new(hash))
+    }
+}
+
+impl From<Hash> for VaultId {
+    fn from(address: Hash) -> Self {
+        Self::new(address)
+    }
+}
+
+impl Display for VaultId {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        write!(f, "vault_{}", self.0)
+    }
+}
 
 #[derive(Clone, Debug, Decode, Encode)]
 pub enum VaultRef {
@@ -102,10 +139,6 @@ impl Vault {
     }
 
     pub fn withdraw(&mut self, amount: Amount) -> Bucket {
-        assert!(
-            amount.is_positive() && !amount.is_zero(),
-            "Amount must be non-zero and positive"
-        );
         let resp: InvokeResult = call_engine(EngineOp::VaultInvoke, &VaultInvokeArg {
             vault_ref: VaultRef::Ref(self.vault_id()),
             action: VaultAction::WithdrawFungible,

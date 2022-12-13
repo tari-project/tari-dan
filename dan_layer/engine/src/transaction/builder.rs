@@ -31,10 +31,10 @@ use crate::{crypto::create_key_pair, runtime::IdProvider, transaction::Transacti
 #[derive(Debug, Clone, Default)]
 pub struct TransactionBuilder {
     instructions: Vec<Instruction>,
-    signature: Option<InstructionSignature>,
-    sender_public_key: Option<RistrettoPublicKey>,
     fee: u64,
     meta: TransactionMeta,
+    signature: Option<InstructionSignature>,
+    sender_public_key: Option<RistrettoPublicKey>,
 }
 
 impl TransactionBuilder {
@@ -48,8 +48,9 @@ impl TransactionBuilder {
         }
     }
 
-    pub fn fee(&mut self, fee: u64) {
+    pub fn with_fee(&mut self, fee: u64) -> &mut Self {
         self.fee = fee;
+        self
     }
 
     pub fn add_instruction(&mut self, instruction: Instruction) -> &mut Self {
@@ -66,12 +67,12 @@ impl TransactionBuilder {
         self
     }
 
-    pub fn signature(&mut self, signature: InstructionSignature) -> &mut Self {
+    pub fn with_signature(&mut self, signature: InstructionSignature) -> &mut Self {
         self.signature = Some(signature);
         self
     }
 
-    pub fn sender_public_key(&mut self, sender_public_key: RistrettoPublicKey) -> &mut Self {
+    pub fn with_sender_public_key(&mut self, sender_public_key: RistrettoPublicKey) -> &mut Self {
         self.sender_public_key = Some(sender_public_key);
         self
     }
@@ -80,21 +81,6 @@ impl TransactionBuilder {
         let (nonce, _nonce_pk) = create_key_pair();
         self.signature = Some(InstructionSignature::sign(secret_key, nonce, &self.instructions));
         self.sender_public_key = Some(PublicKey::from_secret_key(secret_key));
-        self
-    }
-
-    /// Reference this input without consuming it
-    pub fn add_input_ref(&mut self, input_object: ShardId) -> &mut Self {
-        self.meta
-            .involved_objects
-            .insert(input_object, (SubstateChange::Exists, ObjectClaim {}));
-        self
-    }
-
-    pub fn with_input_refs(&mut self, inputs: Vec<ShardId>) -> &mut Self {
-        for input in inputs {
-            self.add_input_ref(input);
-        }
         self
     }
 
@@ -113,7 +99,21 @@ impl TransactionBuilder {
         self
     }
 
-    pub fn with_num_outputs(&mut self, num_outputs: u8) -> &mut Self {
+    pub fn with_outputs(&mut self, outputs: Vec<ShardId>) -> &mut Self {
+        for output in outputs {
+            self.add_output(output);
+        }
+        self
+    }
+
+    pub fn add_output(&mut self, output_object: ShardId) -> &mut Self {
+        self.meta
+            .involved_objects
+            .insert(output_object, (SubstateChange::Create, ObjectClaim {}));
+        self
+    }
+
+    pub fn with_new_outputs(&mut self, num_outputs: u8) -> &mut Self {
         self.meta.max_outputs = num_outputs.into();
         self
     }
@@ -129,11 +129,13 @@ impl TransactionBuilder {
         let meta = transaction.meta.get_or_insert(TransactionMeta::default());
 
         let id_provider = IdProvider::new(transaction.hash, meta.max_outputs);
+
         meta.involved_objects.extend((0..meta.max_outputs).map(|_| {
+            let new_hash = id_provider
+                .new_address_hash()
+                .expect("id provider provides num_outputs IDs");
             (
-                id_provider
-                    .new_output_shard()
-                    .expect("id provider provides num_outputs IDs"),
+                ShardId::from_hash(new_hash.into_array(), 0),
                 (SubstateChange::Create, ObjectClaim {}),
             )
         }));

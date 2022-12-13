@@ -41,7 +41,7 @@ use tari_engine_types::{
     commit_result::{FinalizeResult, RejectReason},
     substate::{Substate, SubstateAddress, SubstateValue},
 };
-use tari_template_lib::models::{ComponentAddress, ResourceAddress, TemplateAddress, VaultId};
+use tari_template_lib::models::{ComponentAddress, TemplateAddress};
 
 #[derive(Debug, Default, Clone)]
 pub struct TariDanPayloadProcessor<TTemplateProvider> {
@@ -132,31 +132,18 @@ fn create_populated_state_store<I: IntoIterator<Item = ObjectPledge>>(
     let mut tx = state_db.write_access()?;
     for input in inputs {
         match input.current_state {
-            SubstateState::Up { data, .. } => {
-                // TODO: The 1:1 mapping between ShardId and component/resource address could be cleaned up
-                match data.substate_value() {
-                    SubstateValue::Component(_) => {
-                        tx.set_state(
-                            &SubstateAddress::Component(ComponentAddress::from(input.shard_id.into_array())),
-                            data,
-                        )
+            SubstateState::Up { data, .. } => match data.substate_value() {
+                SubstateValue::Component(component) => {
+                    tx.set_state(&SubstateAddress::Component(*component.address()), data)
                         .unwrap();
-                    },
-                    SubstateValue::Resource(_) => {
-                        tx.set_state(
-                            &SubstateAddress::Resource(ResourceAddress::from(input.shard_id.into_array())),
-                            data,
-                        )
+                },
+                SubstateValue::Resource(resource) => {
+                    tx.set_state(&SubstateAddress::Resource(*resource.address()), data)
                         .unwrap();
-                    },
-                    SubstateValue::Vault(_) => {
-                        tx.set_state(
-                            &SubstateAddress::Vault(VaultId::from(input.shard_id.into_array())),
-                            data,
-                        )
-                        .unwrap();
-                    },
-                }
+                },
+                SubstateValue::Vault(vault) => {
+                    tx.set_state(&SubstateAddress::Vault(*vault.id()), data).unwrap();
+                },
             },
             SubstateState::DoesNotExist | SubstateState::Down { .. } => { /* Do nothing */ },
         }

@@ -153,6 +153,10 @@ impl<'a> StateWriter for SqliteTransaction<'a> {
         Ok(())
     }
 
+    fn delete_state_raw(&mut self, _key: &[u8]) -> Result<(), StateStoreError> {
+        todo!()
+    }
+
     fn commit(self) -> Result<(), StateStoreError> {
         self.conn
             .transaction_manager()

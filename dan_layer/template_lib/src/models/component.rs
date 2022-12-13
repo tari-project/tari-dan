@@ -20,47 +20,90 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+use std::fmt::{Display, Formatter};
+
 use tari_bor::{borsh, Decode, Encode};
 
-use crate::models::TemplateAddress;
+use crate::{hash::HashParseError, models::TemplateAddress, Hash};
 
-pub type ComponentAddress = crate::Hash;
-
-#[derive(Debug, Clone, Encode, Decode, PartialEq)]
+#[derive(Debug, Clone, Copy, Hash, PartialEq, Eq, Encode, Decode)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
-pub struct ComponentInstance {
-    pub component_address: ComponentAddress,
-    pub template_address: TemplateAddress,
-    pub module_name: String,
-    pub state: Vec<u8>,
+pub struct ComponentAddress(Hash);
+
+impl ComponentAddress {
+    pub fn new(address: Hash) -> Self {
+        Self(address)
+    }
+
+    pub fn hash(&self) -> &Hash {
+        &self.0
+    }
+
+    pub fn to_vec(&self) -> Vec<u8> {
+        self.0.to_vec()
+    }
+
+    pub fn from_hex(hex: &str) -> Result<Self, HashParseError> {
+        let hash = Hash::from_hex(hex)?;
+        Ok(Self::new(hash))
+    }
 }
 
-impl ComponentInstance {
-    pub fn new(component_address: ComponentAddress, component: Component) -> Self {
-        Self {
-            component_address,
-            template_address: component.template_address,
-            module_name: component.module_name,
-            state: component.state,
-        }
+impl<T: Into<Hash>> From<T> for ComponentAddress {
+    fn from(address: T) -> Self {
+        Self::new(address.into())
     }
+}
 
-    pub fn address(&self) -> ComponentAddress {
-        self.component_address
+impl TryFrom<Vec<u8>> for ComponentAddress {
+    type Error = HashParseError;
+
+    fn try_from(value: Vec<u8>) -> Result<Self, Self::Error> {
+        let hash = Hash::try_from(value)?;
+        Ok(Self::new(hash))
     }
+}
 
-    pub fn into_component(self) -> Component {
-        Component {
-            template_address: self.template_address,
-            module_name: self.module_name,
-            state: self.state,
-        }
+impl Display for ComponentAddress {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(f, "component_{}", self.0)
     }
 }
 
 #[derive(Debug, Clone, Encode, Decode)]
-pub struct Component {
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+pub struct ComponentHeader {
+    pub component_address: ComponentAddress,
     pub template_address: TemplateAddress,
     pub module_name: String,
+    pub version: u32,
+    // TODO: Split the state from the header
+    pub state: ComponentBody,
+}
+
+impl ComponentHeader {
+    pub fn address(&self) -> &ComponentAddress {
+        &self.component_address
+    }
+
+    pub fn into_component(self) -> ComponentBody {
+        self.state
+    }
+
+    pub fn state(&self) -> &[u8] {
+        &self.state.state
+    }
+}
+
+#[derive(Debug, Clone, Encode, Decode)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+pub struct ComponentBody {
     pub state: Vec<u8>,
+}
+
+impl ComponentBody {
+    pub fn set(&mut self, state: Vec<u8>) -> &mut Self {
+        self.state = state;
+        self
+    }
 }

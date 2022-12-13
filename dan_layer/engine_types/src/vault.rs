@@ -53,11 +53,11 @@ impl Vault {
         self.resource.amount()
     }
 
-    pub fn id(&self) -> VaultId {
-        self.vault_id
+    pub fn id(&self) -> &VaultId {
+        &self.vault_id
     }
 
-    pub fn resource_address(&self) -> ResourceAddress {
+    pub fn resource_address(&self) -> &ResourceAddress {
         self.resource.address()
     }
 

@@ -24,7 +24,7 @@ use tari_bor::decode;
 use tari_engine_types::{
     commit_result::{FinalizeResult, RejectReason, TransactionResult},
     logs::LogEntry,
-    substate::{SubstateAddress, SubstateValue},
+    resource::Resource,
 };
 use tari_template_lib::{
     args::{
@@ -40,7 +40,7 @@ use tari_template_lib::{
         VaultAction,
         WorkspaceAction,
     },
-    models::{Amount, BucketId, VaultRef},
+    models::{Amount, BucketId, ComponentAddress, ComponentHeader, ResourceAddress, VaultRef},
 };
 
 use crate::runtime::{
@@ -78,8 +78,12 @@ impl RuntimeInterface for RuntimeInterfaceImpl {
         self.tracker.add_log(LogEntry::new(level, message));
     }
 
-    fn get_substate(&self, address: &SubstateAddress) -> Result<SubstateValue, RuntimeError> {
-        self.tracker.get_substate(address)
+    fn get_component(&self, address: &ComponentAddress) -> Result<ComponentHeader, RuntimeError> {
+        self.tracker.get_component(address)
+    }
+
+    fn get_resource(&self, address: &ResourceAddress) -> Result<Resource, RuntimeError> {
+        self.tracker.get_resource(address)
     }
 
     fn component_invoke(
@@ -92,17 +96,12 @@ impl RuntimeInterface for RuntimeInterfaceImpl {
             ComponentAction::Get => {
                 let address = component_ref
                     .as_component_address()
-                    .map(SubstateAddress::Component)
                     .ok_or_else(|| RuntimeError::InvalidArgument {
                         argument: "component_ref",
                         reason: "Get component action requires a component address".to_string(),
                     })?;
-                let substate = self.get_substate(&address)?;
-                Ok(InvokeResult::encode(
-                    &substate
-                        .into_component()
-                        .expect("tracker must return component substate"),
-                )?)
+                let component = self.tracker.get_component(&address)?;
+                Ok(InvokeResult::encode(&component)?)
             },
             ComponentAction::Create => {
                 let module_name: String =
@@ -125,7 +124,6 @@ impl RuntimeInterface for RuntimeInterfaceImpl {
             ComponentAction::SetState => {
                 let address = component_ref
                     .as_component_address()
-                    .map(SubstateAddress::Component)
                     .ok_or_else(|| RuntimeError::InvalidArgument {
                         argument: "component_ref",
                         reason: "SetState component action requires a component address".to_string(),
@@ -137,14 +135,11 @@ impl RuntimeInterface for RuntimeInterfaceImpl {
                         argument: "state",
                         reason: "Argument not provided or failed to decode".to_string(),
                     })?;
-                let mut substate = self.tracker.get_substate(&address)?;
+                let mut component = self.tracker.get_component(&address)?;
                 // TODO: Need to validate this state somehow - it could contain arbitrary data incl. vaults that are not
                 // owned       by this component
-                let component_mut = substate
-                    .component_mut()
-                    .expect("tracker must return component substate");
-                component_mut.state = state;
-                self.tracker.set_substate(substate)?;
+                component.state.set(state);
+                self.tracker.set_component(component)?;
                 Ok(InvokeResult::unit())
             },
         }
@@ -252,7 +247,7 @@ impl RuntimeInterface for RuntimeInterfaceImpl {
 
                 let address = self
                     .tracker
-                    .borrow_vault_mut(&vault_id, |vault| vault.resource_address())?;
+                    .borrow_vault_mut(&vault_id, |vault| *vault.resource_address())?;
                 Ok(InvokeResult::encode(&address)?)
             },
         }
@@ -282,7 +277,7 @@ impl RuntimeInterface for RuntimeInterfaceImpl {
                     reason: "Create bucket action requires a bucket id".to_string(),
                 })?;
                 let bucket = self.tracker.get_bucket(bucket_id)?;
-                Ok(InvokeResult::encode(&bucket.resource_address())?)
+                Ok(InvokeResult::encode(bucket.resource_address())?)
             },
             BucketAction::Take => {
                 let bucket_id = bucket_ref.bucket_id().ok_or_else(|| RuntimeError::InvalidArgument {
@@ -311,7 +306,7 @@ impl RuntimeInterface for RuntimeInterfaceImpl {
                 if !bucket.amount().is_zero() {
                     return Err(RuntimeError::BucketNotEmpty { bucket_id });
                 }
-                Ok(InvokeResult::encode(&bucket.resource_address())?)
+                Ok(InvokeResult::encode(bucket.resource_address())?)
             },
         }
     }

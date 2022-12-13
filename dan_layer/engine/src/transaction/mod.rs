@@ -35,6 +35,7 @@ mod error;
 pub use error::TransactionError;
 
 mod processor;
+
 pub use processor::TransactionProcessor;
 use tari_template_lib::models::ComponentAddress;
 
@@ -55,6 +56,25 @@ pub struct Transaction {
 impl Transaction {
     pub fn builder() -> TransactionBuilder {
         TransactionBuilder::new()
+    }
+
+    pub fn new(
+        fee: u64,
+        instructions: Vec<Instruction>,
+        signature: InstructionSignature,
+        sender_public_key: PublicKey,
+        meta: TransactionMeta,
+    ) -> Self {
+        let mut s = Self {
+            hash: Hash::default(),
+            instructions,
+            signature,
+            _fee: fee,
+            sender_public_key,
+            meta: Some(meta),
+        };
+        s.hash = s.calculate_hash();
+        s
     }
 
     pub fn required_templates(&self) -> Vec<TemplateAddress> {
@@ -78,58 +98,6 @@ impl Transaction {
                 _ => None,
             })
             .collect()
-    }
-}
-
-#[derive(Debug, Clone, Default, Deserialize, Serialize, PartialEq)]
-pub struct TransactionMeta {
-    involved_objects: HashMap<ShardId, (SubstateChange, ObjectClaim)>,
-    max_outputs: u32,
-}
-
-impl TransactionMeta {
-    pub fn new(involved_objects: HashMap<ShardId, (SubstateChange, ObjectClaim)>, max_outputs: u32) -> Self {
-        Self {
-            involved_objects,
-            max_outputs,
-        }
-    }
-
-    pub fn involved_objects_iter(&self) -> impl Iterator<Item = (&ShardId, &(SubstateChange, ObjectClaim))> + '_ {
-        self.involved_objects.iter()
-    }
-
-    pub fn involved_shards(&self) -> Vec<ShardId> {
-        self.involved_objects.keys().copied().collect()
-    }
-
-    pub fn objects_for_shard(&self, shard_id: ShardId) -> Option<(SubstateChange, ObjectClaim)> {
-        self.involved_objects.get(&shard_id).cloned()
-    }
-
-    pub fn max_outputs(&self) -> u32 {
-        self.max_outputs
-    }
-}
-
-impl Transaction {
-    pub fn new(
-        fee: u64,
-        instructions: Vec<Instruction>,
-        signature: InstructionSignature,
-        sender_public_key: PublicKey,
-        meta: TransactionMeta,
-    ) -> Self {
-        let mut s = Self {
-            hash: Hash::default(),
-            instructions,
-            signature,
-            _fee: fee,
-            sender_public_key,
-            meta: Some(meta),
-        };
-        s.hash = s.calculate_hash();
-        s
     }
 
     pub fn hash(&self) -> &Hash {
@@ -169,5 +137,36 @@ impl Transaction {
 
     pub fn destruct(self) -> (Vec<Instruction>, InstructionSignature, PublicKey) {
         (self.instructions, self.signature, self.sender_public_key)
+    }
+}
+
+#[derive(Debug, Clone, Default, Deserialize, Serialize, PartialEq)]
+pub struct TransactionMeta {
+    involved_objects: HashMap<ShardId, (SubstateChange, ObjectClaim)>,
+    max_outputs: u32,
+}
+
+impl TransactionMeta {
+    pub fn new(involved_objects: HashMap<ShardId, (SubstateChange, ObjectClaim)>, max_outputs: u32) -> Self {
+        Self {
+            involved_objects,
+            max_outputs,
+        }
+    }
+
+    pub fn involved_objects_iter(&self) -> impl Iterator<Item = (&ShardId, &(SubstateChange, ObjectClaim))> + '_ {
+        self.involved_objects.iter()
+    }
+
+    pub fn involved_shards(&self) -> Vec<ShardId> {
+        self.involved_objects.keys().copied().collect()
+    }
+
+    pub fn objects_for_shard(&self, shard_id: ShardId) -> Option<(SubstateChange, ObjectClaim)> {
+        self.involved_objects.get(&shard_id).cloned()
+    }
+
+    pub fn max_outputs(&self) -> u32 {
+        self.max_outputs
     }
 }

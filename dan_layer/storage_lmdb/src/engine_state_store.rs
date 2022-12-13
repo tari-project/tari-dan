@@ -106,6 +106,11 @@ impl<'a> StateWriter for LmdbTransaction<WriteTransaction<'a>> {
             .map_err(StateStoreError::custom)
     }
 
+    fn delete_state_raw(&mut self, key: &[u8]) -> Result<(), StateStoreError> {
+        let mut access = self.tx.access();
+        access.del_key(&self.db, key).map_err(StateStoreError::custom)
+    }
+
     fn commit(self) -> Result<(), StateStoreError> {
         self.tx.commit().map_err(StateStoreError::custom)?;
         Ok(())

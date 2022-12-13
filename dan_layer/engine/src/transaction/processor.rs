@@ -23,12 +23,7 @@
 use std::sync::Arc;
 
 use log::*;
-use tari_engine_types::{
-    commit_result::FinalizeResult,
-    execution_result::ExecutionResult,
-    instruction::Instruction,
-    substate::SubstateAddress,
-};
+use tari_engine_types::{commit_result::FinalizeResult, execution_result::ExecutionResult, instruction::Instruction};
 use tari_template_lib::{
     arg,
     args::{Arg, WorkspaceAction},
@@ -104,10 +99,7 @@ where TRuntimeInterface: RuntimeInterface + Clone + 'static
                 method,
                 args,
             } => {
-                let substate = self
-                    .runtime_interface
-                    .get_substate(&SubstateAddress::Component(component_address))?;
-                let component = substate.into_component().expect("Runtime must return a component");
+                let component = self.runtime_interface.get_component(&component_address)?;
                 let template = self
                     .package
                     .get_template_by_address(&component.template_address)
