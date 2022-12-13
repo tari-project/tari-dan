@@ -21,11 +21,12 @@ pub struct RegisteredTemplate {
     pub address: TemplateAddress,
 }
 
-pub async fn send_template_transaction(
+pub async fn send_call_function_transaction(
     world: &mut TariWorld,
     vn_name: String,
     template_name: String,
     function_name: String,
+    num_outputs: u8,
 ) -> SubmitTransactionResponse {
     let template_address = world.templates.get(&template_name).unwrap().address;
 
@@ -49,7 +50,7 @@ pub async fn send_template_transaction(
         wait_for_result: false,
         wait_for_result_timeout: None,
         inputs: vec![],
-        num_outputs: 0,
+        num_outputs,
         is_dry_run: false,
     };
 

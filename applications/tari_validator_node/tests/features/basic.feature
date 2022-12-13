@@ -30,8 +30,7 @@ Feature: Basic scenarios
     Then the template "counter" is listed as registered by the validator node VAL_2
 
     # Call the constructor in the "counter" template
-    # FIXME: The VN does not return a valid response
-    # When the validator node VAL_1 calls the function "new" on the template "counter"
+    When the validator node VAL_1 calls the function "new" with 1 outputs on the template "counter" 
 
     # Uncomment the following lines to stop execution for manual inspection of the nodes
     # When I print the cucumber world

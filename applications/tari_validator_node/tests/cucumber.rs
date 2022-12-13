@@ -39,7 +39,7 @@ use tari_validator_node::GrpcBaseNodeClient;
 use tari_validator_node_client::types::{GetIdentityResponse, GetTemplateRequest, TemplateRegistrationResponse};
 use utils::{
     miner::{mine_blocks, register_miner_process},
-    template::send_template_transaction,
+    template::send_call_function_transaction,
     validator_node::spawn_validator_node,
     wallet::spawn_wallet,
 };
@@ -171,11 +171,19 @@ async fn assert_template_is_registered(world: &mut TariWorld, template_name: Str
     assert_eq!(resp.registration_metadata.address, template_address);
 }
 
-#[when(expr = "the validator node {word} calls the function \"{word}\" on the template \"{word}\"")]
-async fn call_template_function(world: &mut TariWorld, vn_name: String, function_name: String, template_name: String) {
-    let resp = send_template_transaction(world, vn_name, template_name, function_name).await;
+#[when(expr = "the validator node {word} calls the function \"{word}\" with {int} outputs on the template \"{word}\"")]
+async fn call_template_function(
+    world: &mut TariWorld,
+    vn_name: String,
+    function_name: String,
+    num_outputs: u8,
+    template_name: String,
+) {
+    let resp = send_call_function_transaction(world, vn_name, template_name, function_name, num_outputs).await;
+    eprintln!("Template function call response: {:?}", resp);
 
-    eprintln!("Template call response: {:?}", resp);
+    // give it some time for hotstuff consensus
+    tokio::time::sleep(Duration::from_secs(2)).await;
 }
 
 #[when(expr = "I wait {int} seconds")]
