@@ -20,9 +20,6 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-// The Github CI tries to fmt and check inside the templates folder
-#![allow(clippy::all)]
-
 pub fn account_wasm() -> Vec<u8> {
     include_bytes!("../templates/account/account.wasm").to_vec()
 }
