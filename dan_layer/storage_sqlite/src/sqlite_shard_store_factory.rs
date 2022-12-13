@@ -853,8 +853,7 @@ impl ShardStoreTransaction<PublicKey, TariDanPayload> for SqliteShardStoreTransa
             ))
             .collect::<Vec<_>>());
         // Only save this node's shard state
-        for (sid, st_changes) in changes {
-            //.iter().filter(|(s, _)| *s == &node.shard()) {
+        for (sid, st_changes) in changes.iter().filter(|(s, _)| *s == &node.shard()) {
             let shard = Vec::from(sid.as_bytes());
 
             let current_state = substates
@@ -1369,7 +1368,7 @@ impl ShardStoreTransaction<PublicKey, TariDanPayload> for SqliteShardStoreTransa
             shard_id,
             updated_timestamp,
         };
-        let _rows_affected = diesel::update(shard_pledges)
+        let rows_affected = diesel::update(shard_pledges)
             .filter(shard_id.eq(shard.as_bytes()))
             .filter(pledged_to_payload_id.eq(payload.as_bytes()))
             .filter(is_active.eq(true))
@@ -1382,11 +1381,14 @@ impl ShardStoreTransaction<PublicKey, TariDanPayload> for SqliteShardStoreTransa
             .map_err(|e| StorageError::QueryError {
                 reason: format!("Complete pledges: {}", e),
             })?;
-        // if rows_affected == 0 {
-        //     return Err(StorageError::QueryError {
-        //         reason: "Complete pledges: No rows affected".to_string(),
-        //     });
-        // }
+        if rows_affected == 0 {
+            return Err(StorageError::QueryError {
+                reason: format!(
+                    "Complete pledges: No pledges found for shard {}, payload_id: {}, is_active: true",
+                    shard, payload
+                ),
+            });
+        }
         Ok(())
     }
 }
