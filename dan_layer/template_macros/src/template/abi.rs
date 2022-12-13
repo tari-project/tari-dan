@@ -147,7 +147,7 @@ mod tests {
 
         assert_code_eq(output, quote! {
             #[no_mangle]
-            pub extern "C" fn Foo_abi() -> *mut u8 {
+            pub unsafe extern "C" fn Foo_abi() -> *mut u8 {
                 use ::tari_template_abi::{FunctionDef, TemplateDef, Type, wrap_ptr};
                 use ::tari_template_lib::template_dependencies::encode_with_len;
 
