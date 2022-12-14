@@ -60,6 +60,42 @@ pub async fn send_call_function_transaction(
     client.submit_transaction(req).await.unwrap()
 }
 
+fn send_call_function_transaction_with_input_amount(
+    world: &mut TariWorld, 
+    vn_name: String, 
+    template_name: String, 
+    function_name: String, 
+    input_amount: u64, 
+    num_outputs: u8
+) -> SubmitTransactionResponse {
+    let template_address = world.templates.get(&template_name).unwrap().address;
+
+    let instruction = Instruction::CallFunction { template_address, function: function_name, args: vec![input_amount] };
+
+    let (secret_key, _public_key) = create_key_pair();
+
+    let mut builder = Transaction::builder();
+    builder.add_instruction(instruction).sign(&secret_key).fee(1);
+    let transaction = builder.build();
+
+    let req = SubmitTransactionRequest {
+        instructions: transaction.instructions().to_vec(),
+        signature: transaction.signature().clone(),
+        fee: transaction.fee(),
+        sender_public_key: transaction.sender_public_key().clone(),
+        wait_for_result: false,
+        wait_for_result_timeout: None,
+        inputs: vec![input_amount],
+        num_outputs,
+        is_dry_run: false,
+    };
+
+    // send the template transaction request
+    let jrpc_port = world.validator_nodes.get(&vn_name).unwrap().json_rpc_port;
+    let mut client = get_vn_client(jrpc_port).await;
+    client.submit_transaction(req).await.unwrap()
+}
+
 pub async fn send_template_registration(
     world: &mut TariWorld,
     template_name: String,
