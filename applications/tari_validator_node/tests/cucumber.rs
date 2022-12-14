@@ -181,9 +181,6 @@ async fn call_template_function(
 ) {
     let resp = send_call_function_transaction(world, vn_name, template_name, function_name, num_outputs).await;
     eprintln!("Template function call response: {:?}", resp);
-
-    // give it some time for hotstuff consensus
-    tokio::time::sleep(Duration::from_secs(2)).await;
 }
 
 #[when(expr = "I wait {int} seconds")]
