@@ -3,8 +3,10 @@
 
 use std::path::PathBuf;
 
+use tari_dan_common_types::{ShardId, SubstateChange};
 use tari_dan_engine::{crypto::create_key_pair, transaction::Transaction, wasm::compile::compile_template};
 use tari_engine_types::{hashing::hasher, instruction::Instruction, TemplateAddress};
+use tari_template_lib::args::Arg;
 use tari_validator_node_client::types::{
     SubmitTransactionRequest,
     SubmitTransactionResponse,
@@ -60,23 +62,34 @@ pub async fn send_call_function_transaction(
     client.submit_transaction(req).await.unwrap()
 }
 
-fn send_call_function_transaction_with_input_amount(
-    world: &mut TariWorld, 
-    vn_name: String, 
-    template_name: String, 
-    function_name: String, 
-    input_amount: u64, 
-    num_outputs: u8
+pub async fn send_call_function_transaction_with_input_amount(
+    world: &mut TariWorld,
+    vn_name: String,
+    template_name: String,
+    function_name: String,
+    input_amount: u64,
+    num_outputs: u8,
 ) -> SubmitTransactionResponse {
     let template_address = world.templates.get(&template_name).unwrap().address;
 
-    let instruction = Instruction::CallFunction { template_address, function: function_name, args: vec![input_amount] };
+    let instruction = Instruction::CallFunction {
+        template_address,
+        function: function_name,
+        args: vec![Arg::from_bytes(input_amount.to_le_bytes().as_ref()).unwrap()],
+    };
 
     let (secret_key, _public_key) = create_key_pair();
 
     let mut builder = Transaction::builder();
     builder.add_instruction(instruction).sign(&secret_key).fee(1);
     let transaction = builder.build();
+
+    let inputs = transaction
+        .meta()
+        .involved_shards()
+        .iter()
+        .map(|&s| (s, transaction.meta().objects_for_shard(s).unwrap().0))
+        .collect::<Vec<(ShardId, SubstateChange)>>();
 
     let req = SubmitTransactionRequest {
         instructions: transaction.instructions().to_vec(),
@@ -85,7 +98,7 @@ fn send_call_function_transaction_with_input_amount(
         sender_public_key: transaction.sender_public_key().clone(),
         wait_for_result: false,
         wait_for_result_timeout: None,
-        inputs: vec![input_amount],
+        inputs,
         num_outputs,
         is_dry_run: false,
     };

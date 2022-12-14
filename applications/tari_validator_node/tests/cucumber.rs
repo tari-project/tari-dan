@@ -39,7 +39,7 @@ use tari_validator_node::GrpcBaseNodeClient;
 use tari_validator_node_client::types::{GetIdentityResponse, GetTemplateRequest, TemplateRegistrationResponse};
 use utils::{
     miner::{mine_blocks, register_miner_process},
-    template::send_call_function_transaction,
+    template::{send_call_function_transaction, send_call_function_transaction_with_input_amount},
     validator_node::spawn_validator_node,
     wallet::spawn_wallet,
 };
@@ -187,7 +187,7 @@ async fn call_template_function(
 }
 
 #[when(
-    expr = "the validator node {word} calls the function \"{word}\" with {num} amount input and {int} outputs on the \
+    expr = "the validator node {word} calls the function \"{word}\" with {int} amount input and {int} outputs on the \
             template \"{word}\""
 )]
 async fn call_template_function_with_input_amount(
@@ -195,7 +195,7 @@ async fn call_template_function_with_input_amount(
     vn_name: String,
     function_name: String,
     input_amount: u64,
-    num_ouputs: u8,
+    num_outputs: u8,
     template_name: String,
 ) {
     let resp = send_call_function_transaction_with_input_amount(
