@@ -1,0 +1,73 @@
+//  Copyright 2022 The Tari Project
+//  SPDX-License-Identifier: BSD-3-Clause
+
+use std::path::PathBuf;
+
+use tari_template_lib::{models::TemplateAddress, Hash};
+use tari_validator_node_cli::{
+    account_manager::AccountFileManager,
+    command::{
+        handle_submit,
+        transaction::{CliInstruction, CommonSubmitArgs, SubmitArgs},
+    },
+    from_hex::FromHex,
+};
+use tari_validator_node_client::ValidatorNodeClient;
+use tempfile::tempdir;
+
+use super::validator_node::get_vn_client;
+use crate::TariWorld;
+
+pub async fn create_account(world: &mut TariWorld, account_name: String, validator_node_name: String) {
+    let data_dir = get_cli_data_dir(world);
+
+    // initialize the account public/private keys
+    let path = PathBuf::from(data_dir.clone());
+    let account_manager = AccountFileManager::init(path).unwrap();
+    account_manager.create_account().unwrap();
+
+    // create an account component
+    let instruction = CliInstruction::CallFunction {
+        // The "account" template is builtin in the validator nodes with a constant address
+        template_address: FromHex(TemplateAddress::from([0; 32])),
+        function_name: "new".to_owned(),
+        args: vec![], // the account constructor does not have args
+    };
+    let args = SubmitArgs {
+        instruction,
+        common: CommonSubmitArgs {
+            wait_for_result: true,
+            wait_for_result_timeout: Some(60),
+            num_outputs: Some(1),
+            inputs: vec![],
+            input_refs: vec![],
+            version: None,
+            dump_outputs_into: None,
+            account_template_address: None,
+            dry_run: false,
+        },
+    };
+    let mut client = get_validator_node_client(world, validator_node_name).await;
+    let resp = handle_submit(args, data_dir, &mut client).await.unwrap().unwrap();
+
+    // store the account component id for later reference
+    let results = resp.result.unwrap().finalize.execution_results;
+    let component_id: Hash = results.first().unwrap().decode().unwrap();
+    world.components.insert(account_name, component_id);
+}
+
+async fn get_validator_node_client(world: &TariWorld, validator_node_name: String) -> ValidatorNodeClient {
+    let port = world.validator_nodes.get(&validator_node_name).unwrap().json_rpc_port;
+    get_vn_client(port).await
+}
+
+fn get_cli_data_dir(world: &mut TariWorld) -> String {
+    if let Some(dir) = &world.cli_data_dir {
+        return dir.to_string();
+    }
+
+    let temp_dir = tempdir().unwrap().path().join("cli_data_dir");
+    let temp_dir_path = temp_dir.display().to_string();
+    world.cli_data_dir = Some(temp_dir_path.clone());
+    temp_dir_path
+}

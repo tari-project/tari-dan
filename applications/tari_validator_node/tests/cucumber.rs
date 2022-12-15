@@ -41,6 +41,7 @@ use utils::{
     miner::{mine_blocks, register_miner_process},
     template::send_call_function_transaction,
     validator_node::spawn_validator_node,
+    validator_node_cli,
     wallet::spawn_wallet,
 };
 
@@ -62,6 +63,7 @@ pub struct TariWorld {
     templates: IndexMap<String, RegisteredTemplate>,
     components: IndexMap<String, Hash>,
     http_server: Option<MockHttpServer>,
+    cli_data_dir: Option<String>,
 }
 
 #[async_trait(?Send)]
@@ -77,6 +79,7 @@ impl cucumber::World for TariWorld {
             templates: IndexMap::new(),
             components: IndexMap::new(),
             http_server: None,
+            cli_data_dir: None,
         })
     }
 }
@@ -188,6 +191,11 @@ async fn call_template_constructor(
     let results = resp.result.unwrap().finalize.execution_results;
     let component_id: Hash = results.first().unwrap().decode().unwrap();
     world.components.insert(component_name, component_id);
+}
+
+#[when(expr = "I create an account {word} on {word}")]
+async fn create_account(world: &mut TariWorld, account_name: String, vn_name: String) {
+    validator_node_cli::create_account(world, account_name, vn_name).await;
 }
 
 #[when(expr = "I wait {int} seconds")]

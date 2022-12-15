@@ -25,4 +25,5 @@ pub mod http_server;
 pub mod miner;
 pub mod template;
 pub mod validator_node;
+pub mod validator_node_cli;
 pub mod wallet;

@@ -24,17 +24,20 @@ Feature: Basic scenarios
     Then the validator node VAL_1 is listed as registered
     # Then the validator node VAL_2 is listed as registered
 
+    # Create an account
+    When I create an account ACC_1 on VAL_1
+
     # Register the "counter" template
-    When validator node VAL_1 registers the template "counter"
-    When miner MINER mines 20 new blocks
-    Then the template "counter" is listed as registered by the validator node VAL_1
+    # When validator node VAL_1 registers the template "counter"
+    # When miner MINER mines 20 new blocks
+    # Then the template "counter" is listed as registered by the validator node VAL_1
     # Then the template "counter" is listed as registered by the validator node VAL_2
 
     # Call the constructor in the "counter" template
-    When the validator node VAL_1 calls the constructor "new" on the template "counter" to create component COUNTER_1
+    # When the validator node VAL_1 calls the constructor "new" on the template "counter" to create component COUNTER_1
 
     # Uncomment the following lines to stop execution for manual inspection of the nodes
-    # When I print the cucumber world
+    When I print the cucumber world
     # When I wait 5000 seconds
     
 

@@ -20,23 +20,13 @@
 // WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 // USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-mod account_manager;
-mod cli;
-mod command;
-mod from_hex;
-mod prompt;
-#[macro_use]
-mod table;
-mod component_manager;
-
 use std::{error::Error, path::PathBuf};
 
 use anyhow::anyhow;
 use multiaddr::{Multiaddr, Protocol};
 use reqwest::Url;
+use tari_validator_node_cli::{cli::Cli, command::Command};
 use tari_validator_node_client::ValidatorNodeClient;
-
-use crate::{cli::Cli, command::Command, prompt::Prompt};
 
 #[tokio::main(flavor = "current_thread")]
 async fn main() -> Result<(), Box<dyn Error>> {
@@ -72,7 +62,7 @@ async fn handle_command(command: Command, base_dir: PathBuf, client: ValidatorNo
     Ok(())
 }
 
-fn multiaddr_to_http_url(multiaddr: Multiaddr) -> anyhow::Result<Url> {
+pub fn multiaddr_to_http_url(multiaddr: Multiaddr) -> anyhow::Result<Url> {
     let mut iter = multiaddr.iter();
     let ip = iter.next().ok_or_else(|| anyhow!("Invalid multiaddr"))?;
     let port = iter.next().ok_or_else(|| anyhow!("Invalid multiaddr"))?;
