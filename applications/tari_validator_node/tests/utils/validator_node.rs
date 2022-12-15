@@ -94,6 +94,7 @@ pub async fn spawn_validator_node(
             Multiaddr::from_str(&format!("/ip4/127.0.0.1/tcp/{}", port)).unwrap();
         config.validator_node.p2p.public_address =
             Some(config.validator_node.p2p.transport.tcp.listener_address.clone());
+        config.validator_node.public_address = Some(config.validator_node.p2p.transport.tcp.listener_address.clone());
         config.validator_node.p2p.datastore_path = temp_dir.to_path_buf().join("peer_db/wallet");
         config.validator_node.p2p.dht = DhtConfig::default_local_test();
         config.validator_node.json_rpc_address = Some(format!("127.0.0.1:{}", json_rpc_port).parse().unwrap());

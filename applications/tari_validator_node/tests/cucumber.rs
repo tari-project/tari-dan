@@ -60,6 +60,7 @@ pub struct TariWorld {
     validator_nodes: IndexMap<String, ValidatorNodeProcess>,
     miners: IndexMap<String, MinerProcess>,
     templates: IndexMap<String, RegisteredTemplate>,
+    components: IndexMap<String, Hash>,
     http_server: Option<MockHttpServer>,
 }
 
@@ -74,6 +75,7 @@ impl cucumber::World for TariWorld {
             validator_nodes: IndexMap::new(),
             miners: IndexMap::new(),
             templates: IndexMap::new(),
+            components: IndexMap::new(),
             http_server: None,
         })
     }
@@ -171,19 +173,21 @@ async fn assert_template_is_registered(world: &mut TariWorld, template_name: Str
     assert_eq!(resp.registration_metadata.address, template_address);
 }
 
-#[when(expr = "the validator node {word} calls the function \"{word}\" with {int} outputs on the template \"{word}\"")]
-async fn call_template_function(
+#[when(
+    expr = "the validator node {word} calls the constructor \"{word}\" on the template \"{word}\" to create component \
+            {word}"
+)]
+async fn call_template_constructor(
     world: &mut TariWorld,
     vn_name: String,
     function_name: String,
-    num_outputs: u8,
     template_name: String,
+    component_name: String,
 ) {
-    let resp = send_call_function_transaction(world, vn_name, template_name, function_name, num_outputs).await;
-    eprintln!("Template function call response: {:?}", resp);
-
-    // give it some time for hotstuff consensus
-    tokio::time::sleep(Duration::from_secs(2)).await;
+    let resp = send_call_function_transaction(world, vn_name, template_name, function_name, 1).await;
+    let results = resp.result.unwrap().finalize.execution_results;
+    let component_id: Hash = results.first().unwrap().decode().unwrap();
+    world.components.insert(component_name, component_id);
 }
 
 #[when(
@@ -222,7 +226,7 @@ async fn wait_seconds(_world: &mut TariWorld, seconds: u64) {
 async fn print_world(world: &mut TariWorld) {
     eprintln!();
     eprintln!("======================================");
-    eprintln!("============= TEST NODES =============");
+    eprintln!("============= TEST STATE =============");
     eprintln!("======================================");
     eprintln!();
 
@@ -248,6 +252,16 @@ async fn print_world(world: &mut TariWorld) {
             "Validator node \"{}\": json rpc port \"{}\", http ui port \"{}\", temp dir path \"{}\"",
             name, node.json_rpc_port, node.http_ui_port, node.temp_dir_path
         );
+    }
+
+    // templates
+    for (name, template) in world.templates.iter() {
+        eprintln!("Template \"{}\" with address \"{}\"", name, template.address);
+    }
+
+    // templates
+    for (name, component_id) in world.components.iter() {
+        eprintln!("Component \"{}\" with id \"{}\"", name, component_id);
     }
 
     eprintln!();
