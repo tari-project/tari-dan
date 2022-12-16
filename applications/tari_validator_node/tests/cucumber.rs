@@ -39,7 +39,6 @@ use tari_validator_node::GrpcBaseNodeClient;
 use tari_validator_node_client::types::{GetIdentityResponse, GetTemplateRequest, TemplateRegistrationResponse};
 use utils::{
     miner::{mine_blocks, register_miner_process},
-    template::send_call_function_transaction,
     validator_node::spawn_validator_node,
     validator_node_cli,
     wallet::spawn_wallet,
@@ -176,21 +175,15 @@ async fn assert_template_is_registered(world: &mut TariWorld, template_name: Str
     assert_eq!(resp.registration_metadata.address, template_address);
 }
 
-#[when(
-    expr = "the validator node {word} calls the constructor \"{word}\" on the template \"{word}\" to create component \
-            {word}"
-)]
+#[when(expr = "I create a component {word} of template \"{word}\" on {word} using \"{word}\"")]
 async fn call_template_constructor(
     world: &mut TariWorld,
-    vn_name: String,
-    function_name: String,
-    template_name: String,
     component_name: String,
+    template_name: String,
+    vn_name: String,
+    function_call: String,
 ) {
-    let resp = send_call_function_transaction(world, vn_name, template_name, function_name, 1).await;
-    let results = resp.result.unwrap().finalize.execution_results;
-    let component_id: Hash = results.first().unwrap().decode().unwrap();
-    world.components.insert(component_name, component_id);
+    validator_node_cli::create_component(world, component_name, template_name, vn_name, function_call).await;
 }
 
 #[when(expr = "I create an account {word} on {word}")]

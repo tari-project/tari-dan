@@ -56,6 +56,45 @@ pub async fn create_account(world: &mut TariWorld, account_name: String, validat
     world.components.insert(account_name, component_id);
 }
 
+pub async fn create_component(
+    world: &mut TariWorld,
+    component_name: String,
+    template_name: String,
+    vn_name: String,
+    function_call: String,
+) {
+    let data_dir = get_cli_data_dir(world);
+
+    let template_address = world.templates.get(&template_name).unwrap().address;
+    let instruction = CliInstruction::CallFunction {
+        template_address: FromHex(template_address),
+        // TODO: actually parse the function call for arguments
+        function_name: function_call,
+        args: vec![],
+    };
+    let args = SubmitArgs {
+        instruction,
+        common: CommonSubmitArgs {
+            wait_for_result: true,
+            wait_for_result_timeout: Some(60),
+            num_outputs: Some(1),
+            inputs: vec![],
+            input_refs: vec![],
+            version: None,
+            dump_outputs_into: None,
+            account_template_address: None,
+            dry_run: false,
+        },
+    };
+    let mut client = get_validator_node_client(world, vn_name).await;
+    let resp = handle_submit(args, data_dir, &mut client).await.unwrap().unwrap();
+
+    // store the account component id for later reference
+    let results = resp.result.unwrap().finalize.execution_results;
+    let component_id: Hash = results.first().unwrap().decode().unwrap();
+    world.components.insert(component_name, component_id);
+}
+
 async fn get_validator_node_client(world: &TariWorld, validator_node_name: String) -> ValidatorNodeClient {
     let port = world.validator_nodes.get(&validator_node_name).unwrap().json_rpc_port;
     get_vn_client(port).await
