@@ -112,12 +112,18 @@ pub async fn call_method(
         args: vec![],
     };
 
+    let num_outputs = if num_outputs == 0 {
+        None
+    } else {
+        Some(num_outputs as u8)
+    };
+
     let args = SubmitArgs {
         instruction,
         common: CommonSubmitArgs {
             wait_for_result: true,
             wait_for_result_timeout: Some(60),
-            num_outputs: Some(num_outputs as u8),
+            num_outputs,
             inputs: vec![],
             input_refs: vec![],
             version: None,

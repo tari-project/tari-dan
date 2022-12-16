@@ -33,7 +33,9 @@ use cucumber::{given, then, when, writer, WorldInit, WriterExt};
 use indexmap::IndexMap;
 use tari_common_types::types::PublicKey;
 use tari_crypto::tari_utilities::hex::Hex;
+use tari_dan_common_types::QuorumDecision;
 use tari_dan_core::services::BaseNodeClient;
+use tari_engine_types::execution_result::Type;
 use tari_template_lib::Hash;
 use tari_validator_node::GrpcBaseNodeClient;
 use tari_validator_node_client::types::{GetIdentityResponse, GetTemplateRequest, TemplateRegistrationResponse};
@@ -184,6 +186,9 @@ async fn call_template_constructor(
     function_call: String,
 ) {
     validator_node_cli::create_component(world, component_name, template_name, vn_name, function_call).await;
+
+    // give it some time between transactions
+    tokio::time::sleep(Duration::from_secs(4)).await;
 }
 
 #[when(expr = "I invoke on {word} on component {word} the method call \"{word}\" with {int} outputs")]
@@ -194,7 +199,42 @@ async fn call_component_method(
     method_call: String,
     num_outputs: u64,
 ) {
-    validator_node_cli::call_method(world, vn_name, component_name, method_call, num_outputs).await;
+    let resp = validator_node_cli::call_method(world, vn_name, component_name, method_call, num_outputs).await;
+    assert_eq!(resp.result.unwrap().decision, QuorumDecision::Accept);
+
+    // give it some time between transactions
+    tokio::time::sleep(Duration::from_secs(4)).await;
+}
+
+#[when(
+    expr = "I invoke on {word} on component {word} the method call \"{word}\" with {int} outputs the result is \
+            \"{word}\""
+)]
+async fn call_component_method_and_check_result(
+    world: &mut TariWorld,
+    vn_name: String,
+    component_name: String,
+    method_call: String,
+    num_outputs: u64,
+    expected_result: String,
+) {
+    let resp = validator_node_cli::call_method(world, vn_name, component_name, method_call, num_outputs).await;
+    let finalize_result = resp.result.unwrap();
+    assert_eq!(finalize_result.decision, QuorumDecision::Accept);
+
+    let results = finalize_result.finalize.execution_results;
+    let result = results.first().unwrap();
+    match result.return_type {
+        Type::U32 => {
+            let u32_result: u32 = result.decode().unwrap();
+            assert_eq!(u32_result.to_string(), expected_result);
+        },
+        // TODO: handle other possible return types
+        _ => todo!(),
+    };
+
+    // give it some time between transactions
+    tokio::time::sleep(Duration::from_secs(4)).await;
 }
 
 #[when(expr = "I create an account {word} on {word}")]
