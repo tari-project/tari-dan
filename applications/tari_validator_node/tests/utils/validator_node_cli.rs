@@ -18,13 +18,17 @@ use tempfile::tempdir;
 use super::validator_node::get_vn_client;
 use crate::TariWorld;
 
-pub async fn create_account(world: &mut TariWorld, account_name: String, validator_node_name: String) {
+pub async fn create_dan_wallet(world: &mut TariWorld) {
     let data_dir = get_cli_data_dir(world);
 
     // initialize the account public/private keys
-    let path = PathBuf::from(data_dir.clone());
+    let path = PathBuf::from(data_dir);
     let account_manager = AccountFileManager::init(path).unwrap();
     account_manager.create_account().unwrap();
+}
+
+pub async fn create_account(world: &mut TariWorld, account_name: String, validator_node_name: String) {
+    let data_dir = get_cli_data_dir(world);
 
     // create an account component
     let instruction = CliInstruction::CallFunction {

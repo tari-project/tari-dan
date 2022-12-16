@@ -237,6 +237,11 @@ async fn call_component_method_and_check_result(
     tokio::time::sleep(Duration::from_secs(4)).await;
 }
 
+#[when(expr = "I create a DAN wallet")]
+async fn create_dan_wallet(world: &mut TariWorld) {
+    validator_node_cli::create_dan_wallet(world).await;
+}
+
 #[when(expr = "I create an account {word} on {word}")]
 async fn create_account(world: &mut TariWorld, account_name: String, vn_name: String) {
     validator_node_cli::create_account(world, account_name, vn_name).await;

@@ -30,8 +30,8 @@ Feature: Basic scenarios
     Then the template "counter" is listed as registered by the validator node VAL_1
     # Then the template "counter" is listed as registered by the validator node VAL_2
 
-    # Create an account
-    When I create an account ACC_1 on VAL_1
+    # A file-base CLI account must be created to sign future calls
+    When I create a DAN wallet
 
     # Create a new Counter component
     When I create a component COUNTER_1 of template "counter" on VAL_1 using "new"
@@ -42,7 +42,7 @@ Feature: Basic scenarios
     When I invoke on VAL_1 on component COUNTER_1 the method call "value" with 1 outputs the result is "0"
 
     # Uncomment the following lines to stop execution for manual inspection of the nodes
-    When I print the cucumber world
+    # When I print the cucumber world
     # When I wait 5000 seconds
     
 
