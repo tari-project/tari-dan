@@ -36,8 +36,8 @@ Feature: Basic scenarios
     # Create a new Counter component
     When I create a component COUNTER_1 of template "counter" on VAL_1 using "new"
 
-    # Call the constructor in the "counter" template
-    # When the validator node VAL_1 calls the constructor "new" on the template "counter" to create component COUNTER_1
+    # Increase the counter
+    When I invoke on VAL_1 on component COUNTER_1 the method call "increase" with 1 outputs
 
     # Uncomment the following lines to stop execution for manual inspection of the nodes
     When I print the cucumber world

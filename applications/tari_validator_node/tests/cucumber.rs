@@ -186,6 +186,17 @@ async fn call_template_constructor(
     validator_node_cli::create_component(world, component_name, template_name, vn_name, function_call).await;
 }
 
+#[when(expr = "I invoke on {word} on component {word} the method call \"{word}\" with {int} outputs")]
+async fn call_component_method(
+    world: &mut TariWorld,
+    vn_name: String,
+    component_name: String,
+    method_call: String,
+    num_outputs: u64,
+) {
+    validator_node_cli::call_method(world, vn_name, component_name, method_call, num_outputs).await;
+}
+
 #[when(expr = "I create an account {word} on {word}")]
 async fn create_account(world: &mut TariWorld, account_name: String, vn_name: String) {
     validator_node_cli::create_account(world, account_name, vn_name).await;

@@ -12,7 +12,7 @@ use tari_validator_node_cli::{
     },
     from_hex::FromHex,
 };
-use tari_validator_node_client::ValidatorNodeClient;
+use tari_validator_node_client::{types::SubmitTransactionResponse, ValidatorNodeClient};
 use tempfile::tempdir;
 
 use super::validator_node::get_vn_client;
@@ -93,6 +93,41 @@ pub async fn create_component(
     let results = resp.result.unwrap().finalize.execution_results;
     let component_id: Hash = results.first().unwrap().decode().unwrap();
     world.components.insert(component_name, component_id);
+}
+
+pub async fn call_method(
+    world: &mut TariWorld,
+    vn_name: String,
+    component_name: String,
+    method_call: String,
+    num_outputs: u64,
+) -> SubmitTransactionResponse {
+    let data_dir = get_cli_data_dir(world);
+    let component_address = world.components.get(&component_name).unwrap();
+
+    let instruction = CliInstruction::CallMethod {
+        component_address: FromHex(*component_address),
+        // TODO: actually parse the method call for arguments
+        method_name: method_call,
+        args: vec![],
+    };
+
+    let args = SubmitArgs {
+        instruction,
+        common: CommonSubmitArgs {
+            wait_for_result: true,
+            wait_for_result_timeout: Some(60),
+            num_outputs: Some(num_outputs as u8),
+            inputs: vec![],
+            input_refs: vec![],
+            version: None,
+            dump_outputs_into: None,
+            account_template_address: None,
+            dry_run: false,
+        },
+    };
+    let mut client = get_validator_node_client(world, vn_name).await;
+    handle_submit(args, data_dir, &mut client).await.unwrap().unwrap()
 }
 
 async fn get_validator_node_client(world: &TariWorld, validator_node_name: String) -> ValidatorNodeClient {
