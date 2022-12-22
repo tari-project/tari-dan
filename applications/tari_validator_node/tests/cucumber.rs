@@ -33,14 +33,16 @@ use cucumber::{given, then, when, writer, WorldInit, WriterExt};
 use indexmap::IndexMap;
 use tari_common_types::types::PublicKey;
 use tari_crypto::tari_utilities::hex::Hex;
+use tari_dan_common_types::QuorumDecision;
 use tari_dan_core::services::BaseNodeClient;
+use tari_engine_types::execution_result::Type;
 use tari_template_lib::Hash;
 use tari_validator_node::GrpcBaseNodeClient;
 use tari_validator_node_client::types::{GetIdentityResponse, GetTemplateRequest, TemplateRegistrationResponse};
 use utils::{
     miner::{mine_blocks, register_miner_process},
-    template::send_call_function_transaction,
     validator_node::spawn_validator_node,
+    validator_node_cli,
     wallet::spawn_wallet,
 };
 
@@ -62,6 +64,7 @@ pub struct TariWorld {
     templates: IndexMap<String, RegisteredTemplate>,
     components: IndexMap<String, Hash>,
     http_server: Option<MockHttpServer>,
+    cli_data_dir: Option<String>,
 }
 
 #[async_trait(?Send)]
@@ -77,6 +80,7 @@ impl cucumber::World for TariWorld {
             templates: IndexMap::new(),
             components: IndexMap::new(),
             http_server: None,
+            cli_data_dir: None,
         })
     }
 }
@@ -173,21 +177,74 @@ async fn assert_template_is_registered(world: &mut TariWorld, template_name: Str
     assert_eq!(resp.registration_metadata.address, template_address);
 }
 
-#[when(
-    expr = "the validator node {word} calls the constructor \"{word}\" on the template \"{word}\" to create component \
-            {word}"
-)]
+#[when(expr = "I create a component {word} of template \"{word}\" on {word} using \"{word}\"")]
 async fn call_template_constructor(
     world: &mut TariWorld,
-    vn_name: String,
-    function_name: String,
-    template_name: String,
     component_name: String,
+    template_name: String,
+    vn_name: String,
+    function_call: String,
 ) {
-    let resp = send_call_function_transaction(world, vn_name, template_name, function_name, 1).await;
-    let results = resp.result.unwrap().finalize.execution_results;
-    let component_id: Hash = results.first().unwrap().decode().unwrap();
-    world.components.insert(component_name, component_id);
+    validator_node_cli::create_component(world, component_name, template_name, vn_name, function_call).await;
+
+    // give it some time between transactions
+    tokio::time::sleep(Duration::from_secs(4)).await;
+}
+
+#[when(expr = "I invoke on {word} on component {word} the method call \"{word}\" with {int} outputs")]
+async fn call_component_method(
+    world: &mut TariWorld,
+    vn_name: String,
+    component_name: String,
+    method_call: String,
+    num_outputs: u64,
+) {
+    let resp = validator_node_cli::call_method(world, vn_name, component_name, method_call, num_outputs).await;
+    assert_eq!(resp.result.unwrap().decision, QuorumDecision::Accept);
+
+    // give it some time between transactions
+    tokio::time::sleep(Duration::from_secs(4)).await;
+}
+
+#[when(
+    expr = "I invoke on {word} on component {word} the method call \"{word}\" with {int} outputs the result is \
+            \"{word}\""
+)]
+async fn call_component_method_and_check_result(
+    world: &mut TariWorld,
+    vn_name: String,
+    component_name: String,
+    method_call: String,
+    num_outputs: u64,
+    expected_result: String,
+) {
+    let resp = validator_node_cli::call_method(world, vn_name, component_name, method_call, num_outputs).await;
+    let finalize_result = resp.result.unwrap();
+    assert_eq!(finalize_result.decision, QuorumDecision::Accept);
+
+    let results = finalize_result.finalize.execution_results;
+    let result = results.first().unwrap();
+    match result.return_type {
+        Type::U32 => {
+            let u32_result: u32 = result.decode().unwrap();
+            assert_eq!(u32_result.to_string(), expected_result);
+        },
+        // TODO: handle other possible return types
+        _ => todo!(),
+    };
+
+    // give it some time between transactions
+    tokio::time::sleep(Duration::from_secs(4)).await;
+}
+
+#[when(expr = "I create a DAN wallet")]
+async fn create_dan_wallet(world: &mut TariWorld) {
+    validator_node_cli::create_dan_wallet(world).await;
+}
+
+#[when(expr = "I create an account {word} on {word}")]
+async fn create_account(world: &mut TariWorld, account_name: String, vn_name: String) {
+    validator_node_cli::create_account(world, account_name, vn_name).await;
 }
 
 #[when(expr = "I wait {int} seconds")]

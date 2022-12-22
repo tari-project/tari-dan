@@ -29,12 +29,12 @@ mod template;
 pub use template::TemplateSubcommand;
 
 mod vn;
+pub use transaction::handle_submit;
 pub use vn::VnSubcommand;
 
-use crate::command::{manifest::ManifestSubcommand, transaction::TransactionSubcommand};
-
-mod manifest;
-mod transaction;
+pub mod manifest;
+pub mod transaction;
+use self::{manifest::ManifestSubcommand, transaction::TransactionSubcommand};
 
 #[allow(clippy::large_enum_variant)]
 #[derive(Debug, Subcommand, Clone)]

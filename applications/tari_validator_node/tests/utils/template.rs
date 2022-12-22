@@ -3,14 +3,9 @@
 
 use std::path::PathBuf;
 
-use tari_dan_engine::{crypto::create_key_pair, transaction::Transaction, wasm::compile::compile_template};
-use tari_engine_types::{hashing::hasher, instruction::Instruction, TemplateAddress};
-use tari_validator_node_client::types::{
-    SubmitTransactionRequest,
-    SubmitTransactionResponse,
-    TemplateRegistrationRequest,
-    TemplateRegistrationResponse,
-};
+use tari_dan_engine::wasm::compile::compile_template;
+use tari_engine_types::{hashing::hasher, TemplateAddress};
+use tari_validator_node_client::types::{TemplateRegistrationRequest, TemplateRegistrationResponse};
 
 use super::http_server::MockHttpServer;
 use crate::{utils::validator_node::get_vn_client, TariWorld};
@@ -19,45 +14,6 @@ use crate::{utils::validator_node::get_vn_client, TariWorld};
 pub struct RegisteredTemplate {
     pub name: String,
     pub address: TemplateAddress,
-}
-
-pub async fn send_call_function_transaction(
-    world: &mut TariWorld,
-    vn_name: String,
-    template_name: String,
-    function_name: String,
-    num_outputs: u8,
-) -> SubmitTransactionResponse {
-    let template_address = world.templates.get(&template_name).unwrap().address;
-
-    let instruction = Instruction::CallFunction {
-        template_address,
-        function: function_name,
-        args: vec![],
-    };
-
-    let (secret_key, _public_key) = create_key_pair();
-
-    let mut builder = Transaction::builder();
-    builder.add_instruction(instruction).sign(&secret_key).fee(1);
-    let transaction = builder.build();
-
-    let req = SubmitTransactionRequest {
-        instructions: transaction.instructions().to_vec(),
-        signature: transaction.signature().clone(),
-        fee: transaction.fee(),
-        sender_public_key: transaction.sender_public_key().clone(),
-        wait_for_result: true,
-        wait_for_result_timeout: Some(60),
-        inputs: vec![],
-        num_outputs,
-        is_dry_run: false,
-    };
-
-    // send the template transaction request
-    let jrpc_port = world.validator_nodes.get(&vn_name).unwrap().json_rpc_port;
-    let mut client = get_vn_client(jrpc_port).await;
-    client.submit_transaction(req).await.unwrap()
 }
 
 pub async fn send_template_registration(
