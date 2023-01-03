@@ -46,7 +46,7 @@ use tari_template_lib::{
 use tari_transaction_manifest::parse_manifest;
 use tari_utilities::hex::to_hex;
 use tari_validator_node_client::{
-    types::{GetTransactionRequest, SubmitTransactionRequest, TransactionFinalizeResult},
+    types::{GetTransactionRequest, SubmitTransactionRequest, SubmitTransactionResponse, TransactionFinalizeResult},
     ValidatorNodeClient,
 };
 
@@ -72,32 +72,32 @@ pub struct GetArgs {
 #[derive(Debug, Args, Clone)]
 pub struct SubmitArgs {
     #[clap(subcommand)]
-    instruction: CliInstruction,
+    pub instruction: CliInstruction,
     #[clap(flatten)]
-    common: CommonSubmitArgs,
+    pub common: CommonSubmitArgs,
 }
 
 #[derive(Debug, Args, Clone)]
 pub struct CommonSubmitArgs {
     #[clap(long, short = 'w')]
-    wait_for_result: bool,
+    pub wait_for_result: bool,
     /// Timeout in seconds
     #[clap(long, short = 't')]
-    wait_for_result_timeout: Option<u64>,
+    pub wait_for_result_timeout: Option<u64>,
     #[clap(long, short = 'n')]
-    num_outputs: Option<u8>,
+    pub num_outputs: Option<u8>,
     #[clap(long, short = 'i')]
-    inputs: Vec<String>,
+    pub inputs: Vec<String>,
     #[clap(long, short = 'r')]
-    input_refs: Vec<ShardId>,
+    pub input_refs: Vec<ShardId>,
     #[clap(long, short = 'v')]
-    version: Option<u8>,
+    pub version: Option<u8>,
     #[clap(long, short = 'd')]
-    dump_outputs_into: Option<String>,
+    pub dump_outputs_into: Option<String>,
     #[clap(long, short = 'a')]
-    account_template_address: Option<String>,
+    pub account_template_address: Option<String>,
     #[clap(long)]
-    dry_run: bool,
+    pub dry_run: bool,
 }
 
 #[derive(Debug, Args, Clone)]
@@ -132,8 +132,12 @@ impl TransactionSubcommand {
         mut client: ValidatorNodeClient,
     ) -> Result<(), anyhow::Error> {
         match self {
-            TransactionSubcommand::Submit(args) => handle_submit(args, base_dir, &mut client).await?,
-            TransactionSubcommand::SubmitManifest(args) => handle_submit_manifest(args, base_dir, &mut client).await?,
+            TransactionSubcommand::Submit(args) => {
+                handle_submit(args, base_dir, &mut client).await?;
+            },
+            TransactionSubcommand::SubmitManifest(args) => {
+                handle_submit_manifest(args, base_dir, &mut client).await?;
+            },
             TransactionSubcommand::Get(args) => handle_get(args, &mut client).await?,
         }
         Ok(())
@@ -158,11 +162,11 @@ async fn handle_get(args: GetArgs, client: &mut ValidatorNodeClient) -> Result<(
     Ok(())
 }
 
-async fn handle_submit(
+pub async fn handle_submit(
     args: SubmitArgs,
     base_dir: impl AsRef<Path>,
     client: &mut ValidatorNodeClient,
-) -> Result<(), anyhow::Error> {
+) -> Result<Option<SubmitTransactionResponse>, anyhow::Error> {
     let SubmitArgs { instruction, common } = args;
     let instruction = match instruction {
         CliInstruction::CallFunction {
@@ -192,7 +196,7 @@ async fn handle_submit_manifest(
     args: SubmitManifestArgs,
     base_dir: impl AsRef<Path>,
     client: &mut ValidatorNodeClient,
-) -> Result<(), anyhow::Error> {
+) -> Result<Option<SubmitTransactionResponse>, anyhow::Error> {
     let contents = std::fs::read_to_string(&args.manifest).map_err(|e| anyhow!("Failed to read manifest: {}", e))?;
     let instructions = parse_manifest(&contents, manifest::parse_globals(args.input_variables)?)?;
     println!("🌟 Submitting instructions:");
@@ -208,7 +212,7 @@ async fn submit_transaction(
     common: CommonSubmitArgs,
     base_dir: impl AsRef<Path>,
     client: &mut ValidatorNodeClient,
-) -> Result<(), anyhow::Error> {
+) -> Result<Option<SubmitTransactionResponse>, anyhow::Error> {
     let component_manager = ComponentManager::init(base_dir.as_ref())?;
     let account_manager = AccountFileManager::init(base_dir.as_ref().to_path_buf())?;
     let account = account_manager
@@ -274,7 +278,7 @@ async fn submit_transaction(
 
     if request.inputs.is_empty() && request.num_outputs == 0 {
         println!("No inputs or outputs. This transaction will not be processed by the network.");
-        return Ok(());
+        return Ok(None);
     }
     dbg!(&request);
     println!("✅ Transaction {} submitted.", tx_hash);
@@ -286,13 +290,13 @@ async fn submit_transaction(
 
     // dbg!(&request);
     let resp = client.submit_transaction(request).await?;
-    if let Some(result) = resp.result {
+    if let Some(result) = &resp.result {
         if let Some(diff) = result.finalize.result.accept() {
             component_manager.commit_diff(diff)?;
         }
-        summarize(&result, timer.elapsed());
+        summarize(result, timer.elapsed());
     }
-    Ok(())
+    Ok(Some(resp))
 }
 
 #[allow(clippy::too_many_lines)]

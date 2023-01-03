@@ -32,6 +32,7 @@ mod account_template {
     }
 
     impl Account {
+        #[allow(clippy::new_without_default)]
         pub fn new() -> Self {
             Self { vaults: Vec::new() }
         }

@@ -150,6 +150,9 @@ impl TemplateManager {
     }
 
     pub fn template_exists(&self, address: &TemplateAddress) -> Result<bool, TemplateManagerError> {
+        if self.builtin_templates.contains_key(address) {
+            return Ok(true);
+        }
         let tx = self.global_db.create_transaction()?;
         self.global_db
             .templates(&tx)
