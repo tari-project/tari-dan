@@ -28,3 +28,4 @@ pub mod prompt;
 #[macro_use]
 pub mod table;
 pub mod component_manager;
+pub mod versioned_substate_address;

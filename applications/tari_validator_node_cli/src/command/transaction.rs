@@ -88,7 +88,7 @@ pub struct CommonSubmitArgs {
     #[clap(long, short = 'n')]
     pub num_outputs: Option<u8>,
     #[clap(long, short = 'i')]
-    inputs: Vec<VersionedSubstateAddress>,
+    pub inputs: Vec<VersionedSubstateAddress>,
     #[clap(long, short = 'v')]
     pub version: Option<u8>,
     #[clap(long, short = 'd')]
