@@ -21,46 +21,41 @@
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 use std::{
+    env,
     error::Error,
-    fs::{self},
-    io::{self, ErrorKind},
+    fs,
+    io,
+    io::ErrorKind,
     path::{Path, PathBuf},
     process::Command,
 };
 
-const TEMPLATES_FOLDER_NAME: &str = "templates";
+const TEMPLATE_BUILTINS: &[&str] = &["templates/account"];
 
 fn main() -> Result<(), Box<dyn Error>> {
-    // we only want to rebuild if a template was added/modified/deleted
-    println!("cargo:rerun-if-changed={}", TEMPLATES_FOLDER_NAME);
+    for template in TEMPLATE_BUILTINS {
+        // we only want to rebuild if a template was added/modified
+        println!("cargo:rerun-if-changed={}/src", template);
 
-    let templates_folder = std::env::current_dir().unwrap().join(TEMPLATES_FOLDER_NAME);
-    let templates_folder_dir = fs::read_dir(templates_folder).unwrap();
-    for template_path in templates_folder_dir {
-        let path_buf = template_path?.path();
-        let package_dir = path_buf.as_path();
-        let wasm_name = package_dir.file_name().unwrap().to_str().unwrap();
+        let template_path = env::current_dir()?.join(template);
 
         // compile the template into wasm
-        compile_template(&package_dir)?;
+        compile_template(&template_path)?;
 
         // get the path of the wasm executable
-        let wasm_path = get_compiled_wasm_path(&package_dir, wasm_name)?;
+        let wasm_name = Path::new(template).file_name().unwrap().to_str().unwrap();
+        let wasm_path = get_compiled_wasm_path(&template_path, wasm_name);
 
         // copy the wasm binary to the root folder of the template, to be included in source control
-        let mut wasm_dest = package_dir.join(wasm_name);
-        wasm_dest.set_extension("wasm");
+        let wasm_dest = template_path.join(wasm_name).with_extension("wasm");
         fs::copy(wasm_path, wasm_dest)?;
     }
 
     Ok(())
 }
 
-fn compile_template<P: AsRef<Path>>(package_dir: &P) -> Result<(), Box<dyn Error>> {
-    let args = ["build", "--target", "wasm32-unknown-unknown", "--release"]
-        .iter()
-        .map(ToString::to_string)
-        .collect::<Vec<_>>();
+fn compile_template<P: AsRef<Path>>(package_dir: P) -> Result<(), Box<dyn Error>> {
+    let args = ["build", "--target", "wasm32-unknown-unknown", "--release"];
 
     let output = Command::new("cargo")
         .current_dir(package_dir.as_ref())
@@ -81,13 +76,12 @@ fn compile_template<P: AsRef<Path>>(package_dir: &P) -> Result<(), Box<dyn Error
     Ok(())
 }
 
-fn get_compiled_wasm_path<P: AsRef<Path>>(template_path: &P, wasm_name: &str) -> Result<PathBuf, Box<dyn Error>> {
-    let mut wasm_path = template_path.as_ref().to_path_buf();
-    wasm_path.push("target");
-    wasm_path.push("wasm32-unknown-unknown");
-    wasm_path.push("release");
-    wasm_path.push(wasm_name);
-    wasm_path.set_extension("wasm");
-
-    Ok(wasm_path)
+fn get_compiled_wasm_path<P: AsRef<Path>>(template_path: P, wasm_name: &str) -> PathBuf {
+    template_path
+        .as_ref()
+        .join("target")
+        .join("wasm32-unknown-unknown")
+        .join("release")
+        .join(wasm_name)
+        .with_extension("wasm")
 }
