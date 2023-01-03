@@ -141,6 +141,12 @@ impl<'t, 's> Table<'t, 's> {
     }
 }
 
+impl<'t, 's> Default for Table<'t, 's> {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 #[macro_export]
 macro_rules! table_row {
     ($($s:expr),*$(,)?) => {

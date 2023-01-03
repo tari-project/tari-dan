@@ -30,7 +30,7 @@ use tari_validator_node_client::{
     ValidatorNodeClient,
 };
 
-use crate::{from_hex::FromHex, table::Table, table_row, Prompt};
+use crate::{from_hex::FromHex, prompt::Prompt, table::Table, table_row};
 
 #[derive(Debug, Subcommand, Clone)]
 pub enum TemplateSubcommand {
