@@ -36,8 +36,7 @@ use crate::command::{debug::DebugSubcommand, manifest::ManifestSubcommand, trans
 mod debug;
 mod manifest;
 
-mod transaction;
-pub use transaction::handle_submit;
+pub mod transaction;
 
 #[allow(clippy::large_enum_variant)]
 #[derive(Debug, Subcommand, Clone)]
