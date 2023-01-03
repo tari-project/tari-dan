@@ -33,7 +33,7 @@ pub fn generate_dispatcher(ast: &TemplateAst) -> Result<TokenStream> {
 
     let output = quote! {
         #[no_mangle]
-        pub extern "C" fn #dispatcher_function_name(call_info: *mut u8, call_info_len: usize) -> *mut u8 {
+        pub unsafe extern "C" fn #dispatcher_function_name(call_info: *mut u8, call_info_len: usize) -> *mut u8 {
             use ::tari_template_abi::{CallInfo, wrap_ptr};
             use ::tari_template_lib::{template_dependencies::{decode_exact, encode_with_len},init_context, panic_hook::register_panic_hook};
 
@@ -96,7 +96,11 @@ fn get_function_block(template_ident: &Ident, ast: FunctionAst) -> Expr {
             // "self" argument
             TypeAst::Receiver { mutability } => {
                 should_set_state = *mutability;
-                args.push(parse_quote! { &mut state });
+                if should_set_state {
+                    args.push(parse_quote! { &mut state });
+                } else {
+                    args.push(parse_quote! { &state });
+                }
                 vec![
                     parse_quote! {
                         let component =
