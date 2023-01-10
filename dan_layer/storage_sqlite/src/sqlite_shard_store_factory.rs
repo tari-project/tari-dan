@@ -855,7 +855,6 @@ impl ShardStoreTransaction<PublicKey, TariDanPayload> for SqliteShardStoreTransa
         }
     }
 
-    // TODO: the version number should be passed in here, or alternatively, the version number should be removed
     #[allow(clippy::too_many_lines)]
     fn save_substate_changes(
         &mut self,
@@ -865,12 +864,9 @@ impl ShardStoreTransaction<PublicKey, TariDanPayload> for SqliteShardStoreTransa
         use crate::schema::substates;
 
         let payload_id = Vec::from(node.payload_id().as_bytes());
-        // Only save this node's shard state
-        for (sid, st_changes) in changes.iter().filter(|(s, _)| *s == &node.shard()) {
-            let shard = Vec::from(sid.as_bytes());
-
+        for (shard_id, st_changes) in changes {
             let current_state = substates::table
-                .filter(substates::shard_id.eq(shard.clone()))
+                .filter(substates::shard_id.eq(shard_id.as_bytes()))
                 .order_by(substates::version.desc())
                 .first::<Substate>(self.transaction.connection())
                 .optional()
@@ -899,11 +895,11 @@ impl ShardStoreTransaction<PublicKey, TariDanPayload> for SqliteShardStoreTransa
                                 data: "substate data".to_string(),
                             })?;
                         let new_row = NewSubstate {
-                            shard_id: shard.clone(),
+                            shard_id: shard_id.as_bytes().to_vec(),
                             version: d.version().into(),
                             data: pretty_data,
                             created_by_payload_id: payload_id.clone(),
-                            created_justify: json!(node.justify()).to_string(),
+                            created_justify: serde_json::to_string_pretty(node.justify()).unwrap(),
                             created_height: node.height().as_u64() as i64,
                             created_node_hash: node.hash().as_bytes().to_vec(),
                         };

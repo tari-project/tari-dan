@@ -1072,6 +1072,21 @@ where
             .map(|s| (s.shard_id, s.pledge.clone()))
             .collect::<HashMap<_, _>>();
 
+        info!(
+            target: LOG_TARGET,
+            "[execute] Number of pledges: {}",
+            shard_pledges.len()
+        );
+        for (k, v) in shard_pledges.iter() {
+            // TODO: should be debug
+            info!(
+                target: LOG_TARGET,
+                "[execute] shard: {}, pledge: {}",
+                k,
+                v.current_state.as_str()
+            );
+        }
+
         let finalize_result = self.payload_processor.process_payload(payload, shard_pledges)?;
         Ok(finalize_result)
     }
@@ -1084,7 +1099,7 @@ where
     ) -> Result<(), HotStuffError> {
         match payload_result {
             TransactionResult::Accept(ref diff) => {
-                let changes = extract_changes(node.payload_id(), diff)?;
+                let changes = extract_changes_for_shard(node.shard(), node.payload_id(), diff)?;
                 tx.save_substate_changes(&changes, node)?;
             },
             TransactionResult::Reject(ref reason) => {
@@ -1336,26 +1351,33 @@ where
     }
 }
 
-fn extract_changes(
+fn extract_changes_for_shard(
+    shard_id: ShardId,
     payload_id: PayloadId,
     diff: &SubstateDiff,
 ) -> Result<HashMap<ShardId, Vec<SubstateState>>, HotStuffError> {
     let mut changes = HashMap::<_, Vec<_>>::new();
     // down first, then up
     for (address, version) in diff.down_iter() {
-        changes
-            .entry(ShardId::from_address(address, *version))
-            .or_default()
-            .push(SubstateState::Down { deleted_by: payload_id });
+        let sid = ShardId::from_address(address, *version);
+        if sid == shard_id {
+            changes
+                .entry(shard_id)
+                .or_default()
+                .push(SubstateState::Down { deleted_by: payload_id });
+        }
     }
     for (address, substate) in diff.up_iter() {
-        changes
-            .entry(ShardId::from_address(address, substate.version()))
-            .or_default()
-            .push(SubstateState::Up {
-                created_by: payload_id,
-                data: substate.clone(),
-            });
+        let sid = ShardId::from_address(address, substate.version());
+        if sid == shard_id {
+            changes
+                .entry(ShardId::from_address(address, substate.version()))
+                .or_default()
+                .push(SubstateState::Up {
+                    created_by: payload_id,
+                    data: substate.clone(),
+                });
+        }
     }
 
     Ok(changes)
