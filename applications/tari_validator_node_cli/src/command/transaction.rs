@@ -322,25 +322,27 @@ fn summarize_finalize_result(finalize: &FinalizeResult) {
     match finalize.result {
         TransactionResult::Accept(ref diff) => {
             for (address, substate) in diff.up_iter() {
-                println!("️🌲 UP substate {} (v{})", address, substate.version());
+                println!("️🌲 UP substate {} (v{})", address, substate.version(),);
+                println!("      🧩 Shard: {}", ShardId::from_address(address, substate.version()));
                 match substate.substate_value() {
                     SubstateValue::Component(component) => {
                         println!(
-                            "       ▶ component ({}): {}",
+                            "      ▶ component ({}): {}",
                             component.module_name, component.component_address
                         );
                     },
                     SubstateValue::Resource(resource) => {
-                        println!("       ▶ resource: {}", resource.address());
+                        println!("      ▶ resource: {}", resource.address());
                     },
                     SubstateValue::Vault(vault) => {
-                        println!("       ▶ vault: {} {}", vault.id(), vault.resource_address());
+                        println!("      ▶ vault: {} {}", vault.id(), vault.resource_address());
                     },
                 }
                 println!();
             }
             for (address, version) in diff.down_iter() {
-                println!("🗑️ DOWN substate {} v{}", address, version);
+                println!("🗑️ DOWN substate {} v{}", address, version,);
+                println!("      🧩 Shard: {}", ShardId::from_address(address, *version));
                 println!();
             }
         },
