@@ -309,7 +309,7 @@ fn summarize(result: &TransactionFinalizeResult, time_taken: Duration) {
 
     println!();
     println!("========= Pledges =========");
-    for p in result.qc.all_shard_nodes().iter() {
+    for p in result.qc.all_shard_pledges().iter() {
         println!(
             "Shard:{} Pledge:{}",
             p.shard_id,

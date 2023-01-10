@@ -196,6 +196,14 @@ impl SubstateValue {
             _ => None,
         }
     }
+
+    pub fn substate_address(&self) -> SubstateAddress {
+        match self {
+            SubstateValue::Component(component) => SubstateAddress::Component(*component.address()),
+            SubstateValue::Resource(resource) => SubstateAddress::Resource(*resource.address()),
+            SubstateValue::Vault(vault) => SubstateAddress::Vault(*vault.id()),
+        }
+    }
 }
 
 impl From<ComponentHeader> for SubstateValue {

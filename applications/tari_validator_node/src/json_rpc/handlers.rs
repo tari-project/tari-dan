@@ -33,7 +33,7 @@ use serde::Serialize;
 use serde_json::{self as json, json};
 use tari_comms::{multiaddr::Multiaddr, peer_manager::NodeId, types::CommsPublicKey, CommsNode, NodeIdentity};
 use tari_crypto::tari_utilities::hex::Hex;
-use tari_dan_common_types::{PayloadId, QuorumCertificate, QuorumDecision, SubstateChange};
+use tari_dan_common_types::{PayloadId, QuorumCertificate, QuorumDecision, ShardId, SubstateChange};
 use tari_dan_core::{
     services::{epoch_manager::EpochManager, BaseNodeClient},
     storage::shard_store::{ShardStore, ShardStoreTransaction},
@@ -207,7 +207,8 @@ impl JsonRpcHandlers {
                         result: Some(TransactionFinalizeResult {
                             decision: QuorumDecision::Accept,
                             finalize: finalize_result,
-                            qc: QuorumCertificate::genesis(epoch),
+                            // TODO: Get correct QC
+                            qc: QuorumCertificate::genesis(epoch, PayloadId::new(hash), ShardId::zero()),
                         }),
                     };
 
@@ -288,7 +289,7 @@ impl JsonRpcHandlers {
         let data: TransactionRequest = value.parse_params()?;
         let tx = self.shard_store.create_tx().unwrap();
         match tx.get_transaction(data.payload_id) {
-            Ok(transaction) => Ok(JsonRpcResponse::success(answer_id, json!(transaction))),
+            Ok(transaction) => Ok(JsonRpcResponse::success(answer_id, transaction)),
             Err(err) => {
                 println!("error {:?}", err);
                 Err(JsonRpcResponse::error(
@@ -453,7 +454,18 @@ impl JsonRpcHandlers {
 
     pub async fn get_mempool_stats(&self, value: JsonRpcExtractor) -> JrpcResult {
         let answer_id = value.get_answer_id();
-        let response = json!({"size": self.mempool.get_mempool_size()});
+        let size = self.mempool.get_mempool_size().await.map_err(|err| {
+            error!(target: LOG_TARGET, "Error getting mempool size: {}", err);
+            JsonRpcResponse::error(
+                answer_id,
+                JsonRpcError::new(
+                    JsonRpcErrorReason::InvalidParams,
+                    "Something went wrong".to_string(),
+                    json::Value::Null,
+                ),
+            )
+        })?;
+        let response = json!({ "size": size });
         Ok(JsonRpcResponse::success(answer_id, response))
     }
 
@@ -585,7 +597,7 @@ async fn wait_for_transaction_result(
         match tokio::time::timeout(timeout, subscription.recv()).await {
             Ok(res) => match res {
                 Ok(HotStuffEvent::OnFinalized(qc, result)) => {
-                    if qc.payload_id().as_slice() != hash.as_ref() {
+                    if qc.payload_id().as_bytes() != hash.as_ref() {
                         continue;
                     }
 

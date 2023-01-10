@@ -61,7 +61,7 @@ use crate::{
     payload_processor::TariDanPayloadProcessor,
 };
 
-const LOG_TARGET: &str = "tari::validator_node::dry_run_trasaction_processor";
+const LOG_TARGET: &str = "tari::validator_node::dry_run_transaction_processor";
 
 #[derive(Error, Debug)]
 pub enum DryRunTransactionProcessorError {

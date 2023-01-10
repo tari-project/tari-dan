@@ -20,7 +20,7 @@
 //   WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //   USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use std::{collections::HashMap, str::FromStr, sync::Arc, time::Duration};
+use std::{collections::HashMap, sync::Arc, time::Duration};
 
 use lazy_static::lazy_static;
 use rand::rngs::OsRng;
@@ -28,246 +28,41 @@ use tari_common_types::types::{PrivateKey, PublicKey};
 use tari_comms::{multiaddr::Multiaddr, peer_manager::PeerFeatures, NodeIdentity};
 use tari_core::ValidatorNodeMmr;
 use tari_crypto::keys::PublicKey as PublicKeyT;
-use tari_dan_common_types::{vn_mmr_node_hash, Epoch, ObjectPledge, QuorumCertificate, QuorumDecision, ShardId};
+use tari_dan_common_types::{vn_mmr_node_hash, Epoch, QuorumCertificate, QuorumDecision, ShardId};
 use tari_dan_core::{
-    consensus_constants::ConsensusConstants,
     models::{vote_message::VoteMessage, HotStuffMessage, Payload, TariDanPayload},
-    services::{
-        epoch_manager::{EpochManager, RangeEpochManager},
-        leader_strategy::{AlwaysFirstLeader, LeaderStrategy},
-        NodeIdentitySigningService,
-        PayloadProcessor,
-        PayloadProcessorError,
-        SigningService,
-    },
-    workers::{hotstuff_error::HotStuffError, hotstuff_waiter::HotStuffWaiter},
+    services::{epoch_manager::RangeEpochManager, leader_strategy::AlwaysFirstLeader, NodeIdentitySigningService},
+    storage::shard_store::{ShardStore, ShardStoreTransaction},
 };
 use tari_dan_engine::transaction::{Transaction, TransactionBuilder};
-use tari_engine_types::{
-    commit_result::{FinalizeResult, RejectReason, TransactionResult},
-    instruction::Instruction,
-    substate::SubstateDiff,
-};
-use tari_shutdown::Shutdown;
-use tari_template_lib::{args, Hash};
+use tari_engine_types::instruction::Instruction;
+use tari_template_lib::{args, models::TemplateAddress};
 use tari_utilities::ByteArray;
-use tokio::{
-    sync::{
-        broadcast,
-        mpsc::{channel, Receiver, Sender},
-    },
-    task::JoinHandle,
-    time::timeout,
-};
+use tokio::time::timeout;
 
-use crate::TempShardStoreFactory;
+use crate::harness::HsTestHarness;
 
-pub struct PayloadProcessorListener {
-    receiver: broadcast::Receiver<(TariDanPayload, HashMap<ShardId, Option<ObjectPledge>>)>,
-    sender: broadcast::Sender<(TariDanPayload, HashMap<ShardId, Option<ObjectPledge>>)>,
-}
-
-impl PayloadProcessorListener {
-    pub fn new() -> Self {
-        let (sender, receiver) = broadcast::channel(100);
-        Self { receiver, sender }
-    }
-}
-
-impl PayloadProcessor<TariDanPayload> for PayloadProcessorListener {
-    fn process_payload(
-        &self,
-        payload: TariDanPayload,
-        pledges: HashMap<ShardId, Option<ObjectPledge>>,
-    ) -> Result<FinalizeResult, PayloadProcessorError> {
-        self.sender.send((payload, pledges)).unwrap();
-        Ok(FinalizeResult::new(
-            Hash::default(),
-            vec![],
-            TransactionResult::Accept(SubstateDiff::new()),
-        ))
-    }
-}
-
-pub struct NullPayloadProcessor {}
-
-impl PayloadProcessor<TariDanPayload> for NullPayloadProcessor {
-    fn process_payload(
-        &self,
-        payload: TariDanPayload,
-        _pledges: HashMap<ShardId, Option<ObjectPledge>>,
-    ) -> Result<FinalizeResult, PayloadProcessorError> {
-        Ok(FinalizeResult::new(
-            payload.to_id().into_array().into(),
-            vec![],
-            TransactionResult::Reject(RejectReason::ExecutionFailure("NullPayloadProcessor".to_string())),
-        ))
-    }
-}
-
-pub trait Consensus<TariDanPayload> {
-    fn execute_transaction(
-        &mut self,
-        payload: TariDanPayload,
-        inputs: Vec<ObjectPledge>,
-        outputs: Vec<ObjectPledge>,
-    ) -> Result<(), String>;
-}
-
-pub struct HsTestHarness {
-    identity: PublicKey,
-    tx_new: Sender<(TariDanPayload, ShardId)>,
-    tx_hs_messages: Sender<(PublicKey, HotStuffMessage<TariDanPayload, PublicKey>)>,
-    rx_leader: Receiver<(PublicKey, HotStuffMessage<TariDanPayload, PublicKey>)>,
-    shutdown: Shutdown,
-    rx_broadcast: Receiver<(HotStuffMessage<TariDanPayload, PublicKey>, Vec<PublicKey>)>,
-    rx_vote_message: Receiver<(VoteMessage, PublicKey)>,
-    tx_votes: Sender<(PublicKey, VoteMessage)>,
-    rx_execute: broadcast::Receiver<(TariDanPayload, HashMap<ShardId, Option<ObjectPledge>>)>,
-    hs_waiter: Option<JoinHandle<Result<(), HotStuffError>>>,
-    signing_service: NodeIdentitySigningService,
-}
-
-impl HsTestHarness {
-    pub fn new<TEpochManager, TLeader>(
-        private_key: PrivateKey,
-        identity: PublicKey,
-        epoch_manager: TEpochManager,
-        leader: TLeader,
-    ) -> Self
-    where
-        TEpochManager: EpochManager<PublicKey> + Send + Sync + 'static,
-        TLeader: LeaderStrategy<PublicKey> + Send + Sync + 'static,
-    {
-        let (tx_new, rx_new) = channel(1);
-        let (tx_hs_messages, rx_hs_messages) = channel(1);
-        let (tx_leader, rx_leader) = channel(1);
-        let (tx_broadcast, rx_broadcast) = channel(1);
-        let (tx_vote_message, rx_vote_message) = channel(1);
-        let (tx_votes, rx_votes) = channel(1);
-        let (tx_events, _) = broadcast::channel(100);
-        let payload_processor = PayloadProcessorListener::new();
-        let rx_execute = payload_processor.receiver.resubscribe();
-        let shutdown = Shutdown::new();
-
-        let consensus_constants = ConsensusConstants::devnet();
-        let shard_store = TempShardStoreFactory::new();
-
-        let public_address = Multiaddr::from_str("/ip4/127.0.0.1/tcp/48000").unwrap();
-        let node_identity = NodeIdentity::new(private_key, public_address, PeerFeatures::COMMUNICATION_NODE);
-
-        let signing_service = NodeIdentitySigningService::new(Arc::new(node_identity));
-        let hs_waiter = HotStuffWaiter::spawn(
-            signing_service.clone(),
-            identity.clone(),
-            epoch_manager,
-            leader,
-            rx_new,
-            rx_hs_messages,
-            rx_votes,
-            tx_leader,
-            tx_broadcast,
-            tx_vote_message,
-            tx_events,
-            payload_processor,
-            shard_store,
-            shutdown.to_signal(),
-            consensus_constants,
-        );
-        Self {
-            identity,
-            tx_new,
-            tx_hs_messages,
-            rx_leader,
-            shutdown,
-            rx_broadcast,
-            rx_vote_message,
-            tx_votes,
-            rx_execute,
-            hs_waiter: Some(hs_waiter),
-            signing_service,
-        }
-    }
-
-    fn identity(&self) -> PublicKey {
-        self.identity.clone()
-    }
-
-    pub fn signing_service(&self) -> &impl SigningService {
-        &self.signing_service
-    }
-
-    async fn assert_shuts_down_safely(&mut self) {
-        self.shutdown.trigger();
-        self.hs_waiter
-            .take()
-            .unwrap()
-            .await
-            .expect("did not end cleanly")
-            .unwrap();
-    }
-
-    async fn recv_broadcast(&mut self) -> (HotStuffMessage<TariDanPayload, PublicKey>, Vec<PublicKey>) {
-        if let Some(msg) = timeout(Duration::from_secs(10), self.rx_broadcast.recv())
-            .await
-            .expect("timed out")
-        {
-            msg
-        } else {
-            // Otherwise there are no senders, meaning the main loop has shut down,
-            // so try shutdown to get the actual error
-            self.assert_shuts_down_safely().await;
-            panic!("Shut down safely, but still received none");
-        }
-    }
-
-    async fn recv_vote_message(&mut self) -> (VoteMessage, PublicKey) {
-        if let Some(msg) = timeout(Duration::from_secs(10), self.rx_vote_message.recv())
-            .await
-            .expect("timed out")
-        {
-            msg
-        } else {
-            // Otherwise there are no senders, meaning the main loop has shut down,
-            // so try shutdown to get the actual error
-            self.assert_shuts_down_safely().await;
-            panic!("Shut down safely, but still received none");
-        }
-    }
-
-    async fn recv_execute(&mut self) -> (TariDanPayload, HashMap<ShardId, Option<ObjectPledge>>) {
-        if let Ok(msg) = timeout(Duration::from_secs(10), self.rx_execute.recv())
-            .await
-            .expect("timed out")
-        {
-            msg
-        } else {
-            // Otherwise there are no senders, meaning the main loop has shut down,
-            // so try shutdown to get the actual error
-            self.assert_shuts_down_safely().await;
-            panic!("Shut down safely, but still received none");
-        }
-    }
-
-    async fn assert_no_execute(&mut self) {
-        assert!(
-            timeout(Duration::from_secs(1), self.rx_execute.recv()).await.is_err(),
-            "received an execute when we weren't expecting it"
-        )
-    }
+fn create_test_default_qc(
+    committee_keys: Vec<(PublicKey, PrivateKey)>,
+    all_vn_keys: Vec<PublicKey>,
+    payload: &TariDanPayload,
+) -> QuorumCertificate {
+    create_test_qc(ShardId::zero(), committee_keys, all_vn_keys, payload)
 }
 
 fn create_test_qc(
     shard_id: ShardId,
-    commitee_keys: Vec<(PublicKey, PrivateKey)>,
+    committee_keys: Vec<(PublicKey, PrivateKey)>,
     all_vn_keys: Vec<PublicKey>,
+    payload: &TariDanPayload,
 ) -> QuorumCertificate {
-    let qc = QuorumCertificate::genesis(Epoch(0));
+    let qc = QuorumCertificate::genesis(Epoch(0), payload.to_id(), shard_id);
     let vote = VoteMessage::new(
-        qc.local_node_hash(),
+        qc.node_hash(),
+        payload.to_id(),
         shard_id,
         *qc.decision(),
-        qc.all_shard_nodes().to_vec(),
+        qc.all_shard_pledges().to_vec(),
     );
 
     let mut vn_mmr = ValidatorNodeMmr::new(Vec::new());
@@ -277,11 +72,10 @@ fn create_test_qc(
             .expect("Could not build the merkle mountain range of the VN set");
     }
 
-    let validators_metadata: Vec<_> = commitee_keys
+    let validators_metadata: Vec<_> = committee_keys
         .into_iter()
-        .map(|(public_key, secret)| {
+        .map(|(_, secret)| {
             let mut node_vote = vote.clone();
-            let leaf_index = get_merkle_leaf_index(&all_vn_keys, &public_key);
             let node_identity = Arc::new(NodeIdentity::new(
                 secret,
                 Multiaddr::empty(),
@@ -292,7 +86,6 @@ fn create_test_qc(
                     &NodeIdentitySigningService::new(node_identity),
                     ShardId::zero(),
                     &vn_mmr,
-                    leaf_index as u64,
                 )
                 .unwrap();
             node_vote.validator_metadata().clone()
@@ -302,25 +95,14 @@ fn create_test_qc(
     QuorumCertificate::new(
         qc.payload_id(),
         qc.payload_height(),
-        qc.local_node_hash(),
-        qc.local_node_height(),
+        qc.node_hash(),
+        qc.node_height(),
         shard_id,
         qc.epoch(),
         *qc.decision(),
-        qc.all_shard_nodes().to_vec(),
+        qc.all_shard_pledges().to_vec(),
         validators_metadata,
     )
-}
-
-fn get_merkle_leaf_index(vn_pks: &[PublicKey], vn_pk: &PublicKey) -> usize {
-    vn_pks.iter().position(|pk| *pk == *vn_pk).unwrap()
-}
-
-fn create_test_default_qc(
-    commitee_keys: Vec<(PublicKey, PrivateKey)>,
-    all_vn_keys: Vec<PublicKey>,
-) -> QuorumCertificate {
-    create_test_qc(ShardId::zero(), commitee_keys, all_vn_keys)
 }
 
 lazy_static! {
@@ -360,11 +142,12 @@ async fn test_hs_waiter_leader_proposes() {
             .build(),
     );
 
-    let qc = create_test_default_qc(vec![(node1.clone(), node1_pk), (node2.clone(), node2_pk)], vec![
-        node1.clone(),
-        node2.clone(),
-    ]);
-    let new_view_message = HotStuffMessage::new_view(qc, *SHARD0, Some(payload));
+    let qc = create_test_default_qc(
+        vec![(node1.clone(), node1_pk), (node2.clone(), node2_pk)],
+        vec![node1.clone(), node2.clone()],
+        &payload,
+    );
+    let new_view_message = HotStuffMessage::new_view(qc, *SHARD0, payload);
 
     instance
         .tx_hs_messages
@@ -377,9 +160,12 @@ async fn test_hs_waiter_leader_proposes() {
         .await
         .unwrap();
 
-    let (_, broadcast_group) = instance.recv_broadcast().await;
+    let (_, mut broadcast_group) = instance.recv_broadcast().await;
 
-    assert_eq!(broadcast_group, vec![node1, node2]);
+    broadcast_group.sort();
+    let mut all_nodes = vec![node1, node2];
+    all_nodes.sort();
+    assert_eq!(broadcast_group, all_nodes);
     instance.assert_shuts_down_safely().await
 }
 
@@ -399,11 +185,12 @@ async fn test_hs_waiter_replica_sends_vote_for_proposal() {
             .clone()
             .build(),
     );
-    let qc = create_test_default_qc(vec![(node1.clone(), node1_pk), (node2.clone(), node2_pk)], vec![
-        node1.clone(),
-        node2.clone(),
-    ]);
-    let new_view_message = HotStuffMessage::new_view(qc, *SHARD0, Some(payload));
+    let qc = create_test_default_qc(
+        vec![(node1.clone(), node1_pk), (node2.clone(), node2_pk)],
+        vec![node1.clone(), node2.clone()],
+        &payload,
+    );
+    let new_view_message = HotStuffMessage::new_view(qc, *SHARD0, payload);
 
     // Node 2 sends new view to node 1
     instance
@@ -456,6 +243,7 @@ async fn test_hs_waiter_leader_sends_new_proposal_when_enough_votes_are_received
     let payload = TariDanPayload::new(
         Transaction::builder()
             .add_input(*SHARD0)
+            .add_output(*SHARD1)
             .sign(&node1_pk)
             .clone()
             .build(),
@@ -465,8 +253,9 @@ async fn test_hs_waiter_leader_sends_new_proposal_when_enough_votes_are_received
     let qc = create_test_default_qc(
         vec![(node1.clone(), node1_pk.clone()), (node2.clone(), node2_pk.clone())],
         vec![node1.clone(), node2.clone()],
+        &payload,
     );
-    let new_view_message = HotStuffMessage::new_view(qc, *SHARD0, Some(payload));
+    let new_view_message = HotStuffMessage::new_view(qc, *SHARD0, payload.clone());
     instance
         .tx_hs_messages
         .send((node2.clone(), new_view_message.clone()))
@@ -482,16 +271,20 @@ async fn test_hs_waiter_leader_sends_new_proposal_when_enough_votes_are_received
     let (proposal_message, _broadcast_group) = instance.recv_broadcast().await;
 
     let vote_hash = proposal_message.node().unwrap().hash();
+    instance
+        .state_store()
+        .with_write_tx(|tx| tx.save_node(proposal_message.node().unwrap().clone()))
+        .unwrap();
 
     // Create some votes
     let mut vote = VoteMessage::new(
         *vote_hash,
+        payload.to_id(),
         *SHARD0,
         QuorumDecision::Accept,
-        new_view_message.high_qc().unwrap().all_shard_nodes().to_vec(),
+        new_view_message.high_qc().unwrap().all_shard_pledges().to_vec(),
     );
-    vote.sign_vote(instance.signing_service(), ShardId::zero(), &vn_mmr, 0)
-        .unwrap();
+    vote.sign_vote(instance.signing_service(), *SHARD0, &vn_mmr).unwrap();
     instance.tx_votes.send((node1, vote.clone())).await.unwrap();
 
     // Should get no proposal
@@ -503,24 +296,27 @@ async fn test_hs_waiter_leader_sends_new_proposal_when_enough_votes_are_received
     );
 
     // Send another vote
-    let mut vote = VoteMessage::new(*vote_hash, *SHARD0, QuorumDecision::Accept, Default::default());
-    vote.sign_vote(instance.signing_service(), ShardId::zero(), &vn_mmr, 1)
+    let mut vote = VoteMessage::new(
+        *vote_hash,
+        payload.to_id(),
+        *SHARD0,
+        QuorumDecision::Accept,
+        Default::default(),
+    );
+    vote.sign_vote(instance.signing_service(), ShardId::zero(), &vn_mmr)
         .unwrap();
     instance.tx_votes.send((node2, vote)).await.unwrap();
 
     // should get a proposal
-
     let (proposal2, _broadcast_group) = instance.recv_broadcast().await;
-
     let proposed_node = proposal2.node().expect("Should have a node attached");
-
-    assert_eq!(proposed_node.justify().local_node_hash(), *vote_hash);
+    assert_eq!(proposed_node.justify().node_hash(), *vote_hash);
 
     instance.assert_shuts_down_safely().await
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-async fn test_hs_waiter_execute_called_when_consensus_reached() {
+async fn test_hs_waiter_execute_called_at_prepare_phase_only() {
     let (node1_pk, node1) = PublicKey::random_keypair(&mut OsRng);
     let registered_vn_keys = vec![node1.clone()];
     let epoch_manager = RangeEpochManager::new(registered_vn_keys, *SHARD0..*SHARD1, vec![node1.clone()]);
@@ -533,8 +329,8 @@ async fn test_hs_waiter_execute_called_when_consensus_reached() {
             .build(),
     );
 
-    let qc = create_test_default_qc(vec![(node1.clone(), node1_pk.clone())], vec![node1.clone()]);
-    let new_view_message = HotStuffMessage::new_view(qc, *SHARD0, Some(payload.clone()));
+    let qc = create_test_default_qc(vec![(node1.clone(), node1_pk.clone())], vec![node1.clone()], &payload);
+    let new_view_message = HotStuffMessage::new_view(qc, *SHARD0, payload.clone());
     instance
         .tx_hs_messages
         .send((node1.clone(), new_view_message.clone()))
@@ -576,12 +372,9 @@ async fn test_hs_waiter_execute_called_when_consensus_reached() {
 
     dbg!(&proposal4);
     instance.tx_hs_messages.send((node1.clone(), proposal4)).await.unwrap();
-    let (vote, _) = instance.recv_vote_message().await;
-    dbg!(&vote);
 
-    // Execute again at h=2
-    let (executed_payload, _) = instance.recv_execute().await;
-    assert_eq!(executed_payload.transaction(), payload.transaction());
+    // Does not execute again
+    instance.assert_no_execute().await;
 
     instance.assert_shuts_down_safely().await
 }
@@ -613,21 +406,26 @@ async fn test_hs_waiter_multishard_votes() {
             .build(),
     );
 
-    let qc_shard0 = create_test_qc(*SHARD0, vec![(node1.clone(), node1_pk.clone())], vec![
-        node1.clone(),
-        node2.clone(),
-    ]);
-    let new_view_message = HotStuffMessage::new_view(qc_shard0, *SHARD0, Some(payload.clone()));
+    let qc_shard0 = create_test_qc(
+        *SHARD0,
+        vec![(node1.clone(), node1_pk.clone())],
+        vec![node1.clone(), node2.clone()],
+        &payload,
+    );
+    let new_view_message = HotStuffMessage::new_view(qc_shard0, *SHARD0, payload.clone());
     node1_instance
         .tx_hs_messages
         .send((node1.clone(), new_view_message.clone()))
         .await
         .unwrap();
-    let qc_shard1 = create_test_qc(*SHARD1, vec![(node2.clone(), node2_pk.clone())], vec![
-        node1.clone(),
-        node2.clone(),
-    ]);
-    let new_view_message = HotStuffMessage::new_view(qc_shard1, *SHARD1, Some(payload.clone()));
+
+    let qc_shard1 = create_test_qc(
+        *SHARD1,
+        vec![(node2.clone(), node2_pk.clone())],
+        vec![node1.clone(), node2.clone()],
+        &payload,
+    );
+    let new_view_message = HotStuffMessage::new_view(qc_shard1, *SHARD1, payload.clone());
     node2_instance
         .tx_hs_messages
         .send((node2.clone(), new_view_message.clone()))
@@ -713,7 +511,7 @@ async fn test_hs_waiter_leader_starts_view_with_n_minus_f_new_view() {
     // let payload = "Hello World".to_string();
     //
     // Send a new view message
-    // let new_view_message = HotStuffMessage::new_view(QuorumCertificate::genesis(0), 0, Some(payload));
+    // let new_view_message = HotStuffMessage::new_view(QuorumCertificate::genesis(0), 0, payload);
     //
     // tx_hs_messages.send((node1, new_view_message.clone())).await.unwrap();
     // tx_hs_messages.send((node2, new_view_message.clone())).await.unwrap();
@@ -770,13 +568,16 @@ async fn test_hs_waiter_cannot_spend_until_it_is_proven_committed() {
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[ignore = "Implement test"]
 async fn test_kitchen_sink() {
-    env_logger::init();
+    // TODO: Implement a test harness that can connect many nodes together
     let (node1_pk, node1) = PublicKey::random_keypair(&mut OsRng);
     let (node2_pk, node2) = PublicKey::random_keypair(&mut OsRng);
     let shard0_committee = vec![node1.clone()];
     let shard1_committee = vec![node2.clone()];
 
+    let template_address =
+        TemplateAddress::from_hex("0000000000000000000000000000000000000000000000000000000000000000").unwrap();
     // let package = PackageBuilder::new()
     //     .add_template(
     //         template_address,
@@ -808,7 +609,7 @@ async fn test_kitchen_sink() {
     //     .build();
 
     let instruction = Instruction::CallFunction {
-        template_address: Hash::default(),
+        template_address,
         function: "new".to_string(),
         args: args![b"Kitchen Sink"],
     };
@@ -841,26 +642,33 @@ async fn test_kitchen_sink() {
         epoch_manager.clone(),
         AlwaysFirstLeader {},
     );
+    // node1_instance.add_package(package);
     let node2_instance = HsTestHarness::new(node2_pk.clone(), node2.clone(), epoch_manager, AlwaysFirstLeader {});
+    // TODO: Create a task that connects the two instances via their channels so that they can do the hotstuff rounds
+    // node1_instance.connect(&node2_instance);
 
     let payload = TariDanPayload::new(transaction);
 
-    let qc_s1 = create_test_qc(s1, vec![(node1.clone(), node1_pk.clone())], vec![
-        node1.clone(),
-        node2.clone(),
-    ]);
-    let new_view_message = HotStuffMessage::new_view(qc_s1, s1, Some(payload.clone()));
+    let qc_s1 = create_test_qc(
+        s1,
+        vec![(node1.clone(), node1_pk.clone())],
+        vec![node1.clone(), node2.clone()],
+        &payload,
+    );
+    let new_view_message = HotStuffMessage::new_view(qc_s1, s1, payload.clone());
     node1_instance
         .tx_hs_messages
         .send((node1.clone(), new_view_message.clone()))
         .await
         .unwrap();
 
-    let qc_s2 = create_test_qc(s2, vec![(node2.clone(), node2_pk.clone())], vec![
-        node1.clone(),
-        node2.clone(),
-    ]);
-    let new_view_message = HotStuffMessage::new_view(qc_s2, s2, Some(payload.clone()));
+    let qc_s2 = create_test_qc(
+        s2,
+        vec![(node2.clone(), node2_pk.clone())],
+        vec![node1.clone(), node2.clone()],
+        &payload,
+    );
+    let new_view_message = HotStuffMessage::new_view(qc_s2, s2, payload.clone());
     node2_instance
         .tx_hs_messages
         .send((node2.clone(), new_view_message.clone()))
@@ -906,21 +714,21 @@ async fn test_kitchen_sink() {
     // let execute_msg = node1_instance.recv_execute().await;
 }
 
-async fn do_rounds_of_hotstuff(nodes: &mut [HsTestHarness], rounds: usize) {
+async fn do_rounds_of_hotstuff(validator_instances: &mut [HsTestHarness], rounds: usize) {
     #[allow(clippy::mutable_key_type)]
     let mut node_map = HashMap::new();
-    for (i, n) in nodes.iter().enumerate() {
+    for (i, n) in validator_instances.iter().enumerate() {
         node_map.insert(n.identity(), i);
     }
     for i in 0..rounds {
         dbg!(i);
         let mut proposals = vec![];
-        for node in nodes.iter_mut() {
-            let (proposal1_n1, _broadcast_group) = node.recv_broadcast().await;
-            proposals.push((node.identity(), proposal1_n1));
+        for node in validator_instances.iter_mut() {
+            let (proposal, _broadcast_group) = node.recv_broadcast().await;
+            proposals.push((node.identity(), proposal));
         }
 
-        for other_node in nodes.iter() {
+        for other_node in validator_instances.iter() {
             for (addr, msg) in &proposals {
                 other_node
                     .tx_hs_messages
@@ -932,14 +740,14 @@ async fn do_rounds_of_hotstuff(nodes: &mut [HsTestHarness], rounds: usize) {
 
         #[allow(clippy::mutable_key_type)]
         let mut votes = HashMap::<_, Vec<_>>::new();
-        for node in nodes.iter_mut() {
+        for node in validator_instances.iter_mut() {
             let (vote1, leader) = node.recv_vote_message().await;
             votes.entry(leader).or_default().push((vote1, node.identity()));
         }
         for leader in votes.keys() {
             for vote in votes.get(leader).unwrap() {
                 let node_index = node_map.get(leader).unwrap();
-                nodes
+                validator_instances
                     .get_mut(*node_index)
                     .unwrap()
                     .tx_votes

@@ -20,10 +20,9 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-#[cfg(test)]
 mod temp_shard_store_factory;
-#[cfg(test)]
 pub use temp_shard_store_factory::TempShardStoreFactory;
 
+pub mod harness;
 #[cfg(test)]
 mod test_consensus;

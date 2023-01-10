@@ -39,7 +39,7 @@ use tari_dan_engine::{
 };
 use tari_engine_types::{
     commit_result::{FinalizeResult, RejectReason},
-    substate::{Substate, SubstateAddress, SubstateValue},
+    substate::{Substate, SubstateAddress},
 };
 use tari_template_lib::models::{ComponentAddress, TemplateAddress};
 
@@ -132,18 +132,13 @@ fn create_populated_state_store<I: IntoIterator<Item = ObjectPledge>>(
     let mut tx = state_db.write_access()?;
     for input in inputs {
         match input.current_state {
-            SubstateState::Up { data, .. } => match data.substate_value() {
-                SubstateValue::Component(component) => {
-                    tx.set_state(&SubstateAddress::Component(*component.address()), data)
-                        .unwrap();
-                },
-                SubstateValue::Resource(resource) => {
-                    tx.set_state(&SubstateAddress::Resource(*resource.address()), data)
-                        .unwrap();
-                },
-                SubstateValue::Vault(vault) => {
-                    tx.set_state(&SubstateAddress::Vault(*vault.id()), data).unwrap();
-                },
+            SubstateState::Up { data, .. } => {
+                log::error!(target: "tari::dan_layer::payload_processor",
+                    "Input data: {} v{}",
+                    data.substate_value().substate_address(),
+                    data.version()
+                );
+                tx.set_state(&data.substate_value().substate_address(), data)?;
             },
             SubstateState::DoesNotExist | SubstateState::Down { .. } => { /* Do nothing */ },
         }
