@@ -209,7 +209,7 @@ impl From<ShardPledge> for proto::consensus::ShardPledge {
         Self {
             shard_id: s.shard_id.into(),
             node_hash: s.node_hash.into(),
-            pledge: s.pledge.map(Into::into),
+            pledge: Some(s.pledge.into()),
         }
     }
 }
@@ -221,7 +221,11 @@ impl TryFrom<proto::consensus::ShardPledge> for ShardPledge {
         Ok(Self {
             shard_id: value.shard_id.try_into()?,
             node_hash: value.node_hash.try_into()?,
-            pledge: value.pledge.map(|p| p.try_into()).transpose()?,
+            pledge: value
+                .pledge
+                .map(|p| p.try_into())
+                .transpose()?
+                .ok_or_else(|| anyhow!("Pledge is required"))?,
         })
     }
 }

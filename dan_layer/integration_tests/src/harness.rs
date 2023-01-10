@@ -37,17 +37,14 @@ use tokio::{
 use crate::TempShardStoreFactory;
 
 pub struct PayloadProcessorListener {
-    _receiver: broadcast::Receiver<(TariDanPayload, HashMap<ShardId, Option<ObjectPledge>>)>,
-    sender: broadcast::Sender<(TariDanPayload, HashMap<ShardId, Option<ObjectPledge>>)>,
+    pub receiver: broadcast::Receiver<(TariDanPayload, HashMap<ShardId, ObjectPledge>)>,
+    sender: broadcast::Sender<(TariDanPayload, HashMap<ShardId, ObjectPledge>)>,
 }
 
 impl PayloadProcessorListener {
     pub fn new() -> Self {
         let (sender, receiver) = broadcast::channel(100);
-        Self {
-            _receiver: receiver,
-            sender,
-        }
+        Self { receiver, sender }
     }
 }
 
@@ -55,7 +52,7 @@ impl PayloadProcessor<TariDanPayload> for PayloadProcessorListener {
     fn process_payload(
         &self,
         payload: TariDanPayload,
-        pledges: HashMap<ShardId, Option<ObjectPledge>>,
+        pledges: HashMap<ShardId, ObjectPledge>,
     ) -> Result<FinalizeResult, PayloadProcessorError> {
         self.sender.send((payload, pledges)).unwrap();
         Ok(FinalizeResult::new(
@@ -78,7 +75,7 @@ impl PayloadProcessor<TariDanPayload> for NullPayloadProcessor {
     fn process_payload(
         &self,
         payload: TariDanPayload,
-        _pledges: HashMap<ShardId, Option<ObjectPledge>>,
+        _pledges: HashMap<ShardId, ObjectPledge>,
     ) -> Result<FinalizeResult, PayloadProcessorError> {
         Ok(FinalizeResult::new(
             payload.to_id().into_array().into(),
@@ -108,7 +105,7 @@ pub struct HsTestHarness {
     pub rx_broadcast: Receiver<(HotStuffMessage<TariDanPayload, PublicKey>, Vec<PublicKey>)>,
     rx_vote_message: Receiver<(VoteMessage, PublicKey)>,
     pub tx_votes: Sender<(PublicKey, VoteMessage)>,
-    rx_execute: broadcast::Receiver<(TariDanPayload, HashMap<ShardId, Option<ObjectPledge>>)>,
+    rx_execute: broadcast::Receiver<(TariDanPayload, HashMap<ShardId, ObjectPledge>)>,
     shard_store: TempShardStoreFactory,
     hs_waiter: Option<JoinHandle<Result<(), HotStuffError>>>,
     signing_service: NodeIdentitySigningService,
@@ -133,7 +130,7 @@ impl HsTestHarness {
         let (tx_votes, rx_votes) = channel(1);
         let (tx_events, _) = broadcast::channel(100);
         let payload_processor = PayloadProcessorListener::new();
-        let rx_execute = payload_processor._receiver.resubscribe();
+        let rx_execute = payload_processor.receiver.resubscribe();
         let shutdown = Shutdown::new();
 
         let consensus_constants = ConsensusConstants::devnet();
@@ -226,7 +223,7 @@ impl HsTestHarness {
         }
     }
 
-    pub async fn recv_execute(&mut self) -> (TariDanPayload, HashMap<ShardId, Option<ObjectPledge>>) {
+    pub async fn recv_execute(&mut self) -> (TariDanPayload, HashMap<ShardId, ObjectPledge>) {
         if let Ok(msg) = timeout(Duration::from_secs(10), self.rx_execute.recv())
             .await
             .expect("timed out")

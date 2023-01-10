@@ -20,11 +20,9 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use digest::{Digest, FixedOutput};
 use serde::{Deserialize, Serialize};
 use tari_common_types::types::FixedHash;
 use tari_core::ValidatorNodeMmr;
-use tari_crypto::hash::blake2::Blake256;
 use tari_dan_common_types::{
     hashing::tari_hasher,
     vn_mmr_node_hash,
@@ -172,24 +170,6 @@ impl VoteMessage {
 
     pub fn validator_metadata(&self) -> &ValidatorMetadata {
         self.validator_metadata.as_ref().unwrap()
-    }
-
-    pub fn get_all_nodes_hash(&self) -> FixedHash {
-        let mut result = Blake256::new().chain([self.decision.as_u8()]);
-        // data must already be sorted
-        for ShardPledge {
-            shard_id,
-            node_hash,
-            pledge,
-        } in &self.all_shard_pledge
-        {
-            result = result
-                .chain(shard_id.0)
-                .chain(node_hash.as_bytes())
-                // TODO: borsh serialize pledge
-                .chain(pledge.as_ref().map(|p| p.shard_id.0).unwrap_or_default());
-        }
-        result.finalize_fixed().into()
     }
 
     pub fn local_node_hash(&self) -> TreeNodeHash {

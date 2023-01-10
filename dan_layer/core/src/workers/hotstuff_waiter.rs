@@ -473,6 +473,10 @@ where
                 max: max_node_height,
             });
         }
+
+        if node.local_pledge().is_none() {
+            return Err(ProposalValidationError::LocalPledgeIsNone);
+        }
         // if node.payload_height() > NodeHeight(0) && node.justify().decision() != &QuorumDecision::Accept {
         //     return Err(HotStuffError::JustifyIsNotAccepted);
         // }
@@ -508,7 +512,7 @@ where
             .map(|proposed_node| ShardPledge {
                 shard_id: proposed_node.shard(),
                 node_hash: *proposed_node.hash(),
-                pledge: proposed_node.local_pledge().cloned(),
+                pledge: proposed_node.local_pledge().expect("Pledge is empty. This should have been checked previously").clone(),
             })
             .collect::<Vec<_>>();
         shard_pledges.sort_by_key(|s| s.shard_id);

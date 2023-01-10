@@ -96,7 +96,8 @@ pub enum ProposalValidationError {
         node_shard: ShardId,
         justify_shard: ShardId,
     },
-
     #[error("Payload height is too high. Actual:{actual}, expected: {max}")]
     PayloadHeightIsTooHigh { actual: NodeHeight, max: NodeHeight },
+    #[error("Local pledge was not provided in proposal")]
+    LocalPledgeIsNone,
 }

@@ -60,13 +60,13 @@ where TTemplateProvider: TemplateProvider
     fn process_payload(
         &self,
         payload: TariDanPayload,
-        pledges: HashMap<ShardId, Option<ObjectPledge>>,
+        pledges: HashMap<ShardId, ObjectPledge>,
     ) -> Result<FinalizeResult, PayloadProcessorError> {
         let transaction = payload.into_payload();
         let mut template_addresses = HashSet::<_, RandomState>::from_iter(transaction.required_templates());
         let components = transaction.required_components();
 
-        let state_db = create_populated_state_store(pledges.into_values().flatten())?;
+        let state_db = create_populated_state_store(pledges.into_values())?;
         template_addresses.extend(load_template_addresses_for_components(&state_db, &components)?);
 
         // let id_provider = IdProvider::new(*transaction.hash(), transaction.meta().max_outputs());
