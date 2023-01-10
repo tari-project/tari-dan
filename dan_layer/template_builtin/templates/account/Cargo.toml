@@ -5,9 +5,9 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-tari_template_abi = { git = "https://github.com/tari-project/tari-dan.git", branch="development", package="tari_template_abi" }
-tari_template_lib = { git = "https://github.com/tari-project/tari-dan.git", branch="development", package="tari_template_lib" }
-tari_template_macros = {git = "https://github.com/tari-project/tari-dan.git", branch="development", package="tari_template_macros" }
+tari_template_abi = { path = "../../../template_abi" }
+tari_template_lib = { path = "../../../template_lib" }
+tari_template_macros = { path = "../../../template_macros" }
 log = "*"
 
 [profile.release]
