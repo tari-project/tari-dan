@@ -38,11 +38,7 @@ use tari_engine_types::{
     substate::{SubstateAddress, SubstateValue},
     TemplateAddress,
 };
-use tari_template_lib::{
-    arg,
-    args::Arg,
-    models::{Amount, ComponentAddress},
-};
+use tari_template_lib::{arg, args::Arg, models::Amount};
 use tari_transaction_manifest::parse_manifest;
 use tari_utilities::hex::to_hex;
 use tari_validator_node_client::{
@@ -117,7 +113,7 @@ pub enum CliInstruction {
         args: Vec<CliArg>,
     },
     CallMethod {
-        component_address: FromHex<ComponentAddress>,
+        component_address: SubstateAddress,
         method_name: String,
         #[clap(long, short = 'a')]
         args: Vec<CliArg>,
@@ -182,7 +178,9 @@ pub async fn handle_submit(
             method_name,
             args,
         } => Instruction::CallMethod {
-            component_address: component_address.into_inner(),
+            component_address: component_address
+                .as_component_address()
+                .ok_or_else(|| anyhow!("Invalid component address: {}", component_address))?,
             method: method_name,
             args: args.iter().map(|s| s.to_arg()).collect(),
         },
