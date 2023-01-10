@@ -30,6 +30,10 @@ impl TreeNodeHash {
         Self(FixedHash::zero())
     }
 
+    pub fn is_zero(&self) -> bool {
+        *self == Self::zero()
+    }
+
     pub fn as_bytes(&self) -> &[u8] {
         self.0.as_slice()
     }

@@ -21,17 +21,21 @@
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 mod initializer;
+
 pub use initializer::spawn;
 
 mod handle;
 use async_trait::async_trait;
+use futures::channel::oneshot;
 pub use handle::{MempoolHandle, MempoolRequest};
 use tari_dan_core::services::epoch_manager::EpochManagerError;
 use thiserror::Error;
+use tokio::sync::mpsc::error::SendError;
 
 use crate::p2p::services::{messaging::MessagingError, template_manager::TemplateManagerError};
 
 mod service;
+mod validator;
 
 #[derive(Error, Debug)]
 pub enum MempoolError {
@@ -41,6 +45,20 @@ pub enum MempoolError {
     BroadcastFailed(#[from] MessagingError),
     #[error("Invalid template address: {0}")]
     InvalidTemplateAddress(#[from] TemplateManagerError),
+    #[error("Internal service request cancelled")]
+    RequestCancelled,
+}
+
+impl From<SendError<MempoolRequest>> for MempoolError {
+    fn from(_: SendError<MempoolRequest>) -> Self {
+        Self::RequestCancelled
+    }
+}
+
+impl From<oneshot::Canceled> for MempoolError {
+    fn from(_: oneshot::Canceled) -> Self {
+        Self::RequestCancelled
+    }
 }
 
 #[async_trait]

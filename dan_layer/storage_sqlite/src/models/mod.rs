@@ -27,7 +27,6 @@ pub mod leader_proposals;
 pub mod leaf_nodes;
 pub mod lock_node_and_height;
 pub mod locked_qc;
-pub mod metadata;
 pub mod node;
 pub mod payload;
 pub mod pledge;

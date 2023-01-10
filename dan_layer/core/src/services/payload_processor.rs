@@ -32,7 +32,7 @@ pub trait PayloadProcessor<TPayload: Payload> {
     fn process_payload(
         &self,
         payload: TPayload,
-        pledges: HashMap<ShardId, Option<ObjectPledge>>,
+        pledges: HashMap<ShardId, ObjectPledge>,
     ) -> Result<FinalizeResult, PayloadProcessorError>;
 }
 

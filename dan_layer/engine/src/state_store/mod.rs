@@ -24,7 +24,7 @@ pub mod memory;
 
 use std::{error::Error, fmt::Debug, io};
 
-use tari_bor::{decode, encode, Decode, Encode};
+use tari_bor::{decode_exact, encode, Decode, Encode};
 use tari_dan_common_types::optional::IsNotFoundError;
 
 // pub trait StateStorage<'a>: AtomicDb<'a, Error = StateStoreError> + Send + Sync {}
@@ -55,7 +55,7 @@ pub trait StateReader {
 
     fn get_state<K: Encode + Debug, V: Decode>(&self, key: &K) -> Result<V, StateStoreError> {
         let value = self.get_state_raw(&encode(key)?)?;
-        let value = decode(&value).map_err(|err| StateStoreError::ValueDecodeError {
+        let value = decode_exact(&value).map_err(|err| StateStoreError::ValueDecodeError {
             key: format!("{:?}", key),
             value_type: std::any::type_name::<V>(),
             err,
@@ -71,6 +71,12 @@ pub trait StateWriter: StateReader {
 
     fn set_state<K: Encode, V: Encode>(&mut self, key: &K, value: V) -> Result<(), StateStoreError> {
         self.set_state_raw(&encode(key)?, encode(&value)?)
+    }
+
+    fn delete_state_raw(&mut self, key: &[u8]) -> Result<(), StateStoreError>;
+
+    fn delete_state<K: Encode>(&mut self, key: &K) -> Result<(), StateStoreError> {
+        self.delete_state_raw(&encode(key)?)
     }
 
     fn commit(self) -> Result<(), StateStoreError>;

@@ -53,10 +53,26 @@ pub trait ShardStore {
     type Addr: NodeAddressable;
     type Payload: Payload;
 
+    // TODO: lmdb has read/write transactions so we'll need provide both in this trait
     type Transaction<'a>: ShardStoreTransaction<Self::Addr, Self::Payload>
     where Self: 'a;
 
     fn create_tx(&self) -> Result<Self::Transaction<'_>, StorageError>;
+
+    fn with_write_tx<F: FnOnce(&mut Self::Transaction<'_>) -> Result<R, E>, R, E>(&self, f: F) -> Result<R, E>
+    where E: From<StorageError> {
+        let mut tx = self.create_tx()?;
+        let ret = f(&mut tx)?;
+        tx.commit()?;
+        Ok(ret)
+    }
+
+    fn with_read_tx<F: FnOnce(&Self::Transaction<'_>) -> Result<R, E>, R, E>(&self, f: F) -> Result<R, E>
+    where E: From<StorageError> {
+        let tx = self.create_tx()?;
+        let ret = f(&tx)?;
+        Ok(ret)
+    }
 }
 
 #[derive(Debug, Error)]
@@ -81,19 +97,31 @@ impl From<StorageError> for StoreError {
 
 pub trait ShardStoreTransaction<TAddr: NodeAddressable, TPayload: Payload> {
     fn commit(self) -> Result<(), StorageError>;
-    fn count_high_qc_for(&self, shard_id: ShardId) -> Result<usize, StorageError>;
-    fn update_high_qc(&mut self, from: TAddr, shard: ShardId, qc: QuorumCertificate) -> Result<(), StorageError>;
-    fn set_payload(&mut self, payload: TPayload) -> Result<(), StorageError>;
-    /// Returns the current leaf node for the shard, or the genesis node, height are returned.
-    fn get_leaf_node(&self, shard: ShardId) -> Result<LeafNode, StorageError>;
-    fn update_leaf_node(&mut self, shard: ShardId, node: TreeNodeHash, height: NodeHeight) -> Result<(), StorageError>;
-    fn get_high_qc_for(&self, shard: ShardId) -> Result<QuorumCertificate, StorageError>;
+    fn get_high_qc_for(&self, payload_id: PayloadId, shard: ShardId) -> Result<QuorumCertificate, StorageError>;
+    fn insert_high_qc(&mut self, from: TAddr, shard: ShardId, qc: QuorumCertificate) -> Result<(), StorageError>;
+    fn save_payload(&mut self, payload: TPayload) -> Result<(), StorageError>;
+    /// Returns the current leaf node for the shard
+    fn get_leaf_node(&self, payload_id: &PayloadId, shard: &ShardId) -> Result<LeafNode, StorageError>;
+    /// Inserts or updates the leaf node for the shard
+    fn set_leaf_node(
+        &mut self,
+        payload_id: PayloadId,
+        shard: ShardId,
+        node: TreeNodeHash,
+        payload_height: NodeHeight,
+        height: NodeHeight,
+    ) -> Result<(), StorageError>;
     fn get_payload(&self, payload_id: &PayloadId) -> Result<TPayload, StorageError>;
     fn get_node(&self, node_hash: &TreeNodeHash) -> Result<HotStuffTreeNode<TAddr, TPayload>, StorageError>;
     fn save_node(&mut self, node: HotStuffTreeNode<TAddr, TPayload>) -> Result<(), StorageError>;
-    fn get_locked_node_hash_and_height(&self, shard: ShardId) -> Result<(TreeNodeHash, NodeHeight), StorageError>;
+    fn get_locked_node_hash_and_height(
+        &self,
+        payload_id: PayloadId,
+        shard: ShardId,
+    ) -> Result<(TreeNodeHash, NodeHeight), StorageError>;
     fn set_locked(
         &mut self,
+        payload_id: PayloadId,
         shard: ShardId,
         node_hash: TreeNodeHash,
         node_height: NodeHeight,
@@ -104,8 +132,13 @@ pub trait ShardStoreTransaction<TAddr: NodeAddressable, TPayload: Payload> {
         payload: PayloadId,
         current_height: NodeHeight,
     ) -> Result<ObjectPledge, StorageError>;
-    fn set_last_executed_height(&mut self, shard: ShardId, height: NodeHeight) -> Result<(), StorageError>;
-    fn get_last_executed_height(&self, shard: ShardId) -> Result<NodeHeight, StorageError>;
+    fn set_last_executed_height(
+        &mut self,
+        shard: ShardId,
+        payload_id: PayloadId,
+        height: NodeHeight,
+    ) -> Result<(), StorageError>;
+    fn get_last_executed_height(&self, shard: ShardId, payload_id: PayloadId) -> Result<NodeHeight, StorageError>;
     fn save_substate_changes(
         &mut self,
         changes: &HashMap<ShardId, Vec<SubstateState>>,
@@ -120,14 +153,21 @@ pub trait ShardStoreTransaction<TAddr: NodeAddressable, TPayload: Payload> {
         end_shard_id: ShardId,
         excluded_shards: &[ShardId],
     ) -> Result<Vec<SubstateShardData>, StorageError>;
-    fn get_last_voted_height(&self, shard: ShardId) -> Result<NodeHeight, StorageError>;
-    fn set_last_voted_height(&mut self, shard: ShardId, height: NodeHeight) -> Result<(), StorageError>;
+    /// Returns the last voted height. A height of 0 means that no previous vote height has been recorded for the
+    /// <shard, payload> pair.
+    fn get_last_voted_height(&self, shard: ShardId, payload_id: PayloadId) -> Result<NodeHeight, StorageError>;
+    fn set_last_voted_height(
+        &mut self,
+        shard: ShardId,
+        payload_id: PayloadId,
+        height: NodeHeight,
+    ) -> Result<(), StorageError>;
     fn get_leader_proposals(
         &self,
         payload: PayloadId,
         payload_height: NodeHeight,
-        shard: ShardId,
-    ) -> Result<Option<HotStuffTreeNode<TAddr, TPayload>>, StorageError>;
+        shards: &[ShardId],
+    ) -> Result<Vec<HotStuffTreeNode<TAddr, TPayload>>, StorageError>;
     fn save_leader_proposals(
         &mut self,
         shard: ShardId,
@@ -140,9 +180,10 @@ pub trait ShardStoreTransaction<TAddr: NodeAddressable, TPayload: Payload> {
         &mut self,
         from: TAddr,
         node_hash: TreeNodeHash,
+        payload_id: PayloadId,
         shard: ShardId,
         vote_message: VoteMessage,
-    ) -> Result<usize, StorageError>;
+    ) -> Result<(), StorageError>;
 
     fn get_received_votes_for(&self, node_hash: TreeNodeHash, shard: ShardId)
         -> Result<Vec<VoteMessage>, StorageError>;
@@ -153,8 +194,16 @@ pub trait ShardStoreTransaction<TAddr: NodeAddressable, TPayload: Payload> {
         payload_id: Vec<u8>,
         shard_id: Vec<u8>,
     ) -> Result<Vec<SQLSubstate>, StorageError>;
+    fn get_payload_result(&self, payload_id: &PayloadId) -> Result<FinalizeResult, StorageError>;
+    /// Updates the result for an existing payload
     fn update_payload_result(&self, payload_id: &PayloadId, result: FinalizeResult) -> Result<(), StorageError>;
     fn complete_pledges(
+        &self,
+        shard: ShardId,
+        payload_id: PayloadId,
+        node_hash: &TreeNodeHash,
+    ) -> Result<(), StorageError>;
+    fn abandon_pledges(
         &self,
         shard: ShardId,
         payload_id: PayloadId,

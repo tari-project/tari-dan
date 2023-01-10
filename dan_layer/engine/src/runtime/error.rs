@@ -97,4 +97,6 @@ pub enum TransactionCommitError {
     StateStoreError(#[from] StateStoreError),
     #[error("Failed to obtain a state store transaction: {0}")]
     StateStoreTransactionError(anyhow::Error),
+    #[error(transparent)]
+    MaxIdsExceeded(#[from] MaxIdsExceeded),
 }

@@ -3,7 +3,10 @@
 
 use std::path::PathBuf;
 
-use tari_template_lib::{models::TemplateAddress, Hash};
+use tari_template_lib::{
+    models::{ComponentAddress, TemplateAddress},
+    Hash,
+};
 use tari_validator_node_cli::{
     account_manager::AccountFileManager,
     command::{
@@ -44,7 +47,6 @@ pub async fn create_account(world: &mut TariWorld, account_name: String, validat
             wait_for_result_timeout: Some(60),
             num_outputs: Some(1),
             inputs: vec![],
-            input_refs: vec![],
             version: None,
             dump_outputs_into: None,
             account_template_address: None,
@@ -83,7 +85,6 @@ pub async fn create_component(
             wait_for_result_timeout: Some(60),
             num_outputs: Some(1),
             inputs: vec![],
-            input_refs: vec![],
             version: None,
             dump_outputs_into: None,
             account_template_address: None,
@@ -110,7 +111,7 @@ pub async fn call_method(
     let component_address = world.components.get(&component_name).unwrap();
 
     let instruction = CliInstruction::CallMethod {
-        component_address: FromHex(*component_address),
+        component_address: FromHex(ComponentAddress::new(*component_address)),
         // TODO: actually parse the method call for arguments
         method_name: method_call,
         args: vec![],
@@ -129,7 +130,6 @@ pub async fn call_method(
             wait_for_result_timeout: Some(60),
             num_outputs,
             inputs: vec![],
-            input_refs: vec![],
             version: None,
             dump_outputs_into: None,
             account_template_address: None,

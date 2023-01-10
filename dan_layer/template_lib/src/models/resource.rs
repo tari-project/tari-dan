@@ -20,4 +20,41 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-pub type ResourceAddress = crate::Hash;
+use tari_bor::{borsh, Decode, Encode};
+use tari_template_abi::rust::{
+    fmt,
+    fmt::{Display, Formatter},
+};
+
+use crate::{hash::HashParseError, Hash};
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Encode, Decode)]
+#[cfg_attr(feature = "serde", derive(serde::Deserialize, serde::Serialize))]
+pub struct ResourceAddress(Hash);
+
+impl ResourceAddress {
+    pub fn new(address: Hash) -> Self {
+        Self(address)
+    }
+
+    pub fn hash(&self) -> &Hash {
+        &self.0
+    }
+
+    pub fn from_hex(hex: &str) -> Result<Self, HashParseError> {
+        let hash = Hash::from_hex(hex)?;
+        Ok(Self::new(hash))
+    }
+}
+
+impl<T: Into<Hash>> From<T> for ResourceAddress {
+    fn from(address: T) -> Self {
+        Self::new(address.into())
+    }
+}
+
+impl Display for ResourceAddress {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        write!(f, "resource_{}", self.0)
+    }
+}

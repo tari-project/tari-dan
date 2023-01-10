@@ -8,10 +8,7 @@ use tari_dan_engine::{
     runtime::{IdProvider, RuntimeError, RuntimeInterface, RuntimeInterfaceImpl, RuntimeState, StateTracker},
     state_store::memory::MemoryStateStore,
 };
-use tari_engine_types::{
-    commit_result::FinalizeResult,
-    substate::{SubstateAddress, SubstateValue},
-};
+use tari_engine_types::{commit_result::FinalizeResult, resource::Resource};
 use tari_template_lib::{
     args::{
         BucketAction,
@@ -25,7 +22,7 @@ use tari_template_lib::{
         VaultAction,
         WorkspaceAction,
     },
-    models::VaultRef,
+    models::{ComponentAddress, ComponentHeader, ResourceAddress, VaultRef},
     Hash,
 };
 
@@ -88,9 +85,14 @@ impl RuntimeInterface for MockRuntimeInterface {
         log::log!(target: "tari::dan::engine::runtime", level, "{}", message);
     }
 
-    fn get_substate(&self, address: &SubstateAddress) -> Result<SubstateValue, RuntimeError> {
-        self.add_call("get_substate");
-        self.inner.get_substate(address)
+    fn get_component(&self, address: &ComponentAddress) -> Result<ComponentHeader, RuntimeError> {
+        self.add_call("get_component");
+        self.inner.get_component(address)
+    }
+
+    fn get_resource(&self, address: &ResourceAddress) -> Result<Resource, RuntimeError> {
+        self.add_call("get_resource()");
+        self.inner.get_resource(address)
     }
 
     fn component_invoke(

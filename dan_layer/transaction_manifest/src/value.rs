@@ -6,7 +6,6 @@ use std::str::FromStr;
 use proc_macro2::LexError;
 use syn::{parse2, Lit};
 use tari_engine_types::substate::SubstateAddress;
-use tari_template_lib::models::{ComponentAddress, ResourceAddress, VaultId};
 
 #[derive(Debug, Clone)]
 pub enum ManifestValue {
@@ -33,24 +32,9 @@ impl FromStr for ManifestValue {
     type Err = ManifestParseError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        match s.split_once('_') {
-            Some(("component", addr)) => {
-                let addr =
-                    ComponentAddress::from_hex(addr).map_err(|e| ManifestParseError::AddressFormat(e.to_string()))?;
-                Ok(ManifestValue::Address(SubstateAddress::Component(addr)))
-            },
-            Some(("resource", addr)) => {
-                let addr =
-                    ResourceAddress::from_hex(addr).map_err(|e| ManifestParseError::AddressFormat(e.to_string()))?;
-                Ok(ManifestValue::Address(SubstateAddress::Resource(addr)))
-            },
-            Some(("vault", addr)) => {
-                let id = VaultId::from_hex(addr).map_err(|e| ManifestParseError::AddressFormat(e.to_string()))?;
-                Ok(ManifestValue::Address(SubstateAddress::Vault(id)))
-            },
-
-            Some((_, _)) => Err(ManifestParseError::AddressFormat(s.to_string())),
-            None => {
+        match SubstateAddress::from_str(s) {
+            Ok(addr) => Ok(ManifestValue::Address(addr)),
+            Err(_) => {
                 let tokens = s.parse()?;
                 let lit = parse2(tokens)?;
                 Ok(ManifestValue::Literal(lit))
@@ -84,6 +68,8 @@ impl From<LexError> for ManifestParseError {
 
 #[cfg(test)]
 mod tests {
+    use tari_template_lib::models::{ComponentAddress, ResourceAddress, VaultId};
+
     use super::*;
 
     #[test]

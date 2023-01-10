@@ -47,7 +47,7 @@ pub use base_layer_output::BaseLayerOutput;
 pub use committee::Committee;
 pub use error::ModelError;
 pub use hot_stuff_message::HotStuffMessage;
-pub use hot_stuff_tree_node::HotStuffTreeNode;
+pub use hot_stuff_tree_node::{HotStuffTreeNode, HotstuffPhase};
 pub use leaf_node::LeafNode;
 pub use node::Node;
 pub use payload::Payload;

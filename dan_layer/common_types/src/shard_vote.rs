@@ -7,8 +7,8 @@ use tari_bor::borsh::BorshSerialize;
 use crate::{object_pledge::ObjectPledge, ShardId, TreeNodeHash};
 
 #[derive(Debug, Clone, Deserialize, Serialize, BorshSerialize)]
-pub struct ShardVote {
+pub struct ShardPledge {
     pub shard_id: ShardId,
     pub node_hash: TreeNodeHash,
-    pub pledge: Option<ObjectPledge>,
+    pub pledge: ObjectPledge,
 }

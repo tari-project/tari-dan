@@ -28,7 +28,7 @@ mod node_height;
 pub use node_height::NodeHeight;
 
 mod shard_vote;
-pub use shard_vote::ShardVote;
+pub use shard_vote::ShardPledge;
 
 mod tree_node_hash;
 pub use tree_node_hash::TreeNodeHash;
@@ -99,22 +99,15 @@ pub struct PayloadId {
 }
 
 impl PayloadId {
-    pub fn new(id: FixedHash) -> Self {
+    pub fn new<T: AsRef<[u8]>>(id: T) -> Self {
         let mut v = [0u8; 32];
-        v.copy_from_slice(id.as_slice());
+        assert_eq!(id.as_ref().len(), 32);
+        v.copy_from_slice(id.as_ref());
         Self { id: v }
     }
 
-    pub const fn zero() -> Self {
-        Self { id: [0u8; 32] }
-    }
-
-    pub fn as_slice(&self) -> &[u8] {
-        self.id.as_slice()
-    }
-
     pub fn as_bytes(&self) -> &[u8] {
-        self.as_slice()
+        self.id.as_slice()
     }
 
     pub fn into_array(self) -> [u8; 32] {

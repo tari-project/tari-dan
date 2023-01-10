@@ -1,18 +1,18 @@
 //   Copyright 2022 The Tari Project
 //   SPDX-License-Identifier: BSD-3-Clause
 
-use std::io;
+use std::{io, io::Write};
 
+use borsh::BorshSerialize;
 use digest::Digest;
-use serde::{Deserialize, Serialize};
+use serde::Deserialize;
 use tari_common_types::types::{FixedHash, PublicKey, Signature};
 use tari_crypto::hash::blake2::Blake256;
 use tari_mmr::MerkleProof;
-use tari_utilities::ByteArray;
 
 use crate::{serde_with, NodeAddressable, ShardId};
 
-#[derive(Clone, Debug, PartialEq, Eq, Deserialize, Serialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Deserialize, serde::Serialize)]
 pub struct ValidatorMetadata {
     pub public_key: PublicKey,
     #[serde(with = "serde_with::hex")]
@@ -54,19 +54,6 @@ impl ValidatorMetadata {
         // Map to an io error because borsh uses that
         bincode::deserialize(bytes).map_err(|e| io::Error::new(io::ErrorKind::Other, e))
     }
-
-    // TODO: once this type implements borsh we can use the consensus hashing to hash this type directly
-    pub fn to_bytes(&self) -> Vec<u8> {
-        [
-            self.public_key.to_vec(),
-            self.vn_shard_key.as_bytes().to_vec(),
-            self.signature.get_public_nonce().to_vec(),
-            self.signature.get_signature().to_vec(),
-            self.encode_merkle_proof(),
-            self.merkle_leaf_index.to_le_bytes().to_vec(),
-        ]
-        .concat()
-    }
 }
 
 pub fn vn_mmr_node_hash<TAddr: NodeAddressable>(public_key: &TAddr, shard_id: &ShardId) -> FixedHash {
@@ -75,4 +62,16 @@ pub fn vn_mmr_node_hash<TAddr: NodeAddressable>(public_key: &TAddr, shard_id: &S
         .chain(shard_id.as_bytes())
         .finalize()
         .into()
+}
+
+impl BorshSerialize for ValidatorMetadata {
+    fn serialize<W: Write>(&self, writer: &mut W) -> io::Result<()> {
+        self.public_key.serialize(writer)?;
+        self.vn_shard_key.serialize(writer)?;
+        self.signature.serialize(writer)?;
+        // TODO: MerkleProof should implement borsh
+        // self.merkle_proof.serialize(writer)
+        self.merkle_leaf_index.serialize(writer)?;
+        Ok(())
+    }
 }

@@ -20,9 +20,7 @@
 // WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 // USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use digest::{Digest, FixedOutput};
 use serde::{Deserialize, Serialize};
-use tari_crypto::hash::blake2::Blake256;
 use tari_dan_common_types::{
     Epoch,
     NodeAddressable,
@@ -33,6 +31,7 @@ use tari_dan_common_types::{
     ShardId,
     TreeNodeHash,
 };
+use tari_engine_types::hashing::hasher;
 
 use super::Payload;
 
@@ -84,41 +83,47 @@ impl<TAddr: NodeAddressable, TPayload: Payload> HotStuffTreeNode<TAddr, TPayload
         s
     }
 
-    pub fn genesis() -> Self {
-        let mut s = Self {
+    pub fn genesis(
+        epoch: Epoch,
+        payload_id: PayloadId,
+        shard_id: ShardId,
+        proposed_by: TAddr,
+        local_pledge: Option<ObjectPledge>,
+    ) -> Self {
+        Self {
+            // A genesis node is special, and therefore has a zero hash to indicate this
+            hash: TreeNodeHash::zero(),
             parent: TreeNodeHash::zero(),
-            payload_id: PayloadId::zero(),
+            shard: shard_id,
+            height: NodeHeight(0),
+            payload_id,
             payload: None,
             payload_height: NodeHeight(0),
-            hash: TreeNodeHash::zero(),
-            shard: ShardId::zero(),
-            height: NodeHeight(0),
-            epoch: Epoch(0),
-            proposed_by: TAddr::zero(),
-            justify: QuorumCertificate::genesis(Epoch(0)),
-            local_pledge: None,
-        };
-        s.hash = s.calculate_hash();
-        s
+            local_pledge,
+            epoch,
+            justify: QuorumCertificate::genesis(epoch, payload_id, shard_id),
+            proposed_by,
+        }
+    }
+
+    pub fn is_genesis(&self) -> bool {
+        self.hash.is_zero()
     }
 
     pub fn calculate_hash(&self) -> TreeNodeHash {
-        let result = Blake256::new()
-            .chain(self.parent.as_bytes())
-            .chain(self.epoch.to_le_bytes())
-            .chain(self.height.to_le_bytes())
-            .chain(self.justify.to_hash())
-            .chain(self.shard.as_bytes())
-            .chain(self.payload_id.as_slice())
-            .chain(self.payload_height.to_le_bytes())
-            .chain(self.proposed_by.as_bytes());
-        // TODO: Add in other fields
-        // .chain((self.local_pledges.len() as u32).to_le_bytes())
-        // .chain(self.local_pledges.iter().fold(Vec::new(), |mut acc, substate| {
-        //     acc.extend_from_slice(substate.as_bytes())
-        // }));
-
-        result.finalize_fixed().into()
+        hasher("HotStuffTreeNode")
+            .chain(&self.parent)
+            .chain(&self.epoch)
+            .chain(&self.height)
+            // .chain(&self.justify)
+            .chain(&self.shard)
+            .chain(&self.payload_id)
+            .chain(&self.payload_height)
+            .chain(&self.proposed_by.as_bytes())
+            .chain(&self.local_pledge)
+            .result()
+            .into_array()
+            .into()
     }
 
     pub fn hash(&self) -> &TreeNodeHash {
@@ -141,9 +146,16 @@ impl<TAddr: NodeAddressable, TPayload: Payload> HotStuffTreeNode<TAddr, TPayload
         self.payload.as_ref()
     }
 
-    /// The payload height corresponds to the round number.
+    /// The payload height maps (modulo 4) onto the current phase of hotstuff (Prepare, PreCommit, Commit,
+    /// Decide).
     pub fn payload_height(&self) -> NodeHeight {
+        // NodeHeight(self.payload_height.as_u64() % 4)
         self.payload_height
+    }
+
+    /// Returns the hotstuff phase corresponding to the payload height
+    pub fn payload_phase(&self) -> HotstuffPhase {
+        self.payload_height.into()
     }
 
     /// The quorum certificate for this node
@@ -159,6 +171,7 @@ impl<TAddr: NodeAddressable, TPayload: Payload> HotStuffTreeNode<TAddr, TPayload
         self.shard
     }
 
+    /// The height of the chain for the shard
     pub fn height(&self) -> NodeHeight {
         self.height
     }
@@ -171,5 +184,27 @@ impl<TAddr: NodeAddressable, TPayload: Payload> HotStuffTreeNode<TAddr, TPayload
 impl<TAddr: NodeAddressable, TPayload: Payload> PartialEq for HotStuffTreeNode<TAddr, TPayload> {
     fn eq(&self, other: &Self) -> bool {
         self.hash.eq(&other.hash)
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum HotstuffPhase {
+    Genesis,
+    Prepare,
+    PreCommit,
+    Commit,
+    Decide,
+}
+
+impl From<NodeHeight> for HotstuffPhase {
+    fn from(value: NodeHeight) -> Self {
+        match value.as_u64() % 5 {
+            0 => HotstuffPhase::Genesis,
+            1 => HotstuffPhase::Prepare,
+            2 => HotstuffPhase::PreCommit,
+            3 => HotstuffPhase::Commit,
+            4 => HotstuffPhase::Decide,
+            _ => unreachable!(),
+        }
     }
 }

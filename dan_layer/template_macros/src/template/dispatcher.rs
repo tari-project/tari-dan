@@ -104,12 +104,12 @@ fn get_function_block(template_ident: &Ident, ast: FunctionAst) -> Expr {
                 vec![
                     parse_quote! {
                         let component =
-                            decode_exact::<::tari_template_lib::models::ComponentInstance>(&call_info.args[#i])
-                            .expect("failed to decode component instance for function #func_name.");
+                            decode_exact::<::tari_template_lib::models::ComponentHeader>(&call_info.args[#i])
+                            .unwrap_or_else(|e| panic!("failed to decode component instance for function '{}': {}",  #func_name, e));
                     },
                     parse_quote! {
-                        let mut state = decode_exact::<#template_mod_name::#template_ident>(&component.state)
-                            .expect("failed to decode component for function #func_name.");
+                        let mut state = decode_exact::<#template_mod_name::#template_ident>(&component.state())
+                            .unwrap_or_else(|e| panic!("failed to decode component for function '{}': {}", #func_name, e));
                     },
                 ]
             },
@@ -149,7 +149,7 @@ fn get_function_block(template_ident: &Ident, ast: FunctionAst) -> Expr {
     // after user function invocation, update the component state
     if should_set_state {
         stmts.push(parse_quote! {
-            engine().set_component_state(component.address(), state);
+            engine().set_component_state(*component.address(), state);
         });
     }
 

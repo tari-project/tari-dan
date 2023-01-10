@@ -174,7 +174,6 @@ dependencies = [
 [[package]]
 name = "tari_bor"
 version = "0.1.0"
-source = "git+https://github.com/tari-project/tari-dan.git?branch=development#6be6139c494a280b7e8315d5cae4410609e0d39a"
 dependencies = [
  "borsh",
 ]
@@ -182,7 +181,6 @@ dependencies = [
 [[package]]
 name = "tari_template_abi"
 version = "0.35.1"
-source = "git+https://github.com/tari-project/tari-dan.git?branch=development#6be6139c494a280b7e8315d5cae4410609e0d39a"
 dependencies = [
  "tari_bor",
 ]
@@ -190,7 +188,6 @@ dependencies = [
 [[package]]
 name = "tari_template_lib"
 version = "0.35.1"
-source = "git+https://github.com/tari-project/tari-dan.git?branch=development#6be6139c494a280b7e8315d5cae4410609e0d39a"
 dependencies = [
  "hex",
  "newtype-ops",
@@ -202,7 +199,6 @@ dependencies = [
 [[package]]
 name = "tari_template_macros"
 version = "0.35.1"
-source = "git+https://github.com/tari-project/tari-dan.git?branch=development#6be6139c494a280b7e8315d5cae4410609e0d39a"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -211,9 +207,9 @@ dependencies = [
 
 [[package]]
 name = "toml"
-version = "0.5.9"
+version = "0.5.10"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8d82e1a7758622a465f8cee077614c73484dac5b836c02ff6a40d5d1010324d7"
+checksum = "1333c76748e868a4d9d1017b5ab53171dfd095f70c712fdb4653a406547f598f"
 dependencies = [
  "serde",
 ]

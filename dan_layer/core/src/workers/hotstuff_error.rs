@@ -23,6 +23,7 @@
 use tari_dan_common_types::{Epoch, NodeHeight, PayloadId, ShardId};
 use tari_engine_types::commit_result::RejectReason;
 use thiserror::Error;
+use tokio::sync::mpsc;
 
 use crate::{
     services::{epoch_manager::EpochManagerError, PayloadProcessorError},
@@ -35,17 +36,12 @@ pub enum HotStuffError {
     EpochManagerError(#[from] EpochManagerError),
     #[error("Received message from a node that is not in the committee")]
     ReceivedMessageFromNonCommitteeMember,
-    #[error("Update leaf node error: `{0}`")]
-    UpdateLeafNode(String),
     #[error("Store error: {0}")]
     StoreError(#[from] StoreError),
-    #[error("Claim is not valid")]
-    ClaimIsNotValid,
-    #[error("Node payload {node_payload} does not match justify payload {justify_payload}")]
-    NodePayloadDoesNotMatchJustifyPayload {
-        node_payload: PayloadId,
-        justify_payload: PayloadId,
-    },
+    #[error("Received invalid vote: {0}")]
+    InvalidVote(String),
+    #[error("Received invalid proposal: {0}")]
+    InvalidProposal(#[from] ProposalValidationError),
     #[error("Send error")]
     SendError,
     #[error("Not the leader")]
@@ -56,8 +52,6 @@ pub enum HotStuffError {
     TransactionRejected(RejectReason),
     #[error("Storage Error: `{0}`")]
     StorageError(#[from] StorageError),
-    #[error("Payload height is too high. Actual: {actual}, expected: {max}")]
-    PayloadHeightIsTooHigh { actual: NodeHeight, max: NodeHeight },
     #[error("Received generic message without node")]
     RecvProposalMessageWithoutNode,
     #[error("Shard has no data, when it was expected to")]
@@ -72,6 +66,19 @@ pub enum HotStuffError {
     NoCommitteeForShard { shard: ShardId, epoch: Epoch },
     #[error("Cannot vote on a proposal that has been rejected")]
     JustifyIsNotAccepted,
+
+    #[error("Received NEWVIEW message without attached payload")]
+    ReceivedNewViewWithoutPayload,
+}
+
+impl<T> From<mpsc::error::SendError<T>> for HotStuffError {
+    fn from(_e: mpsc::error::SendError<T>) -> Self {
+        Self::SendError
+    }
+}
+
+#[derive(Error, Debug)]
+pub enum ProposalValidationError {
     #[error(
         "Node payload height ({node_payload_height}) does not match justify payload height ({justify_payload_height})"
     )]
@@ -79,4 +86,18 @@ pub enum HotStuffError {
         node_payload_height: NodeHeight,
         justify_payload_height: NodeHeight,
     },
+    #[error("Node payload {node_payload} does not match justify payload {justify_payload}")]
+    NodePayloadDoesNotMatchJustifyPayload {
+        node_payload: PayloadId,
+        justify_payload: PayloadId,
+    },
+    #[error("Node shard {node_shard} does not match justify shard {justify_shard}")]
+    NodeShardDoesNotMatchJustifyPayload {
+        node_shard: ShardId,
+        justify_shard: ShardId,
+    },
+    #[error("Payload height is too high. Actual:{actual}, expected: {max}")]
+    PayloadHeightIsTooHigh { actual: NodeHeight, max: NodeHeight },
+    #[error("Local pledge was not provided in proposal")]
+    LocalPledgeIsNone,
 }

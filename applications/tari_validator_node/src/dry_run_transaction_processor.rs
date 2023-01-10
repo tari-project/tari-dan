@@ -61,7 +61,7 @@ use crate::{
     payload_processor::TariDanPayloadProcessor,
 };
 
-const LOG_TARGET: &str = "tari::validator_node::dry_run_trasaction_processor";
+const LOG_TARGET: &str = "tari::validator_node::dry_run_transaction_processor";
 
 #[derive(Error, Debug)]
 pub enum DryRunTransactionProcessorError {
@@ -122,7 +122,7 @@ impl DryRunTransactionProcessor {
             .collect();
         shard_pledges.reserve(missing_involved_shards.len());
         for shard_id in missing_involved_shards {
-            let pledge = self.get_remote_pledge(shard_id, epoch).await?;
+            let pledge = self.get_remote_pledge(shard_id, payload.to_id(), epoch).await?;
             shard_pledges.insert(shard_id, pledge);
         }
 
@@ -134,7 +134,7 @@ impl DryRunTransactionProcessor {
     async fn get_local_pledges(
         &self,
         involved_shards: Vec<ShardId>,
-    ) -> Result<HashMap<ShardId, Option<ObjectPledge>>, DryRunTransactionProcessorError> {
+    ) -> Result<HashMap<ShardId, ObjectPledge>, DryRunTransactionProcessorError> {
         let tx = self.shard_store.create_tx().unwrap();
         let inventory = tx.get_state_inventory().unwrap();
 
@@ -148,7 +148,7 @@ impl DryRunTransactionProcessor {
                 pledged_to_payload: substate.created_payload_id(),
                 current_state: substate.into_substate_state(),
             };
-            local_pledges.insert(shard_id, Some(local_pledge));
+            local_pledges.insert(shard_id, local_pledge);
         }
 
         Ok(local_pledges)
@@ -157,8 +157,9 @@ impl DryRunTransactionProcessor {
     pub async fn get_remote_pledge(
         &self,
         shard_id: ShardId,
+        payload_id: PayloadId,
         epoch: Epoch,
-    ) -> Result<Option<ObjectPledge>, DryRunTransactionProcessorError> {
+    ) -> Result<ObjectPledge, DryRunTransactionProcessorError> {
         let committee = self.epoch_manager.get_committee(epoch, shard_id).await?;
 
         for vn_public_key in committee.members {
@@ -192,18 +193,22 @@ impl DryRunTransactionProcessor {
             if let Some(resp) = vn_state_stream.next().await {
                 let resp = resp?;
                 match Self::extract_pledge_from_vn_sync_response(resp) {
-                    Ok(pledge) => return Ok(Some(pledge)),
+                    Ok(pledge) => return Ok(pledge),
                     Err(error_msg) => {
                         info!(target: LOG_TARGET, "Unable to extract pledge from peer: {} ", error_msg);
-                        // we do not stop when an indiviual VN does not respond correctly, we try all Vns
+                        // we do not stop when an individual VN does not respond correctly, we try all Vns
                         continue;
                     },
                 };
             }
         }
 
-        // The shard was not found in any VN
-        Ok(None)
+        // The shard does not exist on any VN, so we pledge it to be created in this payload
+        Ok(ObjectPledge {
+            shard_id,
+            pledged_to_payload: payload_id,
+            current_state: SubstateState::DoesNotExist,
+        })
     }
 
     fn extract_pledge_from_vn_sync_response(msg: VnStateSyncResponse) -> Result<ObjectPledge, anyhow::Error> {

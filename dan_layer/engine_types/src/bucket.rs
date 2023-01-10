@@ -39,7 +39,7 @@ impl Bucket {
         self.resource.amount()
     }
 
-    pub fn resource_address(&self) -> ResourceAddress {
+    pub fn resource_address(&self) -> &ResourceAddress {
         self.resource.address()
     }
 

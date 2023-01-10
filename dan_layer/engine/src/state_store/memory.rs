@@ -134,6 +134,12 @@ impl<'a> StateWriter for MemoryTransaction<RwLockWriteGuard<'a, InnerKvMap>> {
         Ok(())
     }
 
+    fn delete_state_raw(&mut self, key: &[u8]) -> Result<(), StateStoreError> {
+        self.pending.remove(key);
+        self.guard.remove(key);
+        Ok(())
+    }
+
     fn commit(mut self) -> Result<(), StateStoreError> {
         if self.allow_creation_of_non_existent_shards {
             self.guard.extend(self.pending);

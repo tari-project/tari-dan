@@ -11,7 +11,7 @@ use std::{
 use serde::{Deserialize, Serialize};
 use tari_bor::Encode;
 use tari_common_types::types::{FixedHash, FixedHashSizeError};
-use tari_engine_types::substate::SubstateAddress;
+use tari_engine_types::{hashing::hasher, substate::SubstateAddress};
 use tari_utilities::hex::{from_hex, Hex};
 
 use crate::serde_with;
@@ -20,12 +20,14 @@ use crate::serde_with;
 pub struct ShardId(#[serde(with = "serde_with::hex")] pub [u8; 32]);
 
 impl ShardId {
-    pub fn from_address(addr: &SubstateAddress) -> Self {
-        match addr {
-            SubstateAddress::Component(addr) => addr.into_array().into(),
-            SubstateAddress::Resource(addr) => addr.into_array().into(),
-            SubstateAddress::Vault(vault_id) => vault_id.into_array().into(),
-        }
+    /// Defines the mapping of SubstateAddress to ShardId
+    pub fn from_address(addr: &SubstateAddress, version: u32) -> Self {
+        Self::from_hash(addr.hash().into_array(), version)
+    }
+
+    pub fn from_hash(hash: [u8; 32], version: u32) -> Self {
+        let new_addr = hasher("shard_id").chain(&hash).chain(&version).result();
+        Self(new_addr.into_array())
     }
 
     pub fn new(id: FixedHash) -> Self {

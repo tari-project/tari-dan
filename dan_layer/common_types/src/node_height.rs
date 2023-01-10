@@ -4,7 +4,7 @@
 use std::{
     cmp::Ordering,
     fmt::{Display, Formatter},
-    ops::Add,
+    ops::{Add, Sub},
 };
 
 use serde::{Deserialize, Serialize};
@@ -18,6 +18,10 @@ impl NodeHeight {
         self.0
     }
 
+    pub fn is_zero(self) -> bool {
+        self.0 == 0
+    }
+
     pub fn to_le_bytes(self) -> [u8; 8] {
         self.0.to_le_bytes()
     }
@@ -28,6 +32,14 @@ impl Add for NodeHeight {
 
     fn add(self, rhs: Self) -> Self::Output {
         NodeHeight(self.0 + rhs.0)
+    }
+}
+
+impl Sub for NodeHeight {
+    type Output = NodeHeight;
+
+    fn sub(self, rhs: Self) -> Self::Output {
+        NodeHeight(self.0 - rhs.0)
     }
 }
 

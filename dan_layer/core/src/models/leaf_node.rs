@@ -26,6 +26,13 @@ use crate::models::{NodeHeight, TreeNodeHash};
 pub struct LeafNode {
     hash: TreeNodeHash,
     height: NodeHeight,
+    payload_height: NodeHeight,
+}
+
+impl LeafNode {
+    pub(crate) fn is_genesis(&self) -> bool {
+        self.hash.is_zero()
+    }
 }
 
 impl LeafNode {
@@ -33,11 +40,16 @@ impl LeafNode {
         Self {
             hash: TreeNodeHash::zero(),
             height: NodeHeight(0),
+            payload_height: NodeHeight(0),
         }
     }
 
-    pub fn new(hash: TreeNodeHash, height: NodeHeight) -> Self {
-        Self { hash, height }
+    pub fn new(hash: TreeNodeHash, height: NodeHeight, payload_height: NodeHeight) -> Self {
+        Self {
+            hash,
+            height,
+            payload_height,
+        }
     }
 
     pub fn hash(&self) -> &TreeNodeHash {
@@ -46,5 +58,9 @@ impl LeafNode {
 
     pub fn height(&self) -> NodeHeight {
         self.height
+    }
+
+    pub fn payload_height(&self) -> NodeHeight {
+        self.payload_height
     }
 }

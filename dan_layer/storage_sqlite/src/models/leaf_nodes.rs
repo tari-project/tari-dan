@@ -28,6 +28,8 @@ use crate::schema::*;
 pub struct LeafNode {
     pub id: i32,
     pub shard_id: Vec<u8>,
+    pub payload_id: Vec<u8>,
+    pub payload_height: i64,
     pub tree_node_hash: Vec<u8>,
     pub node_height: i64,
     pub timestamp: NaiveDateTime,
@@ -37,6 +39,8 @@ pub struct LeafNode {
 #[table_name = "leaf_nodes"]
 pub struct NewLeafNode {
     pub shard_id: Vec<u8>,
+    pub payload_id: Vec<u8>,
     pub tree_node_hash: Vec<u8>,
+    pub payload_height: i64,
     pub node_height: i64,
 }

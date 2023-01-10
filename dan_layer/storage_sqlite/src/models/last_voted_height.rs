@@ -28,6 +28,7 @@ use crate::schema::*;
 #[derive(Debug, Identifiable, Queryable)]
 pub struct LastVotedHeight {
     pub id: i32,
+    pub payload_id: Vec<u8>,
     pub shard_id: Vec<u8>,
     pub node_height: i64,
     pub timestamp: NaiveDateTime,
@@ -37,5 +38,6 @@ pub struct LastVotedHeight {
 #[table_name = "last_voted_heights"]
 pub struct NewLastVotedHeight {
     pub shard_id: Vec<u8>,
+    pub payload_id: Vec<u8>,
     pub node_height: i64,
 }

@@ -6022,6 +6022,7 @@ version = "0.35.1"
 dependencies = [
  "env_logger",
  "lazy_static",
+ "log",
  "rand 0.7.3",
  "tari_common",
  "tari_common_types",
