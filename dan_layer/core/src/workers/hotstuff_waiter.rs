@@ -304,7 +304,7 @@ where
         {
             let mut tx = self.shard_store.create_tx()?;
 
-            // TODO(perf): We could only propose the pledge here and actually pledge it in on_receive_proposal
+            // TODO: We could only propose the pledge here and actually pledge it in on_receive_proposal
             let local_pledge = tx.pledge_object(shard, payload_id, NodeHeight(0))?;
 
             let (parent_hash, parent_height, parent_payload_height, maybe_payload) = if current_leaf_node.is_genesis() {
@@ -397,11 +397,11 @@ where
             };
         }
 
+        let involved_shards = payload.involved_shards();
         // If we have not previously voted on this payload and the node extends the current locked node, then we vote
         if (last_vote_height == NodeHeight(0) || node.height() > last_vote_height) &&
             (*node.parent() == locked_node || node.height() > locked_height)
         {
-            let involved_shards = payload.involved_shards();
             let proposed_nodes = self.shard_store.with_write_tx(|tx| {
                 tx.save_node(node.clone())?;
                 tx.save_leader_proposals(node.shard(), node.payload_id(), node.payload_height(), node.clone())?;
@@ -420,23 +420,17 @@ where
                     node.payload_height()
                 );
 
+                self.update_nodes(&node)?;
                 return Ok(());
             }
 
             // TODO: if the proposal is in DECIDE phase and the result is rejected we should not vote
             // because the leader is just letting us know that nodes voted to reject
-            let decided_nodes = self.decide_and_vote_on_all_nodes(payload, proposed_nodes).await?;
+            self.decide_and_vote_on_all_nodes(payload, proposed_nodes).await?;
 
             let mut tx = self.shard_store.create_tx()?;
             tx.set_last_voted_height(node.shard(), node.payload_id(), node.height())?;
             tx.commit()?;
-
-            // Update all decided nodes, these nodes will be committed
-            for n in decided_nodes {
-                if node.hash() != n.hash() {
-                    self.update_nodes(n)?;
-                }
-            }
         } else {
             info!(
                 target: LOG_TARGET,
@@ -447,7 +441,62 @@ where
                 locked_height
             );
         }
-        self.update_nodes(node)?;
+        self.update_nodes(&node)?;
+        // If all pledges for all shards and complete, then we can persist the payload changes
+        self.finalize_payload(&involved_shards, &node).await?;
+
+        Ok(())
+    }
+
+    /// Checks that all pledges have been resolved (completed/abandoned). If so, atomically commit the changeset for the
+    /// local shards
+    async fn finalize_payload(
+        &self,
+        involved_shards: &[ShardId],
+        node: &HotStuffTreeNode<TAddr, TPayload>,
+    ) -> Result<(), HotStuffError> {
+        // TODO(perf): Perhaps mark local pledges as local and use their shard ids
+        let local_shards = self
+            .epoch_manager
+            .filter_to_local_shards(node.epoch(), &self.public_key, involved_shards)
+            .await?;
+
+        let mut tx = self.shard_store.create_tx()?;
+        // TODO(perf): can count completed/abandoned pledges and only load if necessary
+        let resolved_pledges = tx.get_resolved_pledges_for_payload(node.payload_id())?;
+        assert!(
+            resolved_pledges.len() <= involved_shards.len(),
+            "More pledges than involved shards"
+        );
+        // Check if we have resolved all pledges, if so, we are ready to commit resultant substate changes
+        if resolved_pledges.len() == involved_shards.len() {
+            let finalize_result = tx.get_payload_result(&node.payload_id())?;
+            match &finalize_result.result {
+                TransactionResult::Accept(diff) => {
+                    let local_change_set = extract_changes_for_shards(&local_shards, node.payload_id(), diff)?;
+                    for pledge in resolved_pledges {
+                        // Only persist local shards
+                        if let Some(changes) = local_change_set.get(&pledge.shard_id) {
+                            let node_hash = pledge.completed_by_tree_node_hash.expect(
+                                "FIXME: this panic indicates that other nodes disagree on the result of the payload ",
+                            );
+                            let node = tx.get_node(&node_hash)?;
+                            tx.save_substate_changes(node, changes)?;
+                        }
+                    }
+
+                    tx.commit()?;
+
+                    self.publish_event(HotStuffEvent::OnFinalized(
+                        Box::new(node.justify().clone()),
+                        finalize_result,
+                    ));
+                },
+                TransactionResult::Reject(reason) => {
+                    self.publish_event(HotStuffEvent::Failed(reason.to_string()));
+                },
+            }
+        }
 
         Ok(())
     }
@@ -497,8 +546,7 @@ where
         &self,
         payload: TPayload,
         proposed_nodes: Vec<HotStuffTreeNode<TAddr, TPayload>>,
-    ) -> Result<Vec<HotStuffTreeNode<TAddr, TPayload>>, HotStuffError> {
-        let mut decided_nodes = vec![];
+    ) -> Result<(), HotStuffError> {
         let involved_shards = payload.involved_shards();
         // Find the shards that this node is responsible for out of all the shards involved
         // TODO: Perhaps we can determine the epoch for the payload and then use it. This assumes that all nodes have
@@ -542,7 +590,6 @@ where
                     node.payload_id(),
                     node.shard()
                 );
-                decided_nodes.push(node);
                 continue;
             }
 
@@ -566,7 +613,7 @@ where
             self.tx_vote_message.send((vote_msg, leader)).await?;
         }
 
-        Ok(decided_nodes)
+        Ok(())
     }
 
     fn decide(
@@ -853,7 +900,7 @@ where
     }
 
     /// See section 6, algorithm 4 in https://arxiv.org/pdf/1803.05069.pdf
-    fn update_nodes(&self, node: HotStuffTreeNode<TAddr, TPayload>) -> Result<(), HotStuffError> {
+    fn update_nodes(&self, node: &HotStuffTreeNode<TAddr, TPayload>) -> Result<(), HotStuffError> {
         let mut tx = self.shard_store.create_tx()?;
         // commit_node is at PRE-COMMIT phase
         self.update_high_qc(&mut tx, node.proposed_by().clone(), node.justify().clone())?;
@@ -894,28 +941,15 @@ where
         if commit_node.parent() == precommit_node.hash() && *precommit_node.parent() == prepare_node {
             info!(
                 target: LOG_TARGET,
-                "✅ Node {} forms a 3-chain b'' = {}, b' = {}, b = {}, b* = {}",
-                prepare_node,
+                "✅ Node {} forms a 3-chain b'' = {}, b' = {}, b = {}",
+                node.hash(),
                 commit_node.hash(),
                 precommit_node.hash(),
                 prepare_node,
-                node.hash()
             );
 
-            // prepare_node is at DECIDE phase
-            let prepare_node = if prepare_node.is_zero() {
-                HotStuffTreeNode::genesis(
-                    node.epoch(),
-                    node.payload_id(),
-                    node.shard(),
-                    node.proposed_by().clone(),
-                    None,
-                )
-            } else {
-                tx.get_node(&prepare_node)?
-            };
-            self.on_commit(&mut tx, &prepare_node)?;
-            tx.set_last_executed_height(prepare_node.shard(), prepare_node.payload_id(), prepare_node.height())?;
+            self.on_commit(&mut tx, node)?;
+            tx.set_last_executed_height(node.shard(), node.payload_id(), node.height())?;
         } else {
             debug!(
                 target: LOG_TARGET,
@@ -975,20 +1009,21 @@ where
         let last_exec_height = tx.get_last_executed_height(node.shard(), node.payload_id())?;
         if last_exec_height < node.height() {
             match node.payload_phase() {
-                HotstuffPhase::Prepare => {
+                HotstuffPhase::Decide => {
                     info!(
                         target: LOG_TARGET,
                         "🔥 [on_commit] Committing payload {} in DECIDE phase",
                         node.payload_id()
                     );
                     let finalize_result = tx.get_payload_result(&node.payload_id())?;
-                    self.commit_finalized_result(tx, node, &finalize_result.result)?;
-                    tx.complete_pledges(node.shard(), node.payload_id(), node.hash())?;
-                    // TODO: we should emit this event when all shards have been finalised
-                    self.publish_event(HotStuffEvent::OnFinalized(
-                        Box::new(node.justify().clone()),
-                        finalize_result,
-                    ));
+                    match finalize_result.result {
+                        TransactionResult::Accept(_) => {
+                            tx.complete_pledges(node.shard(), node.payload_id(), node.hash())?;
+                        },
+                        TransactionResult::Reject(_) => {
+                            tx.abandon_pledges(node.shard(), node.payload_id(), node.hash())?;
+                        },
+                    }
                 },
                 phase => {
                     info!(
@@ -1017,7 +1052,7 @@ where
             "[execute] Number of pledges: {}",
             shard_pledges.len()
         );
-        for (k, v) in shard_pledges.iter() {
+        for (k, v) in &shard_pledges {
             // TODO: should be debug
             info!(
                 target: LOG_TARGET,
@@ -1029,29 +1064,6 @@ where
 
         let finalize_result = self.payload_processor.process_payload(payload, shard_pledges)?;
         Ok(finalize_result)
-    }
-
-    fn commit_finalized_result(
-        &self,
-        tx: &mut TShardStore::Transaction<'_>,
-        node: &HotStuffTreeNode<TAddr, TPayload>,
-        payload_result: &TransactionResult,
-    ) -> Result<(), HotStuffError> {
-        match payload_result {
-            TransactionResult::Accept(ref diff) => {
-                let changes = extract_changes_for_shard(node.shard(), node.payload_id(), diff)?;
-                tx.save_substate_changes(&changes, node)?;
-            },
-            TransactionResult::Reject(ref reason) => {
-                info!(
-                    target: LOG_TARGET,
-                    "🔥 [on_commit] Payload {} was rejected with reason: {}",
-                    node.payload_id(),
-                    reason
-                );
-            },
-        }
-        Ok(())
     }
 
     async fn get_leader(&self, node: &HotStuffTreeNode<TAddr, TPayload>) -> Result<TAddr, HotStuffError> {
@@ -1191,16 +1203,16 @@ where
     }
 }
 
-fn extract_changes_for_shard(
-    shard_id: ShardId,
+fn extract_changes_for_shards(
+    shard_ids: &[ShardId],
     payload_id: PayloadId,
     diff: &SubstateDiff,
 ) -> Result<HashMap<ShardId, Vec<SubstateState>>, HotStuffError> {
     let mut changes = HashMap::<_, Vec<_>>::new();
     // down first, then up
     for (address, version) in diff.down_iter() {
-        let sid = ShardId::from_address(address, *version);
-        if sid == shard_id {
+        let shard_id = ShardId::from_address(address, *version);
+        if shard_ids.contains(&shard_id) {
             changes
                 .entry(shard_id)
                 .or_default()
@@ -1208,15 +1220,12 @@ fn extract_changes_for_shard(
         }
     }
     for (address, substate) in diff.up_iter() {
-        let sid = ShardId::from_address(address, substate.version());
-        if sid == shard_id {
-            changes
-                .entry(ShardId::from_address(address, substate.version()))
-                .or_default()
-                .push(SubstateState::Up {
-                    created_by: payload_id,
-                    data: substate.clone(),
-                });
+        let shard_id = ShardId::from_address(address, substate.version());
+        if shard_ids.contains(&shard_id) {
+            changes.entry(shard_id).or_default().push(SubstateState::Up {
+                created_by: payload_id,
+                data: substate.clone(),
+            });
         }
     }
 

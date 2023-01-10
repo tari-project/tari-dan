@@ -130,6 +130,9 @@ create table substates
     destroyed_timestamp     timestamp NULL
 );
 
+-- All shard ids are unique
+create unique index uniq_substates_shard_id on substates (shard_id);
+
 create table shard_pledges
 (
     id                          integer   not NULL primary key AUTOINCREMENT,
