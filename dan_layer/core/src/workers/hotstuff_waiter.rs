@@ -297,6 +297,7 @@ where
             .flat_map(|allocation| allocation.committee.members)
             .collect::<HashSet<_>>();
 
+        // Create leaf node
         let leaf_node: HotStuffTreeNode<TAddr, TPayload>;
         {
             let mut tx = self.shard_store.create_tx()?;
@@ -304,11 +305,11 @@ where
             // TODO(perf): We could only propose the pledge here and actually pledge it in on_receive_proposal
             let local_pledge = tx.pledge_object(shard, payload_id, NodeHeight(0))?;
 
-            let (parent_hash, parent_height) = if current_leaf_node.is_genesis() {
-                (TreeNodeHash::zero(), NodeHeight(0))
+            let (parent_hash, parent_height, parent_payload_height, maybe_payload) = if current_leaf_node.is_genesis() {
+                (TreeNodeHash::zero(), NodeHeight(0), NodeHeight(0), Some(payload))
             } else {
                 let node = tx.get_node(current_leaf_node.hash())?;
-                (*node.hash(), node.height())
+                (*node.hash(), node.height(), node.payload_height(), None)
             };
 
             leaf_node = HotStuffTreeNode::new(
@@ -316,10 +317,10 @@ where
                 shard,
                 parent_height + NodeHeight(1),
                 payload_id,
-                // We only need to send the payload for the first round, we choose not to include it to reduce
+                // We only need to send the payload for the genesis node, we choose not to include it to reduce
                 // message size.
-                None,
-                parent_height + NodeHeight(1),
+                maybe_payload,
+                parent_payload_height + NodeHeight(1),
                 Some(local_pledge),
                 epoch,
                 self.public_key.clone(),
