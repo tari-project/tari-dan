@@ -105,11 +105,11 @@ fn get_function_block(template_ident: &Ident, ast: FunctionAst) -> Expr {
                     parse_quote! {
                         let component =
                             decode_exact::<::tari_template_lib::models::ComponentHeader>(&call_info.args[#i])
-                            .expect("failed to decode component instance for function #func_name.");
+                            .unwrap_or_else(|e| panic!("failed to decode component instance for function '{}': {}",  #func_name, e));
                     },
                     parse_quote! {
                         let mut state = decode_exact::<#template_mod_name::#template_ident>(&component.state())
-                            .expect("failed to decode component for function #func_name.");
+                            .unwrap_or_else(|e| panic!("failed to decode component for function '{}': {}", #func_name, e));
                     },
                 ]
             },
