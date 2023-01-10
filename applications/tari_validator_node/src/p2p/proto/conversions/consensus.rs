@@ -28,11 +28,12 @@ use tari_comms::types::CommsPublicKey;
 use tari_crypto::tari_utilities::ByteArray;
 use tari_dan_common_types::{
     ObjectPledge,
+    PayloadId,
     QuorumCertificate,
     QuorumDecision,
     QuorumRejectReason,
     ShardId,
-    ShardVote,
+    ShardPledge,
     SubstateState,
     TreeNodeHash,
     ValidatorMetadata,
@@ -48,9 +49,10 @@ impl From<VoteMessage> for proto::consensus::VoteMessage {
     fn from(msg: VoteMessage) -> Self {
         Self {
             local_node_hash: msg.local_node_hash().as_bytes().to_vec(),
+            payload_id: msg.payload_id().as_bytes().to_vec(),
             shard_id: msg.shard().as_bytes().to_vec(),
             decision: i32::from(msg.decision().as_u8()),
-            all_shard_nodes: msg.all_shard_nodes().iter().map(|n| n.clone().into()).collect(),
+            all_shard_pledges: msg.all_shard_pledges().iter().map(|n| n.clone().into()).collect(),
             validator_metadata: Some(msg.validator_metadata().clone().into()),
         }
     }
@@ -65,10 +67,11 @@ impl TryFrom<proto::consensus::VoteMessage> for VoteMessage {
             .ok_or_else(|| anyhow!("Validator metadata is missing"))?;
         Ok(VoteMessage::with_validator_metadata(
             TreeNodeHash::try_from(value.local_node_hash)?,
+            PayloadId::try_from(value.payload_id.as_slice())?,
             ShardId::from_bytes(&value.shard_id)?,
             QuorumDecision::from_u8(u8::try_from(value.decision)?)?,
             value
-                .all_shard_nodes
+                .all_shard_pledges
                 .into_iter()
                 .map(|n| n.try_into())
                 .collect::<Result<Vec<_>, _>>()?,
@@ -154,15 +157,15 @@ impl From<QuorumCertificate> for proto::consensus::QuorumCertificate {
         Self {
             payload_id: source.payload_id().as_bytes().to_vec(),
             payload_height: source.payload_height().as_u64(),
-            local_node_hash: source.local_node_hash().as_bytes().to_vec(),
-            local_node_height: source.local_node_height().as_u64(),
+            local_node_hash: source.node_hash().as_bytes().to_vec(),
+            local_node_height: source.node_height().as_u64(),
             shard: source.shard().as_bytes().to_vec(),
             epoch: source.epoch().as_u64(),
             decision: match source.decision() {
                 QuorumDecision::Accept => 0,
                 QuorumDecision::Reject(ref reason) => reason.as_u8().into(),
             },
-            all_shard_nodes: source.all_shard_nodes().iter().map(|p| p.clone().into()).collect(),
+            all_shard_pledges: source.all_shard_pledges().iter().map(|p| p.clone().into()).collect(),
             validators_metadata: source.validators_metadata().iter().map(|p| p.clone().into()).collect(),
         }
     }
@@ -186,7 +189,7 @@ impl TryFrom<proto::consensus::QuorumCertificate> for QuorumCertificate {
                 _ => return Err(anyhow!("Invalid decision")),
             },
             value
-                .all_shard_nodes
+                .all_shard_pledges
                 .iter()
                 .map(|s| s.clone().try_into())
                 .collect::<Result<_, _>>()?,
@@ -199,10 +202,10 @@ impl TryFrom<proto::consensus::QuorumCertificate> for QuorumCertificate {
     }
 }
 
-// -------------------------------- ShardVote -------------------------------- //
+// -------------------------------- ShardPledge -------------------------------- //
 
-impl From<ShardVote> for proto::consensus::ShardVote {
-    fn from(s: ShardVote) -> Self {
+impl From<ShardPledge> for proto::consensus::ShardPledge {
+    fn from(s: ShardPledge) -> Self {
         Self {
             shard_id: s.shard_id.into(),
             node_hash: s.node_hash.into(),
@@ -211,10 +214,10 @@ impl From<ShardVote> for proto::consensus::ShardVote {
     }
 }
 
-impl TryFrom<proto::consensus::ShardVote> for ShardVote {
+impl TryFrom<proto::consensus::ShardPledge> for ShardPledge {
     type Error = anyhow::Error;
 
-    fn try_from(value: proto::consensus::ShardVote) -> Result<Self, Self::Error> {
+    fn try_from(value: proto::consensus::ShardPledge) -> Result<Self, Self::Error> {
         Ok(Self {
             shard_id: value.shard_id.try_into()?,
             node_hash: value.node_hash.try_into()?,

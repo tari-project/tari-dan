@@ -75,7 +75,7 @@ impl<TPayload: Payload, TAddr: NodeAddressable> HotStuffMessage<TPayload, TAddr>
         }
     }
 
-    pub fn new_view(high_qc: QuorumCertificate, shard: ShardId, payload: Option<TPayload>) -> Self {
+    pub fn new_view(high_qc: QuorumCertificate, shard: ShardId, payload: TPayload) -> Self {
         Self {
             message_type: HotStuffMessageType::NewView,
             high_qc: Some(high_qc),
@@ -84,7 +84,7 @@ impl<TPayload: Payload, TAddr: NodeAddressable> HotStuffMessage<TPayload, TAddr>
             // Traditional hotstuff does not include broadcasting a payload at the same time,
             // but if this is a view for a specific payload, then it can be sent to the leader as
             // an attachment
-            new_view_payload: payload,
+            new_view_payload: Some(payload),
         }
     }
 

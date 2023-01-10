@@ -63,8 +63,15 @@ impl OutboundService for OutboundMessaging {
         to: Self::Addr,
         message: DanMessage<Self::Payload, Self::Addr>,
     ) -> Result<(), MessagingError> {
+        // Comment this in to slow down messages for debugging
+        info!(
+            target: LOG_TARGET,
+            "------------------------------------------------------\n",
+        );
+        // tokio::time::sleep(std::time::Duration::from_secs(5)).await;
+
         if to == self.our_node_addr {
-            trace!(target: LOG_TARGET, "Sending {:?} to self", message);
+            debug!(target: LOG_TARGET, "Sending {:?} to self", message);
             self.loopback_sender
                 .send(message)
                 .await

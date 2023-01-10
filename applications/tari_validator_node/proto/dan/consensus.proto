@@ -21,7 +21,7 @@ message HotStuffMessage {
   TariDanPayload new_view_payload = 5;
 }
 
-message ShardVote {
+message ShardPledge {
   bytes shard_id = 1;
   bytes node_hash = 2;
   ObjectPledge pledge = 3;
@@ -40,7 +40,7 @@ message QuorumCertificate {
   bytes shard = 5;
   uint64 epoch = 6;
   QuorumDecision decision = 7;
-  repeated ShardVote all_shard_nodes = 8;
+  repeated ShardPledge all_shard_pledges = 8;
   repeated ValidatorMetadata validators_metadata = 9;
 }
 
@@ -71,10 +71,11 @@ message TariDanPayload {
 
 message VoteMessage {
   bytes local_node_hash = 1;
-  bytes shard_id = 2;
-  QuorumDecision decision = 3;
-  repeated ShardVote all_shard_nodes = 4;
-  ValidatorMetadata validator_metadata = 5;
+  bytes payload_id = 2;
+  bytes shard_id = 3;
+  QuorumDecision decision = 4;
+  repeated ShardPledge all_shard_pledges = 5;
+  ValidatorMetadata validator_metadata = 6;
 }
 
 enum QuorumDecision {
