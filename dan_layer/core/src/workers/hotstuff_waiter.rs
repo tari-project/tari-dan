@@ -473,13 +473,24 @@ where
             let finalize_result = tx.get_payload_result(&node.payload_id())?;
             match &finalize_result.result {
                 TransactionResult::Accept(diff) => {
+                    if resolved_pledges
+                        .iter()
+                        .any(|pledge| pledge.abandoned_by_tree_node_hash.is_some())
+                    {
+                        // Fail immediately
+                        self.publish_event(HotStuffEvent::Failed(
+                            "Payload was accepted by this node but some pledges were abandoned".to_string(),
+                        ));
+                        return Ok(());
+                    }
+
                     let local_change_set = extract_changes_for_shards(&local_shards, node.payload_id(), diff)?;
                     for pledge in resolved_pledges {
                         // Only persist local shards
                         if let Some(changes) = local_change_set.get(&pledge.shard_id) {
-                            let node_hash = pledge.completed_by_tree_node_hash.expect(
-                                "FIXME: this panic indicates that other nodes disagree on the result of the payload ",
-                            );
+                            let node_hash = pledge
+                                .completed_by_tree_node_hash
+                                .expect("[finalize_payload] Pledge MUST be completed");
                             let node = tx.get_node(&node_hash)?;
                             tx.save_substate_changes(node, changes)?;
                         }
@@ -632,16 +643,25 @@ where
 
                 let finalize_result = self.execute(payload, shard_pledges)?;
 
-                self.shard_store
-                    .with_write_tx(|tx| tx.update_payload_result(&node.payload_id(), finalize_result.clone()))?;
-
                 if let TransactionResult::Accept(ref diff) = finalize_result.result {
                     match Self::validate_pledges(shard_pledges, diff) {
-                        Ok(_) => Ok(finalize_result),
-                        Err(e @ HotStuffError::MissingPledges(_)) => Ok(FinalizeResult::errored(
-                            payload_id.into_array().into(),
-                            RejectReason::ShardsNotPledged(e.to_string()),
-                        )),
+                        Ok(_) => {
+                            self.shard_store.with_write_tx(|tx| {
+                                tx.update_payload_result(&node.payload_id(), finalize_result.clone())
+                            })?;
+                            Ok(finalize_result)
+                        },
+                        Err(e @ HotStuffError::MissingPledges(_)) => {
+                            let finalize_result = FinalizeResult::errored(
+                                payload_id.into_array().into(),
+                                RejectReason::ShardsNotPledged(e.to_string()),
+                            );
+                            self.shard_store.with_write_tx(|tx| {
+                                tx.update_payload_result(&node.payload_id(), finalize_result.clone())
+                            })?;
+
+                            Ok(finalize_result)
+                        },
                         Err(e) => Err(e),
                     }
                 } else {
@@ -947,7 +967,18 @@ where
                 precommit_node.hash(),
                 prepare_node,
             );
-
+            // prepare_node is at DECIDE phase
+            //             let prepare_node = if prepare_node.is_zero() {
+            //     HotStuffTreeNode::genesis(
+            //         node.epoch(),
+            //         node.payload_id(),
+            //         node.shard(),
+            //         node.proposed_by().clone(),
+            //         None,
+            //     )
+            // } else {
+            //     tx.get_node(&prepare_node)?
+            // };
             self.on_commit(&mut tx, node)?;
             tx.set_last_executed_height(node.shard(), node.payload_id(), node.height())?;
         } else {
