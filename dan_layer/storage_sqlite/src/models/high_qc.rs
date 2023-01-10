@@ -28,6 +28,7 @@ use crate::schema::*;
 pub struct HighQc {
     pub id: i32,
     pub shard_id: Vec<u8>,
+    pub payload_id: Vec<u8>,
     pub height: i64,
     pub qc_json: String,
     pub identity: Vec<u8>,
@@ -38,6 +39,7 @@ pub struct HighQc {
 #[table_name = "high_qcs"]
 pub struct NewHighQc {
     pub shard_id: Vec<u8>,
+    pub payload_id: Vec<u8>,
     pub height: i64,
     pub qc_json: String,
     pub identity: Vec<u8>,

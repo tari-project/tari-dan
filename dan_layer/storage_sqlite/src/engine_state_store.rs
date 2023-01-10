@@ -25,7 +25,7 @@ use tari_dan_common_types::optional::Optional;
 use tari_dan_engine::state_store::{AtomicDb, StateReader, StateStoreError, StateWriter};
 use tari_utilities::hex::to_hex;
 
-use crate::{diesel::ExpressionMethods, error::SqliteStorageError, schema::metadata};
+use crate::{diesel::ExpressionMethods, error::SqliteStorageError};
 pub struct SqliteStateStore {
     conn: SqliteConnection,
 }
@@ -85,8 +85,8 @@ impl<'a> SqliteTransaction<'a> {
 
 impl<'a> StateReader for SqliteTransaction<'a> {
     fn get_state_raw(&self, key: &[u8]) -> Result<Vec<u8>, StateStoreError> {
-        use crate::schema::metadata::dsl;
-        let val = dsl::metadata
+        use crate::global::schema::metadata;
+        let val = metadata::table
             .select(metadata::value)
             .filter(metadata::key.eq(key))
             .first::<Vec<u8>>(self.conn)
@@ -106,8 +106,8 @@ impl<'a> StateReader for SqliteTransaction<'a> {
     }
 
     fn exists(&self, key: &[u8]) -> Result<bool, StateStoreError> {
-        use crate::schema::metadata::dsl;
-        let val = dsl::metadata
+        use crate::global::schema::metadata;
+        let val = metadata::table
             .count()
             .filter(metadata::key.eq(key))
             .limit(1)
@@ -125,11 +125,11 @@ impl<'a> StateReader for SqliteTransaction<'a> {
 
 impl<'a> StateWriter for SqliteTransaction<'a> {
     fn set_state_raw(&mut self, key: &[u8], value: Vec<u8>) -> Result<(), StateStoreError> {
-        use crate::schema::metadata::dsl;
+        use crate::global::schema::metadata;
 
         // TODO: Check key exists without getting the data
         match self.get_state_raw(key).optional() {
-            Ok(Some(_)) => diesel::update(dsl::metadata.filter(metadata::key.eq(key)))
+            Ok(Some(_)) => diesel::update(metadata::table.filter(metadata::key.eq(key)))
                 .set(metadata::value.eq(value))
                 .execute(self.conn)
                 .map_err(|source| {

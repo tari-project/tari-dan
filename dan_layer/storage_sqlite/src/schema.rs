@@ -1,7 +1,10 @@
-table! {
+// @generated automatically by Diesel CLI.
+
+diesel::table! {
     high_qcs (id) {
         id -> Integer,
         shard_id -> Binary,
+        payload_id -> Binary,
         height -> BigInt,
         qc_json -> Text,
         identity -> Binary,
@@ -9,25 +12,27 @@ table! {
     }
 }
 
-table! {
+diesel::table! {
     last_executed_heights (id) {
         id -> Integer,
+        payload_id -> Binary,
         shard_id -> Binary,
         node_height -> BigInt,
         timestamp -> Timestamp,
     }
 }
 
-table! {
+diesel::table! {
     last_voted_heights (id) {
         id -> Integer,
+        payload_id -> Binary,
         shard_id -> Binary,
         node_height -> BigInt,
         timestamp -> Timestamp,
     }
 }
 
-table! {
+diesel::table! {
     leader_proposals (id) {
         id -> Integer,
         payload_id -> Binary,
@@ -39,19 +44,22 @@ table! {
     }
 }
 
-table! {
+diesel::table! {
     leaf_nodes (id) {
         id -> Integer,
         shard_id -> Binary,
+        payload_id -> Binary,
+        payload_height -> BigInt,
         tree_node_hash -> Binary,
         node_height -> BigInt,
         timestamp -> Timestamp,
     }
 }
 
-table! {
+diesel::table! {
     lock_node_and_heights (id) {
         id -> Integer,
+        payload_id -> Binary,
         shard_id -> Binary,
         tree_node_hash -> Binary,
         node_height -> BigInt,
@@ -59,14 +67,7 @@ table! {
     }
 }
 
-table! {
-    metadata (key) {
-        key -> Binary,
-        value -> Binary,
-    }
-}
-
-table! {
+diesel::table! {
     nodes (id) {
         id -> Integer,
         node_hash -> Binary,
@@ -83,7 +84,7 @@ table! {
     }
 }
 
-table! {
+diesel::table! {
     payloads (id) {
         id -> Integer,
         payload_id -> Binary,
@@ -91,25 +92,26 @@ table! {
         public_nonce -> Binary,
         scalar -> Binary,
         fee -> BigInt,
-        sender_public_key -> Binary,
+        sender_address -> Binary,
         meta -> Text,
-        timestamp -> Timestamp,
         result -> Nullable<Text>,
+        timestamp -> Timestamp,
     }
 }
 
-table! {
+diesel::table! {
     received_votes (id) {
         id -> Integer,
-        tree_node_hash -> Binary,
+        payload_id -> Binary,
         shard_id -> Binary,
+        tree_node_hash -> Binary,
         address -> Binary,
         vote_message -> Text,
         timestamp -> Timestamp,
     }
 }
 
-table! {
+diesel::table! {
     shard_pledges (id) {
         id -> Integer,
         shard_id -> Binary,
@@ -123,7 +125,7 @@ table! {
     }
 }
 
-table! {
+diesel::table! {
     substates (id) {
         id -> Integer,
         shard_id -> Binary,
@@ -142,14 +144,13 @@ table! {
     }
 }
 
-allow_tables_to_appear_in_same_query!(
+diesel::allow_tables_to_appear_in_same_query!(
     high_qcs,
     last_executed_heights,
     last_voted_heights,
     leader_proposals,
     leaf_nodes,
     lock_node_and_heights,
-    metadata,
     nodes,
     payloads,
     received_votes,
