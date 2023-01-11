@@ -15,11 +15,9 @@
   "methods": [
     {
       "name": "get_epoch_manager_stats",
-      "summary": "asdf",
+      "summary": "",
       "tags": [
-        {
-          "name": "asdf"
-        }
+
       ],
       "params": [],
       "result": {
@@ -49,11 +47,9 @@
     },
     {
       "name": "get_identity",
-      "summary": "asdf",
+      "summary": "",
       "tags": [
-        {
-          "name": "asdf"
-        }
+
       ],
       "params": [],
       "result": {
@@ -84,11 +80,9 @@
     },
     {
       "name": "get_recent_transactions",
-      "summary": "asdf",
+      "summary": "",
       "tags": [
-        {
-          "name": "asdf"
-        }
+
       ],
       "params": [],
       "result": {
@@ -115,11 +109,9 @@
     },
     {
       "name": "get_connections",
-      "summary": "asdf",
+      "summary": "",
       "tags": [
-        {
-          "name": "asdf"
-        }
+
       ],
       "params": [],
       "result": {
@@ -148,12 +140,9 @@
     },
     {
       "name": "get_mempool_stats",
-      "summary": "asdf",
+      "summary": "",
       "tags": [
-        {
-          "name": "asdf"
-        }
-      ],
+     ],
       "params": [],
       "result": {
         "name": "epoch_stats",
@@ -181,11 +170,9 @@
     },
     {
       "name": "get_templates",
-      "summary": "asdf",
+      "summary": "",
       "tags": [
-        {
-          "name": "asdf"
-        }
+
       ],
       "params": [
         {
@@ -296,12 +283,8 @@
 ,
     {
       "name": "register_validator_node",
-      "summary": "asdf",
-      "tags": [
-        {
-          "name": "asdf"
-        }
-      ],
+      "summary": "Registers the validator node",
+      "tags": [],
       "params": [],
       "result": {
         "name": "epoch_stats",
@@ -330,38 +313,8 @@
   ],
   "components": {
     "contentDescriptors": {
-      "PetId": {
-        "name": "petId",
-        "required": true,
-        "description": "The id of the pet to retrieve",
-        "schema": {
-          "$ref": "#/components/schemas/PetId"
-        }
-      }
     },
     "schemas": {
-      "PetId": {
-        "type": "integer",
-        "minimum": 0
-      },
-      "Pet": {
-        "type": "object",
-        "required": [
-          "id",
-          "name"
-        ],
-        "properties": {
-          "id": {
-            "$ref": "#/components/schemas/PetId"
-          },
-          "name": {
-            "type": "string"
-          },
-          "tag": {
-            "type": "string"
-          }
-        }
-      },
       "EpochStats": {
         "type": "object",
         "required": [
