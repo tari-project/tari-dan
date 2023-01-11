@@ -64,7 +64,7 @@ use crate::{
         Payload,
     },
     services::{epoch_manager::EpochManager, leader_strategy::LeaderStrategy, PayloadProcessor, SigningService},
-    storage::shard_store::{ShardStore, ShardStoreTransaction},
+    storage::shard_store::{ShardStore, ShardStoreReadTransaction, ShardStoreWriteTransaction},
     workers::{
         events::HotStuffEvent,
         hotstuff_error::{HotStuffError, ProposalValidationError},
@@ -264,10 +264,11 @@ where
         // We dont expect signatures from other VNs at this point
         // TODO: should be 1, we expect the sender to sign their QC
         self.validate_qc(&qc, 0).await?;
-        let mut tx = self.shard_store.create_tx()?;
-        self.update_high_qc(&mut tx, from.clone(), qc)?;
-        tx.save_payload(payload)?;
-        tx.commit()?;
+        self.shard_store.with_write_tx(|tx| {
+            self.update_high_qc(tx, from.clone(), qc)?;
+            tx.save_payload(payload)?;
+            Ok::<_, HotStuffError>(())
+        })?;
 
         // Take note of unique NEWVIEWs so that we can count them
         let entry = self.newview_message_counts.entry((shard, payload_id)).or_default();
@@ -282,7 +283,7 @@ where
         let payload;
         let current_leaf_node;
         {
-            let tx = self.shard_store.create_tx()?;
+            let tx = self.shard_store.create_read_tx()?;
             current_leaf_node = tx.get_leaf_node(&payload_id, &shard)?;
             high_qc = tx.get_high_qc_for(payload_id, shard)?;
             // The high QC could be from a previous payload, we want to propose for this payload
@@ -302,7 +303,7 @@ where
         // Create leaf node
         let leaf_node: HotStuffTreeNode<TAddr, TPayload>;
         {
-            let mut tx = self.shard_store.create_tx()?;
+            let mut tx = self.shard_store.create_write_tx()?;
 
             // TODO: We could only propose the pledge here and actually pledge it in on_receive_proposal
             let local_pledge = tx.pledge_object(shard, payload_id, NodeHeight(0))?;
@@ -381,7 +382,7 @@ where
         let locked_node;
         let locked_height;
         {
-            let mut tx = self.shard_store.create_tx()?;
+            let mut tx = self.shard_store.create_write_tx()?;
 
             last_vote_height = tx.get_last_voted_height(node.shard(), node.payload_id())?;
             let (l_node, l_height) = tx.get_locked_node_hash_and_height(payload_id, shard)?;
@@ -428,7 +429,7 @@ where
             // because the leader is just letting us know that nodes voted to reject
             self.decide_and_vote_on_all_nodes(payload, proposed_nodes).await?;
 
-            let mut tx = self.shard_store.create_tx()?;
+            let mut tx = self.shard_store.create_write_tx()?;
             tx.set_last_voted_height(node.shard(), node.payload_id(), node.height())?;
             tx.commit()?;
         } else {
@@ -461,7 +462,7 @@ where
             .filter_to_local_shards(node.epoch(), &self.public_key, involved_shards)
             .await?;
 
-        let mut tx = self.shard_store.create_tx()?;
+        let mut tx = self.shard_store.create_write_tx()?;
         // TODO(perf): can count completed/abandoned pledges and only load if necessary
         let resolved_pledges = tx.get_resolved_pledges_for_payload(node.payload_id())?;
         assert!(
@@ -737,7 +738,7 @@ where
         let mut on_propose = None;
         let node;
         {
-            let tx = self.shard_store.create_tx()?;
+            let tx = self.shard_store.create_read_tx()?;
             // Avoid duplicates
             if tx.has_vote_for(&from, msg.local_node_hash())? {
                 info!(
@@ -765,7 +766,7 @@ where
             if !valid_committee.contains(&from) {
                 return Err(HotStuffError::ReceivedMessageFromNonCommitteeMember);
             }
-            let mut tx = self.shard_store.create_tx()?;
+            let mut tx = self.shard_store.create_write_tx()?;
 
             // Collect votes
             tx.save_received_vote_for(from, msg.local_node_hash(), msg.clone())?;
@@ -912,7 +913,7 @@ where
 
     /// See section 6, algorithm 4 in https://arxiv.org/pdf/1803.05069.pdf
     fn update_nodes(&self, node: &HotStuffTreeNode<TAddr, TPayload>) -> Result<(), HotStuffError> {
-        let mut tx = self.shard_store.create_tx()?;
+        let mut tx = self.shard_store.create_write_tx()?;
         // commit_node is at PRE-COMMIT phase
         self.update_high_qc(&mut tx, node.proposed_by().clone(), node.justify().clone())?;
 
@@ -990,7 +991,7 @@ where
 
     fn update_high_qc(
         &self,
-        tx: &mut TShardStore::Transaction<'_>,
+        tx: &mut TShardStore::WriteTransaction<'_>,
         proposed_by: TAddr,
         qc: QuorumCertificate,
     ) -> Result<(), HotStuffError> {
@@ -1025,7 +1026,7 @@ where
     /// Commits the changeset and node including all parent nodes if not already done so.
     fn on_commit(
         &self,
-        tx: &mut TShardStore::Transaction<'_>,
+        tx: &mut TShardStore::WriteTransaction<'_>,
         node: &HotStuffTreeNode<TAddr, TPayload>,
     ) -> Result<(), HotStuffError> {
         let last_exec_height = tx.get_last_executed_height(node.shard(), node.payload_id())?;
@@ -1037,7 +1038,7 @@ where
                         "🔥 [on_commit] Committing payload {} in DECIDE phase",
                         node.payload_id()
                     );
-                    let finalize_result = tx.get_payload_result(&node.payload_id())?;
+                    let finalize_result = (*tx).get_payload_result(&node.payload_id())?;
                     match finalize_result.result {
                         TransactionResult::Accept(_) => {
                             tx.complete_pledges(node.shard(), node.payload_id(), node.hash())?;

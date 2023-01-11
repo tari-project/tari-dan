@@ -40,7 +40,7 @@ use tari_dan_core::{
         ValidatorNodeClientFactory,
     },
     storage::{
-        shard_store::{ShardStore, ShardStoreTransaction},
+        shard_store::{ShardStore, ShardStoreReadTransaction},
         StorageError,
     },
 };
@@ -135,11 +135,12 @@ impl DryRunTransactionProcessor {
         &self,
         involved_shards: Vec<ShardId>,
     ) -> Result<HashMap<ShardId, ObjectPledge>, DryRunTransactionProcessorError> {
-        let tx = self.shard_store.create_tx().unwrap();
-        let inventory = tx.get_state_inventory().unwrap();
+        let local_substates = self.shard_store.with_read_tx(|tx| {
+            let inventory = tx.get_state_inventory()?;
+            let local_shard_ids: Vec<_> = involved_shards.into_iter().filter(|s| inventory.contains(s)).collect();
+            tx.get_substate_states(&local_shard_ids)
+        })?;
 
-        let local_shard_ids: Vec<ShardId> = involved_shards.into_iter().filter(|s| inventory.contains(s)).collect();
-        let local_substates = tx.get_substate_states(&local_shard_ids)?;
         let mut local_pledges = HashMap::with_capacity(local_substates.len());
         for substate in local_substates {
             let shard_id = substate.shard_id();

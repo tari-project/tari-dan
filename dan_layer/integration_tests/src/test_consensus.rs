@@ -32,7 +32,7 @@ use tari_dan_common_types::{vn_mmr_node_hash, Epoch, QuorumCertificate, QuorumDe
 use tari_dan_core::{
     models::{vote_message::VoteMessage, HotStuffMessage, Payload, TariDanPayload},
     services::{epoch_manager::RangeEpochManager, leader_strategy::AlwaysFirstLeader, NodeIdentitySigningService},
-    storage::shard_store::{ShardStore, ShardStoreTransaction},
+    storage::shard_store::{ShardStore, ShardStoreWriteTransaction},
 };
 use tari_dan_engine::transaction::{Transaction, TransactionBuilder};
 use tari_engine_types::instruction::Instruction;
