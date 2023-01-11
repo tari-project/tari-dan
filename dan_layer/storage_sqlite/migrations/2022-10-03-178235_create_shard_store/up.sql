@@ -17,8 +17,6 @@ create unique index payload_index_payload_id on payloads (payload_id);
 create table received_votes
 (
     id             integer   not null primary key AUTOINCREMENT,
-    payload_id     blob      not NULL,
-    shard_id       blob      not NULL,
     tree_node_hash blob      not NULL,
     address        blob      not NULL,
     vote_message   text      not NULL,

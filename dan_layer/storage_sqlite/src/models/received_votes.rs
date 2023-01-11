@@ -27,8 +27,6 @@ use crate::schema::*;
 #[derive(Debug, Identifiable, Queryable)]
 pub struct ReceivedVote {
     pub id: i32,
-    pub payload_id: Vec<u8>,
-    pub shard_id: Vec<u8>,
     pub tree_node_hash: Vec<u8>,
     pub address: Vec<u8>,
     pub vote_message: String,
@@ -38,8 +36,6 @@ pub struct ReceivedVote {
 #[derive(Debug, Insertable)]
 #[table_name = "received_votes"]
 pub struct NewReceivedVote {
-    pub payload_id: Vec<u8>,
-    pub shard_id: Vec<u8>,
     pub tree_node_hash: Vec<u8>,
     pub address: Vec<u8>,
     pub vote_message: String,

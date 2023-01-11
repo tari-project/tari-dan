@@ -71,12 +71,9 @@ message TariDanPayload {
 
 message VoteMessage {
   bytes local_node_hash = 1;
-  // TODO: Vote message does not require payload and shard ids - remove them
-  bytes payload_id = 2;
-  bytes shard_id = 3;
-  QuorumDecision decision = 4;
-  repeated ShardPledge all_shard_pledges = 5;
-  ValidatorMetadata validator_metadata = 6;
+  QuorumDecision decision = 2;
+  repeated ShardPledge all_shard_pledges = 3;
+  ValidatorMetadata validator_metadata = 4;
 }
 
 enum QuorumDecision {
