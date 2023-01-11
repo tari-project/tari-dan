@@ -1,0 +1,382 @@
+{
+  "openrpc": "1.0.0-rc1",
+  "info": {
+    "version": "1.0.0",
+    "title": "Tari DAN",
+    "license": {
+      "name": "MIT"
+    }
+  },
+  "servers": [
+    {
+      "url": "http://localhost:18200"
+    }
+  ],
+  "methods": [
+    {
+      "name": "get_epoch_manager_stats",
+      "summary": "asdf",
+      "tags": [
+        {
+          "name": "asdf"
+        }
+      ],
+      "params": [],
+      "result": {
+        "name": "epoch_stats",
+        "description": "",
+        "schema": {
+          "$ref": "#/components/schemas/EpochStats"
+        }
+      },
+      "errors": [
+      ],
+      "examples": [
+        {
+          "name": "default",
+          "description": "",
+          "params": [
+          ],
+          "result": {
+            "name": "example1",
+            "value": {
+              "current_epoch": 2,
+              "is_valid": true
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "get_identity",
+      "summary": "asdf",
+      "tags": [
+        {
+          "name": "asdf"
+        }
+      ],
+      "params": [],
+      "result": {
+        "name": "epoch_stats",
+        "description": "",
+        "schema": {
+          "$ref": "#/components/schemas/EpochStats"
+        }
+      },
+      "errors": [
+      ],
+      "examples": [
+        {
+          "name": "default",
+          "description": "",
+          "params": [
+          ],
+          "result": {
+            "name": "example1",
+            "value": {
+              "node_id": "d09292e5a5900a29382345e078",
+              "public_address": "/onion3/zqydnqgtapphitwdxr4sfg5kuvv7kbs5ye54yjy2mybi7f7qxd5jeiyd:18141",
+              "public_key": "b4a0b93ccd3a50ab8f7fb766cc9fea59e574283d69a53fe60d6aa842f42ecd38"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "get_recent_transactions",
+      "summary": "asdf",
+      "tags": [
+        {
+          "name": "asdf"
+        }
+      ],
+      "params": [],
+      "result": {
+        "name": "epoch_stats",
+        "description": "",
+        "schema": {
+          "$ref": "#/components/schemas/EpochStats"
+        }
+      },
+      "errors": [
+      ],
+      "examples": [
+        {
+          "name": "default",
+          "description": "",
+          "params": [
+          ],
+          "result": {
+            "name": "example1",
+            "value":[{"instructions":"[{\"args\":[],\"function\":\"new\",\"template_address\":[12,19,228,241,232,135,19,15,1,8,15,149,220,6,138,72,176,149,10,197,33,237,250,209,49,138,206,127,245,184,96,61],\"type\":\"CallFunction\"}]","meta":"{\"involved_objects\":{\"0251874ff8b0e8d5a16caf947f71f767b436e26e47de786bc46ea6947db03416\":[\"Create\",{}]},\"max_outputs\":1}","payload_id":[212,180,36,72,138,100,206,22,232,234,74,28,145,62,77,190,94,91,110,170,67,103,28,21,191,60,245,221,105,70,79,165],"timestamp":2023}]
+          }
+        }
+      ]
+    },
+    {
+      "name": "get_connections",
+      "summary": "asdf",
+      "tags": [
+        {
+          "name": "asdf"
+        }
+      ],
+      "params": [],
+      "result": {
+        "name": "epoch_stats",
+        "description": "",
+        "schema": {
+          "$ref": "#/components/schemas/EpochStats"
+        }
+      },
+      "errors": [
+      ],
+      "examples": [
+        {
+          "name": "default",
+          "description": "",
+          "params": [
+          ],
+          "result": {
+            "name": "example1",
+            "value": {
+              "connections": []
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "get_mempool_stats",
+      "summary": "asdf",
+      "tags": [
+        {
+          "name": "asdf"
+        }
+      ],
+      "params": [],
+      "result": {
+        "name": "epoch_stats",
+        "description": "",
+        "schema": {
+          "$ref": "#/components/schemas/EpochStats"
+        }
+      },
+      "errors": [
+      ],
+      "examples": [
+        {
+          "name": "default",
+          "description": "",
+          "params": [
+          ],
+          "result": {
+            "name": "example1",
+            "value": {
+              "size": 0
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "get_templates",
+      "summary": "asdf",
+      "tags": [
+        {
+          "name": "asdf"
+        }
+      ],
+      "params": [
+        {
+          "name": "limit",
+          "schema": {
+            "type": "integer"
+          }
+        }
+      ],
+      "result": {
+        "name": "epoch_stats",
+        "description": "",
+        "schema": {
+          "$ref": "#/components/schemas/EpochStats"
+        }
+      },
+      "errors": [
+      ],
+      "examples": [
+        {
+          "name": "default",
+          "description": "",
+          "params": [
+          ],
+          "result": {
+            "name": "exmaple1",
+            "value": {
+              "templates": [
+                {
+                  "address": [
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0
+                  ],
+                  "binary_sha": [
+                    72,
+                    103,
+                    186,
+                    11,
+                    57,
+                    29,
+                    7,
+                    33,
+                    243,
+                    148,
+                    61,
+                    159,
+                    11,
+                    222,
+                    211,
+                    210,
+                    181,
+                    127,
+                    78,
+                    69,
+                    169,
+                    43,
+                    26,
+                    235,
+                    84,
+                    55,
+                    83,
+                    10,
+                    223,
+                    166,
+                    92,
+                    241
+                  ],
+                  "height": 0,
+                  "name": "account",
+                  "url": ""
+                }
+              ]
+            }
+          }
+        }
+      ]
+        }
+,
+    {
+      "name": "register_validator_node",
+      "summary": "asdf",
+      "tags": [
+        {
+          "name": "asdf"
+        }
+      ],
+      "params": [],
+      "result": {
+        "name": "epoch_stats",
+        "description": "",
+        "schema": {
+          "$ref": "#/components/schemas/EpochStats"
+        }
+      },
+      "errors": [
+      ],
+      "examples": [
+        {
+          "name": "default",
+          "description": "",
+          "params": [
+          ],
+          "result": {
+            "name": "example1",
+            "value":{
+              "transaction_id": 6445356003091125000
+            }
+          }
+        }
+      ]
+    }
+  ],
+  "components": {
+    "contentDescriptors": {
+      "PetId": {
+        "name": "petId",
+        "required": true,
+        "description": "The id of the pet to retrieve",
+        "schema": {
+          "$ref": "#/components/schemas/PetId"
+        }
+      }
+    },
+    "schemas": {
+      "PetId": {
+        "type": "integer",
+        "minimum": 0
+      },
+      "Pet": {
+        "type": "object",
+        "required": [
+          "id",
+          "name"
+        ],
+        "properties": {
+          "id": {
+            "$ref": "#/components/schemas/PetId"
+          },
+          "name": {
+            "type": "string"
+          },
+          "tag": {
+            "type": "string"
+          }
+        }
+      },
+      "EpochStats": {
+        "type": "object",
+        "required": [
+          "current_epoch",
+          "is_valid"
+        ],
+        "properties": {
+          "current_epoch": {
+            "type": "integer"
+          },
+          "is_valid": {
+            "type": "boolean"
+          }
+        }
+      }
+    }
+  }
+}
