@@ -36,6 +36,8 @@ async fn main() {
     // Uncomment to enable tokio tracing via tokio-console
     // console_subscriber::init();
 
+    // Setup a panic hook which prints the default rust panic message but also exits the process. This makes a panic in
+    // any thread "crash" the system instead of silently continuing.
     let default_hook = panic::take_hook();
     panic::set_hook(Box::new(move |info| {
         default_hook(info);
