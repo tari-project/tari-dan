@@ -25,6 +25,7 @@ import { toHexString } from "../../VN/Components/helpers";
 import {renderJson} from "../../../utils/helpers";
 
 export default function Output({ shard, output }: { shard: string; output: any[] }) {
+
   return (
     <div id={shard} className="output">
       <b>Shard : </b>
@@ -34,15 +35,40 @@ export default function Output({ shard, output }: { shard: string; output: any[]
           <tr>
             <th>Height</th>
             <th>Node hash</th>
+              <th>Pledges</th>
               <th>Justify</th>
           </tr>
         </thead>
         <tbody>
           {output.map((row) => {
+              let justify = JSON.parse(row.justify);
             return (
               <tr key={toHexString(row.node_hash)}>
                 <td>{row.height}</td>
                 <td className="key">{toHexString(row.node_hash)}</td>
+                  <td>
+                      <table>
+                          <thead><tr>
+                              <th>Shard</th>
+                              <th>Current state</th>
+                              <th>Pledged to</th>
+                          </tr></thead>
+                          <tbody>
+                          { justify.all_shard_pledges.map((pledge:any) => {
+                              // This enum gets serialized different ways... should be fixed in the rust
+                              let currentState = Object.keys(pledge.pledge.current_state);
+                                return (
+                                    <tr key={pledge.shard_id}>
+                                        <td>{pledge.shard_id}</td>
+                                        <td>{currentState[0] !== "0" ? currentState[0] : pledge.pledge.current_state }</td>
+                                        <td>{pledge.pledge.pledged_to_payload.id}</td>
+                                    </tr>
+                                )
+                          }) }
+
+                          </tbody>
+                      </table>
+                  </td>
                   <td><pre style={{ height: "200px", overflow : "scroll"}}>{ row.justify ? renderJson(JSON.parse(row.justify)) :  ""}</pre></td>
               </tr>
             );
