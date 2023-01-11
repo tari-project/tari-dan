@@ -106,6 +106,7 @@ impl<TShardStore: ShardStore> PeerSyncManagerService<TShardStore> {
                     shard_db
                         .insert_substates(substate_shard_data)
                         .map_err(EpochManagerError::StorageError)?;
+                    shard_db.commit()?;
                 }
 
                 // increase node inventory
