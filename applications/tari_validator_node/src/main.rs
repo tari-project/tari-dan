@@ -59,6 +59,7 @@ async fn main_inner() -> Result<(), ExitError> {
     let cfg = load_configuration(config_path, true, &cli)?;
     let config = ApplicationConfig::load_from(&cfg)?;
     println!("Starting validator node on network {}", config.network);
+
     run_validator_node_with_cli(&config, &cli).await?;
 
     Ok(())
