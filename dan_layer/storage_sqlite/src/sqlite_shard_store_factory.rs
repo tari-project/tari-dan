@@ -1144,14 +1144,13 @@ impl ShardStoreTransaction<PublicKey, TariDanPayload> for SqliteShardStoreTransa
         // })?;
     }
 
-    fn has_vote_for(&self, from: &PublicKey, node_hash: TreeNodeHash, shard: ShardId) -> Result<bool, StorageError> {
+    fn has_vote_for(&self, from: &PublicKey, node_hash: TreeNodeHash) -> Result<bool, StorageError> {
         use crate::schema::received_votes;
 
         let vote: Option<ReceivedVote> = received_votes::table
             .filter(
-                received_votes::shard_id
-                    .eq(shard.as_bytes())
-                    .and(received_votes::tree_node_hash.eq(node_hash.as_bytes()))
+                received_votes::tree_node_hash
+                    .eq(node_hash.as_bytes())
                     .and(received_votes::address.eq(from.as_bytes())),
             )
             .first(self.transaction.connection())
@@ -1167,8 +1166,6 @@ impl ShardStoreTransaction<PublicKey, TariDanPayload> for SqliteShardStoreTransa
         &mut self,
         from: PublicKey,
         node_hash: TreeNodeHash,
-        payload_id: PayloadId,
-        shard_id: ShardId,
         vote_message: VoteMessage,
     ) -> Result<(), StorageError> {
         use crate::schema::received_votes;
@@ -1176,8 +1173,6 @@ impl ShardStoreTransaction<PublicKey, TariDanPayload> for SqliteShardStoreTransa
         let vote_message = serde_json::to_string_pretty(&vote_message).unwrap();
 
         let new_row = NewReceivedVote {
-            payload_id: payload_id.as_bytes().to_vec(),
-            shard_id: shard_id.as_bytes().to_vec(),
             tree_node_hash: node_hash.as_bytes().to_vec(),
             address: from.as_bytes().to_vec(),
             vote_message,
@@ -1193,19 +1188,11 @@ impl ShardStoreTransaction<PublicKey, TariDanPayload> for SqliteShardStoreTransa
         Ok(())
     }
 
-    fn get_received_votes_for(
-        &self,
-        node_hash: TreeNodeHash,
-        shard: ShardId,
-    ) -> Result<Vec<VoteMessage>, StorageError> {
+    fn get_received_votes_for(&self, node_hash: TreeNodeHash) -> Result<Vec<VoteMessage>, StorageError> {
         use crate::schema::received_votes;
 
         let filtered_votes: Option<Vec<ReceivedVote>> = received_votes::table
-            .filter(
-                received_votes::shard_id
-                    .eq(shard.as_bytes())
-                    .and(received_votes::tree_node_hash.eq(Vec::from(node_hash.as_bytes()))),
-            )
+            .filter(received_votes::tree_node_hash.eq(Vec::from(node_hash.as_bytes())))
             .get_results(self.transaction.connection())
             .optional()
             .map_err(|e| StorageError::QueryError {

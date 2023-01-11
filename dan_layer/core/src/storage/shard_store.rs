@@ -169,18 +169,15 @@ pub trait ShardStoreTransaction<TAddr: NodeAddressable, TPayload: Payload> {
         payload_height: NodeHeight,
         node: HotStuffTreeNode<TAddr, TPayload>,
     ) -> Result<(), StorageError>;
-    fn has_vote_for(&self, from: &TAddr, node_hash: TreeNodeHash, shard: ShardId) -> Result<bool, StorageError>;
+    fn has_vote_for(&self, from: &TAddr, node_hash: TreeNodeHash) -> Result<bool, StorageError>;
     fn save_received_vote_for(
         &mut self,
         from: TAddr,
         node_hash: TreeNodeHash,
-        payload_id: PayloadId,
-        shard: ShardId,
         vote_message: VoteMessage,
     ) -> Result<(), StorageError>;
 
-    fn get_received_votes_for(&self, node_hash: TreeNodeHash, shard: ShardId)
-        -> Result<Vec<VoteMessage>, StorageError>;
+    fn get_received_votes_for(&self, node_hash: TreeNodeHash) -> Result<Vec<VoteMessage>, StorageError>;
     fn get_recent_transactions(&self) -> Result<Vec<RecentTransaction>, StorageError>;
     fn get_transaction(&self, payload_id: Vec<u8>) -> Result<Vec<SQLTransaction>, StorageError>;
     fn get_substates_for_payload(

@@ -26,7 +26,6 @@ use tari_core::ValidatorNodeMmr;
 use tari_dan_common_types::{
     hashing::tari_hasher,
     vn_mmr_node_hash,
-    PayloadId,
     QuorumDecision,
     QuorumRejectReason,
     ShardId,
@@ -41,63 +40,34 @@ use crate::{services::SigningService, workers::hotstuff_error::HotStuffError, Ta
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct VoteMessage {
     local_node_hash: TreeNodeHash,
-    payload_id: PayloadId,
-    shard: ShardId,
     decision: QuorumDecision,
     all_shard_pledge: Vec<ShardPledge>,
     validator_metadata: Option<ValidatorMetadata>,
 }
 
 impl VoteMessage {
-    pub fn new(
-        local_node_hash: TreeNodeHash,
-        payload_id: PayloadId,
-        shard: ShardId,
-        decision: QuorumDecision,
-        mut shard_pledges: Vec<ShardPledge>,
-    ) -> Self {
+    pub fn new(local_node_hash: TreeNodeHash, decision: QuorumDecision, mut shard_pledges: Vec<ShardPledge>) -> Self {
         shard_pledges.sort_by(|a, b| a.shard_id.cmp(&b.shard_id));
 
         Self {
             local_node_hash,
-            payload_id,
-            shard,
             decision,
             all_shard_pledge: shard_pledges,
             validator_metadata: None,
         }
     }
 
-    pub fn accept(
-        local_node_hash: TreeNodeHash,
-        payload_id: PayloadId,
-        shard: ShardId,
-        shard_pledges: Vec<ShardPledge>,
-    ) -> Self {
-        Self::new(
-            local_node_hash,
-            payload_id,
-            shard,
-            QuorumDecision::Accept,
-            shard_pledges,
-        )
+    pub fn accept(local_node_hash: TreeNodeHash, shard_pledges: Vec<ShardPledge>) -> Self {
+        Self::new(local_node_hash, QuorumDecision::Accept, shard_pledges)
     }
 
-    pub fn reject(
-        local_node_hash: TreeNodeHash,
-        payload_id: PayloadId,
-        shard: ShardId,
-        shard_pledges: Vec<ShardPledge>,
-        reason: QuorumRejectReason,
-    ) -> Self {
+    pub fn reject(local_node_hash: TreeNodeHash, shard_pledges: Vec<ShardPledge>, reason: QuorumRejectReason) -> Self {
         let decision = QuorumDecision::Reject(reason);
-        Self::new(local_node_hash, payload_id, shard, decision, shard_pledges)
+        Self::new(local_node_hash, decision, shard_pledges)
     }
 
     pub fn with_validator_metadata(
         local_node_hash: TreeNodeHash,
-        payload_id: PayloadId,
-        shard: ShardId,
         decision: QuorumDecision,
         mut all_shard_pledges: Vec<ShardPledge>,
         validator_metadata: ValidatorMetadata,
@@ -106,8 +76,6 @@ impl VoteMessage {
 
         Self {
             local_node_hash,
-            payload_id,
-            shard,
             decision,
             all_shard_pledge: all_shard_pledges,
             validator_metadata: Some(validator_metadata),
@@ -162,7 +130,6 @@ impl VoteMessage {
     pub fn construct_challenge(&self) -> FixedHash {
         tari_hasher::<TariDanCoreHashDomain>("vote_message")
             .chain(self.local_node_hash.as_bytes())
-            .chain(self.shard.as_bytes())
             .chain(&[self.decision.as_u8()])
             .chain(self.all_shard_pledges())
             .result()
@@ -174,14 +141,6 @@ impl VoteMessage {
 
     pub fn local_node_hash(&self) -> TreeNodeHash {
         self.local_node_hash
-    }
-
-    pub fn shard(&self) -> ShardId {
-        self.shard
-    }
-
-    pub fn payload_id(&self) -> PayloadId {
-        self.payload_id
     }
 
     pub fn decision(&self) -> QuorumDecision {

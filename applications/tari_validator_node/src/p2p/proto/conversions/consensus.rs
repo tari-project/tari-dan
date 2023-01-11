@@ -28,11 +28,9 @@ use tari_comms::types::CommsPublicKey;
 use tari_crypto::tari_utilities::ByteArray;
 use tari_dan_common_types::{
     ObjectPledge,
-    PayloadId,
     QuorumCertificate,
     QuorumDecision,
     QuorumRejectReason,
-    ShardId,
     ShardPledge,
     SubstateState,
     TreeNodeHash,
@@ -49,8 +47,6 @@ impl From<VoteMessage> for proto::consensus::VoteMessage {
     fn from(msg: VoteMessage) -> Self {
         Self {
             local_node_hash: msg.local_node_hash().as_bytes().to_vec(),
-            payload_id: msg.payload_id().as_bytes().to_vec(),
-            shard_id: msg.shard().as_bytes().to_vec(),
             decision: i32::from(msg.decision().as_u8()),
             all_shard_pledges: msg.all_shard_pledges().iter().map(|n| n.clone().into()).collect(),
             validator_metadata: Some(msg.validator_metadata().clone().into()),
@@ -67,8 +63,6 @@ impl TryFrom<proto::consensus::VoteMessage> for VoteMessage {
             .ok_or_else(|| anyhow!("Validator metadata is missing"))?;
         Ok(VoteMessage::with_validator_metadata(
             TreeNodeHash::try_from(value.local_node_hash)?,
-            PayloadId::try_from(value.payload_id.as_slice())?,
-            ShardId::from_bytes(&value.shard_id)?,
             QuorumDecision::from_u8(u8::try_from(value.decision)?)?,
             value
                 .all_shard_pledges

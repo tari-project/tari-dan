@@ -608,8 +608,6 @@ where
 
             let vote_msg = self.create_vote(
                 *node.hash(),
-                node.payload_id(),
-                node.shard(),
                 shard_pledges.clone(),
                 &finalize_result.result,
                 vn_shard_key,
@@ -730,9 +728,8 @@ where
     async fn leader_on_receive_vote(&mut self, from: TAddr, msg: VoteMessage) -> Result<(), HotStuffError> {
         info!(
             target: LOG_TARGET,
-            "🔥 Receive {:?} VOTE for shard {} node {} from {}",
+            "🔥 Receive {:?} VOTE for node {} from {}",
             msg.decision(),
-            msg.shard(),
             msg.local_node_hash(),
             from,
         );
@@ -742,7 +739,7 @@ where
         {
             let tx = self.shard_store.create_tx()?;
             // Avoid duplicates
-            if tx.has_vote_for(&from, msg.local_node_hash(), msg.shard())? {
+            if tx.has_vote_for(&from, msg.local_node_hash())? {
                 info!(
                     target: LOG_TARGET,
                     "🔥 Vote with node hash {} already received",
@@ -771,9 +768,9 @@ where
             let mut tx = self.shard_store.create_tx()?;
 
             // Collect votes
-            tx.save_received_vote_for(from, msg.local_node_hash(), msg.payload_id(), msg.shard(), msg.clone())?;
+            tx.save_received_vote_for(from, msg.local_node_hash(), msg.clone())?;
 
-            let votes = tx.get_received_votes_for(msg.local_node_hash(), msg.shard())?;
+            let votes = tx.get_received_votes_for(msg.local_node_hash())?;
 
             if votes.len() >= valid_committee.consensus_threshold() {
                 let validator_metadata = votes.iter().map(|v| v.validator_metadata().clone()).collect();
@@ -900,13 +897,7 @@ where
     }
 
     fn validate_vote(&self, qc: &QuorumCertificate, public_key: &PublicKey, signature: &Signature) -> bool {
-        let vote = VoteMessage::new(
-            qc.node_hash(),
-            qc.payload_id(),
-            qc.shard(),
-            *qc.decision(),
-            qc.all_shard_pledges().to_vec(),
-        );
+        let vote = VoteMessage::new(qc.node_hash(), *qc.decision(), qc.all_shard_pledges().to_vec());
         let challenge = vote.construct_challenge();
         self.signing_service
             .verify_for_public_key(public_key, signature, &*challenge)
@@ -1109,8 +1100,6 @@ where
     fn create_vote(
         &self,
         node_hash: TreeNodeHash,
-        payload_id: PayloadId,
-        shard_id: ShardId,
         shard_pledges: Vec<ShardPledge>,
         payload_result: &TransactionResult,
         vn_shard_key: ShardId,
@@ -1125,11 +1114,11 @@ where
                     accept.up_iter().count(),
                     accept.down_iter().count(),
                 );
-                VoteMessage::accept(node_hash, payload_id, shard_id, shard_pledges)
+                VoteMessage::accept(node_hash, shard_pledges)
             },
             TransactionResult::Reject(ref reason) => {
                 info!(target: LOG_TARGET, "⚔ Vote to REJECT payload: {}", reason);
-                VoteMessage::reject(node_hash, payload_id, shard_id, shard_pledges, reason.into())
+                VoteMessage::reject(node_hash, shard_pledges, reason.into())
             },
         };
 
