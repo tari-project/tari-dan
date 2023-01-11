@@ -391,11 +391,11 @@ where
 
             payload = if let Some(node_payload) = node.payload() {
                 tx.save_payload(node_payload.clone())?;
-                tx.commit()?;
                 node_payload.clone()
             } else {
                 tx.get_payload(&node.payload_id())?
             };
+            tx.commit()?;
         }
 
         let involved_shards = payload.involved_shards();
@@ -497,8 +497,6 @@ where
                         }
                     }
 
-                    tx.commit()?;
-
                     self.publish_event(HotStuffEvent::OnFinalized(
                         Box::new(node.justify().clone()),
                         finalize_result,
@@ -509,6 +507,8 @@ where
                 },
             }
         }
+
+        tx.commit()?;
 
         Ok(())
     }

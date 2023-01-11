@@ -786,12 +786,15 @@ impl ShardStoreReadTransaction<PublicKey, TariDanPayload> for SqliteShardStoreRe
 
 pub struct SqliteShardStoreWriteTransaction<'a> {
     transaction: SqliteShardStoreReadTransaction<'a>,
+    /// Indicates if the transaction has been explicitly committed/rolled back
+    is_complete: bool,
 }
 
 impl<'a> SqliteShardStoreWriteTransaction<'a> {
     pub fn new(transaction: SqliteTransaction<'a>) -> Self {
         Self {
             transaction: SqliteShardStoreReadTransaction::new(transaction),
+            is_complete: false,
         }
     }
 
@@ -836,8 +839,15 @@ impl<'a> SqliteShardStoreWriteTransaction<'a> {
 }
 
 impl ShardStoreWriteTransaction<PublicKey, TariDanPayload> for SqliteShardStoreWriteTransaction<'_> {
-    fn commit(self) -> Result<(), StorageError> {
+    fn commit(mut self) -> Result<(), StorageError> {
         self.transaction.transaction.commit()?;
+        self.is_complete = true;
+        Ok(())
+    }
+
+    fn rollback(mut self) -> Result<(), StorageError> {
+        self.transaction.transaction.rollback()?;
+        self.is_complete = true;
         Ok(())
     }
 
@@ -1488,5 +1498,16 @@ impl<'a> Deref for SqliteShardStoreWriteTransaction<'a> {
 
     fn deref(&self) -> &Self::Target {
         &self.transaction
+    }
+}
+
+impl Drop for SqliteShardStoreWriteTransaction<'_> {
+    fn drop(&mut self) {
+        if !self.is_complete {
+            warn!(
+                target: LOG_TARGET,
+                "Shard store write transaction was not committed/rolled back"
+            );
+        }
     }
 }

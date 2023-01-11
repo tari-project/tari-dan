@@ -50,6 +50,8 @@ use crate::{
     storage::StorageError,
 };
 
+const LOG_TARGET: &str = "tari::dan_layer::storage";
+
 pub trait ShardStore {
     type Addr: NodeAddressable;
     type Payload: Payload;
@@ -71,7 +73,12 @@ pub trait ShardStore {
                 tx.commit()?;
                 Ok(r)
             },
-            Err(e) => Err(e),
+            Err(e) => {
+                if let Err(err) = tx.rollback() {
+                    log::error!(target: LOG_TARGET, "Failed to rollback transaction: {}", err);
+                }
+                Err(e)
+            },
         }
     }
 
@@ -147,6 +154,7 @@ pub trait ShardStoreReadTransaction<TAddr: NodeAddressable, TPayload: Payload> {
 
 pub trait ShardStoreWriteTransaction<TAddr: NodeAddressable, TPayload: Payload> {
     fn commit(self) -> Result<(), StorageError>;
+    fn rollback(self) -> Result<(), StorageError>;
     fn insert_high_qc(&mut self, from: TAddr, shard: ShardId, qc: QuorumCertificate) -> Result<(), StorageError>;
     fn save_payload(&mut self, payload: TPayload) -> Result<(), StorageError>;
     /// Inserts or updates the leaf node for the shard
