@@ -631,6 +631,34 @@ where
         payload: TPayload,
         shard_pledges: &[ShardPledge],
     ) -> Result<FinalizeResult, HotStuffError> {
+        // On every phase, validate that the pledges are pledged to this payload.
+        for pledge in shard_pledges {
+            if pledge.pledge.pledged_to_payload != node.payload_id() {
+                // return Err(HotStuffError::ShardPledgedToDifferentPayload {
+                //     shard: pledge.shard_id,
+                //     pledged_payload: pledge.pledge.pledged_to_payload,
+                //     expected: node.payload_id(),
+                // });
+
+                let finalize_result = FinalizeResult::errored(
+                    payload.to_id().into_array().into(),
+                    RejectReason::ShardsNotPledged(
+                        // TODO: this is hacky... not sure where to put it though
+                        HotStuffError::ShardPledgedToDifferentPayload {
+                            shard: pledge.shard_id,
+                            pledged_payload: pledge.pledge.pledged_to_payload,
+                            expected: node.payload_id(),
+                        }
+                        .to_string(),
+                    ),
+                );
+                self.shard_store
+                    .with_write_tx(|tx| tx.update_payload_result(&node.payload_id(), finalize_result.clone()))?;
+
+                return Ok(finalize_result);
+            }
+        }
+
         match node.payload_phase() {
             HotstuffPhase::Prepare => {
                 let payload_id = payload.to_id();
