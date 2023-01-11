@@ -9,10 +9,7 @@ use tari_template_lib::{
 };
 use tari_validator_node_cli::{
     account_manager::AccountFileManager,
-    command::{
-        handle_submit,
-        transaction::{CliInstruction, CommonSubmitArgs, SubmitArgs},
-    },
+    command::transaction::{handle_submit, CliInstruction, CommonSubmitArgs, SubmitArgs},
     from_hex::FromHex,
 };
 use tari_validator_node_client::{types::SubmitTransactionResponse, ValidatorNodeClient};

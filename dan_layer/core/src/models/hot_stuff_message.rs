@@ -23,16 +23,9 @@
 use std::fmt::{Display, Formatter};
 
 use serde::Serialize;
-use tari_common_types::types::FixedHash;
-use tari_dan_common_types::{
-    quorum_certificate::QuorumCertificate,
-    NodeAddressable,
-    ShardId,
-    TreeNodeHash,
-    ValidatorMetadata,
-};
+use tari_dan_common_types::{quorum_certificate::QuorumCertificate, ShardId, ValidatorMetadata};
 
-use crate::models::{HotStuffMessageType, HotStuffTreeNode, Payload};
+use crate::models::{HotStuffMessageType, HotStuffTreeNode};
 
 // TODO: convert to enum
 #[derive(Debug, Clone, Serialize)]
@@ -41,29 +34,29 @@ pub struct HotStuffMessage<TPayload, TAddr> {
     // The high qc: used for new view messages
     high_qc: Option<QuorumCertificate>,
     node: Option<HotStuffTreeNode<TAddr, TPayload>>,
-    shard: Option<ShardId>,
+    shard: ShardId,
     // Used for broadcasting the payload in new view
     new_view_payload: Option<TPayload>,
 }
 
-impl<TPayload: Payload, TAddr: NodeAddressable> Default for HotStuffMessage<TPayload, TAddr> {
+impl<TPayload, TAddr> Default for HotStuffMessage<TPayload, TAddr> {
     fn default() -> Self {
         Self {
             message_type: Default::default(),
             high_qc: Default::default(),
             node: Default::default(),
-            shard: Default::default(),
+            shard: ShardId::zero(),
             new_view_payload: None,
         }
     }
 }
 
-impl<TPayload: Payload, TAddr: NodeAddressable> HotStuffMessage<TPayload, TAddr> {
+impl<TPayload, TAddr> HotStuffMessage<TPayload, TAddr> {
     pub fn new(
         message_type: HotStuffMessageType,
         high_qc: Option<QuorumCertificate>,
         node: Option<HotStuffTreeNode<TAddr, TPayload>>,
-        shard: Option<ShardId>,
+        shard: ShardId,
         new_view_payload: Option<TPayload>,
     ) -> Self {
         Self {
@@ -79,7 +72,7 @@ impl<TPayload: Payload, TAddr: NodeAddressable> HotStuffMessage<TPayload, TAddr>
         Self {
             message_type: HotStuffMessageType::NewView,
             high_qc: Some(high_qc),
-            shard: Some(shard),
+            shard,
             node: None,
             // Traditional hotstuff does not include broadcasting a payload at the same time,
             // but if this is a view for a specific payload, then it can be sent to the leader as
@@ -91,7 +84,7 @@ impl<TPayload: Payload, TAddr: NodeAddressable> HotStuffMessage<TPayload, TAddr>
     pub fn new_proposal(node: HotStuffTreeNode<TAddr, TPayload>, shard: ShardId) -> Self {
         Self {
             message_type: HotStuffMessageType::Proposal,
-            shard: Some(shard),
+            shard,
             node: Some(node),
             ..Default::default()
         }
@@ -101,25 +94,16 @@ impl<TPayload: Payload, TAddr: NodeAddressable> HotStuffMessage<TPayload, TAddr>
         self.high_qc.clone()
     }
 
-    pub fn contract_id(&self) -> &FixedHash {
-        todo!()
-    }
-
     pub fn new_view_payload(&self) -> Option<&TPayload> {
         self.new_view_payload.as_ref()
     }
 
     pub fn shard(&self) -> ShardId {
-        // TODO: remove unwrap, every message should have a shard
-        self.shard.unwrap()
+        self.shard
     }
 
     pub fn node(&self) -> Option<&HotStuffTreeNode<TAddr, TPayload>> {
         self.node.as_ref()
-    }
-
-    pub fn node_hash(&self) -> Option<&TreeNodeHash> {
-        todo!()
     }
 
     pub fn message_type(&self) -> HotStuffMessageType {
@@ -135,15 +119,15 @@ impl<TPayload: Payload, TAddr: NodeAddressable> HotStuffMessage<TPayload, TAddr>
     }
 }
 
-impl<TPayload: Payload, TAddr: NodeAddressable> Display for HotStuffMessage<TPayload, TAddr> {
+impl<TPayload, TAddr> Display for HotStuffMessage<TPayload, TAddr> {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         write!(
             f,
-            "HSMessage {{ message_type: {:?}, node height: {:?}, payload height: {:?}, shard: {:?} }}",
+            "HSMessage {{ message_type: {:?}, node height: {:?}, payload height: {:?}, shard: {} }}",
             self.message_type,
             self.node.as_ref().map(|n| n.height()),
             self.node.as_ref().map(|n| n.payload_height()),
-            self.shard.as_ref().map(|s| s.to_string())
+            self.shard
         )
     }
 }

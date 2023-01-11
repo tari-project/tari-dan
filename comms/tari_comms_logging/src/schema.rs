@@ -4,6 +4,7 @@ table! {
         from_pubkey -> Binary,
         message_type -> Text,
         message_json -> Text,
+        message_tag -> Text,
         received_at -> Timestamp,
     }
 }
@@ -15,6 +16,7 @@ table! {
         destination_pubkey -> Binary,
         message_type -> Text,
         message_json -> Text,
+        message_tag -> Text,
         sent_at -> Timestamp,
     }
 }
