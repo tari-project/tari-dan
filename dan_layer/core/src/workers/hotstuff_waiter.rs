@@ -1121,6 +1121,14 @@ where
     }
 
     fn execute(&self, payload: TPayload, object_pledges: &[ShardPledge]) -> Result<FinalizeResult, HotStuffError> {
+        let maybe_finalize_result = self
+            .shard_store
+            .with_read_tx(|tx| tx.get_payload_result(&payload.to_id()).optional())?;
+
+        if let Some(finalize_result) = maybe_finalize_result {
+            return Ok(finalize_result);
+        }
+
         let shard_pledges = object_pledges
             .iter()
             .map(|s| (s.shard_id, s.pledge.clone()))
