@@ -20,6 +20,7 @@
 //   WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //   USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+mod steps;
 mod utils;
 
 use std::{
@@ -67,6 +68,26 @@ pub struct TariWorld {
     cli_data_dir: Option<String>,
 }
 
+impl TariWorld {
+    pub fn get_miner(&self, name: &str) -> &MinerProcess {
+        self.miners
+            .get(name)
+            .unwrap_or_else(|| panic!("Miner {} not found", name))
+    }
+
+    pub fn get_wallet(&self, name: &str) -> &WalletProcess {
+        self.wallets
+            .get(name)
+            .unwrap_or_else(|| panic!("Wallet {} not found", name))
+    }
+
+    pub fn get_base_node(&self, name: &str) -> &BaseNodeProcess {
+        self.base_nodes
+            .get(name)
+            .unwrap_or_else(|| panic!("Base node {} not found", name))
+    }
+}
+
 #[async_trait(?Send)]
 impl cucumber::World for TariWorld {
     type Error = Infallible;
@@ -90,24 +111,9 @@ async fn start_base_node(world: &mut TariWorld, bn_name: String) {
     spawn_base_node(world, bn_name).await;
 }
 
-#[given(expr = "a wallet {word} connected to base node {word}")]
-async fn start_wallet(world: &mut TariWorld, wallet_name: String, bn_name: String) {
-    spawn_wallet(world, wallet_name, bn_name).await;
-}
-
-#[given(expr = "a miner {word} connected to base node {word} and wallet {word}")]
-async fn create_miner(world: &mut TariWorld, miner_name: String, bn_name: String, wallet_name: String) {
-    register_miner_process(world, miner_name, bn_name, wallet_name);
-}
-
 #[given(expr = "a validator node {word} connected to base node {word} and wallet {word}")]
 async fn start_validator_node(world: &mut TariWorld, vn_name: String, bn_name: String, wallet_name: String) {
     spawn_validator_node(world, vn_name, bn_name, wallet_name).await;
-}
-
-#[when(expr = "miner {word} mines {int} new blocks")]
-async fn run_miner(world: &mut TariWorld, miner_name: String, num_blocks: u64) {
-    mine_blocks(world, miner_name, num_blocks).await;
 }
 
 #[when(expr = "validator node {word} sends a registration transaction")]
@@ -302,13 +308,13 @@ async fn print_world(world: &mut TariWorld) {
 #[tokio::main]
 async fn main() {
     TariWorld::cucumber()
-        // following config needed to use eprint statements in the tests
         .max_concurrent_scenarios(1)
+        // following config needed to use eprint statements in the tests
         .with_writer(
-            writer::Basic::raw(io::stdout(), writer::Coloring::Never, 0)
+            writer::Basic::raw(io::stdout(), writer::Coloring::Auto, 0)
                 .summarized()
                 .assert_normalized(),
         )
-        .run_and_exit("tests/features/")
+        .run_and_exit("tests/features/basic.feature")
         .await;
 }

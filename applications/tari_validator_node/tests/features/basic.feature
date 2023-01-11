@@ -1,6 +1,5 @@
 # Copyright 2022 The Tari Project
 # SPDX-License-Identifier: BSD-3-Clause
-
 # FIXME: when spawning VN2 the test is flaky
 Feature: Basic scenarios
   @serial
@@ -16,6 +15,7 @@ Feature: Basic scenarios
 
     # The wallet must have some funds before the VN sends transactions
     When miner MINER mines 12 new blocks
+    When wallet WALLET has at least 1000000000 uT
 
     # VN registration
     When validator node VAL_1 sends a registration transaction

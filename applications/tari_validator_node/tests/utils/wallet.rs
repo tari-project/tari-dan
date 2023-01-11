@@ -20,45 +20,59 @@
 //   WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //   USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use std::{str::FromStr, thread, thread::JoinHandle, time::Duration};
+use std::{env, path::Path, str::FromStr, thread, thread::JoinHandle, time::Duration};
 
+use log::Level;
 use tari_app_grpc::{
     authentication::ClientAuthenticationInterceptor,
-    tari_rpc::{wallet_client::WalletClient, SetBaseNodeRequest},
+    tari_rpc::{wallet_client::WalletClient, ConnectivityStatus, Empty, GetIdentityRequest, SetBaseNodeRequest},
 };
-use tari_common::configuration::CommonConfig;
+use tari_app_utilities::common_cli_args::CommonCliArgs;
+use tari_common::{configuration::CommonConfig, initialize_logging};
 use tari_common_types::grpc_authentication::GrpcAuthentication;
 use tari_comms::multiaddr::Multiaddr;
-use tari_comms_dht::DhtConfig;
-use tari_console_wallet::run_wallet;
+use tari_comms_dht::{DbConnectionUrl, DhtConfig};
+use tari_console_wallet::{run_wallet_with_cli, ApplicationConfig};
 use tari_p2p::{auto_update::AutoUpdateConfig, Network, PeerSeedsConfig, TransportType};
 use tari_wallet::WalletConfig;
 use tempfile::tempdir;
-use tokio::runtime;
+use tokio::{runtime, runtime::Runtime};
 use tonic::{
     codegen::InterceptedService,
     transport::{Channel, Endpoint},
 };
 
 type WalletGrpcClient = WalletClient<InterceptedService<Channel, ClientAuthenticationInterceptor>>;
-
-use crate::TariWorld;
+use crate::{utils::helpers::get_os_assigned_ports, TariWorld};
 
 #[derive(Debug)]
 pub struct WalletProcess {
     pub name: String,
-    pub port: u64,
-    pub grpc_port: u64,
+    pub port: u16,
+    pub grpc_port: u16,
     pub handle: JoinHandle<()>,
     pub temp_dir_path: String,
 }
 
+impl WalletProcess {
+    pub async fn create_client(&self) -> WalletGrpcClient {
+        let wallet_addr = format!("http://127.0.0.1:{}", self.grpc_port);
+        eprintln!("Wallet GRPC at {}", wallet_addr);
+        let channel = Endpoint::from_str(&wallet_addr).unwrap().connect().await.unwrap();
+        WalletClient::with_interceptor(
+            channel,
+            ClientAuthenticationInterceptor::create(&GrpcAuthentication::default()).unwrap(),
+        )
+    }
+}
+
 pub async fn spawn_wallet(world: &mut TariWorld, wallet_name: String, base_node_name: String) {
     // each spawned wallet will use different ports
-    let (port, grpc_port) = match world.base_nodes.values().last() {
-        Some(v) => (v.port + 1, v.grpc_port + 1),
-        None => (48000, 48500), // default ports if it's the first wallet to be spawned
-    };
+    let (port, grpc_port) = get_os_assigned_ports();
+    // let (port, grpc_port) = match world.base_nodes.values().last() {
+    //     Some(v) => (v.port + 1, v.grpc_port + 1),
+    //     None => (48000, 48500), // default ports if it's the first wallet to be spawned
+    // };
     let base_node_public_key = world
         .base_nodes
         .get(&base_node_name)
@@ -69,7 +83,7 @@ pub async fn spawn_wallet(world: &mut TariWorld, wallet_name: String, base_node_
     let base_node_port = world.base_nodes.get(&base_node_name).unwrap().port;
     let set_base_node_request = SetBaseNodeRequest {
         net_address: format! {"/ip4/127.0.0.1/tcp/{}", base_node_port},
-        public_key_hex: base_node_public_key.clone().to_string(),
+        public_key_hex: base_node_public_key.to_string(),
     };
     let temp_dir = tempdir().unwrap();
     let temp_dir_path = temp_dir.path().display().to_string();
@@ -97,7 +111,11 @@ pub async fn spawn_wallet(world: &mut TariWorld, wallet_name: String, base_node_
             Multiaddr::from_str(&format!("/ip4/127.0.0.1/tcp/{}", port)).unwrap();
         wallet_config.wallet.p2p.public_address = Some(wallet_config.wallet.p2p.transport.tcp.listener_address.clone());
         wallet_config.wallet.p2p.datastore_path = temp_dir.path().join("peer_db/wallet");
-        wallet_config.wallet.p2p.dht = DhtConfig::default_local_test();
+        wallet_config.wallet.p2p.dht = DhtConfig {
+            // Not all platforms support sqlite memory connection urls
+            database_url: DbConnectionUrl::File(temp_dir.path().join("dht.sqlite")),
+            ..DhtConfig::default_testnet()
+        };
 
         wallet_config.wallet.custom_base_node = Some(format!(
             "{}::/ip4/127.0.0.1/tcp/{}",
@@ -107,10 +125,7 @@ pub async fn spawn_wallet(world: &mut TariWorld, wallet_name: String, base_node_
         let mut builder = runtime::Builder::new_multi_thread();
         let rt = builder.enable_all().build().unwrap();
 
-        let result = run_wallet(rt, &mut wallet_config);
-        if let Err(e) = result {
-            panic!("{:?}", e);
-        }
+        run_wallet(rt, &mut wallet_config);
     });
 
     // make the new wallet able to be referenced by other processes
@@ -121,25 +136,70 @@ pub async fn spawn_wallet(world: &mut TariWorld, wallet_name: String, base_node_
         handle,
         temp_dir_path,
     };
-    world.wallets.insert(wallet_name.clone(), wallet_process);
 
     // We need to give it time for the wallet to startup
     // TODO: it would be better to scan the wallet to detect when it has started
     tokio::time::sleep(Duration::from_secs(5)).await;
 
-    // TODO: fix the wallet configuration so the base node is correctly setted on startup insted of afterwards
-    let mut wallet_client: WalletGrpcClient = create_wallet_client(world, wallet_name).await;
-    let _resp = wallet_client.set_base_node(set_base_node_request).await.unwrap();
+    // TODO: fix the wallet configuration so the base node is correctly set on startup instead of afterwards
+    let mut wallet_client = wallet_process.create_client().await;
+    let _resp = wallet_client
+        .set_base_node(set_base_node_request.clone())
+        .await
+        .unwrap();
+    let identity = wallet_client
+        .identify(GetIdentityRequest {})
+        .await
+        .unwrap()
+        .into_inner();
+    eprintln!("Wallet {} comms address: {}", wallet_name, identity.public_address);
+    let mut status = wallet_client.get_network_status(Empty {}).await.unwrap().into_inner();
+    while status.status != ConnectivityStatus::Online as i32 {
+        eprintln!(
+            "Waiting for wallet to connect to base node {} {} {} (status: {:?})",
+            base_node_name, set_base_node_request.public_key_hex, set_base_node_request.net_address, status
+        );
+        tokio::time::sleep(Duration::from_secs(1)).await;
+        status = wallet_client.get_network_status(Empty {}).await.unwrap().into_inner();
+    }
+
+    world.wallets.insert(wallet_name.clone(), wallet_process);
     tokio::time::sleep(Duration::from_secs(5)).await;
 }
 
-pub async fn create_wallet_client(world: &TariWorld, wallet_name: String) -> WalletGrpcClient {
-    let wallet_grpc_port = world.wallets.get(&wallet_name).unwrap().grpc_port;
-    let wallet_addr = format!("http://127.0.0.1:{}", wallet_grpc_port);
-    eprintln!("Wallet GRPC at {}", wallet_addr);
-    let channel = Endpoint::from_str(&wallet_addr).unwrap().connect().await.unwrap();
-    WalletClient::with_interceptor(
-        channel,
-        ClientAuthenticationInterceptor::create(&GrpcAuthentication::default()).unwrap(),
-    )
+pub fn run_wallet(runtime: Runtime, config: &mut ApplicationConfig) {
+    let data_dir = config.wallet.data_dir.clone();
+    let data_dir_str = data_dir.clone().into_os_string().into_string().unwrap();
+
+    let mut config_path = data_dir;
+    config_path.push("config.toml");
+
+    let log_config = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/log4rs/wallet.yml");
+
+    let cli = tari_console_wallet::Cli {
+        common: CommonCliArgs {
+            base_path: data_dir_str,
+            config: config_path.into_os_string().into_string().unwrap(),
+            log_config: Some(log_config.clone()),
+            log_level: Some(Level::Debug),
+            config_property_overrides: vec![],
+        },
+        password: None,
+        change_password: false,
+        recovery: false,
+        seed_words: None,
+        seed_words_file_name: None,
+        non_interactive_mode: true,
+        input_file: None,
+        command: None,
+        wallet_notify: None,
+        command_mode_auto_exit: false,
+        network: None,
+        grpc_enabled: true,
+        grpc_address: None,
+        command2: None,
+    };
+
+    initialize_logging(log_config.as_path(), "").unwrap();
+    run_wallet_with_cli(runtime, config, cli).unwrap()
 }
