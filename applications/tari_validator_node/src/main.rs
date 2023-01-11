@@ -22,7 +22,7 @@
 
 mod cli;
 
-use std::process;
+use std::{panic, process};
 
 use clap::Parser;
 use log::*;
@@ -35,6 +35,12 @@ const LOG_TARGET: &str = "tari::validator_node::app";
 async fn main() {
     // Uncomment to enable tokio tracing via tokio-console
     // console_subscriber::init();
+
+    let default_hook = panic::take_hook();
+    panic::set_hook(Box::new(move |info| {
+        default_hook(info);
+        process::exit(1);
+    }));
 
     if let Err(err) = main_inner().await {
         let exit_code = err.exit_code;
