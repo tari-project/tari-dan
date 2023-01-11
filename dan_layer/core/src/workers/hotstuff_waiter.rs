@@ -30,15 +30,17 @@ use tari_dan_common_types::{
     Epoch,
     NodeAddressable,
     NodeHeight,
+    ObjectPledge,
     PayloadId,
     QuorumCertificate,
     ShardId,
     ShardPledge,
+    SubstateChange,
     SubstateState,
     TreeNodeHash,
 };
 use tari_engine_types::{
-    commit_result::{FinalizeResult, TransactionResult},
+    commit_result::{FinalizeResult, RejectReason, TransactionResult},
     substate::SubstateDiff,
 };
 use tari_shutdown::ShutdownSignal;
@@ -302,7 +304,7 @@ where
         {
             let mut tx = self.shard_store.create_tx()?;
 
-            // TODO(perf): We could only propose the pledge here and actually pledge it in on_receive_proposal
+            // TODO: We could only propose the pledge here and actually pledge it in on_receive_proposal
             let local_pledge = tx.pledge_object(shard, payload_id, NodeHeight(0))?;
 
             let (parent_hash, parent_height, parent_payload_height, maybe_payload) = if current_leaf_node.is_genesis() {
@@ -395,11 +397,11 @@ where
             };
         }
 
+        let involved_shards = payload.involved_shards();
         // If we have not previously voted on this payload and the node extends the current locked node, then we vote
         if (last_vote_height == NodeHeight(0) || node.height() > last_vote_height) &&
             (*node.parent() == locked_node || node.height() > locked_height)
         {
-            let involved_shards = payload.involved_shards();
             let proposed_nodes = self.shard_store.with_write_tx(|tx| {
                 tx.save_node(node.clone())?;
                 tx.save_leader_proposals(node.shard(), node.payload_id(), node.payload_height(), node.clone())?;
@@ -418,9 +420,9 @@ where
                     node.payload_height()
                 );
 
+                self.update_nodes(&node)?;
                 return Ok(());
             }
-            assert_eq!(proposed_nodes.len(), involved_shards.len());
 
             // TODO: if the proposal is in DECIDE phase and the result is rejected we should not vote
             // because the leader is just letting us know that nodes voted to reject
@@ -439,7 +441,73 @@ where
                 locked_height
             );
         }
-        self.update_nodes(node)?;
+        self.update_nodes(&node)?;
+        // If all pledges for all shards and complete, then we can persist the payload changes
+        self.finalize_payload(&involved_shards, &node).await?;
+
+        Ok(())
+    }
+
+    /// Checks that all pledges have been resolved (completed/abandoned). If so, atomically commit the changeset for the
+    /// local shards
+    async fn finalize_payload(
+        &self,
+        involved_shards: &[ShardId],
+        node: &HotStuffTreeNode<TAddr, TPayload>,
+    ) -> Result<(), HotStuffError> {
+        // TODO(perf): Perhaps mark local pledges as local and use their shard ids
+        let local_shards = self
+            .epoch_manager
+            .filter_to_local_shards(node.epoch(), &self.public_key, involved_shards)
+            .await?;
+
+        let mut tx = self.shard_store.create_tx()?;
+        // TODO(perf): can count completed/abandoned pledges and only load if necessary
+        let resolved_pledges = tx.get_resolved_pledges_for_payload(node.payload_id())?;
+        assert!(
+            resolved_pledges.len() <= involved_shards.len(),
+            "More pledges than involved shards"
+        );
+        // Check if we have resolved all pledges, if so, we are ready to commit resultant substate changes
+        if resolved_pledges.len() == involved_shards.len() {
+            let finalize_result = tx.get_payload_result(&node.payload_id())?;
+            match &finalize_result.result {
+                TransactionResult::Accept(diff) => {
+                    if resolved_pledges
+                        .iter()
+                        .any(|pledge| pledge.abandoned_by_tree_node_hash.is_some())
+                    {
+                        // Fail immediately
+                        self.publish_event(HotStuffEvent::Failed(
+                            "Payload was accepted by this node but some pledges were abandoned".to_string(),
+                        ));
+                        return Ok(());
+                    }
+
+                    let local_change_set = extract_changes_for_shards(&local_shards, node.payload_id(), diff)?;
+                    for pledge in resolved_pledges {
+                        // Only persist local shards
+                        if let Some(changes) = local_change_set.get(&pledge.shard_id) {
+                            let node_hash = pledge
+                                .completed_by_tree_node_hash
+                                .expect("[finalize_payload] Pledge MUST be completed");
+                            let node = tx.get_node(&node_hash)?;
+                            tx.save_substate_changes(node, changes)?;
+                        }
+                    }
+
+                    tx.commit()?;
+
+                    self.publish_event(HotStuffEvent::OnFinalized(
+                        Box::new(node.justify().clone()),
+                        finalize_result,
+                    ));
+                },
+                TransactionResult::Reject(reason) => {
+                    self.publish_event(HotStuffEvent::Failed(reason.to_string()));
+                },
+            }
+        }
 
         Ok(())
     }
@@ -567,25 +635,38 @@ where
     ) -> Result<FinalizeResult, HotStuffError> {
         match node.payload_phase() {
             HotstuffPhase::Prepare => {
+                let payload_id = payload.to_id();
                 info!(
                     target: LOG_TARGET,
-                    "🔥 Executing payload in PREPARE phase: {}",
-                    payload.to_id()
+                    "🔥 Executing payload in PREPARE phase: {}", payload_id
                 );
 
                 let finalize_result = self.execute(payload, shard_pledges)?;
 
-                self.shard_store
-                    .with_write_tx(|tx| tx.update_payload_result(&node.payload_id(), finalize_result.clone()))?;
+                if let TransactionResult::Accept(ref diff) = finalize_result.result {
+                    match Self::validate_pledges(shard_pledges, diff) {
+                        Ok(_) => {
+                            self.shard_store.with_write_tx(|tx| {
+                                tx.update_payload_result(&node.payload_id(), finalize_result.clone())
+                            })?;
+                            Ok(finalize_result)
+                        },
+                        Err(e @ HotStuffError::MissingPledges(_)) => {
+                            let finalize_result = FinalizeResult::errored(
+                                payload_id.into_array().into(),
+                                RejectReason::ShardsNotPledged(e.to_string()),
+                            );
+                            self.shard_store.with_write_tx(|tx| {
+                                tx.update_payload_result(&node.payload_id(), finalize_result.clone())
+                            })?;
 
-                Ok(finalize_result)
-                // match Self::validate_pledges2(&shard_pledges, &finalize_result) {
-                //     Ok(_) => Ok(finalize_result),
-                //     Err(HotStuffError::InvalidShardPledges(_)) => {
-                //         Ok(FinalizeResult::errored(payload.to_id().into_array().into(),
-                // RejectReason::ShardsNotPledged(e.to_string()))     },
-                //     Err(e) => Err(e),
-                // }
+                            Ok(finalize_result)
+                        },
+                        Err(e) => Err(e),
+                    }
+                } else {
+                    Ok(finalize_result)
+                }
             },
             _phase => {
                 let finalize_result = self
@@ -597,128 +678,52 @@ where
         }
     }
 
-    // /// Checks that all shards have been pledged correctly, if not, will return the list of shards that
-    // /// were not pledged
-    // fn validate_pledges2(
-    //     shard_pledges: &[ShardPledge],
-    //     finalized_result: &FinalizeResult,
-    // ) -> Result<(), HotStuffError> {
-    //     let mut missing_pledges = vec![];
-    //
-    //
-    //     match &finalized_result.result {
-    //         TransactionResult::Accept(diff) => {
-    //             for object_pledge in shard_pledges.iter().flat_map(|p|p.pledge.as_ref()) {
-    //                 match &object_pledge.current_state {
-    //                     SubstateState::DoesNotExist => { }
-    //                     SubstateState::Up { data,.. } => {
-    //                         let substate_address = data.substate_value().substate_address();
-    //                         if diff.down_iter().contains(&(substate_address, data.version())) {
-    //                             // Pledge was up but execution downed
-    //                         }
-    //
-    //                         // if !diff.up_iter().map(|(addr, _)| addr).contains(&substate_address) {
-    //                             // Pledge was up and execution upped
-    //                         // }
-    //
-    //                     }
-    //                     SubstateState::Down { .. } => {
-    //                         if diff.up_iter().any(|(addr, _)| addr == &substate_address) {
-    //                             // Pledge was up but execution downed
-    //                         }
-    //
-    //                     }
-    //                 }
-    //             }
-    //         }
-    //         TransactionResult::Reject(_) => Ok(())
-    //     }
-    //     for (shard_changed, substates) in changes {
-    //         if let Some(substate) = substates.first() {
-    //             let pledged_object = shard_pledges.get(&shard_changed);
-    //             if let Some(Some(pledge)) = pledged_object {
-    //                 match substate {
-    //                     SubstateState::DoesNotExist => match pledge.current_state {
-    //                         SubstateState::DoesNotExist => {
-    //                             debug!(
-    //                                 target: LOG_TARGET,
-    //                                 "Pledge requires object to not exist, and it does not exist - ok"
-    //                             );
-    //                         },
-    //                         _ => {
-    //                             missing_pledges.push((shard_changed, SubstateChange::Exists));
-    //                         },
-    //                     },
-    //                     SubstateState::Up { .. } => match pledge.current_state {
-    //                         SubstateState::DoesNotExist => {
-    //                             debug!(
-    //                                 target: LOG_TARGET,
-    //                                 "Pledge requires object to not exist and will be UPPED, and it does not exist -
-    // ok"                             );
-    //                         },
-    //                         _ => {
-    //                             // finalize_result.result =
-    //                             //     TransactionResult::Reject(RejectReason::ShardNotPledged(format!(
-    //                             //         "Shard {} was required to not exist, but it is {}",
-    //                             //         shard_changed,
-    //                             //         pledge.current_state.as_str(),
-    //                             //     )));
-    //                             // break;
-    //                             missing_pledges.push((shard_changed, SubstateChange::Create));
-    //                         },
-    //                     },
-    //                     SubstateState::Down { .. } => match pledge.current_state {
-    //                         SubstateState::Up { .. } => {
-    //                             debug!(
-    //                                 target: LOG_TARGET,
-    //                                 "Pledge requires object to be DOWNED, and it is UP - Ok"
-    //                             );
-    //                         },
-    //                         _ => {
-    //                             // finalize_result.result =
-    //                             //     TransactionResult::Reject(RejectReason::ShardNotPledged(format!(
-    //                             //         "Shard {} was required to be up, but it is {}",
-    //                             //         shard_changed,
-    //                             //         pledge.current_state.as_str(),
-    //                             //     )));
-    //                             // break;
-    //                             missing_pledges.push((shard_changed, SubstateChange::Destroy));
-    //                         },
-    //                     },
-    //                 }
-    //             } else {
-    //                 // finalize_result.result = TransactionResult::Reject(RejectReason::ShardNotPledged(format!(
-    //                 //     "Shard {} was not pledged",
-    //                 //     shard_changed
-    //                 // )));
-    //                 // break;
-    //                 missing_pledges.push((shard_changed, SubstateChange::Exists));
-    //             }
-    //         } else {
-    //             // finalize_result.result = TransactionResult::Reject(RejectReason::ShardNotPledged(format!(
-    //             //     "Shard {} had no substate changes - this is not correct",
-    //             //     shard_changed
-    //             // )));
-    //             // break;
-    //             missing_pledges.push((shard_changed, SubstateChange::Exists));
-    //         }
-    //     }
-    //     if missing_pledges.is_empty() {
-    //         Ok(())
-    //     } else {
-    //         // Sort them so that they are the same for all VNs.
-    //         missing_pledges.sort_by(|a, b| a.0.cmp(&b.0));
-    //         return Err(HotStuffError::MissingPledges(missing_pledges));
-    //         // finalize_result.result = TransactionResult::Reject(RejectReason::ShardsNotPledged(format!(
-    //         //     "Shards {} was not pledged",
-    //         //     missing_pledges
-    //         //         .iter()
-    //         //         .map(|(shard, change)| format!("{}:{}", shard, change))
-    //         //         .collect::<Vec<String>>()
-    //         //         .join(",")
-    //         // )));
-    //     }
-    // }
+    /// Checks that all shards have been pledged correctly, if not, will return the list of shards that
+    /// were not pledged
+    fn validate_pledges(shard_pledges: &[ShardPledge], diff: &SubstateDiff) -> Result<(), HotStuffError> {
+        let mut missing_pledges = vec![];
+
+        // If we've downed the substate, the pledges should be up
+        for (address, version) in diff.down_iter() {
+            let shard_id = ShardId::from_address(address, *version);
+            match shard_pledges.iter().find(|p| p.pledge.shard_id == shard_id) {
+                Some(ShardPledge {
+                    pledge: ObjectPledge { current_state, .. },
+                    ..
+                }) => {
+                    // To down a substate it should be pledged as up
+                    if !matches!(current_state, SubstateState::Up { .. }) {
+                        missing_pledges.push((shard_id, SubstateChange::Exists));
+                    }
+                },
+                None => missing_pledges.push((shard_id, SubstateChange::Exists)),
+            }
+        }
+
+        for (addr, substate) in diff.up_iter() {
+            let shard_id = ShardId::from_address(addr, substate.version());
+            match shard_pledges.iter().find(|p| p.pledge.shard_id == shard_id) {
+                Some(ShardPledge {
+                    pledge: ObjectPledge { current_state, .. },
+                    ..
+                }) => {
+                    // To up a substate it should be pledged as down
+                    if !matches!(current_state, SubstateState::DoesNotExist) {
+                        missing_pledges.push((shard_id, SubstateChange::Create));
+                    }
+                },
+                None => missing_pledges.push((shard_id, SubstateChange::Create)),
+            }
+        }
+
+        if missing_pledges.is_empty() {
+            Ok(())
+        } else {
+            // Sort them so that they are the same for all VNs.
+            missing_pledges.sort_by(|a, b| a.0.cmp(&b.0));
+            Err(HotStuffError::MissingPledges(missing_pledges))
+        }
+    }
 
     /// Step 6: The leader receives votes from the local shard, and once it has enough ($n - f$) votes, it commits a
     /// high QC and sends the next round of proposals.
@@ -915,7 +920,7 @@ where
     }
 
     /// See section 6, algorithm 4 in https://arxiv.org/pdf/1803.05069.pdf
-    fn update_nodes(&self, node: HotStuffTreeNode<TAddr, TPayload>) -> Result<(), HotStuffError> {
+    fn update_nodes(&self, node: &HotStuffTreeNode<TAddr, TPayload>) -> Result<(), HotStuffError> {
         let mut tx = self.shard_store.create_tx()?;
         // commit_node is at PRE-COMMIT phase
         self.update_high_qc(&mut tx, node.proposed_by().clone(), node.justify().clone())?;
@@ -954,30 +959,28 @@ where
         // b <- b'.justify.node
         let prepare_node = precommit_node.justify().node_hash();
         if commit_node.parent() == precommit_node.hash() && *precommit_node.parent() == prepare_node {
-            debug!(
+            info!(
                 target: LOG_TARGET,
-                "Node {} forms a 3-chain b'' = {}, b' = {}, b = {}, b* = {}",
-                prepare_node,
+                "✅ Node {} forms a 3-chain b'' = {}, b' = {}, b = {}",
+                node.hash(),
                 commit_node.hash(),
                 precommit_node.hash(),
                 prepare_node,
-                node.hash()
             );
-
             // prepare_node is at DECIDE phase
-            let prepare_node = if prepare_node.is_zero() {
-                HotStuffTreeNode::genesis(
-                    node.epoch(),
-                    node.payload_id(),
-                    node.shard(),
-                    node.proposed_by().clone(),
-                    None,
-                )
-            } else {
-                tx.get_node(&prepare_node)?
-            };
-            self.on_commit(&mut tx, &prepare_node)?;
-            tx.set_last_executed_height(prepare_node.shard(), prepare_node.payload_id(), prepare_node.height())?;
+            //             let prepare_node = if prepare_node.is_zero() {
+            //     HotStuffTreeNode::genesis(
+            //         node.epoch(),
+            //         node.payload_id(),
+            //         node.shard(),
+            //         node.proposed_by().clone(),
+            //         None,
+            //     )
+            // } else {
+            //     tx.get_node(&prepare_node)?
+            // };
+            self.on_commit(&mut tx, node)?;
+            tx.set_last_executed_height(node.shard(), node.payload_id(), node.height())?;
         } else {
             debug!(
                 target: LOG_TARGET,
@@ -1036,19 +1039,22 @@ where
     ) -> Result<(), HotStuffError> {
         let last_exec_height = tx.get_last_executed_height(node.shard(), node.payload_id())?;
         if last_exec_height < node.height() {
-            // Execute the node!
             match node.payload_phase() {
-                HotstuffPhase::Prepare => {
+                HotstuffPhase::Decide => {
                     info!(
                         target: LOG_TARGET,
                         "🔥 [on_commit] Committing payload {} in DECIDE phase",
                         node.payload_id()
                     );
                     let finalize_result = tx.get_payload_result(&node.payload_id())?;
-                    self.commit_finalized_result(node, &finalize_result.result, tx)?;
-                    let qc = node.justify();
-                    self.publish_event(HotStuffEvent::OnFinalized(Box::new(qc.clone()), finalize_result));
-                    tx.complete_pledges(node.shard(), node.payload_id(), node.hash())?;
+                    match finalize_result.result {
+                        TransactionResult::Accept(_) => {
+                            tx.complete_pledges(node.shard(), node.payload_id(), node.hash())?;
+                        },
+                        TransactionResult::Reject(_) => {
+                            tx.abandon_pledges(node.shard(), node.payload_id(), node.hash())?;
+                        },
+                    }
                 },
                 phase => {
                     info!(
@@ -1072,31 +1078,23 @@ where
             .map(|s| (s.shard_id, s.pledge.clone()))
             .collect::<HashMap<_, _>>();
 
+        info!(
+            target: LOG_TARGET,
+            "[execute] Number of pledges: {}",
+            shard_pledges.len()
+        );
+        for (k, v) in &shard_pledges {
+            // TODO: should be debug
+            info!(
+                target: LOG_TARGET,
+                "[execute] shard: {}, pledge: {}",
+                k,
+                v.current_state.as_str()
+            );
+        }
+
         let finalize_result = self.payload_processor.process_payload(payload, shard_pledges)?;
         Ok(finalize_result)
-    }
-
-    fn commit_finalized_result(
-        &self,
-        node: &HotStuffTreeNode<TAddr, TPayload>,
-        payload_result: &TransactionResult,
-        tx: &mut TShardStore::Transaction<'_>,
-    ) -> Result<(), HotStuffError> {
-        match payload_result {
-            TransactionResult::Accept(ref diff) => {
-                let changes = extract_changes(node.payload_id(), diff)?;
-                tx.save_substate_changes(&changes, node)?;
-            },
-            TransactionResult::Reject(ref reason) => {
-                info!(
-                    target: LOG_TARGET,
-                    "🔥 [on_commit] Payload {} was rejected with reason: {}",
-                    node.payload_id(),
-                    reason
-                );
-            },
-        }
-        Ok(())
     }
 
     async fn get_leader(&self, node: &HotStuffTreeNode<TAddr, TPayload>) -> Result<TAddr, HotStuffError> {
@@ -1107,106 +1105,6 @@ where
             .get_leader(&committee, node.payload_id(), node.shard(), 0);
         Ok(leader.clone())
     }
-
-    // /// Checks that all shards have been pledged correctly, if not, will return the list of shards that
-    // /// were not pledged
-    // fn validate_pledges(
-    //     shard_pledges: &HashMap<ShardId, Option<ObjectPledge>>,
-    //     finalize_result: &mut FinalizeResult,
-    //     changes: HashMap<ShardId, Vec<SubstateState>>,
-    // ) -> Result<(), Vec<(ShardId, SubstateChange)>> {
-    //     let mut missing_pledges = vec![];
-    //     for (shard_changed, substates) in changes {
-    //         // TODO: Is this statement correct?
-    //         // If there are multiple changes to the substate, only the first one needs to be pledged for.
-    //         if let Some(substate) = substates.first() {
-    //             let pledged_object = shard_pledges.get(&shard_changed);
-    //             if let Some(Some(pledge)) = pledged_object {
-    //                 match substate {
-    //                     SubstateState::DoesNotExist => match pledge.current_state {
-    //                         SubstateState::DoesNotExist => {
-    //                             debug!(
-    //                                 target: LOG_TARGET,
-    //                                 "Pledge requires object to not exist, and it does not exist - ok"
-    //                             );
-    //                         },
-    //                         _ => {
-    //                             // finalize_result.result = TransactionResult::Reject(RejectReason::ShardNotPledged(
-    //                             //     format!("Shard {} was required to not exist, but it does", shard_changed),
-    //                             // ));
-    //                             missing_pledges.push((shard_changed, SubstateChange::Exists));
-    //                         },
-    //                     },
-    //                     SubstateState::Up { .. } => match pledge.current_state {
-    //                         SubstateState::DoesNotExist => {
-    //                             debug!(
-    //                                 target: LOG_TARGET,
-    //                                 "Pledge requires object to not exist and will be UPPED, and it does not exist -
-    // ok"                             );
-    //                         },
-    //                         _ => {
-    //                             // finalize_result.result =
-    //                             //     TransactionResult::Reject(RejectReason::ShardNotPledged(format!(
-    //                             //         "Shard {} was required to not exist, but it is {}",
-    //                             //         shard_changed,
-    //                             //         pledge.current_state.as_str(),
-    //                             //     )));
-    //                             // break;
-    //                             missing_pledges.push((shard_changed, SubstateChange::Create));
-    //                         },
-    //                     },
-    //                     SubstateState::Down { .. } => match pledge.current_state {
-    //                         SubstateState::Up { .. } => {
-    //                             debug!(
-    //                                 target: LOG_TARGET,
-    //                                 "Pledge requires object to be DOWNED, and it is UP - Ok"
-    //                             );
-    //                         },
-    //                         _ => {
-    //                             // finalize_result.result =
-    //                             //     TransactionResult::Reject(RejectReason::ShardNotPledged(format!(
-    //                             //         "Shard {} was required to be up, but it is {}",
-    //                             //         shard_changed,
-    //                             //         pledge.current_state.as_str(),
-    //                             //     )));
-    //                             // break;
-    //                             missing_pledges.push((shard_changed, SubstateChange::Destroy));
-    //                         },
-    //                     },
-    //                 }
-    //             } else {
-    //                 // finalize_result.result = TransactionResult::Reject(RejectReason::ShardNotPledged(format!(
-    //                 //     "Shard {} was not pledged",
-    //                 //     shard_changed
-    //                 // )));
-    //                 // break;
-    //                 missing_pledges.push((shard_changed, SubstateChange::Exists));
-    //             }
-    //         } else {
-    //             // finalize_result.result = TransactionResult::Reject(RejectReason::ShardNotPledged(format!(
-    //             //     "Shard {} had no substate changes - this is not correct",
-    //             //     shard_changed
-    //             // )));
-    //             // break;
-    //             missing_pledges.push((shard_changed, SubstateChange::Exists));
-    //         }
-    //     }
-    //     if missing_pledges.is_empty() {
-    //         Ok(())
-    //     } else {
-    //         // Sort them so that they are the same for all VNs.
-    //         missing_pledges.sort_by(|a, b| a.0.cmp(&b.0));
-    //         finalize_result.result = TransactionResult::Reject(RejectReason::ShardsNotPledged(format!(
-    //             "Shards {} was not pledged",
-    //             missing_pledges
-    //                 .iter()
-    //                 .map(|(shard, change)| format!("{}:{}", shard, change))
-    //                 .collect::<Vec<String>>()
-    //                 .join(",")
-    //         )));
-    //         Err(missing_pledges)
-    //     }
-    // }
 
     fn create_vote(
         &self,
@@ -1316,7 +1214,7 @@ where
                 },
                 Some((from, msg)) = self.rx_hs_message.recv() => {
                     if let Err(e) = self.on_new_hs_message(from, msg).await {
-                        // self.publish_event(HotStuffEvent::Failed(e.to_string()));
+                        self.publish_event(HotStuffEvent::Failed(e.to_string()));
                         error!(target: LOG_TARGET, "Error while processing new hotstuff message (on_new_hs_message): {}", e);
                     }
                 },
@@ -1336,26 +1234,30 @@ where
     }
 }
 
-fn extract_changes(
+fn extract_changes_for_shards(
+    shard_ids: &[ShardId],
     payload_id: PayloadId,
     diff: &SubstateDiff,
 ) -> Result<HashMap<ShardId, Vec<SubstateState>>, HotStuffError> {
     let mut changes = HashMap::<_, Vec<_>>::new();
     // down first, then up
     for (address, version) in diff.down_iter() {
-        changes
-            .entry(ShardId::from_address(address, *version))
-            .or_default()
-            .push(SubstateState::Down { deleted_by: payload_id });
+        let shard_id = ShardId::from_address(address, *version);
+        if shard_ids.contains(&shard_id) {
+            changes
+                .entry(shard_id)
+                .or_default()
+                .push(SubstateState::Down { deleted_by: payload_id });
+        }
     }
     for (address, substate) in diff.up_iter() {
-        changes
-            .entry(ShardId::from_address(address, substate.version()))
-            .or_default()
-            .push(SubstateState::Up {
+        let shard_id = ShardId::from_address(address, substate.version());
+        if shard_ids.contains(&shard_id) {
+            changes.entry(shard_id).or_default().push(SubstateState::Up {
                 created_by: payload_id,
                 data: substate.clone(),
             });
+        }
     }
 
     Ok(changes)

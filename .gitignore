@@ -35,8 +35,7 @@ report
 *.sqlite3
 keys.json
 node_modules
-/integration_tests/temp
-/integration_tests/cucumber_output
+temp/
 
 # ignore output files from windows ISS
 buildtools/Output/

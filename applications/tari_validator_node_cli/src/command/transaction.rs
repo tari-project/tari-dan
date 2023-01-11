@@ -38,11 +38,7 @@ use tari_engine_types::{
     substate::{SubstateAddress, SubstateValue},
     TemplateAddress,
 };
-use tari_template_lib::{
-    arg,
-    args::Arg,
-    models::{Amount, ComponentAddress},
-};
+use tari_template_lib::{arg, args::Arg, models::Amount};
 use tari_transaction_manifest::parse_manifest;
 use tari_utilities::hex::to_hex;
 use tari_validator_node_client::{
@@ -117,7 +113,7 @@ pub enum CliInstruction {
         args: Vec<CliArg>,
     },
     CallMethod {
-        component_address: FromHex<ComponentAddress>,
+        component_address: SubstateAddress,
         method_name: String,
         #[clap(long, short = 'a')]
         args: Vec<CliArg>,
@@ -182,7 +178,9 @@ pub async fn handle_submit(
             method_name,
             args,
         } => Instruction::CallMethod {
-            component_address: component_address.into_inner(),
+            component_address: component_address
+                .as_component_address()
+                .ok_or_else(|| anyhow!("Invalid component address: {}", component_address))?,
             method: method_name,
             args: args.iter().map(|s| s.to_arg()).collect(),
         },
@@ -324,25 +322,27 @@ fn summarize_finalize_result(finalize: &FinalizeResult) {
     match finalize.result {
         TransactionResult::Accept(ref diff) => {
             for (address, substate) in diff.up_iter() {
-                println!("️🌲 UP substate {} (v{})", address, substate.version());
+                println!("️🌲 UP substate {} (v{})", address, substate.version(),);
+                println!("      🧩 Shard: {}", ShardId::from_address(address, substate.version()));
                 match substate.substate_value() {
                     SubstateValue::Component(component) => {
                         println!(
-                            "       ▶ component ({}): {}",
+                            "      ▶ component ({}): {}",
                             component.module_name, component.component_address
                         );
                     },
                     SubstateValue::Resource(resource) => {
-                        println!("       ▶ resource: {}", resource.address());
+                        println!("      ▶ resource: {}", resource.address());
                     },
                     SubstateValue::Vault(vault) => {
-                        println!("       ▶ vault: {} {}", vault.id(), vault.resource_address());
+                        println!("      ▶ vault: {} {}", vault.id(), vault.resource_address());
                     },
                 }
                 println!();
             }
             for (address, version) in diff.down_iter() {
-                println!("🗑️ DOWN substate {} v{}", address, version);
+                println!("🗑️ DOWN substate {} v{}", address, version,);
+                println!("      🧩 Shard: {}", ShardId::from_address(address, *version));
                 println!();
             }
         },

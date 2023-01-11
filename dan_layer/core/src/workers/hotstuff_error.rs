@@ -20,7 +20,7 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use tari_dan_common_types::{Epoch, NodeHeight, PayloadId, ShardId};
+use tari_dan_common_types::{Epoch, NodeHeight, PayloadId, ShardId, SubstateChange};
 use tari_engine_types::commit_result::RejectReason;
 use thiserror::Error;
 use tokio::sync::mpsc;
@@ -66,9 +66,10 @@ pub enum HotStuffError {
     NoCommitteeForShard { shard: ShardId, epoch: Epoch },
     #[error("Cannot vote on a proposal that has been rejected")]
     JustifyIsNotAccepted,
-
     #[error("Received NEWVIEW message without attached payload")]
     ReceivedNewViewWithoutPayload,
+    #[error("Missing pledges: {}", .0.iter().map(|(s, c)| format!("{}: {}", s, c)).collect::<Vec<_>>().join(", "))]
+    MissingPledges(Vec<(ShardId, SubstateChange)>),
 }
 
 impl<T> From<mpsc::error::SendError<T>> for HotStuffError {

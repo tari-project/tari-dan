@@ -20,12 +20,11 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use std::collections::HashMap;
-
 use tari_dan_common_types::{
     NodeAddressable,
     NodeHeight,
     ObjectPledge,
+    ObjectPledgeInfo,
     PayloadId,
     QuorumCertificate,
     ShardId,
@@ -126,12 +125,7 @@ pub trait ShardStoreTransaction<TAddr: NodeAddressable, TPayload: Payload> {
         node_hash: TreeNodeHash,
         node_height: NodeHeight,
     ) -> Result<(), StorageError>;
-    fn pledge_object(
-        &mut self,
-        shard: ShardId,
-        payload: PayloadId,
-        current_height: NodeHeight,
-    ) -> Result<ObjectPledge, StorageError>;
+
     fn set_last_executed_height(
         &mut self,
         shard: ShardId,
@@ -141,8 +135,8 @@ pub trait ShardStoreTransaction<TAddr: NodeAddressable, TPayload: Payload> {
     fn get_last_executed_height(&self, shard: ShardId, payload_id: PayloadId) -> Result<NodeHeight, StorageError>;
     fn save_substate_changes(
         &mut self,
-        changes: &HashMap<ShardId, Vec<SubstateState>>,
-        node: &HotStuffTreeNode<TAddr, TPayload>,
+        node: HotStuffTreeNode<TAddr, TPayload>,
+        changes: &[SubstateState],
     ) -> Result<(), StorageError>;
     fn insert_substates(&mut self, substate_data: SubstateShardData) -> Result<(), StorageError>;
     fn get_state_inventory(&self) -> Result<Vec<ShardId>, StorageError>;
@@ -197,6 +191,15 @@ pub trait ShardStoreTransaction<TAddr: NodeAddressable, TPayload: Payload> {
     fn get_payload_result(&self, payload_id: &PayloadId) -> Result<FinalizeResult, StorageError>;
     /// Updates the result for an existing payload
     fn update_payload_result(&self, payload_id: &PayloadId, result: FinalizeResult) -> Result<(), StorageError>;
+
+    // -------------------------------- Pledges -------------------------------- //
+    fn pledge_object(
+        &mut self,
+        shard: ShardId,
+        payload: PayloadId,
+        current_height: NodeHeight,
+    ) -> Result<ObjectPledge, StorageError>;
+    fn get_resolved_pledges_for_payload(&self, payload: PayloadId) -> Result<Vec<ObjectPledgeInfo>, StorageError>;
     fn complete_pledges(
         &self,
         shard: ShardId,

@@ -133,8 +133,8 @@ fn create_populated_state_store<I: IntoIterator<Item = ObjectPledge>>(
     for input in inputs {
         match input.current_state {
             SubstateState::Up { data, .. } => {
-                log::error!(target: "tari::dan_layer::payload_processor",
-                    "Input data: {} v{}",
+                log::debug!(target: "tari::dan_layer::payload_processor",
+                    "State store input substate: {} v{}",
                     data.substate_value().substate_address(),
                     data.version()
                 );

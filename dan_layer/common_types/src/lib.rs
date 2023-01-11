@@ -37,7 +37,7 @@ mod validator_metadata;
 pub use validator_metadata::{vn_mmr_node_hash, ValidatorMetadata};
 
 mod object_pledge;
-pub use object_pledge::ObjectPledge;
+pub use object_pledge::{ObjectPledge, ObjectPledgeInfo};
 
 mod node_addressable;
 pub use node_addressable::NodeAddressable;
