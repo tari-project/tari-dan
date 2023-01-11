@@ -257,4 +257,12 @@ impl SubstateDiff {
     pub fn down_iter(&self) -> impl Iterator<Item = &(SubstateAddress, u32)> + '_ {
         self.down_substates.iter()
     }
+
+    pub fn len(&self) -> usize {
+        self.up_substates.len() + self.down_substates.len()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.len() == 0
+    }
 }

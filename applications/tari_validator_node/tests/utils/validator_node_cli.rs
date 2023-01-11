@@ -108,7 +108,7 @@ pub async fn call_method(
     let component_address = world.components.get(&component_name).unwrap();
 
     let instruction = CliInstruction::CallMethod {
-        component_address: FromHex(ComponentAddress::new(*component_address)),
+        component_address: ComponentAddress::new(*component_address).into(),
         // TODO: actually parse the method call for arguments
         method_name: method_call,
         args: vec![],

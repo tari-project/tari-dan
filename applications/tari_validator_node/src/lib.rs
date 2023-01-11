@@ -102,11 +102,12 @@ pub struct ShardKey {
 }
 
 pub async fn run_validator_node_with_cli(config: &ApplicationConfig, cli: &Cli) -> Result<(), ExitError> {
-    let _ = initialize_logging(
+    if let Err(e) = initialize_logging(
         &cli.common.log_config_path("validator"),
         include_str!("../log4rs_sample.yml"),
-    )
-    .map_err(|e| error!("{}", e));
+    ) {
+        warn!("{}", e);
+    }
 
     let shutdown = Shutdown::new();
 

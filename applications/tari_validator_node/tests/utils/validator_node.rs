@@ -26,23 +26,23 @@ use reqwest::Url;
 use tari_app_utilities::common_cli_args::CommonCliArgs;
 use tari_common::configuration::{CommonConfig, StringList};
 use tari_comms::multiaddr::Multiaddr;
-use tari_comms_dht::DhtConfig;
+use tari_comms_dht::{DbConnectionUrl, DhtConfig};
 use tari_p2p::{Network, PeerSeedsConfig, TransportType};
 use tari_validator_node::{cli::Cli, run_validator_node_with_cli, ApplicationConfig, ValidatorNodeConfig};
 use tari_validator_node_client::ValidatorNodeClient;
 use tempfile::tempdir;
 use tokio::task;
 
-use crate::TariWorld;
+use crate::{utils::helpers::get_os_assigned_ports, TariWorld};
 
 #[derive(Debug)]
 pub struct ValidatorNodeProcess {
     pub name: String,
     pub public_key: String,
-    pub port: u64,
-    pub json_rpc_port: u64,
-    pub http_ui_port: u64,
-    pub base_node_grpc_port: u64,
+    pub port: u16,
+    pub json_rpc_port: u16,
+    pub http_ui_port: u16,
+    pub base_node_grpc_port: u16,
     pub handle: task::JoinHandle<()>,
     pub temp_dir_path: String,
 }
@@ -54,10 +54,13 @@ pub async fn spawn_validator_node(
     wallet_name: String,
 ) {
     // each spawned VN will use different ports
-    let (port, json_rpc_port, http_ui_port) = match world.validator_nodes.values().last() {
-        Some(v) => (v.port + 1, v.json_rpc_port + 1, v.http_ui_port + 1),
-        None => (20000, 20500, 21000), // default ports if it's the first vn to be spawned
-    };
+
+    let (port, json_rpc_port) = get_os_assigned_ports();
+    let http_ui_port = 21000;
+    // let (port, json_rpc_port, http_ui_port) = match world.validator_nodes.values().last() {
+    //     Some(v) => (v.port + 1, v.json_rpc_port + 1, v.http_ui_port + 1),
+    //     None => (20000, 20500, 21000), // default ports if it's the first vn to be spawned
+    // };
     let base_node_grpc_port = world.base_nodes.get(&base_node_name).unwrap().grpc_port;
     let wallet_grpc_port = world.wallets.get(&wallet_name).unwrap().grpc_port;
     let name = validator_node_name.clone();
@@ -95,8 +98,12 @@ pub async fn spawn_validator_node(
         config.validator_node.p2p.public_address =
             Some(config.validator_node.p2p.transport.tcp.listener_address.clone());
         config.validator_node.public_address = Some(config.validator_node.p2p.transport.tcp.listener_address.clone());
-        config.validator_node.p2p.datastore_path = temp_dir.to_path_buf().join("peer_db/wallet");
-        config.validator_node.p2p.dht = DhtConfig::default_local_test();
+        config.validator_node.p2p.datastore_path = temp_dir.to_path_buf().join("peer_db/vn");
+        config.validator_node.p2p.dht = DhtConfig {
+            // Not all platforms support sqlite memory connection urls
+            database_url: DbConnectionUrl::File(temp_dir.join("dht.sqlite")),
+            ..DhtConfig::default_testnet()
+        };
         config.validator_node.json_rpc_address = Some(format!("127.0.0.1:{}", json_rpc_port).parse().unwrap());
         config.validator_node.http_ui_address = Some(format!("127.0.0.1:{}", http_ui_port).parse().unwrap());
 
@@ -156,12 +163,12 @@ fn get_config_file_path() -> PathBuf {
     config_path
 }
 
-pub async fn get_vn_client(port: u64) -> ValidatorNodeClient {
+pub async fn get_vn_client(port: u16) -> ValidatorNodeClient {
     let endpoint: Url = Url::parse(&format!("http://localhost:{}", port)).unwrap();
     ValidatorNodeClient::connect(endpoint).unwrap()
 }
 
-async fn get_vn_identity(jrpc_port: u64) -> String {
+async fn get_vn_identity(jrpc_port: u16) -> String {
     // send the JSON RPC "get_identity" request to the VN
     let mut client = get_vn_client(jrpc_port).await;
     let resp = client.get_identity().await.unwrap();

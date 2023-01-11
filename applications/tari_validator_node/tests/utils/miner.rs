@@ -20,7 +20,7 @@
 //   WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //   USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use std::{str::FromStr, time::Duration};
+use std::time::Duration;
 
 use tari_app_grpc::{
     authentication::ClientAuthenticationInterceptor,
@@ -38,16 +38,13 @@ use tari_app_grpc::{
     },
 };
 use tari_base_node_grpc_client::BaseNodeGrpcClient;
-use tari_wallet_grpc_client::GrpcAuthentication;
-use tonic::{
-    codegen::InterceptedService,
-    transport::{Channel, Endpoint},
-};
+use tari_crypto::tari_utilities::hex::to_hex;
+use tonic::codegen::InterceptedService;
 
 use crate::TariWorld;
 
 type BaseNodeClient = BaseNodeGrpcClient<tonic::transport::Channel>;
-type WalletGrpcClient = WalletClient<InterceptedService<Channel, ClientAuthenticationInterceptor>>;
+type WalletGrpcClient = WalletClient<InterceptedService<tonic::transport::Channel, ClientAuthenticationInterceptor>>;
 
 #[derive(Debug)]
 pub struct MinerProcess {
@@ -66,8 +63,9 @@ pub fn register_miner_process(world: &mut TariWorld, miner_name: String, base_no
 }
 
 pub async fn mine_blocks(world: &mut TariWorld, miner_name: String, num_blocks: u64) {
+    let miner = world.get_miner(&miner_name);
     let mut base_client = create_base_node_client(world, &miner_name).await;
-    let mut wallet_client = create_wallet_client(world, &miner_name).await;
+    let mut wallet_client = world.get_wallet(&miner.wallet_name).create_client().await;
 
     for _ in 0..num_blocks {
         mine_block(&mut base_client, &mut wallet_client).await;
@@ -86,18 +84,6 @@ async fn create_base_node_client(world: &TariWorld, miner_name: &String) -> Base
     BaseNodeClient::connect(base_node_grpc_url).await.unwrap()
 }
 
-async fn create_wallet_client(world: &TariWorld, miner_name: &String) -> WalletGrpcClient {
-    let miner = world.miners.get(miner_name).unwrap();
-    let wallet_grpc_port = world.wallets.get(&miner.wallet_name).unwrap().grpc_port;
-    let wallet_addr = format!("http://127.0.0.1:{}", wallet_grpc_port);
-    eprintln!("Wallet GRPC at {}", wallet_addr);
-    let channel = Endpoint::from_str(&wallet_addr).unwrap().connect().await.unwrap();
-    WalletClient::with_interceptor(
-        channel,
-        ClientAuthenticationInterceptor::create(&GrpcAuthentication::default()).unwrap(),
-    )
-}
-
 async fn mine_block(base_client: &mut BaseNodeClient, wallet_client: &mut WalletGrpcClient) {
     let block_template = create_block_template_with_coinbase(base_client, wallet_client).await;
 
@@ -110,9 +96,10 @@ async fn mine_block(base_client: &mut BaseNodeClient, wallet_client: &mut Wallet
     let block = block_result.block.unwrap();
 
     // We don't need to mine, as Localnet blocks have difficulty 1s
-    let _sumbmit_res = base_client.submit_block(block).await.unwrap();
+    let submit_res = base_client.submit_block(block).await.unwrap().into_inner();
     println!(
-        "Block successfully mined at height {:?}",
+        "Block {} successfully mined at height {:?}",
+        to_hex(&submit_res.block_hash),
         block_template.header.unwrap().height
     );
 }

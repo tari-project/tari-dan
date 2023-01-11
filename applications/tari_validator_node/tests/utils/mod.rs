@@ -21,6 +21,7 @@
 //   USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 pub mod base_node;
+mod helpers;
 pub mod http_server;
 pub mod miner;
 pub mod template;

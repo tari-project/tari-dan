@@ -57,13 +57,7 @@ fn create_test_qc(
     payload: &TariDanPayload,
 ) -> QuorumCertificate {
     let qc = QuorumCertificate::genesis(Epoch(0), payload.to_id(), shard_id);
-    let vote = VoteMessage::new(
-        qc.node_hash(),
-        payload.to_id(),
-        shard_id,
-        *qc.decision(),
-        qc.all_shard_pledges().to_vec(),
-    );
+    let vote = VoteMessage::new(qc.node_hash(), *qc.decision(), qc.all_shard_pledges().to_vec());
 
     let mut vn_mmr = ValidatorNodeMmr::new(Vec::new());
     for pk in &all_vn_keys {
@@ -279,8 +273,6 @@ async fn test_hs_waiter_leader_sends_new_proposal_when_enough_votes_are_received
     // Create some votes
     let mut vote = VoteMessage::new(
         *vote_hash,
-        payload.to_id(),
-        *SHARD0,
         QuorumDecision::Accept,
         new_view_message.high_qc().unwrap().all_shard_pledges().to_vec(),
     );
@@ -296,13 +288,7 @@ async fn test_hs_waiter_leader_sends_new_proposal_when_enough_votes_are_received
     );
 
     // Send another vote
-    let mut vote = VoteMessage::new(
-        *vote_hash,
-        payload.to_id(),
-        *SHARD0,
-        QuorumDecision::Accept,
-        Default::default(),
-    );
+    let mut vote = VoteMessage::new(*vote_hash, QuorumDecision::Accept, Default::default());
     vote.sign_vote(instance.signing_service(), ShardId::zero(), &vn_mmr)
         .unwrap();
     instance.tx_votes.send((node2, vote)).await.unwrap();

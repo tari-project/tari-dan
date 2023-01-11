@@ -115,7 +115,7 @@ impl<TAddr: NodeAddressable, TPayload: Payload> HotStuffTreeNode<TAddr, TPayload
             .chain(&self.parent)
             .chain(&self.epoch)
             .chain(&self.height)
-            // .chain(&self.justify)
+            .chain(&self.justify)
             .chain(&self.shard)
             .chain(&self.payload_id)
             .chain(&self.payload_height)
