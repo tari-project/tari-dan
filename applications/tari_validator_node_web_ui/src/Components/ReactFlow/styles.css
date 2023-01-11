@@ -1,0 +1,17 @@
+html,
+body,
+#root,
+.App {
+  height: 100%;
+}
+
+.App {
+  font-family: sans-serif;
+  text-align: center;
+}
+
+.react-flow__node-custom {
+  padding: 10px;
+  background-color: #556677;
+  color: white;
+}
