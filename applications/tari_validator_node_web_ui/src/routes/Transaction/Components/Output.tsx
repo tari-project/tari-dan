@@ -22,6 +22,7 @@
 
 import React from "react";
 import { toHexString } from "../../VN/Components/helpers";
+import {renderJson} from "../../../utils/helpers";
 
 export default function Output({ shard, output }: { shard: string; output: any[] }) {
   return (
@@ -32,11 +33,8 @@ export default function Output({ shard, output }: { shard: string; output: any[]
         <thead>
           <tr>
             <th>Height</th>
-            <th>Payload height</th>
-            <th>Total leader proposals</th>
-            <th>Total votes</th>
-            <th>Parent node hash</th>
             <th>Node hash</th>
+              <th>Justify</th>
           </tr>
         </thead>
         <tbody>
@@ -44,11 +42,8 @@ export default function Output({ shard, output }: { shard: string; output: any[]
             return (
               <tr key={toHexString(row.node_hash)}>
                 <td>{row.height}</td>
-                <td>{row.payload_height}</td>
-                <td>{row.total_leader_proposals}</td>
-                <td>{row.total_votes}</td>
-                <td className="key">{toHexString(row.parent_node_hash)}</td>
                 <td className="key">{toHexString(row.node_hash)}</td>
+                  <td><pre style={{ height: "200px", overflow : "scroll"}}>{ row.justify ? renderJson(JSON.parse(row.justify)) :  ""}</pre></td>
               </tr>
             );
           })}
