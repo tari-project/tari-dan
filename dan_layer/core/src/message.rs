@@ -51,7 +51,7 @@ impl<TPayload, TAddr: NodeAddressable> DanMessage<TPayload, TAddr> {
     pub fn get_message_tag(&self) -> String {
         match self {
             Self::HotStuffMessage(msg) => format!("shard_{}", msg.shard()),
-            Self::VoteMessage(msg) => format!("shard_{}", msg.shard()),
+            Self::VoteMessage(msg) => format!("node_{}", msg.local_node_hash()),
             Self::NewTransaction(tx) => format!("hash_{}", tx.hash()),
             Self::NetworkAnnounce(msg) => format!("pk_{}", msg.identity),
         }
