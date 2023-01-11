@@ -35,6 +35,7 @@ mod error;
 pub use error::TransactionError;
 
 mod processor;
+
 pub use processor::TransactionProcessor;
 use tari_template_lib::models::ComponentAddress;
 
@@ -49,12 +50,31 @@ pub struct Transaction {
     _fee: u64,
     sender_public_key: PublicKey,
     // Not part of signature. TODO: Should it be?
-    meta: Option<TransactionMeta>,
+    meta: TransactionMeta,
 }
 
 impl Transaction {
     pub fn builder() -> TransactionBuilder {
         TransactionBuilder::new()
+    }
+
+    pub fn new(
+        fee: u64,
+        instructions: Vec<Instruction>,
+        signature: InstructionSignature,
+        sender_public_key: PublicKey,
+        meta: TransactionMeta,
+    ) -> Self {
+        let mut s = Self {
+            hash: Hash::default(),
+            instructions,
+            signature,
+            _fee: fee,
+            sender_public_key,
+            meta,
+        };
+        s.hash = s.calculate_hash();
+        s
     }
 
     pub fn required_templates(&self) -> Vec<TemplateAddress> {
@@ -78,6 +98,45 @@ impl Transaction {
                 _ => None,
             })
             .collect()
+    }
+
+    pub fn hash(&self) -> &Hash {
+        &self.hash
+    }
+
+    pub fn fee(&self) -> u64 {
+        self._fee
+    }
+
+    pub fn meta(&self) -> &TransactionMeta {
+        &self.meta
+    }
+
+    fn calculate_hash(&self) -> Hash {
+        let mut res = hasher("transaction")
+            .chain(self.sender_public_key.as_bytes())
+            .chain(self.signature.signature().get_public_nonce().as_bytes())
+            .chain(self.signature.signature().get_signature().as_bytes());
+        for instruction in &self.instructions {
+            res.update(&instruction.hash())
+        }
+        res.result()
+    }
+
+    pub fn instructions(&self) -> &[Instruction] {
+        &self.instructions
+    }
+
+    pub fn signature(&self) -> &InstructionSignature {
+        &self.signature
+    }
+
+    pub fn sender_public_key(&self) -> &PublicKey {
+        &self.sender_public_key
+    }
+
+    pub fn destruct(self) -> (Vec<Instruction>, InstructionSignature, PublicKey) {
+        (self.instructions, self.signature, self.sender_public_key)
     }
 }
 
@@ -109,65 +168,5 @@ impl TransactionMeta {
 
     pub fn max_outputs(&self) -> u32 {
         self.max_outputs
-    }
-}
-
-impl Transaction {
-    pub fn new(
-        fee: u64,
-        instructions: Vec<Instruction>,
-        signature: InstructionSignature,
-        sender_public_key: PublicKey,
-        meta: TransactionMeta,
-    ) -> Self {
-        let mut s = Self {
-            hash: Hash::default(),
-            instructions,
-            signature,
-            _fee: fee,
-            sender_public_key,
-            meta: Some(meta),
-        };
-        s.hash = s.calculate_hash();
-        s
-    }
-
-    pub fn hash(&self) -> &Hash {
-        &self.hash
-    }
-
-    pub fn fee(&self) -> u64 {
-        self._fee
-    }
-
-    pub fn meta(&self) -> &TransactionMeta {
-        self.meta.as_ref().unwrap()
-    }
-
-    fn calculate_hash(&self) -> Hash {
-        let mut res = hasher("transaction")
-            .chain(self.sender_public_key.as_bytes())
-            .chain(self.signature.signature().get_public_nonce().as_bytes())
-            .chain(self.signature.signature().get_signature().as_bytes());
-        for instruction in &self.instructions {
-            res.update(&instruction.hash())
-        }
-        res.result()
-    }
-
-    pub fn instructions(&self) -> &[Instruction] {
-        &self.instructions
-    }
-
-    pub fn signature(&self) -> &InstructionSignature {
-        &self.signature
-    }
-
-    pub fn sender_public_key(&self) -> &PublicKey {
-        &self.sender_public_key
-    }
-
-    pub fn destruct(self) -> (Vec<Instruction>, InstructionSignature, PublicKey) {
-        (self.instructions, self.signature, self.sender_public_key)
     }
 }

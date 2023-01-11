@@ -32,7 +32,7 @@ use tari_engine_types::{
     bucket::Bucket,
     logs::LogEntry,
     resource::Resource,
-    substate::{Substate, SubstateAddress, SubstateDiff, SubstateValue},
+    substate::{Substate, SubstateAddress, SubstateDiff},
     vault::Vault,
 };
 use tari_template_lib::{
@@ -40,9 +40,9 @@ use tari_template_lib::{
     models::{
         Amount,
         BucketId,
-        Component,
         ComponentAddress,
-        ComponentInstance,
+        ComponentBody,
+        ComponentHeader,
         Metadata,
         ResourceAddress,
         TemplateAddress,
@@ -76,9 +76,9 @@ struct WorkingState {
     logs: Vec<LogEntry>,
     buckets: HashMap<BucketId, Bucket>,
     // These could be "new_substates"
-    new_resources: HashMap<ResourceAddress, SubstateValue>,
-    new_components: HashMap<ComponentAddress, SubstateValue>,
-    new_vaults: HashMap<VaultId, SubstateValue>,
+    new_resources: HashMap<ResourceAddress, Resource>,
+    new_components: HashMap<ComponentAddress, ComponentHeader>,
+    new_vaults: HashMap<VaultId, Vault>,
 
     runtime_state: Option<RuntimeState>,
     last_instruction_output: Option<Vec<u8>>,
@@ -135,7 +135,7 @@ impl StateTracker {
                 self.check_amount(amount)?;
                 self.write_with(|state| {
                     let resource = Resource::fungible(resource_address, amount, metadata);
-                    state.new_resources.insert(resource.address(), resource.into());
+                    state.new_resources.insert(*resource.address(), resource);
                 });
 
                 Ok(resource_address)
@@ -152,7 +152,7 @@ impl StateTracker {
                 dbg!(resource_address.to_string());
                 self.write_with(|state| {
                     let resource = Resource::non_fungible(resource_address, token_ids, metadata);
-                    state.new_resources.insert(resource.address(), resource.into());
+                    state.new_resources.insert(*resource.address(), resource);
                 });
 
                 Ok(resource_address)
@@ -161,23 +161,21 @@ impl StateTracker {
     }
 
     pub fn get_resource(&self, address: &ResourceAddress) -> Result<Resource, RuntimeError> {
-        self.read_with(|state| {
-            match state.new_resources.get(address).cloned().map(|substate| {
-                substate
+        self.read_with(|state| match state.new_resources.get(address).cloned() {
+            Some(resource) => Ok(resource),
+            None => {
+                let tx = self.state_store.read_access()?;
+                let resource = tx
+                    .get_state::<_, Substate>(&SubstateAddress::Resource(*address))
+                    .optional()?
+                    .ok_or(RuntimeError::ResourceNotFound {
+                        resource_address: *address,
+                    })?;
+                Ok(resource
+                    .into_substate()
                     .into_resource()
-                    .expect("new_resources contains non-resource substate")
-            }) {
-                Some(resource) => Ok(resource),
-                None => {
-                    let tx = self.state_store.read_access()?;
-                    let resource = tx.get_state(&SubstateAddress::Resource(*address)).optional()?.ok_or(
-                        RuntimeError::ResourceNotFound {
-                            resource_address: *address,
-                        },
-                    )?;
-                    Ok(resource)
-                },
-            }
+                    .expect("Substate was not a resource type at resource address"))
+            },
         })
     }
 
@@ -230,57 +228,47 @@ impl StateTracker {
 
     pub fn new_component(&self, module_name: String, state: Vec<u8>) -> Result<ComponentAddress, RuntimeError> {
         let runtime_state = self.runtime_state()?;
-        let component = Component {
-            template_address: runtime_state.template_address,
-            module_name,
-            state,
-        };
+        let component = ComponentBody { state };
         let component_address = self.id_provider().new_component_address()?;
         debug!(target: LOG_TARGET, "New component created: {}", component_address);
-        let component = ComponentInstance::new(component_address, component);
+        let component = ComponentHeader {
+            component_address,
+            template_address: runtime_state.template_address,
+            version: 0,
+            module_name,
+            state: component,
+        };
+
         self.write_with(|state| {
             // New root component
-            state.new_components.insert(component_address, component.into());
+            state.new_components.insert(component_address, component);
         });
         Ok(component_address)
     }
 
-    pub fn get_substate(&self, substate_address: &SubstateAddress) -> Result<SubstateValue, RuntimeError> {
-        let substate = self.read_with(|state| match substate_address {
-            SubstateAddress::Component(addr) => state.new_components.get(addr).cloned(),
-            SubstateAddress::Resource(addr) => state.new_resources.get(addr).cloned(),
-            SubstateAddress::Vault(addr) => state.new_vaults.get(addr).cloned(),
-        });
-        match substate {
-            Some(substate) => Ok(substate),
+    pub fn get_component(&self, addr: &ComponentAddress) -> Result<ComponentHeader, RuntimeError> {
+        let component = self.read_with(|state| state.new_components.get(addr).cloned());
+        match component {
+            Some(component) => Ok(component),
             None => {
                 let tx = self.state_store.read_access()?;
                 let value = tx
-                    .get_state(substate_address)
+                    .get_state::<_, Substate>(&SubstateAddress::Component(*addr))
                     .optional()?
-                    .ok_or(RuntimeError::SubstateNotFound {
-                        address: *substate_address,
-                    })?;
-                Ok(value)
+                    .ok_or(RuntimeError::ComponentNotFound { address: *addr })?;
+                Ok(value
+                    .into_substate()
+                    .into_component()
+                    .expect("Substate was not a component type at component address"))
             },
         }
     }
 
-    /// Set the substate. This may be called many times during execution but always results in exactly one UP substate
+    /// Set the component. This may be called many times during execution but always results in exactly one UP substate
     /// with an incremented version.
-    pub fn set_substate(&self, value: SubstateValue) -> Result<(), RuntimeError> {
+    pub fn set_component(&self, component: ComponentHeader) -> Result<(), RuntimeError> {
         self.write_with(|state| {
-            match value {
-                SubstateValue::Component(component) => {
-                    state.new_components.insert(component.address(), component.into());
-                },
-                SubstateValue::Resource(resource) => {
-                    state.new_resources.insert(resource.address(), resource.into());
-                },
-                SubstateValue::Vault(vault) => {
-                    state.new_vaults.insert(vault.id(), vault.into());
-                },
-            }
+            state.new_components.insert(*component.address(), component);
             Ok(())
         })
     }
@@ -304,7 +292,7 @@ impl StateTracker {
         let vault = Vault::new(vault_id, resource);
 
         self.write_with(|state| {
-            state.new_vaults.insert(vault_id, vault.into());
+            state.new_vaults.insert(vault_id, vault);
         });
 
         Ok(vault_id)
@@ -314,25 +302,23 @@ impl StateTracker {
         self.write_with(|state| {
             let vault_mut = state.new_vaults.get_mut(vault_id);
             match vault_mut {
-                Some(SubstateValue::Vault(vault_mut)) => Ok(f(vault_mut)),
-                Some(_) => unreachable!(),
+                Some(vault_mut) => Ok(f(vault_mut)),
                 None => {
                     // TODO: This is not correct
-                    let substate: Substate = self
+                    let substate = self
                         .state_store
                         .read_access()
                         .unwrap()
-                        .get_state(&SubstateAddress::Vault(*vault_id))
+                        .get_state::<_, Substate>(&SubstateAddress::Vault(*vault_id))
                         .optional()?
                         .ok_or(RuntimeError::VaultNotFound { vault_id: *vault_id })?;
 
                     let mut vault = substate
                         .into_substate()
                         .into_vault()
-                        .expect("Vault key does not point to vault substate");
-
+                        .expect("Substate was not a vault type at vault address");
                     let ret = f(&mut vault);
-                    state.new_vaults.insert(*vault_id, vault.into());
+                    state.new_vaults.insert(*vault_id, vault);
                     Ok(ret)
                 },
             }
@@ -392,6 +378,7 @@ impl StateTracker {
 
     pub fn finalize(&self) -> Result<SubstateDiff, TransactionCommitError> {
         self.validate_finalized()?;
+
         let tx = self
             .state_store
             .read_access()
@@ -404,7 +391,7 @@ impl StateTracker {
                 let addr = SubstateAddress::Component(component_addr);
                 let new_substate = match tx.get_state::<_, Substate>(&addr).optional()? {
                     Some(existing_state) => {
-                        substate_diff.down(addr);
+                        substate_diff.down(addr, existing_state.version());
                         Substate::new(existing_state.version() + 1, substate)
                     },
                     None => Substate::new(0, substate),
@@ -412,13 +399,11 @@ impl StateTracker {
                 substate_diff.up(addr, new_substate);
             }
 
-            // Vaults are held within a component and contain a resource, so I dont think they are a substate in and of
-            // themselves
             for (vault_id, substate) in state.new_vaults.drain() {
                 let addr = SubstateAddress::Vault(vault_id);
                 let new_substate = match tx.get_state::<_, Substate>(&addr).optional()? {
                     Some(existing_state) => {
-                        substate_diff.down(addr);
+                        substate_diff.down(addr, existing_state.version());
                         Substate::new(existing_state.version() + 1, substate)
                     },
                     None => Substate::new(0, substate),
@@ -430,7 +415,7 @@ impl StateTracker {
                 let addr = SubstateAddress::Resource(resource_addr);
                 let new_substate = match tx.get_state::<_, Substate>(&addr).optional()? {
                     Some(existing_state) => {
-                        substate_diff.down(addr);
+                        substate_diff.down(addr, existing_state.version());
                         Substate::new(existing_state.version() + 1, substate)
                     },
                     None => Substate::new(0, substate),

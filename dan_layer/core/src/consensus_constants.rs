@@ -21,7 +21,7 @@
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 use serde::{Deserialize, Serialize};
-use tari_dan_common_types::Epoch;
+use tari_dan_common_types::{Epoch, NodeHeight};
 
 #[derive(Clone)]
 pub struct ConsensusConstants {
@@ -37,6 +37,10 @@ impl ConsensusConstants {
             committee_size: 7,
             hotstuff_rounds: 4,
         }
+    }
+
+    pub fn max_payload_height(&self) -> NodeHeight {
+        NodeHeight(self.hotstuff_rounds)
     }
 }
 

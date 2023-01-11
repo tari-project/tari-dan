@@ -27,6 +27,7 @@ use crate::schema::*;
 #[derive(Debug, Identifiable, Queryable)]
 pub struct LockNodeAndHeight {
     pub id: i32,
+    pub payload_id: Vec<u8>,
     pub shard_id: Vec<u8>,
     pub tree_node_hash: Vec<u8>,
     pub node_height: i64,
@@ -36,6 +37,7 @@ pub struct LockNodeAndHeight {
 #[derive(Debug, Insertable)]
 #[table_name = "lock_node_and_heights"]
 pub struct NewLockNodeAndHeight {
+    pub payload_id: Vec<u8>,
     pub shard_id: Vec<u8>,
     pub tree_node_hash: Vec<u8>,
     pub node_height: i64,

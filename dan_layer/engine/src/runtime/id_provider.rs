@@ -22,7 +22,6 @@
 
 use std::sync::{atomic::AtomicU32, Arc};
 
-use tari_dan_common_types::ShardId;
 use tari_engine_types::hashing::hasher;
 use tari_template_lib::{
     models::{BucketId, ComponentAddress, ResourceAddress, VaultId},
@@ -68,33 +67,34 @@ impl IdProvider {
     /// Generates a new unique id H(tx_hash || n).
     /// NOTE: we rely on IDs being predictable for all outputs (components, resources, vaults).
     fn new_id(&self) -> Result<Hash, MaxIdsExceeded> {
-        let id = hasher("output")
-            .chain(&self.transaction_hash)
-            .chain(&self.next()?)
-            .result();
+        let id = generate_output_id(&self.transaction_hash, self.next()?);
         Ok(id)
     }
 
     pub fn new_resource_address(&self) -> Result<ResourceAddress, MaxIdsExceeded> {
-        self.new_id()
+        Ok(self.new_id()?.into())
     }
 
     pub fn new_component_address(&self) -> Result<ComponentAddress, MaxIdsExceeded> {
-        self.new_id()
+        Ok(self.new_id()?.into())
     }
 
-    pub fn new_output_shard(&self) -> Result<ShardId, MaxIdsExceeded> {
-        Ok(self.new_id()?.into_array().into())
+    pub fn new_address_hash(&self) -> Result<Hash, MaxIdsExceeded> {
+        self.new_id()
     }
 
     pub fn new_vault_id(&self) -> Result<VaultId, MaxIdsExceeded> {
-        self.new_id()
+        Ok(self.new_id()?.into())
     }
 
     pub fn new_bucket_id(&self) -> BucketId {
         // Buckets are not saved to shards, so should not increment the hashes
         self.bucket_id.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
     }
+}
+
+fn generate_output_id(hash: &Hash, n: u32) -> Hash {
+    hasher("output").chain(hash).chain(&n).result()
 }
 
 #[cfg(test)]

@@ -20,28 +20,24 @@
 //   WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //   USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use std::{
-    collections::HashMap,
-    sync::{Arc, Mutex},
-};
-
-use tari_dan_common_types::{ShardId, TreeNodeHash};
+use futures::channel::oneshot;
+use tari_dan_common_types::ShardId;
 use tari_dan_engine::transaction::Transaction;
 use tari_template_lib::Hash;
-use tokio::sync::{broadcast, broadcast::error::RecvError, mpsc, mpsc::error::SendError};
+use tokio::sync::{broadcast, broadcast::error::RecvError, mpsc};
 
-pub type TransactionPool = Arc<Mutex<HashMap<Hash, (Transaction, Option<TreeNodeHash>)>>>;
+use crate::p2p::services::mempool::MempoolError;
 
 pub enum MempoolRequest {
     SubmitTransaction(Box<Transaction>),
     RemoveTransaction { transaction_hash: Hash },
+    GetMempoolSize { reply: oneshot::Sender<usize> },
 }
 
 #[derive(Debug)]
 pub struct MempoolHandle {
     rx_valid_transactions: broadcast::Receiver<(Transaction, ShardId)>,
     tx_mempool_request: mpsc::Sender<MempoolRequest>,
-    transactions: TransactionPool,
 }
 
 impl Clone for MempoolHandle {
@@ -49,7 +45,6 @@ impl Clone for MempoolHandle {
         MempoolHandle {
             rx_valid_transactions: self.rx_valid_transactions.resubscribe(),
             tx_mempool_request: self.tx_mempool_request.clone(),
-            transactions: self.transactions.clone(),
         }
     }
 }
@@ -58,32 +53,36 @@ impl MempoolHandle {
     pub(super) fn new(
         rx_valid_transactions: broadcast::Receiver<(Transaction, ShardId)>,
         tx_mempool_request: mpsc::Sender<MempoolRequest>,
-        transactions: TransactionPool,
     ) -> Self {
         Self {
             rx_valid_transactions,
             tx_mempool_request,
-            transactions,
         }
     }
 
-    pub async fn submit_transaction(&self, transaction: Transaction) -> Result<(), SendError<MempoolRequest>> {
+    pub async fn submit_transaction(&self, transaction: Transaction) -> Result<(), MempoolError> {
         self.tx_mempool_request
             .send(MempoolRequest::SubmitTransaction(Box::new(transaction)))
-            .await
+            .await?;
+        Ok(())
     }
 
-    pub async fn remove_transaction(&self, transaction_hash: Hash) -> Result<(), SendError<MempoolRequest>> {
+    pub async fn remove_transaction(&self, transaction_hash: Hash) -> Result<(), MempoolError> {
         self.tx_mempool_request
             .send(MempoolRequest::RemoveTransaction { transaction_hash })
-            .await
+            .await?;
+        Ok(())
     }
 
     pub async fn next_valid_transaction(&mut self) -> Result<(Transaction, ShardId), RecvError> {
         self.rx_valid_transactions.recv().await
     }
 
-    pub fn get_mempool_size(&self) -> usize {
-        self.transactions.lock().unwrap().len()
+    pub async fn get_mempool_size(&self) -> Result<usize, MempoolError> {
+        let (tx, rx) = oneshot::channel();
+        self.tx_mempool_request
+            .send(MempoolRequest::GetMempoolSize { reply: tx })
+            .await?;
+        rx.await.map_err(Into::into)
     }
 }

@@ -39,9 +39,9 @@ use tari_dan_engine::{
 };
 use tari_engine_types::{
     commit_result::{FinalizeResult, RejectReason},
-    substate::{Substate, SubstateAddress, SubstateValue},
+    substate::{Substate, SubstateAddress},
 };
-use tari_template_lib::models::{ComponentAddress, ResourceAddress, TemplateAddress, VaultId};
+use tari_template_lib::models::{ComponentAddress, TemplateAddress};
 
 #[derive(Debug, Default, Clone)]
 pub struct TariDanPayloadProcessor<TTemplateProvider> {
@@ -60,13 +60,13 @@ where TTemplateProvider: TemplateProvider
     fn process_payload(
         &self,
         payload: TariDanPayload,
-        pledges: HashMap<ShardId, Option<ObjectPledge>>,
+        pledges: HashMap<ShardId, ObjectPledge>,
     ) -> Result<FinalizeResult, PayloadProcessorError> {
         let transaction = payload.into_payload();
         let mut template_addresses = HashSet::<_, RandomState>::from_iter(transaction.required_templates());
         let components = transaction.required_components();
 
-        let state_db = create_populated_state_store(pledges.into_values().flatten())?;
+        let state_db = create_populated_state_store(pledges.into_values())?;
         template_addresses.extend(load_template_addresses_for_components(&state_db, &components)?);
 
         // let id_provider = IdProvider::new(*transaction.hash(), transaction.meta().max_outputs());
@@ -133,30 +133,12 @@ fn create_populated_state_store<I: IntoIterator<Item = ObjectPledge>>(
     for input in inputs {
         match input.current_state {
             SubstateState::Up { data, .. } => {
-                // TODO: The 1:1 mapping between ShardId and component/resource address could be cleaned up
-                match data.substate_value() {
-                    SubstateValue::Component(_) => {
-                        tx.set_state(
-                            &SubstateAddress::Component(ComponentAddress::from(input.shard_id.into_array())),
-                            data,
-                        )
-                        .unwrap();
-                    },
-                    SubstateValue::Resource(_) => {
-                        tx.set_state(
-                            &SubstateAddress::Resource(ResourceAddress::from(input.shard_id.into_array())),
-                            data,
-                        )
-                        .unwrap();
-                    },
-                    SubstateValue::Vault(_) => {
-                        tx.set_state(
-                            &SubstateAddress::Vault(VaultId::from(input.shard_id.into_array())),
-                            data,
-                        )
-                        .unwrap();
-                    },
-                }
+                log::error!(target: "tari::dan_layer::payload_processor",
+                    "Input data: {} v{}",
+                    data.substate_value().substate_address(),
+                    data.version()
+                );
+                tx.set_state(&data.substate_value().substate_address(), data)?;
             },
             SubstateState::DoesNotExist | SubstateState::Down { .. } => { /* Do nothing */ },
         }

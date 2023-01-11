@@ -20,22 +20,20 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use digest::{Digest, FixedOutput};
 use serde::{Deserialize, Serialize};
 use tari_common_types::types::FixedHash;
 use tari_core::ValidatorNodeMmr;
-use tari_crypto::hash::blake2::Blake256;
 use tari_dan_common_types::{
     hashing::tari_hasher,
     vn_mmr_node_hash,
+    PayloadId,
     QuorumDecision,
     QuorumRejectReason,
     ShardId,
-    ShardVote,
+    ShardPledge,
     TreeNodeHash,
     ValidatorMetadata,
 };
-use tari_engine_types::commit_result::RejectReason;
 use tari_mmr::MerkleProof;
 
 use crate::{services::SigningService, workers::hotstuff_error::HotStuffError, TariDanCoreHashDomain};
@@ -43,63 +41,75 @@ use crate::{services::SigningService, workers::hotstuff_error::HotStuffError, Ta
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct VoteMessage {
     local_node_hash: TreeNodeHash,
+    payload_id: PayloadId,
     shard: ShardId,
     decision: QuorumDecision,
-    all_shard_nodes: Vec<ShardVote>,
+    all_shard_pledge: Vec<ShardPledge>,
     validator_metadata: Option<ValidatorMetadata>,
 }
 
 impl VoteMessage {
     pub fn new(
         local_node_hash: TreeNodeHash,
+        payload_id: PayloadId,
         shard: ShardId,
         decision: QuorumDecision,
-        mut all_shard_nodes: Vec<ShardVote>,
+        mut shard_pledges: Vec<ShardPledge>,
     ) -> Self {
-        all_shard_nodes.sort_by(|a, b| a.shard_id.cmp(&b.shard_id));
+        shard_pledges.sort_by(|a, b| a.shard_id.cmp(&b.shard_id));
 
         Self {
             local_node_hash,
+            payload_id,
             shard,
             decision,
-            all_shard_nodes,
+            all_shard_pledge: shard_pledges,
             validator_metadata: None,
         }
     }
 
-    pub fn accept(local_node_hash: TreeNodeHash, shard: ShardId, all_shard_nodes: Vec<ShardVote>) -> Self {
-        Self::new(local_node_hash, shard, QuorumDecision::Accept, all_shard_nodes)
+    pub fn accept(
+        local_node_hash: TreeNodeHash,
+        payload_id: PayloadId,
+        shard: ShardId,
+        shard_pledges: Vec<ShardPledge>,
+    ) -> Self {
+        Self::new(
+            local_node_hash,
+            payload_id,
+            shard,
+            QuorumDecision::Accept,
+            shard_pledges,
+        )
     }
 
     pub fn reject(
         local_node_hash: TreeNodeHash,
+        payload_id: PayloadId,
         shard: ShardId,
-        all_shard_nodes: Vec<ShardVote>,
-        reason: &RejectReason,
+        shard_pledges: Vec<ShardPledge>,
+        reason: QuorumRejectReason,
     ) -> Self {
-        let quorum_reject_reason = match reason {
-            RejectReason::ShardsNotPledged(_) => QuorumRejectReason::ShardNotPledged,
-            RejectReason::ExecutionFailure(_) => QuorumRejectReason::ExecutionFailure,
-        };
-        let decision = QuorumDecision::Reject(quorum_reject_reason);
-
-        Self::new(local_node_hash, shard, decision, all_shard_nodes)
+        let decision = QuorumDecision::Reject(reason);
+        Self::new(local_node_hash, payload_id, shard, decision, shard_pledges)
     }
 
     pub fn with_validator_metadata(
         local_node_hash: TreeNodeHash,
+        payload_id: PayloadId,
         shard: ShardId,
         decision: QuorumDecision,
-        mut all_shard_nodes: Vec<ShardVote>,
+        mut all_shard_pledges: Vec<ShardPledge>,
         validator_metadata: ValidatorMetadata,
     ) -> Self {
-        all_shard_nodes.sort_by(|a, b| a.shard_id.cmp(&b.shard_id));
+        all_shard_pledges.sort_by(|a, b| a.shard_id.cmp(&b.shard_id));
 
         Self {
             local_node_hash,
+            payload_id,
             shard,
             decision,
-            all_shard_nodes,
+            all_shard_pledge: all_shard_pledges,
             validator_metadata: Some(validator_metadata),
         }
     }
@@ -109,24 +119,24 @@ impl VoteMessage {
         signing_service: &TSigningService,
         shard_id: ShardId,
         vn_mmr: &ValidatorNodeMmr,
-        vn_mmr_leaf_index: u64,
     ) -> Result<(), HotStuffError> {
         // calculate the signature
         let challenge = self.construct_challenge();
         let signature = signing_service.sign(&*challenge).ok_or(HotStuffError::FailedToSignQc)?;
         // construct the merkle proof for the inclusion of the VN's public key in the epoch
-        let leaf_pos = vn_mmr
+        let leaf_index = vn_mmr
             .find_leaf_index(&*vn_mmr_node_hash(signing_service.public_key(), &shard_id))
             .expect("Unexpected Merkle Mountain Range error")
             .ok_or(HotStuffError::ValidatorNodeNotIncludedInMmr)?;
         let merkle_proof =
-            MerkleProof::for_leaf_node(vn_mmr, leaf_pos as usize).expect("Merkle proof generation failed");
+            MerkleProof::for_leaf_node(vn_mmr, leaf_index as usize).expect("Merkle proof generation failed");
 
         let hash = vn_mmr_node_hash(signing_service.public_key(), &shard_id);
         let root = vn_mmr.get_merkle_root().unwrap();
         let idx = vn_mmr.find_leaf_index(&*hash).unwrap();
+        // TODO: remove
         if let Err(err) =
-            merkle_proof.verify::<tari_core::ValidatorNodeMmrHasherBlake256>(&root, &*hash, leaf_pos as usize)
+            merkle_proof.verify::<tari_core::ValidatorNodeMmrHasherBlake256>(&root, &*hash, leaf_index as usize)
         {
             log::warn!(
                 target: "tari::dan_layer::votemessage",
@@ -142,7 +152,7 @@ impl VoteMessage {
             shard_id,
             signature,
             merkle_proof,
-            vn_mmr_leaf_index,
+            leaf_index.into(),
         );
 
         self.validator_metadata = Some(validator_metadata);
@@ -154,30 +164,12 @@ impl VoteMessage {
             .chain(self.local_node_hash.as_bytes())
             .chain(self.shard.as_bytes())
             .chain(&[self.decision.as_u8()])
-            .chain(self.all_shard_nodes())
+            .chain(self.all_shard_pledges())
             .result()
     }
 
     pub fn validator_metadata(&self) -> &ValidatorMetadata {
         self.validator_metadata.as_ref().unwrap()
-    }
-
-    pub fn get_all_nodes_hash(&self) -> FixedHash {
-        let mut result = Blake256::new().chain([self.decision.as_u8()]);
-        // data must already be sorted
-        for ShardVote {
-            shard_id,
-            node_hash,
-            pledge,
-        } in &self.all_shard_nodes
-        {
-            result = result
-                .chain(shard_id.0)
-                .chain(node_hash.as_bytes())
-                // TODO: borsh serialize pledge
-                .chain(pledge.as_ref().map(|p| p.shard_id.0).unwrap_or_default());
-        }
-        result.finalize_fixed().into()
     }
 
     pub fn local_node_hash(&self) -> TreeNodeHash {
@@ -188,11 +180,15 @@ impl VoteMessage {
         self.shard
     }
 
+    pub fn payload_id(&self) -> PayloadId {
+        self.payload_id
+    }
+
     pub fn decision(&self) -> QuorumDecision {
         self.decision
     }
 
-    pub fn all_shard_nodes(&self) -> &[ShardVote] {
-        &self.all_shard_nodes
+    pub fn all_shard_pledges(&self) -> &[ShardPledge] {
+        &self.all_shard_pledge
     }
 }

@@ -130,6 +130,7 @@ pub struct TemplateMetadata {
 /// ```
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SubmitTransactionRequest {
+    // pub transaction: Transaction,
     pub instructions: Vec<Instruction>,
     pub signature: InstructionSignature,
     pub fee: u64,

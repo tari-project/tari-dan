@@ -27,7 +27,7 @@ use crate::{
     args::{ComponentAction, ComponentInvokeArg, ComponentRef, EmitLogArg, InvokeResult, LogLevel},
     context::Context,
     get_context,
-    models::{ComponentAddress, ComponentInstance},
+    models::{ComponentAddress, ComponentHeader},
 };
 
 pub fn engine() -> TariEngine {
@@ -72,12 +72,12 @@ impl TariEngine {
             args: invoke_args![],
         });
 
-        let component: ComponentInstance = result.decode().unwrap();
-        decode(&component.state).expect("Failed to decode component state")
+        let component: ComponentHeader = result.decode().expect("failed to decode component header from engine");
+        decode(component.state()).expect("Failed to decode component state")
     }
 
     pub fn set_component_state<T: Encode>(&self, component_address: ComponentAddress, state: T) {
-        let state = encode(&state).unwrap();
+        let state = encode(&state).expect("Failed to encode component state");
         let _result = call_engine::<_, InvokeResult>(EngineOp::ComponentInvoke, &ComponentInvokeArg {
             component_ref: ComponentRef::Ref(component_address),
             action: ComponentAction::SetState,

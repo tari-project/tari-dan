@@ -20,83 +20,48 @@
 //   WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //   USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use std::{collections::HashSet, sync::Arc};
+use std::{
+    collections::{HashMap, HashSet},
+    sync::Arc,
+};
 
-use async_trait::async_trait;
 use log::*;
 use tari_comms::NodeIdentity;
-use tari_dan_common_types::ShardId;
+use tari_dan_common_types::{ShardId, TreeNodeHash};
 use tari_dan_core::{
     message::DanMessage,
-    models::{Payload, TariDanPayload},
     services::{epoch_manager::EpochManager, infrastructure_services::OutboundService},
 };
 use tari_dan_engine::transaction::Transaction;
-use tari_engine_types::instruction::Instruction;
 use tari_template_lib::Hash;
 use tokio::sync::{broadcast, mpsc};
 
-use super::{handle::TransactionPool, MempoolError};
+use super::MempoolError;
 use crate::p2p::services::{
     epoch_manager::handle::EpochManagerHandle,
     mempool::{handle::MempoolRequest, Validator},
     messaging::OutboundMessaging,
-    template_manager::{TemplateManager, TemplateManagerError},
 };
 
-const LOG_TARGET: &str = "dan::mempool::service";
+const LOG_TARGET: &str = "tari::validator_node::mempool::service";
 
-pub struct MempoolService {
-    transactions: TransactionPool,
+#[derive(Debug)]
+pub struct MempoolService<V> {
+    transactions: HashMap<Hash, (Transaction, Option<TreeNodeHash>)>,
     new_transactions: mpsc::Receiver<Transaction>,
     mempool_requests: mpsc::Receiver<MempoolRequest>,
     outbound: OutboundMessaging,
     tx_valid_transactions: broadcast::Sender<(Transaction, ShardId)>,
     epoch_manager: EpochManagerHandle,
     node_identity: Arc<NodeIdentity>,
-    validator: MempoolTransactionValidator,
+    validator: V,
 }
 
-pub struct MempoolTransactionValidator {
-    template_manager: TemplateManager,
-}
-
-impl MempoolTransactionValidator {
-    pub(crate) fn new(template_manager: TemplateManager) -> Self {
-        Self { template_manager }
-    }
-}
-#[async_trait]
-impl Validator<Transaction> for MempoolTransactionValidator {
-    type Error = MempoolError;
-
-    async fn validate(&self, inner: &Transaction) -> Result<(), MempoolError> {
-        let instructions = inner.instructions();
-        for instruction in instructions {
-            match instruction {
-                Instruction::CallFunction { template_address, .. } => {
-                    let template_exists = self.template_manager.template_exists(template_address);
-                    match template_exists {
-                        Err(e) => return Err(MempoolError::InvalidTemplateAddress(e)),
-                        Ok(false) => {
-                            return Err(MempoolError::InvalidTemplateAddress(
-                                TemplateManagerError::TemplateNotFound {
-                                    address: *template_address,
-                                },
-                            ))
-                        },
-                        _ => continue,
-                    }
-                },
-                _ => continue,
-            }
-        }
-
-        Ok(())
-    }
-}
-
-impl MempoolService {
+impl<V> MempoolService<V>
+where
+    V: Validator<Transaction>,
+    MempoolError: From<V::Error>,
+{
     pub(super) fn new(
         new_transactions: mpsc::Receiver<Transaction>,
         mempool_requests: mpsc::Receiver<MempoolRequest>,
@@ -104,7 +69,7 @@ impl MempoolService {
         tx_valid_transactions: broadcast::Sender<(Transaction, ShardId)>,
         epoch_manager: EpochManagerHandle,
         node_identity: Arc<NodeIdentity>,
-        validator: MempoolTransactionValidator,
+        validator: V,
     ) -> Self {
         Self {
             transactions: Default::default(),
@@ -136,94 +101,94 @@ impl MempoolService {
         match request {
             MempoolRequest::SubmitTransaction(transaction) => self.handle_new_transaction(*transaction).await,
             MempoolRequest::RemoveTransaction { transaction_hash } => self.remove_transaction(&transaction_hash),
+            MempoolRequest::GetMempoolSize { reply } => {
+                let _ignore = reply.send(self.transactions.len());
+            },
         }
     }
 
     fn remove_transaction(&mut self, hash: &Hash) {
-        let mut transactions = self.transactions.lock().unwrap();
-        transactions.remove(hash);
+        self.transactions.remove(hash);
     }
 
     async fn handle_new_transaction(&mut self, transaction: Transaction) {
-        debug!(target: LOG_TARGET, "Received new transaction: {:?}", transaction);
+        debug!(
+            target: LOG_TARGET,
+            "Received transaction: {} {:?}",
+            transaction.hash(),
+            transaction
+        );
+
+        if self.transactions.contains_key(transaction.hash()) {
+            info!(
+                target: LOG_TARGET,
+                "🎱 Transaction {} already in mempool",
+                transaction.hash()
+            );
+            return;
+        }
 
         if let Err(e) = self.validator.validate(&transaction).await {
             error!(
                 target: LOG_TARGET,
                 "⚠ Invalid templates found for transaction: {}",
-                e.to_string(),
+                MempoolError::from(e)
             );
             return;
         }
 
-        let payload = TariDanPayload::new(transaction.clone());
-
-        let shards = payload.involved_shards();
-        debug!(target: LOG_TARGET, "New Payload in mempool for shards: {:?}", shards);
+        let shards = transaction.meta().involved_shards();
         if shards.is_empty() {
             warn!(target: LOG_TARGET, "⚠ No involved shards for payload");
         }
 
-        {
-            let access = self.transactions.lock().unwrap();
-            if access.contains_key(transaction.hash()) {
-                info!(
+        let current_node_pubkey = self.node_identity.public_key();
+
+        let mut committee_shards = Vec::with_capacity(shards.len());
+        // TODO(perf): n queries
+        for sid in &shards {
+            match self
+                .epoch_manager
+                .is_validator_in_committee_for_current_epoch(*sid, current_node_pubkey.clone())
+                .await
+            {
+                Ok(true) => committee_shards.push(*sid),
+                Ok(false) => {},
+                Err(e) => error!(
                     target: LOG_TARGET,
-                    "🎱 Transaction {} already in mempool",
-                    transaction.hash()
-                );
-                return;
+                    "Failed to retrieve validator in the committee for current epoch: {}",
+                    e.to_string(),
+                ),
             }
         }
 
-        {
-            let current_node_pubkey = self.node_identity.public_key().clone();
-            let mut should_process_txn = false;
-
-            for sid in &shards {
-                match self
-                    .epoch_manager
-                    .is_validator_in_committee_for_current_epoch(*sid, current_node_pubkey.clone())
-                    .await
-                {
-                    Ok(b) => {
-                        if b {
-                            should_process_txn = true;
-                            break;
-                        }
-                    },
-                    Err(e) => error!(
-                        target: LOG_TARGET,
-                        "Failed to retrieve validator in the committee for current epoch: {}",
-                        e.to_string(),
-                    ),
-                }
-            }
-
-            let mut access = self.transactions.lock().unwrap();
-
-            if should_process_txn {
-                info!(target: LOG_TARGET, "🎱 New transaction in mempool");
-                access.insert(*transaction.hash(), (transaction.clone(), None));
-            } else {
-                info!(
-                    target: LOG_TARGET,
-                    "🙇 Not in committee for transaction {}",
-                    transaction.hash()
-                );
-            }
+        if committee_shards.is_empty() {
+            info!(
+                target: LOG_TARGET,
+                "🙇 Not in committee for transaction {}",
+                transaction.hash()
+            );
+        } else {
+            info!(target: LOG_TARGET, "🎱 New transaction in mempool");
+            self.transactions
+                .insert(*transaction.hash(), (transaction.clone(), None));
         }
 
-        match self.propagate_transaction(&transaction, &shards).await {
-            Ok(()) => (),
-            Err(e) => error!(
+        if let Err(e) = self.propagate_transaction(&transaction, &shards).await {
+            error!(
                 target: LOG_TARGET,
                 "Unable to propagate transaction among peers: {}",
                 e.to_string()
-            ),
+            )
         }
 
-        for shard_id in shards {
+        for shard_id in committee_shards {
+            info!(
+                target: LOG_TARGET,
+                " 🚀 Sending transaction {} for shard {} to consensus",
+                transaction.hash(),
+                shard_id
+            );
             if let Err(err) = self.tx_valid_transactions.send((transaction.clone(), shard_id)) {
                 error!(
                     target: LOG_TARGET,
@@ -256,6 +221,7 @@ impl MempoolService {
         let unique_members = committees
             .into_iter()
             .flat_map(|s| s.committee.members)
+            .filter(|pk| pk != self.node_identity.public_key())
             .collect::<HashSet<_>>();
         let committees = unique_members.into_iter().collect::<Vec<_>>();
 
@@ -264,9 +230,5 @@ impl MempoolService {
             .await?;
 
         Ok(())
-    }
-
-    pub fn get_transaction(&self) -> TransactionPool {
-        self.transactions.clone()
     }
 }

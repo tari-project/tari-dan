@@ -55,8 +55,8 @@ impl Resource {
         }
     }
 
-    pub fn address(&self) -> ResourceAddress {
-        self.resource_address
+    pub fn address(&self) -> &ResourceAddress {
+        &self.resource_address
     }
 
     pub fn non_fungible_token_ids(&self) -> Vec<u64> {
@@ -94,6 +94,11 @@ impl Resource {
     }
 
     pub fn withdraw(&mut self, amt: Amount) -> Result<Resource, ResourceError> {
+        if !amt.is_positive() || amt.is_zero() {
+            return Err(ResourceError::InvariantError(
+                "Amount must be positive and non-zero".to_string(),
+            ));
+        }
         match &mut self.state {
             ResourceState::Fungible { amount } => {
                 if amt > *amount {
@@ -132,4 +137,6 @@ pub enum ResourceError {
     },
     #[error("Resource did not contain sufficient balance: {details}")]
     InsufficientBalance { details: String },
+    #[error("Invariant error: {0}")]
+    InvariantError(String),
 }

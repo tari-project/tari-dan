@@ -31,7 +31,7 @@ mod sqlite_transaction;
 pub use sqlite_transaction::SqliteTransaction;
 mod sqlite_db_factory;
 pub use sqlite_db_factory::SqliteDbFactory;
-pub mod engine_state_store;
+// pub mod engine_state_store;
 pub mod global;
 mod models;
 pub mod sqlite_shard_store_factory;

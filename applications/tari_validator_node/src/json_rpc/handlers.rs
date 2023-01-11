@@ -34,7 +34,7 @@ use serde_json::{self as json, json};
 use tari_comms::{multiaddr::Multiaddr, peer_manager::NodeId, types::CommsPublicKey, CommsNode, NodeIdentity};
 use tari_comms_logging::SqliteMessageLog;
 use tari_crypto::tari_utilities::hex::Hex;
-use tari_dan_common_types::{PayloadId, QuorumCertificate, QuorumDecision, SubstateChange};
+use tari_dan_common_types::{PayloadId, QuorumCertificate, QuorumDecision, ShardId, SubstateChange};
 use tari_dan_core::{
     services::{epoch_manager::EpochManager, BaseNodeClient},
     storage::shard_store::{ShardStore, ShardStoreTransaction},
@@ -143,26 +143,26 @@ impl JsonRpcHandlers {
 
         let mut builder = TransactionBuilder::new();
         builder
-            .with_input_refs(
+            .with_inputs(
                 request
                     .inputs
                     .iter()
-                    .filter_map(|i| {
-                        if i.1.eq(&SubstateChange::Exists) {
-                            Some(i.0)
+                    .filter_map(|(shard, change)| {
+                        if *change == SubstateChange::Destroy {
+                            Some(*shard)
                         } else {
                             None
                         }
                     })
                     .collect(),
             )
-            .with_inputs(
+            .with_outputs(
                 request
                     .inputs
                     .iter()
-                    .filter_map(|i| {
-                        if i.1.ne(&SubstateChange::Exists) {
-                            Some(i.0)
+                    .filter_map(|(shard, change)| {
+                        if *change == SubstateChange::Create {
+                            Some(*shard)
                         } else {
                             None
                         }
@@ -170,14 +170,23 @@ impl JsonRpcHandlers {
                     .collect(),
             )
             .with_instructions(request.instructions)
-            .with_num_outputs(request.num_outputs)
-            .signature(request.signature)
-            .sender_public_key(request.sender_public_key);
+            .with_new_outputs(request.num_outputs)
+            .with_signature(request.signature)
+            .with_sender_public_key(request.sender_public_key);
 
         let transaction = builder.build();
+        info!(
+            target: LOG_TARGET,
+            "Transaction {} has involved shards {:?}",
+            transaction.hash(),
+            transaction
+                .meta()
+                .involved_objects_iter()
+                .map(|(s, (ch, _))| format!("{}:{}", s, ch))
+                .collect::<Vec<_>>()
+        );
 
         // Pass to translation engine to translate into Shards and Substates.
-
         // TODO: submit the transaction to the wasm engine and return the result data
         let hash = *transaction.hash();
 
@@ -203,7 +212,8 @@ impl JsonRpcHandlers {
                         result: Some(TransactionFinalizeResult {
                             decision: QuorumDecision::Accept,
                             finalize: finalize_result,
-                            qc: QuorumCertificate::genesis(epoch),
+                            // TODO: Get correct QC
+                            qc: QuorumCertificate::genesis(epoch, PayloadId::new(hash), ShardId::zero()),
                         }),
                     };
 
@@ -284,7 +294,7 @@ impl JsonRpcHandlers {
         let data: TransactionRequest = value.parse_params()?;
         let tx = self.shard_store.create_tx().unwrap();
         match tx.get_transaction(data.payload_id) {
-            Ok(transaction) => Ok(JsonRpcResponse::success(answer_id, json!(transaction))),
+            Ok(transaction) => Ok(JsonRpcResponse::success(answer_id, transaction)),
             Err(err) => {
                 println!("error {:?}", err);
                 Err(JsonRpcResponse::error(
@@ -449,7 +459,18 @@ impl JsonRpcHandlers {
 
     pub async fn get_mempool_stats(&self, value: JsonRpcExtractor) -> JrpcResult {
         let answer_id = value.get_answer_id();
-        let response = json!({"size": self.mempool.get_mempool_size()});
+        let size = self.mempool.get_mempool_size().await.map_err(|err| {
+            error!(target: LOG_TARGET, "Error getting mempool size: {}", err);
+            JsonRpcResponse::error(
+                answer_id,
+                JsonRpcError::new(
+                    JsonRpcErrorReason::InvalidParams,
+                    "Something went wrong".to_string(),
+                    json::Value::Null,
+                ),
+            )
+        })?;
+        let response = json!({ "size": size });
         Ok(JsonRpcResponse::success(answer_id, response))
     }
 
@@ -603,7 +624,7 @@ async fn wait_for_transaction_result(
         match tokio::time::timeout(timeout, subscription.recv()).await {
             Ok(res) => match res {
                 Ok(HotStuffEvent::OnFinalized(qc, result)) => {
-                    if qc.payload_id().as_slice() != hash.as_ref() {
+                    if qc.payload_id().as_bytes() != hash.as_ref() {
                         continue;
                     }
 
