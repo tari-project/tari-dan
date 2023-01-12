@@ -147,6 +147,8 @@ pub async fn spawn_wallet(world: &mut TariWorld, wallet_name: String, base_node_
         .set_base_node(set_base_node_request.clone())
         .await
         .unwrap();
+
+    // TODO: Clean up
     let identity = wallet_client
         .identify(GetIdentityRequest {})
         .await
@@ -154,12 +156,17 @@ pub async fn spawn_wallet(world: &mut TariWorld, wallet_name: String, base_node_
         .into_inner();
     eprintln!("Wallet {} comms address: {}", wallet_name, identity.public_address);
     let mut status = wallet_client.get_network_status(Empty {}).await.unwrap().into_inner();
+    let mut counter = 0;
     while status.status != ConnectivityStatus::Online as i32 {
         eprintln!(
             "Waiting for wallet to connect to base node {} {} {} (status: {:?})",
             base_node_name, set_base_node_request.public_key_hex, set_base_node_request.net_address, status
         );
         tokio::time::sleep(Duration::from_secs(1)).await;
+        counter += 1;
+        if counter > 10 {
+            panic!("Wallet failed to connect to base node");
+        }
         status = wallet_client.get_network_status(Empty {}).await.unwrap().into_inner();
     }
 
