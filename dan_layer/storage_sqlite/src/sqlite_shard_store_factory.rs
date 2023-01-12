@@ -1374,40 +1374,6 @@ impl ShardStoreWriteTransaction<PublicKey, TariDanPayload> for SqliteShardStoreW
         Ok(())
     }
 
-    fn get_transaction(&self, payload_id: Vec<u8>) -> Result<Vec<SQLTransaction>, StorageError> {
-        let res = sql_query(
-            "select node_hash, parent_node_hash, shard, height, payload_height, (select count(*) from received_votes \
-             v where v.tree_node_hash = node_hash) as total_votes, (select count(*) from leader_proposals lp where \
-             lp.payload_id  = n.payload_id and lp.payload_height = n.payload_height and lp.node_hash = n.node_hash) \
-             as total_leader_proposals from nodes as n where payload_id = ? order by shard",
-        )
-        .bind::<Binary, _>(payload_id)
-        .load::<QueryableTransaction>(self.transaction.connection())
-        .map_err(|e| StorageError::QueryError {
-            reason: format!("Get transaction: {}", e),
-        })?;
-        Ok(res.into_iter().map(|transaction| transaction.into()).collect())
-    }
-
-    fn get_substates_for_payload(
-        &self,
-        payload_id: Vec<u8>,
-        shard_id: Vec<u8>,
-    ) -> Result<Vec<SQLSubstate>, StorageError> {
-        let res = sql_query(
-            "select * from substates where shard_id == ? and (created_by_payload_id == ? or destroyed_by_payload_id \
-             == ?);",
-        )
-        .bind::<Binary, _>(shard_id)
-        .bind::<Binary, _>(payload_id.clone())
-        .bind::<Binary, _>(payload_id)
-        .load::<QueryableSubstate>(self.transaction.connection())
-        .map_err(|e| StorageError::QueryError {
-            reason: format!("Get substates: {}", e),
-        })?;
-        Ok(res.into_iter().map(|transaction| transaction.into()).collect())
-    }
-
     // -------------------------------- Pledges -------------------------------- //
 
     fn pledge_object(
