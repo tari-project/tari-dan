@@ -27,12 +27,13 @@ use std::{
     sync::{Arc, Mutex},
 };
 
+use chrono::NaiveDateTime;
 use diesel::{
     dsl::now,
     prelude::*,
     result::{DatabaseErrorKind, Error},
     sql_query,
-    sql_types::{BigInt, Binary, Nullable, Text},
+    sql_types::{BigInt, Binary, Nullable, Text, Timestamp},
     SqliteConnection,
 };
 use log::{debug, warn};
@@ -94,8 +95,8 @@ const LOG_TARGET: &str = "tari::dan::storage::sqlite::shard_store";
 pub struct QueryableRecentTransaction {
     #[sql_type = "Binary"]
     pub payload_id: Vec<u8>,
-    #[sql_type = "BigInt"]
-    pub timestamp: i64,
+    #[sql_type = "Timestamp"]
+    pub timestamp: NaiveDateTime,
     #[sql_type = "Text"]
     pub meta: String,
     #[sql_type = "Text"]
@@ -129,6 +130,10 @@ pub struct QueryableTransaction {
     pub total_votes: i64,
     #[sql_type = "BigInt"]
     pub total_leader_proposals: i64,
+    #[sql_type = "Timestamp"]
+    pub timestamp: NaiveDateTime,
+    #[sql_type = "Text"]
+    pub justify: String,
 }
 
 impl From<QueryableTransaction> for SQLTransaction {
@@ -141,6 +146,8 @@ impl From<QueryableTransaction> for SQLTransaction {
             payload_height: transaction.payload_height,
             total_votes: transaction.total_votes,
             total_leader_proposals: transaction.total_leader_proposals,
+            timestamp: transaction.timestamp,
+            justify: transaction.justify,
         }
     }
 }
@@ -1278,7 +1285,7 @@ impl ShardStoreTransaction<PublicKey, TariDanPayload> for SqliteShardStoreTransa
             "select node_hash, parent_node_hash, shard, height, payload_height, (select count(*) from received_votes \
              v where v.tree_node_hash = node_hash) as total_votes, (select count(*) from leader_proposals lp where \
              lp.payload_id  = n.payload_id and lp.payload_height = n.payload_height and lp.node_hash = n.node_hash) \
-             as total_leader_proposals from nodes as n where payload_id = ? order by shard",
+             as total_leader_proposals, n.timestamp, n.justify from nodes as n where payload_id = ? order by shard",
         )
         .bind::<Binary, _>(payload_id)
         .load::<QueryableTransaction>(self.transaction.connection())

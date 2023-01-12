@@ -23,6 +23,7 @@
 use std::{convert::TryFrom, fmt::Debug};
 
 use anyhow::anyhow;
+use chrono::NaiveDateTime;
 use serde::Serialize;
 use tari_common_types::types::FixedHash;
 
@@ -167,7 +168,7 @@ impl From<u64> for ChainHeight {
 #[derive(Debug, Serialize)]
 pub struct RecentTransaction {
     pub payload_id: Vec<u8>,
-    pub timestamp: i64,
+    pub timestamp: NaiveDateTime,
     pub meta: String,
     pub instructions: String,
 }
@@ -181,6 +182,8 @@ pub struct SQLTransaction {
     pub payload_height: i64,
     pub total_votes: i64,
     pub total_leader_proposals: i64,
+    pub timestamp: NaiveDateTime,
+    pub justify: String,
 }
 
 #[derive(Debug, Serialize)]
