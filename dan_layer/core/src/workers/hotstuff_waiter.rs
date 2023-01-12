@@ -668,7 +668,13 @@ where
                     "🔥 Executing payload in PREPARE phase: {}", payload_id
                 );
 
-                let finalize_result = self.execute(payload, shard_pledges)?;
+                let finalize_result = match self.execute(payload, shard_pledges) {
+                    Ok(finalize_result) => finalize_result,
+                    Err(err) => FinalizeResult::errored(
+                        payload_id.into_array().into(),
+                        RejectReason::ExecutionFailure(err.to_string()),
+                    ),
+                };
 
                 if let TransactionResult::Accept(ref diff) = finalize_result.result {
                     match Self::validate_pledges(shard_pledges, diff) {
@@ -692,6 +698,9 @@ where
                         Err(e) => Err(e),
                     }
                 } else {
+                    self.shard_store
+                        .with_write_tx(|tx| tx.update_payload_result(&node.payload_id(), finalize_result.clone()))?;
+
                     Ok(finalize_result)
                 }
             },
