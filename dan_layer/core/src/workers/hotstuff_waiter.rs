@@ -425,6 +425,13 @@ where
                 return Ok(());
             }
 
+            // All proposals are for different shards and have the same height, so if one of them is REJECT then there
+            // is no point in continuing to vote.
+            if let Some(reject_node) = proposed_nodes.iter().find(|n| n.justify().decision().is_reject()) {
+                self.abandon_payload(reject_node, &proposed_nodes)?;
+                return Ok(());
+            }
+
             // TODO: if the proposal is in DECIDE phase and the result is rejected we should not vote
             // because the leader is just letting us know that nodes voted to reject
             self.decide_and_vote_on_all_nodes(payload, proposed_nodes).await?;
@@ -446,6 +453,55 @@ where
         // If all pledges for all shards and complete, then we can persist the payload changes
         self.finalize_payload(&involved_shards, &node).await?;
 
+        Ok(())
+    }
+
+    /// Abandon all pledges on the payload and REJECT it
+    fn abandon_payload(
+        &self,
+        reject_node: &HotStuffTreeNode<TAddr, TPayload>,
+        proposed_nodes: &[HotStuffTreeNode<TAddr, TPayload>],
+    ) -> Result<(), HotStuffError> {
+        info!(
+            target: LOG_TARGET,
+            "🔥 Rejected shard {} in node {} for payload {}. Abandoning entire payload.",
+            reject_node.shard(),
+            reject_node.hash(),
+            reject_node.payload_id(),
+        );
+
+        let finalize_result = FinalizeResult::reject(
+            reject_node.payload_id().into_array().into(),
+            RejectReason::ShardRejected(format!(
+                "Shard {} failed ({:?}). Abandoning payload {}",
+                reject_node.shard(),
+                reject_node.justify().decision(),
+                reject_node.payload_id()
+            )),
+        );
+
+        self.shard_store.with_write_tx(|tx| {
+            tx.update_payload_result(&reject_node.payload_id(), finalize_result.clone())?;
+            for node in proposed_nodes {
+                // Is it possible we did not pledge at this stage?
+                if tx
+                    .abandon_pledges(node.shard(), node.payload_id(), node.hash())
+                    .optional()?
+                    .is_some()
+                {
+                    info!(
+                        target: LOG_TARGET,
+                        "🔥 Abandoned shard {} pledges for payload {}",
+                        node.shard(),
+                        node.payload_id()
+                    );
+                }
+            }
+            Ok::<_, HotStuffError>(())
+        })?;
+
+        let qc = reject_node.justify();
+        self.publish_event(HotStuffEvent::OnFinalized(Box::new(qc.clone()), finalize_result));
         Ok(())
     }
 
@@ -640,7 +696,7 @@ where
         // On every phase, validate that the pledges are pledged to this payload.
         for pledge in shard_pledges {
             if pledge.pledge.pledged_to_payload != node.payload_id() {
-                let finalize_result = FinalizeResult::errored(
+                let finalize_result = FinalizeResult::reject(
                     payload.to_id().into_array().into(),
                     RejectReason::ShardPledgedToAnotherPayload(
                         HotStuffError::ShardPledgedToDifferentPayload {
@@ -689,7 +745,7 @@ where
 
                 let finalize_result = match self.execute(payload, shard_pledges) {
                     Ok(finalize_result) => finalize_result,
-                    Err(err) => FinalizeResult::errored(
+                    Err(err) => FinalizeResult::reject(
                         payload_id.into_array().into(),
                         RejectReason::ExecutionFailure(err.to_string()),
                     ),
@@ -704,7 +760,7 @@ where
                             Ok(finalize_result)
                         },
                         Err(e @ HotStuffError::MissingPledges(_)) => {
-                            let finalize_result = FinalizeResult::errored(
+                            let finalize_result = FinalizeResult::reject(
                                 payload_id.into_array().into(),
                                 RejectReason::ShardsNotPledged(e.to_string()),
                             );
@@ -1094,7 +1150,7 @@ where
                         "🔥 [on_commit] Committing payload {} in DECIDE phase",
                         node.payload_id()
                     );
-                    let finalize_result = (*tx).get_payload_result(&node.payload_id())?;
+                    let finalize_result = tx.get_payload_result(&node.payload_id())?;
                     match finalize_result.result {
                         TransactionResult::Accept(_) => {
                             tx.complete_pledges(node.shard(), node.payload_id(), node.hash())?;

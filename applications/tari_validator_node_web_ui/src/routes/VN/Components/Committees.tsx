@@ -24,6 +24,7 @@ import { useEffect, useState } from "react";
 import { getCommittee, getShardKey } from "../../../utils/json_rpc";
 import Committee from "./Committee";
 import { U256 } from "./helpers";
+import PropTypes from "prop-types";
 
 async function get_all_committees(currentEpoch: number, shardKey: string, publicKey: string) {
   let shardKeyMap: { [id: string]: string } = { [publicKey]: shardKey };
@@ -72,8 +73,8 @@ function Committees({
       });
     }
   }, [currentEpoch, shardKey, publicKey]);
-  if (committees.length === 0) {
-    return <div className="commiittees">Committees are loading</div>;
+  if (!committees) {
+    return <div className="committees">Committees are loading</div>;
   }
   return (
     <div className="section">
