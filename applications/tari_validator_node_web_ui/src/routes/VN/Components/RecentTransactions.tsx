@@ -29,7 +29,7 @@ import JsonTooltip from "../../../Components/JsonTooltip";
 
 interface IRecentTransaction {
   payload_id: number[];
-  timestamp: number;
+  timestamp: string;
   instructions: string;
   meta: string;
 }
@@ -37,7 +37,7 @@ interface IRecentTransaction {
 interface ITableRecentTransaction {
   id: string;
   payload_id: string;
-  timestamp: Date;
+  timestamp: string;
   instructions: string;
   meta: string;
 }
@@ -53,7 +53,7 @@ function RecentTransactions() {
         recentTransactions.map(({ instructions, meta, payload_id, timestamp }: IRecentTransaction) => ({
           id: toHexString(payload_id),
           payload_id: toHexString(payload_id),
-          timestamp: new Date(timestamp * 1000),
+          timestamp: timestamp,
           meta: meta,
           instructions: instructions,
         }))
@@ -108,7 +108,7 @@ function RecentTransactions() {
               <td className="key">
                 <Link to={`transaction/${payload_id}`}>{payload_id}</Link>
               </td>
-              <td>{timestamp.toUTCString()}</td>
+              <td>{timestamp}</td>
               <td>
                 <JsonTooltip jsonText={meta}>Hover here</JsonTooltip>
               </td>

@@ -23,39 +23,48 @@
 import React from "react";
 import JsonTooltip from "../../../Components/JsonTooltip";
 import { renderJson } from "../../../utils/helpers";
+import {toHexString} from "../../VN/Components/helpers";
 
 export default function Substates({ substates }: any) {
   if (substates.size == 0) {
     return <div className="caption">No substates</div>;
   }
+  console.log(substates);
   substates.map((substate: any) => {
-    console.log("parsing json", substate.justify, JSON.parse(substate.justify));
+    // console.log("parsing json", substate.justify, JSON.parse(substate.justify));
   });
   return (
     <>
       <div className="caption">Substates</div>
-      <table>
+      <table style={{ border: "1px solid gray"}}>
         <thead>
           <tr>
-            <th>Substate type</th>
-            <th>Is draft?</th>
-            <th>Node height</th>
-            <th>Justify</th>
+            <th>Shard</th>
             <th>Data</th>
+            <th>Created</th>
+            <th>Destroyed</th>
             <th></th>
           </tr>
         </thead>
         <tbody>
           {substates.map((substate: any) => (
             <tr>
-              <td>{substate.substate_type}</td>
-              <td>{substate.is_draft ? "Yes" : "No"}</td>
-              <td>{substate.node_height}</td>
+              <td>{toHexString(substate.shard_id)}</td>
               <td>
-                <JsonTooltip jsonText={substate.justify}>Hover here</JsonTooltip>
+                <pre>
+                    {renderJson(JSON.parse(substate.data))}
+                </pre>
               </td>
               <td>
-                <JsonTooltip jsonText={substate.data}>Hover here</JsonTooltip>
+                <pre>
+                    {substate.created_justify? renderJson(JSON.parse(substate.created_justify)) : ""}
+                </pre>
+              </td>
+              <td>
+                <pre>
+
+                    { substate.destroyed_justify ? renderJson(JSON.parse(substate.destroyed_justify)) : ""}
+                </pre>
               </td>
             </tr>
           ))}

@@ -70,6 +70,12 @@ pub enum HotStuffError {
     ReceivedNewViewWithoutPayload,
     #[error("Missing pledges: {}", .0.iter().map(|(s, c)| format!("{}: {}", s, c)).collect::<Vec<_>>().join(", "))]
     MissingPledges(Vec<(ShardId, SubstateChange)>),
+    #[error("Shard was pledged to a different payload")]
+    ShardPledgedToDifferentPayload {
+        shard: ShardId,
+        pledged_payload: PayloadId,
+        expected: PayloadId,
+    },
 }
 
 impl<T> From<mpsc::error::SendError<T>> for HotStuffError {
