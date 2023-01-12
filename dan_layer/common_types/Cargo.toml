@@ -10,7 +10,7 @@ license = "BSD-3-Clause"
 tari_common = { git = "https://github.com/tari-project/tari.git", branch = "development", package = "tari_common", features = ["build"] }
 tari_common_types = { git = "https://github.com/tari-project/tari.git", branch = "development", package = "tari_common_types" }
 tari_utilities = { git = "https://github.com/tari-project/tari_utilities.git", tag = "v0.4.10" }
-tari_crypto = { git = "https://github.com/tari-project/tari-crypto.git", tag = "v0.16.5", features = ["borsh"] }
+tari_crypto = { git = "https://github.com/tari-project/tari-crypto.git", tag = "v0.16.6", features = ["borsh"] }
 tari_engine_types = { path = "../engine_types"}
 tari_bor = { path = "../tari_bor" }
 tari_mmr = { git = "https://github.com/tari-project/tari.git", branch = "development", package = "tari_mmr" }

@@ -13,7 +13,7 @@ tari_app_grpc = { git = "https://github.com/tari-project/tari.git", branch = "de
 tari_common = { git = "https://github.com/tari-project/tari.git", branch = "development", package = "tari_common" }
 tari_comms = { git = "https://github.com/tari-project/tari.git", branch = "development", package = "tari_comms" }
 tari_comms_rpc_macros = { git = "https://github.com/tari-project/tari.git", branch = "development", package = "tari_comms_rpc_macros" }
-tari_crypto = { git = "https://github.com/tari-project/tari-crypto.git", tag = "v0.16.5" }
+tari_crypto = { git = "https://github.com/tari-project/tari-crypto.git", tag = "v0.16.6" }
 tari_mmr = { git = "https://github.com/tari-project/tari.git", branch = "development", package = "tari_mmr" }
 tari_p2p = { git = "https://github.com/tari-project/tari.git", branch = "development", package = "tari_p2p" }
 tari_shutdown = { git = "https://github.com/tari-project/tari.git", branch = "development", package = "tari_shutdown" }
