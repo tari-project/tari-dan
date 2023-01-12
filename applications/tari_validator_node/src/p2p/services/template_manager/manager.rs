@@ -211,7 +211,7 @@ impl TemplateManager {
             added_at: time::OffsetDateTime::now_utc(),
         };
 
-        let tx = self.global_db.create_transaction()?;
+        let mut tx = self.global_db.create_transaction()?;
         let templates_db = self.global_db.templates(&tx);
         if templates_db.get_template(&*template.template_address)?.is_some() {
             return Ok(());
@@ -227,7 +227,7 @@ impl TemplateManager {
         address: TemplateAddress,
         update: DbTemplateUpdate,
     ) -> Result<(), TemplateManagerError> {
-        let tx = self.global_db.create_transaction()?;
+        let mut tx = self.global_db.create_transaction()?;
         let template_db = self.global_db.templates(&tx);
         template_db.update_template(&address, update)?;
         tx.commit()?;
