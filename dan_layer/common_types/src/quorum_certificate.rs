@@ -23,6 +23,7 @@ pub enum QuorumRejectReason {
     ShardNotPledged,
     ExecutionFailure,
     PreviousQcRejection,
+    ShardPledgedToAnotherPayload,
 }
 
 impl QuorumRejectReason {
@@ -31,6 +32,7 @@ impl QuorumRejectReason {
             QuorumRejectReason::ShardNotPledged => 1,
             QuorumRejectReason::ExecutionFailure => 2,
             QuorumRejectReason::PreviousQcRejection => 3,
+            QuorumRejectReason::ShardPledgedToAnotherPayload => 4,
         }
     }
 }
@@ -49,6 +51,7 @@ impl QuorumDecision {
             1 => Ok(QuorumDecision::Reject(QuorumRejectReason::ShardNotPledged)),
             2 => Ok(QuorumDecision::Reject(QuorumRejectReason::ExecutionFailure)),
             3 => Ok(QuorumDecision::Reject(QuorumRejectReason::PreviousQcRejection)),
+            4 => Ok(QuorumDecision::Reject(QuorumRejectReason::ShardPledgedToAnotherPayload)),
             // TODO: Add error type
             _ => Err(anyhow::anyhow!("Invalid QuorumDecision")),
         }
@@ -61,6 +64,7 @@ impl<T: Borrow<RejectReason>> From<T> for QuorumRejectReason {
             RejectReason::ShardsNotPledged(_) => QuorumRejectReason::ShardNotPledged,
             RejectReason::ExecutionFailure(_) => QuorumRejectReason::ExecutionFailure,
             RejectReason::PreviousQcRejection => QuorumRejectReason::PreviousQcRejection,
+            RejectReason::ShardPledgedToAnotherPayload(_) => QuorumRejectReason::ShardPledgedToAnotherPayload,
         }
     }
 }

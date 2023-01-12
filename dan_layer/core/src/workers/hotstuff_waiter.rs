@@ -544,8 +544,17 @@ where
             });
         }
 
-        if node.local_pledge().is_none() {
-            return Err(ProposalValidationError::LocalPledgeIsNone);
+        match node.local_pledge() {
+            Some(pledge) => {
+                if pledge.pledged_to_payload != node.payload_id() {
+                    return Err(ProposalValidationError::PledgePayloadMismatch {
+                        shard: node.shard(),
+                        pledged_payload: pledge.pledged_to_payload,
+                    });
+                }
+            },
+
+            None => return Err(ProposalValidationError::LocalPledgeIsNone),
         }
         // if node.payload_height() > NodeHeight(0) && node.justify().decision() != &QuorumDecision::Accept {
         //     return Err(HotStuffError::JustifyIsNotAccepted);
@@ -615,10 +624,6 @@ where
                 &vn_mmr,
             )?;
 
-            // Ready to send vote, pledge object
-            self.shard_store
-                .with_write_tx(|tx| tx.pledge_object(node.shard(), node.payload_id(), node.payload_height()))?;
-
             let leader = self.get_leader(&node).await?;
             self.tx_vote_message.send((vote_msg, leader)).await?;
         }
@@ -635,16 +640,9 @@ where
         // On every phase, validate that the pledges are pledged to this payload.
         for pledge in shard_pledges {
             if pledge.pledge.pledged_to_payload != node.payload_id() {
-                // return Err(HotStuffError::ShardPledgedToDifferentPayload {
-                //     shard: pledge.shard_id,
-                //     pledged_payload: pledge.pledge.pledged_to_payload,
-                //     expected: node.payload_id(),
-                // });
-
                 let finalize_result = FinalizeResult::errored(
                     payload.to_id().into_array().into(),
-                    RejectReason::ShardsNotPledged(
-                        // TODO: this is hacky... not sure where to put it though
+                    RejectReason::ShardPledgedToAnotherPayload(
                         HotStuffError::ShardPledgedToDifferentPayload {
                             shard: pledge.shard_id,
                             pledged_payload: pledge.pledge.pledged_to_payload,
@@ -653,6 +651,7 @@ where
                         .to_string(),
                     ),
                 );
+
                 self.shard_store
                     .with_write_tx(|tx| tx.update_payload_result(&node.payload_id(), finalize_result.clone()))?;
 
@@ -667,6 +666,26 @@ where
                     target: LOG_TARGET,
                     "🔥 Executing payload in PREPARE phase: {}", payload_id
                 );
+
+                let pledge = self
+                    .shard_store
+                    .with_write_tx(|tx| tx.pledge_object(node.shard(), node.payload_id(), node.payload_height()))?;
+
+                // If an active pledge already exists for another payload, we REJECT this payload.
+                if pledge.pledged_to_payload != node.payload_id() {
+                    let finalize_result = FinalizeResult::errored(
+                        node.payload_id().into_array().into(),
+                        RejectReason::ShardPledgedToAnotherPayload(format!(
+                            "Shard {} is pledged to another payload {}",
+                            node.shard(),
+                            pledge.pledged_to_payload
+                        )),
+                    );
+                    self.shard_store
+                        .with_write_tx(|tx| tx.update_payload_result(&node.payload_id(), finalize_result.clone()))?;
+
+                    return Ok(finalize_result);
+                }
 
                 let finalize_result = match self.execute(payload, shard_pledges) {
                     Ok(finalize_result) => finalize_result,
