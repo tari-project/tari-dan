@@ -245,11 +245,7 @@ impl<'a> SqliteShardStoreReadTransaction<'a> {
         Ok(SubstateShardData::new(
             ShardId::try_from(ss.shard_id.clone())?,
             ss.version as u32,
-            serde_json::from_str(&ss.data).map_err(|source| StorageError::SerdeJson {
-                source,
-                operation: "get_substate_states".to_string(),
-                data: "substate data".to_string(),
-            })?,
+            serde_json::from_str(&ss.data).unwrap(),
             NodeHeight(ss.created_height as u64),
             ss.destroyed_height.map(|v| NodeHeight(v as u64)),
             TreeNodeHash::try_from(ss.created_node_hash.clone()).map_err(|_| StorageError::DecodingError)?,
@@ -262,21 +258,8 @@ impl<'a> SqliteShardStoreReadTransaction<'a> {
                 .as_ref()
                 .map(|v| PayloadId::try_from(v.clone()).map_err(|_| StorageError::DecodingError))
                 .transpose()?,
-            serde_json::from_str(&ss.created_justify).map_err(|source| StorageError::SerdeJson {
-                source,
-                operation: "get_substate_states".to_string(),
-                data: "created_justify".to_string(),
-            })?,
-            ss.destroyed_justify
-                .as_ref()
-                .map(|v| {
-                    serde_json::from_str(v).map_err(|source| StorageError::SerdeJson {
-                        source,
-                        operation: "get_substate_states".to_string(),
-                        data: "destroyed_justify".to_string(),
-                    })
-                })
-                .transpose()?,
+            serde_json::from_str(&ss.created_justify).unwrap(),
+            ss.destroyed_justify.as_ref().map(|v| serde_json::from_str(v).unwrap()),
         ))
     }
 }
@@ -300,11 +283,7 @@ impl ShardStoreReadTransaction<PublicKey, TariDanPayload> for SqliteShardStoreRe
             key: shard_id.to_string(),
         })?;
 
-        let qc = serde_json::from_str(&qc.qc_json).map_err(|source| StorageError::SerdeJson {
-            source,
-            operation: "get_high_qc_for".to_string(),
-            data: qc.qc_json.to_string(),
-        })?;
+        let qc = serde_json::from_str(&qc.qc_json).unwrap();
         Ok(qc)
     }
 
@@ -349,12 +328,7 @@ impl ShardStoreReadTransaction<PublicKey, TariDanPayload> for SqliteShardStoreRe
             key: id.to_string(),
         })?;
 
-        let instructions: Vec<Instruction> =
-            serde_json::from_str(&payload.instructions).map_err(|source| StorageError::SerdeJson {
-                source,
-                operation: "get_payload".to_string(),
-                data: payload.instructions.to_string(),
-            })?;
+        let instructions: Vec<Instruction> = serde_json::from_str(&payload.instructions).unwrap();
 
         let fee = payload.fee as u64;
 
@@ -370,11 +344,7 @@ impl ShardStoreReadTransaction<PublicKey, TariDanPayload> for SqliteShardStoreRe
 
         let sender_public_key =
             PublicKey::from_vec(&payload.sender_address).map_err(StorageError::InvalidByteArrayConversion)?;
-        let meta: TransactionMeta = serde_json::from_str(&payload.meta).map_err(|source| StorageError::SerdeJson {
-            source,
-            operation: "get_payload".to_string(),
-            data: payload.meta.to_string(),
-        })?;
+        let meta: TransactionMeta = serde_json::from_str(&payload.meta).unwrap();
 
         let transaction = Transaction::new(fee, instructions, signature, sender_public_key, meta);
         let mut tari_dan_payload = TariDanPayload::new(transaction);
@@ -422,23 +392,12 @@ impl ShardStoreReadTransaction<PublicKey, TariDanPayload> for SqliteShardStoreRe
         let payload = PayloadId::try_from(node.payload_id)?;
 
         let payload_hgt = node.payload_height as u64;
-        let local_pledge: Option<ObjectPledge> =
-            serde_json::from_str(&node.local_pledges).map_err(|source| StorageError::SerdeJson {
-                source,
-                operation: "get_node".to_string(),
-                // TODO: can't reference the actual value for some reason
-                data: "local_pledges".to_string(),
-            })?;
+        let local_pledge: Option<ObjectPledge> = serde_json::from_str(&node.local_pledges).unwrap();
 
         let epoch = node.epoch as u64;
         let proposed_by = PublicKey::from_vec(&node.proposed_by).map_err(StorageError::InvalidByteArrayConversion)?;
 
-        let justify: QuorumCertificate =
-            serde_json::from_str(&node.justify).map_err(|source| StorageError::SerdeJson {
-                source,
-                operation: "get_node".to_string(),
-                data: "justify".to_string(), // node.justify.to_string(),
-            })?;
+        let justify: QuorumCertificate = serde_json::from_str(&node.justify).unwrap();
 
         Ok(HotStuffTreeNode::new(
             parent,
@@ -638,12 +597,7 @@ impl ShardStoreReadTransaction<PublicKey, TariDanPayload> for SqliteShardStoreRe
         proposals
             .into_iter()
             .map(|proposal| {
-                let hot_stuff_tree_node =
-                    serde_json::from_str(&proposal.hotstuff_tree_node).map_err(|source| StorageError::SerdeJson {
-                        source,
-                        operation: "get_leader_proposals".to_string(),
-                        data: proposal.hotstuff_tree_node.to_string(),
-                    })?;
+                let hot_stuff_tree_node = serde_json::from_str(&proposal.hotstuff_tree_node).unwrap();
                 Ok(hot_stuff_tree_node)
             })
             .collect()
@@ -681,14 +635,8 @@ impl ShardStoreReadTransaction<PublicKey, TariDanPayload> for SqliteShardStoreRe
         if let Some(filtered_votes) = filtered_votes {
             let v = filtered_votes
                 .iter()
-                .map(|v| {
-                    serde_json::from_str::<VoteMessage>(&v.vote_message).map_err(|source| StorageError::SerdeJson {
-                        source,
-                        operation: "get_received_votes_for".to_string(),
-                        data: v.vote_message.to_string(),
-                    })
-                })
-                .collect::<Result<_, _>>()?;
+                .map(|v| serde_json::from_str::<VoteMessage>(&v.vote_message).unwrap())
+                .collect();
             Ok(v)
         } else {
             Ok(vec![])
@@ -827,11 +775,7 @@ impl<'a> SqliteShardStoreWriteTransaction<'a> {
                     SubstateState::Up {
                         created_by: PayloadId::try_from(current_state.created_by_payload_id)?,
                         data: serde_json::from_str::<tari_engine_types::substate::Substate>(&current_state.data)
-                            .map_err(|source| StorageError::SerdeJson {
-                                source,
-                                operation: "create_pledge".to_string(),
-                                data: "pledge".to_string(),
-                            })?,
+                            .unwrap(),
                     }
                 },
             })
@@ -1153,17 +1097,13 @@ impl ShardStoreWriteTransaction<PublicKey, TariDanPayload> for SqliteShardStoreW
                         }
                     }
 
-                    let pretty_data = serde_json::to_string_pretty(d).map_err(|source| StorageError::SerdeJson {
-                        source,
-                        operation: "save_substate_changes".to_string(),
-                        data: "substate data".to_string(),
-                    })?;
+                    let pretty_data = serde_json::to_string_pretty(d).unwrap();
                     let new_row = NewSubstate {
                         shard_id: node.shard().as_bytes().to_vec(),
                         version: d.version().into(),
                         data: pretty_data,
                         created_by_payload_id: node.payload_id().as_bytes().to_vec(),
-                        created_justify: "".to_string(),
+                        created_justify: serde_json::to_string_pretty(node.justify()).unwrap(),
                         created_node_hash: node.hash().as_bytes().to_vec(),
                         created_height: node.height().as_u64() as i64,
                     };
@@ -1220,33 +1160,16 @@ impl ShardStoreWriteTransaction<PublicKey, TariDanPayload> for SqliteShardStoreW
         let new_row = ImportedSubstate {
             shard_id: substate_data.shard_id().as_bytes().to_vec(),
             version: i64::from(substate_data.version()),
-            data: serde_json::to_string_pretty(substate_data.substate()).map_err(|source| StorageError::SerdeJson {
-                source,
-                operation: "insert_substates".to_string(),
-                data: "substate data".to_string(),
-            })?,
+            data: serde_json::to_string_pretty(substate_data.substate()).unwrap(),
             created_by_payload_id: substate_data.created_payload_id().as_bytes().to_vec(),
-            created_justify: serde_json::to_string_pretty(substate_data.created_justify()).map_err(|source| {
-                StorageError::SerdeJson {
-                    source,
-                    operation: "insert_substates".to_string(),
-                    data: "created_justify".to_string(),
-                }
-            })?,
+            created_justify: serde_json::to_string_pretty(substate_data.created_justify()).unwrap(),
             created_height: substate_data.created_height().as_u64() as i64,
             created_node_hash: substate_data.created_node_hash().as_bytes().to_vec(),
             destroyed_by_payload_id: substate_data.destroyed_payload_id().map(|v| v.as_bytes().to_vec()),
             destroyed_justify: substate_data
                 .destroyed_justify()
                 .as_ref()
-                .map(|v| {
-                    serde_json::to_string_pretty(&v).map_err(|source| StorageError::SerdeJson {
-                        source,
-                        operation: "insert_substates".to_string(),
-                        data: "destroyed_justify".to_string(),
-                    })
-                })
-                .transpose()?,
+                .map(|v| serde_json::to_string_pretty(v).unwrap()),
             destroyed_height: substate_data.destroyed_height().map(|v| v.as_u64() as i64),
             destroyed_node_hash: substate_data.destroyed_node_hash().map(|v| v.as_bytes().to_vec()),
         };
