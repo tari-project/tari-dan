@@ -65,12 +65,6 @@ pub enum StorageError {
     General { details: String },
     #[error("Lock error")]
     LockError,
-    #[error("Error converting to or from json during:{operation}: {source}")]
-    SerdeJson {
-        source: serde_json::Error,
-        operation: String,
-        data: String,
-    },
     #[error("Error converting substate type:{substate_type}")]
     InvalidSubStateType { substate_type: String },
 }
