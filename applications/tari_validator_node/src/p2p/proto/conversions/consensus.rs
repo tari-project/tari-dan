@@ -176,12 +176,7 @@ impl TryFrom<proto::consensus::QuorumCertificate> for QuorumCertificate {
             value.local_node_height.into(),
             value.shard.try_into()?,
             value.epoch.into(),
-            match value.decision {
-                0 => QuorumDecision::Accept,
-                1 => QuorumDecision::Reject(QuorumRejectReason::ShardNotPledged),
-                2 => QuorumDecision::Reject(QuorumRejectReason::ExecutionFailure),
-                _ => return Err(anyhow!("Invalid decision")),
-            },
+            QuorumDecision::from_u8(value.decision.try_into()?)?,
             value
                 .all_shard_pledges
                 .iter()
