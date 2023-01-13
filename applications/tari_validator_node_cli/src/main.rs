@@ -71,7 +71,7 @@ pub fn multiaddr_to_http_url(multiaddr: Multiaddr) -> anyhow::Result<Url> {
     let ip = match ip {
         Protocol::Ip4(ip) => ip.to_string(),
         Protocol::Ip6(ip) => ip.to_string(),
-        Protocol::Dns4(ip) | Protocol::Dns(ip) | Protocol::Dnsaddr(ip) | Protocol::Dns6(ip) => ip.to_string(),,
+        Protocol::Dns4(ip) | Protocol::Dns(ip) | Protocol::Dnsaddr(ip) | Protocol::Dns6(ip) => ip.to_string(),
         _ => return Err(anyhow!("Invalid multiaddr")),
     };
 
