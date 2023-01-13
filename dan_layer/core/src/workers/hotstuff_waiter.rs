@@ -343,7 +343,7 @@ where
             tx.commit()?;
         }
 
-        // send to all replicas, including ourselves
+        // send to all replicas for all shards, including ourselves
         self.tx_broadcast
             .send((
                 HotStuffMessage::new_proposal(leaf_node, shard),
@@ -425,15 +425,6 @@ where
                 return Ok(());
             }
 
-            // All proposals are for different shards and have the same height, so if one of them is REJECT then there
-            // is no point in continuing to vote.
-            if let Some(reject_node) = proposed_nodes.iter().find(|n| n.justify().decision().is_reject()) {
-                self.abandon_payload(reject_node, &proposed_nodes)?;
-                return Ok(());
-            }
-
-            // TODO: if the proposal is in DECIDE phase and the result is rejected we should not vote
-            // because the leader is just letting us know that nodes voted to reject
             self.decide_and_vote_on_all_nodes(payload, proposed_nodes).await?;
 
             let mut tx = self.shard_store.create_write_tx()?;
@@ -453,55 +444,6 @@ where
         // If all pledges for all shards and complete, then we can persist the payload changes
         self.finalize_payload(&involved_shards, &node).await?;
 
-        Ok(())
-    }
-
-    /// Abandon all pledges on the payload and REJECT it
-    fn abandon_payload(
-        &self,
-        reject_node: &HotStuffTreeNode<TAddr, TPayload>,
-        proposed_nodes: &[HotStuffTreeNode<TAddr, TPayload>],
-    ) -> Result<(), HotStuffError> {
-        info!(
-            target: LOG_TARGET,
-            "🔥 Rejected shard {} in node {} for payload {}. Abandoning entire payload.",
-            reject_node.shard(),
-            reject_node.hash(),
-            reject_node.payload_id(),
-        );
-
-        let finalize_result = FinalizeResult::reject(
-            reject_node.payload_id().into_array().into(),
-            RejectReason::ShardRejected(format!(
-                "Shard {} failed ({:?}). Abandoning payload {}",
-                reject_node.shard(),
-                reject_node.justify().decision(),
-                reject_node.payload_id()
-            )),
-        );
-
-        self.shard_store.with_write_tx(|tx| {
-            tx.update_payload_result(&reject_node.payload_id(), finalize_result.clone())?;
-            for node in proposed_nodes {
-                // Is it possible we did not pledge at this stage?
-                if tx
-                    .abandon_pledges(node.shard(), node.payload_id(), node.hash())
-                    .optional()?
-                    .is_some()
-                {
-                    info!(
-                        target: LOG_TARGET,
-                        "🔥 Abandoned shard {} pledges for payload {}",
-                        node.shard(),
-                        node.payload_id()
-                    );
-                }
-            }
-            Ok::<_, HotStuffError>(())
-        })?;
-
-        let qc = reject_node.justify();
-        self.publish_event(HotStuffEvent::OnFinalized(Box::new(qc.clone()), finalize_result));
         Ok(())
     }
 
@@ -624,33 +566,41 @@ where
         payload: TPayload,
         proposed_nodes: Vec<HotStuffTreeNode<TAddr, TPayload>>,
     ) -> Result<(), HotStuffError> {
+        let payload_id = payload.to_id();
         let involved_shards = payload.involved_shards();
+
         // Find the shards that this node is responsible for out of all the shards involved
         // TODO: Perhaps we can determine the epoch for the payload and then use it. This assumes that all nodes have
         //       the same epoch as the first node (should we validate that this is the case?)
         let first_node = proposed_nodes
             .get(0)
             .expect("invariant failed: decide_and_vote_on_all_nodes called with empty nodes");
+        let epoch = first_node.epoch();
         let local_shards = self
             .epoch_manager
-            .filter_to_local_shards(first_node.epoch(), &self.public_key, &involved_shards)
+            .filter_to_local_shards(epoch, &self.public_key, &involved_shards)
             .await?;
         let vn_shard_key = self
             .epoch_manager
-            .get_validator_shard_key(first_node.epoch(), self.public_key.clone())
+            .get_validator_shard_key(epoch, self.public_key.clone())
             .await?;
-        let vn_mmr = self.epoch_manager.get_validator_node_mmr(first_node.epoch()).await?;
+        let vn_mmr = self.epoch_manager.get_validator_node_mmr(epoch).await?;
 
         let mut shard_pledges = proposed_nodes
             .iter()
-            // .filter(|n| local_shards.contains(&n.shard()))
             .map(|proposed_node| ShardPledge {
                 shard_id: proposed_node.shard(),
                 node_hash: *proposed_node.hash(),
-                pledge: proposed_node.local_pledge().expect("Pledge is empty. This should have been checked previously").clone(),
+                pledge: proposed_node
+                    .local_pledge()
+                    .expect("Pledge is empty. This should have been checked previously")
+                    .clone(),
             })
             .collect::<Vec<_>>();
         shard_pledges.sort_by_key(|s| s.shard_id);
+
+        // Find all rejected nodes, if any are rejected then we vote to reject all our local shards
+        let is_all_rejected = self.check_for_other_shard_rejections(&payload_id, &proposed_nodes)?;
 
         for node in proposed_nodes {
             // Check that this node is a node we need to vote on
@@ -663,6 +613,18 @@ where
                 info!(
                     target: LOG_TARGET,
                     "🔥 Decided on node {} for payload {}, shard {}",
+                    node.hash(),
+                    node.payload_id(),
+                    node.shard()
+                );
+                continue;
+            }
+
+            // If all proposals are rejections, we've sent our last REJECT vote in the PREPARE round so we dont vote
+            if is_all_rejected && node.payload_phase() == HotstuffPhase::PreCommit {
+                info!(
+                    target: LOG_TARGET,
+                    "🔥 Skipping PRECOMMIT REJECT vote on node {} for payload {}, shard {}",
                     node.hash(),
                     node.payload_id(),
                     node.shard()
@@ -685,6 +647,50 @@ where
         }
 
         Ok(())
+    }
+
+    /// Checks for other shard rejections, if at least one is encountered and we were voting ACCEPT, we change our
+    /// payload result to reject. We return true if all proposals are rejections, otherwise false
+    fn check_for_other_shard_rejections(
+        &self,
+        payload_id: &PayloadId,
+        proposed_nodes: &[HotStuffTreeNode<TAddr, TPayload>],
+    ) -> Result<bool, HotStuffError> {
+        let rejected_nodes = proposed_nodes
+            .iter()
+            .filter(|n| n.justify().decision().is_reject())
+            .collect::<Vec<_>>();
+
+        if !rejected_nodes.is_empty() {
+            let mut tx = self.shard_store.create_write_tx()?;
+            let current_finalize_result = tx.get_payload_result(payload_id)?;
+            // Only change to reject is we arent already rejecting for another reason
+            if current_finalize_result.is_accept() {
+                // If a shard has been rejected, we vote to reject all our shards
+                let finalize_result = FinalizeResult::reject(
+                    payload_id.into_array().into(),
+                    RejectReason::ShardRejected(
+                        rejected_nodes
+                            .iter()
+                            .map(|n| format!("{}({:?})", n.shard(), n.justify().decision()))
+                            .collect::<Vec<_>>()
+                            .join(", "),
+                    ),
+                );
+
+                info!(
+                    target: LOG_TARGET,
+                    "🔥 {} rejected shard(s) for payload {}. Voting to REJECT all local shards.",
+                    rejected_nodes.len(),
+                    payload_id
+                );
+
+                tx.update_payload_result(payload_id, finalize_result)?;
+            }
+            tx.commit()?;
+        }
+
+        Ok(rejected_nodes.len() == proposed_nodes.len())
     }
 
     fn decide(

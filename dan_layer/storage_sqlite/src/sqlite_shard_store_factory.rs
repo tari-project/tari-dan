@@ -1284,7 +1284,7 @@ impl ShardStoreWriteTransaction<PublicKey, TariDanPayload> for SqliteShardStoreW
     }
 
     fn update_payload_result(
-        &self,
+        &mut self,
         requested_payload_id: &PayloadId,
         result: FinalizeResult,
     ) -> Result<(), StorageError> {
@@ -1377,7 +1377,7 @@ impl ShardStoreWriteTransaction<PublicKey, TariDanPayload> for SqliteShardStoreW
     }
 
     fn complete_pledges(
-        &self,
+        &mut self,
         shard: ShardId,
         payload: PayloadId,
         node_hash: &TreeNodeHash,
@@ -1408,7 +1408,7 @@ impl ShardStoreWriteTransaction<PublicKey, TariDanPayload> for SqliteShardStoreW
     }
 
     fn abandon_pledges(
-        &self,
+        &mut self,
         shard: ShardId,
         payload_id: PayloadId,
         node_hash: &TreeNodeHash,
