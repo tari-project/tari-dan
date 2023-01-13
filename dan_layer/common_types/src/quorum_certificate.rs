@@ -40,7 +40,7 @@ impl QuorumRejectReason {
             QuorumRejectReason::ExecutionFailure => 2,
             QuorumRejectReason::PreviousQcRejection => 3,
             QuorumRejectReason::ShardPledgedToAnotherPayload => 4,
-            QuorumRejectReason::ShardRejected => 4,
+            QuorumRejectReason::ShardRejected => 5,
         }
     }
 }
@@ -60,7 +60,7 @@ impl QuorumDecision {
             2 => Ok(QuorumDecision::Reject(QuorumRejectReason::ExecutionFailure)),
             3 => Ok(QuorumDecision::Reject(QuorumRejectReason::PreviousQcRejection)),
             4 => Ok(QuorumDecision::Reject(QuorumRejectReason::ShardPledgedToAnotherPayload)),
-            4 => Ok(QuorumDecision::Reject(QuorumRejectReason::ShardRejected)),
+            5 => Ok(QuorumDecision::Reject(QuorumRejectReason::ShardRejected)),
             // TODO: Add error type
             _ => Err(anyhow::anyhow!("Invalid QuorumDecision")),
         }

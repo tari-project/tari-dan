@@ -729,7 +729,7 @@ where
 
                 // If an active pledge already exists for another payload, we REJECT this payload.
                 if pledge.pledged_to_payload != node.payload_id() {
-                    let finalize_result = FinalizeResult::errored(
+                    let finalize_result = FinalizeResult::reject(
                         node.payload_id().into_array().into(),
                         RejectReason::ShardPledgedToAnotherPayload(format!(
                             "Shard {} is pledged to another payload {}",
