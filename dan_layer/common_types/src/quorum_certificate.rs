@@ -10,7 +10,7 @@ use tari_common_types::types::FixedHash;
 use tari_crypto::hash::blake2::Blake256;
 use tari_engine_types::commit_result::RejectReason;
 
-use crate::{Epoch, NodeHeight, PayloadId, ShardId, ShardPledge, TreeNodeHash, ValidatorMetadata};
+use crate::{Epoch, NodeHeight, PayloadId, ShardId, ShardPledgeCollection, TreeNodeHash, ValidatorMetadata};
 
 #[derive(Debug, Clone, Copy, Deserialize, Serialize, PartialEq, Eq, BorshSerialize)]
 pub enum QuorumDecision {
@@ -80,7 +80,7 @@ pub struct QuorumCertificate {
     shard: ShardId,
     epoch: Epoch,
     decision: QuorumDecision,
-    all_shard_pledges: Vec<ShardPledge>,
+    all_shard_pledges: ShardPledgeCollection,
     validators_metadata: Vec<ValidatorMetadata>,
 }
 
@@ -101,7 +101,7 @@ impl QuorumCertificate {
         shard: ShardId,
         epoch: Epoch,
         decision: QuorumDecision,
-        all_shard_pledges: Vec<ShardPledge>,
+        all_shard_pledges: ShardPledgeCollection,
         validators_metadata: Vec<ValidatorMetadata>,
     ) -> Self {
         Self {
@@ -126,7 +126,7 @@ impl QuorumCertificate {
             shard: shard_id,
             epoch,
             decision: QuorumDecision::Accept,
-            all_shard_pledges: vec![],
+            all_shard_pledges: ShardPledgeCollection::empty(),
             validators_metadata: vec![],
         }
     }
@@ -190,7 +190,7 @@ impl QuorumCertificate {
         &self.decision
     }
 
-    pub fn all_shard_pledges(&self) -> &[ShardPledge] {
+    pub fn all_shard_pledges(&self) -> &ShardPledgeCollection {
         &self.all_shard_pledges
     }
 }

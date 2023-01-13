@@ -68,7 +68,7 @@ impl TryFrom<proto::consensus::VoteMessage> for VoteMessage {
                 .all_shard_pledges
                 .into_iter()
                 .map(|n| n.try_into())
-                .collect::<Result<Vec<_>, _>>()?,
+                .collect::<Result<_, _>>()?,
             metadata.try_into()?,
         ))
     }
