@@ -70,7 +70,10 @@ use tari_dan_core::{
 };
 use tari_dan_engine::transaction::{Transaction, TransactionMeta};
 use tari_engine_types::{commit_result::FinalizeResult, instruction::Instruction, signature::InstructionSignature};
-use tari_utilities::{hex::Hex, ByteArray};
+use tari_utilities::{
+    hex::{to_hex, Hex},
+    ByteArray,
+};
 
 use crate::{
     error::SqliteStorageError,
@@ -1317,11 +1320,20 @@ impl ShardStoreWriteTransaction<PublicKey, TariDanPayload> for SqliteShardStoreW
                 reason: format!("Pledge object error: {}", e),
             })?;
 
-        if let Some(obj) = existing_pledge {
-            // TODO: write test for this logic
-            // if obj.pledged_until_height.unwrap_or_default() as u64 >= current_height.as_u64() {
-            return self.create_pledge(shard, obj);
-            // }
+        if let Some(pledge) = existing_pledge {
+            // Emit a warning in this case, consensus should handle this correctly (by rejecting)
+            if pledge.pledged_to_payload_id != payload.as_bytes() {
+                warn!(
+                    target: LOG_TARGET,
+                    "[pledge_object]: Attempted to create a pledge for shard {}/payload{} that already exists for \
+                     another payload {}",
+                    shard,
+                    payload,
+                    to_hex(&pledge.pledged_to_payload_id)
+                );
+            }
+
+            return self.create_pledge(shard, pledge);
         }
 
         // otherwise save pledge

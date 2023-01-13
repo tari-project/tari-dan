@@ -92,6 +92,7 @@ pub enum RejectReason {
     ShardsNotPledged(String),
     ExecutionFailure(String),
     PreviousQcRejection,
+    ShardPledgedToAnotherPayload(String),
 }
 
 impl std::fmt::Display for RejectReason {
@@ -100,6 +101,7 @@ impl std::fmt::Display for RejectReason {
             RejectReason::ShardsNotPledged(msg) => write!(f, "Shards not pledged: {}", msg),
             RejectReason::ExecutionFailure(msg) => write!(f, "Execution failure: {}", msg),
             RejectReason::PreviousQcRejection => write!(f, "Previous QC was a rejection"),
+            RejectReason::ShardPledgedToAnotherPayload(msg) => write!(f, "Shard pledged to another payload: {}", msg),
         }
     }
 }
