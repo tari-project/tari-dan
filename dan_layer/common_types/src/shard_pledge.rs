@@ -17,6 +17,7 @@ pub struct ShardPledge {
     pub pledge: ObjectPledge,
 }
 
+/// An ordered list of ShardPledges.
 #[derive(Debug, Clone, Deserialize, Serialize, BorshSerialize, Default)]
 pub struct ShardPledgeCollection {
     inner: Vec<ShardPledge>,
@@ -30,19 +31,6 @@ impl ShardPledgeCollection {
 
     pub const fn empty() -> Self {
         Self { inner: Vec::new() }
-    }
-
-    pub fn insert(&mut self, pledge: ShardPledge) {
-        let insert_pos = self
-            .inner
-            .iter()
-            .position(|p| p.shard_id >= pledge.shard_id)
-            .unwrap_or(self.inner.len() - 1);
-        if self.inner[insert_pos].shard_id == pledge.shard_id {
-            self.inner[insert_pos] = pledge;
-        } else {
-            self.inner.insert(insert_pos, pledge);
-        }
     }
 
     pub fn iter(&self) -> impl Iterator<Item = &ShardPledge> {
