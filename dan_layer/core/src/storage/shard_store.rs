@@ -22,6 +22,7 @@
 
 use std::ops::Deref;
 
+use tari_common_types::types::Commitment;
 use tari_dan_common_types::{
     NodeAddressable,
     NodeHeight,
@@ -230,5 +231,11 @@ pub trait ShardStoreWriteTransaction<TAddr: NodeAddressable, TPayload: Payload> 
         shard: ShardId,
         payload_id: PayloadId,
         node_hash: &TreeNodeHash,
+    ) -> Result<(), StorageError>;
+
+    fn save_burnt_utxo(
+        &mut self,
+        substate: &tari_engine_types::substate::Substate,
+        shard_id: ShardId,
     ) -> Result<(), StorageError>;
 }

@@ -20,14 +20,17 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+use std::convert::TryFrom;
+
 use log::*;
-use tari_common_types::types::{FixedHash, FixedHashSizeError};
+use tari_common_types::types::{Commitment, FixedHash, FixedHashSizeError};
 use tari_core::transactions::transaction_components::{
     CodeTemplateRegistration,
     SideChainFeature,
     ValidatorNodeRegistration,
 };
-use tari_dan_common_types::optional::Optional;
+use tari_crypto::tari_utilities::ByteArray;
+use tari_dan_common_types::{optional::Optional, PayloadId, ShardId, SubstateState};
 use tari_dan_core::{
     consensus_constants::ConsensusConstants,
     models::BaseLayerMetadata,
@@ -37,12 +40,21 @@ use tari_dan_core::{
         BaseNodeClient,
         BlockInfo,
     },
+    storage::{
+        shard_store::{ShardStore, ShardStoreWriteTransaction},
+        StorageError,
+    },
     DigitalAssetError,
 };
 use tari_dan_storage::global::{GlobalDb, MetadataKey};
-use tari_dan_storage_sqlite::{error::SqliteStorageError, global::SqliteGlobalDbAdapter};
+use tari_dan_storage_sqlite::{
+    error::SqliteStorageError,
+    global::SqliteGlobalDbAdapter,
+    sqlite_shard_store_factory::SqliteShardStore,
+};
+use tari_engine_types::substate::{Substate, SubstateAddress, SubstateValue};
 use tari_shutdown::ShutdownSignal;
-use tari_template_lib::models::TemplateAddress;
+use tari_template_lib::{models::TemplateAddress, Hash};
 use tokio::{task, time};
 
 use crate::{
@@ -64,6 +76,7 @@ pub fn spawn(
     template_manager: TemplateManagerHandle,
     shutdown: ShutdownSignal,
     consensus_constants: ConsensusConstants,
+    shard_store: SqliteShardStore,
 ) {
     task::spawn(async move {
         let base_layer_scanner = BaseLayerScanner::new(
@@ -74,6 +87,7 @@ pub fn spawn(
             template_manager,
             shutdown,
             consensus_constants,
+            shard_store,
         );
 
         if let Err(err) = base_layer_scanner.start().await {
@@ -94,6 +108,7 @@ pub struct BaseLayerScanner {
     template_manager: TemplateManagerHandle,
     shutdown: ShutdownSignal,
     consensus_constants: ConsensusConstants,
+    shard_store: SqliteShardStore,
 }
 
 impl BaseLayerScanner {
@@ -105,6 +120,7 @@ impl BaseLayerScanner {
         template_manager: TemplateManagerHandle,
         shutdown: ShutdownSignal,
         consensus_constants: ConsensusConstants,
+        state_store: SqliteShardStore,
     ) -> Self {
         Self {
             config,
@@ -118,6 +134,7 @@ impl BaseLayerScanner {
             template_manager,
             shutdown,
             consensus_constants,
+            shard_store: state_store,
         }
     }
 
@@ -267,24 +284,29 @@ impl BaseLayerScanner {
 
             for output in utxos.outputs {
                 let output_hash = output.hash();
-                let sidechain_feature = output.features.sidechain_feature.ok_or_else(|| {
-                    BaseLayerScannerError::InvalidSideChainUtxoResponse(
-                        "Validator node registration output must have a sidechain features".to_string(),
-                    )
-                })?;
-                match sidechain_feature {
-                    SideChainFeature::ValidatorNodeRegistration(reg) => {
-                        self.register_validator_node_registration(current_height, reg).await?;
-                    },
-                    SideChainFeature::TemplateRegistration(reg) => {
-                        self.register_code_template_registration(
-                            reg.clone().template_name.into_string(),
-                            (*output_hash).into(),
-                            reg,
-                            &block_info,
+                if output.is_burned() {
+                    dbg!("Burned output");
+                    self.register_burnt_utxo(output.commitment);
+                } else {
+                    let sidechain_feature = output.features.sidechain_feature.ok_or_else(|| {
+                        BaseLayerScannerError::InvalidSideChainUtxoResponse(
+                            "Validator node registration output must have a sidechain features".to_string(),
                         )
-                        .await?;
-                    },
+                    })?;
+                    match sidechain_feature {
+                        SideChainFeature::ValidatorNodeRegistration(reg) => {
+                            self.register_validator_node_registration(current_height, reg).await?;
+                        },
+                        SideChainFeature::TemplateRegistration(reg) => {
+                            self.register_code_template_registration(
+                                reg.clone().template_name.into_string(),
+                                (*output_hash).into(),
+                                reg,
+                                &block_info,
+                            )
+                            .await?;
+                        },
+                    }
                 }
             }
 
@@ -312,6 +334,24 @@ impl BaseLayerScanner {
 
         self.epoch_manager.notify_scanning_complete().await?;
 
+        Ok(())
+    }
+
+    fn register_burnt_utxo(&mut self, commitment: Commitment) -> Result<(), BaseLayerScannerError> {
+        let substate = Substate::new(0, SubstateValue::LayerOneCommitment(commitment.clone()));
+        self.shard_store
+            .with_write_tx(|tx| {
+                tx.save_burnt_utxo(
+                    &substate,
+                    ShardId::from_address(
+                        &SubstateAddress::LayerOneCommitment(
+                            Hash::try_from(commitment.as_bytes()).expect("Not a valid hash"),
+                        ),
+                        0,
+                    ),
+                )
+            })
+            .map_err(|source| BaseLayerScannerError::CouldNotRegisterBurntUtxo { commitment, source })?;
         Ok(())
     }
 
@@ -389,6 +429,11 @@ pub enum BaseLayerScannerError {
     BaseNodeError(#[from] BaseNodeError),
     #[error("Invalid side chain utxo response: {0}")]
     InvalidSideChainUtxoResponse(String),
+    #[error("Could not register burnt UTXO because {source}")]
+    CouldNotRegisterBurntUtxo {
+        commitment: Commitment,
+        source: StorageError,
+    },
 }
 
 enum BlockchainProgression {

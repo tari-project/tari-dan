@@ -39,7 +39,7 @@ use diesel::{
 };
 use log::{debug, warn};
 use serde_json::json;
-use tari_common_types::types::{PrivateKey, PublicKey, Signature};
+use tari_common_types::types::{Commitment, PrivateKey, PublicKey, Signature};
 use tari_dan_common_types::{
     Epoch,
     NodeHeight,
@@ -1431,6 +1431,35 @@ impl ShardStoreWriteTransaction<PublicKey, TariDanPayload> for SqliteShardStoreW
                 ),
             });
         }
+        Ok(())
+    }
+
+    fn save_burnt_utxo(
+        &mut self,
+        substate: &tari_engine_types::substate::Substate,
+        shard_id: ShardId,
+    ) -> Result<(), StorageError> {
+        let new_row = NewSubstate {
+            shard_id: shard_id.as_bytes().to_vec(),
+            version: substate.version() as i64,
+            data: serde_json::to_string_pretty(substate).unwrap(),
+            created_by_payload_id: vec![0; 32],
+            created_justify: serde_json::to_string_pretty(&QuorumCertificate::genesis(
+                Epoch(0),
+                PayloadId::new(vec![0; 32]),
+                ShardId::zero(),
+            ))
+            .unwrap(),
+            created_node_hash: TreeNodeHash::zero().as_bytes().to_vec(),
+            created_height: 0,
+        };
+        use crate::schema::substates;
+        diesel::insert_into(substates::table)
+            .values(new_row)
+            .execute(self.transaction.connection())
+            .map_err(|e| StorageError::QueryError {
+                reason: format!("Burnt commitment insert error: {}", e),
+            })?;
         Ok(())
     }
 }

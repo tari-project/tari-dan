@@ -156,6 +156,7 @@ pub async fn spawn_services(
         template_manager_service.clone(),
         shutdown.clone(),
         consensus_constants,
+        shard_store.clone(),
     );
 
     // Payload processor

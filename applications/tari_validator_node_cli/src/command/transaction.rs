@@ -337,6 +337,9 @@ fn summarize_finalize_result(finalize: &FinalizeResult) {
                     SubstateValue::Vault(vault) => {
                         println!("      ▶ vault: {} {}", vault.id(), vault.resource_address());
                     },
+                    SubstateValue::LayerOneCommitment(hash) => {
+                        println!("     ! layer one commitment: Should never happen");
+                    },
                 }
                 println!();
             }
