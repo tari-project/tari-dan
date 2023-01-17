@@ -10,6 +10,7 @@ tari_crypto = { git = "https://github.com/tari-project/tari-crypto.git", tag = "
 tari_template_abi = { path = "../template_abi", features = ["std"] }
 tari_template_lib = { path = "../template_lib", default-features = false, features = ["serde"] }
 tari_engine_types = { path= "../engine_types"}
+tari_common_types = { git="https://github.com/tari-project/tari.git", branch="development", package="tari_common_types" }
 
 borsh = "0.9.3"
 log = { version = "0.4.8", features = ["std"] }

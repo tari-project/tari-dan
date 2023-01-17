@@ -128,6 +128,20 @@ where TRuntimeInterface: RuntimeInterface + Clone + 'static
                 runtime.interface().emit_log(level, message);
                 Ok(ExecutionResult::empty())
             },
+            Instruction::ClaimBurn {
+                shard,
+                commitment,
+                range_proof,
+                proof_of_knowledge,
+            } => {
+                // todo: Check signature. Where should that fail?
+
+                // Need to call it on the runtime so that a bucket is created.
+                runtime
+                    .interface()
+                    .claim_burn(shard, commitment, range_proof, proof_of_knowledge)?;
+                Ok(ExecutionResult::empty())
+            },
         }
     }
 

@@ -34,6 +34,7 @@ pub struct IdProvider {
     transaction_hash: Hash,
     max_ids: u32,
     bucket_id: Arc<AtomicU32>,
+    confidential_bucket_id: Arc<AtomicU32>,
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -48,6 +49,7 @@ impl IdProvider {
             current_id: Arc::new(AtomicU32::new(0)),
             transaction_hash,
             bucket_id: Arc::new(AtomicU32::new(1000)),
+            confidential_bucket_id: Arc::new(AtomicU32::new(2000)),
             max_ids,
         }
     }
@@ -90,6 +92,12 @@ impl IdProvider {
     pub fn new_bucket_id(&self) -> BucketId {
         // Buckets are not saved to shards, so should not increment the hashes
         self.bucket_id.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
+    }
+
+    pub fn new_confidential_bucket_id(&self) -> BucketId {
+        // Buckets are not saved to shards, so should not increment the hashes
+        self.confidential_bucket_id
+            .fetch_add(1, std::sync::atomic::Ordering::Relaxed)
     }
 }
 

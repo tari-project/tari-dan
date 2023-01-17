@@ -10,4 +10,5 @@ pub enum SubstateAddress {
     Component(ComponentAddress),
     Resource(ResourceAddress),
     Vault(VaultId),
+    LayerOneCommitment([u8; 32]),
 }

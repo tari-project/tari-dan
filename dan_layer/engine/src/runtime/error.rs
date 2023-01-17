@@ -67,6 +67,12 @@ pub enum RuntimeError {
     TransactionCommitError(#[from] TransactionCommitError),
     #[error("Transaction generated too many outputs: {0}")]
     TooManyOutputs(#[from] MaxIdsExceeded),
+    #[error("Invalid claiming signature")]
+    InvalidClaimingSignature,
+    #[error("Invalid range proof")]
+    InvalidRangeProof,
+    #[error("Invalid substate type")]
+    InvalidSubstateType,
 }
 
 impl RuntimeError {

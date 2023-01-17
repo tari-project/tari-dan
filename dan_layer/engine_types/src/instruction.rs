@@ -5,13 +5,16 @@ use std::fmt::{Display, Formatter};
 
 use serde::{Deserialize, Serialize};
 use tari_bor::{borsh, Encode};
+use tari_common_types::types::{BulletRangeProof, Commitment};
+use tari_crypto::{ristretto::RistrettoComSig, signatures::CommitmentSignature};
 use tari_template_lib::{
     args::{Arg, LogLevel},
     models::{ComponentAddress, TemplateAddress},
     Hash,
 };
+use tari_utilities::hex::Hex;
 
-use crate::hashing::hasher;
+use crate::{hashing::hasher, substate::SubstateAddress};
 
 #[derive(Debug, Clone, Encode, Deserialize, Serialize, PartialEq)]
 #[serde(tag = "type")]
@@ -32,6 +35,12 @@ pub enum Instruction {
     EmitLog {
         level: LogLevel,
         message: String,
+    },
+    ClaimBurn {
+        shard: SubstateAddress,
+        commitment: Commitment,
+        range_proof: BulletRangeProof,
+        proof_of_knowledge: RistrettoComSig,
     },
 }
 
@@ -67,6 +76,18 @@ impl Display for Instruction {
             },
             Self::EmitLog { level, message } => {
                 write!(f, "EmitLog {{ level: {:?}, message: {:?} }}", level, message)
+            },
+            Self::ClaimBurn {
+                commitment,
+                proof_of_knowledge,
+                ..
+            } => {
+                write!(
+                    f,
+                    "ClaimBurn {{ commitment: {:?}, proof_of_knowledge: {:?} }}",
+                    commitment.to_hex(),
+                    proof_of_knowledge
+                )
             },
         }
     }

@@ -21,11 +21,27 @@
 //   USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 use tari_bor::decode;
+use tari_common_types::types::{BulletRangeProof, Commitment};
+use tari_crypto::{
+    range_proof::RangeProofService,
+    ristretto::{
+        bulletproofs_plus::BulletproofsPlusService,
+        pedersen::{
+            commitment_factory::PedersenCommitmentFactory,
+            extended_commitment_factory::ExtendedPedersenCommitmentFactory,
+        },
+        RistrettoComSig,
+        RistrettoSecretKey,
+    },
+};
 use tari_engine_types::{
     commit_result::{FinalizeResult, RejectReason, TransactionResult},
+    confidential_bucket::ConfidentialBucket,
     logs::LogEntry,
     resource::Resource,
+    substate::SubstateAddress,
 };
+use tari_mmr::Hash;
 use tari_template_lib::{
     args::{
         BucketAction,
@@ -42,6 +58,7 @@ use tari_template_lib::{
     },
     models::{Amount, BucketId, ComponentAddress, ComponentHeader, ResourceAddress, VaultRef},
 };
+use tari_utilities::ByteArray;
 
 use crate::runtime::{
     tracker::{RuntimeState, StateTracker},
@@ -348,6 +365,48 @@ impl RuntimeInterface for RuntimeInterfaceImpl {
     fn set_last_instruction_output(&self, value: Option<Vec<u8>>) -> Result<(), RuntimeError> {
         self.tracker.set_last_instruction_output(value);
         Ok(())
+    }
+
+    fn claim_burn(
+        &self,
+        substate_address: SubstateAddress,
+        commitment: Commitment,
+        range_proof: BulletRangeProof,
+        owner_sig: RistrettoComSig,
+    ) -> Result<(), RuntimeError> {
+        let mut vec_comm = [0u8; 32];
+        vec_comm.copy_from_slice(&commitment.as_bytes());
+        // TODO: this should a domain hash of the commitment
+        // 1. Must exist
+        let substate = self.tracker.take_layer_one_commitment(substate_address)?;
+
+        // 2. owner_sig must be valid
+        // TODO: Probably want a better challenge
+        let factory = PedersenCommitmentFactory::default();
+        let challenge = [1u8; 32];
+        if !owner_sig.verify(
+            &commitment,
+            &RistrettoSecretKey::from_bytes(&challenge).expect("todo"),
+            &factory,
+        ) {
+            return Err(RuntimeError::InvalidClaimingSignature);
+        }
+
+        // 3. range_proof must be valid
+        let range_proof_service = BulletproofsPlusService::init(64, 1, ExtendedPedersenCommitmentFactory::default())
+            .expect("Failed to init range proof service");
+
+        if !range_proof_service.verify(&range_proof.0, &commitment) {
+            return Err(RuntimeError::InvalidRangeProof);
+        }
+
+        let confidential_bucket = ConfidentialBucket::new(commitment, range_proof);
+        self.tracker.new_confidential_bucket(confidential_bucket)?;
+
+        // TODO: Down the old state
+        // TODO: Save the bucket to the workspace
+
+        todo!()
     }
 
     fn finalize(&self) -> Result<FinalizeResult, RuntimeError> {

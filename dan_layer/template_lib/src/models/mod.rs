@@ -29,6 +29,9 @@ pub use bucket::{Bucket, BucketId};
 mod component;
 pub use component::*;
 
+mod confidential_bucket;
+pub use confidential_bucket::{ConfidentialBucket, ConfidentialBucketId};
+
 mod metadata;
 pub use metadata::Metadata;
 

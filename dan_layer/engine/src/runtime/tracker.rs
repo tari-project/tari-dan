@@ -27,12 +27,14 @@ use std::{
 };
 
 use log::debug;
+use tari_common_types::types::Commitment;
 use tari_dan_common_types::optional::Optional;
 use tari_engine_types::{
     bucket::Bucket,
+    confidential_bucket::ConfidentialBucket,
     logs::LogEntry,
     resource::Resource,
-    substate::{Substate, SubstateAddress, SubstateDiff},
+    substate::{Substate, SubstateAddress, SubstateDiff, SubstateValue},
     vault::Vault,
 };
 use tari_template_lib::{
@@ -43,6 +45,7 @@ use tari_template_lib::{
         ComponentAddress,
         ComponentBody,
         ComponentHeader,
+        ConfidentialBucketId,
         Metadata,
         ResourceAddress,
         TemplateAddress,
@@ -75,11 +78,12 @@ pub struct RuntimeState {
 struct WorkingState {
     logs: Vec<LogEntry>,
     buckets: HashMap<BucketId, Bucket>,
+    confidential_buckets: HashMap<ConfidentialBucketId, ConfidentialBucket>,
     // These could be "new_substates"
     new_resources: HashMap<ResourceAddress, Resource>,
     new_components: HashMap<ComponentAddress, ComponentHeader>,
     new_vaults: HashMap<VaultId, Vault>,
-
+    claimed_layer_one_commitments: Vec<SubstateAddress>,
     runtime_state: Option<RuntimeState>,
     last_instruction_output: Option<Vec<u8>>,
     workspace: HashMap<Vec<u8>, Vec<u8>>,
@@ -92,9 +96,11 @@ impl StateTracker {
             working_state: Arc::new(RwLock::new(WorkingState {
                 logs: Vec::new(),
                 buckets: HashMap::new(),
+                confidential_buckets: HashMap::new(),
                 new_resources: HashMap::new(),
                 new_components: HashMap::new(),
                 new_vaults: HashMap::new(),
+                claimed_layer_one_commitments: Vec::new(),
                 runtime_state: None,
                 last_instruction_output: None,
                 workspace: HashMap::new(),
@@ -223,6 +229,29 @@ impl StateTracker {
                 .get_mut(&bucket_id)
                 .ok_or(RuntimeError::BucketNotFound { bucket_id })?;
             Ok(callback(bucket))
+        })
+    }
+
+    pub fn take_layer_one_commitment(&self, substate_address: SubstateAddress) -> Result<Commitment, RuntimeError> {
+        self.write_with(|state| {
+            let substate: Substate = self.state_store.read_access()?.get_state(&substate_address)?;
+
+            match substate.substate_value() {
+                SubstateValue::LayerOneCommitment(commitment) => {
+                    state.claimed_layer_one_commitments.push(substate_address);
+                    Ok(commitment.clone())
+                },
+                _ => Err(RuntimeError::InvalidSubstateType),
+            }
+        })
+    }
+
+    pub fn new_confidential_bucket(&self, bucket: ConfidentialBucket) -> Result<ConfidentialBucketId, RuntimeError> {
+        self.write_with(|state| {
+            let bucket_id = self.id_provider.new_confidential_bucket_id();
+            debug!(target: LOG_TARGET, "New conf bucket: {}", bucket_id);
+            state.confidential_buckets.insert(bucket_id, bucket);
+            Ok(bucket_id)
         })
     }
 

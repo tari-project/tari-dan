@@ -36,7 +36,9 @@ mod tests;
 
 use std::{fmt::Debug, sync::Arc};
 
-use tari_engine_types::{commit_result::FinalizeResult, resource::Resource};
+use tari_common_types::types::{BulletRangeProof, Commitment};
+use tari_crypto::ristretto::RistrettoComSig;
+use tari_engine_types::{commit_result::FinalizeResult, resource::Resource, substate::SubstateAddress};
 use tari_template_lib::{
     args::{
         Arg,
@@ -95,6 +97,14 @@ pub trait RuntimeInterface: Send + Sync {
     fn workspace_invoke(&self, action: WorkspaceAction, args: Vec<Vec<u8>>) -> Result<InvokeResult, RuntimeError>;
 
     fn set_last_instruction_output(&self, value: Option<Vec<u8>>) -> Result<(), RuntimeError>;
+
+    fn claim_burn(
+        &self,
+        substate_address: SubstateAddress,
+        commitment: Commitment,
+        range_proof: BulletRangeProof,
+        owner_sig: RistrettoComSig,
+    ) -> Result<(), RuntimeError>;
 
     fn finalize(&self) -> Result<FinalizeResult, RuntimeError>;
 }

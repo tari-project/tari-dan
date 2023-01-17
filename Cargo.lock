@@ -6258,6 +6258,7 @@ version = "0.1.0"
 dependencies = [
  "borsh",
  "log",
+ "tari_common_types",
  "tari_crypto",
  "tari_dan_engine",
  "tari_engine_types",

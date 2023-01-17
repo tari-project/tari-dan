@@ -4,11 +4,12 @@
 
 use std::sync::{Arc, RwLock};
 
+use tari_crypto::ristretto::RistrettoComSig;
 use tari_dan_engine::{
     runtime::{IdProvider, RuntimeError, RuntimeInterface, RuntimeInterfaceImpl, RuntimeState, StateTracker},
     state_store::memory::MemoryStateStore,
 };
-use tari_engine_types::{commit_result::FinalizeResult, resource::Resource};
+use tari_engine_types::{commit_result::FinalizeResult, resource::Resource, substate::SubstateAddress};
 use tari_template_lib::{
     args::{
         BucketAction,
@@ -154,6 +155,16 @@ impl RuntimeInterface for MockRuntimeInterface {
     fn set_last_instruction_output(&self, value: Option<Vec<u8>>) -> Result<(), RuntimeError> {
         self.add_call("set_last_instruction_output");
         self.inner.set_last_instruction_output(value)
+    }
+
+    fn claim_burn(
+        &self,
+        substate_address: SubstateAddress,
+        commitment: tari_common_types::types::Commitment,
+        range_proof: tari_common_types::types::BulletRangeProof,
+        owner_sig: RistrettoComSig,
+    ) -> Result<(), RuntimeError> {
+        todo!()
     }
 
     fn finalize(&self) -> Result<FinalizeResult, RuntimeError> {
