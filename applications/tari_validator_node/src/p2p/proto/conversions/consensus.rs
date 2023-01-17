@@ -30,7 +30,6 @@ use tari_dan_common_types::{
     ObjectPledge,
     QuorumCertificate,
     QuorumDecision,
-    QuorumRejectReason,
     ShardPledge,
     SubstateState,
     TreeNodeHash,
