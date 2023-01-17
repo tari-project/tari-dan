@@ -76,6 +76,10 @@ pub enum HotStuffError {
         pledged_payload: PayloadId,
         expected: PayloadId,
     },
+    #[error("Merkle proof error: {0}")]
+    MerkleProofError(#[from] tari_mmr::MerkleProofError),
+    #[error("Merkle mountain range error: {0}")]
+    MerkleMountainRangeError(#[from] tari_mmr::error::MerkleMountainRangeError),
 }
 
 impl<T> From<mpsc::error::SendError<T>> for HotStuffError {
