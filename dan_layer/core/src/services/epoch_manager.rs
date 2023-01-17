@@ -286,11 +286,11 @@ impl<TAddr: NodeAddressable> EpochManager<TAddr> for RangeEpochManager<TAddr> {
     }
 
     async fn get_validator_node_mmr(&self, epoch: Epoch) -> Result<ValidatorNodeMmr, EpochManagerError> {
-        let mut vn_mmr = ValidatorNodeMmr::new(Vec::with_capacity(self.registered_vns.len()));
         let vns = self
             .registered_vns
             .get(&epoch)
             .ok_or(EpochManagerError::NoEpochFound(epoch))?;
+        let mut vn_mmr = ValidatorNodeMmr::new(Vec::with_capacity(vns.len()));
         for vn in vns {
             vn_mmr
                 .push(vn.node_hash().to_vec())
