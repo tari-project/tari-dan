@@ -234,7 +234,6 @@ impl StateTracker {
         let component = ComponentHeader {
             component_address,
             template_address: runtime_state.template_address,
-            version: 0,
             module_name,
             state: component,
         };
