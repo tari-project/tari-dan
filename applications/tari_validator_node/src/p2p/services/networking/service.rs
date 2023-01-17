@@ -179,8 +179,10 @@ impl Networking {
         };
 
         if !peer.is_valid() {
-            // TODO: Ban sender?
-            return Err(anyhow!("Invalid peer"));
+            return Err(anyhow::anyhow!(
+                "Invalid announce: peer {} has an invalid signature",
+                peer.identity,
+            ));
         }
 
         match self.peer_provider.get_peer(&announce.identity).await.optional()? {
