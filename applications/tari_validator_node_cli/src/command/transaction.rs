@@ -328,14 +328,29 @@ fn summarize_finalize_result(finalize: &FinalizeResult) {
                     SubstateValue::Component(component) => {
                         println!(
                             "      ▶ component ({}): {}",
-                            component.module_name, component.component_address
+                            component.module_name,
+                            substate.substate_address()
                         );
                     },
-                    SubstateValue::Resource(resource) => {
-                        println!("      ▶ resource: {}", resource.address());
+                    SubstateValue::Resource(_) => {
+                        println!("      ▶ resource: {}", substate.substate_address());
                     },
                     SubstateValue::Vault(vault) => {
-                        println!("      ▶ vault: {} {}", vault.id(), vault.resource_address());
+                        println!(
+                            "      ▶ vault: {} {}",
+                            substate.substate_address(),
+                            vault.resource_address()
+                        );
+                    },
+                    SubstateValue::NonFungible(_) => {
+                        println!(
+                            "      ▶ NFT: {} {}",
+                            substate.substate_address(),
+                            substate
+                                .substate_address()
+                                .as_non_fungible_resource_address()
+                                .expect("NFT address")
+                        );
                     },
                 }
                 println!();

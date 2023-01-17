@@ -1599,17 +1599,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "d3ne"
-version = "0.7.4"
-source = "git+https://github.com/stringhandler/d3ne-rs.git?branch=st-fixes2#ad2b0dfca267c9466251780aecb78bab139846e5"
-dependencies = [
- "anyhow",
- "serde",
- "serde_json",
- "thiserror",
-]
-
-[[package]]
 name = "darling"
 version = "0.10.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5958,7 +5947,6 @@ version = "0.35.1"
 dependencies = [
  "anyhow",
  "cargo_toml",
- "d3ne",
  "digest 0.9.0",
  "log",
  "rand 0.7.3",
@@ -6263,6 +6251,7 @@ dependencies = [
  "tari_engine_types",
  "tari_template_abi",
  "tari_template_lib",
+ "tari_transaction_manifest",
 ]
 
 [[package]]

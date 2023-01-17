@@ -73,6 +73,7 @@ impl Display for ComponentAddress {
 #[derive(Debug, Clone, Encode, Decode)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct ComponentHeader {
+    // TODO: I dont think addresses should be in substates directly, this is only currently used by the template macro
     pub component_address: ComponentAddress,
     pub template_address: TemplateAddress,
     pub module_name: String,

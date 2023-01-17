@@ -159,7 +159,8 @@ fn test_account() {
         .result
         .expect("Faucet mint failed")
         .up_iter()
-        .find_map(|(_, s)| s.substate_value().resource_address())
+        .find(|(_, s)| s.substate_address().is_resource())
+        .map(|(_, s)| *s.substate_address())
         .unwrap();
 
     // Create sender and receiver accounts
@@ -305,5 +306,32 @@ mod errors {
             },
             _ => panic!("Unexpected error: {}", err),
         }
+    }
+}
+
+mod basic_nft {
+    use super::*;
+
+    #[test]
+    fn create_resource_mint_and_deposit() {
+        let template_test = TemplateTest::new(vec!["tests/templates/account", "tests/templates/basic_nft"]);
+
+        let account_address: ComponentAddress = template_test.call_function("Account", "new", args![]);
+        let nft_component: ComponentAddress = template_test.call_function("SparkleNft", "new", args![]);
+
+        let vars = vec![("account", account_address.into()), ("nft", nft_component.into())];
+
+        let result = template_test.execute_and_commit_manifest(
+            r#"
+            let account = var!["account"];
+            let sparkle_nft = var!["nft"];
+        
+            let nft_bucket = sparkle_nft.mint();
+            account.deposit(nft_bucket);
+        "#,
+            vars,
+        );
+
+        let diff = result.result.expect("execution failed");
     }
 }

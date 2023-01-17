@@ -24,8 +24,8 @@ use std::{fmt::Display, io};
 
 use anyhow::anyhow;
 use tari_dan_common_types::optional::IsNotFoundError;
-use tari_engine_types::{resource::ResourceError, substate::SubstateAddress};
-use tari_template_lib::models::{Amount, BucketId, ComponentAddress, ResourceAddress, VaultId};
+use tari_engine_types::{resource_container::ResourceError, substate::SubstateAddress};
+use tari_template_lib::models::{Amount, BucketId, ComponentAddress, NftTokenId, ResourceAddress, VaultId};
 
 use crate::{runtime::id_provider::MaxIdsExceeded, state_store::StateStoreError};
 
@@ -67,6 +67,8 @@ pub enum RuntimeError {
     TransactionCommitError(#[from] TransactionCommitError),
     #[error("Transaction generated too many outputs: {0}")]
     TooManyOutputs(#[from] MaxIdsExceeded),
+    #[error("Duplicate NFT token id: {token_id}")]
+    DuplicateNftTokenId { token_id: NftTokenId },
 }
 
 impl RuntimeError {

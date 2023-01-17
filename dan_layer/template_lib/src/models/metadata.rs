@@ -22,14 +22,12 @@
 
 use std::collections::HashMap;
 
-use hex;
 use tari_bor::{borsh, Decode, Encode};
 
 #[derive(Clone, Debug, Decode, Encode, Default, PartialEq)]
 #[cfg_attr(feature = "serde", derive(serde::Deserialize, serde::Serialize))]
 pub struct Metadata {
-    // TODO: Serialize as hex so that this can be serialized. In future this should be optimized.
-    metadata: HashMap<String, Vec<u8>>,
+    metadata: HashMap<String, String>,
 }
 
 impl Metadata {
@@ -39,11 +37,14 @@ impl Metadata {
         }
     }
 
-    pub fn insert(&mut self, key: Vec<u8>, value: Vec<u8>) {
-        self.metadata.insert(hex::encode(key), value);
+    pub fn insert<K: Into<String>, V: Into<String>>(&mut self, key: K, value: V) -> &mut Self {
+        let key = key.into();
+        let value = value.into();
+        self.metadata.insert(key, value);
+        self
     }
 
-    pub fn get(&self, key: &[u8]) -> Option<&[u8]> {
-        self.metadata.get(&hex::encode(key)).map(|v| v.as_slice())
+    pub fn get(&self, key: &str) -> Option<&str> {
+        self.metadata.get(key).map(|v| v.as_str())
     }
 }

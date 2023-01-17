@@ -34,7 +34,7 @@ use crate::{
     args::{InvokeResult, VaultAction, VaultInvokeArg},
     hash::HashParseError,
     models::{Amount, Bucket, ResourceAddress},
-    resource::ResourceType,
+    resource::{ResourceManager, ResourceType},
     Hash,
 };
 
@@ -122,8 +122,10 @@ impl Vault {
         }
     }
 
-    pub fn from_bucket(bucket: Bucket, resource_type: ResourceType) -> Self {
-        let mut vault = Self::new_empty(bucket.resource_address(), resource_type);
+    pub fn from_bucket(bucket: Bucket) -> Self {
+        let resource_address = bucket.resource_address();
+        let resource_type = ResourceManager::get(resource_address).resource_type();
+        let mut vault = Self::new_empty(resource_address, resource_type);
         vault.deposit(bucket);
         vault
     }
