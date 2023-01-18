@@ -32,7 +32,7 @@ use tari_validator_node::GrpcBaseNodeClient;
 use tempfile::tempdir;
 use tokio::task;
 
-use crate::TariWorld;
+use crate::{utils::helpers::get_os_assigned_ports, TariWorld};
 
 #[derive(Debug)]
 pub struct BaseNodeProcess {
@@ -46,12 +46,11 @@ pub struct BaseNodeProcess {
 
 pub async fn spawn_base_node(world: &mut TariWorld, bn_name: String) {
     // each spawned base node will use different ports
-    // FIXME: the wallet is not able to connect to the base node when using "get_os_assigned_ports"
-    // let (port, grpc_port) = get_os_assigned_ports();
-    let (port, grpc_port) = match world.base_nodes.values().last() {
-        Some(v) => (v.port + 1, v.grpc_port + 1),
-        None => (19000, 19500), // default ports if it's the first base node to be spawned
-    };
+    let (port, grpc_port) = get_os_assigned_ports();
+    // let (port, grpc_port) = match world.base_nodes.values().last() {
+    // Some(v) => (v.port + 1, v.grpc_port + 1),
+    // None => (19000, 19500), // default ports if it's the first base node to be spawned
+    // };
     let base_node_address = Multiaddr::from_str(&format!("/ip4/127.0.0.1/tcp/{}", port)).unwrap();
     let base_node_identity = NodeIdentity::random(&mut OsRng, base_node_address, PeerFeatures::COMMUNICATION_NODE);
     println!("Base node identity: {}", base_node_identity);
