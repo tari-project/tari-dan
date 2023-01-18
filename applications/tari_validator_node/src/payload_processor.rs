@@ -94,10 +94,10 @@ where TTemplateProvider: TemplateProvider
         let tx_hash = *transaction.hash();
         match processor.execute(transaction) {
             Ok(result) => Ok(result),
-            Err(TransactionError::WasmExecutionError(WasmExecutionError::Panic { message, .. })) => Ok(
-                FinalizeResult::errored(tx_hash, RejectReason::ExecutionFailure(message)),
-            ),
-            Err(err) => Ok(FinalizeResult::errored(
+            Err(TransactionError::WasmExecutionError(WasmExecutionError::Panic { message, .. })) => {
+                Ok(FinalizeResult::reject(tx_hash, RejectReason::ExecutionFailure(message)))
+            },
+            Err(err) => Ok(FinalizeResult::reject(
                 tx_hash,
                 RejectReason::ExecutionFailure(err.to_string()),
             )),

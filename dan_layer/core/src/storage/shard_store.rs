@@ -210,7 +210,7 @@ pub trait ShardStoreWriteTransaction<TAddr: NodeAddressable, TPayload: Payload> 
     ) -> Result<(), StorageError>;
 
     /// Updates the result for an existing payload
-    fn update_payload_result(&self, payload_id: &PayloadId, result: FinalizeResult) -> Result<(), StorageError>;
+    fn update_payload_result(&mut self, payload_id: &PayloadId, result: FinalizeResult) -> Result<(), StorageError>;
 
     // -------------------------------- Pledges -------------------------------- //
     fn pledge_object(
@@ -220,13 +220,13 @@ pub trait ShardStoreWriteTransaction<TAddr: NodeAddressable, TPayload: Payload> 
         current_height: NodeHeight,
     ) -> Result<ObjectPledge, StorageError>;
     fn complete_pledges(
-        &self,
+        &mut self,
         shard: ShardId,
         payload_id: PayloadId,
         node_hash: &TreeNodeHash,
     ) -> Result<(), StorageError>;
     fn abandon_pledges(
-        &self,
+        &mut self,
         shard: ShardId,
         payload_id: PayloadId,
         node_hash: &TreeNodeHash,

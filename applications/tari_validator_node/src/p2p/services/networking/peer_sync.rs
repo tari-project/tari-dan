@@ -76,8 +76,11 @@ impl<TPeerProvider: PeerProvider<Addr = CommsPublicKey>> PeerSyncProtocol<TPeerP
             };
             debug!(target: LOG_TARGET, "Received peer: {}", peer);
             if !peer.is_valid() {
-                // TODO: Ban sender?
-                return Err(anyhow::anyhow!("Invalid peer"));
+                return Err(anyhow::anyhow!(
+                    "Invalid peer: peer {} has an invalid signature (synced from {})",
+                    peer.identity,
+                    self.conn.peer_node_id()
+                ));
             }
 
             self.peer_provider.add_peer(peer).await?;

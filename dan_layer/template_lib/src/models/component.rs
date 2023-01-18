@@ -76,7 +76,6 @@ pub struct ComponentHeader {
     pub component_address: ComponentAddress,
     pub template_address: TemplateAddress,
     pub module_name: String,
-    pub version: u32,
     // TODO: Split the state from the header
     pub state: ComponentBody,
 }
