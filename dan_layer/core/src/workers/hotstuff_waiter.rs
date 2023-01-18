@@ -23,7 +23,7 @@
 use std::collections::{HashMap, HashSet};
 
 use log::*;
-use tari_common_types::types::{PublicKey, Signature};
+use tari_common_types::types::{FixedHash, PublicKey, Signature};
 use tari_core::{ValidatorNodeMmr, ValidatorNodeMmrHasherBlake256};
 use tari_dan_common_types::{
     optional::Optional,
@@ -598,10 +598,11 @@ where
                     .expect("Pledge is empty. This should have been checked previously")
                     .clone(),
             })
-            .collect();
+            .collect::<ShardPledgeCollection>();
 
         // Find all rejected nodes, if any are rejected then we vote to reject all our local shards
-        let is_all_rejected = self.check_for_other_shard_rejections(&payload_id, &proposed_nodes)?;
+        let is_all_rejected =
+            self.check_for_other_shard_rejections(&payload_id, &proposed_nodes, shard_pledges.pledge_hash())?;
 
         for node in proposed_nodes {
             // Check that this node is a node we need to vote on
@@ -656,6 +657,7 @@ where
         &self,
         payload_id: &PayloadId,
         proposed_nodes: &[HotStuffTreeNode<TAddr, TPayload>],
+        pledge_hash: FixedHash,
     ) -> Result<bool, HotStuffError> {
         let rejected_nodes = proposed_nodes
             .iter()
@@ -664,9 +666,9 @@ where
 
         if !rejected_nodes.is_empty() {
             let mut tx = self.shard_store.create_write_tx()?;
-            let current_finalize_result = tx.get_payload_result(payload_id)?;
+            let current_payload_result = tx.get_payload_result(payload_id)?;
             // Only change to reject is we arent already rejecting for another reason
-            if current_finalize_result.is_accept() {
+            if current_payload_result.finalize_result.is_accept() {
                 // If a shard has been rejected, we vote to reject all our shards
                 let finalize_result = FinalizeResult::reject(
                     payload_id.into_array().into(),
@@ -686,7 +688,10 @@ where
                     payload_id
                 );
 
-                tx.update_payload_result(payload_id, finalize_result)?;
+                tx.update_payload_result(payload_id, PayloadResult {
+                    finalize_result,
+                    pledge_hash,
+                })?;
             }
             tx.commit()?;
         }

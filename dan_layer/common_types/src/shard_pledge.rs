@@ -6,7 +6,7 @@ use std::ops::Deref;
 use serde::{Deserialize, Serialize};
 use tari_bor::borsh::BorshSerialize;
 use tari_common_types::types::FixedHash;
-use tari_engine_types::hashing::hasher;
+use tari_engine_types::hashing::{hasher, TariEngineHasher};
 
 use crate::{object_pledge::ObjectPledge, ShardId, TreeNodeHash};
 
@@ -21,16 +21,24 @@ pub struct ShardPledge {
 #[derive(Debug, Clone, Deserialize, Serialize, BorshSerialize, Default)]
 pub struct ShardPledgeCollection {
     inner: Vec<ShardPledge>,
+    pledge_hash: FixedHash,
 }
 
 impl ShardPledgeCollection {
     pub fn new(mut pledges: Vec<ShardPledge>) -> Self {
         pledges.sort_by_key(|p| p.shard_id);
-        Self { inner: pledges }
+        let pledge_hash = hash_pledges(&pledges);
+        Self {
+            inner: pledges,
+            pledge_hash,
+        }
     }
 
-    pub const fn empty() -> Self {
-        Self { inner: Vec::new() }
+    pub fn empty() -> Self {
+        Self {
+            inner: Vec::new(),
+            pledge_hash: hash_pledges(&[]),
+        }
     }
 
     pub fn iter(&self) -> impl Iterator<Item = &ShardPledge> {
@@ -38,14 +46,18 @@ impl ShardPledgeCollection {
     }
 
     pub fn pledge_hash(&self) -> FixedHash {
-        self.inner
-            .iter()
-            .map(|p| &p.pledge)
-            .fold(hasher("ShardPledgeCollection"), |hasher, p| hasher.chain(p))
-            .result()
-            .into_array()
-            .into()
+        self.pledge_hash
     }
+}
+
+fn hash_pledges(pledges: &[ShardPledge]) -> FixedHash {
+    pledges
+        .iter()
+        .map(|p| &p.pledge)
+        .fold(hasher("ShardPledgeCollection"), TariEngineHasher::chain)
+        .result()
+        .into_array()
+        .into()
 }
 
 impl FromIterator<ShardPledge> for ShardPledgeCollection {
