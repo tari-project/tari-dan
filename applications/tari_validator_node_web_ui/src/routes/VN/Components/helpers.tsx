@@ -23,8 +23,11 @@
 class U256 {
   n: string;
   constructor(n: string) {
+    if (!n) {
+      throw new Error("U256 input is null/empty");
+    }
     if (n.length > 64) {
-      throw new Error("Input is bigger than it should");
+      throw new Error("U256 input is larger than 64 characters");
     }
     this.n = n.padStart(64, "0");
   }
