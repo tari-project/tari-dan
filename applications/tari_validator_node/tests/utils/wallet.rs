@@ -114,7 +114,7 @@ pub async fn spawn_wallet(world: &mut TariWorld, wallet_name: String, base_node_
         wallet_config.wallet.p2p.dht = DhtConfig {
             // Not all platforms support sqlite memory connection urls
             database_url: DbConnectionUrl::File(temp_dir.path().join("dht.sqlite")),
-            ..DhtConfig::default_testnet()
+            ..DhtConfig::default_local_test()
         };
 
         wallet_config.wallet.custom_base_node = Some(format!(
@@ -155,6 +155,7 @@ pub async fn spawn_wallet(world: &mut TariWorld, wallet_name: String, base_node_
         .unwrap()
         .into_inner();
     eprintln!("Wallet {} comms address: {}", wallet_name, identity.public_address);
+
     let mut status = wallet_client.get_network_status(Empty {}).await.unwrap().into_inner();
     let mut counter = 0;
     while status.status != ConnectivityStatus::Online as i32 {
