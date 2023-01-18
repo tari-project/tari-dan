@@ -106,6 +106,21 @@ impl cucumber::World for TariWorld {
     }
 }
 
+#[tokio::main]
+async fn main() {
+    TariWorld::cucumber()
+        .max_concurrent_scenarios(1)
+        .with_writer(
+            // following config needed to use eprint statements in the tests
+            writer::Basic::raw(io::stdout(), writer::Coloring::Auto, 0)
+                .summarized()
+                .assert_normalized(),
+        )
+        // TODO: allow to run multiple scenarios
+        .run_and_exit("tests/features/counter.feature")
+        .await;
+}
+
 #[given(expr = "a base node {word}")]
 async fn start_base_node(world: &mut TariWorld, bn_name: String) {
     spawn_base_node(world, bn_name).await;
@@ -303,18 +318,4 @@ async fn print_world(world: &mut TariWorld) {
     eprintln!();
     eprintln!("======================================");
     eprintln!();
-}
-
-#[tokio::main]
-async fn main() {
-    TariWorld::cucumber()
-        .max_concurrent_scenarios(1)
-        // following config needed to use eprint statements in the tests
-        .with_writer(
-            writer::Basic::raw(io::stdout(), writer::Coloring::Auto, 0)
-                .summarized()
-                .assert_normalized(),
-        )
-        .run_and_exit("tests/features/basic.feature")
-        .await;
 }
