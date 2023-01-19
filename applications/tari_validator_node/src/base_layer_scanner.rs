@@ -54,7 +54,10 @@ use tari_dan_storage_sqlite::{
 };
 use tari_engine_types::substate::{Substate, SubstateAddress, SubstateValue};
 use tari_shutdown::ShutdownSignal;
-use tari_template_lib::{models::TemplateAddress, Hash};
+use tari_template_lib::{
+    models::{LayerOneCommitmentAddress, TemplateAddress},
+    Hash,
+};
 use tokio::{task, time};
 
 use crate::{
@@ -345,7 +348,8 @@ impl BaseLayerScanner {
                     &substate,
                     ShardId::from_address(
                         &SubstateAddress::LayerOneCommitment(
-                            Hash::try_from(commitment.as_bytes()).expect("Not a valid hash"),
+                            LayerOneCommitmentAddress::try_from_commitment(commitment.as_bytes())
+                                .expect("NOt a valid commitment"),
                         ),
                         0,
                     ),

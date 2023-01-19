@@ -56,7 +56,15 @@ use tari_template_lib::{
         VaultAction,
         WorkspaceAction,
     },
-    models::{Amount, BucketId, ComponentAddress, ComponentHeader, ResourceAddress, VaultRef},
+    models::{
+        Amount,
+        BucketId,
+        ComponentAddress,
+        ComponentHeader,
+        LayerOneCommitmentAddress,
+        ResourceAddress,
+        VaultRef,
+    },
 };
 use tari_utilities::ByteArray;
 
@@ -369,16 +377,13 @@ impl RuntimeInterface for RuntimeInterfaceImpl {
 
     fn claim_burn(
         &self,
-        substate_address: SubstateAddress,
-        commitment: Commitment,
+        commitment_address: LayerOneCommitmentAddress,
         range_proof: BulletRangeProof,
         owner_sig: RistrettoComSig,
     ) -> Result<(), RuntimeError> {
-        let mut vec_comm = [0u8; 32];
-        vec_comm.copy_from_slice(&commitment.as_bytes());
         // TODO: this should a domain hash of the commitment
         // 1. Must exist
-        let substate = self.tracker.take_layer_one_commitment(substate_address)?;
+        let commitment = self.tracker.take_layer_one_commitment(commitment_address)?;
 
         // 2. owner_sig must be valid
         // TODO: Probably want a better challenge

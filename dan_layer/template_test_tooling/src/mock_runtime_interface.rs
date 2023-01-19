@@ -23,7 +23,7 @@ use tari_template_lib::{
         VaultAction,
         WorkspaceAction,
     },
-    models::{ComponentAddress, ComponentHeader, ResourceAddress, VaultRef},
+    models::{ComponentAddress, ComponentHeader, LayerOneCommitmentAddress, ResourceAddress, VaultRef},
     Hash,
 };
 
@@ -159,8 +159,7 @@ impl RuntimeInterface for MockRuntimeInterface {
 
     fn claim_burn(
         &self,
-        substate_address: SubstateAddress,
-        commitment: tari_common_types::types::Commitment,
+        commitment_address: LayerOneCommitmentAddress,
         range_proof: tari_common_types::types::BulletRangeProof,
         owner_sig: RistrettoComSig,
     ) -> Result<(), RuntimeError> {

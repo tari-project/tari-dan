@@ -46,6 +46,7 @@ use tari_template_lib::{
         ComponentBody,
         ComponentHeader,
         ConfidentialBucketId,
+        LayerOneCommitmentAddress,
         Metadata,
         ResourceAddress,
         TemplateAddress,
@@ -83,7 +84,7 @@ struct WorkingState {
     new_resources: HashMap<ResourceAddress, Resource>,
     new_components: HashMap<ComponentAddress, ComponentHeader>,
     new_vaults: HashMap<VaultId, Vault>,
-    claimed_layer_one_commitments: Vec<SubstateAddress>,
+    claimed_layer_one_commitments: Vec<LayerOneCommitmentAddress>,
     runtime_state: Option<RuntimeState>,
     last_instruction_output: Option<Vec<u8>>,
     workspace: HashMap<Vec<u8>, Vec<u8>>,
@@ -232,13 +233,19 @@ impl StateTracker {
         })
     }
 
-    pub fn take_layer_one_commitment(&self, substate_address: SubstateAddress) -> Result<Commitment, RuntimeError> {
+    pub fn take_layer_one_commitment(
+        &self,
+        commitment_address: LayerOneCommitmentAddress,
+    ) -> Result<Commitment, RuntimeError> {
         self.write_with(|state| {
-            let substate: Substate = self.state_store.read_access()?.get_state(&substate_address)?;
+            let substate: Substate = self
+                .state_store
+                .read_access()?
+                .get_state(&SubstateAddress::LayerOneCommitment(commitment_address))?;
 
             match substate.substate_value() {
                 SubstateValue::LayerOneCommitment(commitment) => {
-                    state.claimed_layer_one_commitments.push(substate_address);
+                    state.claimed_layer_one_commitments.push(commitment_address);
                     Ok(commitment.clone())
                 },
                 _ => Err(RuntimeError::InvalidSubstateType),

@@ -81,6 +81,7 @@ message Instruction {
     METHOD = 1;
     PUT_OUTPUT_IN_WORKSPACE = 2;
     EMIT_LOG = 3;
+    CLAIM_BURN = 4;
   }
   InstructionType instruction_type = 1;
 
@@ -100,6 +101,10 @@ message Instruction {
 
   string log_level = 8;
   string log_message = 9;
+
+  bytes claim_burn_commitment_address = 10;
+  bytes claim_burn_range_proof = 11;
+  bytes claim_burn_proof_of_knowledge = 12;
 }
 
 message Arg {

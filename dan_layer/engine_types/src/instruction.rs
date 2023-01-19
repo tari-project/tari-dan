@@ -9,7 +9,7 @@ use tari_common_types::types::{BulletRangeProof, Commitment};
 use tari_crypto::{ristretto::RistrettoComSig, signatures::CommitmentSignature};
 use tari_template_lib::{
     args::{Arg, LogLevel},
-    models::{ComponentAddress, TemplateAddress},
+    models::{ComponentAddress, LayerOneCommitmentAddress, TemplateAddress},
     Hash,
 };
 use tari_utilities::hex::Hex;
@@ -37,8 +37,7 @@ pub enum Instruction {
         message: String,
     },
     ClaimBurn {
-        shard: SubstateAddress,
-        commitment: Commitment,
+        commitment_address: LayerOneCommitmentAddress,
         range_proof: BulletRangeProof,
         proof_of_knowledge: RistrettoComSig,
     },
@@ -78,15 +77,14 @@ impl Display for Instruction {
                 write!(f, "EmitLog {{ level: {:?}, message: {:?} }}", level, message)
             },
             Self::ClaimBurn {
-                commitment,
+                commitment_address,
                 proof_of_knowledge,
                 ..
             } => {
                 write!(
                     f,
-                    "ClaimBurn {{ commitment: {:?}, proof_of_knowledge: {:?} }}",
-                    commitment.to_hex(),
-                    proof_of_knowledge
+                    "ClaimBurn {{ commitment_address: {:?}, proof_of_knowledge: {:?} }}",
+                    commitment_address, proof_of_knowledge
                 )
             },
         }

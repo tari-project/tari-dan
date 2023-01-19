@@ -30,7 +30,7 @@ use tari_bor::{borsh, decode, encode, Decode, Encode};
 use tari_common_types::types::{Commitment, FixedHash};
 use tari_crypto::{keys::PublicKey, ristretto::RistrettoPublicKey};
 use tari_template_lib::{
-    models::{ComponentAddress, ComponentHeader, ResourceAddress, VaultId},
+    models::{ComponentAddress, ComponentHeader, LayerOneCommitmentAddress, ResourceAddress, VaultId},
     Hash,
 };
 use tari_utilities::{hex::Hex, ByteArray};
@@ -78,7 +78,7 @@ pub enum SubstateAddress {
     Component(ComponentAddress),
     Resource(ResourceAddress),
     Vault(VaultId),
-    LayerOneCommitment(Hash),
+    LayerOneCommitment(LayerOneCommitmentAddress),
 }
 
 impl SubstateAddress {
@@ -94,7 +94,7 @@ impl SubstateAddress {
             SubstateAddress::Component(address) => address.hash(),
             SubstateAddress::Resource(address) => address.hash(),
             SubstateAddress::Vault(id) => id.hash(),
-            SubstateAddress::LayerOneCommitment(hash) => hash,
+            SubstateAddress::LayerOneCommitment(address) => address.hash(),
         }
     }
 
@@ -104,7 +104,7 @@ impl SubstateAddress {
             Self::Component(addr) => addr.to_string(),
             Self::Resource(addr) => addr.to_string(),
             Self::Vault(addr) => addr.to_string(),
-            Self::LayerOneCommitment(hash) => hash.to_string(),
+            Self::LayerOneCommitment(addr) => addr.to_string(),
         }
     }
 }
@@ -210,9 +210,9 @@ impl SubstateValue {
             SubstateValue::Resource(resource) => SubstateAddress::Resource(*resource.address()),
             SubstateValue::Vault(vault) => SubstateAddress::Vault(*vault.id()),
             // TODO: better type. Commitment does not implement Copy, so need to use an array that does
-            SubstateValue::LayerOneCommitment(commitment) => {
-                SubstateAddress::LayerOneCommitment(Hash::try_from(commitment.as_bytes()).unwrap())
-            },
+            SubstateValue::LayerOneCommitment(commitment) => SubstateAddress::LayerOneCommitment(
+                LayerOneCommitmentAddress::try_from_commitment(commitment.as_bytes()).unwrap(),
+            ),
         }
     }
 }

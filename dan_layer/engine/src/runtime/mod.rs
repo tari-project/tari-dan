@@ -54,7 +54,7 @@ use tari_template_lib::{
         WorkspaceAction,
     },
     invoke_args,
-    models::{ComponentAddress, ComponentHeader, ResourceAddress, VaultRef},
+    models::{ComponentAddress, ComponentHeader, LayerOneCommitmentAddress, ResourceAddress, VaultRef},
 };
 pub use tracker::{RuntimeState, StateTracker};
 
@@ -100,8 +100,7 @@ pub trait RuntimeInterface: Send + Sync {
 
     fn claim_burn(
         &self,
-        substate_address: SubstateAddress,
-        commitment: Commitment,
+        commitment_address: LayerOneCommitmentAddress,
         range_proof: BulletRangeProof,
         owner_sig: RistrettoComSig,
     ) -> Result<(), RuntimeError>;

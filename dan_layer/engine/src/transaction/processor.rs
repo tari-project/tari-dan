@@ -129,8 +129,7 @@ where TRuntimeInterface: RuntimeInterface + Clone + 'static
                 Ok(ExecutionResult::empty())
             },
             Instruction::ClaimBurn {
-                shard,
-                commitment,
+                commitment_address,
                 range_proof,
                 proof_of_knowledge,
             } => {
@@ -139,7 +138,7 @@ where TRuntimeInterface: RuntimeInterface + Clone + 'static
                 // Need to call it on the runtime so that a bucket is created.
                 runtime
                     .interface()
-                    .claim_burn(shard, commitment, range_proof, proof_of_knowledge)?;
+                    .claim_burn(commitment_address, range_proof, proof_of_knowledge)?;
                 Ok(ExecutionResult::empty())
             },
         }
