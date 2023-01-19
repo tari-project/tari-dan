@@ -11,7 +11,7 @@ use tari_validator_node_cli::{
     account_manager::AccountFileManager,
     command::{
         handle_submit,
-        transaction::{CliInstruction, CommonSubmitArgs, SubmitArgs, CliArg},
+        transaction::{CliArg, CliInstruction, CommonSubmitArgs, SubmitArgs},
     },
     from_hex::FromHex,
 };
