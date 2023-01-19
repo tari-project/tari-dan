@@ -1,7 +1,7 @@
 //  Copyright 2022 The Tari Project
 //  SPDX-License-Identifier: BSD-3-Clause
 
-use std::path::PathBuf;
+use std::{path::PathBuf, str::FromStr};
 
 use tari_template_lib::{
     models::{ComponentAddress, TemplateAddress},
@@ -11,7 +11,7 @@ use tari_validator_node_cli::{
     account_manager::AccountFileManager,
     command::{
         handle_submit,
-        transaction::{CliInstruction, CommonSubmitArgs, SubmitArgs},
+        transaction::{CliInstruction, CommonSubmitArgs, SubmitArgs, CliArg},
     },
     from_hex::FromHex,
 };
@@ -68,22 +68,23 @@ pub async fn create_component(
     template_name: String,
     vn_name: String,
     function_call: String,
+    args: Vec<String>,
 ) {
     let data_dir = get_cli_data_dir(world);
 
     let template_address = world.templates.get(&template_name).unwrap().address;
+    let args: Vec<CliArg> = args.iter().map(|a| CliArg::from_str(a).unwrap()).collect();
     let instruction = CliInstruction::CallFunction {
         template_address: FromHex(template_address),
-        // TODO: actually parse the function call for arguments
         function_name: function_call,
-        args: vec![],
+        args,
     };
     let args = SubmitArgs {
         instruction,
         common: CommonSubmitArgs {
             wait_for_result: true,
             wait_for_result_timeout: Some(60),
-            num_outputs: Some(1),
+            num_outputs: Some(3),
             inputs: vec![],
             version: None,
             dump_outputs_into: None,

@@ -117,7 +117,7 @@ async fn main() {
                 .assert_normalized(),
         )
         // TODO: allow to run multiple scenarios
-        .run_and_exit("tests/features/counter.feature")
+        .run_and_exit("tests/features/fungible.feature")
         .await;
 }
 
@@ -198,15 +198,31 @@ async fn assert_template_is_registered(world: &mut TariWorld, template_name: Str
     assert_eq!(resp.registration_metadata.address, template_address);
 }
 
-#[when(expr = "I create a component {word} of template \"{word}\" on {word} using \"{word}\"")]
+#[when(expr = "I create a component {word} of template \"{word}\" on {word} using \"{word}\" with inputs \"{word}\"")]
 async fn call_template_constructor(
     world: &mut TariWorld,
     component_name: String,
     template_name: String,
     vn_name: String,
     function_call: String,
+    args: String,
 ) {
-    validator_node_cli::create_component(world, component_name, template_name, vn_name, function_call).await;
+    let args = args.split(',').map(|a| a.trim().to_string()).collect();
+    validator_node_cli::create_component(world, component_name, template_name, vn_name, function_call, args).await;
+
+    // give it some time between transactions
+    tokio::time::sleep(Duration::from_secs(4)).await;
+}
+
+#[when(expr = "I create a component {word} of template \"{word}\" on {word} using \"{word}\"")]
+async fn call_template_constructor_without_args(
+    world: &mut TariWorld,
+    component_name: String,
+    template_name: String,
+    vn_name: String,
+    function_call: String,
+) {
+    validator_node_cli::create_component(world, component_name, template_name, vn_name, function_call, vec![]).await;
 
     // give it some time between transactions
     tokio::time::sleep(Duration::from_secs(4)).await;
