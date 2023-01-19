@@ -92,6 +92,13 @@ impl SubstateAddress {
         }
     }
 
+    pub fn as_resource_address(&self) -> Option<ResourceAddress> {
+        match self {
+            Self::Resource(address) => Some(*address),
+            _ => None,
+        }
+    }
+
     pub fn hash(&self) -> &Hash {
         match self {
             SubstateAddress::Component(address) => address.hash(),

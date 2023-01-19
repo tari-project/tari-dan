@@ -159,8 +159,7 @@ fn test_account() {
         .result
         .expect("Faucet mint failed")
         .up_iter()
-        .find(|(_, s)| s.substate_address().is_resource())
-        .map(|(_, s)| *s.substate_address())
+        .find_map(|(_, s)| s.substate_address().as_resource_address())
         .unwrap();
 
     // Create sender and receiver accounts

@@ -29,7 +29,10 @@ mod no_std {
 
     pub mod collections {
         extern crate alloc;
-        pub use alloc::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
+        pub use alloc::collections::{BTreeMap, BTreeSet};
+
+        #[cfg(feature = "alloc")]
+        pub use hashbrown::{HashMap, HashSet};
     }
 
     pub use tari_bor::borsh::maybestd::io;
