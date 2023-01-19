@@ -333,5 +333,21 @@ mod basic_nft {
         );
 
         let diff = result.result.expect("execution failed");
+
+        // Resource is changed
+        assert_eq!(diff.down_iter().filter(|(addr, _)| addr.is_resource()).count(), 1);
+        assert_eq!(diff.up_iter().filter(|(addr, _)| addr.is_resource()).count(), 1);
+
+        // NFT and account components changed
+        assert_eq!(diff.down_iter().filter(|(addr, _)| addr.is_component()).count(), 2);
+        assert_eq!(diff.up_iter().filter(|(addr, _)| addr.is_component()).count(), 2);
+
+        // One new vault created
+        assert_eq!(diff.down_iter().filter(|(addr, _)| addr.is_vault()).count(), 0);
+        assert_eq!(diff.up_iter().filter(|(addr, _)| addr.is_vault()).count(), 1);
+
+        // One new NFT minted
+        assert_eq!(diff.down_iter().filter(|(addr, _)| addr.is_non_fungible()).count(), 0);
+        assert_eq!(diff.up_iter().filter(|(addr, _)| addr.is_non_fungible()).count(), 1);
     }
 }

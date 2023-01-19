@@ -121,6 +121,18 @@ impl SubstateAddress {
     pub fn is_resource(&self) -> bool {
         matches!(self, Self::Resource(_))
     }
+
+    pub fn is_component(&self) -> bool {
+        matches!(self, Self::Component(_))
+    }
+
+    pub fn is_vault(&self) -> bool {
+        matches!(self, Self::Vault(_))
+    }
+
+    pub fn is_non_fungible(&self) -> bool {
+        matches!(self, Self::NonFungible(_, _))
+    }
 }
 
 impl From<ComponentAddress> for SubstateAddress {
