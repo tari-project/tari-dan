@@ -180,6 +180,14 @@ impl FromStr for SubstateAddress {
                 let id = VaultId::from_hex(addr).map_err(|_| InvalidSubstateAddressFormat(s.to_string()))?;
                 Ok(SubstateAddress::Vault(id))
             },
+            Some(("nft", addr)) => {
+                let id = NftTokenId::from_hex(addr).map_err(|_| InvalidSubstateAddressFormat(s.to_string()))?;
+                // TODO: We need to add more structure to objects with child/parent relationships.
+                //       Setting the resource to 000.. has no effect because the system knows about this substate and
+                //       includes the correct resource in the final address, however this may change as the NFT ID
+                //       should be qualified by the parent resource.
+                Ok(SubstateAddress::NonFungible(ResourceAddress::new(Hash::default()), id))
+            },
             Some(_) | None => Err(InvalidSubstateAddressFormat(s.to_string())),
         }
     }

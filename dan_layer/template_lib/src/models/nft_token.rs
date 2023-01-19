@@ -8,7 +8,7 @@ use tari_template_abi::{
     EngineOp,
 };
 
-use crate::{models::Metadata, Hash};
+use crate::{hash::HashParseError, models::Metadata, Hash};
 
 #[derive(Debug, Clone, Copy, Ord, PartialOrd, PartialEq, Eq, Encode, Decode, Hash)]
 #[cfg_attr(feature = "serde", derive(serde::Deserialize, serde::Serialize))]
@@ -23,14 +23,16 @@ impl NftTokenId {
     pub fn hash(&self) -> &Hash {
         &self.0
     }
+
+    pub fn from_hex(hex: &str) -> Result<Self, HashParseError> {
+        let hash = Hash::from_hex(hex)?;
+        Ok(Self(hash))
+    }
 }
 
 impl Display for NftTokenId {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let mut buf = [0u8; 8];
-        buf[0..8].copy_from_slice(&self.0[0..8]);
-        let id = u64::from_le_bytes(buf);
-        write!(f, "Token: {}", id)
+        write!(f, "nft_{}", self.0)
     }
 }
 
