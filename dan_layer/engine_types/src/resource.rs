@@ -56,4 +56,8 @@ impl Resource {
     pub fn increase_total_supply(&mut self, amount: Amount) {
         self.total_supply += amount;
     }
+
+    pub fn total_supply(&self) -> Amount {
+        self.total_supply
+    }
 }

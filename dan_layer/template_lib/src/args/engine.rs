@@ -143,6 +143,7 @@ impl From<ResourceAddress> for ResourceRef {
 
 #[derive(Clone, Debug, Decode, Encode)]
 pub enum ResourceAction {
+    GetTotalSupply,
     GetResourceType,
     Create,
     Mint,

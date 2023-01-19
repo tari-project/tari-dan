@@ -33,17 +33,21 @@ mod sparkle_nft_template {
 
     pub struct SparkleNft {
         address: ResourceAddress,
+        vault: Vault,
     }
 
     impl SparkleNft {
         pub fn new() -> Self {
             // Create the non-fungible resource with 1 token (optional)
             let tokens = [(NftTokenId::random(), NftToken::new(Metadata::new(), Vec::new()))];
-            let address = ResourceBuilder::non_fungible()
+            let bucket = ResourceBuilder::non_fungible()
                 .with_token_symbol("SPKL")
                 .with_tokens(tokens)
-                .build();
-            Self { address }
+                .build_bucket();
+            Self {
+                address: bucket.resource_address(),
+                vault: Vault::from_bucket(bucket),
+            }
         }
 
         pub fn mint(&mut self) -> Bucket {
@@ -61,6 +65,10 @@ mod sparkle_nft_template {
             // TODO: Custom data that is mutable by the token owner (probably a serialized struct)
             // Mint the NFT, this will fail if the token ID already exists
             ResourceManager::get(self.address).mint_non_fungible(id, NftToken::new(immutable_data, Vec::new()))
+        }
+
+        pub fn total_supply(&self) -> Amount {
+            ResourceManager::get(self.address).total_supply()
         }
     }
 }

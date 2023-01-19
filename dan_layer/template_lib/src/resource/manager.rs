@@ -107,4 +107,14 @@ impl ResourceManager {
         let bucket_id = resp.decode().expect("Failed to decode Bucket");
         Bucket::from_id(bucket_id)
     }
+
+    pub fn total_supply(&self) -> Amount {
+        let resp: InvokeResult = call_engine(EngineOp::ResourceInvoke, &ResourceInvokeArg {
+            resource_ref: self.expect_resource_address(),
+            action: ResourceAction::GetTotalSupply,
+            args: invoke_args![],
+        });
+
+        resp.decode().expect("[total_supply] Failed to decode Amount")
+    }
 }

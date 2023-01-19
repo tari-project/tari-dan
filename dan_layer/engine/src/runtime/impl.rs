@@ -35,7 +35,6 @@ use tari_template_lib::{
         CreateResourceArg,
         InvokeResult,
         LogLevel,
-        MintArg,
         MintResourceArg,
         ResourceAction,
         ResourceRef,
@@ -154,6 +153,18 @@ impl RuntimeInterface for RuntimeInterfaceImpl {
         args: Vec<Vec<u8>>,
     ) -> Result<InvokeResult, RuntimeError> {
         match action {
+            ResourceAction::GetTotalSupply => {
+                let resource_address =
+                    resource_ref
+                        .as_resource_address()
+                        .ok_or_else(|| RuntimeError::InvalidArgument {
+                            argument: "resource_ref",
+                            reason: "GetResourceType resource action requires a resource address".to_string(),
+                        })?;
+                let resource = self.tracker.get_resource(&resource_address)?;
+                let total_supply = resource.total_supply();
+                Ok(InvokeResult::encode(&total_supply)?)
+            },
             ResourceAction::GetResourceType => {
                 let resource_address =
                     resource_ref
@@ -178,14 +189,6 @@ impl RuntimeInterface for RuntimeInterfaceImpl {
 
                 let mut output_bucket = None;
                 if let Some(mint_arg) = arg.mint_arg {
-                    self.tracker
-                        .borrow_resource_mut(&resource_address, |resource| match &mint_arg {
-                            MintArg::Fungible { amount } => resource.increase_total_supply(*amount),
-                            MintArg::NonFungible { tokens: token_ids } => {
-                                resource.increase_total_supply(token_ids.len().into());
-                            },
-                        })?;
-
                     let bucket_id = self.tracker.mint_resource(resource_address, mint_arg)?;
                     output_bucket = Some(tari_template_lib::models::Bucket::from_id(bucket_id));
                 }

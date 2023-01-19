@@ -319,6 +319,9 @@ mod basic_nft {
         let account_address: ComponentAddress = template_test.call_function("Account", "new", args![]);
         let nft_component: ComponentAddress = template_test.call_function("SparkleNft", "new", args![]);
 
+        let total_supply: Amount = template_test.call_method(nft_component, "total_supply", args![]);
+        assert_eq!(total_supply, Amount(1));
+
         let vars = vec![("account", account_address.into()), ("nft", nft_component.into())];
 
         let result = template_test.execute_and_commit_manifest(
@@ -349,5 +352,8 @@ mod basic_nft {
         // One new NFT minted
         assert_eq!(diff.down_iter().filter(|(addr, _)| addr.is_non_fungible()).count(), 0);
         assert_eq!(diff.up_iter().filter(|(addr, _)| addr.is_non_fungible()).count(), 1);
+
+        let total_supply: Amount = template_test.call_method(nft_component, "total_supply", args![]);
+        assert_eq!(total_supply, Amount(2));
     }
 }
