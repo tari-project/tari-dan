@@ -22,12 +22,13 @@
 
 use std::fmt::Debug;
 
+use serde::{Deserialize, Serialize};
 use tari_common_types::types::FixedHash;
 use tari_dan_common_types::{ObjectClaim, PayloadId, ShardId, SubstateChange};
+use tari_engine_types::commit_result::FinalizeResult;
 
 use crate::models::ConsensusHash;
 
-// TODO: Rename to Command - most of the hotstuff docs refers to this as command
 pub trait Payload: Debug + Clone + Send + Sync + ConsensusHash {
     fn involved_shards(&self) -> Vec<ShardId>;
     fn to_id(&self) -> PayloadId {
@@ -36,18 +37,6 @@ pub trait Payload: Debug + Clone + Send + Sync + ConsensusHash {
     fn objects_for_shard(&self, shard: ShardId) -> Option<(SubstateChange, ObjectClaim)>;
     fn max_outputs(&self) -> u32;
 }
-
-// impl Payload for &str {
-//     fn involved_shards(&self) -> Vec<u32> {
-//         self.as_bytes()
-//     }
-// }
-
-// impl Payload for String {
-//     fn involved_shards(&self) -> Vec<u32> {
-//         vec![0]
-//     }
-// }
 
 impl ConsensusHash for (String, Vec<ShardId>) {
     fn consensus_hash(&self) -> FixedHash {
@@ -71,4 +60,10 @@ impl Payload for (String, Vec<ShardId>) {
     fn max_outputs(&self) -> u32 {
         100
     }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PayloadResult {
+    pub finalize_result: FinalizeResult,
+    pub pledge_hash: FixedHash,
 }

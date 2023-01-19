@@ -143,7 +143,11 @@ impl HotstuffService {
     ) -> Result<(), anyhow::Error> {
         trace!(target: LOG_TARGET, "Sending leader message to {}", to);
         self.outbound
-            .send(self.node_public_key.clone(), to, DanMessage::HotStuffMessage(msg))
+            .send(
+                self.node_public_key.clone(),
+                to,
+                DanMessage::HotStuffMessage(Box::new(msg)),
+            )
             .await?;
         Ok(())
     }
@@ -161,7 +165,11 @@ impl HotstuffService {
         msg: HotStuffMessage<TariDanPayload, CommsPublicKey>,
     ) -> Result<(), anyhow::Error> {
         self.outbound
-            .broadcast(self.node_public_key.clone(), &nodes, DanMessage::HotStuffMessage(msg))
+            .broadcast(
+                self.node_public_key.clone(),
+                &nodes,
+                DanMessage::HotStuffMessage(Box::new(msg)),
+            )
             .await?;
         Ok(())
     }
