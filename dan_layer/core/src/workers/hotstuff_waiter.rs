@@ -622,8 +622,12 @@ where
                 continue;
             }
 
-            // If all proposals are rejections, we've sent our last REJECT vote in the PREPARE round so we dont vote
+            // If all proposals are rejections and we have proof that all validators have voted in this way,
+            // we've sent our last REJECT vote in the PREPARE round so we dont vote again.
             if is_all_rejected && node.payload_phase() == HotstuffPhase::PreCommit {
+                // Abandon early because we are not continuing to vote so will never reach the DECIDE for the chain
+                self.shard_store
+                    .with_write_tx(|tx| tx.abandon_pledges(node.shard(), node.payload_id(), node.hash()))?;
                 info!(
                     target: LOG_TARGET,
                     "🔥 Skipping PRECOMMIT REJECT vote on node {} for payload {}, shard {}",
@@ -1107,18 +1111,7 @@ where
                 precommit_node.hash(),
                 prepare_node,
             );
-            // prepare_node is at DECIDE phase
-            //             let prepare_node = if prepare_node.is_zero() {
-            //     HotStuffTreeNode::genesis(
-            //         node.epoch(),
-            //         node.payload_id(),
-            //         node.shard(),
-            //         node.proposed_by().clone(),
-            //         None,
-            //     )
-            // } else {
-            //     tx.get_node(&prepare_node)?
-            // };
+
             self.on_commit(&mut tx, node)?;
             tx.set_last_executed_height(node.shard(), node.payload_id(), node.height())?;
         } else {
