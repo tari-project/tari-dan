@@ -90,12 +90,6 @@ Once the template is registered on the base layer and sufficiently mined, you sh
 ### Calling a function
 With the templated registered we can invoke a function by using the `validator_node_cli`.
 
-First we must create an account
-
-```
-cargo run --bin tari_validator_node_cli -- accounts create
-```
-
 Next we can get a list of templates
 
 ```

@@ -20,10 +20,10 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-pub mod account_manager;
 pub mod cli;
 pub mod command;
 pub mod from_hex;
+pub mod key_manager;
 pub mod prompt;
 #[macro_use]
 pub mod table;
