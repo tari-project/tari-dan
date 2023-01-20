@@ -20,7 +20,7 @@ pub struct ShardPledge {
 /// An ordered list of ShardPledges.
 #[derive(Debug, Clone, Deserialize, Serialize, BorshSerialize, Default)]
 pub struct ShardPledgeCollection {
-    inner: Vec<ShardPledge>,
+    pledges: Vec<ShardPledge>,
     pledge_hash: FixedHash,
 }
 
@@ -28,21 +28,18 @@ impl ShardPledgeCollection {
     pub fn new(mut pledges: Vec<ShardPledge>) -> Self {
         pledges.sort_by_key(|p| p.shard_id);
         let pledge_hash = hash_pledges(&pledges);
-        Self {
-            inner: pledges,
-            pledge_hash,
-        }
+        Self { pledges, pledge_hash }
     }
 
     pub fn empty() -> Self {
         Self {
-            inner: Vec::new(),
+            pledges: Vec::new(),
             pledge_hash: hash_pledges(&[]),
         }
     }
 
     pub fn iter(&self) -> impl Iterator<Item = &ShardPledge> {
-        self.inner.iter()
+        self.pledges.iter()
     }
 
     pub fn pledge_hash(&self) -> FixedHash {
@@ -70,6 +67,6 @@ impl Deref for ShardPledgeCollection {
     type Target = [ShardPledge];
 
     fn deref(&self) -> &Self::Target {
-        &self.inner
+        &self.pledges
     }
 }
