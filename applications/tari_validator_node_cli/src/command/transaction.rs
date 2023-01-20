@@ -47,10 +47,10 @@ use tari_validator_node_client::{
 };
 
 use crate::{
-    account_manager::AccountFileManager,
     command::manifest,
     component_manager::ComponentManager,
     from_hex::FromHex,
+    key_manager::KeyManager,
     versioned_substate_address::VersionedSubstateAddress,
 };
 
@@ -206,10 +206,10 @@ pub async fn submit_transaction(
     client: &mut ValidatorNodeClient,
 ) -> Result<Option<SubmitTransactionResponse>, anyhow::Error> {
     let component_manager = ComponentManager::init(base_dir.as_ref())?;
-    let account_manager = AccountFileManager::init(base_dir.as_ref().to_path_buf())?;
-    let account = account_manager
-        .get_active_account()
-        .ok_or_else(|| anyhow::anyhow!("No active account. Use `accounts use [public key hex]` to set one."))?;
+    let key_manager = KeyManager::init(base_dir)?;
+    let key = key_manager
+        .get_active_key()
+        .ok_or_else(|| anyhow::anyhow!("No active key. Use `keys use [public key hex]` to set one."))?;
 
     let inputs = if common.inputs.is_empty() {
         load_inputs(&instructions, &component_manager)?
@@ -238,7 +238,7 @@ pub async fn submit_transaction(
         .with_new_outputs(common.num_outputs.unwrap_or(0))
         .with_outputs(outputs)
         .with_fee(1)
-        .sign(&account.secret_key);
+        .sign(&key.secret_key);
 
     let transaction = builder.build();
 

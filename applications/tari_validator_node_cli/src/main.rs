@@ -25,7 +25,7 @@ use std::{error::Error, path::PathBuf};
 use anyhow::anyhow;
 use multiaddr::{Multiaddr, Protocol};
 use reqwest::Url;
-use tari_validator_node_cli::{cli::Cli, command::Command};
+use tari_validator_node_cli::{cli::Cli, command::Command, key_manager::KeyManager};
 use tari_validator_node_client::ValidatorNodeClient;
 
 #[tokio::main(flavor = "current_thread")]
@@ -39,6 +39,12 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let base_dir = cli
         .base_dir
         .unwrap_or_else(|| dirs::home_dir().unwrap().join(".tari/vncli"));
+
+    // Create a key
+    let key_manager = KeyManager::init(&base_dir)?;
+    if key_manager.count() == 0 {
+        key_manager.create()?;
+    }
 
     log::info!("🌍️ Connecting to {}", endpoint);
     let client = ValidatorNodeClient::connect(endpoint)?;
@@ -54,7 +60,7 @@ async fn handle_command(command: Command, base_dir: PathBuf, client: ValidatorNo
     match command {
         Command::Vn(cmd) => cmd.handle(client).await?,
         Command::Templates(cmd) => cmd.handle(client).await?,
-        Command::Accounts(cmd) => cmd.handle(base_dir).await?,
+        Command::Keys(cmd) => cmd.handle(base_dir).await?,
         Command::Transactions(cmd) => cmd.handle(base_dir, client).await?,
         Command::Manifests(cmd) => cmd.handle()?,
     }
