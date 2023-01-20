@@ -88,7 +88,7 @@ pub struct HotStuffWaiter<
     /// The epoch manager
     epoch_manager: TEpochManager,
     /// Received payloads that should be proposed. Only payloads that involve this node are pushed on this channel.
-    rx_new: Receiver<(TPayload, ShardId, u8)>,
+    rx_new: Receiver<(TPayload, ShardId)>,
     /// Received replica hotstuff messages, namely Proposal messages from the leader or
     /// NewView messages from replicas.
     rx_hs_message: Receiver<(TAddr, HotStuffMessage<TPayload, TAddr>)>,

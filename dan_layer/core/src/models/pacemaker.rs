@@ -22,7 +22,7 @@
 
 use tari_dan_common_types::{PayloadId, ShardId};
 
-use crate::{models::HotstuffPhase, workers::hotstuff_error::HotStuffError};
+use crate::models::HotstuffPhase;
 
 pub type WaitOver = (PayloadId, ShardId, HotstuffPhase);
 

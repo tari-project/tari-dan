@@ -37,7 +37,6 @@ pub use template_provider::TemplateProvider;
 pub mod base_node_error;
 pub mod epoch_manager;
 pub mod leader_strategy;
-pub(crate) mod pacemaker;
 mod service_specification;
 mod template_provider;
 mod validator_node_rpc_client;

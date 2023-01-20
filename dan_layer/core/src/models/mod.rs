@@ -36,6 +36,7 @@ mod hot_stuff_message;
 mod hot_stuff_tree_node;
 mod leaf_node;
 mod node;
+pub mod pacemaker;
 mod payload;
 mod sidechain_metadata;
 mod substate_shard_data;

@@ -22,33 +22,18 @@
 
 use std::{collections::HashMap, time::Duration};
 
-use async_trait::async_trait;
+use log::*;
 use tari_dan_common_types::{PayloadId, ShardId};
-use tari_shutdown::{Shutdown, ShutdownSignal};
-use tokio::{
-    sync::mpsc::{Receiver, Sender},
-    task::JoinHandle,
-};
+use tari_shutdown::ShutdownSignal;
+use tokio::{sync::mpsc::Sender, task::JoinHandle};
 
 use super::hotstuff_error::HotStuffError;
-use crate::{
-    models::HotstuffPhase,
-    services::pacemaker::{Pacemaker, PacemakerSignal, PacemakerWaitStatus, WaitOver},
+use crate::models::{
+    pacemaker::{PacemakerWaitStatus, WaitOver},
+    HotstuffPhase,
 };
 
 const LOG_TARGET: &str = "tari::dan_layer::pacemaker_worker";
-
-pub struct Timer {}
-
-impl Timer {
-    fn new() -> Self {
-        Self {}
-    }
-
-    async fn start_wait(&self, max_timeout: u64) {
-        tokio::time::sleep(Duration::from_secs(max_timeout)).await;
-    }
-}
 
 #[derive(Debug)]
 pub struct LeaderFailurePacemaker {
@@ -78,20 +63,21 @@ impl LeaderFailurePacemaker {
     }
 
     pub async fn start_timer(
-        &mut self,
-        wait_over: (PayloadId, ShardId, HotStuffPhase),
-        shutdown: ShutdownSignal,
+        mut self,
+        wait_over: (PayloadId, ShardId, HotstuffPhase),
+        mut shutdown: ShutdownSignal,
     ) -> Result<(), HotStuffError> {
         tokio::select! {
-            _ = tokio::time::sleep(Duration::from(self.max_timeout)).await => {
+            _ = tokio::time::sleep(Duration::from_secs(self.max_timeout)) => {
                 let status = PacemakerWaitStatus::WaitTimeOut;
-                self.status.insert(wait_over.clone(), status);
-                self.tx_waiter_status.send((wait_over, status)).await;
-            }
+                self.status.insert(wait_over.clone(), status.clone());
+                self.tx_waiter_status.send((wait_over, status)).await.map_err(|_| HotStuffError::SendError)?;
+                info!(target: LOG_TARGET, "💤 Leader communication exceeded allowed timeout");
+            },
             _ = shutdown.wait() => {
                 let status = PacemakerWaitStatus::ShutDown;
-                self.status.insert(wait_over.clone(), status).await;
-            }
+                self.status.insert(wait_over, status);
+            },
         }
         Ok(())
     }
