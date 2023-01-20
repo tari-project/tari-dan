@@ -40,7 +40,7 @@ impl From<DanMessage<TariDanPayload, CommsPublicKey>> for proto::network::DanMes
     fn from(msg: DanMessage<TariDanPayload, CommsPublicKey>) -> Self {
         match msg {
             DanMessage::HotStuffMessage(hot_stuff_msg) => Self {
-                message: Some(proto::network::dan_message::Message::HotStuff(hot_stuff_msg.into())),
+                message: Some(proto::network::dan_message::Message::HotStuff((*hot_stuff_msg).into())),
             },
             DanMessage::VoteMessage(vote_msg) => Self {
                 message: Some(proto::network::dan_message::Message::Vote(vote_msg.into())),
@@ -61,7 +61,9 @@ impl TryFrom<proto::network::DanMessage> for DanMessage<TariDanPayload, CommsPub
     fn try_from(value: proto::network::DanMessage) -> Result<Self, Self::Error> {
         let msg_type = value.message.ok_or_else(|| anyhow!("Message type not provided"))?;
         match msg_type {
-            proto::network::dan_message::Message::HotStuff(msg) => Ok(DanMessage::HotStuffMessage(msg.try_into()?)),
+            proto::network::dan_message::Message::HotStuff(msg) => {
+                Ok(DanMessage::HotStuffMessage(Box::new(msg.try_into()?)))
+            },
             proto::network::dan_message::Message::Vote(msg) => Ok(DanMessage::VoteMessage(msg.try_into()?)),
             proto::network::dan_message::Message::NewTransaction(msg) => {
                 Ok(DanMessage::NewTransaction(msg.try_into()?))

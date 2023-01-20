@@ -27,8 +27,8 @@ pub use quorum_certificate::{QuorumCertificate, QuorumDecision, QuorumRejectReas
 mod node_height;
 pub use node_height::NodeHeight;
 
-mod shard_vote;
-pub use shard_vote::ShardPledge;
+mod shard_pledge;
+pub use shard_pledge::{ShardPledge, ShardPledgeCollection};
 
 mod tree_node_hash;
 pub use tree_node_hash::TreeNodeHash;

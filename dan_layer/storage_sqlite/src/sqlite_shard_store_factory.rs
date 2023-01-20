@@ -57,6 +57,7 @@ use tari_dan_core::{
         HotStuffTreeNode,
         LeafNode,
         Payload,
+        PayloadResult,
         RecentTransaction,
         SQLSubstate,
         SQLTransaction,
@@ -69,7 +70,7 @@ use tari_dan_core::{
     },
 };
 use tari_dan_engine::transaction::{Transaction, TransactionMeta};
-use tari_engine_types::{commit_result::FinalizeResult, instruction::Instruction, signature::InstructionSignature};
+use tari_engine_types::{instruction::Instruction, signature::InstructionSignature};
 use tari_utilities::{
     hex::{to_hex, Hex},
     ByteArray,
@@ -353,16 +354,16 @@ impl ShardStoreReadTransaction<PublicKey, TariDanPayload> for SqliteShardStoreRe
         let mut tari_dan_payload = TariDanPayload::new(transaction);
 
         // deserialize the transaction result
-        let result_field: Option<FinalizeResult> = match payload.result {
+        let result_field: Option<PayloadResult> = match payload.result {
             Some(result_json) => {
-                let result: FinalizeResult =
+                let result: PayloadResult =
                     serde_json::from_str(&result_json).map_err(|_| StorageError::DecodingError)?;
                 Some(result)
             },
             None => None,
         };
         if let Some(result) = result_field {
-            tari_dan_payload.set_result(result);
+            tari_dan_payload.set_result(result.finalize_result);
         }
 
         Ok(tari_dan_payload)
@@ -658,7 +659,7 @@ impl ShardStoreReadTransaction<PublicKey, TariDanPayload> for SqliteShardStoreRe
             .collect())
     }
 
-    fn get_payload_result(&self, payload_id: &PayloadId) -> Result<FinalizeResult, StorageError> {
+    fn get_payload_result(&self, payload_id: &PayloadId) -> Result<PayloadResult, StorageError> {
         use crate::schema::{payloads, payloads::dsl};
 
         let maybe_payload: Option<SqlPayload> = dsl::payloads
@@ -756,11 +757,15 @@ impl<'a> SqliteShardStoreWriteTransaction<'a> {
         }
     }
 
+    pub fn connection(&self) -> &SqliteConnection {
+        self.transaction.connection()
+    }
+
     fn create_pledge(&mut self, shard: ShardId, obj: DbShardPledge) -> Result<ObjectPledge, StorageError> {
         use crate::schema::substates;
         let current_state: Option<Substate> = substates::table
             .filter(substates::shard_id.eq(shard.as_bytes()))
-            .first(self.transaction.connection())
+            .first(self.connection())
             .optional()
             .map_err(|e| StorageError::QueryError {
                 reason: format!("Create object pledge error: {}", e),
@@ -822,7 +827,7 @@ impl ShardStoreWriteTransaction<PublicKey, TariDanPayload> for SqliteShardStoreW
         };
         match diesel::insert_into(high_qcs::table)
             .values(&new_row)
-            .execute(self.transaction.connection())
+            .execute(self.connection())
         {
             Ok(_) => Ok(()),
             // (shard_id, payload_id, height) is a unique index
@@ -835,7 +840,7 @@ impl ShardStoreWriteTransaction<PublicKey, TariDanPayload> for SqliteShardStoreW
             //     //         high_qcs::qc_json.eq(new_row.qc_json),
             //     //         high_qcs::identity.eq(new_row.identity),
             //     //     ))
-            //     //     .execute(self.transaction.connection())
+            //     //     .execute(self.connection())
             //     //     .map_err(|e| StorageError::QueryError {
             //     //         reason: format!("Update high QC: {}", e),
             //     //     })?;
@@ -886,7 +891,7 @@ impl ShardStoreWriteTransaction<PublicKey, TariDanPayload> for SqliteShardStoreW
 
         match diesel::insert_into(payloads::table)
             .values(&new_row)
-            .execute(self.transaction.connection())
+            .execute(self.connection())
         {
             Ok(_) => {},
             Err(err) => {
@@ -923,7 +928,7 @@ impl ShardStoreWriteTransaction<PublicKey, TariDanPayload> for SqliteShardStoreW
             .filter(leaf_nodes::shard_id.eq(shard_id.as_bytes()))
             .filter(leaf_nodes::payload_id.eq(payload_id.as_bytes()))
             .order_by(leaf_nodes::node_height.desc())
-            .first(self.transaction.connection())
+            .first(self.connection())
             .optional()
             .map_err(|e| StorageError::QueryError {
                 reason: format!("Get leaf node: {}", e),
@@ -940,7 +945,7 @@ impl ShardStoreWriteTransaction<PublicKey, TariDanPayload> for SqliteShardStoreW
                         leaf_nodes::payload_id.eq(payload_id.as_bytes()),
                     ))
                     .filter(leaf_nodes::id.eq(leaf_node.id))
-                    .execute(self.transaction.connection())
+                    .execute(self.connection())
                     .map_err(|e| StorageError::QueryError {
                         reason: format!("Update leaf node: {}", e),
                     })?;
@@ -958,7 +963,7 @@ impl ShardStoreWriteTransaction<PublicKey, TariDanPayload> for SqliteShardStoreW
                 // of possibly updating an existing row
                 diesel::insert_into(leaf_nodes::table)
                     .values(&new_row)
-                    .execute(self.transaction.connection())
+                    .execute(self.connection())
                     .map_err(|e| StorageError::QueryError {
                         reason: format!("Update leaf node error: {}", e),
                     })?;
@@ -1002,7 +1007,7 @@ impl ShardStoreWriteTransaction<PublicKey, TariDanPayload> for SqliteShardStoreW
 
         match diesel::insert_into(nodes::dsl::nodes)
             .values(&new_row)
-            .execute(self.transaction.connection())
+            .execute(self.connection())
         {
             Ok(_) => {},
             Err(err) => match err {
@@ -1041,7 +1046,7 @@ impl ShardStoreWriteTransaction<PublicKey, TariDanPayload> for SqliteShardStoreW
 
         diesel::insert_into(lock_node_and_heights::table)
             .values(&new_row)
-            .execute(self.transaction.connection())
+            .execute(self.connection())
             .map_err(|e| StorageError::QueryError {
                 reason: format!("Set locked error: {}", e),
             })?;
@@ -1064,7 +1069,7 @@ impl ShardStoreWriteTransaction<PublicKey, TariDanPayload> for SqliteShardStoreW
 
         diesel::insert_into(last_executed_heights::table)
             .values(&new_row)
-            .execute(self.transaction.connection())
+            .execute(self.connection())
             .map_err(|e| StorageError::QueryError {
                 reason: format!("Set last executed height error: {}", e),
             })?;
@@ -1080,7 +1085,7 @@ impl ShardStoreWriteTransaction<PublicKey, TariDanPayload> for SqliteShardStoreW
 
         let current_state = substates::table
             .filter(substates::shard_id.eq(node.shard().as_bytes()))
-            .first::<Substate>(self.transaction.connection())
+            .first::<Substate>(self.connection())
             .optional()
             .map_err(|e| StorageError::QueryError {
                 reason: format!("Save substate changes error. Could not retrieve current state: {}", e),
@@ -1112,7 +1117,7 @@ impl ShardStoreWriteTransaction<PublicKey, TariDanPayload> for SqliteShardStoreW
                     };
                     diesel::insert_into(substates::table)
                         .values(&new_row)
-                        .execute(self.transaction.connection())
+                        .execute(self.connection())
                         .map_err(|e| StorageError::QueryError {
                             reason: format!("Save substate changes error. Could not insert new substate: {}", e),
                         })?;
@@ -1135,7 +1140,7 @@ impl ShardStoreWriteTransaction<PublicKey, TariDanPayload> for SqliteShardStoreW
                                 substates::destroyed_node_hash.eq(node.hash().as_bytes()),
                                 substates::destroyed_timestamp.eq(now),
                             ))
-                            .execute(self.transaction.connection())
+                            .execute(self.connection())
                             .map_err(|e| StorageError::QueryError {
                                 reason: format!("Save substate changes error. Could not destroy substate: {}", e),
                             })?;
@@ -1179,7 +1184,7 @@ impl ShardStoreWriteTransaction<PublicKey, TariDanPayload> for SqliteShardStoreW
 
         diesel::insert_into(substates::table)
             .values(&new_row)
-            .execute(self.transaction.connection())
+            .execute(self.connection())
             .map_err(|e| StorageError::QueryError {
                 reason: format!("Insert substates: {}", e),
             })?;
@@ -1203,7 +1208,7 @@ impl ShardStoreWriteTransaction<PublicKey, TariDanPayload> for SqliteShardStoreW
 
         diesel::insert_into(last_voted_heights::table)
             .values(&new_row)
-            .execute(self.transaction.connection())
+            .execute(self.connection())
             .map_err(|e| StorageError::QueryError {
                 reason: format!("Set last voted height: {}", e),
             })?;
@@ -1235,7 +1240,7 @@ impl ShardStoreWriteTransaction<PublicKey, TariDanPayload> for SqliteShardStoreW
 
         match diesel::insert_into(leader_proposals::table)
             .values(&new_row)
-            .execute(self.transaction.connection())
+            .execute(self.connection())
         {
             Ok(_) => Ok(()),
             Err(e) => match e {
@@ -1271,7 +1276,7 @@ impl ShardStoreWriteTransaction<PublicKey, TariDanPayload> for SqliteShardStoreW
 
         diesel::insert_into(received_votes::table)
             .values(&new_row)
-            .execute(self.transaction.connection())
+            .execute(self.connection())
             .map_err(|e| StorageError::QueryError {
                 reason: format!("Save received voted for: {}", e),
             })?;
@@ -1280,9 +1285,9 @@ impl ShardStoreWriteTransaction<PublicKey, TariDanPayload> for SqliteShardStoreW
     }
 
     fn update_payload_result(
-        &self,
+        &mut self,
         requested_payload_id: &PayloadId,
-        result: FinalizeResult,
+        result: PayloadResult,
     ) -> Result<(), StorageError> {
         use crate::schema::payloads;
 
@@ -1291,7 +1296,7 @@ impl ShardStoreWriteTransaction<PublicKey, TariDanPayload> for SqliteShardStoreW
         diesel::update(payloads::table)
             .filter(payloads::payload_id.eq(requested_payload_id.as_bytes()))
             .set(payloads::result.eq(result_json))
-            .execute(self.transaction.connection())
+            .execute(self.connection())
             .map_err(|source| SqliteStorageError::DieselError {
                 source,
                 operation: "update_payload_result".to_string(),
@@ -1314,7 +1319,7 @@ impl ShardStoreWriteTransaction<PublicKey, TariDanPayload> for SqliteShardStoreW
             .filter(shard_pledges::shard_id.eq(shard.as_bytes()))
             .filter(shard_pledges::is_active.eq(true))
             .order_by(shard_pledges::created_height.desc())
-            .first(self.transaction.connection())
+            .first(self.connection())
             .optional()
             .map_err(|e| StorageError::QueryError {
                 reason: format!("Pledge object error: {}", e),
@@ -1345,7 +1350,7 @@ impl ShardStoreWriteTransaction<PublicKey, TariDanPayload> for SqliteShardStoreW
         };
         let num_affected = diesel::insert_into(shard_pledges::table)
             .values(new_row)
-            .execute(self.transaction.connection())
+            .execute(self.connection())
             .map_err(|e| StorageError::QueryError {
                 reason: format!("Pledge insert error: {}", e),
             })?;
@@ -1364,7 +1369,7 @@ impl ShardStoreWriteTransaction<PublicKey, TariDanPayload> for SqliteShardStoreW
                     .and(shard_pledges::pledged_to_payload_id.eq(payload.as_bytes())),
             )
             .order_by(shard_pledges::id.desc())
-            .first(self.transaction.connection())
+            .first(self.connection())
             .map_err(|e| StorageError::QueryError {
                 reason: format!("Pledge object error: {}", e),
             })?;
@@ -1373,7 +1378,7 @@ impl ShardStoreWriteTransaction<PublicKey, TariDanPayload> for SqliteShardStoreW
     }
 
     fn complete_pledges(
-        &self,
+        &mut self,
         shard: ShardId,
         payload: PayloadId,
         node_hash: &TreeNodeHash,
@@ -1388,7 +1393,7 @@ impl ShardStoreWriteTransaction<PublicKey, TariDanPayload> for SqliteShardStoreW
                 shard_pledges::completed_by_tree_node_hash.eq(node_hash.as_bytes()),
                 shard_pledges::updated_timestamp.eq(now),
             ))
-            .execute(self.transaction.connection())
+            .execute(self.connection())
             .map_err(|e| StorageError::QueryError {
                 reason: format!("Complete pledges: {}", e),
             })?;
@@ -1404,7 +1409,7 @@ impl ShardStoreWriteTransaction<PublicKey, TariDanPayload> for SqliteShardStoreW
     }
 
     fn abandon_pledges(
-        &self,
+        &mut self,
         shard: ShardId,
         payload_id: PayloadId,
         node_hash: &TreeNodeHash,
@@ -1419,16 +1424,15 @@ impl ShardStoreWriteTransaction<PublicKey, TariDanPayload> for SqliteShardStoreW
                 shard_pledges::abandoned_by_tree_node_hash.eq(node_hash.as_bytes()),
                 shard_pledges::updated_timestamp.eq(now),
             ))
-            .execute(self.transaction.connection())
+            .execute(self.connection())
             .map_err(|e| StorageError::QueryError {
-                reason: format!("Complete pledges: {}", e),
+                reason: format!("Abandon pledges: {}", e),
             })?;
+
         if rows_affected == 0 {
-            return Err(StorageError::QueryError {
-                reason: format!(
-                    "Abandon pledges: No pledges found to abandon for shard {}, payload_id: {}, is_active: true",
-                    shard, payload_id
-                ),
+            return Err(StorageError::NotFound {
+                item: "Abandon pledges".to_string(),
+                key: format!("payload={}, shard={}", payload_id, shard),
             });
         }
         Ok(())
