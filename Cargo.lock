@@ -6375,6 +6375,7 @@ dependencies = [
  "tari_template_builtin",
  "tari_template_lib",
  "tari_test_utils",
+ "tari_transaction_manifest",
  "tari_validator_node_cli",
  "tari_validator_node_client",
  "tari_wallet",
