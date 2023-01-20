@@ -76,6 +76,10 @@ pub enum HotStuffError {
         pledged_payload: PayloadId,
         expected: PayloadId,
     },
+    #[error("Invalid Pacemaker Status")]
+    InvalidPacemakerStatus,
+    #[error("Invalid Leader Round")]
+    InvalidLeaderRound,
 }
 
 impl<T> From<mpsc::error::SendError<T>> for HotStuffError {

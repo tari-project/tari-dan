@@ -20,10 +20,21 @@
 // WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 // USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-// mod state_sync;
-// pub use state_sync::StateSyncError;
+use tari_dan_common_types::{PayloadId, ShardId};
 
-pub mod events;
-pub mod hotstuff_error;
-pub mod hotstuff_waiter;
-pub mod pacemaker_worker;
+use crate::{models::HotstuffPhase, workers::hotstuff_error::HotStuffError};
+
+pub type WaitOver = (PayloadId, ShardId, HotstuffPhase);
+
+#[derive(Debug, Clone)]
+pub enum PacemakerSignal {
+    StartWait(WaitOver),
+    StopWait(WaitOver),
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum PacemakerWaitStatus {
+    OnWait,
+    ShutDown,
+    WaitTimeOut,
+}
