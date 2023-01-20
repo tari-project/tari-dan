@@ -57,6 +57,7 @@ use tari_dan_core::{
         HotStuffTreeNode,
         LeafNode,
         Payload,
+        PayloadResult,
         RecentTransaction,
         SQLSubstate,
         SQLTransaction,
@@ -69,7 +70,7 @@ use tari_dan_core::{
     },
 };
 use tari_dan_engine::transaction::{Transaction, TransactionMeta};
-use tari_engine_types::{commit_result::FinalizeResult, instruction::Instruction, signature::InstructionSignature};
+use tari_engine_types::{instruction::Instruction, signature::InstructionSignature};
 use tari_utilities::{
     hex::{to_hex, Hex},
     ByteArray,
@@ -353,16 +354,16 @@ impl ShardStoreReadTransaction<PublicKey, TariDanPayload> for SqliteShardStoreRe
         let mut tari_dan_payload = TariDanPayload::new(transaction);
 
         // deserialize the transaction result
-        let result_field: Option<FinalizeResult> = match payload.result {
+        let result_field: Option<PayloadResult> = match payload.result {
             Some(result_json) => {
-                let result: FinalizeResult =
+                let result: PayloadResult =
                     serde_json::from_str(&result_json).map_err(|_| StorageError::DecodingError)?;
                 Some(result)
             },
             None => None,
         };
         if let Some(result) = result_field {
-            tari_dan_payload.set_result(result);
+            tari_dan_payload.set_result(result.finalize_result);
         }
 
         Ok(tari_dan_payload)
@@ -658,7 +659,7 @@ impl ShardStoreReadTransaction<PublicKey, TariDanPayload> for SqliteShardStoreRe
             .collect())
     }
 
-    fn get_payload_result(&self, payload_id: &PayloadId) -> Result<FinalizeResult, StorageError> {
+    fn get_payload_result(&self, payload_id: &PayloadId) -> Result<PayloadResult, StorageError> {
         use crate::schema::{payloads, payloads::dsl};
 
         let maybe_payload: Option<SqlPayload> = dsl::payloads
@@ -1286,7 +1287,7 @@ impl ShardStoreWriteTransaction<PublicKey, TariDanPayload> for SqliteShardStoreW
     fn update_payload_result(
         &mut self,
         requested_payload_id: &PayloadId,
-        result: FinalizeResult,
+        result: PayloadResult,
     ) -> Result<(), StorageError> {
         use crate::schema::payloads;
 

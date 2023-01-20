@@ -29,7 +29,7 @@ use std::{
 use anyhow::anyhow;
 use clap::{Args, Subcommand};
 use tari_common_types::types::FixedHash;
-use tari_dan_common_types::ShardId;
+use tari_dan_common_types::{ShardId, SubstateChange};
 use tari_dan_engine::transaction::Transaction;
 use tari_engine_types::{
     commit_result::{FinalizeResult, TransactionResult},
@@ -266,17 +266,12 @@ pub async fn submit_transaction(
         println!("No inputs or outputs. This transaction will not be processed by the network.");
         return Ok(None);
     }
-    println!("Request:");
-    println!("{}", serde_json::to_string_pretty(&request).unwrap());
     println!();
-
-    println!("🌟 Submitting instructions:");
-    for instruction in &request.instructions {
-        println!("- {}", instruction);
-    }
-    println!();
-
     println!("✅ Transaction {} submitted.", transaction.hash());
+    println!();
+    summarize_request(&request);
+    println!();
+
     let timer = Instant::now();
     if common.wait_for_result {
         println!("⏳️ Waiting for transaction result...");
@@ -292,6 +287,47 @@ pub async fn submit_transaction(
         summarize(result, timer.elapsed());
     }
     Ok(Some(resp))
+}
+
+fn summarize_request(request: &SubmitTransactionRequest) {
+    if request.is_dry_run {
+        println!("NOTE: Dry run is enabled. This transaction will not be processed by the network.");
+        println!();
+    }
+    println!("Fee: {}", request.fee);
+    println!("Inputs:");
+    let mut iter = request
+        .inputs
+        .iter()
+        .filter(|(_, change)| *change == SubstateChange::Destroy)
+        .peekable();
+    if iter.peek().is_none() {
+        println!("  None");
+    } else {
+        for (shard_id, change) in iter {
+            println!("- {}: {}", shard_id, change);
+        }
+    }
+    println!();
+    println!("Outputs:");
+    let mut iter = request
+        .inputs
+        .iter()
+        .filter(|(_, change)| *change == SubstateChange::Create)
+        .peekable();
+    if iter.peek().is_none() {
+        println!("  None");
+    } else {
+        for (shard_id, change) in iter {
+            println!("- {}: {}", shard_id, change);
+        }
+    }
+    println!();
+    println!("🌟 Submitting instructions:");
+    for instruction in &request.instructions {
+        println!("- {}", instruction);
+    }
+    println!();
 }
 
 #[allow(clippy::too_many_lines)]

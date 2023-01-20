@@ -29,7 +29,7 @@ use tari_dan_common_types::{
     QuorumDecision,
     QuorumRejectReason,
     ShardId,
-    ShardPledge,
+    ShardPledgeCollection,
     TreeNodeHash,
     ValidatorMetadata,
 };
@@ -41,27 +41,29 @@ use crate::{services::SigningService, workers::hotstuff_error::HotStuffError, Ta
 pub struct VoteMessage {
     local_node_hash: TreeNodeHash,
     decision: QuorumDecision,
-    all_shard_pledge: Vec<ShardPledge>,
+    all_shard_pledges: ShardPledgeCollection,
     validator_metadata: Option<ValidatorMetadata>,
 }
 
 impl VoteMessage {
-    pub fn new(local_node_hash: TreeNodeHash, decision: QuorumDecision, mut shard_pledges: Vec<ShardPledge>) -> Self {
-        shard_pledges.sort_by(|a, b| a.shard_id.cmp(&b.shard_id));
-
+    pub fn new(local_node_hash: TreeNodeHash, decision: QuorumDecision, shard_pledges: ShardPledgeCollection) -> Self {
         Self {
             local_node_hash,
             decision,
-            all_shard_pledge: shard_pledges,
+            all_shard_pledges: shard_pledges,
             validator_metadata: None,
         }
     }
 
-    pub fn accept(local_node_hash: TreeNodeHash, shard_pledges: Vec<ShardPledge>) -> Self {
+    pub fn accept(local_node_hash: TreeNodeHash, shard_pledges: ShardPledgeCollection) -> Self {
         Self::new(local_node_hash, QuorumDecision::Accept, shard_pledges)
     }
 
-    pub fn reject(local_node_hash: TreeNodeHash, shard_pledges: Vec<ShardPledge>, reason: QuorumRejectReason) -> Self {
+    pub fn reject(
+        local_node_hash: TreeNodeHash,
+        shard_pledges: ShardPledgeCollection,
+        reason: QuorumRejectReason,
+    ) -> Self {
         let decision = QuorumDecision::Reject(reason);
         Self::new(local_node_hash, decision, shard_pledges)
     }
@@ -69,15 +71,13 @@ impl VoteMessage {
     pub fn with_validator_metadata(
         local_node_hash: TreeNodeHash,
         decision: QuorumDecision,
-        mut all_shard_pledges: Vec<ShardPledge>,
+        all_shard_pledges: ShardPledgeCollection,
         validator_metadata: ValidatorMetadata,
     ) -> Self {
-        all_shard_pledges.sort_by(|a, b| a.shard_id.cmp(&b.shard_id));
-
         Self {
             local_node_hash,
             decision,
-            all_shard_pledge: all_shard_pledges,
+            all_shard_pledges,
             validator_metadata: Some(validator_metadata),
         }
     }
@@ -147,7 +147,7 @@ impl VoteMessage {
         self.decision
     }
 
-    pub fn all_shard_pledges(&self) -> &[ShardPledge] {
-        &self.all_shard_pledge
+    pub fn all_shard_pledges(&self) -> &ShardPledgeCollection {
+        &self.all_shard_pledges
     }
 }

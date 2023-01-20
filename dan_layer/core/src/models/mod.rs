@@ -51,7 +51,7 @@ pub use hot_stuff_message::HotStuffMessage;
 pub use hot_stuff_tree_node::{HotStuffTreeNode, HotstuffPhase};
 pub use leaf_node::LeafNode;
 pub use node::Node;
-pub use payload::Payload;
+pub use payload::{Payload, PayloadResult};
 pub use sidechain_metadata::SidechainMetadata;
 pub use substate_shard_data::SubstateShardData;
 use tari_dan_common_types::{NodeHeight, TreeNodeHash};
