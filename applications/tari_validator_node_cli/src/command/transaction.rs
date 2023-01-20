@@ -199,7 +199,7 @@ async fn handle_submit_manifest(
     submit_transaction(instructions, args.common, base_dir, client).await
 }
 
-async fn submit_transaction(
+pub async fn submit_transaction(
     instructions: Vec<Instruction>,
     common: CommonSubmitArgs,
     base_dir: impl AsRef<Path>,

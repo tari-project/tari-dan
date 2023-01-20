@@ -31,10 +31,23 @@ Feature: Fungible tokens
     When I create a DAN wallet
 
     # Create a new Faucet component
-    When I create a component FAUCET of template "faucet" on VN using "mint" with inputs "10000"
+    When I create a component FAUCET of template "faucet" on VN using "mint" with inputs "10000" and 3 outputs
 
     # Create two accounts to test sending the tokens
     When I create an account ACC_1 on VN
-    When I create an account ACC_2 on VN
+    # When I create an account ACC_2 on VN
     
+    # Submit a transaction manifest
+    When I submit a transaction manifest on VN with 4 outputs
+        ```
+        use template_faucet as TestFaucet;
+        use template_0000000000000000000000000000000000000000000000000000000000000000 as Account;
 
+        fn main() {
+            let mut acc = Account::new();
+            let faucet = global!["FAUCET"];
+            let mut account = global!["ACC_1"];
+            let funds = faucet.take_free_coins();
+            account.deposit(funds);
+        }
+        ```

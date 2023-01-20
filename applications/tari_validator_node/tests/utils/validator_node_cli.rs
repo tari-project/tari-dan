@@ -1,17 +1,19 @@
 //  Copyright 2022 The Tari Project
 //  SPDX-License-Identifier: BSD-3-Clause
 
-use std::{path::PathBuf, str::FromStr};
+use std::{path::PathBuf, str::FromStr, collections::HashMap};
 
+use tari_engine_types::substate::SubstateAddress;
 use tari_template_lib::{
     models::{ComponentAddress, TemplateAddress},
     Hash,
 };
+use tari_transaction_manifest::parse_manifest;
 use tari_validator_node_cli::{
     account_manager::AccountFileManager,
     command::{
         handle_submit,
-        transaction::{CliArg, CliInstruction, CommonSubmitArgs, SubmitArgs},
+        transaction::{CliArg, CliInstruction, CommonSubmitArgs, SubmitArgs, SubmitManifestArgs, submit_transaction}, manifest,
     },
     from_hex::FromHex,
 };
@@ -69,6 +71,7 @@ pub async fn create_component(
     vn_name: String,
     function_call: String,
     args: Vec<String>,
+    num_outputs: u64,
 ) {
     let data_dir = get_cli_data_dir(world);
 
@@ -79,12 +82,19 @@ pub async fn create_component(
         function_name: function_call,
         args,
     };
+
+    let num_outputs = if num_outputs == 0 {
+        None
+    } else {
+        Some(num_outputs as u8)
+    };
+
     let args = SubmitArgs {
         instruction,
         common: CommonSubmitArgs {
             wait_for_result: true,
             wait_for_result_timeout: Some(60),
-            num_outputs: Some(3),
+            num_outputs,
             inputs: vec![],
             version: None,
             dump_outputs_into: None,
@@ -139,6 +149,40 @@ pub async fn call_method(
     };
     let mut client = get_validator_node_client(world, vn_name).await;
     handle_submit(args, data_dir, &mut client).await.unwrap().unwrap()
+}
+
+pub async fn submit_manifest(world: &mut TariWorld, vn_name: String, manifest_content: String, num_outputs: u64) {
+    // generate globals for components addresses
+    let mut globals = HashMap::new();
+    for component in &world.components {
+        let name = component.0.to_string();
+        let component_address_hash = component.1;
+        let substate_address = SubstateAddress::Component(ComponentAddress::new(*component_address_hash)).into();
+        globals.insert(name, substate_address);
+    }
+    
+    // parse the manifest
+    let instructions = parse_manifest(&manifest_content, globals).unwrap();
+
+    // submit the instructions to the vn
+    let mut client = get_validator_node_client(world, vn_name).await;
+    let data_dir = get_cli_data_dir(world);
+    let num_outputs = if num_outputs == 0 {
+        None
+    } else {
+        Some(num_outputs as u8)
+    };
+    let args = CommonSubmitArgs {
+        wait_for_result: true,
+        wait_for_result_timeout: Some(60),
+        num_outputs,
+        inputs: vec![],
+        version: None,
+        dump_outputs_into: None,
+        account_template_address: None,
+        dry_run: false,
+    };
+    submit_transaction(instructions, args, data_dir, &mut client).await.unwrap();
 }
 
 async fn get_validator_node_client(world: &TariWorld, validator_node_name: String) -> ValidatorNodeClient {
