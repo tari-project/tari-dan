@@ -35,28 +35,28 @@ use tari_dan_engine::crypto::create_key_pair;
 use tari_utilities::hex::Hex;
 
 #[derive(Debug)]
-pub struct AccountFileManager {
-    pub accounts_path: PathBuf,
+pub struct KeyManager {
+    pub keys_path: PathBuf,
 }
 
-impl AccountFileManager {
-    pub fn init(base_path: PathBuf) -> anyhow::Result<Self> {
-        let accounts_path = base_path.join("accounts");
-        fs::create_dir_all(&accounts_path)?;
-        Ok(Self { accounts_path })
+impl KeyManager {
+    pub fn init<P: AsRef<Path>>(base_path: P) -> anyhow::Result<Self> {
+        let keys_path = base_path.as_ref().join("keys");
+        fs::create_dir_all(&keys_path)?;
+        Ok(Self { keys_path })
     }
 
-    pub fn create_account(&self) -> anyhow::Result<Account> {
+    pub fn create(&self) -> anyhow::Result<KeyPair> {
         let (k, p) = create_key_pair();
         let is_active = self.count() == 0;
         fs::write(
-            self.accounts_path.join(format!("{}.json", p)),
+            self.keys_path.join(format!("{}.json", p)),
             json!({"key": k.to_hex()}).to_string(),
         )?;
         if is_active {
-            self.set_active_account(&p.to_hex())?;
+            self.set_active_key(&p.to_hex())?;
         }
-        Ok(Account {
+        Ok(KeyPair {
             secret_key: k,
             public_key: p,
             is_active,
@@ -64,59 +64,56 @@ impl AccountFileManager {
     }
 
     pub fn count(&self) -> usize {
-        match fs::read_dir(&self.accounts_path) {
+        match fs::read_dir(&self.keys_path) {
             Ok(r) => r.count(),
             Err(_) => 0,
         }
     }
 
-    pub fn all(&self) -> Vec<Account> {
-        let active_account = read_active_account(&self.accounts_path);
-        let dir = match fs::read_dir(&self.accounts_path) {
+    pub fn all(&self) -> Vec<KeyPair> {
+        let active_key = read_active_key(&self.keys_path);
+        let dir = match fs::read_dir(&self.keys_path) {
             Ok(r) => r,
             Err(_) => return vec![],
         };
         dir.filter_map(|entry| {
             let entry = entry.ok()?;
-            let key = read_account_key(entry.path()).ok()?;
+            let key = read_key(entry.path()).ok()?;
             let public_key = PublicKey::from_secret_key(&key);
-            Some(Account {
+            Some(KeyPair {
                 secret_key: key,
-                is_active: active_account
-                    .as_ref()
-                    .map(|a| a.public_key == public_key)
-                    .unwrap_or(false),
+                is_active: active_key.as_ref().map(|a| a.public_key == public_key).unwrap_or(false),
                 public_key,
             })
         })
         .collect()
     }
 
-    pub fn get_active_account(&self) -> Option<Account> {
-        read_active_account(&self.accounts_path)
+    pub fn get_active_key(&self) -> Option<KeyPair> {
+        read_active_key(&self.keys_path)
     }
 
-    pub fn set_active_account(&self, name: &str) -> anyhow::Result<()> {
-        if !self.accounts_path.join(format!("{}.json", name)).exists() {
-            return Err(anyhow!("Account does not exist"));
+    pub fn set_active_key(&self, name: &str) -> anyhow::Result<()> {
+        if !self.keys_path.join(format!("{}.json", name)).exists() {
+            return Err(anyhow!("Key does not exist"));
         }
-        fs::write(self.accounts_path.join("active_account"), name)?;
+        fs::write(self.keys_path.join("active_key"), name)?;
         Ok(())
     }
 }
 
-fn read_active_account<P: AsRef<Path>>(base_dir: P) -> Option<Account> {
-    let active_account = fs::read_to_string(base_dir.as_ref().join("active_account")).ok()?;
-    read_account_key(base_dir.as_ref().join(format!("{}.json", active_account)))
+fn read_active_key<P: AsRef<Path>>(base_dir: P) -> Option<KeyPair> {
+    let active_key = fs::read_to_string(base_dir.as_ref().join("active_key")).ok()?;
+    read_key(base_dir.as_ref().join(format!("{}.json", active_key)))
         .ok()
-        .map(|key| Account {
+        .map(|key| KeyPair {
             public_key: PublicKey::from_secret_key(&key),
             secret_key: key,
             is_active: true,
         })
 }
 
-fn read_account_key<P: AsRef<Path>>(path: P) -> anyhow::Result<PrivateKey> {
+fn read_key<P: AsRef<Path>>(path: P) -> anyhow::Result<PrivateKey> {
     let file = fs::read_to_string(path)?;
     let val = json::from_str::<json::Value>(&file)?;
     let key = val
@@ -127,13 +124,13 @@ fn read_account_key<P: AsRef<Path>>(path: P) -> anyhow::Result<PrivateKey> {
 }
 
 #[derive(Debug, Clone)]
-pub struct Account {
+pub struct KeyPair {
     pub secret_key: PrivateKey,
     pub public_key: PublicKey,
     pub is_active: bool,
 }
 
-impl Display for Account {
+impl Display for KeyPair {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", self.public_key.to_hex())
     }

@@ -24,10 +24,10 @@ use std::path::Path;
 
 use clap::Subcommand;
 
-use crate::account_manager::AccountFileManager;
+use crate::key_manager::KeyManager;
 
 #[derive(Debug, Subcommand, Clone)]
-pub enum AccountsSubcommand {
+pub enum KeysSubcommand {
     #[clap(alias = "create")]
     New,
     List,
@@ -36,30 +36,30 @@ pub enum AccountsSubcommand {
     },
 }
 
-impl AccountsSubcommand {
+impl KeysSubcommand {
     pub async fn handle<P: AsRef<Path>>(self, base_dir: P) -> anyhow::Result<()> {
-        let account_manager = AccountFileManager::init(base_dir.as_ref().to_path_buf())?;
+        let key_manager = KeyManager::init(base_dir)?;
 
         #[allow(clippy::enum_glob_use)]
-        use AccountsSubcommand::*;
+        use KeysSubcommand::*;
         match self {
             New => {
-                let account = account_manager.create_account()?;
-                println!("New account {} created", account);
+                let key = key_manager.create()?;
+                println!("New key pair {} created", key);
             },
             List => {
-                println!("Accounts:");
-                for (i, account) in account_manager.all().into_iter().enumerate() {
-                    if account.is_active {
-                        println!("{}. {} (active)", i, account);
+                println!("Key pairs:");
+                for (i, key) in key_manager.all().into_iter().enumerate() {
+                    if key.is_active {
+                        println!("{}. {} (active)", i, key);
                     } else {
-                        println!("{}. {}", i, account);
+                        println!("{}. {}", i, key);
                     }
                 }
             },
             Use { name } => {
-                account_manager.set_active_account(&name)?;
-                println!("Account {} is now active", name);
+                key_manager.set_active_key(&name)?;
+                println!("Key {} is now active", name);
             },
         }
         Ok(())

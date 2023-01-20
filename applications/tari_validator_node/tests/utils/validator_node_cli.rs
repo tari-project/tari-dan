@@ -10,12 +10,12 @@ use tari_template_lib::{
 };
 use tari_transaction_manifest::parse_manifest;
 use tari_validator_node_cli::{
-    account_manager::AccountFileManager,
     command::{
         handle_submit,
         transaction::{submit_transaction, CliArg, CliInstruction, CommonSubmitArgs, SubmitArgs},
     },
     from_hex::FromHex,
+    key_manager::KeyManager,
 };
 use tari_validator_node_client::{types::SubmitTransactionResponse, ValidatorNodeClient};
 use tempfile::tempdir;
@@ -28,8 +28,8 @@ pub async fn create_dan_wallet(world: &mut TariWorld) {
 
     // initialize the account public/private keys
     let path = PathBuf::from(data_dir);
-    let account_manager = AccountFileManager::init(path).unwrap();
-    account_manager.create_account().unwrap();
+    let account_manager = KeyManager::init(path).unwrap();
+    account_manager.create().unwrap();
 }
 
 pub async fn create_account(world: &mut TariWorld, account_name: String, validator_node_name: String) {
