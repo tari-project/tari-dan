@@ -69,8 +69,9 @@ where TTemplateProvider: TemplateProvider
         let state_db = create_populated_state_store(pledges.into_values())?;
         template_addresses.extend(load_template_addresses_for_components(&state_db, &components)?);
 
+        // Execution will fail if more than the max addresses are created
         // let id_provider = IdProvider::new(*transaction.hash(), transaction.meta().max_outputs());
-        // The consensus will fail if not enough ids are pledged
+        // Execution will fail if more than 64 new addresses are created
         let id_provider = IdProvider::new(*transaction.hash(), 64);
         let tracker = StateTracker::new(state_db, id_provider);
         let runtime = RuntimeInterfaceImpl::new(tracker);
@@ -93,10 +94,10 @@ where TTemplateProvider: TemplateProvider
         let tx_hash = *transaction.hash();
         match processor.execute(transaction) {
             Ok(result) => Ok(result),
-            Err(TransactionError::WasmExecutionError(WasmExecutionError::Panic { message, .. })) => Ok(
-                FinalizeResult::errored(tx_hash, RejectReason::ExecutionFailure(message)),
-            ),
-            Err(err) => Ok(FinalizeResult::errored(
+            Err(TransactionError::WasmExecutionError(WasmExecutionError::Panic { message, .. })) => {
+                Ok(FinalizeResult::reject(tx_hash, RejectReason::ExecutionFailure(message)))
+            },
+            Err(err) => Ok(FinalizeResult::reject(
                 tx_hash,
                 RejectReason::ExecutionFailure(err.to_string()),
             )),

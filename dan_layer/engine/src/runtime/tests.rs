@@ -23,7 +23,6 @@ mod tracker {
         });
         let addr = tracker.new_component("test".to_string(), vec![1, 2, 3]).unwrap();
         let component = tracker.get_component(&addr).unwrap();
-        assert_eq!(component.version, 0);
         assert_eq!(component.module_name, "test");
         assert_eq!(component.state.state, vec![1, 2, 3]);
     }

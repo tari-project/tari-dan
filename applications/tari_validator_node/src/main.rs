@@ -22,7 +22,7 @@
 
 mod cli;
 
-use std::process;
+use std::{panic, process};
 
 use clap::Parser;
 use log::*;
@@ -35,6 +35,14 @@ const LOG_TARGET: &str = "tari::validator_node::app";
 async fn main() {
     // Uncomment to enable tokio tracing via tokio-console
     // console_subscriber::init();
+
+    // Setup a panic hook which prints the default rust panic message but also exits the process. This makes a panic in
+    // any thread "crash" the system instead of silently continuing.
+    let default_hook = panic::take_hook();
+    panic::set_hook(Box::new(move |info| {
+        default_hook(info);
+        process::exit(1);
+    }));
 
     if let Err(err) = main_inner().await {
         let exit_code = err.exit_code;
@@ -53,6 +61,7 @@ async fn main_inner() -> Result<(), ExitError> {
     let cfg = load_configuration(config_path, true, &cli)?;
     let config = ApplicationConfig::load_from(&cfg)?;
     println!("Starting validator node on network {}", config.network);
+
     run_validator_node_with_cli(&config, &cli).await?;
 
     Ok(())

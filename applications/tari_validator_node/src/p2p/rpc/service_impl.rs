@@ -27,7 +27,7 @@ use tari_comms::protocol::rpc::{Request, Response, RpcStatus, Streaming};
 use tari_dan_common_types::{NodeAddressable, ShardId};
 use tari_dan_core::{
     services::PeerProvider,
-    storage::shard_store::{ShardStore, ShardStoreTransaction},
+    storage::shard_store::{ShardStore, ShardStoreReadTransaction},
 };
 use tari_dan_engine::transaction::Transaction;
 use tari_dan_storage_sqlite::sqlite_shard_store_factory::SqliteShardStore;
@@ -157,11 +157,9 @@ where TPeerProvider: PeerProvider + Clone + Send + Sync + 'static
         let shard_db = self.shard_state_store.clone();
 
         task::spawn(async move {
-            let shards_substates_data = shard_db.create_tx().unwrap().get_substate_states_by_range(
-                start_shard_id,
-                end_shard_id,
-                excluded_shards.as_slice(),
-            );
+            let shards_substates_data = shard_db.with_read_tx(|tx| {
+                tx.get_substate_states_by_range(start_shard_id, end_shard_id, excluded_shards.as_slice())
+            });
             let substates = match shards_substates_data {
                 Ok(s) => s,
                 Err(err) => {

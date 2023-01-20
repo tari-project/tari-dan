@@ -29,7 +29,7 @@ use tari_dan_common_types::ShardId;
 use tari_dan_core::{
     models::{SubstateShardData, ValidatorNode},
     services::{epoch_manager::EpochManagerError, ValidatorNodeClientFactory},
-    storage::shard_store::{ShardStore, ShardStoreTransaction},
+    storage::shard_store::{ShardStore, ShardStoreReadTransaction, ShardStoreWriteTransaction},
 };
 
 use crate::{p2p, p2p::services::rpc_client::TariCommsValidatorNodeClientFactory};
@@ -60,7 +60,7 @@ impl<TShardStore: ShardStore> PeerSyncManagerService<TShardStore> {
         vn_shard_key: ShardId,
     ) -> Result<(), EpochManagerError> {
         let inventory = {
-            let shard_db = self.shard_store.create_tx()?;
+            let shard_db = self.shard_store.create_read_tx()?;
             shard_db
                 .get_state_inventory()
                 .map_err(EpochManagerError::StorageError)?
@@ -101,12 +101,10 @@ impl<TShardStore: ShardStore> PeerSyncManagerService<TShardStore> {
                     msg.try_into().map_err(EpochManagerError::InvalidStateSyncData)?;
 
                 // insert response state values in the shard db
-                {
-                    let mut shard_db = self.shard_store.create_tx()?;
-                    shard_db
-                        .insert_substates(substate_shard_data)
-                        .map_err(EpochManagerError::StorageError)?;
-                }
+                self.shard_store.with_write_tx(|tx| {
+                    tx.insert_substates(substate_shard_data)
+                        .map_err(EpochManagerError::StorageError)
+                })?;
 
                 // increase node inventory
                 // inventory.push(sync_vn_shard.into());

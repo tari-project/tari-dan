@@ -172,7 +172,7 @@ impl BaseLayerEpochManager {
             epoch: next_epoch,
         }];
 
-        let tx = self.global_db.create_transaction()?;
+        let mut tx = self.global_db.create_transaction()?;
         self.global_db.validator_nodes(&tx).insert_validator_nodes(new_vns)?;
 
         if registration.public_key() == self.node_identity.public_key() {
@@ -203,7 +203,7 @@ impl BaseLayerEpochManager {
             validator_node_mr: header.validator_node_mr.to_vec(),
         };
 
-        let tx = self.global_db.create_transaction()?;
+        let mut tx = self.global_db.create_transaction()?;
 
         self.global_db.epochs(&tx).insert_epoch(db_epoch)?;
         self.global_db
@@ -219,7 +219,7 @@ impl BaseLayerEpochManager {
         &mut self,
         base_layer_constants: BaseLayerConsensusConstants,
     ) -> Result<(), EpochManagerError> {
-        let tx = self.global_db.create_transaction()?;
+        let mut tx = self.global_db.create_transaction()?;
         self.global_db
             .metadata(&tx)
             .set_metadata(MetadataKey::BaseLayerConsensusConstants, &base_layer_constants)?;
@@ -256,7 +256,7 @@ impl BaseLayerEpochManager {
     }
 
     pub fn update_last_registration_epoch(&self, epoch: Epoch) -> Result<(), EpochManagerError> {
-        let tx = self.global_db.create_transaction()?;
+        let mut tx = self.global_db.create_transaction()?;
         self.global_db
             .metadata(&tx)
             .set_metadata(MetadataKey::LastEpochRegistration, &epoch)?;
@@ -463,7 +463,7 @@ impl BaseLayerEpochManager {
             .sync_peers_state(committee_vns, start_shard_id, end_shard_id, vn_shard_key)
             .await?;
 
-        let tx = self.global_db.create_transaction()?;
+        let mut tx = self.global_db.create_transaction()?;
         self.global_db
             .metadata(&tx)
             .set_metadata(MetadataKey::LastSyncedEpoch, &self.current_epoch)?;

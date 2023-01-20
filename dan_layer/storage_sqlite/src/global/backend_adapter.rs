@@ -83,7 +83,7 @@ impl AtomicDb for SqliteGlobalDbAdapter {
         Ok(tx)
     }
 
-    fn commit(&self, transaction: Self::DbTransaction<'_>) -> Result<(), Self::Error> {
+    fn commit(&self, mut transaction: Self::DbTransaction<'_>) -> Result<(), Self::Error> {
         transaction.commit()
     }
 }

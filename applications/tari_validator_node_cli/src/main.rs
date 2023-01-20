@@ -67,10 +67,12 @@ pub fn multiaddr_to_http_url(multiaddr: Multiaddr) -> anyhow::Result<Url> {
     let mut iter = multiaddr.iter();
     let ip = iter.next().ok_or_else(|| anyhow!("Invalid multiaddr"))?;
     let port = iter.next().ok_or_else(|| anyhow!("Invalid multiaddr"))?;
+    let scheme = iter.next();
 
     let ip = match ip {
         Protocol::Ip4(ip) => ip.to_string(),
         Protocol::Ip6(ip) => ip.to_string(),
+        Protocol::Dns4(ip) | Protocol::Dns(ip) | Protocol::Dnsaddr(ip) | Protocol::Dns6(ip) => ip.to_string(),
         _ => return Err(anyhow!("Invalid multiaddr")),
     };
 
@@ -79,6 +81,13 @@ pub fn multiaddr_to_http_url(multiaddr: Multiaddr) -> anyhow::Result<Url> {
         _ => return Err(anyhow!("Invalid multiaddr")),
     };
 
-    let url = Url::parse(&format!("http://{}:{}", ip, port))?;
+    let scheme = match scheme {
+        Some(Protocol::Http) => "http",
+        Some(Protocol::Https) => "https",
+        None => "http",
+        _ => return Err(anyhow!("Invalid multiaddr")),
+    };
+
+    let url = Url::parse(&format!("{}://{}:{}", scheme, ip, port))?;
     Ok(url)
 }

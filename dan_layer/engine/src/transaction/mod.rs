@@ -77,6 +77,8 @@ impl Transaction {
         s
     }
 
+    /// Returns the template addresses that are statically known to be executed by this transaction.
+    /// This does not include templates for component invocation as that data is not contained within the transaction.
     pub fn required_templates(&self) -> Vec<TemplateAddress> {
         self.instructions
             .iter()

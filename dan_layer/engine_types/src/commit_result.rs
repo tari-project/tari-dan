@@ -43,7 +43,7 @@ impl FinalizeResult {
         }
     }
 
-    pub fn errored(transaction_hash: Hash, reason: RejectReason) -> Self {
+    pub fn reject(transaction_hash: Hash, reason: RejectReason) -> Self {
         Self::new(transaction_hash, Vec::new(), TransactionResult::Reject(reason))
     }
 
@@ -92,6 +92,8 @@ pub enum RejectReason {
     ShardsNotPledged(String),
     ExecutionFailure(String),
     PreviousQcRejection,
+    ShardPledgedToAnotherPayload(String),
+    ShardRejected(String),
 }
 
 impl std::fmt::Display for RejectReason {
@@ -100,6 +102,8 @@ impl std::fmt::Display for RejectReason {
             RejectReason::ShardsNotPledged(msg) => write!(f, "Shards not pledged: {}", msg),
             RejectReason::ExecutionFailure(msg) => write!(f, "Execution failure: {}", msg),
             RejectReason::PreviousQcRejection => write!(f, "Previous QC was a rejection"),
+            RejectReason::ShardPledgedToAnotherPayload(msg) => write!(f, "Shard pledged to another payload: {}", msg),
+            RejectReason::ShardRejected(msg) => write!(f, "Shard was rejected: {}", msg),
         }
     }
 }

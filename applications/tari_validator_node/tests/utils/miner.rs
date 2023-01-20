@@ -147,7 +147,13 @@ fn coinbase_request(template_response: &NewBlockTemplateResponse) -> GetCoinbase
     let fee = miner_data.total_fees;
     let reward = miner_data.reward;
     let height = template.header.as_ref().unwrap().height;
-    GetCoinbaseRequest { reward, fee, height }
+    let extra = vec![];
+    GetCoinbaseRequest {
+        reward,
+        fee,
+        height,
+        extra,
+    }
 }
 
 fn extract_outputs_and_kernels(coinbase: GetCoinbaseResponse) -> (TransactionOutput, TransactionKernel) {

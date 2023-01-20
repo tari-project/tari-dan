@@ -50,13 +50,17 @@ pub async fn run_http_ui_server(address: SocketAddr, json_rpc_address: Option<St
         .fallback(handler);
 
     info!(target: LOG_TARGET, "🌐 HTTP UI started at {}", address);
-    axum::Server::bind(&address)
-        .serve(router.into_make_service())
-        .await
-        .map_err(|err| {
-            error!(target: LOG_TARGET, "HTTP UI encountered an error: {}", err);
-            err
-        })?;
+    let server = axum::Server::try_bind(&address).or_else(|_| {
+        error!(
+            target: LOG_TARGET,
+            "🌐 Failed to bind on preferred address {}. Trying OS-assigned", address
+        );
+        axum::Server::try_bind(&"127.0.0.1:0".parse().unwrap())
+    })?;
+
+    let server = server.serve(router.into_make_service());
+    info!(target: LOG_TARGET, "🌐 HTTP UI listening on {}", server.local_addr());
+    server.await?;
 
     info!(target: LOG_TARGET, "Stopping HTTP UI");
     Ok(())

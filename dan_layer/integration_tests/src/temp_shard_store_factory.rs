@@ -27,7 +27,11 @@ use tari_dan_core::{
     models::TariDanPayload,
     storage::{shard_store::ShardStore, StorageError},
 };
-use tari_dan_storage_sqlite::sqlite_shard_store_factory::{SqliteShardStore, SqliteShardStoreTransaction};
+use tari_dan_storage_sqlite::sqlite_shard_store_factory::{
+    SqliteShardStore,
+    SqliteShardStoreReadTransaction,
+    SqliteShardStoreWriteTransaction,
+};
 use tempdir::TempDir;
 
 #[derive(Clone)]
@@ -60,10 +64,15 @@ impl Default for TempShardStoreFactory {
 impl ShardStore for TempShardStoreFactory {
     type Addr = PublicKey;
     type Payload = TariDanPayload;
-    type Transaction<'a> = SqliteShardStoreTransaction<'a>;
+    type ReadTransaction<'a> = SqliteShardStoreReadTransaction<'a>;
+    type WriteTransaction<'a> = SqliteShardStoreWriteTransaction<'a>;
 
-    fn create_tx(&self) -> Result<Self::Transaction<'_>, StorageError> {
-        self.sqlite.create_tx()
+    fn create_read_tx(&self) -> Result<Self::ReadTransaction<'_>, StorageError> {
+        self.sqlite.create_read_tx()
+    }
+
+    fn create_write_tx(&self) -> Result<Self::WriteTransaction<'_>, StorageError> {
+        self.sqlite.create_write_tx()
     }
 }
 

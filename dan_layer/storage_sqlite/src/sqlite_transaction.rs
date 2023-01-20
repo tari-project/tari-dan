@@ -51,7 +51,7 @@ impl<'a> SqliteTransaction<'a> {
         &self.connection
     }
 
-    pub fn commit(mut self) -> Result<(), SqliteStorageError> {
+    pub fn commit(&mut self) -> Result<(), SqliteStorageError> {
         self.connection()
             .execute("COMMIT")
             .map_err(|source| SqliteStorageError::DieselError {
@@ -63,7 +63,7 @@ impl<'a> SqliteTransaction<'a> {
         Ok(())
     }
 
-    pub fn rollback(mut self) -> Result<(), SqliteStorageError> {
+    pub fn rollback(&mut self) -> Result<(), SqliteStorageError> {
         self.rollback_inner()
     }
 

@@ -10,7 +10,7 @@ use tari_common_types::types::FixedHash;
 use tari_crypto::hash::blake2::Blake256;
 use tari_engine_types::commit_result::RejectReason;
 
-use crate::{Epoch, NodeHeight, PayloadId, ShardId, ShardPledge, TreeNodeHash, ValidatorMetadata};
+use crate::{Epoch, NodeHeight, PayloadId, ShardId, ShardPledgeCollection, TreeNodeHash, ValidatorMetadata};
 
 #[derive(Debug, Clone, Copy, Deserialize, Serialize, PartialEq, Eq, BorshSerialize)]
 pub enum QuorumDecision {
@@ -18,11 +18,19 @@ pub enum QuorumDecision {
     Reject(QuorumRejectReason),
 }
 
+impl QuorumDecision {
+    pub fn is_reject(&self) -> bool {
+        matches!(self, QuorumDecision::Reject(_))
+    }
+}
+
 #[derive(Debug, Clone, Copy, Deserialize, Serialize, PartialEq, Eq, BorshSerialize)]
 pub enum QuorumRejectReason {
     ShardNotPledged,
     ExecutionFailure,
     PreviousQcRejection,
+    ShardPledgedToAnotherPayload,
+    ShardRejected,
 }
 
 impl QuorumRejectReason {
@@ -31,6 +39,8 @@ impl QuorumRejectReason {
             QuorumRejectReason::ShardNotPledged => 1,
             QuorumRejectReason::ExecutionFailure => 2,
             QuorumRejectReason::PreviousQcRejection => 3,
+            QuorumRejectReason::ShardPledgedToAnotherPayload => 4,
+            QuorumRejectReason::ShardRejected => 5,
         }
     }
 }
@@ -49,6 +59,8 @@ impl QuorumDecision {
             1 => Ok(QuorumDecision::Reject(QuorumRejectReason::ShardNotPledged)),
             2 => Ok(QuorumDecision::Reject(QuorumRejectReason::ExecutionFailure)),
             3 => Ok(QuorumDecision::Reject(QuorumRejectReason::PreviousQcRejection)),
+            4 => Ok(QuorumDecision::Reject(QuorumRejectReason::ShardPledgedToAnotherPayload)),
+            5 => Ok(QuorumDecision::Reject(QuorumRejectReason::ShardRejected)),
             // TODO: Add error type
             _ => Err(anyhow::anyhow!("Invalid QuorumDecision")),
         }
@@ -61,6 +73,8 @@ impl<T: Borrow<RejectReason>> From<T> for QuorumRejectReason {
             RejectReason::ShardsNotPledged(_) => QuorumRejectReason::ShardNotPledged,
             RejectReason::ExecutionFailure(_) => QuorumRejectReason::ExecutionFailure,
             RejectReason::PreviousQcRejection => QuorumRejectReason::PreviousQcRejection,
+            RejectReason::ShardPledgedToAnotherPayload(_) => QuorumRejectReason::ShardPledgedToAnotherPayload,
+            RejectReason::ShardRejected(_) => QuorumRejectReason::ShardRejected,
         }
     }
 }
@@ -76,7 +90,7 @@ pub struct QuorumCertificate {
     shard: ShardId,
     epoch: Epoch,
     decision: QuorumDecision,
-    all_shard_pledges: Vec<ShardPledge>,
+    all_shard_pledges: ShardPledgeCollection,
     validators_metadata: Vec<ValidatorMetadata>,
 }
 
@@ -97,7 +111,7 @@ impl QuorumCertificate {
         shard: ShardId,
         epoch: Epoch,
         decision: QuorumDecision,
-        all_shard_pledges: Vec<ShardPledge>,
+        all_shard_pledges: ShardPledgeCollection,
         validators_metadata: Vec<ValidatorMetadata>,
     ) -> Self {
         Self {
@@ -122,7 +136,7 @@ impl QuorumCertificate {
             shard: shard_id,
             epoch,
             decision: QuorumDecision::Accept,
-            all_shard_pledges: vec![],
+            all_shard_pledges: ShardPledgeCollection::empty(),
             validators_metadata: vec![],
         }
     }
@@ -186,7 +200,7 @@ impl QuorumCertificate {
         &self.decision
     }
 
-    pub fn all_shard_pledges(&self) -> &[ShardPledge] {
+    pub fn all_shard_pledges(&self) -> &ShardPledgeCollection {
         &self.all_shard_pledges
     }
 }

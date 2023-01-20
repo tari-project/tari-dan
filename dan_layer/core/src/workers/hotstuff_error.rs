@@ -70,6 +70,12 @@ pub enum HotStuffError {
     ReceivedNewViewWithoutPayload,
     #[error("Missing pledges: {}", .0.iter().map(|(s, c)| format!("{}: {}", s, c)).collect::<Vec<_>>().join(", "))]
     MissingPledges(Vec<(ShardId, SubstateChange)>),
+    #[error("Shard {shard} already pledged to another payload {pledged_payload}, expected {expected}")]
+    ShardPledgedToDifferentPayload {
+        shard: ShardId,
+        pledged_payload: PayloadId,
+        expected: PayloadId,
+    },
 }
 
 impl<T> From<mpsc::error::SendError<T>> for HotStuffError {
@@ -101,4 +107,6 @@ pub enum ProposalValidationError {
     PayloadHeightIsTooHigh { actual: NodeHeight, max: NodeHeight },
     #[error("Local pledge was not provided in proposal")]
     LocalPledgeIsNone,
+    #[error("Received proposal pledge for a different payload {pledged_payload} for shard {shard}")]
+    PledgePayloadMismatch { shard: ShardId, pledged_payload: PayloadId },
 }
