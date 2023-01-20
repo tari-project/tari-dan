@@ -427,7 +427,13 @@ where
                 return Ok(());
             }
 
-            self.decide_and_vote_on_all_nodes(payload, proposed_nodes).await?;
+            match self.decide_and_vote_on_all_nodes(payload, proposed_nodes).await {
+                Ok(_) => {},
+                Err(err @ HotStuffError::AllShardsRejected { .. }) => {
+                    self.publish_event(HotStuffEvent::Failed(payload_id, err.to_string()));
+                },
+                Err(err) => return Err(err),
+            }
 
             let mut tx = self.shard_store.create_write_tx()?;
             tx.set_last_voted_height(node.shard(), node.payload_id(), node.height())?;
@@ -480,6 +486,7 @@ where
                     {
                         // Fail immediately
                         self.publish_event(HotStuffEvent::Failed(
+                            node.payload_id(),
                             "Payload was accepted by this node but some pledges were abandoned".to_string(),
                         ));
                         return Ok(());
@@ -503,7 +510,7 @@ where
                     ));
                 },
                 TransactionResult::Reject(reason) => {
-                    self.publish_event(HotStuffEvent::Failed(reason.to_string()));
+                    self.publish_event(HotStuffEvent::Failed(node.payload_id(), reason.to_string()));
                 },
             }
         }
@@ -626,8 +633,11 @@ where
             // we've sent our last REJECT vote in the PREPARE round so we dont vote again.
             if is_all_rejected && node.payload_phase() == HotstuffPhase::PreCommit {
                 // Abandon early because we are not continuing to vote so will never reach the DECIDE for the chain
-                self.shard_store
-                    .with_write_tx(|tx| tx.abandon_pledges(node.shard(), node.payload_id(), node.hash()))?;
+                self.shard_store.with_write_tx(|tx| {
+                    tx.abandon_pledges(node.shard(), node.payload_id(), node.hash())
+                        // If the substate was pledged to a different payload, we didn't pledge for this payload so the pledge may not exist
+                        .optional()
+                })?;
                 info!(
                     target: LOG_TARGET,
                     "🔥 Skipping PRECOMMIT REJECT vote on node {} for payload {}, shard {}",
@@ -635,6 +645,7 @@ where
                     node.payload_id(),
                     node.shard()
                 );
+
                 continue;
             }
 
@@ -650,6 +661,19 @@ where
 
             let leader = self.get_leader(&node).await?;
             self.tx_vote_message.send((vote_msg, leader)).await?;
+        }
+
+        if is_all_rejected {
+            let payload_result = self.shard_store.with_read_tx(|tx| tx.get_payload_result(&payload_id))?;
+            return Err(HotStuffError::AllShardsRejected {
+                payload_id,
+                reason: payload_result
+                    .finalize_result
+                    .result
+                    .reject()
+                    .map(|r| r.to_string())
+                    .unwrap_or_else(|| "Unknown reason".to_string()),
+            });
         }
 
         Ok(())
@@ -821,8 +845,9 @@ where
                     .with_read_tx(|tx| tx.get_payload_result(&node.payload_id()))?;
 
                 if pledge_hash != finalize_result.pledge_hash {
-                    // return Err(HotStuffError::ShardPledgesChanged);
-                    panic!("Shard pledges changed");
+                    return Err(HotStuffError::ShardPledgesChanged {
+                        payload_id: node.payload_id(),
+                    });
                 }
 
                 Ok(finalize_result.finalize_result)
@@ -1185,7 +1210,16 @@ where
                             tx.complete_pledges(node.shard(), node.payload_id(), node.hash())?;
                         },
                         TransactionResult::Reject(_) => {
-                            tx.abandon_pledges(node.shard(), node.payload_id(), node.hash())?;
+                            info!(
+                                target: LOG_TARGET,
+                                "🔥 on_commit ABANDON pledge for payload {}, shard{}",
+                                node.payload_id(),
+                                node.shard()
+                            );
+                            tx.abandon_pledges(node.shard(), node.payload_id(), node.hash())
+                                // With conflicting multi-shard payloads A and B, it may be that some pledges are for payload A and some for payload B.
+                                // This results in both payloads being rejected, but also means we cannot count on the pledge existing for this node.
+                                .optional()?;
                         },
                     }
                 },
@@ -1360,7 +1394,7 @@ where
                 },
                 Some((from, msg)) = self.rx_hs_message.recv() => {
                     if let Err(e) = self.on_new_hs_message(from, msg).await {
-                        self.publish_event(HotStuffEvent::Failed(e.to_string()));
+                        // self.publish_event(HotStuffEvent::Failed(e.to_string()));
                         error!(target: LOG_TARGET, "Error while processing new hotstuff message (on_new_hs_message): {}", e);
                     }
                 },

@@ -76,6 +76,10 @@ pub enum HotStuffError {
         pledged_payload: PayloadId,
         expected: PayloadId,
     },
+    #[error("Pledges changed since last execution for payload {payload_id}")]
+    ShardPledgesChanged { payload_id: PayloadId },
+    #[error("All shards rejected payload {payload_id}: {reason}")]
+    AllShardsRejected { payload_id: PayloadId, reason: String },
 }
 
 impl<T> From<mpsc::error::SendError<T>> for HotStuffError {
