@@ -1,7 +1,7 @@
 //  Copyright 2022 The Tari Project
 //  SPDX-License-Identifier: BSD-3-Clause
 
-use std::{path::PathBuf, str::FromStr, collections::HashMap};
+use std::{collections::HashMap, path::PathBuf, str::FromStr};
 
 use tari_engine_types::substate::SubstateAddress;
 use tari_template_lib::{
@@ -13,7 +13,7 @@ use tari_validator_node_cli::{
     account_manager::AccountFileManager,
     command::{
         handle_submit,
-        transaction::{CliArg, CliInstruction, CommonSubmitArgs, SubmitArgs, SubmitManifestArgs, submit_transaction}, manifest,
+        transaction::{submit_transaction, CliArg, CliInstruction, CommonSubmitArgs, SubmitArgs},
     },
     from_hex::FromHex,
 };
@@ -160,7 +160,7 @@ pub async fn submit_manifest(world: &mut TariWorld, vn_name: String, manifest_co
         let substate_address = SubstateAddress::Component(ComponentAddress::new(*component_address_hash)).into();
         globals.insert(name, substate_address);
     }
-    
+
     // parse the manifest
     let instructions = parse_manifest(&manifest_content, globals).unwrap();
 
@@ -182,7 +182,9 @@ pub async fn submit_manifest(world: &mut TariWorld, vn_name: String, manifest_co
         account_template_address: None,
         dry_run: false,
     };
-    submit_transaction(instructions, args, data_dir, &mut client).await.unwrap();
+    submit_transaction(instructions, args, data_dir, &mut client)
+        .await
+        .unwrap();
 }
 
 async fn get_validator_node_client(world: &TariWorld, validator_node_name: String) -> ValidatorNodeClient {

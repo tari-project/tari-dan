@@ -35,19 +35,20 @@ Feature: Fungible tokens
 
     # Create two accounts to test sending the tokens
     When I create an account ACC_1 on VN
-    # When I create an account ACC_2 on VN
     
     # Submit a transaction manifest
+    # TODO: try creating a second account and tranfering the tokens
     When I submit a transaction manifest on VN with 4 outputs
         ```
         use template_faucet as TestFaucet;
         use template_0000000000000000000000000000000000000000000000000000000000000000 as Account;
 
         fn main() {
-            let mut acc = Account::new();
             let faucet = global!["FAUCET"];
-            let mut account = global!["ACC_1"];
-            let funds = faucet.take_free_coins();
-            account.deposit(funds);
+            let mut acc1 = global!["ACC_1"];
+
+            // get tokens from the faucet
+            let faucet_bucket = faucet.take_free_coins();
+            acc1.deposit(faucet_bucket);
         }
         ```

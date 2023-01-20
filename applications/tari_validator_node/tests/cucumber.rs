@@ -26,18 +26,18 @@ mod utils;
 use std::{
     convert::{Infallible, TryFrom},
     io,
-    time::Duration, collections::HashMap,
+    time::Duration,
 };
 
 use async_trait::async_trait;
-use cucumber::{given, then, when, writer, WorldInit, WriterExt, gherkin::Step};
+use cucumber::{gherkin::Step, given, then, when, writer, WorldInit, WriterExt};
 use indexmap::IndexMap;
 use tari_common_types::types::PublicKey;
 use tari_crypto::tari_utilities::hex::Hex;
 use tari_dan_common_types::QuorumDecision;
 use tari_dan_core::services::BaseNodeClient;
-use tari_engine_types::{execution_result::Type, substate::SubstateAddress};
-use tari_template_lib::{Hash, models::ComponentAddress};
+use tari_engine_types::execution_result::Type;
+use tari_template_lib::Hash;
 use tari_validator_node::GrpcBaseNodeClient;
 use tari_validator_node_client::types::{GetIdentityResponse, GetTemplateRequest, TemplateRegistrationResponse};
 use utils::{
@@ -198,7 +198,10 @@ async fn assert_template_is_registered(world: &mut TariWorld, template_name: Str
     assert_eq!(resp.registration_metadata.address, template_address);
 }
 
-#[when(expr = "I create a component {word} of template \"{word}\" on {word} using \"{word}\" with inputs \"{word}\" and {int} outputs")]
+#[when(
+    expr = "I create a component {word} of template \"{word}\" on {word} using \"{word}\" with inputs \"{word}\" and \
+            {int} outputs"
+)]
 async fn call_template_constructor(
     world: &mut TariWorld,
     component_name: String,
@@ -209,7 +212,16 @@ async fn call_template_constructor(
     num_outputs: u64,
 ) {
     let args = args.split(',').map(|a| a.trim().to_string()).collect();
-    validator_node_cli::create_component(world, component_name, template_name, vn_name, function_call, args, num_outputs).await;
+    validator_node_cli::create_component(
+        world,
+        component_name,
+        template_name,
+        vn_name,
+        function_call,
+        args,
+        num_outputs,
+    )
+    .await;
 
     // give it some time between transactions
     tokio::time::sleep(Duration::from_secs(4)).await;
@@ -288,14 +300,14 @@ async fn create_account(world: &mut TariWorld, account_name: String, vn_name: St
 #[when(expr = "I submit a transaction manifest on {word} with {int} outputs")]
 async fn submit_manifest(world: &mut TariWorld, step: &Step, vn_name: String, num_outputs: u64) {
     let mut manifest = step.docstring.as_ref().unwrap().clone();
-    
+
     // replace the template addresses
     for template in &world.templates {
         let from = format!("use template_{}", template.0); // name
         let to = format!("use template_{}", template.1.address); // address
         manifest = manifest.replace(&from, &to);
     }
-    
+
     validator_node_cli::submit_manifest(world, vn_name, manifest, num_outputs).await;
 }
 
