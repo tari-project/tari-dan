@@ -236,12 +236,9 @@ impl RuntimeInterface for RuntimeInterfaceImpl {
                         argument: "vault_ref",
                         reason: "Create vault action requires a resource address".to_string(),
                     })?;
-                let resource_type = vault_ref.resource_type().ok_or_else(|| RuntimeError::InvalidArgument {
-                    argument: "vault_ref",
-                    reason: "Create vault action requires a resource type".to_string(),
-                })?;
+                let resource = self.tracker.get_resource(&resource_address)?;
 
-                let vault_id = self.tracker.new_vault(*resource_address, resource_type)?;
+                let vault_id = self.tracker.new_vault(*resource_address, resource.resource_type())?;
                 Ok(InvokeResult::encode(&vault_id)?)
             },
             VaultAction::Deposit => {

@@ -34,7 +34,6 @@ use crate::{
     args::{InvokeResult, VaultAction, VaultInvokeArg},
     hash::HashParseError,
     models::{Amount, Bucket, ResourceAddress},
-    resource::{ResourceManager, ResourceType},
     Hash,
 };
 
@@ -71,10 +70,7 @@ impl Display for VaultId {
 
 #[derive(Clone, Debug, Decode, Encode)]
 pub enum VaultRef {
-    Vault {
-        address: ResourceAddress,
-        resource_type: ResourceType,
-    },
+    Vault { address: ResourceAddress },
     Ref(VaultId),
 }
 
@@ -82,13 +78,6 @@ impl VaultRef {
     pub fn resource_address(&self) -> Option<&ResourceAddress> {
         match self {
             VaultRef::Vault { address, .. } => Some(address),
-            VaultRef::Ref(_) => None,
-        }
-    }
-
-    pub fn resource_type(&self) -> Option<ResourceType> {
-        match self {
-            VaultRef::Vault { resource_type, .. } => Some(*resource_type),
             VaultRef::Ref(_) => None,
         }
     }
@@ -107,11 +96,10 @@ pub struct Vault {
 }
 
 impl Vault {
-    pub fn new_empty(resource_address: ResourceAddress, resource_type: ResourceType) -> Self {
+    pub fn new_empty(resource_address: ResourceAddress) -> Self {
         let resp: InvokeResult = call_engine(EngineOp::VaultInvoke, &VaultInvokeArg {
             vault_ref: VaultRef::Vault {
                 address: resource_address,
-                resource_type,
             },
             action: VaultAction::Create,
             args: args![],
@@ -124,8 +112,7 @@ impl Vault {
 
     pub fn from_bucket(bucket: Bucket) -> Self {
         let resource_address = bucket.resource_address();
-        let resource_type = ResourceManager::get(resource_address).resource_type();
-        let mut vault = Self::new_empty(resource_address, resource_type);
+        let mut vault = Self::new_empty(resource_address);
         vault.deposit(bucket);
         vault
     }

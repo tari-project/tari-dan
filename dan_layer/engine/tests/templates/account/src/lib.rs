@@ -71,8 +71,7 @@ mod account_template {
             if let Some(v) = self.get_vault_mut(resource_address) {
                 v.deposit(bucket);
             } else {
-                let resource_type = ResourceManager::get(resource_address).resource_type();
-                let mut new_vault = Vault::new_empty(resource_address, resource_type);
+                let mut new_vault = Vault::new_empty(resource_address);
                 new_vault.deposit(bucket);
                 self.vaults.push((resource_address, new_vault));
             }
