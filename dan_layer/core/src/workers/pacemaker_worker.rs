@@ -20,25 +20,17 @@
 // WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 // USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use std::{
-    collections::{HashMap, HashSet},
-    time::Duration,
-};
+use std::{collections::HashSet, time::Duration};
 
 use log::*;
-use tari_dan_common_types::{PayloadId, ShardId};
 use tari_shutdown::ShutdownSignal;
 use tokio::{
     sync::mpsc::{Receiver, Sender},
     task::JoinHandle,
-    time::timeout,
 };
 
 use super::hotstuff_error::HotStuffError;
-use crate::models::{
-    pacemaker::{PacemakerSignal, PacemakerWaitStatus, WaitOver},
-    HotstuffPhase,
-};
+use crate::models::pacemaker::{PacemakerSignal, PacemakerWaitStatus, WaitOver};
 
 const LOG_TARGET: &str = "tari::dan_layer::pacemaker_worker";
 
@@ -47,7 +39,7 @@ pub struct LeaderFailurePacemaker {
     rx_waiter_signal: Receiver<PacemakerSignal>,
     tx_waiter_status: Sender<(WaitOver, PacemakerWaitStatus)>,
     max_timeout: u64,
-    pub wait_over_set: HashSet<WaitOver>,
+    wait_over_set: HashSet<WaitOver>,
 }
 
 impl LeaderFailurePacemaker {
@@ -74,20 +66,31 @@ impl LeaderFailurePacemaker {
         }
     }
 
-    async fn send_timeout_msg(&mut self, wait_over: WaitOver) -> Result<(), HotStuffError> {
-        if self.wait_over_set.contains(&wait_over) {
+    async fn send_timeout_msg(
+        &mut self,
+        wait_over: WaitOver,
+        status: PacemakerWaitStatus,
+    ) -> Result<(), HotStuffError> {
+        info!(
+            target: LOG_TARGET,
+            "Leader is not responsive, failed to communicate with replicas,  for payload_id = {}, shard_id = {}, \
+             phase = {:?}",
+            wait_over.0,
+            wait_over.1,
+            wait_over.2
+        );
+        if !self.wait_over_set.contains(&wait_over) {
+            self.wait_over_set.insert(wait_over);
             self.tx_waiter_status
-                .send((wait_over, PacemakerWaitStatus::WaitTimeOut))
+                .send((wait_over, status))
                 .await
                 .map_err(|_| HotStuffError::SendError)?;
-            // TODO: do we need to remove the wait over data ?
-            self.wait_over_set.remove(&wait_over);
         }
         Ok(())
     }
 
     pub async fn run(mut self, mut shutdown: ShutdownSignal) -> Result<(), HotStuffError> {
-        let mut timeout_handle = HashMap::new();
+        let (tx_status, mut rx_status) = tokio::sync::mpsc::channel::<(WaitOver, PacemakerWaitStatus)>(10);
         loop {
             tokio::select! {
                 msg = self.rx_waiter_signal.recv() => {
@@ -99,27 +102,25 @@ impl LeaderFailurePacemaker {
                                     // payload and shard id
                                     continue;
                                 }
-                                self.wait_over_set.insert(wait_over.clone());
-                                tokio::time::sleep(Duration::from_secs(self.max_timeout)).await;
-                                // only sends a wait time out message if the waiting process
-                                // is still on
-                                timeout_handle.insert(wait_over.clone(), timeout(Duration::from_secs(self.max_timeout), async {
-                                    info!(target: LOG_TARGET,
-                                        "Waiting possible leader failure for payload_id = {}, shard_id = {}, hotstuff_phase = {:?}",
-                                        wait_over.0, wait_over.1, wait_over.2
+                                info!(target: LOG_TARGET,
+                                    "Waiting possible leader failure for payload_id = {}, shard_id = {}, hotstuff_phase = {:?}",
+                                    wait_over.0, wait_over.1, wait_over.2
                                 );
-                                }));
-                                self.send_timeout_msg(wait_over).await?;
+                                tokio::time::sleep(Duration::from_secs(self.max_timeout)).await;
+                                // at this point we send the status to our internal receiver
+                                tx_status.send((wait_over, PacemakerWaitStatus::WaitTimeOut)).await.map_err(|_| HotStuffError::SendError)?;
                             },
                             PacemakerSignal::StopWait(wait_over) => {
                                 // simply remove the wait over data from the pacemaker
-                                if let Some(&timeout) = timeout_handle.get(&wait_over) {
-                                    timeout_handle.remove(&wait_over);
-                                    timeout.into_inner();
-                                    self.wait_over_set.remove(&wait_over);
-                                }
+                                tx_status.send((wait_over, PacemakerWaitStatus::ShutDown)).await.map_err(|_| HotStuffError::SendError)?;
                             },
                         }
+                    }
+                },
+                msg = rx_status.recv() => {
+                    if let Some((wait_over, status)) = msg {
+                        println!("WE ARE HEREEEE with status = {:?}", status);
+                        self.send_timeout_msg(wait_over, status).await?;
                     }
                 },
                 _ = shutdown.wait() => {
@@ -189,7 +190,7 @@ mod tests {
         };
 
         let shutdown = Shutdown::new();
-        LeaderFailurePacemaker::spawn(rx_waiter_signal, tx_waiter_status, 3_u64, shutdown.to_signal());
+        LeaderFailurePacemaker::spawn(rx_waiter_signal, tx_waiter_status, 100_u64, shutdown.to_signal());
 
         let payload = PayloadId::new([
             0u8, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28,
@@ -205,7 +206,7 @@ mod tests {
             .await
             .unwrap();
 
-        tokio::time::sleep(Duration::from_secs(1)).await;
+        // tokio::time::sleep(Duration::from_secs(1)).await;
         // send shutdown signal for pacemaker
         tester
             .tx_waiter_signal
@@ -213,11 +214,12 @@ mod tests {
             .await
             .unwrap();
 
-        tokio::time::sleep(Duration::from_secs(2)).await;
+        // tokio::time::sleep(Duration::from_secs(2)).await;
 
         let msg = tester.rx_waiter_status.recv().await.unwrap();
         assert_eq!(msg.0 .0, payload);
         assert_eq!(msg.0 .1, shard_id);
         assert_eq!(msg.0 .2, phase);
+        assert_eq!(msg.1, PacemakerWaitStatus::WaitTimeOut);
     }
 }
