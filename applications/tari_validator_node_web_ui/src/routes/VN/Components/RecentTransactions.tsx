@@ -158,7 +158,8 @@ function RecentTransactions() {
   useEffect(() => {
     getRecentTransactions().then((recentTransactions) => {
       setRecentTransacations(
-        recentTransactions.map(
+        // Display from newest to oldest by reversing
+        recentTransactions.slice().reverse().map(({ instructions, meta, payload_id, timestamp }: IRecentTransaction) => ({
           ({
             instructions,
             meta,

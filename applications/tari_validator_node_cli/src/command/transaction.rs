@@ -29,7 +29,7 @@ use std::{
 use anyhow::anyhow;
 use clap::{Args, Subcommand};
 use tari_common_types::types::FixedHash;
-use tari_dan_common_types::ShardId;
+use tari_dan_common_types::{ShardId, SubstateChange};
 use tari_dan_engine::transaction::Transaction;
 use tari_engine_types::{
     commit_result::{FinalizeResult, TransactionResult},
@@ -47,10 +47,10 @@ use tari_validator_node_client::{
 };
 
 use crate::{
-    account_manager::AccountFileManager,
     command::manifest,
     component_manager::ComponentManager,
     from_hex::FromHex,
+    key_manager::KeyManager,
     versioned_substate_address::VersionedSubstateAddress,
 };
 
@@ -199,17 +199,17 @@ async fn handle_submit_manifest(
     submit_transaction(instructions, args.common, base_dir, client).await
 }
 
-async fn submit_transaction(
+pub async fn submit_transaction(
     instructions: Vec<Instruction>,
     common: CommonSubmitArgs,
     base_dir: impl AsRef<Path>,
     client: &mut ValidatorNodeClient,
 ) -> Result<Option<SubmitTransactionResponse>, anyhow::Error> {
     let component_manager = ComponentManager::init(base_dir.as_ref())?;
-    let account_manager = AccountFileManager::init(base_dir.as_ref().to_path_buf())?;
-    let account = account_manager
-        .get_active_account()
-        .ok_or_else(|| anyhow::anyhow!("No active account. Use `accounts use [public key hex]` to set one."))?;
+    let key_manager = KeyManager::init(base_dir)?;
+    let key = key_manager
+        .get_active_key()
+        .ok_or_else(|| anyhow::anyhow!("No active key. Use `keys use [public key hex]` to set one."))?;
 
     let inputs = if common.inputs.is_empty() {
         load_inputs(&instructions, &component_manager)?
@@ -238,7 +238,7 @@ async fn submit_transaction(
         .with_new_outputs(common.num_outputs.unwrap_or(0))
         .with_outputs(outputs)
         .with_fee(1)
-        .sign(&account.secret_key);
+        .sign(&key.secret_key);
 
     let transaction = builder.build();
 
@@ -266,17 +266,12 @@ async fn submit_transaction(
         println!("No inputs or outputs. This transaction will not be processed by the network.");
         return Ok(None);
     }
-    println!("Request:");
-    println!("{}", serde_json::to_string_pretty(&request).unwrap());
     println!();
-
-    println!("🌟 Submitting instructions:");
-    for instruction in &request.instructions {
-        println!("- {}", instruction);
-    }
-    println!();
-
     println!("✅ Transaction {} submitted.", transaction.hash());
+    println!();
+    summarize_request(&request);
+    println!();
+
     let timer = Instant::now();
     if common.wait_for_result {
         println!("⏳️ Waiting for transaction result...");
@@ -292,6 +287,47 @@ async fn submit_transaction(
         summarize(result, timer.elapsed());
     }
     Ok(Some(resp))
+}
+
+fn summarize_request(request: &SubmitTransactionRequest) {
+    if request.is_dry_run {
+        println!("NOTE: Dry run is enabled. This transaction will not be processed by the network.");
+        println!();
+    }
+    println!("Fee: {}", request.fee);
+    println!("Inputs:");
+    let mut iter = request
+        .inputs
+        .iter()
+        .filter(|(_, change)| *change == SubstateChange::Destroy)
+        .peekable();
+    if iter.peek().is_none() {
+        println!("  None");
+    } else {
+        for (shard_id, change) in iter {
+            println!("- {}: {}", shard_id, change);
+        }
+    }
+    println!();
+    println!("Outputs:");
+    let mut iter = request
+        .inputs
+        .iter()
+        .filter(|(_, change)| *change == SubstateChange::Create)
+        .peekable();
+    if iter.peek().is_none() {
+        println!("  None");
+    } else {
+        for (shard_id, change) in iter {
+            println!("- {}: {}", shard_id, change);
+        }
+    }
+    println!();
+    println!("🌟 Submitting instructions:");
+    for instruction in &request.instructions {
+        println!("- {}", instruction);
+    }
+    println!();
 }
 
 #[allow(clippy::too_many_lines)]
@@ -328,14 +364,29 @@ fn summarize_finalize_result(finalize: &FinalizeResult) {
                     SubstateValue::Component(component) => {
                         println!(
                             "      ▶ component ({}): {}",
-                            component.module_name, component.component_address
+                            component.module_name,
+                            substate.substate_address()
                         );
                     },
-                    SubstateValue::Resource(resource) => {
-                        println!("      ▶ resource: {}", resource.address());
+                    SubstateValue::Resource(_) => {
+                        println!("      ▶ resource: {}", substate.substate_address());
                     },
                     SubstateValue::Vault(vault) => {
-                        println!("      ▶ vault: {} {}", vault.id(), vault.resource_address());
+                        println!(
+                            "      ▶ vault: {} {}",
+                            substate.substate_address(),
+                            vault.resource_address()
+                        );
+                    },
+                    SubstateValue::NonFungible(_) => {
+                        println!(
+                            "      ▶ NFT: {} {}",
+                            substate.substate_address(),
+                            substate
+                                .substate_address()
+                                .as_non_fungible_resource_address()
+                                .expect("NFT address")
+                        );
                     },
                 }
                 println!();

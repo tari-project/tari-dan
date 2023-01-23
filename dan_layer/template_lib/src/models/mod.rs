@@ -32,6 +32,9 @@ pub use component::*;
 mod metadata;
 pub use metadata::Metadata;
 
+mod nft_token;
+pub use nft_token::{NftToken, NftTokenId};
+
 mod resource;
 pub use resource::ResourceAddress;
 

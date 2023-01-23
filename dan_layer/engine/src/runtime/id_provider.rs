@@ -28,6 +28,8 @@ use tari_template_lib::{
     Hash,
 };
 
+use crate::runtime::RuntimeError;
+
 #[derive(Debug, Clone)]
 pub struct IdProvider {
     current_id: Arc<AtomicU32>,
@@ -90,6 +92,11 @@ impl IdProvider {
     pub fn new_bucket_id(&self) -> BucketId {
         // Buckets are not saved to shards, so should not increment the hashes
         self.bucket_id.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
+    }
+
+    pub fn new_uuid(&self) -> Result<Vec<u8>, RuntimeError> {
+        let id = self.new_id()?;
+        Ok(id.to_vec())
     }
 }
 

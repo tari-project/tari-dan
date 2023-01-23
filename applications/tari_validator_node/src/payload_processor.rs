@@ -94,10 +94,10 @@ where TTemplateProvider: TemplateProvider
         let tx_hash = *transaction.hash();
         match processor.execute(transaction) {
             Ok(result) => Ok(result),
-            Err(TransactionError::WasmExecutionError(WasmExecutionError::Panic { message, .. })) => Ok(
-                FinalizeResult::errored(tx_hash, RejectReason::ExecutionFailure(message)),
-            ),
-            Err(err) => Ok(FinalizeResult::errored(
+            Err(TransactionError::WasmExecutionError(WasmExecutionError::Panic { message, .. })) => {
+                Ok(FinalizeResult::reject(tx_hash, RejectReason::ExecutionFailure(message)))
+            },
+            Err(err) => Ok(FinalizeResult::reject(
                 tx_hash,
                 RejectReason::ExecutionFailure(err.to_string()),
             )),
@@ -134,12 +134,13 @@ fn create_populated_state_store<I: IntoIterator<Item = ObjectPledge>>(
     for input in inputs {
         match input.current_state {
             SubstateState::Up { data, .. } => {
+                let addr = *data.substate_address();
                 log::debug!(target: "tari::dan_layer::payload_processor",
                     "State store input substate: {} v{}",
-                    data.substate_value().substate_address(),
+                    addr,
                     data.version()
                 );
-                tx.set_state(&data.substate_value().substate_address(), data)?;
+                tx.set_state(&addr, data)?;
             },
             SubstateState::DoesNotExist | SubstateState::Down { .. } => { /* Do nothing */ },
         }

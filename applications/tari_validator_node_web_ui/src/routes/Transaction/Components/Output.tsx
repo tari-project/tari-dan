@@ -72,7 +72,7 @@ export default function Output({
                           </TableRow>
                         </TableHead>
                         <TableBody>
-                          {justify.all_shard_pledges.map((pledge: any) => {
+                          { Array.isArray(justify.all_shard_pledges?.pledges) ? justify.all_shard_pledges.pledges.map((pledge:any) => {
                             // This enum gets serialized different ways... should be fixed in the rust
                             let currentState = Object.keys(
                               pledge.pledge.current_state
@@ -90,7 +90,7 @@ export default function Output({
                                 </DataTableCell>
                               </TableRow>
                             );
-                          })}
+                          }) : <TableRow><DataTableCell>No pledges</DataTableCell></TableRow> }
                         </TableBody>
                       </Table>
                     </TableContainer>
