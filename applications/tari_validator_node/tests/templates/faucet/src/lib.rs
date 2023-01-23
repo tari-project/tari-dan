@@ -38,8 +38,7 @@ mod faucet_template {
                 .build_bucket();
 
             Self {
-                // TODO: Resource type from resource address
-                vault: Vault::from_bucket(coins, ResourceType::Fungible),
+                vault: Vault::from_bucket(coins),
             }
         }
 
