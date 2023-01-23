@@ -20,30 +20,17 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-import { useEffect, useState } from 'react';
-import { getMempoolStats } from '../../../utils/json_rpc';
-import Error from './Error';
+import * as React from 'react';
 import Typography from '@mui/material/Typography';
 
-function Mempool() {
-  const [state, setState] = useState();
-  const [error, setError] = useState<String>();
-  useEffect(() => {
-    getMempoolStats()
-      .then((response) => {
-        setState(response.size);
-        setError(undefined);
-      })
-      .catch((reason) => {
-        setError(reason);
-      });
-  }, []);
-  if (error) {
-    return <Error component="Mempool" message={error} />;
-  }
-  return (
-    <Typography>Size {state === undefined ? 'checking...' : state}</Typography>
-  );
+interface TitleProps {
+  children?: React.ReactNode;
 }
 
-export default Mempool;
+export default function Title(props: TitleProps) {
+  return (
+    <Typography component="h2" variant="h6" color="primary" gutterBottom>
+      {props.children}
+    </Typography>
+  );
+}

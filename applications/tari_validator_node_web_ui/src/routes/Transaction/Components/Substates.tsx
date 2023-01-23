@@ -20,10 +20,146 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-import React from "react";
-import JsonTooltip from "../../../Components/JsonTooltip";
-import { renderJson } from "../../../utils/helpers";
-import {toHexString} from "../../VN/Components/helpers";
+import { useState } from 'react';
+import JsonTooltip from '../../../Components/JsonTooltip';
+import { renderJson } from '../../../utils/helpers';
+import { toHexString } from '../../VN/Components/helpers';
+import Table from '@mui/material/Table';
+import TableBody from '@mui/material/TableBody';
+import TableCell from '@mui/material/TableCell';
+import TableContainer from '@mui/material/TableContainer';
+import TableHead from '@mui/material/TableHead';
+import TableRow from '@mui/material/TableRow';
+import { DataTableCell, CodeBlock } from '../../../Components/StyledComponents';
+import IconButton from '@mui/material/IconButton';
+import KeyboardArrowDownIcon from '@mui/icons-material/KeyboardArrowDown';
+import KeyboardArrowUpIcon from '@mui/icons-material/KeyboardArrowUp';
+import Collapse from '@mui/material/Collapse';
+import SecondaryHeading from '../../../Components/SecondaryHeading';
+
+function RowData({ substate }: any) {
+  const [open1, setOpen1] = useState(false);
+  const [open2, setOpen2] = useState(false);
+  const [open3, setOpen3] = useState(false);
+
+  return (
+    <>
+      <TableRow>
+        <DataTableCell>{toHexString(substate.shard_id)}</DataTableCell>
+        <DataTableCell sx={{ borderBottom: 'none', textAlign: 'center' }}>
+          <IconButton
+            aria-label="expand row"
+            size="small"
+            onClick={() => {
+              setOpen1(!open1);
+              setOpen2(false);
+              setOpen3(false);
+            }}
+            sx={
+              open1
+                ? { backgroundColor: '#9330FF', color: '#fff' }
+                : { backgroundColor: '#fff', color: '#9330FF' }
+            }
+          >
+            {open1 ? <KeyboardArrowUpIcon /> : <KeyboardArrowDownIcon />}
+          </IconButton>
+        </DataTableCell>
+        <DataTableCell sx={{ borderBottom: 'none', textAlign: 'center' }}>
+          <IconButton
+            aria-label="expand row"
+            size="small"
+            onClick={() => {
+              setOpen2(!open2);
+              setOpen1(false);
+              setOpen3(false);
+            }}
+            sx={
+              open2
+                ? { backgroundColor: '#9330FF', color: '#fff' }
+                : { backgroundColor: '#fff', color: '#9330FF' }
+            }
+          >
+            {open2 ? <KeyboardArrowUpIcon /> : <KeyboardArrowDownIcon />}
+          </IconButton>
+        </DataTableCell>
+        <DataTableCell sx={{ borderBottom: 'none', textAlign: 'center' }}>
+          <IconButton
+            aria-label="expand row"
+            size="small"
+            onClick={() => {
+              setOpen3(!open3);
+              setOpen1(false);
+              setOpen2(false);
+            }}
+            sx={
+              open3
+                ? { backgroundColor: '#9330FF', color: '#fff' }
+                : { backgroundColor: '#fff', color: '#9330FF' }
+            }
+          >
+            {open3 ? <KeyboardArrowUpIcon /> : <KeyboardArrowDownIcon />}
+          </IconButton>
+        </DataTableCell>
+      </TableRow>
+      <TableRow>
+        <DataTableCell
+          style={{
+            paddingBottom: 0,
+            paddingTop: 0,
+            borderBottom: 'none',
+          }}
+          colSpan={4}
+        >
+          <Collapse in={open1} timeout="auto" unmountOnExit>
+            <CodeBlock style={{ marginBottom: '10px' }}>
+              <pre>{renderJson(JSON.parse(substate.data))}</pre>
+            </CodeBlock>
+          </Collapse>
+        </DataTableCell>
+      </TableRow>
+      <TableRow>
+        <DataTableCell
+          style={{
+            paddingBottom: 0,
+            paddingTop: 0,
+            borderBottom: 'none',
+          }}
+          colSpan={4}
+        >
+          <Collapse in={open2} timeout="auto" unmountOnExit>
+            <CodeBlock style={{ marginBottom: '10px' }}>
+              <pre>
+                {substate.created_justify
+                  ? renderJson(JSON.parse(substate.created_justify))
+                  : ''}
+              </pre>
+            </CodeBlock>
+          </Collapse>
+        </DataTableCell>
+      </TableRow>
+      <TableRow>
+        <DataTableCell
+          style={{
+            paddingBottom: 0,
+            paddingTop: 0,
+            borderBottom: 'none',
+          }}
+          colSpan={4}
+        >
+          <Collapse in={open3} timeout="auto" unmountOnExit>
+            <CodeBlock style={{ marginBottom: '10px' }}>
+              <pre>
+                {substate.destroyed_justify
+                  ? renderJson(JSON.parse(substate.destroyed_justify))
+                  : ''}
+              </pre>
+            </CodeBlock>
+          </Collapse>
+        </DataTableCell>
+      </TableRow>
+    </>
+  );
+}
 
 export default function Substates({ substates }: any) {
   if (substates.size == 0) {
@@ -34,42 +170,24 @@ export default function Substates({ substates }: any) {
     // console.log("parsing json", substate.justify, JSON.parse(substate.justify));
   });
   return (
-    <>
-      <div className="caption">Substates</div>
-      <table style={{ border: "1px solid gray"}}>
-        <thead>
-          <tr>
-            <th>Shard</th>
-            <th>Data</th>
-            <th>Created</th>
-            <th>Destroyed</th>
-            <th></th>
-          </tr>
-        </thead>
-        <tbody>
+    <TableContainer>
+      <SecondaryHeading>Substates</SecondaryHeading>
+      <Table>
+        <TableHead>
+          <TableRow>
+            <TableCell>Shard</TableCell>
+            <TableCell sx={{ textAlign: 'center' }}>Data</TableCell>
+            <TableCell sx={{ textAlign: 'center' }}>Created</TableCell>
+            <TableCell sx={{ textAlign: 'center' }}>Destroyed</TableCell>
+            {/* <TableCell></TableCell> */}
+          </TableRow>
+        </TableHead>
+        <TableBody>
           {substates.map((substate: any) => (
-            <tr>
-              <td>{toHexString(substate.shard_id)}</td>
-              <td>
-                <pre>
-                    {renderJson(JSON.parse(substate.data))}
-                </pre>
-              </td>
-              <td>
-                <pre>
-                    {substate.created_justify? renderJson(JSON.parse(substate.created_justify)) : ""}
-                </pre>
-              </td>
-              <td>
-                <pre>
-
-                    { substate.destroyed_justify ? renderJson(JSON.parse(substate.destroyed_justify)) : ""}
-                </pre>
-              </td>
-            </tr>
+            <RowData substate={substate} />
           ))}
-        </tbody>
-      </table>
-    </>
+        </TableBody>
+      </Table>
+    </TableContainer>
   );
 }

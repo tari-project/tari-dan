@@ -54,107 +54,13 @@ interface ITableRecentTransaction {
 
 type ColumnKey = keyof ITableRecentTransaction;
 
-function RowData({
-  id,
-  payload_id,
-  timestamp,
-  instructions,
-  meta,
-}: ITableRecentTransaction) {
-  const [open1, setOpen1] = useState(false);
-  const [open2, setOpen2] = useState(false);
-
-  return (
-    <>
-      <TableRow key={id} sx={{ borderBottom: 'none' }}>
-        <DataTableCell
-          sx={{
-            borderBottom: 'none',
-          }}
-        >
-          <Link
-            style={{ textDecoration: 'none' }}
-            to={`transaction/${payload_id}`}
-          >
-            {payload_id}
-          </Link>
-        </DataTableCell>
-        <DataTableCell
-          sx={{
-            borderBottom: 'none',
-          }}
-        >
-          {timestamp}
-        </DataTableCell>
-        <DataTableCell sx={{ borderBottom: 'none', textAlign: 'center' }}>
-          <IconButton
-            aria-label="expand row"
-            size="small"
-            onClick={() => {
-              setOpen1(!open1);
-              setOpen2(false);
-            }}
-            sx={
-              open1
-                ? { backgroundColor: '#9330FF', color: '#fff' }
-                : { backgroundColor: '#fff', color: '#9330FF' }
-            }
-          >
-            {open1 ? <KeyboardArrowUpIcon /> : <KeyboardArrowDownIcon />}
-          </IconButton>
-        </DataTableCell>
-        <DataTableCell sx={{ borderBottom: 'none', textAlign: 'center' }}>
-          <IconButton
-            aria-label="expand row"
-            size="small"
-            onClick={() => {
-              setOpen2(!open2);
-              setOpen1(false);
-            }}
-            sx={
-              open2
-                ? { backgroundColor: '#9330FF', color: '#fff' }
-                : { backgroundColor: '#fff', color: '#9330FF' }
-            }
-          >
-            {open2 ? <KeyboardArrowUpIcon /> : <KeyboardArrowDownIcon />}
-          </IconButton>
-        </DataTableCell>
-      </TableRow>
-      <TableRow key={`${id}-2`}>
-        <DataTableCell
-          style={{
-            paddingBottom: 0,
-            paddingTop: 0,
-            borderBottom: 'none',
-          }}
-          colSpan={4}
-        >
-          <Collapse in={open1} timeout="auto" unmountOnExit>
-            <CodeBlock style={{ marginBottom: '10px' }}>
-              {renderJson(JSON.parse(meta))}
-            </CodeBlock>
-          </Collapse>
-        </DataTableCell>
-      </TableRow>
-      <TableRow key={`${id}-3`}>
-        <DataTableCell style={{ paddingBottom: 0, paddingTop: 0 }} colSpan={4}>
-          <Collapse in={open2} timeout="auto" unmountOnExit>
-            <CodeBlock style={{ marginBottom: '10px' }}>
-              {renderJson(JSON.parse(instructions))}
-            </CodeBlock>
-          </Collapse>
-        </DataTableCell>
-      </TableRow>
-    </>
-  );
-}
-
 function RecentTransactions() {
   const [recentTransacations, setRecentTransacations] = useState<
     ITableRecentTransaction[]
   >([]);
   const [lastSort, setLastSort] = useState({ column: '', order: -1 });
+  const [open1, setOpen1] = useState(false);
+  const [open2, setOpen2] = useState(false);
   useEffect(() => {
     getRecentTransactions().then((recentTransactions) => {
       setRecentTransacations(
@@ -227,14 +133,103 @@ function RecentTransactions() {
         <TableBody>
           {recentTransacations.map(
             ({ id, payload_id, timestamp, instructions, meta }) => (
-              <RowData
-                key={id}
-                id={id}
-                payload_id={payload_id}
-                timestamp={timestamp}
-                instructions={instructions}
-                meta={meta}
-              />
+              <>
+                <TableRow key={id} sx={{ borderBottom: 'none' }}>
+                  <DataTableCell
+                    sx={{
+                      borderBottom: 'none',
+                    }}
+                  >
+                    <Link
+                      style={{ textDecoration: 'none' }}
+                      to={`transaction/${payload_id}`}
+                    >
+                      {payload_id}
+                    </Link>
+                  </DataTableCell>
+                  <DataTableCell
+                    sx={{
+                      borderBottom: 'none',
+                    }}
+                  >
+                    {timestamp}
+                  </DataTableCell>
+                  <DataTableCell
+                    sx={{ borderBottom: 'none', textAlign: 'center' }}
+                  >
+                    <IconButton
+                      aria-label="expand row"
+                      size="small"
+                      onClick={() => {
+                        setOpen1(!open1);
+                        setOpen2(false);
+                      }}
+                      sx={
+                        open1
+                          ? { backgroundColor: '#9330FF', color: '#fff' }
+                          : { backgroundColor: '#fff', color: '#9330FF' }
+                      }
+                    >
+                      {open1 ? (
+                        <KeyboardArrowUpIcon />
+                      ) : (
+                        <KeyboardArrowDownIcon />
+                      )}
+                    </IconButton>
+                  </DataTableCell>
+                  <DataTableCell
+                    sx={{ borderBottom: 'none', textAlign: 'center' }}
+                  >
+                    <IconButton
+                      aria-label="expand row"
+                      size="small"
+                      onClick={() => {
+                        setOpen2(!open2);
+                        setOpen1(false);
+                      }}
+                      sx={
+                        open2
+                          ? { backgroundColor: '#9330FF', color: '#fff' }
+                          : { backgroundColor: '#fff', color: '#9330FF' }
+                      }
+                    >
+                      {open2 ? (
+                        <KeyboardArrowUpIcon />
+                      ) : (
+                        <KeyboardArrowDownIcon />
+                      )}
+                    </IconButton>
+                  </DataTableCell>
+                </TableRow>
+                <TableRow key={`${id}2`}>
+                  <DataTableCell
+                    style={{
+                      paddingBottom: 0,
+                      paddingTop: 0,
+                      borderBottom: 'none',
+                    }}
+                    colSpan={4}
+                  >
+                    <Collapse in={open1} timeout="auto" unmountOnExit>
+                      <CodeBlock style={{ marginBottom: '10px' }}>
+                        {renderJson(JSON.parse(meta))}
+                      </CodeBlock>
+                    </Collapse>
+                  </DataTableCell>
+                </TableRow>
+                <TableRow key={`${id}3`}>
+                  <DataTableCell
+                    style={{ paddingBottom: 0, paddingTop: 0 }}
+                    colSpan={4}
+                  >
+                    <Collapse in={open2} timeout="auto" unmountOnExit>
+                      <CodeBlock style={{ marginBottom: '10px' }}>
+                        {renderJson(JSON.parse(instructions))}
+                      </CodeBlock>
+                    </Collapse>
+                  </DataTableCell>
+                </TableRow>
+              </>
             )
           )}
         </TableBody>
