@@ -23,15 +23,15 @@
 use tari_bor::{borsh, Decode, Encode};
 use tari_template_lib::models::{Amount, ResourceAddress};
 
-use crate::resource::{Resource, ResourceError};
+use crate::resource_container::{ResourceContainer, ResourceError};
 
 #[derive(Debug, Clone, Encode, Decode)]
 pub struct Bucket {
-    resource: Resource,
+    resource: ResourceContainer,
 }
 
 impl Bucket {
-    pub fn new(resource: Resource) -> Self {
+    pub fn new(resource: ResourceContainer) -> Self {
         Self { resource }
     }
 
@@ -40,18 +40,14 @@ impl Bucket {
     }
 
     pub fn resource_address(&self) -> &ResourceAddress {
-        self.resource.address()
+        self.resource.resource_address()
     }
 
-    pub fn resource(&self) -> &Resource {
-        &self.resource
-    }
-
-    pub fn into_resource(self) -> Resource {
+    pub(crate) fn into_resource(self) -> ResourceContainer {
         self.resource
     }
 
-    pub fn take(&mut self, amount: Amount) -> Result<Resource, ResourceError> {
+    pub fn take(&mut self, amount: Amount) -> Result<ResourceContainer, ResourceError> {
         self.resource.withdraw(amount)
     }
 }

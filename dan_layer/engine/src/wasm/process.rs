@@ -126,6 +126,9 @@ impl WasmProcess {
             EngineOp::WorkspaceInvoke => Self::handle(env, arg, |env, arg: WorkspaceInvokeArg| {
                 env.state().interface().workspace_invoke(arg.action, arg.args)
             }),
+            EngineOp::GenerateUniqueId => {
+                Self::handle(env, arg, |env, _arg: ()| env.state().interface().generate_uuid())
+            },
         };
 
         result.unwrap_or_else(|err| {

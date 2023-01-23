@@ -81,7 +81,9 @@ impl ComponentManager {
                 addr @ SubstateAddress::Component(_) => {
                     component = Some((addr, substate.version()));
                 },
-                addr @ SubstateAddress::Resource(_) | addr @ SubstateAddress::Vault(_) => {
+                addr @ SubstateAddress::Resource(_) |
+                addr @ SubstateAddress::Vault(_) |
+                addr @ SubstateAddress::NonFungible(_, _) => {
                     children.push(VersionedSubstateAddress {
                         address: *addr,
                         version: substate.version(),

@@ -54,9 +54,16 @@ mod account_template {
                 .map(|(_, vault)| vault)
         }
 
-        pub fn balance(&self, resource: ResourceAddress) -> Amount {
-            let v = self.get_vault(resource).expect("No vault for this resource");
-            v.balance()
+        pub fn balance(&self, resource: SubstateAddress) -> Amount {
+            if let SubstateAddress::Resource(resource) = resource {
+                let v = self
+                    .get_vault(resource)
+                    .ok_or_else(|| format!("No vault for resource {}", resource))
+                    .unwrap();
+                v.balance()
+            } else {
+                panic!("Invalid addr {:?}", resource);
+            }
         }
 
         // #[access_rules(requires(owner_badge))]
@@ -74,8 +81,7 @@ mod account_template {
             if let Some(v) = self.get_vault_mut(resource_address) {
                 v.deposit(bucket);
             } else {
-                // TODO: Get the resource type from the resource address
-                let mut new_vault = Vault::new_empty(resource_address, ResourceType::Fungible);
+                let mut new_vault = Vault::new_empty(resource_address);
                 new_vault.deposit(bucket);
                 self.vaults.push((resource_address, new_vault));
             }

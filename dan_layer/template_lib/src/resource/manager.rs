@@ -23,82 +23,98 @@
 use tari_template_abi::{call_engine, EngineOp};
 
 use crate::{
-    args::{InvokeResult, MintResourceArg, ResourceAction, ResourceInvokeArg, ResourceRef},
-    models::{Bucket, Metadata, ResourceAddress},
+    args::{CreateResourceArg, InvokeResult, MintArg, MintResourceArg, ResourceAction, ResourceInvokeArg, ResourceRef},
+    models::{Amount, Bucket, Metadata, NftToken, NftTokenId, ResourceAddress},
+    prelude::ResourceType,
 };
 
 #[derive(Debug)]
 pub struct ResourceManager {
-    for_specific: Option<ResourceAddress>,
+    resource_address: Option<ResourceAddress>,
 }
 
 impl ResourceManager {
     pub(crate) fn new() -> Self {
-        ResourceManager { for_specific: None }
+        ResourceManager { resource_address: None }
     }
 
     pub fn get(address: ResourceAddress) -> Self {
-        ResourceManager {
-            for_specific: Some(address),
+        Self {
+            resource_address: Some(address),
         }
     }
 
-    pub(super) fn mint_resource(&mut self, arg: MintResourceArg) -> Bucket {
-        let resp: InvokeResult = call_engine(EngineOp::ResourceInvoke, &ResourceInvokeArg {
-            resource_ref: if let Some(resource_adddress) = self.for_specific {
-                ResourceRef::Ref(resource_adddress)
-            } else {
-                ResourceRef::Resource
-            },
-            action: ResourceAction::Mint,
-            args: invoke_args![arg],
-        });
-
-        let resource_address = resp.decode().expect("Failed to decode Bucket");
-        Bucket::new(resource_address)
+    fn expect_resource_address(&self) -> ResourceRef {
+        let resource_address = self
+            .resource_address
+            .as_ref()
+            .copied()
+            .expect("Resource address not set");
+        ResourceRef::Ref(resource_address)
     }
 
-    // Register, but don't mind any tokens
-    pub fn register_non_fungible(&mut self, metadata: Metadata) -> ResourceAddress {
-        let arg = MintResourceArg::NonFungible {
-            resource_address: None,
-            token_ids: vec![],
-            metadata,
-        };
+    pub fn resource_type(&self) -> ResourceType {
         let resp: InvokeResult = call_engine(EngineOp::ResourceInvoke, &ResourceInvokeArg {
-            resource_ref: if let Some(resource_adddress) = self.for_specific {
-                ResourceRef::Ref(resource_adddress)
-            } else {
-                ResourceRef::Resource
-            },
-            action: ResourceAction::Mint,
-            args: invoke_args![arg],
+            resource_ref: self.expect_resource_address(),
+            action: ResourceAction::GetResourceType,
+            args: invoke_args![],
         });
-
-        resp.decode().expect("Failed to decode ResourceAddress")
+        resp.decode()
+            .expect("Resource GetResourceType returned invalid resource type")
     }
 
-    pub fn mint_non_fungible(&mut self, name: &str, image_url: &str, ids: Vec<u64>) -> Bucket {
-        let mut metadata = Metadata::new();
-        metadata.insert(b"NAME".to_vec(), name.as_bytes().to_vec());
-        metadata.insert(b"IMAGE_URL".to_vec(), image_url.as_bytes().to_vec());
-
-        let arg = MintResourceArg::NonFungible {
-            resource_address: self.for_specific,
-            token_ids: ids,
-            metadata,
-        };
+    pub fn create(
+        &mut self,
+        resource_type: ResourceType,
+        metadata: Metadata,
+        mint_arg: Option<MintArg>,
+    ) -> (ResourceAddress, Option<Bucket>) {
         let resp: InvokeResult = call_engine(EngineOp::ResourceInvoke, &ResourceInvokeArg {
-            resource_ref: if let Some(resource_adddress) = self.for_specific {
-                ResourceRef::Ref(resource_adddress)
-            } else {
-                ResourceRef::Resource
+            resource_ref: ResourceRef::Resource,
+            action: ResourceAction::Create,
+            args: invoke_args![CreateResourceArg {
+                resource_type,
+                metadata,
+                mint_arg
+            }],
+        });
+
+        resp.decode()
+            .expect("[register_non_fungible] Failed to decode ResourceAddress")
+    }
+
+    pub fn mint_non_fungible(&mut self, id: NftTokenId, token: NftToken) -> Bucket {
+        self.mint_internal(MintResourceArg {
+            mint_arg: MintArg::NonFungible {
+                tokens: Some((id, token)).into_iter().collect(),
             },
+        })
+    }
+
+    pub fn mint_fungible(&mut self, amount: Amount) -> Bucket {
+        self.mint_internal(MintResourceArg {
+            mint_arg: MintArg::Fungible { amount },
+        })
+    }
+
+    fn mint_internal(&mut self, arg: MintResourceArg) -> Bucket {
+        let resp: InvokeResult = call_engine(EngineOp::ResourceInvoke, &ResourceInvokeArg {
+            resource_ref: self.expect_resource_address(),
             action: ResourceAction::Mint,
             args: invoke_args![arg],
         });
 
-        let resource_address = resp.decode().expect("Failed to decode Bucket");
-        Bucket::new(resource_address)
+        let bucket_id = resp.decode().expect("Failed to decode Bucket");
+        Bucket::from_id(bucket_id)
+    }
+
+    pub fn total_supply(&self) -> Amount {
+        let resp: InvokeResult = call_engine(EngineOp::ResourceInvoke, &ResourceInvokeArg {
+            resource_ref: self.expect_resource_address(),
+            action: ResourceAction::GetTotalSupply,
+            args: invoke_args![],
+        });
+
+        resp.decode().expect("[total_supply] Failed to decode Amount")
     }
 }

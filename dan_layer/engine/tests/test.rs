@@ -159,7 +159,7 @@ fn test_account() {
         .result
         .expect("Faucet mint failed")
         .up_iter()
-        .find_map(|(_, s)| s.substate_value().resource_address())
+        .find_map(|(_, s)| s.substate_address().as_resource_address())
         .unwrap();
 
     // Create sender and receiver accounts
@@ -305,5 +305,54 @@ mod errors {
             },
             _ => panic!("Unexpected error: {}", err),
         }
+    }
+}
+
+mod basic_nft {
+    use super::*;
+
+    #[test]
+    fn create_resource_mint_and_deposit() {
+        let template_test = TemplateTest::new(vec!["tests/templates/account", "tests/templates/basic_nft"]);
+
+        let account_address: ComponentAddress = template_test.call_function("Account", "new", args![]);
+        let nft_component: ComponentAddress = template_test.call_function("SparkleNft", "new", args![]);
+
+        let total_supply: Amount = template_test.call_method(nft_component, "total_supply", args![]);
+        assert_eq!(total_supply, Amount(1));
+
+        let vars = vec![("account", account_address.into()), ("nft", nft_component.into())];
+
+        let result = template_test.execute_and_commit_manifest(
+            r#"
+            let account = var!["account"];
+            let sparkle_nft = var!["nft"];
+        
+            let nft_bucket = sparkle_nft.mint();
+            account.deposit(nft_bucket);
+        "#,
+            vars,
+        );
+
+        let diff = result.result.expect("execution failed");
+
+        // Resource is changed
+        assert_eq!(diff.down_iter().filter(|(addr, _)| addr.is_resource()).count(), 1);
+        assert_eq!(diff.up_iter().filter(|(addr, _)| addr.is_resource()).count(), 1);
+
+        // NFT and account components changed
+        assert_eq!(diff.down_iter().filter(|(addr, _)| addr.is_component()).count(), 2);
+        assert_eq!(diff.up_iter().filter(|(addr, _)| addr.is_component()).count(), 2);
+
+        // One new vault created
+        assert_eq!(diff.down_iter().filter(|(addr, _)| addr.is_vault()).count(), 0);
+        assert_eq!(diff.up_iter().filter(|(addr, _)| addr.is_vault()).count(), 1);
+
+        // One new NFT minted
+        assert_eq!(diff.down_iter().filter(|(addr, _)| addr.is_non_fungible()).count(), 0);
+        assert_eq!(diff.up_iter().filter(|(addr, _)| addr.is_non_fungible()).count(), 1);
+
+        let total_supply: Amount = template_test.call_method(nft_component, "total_supply", args![]);
+        assert_eq!(total_supply, Amount(2));
     }
 }

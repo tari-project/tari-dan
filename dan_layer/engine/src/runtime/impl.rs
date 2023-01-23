@@ -32,6 +32,7 @@ use tari_template_lib::{
         BucketRef,
         ComponentAction,
         ComponentRef,
+        CreateResourceArg,
         InvokeResult,
         LogLevel,
         MintResourceArg,
@@ -139,7 +140,7 @@ impl RuntimeInterface for RuntimeInterfaceImpl {
                 // TODO: Need to validate this state somehow - it could contain arbitrary data incl. vaults that are not
                 // owned       by this component
                 component.state.set(state);
-                self.tracker.set_component(component)?;
+                self.tracker.set_component(address, component)?;
                 Ok(InvokeResult::unit())
             },
         }
@@ -147,11 +148,53 @@ impl RuntimeInterface for RuntimeInterfaceImpl {
 
     fn resource_invoke(
         &self,
-        _resource_ref: ResourceRef,
+        resource_ref: ResourceRef,
         action: ResourceAction,
         args: Vec<Vec<u8>>,
     ) -> Result<InvokeResult, RuntimeError> {
         match action {
+            ResourceAction::GetTotalSupply => {
+                let resource_address =
+                    resource_ref
+                        .as_resource_address()
+                        .ok_or_else(|| RuntimeError::InvalidArgument {
+                            argument: "resource_ref",
+                            reason: "GetResourceType resource action requires a resource address".to_string(),
+                        })?;
+                let resource = self.tracker.get_resource(&resource_address)?;
+                let total_supply = resource.total_supply();
+                Ok(InvokeResult::encode(&total_supply)?)
+            },
+            ResourceAction::GetResourceType => {
+                let resource_address =
+                    resource_ref
+                        .as_resource_address()
+                        .ok_or_else(|| RuntimeError::InvalidArgument {
+                            argument: "resource_ref",
+                            reason: "GetResourceType resource action requires a resource address".to_string(),
+                        })?;
+                let resource = self.tracker.get_resource(&resource_address)?;
+                let resource_type = resource.resource_type();
+                Ok(InvokeResult::encode(&resource_type)?)
+            },
+            ResourceAction::Create => {
+                let arg: CreateResourceArg =
+                    args.get(0)
+                        .and_then(|r| decode(r).ok())
+                        .ok_or_else(|| RuntimeError::InvalidArgument {
+                            argument: "CreateResourceArg",
+                            reason: "Argument not provided or failed to decode".to_string(),
+                        })?;
+                let resource_address = self.tracker.new_resource(arg.resource_type, arg.metadata)?;
+
+                let mut output_bucket = None;
+                if let Some(mint_arg) = arg.mint_arg {
+                    let bucket_id = self.tracker.mint_resource(resource_address, mint_arg)?;
+                    output_bucket = Some(tari_template_lib::models::Bucket::from_id(bucket_id));
+                }
+
+                Ok(InvokeResult::encode(&(resource_address, output_bucket))?)
+            },
             ResourceAction::Mint => {
                 let mint_resource: MintResourceArg =
                     args.get(0)
@@ -161,8 +204,16 @@ impl RuntimeInterface for RuntimeInterfaceImpl {
                             reason: "Argument not provided or failed to decode".to_string(),
                         })?;
 
-                let resource_address = self.tracker.mint_resource(mint_resource)?;
-                Ok(InvokeResult::encode(&resource_address)?)
+                let resource_address =
+                    resource_ref
+                        .as_resource_address()
+                        .ok_or_else(|| RuntimeError::InvalidArgument {
+                            argument: "resource_ref",
+                            reason: "Mint resource action requires a resource address".to_string(),
+                        })?;
+                let bucket_id = self.tracker.mint_resource(resource_address, mint_resource.mint_arg)?;
+                let bucket = tari_template_lib::models::Bucket::from_id(bucket_id);
+                Ok(InvokeResult::encode(&bucket)?)
             },
             ResourceAction::Burn => todo!(),
             ResourceAction::Deposit => todo!(),
@@ -185,12 +236,9 @@ impl RuntimeInterface for RuntimeInterfaceImpl {
                         argument: "vault_ref",
                         reason: "Create vault action requires a resource address".to_string(),
                     })?;
-                let resource_type = vault_ref.resource_type().ok_or_else(|| RuntimeError::InvalidArgument {
-                    argument: "vault_ref",
-                    reason: "Create vault action requires a resource type".to_string(),
-                })?;
+                let resource = self.tracker.get_resource(resource_address)?;
 
-                let vault_id = self.tracker.new_vault(*resource_address, resource_type)?;
+                let vault_id = self.tracker.new_vault(*resource_address, resource.resource_type())?;
                 Ok(InvokeResult::encode(&vault_id)?)
             },
             VaultAction::Deposit => {
@@ -268,7 +316,9 @@ impl RuntimeInterface for RuntimeInterfaceImpl {
                         reason: "Create bucket action requires a resource address".to_string(),
                     })?;
                 let resource = self.tracker.get_resource(&resource_address)?;
-                let bucket_id = self.tracker.new_bucket(resource)?;
+                let bucket_id = self
+                    .tracker
+                    .new_empty_bucket(resource_address, resource.resource_type())?;
                 Ok(InvokeResult::encode(&bucket_id)?)
             },
             BucketAction::GetResourceAddress => {
@@ -343,6 +393,10 @@ impl RuntimeInterface for RuntimeInterfaceImpl {
                 Ok(InvokeResult::encode(&value)?)
             },
         }
+    }
+
+    fn generate_uuid(&self) -> Result<Vec<u8>, RuntimeError> {
+        self.tracker.id_provider().new_uuid()
     }
 
     fn set_last_instruction_output(&self, value: Option<Vec<u8>>) -> Result<(), RuntimeError> {

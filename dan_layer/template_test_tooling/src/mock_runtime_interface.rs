@@ -151,6 +151,11 @@ impl RuntimeInterface for MockRuntimeInterface {
         }
     }
 
+    fn generate_uuid(&self) -> Result<Vec<u8>, RuntimeError> {
+        self.add_call("generate_uuid");
+        self.inner.generate_uuid()
+    }
+
     fn set_last_instruction_output(&self, value: Option<Vec<u8>>) -> Result<(), RuntimeError> {
         self.add_call("set_last_instruction_output");
         self.inner.set_last_instruction_output(value)

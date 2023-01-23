@@ -24,6 +24,7 @@ use tari_template_lib::{
     args::Arg,
     models::{ComponentAddress, ComponentHeader, TemplateAddress},
 };
+use tari_transaction_manifest::{parse_manifest, ManifestValue};
 
 use super::MockRuntimeInterface;
 
@@ -152,6 +153,26 @@ impl TemplateTest<MockRuntimeInterface> {
         self.commit_diff(diff);
 
         result
+    }
+
+    pub fn execute_and_commit_manifest<'a, I: IntoIterator<Item = (&'a str, ManifestValue)>>(
+        &self,
+        manifest: &str,
+        variables: I,
+    ) -> FinalizeResult {
+        let template_imports = self
+            .name_to_template
+            .iter()
+            .map(|(name, addr)| format!("use template_{} as {};", addr, name))
+            .collect::<Vec<_>>()
+            .join("\n");
+        let manifest = format!("{} fn main() {{ {} }}", template_imports, manifest);
+        let instructions = parse_manifest(
+            &manifest,
+            variables.into_iter().map(|(a, b)| (a.to_string(), b)).collect(),
+        )
+        .unwrap();
+        self.execute_and_commit(instructions)
     }
 }
 

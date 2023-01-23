@@ -1,15 +1,14 @@
 [workspace]
 [package]
-name = "buggy"
+name = "account"
 version = "0.1.0"
 edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-tari_template_abi = { path = "../../../../template_abi", default-features = false, features = ["alloc"] }
-tari_bor = { path = "../../../../tari_bor", default-features = false }
-wee_alloc = "0.4.5"
+tari_template_abi = { path = "../../../../template_abi" }
+tari_template_lib = { path = "../../../../template_lib" }
 
 [profile.release]
 opt-level = 's'     # Optimize for size.
@@ -20,8 +19,3 @@ strip = "debuginfo" # Strip debug info.
 
 [lib]
 crate-type = ["cdylib", "lib"]
-
-[features]
-call_engine_in_abi = []
-return_null_abi = []
-unexpected_export_function = []
