@@ -39,6 +39,7 @@ use tari_dan_core::services::BaseNodeClient;
 use tari_engine_types::execution_result::Type;
 use tari_template_lib::Hash;
 use tari_validator_node::GrpcBaseNodeClient;
+use tari_validator_node_cli::versioned_substate_address::VersionedSubstateAddress;
 use tari_validator_node_client::types::{GetIdentityResponse, GetTemplateRequest, TemplateRegistrationResponse};
 use utils::{
     miner::{mine_blocks, register_miner_process},
@@ -63,7 +64,7 @@ pub struct TariWorld {
     validator_nodes: IndexMap<String, ValidatorNodeProcess>,
     miners: IndexMap<String, MinerProcess>,
     templates: IndexMap<String, RegisteredTemplate>,
-    components: IndexMap<String, Hash>,
+    outputs: IndexMap<String, IndexMap<String, VersionedSubstateAddress>>,
     http_server: Option<MockHttpServer>,
     cli_data_dir: Option<String>,
 }
@@ -99,7 +100,7 @@ impl cucumber::World for TariWorld {
             validator_nodes: IndexMap::new(),
             miners: IndexMap::new(),
             templates: IndexMap::new(),
-            components: IndexMap::new(),
+            outputs: IndexMap::new(),
             http_server: None,
             cli_data_dir: None,
         })
@@ -199,22 +200,21 @@ async fn assert_template_is_registered(world: &mut TariWorld, template_name: Str
 }
 
 #[when(
-    expr = "I create a component {word} of template \"{word}\" on {word} using \"{word}\" with inputs \"{word}\" and \
-            {int} outputs"
+    expr = r#"I call function "{word}" on template "{word}" on {word} with args "{word}" and {int} outputs named "{word}""#
 )]
 async fn call_template_constructor(
     world: &mut TariWorld,
-    component_name: String,
+    function_call: String,
     template_name: String,
     vn_name: String,
-    function_call: String,
     args: String,
     num_outputs: u64,
+    outputs_name: String,
 ) {
     let args = args.split(',').map(|a| a.trim().to_string()).collect();
     validator_node_cli::create_component(
         world,
-        component_name,
+        outputs_name,
         template_name,
         vn_name,
         function_call,
@@ -297,18 +297,39 @@ async fn create_account(world: &mut TariWorld, account_name: String, vn_name: St
     validator_node_cli::create_account(world, account_name, vn_name).await;
 }
 
-#[when(expr = "I submit a transaction manifest on {word} with {int} outputs")]
-async fn submit_manifest(world: &mut TariWorld, step: &Step, vn_name: String, num_outputs: u64) {
+#[when(expr = r#"I submit a transaction manifest on {word} with {int} outputs named "{word}""#)]
+async fn submit_manifest(world: &mut TariWorld, step: &Step, vn_name: String, num_outputs: u64, output_name: String) {
     let mut manifest = step.docstring.as_ref().unwrap().clone();
 
     // replace the template addresses
-    for template in &world.templates {
-        let from = format!("use template_{}", template.0); // name
-        let to = format!("use template_{}", template.1.address); // address
+    for (name, template) in &world.templates {
+        let from = format!("use template_{}", name);
+        let to = format!("use template_{}", template.address);
         manifest = manifest.replace(&from, &to);
     }
 
-    validator_node_cli::submit_manifest(world, vn_name, manifest, num_outputs).await;
+    validator_node_cli::submit_manifest(world, vn_name, output_name, manifest, String::new(), num_outputs).await;
+}
+
+#[when(regex = r#"^I submit a transaction manifest on (\w+) with inputs "([^"]+)" and (\d+) outputs? named "(\w+)"$"#)]
+async fn submit_manifest_with_inputs(
+    world: &mut TariWorld,
+    step: &Step,
+    vn_name: String,
+    inputs: String,
+    num_outputs: u64,
+    outputs_name: String,
+) {
+    let mut manifest = step.docstring.as_ref().expect("manifest code not provided").clone();
+
+    // replace the template addresses
+    for (name, template) in &world.templates {
+        let from = format!("use template_{}", name);
+        let to = format!("use template_{}", template.address);
+        manifest = manifest.replace(&from, &to);
+    }
+
+    validator_node_cli::submit_manifest(world, vn_name, outputs_name, manifest, inputs, num_outputs).await;
 }
 
 #[when(expr = "I wait {int} seconds")]
@@ -354,8 +375,11 @@ async fn print_world(world: &mut TariWorld) {
     }
 
     // templates
-    for (name, component_id) in world.components.iter() {
-        eprintln!("Component \"{}\" with id \"{}\"", name, component_id);
+    for (name, outputs) in world.outputs.iter() {
+        eprintln!("Outputs \"{}\"", name);
+        for (name, addr) in outputs {
+            eprintln!("  - {}: {}", name, addr);
+        }
     }
 
     eprintln!();

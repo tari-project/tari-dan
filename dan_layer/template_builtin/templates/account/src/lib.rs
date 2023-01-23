@@ -54,16 +54,12 @@ mod account_template {
                 .map(|(_, vault)| vault)
         }
 
-        pub fn balance(&self, resource: SubstateAddress) -> Amount {
-            if let SubstateAddress::Resource(resource) = resource {
-                let v = self
-                    .get_vault(resource)
-                    .ok_or_else(|| format!("No vault for resource {}", resource))
-                    .unwrap();
-                v.balance()
-            } else {
-                panic!("Invalid addr {:?}", resource);
-            }
+        pub fn balance(&self, resource: ResourceAddress) -> Amount {
+            let v = self
+                .get_vault(resource)
+                .ok_or_else(|| format!("No vault for resource {}", resource))
+                .unwrap();
+            v.balance()
         }
 
         // #[access_rules(requires(owner_badge))]

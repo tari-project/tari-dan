@@ -26,6 +26,6 @@ pub use tari_template_macros::template;
 pub use crate::{
     chain_time::ChainTime,
     component::ComponentManager,
-    models::{Amount, Bucket, BucketId, Metadata, NftToken, NftTokenId, ResourceAddress, SubstateAddress, Vault},
+    models::{Amount, Bucket, BucketId, Metadata, NftToken, NftTokenId, ResourceAddress, Vault},
     resource::{ResourceBuilder, ResourceManager, ResourceType},
 };

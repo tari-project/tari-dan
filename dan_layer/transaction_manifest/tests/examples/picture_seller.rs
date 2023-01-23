@@ -2,9 +2,7 @@
 //   SPDX-License-Identifier: BSD-3-clause
 
 // These mappings can be provided to the parser context or defined inline in the manifest
-// TODO: Account builtin should not have to be explicitly defined
 use template_687b0d5b3bee2e987a72c0f8b0b9286968803eba9040ed67e3a85b8465ad294a as TestFaucet;
-use template_bc617551fc331bb5ebc12943c1456dbf8fbd0ae4e950b2ffc28a6b89ce040382 as Account;
 use template_c2b621869ec2929d3b9503ea41054f01b468ce99e50254b58e460f608ae377f7 as PictureSeller;
 
 fn main() {

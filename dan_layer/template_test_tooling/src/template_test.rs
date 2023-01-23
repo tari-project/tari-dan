@@ -12,7 +12,7 @@ use tari_dan_engine::{
     runtime::RuntimeInterface,
     state_store::{memory::MemoryStateStore, AtomicDb, StateReader, StateStoreError, StateWriter},
     transaction::{Transaction, TransactionError, TransactionProcessor},
-    wasm::{compile::compile_template, LoadedWasmTemplate},
+    wasm::{compile::compile_template, LoadedWasmTemplate, WasmModule},
 };
 use tari_engine_types::{
     commit_result::FinalizeResult,
@@ -20,6 +20,7 @@ use tari_engine_types::{
     instruction::Instruction,
     substate::{Substate, SubstateAddress, SubstateDiff},
 };
+use tari_template_builtin::{get_template_builtin, ACCOUNT_TEMPLATE_ADDRESS};
 use tari_template_lib::{
     args::Arg,
     models::{ComponentAddress, ComponentHeader, TemplateAddress},
@@ -43,6 +44,13 @@ impl<R: RuntimeInterface + Clone + 'static> TemplateTest<R> {
         let wasms = templates.into_iter().map(|path| compile_template(path, &[]).unwrap());
         let mut builder = Package::builder();
         let mut name_to_template = HashMap::new();
+
+        // Add Account template builtin
+        let wasm = get_template_builtin(&ACCOUNT_TEMPLATE_ADDRESS);
+        let template = WasmModule::from_code(wasm.to_vec()).load_template().unwrap();
+        builder.add_template(ACCOUNT_TEMPLATE_ADDRESS, template);
+        name_to_template.insert("Account".to_string(), ACCOUNT_TEMPLATE_ADDRESS);
+
         for wasm in wasms {
             let template_addr = hasher("test_template").chain(wasm.code()).result();
             let wasm = wasm.load_template().unwrap();
@@ -107,7 +115,10 @@ impl TemplateTest<MockRuntimeInterface> {
     }
 
     pub fn get_template_address(&self, name: &str) -> TemplateAddress {
-        *self.name_to_template.get(name).unwrap()
+        *self
+            .name_to_template
+            .get(name)
+            .unwrap_or_else(|| panic!("No template with name {}", name))
     }
 
     pub fn call_function<T>(&self, template_name: &str, func_name: &str, args: Vec<Arg>) -> T

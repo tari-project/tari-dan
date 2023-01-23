@@ -27,43 +27,43 @@ root:
 
 loggers:
   tari::application:
-    level: trace
+    level: info
     appenders:
       - stdout
     additive: false
 
   tari::validator_node:
-    level: trace
+    level: info
     appenders:
       - stdout
     additive: false
 
   tari::dan:
-    level: trace
+    level: info
     appenders:
       - stdout
     additive: false
 
   tari::dan_layer:
-    level: trace
+    level: info
     appenders:
       - stdout
     additive: false
 
   dan:
-    level: trace
+    level: info
     appenders:
       - stdout
     additive: false
 
   vn:
-    level: trace
+    level: info
     appenders:
       - stdout
     additive: false
 
   tari_validator_node:
-    level: trace
+    level: info
     appenders:
       - stdout
     additive: false

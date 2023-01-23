@@ -26,6 +26,7 @@ use syn::{
     UseTree,
 };
 use tari_engine_types::TemplateAddress;
+use tari_template_builtin::ACCOUNT_TEMPLATE_ADDRESS;
 use tari_template_lib::args::LogLevel;
 
 #[derive(Debug, Clone)]
@@ -76,6 +77,10 @@ impl ManifestParser {
 
     pub fn parse(&self, input: ParseStream) -> Result<Vec<ManifestIntent>, syn::Error> {
         let mut statements = vec![];
+        statements.push(ManifestIntent::DefineTemplate {
+            template_address: ACCOUNT_TEMPLATE_ADDRESS,
+            alias: Ident::new("Account", proc_macro2::Span::call_site()),
+        });
         for stmt in Block::parse_within(input)? {
             match stmt {
                 // use template_hash as TemplateName;

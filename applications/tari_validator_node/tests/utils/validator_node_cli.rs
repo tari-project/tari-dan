@@ -1,13 +1,10 @@
 //  Copyright 2022 The Tari Project
 //  SPDX-License-Identifier: BSD-3-Clause
 
-use std::{collections::HashMap, path::PathBuf, str::FromStr};
+use std::{path::PathBuf, str::FromStr};
 
-use tari_engine_types::substate::SubstateAddress;
-use tari_template_lib::{
-    models::{ComponentAddress, TemplateAddress},
-    Hash,
-};
+use tari_engine_types::substate::{SubstateAddress, SubstateDiff};
+use tari_template_lib::models::TemplateAddress;
 use tari_transaction_manifest::parse_manifest;
 use tari_validator_node_cli::{
     command::{
@@ -16,6 +13,7 @@ use tari_validator_node_cli::{
     },
     from_hex::FromHex,
     key_manager::KeyManager,
+    versioned_substate_address::VersionedSubstateAddress,
 };
 use tari_validator_node_client::{types::SubmitTransactionResponse, ValidatorNodeClient};
 use tempfile::tempdir;
@@ -58,15 +56,17 @@ pub async fn create_account(world: &mut TariWorld, account_name: String, validat
     let mut client = get_validator_node_client(world, validator_node_name).await;
     let resp = handle_submit(args, data_dir, &mut client).await.unwrap().unwrap();
 
-    // store the account component id for later reference
-    let results = resp.result.unwrap().finalize.execution_results;
-    let component_id: Hash = results.first().unwrap().decode().unwrap();
-    world.components.insert(account_name, component_id);
+    // store the account component address and other substate addresses for later reference
+    add_substate_addresses(
+        world,
+        account_name,
+        resp.result.unwrap().finalize.result.accept().unwrap(),
+    );
 }
 
 pub async fn create_component(
     world: &mut TariWorld,
-    component_name: String,
+    outputs_name: String,
     template_name: String,
     vn_name: String,
     function_call: String,
@@ -105,24 +105,63 @@ pub async fn create_component(
     let mut client = get_validator_node_client(world, vn_name).await;
     let resp = handle_submit(args, data_dir, &mut client).await.unwrap().unwrap();
 
-    // store the account component id for later reference
-    let results = resp.result.unwrap().finalize.execution_results;
-    let component_id: Hash = results.first().unwrap().decode().unwrap();
-    world.components.insert(component_name, component_id);
+    // store the account component address and other substate addresses for later reference
+    add_substate_addresses(
+        world,
+        outputs_name,
+        resp.result.unwrap().finalize.result.accept().unwrap(),
+    );
+}
+
+fn add_substate_addresses(world: &mut TariWorld, outputs_name: String, diff: &SubstateDiff) {
+    let outputs = world.outputs.entry(outputs_name).or_default();
+    let mut counters = [0usize, 0, 0, 0];
+    for (addr, data) in diff.up_iter() {
+        match addr {
+            SubstateAddress::Component(_) => {
+                outputs.insert(format!("components[{}]", counters[0]), VersionedSubstateAddress {
+                    address: *addr,
+                    version: data.version(),
+                });
+                counters[0] += 1;
+            },
+            SubstateAddress::Resource(_) => {
+                outputs.insert(format!("resources[{}]", counters[1]), VersionedSubstateAddress {
+                    address: *addr,
+                    version: data.version(),
+                });
+                counters[1] += 1;
+            },
+            SubstateAddress::Vault(_) => {
+                outputs.insert(format!("vaults[{}]", counters[2]), VersionedSubstateAddress {
+                    address: *addr,
+                    version: data.version(),
+                });
+                counters[2] += 1;
+            },
+            SubstateAddress::NonFungible(_, _) => {
+                outputs.insert(format!("nfts[{}]", counters[3]), VersionedSubstateAddress {
+                    address: *addr,
+                    version: data.version(),
+                });
+                counters[3] += 1;
+            },
+        }
+    }
 }
 
 pub async fn call_method(
     world: &mut TariWorld,
     vn_name: String,
-    component_name: String,
+    outputs_name: String,
     method_call: String,
     num_outputs: u64,
 ) -> SubmitTransactionResponse {
     let data_dir = get_cli_data_dir(world);
-    let component_address = world.components.get(&component_name).unwrap();
+    let outputs = world.outputs.get(&outputs_name).unwrap();
 
     let instruction = CliInstruction::CallMethod {
-        component_address: ComponentAddress::new(*component_address).into(),
+        component_address: outputs["components[0]"].address,
         // TODO: actually parse the method call for arguments
         method_name: method_call,
         args: vec![],
@@ -148,18 +187,36 @@ pub async fn call_method(
         },
     };
     let mut client = get_validator_node_client(world, vn_name).await;
-    handle_submit(args, data_dir, &mut client).await.unwrap().unwrap()
+    let resp = handle_submit(args, data_dir, &mut client).await.unwrap().unwrap();
+    // store the account component address and other substate addresses for later reference
+    add_substate_addresses(
+        world,
+        outputs_name,
+        resp.result.as_ref().unwrap().finalize.result.accept().unwrap(),
+    );
+    resp
 }
 
-pub async fn submit_manifest(world: &mut TariWorld, vn_name: String, manifest_content: String, num_outputs: u64) {
+pub async fn submit_manifest(
+    world: &mut TariWorld,
+    vn_name: String,
+    outputs_name: String,
+    manifest_content: String,
+    inputs: String,
+    num_outputs: u64,
+) {
+    let input_groups = inputs.split(',').map(|s| s.trim()).collect::<Vec<_>>();
     // generate globals for components addresses
-    let mut globals = HashMap::new();
-    for component in &world.components {
-        let name = component.0.to_string();
-        let component_address_hash = component.1;
-        let substate_address = SubstateAddress::Component(ComponentAddress::new(*component_address_hash)).into();
-        globals.insert(name, substate_address);
-    }
+    let globals = world
+        .outputs
+        .iter()
+        .filter(|(name, _)| input_groups.contains(&name.as_str()))
+        .flat_map(|(name, outputs)| {
+            outputs
+                .iter()
+                .map(move |(child_name, addr)| (format!("{}.{}", name, child_name), addr.address.into()))
+        })
+        .collect();
 
     // parse the manifest
     let instructions = parse_manifest(&manifest_content, globals).unwrap();
@@ -172,19 +229,40 @@ pub async fn submit_manifest(world: &mut TariWorld, vn_name: String, manifest_co
     } else {
         Some(num_outputs as u8)
     };
+
+    // Supply the inputs explicitly. If this is empty, the internal component manager will attempt to supply the correct
+    // inputs
+    let inputs = inputs
+        .split(',')
+        .flat_map(|s| {
+            world
+                .outputs
+                .get(s.trim())
+                .unwrap_or_else(|| panic!("No outputs named {}", s.trim()))
+        })
+        .map(|(_, addr)| *addr)
+        .collect();
+
     let args = CommonSubmitArgs {
         wait_for_result: true,
         wait_for_result_timeout: Some(60),
         num_outputs,
-        inputs: vec![],
+        inputs,
         version: None,
         dump_outputs_into: None,
         account_template_address: None,
         dry_run: false,
     };
-    submit_transaction(instructions, args, data_dir, &mut client)
+    let resp = submit_transaction(instructions, args, data_dir, &mut client)
         .await
+        .unwrap()
         .unwrap();
+
+    add_substate_addresses(
+        world,
+        outputs_name,
+        resp.result.unwrap().finalize.result.accept().unwrap(),
+    );
 }
 
 async fn get_validator_node_client(world: &TariWorld, validator_node_name: String) -> ValidatorNodeClient {

@@ -6237,6 +6237,9 @@ dependencies = [
 [[package]]
 name = "tari_template_builtin"
 version = "0.35.1"
+dependencies = [
+ "tari_engine_types",
+]
 
 [[package]]
 name = "tari_template_lib"
@@ -6271,6 +6274,7 @@ dependencies = [
  "tari_dan_engine",
  "tari_engine_types",
  "tari_template_abi",
+ "tari_template_builtin",
  "tari_template_lib",
  "tari_transaction_manifest",
 ]
@@ -6295,6 +6299,7 @@ dependencies = [
  "quote",
  "syn",
  "tari_engine_types",
+ "tari_template_builtin",
  "tari_template_lib",
  "thiserror",
 ]
