@@ -313,7 +313,7 @@ mod basic_nft {
 
     #[test]
     fn create_resource_mint_and_deposit() {
-        let template_test = TemplateTest::new(vec!["tests/templates/account", "tests/templates/basic_nft"]);
+        let template_test = TemplateTest::new(vec!["tests/templates/account", "tests/templates/nft/basic_nft"]);
 
         let account_address: ComponentAddress = template_test.call_function("Account", "new", args![]);
         let nft_component: ComponentAddress = template_test.call_function("SparkleNft", "new", args![]);
