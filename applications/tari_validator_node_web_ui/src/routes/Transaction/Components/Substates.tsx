@@ -21,7 +21,6 @@
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 import { useState } from 'react';
-import JsonTooltip from '../../../Components/JsonTooltip';
 import { renderJson } from '../../../utils/helpers';
 import { toHexString } from '../../VN/Components/helpers';
 import Table from '@mui/material/Table';
@@ -35,7 +34,6 @@ import {
   CodeBlock,
   AccordionIconButton,
 } from '../../../Components/StyledComponents';
-import IconButton from '@mui/material/IconButton';
 import KeyboardArrowDownIcon from '@mui/icons-material/KeyboardArrowDown';
 import KeyboardArrowUpIcon from '@mui/icons-material/KeyboardArrowUp';
 import Collapse from '@mui/material/Collapse';
@@ -48,7 +46,7 @@ function RowData({ substate }: any) {
 
   return (
     <>
-      <TableRow>
+      <TableRow key={substate.shard_id}>
         <DataTableCell sx={{ borderBottom: 'none' }}>
           {toHexString(substate.shard_id)}
         </DataTableCell>

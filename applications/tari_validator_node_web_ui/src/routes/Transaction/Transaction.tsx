@@ -117,10 +117,12 @@ export default function Transaction() {
       <Grid container spacing={5}>
         <Grid item xs={12} md={12} lg={12}>
           <PageHeading>Payload ID</PageHeading>
-          <Typography variant="h6" sx={{ mt: 4, mb: 4 }}>
+          <Typography variant="h6" sx={{ mt: 4, mb: 4, textAlign: 'center' }}>
             {payloadId}
           </Typography>
-          <Typography>Outputs : {outputs?.size}</Typography>
+          <Typography sx={{ textAlign: 'center' }}>
+            Outputs : {outputs?.size}
+          </Typography>
         </Grid>
         <Grid item xs={12} md={12} lg={12}>
           <StyledPaper>
