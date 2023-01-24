@@ -72,11 +72,11 @@ tari_common = { git = "https://github.com/tari-project/tari.git", branch = "deve
 
 [dev-dependencies]
 # FIXME: the newest version failed compilation due to a missing "bool_to_option" unstable feature
-cucumber = { version = "0.13.0"}
+cucumber = { version = "0.13.0" }
 tempfile = "3.3.0"
 tari_test_utils = { git = "https://github.com/tari-project/tari.git", branch = "development", package = "tari_test_utils" }
 tari_base_node = { git = "https://github.com/tari-project/tari.git", branch = "development", package = "tari_base_node" }
-tari_console_wallet = { git = "https://github.com/tari-project/tari.git", branch = "development", package = "tari_console_wallet"}
+tari_console_wallet = { git = "https://github.com/tari-project/tari.git", branch = "development", package = "tari_console_wallet" }
 tari_comms_dht = { git = "https://github.com/tari-project/tari.git", branch = "development", package = "tari_comms_dht" }
 tari_wallet = { git = "https://github.com/tari-project/tari.git", branch = "development", package = "tari_wallet" }
 tari_validator_node_cli = { path = "../tari_validator_node_cli" }

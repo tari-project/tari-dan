@@ -144,7 +144,7 @@ fn test_dodgy_template() {
 
 #[test]
 fn test_account() {
-    let template_test = TemplateTest::new(vec!["tests/templates/account", "tests/templates/faucet"]);
+    let template_test = TemplateTest::new(vec!["tests/templates/faucet"]);
 
     let faucet_template = template_test.get_template_address("TestFaucet");
 
@@ -313,7 +313,7 @@ mod basic_nft {
 
     #[test]
     fn create_resource_mint_and_deposit() {
-        let template_test = TemplateTest::new(vec!["tests/templates/account", "tests/templates/basic_nft"]);
+        let template_test = TemplateTest::new(vec!["tests/templates/basic_nft"]);
 
         let account_address: ComponentAddress = template_test.call_function("Account", "new", args![]);
         let nft_component: ComponentAddress = template_test.call_function("SparkleNft", "new", args![]);

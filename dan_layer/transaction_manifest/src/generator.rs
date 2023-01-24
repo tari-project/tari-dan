@@ -4,7 +4,7 @@
 use std::collections::{HashMap, HashSet};
 
 use syn::Lit;
-use tari_engine_types::{instruction::Instruction, TemplateAddress};
+use tari_engine_types::{instruction::Instruction, substate::SubstateAddress, TemplateAddress};
 use tari_template_lib::{arg, args::Arg};
 
 use crate::{
@@ -152,7 +152,12 @@ impl ManifestInstructionGenerator {
                         .get(&ident.to_string())
                         .or_else(|| self.global_aliases.get(&ident.to_string()))
                         .map(|v| match v {
-                            ManifestValue::Address(addr) => Ok(arg!(*addr)),
+                            ManifestValue::Address(addr) => match addr {
+                                SubstateAddress::Component(addr) => Ok(arg!(*addr)),
+                                SubstateAddress::Resource(addr) => Ok(arg!(*addr)),
+                                SubstateAddress::Vault(addr) => Ok(arg!(*addr)),
+                                SubstateAddress::NonFungible(_, id) => Ok(arg!(*id)),
+                            },
                             ManifestValue::Literal(lit) => lit_to_arg(lit),
                         })
                         .or_else(|| {

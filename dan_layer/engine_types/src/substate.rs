@@ -216,6 +216,13 @@ impl SubstateValue {
         }
     }
 
+    pub fn component(&self) -> Option<&ComponentHeader> {
+        match self {
+            SubstateValue::Component(component) => Some(component),
+            _ => None,
+        }
+    }
+
     pub fn component_mut(&mut self) -> Option<&mut ComponentHeader> {
         match self {
             SubstateValue::Component(component) => Some(component),
