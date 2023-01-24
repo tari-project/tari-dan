@@ -117,7 +117,6 @@ async fn main() {
                 .summarized()
                 .assert_normalized(),
         )
-        // TODO: allow to run multiple scenarios
         .run_and_exit("tests/features/")
         .await;
 }

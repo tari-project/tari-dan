@@ -1,7 +1,7 @@
 # Copyright 2022 The Tari Project
 # SPDX-License-Identifier: BSD-3-Clause
 
-Feature: Commitee scenarios
+Feature: Committee scenarios
 
   # FIXME: when spawning VN2 the test is flaky
   @serial

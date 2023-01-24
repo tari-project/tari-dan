@@ -58,7 +58,24 @@ impl WalletProcess {
     pub async fn create_client(&self) -> WalletGrpcClient {
         let wallet_addr = format!("http://127.0.0.1:{}", self.grpc_port);
         eprintln!("Wallet GRPC at {}", wallet_addr);
-        let channel = Endpoint::from_str(&wallet_addr).unwrap().connect().await.unwrap();
+        let endpoint = Endpoint::from_str(&wallet_addr).unwrap();
+        let mut counter = 0;
+        let channel = loop {
+            if self.handle.is_finished() {
+                panic!("Wallet process has exited");
+            }
+            match endpoint.connect().await {
+                Ok(channel) => break channel,
+                Err(e) => {
+                    eprintln!("Failed to connect to wallet GRPC address {}: {}", wallet_addr, e);
+                    if counter > 10 {
+                        panic!("Failed to connect to wallet GRPC address {}", wallet_addr);
+                    }
+                    tokio::time::sleep(Duration::from_secs(1)).await;
+                    counter += 1;
+                },
+            }
+        };
         WalletClient::with_interceptor(
             channel,
             ClientAuthenticationInterceptor::create(&GrpcAuthentication::default()).unwrap(),
@@ -137,25 +154,24 @@ pub async fn spawn_wallet(world: &mut TariWorld, wallet_name: String, base_node_
         temp_dir_path,
     };
 
-    // We need to give it time for the wallet to startup
-    // TODO: it would be better to scan the wallet to detect when it has started
-    tokio::time::sleep(Duration::from_secs(5)).await;
+    tokio::time::sleep(Duration::from_secs(2)).await;
+    let mut wallet_client = wallet_process.create_client().await;
+
+    let identity = wallet_client
+        .identify(GetIdentityRequest {})
+        .await
+        .unwrap()
+        .into_inner();
+
+    eprintln!("Wallet {} comms address: {}", wallet_name, identity.public_address);
 
     // TODO: fix the wallet configuration so the base node is correctly set on startup instead of afterwards
-    let mut wallet_client = wallet_process.create_client().await;
     let _resp = wallet_client
         .set_base_node(set_base_node_request.clone())
         .await
         .unwrap();
 
     // TODO: Clean up
-    let identity = wallet_client
-        .identify(GetIdentityRequest {})
-        .await
-        .unwrap()
-        .into_inner();
-    eprintln!("Wallet {} comms address: {}", wallet_name, identity.public_address);
-
     let mut status = wallet_client.get_network_status(Empty {}).await.unwrap().into_inner();
     let mut counter = 0;
     while status.status != ConnectivityStatus::Online as i32 {
