@@ -30,7 +30,11 @@ import TableCell from '@mui/material/TableCell';
 import TableContainer from '@mui/material/TableContainer';
 import TableHead from '@mui/material/TableHead';
 import TableRow from '@mui/material/TableRow';
-import { DataTableCell, CodeBlock } from '../../../Components/StyledComponents';
+import {
+  DataTableCell,
+  CodeBlock,
+  AccordionIconButton,
+} from '../../../Components/StyledComponents';
 import IconButton from '@mui/material/IconButton';
 import KeyboardArrowDownIcon from '@mui/icons-material/KeyboardArrowDown';
 import KeyboardArrowUpIcon from '@mui/icons-material/KeyboardArrowUp';
@@ -45,9 +49,12 @@ function RowData({ substate }: any) {
   return (
     <>
       <TableRow>
-        <DataTableCell>{toHexString(substate.shard_id)}</DataTableCell>
+        <DataTableCell sx={{ borderBottom: 'none' }}>
+          {toHexString(substate.shard_id)}
+        </DataTableCell>
         <DataTableCell sx={{ borderBottom: 'none', textAlign: 'center' }}>
-          <IconButton
+          <AccordionIconButton
+            open={open1}
             aria-label="expand row"
             size="small"
             onClick={() => {
@@ -55,50 +62,37 @@ function RowData({ substate }: any) {
               setOpen2(false);
               setOpen3(false);
             }}
-            sx={
-              open1
-                ? { backgroundColor: '#9330FF', color: '#fff' }
-                : { backgroundColor: '#fff', color: '#9330FF' }
-            }
           >
             {open1 ? <KeyboardArrowUpIcon /> : <KeyboardArrowDownIcon />}
-          </IconButton>
+          </AccordionIconButton>
         </DataTableCell>
         <DataTableCell sx={{ borderBottom: 'none', textAlign: 'center' }}>
-          <IconButton
+          <AccordionIconButton
+            open={open2}
             aria-label="expand row"
             size="small"
             onClick={() => {
-              setOpen2(!open2);
               setOpen1(false);
+              setOpen2(!open2);
               setOpen3(false);
             }}
-            sx={
-              open2
-                ? { backgroundColor: '#9330FF', color: '#fff' }
-                : { backgroundColor: '#fff', color: '#9330FF' }
-            }
           >
             {open2 ? <KeyboardArrowUpIcon /> : <KeyboardArrowDownIcon />}
-          </IconButton>
+          </AccordionIconButton>
         </DataTableCell>
         <DataTableCell sx={{ borderBottom: 'none', textAlign: 'center' }}>
-          <IconButton
+          <AccordionIconButton
+            open={open3}
             aria-label="expand row"
             size="small"
             onClick={() => {
-              setOpen3(!open3);
               setOpen1(false);
               setOpen2(false);
+              setOpen3(!open3);
             }}
-            sx={
-              open3
-                ? { backgroundColor: '#9330FF', color: '#fff' }
-                : { backgroundColor: '#fff', color: '#9330FF' }
-            }
           >
             {open3 ? <KeyboardArrowUpIcon /> : <KeyboardArrowDownIcon />}
-          </IconButton>
+          </AccordionIconButton>
         </DataTableCell>
       </TableRow>
       <TableRow>
@@ -142,7 +136,6 @@ function RowData({ substate }: any) {
           style={{
             paddingBottom: 0,
             paddingTop: 0,
-            borderBottom: 'none',
           }}
           colSpan={4}
         >
@@ -176,10 +169,15 @@ export default function Substates({ substates }: any) {
         <TableHead>
           <TableRow>
             <TableCell>Shard</TableCell>
-            <TableCell sx={{ textAlign: 'center' }}>Data</TableCell>
-            <TableCell sx={{ textAlign: 'center' }}>Created</TableCell>
-            <TableCell sx={{ textAlign: 'center' }}>Destroyed</TableCell>
-            {/* <TableCell></TableCell> */}
+            <TableCell sx={{ textAlign: 'center', width: '120px' }}>
+              Data
+            </TableCell>
+            <TableCell sx={{ textAlign: 'center', width: '120px' }}>
+              Created
+            </TableCell>
+            <TableCell sx={{ textAlign: 'center', width: '120px' }}>
+              Destroyed
+            </TableCell>
           </TableRow>
         </TableHead>
         <TableBody>

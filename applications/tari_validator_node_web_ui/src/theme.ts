@@ -52,20 +52,9 @@ const theme = createTheme({
   components: {
     MuiButton: {
       defaultProps: {
-        // variant: 'contained',
-        // color: 'primary',
         disableRipple: true,
         style: {
           borderRadius: '5px',
-          //   fontFamily: '"AvenirHeavy", sans-serif',
-          //   padding: '5px 15px',
-        },
-      },
-    },
-    MuiPaper: {
-      defaultProps: {
-        style: {
-          //   boxShadow: '10px 14px 28px rgba(35, 11, 73, 0.05)',
         },
       },
     },

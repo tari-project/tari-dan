@@ -102,7 +102,7 @@ const Drawer = styled(MuiDrawer, {
 }));
 
 function Layout() {
-  const [open, setOpen] = useState(true);
+  const [open, setOpen] = useState(false);
   const toggleDrawer = () => {
     setOpen(!open);
   };
@@ -123,7 +123,6 @@ function Layout() {
           <Toolbar
             sx={{
               pr: '24px', // keep right padding when drawer closed
-              // backgroundColor: '#FFF',
             }}
           >
             <IconButton

@@ -29,7 +29,104 @@ import TableCell from '@mui/material/TableCell';
 import TableContainer from '@mui/material/TableContainer';
 import TableHead from '@mui/material/TableHead';
 import TableRow from '@mui/material/TableRow';
-import { DataTableCell, CodeBlock } from '../../../Components/StyledComponents';
+import {
+  DataTableCell,
+  CodeBlock,
+  AccordionIconButton,
+} from '../../../Components/StyledComponents';
+import KeyboardArrowDownIcon from '@mui/icons-material/KeyboardArrowDown';
+import KeyboardArrowUpIcon from '@mui/icons-material/KeyboardArrowUp';
+import Collapse from '@mui/material/Collapse';
+
+function RowData({ row, justify }: any) {
+  const [open, setOpen] = useState(false);
+
+  return (
+    <>
+      <TableRow
+        key={toHexString(row.node_hash)}
+        style={{ verticalAlign: 'top', borderBottom: 'none' }}
+      >
+        <DataTableCell style={{ borderBottom: 'none' }}>
+          {row.height}
+        </DataTableCell>
+        <DataTableCell style={{ borderBottom: 'none' }} className="key">
+          {toHexString(row.node_hash)}
+        </DataTableCell>
+        <TableCell style={{ borderBottom: 'none', padding: 0 }}>
+          <TableContainer>
+            <Table>
+              <TableHead>
+                <TableRow>
+                  <TableCell>Shard</TableCell>
+                  <TableCell>Current state</TableCell>
+                  <TableCell>Pledged to</TableCell>
+                </TableRow>
+              </TableHead>
+              <TableBody>
+                {Array.isArray(justify.all_shard_pledges?.pledges) ? (
+                  justify.all_shard_pledges.pledges.map((pledge: any) => {
+                    // This enum gets serialized different ways... should be fixed in the rust
+                    let currentState = Object.keys(pledge.pledge.current_state);
+                    return (
+                      <TableRow
+                        key={pledge.shard_id}
+                        sx={{ borderBottom: 'none' }}
+                      >
+                        <DataTableCell>{pledge.shard_id}</DataTableCell>
+                        <DataTableCell>
+                          {currentState[0] !== '0'
+                            ? currentState[0]
+                            : pledge.pledge.current_state}
+                        </DataTableCell>
+                        <DataTableCell>
+                          {pledge.pledge.pledged_to_payload.id}
+                        </DataTableCell>
+                      </TableRow>
+                    );
+                  })
+                ) : (
+                  <TableRow>
+                    <DataTableCell colSpan={3} style={{ borderBottom: 'none' }}>
+                      No pledges
+                    </DataTableCell>
+                  </TableRow>
+                )}
+              </TableBody>
+            </Table>
+          </TableContainer>
+        </TableCell>
+        <TableCell sx={{ borderBottom: 'none', textAlign: 'center' }}>
+          <AccordionIconButton
+            open={open}
+            aria-label="expand row"
+            size="small"
+            onClick={() => {
+              setOpen(!open);
+            }}
+          >
+            {open ? <KeyboardArrowUpIcon /> : <KeyboardArrowDownIcon />}
+          </AccordionIconButton>
+        </TableCell>
+      </TableRow>
+      <TableRow>
+        <DataTableCell
+          style={{
+            paddingBottom: 0,
+            paddingTop: 0,
+          }}
+          colSpan={4}
+        >
+          <Collapse in={open} timeout="auto" unmountOnExit>
+            <CodeBlock style={{ marginBottom: '10px' }}>
+              {row.justify ? renderJson(JSON.parse(row.justify)) : ''}
+            </CodeBlock>
+          </Collapse>
+        </DataTableCell>
+      </TableRow>
+    </>
+  );
+}
 
 export default function Output({
   shard,
@@ -55,53 +152,7 @@ export default function Output({
           <TableBody>
             {output.map((row) => {
               let justify = JSON.parse(row.justify);
-              return (
-                <TableRow key={toHexString(row.node_hash)}>
-                  <DataTableCell>{row.height}</DataTableCell>
-                  <DataTableCell className="key">
-                    {toHexString(row.node_hash)}
-                  </DataTableCell>
-                  <TableCell>
-                    <TableContainer>
-                      <Table>
-                        <TableHead>
-                          <TableRow>
-                            <TableCell>Shard</TableCell>
-                            <TableCell>Current state</TableCell>
-                            <TableCell>Pledged to</TableCell>
-                          </TableRow>
-                        </TableHead>
-                        <TableBody>
-                          { Array.isArray(justify.all_shard_pledges?.pledges) ? justify.all_shard_pledges.pledges.map((pledge:any) => {
-                            // This enum gets serialized different ways... should be fixed in the rust
-                            let currentState = Object.keys(
-                              pledge.pledge.current_state
-                            );
-                            return (
-                              <TableRow key={pledge.shard_id}>
-                                <DataTableCell>{pledge.shard_id}</DataTableCell>
-                                <DataTableCell>
-                                  {currentState[0] !== '0'
-                                    ? currentState[0]
-                                    : pledge.pledge.current_state}
-                                </DataTableCell>
-                                <DataTableCell>
-                                  {pledge.pledge.pledged_to_payload.id}
-                                </DataTableCell>
-                              </TableRow>
-                            );
-                          }) : <TableRow><DataTableCell>No pledges</DataTableCell></TableRow> }
-                        </TableBody>
-                      </Table>
-                    </TableContainer>
-                  </TableCell>
-                  <TableCell>
-                    <pre style={{ height: '200px', overflow: 'scroll' }}>
-                      {row.justify ? renderJson(JSON.parse(row.justify)) : ''}
-                    </pre>
-                  </TableCell>
-                </TableRow>
-              );
+              return <RowData row={row} justify={justify} />;
             })}
           </TableBody>
         </Table>

@@ -24,6 +24,22 @@ import Paper from '@mui/material/Paper';
 import TableCell from '@mui/material/TableCell';
 import { styled } from '@mui/material/styles';
 import Box from '@mui/material/Box';
+import IconButton from '@mui/material/IconButton';
+import theme from '../theme';
+
+interface IAccordionIconButton {
+  open: boolean;
+}
+
+export const AccordionIconButton = styled(IconButton)<IAccordionIconButton>`
+  background-color: ${({ open }) =>
+    open ? theme.palette.primary.main : '#fff'};
+  color: ${({ open }) => (open ? '#fff' : theme.palette.primary.main)};
+  &:hover {
+    background-color: ${theme.palette.primary.main};
+    color: #fff;
+  }
+`;
 
 export const StyledPaper = styled(Paper)(({ theme }) => ({
   padding: theme.spacing(3),
@@ -38,4 +54,6 @@ export const CodeBlock = styled(Box)(({ theme }) => ({
   backgroundColor: '#F5F5F7',
   borderRadius: theme.shape.borderRadius,
   padding: theme.spacing(3),
+  maxHeight: '400px',
+  overflowY: 'scroll',
 }));

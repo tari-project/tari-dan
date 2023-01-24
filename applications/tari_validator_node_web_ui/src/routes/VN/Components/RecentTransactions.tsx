@@ -31,8 +31,11 @@ import TableCell from '@mui/material/TableCell';
 import TableContainer from '@mui/material/TableContainer';
 import TableHead from '@mui/material/TableHead';
 import TableRow from '@mui/material/TableRow';
-import { DataTableCell, CodeBlock } from '../../../Components/StyledComponents';
-import IconButton from '@mui/material/IconButton';
+import {
+  DataTableCell,
+  CodeBlock,
+  AccordionIconButton,
+} from '../../../Components/StyledComponents';
 import KeyboardArrowDownIcon from '@mui/icons-material/KeyboardArrowDown';
 import KeyboardArrowUpIcon from '@mui/icons-material/KeyboardArrowUp';
 import Collapse from '@mui/material/Collapse';
@@ -87,38 +90,30 @@ function RowData({
           {timestamp}
         </DataTableCell>
         <DataTableCell sx={{ borderBottom: 'none', textAlign: 'center' }}>
-          <IconButton
+          <AccordionIconButton
+            open={open1}
             aria-label="expand row"
             size="small"
             onClick={() => {
               setOpen1(!open1);
               setOpen2(false);
             }}
-            sx={
-              open1
-                ? { backgroundColor: '#9330FF', color: '#fff' }
-                : { backgroundColor: '#fff', color: '#9330FF' }
-            }
           >
             {open1 ? <KeyboardArrowUpIcon /> : <KeyboardArrowDownIcon />}
-          </IconButton>
+          </AccordionIconButton>
         </DataTableCell>
         <DataTableCell sx={{ borderBottom: 'none', textAlign: 'center' }}>
-          <IconButton
+          <AccordionIconButton
+            open={open2}
             aria-label="expand row"
             size="small"
             onClick={() => {
               setOpen2(!open2);
               setOpen1(false);
             }}
-            sx={
-              open2
-                ? { backgroundColor: '#9330FF', color: '#fff' }
-                : { backgroundColor: '#fff', color: '#9330FF' }
-            }
           >
             {open2 ? <KeyboardArrowUpIcon /> : <KeyboardArrowDownIcon />}
-          </IconButton>
+          </AccordionIconButton>
         </DataTableCell>
       </TableRow>
       <TableRow key={`${id}-2`}>
@@ -159,20 +154,23 @@ function RecentTransactions() {
     getRecentTransactions().then((recentTransactions) => {
       setRecentTransacations(
         // Display from newest to oldest by reversing
-        recentTransactions.slice().reverse().map(({ instructions, meta, payload_id, timestamp }: IRecentTransaction) => ({
-          ({
-            instructions,
-            meta,
-            payload_id,
-            timestamp,
-          }: IRecentTransaction) => ({
-            id: toHexString(payload_id),
-            payload_id: toHexString(payload_id),
-            timestamp: timestamp,
-            meta: meta,
-            instructions: instructions,
-          })
-        )
+        recentTransactions
+          .slice()
+          .reverse()
+          .map(
+            ({
+              instructions,
+              meta,
+              payload_id,
+              timestamp,
+            }: IRecentTransaction) => ({
+              id: toHexString(payload_id),
+              payload_id: toHexString(payload_id),
+              timestamp: timestamp,
+              meta: meta,
+              instructions: instructions,
+            })
+          )
       );
     });
   }, []);
