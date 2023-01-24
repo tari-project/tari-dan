@@ -4,7 +4,7 @@
 use std::{path::PathBuf, str::FromStr};
 
 use tari_engine_types::substate::{SubstateAddress, SubstateDiff};
-use tari_template_lib::models::TemplateAddress;
+use tari_template_builtin::ACCOUNT_TEMPLATE_ADDRESS;
 use tari_transaction_manifest::parse_manifest;
 use tari_validator_node_cli::{
     command::{
@@ -36,7 +36,7 @@ pub async fn create_account(world: &mut TariWorld, account_name: String, validat
     // create an account component
     let instruction = CliInstruction::CallFunction {
         // The "account" template is builtin in the validator nodes with a constant address
-        template_address: FromHex(TemplateAddress::from([0; 32])),
+        template_address: FromHex(ACCOUNT_TEMPLATE_ADDRESS),
         function_name: "new".to_owned(),
         args: vec![], // the account constructor does not have args
     };
@@ -54,7 +54,7 @@ pub async fn create_account(world: &mut TariWorld, account_name: String, validat
         },
     };
     let mut client = get_validator_node_client(world, validator_node_name).await;
-    let resp = handle_submit(args, data_dir, &mut client).await.unwrap().unwrap();
+    let resp = handle_submit(args, data_dir, &mut client).await.unwrap();
 
     // store the account component address and other substate addresses for later reference
     add_substate_addresses(
@@ -75,7 +75,11 @@ pub async fn create_component(
 ) {
     let data_dir = get_cli_data_dir(world);
 
-    let template_address = world.templates.get(&template_name).unwrap().address;
+    let template_address = world
+        .templates
+        .get(&template_name)
+        .unwrap_or_else(|| panic!("Template not found with name {}", template_name))
+        .address;
     let args: Vec<CliArg> = args.iter().map(|a| CliArg::from_str(a).unwrap()).collect();
     let instruction = CliInstruction::CallFunction {
         template_address: FromHex(template_address),
@@ -103,7 +107,7 @@ pub async fn create_component(
         },
     };
     let mut client = get_validator_node_client(world, vn_name).await;
-    let resp = handle_submit(args, data_dir, &mut client).await.unwrap().unwrap();
+    let resp = handle_submit(args, data_dir, &mut client).await.unwrap();
 
     // store the account component address and other substate addresses for later reference
     add_substate_addresses(
@@ -119,28 +123,32 @@ fn add_substate_addresses(world: &mut TariWorld, outputs_name: String, diff: &Su
     for (addr, data) in diff.up_iter() {
         match addr {
             SubstateAddress::Component(_) => {
-                outputs.insert(format!("components[{}]", counters[0]), VersionedSubstateAddress {
-                    address: *addr,
-                    version: data.version(),
-                });
+                let component = data.substate_value().component().unwrap();
+                outputs.insert(
+                    format!("components/{}", component.module_name),
+                    VersionedSubstateAddress {
+                        address: *addr,
+                        version: data.version(),
+                    },
+                );
                 counters[0] += 1;
             },
             SubstateAddress::Resource(_) => {
-                outputs.insert(format!("resources[{}]", counters[1]), VersionedSubstateAddress {
+                outputs.insert(format!("resources/{}", counters[1]), VersionedSubstateAddress {
                     address: *addr,
                     version: data.version(),
                 });
                 counters[1] += 1;
             },
             SubstateAddress::Vault(_) => {
-                outputs.insert(format!("vaults[{}]", counters[2]), VersionedSubstateAddress {
+                outputs.insert(format!("vaults/{}", counters[2]), VersionedSubstateAddress {
                     address: *addr,
                     version: data.version(),
                 });
                 counters[2] += 1;
             },
             SubstateAddress::NonFungible(_, _) => {
-                outputs.insert(format!("nfts[{}]", counters[3]), VersionedSubstateAddress {
+                outputs.insert(format!("nfts/{}", counters[3]), VersionedSubstateAddress {
                     address: *addr,
                     version: data.version(),
                 });
@@ -153,15 +161,29 @@ fn add_substate_addresses(world: &mut TariWorld, outputs_name: String, diff: &Su
 pub async fn call_method(
     world: &mut TariWorld,
     vn_name: String,
+    fq_component_name: String,
     outputs_name: String,
     method_call: String,
     num_outputs: u64,
 ) -> SubmitTransactionResponse {
     let data_dir = get_cli_data_dir(world);
-    let outputs = world.outputs.get(&outputs_name).unwrap();
+    let (input_group, component_name) = fq_component_name.split_once('/').unwrap_or_else(|| {
+        panic!(
+            "Component name must be in the format '{{group}}/components/{{template_name}}', got {}",
+            fq_component_name
+        )
+    });
+    let component = world
+        .outputs
+        .get(input_group)
+        .unwrap_or_else(|| panic!("No outputs found with name {}", input_group))
+        .iter()
+        .find(|(name, _)| **name == component_name)
+        .map(|(_, data)| data)
+        .unwrap_or_else(|| panic!("No component named {}", component_name));
 
     let instruction = CliInstruction::CallMethod {
-        component_address: outputs["components[0]"].address,
+        component_address: component.address,
         // TODO: actually parse the method call for arguments
         method_name: method_call,
         args: vec![],
@@ -187,7 +209,7 @@ pub async fn call_method(
         },
     };
     let mut client = get_validator_node_client(world, vn_name).await;
-    let resp = handle_submit(args, data_dir, &mut client).await.unwrap().unwrap();
+    let resp = handle_submit(args, data_dir, &mut client).await.unwrap();
     // store the account component address and other substate addresses for later reference
     add_substate_addresses(
         world,
@@ -214,7 +236,7 @@ pub async fn submit_manifest(
         .flat_map(|(name, outputs)| {
             outputs
                 .iter()
-                .map(move |(child_name, addr)| (format!("{}.{}", name, child_name), addr.address.into()))
+                .map(move |(child_name, addr)| (format!("{}/{}", name, child_name), addr.address.into()))
         })
         .collect();
 
@@ -255,7 +277,6 @@ pub async fn submit_manifest(
     };
     let resp = submit_transaction(instructions, args, data_dir, &mut client)
         .await
-        .unwrap()
         .unwrap();
 
     add_substate_addresses(

@@ -118,7 +118,7 @@ async fn main() {
                 .assert_normalized(),
         )
         // TODO: allow to run multiple scenarios
-        .run_and_exit("tests/features/fungible.feature")
+        .run_and_exit("tests/features/")
         .await;
 }
 
@@ -227,7 +227,7 @@ async fn call_template_constructor(
     tokio::time::sleep(Duration::from_secs(4)).await;
 }
 
-#[when(expr = "I create a component {word} of template \"{word}\" on {word} using \"{word}\"")]
+#[when(expr = r#"I create a component {word} of template "{word}" on {word} using "{word}""#)]
 async fn call_template_constructor_without_args(
     world: &mut TariWorld,
     component_name: String,
@@ -235,21 +235,23 @@ async fn call_template_constructor_without_args(
     vn_name: String,
     function_call: String,
 ) {
-    validator_node_cli::create_component(world, component_name, template_name, vn_name, function_call, vec![], 0).await;
+    validator_node_cli::create_component(world, component_name, template_name, vn_name, function_call, vec![], 1).await;
 
     // give it some time between transactions
     tokio::time::sleep(Duration::from_secs(4)).await;
 }
 
-#[when(expr = "I invoke on {word} on component {word} the method call \"{word}\" with {int} outputs")]
+#[when(expr = r#"I invoke on {word} on component {word} the method call "{word}" with {int} outputs named "{word}""#)]
 async fn call_component_method(
     world: &mut TariWorld,
     vn_name: String,
     component_name: String,
     method_call: String,
     num_outputs: u64,
+    output_name: String,
 ) {
-    let resp = validator_node_cli::call_method(world, vn_name, component_name, method_call, num_outputs).await;
+    let resp =
+        validator_node_cli::call_method(world, vn_name, component_name, output_name, method_call, num_outputs).await;
     assert_eq!(resp.result.unwrap().decision, QuorumDecision::Accept);
 
     // give it some time between transactions
@@ -268,7 +270,15 @@ async fn call_component_method_and_check_result(
     num_outputs: u64,
     expected_result: String,
 ) {
-    let resp = validator_node_cli::call_method(world, vn_name, component_name, method_call, num_outputs).await;
+    let resp = validator_node_cli::call_method(
+        world,
+        vn_name,
+        component_name,
+        "dummy_outputs".to_string(),
+        method_call,
+        num_outputs,
+    )
+    .await;
     let finalize_result = resp.result.unwrap();
     assert_eq!(finalize_result.decision, QuorumDecision::Accept);
 
@@ -299,15 +309,7 @@ async fn create_account(world: &mut TariWorld, account_name: String, vn_name: St
 
 #[when(expr = r#"I submit a transaction manifest on {word} with {int} outputs named "{word}""#)]
 async fn submit_manifest(world: &mut TariWorld, step: &Step, vn_name: String, num_outputs: u64, output_name: String) {
-    let mut manifest = step.docstring.as_ref().unwrap().clone();
-
-    // replace the template addresses
-    for (name, template) in &world.templates {
-        let from = format!("use template_{}", name);
-        let to = format!("use template_{}", template.address);
-        manifest = manifest.replace(&from, &to);
-    }
-
+    let manifest = wrap_manifest_in_main(world, step.docstring.as_ref().expect("manifest code not provided"));
     validator_node_cli::submit_manifest(world, vn_name, output_name, manifest, String::new(), num_outputs).await;
 }
 
@@ -320,16 +322,16 @@ async fn submit_manifest_with_inputs(
     num_outputs: u64,
     outputs_name: String,
 ) {
-    let mut manifest = step.docstring.as_ref().expect("manifest code not provided").clone();
-
-    // replace the template addresses
-    for (name, template) in &world.templates {
-        let from = format!("use template_{}", name);
-        let to = format!("use template_{}", template.address);
-        manifest = manifest.replace(&from, &to);
-    }
-
+    let manifest = wrap_manifest_in_main(world, step.docstring.as_ref().expect("manifest code not provided"));
     validator_node_cli::submit_manifest(world, vn_name, outputs_name, manifest, inputs, num_outputs).await;
+}
+
+fn wrap_manifest_in_main(world: &TariWorld, contents: &str) -> String {
+    // define all templates
+    let template_defs = world.templates.iter().fold(String::new(), |acc, (name, template)| {
+        format!("{}\nuse template_{} as {};", acc, template.address, name)
+    });
+    format!("{} fn main() {{ {} }}", template_defs, contents)
 }
 
 #[when(expr = "I wait {int} seconds")]

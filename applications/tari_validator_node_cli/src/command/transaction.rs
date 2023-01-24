@@ -161,7 +161,7 @@ pub async fn handle_submit(
     args: SubmitArgs,
     base_dir: impl AsRef<Path>,
     client: &mut ValidatorNodeClient,
-) -> Result<Option<SubmitTransactionResponse>, anyhow::Error> {
+) -> Result<SubmitTransactionResponse, anyhow::Error> {
     let SubmitArgs { instruction, common } = args;
     let instruction = match instruction {
         CliInstruction::CallFunction {
@@ -193,7 +193,7 @@ async fn handle_submit_manifest(
     args: SubmitManifestArgs,
     base_dir: impl AsRef<Path>,
     client: &mut ValidatorNodeClient,
-) -> Result<Option<SubmitTransactionResponse>, anyhow::Error> {
+) -> Result<SubmitTransactionResponse, anyhow::Error> {
     let contents = std::fs::read_to_string(&args.manifest).map_err(|e| anyhow!("Failed to read manifest: {}", e))?;
     let instructions = parse_manifest(&contents, manifest::parse_globals(args.input_variables)?)?;
     submit_transaction(instructions, args.common, base_dir, client).await
@@ -204,7 +204,7 @@ pub async fn submit_transaction(
     common: CommonSubmitArgs,
     base_dir: impl AsRef<Path>,
     client: &mut ValidatorNodeClient,
-) -> Result<Option<SubmitTransactionResponse>, anyhow::Error> {
+) -> Result<SubmitTransactionResponse, anyhow::Error> {
     let component_manager = ComponentManager::init(base_dir.as_ref())?;
     let key_manager = KeyManager::init(base_dir)?;
     let key = key_manager
@@ -263,8 +263,9 @@ pub async fn submit_transaction(
     };
 
     if request.inputs.is_empty() && request.num_outputs == 0 {
-        println!("No inputs or outputs. This transaction will not be processed by the network.");
-        return Ok(None);
+        return Err(anyhow::anyhow!(
+            "No inputs or outputs, transaction will not be processed by the network"
+        ));
     }
     println!();
     println!("✅ Transaction {} submitted.", transaction.hash());
@@ -286,7 +287,7 @@ pub async fn submit_transaction(
         }
         summarize(result, timer.elapsed());
     }
-    Ok(Some(resp))
+    Ok(resp)
 }
 
 fn summarize_request(request: &SubmitTransactionRequest) {

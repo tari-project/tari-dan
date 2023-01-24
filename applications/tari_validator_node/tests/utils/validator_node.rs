@@ -102,7 +102,7 @@ pub async fn spawn_validator_node(
         config.validator_node.p2p.dht = DhtConfig {
             // Not all platforms support sqlite memory connection urls
             database_url: DbConnectionUrl::File(temp_dir.join("dht.sqlite")),
-            ..DhtConfig::default_testnet()
+            ..DhtConfig::default_local_test()
         };
         config.validator_node.json_rpc_address = Some(format!("127.0.0.1:{}", json_rpc_port).parse().unwrap());
         config.validator_node.http_ui_address = Some(format!("127.0.0.1:{}", http_ui_port).parse().unwrap());

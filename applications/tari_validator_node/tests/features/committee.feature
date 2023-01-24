@@ -39,15 +39,15 @@ Feature: Commitee scenarios
     When I create a component COUNTER_1 of template "counter" on VAL_1 using "new"
 
     # The initial value of the counter must be 0
-    When I invoke on VAL_1 on component COUNTER_1 the method call "value" with 1 outputs the result is "0"
-    When I invoke on VAL_2 on component COUNTER_1 the method call "value" with 1 outputs the result is "0"
+    When I invoke on VAL_1 on component COUNTER_1/components/Counter the method call "value" with 1 outputs the result is "0"
+    When I invoke on VAL_2 on component COUNTER_1/components/Counter the method call "value" with 1 outputs the result is "0"
 
     # Increase the counter
-    When I invoke on VAL_1 on component COUNTER_1 the method call "increase" with 1 outputs
+    When I invoke on VAL_1 on component COUNTER_1/components/Counter the method call "increase" with 1 outputs named "TX1"
    
     # Check that the counter has been increased in both VNs
-    When I invoke on VAL_1 on component COUNTER_1 the method call "value" with 1 outputs the result is "1"
-    When I invoke on VAL_2 on component COUNTER_1 the method call "value" with 1 outputs the result is "1"
+    When I invoke on VAL_1 on component TX1/components/Counter the method call "value" with 1 outputs the result is "1"
+    When I invoke on VAL_2 on component TX1/components/Counter the method call "value" with 1 outputs the result is "1"
 
     # Uncomment the following lines to stop execution for manual inspection of the nodes
     # When I print the cucumber world
