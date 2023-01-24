@@ -25,13 +25,23 @@ mod utils;
 
 use std::{
     convert::{Infallible, TryFrom},
+    future,
     io,
     time::Duration,
 };
 
 use async_trait::async_trait;
-use cucumber::{gherkin::Step, given, then, when, writer, WorldInit, WriterExt};
+use cucumber::{
+    gherkin::{Scenario, Step},
+    given,
+    then,
+    when,
+    writer,
+    WorldInit,
+    WriterExt,
+};
 use indexmap::IndexMap;
+use tari_common::initialize_logging;
 use tari_common_types::types::PublicKey;
 use tari_crypto::tari_utilities::hex::Hex;
 use tari_dan_common_types::QuorumDecision;
@@ -51,6 +61,7 @@ use utils::{
 use crate::utils::{
     base_node::{get_base_node_client, spawn_base_node, BaseNodeProcess},
     http_server::MockHttpServer,
+    logging::create_log_config_file,
     miner::MinerProcess,
     template::{send_template_registration, RegisteredTemplate},
     validator_node::{get_vn_client, ValidatorNodeProcess},
@@ -67,6 +78,7 @@ pub struct TariWorld {
     outputs: IndexMap<String, IndexMap<String, VersionedSubstateAddress>>,
     http_server: Option<MockHttpServer>,
     cli_data_dir: Option<String>,
+    current_scenario_name: Option<String>,
 }
 
 impl TariWorld {
@@ -87,6 +99,24 @@ impl TariWorld {
             .get(name)
             .unwrap_or_else(|| panic!("Base node {} not found", name))
     }
+
+    pub fn after(&mut self, _scenario: &Scenario) {
+        for (name, mut p) in self.validator_nodes.drain(..) {
+            println!("Shutting down validator node {}", name);
+            p.shutdown.trigger();
+        }
+
+        for (name, mut p) in self.wallets.drain(..) {
+            println!("Shutting down wallet {}", name);
+            p.shutdown.trigger();
+        }
+        for (name, mut p) in self.base_nodes.drain(..) {
+            println!("Shutting down base node {}", name);
+            // You have explicitly trigger the shutdown now because of the change to use Arc/Mutex in tari_shutdown
+            p.shutdown.trigger();
+        }
+        self.miners.clear();
+    }
 }
 
 #[async_trait(?Send)]
@@ -94,21 +124,15 @@ impl cucumber::World for TariWorld {
     type Error = Infallible;
 
     async fn new() -> Result<Self, Self::Error> {
-        Ok(Self {
-            base_nodes: IndexMap::new(),
-            wallets: IndexMap::new(),
-            validator_nodes: IndexMap::new(),
-            miners: IndexMap::new(),
-            templates: IndexMap::new(),
-            outputs: IndexMap::new(),
-            http_server: None,
-            cli_data_dir: None,
-        })
+        Ok(Self::default())
     }
 }
 
 #[tokio::main]
 async fn main() {
+    let log_path = create_log_config_file();
+    initialize_logging(log_path.as_path(), include_str!("./log4rs/cucumber.yml")).unwrap();
+
     TariWorld::cucumber()
         .max_concurrent_scenarios(1)
         .with_writer(
@@ -117,6 +141,16 @@ async fn main() {
                 .summarized()
                 .assert_normalized(),
         )
+        .before(move |_feature, _rule, scenario, world| {
+            world.current_scenario_name = Some(scenario.name.clone());
+            Box::pin(future::ready(()))
+        })
+        .after(move |_feature, _rule, scenario, maybe_world| {
+            if let Some(world) = maybe_world {
+                world.after(scenario);
+            }
+            Box::pin(future::ready(()))
+        })
         .run_and_exit("tests/features/")
         .await;
 }
