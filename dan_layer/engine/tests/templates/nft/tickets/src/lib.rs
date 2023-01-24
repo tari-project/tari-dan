@@ -22,6 +22,7 @@
 use tari_template_lib::prelude::*;
 
 /// Example of a ticket sale for event attendances. Every ticket is tracked individually, but they do not hold any unique individual data.
+/// It should also be possible to add custom metadata to each ticket (e.g. seat number) with optional uniqueness checks
 /// The same logic can be used for supply chain tracking of products
 #[template]
 mod tickets {
