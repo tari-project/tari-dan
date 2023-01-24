@@ -3,14 +3,6 @@
 version = 3
 
 [[package]]
-name = "account"
-version = "0.1.0"
-dependencies = [
- "tari_template_abi",
- "tari_template_lib",
-]
-
-[[package]]
 name = "ahash"
 version = "0.7.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -19,6 +11,14 @@ dependencies = [
  "getrandom",
  "once_cell",
  "version_check",
+]
+
+[[package]]
+name = "basic_nft"
+version = "0.1.0"
+dependencies = [
+ "tari_template_abi",
+ "tari_template_lib",
 ]
 
 [[package]]

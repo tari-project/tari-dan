@@ -356,3 +356,64 @@ mod basic_nft {
         assert_eq!(total_supply, Amount(2));
     }
 }
+
+// TODO: implement the tests
+#[cfg(any())]
+mod emoji_id {
+    use super::*;
+
+    #[test]
+    fn mint_and_withdraw() {
+        let template_test = TemplateTest::new(vec!["tests/templates/account", "tests/templates/nft/emoji_id"]);
+        let account_address: ComponentAddress = template_test.call_function("Account", "new", args![]);
+        let emoji_id_minter: ComponentAddress =
+            template_test.call_function("EmojiIdMinter", "new", args!["EJID", 10, 1000]);
+
+        // at the beggining we don't have any emojis minted
+        let total_supply: Amount = template_test.call_method(nft_component, "total_supply", args![]);
+        assert_eq!(total_supply, Amount(0));
+
+        // TODO: add Thaum funds to the account, to be able to mint
+
+        // mint a new valid emoji id
+        let vars = vec![
+            ("account", account_address.into()),
+            ("emoji_id_minter", emoji_id_minter.into()),
+        ];
+
+        let result = template_test.execute_and_commit_manifest(
+            r#"
+            let account = var!["account"];
+            let emoji_id_minter = var!["emoji_id_minter"];
+        
+            // TODO: how to import and use a type defined in the template? (Emoji enum in this case)
+            let emojis = vec![Emoji::Smile, Emoji::Laugh];
+
+            // TODO: can we specify Thaum without managing addresses?
+            let payment = account.take(Thaum, Amount(1000));
+
+            let (emoji_id, _) = emoji_id_minter.mint(emojis, payment);
+            account.deposit(nft_bucket);
+        "#,
+            vars,
+        );
+        let total_supply: Amount = template_test.call_method(nft_component, "total_supply", args![]);
+        assert_eq!(total_supply, Amount(1));
+    }
+
+    #[test]
+    fn insufficient_payments_are_rejected() {
+        todo!()
+    }
+
+    #[test]
+    fn emoji_ids_are_unique() {
+        // check that duplicated emoji ids cannot be minted
+        todo!()
+    }
+
+    #[test]
+    fn invalid_emoji_lenghts_are_rejected() {
+        todo!()
+    }
+}

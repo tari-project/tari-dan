@@ -1,6 +1,6 @@
 [workspace]
 [package]
-name = "basic_nft"
+name = "emoji_id"
 version = "0.1.0"
 edition = "2021"
 
