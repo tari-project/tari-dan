@@ -28,7 +28,7 @@ use std::{
 use serde::{Deserialize, Serialize};
 use tari_bor::{borsh, decode, encode, Decode, Encode};
 use tari_template_lib::{
-    models::{ComponentAddress, ComponentHeader, NftToken, NftTokenId, ResourceAddress, VaultId},
+    models::{ComponentAddress, ComponentHeader, NonFungible, NonFungibleId, ResourceAddress, VaultId},
     Hash,
 };
 
@@ -58,7 +58,7 @@ impl Substate {
         &self.substate
     }
 
-    pub fn into_substate(self) -> SubstateValue {
+    pub fn into_substate_value(self) -> SubstateValue {
         self.substate
     }
 
@@ -81,7 +81,7 @@ pub enum SubstateAddress {
     Component(ComponentAddress),
     Resource(ResourceAddress),
     Vault(VaultId),
-    NonFungible(ResourceAddress, NftTokenId),
+    NonFungible(ResourceAddress, NonFungibleId),
 }
 
 impl SubstateAddress {
@@ -114,13 +114,13 @@ impl SubstateAddress {
             SubstateAddress::Component(addr) => addr.to_string(),
             SubstateAddress::Resource(addr) => addr.to_string(),
             SubstateAddress::Vault(addr) => addr.to_string(),
-            SubstateAddress::NonFungible(_, addr) => addr.to_string(),
+            SubstateAddress::NonFungible(resource_addr, addr) => format!("{} {}", resource_addr, addr),
         }
     }
 
-    pub fn as_non_fungible_resource_address(&self) -> Option<ResourceAddress> {
+    pub fn as_non_fungible_address(&self) -> Option<(ResourceAddress, NonFungibleId)> {
         match self {
-            SubstateAddress::NonFungible(resource_address, _) => Some(*resource_address),
+            SubstateAddress::NonFungible(resource_address, nft_id) => Some((*resource_address, *nft_id)),
             _ => None,
         }
     }
@@ -188,7 +188,7 @@ impl FromStr for SubstateAddress {
                 Ok(SubstateAddress::Vault(id))
             },
             Some(("nft", addr)) => {
-                let id = NftTokenId::from_hex(addr).map_err(|_| InvalidSubstateAddressFormat(s.to_string()))?;
+                let id = NonFungibleId::from_hex(addr).map_err(|_| InvalidSubstateAddressFormat(s.to_string()))?;
                 // TODO: We need to add more structure to objects with child/parent relationships.
                 //       Setting the resource to 000.. has no effect because the system knows about this substate and
                 //       includes the correct resource in the final address, however this may change as the NFT ID
@@ -205,7 +205,7 @@ pub enum SubstateValue {
     Component(ComponentHeader),
     Resource(Resource),
     Vault(Vault),
-    NonFungible(NftToken),
+    NonFungible(NonFungible),
 }
 
 impl SubstateValue {
@@ -251,6 +251,13 @@ impl SubstateValue {
             _ => None,
         }
     }
+
+    pub fn into_non_fungible(self) -> Option<NonFungible> {
+        match self {
+            SubstateValue::NonFungible(nft) => Some(nft),
+            _ => None,
+        }
+    }
 }
 
 impl From<ComponentHeader> for SubstateValue {
@@ -271,8 +278,8 @@ impl From<Vault> for SubstateValue {
     }
 }
 
-impl From<NftToken> for SubstateValue {
-    fn from(token: NftToken) -> Self {
+impl From<NonFungible> for SubstateValue {
+    fn from(token: NonFungible) -> Self {
         Self::NonFungible(token)
     }
 }

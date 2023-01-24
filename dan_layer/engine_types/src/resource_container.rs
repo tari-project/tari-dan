@@ -4,7 +4,7 @@
 use serde::{Deserialize, Serialize};
 use tari_bor::{borsh, Decode, Encode};
 use tari_template_abi::rust::collections::BTreeSet;
-use tari_template_lib::models::{Amount, NftTokenId, ResourceAddress};
+use tari_template_lib::models::{Amount, NonFungibleId, ResourceAddress};
 
 /// Instances of a single resource kept in Buckets and Vaults
 #[derive(Debug, Clone, Encode, Decode, Serialize, Deserialize, PartialEq)]
@@ -15,7 +15,7 @@ pub enum ResourceContainer {
     },
     NonFungible {
         address: ResourceAddress,
-        token_ids: BTreeSet<NftTokenId>,
+        token_ids: BTreeSet<NonFungibleId>,
     },
     // Confidential {
     //     inputs: Vec<Commitment>,
@@ -29,7 +29,7 @@ impl ResourceContainer {
         ResourceContainer::Fungible { address, amount }
     }
 
-    pub fn non_fungible(address: ResourceAddress, token_ids: BTreeSet<NftTokenId>) -> ResourceContainer {
+    pub fn non_fungible(address: ResourceAddress, token_ids: BTreeSet<NonFungibleId>) -> ResourceContainer {
         ResourceContainer::NonFungible { address, token_ids }
     }
 
@@ -47,7 +47,7 @@ impl ResourceContainer {
         }
     }
 
-    pub fn non_fungible_token_ids(&self) -> Option<&BTreeSet<NftTokenId>> {
+    pub fn non_fungible_token_ids(&self) -> Option<&BTreeSet<NonFungibleId>> {
         match self {
             ResourceContainer::NonFungible { token_ids, .. } => Some(token_ids),
             _ => None,
@@ -117,7 +117,7 @@ impl ResourceContainer {
         }
     }
 
-    pub fn withdraw_by_ids(&mut self, ids: &BTreeSet<NftTokenId>) -> Result<ResourceContainer, ResourceError> {
+    pub fn withdraw_by_ids(&mut self, ids: &BTreeSet<NonFungibleId>) -> Result<ResourceContainer, ResourceError> {
         match self {
             ResourceContainer::Fungible { .. } => Err(ResourceError::OperationNotAllowed(
                 "Cannot withdraw by NFT token id from a fungible resource".to_string(),
@@ -153,5 +153,5 @@ pub enum ResourceError {
     #[error("Operation not allowed: {0}")]
     OperationNotAllowed(String),
     #[error("Non fungible token not found: {token}")]
-    NonFungibleTokenIdNotFound { token: NftTokenId },
+    NonFungibleTokenIdNotFound { token: NonFungibleId },
 }

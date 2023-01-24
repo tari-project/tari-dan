@@ -24,7 +24,7 @@ use tari_template_abi::rust::collections::HashMap;
 
 use crate::{
     args::MintArg,
-    models::{Amount, Bucket, Metadata, NftToken, NftTokenId, ResourceAddress},
+    models::{Amount, Bucket, Metadata, NonFungible, NonFungibleId, ResourceAddress},
     prelude::ResourceType,
     resource::ResourceManager,
 };
@@ -92,7 +92,7 @@ impl FungibleResourceBuilder {
 
 pub struct NonFungibleResourceBuilder {
     metadata: Metadata,
-    tokens_ids: HashMap<NftTokenId, NftToken>,
+    tokens_ids: HashMap<NonFungibleId, NonFungible>,
 }
 
 impl NonFungibleResourceBuilder {
@@ -113,7 +113,7 @@ impl NonFungibleResourceBuilder {
         self
     }
 
-    pub fn with_tokens<I: IntoIterator<Item = (NftTokenId, NftToken)>>(mut self, tokens: I) -> Self {
+    pub fn with_tokens<I: IntoIterator<Item = (NonFungibleId, NonFungible)>>(mut self, tokens: I) -> Self {
         self.tokens_ids.extend(tokens);
         self
     }

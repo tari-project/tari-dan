@@ -2,8 +2,12 @@
 //  SPDX-License-Identifier: BSD-3-Clause
 //
 
-use std::{collections::HashMap, path::Path};
+use std::{
+    collections::{HashMap, HashSet},
+    path::Path,
+};
 
+use anyhow::anyhow;
 use borsh::BorshDeserialize;
 use tari_crypto::ristretto::RistrettoSecretKey;
 use tari_dan_engine::{
@@ -33,6 +37,7 @@ pub struct TemplateTest<R> {
     package: Package,
     processor: TransactionProcessor<R>,
     secret_key: RistrettoSecretKey,
+    last_outputs: HashSet<SubstateAddress>,
     name_to_template: HashMap<String, TemplateAddress>,
     runtime_interface: R,
 }
@@ -67,6 +72,7 @@ impl<R: RuntimeInterface + Clone + 'static> TemplateTest<R> {
             secret_key,
             name_to_template,
             runtime_interface,
+            last_outputs: HashSet::new(),
         }
     }
 }
@@ -90,9 +96,14 @@ impl TemplateTest<MockRuntimeInterface> {
         self.runtime_interface.clear_calls();
     }
 
-    fn commit_diff(&self, diff: &SubstateDiff) {
+    pub fn get_previous_output_address(&self, ty: SubstateType) -> SubstateAddress {
+        *self.last_outputs.iter().find(|addr| ty.matches(addr)).unwrap()
+    }
+
+    fn commit_diff(&mut self, diff: &SubstateDiff) {
         let store = self.runtime_interface.state_store();
         let mut tx = store.write_access().unwrap();
+        self.last_outputs.clear();
 
         for (address, _) in diff.down_iter() {
             eprintln!("DOWN substate: {}", address);
@@ -101,6 +112,7 @@ impl TemplateTest<MockRuntimeInterface> {
 
         for (address, substate) in diff.up_iter() {
             eprintln!("UP substate: {}", address);
+            self.last_outputs.insert(*address);
             tx.set_state(address, substate).unwrap();
         }
 
@@ -121,23 +133,27 @@ impl TemplateTest<MockRuntimeInterface> {
             .unwrap_or_else(|| panic!("No template with name {}", name))
     }
 
-    pub fn call_function<T>(&self, template_name: &str, func_name: &str, args: Vec<Arg>) -> T
+    pub fn call_function<T>(&mut self, template_name: &str, func_name: &str, args: Vec<Arg>) -> T
     where T: BorshDeserialize {
-        let result = self.execute_and_commit(vec![Instruction::CallFunction {
-            template_address: self.get_template_address(template_name),
-            function: func_name.to_owned(),
-            args,
-        }]);
+        let result = self
+            .execute_and_commit(vec![Instruction::CallFunction {
+                template_address: self.get_template_address(template_name),
+                function: func_name.to_owned(),
+                args,
+            }])
+            .unwrap();
         result.execution_results[0].decode().unwrap()
     }
 
-    pub fn call_method<T>(&self, component_address: ComponentAddress, method_name: &str, args: Vec<Arg>) -> T
+    pub fn call_method<T>(&mut self, component_address: ComponentAddress, method_name: &str, args: Vec<Arg>) -> T
     where T: BorshDeserialize {
-        let result = self.execute_and_commit(vec![Instruction::CallMethod {
-            component_address,
-            method: method_name.to_owned(),
-            args,
-        }]);
+        let result = self
+            .execute_and_commit(vec![Instruction::CallMethod {
+                component_address,
+                method: method_name.to_owned(),
+                args,
+            }])
+            .unwrap();
 
         result.execution_results[0].decode().unwrap()
     }
@@ -153,24 +169,24 @@ impl TemplateTest<MockRuntimeInterface> {
         self.processor.execute(transaction)
     }
 
-    pub fn execute_and_commit(&self, instructions: Vec<Instruction>) -> FinalizeResult {
-        let result = self.try_execute(instructions).unwrap();
+    pub fn execute_and_commit(&mut self, instructions: Vec<Instruction>) -> anyhow::Result<FinalizeResult> {
+        let result = self.try_execute(instructions)?;
         let diff = result
             .result
             .accept()
-            .unwrap_or_else(|| panic!("Transaction was rejected: {}", result.result.reject().unwrap()));
+            .ok_or_else(|| anyhow!("Transaction was rejected: {}", result.result.reject().unwrap()))?;
 
         // It is convenient to commit the state back to the staged state store in tests.
         self.commit_diff(diff);
 
-        result
+        Ok(result)
     }
 
     pub fn execute_and_commit_manifest<'a, I: IntoIterator<Item = (&'a str, ManifestValue)>>(
-        &self,
+        &mut self,
         manifest: &str,
         variables: I,
-    ) -> FinalizeResult {
+    ) -> anyhow::Result<FinalizeResult> {
         let template_imports = self
             .name_to_template
             .iter()
@@ -196,8 +212,33 @@ impl ReadOnlyStateStore {
     }
 
     pub fn get_component(&self, component_address: ComponentAddress) -> Result<ComponentHeader, StateStoreError> {
+        let substate = self.get_substate(&SubstateAddress::Component(component_address))?;
+        Ok(substate.into_substate_value().into_component().unwrap())
+    }
+
+    pub fn get_substate(&self, address: &SubstateAddress) -> Result<Substate, StateStoreError> {
         let tx = self.store.read_access()?;
-        let substate = tx.get_state::<_, Substate>(&SubstateAddress::Component(component_address))?;
-        Ok(substate.into_substate().into_component().unwrap())
+        let substate = tx.get_state::<_, Substate>(address)?;
+        Ok(substate)
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum SubstateType {
+    Component,
+    Resource,
+    Vault,
+    NonFungible,
+}
+
+impl SubstateType {
+    pub fn matches(&self, addr: &SubstateAddress) -> bool {
+        match (self, addr) {
+            (SubstateType::Component, SubstateAddress::Component(_)) => true,
+            (SubstateType::Resource, SubstateAddress::Resource(_)) => true,
+            (SubstateType::Vault, SubstateAddress::Vault(_)) => true,
+            (SubstateType::NonFungible, SubstateAddress::NonFungible(_, _)) => true,
+            _ => false,
+        }
     }
 }

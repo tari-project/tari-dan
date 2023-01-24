@@ -20,6 +20,8 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+use std::collections::BTreeSet;
+
 use tari_bor::{borsh, Decode, Encode};
 use tari_template_abi::{
     call_engine,
@@ -33,7 +35,7 @@ use tari_template_abi::{
 use crate::{
     args::{InvokeResult, VaultAction, VaultInvokeArg},
     hash::HashParseError,
-    models::{Amount, Bucket, ResourceAddress},
+    models::{Amount, Bucket, NonFungibleId, ResourceAddress},
     Hash,
 };
 
@@ -145,6 +147,17 @@ impl Vault {
         });
 
         resp.decode().expect("failed to decode Amount")
+    }
+
+    pub fn get_non_fungible_ids(&self) -> BTreeSet<NonFungibleId> {
+        let resp: InvokeResult = call_engine(EngineOp::VaultInvoke, &VaultInvokeArg {
+            vault_ref: VaultRef::Ref(self.vault_id()),
+            action: VaultAction::GetNonFungibleIds,
+            args: invoke_args![],
+        });
+
+        resp.decode()
+            .expect("get_non_fungible_ids returned invalid non fungible ids")
     }
 
     pub fn resource_address(&self) -> ResourceAddress {

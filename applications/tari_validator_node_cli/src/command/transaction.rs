@@ -380,14 +380,7 @@ fn summarize_finalize_result(finalize: &FinalizeResult) {
                         );
                     },
                     SubstateValue::NonFungible(_) => {
-                        println!(
-                            "      ▶ NFT: {} {}",
-                            substate.substate_address(),
-                            substate
-                                .substate_address()
-                                .as_non_fungible_resource_address()
-                                .expect("NFT address")
-                        );
+                        println!("      ▶ NFT: {}", substate.substate_address(),);
                     },
                 }
                 println!();
