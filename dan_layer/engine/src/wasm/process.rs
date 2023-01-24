@@ -134,7 +134,7 @@ impl WasmProcess {
         result.unwrap_or_else(|err| {
             env.state()
                 .interface()
-                .emit_log(LogLevel::Error, format!("Execution error:{}", err));
+                .emit_log(LogLevel::Error, format!("Execution error: {}", err));
             eprintln!("{}", err);
             log::error!(target: LOG_TARGET, "{}", err);
             0

@@ -23,6 +23,7 @@
 pub mod base_node;
 mod helpers;
 pub mod http_server;
+pub mod logging;
 pub mod miner;
 pub mod template;
 pub mod validator_node;

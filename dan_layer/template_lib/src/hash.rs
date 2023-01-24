@@ -35,6 +35,10 @@ use tari_bor::{Decode, Encode};
 pub struct Hash(#[cfg_attr(feature = "json", serde(with = "hex"))] [u8; 32]);
 
 impl Hash {
+    pub const fn from_array(bytes: [u8; 32]) -> Self {
+        Self(bytes)
+    }
+
     pub fn into_array(self) -> [u8; 32] {
         self.0
     }
