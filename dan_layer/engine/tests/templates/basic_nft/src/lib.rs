@@ -91,5 +91,13 @@ mod sparkle_nft_template {
             f(&mut data);
             resource_manager.update_non_fungible_data(id, &data);
         }
+
+        pub fn withdraw_all(&mut self) -> Bucket {
+            self.vault.withdraw_all()
+        }
+
+        pub fn inner_vault_balance(&self) -> Amount {
+            self.vault.balance()
+        }
     }
 }

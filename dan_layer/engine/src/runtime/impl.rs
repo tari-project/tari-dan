@@ -252,7 +252,7 @@ impl RuntimeInterface for RuntimeInterfaceImpl {
                     .borrow_vault_mut(&vault_id, |vault| vault.deposit(bucket))??;
                 Ok(InvokeResult::unit())
             },
-            VaultAction::WithdrawFungible => {
+            VaultAction::Withdraw => {
                 let vault_id = vault_ref.vault_id().ok_or_else(|| RuntimeError::InvalidArgument {
                     argument: "vault_ref",
                     reason: "WithdrawFungible vault action requires a vault id".to_string(),
@@ -265,13 +265,25 @@ impl RuntimeInterface for RuntimeInterfaceImpl {
                 let bucket = self.tracker.new_bucket(resource)?;
                 Ok(InvokeResult::encode(&bucket)?)
             },
+            VaultAction::WithdrawAll => {
+                let vault_id = vault_ref.vault_id().ok_or_else(|| RuntimeError::InvalidArgument {
+                    argument: "vault_ref",
+                    reason: "WithdrawAll vault action requires a vault id".to_string(),
+                })?;
+
+                let resource = self
+                    .tracker
+                    .borrow_vault_mut(&vault_id, |vault| vault.withdraw_all())??;
+                let bucket = self.tracker.new_bucket(resource)?;
+                Ok(InvokeResult::encode(&bucket)?)
+            },
             VaultAction::GetBalance => {
                 let vault_id = vault_ref.vault_id().ok_or_else(|| RuntimeError::InvalidArgument {
                     argument: "vault_ref",
                     reason: "GetBalance vault action requires a vault id".to_string(),
                 })?;
 
-                let balance = self.tracker.borrow_vault_mut(&vault_id, |vault| vault.balance())?;
+                let balance = self.tracker.borrow_vault(&vault_id, |v| v.balance())?;
                 Ok(InvokeResult::encode(&balance)?)
             },
             VaultAction::GetResourceAddress => {
