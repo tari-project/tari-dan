@@ -140,13 +140,13 @@ impl<T: Copy + Debug + PartialEq + Eq + Hash + Send + Sync + 'static> Pacemaker<
                 _ = shutdown.wait() => {
                     info!("Shutting down pacemaker service..");
                     // to guarantee that no process is left running, we trigger all shutdowns
-                    let _ = self.tx_inner_map.iter().map(|(k, v)| async move {
-                            match v.send(()).await {
-                                Err(e) => error!(target: LOG_TARGET, "Process already shut down for value = {:?} with error = {}", k, e),
-                                Ok(_) => (),
-                        };
-                        v
+                    let send_triggers = self.tx_inner_map.iter().map(|(k, v)| async move {
+                            if let Err(e) = v.send(()).await {
+                                error!(target: LOG_TARGET, "Process already shut down for value = {:?} with error = {}", k, e);
+                            };
+                            v
                     }).collect::<Vec<_>>();
+                    drop(send_triggers);
                     break;
                 }
             }
