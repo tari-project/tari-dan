@@ -28,12 +28,14 @@ use tari_dan_engine::wasm::WasmModule;
 use tari_dan_storage::global::{DbTemplate, DbTemplateUpdate, GlobalDb, TemplateStatus};
 use tari_dan_storage_sqlite::global::SqliteGlobalDbAdapter;
 use tari_engine_types::calculate_template_binary_hash;
-use tari_template_builtin::account_wasm;
+use tari_template_builtin::get_template_builtin;
 use tari_template_lib::models::TemplateAddress;
 
 use crate::p2p::services::template_manager::{handle::TemplateRegistration, TemplateConfig, TemplateManagerError};
 
 const LOG_TARGET: &str = "tari::validator_node::template_manager";
+
+pub const ACCOUNT_TEMPLATE_ADDRESS: TemplateAddress = TemplateAddress::from_array([0; 32]);
 
 #[derive(Debug, Clone)]
 pub struct TemplateMetadata {
@@ -120,10 +122,9 @@ impl TemplateManager {
         let mut builtin_templates = HashMap::new();
 
         // get the builtin WASM code of the account template
-        let compiled_code = account_wasm();
-        let address = TemplateAddress::from([0; 32]);
-        let template = Self::load_builtin_template("account", address, compiled_code);
-        builtin_templates.insert(address, template);
+        let compiled_code = get_template_builtin(&ACCOUNT_TEMPLATE_ADDRESS);
+        let template = Self::load_builtin_template("account", ACCOUNT_TEMPLATE_ADDRESS, compiled_code.to_vec());
+        builtin_templates.insert(ACCOUNT_TEMPLATE_ADDRESS, template);
 
         builtin_templates
     }

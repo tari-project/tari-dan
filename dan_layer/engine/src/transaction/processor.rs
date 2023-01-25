@@ -121,7 +121,7 @@ where TRuntimeInterface: RuntimeInterface + Clone + 'static
             Instruction::PutLastInstructionOutputOnWorkspace { key } => {
                 let _result = runtime
                     .interface()
-                    .workspace_invoke(WorkspaceAction::PutLastInstructionOutput, invoke_args![key])?;
+                    .workspace_invoke(WorkspaceAction::PutLastInstructionOutput, invoke_args![key].into())?;
                 Ok(ExecutionResult::empty())
             },
             Instruction::EmitLog { level, message } => {
