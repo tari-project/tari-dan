@@ -57,11 +57,21 @@ async fn send_timeout_message<T: Debug + Send>(
 ///   4. Otherwise, it should notify the sender of [`start_wait`] message that the max_timeout duration has passed.
 #[derive(Debug)]
 pub struct Pacemaker<T> {
+    /// Receiver for start signal. Whenever the service receives a new instance of `T`
+    /// it starts a waiting max_timeout time process
     rx_start_signal: Receiver<T>,
+    /// Receiver of stop/shutdown signal. It is assumed that whenever a new value `T` is
+    /// received, that we are already waiting for timeout on that value (i.e. rx_start_signal,
+    /// received that same value first). If such value is received, then we stop the waiting process
     rx_shutdown_signal: Receiver<T>,
-    tx_inner_map: HashMap<T, Sender<bool>>,
+    /// An auxiliary map, mapping each received value to a single use channel (of buffer size 1).
+    /// Its role it to facilitate asynchronous communication between the arrival of shutdown messages
+    /// and time out signals
+    tx_inner_map: HashMap<T, Sender<()>>,
+    /// Sender which sends Timeout status to the other end of the channel
     tx_waiter_status: Sender<(T, PacemakerWaitStatus)>,
-    max_timeout: u64,
+    /// Duration of timeout period
+    max_timeout: Duration,
 }
 
 impl<T: Copy + Debug + PartialEq + Eq + Hash + Send + Sync + 'static> Pacemaker<T> {
@@ -69,7 +79,7 @@ impl<T: Copy + Debug + PartialEq + Eq + Hash + Send + Sync + 'static> Pacemaker<
         rx_start_signal: Receiver<T>,
         rx_shutdown_signal: Receiver<T>,
         tx_waiter_status: Sender<(T, PacemakerWaitStatus)>,
-        max_timeout: u64,
+        max_timeout: Duration,
         shutdown: ShutdownSignal,
     ) -> JoinHandle<Result<(), HotStuffError>> {
         let pacemaker = Self::new(rx_start_signal, rx_shutdown_signal, tx_waiter_status, max_timeout);
@@ -80,7 +90,7 @@ impl<T: Copy + Debug + PartialEq + Eq + Hash + Send + Sync + 'static> Pacemaker<
         rx_start_signal: Receiver<T>,
         rx_shutdown_signal: Receiver<T>,
         tx_waiter_status: Sender<(T, PacemakerWaitStatus)>,
-        max_timeout: u64,
+        max_timeout: Duration,
     ) -> Self {
         Self {
             rx_start_signal,
@@ -97,8 +107,8 @@ impl<T: Copy + Debug + PartialEq + Eq + Hash + Send + Sync + 'static> Pacemaker<
             tokio::select! {
                 msg = self.rx_start_signal.recv() => {
                     if let Some(wait_over) = msg {
-                        let (tx, mut rx) = channel::<bool>(1);
-                        self.tx_inner_map.insert(wait_over, tx);
+                        let (tx_stop_timeout, mut rx_stop_timeout) = channel::<()>(1);
+                        self.tx_inner_map.insert(wait_over, tx_stop_timeout);
                         info!(
                             target: LOG_TARGET,
                             "Received start wait signal for value: {:?}", wait_over
@@ -106,12 +116,12 @@ impl<T: Copy + Debug + PartialEq + Eq + Hash + Send + Sync + 'static> Pacemaker<
                         let tx_waiter_status = self.tx_waiter_status.clone();
                         let _join = tokio::spawn(async move {
                             tokio::select! {
-                                _ = tokio::time::sleep(Duration::from_millis(max_timeout)) => {
+                                _ = tokio::time::sleep(max_timeout) => {
                                     if let Err(e) = send_timeout_message(wait_over, tx_waiter_status).await {
                                         error!(target: LOG_TARGET, "failed to send timeout status message for value = {:?} with error = {}", wait_over, e);
                                     }
                                 },
-                                _ = rx.recv() => {
+                                _ = rx_stop_timeout.recv() => {
                                     info!("The wait signal for wait_over = {:?} has been shutted down", wait_over);
                                 }
                             }
@@ -120,15 +130,23 @@ impl<T: Copy + Debug + PartialEq + Eq + Hash + Send + Sync + 'static> Pacemaker<
                 },
                 msg = self.rx_shutdown_signal.recv() => {
                     if let Some(wait_over) = msg {
-                        if let Some(tx) = self.tx_inner_map.get(&wait_over) {
-                            tx.send(true).await.unwrap();
-                            // remove the entry from the tx_inner_map
-                            self.tx_inner_map.remove(&wait_over);
+                        if let Some(tx_stop_timeout) = self.tx_inner_map.remove(&wait_over) {
+                            // remove any possible entry from the mapping and send a new signal message
+                            // to the thread spawned with the timeout
+                            tx_stop_timeout.send(()).await.map_err(|_| HotStuffError::SendError)?;
                         }
                     }
                 },
                 _ = shutdown.wait() => {
                     info!("Shutting down pacemaker service..");
+                    // to guarantee that no process is left running, we trigger all shutdowns
+                    let _ = self.tx_inner_map.iter().map(|(k, v)| async move {
+                            match v.send(()).await {
+                                Err(e) => error!(target: LOG_TARGET, "Process already shut down for value = {:?} with error = {}", k, e),
+                                Ok(_) => (),
+                        };
+                        v
+                    }).collect::<Vec<_>>();
                     break;
                 }
             }
@@ -168,7 +186,7 @@ mod tests {
             rx_start_waiter_signal,
             rx_shutdown_waiter_signal,
             tx_waiter_status,
-            10,
+            Duration::from_millis(10),
             shutdown.to_signal(),
         );
 
@@ -198,7 +216,7 @@ mod tests {
             rx_start_waiter_signal,
             rx_shutdown_waiter_signal,
             tx_waiter_status,
-            10,
+            Duration::from_millis(10),
             shutdown.to_signal(),
         );
 
@@ -234,7 +252,7 @@ mod tests {
             rx_start_waiter_signal,
             rx_shutdown_waiter_signal,
             tx_waiter_status,
-            10,
+            Duration::from_millis(10),
             shutdown.to_signal(),
         );
 
