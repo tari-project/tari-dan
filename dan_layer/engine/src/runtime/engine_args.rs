@@ -7,7 +7,7 @@ use tari_bor::{borsh, decode_exact, Decode, Encode};
 
 use crate::runtime::RuntimeError;
 
-#[derive(Debug, Clone, Encode, Decode)]
+#[derive(Debug, Clone, Encode, Decode, Default)]
 pub struct EngineArgs {
     args: Vec<Vec<u8>>,
 }

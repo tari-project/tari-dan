@@ -214,8 +214,7 @@ impl RuntimeInterface for RuntimeInterfaceImpl {
                             reason: "UpdateNonFungibleData resource action requires a resource address".to_string(),
                         })?;
                 let arg: ResourceUpdateNonFungibleDataArg = args.get(0)?;
-                let _nft = self
-                    .tracker
+                self.tracker
                     .with_non_fungible_mut(resource_address, arg.id, move |nft| nft.set_data_raw(arg.data))?;
                 Ok(InvokeResult::unit())
             },

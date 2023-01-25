@@ -233,6 +233,7 @@ pub enum SubstateType {
 
 impl SubstateType {
     pub fn matches(&self, addr: &SubstateAddress) -> bool {
+        #[allow(clippy::match_like_matches_macro)]
         match (self, addr) {
             (SubstateType::Component, SubstateAddress::Component(_)) => true,
             (SubstateType::Resource, SubstateAddress::Resource(_)) => true,

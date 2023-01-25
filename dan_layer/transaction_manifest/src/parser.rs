@@ -347,8 +347,7 @@ fn build_arguments(args: Punctuated<Expr, Comma>) -> Result<Vec<LiteralOrVariabl
                     if segments
                         .first()
                         .ok_or_else(|| syn::Error::new_spanned(func.clone(), "Invalid function call"))?
-                        .ident
-                        .to_string() ==
+                        .ident ==
                         "Amount"
                     {
                         let amt = args
