@@ -127,7 +127,22 @@ impl ManifestInstructionGenerator {
         fn lit_to_arg(lit: &Lit) -> Result<Arg, ManifestError> {
             match lit {
                 Lit::Str(s) => Ok(arg!(s.value())),
-                Lit::Int(i) => Ok(arg!(i.base10_parse::<u64>()?)),
+                Lit::Int(i) => match i.suffix() {
+                    "u8" => Ok(arg!(i.base10_parse::<u8>()?)),
+                    "u16" => Ok(arg!(i.base10_parse::<u16>()?)),
+                    "u32" => Ok(arg!(i.base10_parse::<u32>()?)),
+                    "u64" => Ok(arg!(i.base10_parse::<u64>()?)),
+                    "u128" => Ok(arg!(i.base10_parse::<u128>()?)),
+                    "i8" => Ok(arg!(i.base10_parse::<i8>()?)),
+                    "i16" => Ok(arg!(i.base10_parse::<i16>()?)),
+                    "" | "i32" => Ok(arg!(i.base10_parse::<i32>()?)),
+                    "i64" => Ok(arg!(i.base10_parse::<i64>()?)),
+                    "i128" => Ok(arg!(i.base10_parse::<i128>()?)),
+                    _ => Err(ManifestError::UnsupportedExpr(format!(
+                        r#"Unsupported integer suffix "{}""#,
+                        i.suffix()
+                    ))),
+                },
                 Lit::Bool(b) => Ok(arg!(b.value())),
                 Lit::ByteStr(v) => Ok(arg!(v.value())),
                 Lit::Byte(v) => Ok(arg!(v.value())),

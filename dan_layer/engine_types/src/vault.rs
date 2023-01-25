@@ -20,9 +20,11 @@
 //   WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //   USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+use std::collections::BTreeSet;
+
 use serde::{Deserialize, Serialize};
 use tari_bor::{borsh, Decode, Encode};
-use tari_template_lib::models::{Amount, ResourceAddress, VaultId};
+use tari_template_lib::models::{Amount, NonFungibleId, ResourceAddress, VaultId};
 
 use crate::{
     bucket::Bucket,
@@ -55,5 +57,9 @@ impl Vault {
 
     pub fn resource_address(&self) -> &ResourceAddress {
         self.resource.resource_address()
+    }
+
+    pub fn get_non_fungible_ids(&self) -> Option<&BTreeSet<NonFungibleId>> {
+        self.resource.non_fungible_token_ids()
     }
 }

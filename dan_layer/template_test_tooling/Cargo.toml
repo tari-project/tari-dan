@@ -13,6 +13,7 @@ tari_engine_types = { path = "../engine_types" }
 tari_transaction_manifest = { path = "../transaction_manifest" }
 tari_template_builtin = { path = "../template_builtin" }
 
+anyhow = "1.0.68"
 borsh = "0.9.3"
 log = { version = "0.4.8", features = ["std"] }
 

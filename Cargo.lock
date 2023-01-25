@@ -6323,6 +6323,7 @@ dependencies = [
 name = "tari_template_test_tooling"
 version = "0.1.0"
 dependencies = [
+ "anyhow",
  "borsh",
  "log",
  "tari_crypto",

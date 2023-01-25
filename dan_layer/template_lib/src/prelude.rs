@@ -20,12 +20,13 @@
 //   WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //   USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+pub use tari_bor::encode;
 #[cfg(feature = "macro")]
 pub use tari_template_macros::template;
 
 pub use crate::{
     chain_time::ChainTime,
     component::ComponentManager,
-    models::{Amount, Bucket, BucketId, Metadata, NftToken, NftTokenId, ResourceAddress, Vault},
+    models::{Amount, Bucket, BucketId, Metadata, NonFungible, NonFungibleId, ResourceAddress, Vault},
     resource::{ResourceBuilder, ResourceManager, ResourceType},
 };

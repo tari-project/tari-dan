@@ -29,7 +29,7 @@ use tari_template_abi::rust::{
 };
 
 use crate::{
-    models::{Amount, BucketId, ComponentAddress, Metadata, NftToken, NftTokenId, ResourceAddress, VaultRef},
+    models::{Amount, BucketId, ComponentAddress, Metadata, NonFungible, NonFungibleId, ResourceAddress, VaultRef},
     resource::ResourceType,
 };
 
@@ -145,18 +145,23 @@ impl From<ResourceAddress> for ResourceRef {
 pub enum ResourceAction {
     GetTotalSupply,
     GetResourceType,
+    GetNonFungible,
     Create,
     Mint,
     Burn,
     Deposit,
     Withdraw,
-    Update,
+    UpdateNonFungibleData,
 }
 
 #[derive(Clone, Debug, Decode, Encode)]
 pub enum MintArg {
-    Fungible { amount: Amount },
-    NonFungible { tokens: HashMap<NftTokenId, NftToken> },
+    Fungible {
+        amount: Amount,
+    },
+    NonFungible {
+        tokens: HashMap<NonFungibleId, NonFungible>,
+    },
 }
 
 #[derive(Clone, Debug, Decode, Encode)]
@@ -169,6 +174,17 @@ pub struct CreateResourceArg {
 #[derive(Clone, Debug, Decode, Encode)]
 pub struct MintResourceArg {
     pub mint_arg: MintArg,
+}
+
+#[derive(Clone, Debug, Decode, Encode)]
+pub struct ResourceGetNonFungibleArg {
+    pub id: NonFungibleId,
+}
+
+#[derive(Clone, Debug, Decode, Encode)]
+pub struct ResourceUpdateNonFungibleDataArg {
+    pub id: NonFungibleId,
+    pub data: Vec<u8>,
 }
 
 #[derive(Clone, Debug, Decode, Encode)]
@@ -210,6 +226,7 @@ pub enum VaultAction {
     WithdrawFungible,
     GetBalance,
     GetResourceAddress,
+    GetNonFungibleIds,
 }
 
 #[derive(Clone, Debug, Decode, Encode)]

@@ -20,7 +20,8 @@
 //   WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //   USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use tari_bor::decode;
+use std::collections::BTreeSet;
+
 use tari_engine_types::{
     commit_result::{FinalizeResult, RejectReason, TransactionResult},
     logs::LogEntry,
@@ -37,7 +38,9 @@ use tari_template_lib::{
         LogLevel,
         MintResourceArg,
         ResourceAction,
+        ResourceGetNonFungibleArg,
         ResourceRef,
+        ResourceUpdateNonFungibleDataArg,
         VaultAction,
         WorkspaceAction,
     },
@@ -45,6 +48,7 @@ use tari_template_lib::{
 };
 
 use crate::runtime::{
+    engine_args::EngineArgs,
     tracker::{RuntimeState, StateTracker},
     RuntimeError,
     RuntimeInterface,
@@ -91,7 +95,7 @@ impl RuntimeInterface for RuntimeInterfaceImpl {
         &self,
         component_ref: ComponentRef,
         action: ComponentAction,
-        args: Vec<Vec<u8>>,
+        args: EngineArgs,
     ) -> Result<InvokeResult, RuntimeError> {
         match action {
             ComponentAction::Get => {
@@ -105,20 +109,8 @@ impl RuntimeInterface for RuntimeInterfaceImpl {
                 Ok(InvokeResult::encode(&component)?)
             },
             ComponentAction::Create => {
-                let module_name: String =
-                    args.get(0)
-                        .and_then(|r| decode(r).ok())
-                        .ok_or_else(|| RuntimeError::InvalidArgument {
-                            argument: "module_name",
-                            reason: "Argument not provided or failed to decode".to_string(),
-                        })?;
-                let state: Vec<u8> =
-                    args.get(1)
-                        .and_then(|r| decode(r).ok())
-                        .ok_or_else(|| RuntimeError::InvalidArgument {
-                            argument: "state",
-                            reason: "Argument not provided or failed to decode".to_string(),
-                        })?;
+                let module_name: String = args.get(0)?;
+                let state: Vec<u8> = args.get(1)?;
                 let component_address = self.tracker.new_component(module_name, state)?;
                 Ok(InvokeResult::encode(&component_address)?)
             },
@@ -129,13 +121,7 @@ impl RuntimeInterface for RuntimeInterfaceImpl {
                         argument: "component_ref",
                         reason: "SetState component action requires a component address".to_string(),
                     })?;
-                let state = args
-                    .get(0)
-                    .and_then(|r| decode(r).ok())
-                    .ok_or_else(|| RuntimeError::InvalidArgument {
-                        argument: "state",
-                        reason: "Argument not provided or failed to decode".to_string(),
-                    })?;
+                let state = args.get(0)?;
                 let mut component = self.tracker.get_component(&address)?;
                 // TODO: Need to validate this state somehow - it could contain arbitrary data incl. vaults that are not
                 // owned       by this component
@@ -150,7 +136,7 @@ impl RuntimeInterface for RuntimeInterfaceImpl {
         &self,
         resource_ref: ResourceRef,
         action: ResourceAction,
-        args: Vec<Vec<u8>>,
+        args: EngineArgs,
     ) -> Result<InvokeResult, RuntimeError> {
         match action {
             ResourceAction::GetTotalSupply => {
@@ -178,13 +164,8 @@ impl RuntimeInterface for RuntimeInterfaceImpl {
                 Ok(InvokeResult::encode(&resource_type)?)
             },
             ResourceAction::Create => {
-                let arg: CreateResourceArg =
-                    args.get(0)
-                        .and_then(|r| decode(r).ok())
-                        .ok_or_else(|| RuntimeError::InvalidArgument {
-                            argument: "CreateResourceArg",
-                            reason: "Argument not provided or failed to decode".to_string(),
-                        })?;
+                let arg: CreateResourceArg = args.get(0)?;
+
                 let resource_address = self.tracker.new_resource(arg.resource_type, arg.metadata)?;
 
                 let mut output_bucket = None;
@@ -196,13 +177,7 @@ impl RuntimeInterface for RuntimeInterfaceImpl {
                 Ok(InvokeResult::encode(&(resource_address, output_bucket))?)
             },
             ResourceAction::Mint => {
-                let mint_resource: MintResourceArg =
-                    args.get(0)
-                        .and_then(|r| decode(r).ok())
-                        .ok_or_else(|| RuntimeError::InvalidArgument {
-                            argument: "MintResourceArg",
-                            reason: "Argument not provided or failed to decode".to_string(),
-                        })?;
+                let mint_resource: MintResourceArg = args.get(0)?;
 
                 let resource_address =
                     resource_ref
@@ -218,7 +193,31 @@ impl RuntimeInterface for RuntimeInterfaceImpl {
             ResourceAction::Burn => todo!(),
             ResourceAction::Deposit => todo!(),
             ResourceAction::Withdraw => todo!(),
-            ResourceAction::Update => todo!(),
+            ResourceAction::GetNonFungible => {
+                let resource_address =
+                    resource_ref
+                        .as_resource_address()
+                        .ok_or_else(|| RuntimeError::InvalidArgument {
+                            argument: "resource_ref",
+                            reason: "GetNonFungible resource action requires a resource address".to_string(),
+                        })?;
+                let arg: ResourceGetNonFungibleArg = args.get(0)?;
+                let nft = self.tracker.get_non_fungible(&resource_address, arg.id)?;
+                Ok(InvokeResult::encode(&nft)?)
+            },
+            ResourceAction::UpdateNonFungibleData => {
+                let resource_address =
+                    resource_ref
+                        .as_resource_address()
+                        .ok_or_else(|| RuntimeError::InvalidArgument {
+                            argument: "resource_ref",
+                            reason: "UpdateNonFungibleData resource action requires a resource address".to_string(),
+                        })?;
+                let arg: ResourceUpdateNonFungibleDataArg = args.get(0)?;
+                self.tracker
+                    .with_non_fungible_mut(resource_address, arg.id, move |nft| nft.set_data_raw(arg.data))?;
+                Ok(InvokeResult::unit())
+            },
         }
     }
 
@@ -226,7 +225,7 @@ impl RuntimeInterface for RuntimeInterfaceImpl {
         &self,
         vault_ref: VaultRef,
         action: VaultAction,
-        args: Vec<Vec<u8>>,
+        args: EngineArgs,
     ) -> Result<InvokeResult, RuntimeError> {
         match action {
             VaultAction::Create => {
@@ -246,13 +245,7 @@ impl RuntimeInterface for RuntimeInterfaceImpl {
                     argument: "vault_ref",
                     reason: "Put vault action requires a vault id".to_string(),
                 })?;
-                let bucket_id: BucketId =
-                    args.get(0)
-                        .and_then(|r| decode(r).ok())
-                        .ok_or_else(|| RuntimeError::InvalidArgument {
-                            argument: "bucket_id",
-                            reason: "Argument not provided or failed to decode".to_string(),
-                        })?;
+                let bucket_id: BucketId = args.get(0)?;
 
                 let bucket = self.tracker.take_bucket(bucket_id)?;
                 self.tracker
@@ -264,13 +257,7 @@ impl RuntimeInterface for RuntimeInterfaceImpl {
                     argument: "vault_ref",
                     reason: "WithdrawFungible vault action requires a vault id".to_string(),
                 })?;
-                let amount: Amount =
-                    args.get(0)
-                        .and_then(|r| decode(r).ok())
-                        .ok_or_else(|| RuntimeError::InvalidArgument {
-                            argument: "amount",
-                            reason: "Argument not provided or failed to decode".to_string(),
-                        })?;
+                let amount: Amount = args.get(0)?;
 
                 let resource = self
                     .tracker
@@ -298,6 +285,20 @@ impl RuntimeInterface for RuntimeInterfaceImpl {
                     .borrow_vault_mut(&vault_id, |vault| *vault.resource_address())?;
                 Ok(InvokeResult::encode(&address)?)
             },
+            VaultAction::GetNonFungibleIds => {
+                let vault_id = vault_ref.vault_id().ok_or_else(|| RuntimeError::InvalidArgument {
+                    argument: "vault_ref",
+                    reason: "vault action requires a vault id".to_string(),
+                })?;
+
+                let resp = self.tracker.borrow_vault_mut(&vault_id, |vault| {
+                    let empty = BTreeSet::new();
+                    let ids = vault.get_non_fungible_ids().unwrap_or(&empty);
+                    InvokeResult::encode(&ids)
+                })??;
+
+                Ok(resp)
+            },
         }
     }
 
@@ -305,7 +306,7 @@ impl RuntimeInterface for RuntimeInterfaceImpl {
         &self,
         bucket_ref: BucketRef,
         action: BucketAction,
-        args: Vec<Vec<u8>>,
+        args: EngineArgs,
     ) -> Result<InvokeResult, RuntimeError> {
         match action {
             BucketAction::Create => {
@@ -334,13 +335,7 @@ impl RuntimeInterface for RuntimeInterfaceImpl {
                     argument: "bucket_ref",
                     reason: "Take bucket action requires a bucket id".to_string(),
                 })?;
-                let amount = args
-                    .get(0)
-                    .and_then(|r| decode(r).ok())
-                    .ok_or_else(|| RuntimeError::InvalidArgument {
-                        argument: "amount",
-                        reason: "Argument not provided or failed to decode".to_string(),
-                    })?;
+                let amount = args.get(0)?;
                 let resource = self
                     .tracker
                     .with_bucket_mut(bucket_id, |bucket| bucket.take(amount))??;
@@ -361,7 +356,7 @@ impl RuntimeInterface for RuntimeInterfaceImpl {
         }
     }
 
-    fn workspace_invoke(&self, action: WorkspaceAction, args: Vec<Vec<u8>>) -> Result<InvokeResult, RuntimeError> {
+    fn workspace_invoke(&self, action: WorkspaceAction, args: EngineArgs) -> Result<InvokeResult, RuntimeError> {
         match action {
             WorkspaceAction::ListBuckets => {
                 let bucket_ids = self.tracker.list_buckets();
@@ -369,12 +364,7 @@ impl RuntimeInterface for RuntimeInterfaceImpl {
             },
             WorkspaceAction::Put => todo!(),
             WorkspaceAction::PutLastInstructionOutput => {
-                let key = args.get(0).and_then(|r| decode::<Vec<u8>>(r).ok()).ok_or_else(|| {
-                    RuntimeError::InvalidArgument {
-                        argument: "key",
-                        reason: "Argument not provided or failed to decode".to_string(),
-                    }
-                })?;
+                let key = args.get(0)?;
                 let last_output = self
                     .tracker
                     .take_last_instruction_output()
@@ -383,12 +373,7 @@ impl RuntimeInterface for RuntimeInterfaceImpl {
                 Ok(InvokeResult::unit())
             },
             WorkspaceAction::Take => {
-                let key = args.get(0).and_then(|r| decode::<Vec<u8>>(r).ok()).ok_or_else(|| {
-                    RuntimeError::InvalidArgument {
-                        argument: "key",
-                        reason: "Argument not provided or failed to decode".to_string(),
-                    }
-                })?;
+                let key: Vec<u8> = args.get(0)?;
                 let value = self.tracker.take_from_workspace(&key)?;
                 Ok(InvokeResult::encode(&value)?)
             },
