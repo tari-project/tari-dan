@@ -127,26 +127,23 @@ impl ManifestInstructionGenerator {
         fn lit_to_arg(lit: &Lit) -> Result<Arg, ManifestError> {
             match lit {
                 Lit::Str(s) => Ok(arg!(s.value())),
-                Lit::Int(i) => {
-                    let suffix = Some(i.suffix()).filter(|s| s.is_empty()).unwrap_or("i32");
-                    match suffix {
-                        "u8" => return Ok(arg!(i.base10_parse::<u8>()?)),
-                        "u16" => return Ok(arg!(i.base10_parse::<u16>()?)),
-                        "u32" => return Ok(arg!(i.base10_parse::<u32>()?)),
-                        "u64" => return Ok(arg!(i.base10_parse::<u64>()?)),
-                        "u128" => return Ok(arg!(i.base10_parse::<u128>()?)),
-                        "i8" => return Ok(arg!(i.base10_parse::<i8>()?)),
-                        "i16" => return Ok(arg!(i.base10_parse::<i16>()?)),
-                        "i32" => return Ok(arg!(i.base10_parse::<i32>()?)),
-                        "i64" => return Ok(arg!(i.base10_parse::<i64>()?)),
-                        "i128" => return Ok(arg!(i.base10_parse::<i128>()?)),
-                        _ => {
-                            return Err(ManifestError::UnsupportedExpr(format!(
-                                "Unsupported integer suffix ({})",
-                                suffix
-                            )));
-                        },
-                    }
+                Lit::Int(i) => match i.suffix() {
+                    "u8" => return Ok(arg!(i.base10_parse::<u8>()?)),
+                    "u16" => return Ok(arg!(i.base10_parse::<u16>()?)),
+                    "u32" => return Ok(arg!(i.base10_parse::<u32>()?)),
+                    "u64" => return Ok(arg!(i.base10_parse::<u64>()?)),
+                    "u128" => return Ok(arg!(i.base10_parse::<u128>()?)),
+                    "i8" => return Ok(arg!(i.base10_parse::<i8>()?)),
+                    "i16" => return Ok(arg!(i.base10_parse::<i16>()?)),
+                    "" | "i32" => return Ok(arg!(i.base10_parse::<i32>()?)),
+                    "i64" => return Ok(arg!(i.base10_parse::<i64>()?)),
+                    "i128" => return Ok(arg!(i.base10_parse::<i128>()?)),
+                    _ => {
+                        return Err(ManifestError::UnsupportedExpr(format!(
+                            r#"Unsupported integer suffix "{}""#,
+                            i.suffix()
+                        )));
+                    },
                 },
                 Lit::Bool(b) => Ok(arg!(b.value())),
                 Lit::ByteStr(v) => Ok(arg!(v.value())),
