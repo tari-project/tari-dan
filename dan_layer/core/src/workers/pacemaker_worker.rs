@@ -30,7 +30,6 @@ use tokio::{
 };
 
 use super::hotstuff_error::HotStuffError;
-use crate::models::pacemaker::PacemakerWaitStatus;
 
 const LOG_TARGET: &str = "tari::dan_layer::pacemaker_worker";
 
