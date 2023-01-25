@@ -20,13 +20,12 @@
 // WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 // USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use std::{fmt::Debug, time::Duration};
+use std::{collections::HashMap, fmt::Debug, hash::Hash, time::Duration};
 
-use futures::stream::FuturesUnordered;
 use log::*;
 use tari_shutdown::ShutdownSignal;
 use tokio::{
-    sync::mpsc::{Receiver, Sender},
+    sync::mpsc::{channel, Receiver, Sender},
     task::JoinHandle,
 };
 
@@ -35,15 +34,38 @@ use crate::models::pacemaker::PacemakerWaitStatus;
 
 const LOG_TARGET: &str = "tari::dan_layer::pacemaker_worker";
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum PacemakerWaitStatus {
+    WaitTimeOut,
+}
+
+async fn send_timeout_message<T: Debug + Send>(
+    wait_over: T,
+    tx_waiter_status: Sender<(T, PacemakerWaitStatus)>,
+) -> Result<(), HotStuffError> {
+    info!(target: LOG_TARGET, "Sending timeout message for value: {:?}", wait_over);
+    tx_waiter_status
+        .send((wait_over, PacemakerWaitStatus::WaitTimeOut))
+        .await
+        .map_err(|_| HotStuffError::SendError)?;
+    Ok(())
+}
+
+/// A pacemaker service that is responsible for:
+///   1. Receiving [`start_wait`] messages parametrized over a type `T` and start wait up to a max_timeout value.
+///   2. Receiving [`stop_wait`] messages for an already existing [`start_wait`].
+///   3. If it receives a stop message then it should stop the waiting and do nothing else;
+///   4. Otherwise, it should notify the sender of [`start_wait`] message that the max_timeout duration has passed.
 #[derive(Debug)]
-pub struct Pacemaker<T: Debug + PartialEq + Send> {
+pub struct Pacemaker<T> {
     rx_start_signal: Receiver<T>,
     rx_shutdown_signal: Receiver<T>,
+    tx_inner_map: HashMap<T, Sender<bool>>,
     tx_waiter_status: Sender<(T, PacemakerWaitStatus)>,
     max_timeout: u64,
 }
 
-impl<T: Debug + PartialEq + Send + 'static> Pacemaker<T> {
+impl<T: Copy + Debug + PartialEq + Eq + Hash + Send + Sync + 'static> Pacemaker<T> {
     pub fn spawn(
         rx_start_signal: Receiver<T>,
         rx_shutdown_signal: Receiver<T>,
@@ -64,65 +86,46 @@ impl<T: Debug + PartialEq + Send + 'static> Pacemaker<T> {
         Self {
             rx_start_signal,
             rx_shutdown_signal,
+            tx_inner_map: HashMap::new(),
             tx_waiter_status,
             max_timeout,
         }
     }
 
-    async fn send_shutdown_msg(&mut self, wait_over: T) -> Result<(), HotStuffError> {
-        info!(
-            target: LOG_TARGET,
-            "Sending shutdown message for value: {:?}", wait_over
-        );
-        self.tx_waiter_status
-            .send((wait_over, PacemakerWaitStatus::ShutDown))
-            .await
-            .map_err(|_| HotStuffError::SendError)?;
-        Ok(())
-    }
-
-    async fn send_timeout_msg(&mut self, wait_over: T) -> Result<(), HotStuffError> {
-        info!(target: LOG_TARGET, "Sending timeout message for value: {:?}", wait_over);
-        self.tx_waiter_status
-            .send((wait_over, PacemakerWaitStatus::WaitTimeOut))
-            .await
-            .map_err(|_| HotStuffError::SendError)?;
-
-        Ok(())
-    }
-
     pub async fn run(mut self, mut shutdown: ShutdownSignal) -> Result<(), HotStuffError> {
-        let wait_messages = FuturesUnordered::new();
+        let max_timeout = self.max_timeout;
         loop {
             tokio::select! {
                 msg = self.rx_start_signal.recv() => {
                     if let Some(wait_over) = msg {
+                        let (tx, mut rx) = channel::<bool>(1);
+                        self.tx_inner_map.insert(wait_over, tx);
                         info!(
                             target: LOG_TARGET,
                             "Received start wait signal for value: {:?}", wait_over
                         );
-
-                        wait_messages.push(tokio::select! {
-                            _ = tokio::time::sleep(Duration::from_secs(self.max_timeout)) => {
-                                info!(
-                                    target: LOG_TARGET,
-                                    "Waiter has timed out for value {:?}", wait_over
-                                );
-                                self.send_timeout_msg(wait_over).await.map_err(|_| HotStuffError::SendError)?;
-                            },
-                            msg = self.rx_shutdown_signal.recv() => {
-                                if let Some(wo) = msg {
-                                    if wo == wait_over {
-                                        info!(
-                                            target: LOG_TARGET,
-                                            "Waiter has received a shutdown signal for value: {:?}",
-                                            wait_over
-                                        );
-                                        self.send_shutdown_msg(wait_over).await.map_err(|_| HotStuffError::SendError)?;
+                        let tx_waiter_status = self.tx_waiter_status.clone();
+                        let _join = tokio::spawn(async move {
+                            tokio::select! {
+                                _ = tokio::time::sleep(Duration::from_millis(max_timeout)) => {
+                                    if let Err(e) = send_timeout_message(wait_over, tx_waiter_status).await {
+                                        error!(target: LOG_TARGET, "failed to send timeout status message for value = {:?} with error = {}", wait_over, e);
                                     }
+                                },
+                                _ = rx.recv() => {
+                                    info!("The wait signal for wait_over = {:?} has been shutted down", wait_over);
                                 }
                             }
-                        })
+                        });
+                    }
+                },
+                msg = self.rx_shutdown_signal.recv() => {
+                    if let Some(wait_over) = msg {
+                        if let Some(tx) = self.tx_inner_map.get(&wait_over) {
+                            tx.send(true).await.unwrap();
+                            // remove the entry from the tx_inner_map
+                            self.tx_inner_map.remove(&wait_over);
+                        }
                     }
                 },
                 _ = shutdown.wait() => {
@@ -138,24 +141,22 @@ impl<T: Debug + PartialEq + Send + 'static> Pacemaker<T> {
 
 #[cfg(test)]
 mod tests {
-    use tari_dan_common_types::{PayloadId, ShardId};
     use tari_shutdown::Shutdown;
     use tokio::sync::mpsc::channel;
 
     use super::*;
-    use crate::models::{pacemaker::WaitOver, HotstuffPhase};
 
     struct Tester {
-        tx_start_waiter_signal: Sender<WaitOver>,
-        tx_shutdown_waiter_signal: Sender<WaitOver>,
-        rx_waiter_status: Receiver<(WaitOver, PacemakerWaitStatus)>,
+        tx_start_waiter_signal: Sender<u32>,
+        tx_shutdown_waiter_signal: Sender<u32>,
+        rx_waiter_status: Receiver<(u32, PacemakerWaitStatus)>,
     }
 
     #[tokio::test]
     async fn test_wait_timeout_pacemaker() {
-        let (tx_start_waiter_signal, rx_start_waiter_signal) = channel::<WaitOver>(10);
-        let (tx_waiter_status, rx_waiter_status) = channel::<(WaitOver, PacemakerWaitStatus)>(10);
-        let (tx_shutdown_waiter_signal, rx_shutdown_waiter_signal) = channel::<WaitOver>(10);
+        let (tx_start_waiter_signal, rx_start_waiter_signal) = channel::<u32>(10);
+        let (tx_waiter_status, rx_waiter_status) = channel::<(u32, PacemakerWaitStatus)>(10);
+        let (tx_shutdown_waiter_signal, rx_shutdown_waiter_signal) = channel::<u32>(10);
 
         let mut tester = Tester {
             rx_waiter_status,
@@ -168,37 +169,24 @@ mod tests {
             rx_start_waiter_signal,
             rx_shutdown_waiter_signal,
             tx_waiter_status,
-            3_u64,
+            10,
             shutdown.to_signal(),
         );
 
-        let payload = PayloadId::new([
-            0u8, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28,
-            29, 30, 31,
-        ]);
-        let shard_id = ShardId::zero();
-        let phase = HotstuffPhase::Prepare;
+        tester.tx_start_waiter_signal.send(0_u32).await.unwrap();
 
-        tester
-            .tx_start_waiter_signal
-            .send((payload, shard_id, phase))
-            .await
-            .unwrap();
-
-        tokio::time::sleep(Duration::from_secs(3)).await;
+        tokio::time::sleep(Duration::from_millis(11)).await;
 
         let msg = tester.rx_waiter_status.recv().await.unwrap();
-        assert_eq!(msg.0 .0, payload);
-        assert_eq!(msg.0 .1, shard_id);
-        assert_eq!(msg.0 .2, phase);
+        assert_eq!(msg.0, 0_u32);
         assert_eq!(msg.1, PacemakerWaitStatus::WaitTimeOut);
     }
 
     #[tokio::test]
     async fn test_shutdown_pacemaker() {
-        let (tx_start_waiter_signal, rx_start_waiter_signal) = channel::<WaitOver>(10);
-        let (tx_waiter_status, rx_waiter_status) = channel::<(WaitOver, PacemakerWaitStatus)>(10);
-        let (tx_shutdown_waiter_signal, rx_shutdown_waiter_signal) = channel::<WaitOver>(10);
+        let (tx_start_waiter_signal, rx_start_waiter_signal) = channel::<u32>(10);
+        let (tx_waiter_status, rx_waiter_status) = channel::<(u32, PacemakerWaitStatus)>(10);
+        let (tx_shutdown_waiter_signal, rx_shutdown_waiter_signal) = channel::<u32>(10);
 
         let mut tester = Tester {
             rx_waiter_status,
@@ -211,46 +199,30 @@ mod tests {
             rx_start_waiter_signal,
             rx_shutdown_waiter_signal,
             tx_waiter_status,
-            10_u64,
+            10,
             shutdown.to_signal(),
         );
 
-        let payload = PayloadId::new([
-            0u8, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28,
-            29, 30, 31,
-        ]);
-        let shard_id = ShardId::zero();
-        let phase = HotstuffPhase::Prepare;
-
         // send start waiting signal to wait over
-        tester
-            .tx_start_waiter_signal
-            .send((payload, shard_id, phase))
-            .await
-            .unwrap();
+        tester.tx_start_waiter_signal.send(1).await.unwrap();
 
-        // tokio::time::sleep(Duration::from_secs(1)).await;
+        tokio::time::sleep(Duration::from_millis(1)).await;
+
         // send shutdown signal for pacemaker
-        tester
-            .tx_shutdown_waiter_signal
-            .send((payload, shard_id, phase))
-            .await
-            .unwrap();
+        tester.tx_shutdown_waiter_signal.send(1).await.unwrap();
 
-        // tokio::time::sleep(Duration::from_secs(2)).await;
-
-        let msg = tester.rx_waiter_status.recv().await.unwrap();
-        assert_eq!(msg.0 .0, payload);
-        assert_eq!(msg.0 .1, shard_id);
-        assert_eq!(msg.0 .2, phase);
-        assert_eq!(msg.1, PacemakerWaitStatus::ShutDown);
+        assert!(
+            tokio::time::timeout(Duration::from_millis(10), tester.rx_waiter_status.recv())
+                .await
+                .is_err()
+        );
     }
 
     #[tokio::test]
     async fn test_wait_timeout_one_out_of_three_pacemaker() {
-        let (tx_start_waiter_signal, rx_start_waiter_signal) = channel::<WaitOver>(10);
-        let (tx_waiter_status, rx_waiter_status) = channel::<(WaitOver, PacemakerWaitStatus)>(10);
-        let (tx_shutdown_waiter_signal, rx_shutdown_waiter_signal) = channel::<WaitOver>(10);
+        let (tx_start_waiter_signal, rx_start_waiter_signal) = channel::<u32>(10);
+        let (tx_waiter_status, rx_waiter_status) = channel::<(u32, PacemakerWaitStatus)>(10);
+        let (tx_shutdown_waiter_signal, rx_shutdown_waiter_signal) = channel::<u32>(10);
 
         let mut tester = Tester {
             rx_waiter_status,
@@ -263,78 +235,37 @@ mod tests {
             rx_start_waiter_signal,
             rx_shutdown_waiter_signal,
             tx_waiter_status,
-            3_u64,
+            10,
             shutdown.to_signal(),
         );
 
-        let mut data = vec![
-            0u8, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28,
-            29, 30, 31,
-        ];
+        // send three wait signals
+        tester.tx_start_waiter_signal.send(0).await.unwrap();
+        tester.tx_start_waiter_signal.send(1).await.unwrap();
+        tester.tx_start_waiter_signal.send(2).await.unwrap();
 
-        let payload_0 = PayloadId::new(data.clone());
-        let shard_id_0 = ShardId::zero();
-        let phase_0 = HotstuffPhase::Prepare;
+        tokio::time::sleep(Duration::from_millis(1)).await;
 
-        tester
-            .tx_start_waiter_signal
-            .send((payload_0, shard_id_0, phase_0))
-            .await
-            .unwrap();
+        // stop the middle waiter
+        tester.tx_shutdown_waiter_signal.send(1).await.unwrap();
 
-        data[0] = 100_u8;
-
-        let payload_1 = PayloadId::new(data.clone());
-        let shard_id_1 = ShardId::zero();
-        let phase_1 = HotstuffPhase::PreCommit;
-
-        tester
-            .tx_start_waiter_signal
-            .send((payload_1, shard_id_1, phase_1))
-            .await
-            .unwrap();
-
-        data[0] = 255_u8;
-
-        let payload_2 = PayloadId::new(data);
-        let shard_id_2 = ShardId::zero();
-        let phase_2 = HotstuffPhase::Commit;
-
-        tester
-            .tx_start_waiter_signal
-            .send((payload_2, shard_id_2, phase_2))
-            .await
-            .unwrap();
-
-        tokio::time::sleep(Duration::from_secs(1)).await;
-
-        // stop the middle waiter, on time
-        tester
-            .tx_shutdown_waiter_signal
-            .send((payload_1, shard_id_1, phase_1))
-            .await
-            .unwrap();
-
+        // we should receive two WaitTimeOut status, for the first and last messages
+        // the middle one was stopped, so we don't expect any further status messages
+        // to be received
         let msg = tester.rx_waiter_status.recv().await.unwrap();
-        assert_eq!(msg.0 .0, payload_1);
-        assert_eq!(msg.0 .1, shard_id_1);
-        assert_eq!(msg.0 .2, phase_1);
 
-        assert_eq!(msg.1, PacemakerWaitStatus::ShutDown);
-
-        tokio::time::sleep(Duration::from_secs(2)).await;
-
-        let msg = tester.rx_waiter_status.recv().await.unwrap();
-        assert_eq!(msg.0 .0, payload_0);
-        assert_eq!(msg.0 .1, shard_id_0);
-        assert_eq!(msg.0 .2, phase_0);
+        assert_eq!(msg.0, 0);
         assert_eq!(msg.1, PacemakerWaitStatus::WaitTimeOut);
 
         let msg = tester.rx_waiter_status.recv().await.unwrap();
-        assert_eq!(msg.0 .0, payload_2);
-        assert_eq!(msg.0 .1, shard_id_2);
-        assert_eq!(msg.0 .2, phase_2);
 
+        assert_eq!(msg.0, 2);
         assert_eq!(msg.1, PacemakerWaitStatus::WaitTimeOut);
+
+        assert!(
+            tokio::time::timeout(Duration::from_millis(10), tester.rx_waiter_status.recv())
+                .await
+                .is_err()
+        );
     }
 }
