@@ -20,34 +20,48 @@
 //   WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //   USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use tari_bor::{borsh, Decode, Encode};
-use tari_template_lib::models::{Amount, ResourceAddress};
+use std::path::Path;
 
-use crate::resource_container::{ResourceContainer, ResourceError};
+use clap::Subcommand;
 
-#[derive(Debug, Clone, Encode, Decode)]
-pub struct Bucket {
-    resource: ResourceContainer,
+use crate::key_manager::KeyManager;
+
+#[derive(Debug, Subcommand, Clone)]
+pub enum KeysSubcommand {
+    #[clap(alias = "create")]
+    New,
+    List,
+    Use {
+        name: String,
+    },
 }
 
-impl Bucket {
-    pub fn new(resource: ResourceContainer) -> Self {
-        Self { resource }
-    }
+impl KeysSubcommand {
+    pub async fn handle<P: AsRef<Path>>(self, base_dir: P) -> anyhow::Result<()> {
+        let key_manager = KeyManager::init(base_dir)?;
 
-    pub fn amount(&self) -> Amount {
-        self.resource.amount()
-    }
-
-    pub fn resource_address(&self) -> &ResourceAddress {
-        self.resource.resource_address()
-    }
-
-    pub(crate) fn into_resource(self) -> ResourceContainer {
-        self.resource
-    }
-
-    pub fn take(&mut self, amount: Amount) -> Result<ResourceContainer, ResourceError> {
-        self.resource.withdraw(amount)
+        #[allow(clippy::enum_glob_use)]
+        use KeysSubcommand::*;
+        match self {
+            New => {
+                let key = key_manager.create()?;
+                println!("New key pair {} created", key);
+            },
+            List => {
+                println!("Key pairs:");
+                for (i, key) in key_manager.all().into_iter().enumerate() {
+                    if key.is_active {
+                        println!("{}. {} (active)", i, key);
+                    } else {
+                        println!("{}. {}", i, key);
+                    }
+                }
+            },
+            Use { name } => {
+                key_manager.set_active_key(&name)?;
+                println!("Key {} is now active", name);
+            },
+        }
+        Ok(())
     }
 }

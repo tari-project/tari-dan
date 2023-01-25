@@ -24,8 +24,8 @@ use std::{fmt::Display, io};
 
 use anyhow::anyhow;
 use tari_dan_common_types::optional::IsNotFoundError;
-use tari_engine_types::{resource::ResourceError, substate::SubstateAddress};
-use tari_template_lib::models::{Amount, BucketId, ComponentAddress, ResourceAddress, VaultId};
+use tari_engine_types::{resource_container::ResourceError, substate::SubstateAddress};
+use tari_template_lib::models::{Amount, BucketId, ComponentAddress, NonFungibleId, ResourceAddress, VaultId};
 
 use crate::{runtime::id_provider::MaxIdsExceeded, state_store::StateStoreError};
 
@@ -49,6 +49,11 @@ pub enum RuntimeError {
     IllegalRuntimeState,
     #[error("Vault not found with id ({vault_id})")]
     VaultNotFound { vault_id: VaultId },
+    #[error("Non-fungible token not found with address {resource_address} and id {nft_id}")]
+    NonFungibleNotFound {
+        resource_address: ResourceAddress,
+        nft_id: NonFungibleId,
+    },
     #[error("Bucket not found with id {bucket_id}")]
     BucketNotFound { bucket_id: BucketId },
     #[error("Resource not found with address {resource_address}")]
@@ -67,6 +72,8 @@ pub enum RuntimeError {
     TransactionCommitError(#[from] TransactionCommitError),
     #[error("Transaction generated too many outputs: {0}")]
     TooManyOutputs(#[from] MaxIdsExceeded),
+    #[error("Duplicate NFT token id: {token_id}")]
+    DuplicateNonFungibleId { token_id: NonFungibleId },
 }
 
 impl RuntimeError {

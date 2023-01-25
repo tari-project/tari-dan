@@ -20,23 +20,25 @@
 //   WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //   USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+use std::collections::BTreeSet;
+
 use serde::{Deserialize, Serialize};
 use tari_bor::{borsh, Decode, Encode};
-use tari_template_lib::models::{Amount, ResourceAddress, VaultId};
+use tari_template_lib::models::{Amount, NonFungibleId, ResourceAddress, VaultId};
 
 use crate::{
     bucket::Bucket,
-    resource::{Resource, ResourceError},
+    resource_container::{ResourceContainer, ResourceError},
 };
 
 #[derive(Debug, Clone, Encode, Decode, Serialize, Deserialize, PartialEq)]
 pub struct Vault {
     vault_id: VaultId,
-    resource: Resource,
+    resource: ResourceContainer,
 }
 
 impl Vault {
-    pub fn new(vault_id: VaultId, resource: Resource) -> Self {
+    pub fn new(vault_id: VaultId, resource: ResourceContainer) -> Self {
         Self { vault_id, resource }
     }
 
@@ -45,7 +47,7 @@ impl Vault {
         Ok(())
     }
 
-    pub fn withdraw(&mut self, amount: Amount) -> Result<Resource, ResourceError> {
+    pub fn withdraw(&mut self, amount: Amount) -> Result<ResourceContainer, ResourceError> {
         self.resource.withdraw(amount)
     }
 
@@ -53,15 +55,11 @@ impl Vault {
         self.resource.amount()
     }
 
-    pub fn id(&self) -> &VaultId {
-        &self.vault_id
-    }
-
     pub fn resource_address(&self) -> &ResourceAddress {
-        self.resource.address()
+        self.resource.resource_address()
     }
 
-    pub fn resource(&self) -> &Resource {
-        &self.resource
+    pub fn get_non_fungible_ids(&self) -> Option<&BTreeSet<NonFungibleId>> {
+        self.resource.non_fungible_token_ids()
     }
 }

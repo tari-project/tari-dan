@@ -74,6 +74,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "ahash"
+version = "0.8.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "bf6ccdb167abbf410dcb915cabd428929d7f6a04980b54a11f26a39f1c7f7107"
+dependencies = [
+ "cfg-if",
+ "once_cell",
+ "version_check 0.9.4",
+]
+
+[[package]]
 name = "aho-corasick"
 version = "0.7.20"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1605,17 +1616,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "d3ne"
-version = "0.7.4"
-source = "git+https://github.com/stringhandler/d3ne-rs.git?branch=st-fixes2#ad2b0dfca267c9466251780aecb78bab139846e5"
-dependencies = [
- "anyhow",
- "serde",
- "serde_json",
- "thiserror",
-]
-
-[[package]]
 name = "darling"
 version = "0.10.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2501,7 +2501,7 @@ version = "0.11.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ab5ef0d4909ef3724cc8cce6ccc8572c5c817592e9285f5464f8e86f8bd3726e"
 dependencies = [
- "ahash",
+ "ahash 0.7.6",
 ]
 
 [[package]]
@@ -2510,7 +2510,16 @@ version = "0.12.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8a9ee70c43aaf417c914396645a0fa852624801b24ebb7ae78fe8272889ac888"
 dependencies = [
- "ahash",
+ "ahash 0.7.6",
+]
+
+[[package]]
+name = "hashbrown"
+version = "0.13.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "43a3c133739dddd0d2990f9a4bdf8eb4b21ef50e4851ca85ab661199821d510e"
+dependencies = [
+ "ahash 0.8.2",
 ]
 
 [[package]]
@@ -6013,7 +6022,6 @@ version = "0.35.1"
 dependencies = [
  "anyhow",
  "cargo_toml",
- "d3ne",
  "digest 0.9.0",
  "log",
  "rand 0.7.3",
@@ -6277,12 +6285,16 @@ dependencies = [
 name = "tari_template_abi"
 version = "0.35.1"
 dependencies = [
+ "hashbrown 0.13.2",
  "tari_bor",
 ]
 
 [[package]]
 name = "tari_template_builtin"
 version = "0.35.1"
+dependencies = [
+ "tari_engine_types",
+]
 
 [[package]]
 name = "tari_template_lib"
@@ -6311,13 +6323,16 @@ dependencies = [
 name = "tari_template_test_tooling"
 version = "0.1.0"
 dependencies = [
+ "anyhow",
  "borsh",
  "log",
  "tari_crypto",
  "tari_dan_engine",
  "tari_engine_types",
  "tari_template_abi",
+ "tari_template_builtin",
  "tari_template_lib",
+ "tari_transaction_manifest",
 ]
 
 [[package]]
@@ -6340,6 +6355,7 @@ dependencies = [
  "quote",
  "syn",
  "tari_engine_types",
+ "tari_template_builtin",
  "tari_template_lib",
  "thiserror",
 ]
@@ -6420,6 +6436,7 @@ dependencies = [
  "tari_template_builtin",
  "tari_template_lib",
  "tari_test_utils",
+ "tari_transaction_manifest",
  "tari_validator_node_cli",
  "tari_validator_node_client",
  "tari_wallet",

@@ -25,13 +25,23 @@ mod utils;
 
 use std::{
     convert::{Infallible, TryFrom},
+    future,
     io,
     time::Duration,
 };
 
 use async_trait::async_trait;
-use cucumber::{given, then, when, writer, WorldInit, WriterExt};
+use cucumber::{
+    gherkin::{Scenario, Step},
+    given,
+    then,
+    when,
+    writer,
+    WorldInit,
+    WriterExt,
+};
 use indexmap::IndexMap;
+use tari_common::initialize_logging;
 use tari_common_types::types::PublicKey;
 use tari_crypto::tari_utilities::hex::Hex;
 use tari_dan_common_types::QuorumDecision;
@@ -39,6 +49,7 @@ use tari_dan_core::services::BaseNodeClient;
 use tari_engine_types::execution_result::Type;
 use tari_template_lib::Hash;
 use tari_validator_node::GrpcBaseNodeClient;
+use tari_validator_node_cli::versioned_substate_address::VersionedSubstateAddress;
 use tari_validator_node_client::types::{GetIdentityResponse, GetTemplateRequest, TemplateRegistrationResponse};
 use utils::{
     miner::{mine_blocks, register_miner_process},
@@ -50,6 +61,7 @@ use utils::{
 use crate::utils::{
     base_node::{get_base_node_client, spawn_base_node, BaseNodeProcess},
     http_server::MockHttpServer,
+    logging::create_log_config_file,
     miner::MinerProcess,
     template::{send_template_registration, RegisteredTemplate},
     validator_node::{get_vn_client, ValidatorNodeProcess},
@@ -63,9 +75,10 @@ pub struct TariWorld {
     validator_nodes: IndexMap<String, ValidatorNodeProcess>,
     miners: IndexMap<String, MinerProcess>,
     templates: IndexMap<String, RegisteredTemplate>,
-    components: IndexMap<String, Hash>,
+    outputs: IndexMap<String, IndexMap<String, VersionedSubstateAddress>>,
     http_server: Option<MockHttpServer>,
     cli_data_dir: Option<String>,
+    current_scenario_name: Option<String>,
 }
 
 impl TariWorld {
@@ -86,6 +99,24 @@ impl TariWorld {
             .get(name)
             .unwrap_or_else(|| panic!("Base node {} not found", name))
     }
+
+    pub fn after(&mut self, _scenario: &Scenario) {
+        for (name, mut p) in self.validator_nodes.drain(..) {
+            println!("Shutting down validator node {}", name);
+            p.shutdown.trigger();
+        }
+
+        for (name, mut p) in self.wallets.drain(..) {
+            println!("Shutting down wallet {}", name);
+            p.shutdown.trigger();
+        }
+        for (name, mut p) in self.base_nodes.drain(..) {
+            println!("Shutting down base node {}", name);
+            // You have explicitly trigger the shutdown now because of the change to use Arc/Mutex in tari_shutdown
+            p.shutdown.trigger();
+        }
+        self.miners.clear();
+    }
 }
 
 #[async_trait(?Send)]
@@ -93,17 +124,35 @@ impl cucumber::World for TariWorld {
     type Error = Infallible;
 
     async fn new() -> Result<Self, Self::Error> {
-        Ok(Self {
-            base_nodes: IndexMap::new(),
-            wallets: IndexMap::new(),
-            validator_nodes: IndexMap::new(),
-            miners: IndexMap::new(),
-            templates: IndexMap::new(),
-            components: IndexMap::new(),
-            http_server: None,
-            cli_data_dir: None,
-        })
+        Ok(Self::default())
     }
+}
+
+#[tokio::main]
+async fn main() {
+    let log_path = create_log_config_file();
+    initialize_logging(log_path.as_path(), include_str!("./log4rs/cucumber.yml")).unwrap();
+
+    TariWorld::cucumber()
+        .max_concurrent_scenarios(1)
+        .with_writer(
+            // following config needed to use eprint statements in the tests
+            writer::Basic::raw(io::stdout(), writer::Coloring::Auto, 0)
+                .summarized()
+                .assert_normalized(),
+        )
+        .before(move |_feature, _rule, scenario, world| {
+            world.current_scenario_name = Some(scenario.name.clone());
+            Box::pin(future::ready(()))
+        })
+        .after(move |_feature, _rule, scenario, maybe_world| {
+            if let Some(world) = maybe_world {
+                world.after(scenario);
+            }
+            Box::pin(future::ready(()))
+        })
+        .run_and_exit("tests/features/")
+        .await;
 }
 
 #[given(expr = "a base node {word}")]
@@ -183,29 +232,59 @@ async fn assert_template_is_registered(world: &mut TariWorld, template_name: Str
     assert_eq!(resp.registration_metadata.address, template_address);
 }
 
-#[when(expr = "I create a component {word} of template \"{word}\" on {word} using \"{word}\"")]
+#[when(
+    expr = r#"I call function "{word}" on template "{word}" on {word} with args "{word}" and {int} outputs named "{word}""#
+)]
 async fn call_template_constructor(
+    world: &mut TariWorld,
+    function_call: String,
+    template_name: String,
+    vn_name: String,
+    args: String,
+    num_outputs: u64,
+    outputs_name: String,
+) {
+    let args = args.split(',').map(|a| a.trim().to_string()).collect();
+    validator_node_cli::create_component(
+        world,
+        outputs_name,
+        template_name,
+        vn_name,
+        function_call,
+        args,
+        num_outputs,
+    )
+    .await;
+
+    // give it some time between transactions
+    tokio::time::sleep(Duration::from_secs(4)).await;
+}
+
+#[when(expr = r#"I create a component {word} of template "{word}" on {word} using "{word}""#)]
+async fn call_template_constructor_without_args(
     world: &mut TariWorld,
     component_name: String,
     template_name: String,
     vn_name: String,
     function_call: String,
 ) {
-    validator_node_cli::create_component(world, component_name, template_name, vn_name, function_call).await;
+    validator_node_cli::create_component(world, component_name, template_name, vn_name, function_call, vec![], 1).await;
 
     // give it some time between transactions
     tokio::time::sleep(Duration::from_secs(4)).await;
 }
 
-#[when(expr = "I invoke on {word} on component {word} the method call \"{word}\" with {int} outputs")]
+#[when(expr = r#"I invoke on {word} on component {word} the method call "{word}" with {int} outputs named "{word}""#)]
 async fn call_component_method(
     world: &mut TariWorld,
     vn_name: String,
     component_name: String,
     method_call: String,
     num_outputs: u64,
+    output_name: String,
 ) {
-    let resp = validator_node_cli::call_method(world, vn_name, component_name, method_call, num_outputs).await;
+    let resp =
+        validator_node_cli::call_method(world, vn_name, component_name, output_name, method_call, num_outputs).await;
     assert_eq!(resp.result.unwrap().decision, QuorumDecision::Accept);
 
     // give it some time between transactions
@@ -224,7 +303,15 @@ async fn call_component_method_and_check_result(
     num_outputs: u64,
     expected_result: String,
 ) {
-    let resp = validator_node_cli::call_method(world, vn_name, component_name, method_call, num_outputs).await;
+    let resp = validator_node_cli::call_method(
+        world,
+        vn_name,
+        component_name,
+        "dummy_outputs".to_string(),
+        method_call,
+        num_outputs,
+    )
+    .await;
     let finalize_result = resp.result.unwrap();
     assert_eq!(finalize_result.decision, QuorumDecision::Accept);
 
@@ -251,6 +338,33 @@ async fn create_dan_wallet(world: &mut TariWorld) {
 #[when(expr = "I create an account {word} on {word}")]
 async fn create_account(world: &mut TariWorld, account_name: String, vn_name: String) {
     validator_node_cli::create_account(world, account_name, vn_name).await;
+}
+
+#[when(expr = r#"I submit a transaction manifest on {word} with {int} outputs named "{word}""#)]
+async fn submit_manifest(world: &mut TariWorld, step: &Step, vn_name: String, num_outputs: u64, output_name: String) {
+    let manifest = wrap_manifest_in_main(world, step.docstring.as_ref().expect("manifest code not provided"));
+    validator_node_cli::submit_manifest(world, vn_name, output_name, manifest, String::new(), num_outputs).await;
+}
+
+#[when(regex = r#"^I submit a transaction manifest on (\w+) with inputs "([^"]+)" and (\d+) outputs? named "(\w+)"$"#)]
+async fn submit_manifest_with_inputs(
+    world: &mut TariWorld,
+    step: &Step,
+    vn_name: String,
+    inputs: String,
+    num_outputs: u64,
+    outputs_name: String,
+) {
+    let manifest = wrap_manifest_in_main(world, step.docstring.as_ref().expect("manifest code not provided"));
+    validator_node_cli::submit_manifest(world, vn_name, outputs_name, manifest, inputs, num_outputs).await;
+}
+
+fn wrap_manifest_in_main(world: &TariWorld, contents: &str) -> String {
+    // define all templates
+    let template_defs = world.templates.iter().fold(String::new(), |acc, (name, template)| {
+        format!("{}\nuse template_{} as {};", acc, template.address, name)
+    });
+    format!("{} fn main() {{ {} }}", template_defs, contents)
 }
 
 #[when(expr = "I wait {int} seconds")]
@@ -296,25 +410,14 @@ async fn print_world(world: &mut TariWorld) {
     }
 
     // templates
-    for (name, component_id) in world.components.iter() {
-        eprintln!("Component \"{}\" with id \"{}\"", name, component_id);
+    for (name, outputs) in world.outputs.iter() {
+        eprintln!("Outputs \"{}\"", name);
+        for (name, addr) in outputs {
+            eprintln!("  - {}: {}", name, addr);
+        }
     }
 
     eprintln!();
     eprintln!("======================================");
     eprintln!();
-}
-
-#[tokio::main]
-async fn main() {
-    TariWorld::cucumber()
-        .max_concurrent_scenarios(1)
-        // following config needed to use eprint statements in the tests
-        .with_writer(
-            writer::Basic::raw(io::stdout(), writer::Coloring::Auto, 0)
-                .summarized()
-                .assert_normalized(),
-        )
-        .run_and_exit("tests/features/basic.feature")
-        .await;
 }

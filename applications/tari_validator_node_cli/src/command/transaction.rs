@@ -47,10 +47,10 @@ use tari_validator_node_client::{
 };
 
 use crate::{
-    account_manager::AccountFileManager,
     command::manifest,
     component_manager::ComponentManager,
     from_hex::FromHex,
+    key_manager::KeyManager,
     versioned_substate_address::VersionedSubstateAddress,
 };
 
@@ -161,7 +161,7 @@ pub async fn handle_submit(
     args: SubmitArgs,
     base_dir: impl AsRef<Path>,
     client: &mut ValidatorNodeClient,
-) -> Result<Option<SubmitTransactionResponse>, anyhow::Error> {
+) -> Result<SubmitTransactionResponse, anyhow::Error> {
     let SubmitArgs { instruction, common } = args;
     let instruction = match instruction {
         CliInstruction::CallFunction {
@@ -193,23 +193,23 @@ async fn handle_submit_manifest(
     args: SubmitManifestArgs,
     base_dir: impl AsRef<Path>,
     client: &mut ValidatorNodeClient,
-) -> Result<Option<SubmitTransactionResponse>, anyhow::Error> {
+) -> Result<SubmitTransactionResponse, anyhow::Error> {
     let contents = std::fs::read_to_string(&args.manifest).map_err(|e| anyhow!("Failed to read manifest: {}", e))?;
     let instructions = parse_manifest(&contents, manifest::parse_globals(args.input_variables)?)?;
     submit_transaction(instructions, args.common, base_dir, client).await
 }
 
-async fn submit_transaction(
+pub async fn submit_transaction(
     instructions: Vec<Instruction>,
     common: CommonSubmitArgs,
     base_dir: impl AsRef<Path>,
     client: &mut ValidatorNodeClient,
-) -> Result<Option<SubmitTransactionResponse>, anyhow::Error> {
+) -> Result<SubmitTransactionResponse, anyhow::Error> {
     let component_manager = ComponentManager::init(base_dir.as_ref())?;
-    let account_manager = AccountFileManager::init(base_dir.as_ref().to_path_buf())?;
-    let account = account_manager
-        .get_active_account()
-        .ok_or_else(|| anyhow::anyhow!("No active account. Use `accounts use [public key hex]` to set one."))?;
+    let key_manager = KeyManager::init(base_dir)?;
+    let key = key_manager
+        .get_active_key()
+        .ok_or_else(|| anyhow::anyhow!("No active key. Use `keys use [public key hex]` to set one."))?;
 
     let inputs = if common.inputs.is_empty() {
         load_inputs(&instructions, &component_manager)?
@@ -238,7 +238,7 @@ async fn submit_transaction(
         .with_new_outputs(common.num_outputs.unwrap_or(0))
         .with_outputs(outputs)
         .with_fee(1)
-        .sign(&account.secret_key);
+        .sign(&key.secret_key);
 
     let transaction = builder.build();
 
@@ -263,8 +263,9 @@ async fn submit_transaction(
     };
 
     if request.inputs.is_empty() && request.num_outputs == 0 {
-        println!("No inputs or outputs. This transaction will not be processed by the network.");
-        return Ok(None);
+        return Err(anyhow::anyhow!(
+            "No inputs or outputs, transaction will not be processed by the network"
+        ));
     }
     println!();
     println!("✅ Transaction {} submitted.", transaction.hash());
@@ -286,7 +287,7 @@ async fn submit_transaction(
         }
         summarize(result, timer.elapsed());
     }
-    Ok(Some(resp))
+    Ok(resp)
 }
 
 fn summarize_request(request: &SubmitTransactionRequest) {
@@ -364,14 +365,22 @@ fn summarize_finalize_result(finalize: &FinalizeResult) {
                     SubstateValue::Component(component) => {
                         println!(
                             "      ▶ component ({}): {}",
-                            component.module_name, component.component_address
+                            component.module_name,
+                            substate.substate_address()
                         );
                     },
-                    SubstateValue::Resource(resource) => {
-                        println!("      ▶ resource: {}", resource.address());
+                    SubstateValue::Resource(_) => {
+                        println!("      ▶ resource: {}", substate.substate_address());
                     },
                     SubstateValue::Vault(vault) => {
-                        println!("      ▶ vault: {} {}", vault.id(), vault.resource_address());
+                        println!(
+                            "      ▶ vault: {} {}",
+                            substate.substate_address(),
+                            vault.resource_address()
+                        );
+                    },
+                    SubstateValue::NonFungible(_) => {
+                        println!("      ▶ NFT: {}", substate.substate_address(),);
                     },
                 }
                 println!();

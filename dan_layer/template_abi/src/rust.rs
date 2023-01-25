@@ -24,8 +24,16 @@
 mod no_std {
     extern crate alloc;
 
-    pub use alloc::{string, vec};
-    pub use core::{fmt, mem, ptr, slice};
+    pub use alloc::{format, str, string, vec};
+    pub use core::{cmp, fmt, mem, ptr, slice, write, writeln};
+
+    pub mod collections {
+        extern crate alloc;
+        pub use alloc::collections::{BTreeMap, BTreeSet};
+
+        #[cfg(feature = "alloc")]
+        pub use hashbrown::{HashMap, HashSet};
+    }
 
     pub use tari_bor::borsh::maybestd::io;
 }
@@ -35,7 +43,11 @@ pub use no_std::*;
 
 #[cfg(feature = "std")]
 mod rust_std {
-    pub use ::std::{fmt, format, io, mem, ptr, slice, string, vec};
+    pub use ::std::{cmp, fmt, format, io, mem, ptr, slice, str, string, vec, write, writeln};
+
+    pub mod collections {
+        pub use ::std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
+    }
 }
 
 #[cfg(feature = "std")]

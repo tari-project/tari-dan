@@ -28,7 +28,8 @@ pub use builder::ResourceBuilder;
 mod manager;
 pub use manager::ResourceManager;
 
-#[derive(Clone, Copy, Debug, Decode, Encode)]
+#[derive(Clone, Copy, Debug, Decode, Encode, PartialEq)]
+#[cfg_attr(feature = "serde", derive(serde::Deserialize, serde::Serialize))]
 pub enum ResourceType {
     Fungible,
     NonFungible,

@@ -21,7 +21,7 @@
 //   USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 use std::{
-    collections::HashMap,
+    collections::{BTreeSet, HashMap},
     mem,
     sync::{Arc, RwLock},
 };
@@ -32,11 +32,12 @@ use tari_engine_types::{
     bucket::Bucket,
     logs::LogEntry,
     resource::Resource,
+    resource_container::ResourceContainer,
     substate::{Substate, SubstateAddress, SubstateDiff},
     vault::Vault,
 };
 use tari_template_lib::{
-    args::MintResourceArg,
+    args::MintArg,
     models::{
         Amount,
         BucketId,
@@ -44,6 +45,8 @@ use tari_template_lib::{
         ComponentBody,
         ComponentHeader,
         Metadata,
+        NonFungible,
+        NonFungibleId,
         ResourceAddress,
         TemplateAddress,
         VaultId,
@@ -79,6 +82,7 @@ struct WorkingState {
     new_resources: HashMap<ResourceAddress, Resource>,
     new_components: HashMap<ComponentAddress, ComponentHeader>,
     new_vaults: HashMap<VaultId, Vault>,
+    new_non_fungibles: HashMap<(ResourceAddress, NonFungibleId), NonFungible>,
 
     runtime_state: Option<RuntimeState>,
     last_instruction_output: Option<Vec<u8>>,
@@ -95,6 +99,7 @@ impl StateTracker {
                 new_resources: HashMap::new(),
                 new_components: HashMap::new(),
                 new_vaults: HashMap::new(),
+                new_non_fungibles: HashMap::new(),
                 runtime_state: None,
                 last_instruction_output: None,
                 workspace: HashMap::new(),
@@ -121,43 +126,64 @@ impl StateTracker {
         Ok(())
     }
 
-    pub fn mint_resource(&self, mint_arg: MintResourceArg) -> Result<ResourceAddress, RuntimeError> {
-        match mint_arg {
-            MintResourceArg::Fungible {
-                resource_address,
-                amount,
-                metadata,
-            } => {
-                let resource_address = resource_address
-                    .map(Ok)
-                    .unwrap_or_else(|| self.id_provider.new_resource_address())?;
-                debug!(target: LOG_TARGET, "New resource minted: {}", resource_address);
+    pub fn new_resource(
+        &self,
+        resource_type: ResourceType,
+        metadata: Metadata,
+    ) -> Result<ResourceAddress, RuntimeError> {
+        let resource_address = self.id_provider.new_resource_address()?;
+        let resource = Resource::new(resource_type, resource_address, metadata);
+        self.write_with(|state| {
+            state.new_resources.insert(resource_address, resource);
+        });
+        Ok(resource_address)
+    }
+
+    pub fn mint_resource(
+        &self,
+        resource_address: ResourceAddress,
+        mint_arg: MintArg,
+    ) -> Result<BucketId, RuntimeError> {
+        let resource_container = match mint_arg {
+            MintArg::Fungible { amount } => {
                 self.check_amount(amount)?;
-                self.write_with(|state| {
-                    let resource = Resource::fungible(resource_address, amount, metadata);
-                    state.new_resources.insert(*resource.address(), resource);
-                });
+                debug!(
+                    target: LOG_TARGET,
+                    "Minting {} fungible tokens on resource: {}", amount, resource_address
+                );
 
-                Ok(resource_address)
+                ResourceContainer::fungible(resource_address, amount)
             },
-            MintResourceArg::NonFungible {
-                resource_address,
-                token_ids,
-                metadata,
-            } => {
-                let resource_address = resource_address
-                    .map(Ok)
-                    .unwrap_or_else(|| self.id_provider.new_resource_address())?;
-                debug!(target: LOG_TARGET, "New resource minted: {}", resource_address);
-                dbg!(resource_address.to_string());
+            MintArg::NonFungible { tokens } => {
+                debug!(
+                    target: LOG_TARGET,
+                    "Minting {} NFT token(s) on resource: {}",
+                    tokens.len(),
+                    resource_address
+                );
                 self.write_with(|state| {
-                    let resource = Resource::non_fungible(resource_address, token_ids, metadata);
-                    state.new_resources.insert(*resource.address(), resource);
-                });
+                    let mut token_ids = BTreeSet::new();
+                    for (id, token) in tokens {
+                        if state.new_non_fungibles.insert((resource_address, id), token).is_some() {
+                            return Err(RuntimeError::DuplicateNonFungibleId { token_id: id });
+                        }
+                        if !token_ids.insert(id) {
+                            return Err(RuntimeError::DuplicateNonFungibleId { token_id: id });
+                        }
+                    }
 
-                Ok(resource_address)
+                    Ok(ResourceContainer::non_fungible(resource_address, token_ids))
+                })?
             },
-        }
+        };
+
+        // Increase the total supply, this also validates that the resource already exists.
+        self.borrow_resource_mut(&resource_address, |resource| {
+            resource.increase_total_supply(resource_container.amount());
+        })?;
+
+        let bucket = self.new_bucket(resource_container)?;
+        Ok(bucket)
     }
 
     pub fn get_resource(&self, address: &ResourceAddress) -> Result<Resource, RuntimeError> {
@@ -172,18 +198,102 @@ impl StateTracker {
                         resource_address: *address,
                     })?;
                 Ok(resource
-                    .into_substate()
+                    .into_substate_value()
                     .into_resource()
                     .expect("Substate was not a resource type at resource address"))
             },
         })
     }
 
-    pub fn new_bucket(&self, resource: Resource) -> Result<BucketId, RuntimeError> {
+    pub fn get_non_fungible(
+        &self,
+        resource_address: &ResourceAddress,
+        nft_id: NonFungibleId,
+    ) -> Result<NonFungible, RuntimeError> {
+        self.read_with(
+            |state| match state.new_non_fungibles.get(&(*resource_address, nft_id)).cloned() {
+                Some(nft) => Ok(nft),
+                None => {
+                    let tx = self.state_store.read_access()?;
+                    let nft = tx
+                        .get_state::<_, Substate>(&SubstateAddress::NonFungible(*resource_address, nft_id))
+                        .optional()?
+                        .ok_or(RuntimeError::NonFungibleNotFound {
+                            resource_address: *resource_address,
+                            nft_id,
+                        })?;
+                    Ok(nft
+                        .into_substate_value()
+                        .into_non_fungible()
+                        .expect("Substate was not a non-fungible type at non-fungible address"))
+                },
+            },
+        )
+    }
+
+    pub fn with_non_fungible_mut<R, F: FnOnce(&mut NonFungible) -> R>(
+        &self,
+        resource_address: ResourceAddress,
+        nft_id: NonFungibleId,
+        callback: F,
+    ) -> Result<R, RuntimeError> {
+        self.write_with(|state| {
+            let nft_mut = state.new_non_fungibles.get_mut(&(resource_address, nft_id));
+            match nft_mut {
+                Some(nft_mut) => Ok(callback(nft_mut)),
+                None => {
+                    let substate = self
+                        .state_store
+                        .read_access()
+                        .unwrap()
+                        .get_state::<_, Substate>(&SubstateAddress::NonFungible(resource_address, nft_id))
+                        .optional()?
+                        .ok_or(RuntimeError::NonFungibleNotFound {
+                            resource_address,
+                            nft_id,
+                        })?;
+
+                    let mut nft = substate.into_substate_value().into_non_fungible().unwrap_or_else(|| {
+                        panic!(
+                            "Substate was not a NonFungible type at ({}, {})",
+                            resource_address, nft_id
+                        )
+                    });
+                    let ret = callback(&mut nft);
+                    state.new_non_fungibles.insert((resource_address, nft_id), nft);
+                    Ok(ret)
+                },
+            }
+        })
+    }
+
+    pub fn new_bucket(&self, resource: ResourceContainer) -> Result<BucketId, RuntimeError> {
         self.write_with(|state| {
             let bucket_id = self.id_provider.new_bucket_id();
             debug!(target: LOG_TARGET, "New bucket: {}", bucket_id);
             let bucket = Bucket::new(resource);
+            state.buckets.insert(bucket_id, bucket);
+            Ok(bucket_id)
+        })
+    }
+
+    pub fn new_empty_bucket(
+        &self,
+        resource_address: ResourceAddress,
+        resource_type: ResourceType,
+    ) -> Result<BucketId, RuntimeError> {
+        self.write_with(|state| {
+            let bucket_id = self.id_provider.new_bucket_id();
+            debug!(
+                target: LOG_TARGET,
+                "New bucket {} for resource {} {:?}", bucket_id, resource_address, resource_type
+            );
+            let new_state = match resource_type {
+                ResourceType::Fungible => ResourceContainer::fungible(resource_address, Amount::zero()),
+                ResourceType::NonFungible => ResourceContainer::non_fungible(resource_address, BTreeSet::new()),
+                ResourceType::Confidential => todo!("new_empty_bucket"),
+            };
+            let bucket = Bucket::new(new_state);
             state.buckets.insert(bucket_id, bucket);
             Ok(bucket_id)
         })
@@ -212,10 +322,10 @@ impl StateTracker {
         })
     }
 
-    pub fn with_bucket_mut<R, F: FnMut(&mut Bucket) -> R>(
+    pub fn with_bucket_mut<R, F: FnOnce(&mut Bucket) -> R>(
         &self,
         bucket_id: BucketId,
-        mut callback: F,
+        callback: F,
     ) -> Result<R, RuntimeError> {
         self.write_with(|state| {
             let bucket = state
@@ -256,7 +366,7 @@ impl StateTracker {
                     .optional()?
                     .ok_or(RuntimeError::ComponentNotFound { address: *addr })?;
                 Ok(value
-                    .into_substate()
+                    .into_substate_value()
                     .into_component()
                     .expect("Substate was not a component type at component address"))
             },
@@ -265,9 +375,13 @@ impl StateTracker {
 
     /// Set the component. This may be called many times during execution but always results in exactly one UP substate
     /// with an incremented version.
-    pub fn set_component(&self, component: ComponentHeader) -> Result<(), RuntimeError> {
+    pub fn set_component(
+        &self,
+        component_address: ComponentAddress,
+        component: ComponentHeader,
+    ) -> Result<(), RuntimeError> {
         self.write_with(|state| {
-            state.new_components.insert(*component.address(), component);
+            state.new_components.insert(component_address, component);
             Ok(())
         })
     }
@@ -284,9 +398,9 @@ impl StateTracker {
         let vault_id = self.id_provider.new_vault_id()?;
         debug!(target: LOG_TARGET, "New vault id: {}", vault_id);
         let resource = match resource_type {
-            ResourceType::Fungible => Resource::fungible(resource_address, 0.into(), Metadata::new()),
-            ResourceType::NonFungible => Resource::non_fungible(resource_address, vec![], Metadata::new()),
-            ResourceType::Confidential => todo!("thaum resource"),
+            ResourceType::Fungible => ResourceContainer::fungible(resource_address, 0.into()),
+            ResourceType::NonFungible => ResourceContainer::non_fungible(resource_address, BTreeSet::new()),
+            ResourceType::Confidential => todo!("new_vault: thaum resource"),
         };
         let vault = Vault::new(vault_id, resource);
 
@@ -297,13 +411,44 @@ impl StateTracker {
         Ok(vault_id)
     }
 
+    pub fn borrow_resource_mut<R, F: FnOnce(&mut Resource) -> R>(
+        &self,
+        resource_address: &ResourceAddress,
+        f: F,
+    ) -> Result<R, RuntimeError> {
+        self.write_with(|state| {
+            let resource_mut = state.new_resources.get_mut(resource_address);
+            match resource_mut {
+                Some(resource_mut) => Ok(f(resource_mut)),
+                None => {
+                    let substate = self
+                        .state_store
+                        .read_access()
+                        .unwrap()
+                        .get_state::<_, Substate>(&SubstateAddress::Resource(*resource_address))
+                        .optional()?
+                        .ok_or(RuntimeError::ResourceNotFound {
+                            resource_address: *resource_address,
+                        })?;
+
+                    let mut resource = substate
+                        .into_substate_value()
+                        .into_resource()
+                        .expect("Substate was not a resource type at resource address");
+                    let ret = f(&mut resource);
+                    state.new_resources.insert(*resource_address, resource);
+                    Ok(ret)
+                },
+            }
+        })
+    }
+
     pub fn borrow_vault_mut<R, F: FnOnce(&mut Vault) -> R>(&self, vault_id: &VaultId, f: F) -> Result<R, RuntimeError> {
         self.write_with(|state| {
             let vault_mut = state.new_vaults.get_mut(vault_id);
             match vault_mut {
                 Some(vault_mut) => Ok(f(vault_mut)),
                 None => {
-                    // TODO: This is not correct
                     let substate = self
                         .state_store
                         .read_access()
@@ -313,7 +458,7 @@ impl StateTracker {
                         .ok_or(RuntimeError::VaultNotFound { vault_id: *vault_id })?;
 
                     let mut vault = substate
-                        .into_substate()
+                        .into_substate_value()
                         .into_vault()
                         .expect("Substate was not a vault type at vault address");
                     let ret = f(&mut vault);
@@ -391,9 +536,9 @@ impl StateTracker {
                 let new_substate = match tx.get_state::<_, Substate>(&addr).optional()? {
                     Some(existing_state) => {
                         substate_diff.down(addr, existing_state.version());
-                        Substate::new(existing_state.version() + 1, substate)
+                        Substate::new(addr, existing_state.version() + 1, substate)
                     },
-                    None => Substate::new(0, substate),
+                    None => Substate::new(addr, 0, substate),
                 };
                 substate_diff.up(addr, new_substate);
             }
@@ -403,9 +548,9 @@ impl StateTracker {
                 let new_substate = match tx.get_state::<_, Substate>(&addr).optional()? {
                     Some(existing_state) => {
                         substate_diff.down(addr, existing_state.version());
-                        Substate::new(existing_state.version() + 1, substate)
+                        Substate::new(addr, existing_state.version() + 1, substate)
                     },
-                    None => Substate::new(0, substate),
+                    None => Substate::new(addr, 0, substate),
                 };
                 substate_diff.up(addr, new_substate);
             }
@@ -415,9 +560,21 @@ impl StateTracker {
                 let new_substate = match tx.get_state::<_, Substate>(&addr).optional()? {
                     Some(existing_state) => {
                         substate_diff.down(addr, existing_state.version());
-                        Substate::new(existing_state.version() + 1, substate)
+                        Substate::new(addr, existing_state.version() + 1, substate)
                     },
-                    None => Substate::new(0, substate),
+                    None => Substate::new(addr, 0, substate),
+                };
+                substate_diff.up(addr, new_substate);
+            }
+
+            for ((resource_addr, id), substate) in state.new_non_fungibles.drain() {
+                let addr = SubstateAddress::NonFungible(resource_addr, id);
+                let new_substate = match tx.get_state::<_, Substate>(&addr).optional()? {
+                    Some(existing_state) => {
+                        substate_diff.down(addr, existing_state.version());
+                        Substate::new(addr, existing_state.version() + 1, substate)
+                    },
+                    None => Substate::new(addr, 0, substate),
                 };
                 substate_diff.up(addr, new_substate);
             }

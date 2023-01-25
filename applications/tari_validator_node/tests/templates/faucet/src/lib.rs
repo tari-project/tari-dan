@@ -20,48 +20,31 @@
 //   WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //   USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use std::path::Path;
+use tari_template_lib::prelude::*;
 
-use clap::Subcommand;
+#[template]
+mod faucet_template {
+    use super::*;
 
-use crate::account_manager::AccountFileManager;
+    pub struct TestFaucet {
+        vault: Vault,
+    }
 
-#[derive(Debug, Subcommand, Clone)]
-pub enum AccountsSubcommand {
-    #[clap(alias = "create")]
-    New,
-    List,
-    Use {
-        name: String,
-    },
-}
+    impl TestFaucet {
+        pub fn mint(initial_supply: Amount) -> Self {
+            let coins = ResourceBuilder::fungible()
+                .with_token_symbol("🪙")
+                .initial_supply(initial_supply)
+                .build_bucket();
 
-impl AccountsSubcommand {
-    pub async fn handle<P: AsRef<Path>>(self, base_dir: P) -> anyhow::Result<()> {
-        let account_manager = AccountFileManager::init(base_dir.as_ref().to_path_buf())?;
-
-        #[allow(clippy::enum_glob_use)]
-        use AccountsSubcommand::*;
-        match self {
-            New => {
-                let account = account_manager.create_account()?;
-                println!("New account {} created", account);
-            },
-            List => {
-                println!("Accounts:");
-                for (i, account) in account_manager.all().into_iter().enumerate() {
-                    if account.is_active {
-                        println!("{}. {} (active)", i, account);
-                    } else {
-                        println!("{}. {}", i, account);
-                    }
-                }
-            },
-            Use { name } => {
-                account_manager.set_active_account(&name)?;
-                println!("Account {} is now active", name);
-            },
+            Self {
+                vault: Vault::from_bucket(coins),
+            }
         }
-        Ok(())
+
+        pub fn take_free_coins(&mut self) -> Bucket {
+            debug("Withdrawing 1000 coins from faucet");
+            self.vault.withdraw(Amount(1000))
+        }
     }
 }

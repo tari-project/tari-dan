@@ -32,6 +32,9 @@ pub use component::*;
 mod metadata;
 pub use metadata::Metadata;
 
+mod non_fungible;
+pub use non_fungible::{NonFungible, NonFungibleId};
+
 mod resource;
 pub use resource::ResourceAddress;
 

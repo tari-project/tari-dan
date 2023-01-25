@@ -28,7 +28,7 @@ use std::{
 use serde::{Deserialize, Serialize};
 use tari_bor::{borsh, decode, encode, Decode, Encode};
 use tari_template_lib::{
-    models::{ComponentAddress, ComponentHeader, ResourceAddress, VaultId},
+    models::{ComponentAddress, ComponentHeader, NonFungible, NonFungibleId, ResourceAddress, VaultId},
     Hash,
 };
 
@@ -36,23 +36,29 @@ use crate::{resource::Resource, vault::Vault};
 
 #[derive(Debug, Clone, Encode, Decode, Serialize, Deserialize)]
 pub struct Substate {
+    address: SubstateAddress,
     substate: SubstateValue,
     version: u32,
 }
 
 impl Substate {
-    pub fn new<T: Into<SubstateValue>>(version: u32, substate: T) -> Self {
+    pub fn new<T: Into<SubstateValue>>(address: SubstateAddress, version: u32, substate: T) -> Self {
         Self {
+            address,
             substate: substate.into(),
             version,
         }
+    }
+
+    pub fn substate_address(&self) -> &SubstateAddress {
+        &self.address
     }
 
     pub fn substate_value(&self) -> &SubstateValue {
         &self.substate
     }
 
-    pub fn into_substate(self) -> SubstateValue {
+    pub fn into_substate_value(self) -> SubstateValue {
         self.substate
     }
 
@@ -75,6 +81,7 @@ pub enum SubstateAddress {
     Component(ComponentAddress),
     Resource(ResourceAddress),
     Vault(VaultId),
+    NonFungible(ResourceAddress, NonFungibleId),
 }
 
 impl SubstateAddress {
@@ -85,21 +92,53 @@ impl SubstateAddress {
         }
     }
 
+    pub fn as_resource_address(&self) -> Option<ResourceAddress> {
+        match self {
+            Self::Resource(address) => Some(*address),
+            _ => None,
+        }
+    }
+
     pub fn hash(&self) -> &Hash {
         match self {
             SubstateAddress::Component(address) => address.hash(),
             SubstateAddress::Resource(address) => address.hash(),
             SubstateAddress::Vault(id) => id.hash(),
+            SubstateAddress::NonFungible(_, id) => id.hash(),
         }
     }
 
     // TODO: look at using BECH32 standard
     pub fn to_address_string(&self) -> String {
         match self {
-            Self::Component(addr) => addr.to_string(),
-            Self::Resource(addr) => addr.to_string(),
-            Self::Vault(addr) => addr.to_string(),
+            SubstateAddress::Component(addr) => addr.to_string(),
+            SubstateAddress::Resource(addr) => addr.to_string(),
+            SubstateAddress::Vault(addr) => addr.to_string(),
+            SubstateAddress::NonFungible(_, addr) => addr.to_string(),
         }
+    }
+
+    pub fn as_non_fungible_address(&self) -> Option<(ResourceAddress, NonFungibleId)> {
+        match self {
+            SubstateAddress::NonFungible(resource_address, nft_id) => Some((*resource_address, *nft_id)),
+            _ => None,
+        }
+    }
+
+    pub fn is_resource(&self) -> bool {
+        matches!(self, Self::Resource(_))
+    }
+
+    pub fn is_component(&self) -> bool {
+        matches!(self, Self::Component(_))
+    }
+
+    pub fn is_vault(&self) -> bool {
+        matches!(self, Self::Vault(_))
+    }
+
+    pub fn is_non_fungible(&self) -> bool {
+        matches!(self, Self::NonFungible(_, _))
     }
 }
 
@@ -123,7 +162,12 @@ impl From<VaultId> for SubstateAddress {
 
 impl Display for SubstateAddress {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.to_address_string())
+        match self {
+            SubstateAddress::Component(addr) => write!(f, "{}", addr),
+            SubstateAddress::Resource(addr) => write!(f, "{}", addr),
+            SubstateAddress::Vault(addr) => write!(f, "{}", addr),
+            SubstateAddress::NonFungible(resource_addr, addr) => write!(f, "{} {}", resource_addr, addr),
+        }
     }
 }
 
@@ -141,12 +185,35 @@ impl FromStr for SubstateAddress {
                 Ok(SubstateAddress::Component(addr))
             },
             Some(("resource", addr)) => {
-                let addr = ResourceAddress::from_hex(addr).map_err(|_| InvalidSubstateAddressFormat(s.to_string()))?;
-                Ok(SubstateAddress::Resource(addr))
+                // resource_xxxx nft_xxxxx
+                match addr.split_once(' ') {
+                    Some((resource_str, addr)) => {
+                        let resource_addr = ResourceAddress::from_hex(resource_str)
+                            .map_err(|_| InvalidSubstateAddressFormat(s.to_string()))?;
+                        let id = SubstateAddress::from_str(addr)?;
+                        let (_, id) = id
+                            .as_non_fungible_address()
+                            .ok_or_else(|| InvalidSubstateAddressFormat(s.to_string()))?;
+                        Ok(SubstateAddress::NonFungible(resource_addr, id))
+                    },
+                    None => {
+                        let addr =
+                            ResourceAddress::from_hex(addr).map_err(|_| InvalidSubstateAddressFormat(s.to_string()))?;
+                        Ok(SubstateAddress::Resource(addr))
+                    },
+                }
             },
             Some(("vault", addr)) => {
                 let id = VaultId::from_hex(addr).map_err(|_| InvalidSubstateAddressFormat(s.to_string()))?;
                 Ok(SubstateAddress::Vault(id))
+            },
+            Some(("nft", addr)) => {
+                let id = NonFungibleId::from_hex(addr).map_err(|_| InvalidSubstateAddressFormat(s.to_string()))?;
+                // TODO: We need to add more structure to objects with child/parent relationships.
+                //       Setting the resource to 000.. has no effect because the system knows about this substate and
+                //       includes the correct resource in the final address, however this may change as the NFT ID
+                //       should be qualified by the parent resource.
+                Ok(SubstateAddress::NonFungible(ResourceAddress::new(Hash::default()), id))
             },
             Some(_) | None => Err(InvalidSubstateAddressFormat(s.to_string())),
         }
@@ -158,10 +225,18 @@ pub enum SubstateValue {
     Component(ComponentHeader),
     Resource(Resource),
     Vault(Vault),
+    NonFungible(NonFungible),
 }
 
 impl SubstateValue {
     pub fn into_component(self) -> Option<ComponentHeader> {
+        match self {
+            SubstateValue::Component(component) => Some(component),
+            _ => None,
+        }
+    }
+
+    pub fn component(&self) -> Option<&ComponentHeader> {
         match self {
             SubstateValue::Component(component) => Some(component),
             _ => None,
@@ -191,17 +266,16 @@ impl SubstateValue {
 
     pub fn resource_address(&self) -> Option<ResourceAddress> {
         match self {
-            SubstateValue::Resource(resource) => Some(*resource.address()),
+            SubstateValue::Resource(resource) => Some(*resource.resource_address()),
             SubstateValue::Vault(vault) => Some(*vault.resource_address()),
             _ => None,
         }
     }
 
-    pub fn substate_address(&self) -> SubstateAddress {
+    pub fn into_non_fungible(self) -> Option<NonFungible> {
         match self {
-            SubstateValue::Component(component) => SubstateAddress::Component(*component.address()),
-            SubstateValue::Resource(resource) => SubstateAddress::Resource(*resource.address()),
-            SubstateValue::Vault(vault) => SubstateAddress::Vault(*vault.id()),
+            SubstateValue::NonFungible(nft) => Some(nft),
+            _ => None,
         }
     }
 }
@@ -221,6 +295,12 @@ impl From<Resource> for SubstateValue {
 impl From<Vault> for SubstateValue {
     fn from(vault: Vault) -> Self {
         Self::Vault(vault)
+    }
+}
+
+impl From<NonFungible> for SubstateValue {
+    fn from(token: NonFungible) -> Self {
+        Self::NonFungible(token)
     }
 }
 

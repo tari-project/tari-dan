@@ -65,7 +65,7 @@ impl ComponentManager {
             },
         };
 
-        self.store.save_with_id(&substate, &substate_addr.to_string())?;
+        self.store.save_with_id(&substate, &substate_addr.to_address_string())?;
         Ok(())
     }
 
@@ -81,7 +81,9 @@ impl ComponentManager {
                 addr @ SubstateAddress::Component(_) => {
                     component = Some((addr, substate.version()));
                 },
-                addr @ SubstateAddress::Resource(_) | addr @ SubstateAddress::Vault(_) => {
+                addr @ SubstateAddress::Resource(_) |
+                addr @ SubstateAddress::Vault(_) |
+                addr @ SubstateAddress::NonFungible(_, _) => {
                     children.push(VersionedSubstateAddress {
                         address: *addr,
                         version: substate.version(),
@@ -107,15 +109,15 @@ impl ComponentManager {
     //         .ok_or_else(|| anyhow!("No version {} found for substate {}", version, address))?;
     //     substate.versions.remove(pos);
     //     if substate.versions.is_empty() {
-    //         self.store.delete(&address.to_string())?;
+    //         self.store.delete(&address.to_address_string())?;
     //     } else {
-    //         self.store.save_with_id(&substate, &address.to_string())?;
+    //         self.store.save_with_id(&substate, &address.to_address_string())?;
     //     }
     //     Ok(())
     // }
 
     pub fn get_root_substate(&self, substate_addr: &SubstateAddress) -> anyhow::Result<Option<SubstateMetadata>> {
-        let meta = self.store.get(&substate_addr.to_string()).or_else(|e| {
+        let meta = self.store.get(&substate_addr.to_address_string()).or_else(|e| {
             if e.kind() == io::ErrorKind::NotFound {
                 Ok(None)
             } else {

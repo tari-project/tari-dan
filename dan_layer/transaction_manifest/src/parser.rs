@@ -6,9 +6,12 @@ use syn::{
     parse::ParseStream,
     parse2,
     punctuated::Punctuated,
+    spanned::Spanned,
     token::Comma,
     Block,
     Expr,
+    ExprCall,
+    ExprLit,
     ExprMacro,
     ExprMethodCall,
     ExprPath,
@@ -16,6 +19,7 @@ use syn::{
     ItemFn,
     ItemUse,
     Lit,
+    LitInt,
     LitStr,
     Local,
     Macro,
@@ -26,6 +30,7 @@ use syn::{
     UseTree,
 };
 use tari_engine_types::TemplateAddress;
+use tari_template_builtin::ACCOUNT_TEMPLATE_ADDRESS;
 use tari_template_lib::args::LogLevel;
 
 #[derive(Debug, Clone)]
@@ -76,6 +81,10 @@ impl ManifestParser {
 
     pub fn parse(&self, input: ParseStream) -> Result<Vec<ManifestIntent>, syn::Error> {
         let mut statements = vec![];
+        statements.push(ManifestIntent::DefineTemplate {
+            template_address: ACCOUNT_TEMPLATE_ADDRESS,
+            alias: Ident::new("Account", proc_macro2::Span::call_site()),
+        });
         for stmt in Block::parse_within(input)? {
             match stmt {
                 // use template_hash as TemplateName;
@@ -315,28 +324,61 @@ fn macro_call(mac: &Ident, tokens: TokenStream) -> Result<ManifestIntent, syn::E
 
 fn build_arguments(args: Punctuated<Expr, Comma>) -> Result<Vec<LiteralOrVariable>, syn::Error> {
     args.into_iter()
-        .map(|arg| {
-            let arg = match arg {
-                Expr::Lit(lit) => LiteralOrVariable::Lit(lit.lit),
+        .map(|arg| match arg {
+            Expr::Lit(lit) => Ok(LiteralOrVariable::Lit(lit.lit)),
 
-                Expr::Path(expr_path) => {
-                    if expr_path.path.segments.len() != 1 {
-                        return Err(syn::Error::new_spanned(
-                            expr_path,
-                            "Invalid path, only single segment paths are supported",
-                        ));
-                    }
-                    LiteralOrVariable::Variable(expr_path.path.segments[0].ident.clone())
-                },
-                _ => {
-                    return Err(syn::Error::new_spanned(
-                        arg,
-                        "Invalid argument, only literals and variables are supported",
+            Expr::Path(expr_path) => {
+                if expr_path.path.segments.len() == 1 {
+                    Ok(LiteralOrVariable::Variable(expr_path.path.segments[0].ident.clone()))
+                } else {
+                    Err(syn::Error::new_spanned(
+                        expr_path,
+                        "Invalid path, only single segment paths are supported",
                     ))
-                },
-            };
-
-            Ok(arg)
+                }
+            },
+            // Support for Amount(100) syntax
+            Expr::Call(ExprCall { func, args, .. }) => {
+                if let Expr::Path(ExprPath {
+                    path: Path { segments, .. },
+                    ..
+                }) = &*func
+                {
+                    if segments
+                        .first()
+                        .ok_or_else(|| syn::Error::new_spanned(func.clone(), "Invalid function call"))?
+                        .ident ==
+                        "Amount"
+                    {
+                        let amt = args
+                            .first()
+                            .ok_or_else(|| syn::Error::new_spanned(func, "Invalid function call"))?;
+                        match amt {
+                            Expr::Lit(ExprLit { lit: Lit::Int(lit), .. }) => Ok(LiteralOrVariable::Lit(Lit::Int(
+                                LitInt::new(&format!("{}u64", lit.base10_digits()), amt.span()),
+                            ))),
+                            _ => Err(syn::Error::new_spanned(
+                                amt,
+                                "Invalid argument, only literals and variables are supported",
+                            )),
+                        }
+                    } else {
+                        Err(syn::Error::new_spanned(
+                            func,
+                            "Invalid function call, only Amount is supported",
+                        ))
+                    }
+                } else {
+                    Err(syn::Error::new_spanned(
+                        func,
+                        "Invalid function call, only Amount is supported",
+                    ))
+                }
+            },
+            _ => Err(syn::Error::new_spanned(
+                arg,
+                "Invalid argument, only literals and variables are supported",
+            )),
         })
         .collect()
 }

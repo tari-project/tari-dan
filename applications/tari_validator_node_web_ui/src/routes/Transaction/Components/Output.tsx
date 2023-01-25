@@ -54,7 +54,7 @@ export default function Output({ shard, output }: { shard: string; output: any[]
                               <th>Pledged to</th>
                           </tr></thead>
                           <tbody>
-                          { justify.all_shard_pledges.map((pledge:any) => {
+                          { Array.isArray(justify.all_shard_pledges?.pledges) ? justify.all_shard_pledges.pledges.map((pledge:any) => {
                               // This enum gets serialized different ways... should be fixed in the rust
                               let currentState = Object.keys(pledge.pledge.current_state);
                                 return (
@@ -64,7 +64,7 @@ export default function Output({ shard, output }: { shard: string; output: any[]
                                         <td>{pledge.pledge.pledged_to_payload.id}</td>
                                     </tr>
                                 )
-                          }) }
+                          }) : <tr><td>No pledges</td></tr> }
 
                           </tbody>
                       </table>

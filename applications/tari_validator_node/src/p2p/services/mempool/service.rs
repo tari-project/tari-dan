@@ -214,7 +214,7 @@ where
             .await
             .map_err(|e| MempoolError::EpochManagerError(Box::new(e)))?;
 
-        let msg = DanMessage::NewTransaction(transaction.clone());
+        let msg = DanMessage::NewTransaction(Box::new(transaction.clone()));
 
         // propagate over the involved shard ids
         #[allow(clippy::mutable_key_type)]

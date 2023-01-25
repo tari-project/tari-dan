@@ -1,7 +1,7 @@
 //   Copyright 2022 The Tari Project
 //   SPDX-License-Identifier: BSD-3-Clause
 
-use std::str::FromStr;
+use std::{fmt::Display, str::FromStr};
 
 use anyhow::anyhow;
 use serde::{Deserialize, Serialize};
@@ -27,5 +27,11 @@ impl FromStr for VersionedSubstateAddress {
             address,
             version: version.unwrap_or(0),
         })
+    }
+}
+
+impl Display for VersionedSubstateAddress {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}:{}", self.address, self.version)
     }
 }

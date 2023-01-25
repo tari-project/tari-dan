@@ -32,9 +32,9 @@ pub enum DanMessage<TPayload, TAddr> {
     HotStuffMessage(Box<HotStuffMessage<TPayload, TAddr>>),
     VoteMessage(VoteMessage),
     // Mempool
-    NewTransaction(Transaction),
+    NewTransaction(Box<Transaction>),
     // Network
-    NetworkAnnounce(NetworkAnnounce<TAddr>),
+    NetworkAnnounce(Box<NetworkAnnounce<TAddr>>),
 }
 
 impl<TPayload, TAddr> DanMessage<TPayload, TAddr> {

@@ -20,6 +20,8 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+use std::collections::BTreeSet;
+
 use tari_bor::{borsh, Decode, Encode};
 use tari_template_abi::{
     call_engine,
@@ -33,8 +35,7 @@ use tari_template_abi::{
 use crate::{
     args::{InvokeResult, VaultAction, VaultInvokeArg},
     hash::HashParseError,
-    models::{Amount, Bucket, ResourceAddress},
-    resource::ResourceType,
+    models::{Amount, Bucket, NonFungibleId, ResourceAddress},
     Hash,
 };
 
@@ -71,10 +72,7 @@ impl Display for VaultId {
 
 #[derive(Clone, Debug, Decode, Encode)]
 pub enum VaultRef {
-    Vault {
-        address: ResourceAddress,
-        resource_type: ResourceType,
-    },
+    Vault { address: ResourceAddress },
     Ref(VaultId),
 }
 
@@ -82,13 +80,6 @@ impl VaultRef {
     pub fn resource_address(&self) -> Option<&ResourceAddress> {
         match self {
             VaultRef::Vault { address, .. } => Some(address),
-            VaultRef::Ref(_) => None,
-        }
-    }
-
-    pub fn resource_type(&self) -> Option<ResourceType> {
-        match self {
-            VaultRef::Vault { resource_type, .. } => Some(*resource_type),
             VaultRef::Ref(_) => None,
         }
     }
@@ -107,11 +98,10 @@ pub struct Vault {
 }
 
 impl Vault {
-    pub fn new_empty(resource_address: ResourceAddress, resource_type: ResourceType) -> Self {
+    pub fn new_empty(resource_address: ResourceAddress) -> Self {
         let resp: InvokeResult = call_engine(EngineOp::VaultInvoke, &VaultInvokeArg {
             vault_ref: VaultRef::Vault {
                 address: resource_address,
-                resource_type,
             },
             action: VaultAction::Create,
             args: args![],
@@ -122,8 +112,9 @@ impl Vault {
         }
     }
 
-    pub fn from_bucket(bucket: Bucket, resource_type: ResourceType) -> Self {
-        let mut vault = Self::new_empty(bucket.resource_address(), resource_type);
+    pub fn from_bucket(bucket: Bucket) -> Self {
+        let resource_address = bucket.resource_address();
+        let mut vault = Self::new_empty(resource_address);
         vault.deposit(bucket);
         vault
     }
@@ -156,6 +147,17 @@ impl Vault {
         });
 
         resp.decode().expect("failed to decode Amount")
+    }
+
+    pub fn get_non_fungible_ids(&self) -> BTreeSet<NonFungibleId> {
+        let resp: InvokeResult = call_engine(EngineOp::VaultInvoke, &VaultInvokeArg {
+            vault_ref: VaultRef::Ref(self.vault_id()),
+            action: VaultAction::GetNonFungibleIds,
+            args: invoke_args![],
+        });
+
+        resp.decode()
+            .expect("get_non_fungible_ids returned invalid non fungible ids")
     }
 
     pub fn resource_address(&self) -> ResourceAddress {

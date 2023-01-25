@@ -27,6 +27,8 @@ use tari_template_lib::prelude::*;
 
 #[template]
 mod account_template {
+    use std::collections::BTreeSet;
+
     use super::*;
 
     pub struct Account {
@@ -55,7 +57,10 @@ mod account_template {
         }
 
         pub fn balance(&self, resource: ResourceAddress) -> Amount {
-            let v = self.get_vault(resource).expect("No vault for this resource");
+            let v = self
+                .get_vault(resource)
+                .ok_or_else(|| format!("No vault for resource {}", resource))
+                .unwrap();
             v.balance()
         }
 
@@ -74,17 +79,24 @@ mod account_template {
             if let Some(v) = self.get_vault_mut(resource_address) {
                 v.deposit(bucket);
             } else {
-                // TODO: Get the resource type from the resource address
-                let mut new_vault = Vault::new_empty(resource_address, ResourceType::Fungible);
+                let mut new_vault = Vault::new_empty(resource_address);
                 new_vault.deposit(bucket);
                 self.vaults.push((resource_address, new_vault));
             }
         }
 
+        // #[access_rules(require(owner_badge))]
+        pub fn get_non_fungible_ids(&self, resource: ResourceAddress) -> BTreeSet<NonFungibleId> {
+            let v = self
+                .get_vault(resource)
+                .ok_or_else(|| format!("No vault for resource {}", resource))
+                .unwrap();
+            v.get_non_fungible_ids()
+        }
+
         // pub fn deposit_all_from_workspace(&mut self) {
-        //     for bucket_id in WorkspaceManager::list_buckets() {
-        //         debug(format!("bucket: {}", bucket_id));
-        //         let bucket = WorkspaceManager::take_bucket(bucket_id);
+        //     for bucket in WorkspaceManager::take_all_buckets() {
+        //         debug(format!("bucket: {}", bucket));
         //         self.deposit(bucket);
         //     }
         // }
