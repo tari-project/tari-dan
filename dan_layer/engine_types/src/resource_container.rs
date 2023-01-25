@@ -111,8 +111,15 @@ impl ResourceContainer {
                 }
                 let num_to_take = usize::try_from(amt.value())
                     .map_err(|_| ResourceError::OperationNotAllowed(format!("Amount {} too large to withdraw", amt)))?;
-                let token_ids = token_ids.iter().take(num_to_take).copied().collect();
-                Ok(ResourceContainer::non_fungible(*self.resource_address(), token_ids))
+                let taken_tokens = (0..num_to_take)
+                    .map(|_| {
+                        token_ids
+                            .pop_first()
+                            .expect("Invariant violation: token_ids.len() < amt")
+                    })
+                    .collect();
+
+                Ok(ResourceContainer::non_fungible(*self.resource_address(), taken_tokens))
             },
         }
     }

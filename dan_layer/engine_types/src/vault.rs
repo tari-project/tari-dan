@@ -34,32 +34,39 @@ use crate::{
 #[derive(Debug, Clone, Encode, Decode, Serialize, Deserialize, PartialEq)]
 pub struct Vault {
     vault_id: VaultId,
-    resource: ResourceContainer,
+    resource_container: ResourceContainer,
 }
 
 impl Vault {
     pub fn new(vault_id: VaultId, resource: ResourceContainer) -> Self {
-        Self { vault_id, resource }
+        Self {
+            vault_id,
+            resource_container: resource,
+        }
     }
 
     pub fn deposit(&mut self, bucket: Bucket) -> Result<(), ResourceError> {
-        self.resource.deposit(bucket.into_resource())?;
+        self.resource_container.deposit(bucket.into_resource())?;
         Ok(())
     }
 
     pub fn withdraw(&mut self, amount: Amount) -> Result<ResourceContainer, ResourceError> {
-        self.resource.withdraw(amount)
+        self.resource_container.withdraw(amount)
+    }
+
+    pub fn withdraw_all(&mut self) -> Result<ResourceContainer, ResourceError> {
+        self.resource_container.withdraw(self.resource_container.amount())
     }
 
     pub fn balance(&self) -> Amount {
-        self.resource.amount()
+        self.resource_container.amount()
     }
 
     pub fn resource_address(&self) -> &ResourceAddress {
-        self.resource.resource_address()
+        self.resource_container.resource_address()
     }
 
     pub fn get_non_fungible_ids(&self) -> Option<&BTreeSet<NonFungibleId>> {
-        self.resource.non_fungible_token_ids()
+        self.resource_container.non_fungible_token_ids()
     }
 }

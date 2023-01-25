@@ -223,7 +223,8 @@ pub struct VaultInvokeArg {
 pub enum VaultAction {
     Create,
     Deposit,
-    WithdrawFungible,
+    Withdraw,
+    WithdrawAll,
     GetBalance,
     GetResourceAddress,
     GetNonFungibleIds,

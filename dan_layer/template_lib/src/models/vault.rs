@@ -121,7 +121,7 @@ impl Vault {
 
     pub fn deposit(&mut self, bucket: Bucket) {
         let result: InvokeResult = call_engine(EngineOp::VaultInvoke, &VaultInvokeArg {
-            vault_ref: VaultRef::Ref(self.vault_id()),
+            vault_ref: self.vault_ref(),
             action: VaultAction::Deposit,
             args: invoke_args![bucket.id()],
         });
@@ -131,9 +131,19 @@ impl Vault {
 
     pub fn withdraw(&mut self, amount: Amount) -> Bucket {
         let resp: InvokeResult = call_engine(EngineOp::VaultInvoke, &VaultInvokeArg {
-            vault_ref: VaultRef::Ref(self.vault_id()),
-            action: VaultAction::WithdrawFungible,
+            vault_ref: self.vault_ref(),
+            action: VaultAction::Withdraw,
             args: invoke_args![amount],
+        });
+
+        resp.decode().expect("failed to decode Bucket")
+    }
+
+    pub fn withdraw_all(&mut self) -> Bucket {
+        let resp: InvokeResult = call_engine(EngineOp::VaultInvoke, &VaultInvokeArg {
+            vault_ref: self.vault_ref(),
+            action: VaultAction::WithdrawAll,
+            args: invoke_args![],
         });
 
         resp.decode().expect("failed to decode Bucket")
@@ -141,7 +151,7 @@ impl Vault {
 
     pub fn balance(&self) -> Amount {
         let resp: InvokeResult = call_engine(EngineOp::VaultInvoke, &VaultInvokeArg {
-            vault_ref: VaultRef::Ref(self.vault_id()),
+            vault_ref: self.vault_ref(),
             action: VaultAction::GetBalance,
             args: args![],
         });
@@ -151,7 +161,7 @@ impl Vault {
 
     pub fn get_non_fungible_ids(&self) -> BTreeSet<NonFungibleId> {
         let resp: InvokeResult = call_engine(EngineOp::VaultInvoke, &VaultInvokeArg {
-            vault_ref: VaultRef::Ref(self.vault_id()),
+            vault_ref: self.vault_ref(),
             action: VaultAction::GetNonFungibleIds,
             args: invoke_args![],
         });
@@ -162,7 +172,7 @@ impl Vault {
 
     pub fn resource_address(&self) -> ResourceAddress {
         let resp: InvokeResult = call_engine(EngineOp::VaultInvoke, &VaultInvokeArg {
-            vault_ref: VaultRef::Ref(self.vault_id()),
+            vault_ref: self.vault_ref(),
             action: VaultAction::GetResourceAddress,
             args: invoke_args![],
         });
@@ -171,7 +181,7 @@ impl Vault {
             .expect("GetResourceAddress returned invalid resource address")
     }
 
-    pub fn vault_id(&self) -> VaultId {
-        self.vault_id
+    pub fn vault_ref(&self) -> VaultRef {
+        VaultRef::Ref(self.vault_id)
     }
 }

@@ -97,7 +97,11 @@ impl TemplateTest<MockRuntimeInterface> {
     }
 
     pub fn get_previous_output_address(&self, ty: SubstateType) -> SubstateAddress {
-        *self.last_outputs.iter().find(|addr| ty.matches(addr)).unwrap()
+        *self
+            .last_outputs
+            .iter()
+            .find(|addr| ty.matches(addr))
+            .unwrap_or_else(|| panic!("No output of type {:?}", ty))
     }
 
     fn commit_diff(&mut self, diff: &SubstateDiff) {

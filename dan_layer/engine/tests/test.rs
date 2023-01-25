@@ -326,10 +326,17 @@ mod basic_nft {
         let account_address: ComponentAddress = template_test.call_function("Account", "new", args![]);
         let nft_component: ComponentAddress = template_test.call_function("SparkleNft", "new", args![]);
 
+        let vars = vec![
+            ("account", account_address.into()),
+            ("nft", nft_component.into()),
+            (
+                "nft_resx",
+                template_test.get_previous_output_address(SubstateType::Resource).into(),
+            ),
+        ];
+
         let total_supply: Amount = template_test.call_method(nft_component, "total_supply", args![]);
         assert_eq!(total_supply, Amount(1));
-
-        let vars = vec![("account", account_address.into()), ("nft", nft_component.into())];
 
         let result = template_test
             .execute_and_commit_manifest(
@@ -340,7 +347,7 @@ mod basic_nft {
             let nft_bucket = sparkle_nft.mint();
             account.deposit(nft_bucket);
         "#,
-                vars,
+                vars.clone(),
             )
             .unwrap();
 
@@ -364,6 +371,25 @@ mod basic_nft {
 
         let total_supply: Amount = template_test.call_method(nft_component, "total_supply", args![]);
         assert_eq!(total_supply, Amount(2));
+
+        let result = template_test
+            .execute_and_commit_manifest(
+                r#"
+            let account = var!["account"];
+            let sparkle_nft = var!["nft"];
+        
+            let nft_bucket = sparkle_nft.withdraw_all();
+            account.deposit(nft_bucket);
+            sparkle_nft.inner_vault_balance();
+            
+            let nft_resx = var!["nft_resx"];
+            account.balance(nft_resx);
+        "#,
+                vars,
+            )
+            .unwrap();
+        result.result.expect("execution failed");
+        assert_eq!(result.execution_results[3].decode::<Amount>().unwrap(), Amount(0));
     }
 
     #[test]
