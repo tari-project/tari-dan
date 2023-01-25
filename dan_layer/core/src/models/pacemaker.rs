@@ -26,12 +26,6 @@ use crate::models::HotstuffPhase;
 
 pub type WaitOver = (PayloadId, ShardId, HotstuffPhase);
 
-#[derive(Debug, Clone)]
-pub enum PacemakerSignal {
-    StartWait(WaitOver),
-    StopWait(WaitOver),
-}
-
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum PacemakerWaitStatus {
     OnWait,
