@@ -114,7 +114,7 @@ impl SubstateAddress {
             SubstateAddress::Component(addr) => addr.to_string(),
             SubstateAddress::Resource(addr) => addr.to_string(),
             SubstateAddress::Vault(addr) => addr.to_string(),
-            SubstateAddress::NonFungible(resource_addr, addr) => format!("{} {}", resource_addr, addr),
+            SubstateAddress::NonFungible(_, addr) => addr.to_string(),
         }
     }
 
@@ -162,7 +162,12 @@ impl From<VaultId> for SubstateAddress {
 
 impl Display for SubstateAddress {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.to_address_string())
+        match self {
+            SubstateAddress::Component(addr) => write!(f, "{}", addr),
+            SubstateAddress::Resource(addr) => write!(f, "{}", addr),
+            SubstateAddress::Vault(addr) => write!(f, "{}", addr),
+            SubstateAddress::NonFungible(resource_addr, addr) => write!(f, "{} {}", resource_addr, addr),
+        }
     }
 }
 
@@ -180,8 +185,23 @@ impl FromStr for SubstateAddress {
                 Ok(SubstateAddress::Component(addr))
             },
             Some(("resource", addr)) => {
-                let addr = ResourceAddress::from_hex(addr).map_err(|_| InvalidSubstateAddressFormat(s.to_string()))?;
-                Ok(SubstateAddress::Resource(addr))
+                // resource_xxxx nft_xxxxx
+                match addr.split_once(' ') {
+                    Some((resource_str, addr)) => {
+                        let resource_addr = ResourceAddress::from_hex(resource_str)
+                            .map_err(|_| InvalidSubstateAddressFormat(s.to_string()))?;
+                        let id = SubstateAddress::from_str(addr)?;
+                        let (_, id) = id
+                            .as_non_fungible_address()
+                            .ok_or_else(|| InvalidSubstateAddressFormat(s.to_string()))?;
+                        Ok(SubstateAddress::NonFungible(resource_addr, id))
+                    },
+                    None => {
+                        let addr =
+                            ResourceAddress::from_hex(addr).map_err(|_| InvalidSubstateAddressFormat(s.to_string()))?;
+                        Ok(SubstateAddress::Resource(addr))
+                    },
+                }
             },
             Some(("vault", addr)) => {
                 let id = VaultId::from_hex(addr).map_err(|_| InvalidSubstateAddressFormat(s.to_string()))?;
