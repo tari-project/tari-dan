@@ -45,10 +45,11 @@ pub struct Auction {
     highest_bid: Option<Bid>,
 
     // Time sensitive logic is a big issue, we need custom support for it. I see two options:
-    //      1. Ad hoc protocol in the second layer to agree on time blocks (inside of a commitee? globally?) 
-    //      2. Leverage the base layer block number
-    // We are going with (2) here. But either way this means custom utils and that some external state influences execution
-    ending_block: u64,
+    //      1. Ad hoc protocol in the second layer to agree on timestamps (inside of a commitee? globally?) 
+    //      2. Leverage the base layer block number (~3 minute intervals)
+    //      3. Use the current epoch (~30 min intervals)
+    // We are going with (3) here. But either way this means custom utils and that some external state influences execution
+    ending_epoch: u64,
 }
 
 pub struct Bid {
@@ -62,7 +63,7 @@ pub struct SellOrder {
     seller_address: ComponentAddress,
     buy_price: Amount,
     // optional expiration of the sell order
-    ending_block: Option<u64>,
+    ending_epoch: Option<u64>,
 }
 
 #[template]
@@ -85,26 +86,26 @@ mod marketplace {
             }
         }
 
-        // TODO: how to ensure the bucket contains a single NFT item?
-        pub fn start_auction(&mut self, nft_bucket: Bucket, min_price: Option<Amount>, buy_price: Option<Amount>, block_period: u64) {
+        // TODO: how to ensure the bucket contains a single NFT item? Passing both the address and id seems a bit too unconvenient
+        pub fn start_auction(&mut self, nft_bucket: Bucket, min_price: Option<Amount>, buy_price: Option<Amount>, epoch_period: u64) {
             let auction = Auction {
                 vault: Vault::from_bucket(nft_bucket),
                 min_price,
                 buy_price,
                 highest_bid: None,
-                // TODO: BaseLayerManager still does not exist in our current implementation
-                ending_block: BaseLayerManager::current_block_heigth() + block_period,
+                // TODO: current epoch retrieval does not exist in our current implementation
+                ending_epoch: System::current_epoch() + epoch_period,
             };
             self.auctions.insert(auction.vault.resource_address(), auction);
         }
 
         // returns a badge used to cancel the sell order in the future
         // the badge will contain a immutable metadata with a reference to the nft being sold
-        pub fn place_sell_order(&mut self, nft_bucket: Bucket, buy_price: Amount, block_period: u64) -> Bucket {
+        pub fn place_sell_order(&mut self, nft_bucket: Bucket, buy_price: Amount, epoch_period: u64) -> Bucket {
             let sell_order = SellOrder {
                 vault: Vault::from_bucket(nft_bucket),
                 buy_price,
-                ending_block: BaseLayerManager::current_block_heigth() + block_period,
+                ending_epoch: System::current_epoch() + epoch_period,
             };
             let nft_address = sell_order.vault.resource_address();
             self.sell_orders.insert(nft_address, sell_order);
@@ -145,7 +146,7 @@ mod marketplace {
                 .expect("Sell order does not exist");
 
             assert!(
-                BaseLayerManager::current_block_heigth() < sell_order.ending_block 
+                System::current_epoch() < sell_order.ending_epoch
                 "Sell order has expired"
             );
 
@@ -168,7 +169,7 @@ mod marketplace {
                 .expect("Auction does not exist");
             
             assert!(
-                BaseLayerManager::current_block_heigth() < auction.ending_block 
+                System::current_epoch() < auction.ending_epoch
                 "Auction has expired"
             );
 
@@ -226,7 +227,7 @@ mod marketplace {
                 .expect("Auction does not exist");
             
             assert!(
-                BaseLayerManager::current_block_heigth() > auction.ending_block 
+                System::current_epoch() > auction.ending_epoch
                 "Auction is still in progress"
             );
 
@@ -258,7 +259,7 @@ mod marketplace {
                 .expect("Auction does not exist");
 
             assert!(
-                BaseLayerManager::current_block_heigth() > auction.ending_block 
+                System::current_epoch() > auction.ending_epoch
                 "Auction is still in progress"
             );
 
@@ -290,6 +291,7 @@ mod marketplace {
 
         // convenience methods for external APIs and interfaces
         // Support for advanced filtering (price ranges, auctions about to end, etc.) could be desirable
+        // Can this methods be called without paying fees? We also want to ensure the results come from consensus
         pub fn get_auctions(&self) -> HashMap<NonFungibleTokenId, Auction> {
             self.auctions.clone()
         }

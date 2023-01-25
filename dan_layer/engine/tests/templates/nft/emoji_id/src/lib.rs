@@ -22,6 +22,7 @@
 
 use tari_template_lib::prelude::*;
 
+#[derive(Debug, Clone, Encode, Decode)]
 pub enum Emoji {
     Smile,
     Sweat,
@@ -29,14 +30,10 @@ pub enum Emoji {
     Wink,
 }
 
-/*
-// TODO: Immutable/mutable properties of the NFT defined by a struct
-// TODO: the macro will implement a "NonFungible" trait and a constructor "new(component_id, emojis)"
-#[derive(NonFungible)]
+#[derive(Debug, Clone, Encode, Decode)]
 pub struct EmojiId {
     pub emojis: Vec<Emoji>,
 }
-*/
 
 /// This template implements a classic, first come first served, constant price NFT drop
 #[template]
@@ -68,8 +65,8 @@ mod emoji_id {
             }
         }
 
-        // TODO: how do we add generics to custom resource buckets? The resource addresses must be passed around somehow
-        pub fn mint(&mut self, emojis: Vec<Emoji>, payment: Bucket<Thaum>) -> (Bucket, Bucket<Thaum>) {
+        // TODO: how do we ensure that the payment is indeed in Thaums?
+        pub fn mint(&mut self, emojis: Vec<Emoji>, payment: Bucket) -> (Bucket, Bucket<Thaum>) {
             assert!(
                 !emojis.empty() && emojis.len() <= self.max_emoji_id_len,
                 "Invalid Emoji ID lenght"
@@ -78,7 +75,7 @@ mod emoji_id {
             // process the payment
             // no need to manually check the amount, as the split operation will fail if not enough funds
             let (cost, change) = payment.split(self.mint_price);
-            self.earnings.put(cost);
+            self.earnings.deposit(cost);
 
             // mint a new emoji id
             // TODO: how do we ensure uniqueness of emoji ids? Two options:
