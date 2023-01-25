@@ -411,6 +411,54 @@ impl StateTracker {
         Ok(vault_id)
     }
 
+    pub fn borrow_vault<R, F: FnOnce(&Vault) -> R>(&self, vault_id: &VaultId, f: F) -> Result<R, RuntimeError> {
+        self.read_with(|state| match state.new_vaults.get(vault_id) {
+            Some(vault) => Ok(f(vault)),
+            None => {
+                let substate = self
+                    .state_store
+                    .read_access()
+                    .unwrap()
+                    .get_state::<_, Substate>(&SubstateAddress::Vault(*vault_id))
+                    .optional()?
+                    .ok_or(RuntimeError::VaultNotFound { vault_id: *vault_id })?;
+
+                let vault = substate
+                    .into_substate_value()
+                    .into_vault()
+                    .expect("Substate was not a vault type at vault address");
+
+                Ok(f(&vault))
+            },
+        })
+    }
+
+    pub fn borrow_vault_mut<R, F: FnOnce(&mut Vault) -> R>(&self, vault_id: &VaultId, f: F) -> Result<R, RuntimeError> {
+        self.write_with(|state| {
+            let vault_mut = state.new_vaults.get_mut(vault_id);
+            match vault_mut {
+                Some(vault_mut) => Ok(f(vault_mut)),
+                None => {
+                    let substate = self
+                        .state_store
+                        .read_access()
+                        .unwrap()
+                        .get_state::<_, Substate>(&SubstateAddress::Vault(*vault_id))
+                        .optional()?
+                        .ok_or(RuntimeError::VaultNotFound { vault_id: *vault_id })?;
+
+                    let mut vault = substate
+                        .into_substate_value()
+                        .into_vault()
+                        .expect("Substate was not a vault type at vault address");
+                    let ret = f(&mut vault);
+                    state.new_vaults.insert(*vault_id, vault);
+                    Ok(ret)
+                },
+            }
+        })
+    }
+
     pub fn borrow_resource_mut<R, F: FnOnce(&mut Resource) -> R>(
         &self,
         resource_address: &ResourceAddress,
@@ -437,32 +485,6 @@ impl StateTracker {
                         .expect("Substate was not a resource type at resource address");
                     let ret = f(&mut resource);
                     state.new_resources.insert(*resource_address, resource);
-                    Ok(ret)
-                },
-            }
-        })
-    }
-
-    pub fn borrow_vault_mut<R, F: FnOnce(&mut Vault) -> R>(&self, vault_id: &VaultId, f: F) -> Result<R, RuntimeError> {
-        self.write_with(|state| {
-            let vault_mut = state.new_vaults.get_mut(vault_id);
-            match vault_mut {
-                Some(vault_mut) => Ok(f(vault_mut)),
-                None => {
-                    let substate = self
-                        .state_store
-                        .read_access()
-                        .unwrap()
-                        .get_state::<_, Substate>(&SubstateAddress::Vault(*vault_id))
-                        .optional()?
-                        .ok_or(RuntimeError::VaultNotFound { vault_id: *vault_id })?;
-
-                    let mut vault = substate
-                        .into_substate_value()
-                        .into_vault()
-                        .expect("Substate was not a vault type at vault address");
-                    let ret = f(&mut vault);
-                    state.new_vaults.insert(*vault_id, vault);
                     Ok(ret)
                 },
             }
