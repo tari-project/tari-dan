@@ -5533,7 +5533,7 @@ dependencies = [
  "rand 0.7.3",
  "serde",
  "structopt",
- "tari_common",
+ "tari_common 0.44.1 (git+https://github.com/tari-project/tari.git?branch=development)",
  "tari_common_types",
  "tari_comms",
  "tari_crypto",
@@ -5572,7 +5572,7 @@ dependencies = [
  "strum_macros",
  "tari_app_grpc",
  "tari_app_utilities",
- "tari_common",
+ "tari_common 0.44.1 (git+https://github.com/tari-project/tari.git?branch=development)",
  "tari_common_types",
  "tari_comms",
  "tari_comms_dht",
@@ -5675,6 +5675,30 @@ dependencies = [
 ]
 
 [[package]]
+name = "tari_common"
+version = "0.44.1"
+source = "git+https://github.com/brianp/tari.git?branch=feature-gate#2fd13779d06f8a199bba3f0e8428a72094be498f"
+dependencies = [
+ "anyhow",
+ "blake2 0.9.2",
+ "config",
+ "derivative",
+ "dirs-next 1.0.2",
+ "log",
+ "log4rs",
+ "multiaddr",
+ "path-clean",
+ "serde",
+ "serde_json",
+ "sha2 0.9.9",
+ "sha3",
+ "structopt",
+ "tari_crypto",
+ "tempfile",
+ "thiserror",
+]
+
+[[package]]
 name = "tari_common_sqlite"
 version = "0.44.1"
 source = "git+https://github.com/tari-project/tari.git?branch=development#5f7f04b599ab49765466fb7e0faa37e2dfec4afe"
@@ -5696,7 +5720,7 @@ dependencies = [
  "newtype-ops",
  "rand 0.7.3",
  "serde",
- "tari_common",
+ "tari_common 0.44.1 (git+https://github.com/tari-project/tari.git?branch=development)",
  "tari_crypto",
  "tari_utilities",
  "thiserror",
@@ -5734,7 +5758,7 @@ dependencies = [
  "serde",
  "serde_derive",
  "snow",
- "tari_common",
+ "tari_common 0.44.1 (git+https://github.com/tari-project/tari.git?branch=development)",
  "tari_crypto",
  "tari_metrics",
  "tari_shutdown",
@@ -5772,7 +5796,7 @@ dependencies = [
  "rand 0.7.3",
  "serde",
  "serde_derive",
- "tari_common",
+ "tari_common 0.44.1 (git+https://github.com/tari-project/tari.git?branch=development)",
  "tari_common_sqlite",
  "tari_comms",
  "tari_comms_rpc_macros",
@@ -5833,7 +5857,7 @@ dependencies = [
  "strum_macros",
  "tari_app_grpc",
  "tari_app_utilities",
- "tari_common",
+ "tari_common 0.44.1 (git+https://github.com/tari-project/tari.git?branch=development)",
  "tari_common_types",
  "tari_comms",
  "tari_comms_dht",
@@ -5895,7 +5919,7 @@ dependencies = [
  "serde_repr",
  "sha3",
  "strum_macros",
- "tari_common",
+ "tari_common 0.44.1 (git+https://github.com/tari-project/tari.git?branch=development)",
  "tari_common_types",
  "tari_comms",
  "tari_comms_dht",
@@ -5960,7 +5984,7 @@ dependencies = [
  "prost-types",
  "serde",
  "tari_bor",
- "tari_common",
+ "tari_common 0.44.1 (git+https://github.com/tari-project/tari.git?branch=development)",
  "tari_common_types",
  "tari_crypto",
  "tari_engine_types",
@@ -5991,7 +6015,7 @@ dependencies = [
  "serde",
  "serde_json",
  "tari_bor",
- "tari_common",
+ "tari_common 0.44.1 (git+https://github.com/tari-project/tari.git?branch=development)",
  "tari_common_types",
  "tari_comms",
  "tari_comms_dht",
@@ -6028,7 +6052,7 @@ dependencies = [
  "serde",
  "serde_json",
  "tari_bor",
- "tari_common",
+ "tari_common 0.44.1 (git+https://github.com/tari-project/tari.git?branch=development)",
  "tari_common_types",
  "tari_crypto",
  "tari_dan_common_types",
@@ -6080,7 +6104,7 @@ dependencies = [
  "log",
  "serde",
  "serde_json",
- "tari_common",
+ "tari_common 0.44.1 (git+https://github.com/tari-project/tari.git?branch=development)",
  "tari_common_types",
  "tari_dan_common_types",
  "tari_dan_core",
@@ -6102,7 +6126,7 @@ dependencies = [
  "lazy_static",
  "log",
  "rand 0.7.3",
- "tari_common",
+ "tari_common 0.44.1 (git+https://github.com/tari-project/tari.git?branch=development)",
  "tari_common_types",
  "tari_comms",
  "tari_core",
@@ -6134,6 +6158,25 @@ dependencies = [
  "tari_template_lib",
  "tari_utilities",
  "thiserror",
+]
+
+[[package]]
+name = "tari_feature_gate"
+version = "0.0.1"
+source = "git+https://github.com/brianp/tari.git?branch=feature-gate#2fd13779d06f8a199bba3f0e8428a72094be498f"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn",
+]
+
+[[package]]
+name = "tari_features"
+version = "0.0.1"
+source = "git+https://github.com/brianp/tari.git?branch=feature-gate#2fd13779d06f8a199bba3f0e8428a72094be498f"
+dependencies = [
+ "tari_common 0.44.1 (git+https://github.com/brianp/tari.git?branch=feature-gate)",
+ "tari_feature_gate",
 ]
 
 [[package]]
@@ -6185,7 +6228,7 @@ dependencies = [
  "digest 0.9.0",
  "log",
  "serde",
- "tari_common",
+ "tari_common 0.44.1 (git+https://github.com/tari-project/tari.git?branch=development)",
  "tari_crypto",
  "tari_utilities",
  "thiserror",
@@ -6211,7 +6254,7 @@ dependencies = [
  "semver",
  "serde",
  "serde_derive",
- "tari_common",
+ "tari_common 0.44.1 (git+https://github.com/tari-project/tari.git?branch=development)",
  "tari_comms",
  "tari_comms_dht",
  "tari_crypto",
@@ -6414,7 +6457,7 @@ dependencies = [
  "tari_app_utilities",
  "tari_base_node",
  "tari_base_node_grpc_client",
- "tari_common",
+ "tari_common 0.44.1 (git+https://github.com/tari-project/tari.git?branch=development)",
  "tari_common_types",
  "tari_comms",
  "tari_comms_dht",
@@ -6429,6 +6472,7 @@ dependencies = [
  "tari_dan_storage",
  "tari_dan_storage_sqlite",
  "tari_engine_types",
+ "tari_features",
  "tari_mmr",
  "tari_p2p",
  "tari_shutdown",
@@ -6470,6 +6514,7 @@ dependencies = [
  "tari_dan_common_types",
  "tari_dan_engine",
  "tari_engine_types",
+ "tari_features",
  "tari_template_lib",
  "tari_transaction_manifest",
  "tari_utilities",
@@ -6522,7 +6567,7 @@ dependencies = [
  "sha2 0.9.9",
  "strum",
  "strum_macros",
- "tari_common",
+ "tari_common 0.44.1 (git+https://github.com/tari-project/tari.git?branch=development)",
  "tari_common_sqlite",
  "tari_common_types",
  "tari_comms",

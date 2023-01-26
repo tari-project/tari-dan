@@ -21,8 +21,11 @@
 // USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 use std::process::Command;
+use tari_features::resolver::build_features;
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
+    build_features();
+
     tari_common::build::ProtobufCompiler::new()
         .proto_paths(&["proto/dan"])
         .include_paths(&["proto/dan"])

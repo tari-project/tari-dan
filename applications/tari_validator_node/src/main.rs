@@ -20,15 +20,22 @@
 // WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 // USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+#![feature(proc_macro_hygiene)]
+#![feature(stmt_expr_attributes)]
+
 mod cli;
 
-use std::{panic, process};
+#[tari_feature(crash_on_thread_panic)]
+use std::panic;
+
+use std::process;
 
 use clap::Parser;
 use log::*;
 use tari_common::{exit_codes::ExitError, initialize_logging, load_configuration};
 use tari_shutdown::Shutdown;
 use tari_validator_node::{cli::Cli, run_validator_node, ApplicationConfig};
+use tari_features::tari_feature_gate::tari_feature;
 
 const LOG_TARGET: &str = "tari::validator_node::app";
 
@@ -39,11 +46,14 @@ async fn main() {
 
     // Setup a panic hook which prints the default rust panic message but also exits the process. This makes a panic in
     // any thread "crash" the system instead of silently continuing.
-    let default_hook = panic::take_hook();
-    panic::set_hook(Box::new(move |info| {
-        default_hook(info);
-        process::exit(1);
-    }));
+    #[cfg(tari_feature_crash_on_thread_panic)]
+    {
+        let default_hook = panic::take_hook();
+        panic::set_hook(Box::new(move |info| {
+            default_hook(info);
+            process::exit(1);
+        }));
+    }
 
     if let Err(err) = main_inner().await {
         let exit_code = err.exit_code;

@@ -30,3 +30,6 @@ serde_json = "1.0.85"
 time = "0.3.15"
 thiserror = "1.0.36"
 tokio = { version = "1", features = ["macros"] }
+
+[build-dependencies]
+tari_features = { git = "https://github.com/brianp/tari.git", branch = "feature-gate" }

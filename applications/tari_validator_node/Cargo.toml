@@ -32,6 +32,7 @@ tari_wallet_grpc_client = { git = "https://github.com/tari-project/tari.git", br
 tari_engine_types = { path = "../../dan_layer/engine_types" }
 tari_validator_node_client = { path = "../../clients/validator_node_client" }
 tari_comms_logging = { path = "../../comms/tari_comms_logging" }
+tari_features = { git = "https://github.com/brianp/tari.git", branch = "feature-gate" }
 
 anyhow = "1.0.53"
 async-trait = "0.1.50"
@@ -69,6 +70,7 @@ tower-http = { version = "0.3.0", features = ["cors"] }
 
 [build-dependencies]
 tari_common = { git = "https://github.com/tari-project/tari.git", branch = "development", package = "tari_common", features = ["build"] }
+tari_features = { git = "https://github.com/brianp/tari.git", branch = "feature-gate" }
 
 [dev-dependencies]
 # FIXME: the newest version failed compilation due to a missing "bool_to_option" unstable feature
