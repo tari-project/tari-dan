@@ -20,12 +20,21 @@
 // WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 // USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use std::{collections::HashMap, fmt::Debug, hash::Hash, time::Duration};
+use std::{
+    collections::HashMap,
+    fmt::Debug,
+    hash::Hash,
+    sync::{Arc, Mutex},
+    time::Duration,
+};
 
 use log::*;
 use tari_shutdown::ShutdownSignal;
 use tokio::{
-    sync::mpsc::{channel, Receiver, Sender},
+    sync::{
+        mpsc::{Receiver, Sender},
+        oneshot,
+    },
     task::JoinHandle,
 };
 
@@ -67,7 +76,7 @@ pub struct Pacemaker<T> {
     /// An auxiliary map, mapping each received value to a single use channel (of buffer size 1).
     /// Its role it to facilitate asynchronous communication between the arrival of shutdown messages
     /// and time out signals
-    tx_inner_map: HashMap<T, Sender<()>>,
+    tx_inner_map: Arc<Mutex<HashMap<T, oneshot::Sender<()>>>>,
     /// Sender which sends Timeout status to the other end of the channel
     tx_waiter_status: Sender<(T, PacemakerWaitStatus)>,
     /// Duration of timeout period
@@ -95,7 +104,7 @@ impl<T: Copy + Debug + PartialEq + Eq + Hash + Send + Sync + 'static> Pacemaker<
         Self {
             rx_start_signal,
             rx_shutdown_signal,
-            tx_inner_map: HashMap::new(),
+            tx_inner_map: Arc::new(Mutex::new(HashMap::new())),
             tx_waiter_status,
             max_timeout,
         }
@@ -107,21 +116,23 @@ impl<T: Copy + Debug + PartialEq + Eq + Hash + Send + Sync + 'static> Pacemaker<
             tokio::select! {
                 msg = self.rx_start_signal.recv() => {
                     if let Some(wait_over) = msg {
-                        let (tx_stop_timeout, mut rx_stop_timeout) = channel::<()>(1);
-                        self.tx_inner_map.insert(wait_over, tx_stop_timeout);
+                        let (tx_stop_timeout, rx_stop_timeout) = oneshot::channel::<()>();
+                        self.tx_inner_map.lock().unwrap().insert(wait_over, tx_stop_timeout);
                         info!(
                             target: LOG_TARGET,
                             "Received start wait signal for value: {:?}", wait_over
                         );
                         let tx_waiter_status = self.tx_waiter_status.clone();
+                        let tx_inner_map = self.tx_inner_map.clone();
                         let _join = tokio::spawn(async move {
                             tokio::select! {
                                 _ = tokio::time::sleep(max_timeout) => {
                                     if let Err(e) = send_timeout_message(wait_over, tx_waiter_status).await {
                                         error!(target: LOG_TARGET, "failed to send timeout status message for value = {:?} with error = {}", wait_over, e);
                                     }
+                                    tx_inner_map.lock().unwrap().remove(&wait_over);
                                 },
-                                _ = rx_stop_timeout.recv() => {
+                                _ = rx_stop_timeout => {
                                     info!("The wait signal for wait_over = {:?} has been shutted down", wait_over);
                                 }
                             }
@@ -130,23 +141,23 @@ impl<T: Copy + Debug + PartialEq + Eq + Hash + Send + Sync + 'static> Pacemaker<
                 },
                 msg = self.rx_shutdown_signal.recv() => {
                     if let Some(wait_over) = msg {
-                        if let Some(tx_stop_timeout) = self.tx_inner_map.remove(&wait_over) {
+                        let tx_stop_timeout = self.tx_inner_map.lock().unwrap().remove(&wait_over);
+                        if let Some(tx_stop_timeout) = tx_stop_timeout {
                             // remove any possible entry from the mapping and send a new signal message
                             // to the thread spawned with the timeout
-                            tx_stop_timeout.send(()).await.map_err(|_| HotStuffError::SendError)?;
+                            tx_stop_timeout.send(()).map_err(|_| HotStuffError::SendError)?;
                         }
                     }
                 },
                 _ = shutdown.wait() => {
                     info!("Shutting down pacemaker service..");
                     // to guarantee that no process is left running, we trigger all shutdowns
-                    let send_triggers = self.tx_inner_map.iter().map(|(k, v)| async move {
-                            if let Err(e) = v.send(()).await {
-                                error!(target: LOG_TARGET, "Process already shut down for value = {:?} with error = {}", k, e);
-                            };
-                            v
-                    }).collect::<Vec<_>>();
-                    drop(send_triggers);
+                    let triggers = self.tx_inner_map.lock().unwrap().drain().collect::<Vec<_>>();
+                    for (k, v) in triggers {
+                        if v.send(()).is_err() {
+                            error!(target: LOG_TARGET, "Process already shut down for value = {:?}", k);
+                        }
+                    }
                     break;
                 }
             }
