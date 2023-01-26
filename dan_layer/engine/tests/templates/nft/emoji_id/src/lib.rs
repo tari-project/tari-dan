@@ -64,7 +64,8 @@ mod emoji_id {
             }
         }
 
-        pub fn mint(&mut self, emojis: Vec<Emoji>, payment: Bucket) -> (Bucket, Bucket) {
+        // TODO: return change
+        pub fn mint(&mut self, emojis: Vec<Emoji>, payment: Bucket) -> Bucket {
             assert!(
                 !emojis.is_empty() && emojis.len() as u64 <= self.max_emoji_id_len,
                 "Invalid Emoji ID length"
@@ -72,10 +73,10 @@ mod emoji_id {
 
             // process the payment
             // no need to manually check the amount, as the split operation will fail if not enough funds
-            let (cost, change) = payment.split(self.mint_price);
+            // TODO: let (cost, change) = payment.split(self.mint_price);
             // no need to manually check that the payment is in the same resource that we are accepting ...
             // ... the deposit will fail if it's different
-            self.earnings.deposit(cost);
+            self.earnings.deposit(payment);
 
             // mint a new emoji id
             // TODO: how do we ensure uniqueness of emoji ids? Two options:
@@ -83,8 +84,9 @@ mod emoji_id {
             //      2. Enforce that always an NFT's immutable data must be unique in the resource's scope
             //      3. Ad-hoc uniqueness fields in a NFT resource
             // We are going with (1) for now
-            let hash = Hash::try_from_vec(encode(&emojis).unwrap()).unwrap();
-            let id = NonFungibleId(hash);
+            //let hash = Hash::try_from_vec(encode(&emojis).unwrap()).unwrap();
+            //let id = NonFungibleId(hash);
+            let id = NonFungibleId::random();
             let mut immutable_data = Metadata::new();
             immutable_data.insert("emojis", format!("Emojis: {:?}", emojis));
             let nft = NonFungible::new(immutable_data, &{});
@@ -94,7 +96,7 @@ mod emoji_id {
             let emoji_id_bucket = ResourceManager::get(self.resource_address)
                 .mint_non_fungible(id, nft);
 
-            (emoji_id_bucket, change)
+            emoji_id_bucket
         }
 
         pub fn total_supply(&self) -> Amount {

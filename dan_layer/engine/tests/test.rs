@@ -475,12 +475,25 @@ mod basic_nft {
 mod emoji_id {
     use super::*;
 
+    #[derive(Debug, Clone, Encode, Decode, Hash)]
+    pub enum Emoji {
+        Smile,
+        Sweat,
+        Laugh,
+        Wink,
+    }
+
+    #[derive(Debug, Clone, Encode, Decode, Hash)]
+    pub struct EmojiId {
+        pub emojis: Vec<Emoji>,
+    }
+
     #[test]
     fn mint_and_withdraw() {
         let mut template_test = TemplateTest::new(vec!["tests/templates/faucet", "tests/templates/nft/emoji_id"]);
 
         // create an account
-        let _account_address: ComponentAddress = template_test.call_function("Account", "new", args![]);
+        let account_address: ComponentAddress = template_test.call_function("Account", "new", args![]);
 
         // create a fungible token faucet, we are going to use those tokens as payments
         // TODO: use Thaums instead when they're implemented
@@ -493,7 +506,7 @@ mod emoji_id {
                 args: args![initial_supply],
             }])
             .unwrap();
-        let _faucet_component: ComponentAddress = result.execution_results[0].decode().unwrap();
+        let faucet_component: ComponentAddress = result.execution_results[0].decode().unwrap();
         let faucet_resource = result
             .result
             .expect("Faucet mint failed")
@@ -509,32 +522,57 @@ mod emoji_id {
         let total_supply: Amount = template_test.call_method(emoji_id_minter, "total_supply", args![]);
         assert_eq!(total_supply, Amount(0));
 
-        // TODO: add Thaum funds to the account, to be able to mint
-        //
-        // mint a new valid emoji id
-        // let vars = vec![
-        // ("account", account_address.into()),
-        // ("emoji_id_minter", emoji_id_minter.into()),
-        // ];
-        //
-        // template_test.execute_and_commit_manifest(
-        // r#"
-        // let account = var!["account"];
-        // let emoji_id_minter = var!["emoji_id_minter"];
-        //
-        // TODO: how to import and use a type defined in the template? (Emoji enum in this case)
-        // let emojis = vec![Emoji::Smile, Emoji::Laugh];
-        //
-        // TODO: can we specify Thaum without managing addresses?
-        // let payment = account.take(Thaum, Amount(1000));
-        //
-        // let (emoji_id, _) = emoji_id_minter.mint(emojis, payment);
-        // account.deposit(nft_bucket);
-        // "#,
-        // vars,
-        // ).unwrap();
-        // let total_supply: Amount = template_test.call_method(emoji_id_minter, "total_supply", args![]);
-        // assert_eq!(total_supply, Amount(1));
+        // get some funds into the account
+        let vars = vec![
+            ("account", account_address.into()),
+            ("faucet", faucet_component.into()),
+            ("emoji_id_minter", emoji_id_minter.into()),
+        ];
+        template_test
+            .execute_and_commit_manifest(
+                r#"
+            let account = var!["account"];
+            let faucet = var!["faucet"];
+        
+            let coins = faucet.take_free_coins();
+            account.deposit(coins);
+        "#,
+                vars,
+            )
+            .unwrap();
+
+        // mint a new emoji_id
+        // TODO: transaction manifests do not support passing a arbitrary type (like Vec<Emoji>)
+        let emoji_vec = vec![Emoji::Smile, Emoji::Laugh];
+        template_test
+            .execute_and_commit(vec![
+                Instruction::CallMethod {
+                    component_address: account_address,
+                    method: "withdraw".to_string(),
+                    args: args![faucet_resource, Amount(25)],
+                },
+                Instruction::PutLastInstructionOutputOnWorkspace {
+                    key: b"payment".to_vec(),
+                },
+                Instruction::CallMethod {
+                    component_address: emoji_id_minter,
+                    method: "mint".to_string(),
+                    args: args![Literal(emoji_vec), Variable("payment")],
+                },
+                Instruction::PutLastInstructionOutputOnWorkspace {
+                    key: b"emoji_id".to_vec(),
+                },
+                Instruction::CallMethod {
+                    component_address: account_address,
+                    method: "deposit".to_string(),
+                    args: args![Variable("emoji_id")],
+                },
+            ])
+            .unwrap();
+
+        // the supply of emoji ids should have increased
+        let total_supply: Amount = template_test.call_method(emoji_id_minter, "total_supply", args![]);
+        assert_eq!(total_supply, Amount(1));
     }
 
     #[ignore]
