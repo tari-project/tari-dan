@@ -79,6 +79,9 @@ impl ComponentManager {
         for (addr, substate) in diff.up_iter() {
             match addr {
                 addr @ SubstateAddress::Component(_) => {
+                    if let Some((addr, version)) = component.take() {
+                        self.add_root_substate(addr, version, children.drain(..).collect())?;
+                    }
                     component = Some((addr, substate.version()));
                 },
                 addr @ SubstateAddress::Resource(_) |
