@@ -28,12 +28,12 @@ use tari_dan_engine::{
     transaction::TransactionError,
     wasm::{compile::compile_template, WasmExecutionError},
 };
-use tari_engine_types::instruction::Instruction;
+use tari_engine_types::{instruction::Instruction, substate::SubstateAddress};
 use tari_template_lib::{
     args,
     models::{Amount, ComponentAddress},
 };
-use tari_template_test_tooling::{SubstateType, TemplateTest};
+use tari_template_test_tooling::{MockRuntimeInterface, SubstateType, TemplateTest};
 
 #[test]
 fn test_hello_world() {
@@ -319,12 +319,18 @@ mod basic_nft {
 
     use super::*;
 
-    #[test]
-    fn create_resource_mint_and_deposit() {
+    fn setup() -> (TemplateTest<MockRuntimeInterface>, ComponentAddress, ComponentAddress) {
         let mut template_test = TemplateTest::new(vec!["tests/templates/nft/basic_nft"]);
 
         let account_address: ComponentAddress = template_test.call_function("Account", "new", args![]);
         let nft_component: ComponentAddress = template_test.call_function("SparkleNft", "new", args![]);
+
+        (template_test, account_address, nft_component)
+    }
+
+    #[test]
+    fn create_resource_mint_and_deposit() {
+        let (mut template_test, account_address, nft_component) = setup();
 
         let vars = vec![
             ("account", account_address.into()),
@@ -336,7 +342,7 @@ mod basic_nft {
         ];
 
         let total_supply: Amount = template_test.call_method(nft_component, "total_supply", args![]);
-        assert_eq!(total_supply, Amount(1));
+        assert_eq!(total_supply, Amount(4));
 
         let result = template_test
             .execute_and_commit_manifest(
@@ -370,7 +376,7 @@ mod basic_nft {
         assert_eq!(diff.up_iter().filter(|(addr, _)| addr.is_non_fungible()).count(), 1);
 
         let total_supply: Amount = template_test.call_method(nft_component, "total_supply", args![]);
-        assert_eq!(total_supply, Amount(2));
+        assert_eq!(total_supply, Amount(5));
 
         let result = template_test
             .execute_and_commit_manifest(
@@ -384,23 +390,26 @@ mod basic_nft {
             
             let nft_resx = var!["nft_resx"];
             account.balance(nft_resx);
+            sparkle_nft.total_supply();
         "#,
                 vars,
             )
             .unwrap();
         result.result.expect("execution failed");
+        // sparkle_nft.inner_vault_balance()
         assert_eq!(result.execution_results[3].decode::<Amount>().unwrap(), Amount(0));
+        // account.balance(nft_resx)
+        assert_eq!(result.execution_results[4].decode::<Amount>().unwrap(), Amount(5));
+        // sparkle_nft.total_supply()
+        assert_eq!(result.execution_results[5].decode::<Amount>().unwrap(), Amount(5));
     }
 
     #[test]
     fn change_nft_mutable_data() {
-        let mut template_test = TemplateTest::new(vec!["tests/templates/nft/basic_nft"]);
-
-        let account_address: ComponentAddress = template_test.call_function("Account", "new", args![]);
-        let nft_component: ComponentAddress = template_test.call_function("SparkleNft", "new", args![]);
+        let (mut template_test, account_address, nft_component) = setup();
 
         let total_supply: Amount = template_test.call_method(nft_component, "total_supply", args![]);
-        assert_eq!(total_supply, Amount(1));
+        assert_eq!(total_supply, Amount(4));
 
         let vars = [("account", account_address.into()), ("nft", nft_component.into())];
 
@@ -425,8 +434,8 @@ mod basic_nft {
         let vars = [
             ("account", account_address.into()),
             ("nft", nft_component.into()),
-            ("nft_resx", nft_resource_addr.into()),
-            ("nft_id", nft_addr.into()),
+            ("nft_resx", (*nft_resource_addr).into()),
+            ("nft_id", nft_addr.clone().into()),
         ];
 
         template_test
@@ -469,6 +478,89 @@ mod basic_nft {
             .unwrap_err();
 
         assert!(err.to_string().contains("Not enough brightness remaining"));
+    }
+
+    #[test]
+    fn mint_specific_id() {
+        let (mut template_test, account_address, nft_component) = setup();
+
+        let vars = vec![
+            ("account", account_address.into()),
+            ("nft", nft_component.into()),
+            (
+                "nft_resx",
+                template_test.get_previous_output_address(SubstateType::Resource).into(),
+            ),
+        ];
+
+        let total_supply: Amount = template_test.call_method(nft_component, "total_supply", args![]);
+        assert_eq!(total_supply, Amount(4));
+
+        let result = template_test
+            .execute_and_commit_manifest(
+                r#"
+            let account = var!["account"];
+            let sparkle_nft = var!["nft"];
+        
+            let nft_bucket = sparkle_nft.mint_specific(NonFungibleId("SpecialNft"));
+            account.deposit(nft_bucket);
+            
+            let nft_bucket = sparkle_nft.mint_specific(NonFungibleId(123u32));
+            account.deposit(nft_bucket);
+
+            let nft_bucket = sparkle_nft.mint_specific(NonFungibleId(456u64));
+            account.deposit(nft_bucket);
+
+            let nft_bucket = sparkle_nft.mint_specific(NonFungibleId(b"this will be interpreted as uuid"));
+            account.deposit(nft_bucket);
+            
+            sparkle_nft.total_supply();
+        "#,
+                vars.clone(),
+            )
+            .unwrap();
+
+        let diff = result.result.expect("execution failed");
+        let nfts = diff
+            .up_iter()
+            .filter_map(|(a, _)| match a {
+                SubstateAddress::NonFungible(_, id) => Some(id),
+                _ => None,
+            })
+            .collect::<Vec<_>>();
+        assert_eq!(
+            nfts.iter()
+                .filter(|n| n.to_canonical_string() == "str:SpecialNft")
+                .count(),
+            1
+        );
+        assert_eq!(nfts.iter().filter(|n| n.to_canonical_string() == "u32:123").count(), 1);
+        assert_eq!(nfts.iter().filter(|n| n.to_canonical_string() == "u64:456").count(), 1);
+        assert_eq!(
+            nfts.iter()
+                .filter(|n| n.to_canonical_string() ==
+                    "uuid:746869732077696c6c20626520696e7465727072657465642061732075756964")
+                .count(),
+            1
+        );
+        assert_eq!(nfts.len(), 4);
+        assert_eq!(result.execution_results[12].decode::<Amount>().unwrap(), Amount(8));
+
+        // Try mint 2 nfts with the same id in a single transaction - should fail
+        template_test
+            .execute_and_commit_manifest(
+                r#"
+            let account = var!["account"];
+            let sparkle_nft = var!["nft"];
+        
+            let nft_bucket1 = sparkle_nft.mint_specific(NonFungibleId("Duplicate"));
+            let nft_bucket2 = sparkle_nft.mint_specific(NonFungibleId("Duplicate"));
+            account.deposit(nft_bucket1);
+            account.deposit(nft_bucket2);
+        "#,
+                vars,
+            )
+            .unwrap_err();
     }
 }
 

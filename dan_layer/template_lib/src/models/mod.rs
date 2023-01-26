@@ -38,8 +38,8 @@ pub use non_fungible::{NonFungible, NonFungibleId};
 mod resource;
 pub use resource::ResourceAddress;
 
-mod package;
-pub use package::TemplateAddress;
+mod template;
+pub use template::TemplateAddress;
 
 mod vault;
 pub use vault::{Vault, VaultId, VaultRef};

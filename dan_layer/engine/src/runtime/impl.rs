@@ -215,7 +215,7 @@ impl RuntimeInterface for RuntimeInterfaceImpl {
                         })?;
                 let arg: ResourceUpdateNonFungibleDataArg = args.get(0)?;
                 self.tracker
-                    .with_non_fungible_mut(resource_address, arg.id, move |nft| nft.set_data_raw(arg.data))?;
+                    .with_non_fungible_mut(resource_address, arg.id.clone(), move |nft| nft.set_data_raw(arg.data))?;
                 Ok(InvokeResult::unit())
             },
         }
@@ -392,7 +392,7 @@ impl RuntimeInterface for RuntimeInterfaceImpl {
         }
     }
 
-    fn generate_uuid(&self) -> Result<Vec<u8>, RuntimeError> {
+    fn generate_uuid(&self) -> Result<[u8; 32], RuntimeError> {
         self.tracker.id_provider().new_uuid()
     }
 

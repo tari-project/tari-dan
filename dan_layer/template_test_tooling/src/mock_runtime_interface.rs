@@ -159,7 +159,7 @@ impl RuntimeInterface for MockRuntimeInterface {
         }
     }
 
-    fn generate_uuid(&self) -> Result<Vec<u8>, RuntimeError> {
+    fn generate_uuid(&self) -> Result<[u8; 32], RuntimeError> {
         self.add_call("generate_uuid");
         self.inner.generate_uuid()
     }

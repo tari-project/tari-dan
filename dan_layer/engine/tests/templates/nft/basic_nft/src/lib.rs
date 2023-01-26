@@ -38,7 +38,21 @@ mod sparkle_nft_template {
     impl SparkleNft {
         pub fn new() -> Self {
             // Create the non-fungible resource with 1 token (optional)
-            let tokens = [(NonFungibleId::random(), NonFungible::new(Metadata::new(), &()))];
+            let tokens = [
+                (NonFungibleId::from_u32(1), NonFungible::new(Metadata::new(), &())),
+                (
+                    NonFungibleId::from_u64(u64::MAX),
+                    NonFungible::new(Metadata::new(), &()),
+                ),
+                (
+                    NonFungibleId::from_string("Sparkle1"),
+                    NonFungible::new(Metadata::new(), &()),
+                ),
+                (
+                    NonFungibleId::from_u256([0u8; 32]),
+                    NonFungible::new(Metadata::new(), &()),
+                ),
+            ];
             let bucket = ResourceBuilder::non_fungible()
                 .with_token_symbol("SPKL")
                 .with_tokens(tokens)
@@ -52,6 +66,11 @@ mod sparkle_nft_template {
         pub fn mint(&mut self) -> Bucket {
             // Mint a new token with a random ID
             let id = NonFungibleId::random();
+            self.mint_specific(id)
+        }
+
+        pub fn mint_specific(&mut self, id: NonFungibleId) -> Bucket {
+            debug(format!("Minting {}", id));
             // These are characteristic of the NFT and are immutable
             let mut immutable_data = Metadata::new();
             immutable_data
@@ -86,7 +105,7 @@ mod sparkle_nft_template {
 
         fn with_sparkle_mut<F: FnOnce(&mut Sparkle)>(&self, id: NonFungibleId, f: F) {
             let resource_manager = ResourceManager::get(self.address);
-            let nft = resource_manager.get_non_fungible(id);
+            let nft = resource_manager.get_non_fungible(&id);
             let mut data = nft.get_data::<Sparkle>();
             f(&mut data);
             resource_manager.update_non_fungible_data(id, &data);

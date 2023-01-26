@@ -32,7 +32,7 @@ use tari_template_lib::{
     Hash,
 };
 
-use crate::{resource::Resource, vault::Vault};
+use crate::{hashing::hasher, resource::Resource, vault::Vault};
 
 #[derive(Debug, Clone, Encode, Decode, Serialize, Deserialize)]
 pub struct Substate {
@@ -76,7 +76,7 @@ impl Substate {
 }
 
 /// Base object address, version tuples
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Encode, Decode, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Encode, Decode, Serialize, Deserialize)]
 pub enum SubstateAddress {
     Component(ComponentAddress),
     Resource(ResourceAddress),
@@ -99,12 +99,15 @@ impl SubstateAddress {
         }
     }
 
-    pub fn hash(&self) -> &Hash {
+    pub fn to_canonical_hash(&self) -> Hash {
         match self {
-            SubstateAddress::Component(address) => address.hash(),
-            SubstateAddress::Resource(address) => address.hash(),
-            SubstateAddress::Vault(id) => id.hash(),
-            SubstateAddress::NonFungible(_, id) => id.hash(),
+            SubstateAddress::Component(address) => *address.hash(),
+            SubstateAddress::Resource(address) => *address.hash(),
+            SubstateAddress::Vault(id) => *id.hash(),
+            SubstateAddress::NonFungible(resource_addr, id) => hasher("non_fungible_id")
+                .chain(resource_addr.hash())
+                .chain(&id)
+                .result(),
         }
     }
 
@@ -118,9 +121,9 @@ impl SubstateAddress {
         }
     }
 
-    pub fn as_non_fungible_address(&self) -> Option<(ResourceAddress, NonFungibleId)> {
+    pub fn as_non_fungible_address(&self) -> Option<(&ResourceAddress, &NonFungibleId)> {
         match self {
-            SubstateAddress::NonFungible(resource_address, nft_id) => Some((*resource_address, *nft_id)),
+            SubstateAddress::NonFungible(resource_address, nft_id) => Some((resource_address, nft_id)),
             _ => None,
         }
     }
@@ -185,17 +188,16 @@ impl FromStr for SubstateAddress {
                 Ok(SubstateAddress::Component(addr))
             },
             Some(("resource", addr)) => {
-                // resource_xxxx nft_xxxxx
                 match addr.split_once(' ') {
+                    // resource_xxxx nft_xxxxx
                     Some((resource_str, addr)) => {
                         let resource_addr = ResourceAddress::from_hex(resource_str)
                             .map_err(|_| InvalidSubstateAddressFormat(s.to_string()))?;
-                        let id = SubstateAddress::from_str(addr)?;
-                        let (_, id) = id
-                            .as_non_fungible_address()
-                            .ok_or_else(|| InvalidSubstateAddressFormat(s.to_string()))?;
+                        let id = NonFungibleId::try_from_canonical_string(addr)
+                            .map_err(|_| InvalidSubstateAddressFormat(s.to_string()))?;
                         Ok(SubstateAddress::NonFungible(resource_addr, id))
                     },
+                    // resource_xxxx
                     None => {
                         let addr =
                             ResourceAddress::from_hex(addr).map_err(|_| InvalidSubstateAddressFormat(s.to_string()))?;
@@ -206,14 +208,6 @@ impl FromStr for SubstateAddress {
             Some(("vault", addr)) => {
                 let id = VaultId::from_hex(addr).map_err(|_| InvalidSubstateAddressFormat(s.to_string()))?;
                 Ok(SubstateAddress::Vault(id))
-            },
-            Some(("nft", addr)) => {
-                let id = NonFungibleId::from_hex(addr).map_err(|_| InvalidSubstateAddressFormat(s.to_string()))?;
-                // TODO: We need to add more structure to objects with child/parent relationships.
-                //       Setting the resource to 000.. has no effect because the system knows about this substate and
-                //       includes the correct resource in the final address, however this may change as the NFT ID
-                //       should be qualified by the parent resource.
-                Ok(SubstateAddress::NonFungible(ResourceAddress::new(Hash::default()), id))
             },
             Some(_) | None => Err(InvalidSubstateAddressFormat(s.to_string())),
         }

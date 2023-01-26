@@ -94,9 +94,9 @@ impl IdProvider {
         self.bucket_id.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
     }
 
-    pub fn new_uuid(&self) -> Result<Vec<u8>, RuntimeError> {
+    pub fn new_uuid(&self) -> Result<[u8; 32], RuntimeError> {
         let id = self.new_id()?;
-        Ok(id.to_vec())
+        Ok(id.into_array())
     }
 }
 

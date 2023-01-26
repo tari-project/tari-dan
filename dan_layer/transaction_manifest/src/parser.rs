@@ -6,7 +6,6 @@ use syn::{
     parse::ParseStream,
     parse2,
     punctuated::Punctuated,
-    spanned::Spanned,
     token::Comma,
     Block,
     Expr,
@@ -19,7 +18,6 @@ use syn::{
     ItemFn,
     ItemUse,
     Lit,
-    LitInt,
     LitStr,
     Local,
     Macro,
@@ -51,7 +49,7 @@ pub struct InvokeIntent {
     pub component_variable: Option<Ident>,
     pub template_variable: Option<Ident>,
     pub function_name: Ident,
-    pub arguments: Vec<LiteralOrVariable>,
+    pub arguments: Vec<ManifestLiteral>,
 }
 
 #[derive(Debug, Clone)]
@@ -67,9 +65,16 @@ pub struct LogIntent {
 }
 
 #[derive(Debug, Clone)]
-pub enum LiteralOrVariable {
+pub enum ManifestLiteral {
     Lit(Lit),
     Variable(Ident),
+    Special(SpecialLiteral),
+}
+
+#[derive(Debug, Clone)]
+pub enum SpecialLiteral {
+    Amount(i64),
+    NonFungibleId(Lit),
 }
 
 pub struct ManifestParser;
@@ -322,14 +327,14 @@ fn macro_call(mac: &Ident, tokens: TokenStream) -> Result<ManifestIntent, syn::E
     }
 }
 
-fn build_arguments(args: Punctuated<Expr, Comma>) -> Result<Vec<LiteralOrVariable>, syn::Error> {
+fn build_arguments(args: Punctuated<Expr, Comma>) -> Result<Vec<ManifestLiteral>, syn::Error> {
     args.into_iter()
         .map(|arg| match arg {
-            Expr::Lit(lit) => Ok(LiteralOrVariable::Lit(lit.lit)),
+            Expr::Lit(lit) => Ok(ManifestLiteral::Lit(lit.lit)),
 
             Expr::Path(expr_path) => {
                 if expr_path.path.segments.len() == 1 {
-                    Ok(LiteralOrVariable::Variable(expr_path.path.segments[0].ident.clone()))
+                    Ok(ManifestLiteral::Variable(expr_path.path.segments[0].ident.clone()))
                 } else {
                     Err(syn::Error::new_spanned(
                         expr_path,
@@ -344,30 +349,11 @@ fn build_arguments(args: Punctuated<Expr, Comma>) -> Result<Vec<LiteralOrVariabl
                     ..
                 }) = &*func
                 {
-                    if segments
+                    let name = segments
                         .first()
-                        .ok_or_else(|| syn::Error::new_spanned(func.clone(), "Invalid function call"))?
-                        .ident ==
-                        "Amount"
-                    {
-                        let amt = args
-                            .first()
-                            .ok_or_else(|| syn::Error::new_spanned(func, "Invalid function call"))?;
-                        match amt {
-                            Expr::Lit(ExprLit { lit: Lit::Int(lit), .. }) => Ok(LiteralOrVariable::Lit(Lit::Int(
-                                LitInt::new(&format!("{}u64", lit.base10_digits()), amt.span()),
-                            ))),
-                            _ => Err(syn::Error::new_spanned(
-                                amt,
-                                "Invalid argument, only literals and variables are supported",
-                            )),
-                        }
-                    } else {
-                        Err(syn::Error::new_spanned(
-                            func,
-                            "Invalid function call, only Amount is supported",
-                        ))
-                    }
+                        .ok_or_else(|| syn::Error::new_spanned(func.clone(), "Invalid function call"))?;
+
+                    handle_special_literals(&name.ident, args)
                 } else {
                     Err(syn::Error::new_spanned(
                         func,
@@ -381,6 +367,40 @@ fn build_arguments(args: Punctuated<Expr, Comma>) -> Result<Vec<LiteralOrVariabl
             )),
         })
         .collect()
+}
+
+fn handle_special_literals(name: &Ident, args: Punctuated<Expr, Comma>) -> Result<ManifestLiteral, syn::Error> {
+    if name == "Amount" {
+        let amt = args
+            .first()
+            .ok_or_else(|| syn::Error::new_spanned(name, "Invalid function call"))?;
+        match amt {
+            Expr::Lit(ExprLit { lit: Lit::Int(lit), .. }) => {
+                Ok(ManifestLiteral::Special(SpecialLiteral::Amount(lit.base10_parse()?)))
+            },
+            _ => Err(syn::Error::new_spanned(
+                amt,
+                "Invalid argument, only literals and variables are supported",
+            )),
+        }
+    } else if name == "NonFungibleId" {
+        let arg = args
+            .first()
+            .ok_or_else(|| syn::Error::new_spanned(name, "Invalid function call"))?;
+        if let Expr::Lit(ExprLit { lit, .. }) = arg {
+            Ok(ManifestLiteral::Special(SpecialLiteral::NonFungibleId(lit.clone())))
+        } else {
+            Err(syn::Error::new_spanned(
+                arg,
+                "Invalid argument, only literals and variables are supported",
+            ))
+        }
+    } else {
+        Err(syn::Error::new_spanned(
+            name,
+            "Invalid function call, only Amount is supported",
+        ))
+    }
 }
 
 fn extract_single_var_name(expr: &Expr) -> Result<Ident, syn::Error> {

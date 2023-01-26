@@ -116,7 +116,7 @@ impl TransactionBuilder {
                 .new_address_hash()
                 .expect("id provider provides num_outputs IDs");
             (
-                ShardId::from_hash(new_hash.into_array(), 0),
+                ShardId::from_hash(&new_hash, 0),
                 (SubstateChange::Create, ObjectClaim {}),
             )
         }));

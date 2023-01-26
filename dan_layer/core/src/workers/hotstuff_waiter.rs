@@ -845,10 +845,10 @@ where
                 }) => {
                     // To down a substate it should be pledged as up
                     if !matches!(current_state, SubstateState::Up { .. }) {
-                        missing_pledges.push((shard_id, SubstateChange::Exists, *address, *version));
+                        missing_pledges.push((shard_id, SubstateChange::Exists, address.clone(), *version));
                     }
                 },
-                None => missing_pledges.push((shard_id, SubstateChange::Exists, *address, *version)),
+                None => missing_pledges.push((shard_id, SubstateChange::Exists, address.clone(), *version)),
             }
         }
 
@@ -883,7 +883,7 @@ where
                         },
                     }
                 },
-                None => missing_pledges.push((shard_id, SubstateChange::Create, *addr, substate.version())),
+                None => missing_pledges.push((shard_id, SubstateChange::Create, addr.clone(), substate.version())),
             }
         }
 

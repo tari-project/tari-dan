@@ -38,7 +38,11 @@ use tari_engine_types::{
     substate::{SubstateAddress, SubstateValue},
     TemplateAddress,
 };
-use tari_template_lib::{arg, args::Arg, models::Amount};
+use tari_template_lib::{
+    arg,
+    args::Arg,
+    models::{Amount, NonFungibleId},
+};
 use tari_transaction_manifest::parse_manifest;
 use tari_utilities::hex::to_hex;
 use tari_validator_node_client::{
@@ -493,6 +497,7 @@ pub enum CliArg {
     I16(i16),
     I8(i8),
     Bool(bool),
+    NonFungibleId(NonFungibleId),
 }
 
 impl FromStr for CliArg {
@@ -526,6 +531,19 @@ impl FromStr for CliArg {
         if let Ok(v) = s.parse::<bool>() {
             return Ok(CliArg::Bool(v));
         }
+        if let Some(("nft", nft_id)) = s.split_once('_') {
+            match NonFungibleId::try_from_canonical_string(nft_id) {
+                Ok(v) => {
+                    return Ok(CliArg::NonFungibleId(v));
+                },
+                Err(e) => {
+                    eprintln!(
+                        "WARN: '{}' is not a valid NonFungibleId ({:?}) and will be interpreted as a string",
+                        s, e
+                    );
+                },
+            }
+        }
         Ok(CliArg::String(s.to_string()))
     }
 }
@@ -543,6 +561,7 @@ impl CliArg {
             CliArg::I16(v) => arg!(*v),
             CliArg::I8(v) => arg!(*v),
             CliArg::Bool(v) => arg!(*v),
+            CliArg::NonFungibleId(v) => arg!(v),
         }
     }
 }

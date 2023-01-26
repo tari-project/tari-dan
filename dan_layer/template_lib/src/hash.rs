@@ -22,6 +22,7 @@
 
 use std::{
     error::Error,
+    fmt,
     fmt::{Display, Formatter},
     io,
     io::Write,
@@ -53,6 +54,13 @@ impl Hash {
             *h = u8::from_str_radix(&s[2 * i..2 * (i + 1)], 16).map_err(|_| HashParseError)?;
         }
         Ok(Hash(hash))
+    }
+
+    pub fn write_hex_fmt<W: fmt::Write>(&self, writer: &mut W) -> fmt::Result {
+        for b in self.0 {
+            write!(writer, "{:02x?}", b)?;
+        }
+        Ok(())
     }
 
     pub fn try_from_vec(data: Vec<u8>) -> Result<Self, HashParseError> {
