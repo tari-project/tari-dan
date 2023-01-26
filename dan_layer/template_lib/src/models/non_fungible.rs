@@ -12,7 +12,7 @@ use crate::{hash::HashParseError, models::Metadata, Hash};
 
 #[derive(Debug, Clone, Copy, Ord, PartialOrd, PartialEq, Eq, Encode, Decode, Hash)]
 #[cfg_attr(feature = "serde", derive(serde::Deserialize, serde::Serialize))]
-pub struct NonFungibleId(Hash);
+pub struct NonFungibleId(pub Hash);
 
 impl NonFungibleId {
     pub fn random() -> Self {

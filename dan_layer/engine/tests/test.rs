@@ -472,63 +472,87 @@ mod basic_nft {
     }
 }
 
-// TODO: implement the tests
-#[cfg(any())]
 mod emoji_id {
     use super::*;
 
     #[test]
     fn mint_and_withdraw() {
-        let template_test = TemplateTest::new(vec!["tests/templates/account", "tests/templates/nft/emoji_id"]);
-        let account_address: ComponentAddress = template_test.call_function("Account", "new", args![]);
+        let mut template_test = TemplateTest::new(vec!["tests/templates/faucet", "tests/templates/nft/emoji_id"]);
+
+        // create an account
+        let _account_address: ComponentAddress = template_test.call_function("Account", "new", args![]);
+
+        // create a fungible token faucet, we are going to use those tokens as payments
+        // TODO: use Thaums instead when they're implemented
+        let faucet_template = template_test.get_template_address("TestFaucet");
+        let initial_supply = Amount(1_000_000_000_000);
+        let result = template_test
+            .execute_and_commit(vec![Instruction::CallFunction {
+                template_address: faucet_template,
+                function: "mint".to_string(),
+                args: args![initial_supply],
+            }])
+            .unwrap();
+        let _faucet_component: ComponentAddress = result.execution_results[0].decode().unwrap();
+        let faucet_resource = result
+            .result
+            .expect("Faucet mint failed")
+            .up_iter()
+            .find_map(|(_, s)| s.substate_address().as_resource_address())
+            .unwrap();
+
+        // initialize the emoji id minter
         let emoji_id_minter: ComponentAddress =
-            template_test.call_function("EmojiIdMinter", "new", args!["EJID", 10, 1000]);
+            template_test.call_function("EmojiIdMinter", "new", args![faucet_resource, 10_u64, Amount(20)]);
 
         // at the beggining we don't have any emojis minted
-        let total_supply: Amount = template_test.call_method(nft_component, "total_supply", args![]);
+        let total_supply: Amount = template_test.call_method(emoji_id_minter, "total_supply", args![]);
         assert_eq!(total_supply, Amount(0));
 
         // TODO: add Thaum funds to the account, to be able to mint
-
+        //
         // mint a new valid emoji id
-        let vars = vec![
-            ("account", account_address.into()),
-            ("emoji_id_minter", emoji_id_minter.into()),
-        ];
-
-        let result = template_test.execute_and_commit_manifest(
-            r#"
-            let account = var!["account"];
-            let emoji_id_minter = var!["emoji_id_minter"];
-        
-            // TODO: how to import and use a type defined in the template? (Emoji enum in this case)
-            let emojis = vec![Emoji::Smile, Emoji::Laugh];
-
-            // TODO: can we specify Thaum without managing addresses?
-            let payment = account.take(Thaum, Amount(1000));
-
-            let (emoji_id, _) = emoji_id_minter.mint(emojis, payment);
-            account.deposit(nft_bucket);
-        "#,
-            vars,
-        );
-        let total_supply: Amount = template_test.call_method(nft_component, "total_supply", args![]);
-        assert_eq!(total_supply, Amount(1));
+        // let vars = vec![
+        // ("account", account_address.into()),
+        // ("emoji_id_minter", emoji_id_minter.into()),
+        // ];
+        //
+        // template_test.execute_and_commit_manifest(
+        // r#"
+        // let account = var!["account"];
+        // let emoji_id_minter = var!["emoji_id_minter"];
+        //
+        // TODO: how to import and use a type defined in the template? (Emoji enum in this case)
+        // let emojis = vec![Emoji::Smile, Emoji::Laugh];
+        //
+        // TODO: can we specify Thaum without managing addresses?
+        // let payment = account.take(Thaum, Amount(1000));
+        //
+        // let (emoji_id, _) = emoji_id_minter.mint(emojis, payment);
+        // account.deposit(nft_bucket);
+        // "#,
+        // vars,
+        // ).unwrap();
+        // let total_supply: Amount = template_test.call_method(emoji_id_minter, "total_supply", args![]);
+        // assert_eq!(total_supply, Amount(1));
     }
 
+    #[ignore]
     #[test]
     fn insufficient_payments_are_rejected() {
         todo!()
     }
 
+    #[ignore]
     #[test]
     fn emoji_ids_are_unique() {
         // check that duplicated emoji ids cannot be minted
         todo!()
     }
 
+    #[ignore]
     #[test]
-    fn invalid_emoji_lenghts_are_rejected() {
+    fn invalid_emoji_lengths_are_rejected() {
         todo!()
     }
 }
