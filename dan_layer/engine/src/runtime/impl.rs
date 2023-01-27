@@ -202,7 +202,7 @@ impl RuntimeInterface for RuntimeInterfaceImpl {
                             reason: "GetNonFungible resource action requires a resource address".to_string(),
                         })?;
                 let arg: ResourceGetNonFungibleArg = args.get(0)?;
-                let nft = self.tracker.get_non_fungible(&resource_address, arg.id)?;
+                let nft = self.tracker.get_non_fungible(&resource_address, &arg.id)?;
                 Ok(InvokeResult::encode(&nft)?)
             },
             ResourceAction::UpdateNonFungibleData => {
@@ -215,7 +215,7 @@ impl RuntimeInterface for RuntimeInterfaceImpl {
                         })?;
                 let arg: ResourceUpdateNonFungibleDataArg = args.get(0)?;
                 self.tracker
-                    .with_non_fungible_mut(resource_address, arg.id, move |nft| nft.set_data_raw(arg.data))?;
+                    .with_non_fungible_mut(resource_address, arg.id.clone(), move |nft| nft.set_data_raw(arg.data))?;
                 Ok(InvokeResult::unit())
             },
         }
@@ -303,10 +303,11 @@ impl RuntimeInterface for RuntimeInterfaceImpl {
                     reason: "vault action requires a vault id".to_string(),
                 })?;
 
-                let resp = self.tracker.borrow_vault_mut(&vault_id, |vault| {
+                let resp = self.tracker.borrow_vault(&vault_id, |vault| {
                     let empty = BTreeSet::new();
                     let ids = vault.get_non_fungible_ids().unwrap_or(&empty);
-                    InvokeResult::encode(&ids)
+                    // NOTE: A BTreeSet does not decode when received in the WASM
+                    InvokeResult::encode(&ids.iter().collect::<Vec<_>>())
                 })??;
 
                 Ok(resp)
@@ -392,7 +393,7 @@ impl RuntimeInterface for RuntimeInterfaceImpl {
         }
     }
 
-    fn generate_uuid(&self) -> Result<Vec<u8>, RuntimeError> {
+    fn generate_uuid(&self) -> Result<[u8; 32], RuntimeError> {
         self.tracker.id_provider().new_uuid()
     }
 

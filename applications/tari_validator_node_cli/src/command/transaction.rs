@@ -38,7 +38,12 @@ use tari_engine_types::{
     substate::{SubstateAddress, SubstateValue},
     TemplateAddress,
 };
-use tari_template_lib::{arg, args::Arg, models::Amount};
+use tari_template_lib::{
+    arg,
+    args::Arg,
+    models::{Amount, NonFungibleId},
+    prelude::ResourceAddress,
+};
 use tari_transaction_manifest::parse_manifest;
 use tari_utilities::hex::to_hex;
 use tari_validator_node_client::{
@@ -93,6 +98,10 @@ pub struct CommonSubmitArgs {
     pub account_template_address: Option<String>,
     #[clap(long)]
     pub dry_run: bool,
+    #[clap(long, short = 'm', alias = "mint-specific")]
+    pub non_fungible_mint_outputs: Vec<SpecificNonFungibleMintOutput>,
+    #[clap(long, alias = "mint-new")]
+    pub new_non_fungible_outputs: Vec<NewNonFungibleMintOutput>,
 }
 
 #[derive(Debug, Args, Clone)]
@@ -171,7 +180,7 @@ pub async fn handle_submit(
         } => Instruction::CallFunction {
             template_address: template_address.into_inner(),
             function: function_name,
-            args: args.iter().map(|s| s.to_arg()).collect(),
+            args: args.into_iter().map(|s| s.into_arg()).collect(),
         },
         CliInstruction::CallMethod {
             component_address,
@@ -182,7 +191,7 @@ pub async fn handle_submit(
                 .as_component_address()
                 .ok_or_else(|| anyhow!("Invalid component address: {}", component_address))?,
             method: method_name,
-            args: args.iter().map(|s| s.to_arg()).collect(),
+            args: args.into_iter().map(|s| s.into_arg()).collect(),
         },
     };
 
@@ -219,10 +228,17 @@ pub async fn submit_transaction(
 
     // TODO: we assume that all inputs will be consumed and produce a new output however this is only the case when the
     //       object is mutated
-    let outputs = inputs
+    let mut outputs = inputs
         .iter()
         .map(|versioned_addr| ShardId::from_address(&versioned_addr.address, versioned_addr.version + 1))
-        .collect();
+        .collect::<Vec<_>>();
+
+    outputs.extend(
+        common
+            .non_fungible_mint_outputs
+            .into_iter()
+            .map(|m| ShardId::from_address(&SubstateAddress::NonFungible(m.resource_address, m.non_fungible_id), 0)),
+    );
 
     // Convert to shard id
     let inputs = inputs
@@ -237,6 +253,13 @@ pub async fn submit_transaction(
         .with_inputs(inputs)
         .with_new_outputs(common.num_outputs.unwrap_or(0))
         .with_outputs(outputs)
+        .with_new_non_fungible_outputs(
+            common
+                .new_non_fungible_outputs
+                .into_iter()
+                .map(|m| (m.resource_address, m.count))
+                .collect(),
+        )
         .with_fee(1)
         .sign(&key.secret_key);
 
@@ -439,6 +462,9 @@ fn summarize_finalize_result(finalize: &FinalizeResult) {
             Type::Other { ref name } if name == "Amount" => {
                 println!("{}: {}", name, result.decode::<Amount>().unwrap());
             },
+            Type::Other { ref name } if name == "Vec" => {
+                println!("Raw Vec: {}", String::from_utf8_lossy(&result.raw));
+            },
             Type::Other { ref name } => {
                 println!("{}: {}", name, to_hex(&result.raw));
             },
@@ -493,6 +519,8 @@ pub enum CliArg {
     I16(i16),
     I8(i8),
     Bool(bool),
+    NonFungibleId(NonFungibleId),
+    SubstateAddress(SubstateAddress),
 }
 
 impl FromStr for CliArg {
@@ -526,23 +554,95 @@ impl FromStr for CliArg {
         if let Ok(v) = s.parse::<bool>() {
             return Ok(CliArg::Bool(v));
         }
+
+        if let Ok(v) = s.parse::<SubstateAddress>() {
+            return Ok(CliArg::SubstateAddress(v));
+        }
+
+        if let Some(("nft", nft_id)) = s.split_once('_') {
+            match NonFungibleId::try_from_canonical_string(nft_id) {
+                Ok(v) => {
+                    return Ok(CliArg::NonFungibleId(v));
+                },
+                Err(e) => {
+                    eprintln!(
+                        "WARN: '{}' is not a valid NonFungibleId ({:?}) and will be interpreted as a string",
+                        s, e
+                    );
+                },
+            }
+        }
         Ok(CliArg::String(s.to_string()))
     }
 }
 
 impl CliArg {
-    pub fn to_arg(&self) -> Arg {
+    pub fn into_arg(self) -> Arg {
         match self {
             CliArg::String(s) => arg!(s),
-            CliArg::U64(v) => arg!(*v),
-            CliArg::U32(v) => arg!(*v),
-            CliArg::U16(v) => arg!(*v),
-            CliArg::U8(v) => arg!(*v),
-            CliArg::I64(v) => arg!(*v),
-            CliArg::I32(v) => arg!(*v),
-            CliArg::I16(v) => arg!(*v),
-            CliArg::I8(v) => arg!(*v),
-            CliArg::Bool(v) => arg!(*v),
+            CliArg::U64(v) => arg!(v),
+            CliArg::U32(v) => arg!(v),
+            CliArg::U16(v) => arg!(v),
+            CliArg::U8(v) => arg!(v),
+            CliArg::I64(v) => arg!(v),
+            CliArg::I32(v) => arg!(v),
+            CliArg::I16(v) => arg!(v),
+            CliArg::I8(v) => arg!(v),
+            CliArg::Bool(v) => arg!(v),
+            CliArg::SubstateAddress(v) => arg!(v.to_canonical_hash()),
+            CliArg::NonFungibleId(v) => arg!(v),
         }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct SpecificNonFungibleMintOutput {
+    pub resource_address: ResourceAddress,
+    pub non_fungible_id: NonFungibleId,
+}
+
+impl FromStr for SpecificNonFungibleMintOutput {
+    type Err = anyhow::Error;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let (resource_address, non_fungible_id) = s
+            .split_once(',')
+            .ok_or_else(|| anyhow!("Expected resource address and non-fungible id"))?;
+        let resource_address = SubstateAddress::from_str(resource_address)?;
+        let resource_address = resource_address
+            .as_resource_address()
+            .ok_or_else(|| anyhow!("Expected resource address but got {}", resource_address))?;
+        let non_fungible_id = non_fungible_id
+            .split_once('_')
+            .map(|(_, b)| b)
+            .unwrap_or(non_fungible_id);
+        let non_fungible_id =
+            NonFungibleId::try_from_canonical_string(non_fungible_id).map_err(|e| anyhow!("{:?}", e))?;
+        Ok(SpecificNonFungibleMintOutput {
+            resource_address,
+            non_fungible_id,
+        })
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct NewNonFungibleMintOutput {
+    pub resource_address: ResourceAddress,
+    pub count: u8,
+}
+
+impl FromStr for NewNonFungibleMintOutput {
+    type Err = anyhow::Error;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let (resource_address, count_str) = s.split_once(',').unwrap_or((s, "1"));
+        let resource_address = SubstateAddress::from_str(resource_address)?;
+        let resource_address = resource_address
+            .as_resource_address()
+            .ok_or_else(|| anyhow!("Expected resource address but got {}", resource_address))?;
+        Ok(NewNonFungibleMintOutput {
+            resource_address,
+            count: count_str.parse()?,
+        })
     }
 }

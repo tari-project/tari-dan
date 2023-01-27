@@ -51,6 +51,8 @@ pub async fn create_account(world: &mut TariWorld, account_name: String, validat
             dump_outputs_into: None,
             account_template_address: None,
             dry_run: false,
+            non_fungible_mint_outputs: vec![],
+            new_non_fungible_outputs: vec![],
         },
     };
     let mut client = get_validator_node_client(world, validator_node_name).await;
@@ -104,6 +106,8 @@ pub async fn create_component(
             dump_outputs_into: None,
             account_template_address: None,
             dry_run: false,
+            non_fungible_mint_outputs: vec![],
+            new_non_fungible_outputs: vec![],
         },
     };
     let mut client = get_validator_node_client(world, vn_name).await;
@@ -127,7 +131,7 @@ fn add_substate_addresses(world: &mut TariWorld, outputs_name: String, diff: &Su
                 outputs.insert(
                     format!("components/{}", component.module_name),
                     VersionedSubstateAddress {
-                        address: *addr,
+                        address: addr.clone(),
                         version: data.version(),
                     },
                 );
@@ -135,21 +139,21 @@ fn add_substate_addresses(world: &mut TariWorld, outputs_name: String, diff: &Su
             },
             SubstateAddress::Resource(_) => {
                 outputs.insert(format!("resources/{}", counters[1]), VersionedSubstateAddress {
-                    address: *addr,
+                    address: addr.clone(),
                     version: data.version(),
                 });
                 counters[1] += 1;
             },
             SubstateAddress::Vault(_) => {
                 outputs.insert(format!("vaults/{}", counters[2]), VersionedSubstateAddress {
-                    address: *addr,
+                    address: addr.clone(),
                     version: data.version(),
                 });
                 counters[2] += 1;
             },
             SubstateAddress::NonFungible(_, _) => {
                 outputs.insert(format!("nfts/{}", counters[3]), VersionedSubstateAddress {
-                    address: *addr,
+                    address: addr.clone(),
                     version: data.version(),
                 });
                 counters[3] += 1;
@@ -179,7 +183,7 @@ pub async fn call_method(
         .unwrap_or_else(|| panic!("No outputs found with name {}", input_group))
         .iter()
         .find(|(name, _)| **name == component_name)
-        .map(|(_, data)| data)
+        .map(|(_, data)| data.clone())
         .unwrap_or_else(|| panic!("No component named {}", component_name));
 
     let instruction = CliInstruction::CallMethod {
@@ -206,6 +210,8 @@ pub async fn call_method(
             dump_outputs_into: None,
             account_template_address: None,
             dry_run: false,
+            non_fungible_mint_outputs: vec![],
+            new_non_fungible_outputs: vec![],
         },
     };
     let mut client = get_validator_node_client(world, vn_name).await;
@@ -236,7 +242,7 @@ pub async fn submit_manifest(
         .flat_map(|(name, outputs)| {
             outputs
                 .iter()
-                .map(move |(child_name, addr)| (format!("{}/{}", name, child_name), addr.address.into()))
+                .map(move |(child_name, addr)| (format!("{}/{}", name, child_name), addr.address.clone().into()))
         })
         .collect();
 
@@ -262,7 +268,7 @@ pub async fn submit_manifest(
                 .get(s.trim())
                 .unwrap_or_else(|| panic!("No outputs named {}", s.trim()))
         })
-        .map(|(_, addr)| *addr)
+        .map(|(_, addr)| addr.clone())
         .collect();
 
     let args = CommonSubmitArgs {
@@ -274,6 +280,8 @@ pub async fn submit_manifest(
         dump_outputs_into: None,
         account_template_address: None,
         dry_run: false,
+        non_fungible_mint_outputs: vec![],
+        new_non_fungible_outputs: vec![],
     };
     let resp = submit_transaction(instructions, args, data_dir, &mut client)
         .await

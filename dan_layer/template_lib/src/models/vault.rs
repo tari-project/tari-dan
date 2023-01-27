@@ -20,8 +20,6 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use std::collections::BTreeSet;
-
 use tari_bor::{borsh, Decode, Encode};
 use tari_template_abi::{
     call_engine,
@@ -159,7 +157,7 @@ impl Vault {
         resp.decode().expect("failed to decode Amount")
     }
 
-    pub fn get_non_fungible_ids(&self) -> BTreeSet<NonFungibleId> {
+    pub fn get_non_fungible_ids(&self) -> Vec<NonFungibleId> {
         let resp: InvokeResult = call_engine(EngineOp::VaultInvoke, &VaultInvokeArg {
             vault_ref: self.vault_ref(),
             action: VaultAction::GetNonFungibleIds,

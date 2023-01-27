@@ -135,7 +135,7 @@ impl ResourceContainer {
                     .map(|id| {
                         token_ids
                             .take(id)
-                            .ok_or(ResourceError::NonFungibleTokenIdNotFound { token: *id })
+                            .ok_or_else(|| ResourceError::NonFungibleTokenIdNotFound { token: id.clone() })
                     })
                     .collect::<Result<_, _>>()?;
                 Ok(ResourceContainer::non_fungible(*self.resource_address(), taken_tokens))

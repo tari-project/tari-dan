@@ -21,7 +21,7 @@
 //   USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 use tari_dan_engine::packager::TemplateModuleLoader;
-use tari_template_lib::models::TemplateAddress;
+use tari_engine_types::TemplateAddress;
 
 pub trait TemplateProvider {
     type Template: TemplateModuleLoader;
