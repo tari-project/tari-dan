@@ -21,7 +21,8 @@
 //   USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 use tari_template_lib::prelude::*;
-use tari_template_lib::Hash;
+use std::fmt;
+use std::vec::Vec;
 
 #[derive(Debug, Clone, Encode, Decode, Hash)]
 pub enum Emoji {
@@ -31,9 +32,28 @@ pub enum Emoji {
     Wink,
 }
 
+impl fmt::Display for Emoji {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        let s = match self {
+            Smile => "\u{1F600}",
+            Sweat => "\u{1F605}",
+            Laugh => "\u{1F602}",
+            Wink => "\u{1F609}",
+        };
+        write!(f, "{}", s)
+    }
+}
+
 #[derive(Debug, Clone, Encode, Decode, Hash)]
-pub struct EmojiId {
-    pub emojis: Vec<Emoji>,
+pub struct EmojiId(Vec<Emoji>);
+
+impl fmt::Display for EmojiId {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        for emoji in &self.0 {
+            write!(f, "{}", emoji)?;
+        }
+        Ok(())
+    }
 }
 
 /// This template implements a classic, first come first served, constant price NFT drop
@@ -65,9 +85,9 @@ mod emoji_id {
         }
 
         // TODO: return change
-        pub fn mint(&mut self, emojis: Vec<Emoji>, payment: Bucket) -> Bucket {
+        pub fn mint(&mut self, emoji_id: EmojiId, payment: Bucket) -> Bucket {
             assert!(
-                !emojis.is_empty() && emojis.len() as u64 <= self.max_emoji_id_len,
+                !emoji_id.0.is_empty() && emoji_id.0.len() as u64 <= self.max_emoji_id_len,
                 "Invalid Emoji ID length"
             );
 
@@ -84,11 +104,9 @@ mod emoji_id {
             //      2. Enforce that always an NFT's immutable data must be unique in the resource's scope
             //      3. Ad-hoc uniqueness fields in a NFT resource
             // We are going with (1) for now
-            //let hash = Hash::try_from_vec(encode(&emojis).unwrap()).unwrap();
-            //let id = NonFungibleId(hash);
             let id = NonFungibleId::random();
             let mut immutable_data = Metadata::new();
-            immutable_data.insert("emojis", format!("Emojis: {:?}", emojis));
+            immutable_data.insert("emoji id", format!("Emojis: {}", emoji_id));
             let nft = NonFungible::new(immutable_data, &{});
             
             // if a previous emoji id was minted with the same emojis, the hash will be the same

@@ -484,9 +484,7 @@ mod emoji_id {
     }
 
     #[derive(Debug, Clone, Encode, Decode, Hash)]
-    pub struct EmojiId {
-        pub emojis: Vec<Emoji>,
-    }
+    pub struct EmojiId(Vec<Emoji>);
 
     #[test]
     fn mint_and_withdraw() {
@@ -543,7 +541,7 @@ mod emoji_id {
 
         // mint a new emoji_id
         // TODO: transaction manifests do not support passing a arbitrary type (like Vec<Emoji>)
-        let emoji_vec = vec![Emoji::Smile, Emoji::Laugh];
+        let emoji_id = EmojiId(vec![Emoji::Smile, Emoji::Laugh]);
         template_test
             .execute_and_commit(vec![
                 Instruction::CallMethod {
@@ -557,7 +555,7 @@ mod emoji_id {
                 Instruction::CallMethod {
                     component_address: emoji_id_minter,
                     method: "mint".to_string(),
-                    args: args![Literal(emoji_vec), Variable("payment")],
+                    args: args![Literal(emoji_id), Variable("payment")],
                 },
                 Instruction::PutLastInstructionOutputOnWorkspace {
                     key: b"emoji_id".to_vec(),
