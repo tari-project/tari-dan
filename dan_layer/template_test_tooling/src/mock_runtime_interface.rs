@@ -25,12 +25,13 @@ use tari_template_lib::{
         ComponentRef,
         InvokeResult,
         LogLevel,
+        NonFungibleAction,
         ResourceAction,
         ResourceRef,
         VaultAction,
         WorkspaceAction,
     },
-    models::{ComponentAddress, ComponentHeader, ResourceAddress, VaultRef},
+    models::{ComponentAddress, ComponentHeader, NonFungibleAddress, ResourceAddress, VaultRef},
     Hash,
 };
 
@@ -156,6 +157,19 @@ impl RuntimeInterface for MockRuntimeInterface {
         match self.invoke_result.read().unwrap().as_ref() {
             Some(result) => Ok(result.clone()),
             None => self.inner.workspace_invoke(action, args),
+        }
+    }
+
+    fn non_fungible_invoke(
+        &self,
+        nf_addr: NonFungibleAddress,
+        action: NonFungibleAction,
+        args: EngineArgs,
+    ) -> Result<InvokeResult, RuntimeError> {
+        self.add_call("non_fungible_invoke");
+        match self.invoke_result.read().unwrap().as_ref() {
+            Some(result) => Ok(result.clone()),
+            None => self.inner.non_fungible_invoke(nf_addr, action, args),
         }
     }
 
