@@ -83,7 +83,7 @@ pub struct Pacemaker<T> {
     max_timeout: Duration,
 }
 
-impl<T: Copy + Debug + PartialEq + Eq + Hash + Send + Sync + 'static> Pacemaker<T> {
+impl<T: Clone + Debug + PartialEq + Eq + Hash + Send + Sync + 'static> Pacemaker<T> {
     pub fn spawn(
         rx_start_signal: Receiver<T>,
         rx_shutdown_signal: Receiver<T>,
@@ -117,7 +117,7 @@ impl<T: Copy + Debug + PartialEq + Eq + Hash + Send + Sync + 'static> Pacemaker<
                 msg = self.rx_start_signal.recv() => {
                     if let Some(wait_over) = msg {
                         let (tx_stop_timeout, rx_stop_timeout) = oneshot::channel::<()>();
-                        self.tx_inner_map.lock().unwrap().insert(wait_over, tx_stop_timeout);
+                        self.tx_inner_map.lock().unwrap().insert(wait_over.clone(), tx_stop_timeout);
                         info!(
                             target: LOG_TARGET,
                             "Received start wait signal for value: {:?}", wait_over
@@ -127,7 +127,7 @@ impl<T: Copy + Debug + PartialEq + Eq + Hash + Send + Sync + 'static> Pacemaker<
                         let _join = tokio::spawn(async move {
                             tokio::select! {
                                 _ = tokio::time::sleep(max_timeout) => {
-                                    if let Err(e) = send_timeout_message(wait_over, tx_waiter_status).await {
+                                    if let Err(e) = send_timeout_message(wait_over.clone(), tx_waiter_status).await {
                                         error!(target: LOG_TARGET, "failed to send timeout status message for value = {:?} with error = {}", wait_over, e);
                                     }
                                     tx_inner_map.lock().unwrap().remove(&wait_over);
