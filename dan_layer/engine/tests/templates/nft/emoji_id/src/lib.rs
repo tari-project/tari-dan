@@ -70,7 +70,7 @@ mod emoji_id {
 
     impl EmojiIdMinter {
         // TODO: in this example we need to specify the payment resource, but there should be native support for Thaums
-        // TODO: decoding fails if "max_emoji_id_len" is usize instead of u64, we may need to add support to it
+        // TODO: decoding fails if "max_emoji_id_len" is usize instead of u64, we may need to add support for it
         pub fn new(payment_resource_address: ResourceAddress, max_emoji_id_len: u64, mint_price: Amount) -> Self {
             // Create the non-fungible resource with empty initial supply
             let resource_address = ResourceBuilder::non_fungible()
@@ -104,9 +104,9 @@ mod emoji_id {
             //      2. Enforce that always an NFT's immutable data must be unique in the resource's scope
             //      3. Ad-hoc uniqueness fields in a NFT resource
             // We are going with (1) for now
-            let id = NonFungibleId::random();
+            let id = NonFungibleId::from_string(emoji_id.to_string());
             let mut immutable_data = Metadata::new();
-            immutable_data.insert("emoji id", format!("Emojis: {}", emoji_id));
+            immutable_data.insert("emoji id", emoji_id.to_string());
             let nft = NonFungible::new(immutable_data, &{});
             
             // if a previous emoji id was minted with the same emojis, the hash will be the same
