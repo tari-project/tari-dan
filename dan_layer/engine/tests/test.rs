@@ -726,5 +726,17 @@ mod emoji_id {
             &emoji_id,
         )
         .unwrap_err();
+
+        // FIXME: trying to mint a new emoji id (different from the first) should work
+        //        but it gives a "Dangling bucket error"
+        // let emoji_id = EmojiId(vec![Emoji::Smile, Emoji::Wink]);
+        // mint_emoji_id(
+        // &mut template_test,
+        // account_address,
+        // faucet_resource,
+        // emoji_id_minter,
+        // &emoji_id,
+        // )
+        // .unwrap();
     }
 }
