@@ -1,7 +1,7 @@
 //   Copyright 2023 The Tari Project
 //   SPDX-License-Identifier: BSD-3-Clause
 
-use tari_bor::{borsh, Decode, Encode};
+use tari_bor::{borsh, decode_exact, encode, Decode, Encode};
 use tari_template_abi::{
     call_engine,
     rust::{fmt, fmt::Display, write},
@@ -12,9 +12,9 @@ use crate::{hash::HashParseError, models::Metadata, Hash};
 
 #[derive(Debug, Clone, Copy, Ord, PartialOrd, PartialEq, Eq, Encode, Decode, Hash)]
 #[cfg_attr(feature = "serde", derive(serde::Deserialize, serde::Serialize))]
-pub struct NftTokenId(Hash);
+pub struct NonFungibleId(Hash);
 
-impl NftTokenId {
+impl NonFungibleId {
     pub fn random() -> Self {
         let uuid = call_engine(EngineOp::GenerateUniqueId, &());
         Self(Hash::try_from_vec(uuid).unwrap())
@@ -30,7 +30,7 @@ impl NftTokenId {
     }
 }
 
-impl Display for NftTokenId {
+impl Display for NonFungibleId {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "nft_{}", self.0)
     }
@@ -38,14 +38,17 @@ impl Display for NftTokenId {
 
 #[derive(Debug, Clone, Encode, Decode)]
 #[cfg_attr(feature = "serde", derive(serde::Deserialize, serde::Serialize))]
-pub struct NftToken {
+pub struct NonFungible {
     metadata: Metadata,
     mutable_data: Vec<u8>,
 }
 
-impl NftToken {
-    pub fn new(metadata: Metadata, mutable_data: Vec<u8>) -> Self {
-        Self { metadata, mutable_data }
+impl NonFungible {
+    pub fn new<T: Encode>(metadata: Metadata, mutable_data: &T) -> Self {
+        Self {
+            metadata,
+            mutable_data: encode(mutable_data).unwrap(),
+        }
     }
 
     pub fn metadata(&self) -> &Metadata {
@@ -54,5 +57,21 @@ impl NftToken {
 
     pub fn mutable_data(&self) -> &[u8] {
         &self.mutable_data
+    }
+
+    pub fn get_data<T: Decode>(&self) -> T {
+        decode_exact(&self.mutable_data).expect("Failed to decode NonFungible data")
+    }
+
+    pub fn get_data_raw(&self) -> &[u8] {
+        &self.mutable_data
+    }
+
+    pub fn set_data<T: Encode>(&mut self, data: &T) {
+        self.mutable_data = encode(data).unwrap();
+    }
+
+    pub fn set_data_raw(&mut self, data: Vec<u8>) {
+        self.mutable_data = data;
     }
 }

@@ -4,4 +4,4 @@
 mod mock_runtime_interface;
 pub use mock_runtime_interface::*;
 mod template_test;
-pub use template_test::TemplateTest;
+pub use template_test::{SubstateType, TemplateTest};

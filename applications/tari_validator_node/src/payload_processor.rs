@@ -116,7 +116,7 @@ fn load_template_addresses_for_components(
     for component in components {
         let component = access.get_state::<_, Substate>(&SubstateAddress::Component(*component))?;
         let component = component
-            .into_substate()
+            .into_substate_value()
             .into_component()
             .expect("Component substate should be a component");
         template_addresses.push(component.template_address);

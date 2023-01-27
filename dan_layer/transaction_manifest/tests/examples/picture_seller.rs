@@ -9,7 +9,7 @@ fn main() {
     // initialize the component
     // TODO: This creates a new component but does not use it as a component input for call method
     //       because this is not currently supported.
-    let picture_seller = PictureSeller::new(1_000);
+    let picture_seller = PictureSeller::new(1_000u64);
 
     let picture_seller = global!["picture_seller_addr"];
     let faucet = global!["test_faucet"];
@@ -18,14 +18,14 @@ fn main() {
     let mut account = global!["account"];
 
     // initialize a user account with some faucet funds
-    let funds = faucet.take_free_coins(1_000);
+    let funds = faucet.take_free_coins(Amount(1_000));
     account.deposit(funds);
 
     // TODO: XTR builtin
     let XTR = global!["xtr_resource"];
 
     // buy a picture
-    let bucket = account.withdraw(XTR, 1_000);
+    let bucket = account.withdraw(XTR, 1_000u64);
     let picture = picture_seller.buy(bucket);
 
     // store our brand new picture in our account

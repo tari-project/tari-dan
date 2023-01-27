@@ -65,7 +65,7 @@ impl ComponentManager {
             },
         };
 
-        self.store.save_with_id(&substate, &substate_addr.to_string())?;
+        self.store.save_with_id(&substate, &substate_addr.to_address_string())?;
         Ok(())
     }
 
@@ -79,6 +79,9 @@ impl ComponentManager {
         for (addr, substate) in diff.up_iter() {
             match addr {
                 addr @ SubstateAddress::Component(_) => {
+                    if let Some((addr, version)) = component.take() {
+                        self.add_root_substate(addr, version, children.drain(..).collect())?;
+                    }
                     component = Some((addr, substate.version()));
                 },
                 addr @ SubstateAddress::Resource(_) |
@@ -109,15 +112,15 @@ impl ComponentManager {
     //         .ok_or_else(|| anyhow!("No version {} found for substate {}", version, address))?;
     //     substate.versions.remove(pos);
     //     if substate.versions.is_empty() {
-    //         self.store.delete(&address.to_string())?;
+    //         self.store.delete(&address.to_address_string())?;
     //     } else {
-    //         self.store.save_with_id(&substate, &address.to_string())?;
+    //         self.store.save_with_id(&substate, &address.to_address_string())?;
     //     }
     //     Ok(())
     // }
 
     pub fn get_root_substate(&self, substate_addr: &SubstateAddress) -> anyhow::Result<Option<SubstateMetadata>> {
-        let meta = self.store.get(&substate_addr.to_string()).or_else(|e| {
+        let meta = self.store.get(&substate_addr.to_address_string()).or_else(|e| {
             if e.kind() == io::ErrorKind::NotFound {
                 Ok(None)
             } else {
