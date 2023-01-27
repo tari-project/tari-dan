@@ -32,10 +32,11 @@ use crate::runtime::RuntimeError;
 
 #[derive(Debug, Clone)]
 pub struct IdProvider {
-    current_id: Arc<AtomicU32>,
     transaction_hash: Hash,
     max_ids: u32,
+    current_id: Arc<AtomicU32>,
     bucket_id: Arc<AtomicU32>,
+    uuid: Arc<AtomicU32>,
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -47,10 +48,12 @@ pub struct MaxIdsExceeded {
 impl IdProvider {
     pub fn new(transaction_hash: Hash, max_ids: u32) -> Self {
         Self {
-            current_id: Arc::new(AtomicU32::new(0)),
             transaction_hash,
-            bucket_id: Arc::new(AtomicU32::new(1000)),
             max_ids,
+            // TODO: these should be ranges
+            current_id: Arc::new(AtomicU32::new(0)),
+            bucket_id: Arc::new(AtomicU32::new(1000)),
+            uuid: Arc::new(AtomicU32::new(0)),
         }
     }
 
@@ -95,7 +98,8 @@ impl IdProvider {
     }
 
     pub fn new_uuid(&self) -> Result<[u8; 32], RuntimeError> {
-        let id = self.new_id()?;
+        let n = self.uuid.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        let id = hasher("uuid_output").chain(&self.transaction_hash).chain(&n).result();
         Ok(id.into_array())
     }
 }

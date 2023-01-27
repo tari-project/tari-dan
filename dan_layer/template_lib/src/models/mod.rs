@@ -43,6 +43,3 @@ pub use template::TemplateAddress;
 
 mod vault;
 pub use vault::{Vault, VaultId, VaultRef};
-
-mod substate_address;
-pub use substate_address::SubstateAddress;
