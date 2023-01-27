@@ -25,20 +25,21 @@ use std::fmt;
 use std::vec::Vec;
 
 #[derive(Debug, Clone, Encode, Decode, Hash)]
+#[repr(i32)]
 pub enum Emoji {
-    Smile,
-    Sweat,
-    Laugh,
-    Wink,
+    Smile = 0x00,
+    Sweat = 0x01,
+    Laugh = 0x02,
+    Wink =0x03,
 }
 
 impl fmt::Display for Emoji {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         let s = match self {
-            Smile => "\u{1F600}",
-            Sweat => "\u{1F605}",
-            Laugh => "\u{1F602}",
-            Wink => "\u{1F609}",
+            Emoji::Smile => "\u{1F600}",
+            Emoji::Sweat => "\u{1F605}",
+            Emoji::Laugh => "\u{1F602}",
+            Emoji::Wink => "\u{1F609}",
         };
         write!(f, "{}", s)
     }

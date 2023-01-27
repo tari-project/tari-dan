@@ -565,21 +565,57 @@ mod basic_nft {
 }
 
 mod emoji_id {
+    use tari_engine_types::commit_result::FinalizeResult;
+    use tari_template_lib::prelude::ResourceAddress;
+
     use super::*;
 
     #[derive(Debug, Clone, Encode, Decode, Hash)]
+    #[repr(i32)]
     pub enum Emoji {
-        Smile,
-        Sweat,
-        Laugh,
-        Wink,
+        Smile = 0x00,
+        Sweat = 0x01,
+        Laugh = 0x02,
+        Wink = 0x03,
     }
 
     #[derive(Debug, Clone, Encode, Decode, Hash)]
     pub struct EmojiId(Vec<Emoji>);
 
+    fn mint_emoji_id(
+        template_test: &mut TemplateTest<MockRuntimeInterface>,
+        account_address: ComponentAddress,
+        faucet_resource: ResourceAddress,
+        emoji_id_minter: ComponentAddress,
+        emoji_id: &EmojiId,
+    ) -> Result<FinalizeResult, anyhow::Error> {
+        template_test.execute_and_commit(vec![
+            Instruction::CallMethod {
+                component_address: account_address,
+                method: "withdraw".to_string(),
+                args: args![faucet_resource, Amount(25)],
+            },
+            Instruction::PutLastInstructionOutputOnWorkspace {
+                key: b"payment".to_vec(),
+            },
+            Instruction::CallMethod {
+                component_address: emoji_id_minter,
+                method: "mint".to_string(),
+                args: args![Literal(emoji_id.clone()), Variable("payment")],
+            },
+            Instruction::PutLastInstructionOutputOnWorkspace {
+                key: b"emoji_id".to_vec(),
+            },
+            Instruction::CallMethod {
+                component_address: account_address,
+                method: "deposit".to_string(),
+                args: args![Variable("emoji_id")],
+            },
+        ])
+    }
+
     #[test]
-    fn mint_and_withdraw() {
+    fn mint_emoji_ids() {
         let mut template_test = TemplateTest::new(vec!["tests/templates/faucet", "tests/templates/nft/emoji_id"]);
 
         // create an account
@@ -605,8 +641,23 @@ mod emoji_id {
             .unwrap();
 
         // initialize the emoji id minter
-        let emoji_id_minter: ComponentAddress =
-            template_test.call_function("EmojiIdMinter", "new", args![faucet_resource, 10_u64, Amount(20)]);
+        let emoji_id_template = template_test.get_template_address("EmojiIdMinter");
+        let max_emoji_id_len = 10_u64;
+        let price = Amount(20);
+        let result = template_test
+            .execute_and_commit(vec![Instruction::CallFunction {
+                template_address: emoji_id_template,
+                function: "new".to_string(),
+                args: args![faucet_resource, max_emoji_id_len, price],
+            }])
+            .unwrap();
+        let emoji_id_minter: ComponentAddress = result.execution_results[0].decode().unwrap();
+        let emoji_id_resource = result
+            .result
+            .expect("Emoji id initialization failed")
+            .up_iter()
+            .find_map(|(_, s)| s.substate_address().as_resource_address())
+            .unwrap();
 
         // at the beggining we don't have any emojis minted
         let total_supply: Amount = template_test.call_method(emoji_id_minter, "total_supply", args![]);
@@ -627,60 +678,53 @@ mod emoji_id {
             let coins = faucet.take_free_coins();
             account.deposit(coins);
         "#,
-                vars,
+                vars.clone(),
             )
             .unwrap();
 
         // mint a new emoji_id
         // TODO: transaction manifests do not support passing a arbitrary type (like Vec<Emoji>)
         let emoji_id = EmojiId(vec![Emoji::Smile, Emoji::Laugh]);
-        template_test
-            .execute_and_commit(vec![
-                Instruction::CallMethod {
-                    component_address: account_address,
-                    method: "withdraw".to_string(),
-                    args: args![faucet_resource, Amount(25)],
-                },
-                Instruction::PutLastInstructionOutputOnWorkspace {
-                    key: b"payment".to_vec(),
-                },
-                Instruction::CallMethod {
-                    component_address: emoji_id_minter,
-                    method: "mint".to_string(),
-                    args: args![Literal(emoji_id), Variable("payment")],
-                },
-                Instruction::PutLastInstructionOutputOnWorkspace {
-                    key: b"emoji_id".to_vec(),
-                },
-                Instruction::CallMethod {
-                    component_address: account_address,
-                    method: "deposit".to_string(),
-                    args: args![Variable("emoji_id")],
-                },
-            ])
-            .unwrap();
+        mint_emoji_id(
+            &mut template_test,
+            account_address,
+            faucet_resource,
+            emoji_id_minter,
+            &emoji_id,
+        )
+        .unwrap();
+
+        // check that the account holds the newly minted nft
+        let nft_balance: Amount = template_test.call_method(account_address, "balance", args![emoji_id_resource]);
+        assert_eq!(nft_balance, Amount(1));
 
         // the supply of emoji ids should have increased
         let total_supply: Amount = template_test.call_method(emoji_id_minter, "total_supply", args![]);
         assert_eq!(total_supply, Amount(1));
-    }
 
-    #[ignore]
-    #[test]
-    fn insufficient_payments_are_rejected() {
-        todo!()
-    }
+        // emoji id are unique, so minting the same emojis again must fail
+        mint_emoji_id(
+            &mut template_test,
+            account_address,
+            faucet_resource,
+            emoji_id_minter,
+            &emoji_id,
+        )
+        .unwrap_err();
 
-    #[ignore]
-    #[test]
-    fn emoji_ids_are_unique() {
-        // check that duplicated emoji ids cannot be minted
-        todo!()
-    }
-
-    #[ignore]
-    #[test]
-    fn invalid_emoji_lengths_are_rejected() {
-        todo!()
+        // emoji ids with invalid lenght must fail
+        let mut too_long_emoji_id = vec![];
+        for _ in 0..=max_emoji_id_len {
+            too_long_emoji_id.push(Emoji::Smile);
+        }
+        let emoji_id = EmojiId(too_long_emoji_id);
+        mint_emoji_id(
+            &mut template_test,
+            account_address,
+            faucet_resource,
+            emoji_id_minter,
+            &emoji_id,
+        )
+        .unwrap_err();
     }
 }
