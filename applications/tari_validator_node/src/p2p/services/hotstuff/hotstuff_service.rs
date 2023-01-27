@@ -94,7 +94,7 @@ impl HotstuffService {
         let (tx_vote_message, rx_vote_message) = channel(100);
         let (tx_events, _) = broadcast::channel(100);
         let (tx_pacemaker_status, rx_pacemaker_status) = channel(100);
-        let (tx_pacemaker_start_wait, rx_pacemaker_stop_wait) = channel(100);
+        let (tx_pacemaker_start_wait, rx_pacemaker_start_wait) = channel(100);
         let (tx_pacemaker_stop_wait, rx_pacemaker_stop_wait) = channel(100);
 
         let leader_strategy = PayloadSpecificLeaderStrategy {};
@@ -127,8 +127,8 @@ impl HotstuffService {
         );
 
         Pacemaker::spawn(
-            rx_pacemaker_start_signal,
-            rx_pacemaker_stop_signal,
+            rx_pacemaker_start_wait,
+            rx_pacemaker_stop_wait,
             tx_pacemaker_status,
             NETWORK_LATENCY,
             shutdown.clone(),
