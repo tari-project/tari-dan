@@ -32,6 +32,7 @@ import { StyledPaper } from '../../Components/StyledComponents';
 import PageHeading from '../../Components/PageHeading';
 import Typography from '@mui/material/Typography';
 import Grid from '@mui/material/Grid';
+import SecondaryHeading from '../../Components/SecondaryHeading';
 
 type loaderData = [string, Map<string, any[]>, Map<string, any[]>];
 
@@ -120,12 +121,12 @@ export default function Transaction() {
           <Typography variant="h6" sx={{ mt: 4, mb: 4, textAlign: 'center' }}>
             {payloadId}
           </Typography>
-          <Typography sx={{ textAlign: 'center' }}>
-            Outputs : {outputs?.size}
-          </Typography>
         </Grid>
         <Grid item xs={12} md={12} lg={12}>
           <StyledPaper>
+            <Typography>
+              <strong>Outputs :</strong> {outputs?.size}
+            </Typography>
             <Mermaid chart={mermaid} />
           </StyledPaper>
         </Grid>
@@ -136,6 +137,9 @@ export default function Transaction() {
               <StyledPaper>
                 <Output key={shard} shard={shard} output={output} />
               </StyledPaper>
+            </Grid>
+            <Grid item xs={12} md={12} lg={12}>
+              <SecondaryHeading>Substates</SecondaryHeading>
             </Grid>
             <Grid item xs={12} md={12} lg={12}>
               <StyledPaper>

@@ -162,7 +162,6 @@ export default function Substates({ substates }: any) {
   });
   return (
     <TableContainer>
-      <SecondaryHeading>Substates</SecondaryHeading>
       <Table>
         <TableHead>
           <TableRow>
