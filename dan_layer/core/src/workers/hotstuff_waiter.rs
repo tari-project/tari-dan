@@ -20,7 +20,10 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use std::collections::{HashMap, HashSet};
+use std::{
+    collections::{HashMap, HashSet},
+    time::Duration,
+};
 
 use log::*;
 use tari_common_types::types::{FixedHash, PublicKey, Signature};
@@ -74,6 +77,7 @@ use crate::{
 };
 
 const LOG_TARGET: &str = "tari::dan_layer::hotstuff_waiter";
+const NETWORK_LATENCY: Duration = Duration::from_secs(10);
 
 pub struct HotStuffWaiter<
     TPayload,
@@ -113,6 +117,8 @@ pub struct HotStuffWaiter<
     consensus_constants: ConsensusConstants,
     /// NEWVIEW message counts - TODO: this will bloat memory maybe moving to the db is better
     newview_message_counts: HashMap<(ShardId, PayloadId), HashSet<TAddr>>,
+    /// Network latency
+    network_latency: Duration,
 }
 
 impl<TPayload, TAddr, TLeaderStrategy, TEpochManager, TPayloadProcessor, TShardStore, TSigningService>
@@ -194,6 +200,7 @@ where
             shard_store,
             consensus_constants,
             newview_message_counts: HashMap::new(),
+            network_latency: NETWORK_LATENCY,
         }
     }
 
