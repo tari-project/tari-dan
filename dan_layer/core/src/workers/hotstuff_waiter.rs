@@ -56,6 +56,7 @@ use tokio::{
     task::JoinHandle,
 };
 
+use super::pacemaker_worker::PacemakerWaitStatus;
 use crate::{
     consensus_constants::ConsensusConstants,
     models::{
@@ -77,7 +78,7 @@ use crate::{
 };
 
 const LOG_TARGET: &str = "tari::dan_layer::hotstuff_waiter";
-const NETWORK_LATENCY: Duration = Duration::from_secs(10);
+pub const NETWORK_LATENCY: Duration = Duration::from_secs(10);
 
 pub struct HotStuffWaiter<
     TPayload,
@@ -100,6 +101,8 @@ pub struct HotStuffWaiter<
     rx_hs_message: Receiver<(TAddr, HotStuffMessage<TPayload, TAddr>)>,
     /// Received vote messages
     rx_votes: Receiver<(TAddr, VoteMessage)>,
+    /// Received pacemaker waiting status
+    rx_pacemaker_status: Receiver<((PayloadId, ShardId, Committee<TAddr>), PacemakerWaitStatus)>,
     /// Hotstuff messages that should be delivered to the leader
     tx_leader: Sender<(TAddr, HotStuffMessage<TPayload, TAddr>)>,
     /// Hotstuff messages that should be delivered to the replicas
@@ -108,6 +111,10 @@ pub struct HotStuffWaiter<
     tx_vote_message: Sender<(VoteMessage, TAddr)>,
     /// HotstuffEvent channel
     tx_events: broadcast::Sender<HotStuffEvent>,
+    /// Start waiting messages to be sent to the pacemaker, whenever a new view or vote is performed by the replicas
+    tx_pacemaker_start_wait: Sender<(PayloadId, ShardId, Committee<TAddr>)>,
+    /// Stop waiting messages to be sent to the pacemaker, whenver replicas receive leader response
+    tx_pacemaker_stop_wait: Sender<(PayloadId, ShardId, Committee<TAddr>)>,
     /// The payload processor. This determines whether a payload proposal results in an accepted or rejected vote.
     payload_processor: TPayloadProcessor,
     /// Store used to persist consensus state.
@@ -140,10 +147,13 @@ where
         rx_new: Receiver<(TPayload, ShardId)>,
         rx_hs_message: Receiver<(TAddr, HotStuffMessage<TPayload, TAddr>)>,
         rx_votes: Receiver<(TAddr, VoteMessage)>,
+        rx_pacemaker_status: Receiver<((PayloadId, ShardId, Committee<TAddr>), PacemakerWaitStatus)>,
         tx_leader: Sender<(TAddr, HotStuffMessage<TPayload, TAddr>)>,
         tx_broadcast: Sender<(HotStuffMessage<TPayload, TAddr>, Vec<TAddr>)>,
         tx_vote_message: Sender<(VoteMessage, TAddr)>,
         tx_events: broadcast::Sender<HotStuffEvent>,
+        tx_pacemaker_start_wait: Sender<(PayloadId, ShardId, Committee<TAddr>)>,
+        tx_pacemaker_stop_wait: Sender<(PayloadId, ShardId, Committee<TAddr>)>,
         payload_processor: TPayloadProcessor,
         shard_store: TShardStore,
         shutdown: ShutdownSignal,
@@ -157,10 +167,13 @@ where
             rx_new,
             rx_hs_message,
             rx_votes,
+            rx_pacemaker_status,
             tx_leader,
             tx_broadcast,
             tx_vote_message,
             tx_events,
+            tx_pacemaker_start_wait,
+            tx_pacemaker_stop_wait,
             payload_processor,
             shard_store,
             consensus_constants,
@@ -176,10 +189,13 @@ where
         rx_new: Receiver<(TPayload, ShardId)>,
         rx_hs_message: Receiver<(TAddr, HotStuffMessage<TPayload, TAddr>)>,
         rx_votes: Receiver<(TAddr, VoteMessage)>,
+        rx_pacemaker_status: Receiver<((PayloadId, ShardId, Committee<TAddr>), PacemakerWaitStatus)>,
         tx_leader: Sender<(TAddr, HotStuffMessage<TPayload, TAddr>)>,
         tx_broadcast: Sender<(HotStuffMessage<TPayload, TAddr>, Vec<TAddr>)>,
         tx_vote_message: Sender<(VoteMessage, TAddr)>,
         tx_events: broadcast::Sender<HotStuffEvent>,
+        tx_pacemaker_start_wait: Sender<(PayloadId, ShardId, Committee<TAddr>)>,
+        tx_pacemaker_stop_wait: Sender<(PayloadId, ShardId, Committee<TAddr>)>,
         payload_processor: TPayloadProcessor,
         shard_store: TShardStore,
         consensus_constants: ConsensusConstants,
@@ -191,11 +207,14 @@ where
             leader_strategy,
             rx_new,
             rx_hs_message,
+            rx_pacemaker_status,
             rx_votes,
             tx_leader,
             tx_broadcast,
             tx_vote_message,
             tx_events,
+            tx_pacemaker_start_wait,
+            tx_pacemaker_stop_wait,
             payload_processor,
             shard_store,
             consensus_constants,

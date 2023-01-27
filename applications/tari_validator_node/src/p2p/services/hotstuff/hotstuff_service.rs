@@ -36,7 +36,8 @@ use tari_dan_core::{
     },
     workers::{
         events::{EventSubscription, HotStuffEvent},
-        hotstuff_waiter::HotStuffWaiter,
+        hotstuff_waiter::{HotStuffWaiter, NETWORK_LATENCY},
+        pacemaker_worker::Pacemaker,
     },
 };
 use tari_dan_engine::transaction::Transaction;
@@ -92,6 +93,9 @@ impl HotstuffService {
         let (tx_broadcast, rx_broadcast) = channel(100);
         let (tx_vote_message, rx_vote_message) = channel(100);
         let (tx_events, _) = broadcast::channel(100);
+        let (tx_pacemaker_status, rx_pacemaker_status) = channel(100);
+        let (tx_pacemaker_start_wait, rx_pacemaker_stop_wait) = channel(100);
+        let (tx_pacemaker_stop_wait, rx_pacemaker_stop_wait) = channel(100);
 
         let leader_strategy = PayloadSpecificLeaderStrategy {};
 
@@ -109,14 +113,25 @@ impl HotstuffService {
             rx_new,
             rx_hotstuff_messages,
             rx_vote_messages,
+            rx_pacemaker_status,
             tx_leader,
             tx_broadcast,
             tx_vote_message,
             tx_events.clone(),
+            tx_pacemaker_start_wait,
+            tx_pacemaker_stop_wait,
             payload_processor,
             shard_store_factory,
             shutdown.clone(),
             consensus_constants,
+        );
+
+        Pacemaker::spawn(
+            rx_pacemaker_start_signal,
+            rx_pacemaker_stop_signal,
+            tx_pacemaker_status,
+            NETWORK_LATENCY,
+            shutdown.clone(),
         );
 
         tokio::spawn(
