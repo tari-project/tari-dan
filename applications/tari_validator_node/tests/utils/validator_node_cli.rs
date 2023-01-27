@@ -51,6 +51,7 @@ pub async fn create_account(world: &mut TariWorld, account_name: String, validat
             dump_outputs_into: None,
             account_template_address: None,
             dry_run: false,
+            mint_outputs: vec![],
         },
     };
     let mut client = get_validator_node_client(world, validator_node_name).await;
@@ -104,6 +105,7 @@ pub async fn create_component(
             dump_outputs_into: None,
             account_template_address: None,
             dry_run: false,
+            mint_outputs: vec![],
         },
     };
     let mut client = get_validator_node_client(world, vn_name).await;
@@ -206,6 +208,7 @@ pub async fn call_method(
             dump_outputs_into: None,
             account_template_address: None,
             dry_run: false,
+            mint_outputs: vec![],
         },
     };
     let mut client = get_validator_node_client(world, vn_name).await;
@@ -274,6 +277,7 @@ pub async fn submit_manifest(
         dump_outputs_into: None,
         account_template_address: None,
         dry_run: false,
+        mint_outputs: vec![],
     };
     let resp = submit_transaction(instructions, args, data_dir, &mut client)
         .await

@@ -202,7 +202,7 @@ impl RuntimeInterface for RuntimeInterfaceImpl {
                             reason: "GetNonFungible resource action requires a resource address".to_string(),
                         })?;
                 let arg: ResourceGetNonFungibleArg = args.get(0)?;
-                let nft = self.tracker.get_non_fungible(&resource_address, arg.id)?;
+                let nft = self.tracker.get_non_fungible(&resource_address, &arg.id)?;
                 Ok(InvokeResult::encode(&nft)?)
             },
             ResourceAction::UpdateNonFungibleData => {

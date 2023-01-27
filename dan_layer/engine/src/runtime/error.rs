@@ -89,7 +89,8 @@ impl IsNotFoundError for RuntimeError {
             RuntimeError::ComponentNotFound { .. } |
                 RuntimeError::VaultNotFound { .. } |
                 RuntimeError::BucketNotFound { .. } |
-                RuntimeError::ResourceNotFound { .. }
+                RuntimeError::ResourceNotFound { .. } |
+                RuntimeError::NonFungibleNotFound { .. }
         )
     }
 }

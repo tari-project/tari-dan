@@ -164,13 +164,14 @@ impl StateTracker {
                 self.write_with(|state| {
                     let mut token_ids = BTreeSet::new();
                     for (id, token) in tokens {
-                        if state
-                            .new_non_fungibles
-                            .insert((resource_address, id.clone()), token)
+                        if self
+                            .get_non_fungible_internal(&resource_address, &id, state)
+                            .optional()?
                             .is_some()
                         {
                             return Err(RuntimeError::DuplicateNonFungibleId { token_id: id });
                         }
+                        state.new_non_fungibles.insert((resource_address, id.clone()), token);
                         if !token_ids.insert(id.clone()) {
                             return Err(RuntimeError::DuplicateNonFungibleId { token_id: id });
                         }
@@ -212,31 +213,38 @@ impl StateTracker {
     pub fn get_non_fungible(
         &self,
         resource_address: &ResourceAddress,
-        nft_id: NonFungibleId,
+        nft_id: &NonFungibleId,
     ) -> Result<NonFungible, RuntimeError> {
-        self.read_with(|state| {
-            match state
-                .new_non_fungibles
-                .get(&(*resource_address, nft_id.clone()))
-                .cloned()
-            {
-                Some(nft) => Ok(nft),
-                None => {
-                    let tx = self.state_store.read_access()?;
-                    let nft = tx
-                        .get_state::<_, Substate>(&SubstateAddress::NonFungible(*resource_address, nft_id.clone()))
-                        .optional()?
-                        .ok_or(RuntimeError::NonFungibleNotFound {
-                            resource_address: *resource_address,
-                            nft_id,
-                        })?;
-                    Ok(nft
-                        .into_substate_value()
-                        .into_non_fungible()
-                        .expect("Substate was not a non-fungible type at non-fungible address"))
-                },
-            }
-        })
+        self.read_with(|state| self.get_non_fungible_internal(resource_address, nft_id, state))
+    }
+
+    fn get_non_fungible_internal(
+        &self,
+        resource_address: &ResourceAddress,
+        nft_id: &NonFungibleId,
+        state: &WorkingState,
+    ) -> Result<NonFungible, RuntimeError> {
+        match state
+            .new_non_fungibles
+            .get(&(*resource_address, nft_id.clone()))
+            .cloned()
+        {
+            Some(nft) => Ok(nft),
+            None => {
+                let tx = self.state_store.read_access()?;
+                let nft = tx
+                    .get_state::<_, Substate>(&SubstateAddress::NonFungible(*resource_address, nft_id.clone()))
+                    .optional()?
+                    .ok_or_else(|| RuntimeError::NonFungibleNotFound {
+                        resource_address: *resource_address,
+                        nft_id: nft_id.clone(),
+                    })?;
+                Ok(nft
+                    .into_substate_value()
+                    .into_non_fungible()
+                    .expect("Substate was not a non-fungible type at non-fungible address"))
+            },
+        }
     }
 
     pub fn with_non_fungible_mut<R, F: FnOnce(&mut NonFungible) -> R>(

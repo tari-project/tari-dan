@@ -42,6 +42,7 @@ use tari_template_lib::{
     arg,
     args::Arg,
     models::{Amount, NonFungibleId},
+    prelude::ResourceAddress,
 };
 use tari_transaction_manifest::parse_manifest;
 use tari_utilities::hex::to_hex;
@@ -97,6 +98,8 @@ pub struct CommonSubmitArgs {
     pub account_template_address: Option<String>,
     #[clap(long)]
     pub dry_run: bool,
+    #[clap(long, short = 'm')]
+    pub mint_outputs: Vec<MintOutput>,
 }
 
 #[derive(Debug, Args, Clone)]
@@ -223,10 +226,17 @@ pub async fn submit_transaction(
 
     // TODO: we assume that all inputs will be consumed and produce a new output however this is only the case when the
     //       object is mutated
-    let outputs = inputs
+    let mut outputs = inputs
         .iter()
         .map(|versioned_addr| ShardId::from_address(&versioned_addr.address, versioned_addr.version + 1))
-        .collect();
+        .collect::<Vec<_>>();
+
+    outputs.extend(
+        common
+            .mint_outputs
+            .into_iter()
+            .map(|m| ShardId::from_address(&SubstateAddress::NonFungible(m.resource_address, m.non_fungible_id), 0)),
+    );
 
     // Convert to shard id
     let inputs = inputs
@@ -563,5 +573,34 @@ impl CliArg {
             CliArg::Bool(v) => arg!(*v),
             CliArg::NonFungibleId(v) => arg!(v),
         }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct MintOutput {
+    resource_address: ResourceAddress,
+    non_fungible_id: NonFungibleId,
+}
+
+impl FromStr for MintOutput {
+    type Err = anyhow::Error;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let (resource_address, non_fungible_id) =
+            s.split_once(',').ok_or_else(|| anyhow!("Invalid resource address"))?;
+        let resource_address = SubstateAddress::from_str(resource_address)?;
+        let resource_address = resource_address
+            .as_resource_address()
+            .ok_or_else(|| anyhow!("Expected resource address but got {}", resource_address))?;
+        let non_fungible_id = non_fungible_id
+            .split_once('_')
+            .map(|(_, b)| b)
+            .unwrap_or(non_fungible_id);
+        let non_fungible_id =
+            NonFungibleId::try_from_canonical_string(non_fungible_id).map_err(|e| anyhow!("{:?}", e))?;
+        Ok(MintOutput {
+            resource_address,
+            non_fungible_id,
+        })
     }
 }

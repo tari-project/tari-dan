@@ -92,6 +92,13 @@ impl SubstateAddress {
         }
     }
 
+    pub fn as_vault_id(&self) -> Option<VaultId> {
+        match self {
+            Self::Vault(id) => Some(*id),
+            _ => None,
+        }
+    }
+
     pub fn as_resource_address(&self) -> Option<ResourceAddress> {
         match self {
             Self::Resource(address) => Some(*address),
@@ -190,12 +197,15 @@ impl FromStr for SubstateAddress {
             Some(("resource", addr)) => {
                 match addr.split_once(' ') {
                     // resource_xxxx nft_xxxxx
-                    Some((resource_str, addr)) => {
-                        let resource_addr = ResourceAddress::from_hex(resource_str)
-                            .map_err(|_| InvalidSubstateAddressFormat(s.to_string()))?;
-                        let id = NonFungibleId::try_from_canonical_string(addr)
-                            .map_err(|_| InvalidSubstateAddressFormat(s.to_string()))?;
-                        Ok(SubstateAddress::NonFungible(resource_addr, id))
+                    Some((resource_str, addr)) => match addr.split_once('_') {
+                        Some(("nft", addr)) => {
+                            let resource_addr = ResourceAddress::from_hex(resource_str)
+                                .map_err(|_| InvalidSubstateAddressFormat(s.to_string()))?;
+                            let id = NonFungibleId::try_from_canonical_string(addr)
+                                .map_err(|_| InvalidSubstateAddressFormat(s.to_string()))?;
+                            Ok(SubstateAddress::NonFungible(resource_addr, id))
+                        },
+                        _ => Err(InvalidSubstateAddressFormat(s.to_string())),
                     },
                     // resource_xxxx
                     None => {
@@ -338,5 +348,36 @@ impl SubstateDiff {
 
     pub fn is_empty(&self) -> bool {
         self.len() == 0
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    mod substate_address_parse {
+        use super::*;
+
+        #[test]
+        fn it_parses_valid_substate_addresses() {
+            SubstateAddress::from_str("component_7cbfe29101c24924b1b6ccefbfff98986d648622272ae24f7585dab55ff1ff64")
+                .unwrap()
+                .as_component_address()
+                .unwrap();
+            SubstateAddress::from_str("vault_7cbfe29101c24924b1b6ccefbfff98986d648622272ae24f7585dab55ff1ff64")
+                .unwrap()
+                .as_vault_id()
+                .unwrap();
+            SubstateAddress::from_str("resource_7cbfe29101c24924b1b6ccefbfff98986d648622272ae24f7585dab55ff1ff64")
+                .unwrap()
+                .as_resource_address()
+                .unwrap();
+            SubstateAddress::from_str(
+                "resource_7cbfe29101c24924b1b6ccefbfff98986d648622272ae24f7585dab55ff1ff64 nft_str:SpecialNft",
+            )
+            .unwrap()
+            .as_non_fungible_address()
+            .unwrap();
+        }
     }
 }
