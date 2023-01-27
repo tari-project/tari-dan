@@ -6007,7 +6007,6 @@ dependencies = [
  "tari_service_framework",
  "tari_shutdown",
  "tari_storage",
- "tari_template_lib",
  "tari_test_utils",
  "tari_utilities",
  "thiserror",

@@ -21,7 +21,7 @@
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 use tari_dan_common_types::{Epoch, NodeHeight, PayloadId, ShardId, SubstateChange};
-use tari_engine_types::commit_result::RejectReason;
+use tari_engine_types::{commit_result::RejectReason, substate::SubstateAddress};
 use thiserror::Error;
 use tokio::sync::mpsc;
 
@@ -68,13 +68,19 @@ pub enum HotStuffError {
     JustifyIsNotAccepted,
     #[error("Received NEWVIEW message without attached payload")]
     ReceivedNewViewWithoutPayload,
-    #[error("Missing pledges: {}", .0.iter().map(|(s, c)| format!("{}: {}", s, c)).collect::<Vec<_>>().join(", "))]
-    MissingPledges(Vec<(ShardId, SubstateChange)>),
+    #[error("Missing pledges: {}", .0.iter().map(|(s, c, a, v)| format!("{} ({}): {} v{}", s, c, a, v)).collect::<Vec<_>>().join(", "))]
+    MissingPledges(Vec<(ShardId, SubstateChange, SubstateAddress, u32)>),
     #[error("Shard {shard} already pledged to another payload {pledged_payload}, expected {expected}")]
     ShardPledgedToDifferentPayload {
         shard: ShardId,
         pledged_payload: PayloadId,
         expected: PayloadId,
+    },
+    #[error("Pledge for shard {shard} for payload {pledged_payload} is invalid: {details}")]
+    InvalidPledge {
+        shard: ShardId,
+        pledged_payload: PayloadId,
+        details: String,
     },
 }
 

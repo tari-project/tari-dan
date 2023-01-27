@@ -49,18 +49,18 @@ impl ComponentManager {
 
     pub fn add_root_substate(
         &self,
-        substate_addr: &SubstateAddress,
+        substate_addr: SubstateAddress,
         version: u32,
         children: Vec<VersionedSubstateAddress>,
     ) -> anyhow::Result<()> {
-        let substate = match self.get_root_substate(substate_addr)? {
+        let substate = match self.get_root_substate(&substate_addr)? {
             Some(mut substate) => {
                 println!("Updating existing root substate: {} v{}", substate_addr, version);
                 substate.versions.push((version, children));
                 substate
             },
             None => SubstateMetadata {
-                address: *substate_addr,
+                address: substate_addr.clone(),
                 versions: vec![(version, children)],
             },
         };
@@ -70,7 +70,7 @@ impl ComponentManager {
     }
 
     pub fn commit_diff(&self, diff: &SubstateDiff) -> anyhow::Result<()> {
-        let mut component = None;
+        let mut component: Option<(&SubstateAddress, u32)> = None;
         let mut children = vec![];
         // for (addr, version) in diff.down_iter() {
         // self.remove_substate_version(addr, *version)?;
@@ -79,13 +79,17 @@ impl ComponentManager {
         for (addr, substate) in diff.up_iter() {
             match addr {
                 addr @ SubstateAddress::Component(_) => {
+                    if let Some((addr, version)) = component.take() {
+                        self.add_root_substate(addr.clone(), version, children.drain(..).collect())?;
+                    }
+
                     component = Some((addr, substate.version()));
                 },
                 addr @ SubstateAddress::Resource(_) |
                 addr @ SubstateAddress::Vault(_) |
                 addr @ SubstateAddress::NonFungible(_, _) => {
                     children.push(VersionedSubstateAddress {
-                        address: *addr,
+                        address: addr.clone(),
                         version: substate.version(),
                     });
                 },
@@ -93,7 +97,7 @@ impl ComponentManager {
         }
 
         if let Some((addr, version)) = component {
-            self.add_root_substate(addr, version, children)?;
+            self.add_root_substate(addr.clone(), version, children)?;
         }
         Ok(())
     }

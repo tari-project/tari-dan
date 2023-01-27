@@ -129,11 +129,11 @@ impl ResourceManager {
         resp.decode().expect("[total_supply] Failed to decode Amount")
     }
 
-    pub fn get_non_fungible(&self, id: NonFungibleId) -> NonFungible {
+    pub fn get_non_fungible(&self, id: &NonFungibleId) -> NonFungible {
         let resp: InvokeResult = call_engine(EngineOp::ResourceInvoke, &ResourceInvokeArg {
             resource_ref: self.expect_resource_address(),
             action: ResourceAction::GetNonFungible,
-            args: invoke_args![ResourceGetNonFungibleArg { id }],
+            args: invoke_args![ResourceGetNonFungibleArg { id: id.clone() }],
         });
 
         resp.decode().expect("[get_non_fungible] Failed to decode Amount")

@@ -8,7 +8,7 @@ use serde::{Deserialize, Serialize};
 use tari_dan_common_types::serde_with;
 use tari_engine_types::substate::SubstateAddress;
 
-#[derive(Debug, Clone, Copy, Deserialize, Serialize)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct VersionedSubstateAddress {
     #[serde(with = "serde_with::string")]
     pub address: SubstateAddress,

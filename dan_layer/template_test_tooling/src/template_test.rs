@@ -97,10 +97,10 @@ impl TemplateTest<MockRuntimeInterface> {
     }
 
     pub fn get_previous_output_address(&self, ty: SubstateType) -> SubstateAddress {
-        *self
-            .last_outputs
+        self.last_outputs
             .iter()
             .find(|addr| ty.matches(addr))
+            .cloned()
             .unwrap_or_else(|| panic!("No output of type {:?}", ty))
     }
 
@@ -116,7 +116,7 @@ impl TemplateTest<MockRuntimeInterface> {
 
         for (address, substate) in diff.up_iter() {
             eprintln!("UP substate: {}", address);
-            self.last_outputs.insert(*address);
+            self.last_outputs.insert(address.clone());
             tx.set_state(address, substate).unwrap();
         }
 
