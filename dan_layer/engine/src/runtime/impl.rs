@@ -303,10 +303,11 @@ impl RuntimeInterface for RuntimeInterfaceImpl {
                     reason: "vault action requires a vault id".to_string(),
                 })?;
 
-                let resp = self.tracker.borrow_vault_mut(&vault_id, |vault| {
+                let resp = self.tracker.borrow_vault(&vault_id, |vault| {
                     let empty = BTreeSet::new();
                     let ids = vault.get_non_fungible_ids().unwrap_or(&empty);
-                    InvokeResult::encode(&ids)
+                    // NOTE: A BTreeSet does not decode when received in the WASM
+                    InvokeResult::encode(&ids.iter().collect::<Vec<_>>())
                 })??;
 
                 Ok(resp)

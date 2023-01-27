@@ -180,7 +180,7 @@ pub async fn handle_submit(
         } => Instruction::CallFunction {
             template_address: template_address.into_inner(),
             function: function_name,
-            args: args.iter().map(|s| s.to_arg()).collect(),
+            args: args.into_iter().map(|s| s.into_arg()).collect(),
         },
         CliInstruction::CallMethod {
             component_address,
@@ -191,7 +191,7 @@ pub async fn handle_submit(
                 .as_component_address()
                 .ok_or_else(|| anyhow!("Invalid component address: {}", component_address))?,
             method: method_name,
-            args: args.iter().map(|s| s.to_arg()).collect(),
+            args: args.into_iter().map(|s| s.into_arg()).collect(),
         },
     };
 
@@ -462,6 +462,9 @@ fn summarize_finalize_result(finalize: &FinalizeResult) {
             Type::Other { ref name } if name == "Amount" => {
                 println!("{}: {}", name, result.decode::<Amount>().unwrap());
             },
+            Type::Other { ref name } if name == "Vec" => {
+                println!("Raw Vec: {}", String::from_utf8_lossy(&result.raw));
+            },
             Type::Other { ref name } => {
                 println!("{}: {}", name, to_hex(&result.raw));
             },
@@ -517,6 +520,7 @@ pub enum CliArg {
     I8(i8),
     Bool(bool),
     NonFungibleId(NonFungibleId),
+    SubstateAddress(SubstateAddress),
 }
 
 impl FromStr for CliArg {
@@ -550,6 +554,11 @@ impl FromStr for CliArg {
         if let Ok(v) = s.parse::<bool>() {
             return Ok(CliArg::Bool(v));
         }
+
+        if let Ok(v) = s.parse::<SubstateAddress>() {
+            return Ok(CliArg::SubstateAddress(v));
+        }
+
         if let Some(("nft", nft_id)) = s.split_once('_') {
             match NonFungibleId::try_from_canonical_string(nft_id) {
                 Ok(v) => {
@@ -568,18 +577,19 @@ impl FromStr for CliArg {
 }
 
 impl CliArg {
-    pub fn to_arg(&self) -> Arg {
+    pub fn into_arg(self) -> Arg {
         match self {
             CliArg::String(s) => arg!(s),
-            CliArg::U64(v) => arg!(*v),
-            CliArg::U32(v) => arg!(*v),
-            CliArg::U16(v) => arg!(*v),
-            CliArg::U8(v) => arg!(*v),
-            CliArg::I64(v) => arg!(*v),
-            CliArg::I32(v) => arg!(*v),
-            CliArg::I16(v) => arg!(*v),
-            CliArg::I8(v) => arg!(*v),
-            CliArg::Bool(v) => arg!(*v),
+            CliArg::U64(v) => arg!(v),
+            CliArg::U32(v) => arg!(v),
+            CliArg::U16(v) => arg!(v),
+            CliArg::U8(v) => arg!(v),
+            CliArg::I64(v) => arg!(v),
+            CliArg::I32(v) => arg!(v),
+            CliArg::I16(v) => arg!(v),
+            CliArg::I8(v) => arg!(v),
+            CliArg::Bool(v) => arg!(v),
+            CliArg::SubstateAddress(v) => arg!(v.to_canonical_hash()),
             CliArg::NonFungibleId(v) => arg!(v),
         }
     }
