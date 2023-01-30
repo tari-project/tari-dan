@@ -37,7 +37,7 @@ import RecentTransactions from './Components/RecentTransactions';
 import Templates from './Components/Templates';
 import './ValidatorNode.css';
 import { StyledPaper } from '../../Components/StyledComponents';
-import { Grid, Typography } from '@mui/material';
+import Grid from '@mui/material/Grid';
 import SecondaryHeading from '../../Components/SecondaryHeading';
 
 function ValidatorNode() {
@@ -97,53 +97,51 @@ function ValidatorNode() {
   }
   if (epoch === undefined || identity === undefined) return <div>Loading</div>;
   return (
-    <div className="validator-node">
-      <Grid container spacing={5}>
-        <SecondaryHeading>Info</SecondaryHeading>
-        <Grid item xs={12} md={12} lg={12}>
-          <StyledPaper>
-            <Info epoch={epoch} identity={identity} shardKey={shardKey} />
-            {shardKey ? (
-              <Committees
-                currentEpoch={epoch.current_epoch}
-                shardKey={shardKey}
-                publicKey={identity.public_key}
-              />
-            ) : null}
-          </StyledPaper>
-        </Grid>
-        <SecondaryHeading>Connections</SecondaryHeading>
-        <Grid item xs={12} md={12} lg={12}>
-          <StyledPaper>
-            <Connections />
-          </StyledPaper>
-        </Grid>
-        <SecondaryHeading>Mempool</SecondaryHeading>
-        <Grid item xs={12} md={12} lg={12}>
-          <StyledPaper>
-            <Mempool />
-          </StyledPaper>
-        </Grid>
-        <SecondaryHeading>Recent Transactions</SecondaryHeading>
-        <Grid item xs={12} md={12} lg={12}>
-          <StyledPaper>
-            <RecentTransactions />
-          </StyledPaper>
-        </Grid>
-        <SecondaryHeading>Templates</SecondaryHeading>
-        <Grid item xs={12} md={12} lg={12}>
-          <StyledPaper>
-            <Templates />
-          </StyledPaper>
-        </Grid>
-        <SecondaryHeading>Epoch</SecondaryHeading>
-        <Grid item xs={12} md={12} lg={12}>
-          <StyledPaper>
-            <AllVNs epoch={epoch.current_epoch} />
-          </StyledPaper>
-        </Grid>
+    <Grid container spacing={5}>
+      <SecondaryHeading>Info</SecondaryHeading>
+      <Grid item xs={12} md={12} lg={12}>
+        <StyledPaper>
+          <Info epoch={epoch} identity={identity} shardKey={shardKey} />
+          {shardKey ? (
+            <Committees
+              currentEpoch={epoch.current_epoch}
+              shardKey={shardKey}
+              publicKey={identity.public_key}
+            />
+          ) : null}
+        </StyledPaper>
       </Grid>
-    </div>
+      <SecondaryHeading>Connections</SecondaryHeading>
+      <Grid item xs={12} md={12} lg={12}>
+        <StyledPaper>
+          <Connections />
+        </StyledPaper>
+      </Grid>
+      <SecondaryHeading>Mempool</SecondaryHeading>
+      <Grid item xs={12} md={12} lg={12}>
+        <StyledPaper>
+          <Mempool />
+        </StyledPaper>
+      </Grid>
+      <SecondaryHeading>Recent Transactions</SecondaryHeading>
+      <Grid item xs={12} md={12} lg={12}>
+        <StyledPaper>
+          <RecentTransactions />
+        </StyledPaper>
+      </Grid>
+      <SecondaryHeading>Templates</SecondaryHeading>
+      <Grid item xs={12} md={12} lg={12}>
+        <StyledPaper>
+          <Templates />
+        </StyledPaper>
+      </Grid>
+      <SecondaryHeading>Epoch</SecondaryHeading>
+      <Grid item xs={12} md={12} lg={12}>
+        <StyledPaper>
+          <AllVNs epoch={epoch.current_epoch} />
+        </StyledPaper>
+      </Grid>
+    </Grid>
   );
 }
 

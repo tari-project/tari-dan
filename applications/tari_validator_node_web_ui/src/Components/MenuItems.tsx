@@ -43,6 +43,11 @@ const mainItems = [
     link: '/',
   },
   {
+    title: 'Recent Transactions',
+    icon: <AssessmentOutlinedIcon />,
+    link: 'transactions',
+  },
+  {
     title: 'Committees',
     icon: <PeopleOutlinedIcon />,
     link: 'committees',
@@ -56,11 +61,6 @@ const mainItems = [
     title: 'Mempool',
     icon: <AddchartIcon />,
     link: 'mempool',
-  },
-  {
-    title: 'Recent Transactions',
-    icon: <AssessmentOutlinedIcon />,
-    link: 'transactions',
   },
   {
     title: 'Templates',
