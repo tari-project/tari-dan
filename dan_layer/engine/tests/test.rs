@@ -851,7 +851,8 @@ mod tickets {
             ("account", account_address.into()),
             ("ticket_seller", ticket_seller.into()),
             ("ticket_resource", ticket_resource.into()),
-            // TODO: it's weird that the "redeem_ticket" method accepts a NonFungibleId, but we are passing a SubstateAddress variable
+            // TODO: it's weird that the "redeem_ticket" method accepts a NonFungibleId, but we are passing a
+            // SubstateAddress variable
             ("ticket_addr", ticket_substate_addr.clone().into()),
         ];
 
@@ -882,5 +883,87 @@ mod tickets {
             pub is_redeemed: bool,
         }
         assert!(ticket_nft.get_data::<Ticket>().is_redeemed);
+    }
+}
+
+mod marketplace {
+    use tari_template_lib::prelude::{ResourceAddress, Vault};
+
+    use super::*;
+
+    #[derive(Debug, Clone, Encode, Decode)]
+    pub struct Auction {
+        vault: Vault,
+        seller_address: ComponentAddress,
+        payment_resource_address: ResourceAddress,
+        min_price: Option<Amount>,
+        buy_price: Option<Amount>,
+        highest_bid: Option<Bid>,
+        ending_epoch: u64,
+    }
+
+    #[derive(Debug, Clone, Encode, Decode)]
+    pub struct Bid {
+        address: ComponentAddress,
+        bid: Vault,
+    }
+
+    #[test]
+    #[allow(clippy::too_many_lines)]
+    fn start_and_finish_auction() {
+        let mut template_test = TemplateTest::new(vec!["tests/templates/faucet", "tests/templates/nft/marketplace"]);
+
+        // create accounts
+        let _seller_account: ComponentAddress = template_test.call_function("Account", "new", args![]);
+        let buyer_account: ComponentAddress = template_test.call_function("Account", "new", args![]);
+
+        // create a fungible token faucet, we are going to use those tokens as payments
+        // TODO: use Thaums instead when they're implemented
+        let faucet_template = template_test.get_template_address("TestFaucet");
+        let initial_supply = Amount(1_000_000_000_000);
+        let result = template_test
+            .execute_and_commit(vec![Instruction::CallFunction {
+                template_address: faucet_template,
+                function: "mint".to_string(),
+                args: args![initial_supply],
+            }])
+            .unwrap();
+        let faucet_component: ComponentAddress = result.execution_results[0].decode().unwrap();
+        let faucet_resource = result
+            .result
+            .expect("Faucet mint failed")
+            .up_iter()
+            .find_map(|(_, s)| s.substate_address().as_resource_address())
+            .unwrap();
+
+        // initialize the marketplace
+        let marketplace_template = template_test.get_template_address("NftMarketplace");
+        let result = template_test
+            .execute_and_commit(vec![Instruction::CallFunction {
+                template_address: marketplace_template,
+                function: "new".to_string(),
+                args: args![],
+            }])
+            .unwrap();
+        let _marketplace: ComponentAddress = result.execution_results[0].decode().unwrap();
+
+        // get some funds into the buyer's account
+        let vars = vec![
+            ("account", buyer_account.into()),
+            ("faucet", faucet_component.into()),
+            ("faucet_resource", faucet_resource.into()),
+        ];
+        template_test
+            .execute_and_commit_manifest(
+                r#"
+            let account = var!["account"];
+            let faucet = var!["faucet"];
+        
+            let coins = faucet.take_free_coins();
+            account.deposit(coins);
+        "#,
+                vars.clone(),
+            )
+            .unwrap();
     }
 }
