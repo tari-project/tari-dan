@@ -20,30 +20,19 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-import { useEffect, useState } from 'react';
-import { getMempoolStats } from '../../../utils/json_rpc';
-import Error from './Error';
-import Typography from '@mui/material/Typography';
+import { Typography, Link } from '@mui/material';
 
-function Mempool() {
-  const [state, setState] = useState();
-  const [error, setError] = useState<String>();
-  useEffect(() => {
-    getMempoolStats()
-      .then((response) => {
-        setState(response.size);
-        setError(undefined);
-      })
-      .catch((reason) => {
-        setError(reason);
-      });
-  }, []);
-  if (error) {
-    return <Error component="Mempool" message={error} />;
-  }
+const Copyright = () => {
   return (
-    <Typography>Size {state === undefined ? 'checking...' : state}</Typography>
+    <Typography variant="body2" color="text.secondary" align="center">
+      {'Copyright © '}
+      <Link color="inherit" href="https://tari.com/" target={'_blank'}>
+        Tari Labs
+      </Link>{' '}
+      {new Date().getFullYear()}
+      {'.'}
+    </Typography>
   );
-}
+};
 
-export default Mempool;
+export default Copyright;

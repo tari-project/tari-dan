@@ -20,30 +20,45 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-import { useEffect, useState } from 'react';
-import { getMempoolStats } from '../../../utils/json_rpc';
-import Error from './Error';
-import Typography from '@mui/material/Typography';
+import { createTheme } from '@mui/material/styles';
 
-function Mempool() {
-  const [state, setState] = useState();
-  const [error, setError] = useState<String>();
-  useEffect(() => {
-    getMempoolStats()
-      .then((response) => {
-        setState(response.size);
-        setError(undefined);
-      })
-      .catch((reason) => {
-        setError(reason);
-      });
-  }, []);
-  if (error) {
-    return <Error component="Mempool" message={error} />;
-  }
-  return (
-    <Typography>Size {state === undefined ? 'checking...' : state}</Typography>
-  );
-}
+const theme = createTheme({
+  palette: {
+    primary: {
+      main: '#9330FF',
+    },
+    secondary: {
+      main: '#40388A',
+    },
+  },
+  shape: {
+    borderRadius: 10,
+  },
+  typography: {
+    fontFamily: '"AvenirMedium", sans-serif',
+    body1: {
+      color: '#000000',
+    },
+    body2: {
+      color: '#000000',
+    },
+  },
+  transitions: {
+    duration: {
+      enteringScreen: 500,
+      leavingScreen: 500,
+    },
+  },
+  components: {
+    MuiButton: {
+      defaultProps: {
+        disableRipple: true,
+        style: {
+          borderRadius: '5px',
+        },
+      },
+    },
+  },
+});
 
-export default Mempool;
+export default theme;

@@ -851,6 +851,7 @@ mod tickets {
             ("account", account_address.into()),
             ("ticket_seller", ticket_seller.into()),
             ("ticket_resource", ticket_resource.into()),
+            // TODO: it's weird that the "redeem_ticket" method accepts a NonFungibleId, but we are passing a SubstateAddress variable
             ("ticket_addr", ticket_substate_addr.clone().into()),
         ];
 

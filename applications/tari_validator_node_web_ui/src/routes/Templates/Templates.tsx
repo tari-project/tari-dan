@@ -20,30 +20,24 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-import { useEffect, useState } from 'react';
-import { getMempoolStats } from '../../../utils/json_rpc';
-import Error from './Error';
-import Typography from '@mui/material/Typography';
+import PageHeading from '../../Components/PageHeading';
+import Grid from '@mui/material/Grid';
+import { StyledPaper } from '../../Components/StyledComponents';
+import Templates from '../VN/Components/Templates';
 
-function Mempool() {
-  const [state, setState] = useState();
-  const [error, setError] = useState<String>();
-  useEffect(() => {
-    getMempoolStats()
-      .then((response) => {
-        setState(response.size);
-        setError(undefined);
-      })
-      .catch((reason) => {
-        setError(reason);
-      });
-  }, []);
-  if (error) {
-    return <Error component="Mempool" message={error} />;
-  }
+function TemplatesLayout() {
   return (
-    <Typography>Size {state === undefined ? 'checking...' : state}</Typography>
+    <div>
+      <Grid container spacing={5}>
+        <PageHeading>Templates</PageHeading>
+        <Grid item xs={12} md={12} lg={12}>
+          <StyledPaper>
+            <Templates />
+          </StyledPaper>
+        </Grid>
+      </Grid>
+    </div>
   );
 }
 
-export default Mempool;
+export default TemplatesLayout;
