@@ -17,11 +17,7 @@ use tari_dan_core::{
         PayloadProcessorError,
         SigningService,
     },
-    workers::{
-        hotstuff_error::HotStuffError,
-        hotstuff_waiter::{HotStuffWaiter, NETWORK_LATENCY},
-        pacemaker_worker::Pacemaker,
-    },
+    workers::{hotstuff_error::HotStuffError, hotstuff_waiter::HotStuffWaiter, pacemaker_worker::Pacemaker},
 };
 use tari_engine_types::{
     commit_result::{FinalizeResult, RejectReason, TransactionResult},
@@ -112,7 +108,6 @@ pub struct HsTestHarness {
     rx_execute: broadcast::Receiver<(TariDanPayload, HashMap<ShardId, ObjectPledge>)>,
     shard_store: TempShardStoreFactory,
     hs_waiter: Option<JoinHandle<Result<(), HotStuffError>>>,
-    pacemaker: Option<JoinHandle<Result<(), HotStuffError>>>,
     signing_service: NodeIdentitySigningService,
 }
 
@@ -134,9 +129,6 @@ impl HsTestHarness {
         let (tx_vote_message, rx_vote_message) = channel(1);
         let (tx_votes, rx_votes) = channel(1);
         let (tx_events, _) = broadcast::channel(100);
-        let (tx_pacemaker_status, rx_pacemaker_status) = channel(1);
-        let (tx_pacemaker_start_wait, rx_pacemaker_start_wait) = channel(1);
-        let (tx_pacemaker_stop_wait, rx_pacemaker_stop_wait) = channel(1);
         let payload_processor = PayloadProcessorListener::new();
         let rx_execute = payload_processor.receiver.resubscribe();
         let shutdown = Shutdown::new();
@@ -147,6 +139,7 @@ impl HsTestHarness {
         let public_address = Multiaddr::from_str("/ip4/127.0.0.1/tcp/48000").unwrap();
         let node_identity = NodeIdentity::new(private_key, public_address, PeerFeatures::COMMUNICATION_NODE);
 
+        let pacemaker = Pacemaker::spawn(shutdown.clone().to_signal());
         let signing_service = NodeIdentitySigningService::new(Arc::new(node_identity));
         let hs_waiter = HotStuffWaiter::spawn(
             signing_service.clone(),
@@ -156,25 +149,17 @@ impl HsTestHarness {
             rx_new,
             rx_hs_messages,
             rx_votes,
-            rx_pacemaker_status,
             tx_leader,
             tx_broadcast,
             tx_vote_message,
             tx_events,
-            tx_pacemaker_start_wait,
-            tx_pacemaker_stop_wait,
+            pacemaker,
             payload_processor,
             shard_store.clone(),
             shutdown.to_signal().clone(),
             consensus_constants,
         );
-        let pacemaker = Pacemaker::spawn(
-            rx_pacemaker_start_wait,
-            rx_pacemaker_stop_wait,
-            tx_pacemaker_status,
-            NETWORK_LATENCY,
-            shutdown.to_signal(),
-        );
+
         Self {
             identity,
             tx_new,
@@ -187,7 +172,6 @@ impl HsTestHarness {
             rx_execute,
             shard_store,
             hs_waiter: Some(hs_waiter),
-            pacemaker: Some(pacemaker),
             signing_service,
         }
     }
