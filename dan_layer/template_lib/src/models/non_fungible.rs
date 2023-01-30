@@ -148,11 +148,6 @@ fn validate_nft_id_str(s: &str) -> Result<(), ParseNonFungibleIdError> {
     if s.is_empty() || s.len() > 64 {
         return Err(ParseNonFungibleIdError::InvalidStringLength);
     }
-    if s.chars()
-        .any(|c| !matches!(c,  'a'..='z' | 'A'..='Z' | '0'..='9' | '_' ))
-    {
-        return Err(ParseNonFungibleIdError::InvalidString);
-    }
     Ok(())
 }
 
@@ -206,7 +201,6 @@ impl NonFungible {
 pub enum ParseNonFungibleIdError {
     InvalidFormat,
     InvalidType,
-    InvalidString,
     InvalidStringLength,
     InvalidUuid,
     InvalidUint32,
@@ -235,18 +229,6 @@ mod tests {
             assert_eq!(
                 NonFungibleId::try_from_string("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"),
                 Err(ParseNonFungibleIdError::InvalidStringLength)
-            );
-            assert_eq!(
-                NonFungibleId::try_from_string("hello123____!"),
-                Err(ParseNonFungibleIdError::InvalidString)
-            );
-            assert_eq!(
-                NonFungibleId::try_from_string("hello world"),
-                Err(ParseNonFungibleIdError::InvalidString)
-            );
-            assert_eq!(
-                NonFungibleId::try_from_string("❌nope❌"),
-                Err(ParseNonFungibleIdError::InvalidString)
             );
         }
     }

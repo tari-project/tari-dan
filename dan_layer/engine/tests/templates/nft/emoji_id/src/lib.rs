@@ -21,18 +21,40 @@
 //   USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 use tari_template_lib::prelude::*;
+use std::fmt;
+use std::vec::Vec;
 
-#[derive(Debug, Clone, Encode, Decode)]
+#[derive(Debug, Clone, Encode, Decode, Hash)]
+#[repr(i32)]
 pub enum Emoji {
-    Smile,
-    Sweat,
-    Laugh,
-    Wink,
+    Smile = 0x00,
+    Sweat = 0x01,
+    Laugh = 0x02,
+    Wink =0x03,
 }
 
-#[derive(Debug, Clone, Encode, Decode)]
-pub struct EmojiId {
-    pub emojis: Vec<Emoji>,
+impl fmt::Display for Emoji {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        let s = match self {
+            Emoji::Smile => "\u{1F600}",
+            Emoji::Sweat => "\u{1F605}",
+            Emoji::Laugh => "\u{1F602}",
+            Emoji::Wink => "\u{1F609}",
+        };
+        write!(f, "{}", s)
+    }
+}
+
+#[derive(Debug, Clone, Encode, Decode, Hash)]
+pub struct EmojiId(Vec<Emoji>);
+
+impl fmt::Display for EmojiId {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        for emoji in &self.0 {
+            write!(f, "{}", emoji)?;
+        }
+        Ok(())
+    }
 }
 
 /// This template implements a classic, first come first served, constant price NFT drop
@@ -41,22 +63,20 @@ mod emoji_id {
     use super::*;  
     
     pub struct EmojiIdMinter {
-        max_emoji_id_len: usize,
+        max_emoji_id_len: u64,
         mint_price: Amount,
         resource_address: ResourceAddress,
-        earnings: Vault<Thaum>,
+        earnings: Vault,
     }
 
     impl EmojiIdMinter {
-        pub fn new(token_symbol: String, max_emoji_id_len: usize, mint_price: Amount) -> Self {
+        // TODO: in this example we need to specify the payment resource, but there should be native support for Thaums
+        // TODO: decoding fails if "max_emoji_id_len" is usize instead of u64, we may need to add support for it
+        pub fn new(payment_resource_address: ResourceAddress, max_emoji_id_len: u64, mint_price: Amount) -> Self {
             // Create the non-fungible resource with empty initial supply
             let resource_address = ResourceBuilder::non_fungible()
-                .with_token_symbol(token_symbol)
-                .build();
-
-            // TODO: how do you initialize a Thaum vault? Could it be similar with non-Thaum fungible resources?    
-            let earnings = Vault::new_empty::<Thaum>();
-
+                .build(); 
+            let earnings = Vault::new_empty(payment_resource_address);
             Self {
                 max_emoji_id_len,
                 mint_price,
@@ -65,35 +85,37 @@ mod emoji_id {
             }
         }
 
-        // TODO: how do we ensure that the payment is indeed in Thaums?
-        pub fn mint(&mut self, emojis: Vec<Emoji>, payment: Bucket) -> (Bucket, Bucket<Thaum>) {
+        // TODO: return change
+        pub fn mint(&mut self, emoji_id: EmojiId, payment: Bucket) -> Bucket {
             assert!(
-                !emojis.empty() && emojis.len() <= self.max_emoji_id_len,
-                "Invalid Emoji ID lenght"
+                !emoji_id.0.is_empty() && emoji_id.0.len() as u64 <= self.max_emoji_id_len,
+                "Invalid Emoji ID length"
             );
 
             // process the payment
             // no need to manually check the amount, as the split operation will fail if not enough funds
-            let (cost, change) = payment.split(self.mint_price);
-            self.earnings.deposit(cost);
+            // TODO: let (cost, change) = payment.split(self.mint_price);
+            // no need to manually check that the payment is in the same resource that we are accepting ...
+            // ... the deposit will fail if it's different
+            self.earnings.deposit(payment);
 
             // mint a new emoji id
             // TODO: how do we ensure uniqueness of emoji ids? Two options:
             //      1. Derive the nft id from the emojis
             //      2. Enforce that always an NFT's immutable data must be unique in the resource's scope
-            let id = NftTokenId::random();
+            //      3. Ad-hoc uniqueness fields in a NFT resource
+            // We are going with (1) for now
+            let id = NonFungibleId::from_string(emoji_id.to_string());
             let mut immutable_data = Metadata::new();
-            immutable_data.insert("emojis", emojis);
-            let nft = NftToken::new(immutable_data, Vec::new());
-            // here we assume (2) that immutable data is unique, 
-            // so the minting will fail if another nft with the same emojis was minted previously
-            ResourceManager::get(self.resource_address).mint_non_fungible(nft);
+            immutable_data.insert("emoji id", emoji_id.to_string());
+            let nft = NonFungible::new(immutable_data, &{});
+            
+            // if a previous emoji id was minted with the same emojis, the hash will be the same
+            // so consensus will fail when running "mint_non_fungible"
+            let emoji_id_bucket = ResourceManager::get(self.resource_address)
+                .mint_non_fungible(id, nft);
 
-            // Mint a new token with a random ID
-            let id = NftTokenId::random();
-            self.mint_specific(id);
-
-            (emoji_id, change)
+            emoji_id_bucket
         }
 
         pub fn total_supply(&self) -> Amount {
