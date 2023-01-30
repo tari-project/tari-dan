@@ -97,7 +97,7 @@ pub trait RuntimeInterface: Send + Sync {
 
     fn workspace_invoke(&self, action: WorkspaceAction, args: EngineArgs) -> Result<InvokeResult, RuntimeError>;
 
-    fn generate_uuid(&self) -> Result<Vec<u8>, RuntimeError>;
+    fn generate_uuid(&self) -> Result<[u8; 32], RuntimeError>;
 
     fn set_last_instruction_output(&self, value: Option<Vec<u8>>) -> Result<(), RuntimeError>;
 

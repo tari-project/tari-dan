@@ -27,8 +27,6 @@ use tari_template_lib::prelude::*;
 
 #[template]
 mod account_template {
-    use std::collections::BTreeSet;
-
     use super::*;
 
     pub struct Account {
@@ -86,7 +84,7 @@ mod account_template {
         }
 
         // #[access_rules(require(owner_badge))]
-        pub fn get_non_fungible_ids(&self, resource: ResourceAddress) -> BTreeSet<NonFungibleId> {
+        pub fn get_non_fungible_ids(&self, resource: ResourceAddress) -> Vec<NonFungibleId> {
             let v = self
                 .get_vault(resource)
                 .ok_or_else(|| format!("No vault for resource {}", resource))
