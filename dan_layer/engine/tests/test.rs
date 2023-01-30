@@ -742,6 +742,8 @@ mod emoji_id {
 }
 
 mod tickets {
+    use tari_template_lib::prelude::NonFungibleId;
+
     use super::*;
 
     #[derive(Debug, Clone, Encode, Decode, Default)]
@@ -750,11 +752,12 @@ mod tickets {
     }
 
     #[test]
-    fn buy_ticket() {
+    #[allow(clippy::too_many_lines)]
+    fn buy_and_redeem_ticket() {
         let mut template_test = TemplateTest::new(vec!["tests/templates/faucet", "tests/templates/nft/tickets"]);
 
         // create an account
-        let _account_address: ComponentAddress = template_test.call_function("Account", "new", args![]);
+        let account_address: ComponentAddress = template_test.call_function("Account", "new", args![]);
 
         // create a fungible token faucet, we are going to use those tokens as payments
         // TODO: use Thaums instead when they're implemented
@@ -767,7 +770,7 @@ mod tickets {
                 args: args![initial_supply],
             }])
             .unwrap();
-        let _faucet_component: ComponentAddress = result.execution_results[0].decode().unwrap();
+        let faucet_component: ComponentAddress = result.execution_results[0].decode().unwrap();
         let faucet_resource = result
             .result
             .expect("Faucet mint failed")
@@ -789,12 +792,94 @@ mod tickets {
                 args: args![faucet_resource, initial_supply, price, event_description],
             }])
             .unwrap();
-        let _ticket_seller: ComponentAddress = result.execution_results[0].decode().unwrap();
-        let _ticket_resource = result
+        let ticket_seller: ComponentAddress = result.execution_results[0].decode().unwrap();
+        let ticket_resource = result
             .result
-            .expect("Emoji id initialization failed")
+            .expect("TicketSeller initialization failed")
             .up_iter()
             .find_map(|(_, s)| s.substate_address().as_resource_address())
             .unwrap();
+
+        // at the beggining we have the initial supply of tickeds
+        let total_supply: Amount = template_test.call_method(ticket_seller, "total_supply", args![]);
+        assert_eq!(total_supply, Amount(initial_supply as i64));
+
+        // get some funds into the account
+        let vars = vec![
+            ("account", account_address.into()),
+            ("faucet", faucet_component.into()),
+            ("faucet_resource", faucet_resource.into()),
+            ("ticket_seller", ticket_seller.into()),
+        ];
+        template_test
+            .execute_and_commit_manifest(
+                r#"
+            let account = var!["account"];
+            let faucet = var!["faucet"];
+        
+            let coins = faucet.take_free_coins();
+            account.deposit(coins);
+        "#,
+                vars.clone(),
+            )
+            .unwrap();
+
+        // buy a ticket
+        template_test
+            .execute_and_commit_manifest(
+                r#"
+            let account = var!["account"];
+            let faucet_resource = var!["faucet_resource"];
+            let ticket_seller = var!["ticket_seller"];
+        
+            let payment = account.withdraw(faucet_resource, Amount(20));
+            let nft_bucket = ticket_seller.buy_ticket(payment);
+            account.deposit(nft_bucket);
+        "#,
+                vars.clone(),
+            )
+            .unwrap();
+
+        // redeem a ticket
+        let ticket_ids: Vec<NonFungibleId> =
+            template_test.call_method(account_address, "get_non_fungible_ids", args![ticket_resource]);
+        assert_eq!(ticket_ids.len(), 1);
+        let ticket_id = ticket_ids.first().unwrap().clone();
+        let ticket_substate_addr = SubstateAddress::NonFungible(ticket_resource, ticket_id);
+
+        let vars = [
+            ("account", account_address.into()),
+            ("ticket_seller", ticket_seller.into()),
+            ("ticket_resource", ticket_resource.into()),
+            ("ticket_addr", ticket_substate_addr.clone().into()),
+        ];
+
+        template_test
+            .execute_and_commit_manifest(
+                r#"
+                let account = var!["account"];
+                let ticket_resource = var!["ticket_resource"];
+                account.get_non_fungible_ids(ticket_resource);
+                
+                let ticket_seller = var!["ticket_seller"];
+                let ticket_addr = var!["ticket_addr"];
+                ticket_seller.redeem_ticket(ticket_addr);
+            "#,
+                vars.clone(),
+            )
+            .unwrap();
+
+        let ticket_nft = template_test
+            .read_only_state_store()
+            .get_substate(&ticket_substate_addr)
+            .unwrap()
+            .into_substate_value()
+            .into_non_fungible()
+            .unwrap();
+        #[derive(Debug, Clone, Encode, Decode, Default)]
+        pub struct Ticket {
+            pub is_redeemed: bool,
+        }
+        assert!(ticket_nft.get_data::<Ticket>().is_redeemed);
     }
 }

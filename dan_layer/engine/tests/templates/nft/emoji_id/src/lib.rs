@@ -85,7 +85,7 @@ mod emoji_id {
             }
         }
 
-        // TODO: return change
+        // TODO: return change (or check bucket.value() == required_amount)
         pub fn mint(&mut self, emoji_id: EmojiId, payment: Bucket) -> Bucket {
             assert!(
                 !emoji_id.0.is_empty() && emoji_id.0.len() as u64 <= self.max_emoji_id_len,
