@@ -34,7 +34,6 @@ use tari_dan_common_types::{
     SubstateState,
     TreeNodeHash,
 };
-use tari_engine_types::commit_result::FinalizeResult;
 use thiserror::Error;
 
 use crate::{
@@ -43,6 +42,7 @@ use crate::{
         HotStuffTreeNode,
         LeafNode,
         Payload,
+        PayloadResult,
         RecentTransaction,
         SQLSubstate,
         SQLTransaction,
@@ -149,7 +149,7 @@ pub trait ShardStoreReadTransaction<TAddr: NodeAddressable, TPayload: Payload> {
         payload_id: Vec<u8>,
         shard_id: Vec<u8>,
     ) -> Result<Vec<SQLSubstate>, StorageError>;
-    fn get_payload_result(&self, payload_id: &PayloadId) -> Result<FinalizeResult, StorageError>;
+    fn get_payload_result(&self, payload_id: &PayloadId) -> Result<PayloadResult, StorageError>;
     fn get_resolved_pledges_for_payload(&self, payload: PayloadId) -> Result<Vec<ObjectPledgeInfo>, StorageError>;
 }
 
@@ -211,7 +211,7 @@ pub trait ShardStoreWriteTransaction<TAddr: NodeAddressable, TPayload: Payload> 
     ) -> Result<(), StorageError>;
 
     /// Updates the result for an existing payload
-    fn update_payload_result(&self, payload_id: &PayloadId, result: FinalizeResult) -> Result<(), StorageError>;
+    fn update_payload_result(&mut self, payload_id: &PayloadId, result: PayloadResult) -> Result<(), StorageError>;
 
     // -------------------------------- Pledges -------------------------------- //
     fn pledge_object(
@@ -221,13 +221,13 @@ pub trait ShardStoreWriteTransaction<TAddr: NodeAddressable, TPayload: Payload> 
         current_height: NodeHeight,
     ) -> Result<ObjectPledge, StorageError>;
     fn complete_pledges(
-        &self,
+        &mut self,
         shard: ShardId,
         payload_id: PayloadId,
         node_hash: &TreeNodeHash,
     ) -> Result<(), StorageError>;
     fn abandon_pledges(
-        &self,
+        &mut self,
         shard: ShardId,
         payload_id: PayloadId,
         node_hash: &TreeNodeHash,

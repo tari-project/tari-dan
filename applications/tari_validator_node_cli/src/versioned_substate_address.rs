@@ -1,14 +1,14 @@
 //   Copyright 2022 The Tari Project
 //   SPDX-License-Identifier: BSD-3-Clause
 
-use std::str::FromStr;
+use std::{fmt::Display, str::FromStr};
 
 use anyhow::anyhow;
 use serde::{Deserialize, Serialize};
 use tari_dan_common_types::serde_with;
 use tari_engine_types::substate::SubstateAddress;
 
-#[derive(Debug, Clone, Copy, Deserialize, Serialize)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct VersionedSubstateAddress {
     #[serde(with = "serde_with::string")]
     pub address: SubstateAddress,
@@ -27,5 +27,11 @@ impl FromStr for VersionedSubstateAddress {
             address,
             version: version.unwrap_or(0),
         })
+    }
+}
+
+impl Display for VersionedSubstateAddress {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}:{}", self.address, self.version)
     }
 }

@@ -6,7 +6,15 @@ use std::sync::{Arc, RwLock};
 
 use tari_crypto::ristretto::RistrettoComSig;
 use tari_dan_engine::{
-    runtime::{IdProvider, RuntimeError, RuntimeInterface, RuntimeInterfaceImpl, RuntimeState, StateTracker},
+    runtime::{
+        EngineArgs,
+        IdProvider,
+        RuntimeError,
+        RuntimeInterface,
+        RuntimeInterfaceImpl,
+        RuntimeState,
+        StateTracker,
+    },
     state_store::memory::MemoryStateStore,
 };
 use tari_engine_types::{commit_result::FinalizeResult, resource::Resource, substate::SubstateAddress};
@@ -100,7 +108,7 @@ impl RuntimeInterface for MockRuntimeInterface {
         &self,
         component_ref: ComponentRef,
         action: ComponentAction,
-        args: Vec<Vec<u8>>,
+        args: EngineArgs,
     ) -> Result<InvokeResult, RuntimeError> {
         self.add_call("component_invoke");
         self.inner.component_invoke(component_ref, action, args)
@@ -110,7 +118,7 @@ impl RuntimeInterface for MockRuntimeInterface {
         &self,
         resource_ref: ResourceRef,
         action: ResourceAction,
-        args: Vec<Vec<u8>>,
+        args: EngineArgs,
     ) -> Result<InvokeResult, RuntimeError> {
         self.add_call("resource_invoke");
         match self.invoke_result.read().unwrap().as_ref() {
@@ -123,7 +131,7 @@ impl RuntimeInterface for MockRuntimeInterface {
         &self,
         vault_ref: VaultRef,
         action: VaultAction,
-        args: Vec<Vec<u8>>,
+        args: EngineArgs,
     ) -> Result<InvokeResult, RuntimeError> {
         self.add_call("vault_invoke");
         match self.invoke_result.read().unwrap().as_ref() {
@@ -136,7 +144,7 @@ impl RuntimeInterface for MockRuntimeInterface {
         &self,
         bucket_ref: BucketRef,
         action: BucketAction,
-        args: Vec<Vec<u8>>,
+        args: EngineArgs,
     ) -> Result<InvokeResult, RuntimeError> {
         match self.invoke_result.read().unwrap().as_ref() {
             Some(result) => Ok(result.clone()),
@@ -144,12 +152,17 @@ impl RuntimeInterface for MockRuntimeInterface {
         }
     }
 
-    fn workspace_invoke(&self, action: WorkspaceAction, args: Vec<Vec<u8>>) -> Result<InvokeResult, RuntimeError> {
+    fn workspace_invoke(&self, action: WorkspaceAction, args: EngineArgs) -> Result<InvokeResult, RuntimeError> {
         self.add_call("workspace_invoke");
         match self.invoke_result.read().unwrap().as_ref() {
             Some(result) => Ok(result.clone()),
             None => self.inner.workspace_invoke(action, args),
         }
+    }
+
+    fn generate_uuid(&self) -> Result<[u8; 32], RuntimeError> {
+        self.add_call("generate_uuid");
+        self.inner.generate_uuid()
     }
 
     fn set_last_instruction_output(&self, value: Option<Vec<u8>>) -> Result<(), RuntimeError> {

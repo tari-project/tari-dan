@@ -20,61 +20,143 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-import React from "react";
-import { toHexString } from "../../VN/Components/helpers";
-import {renderJson} from "../../../utils/helpers";
+import { useState } from 'react';
+import { toHexString } from '../../VN/Components/helpers';
+import { renderJson } from '../../../utils/helpers';
+import Table from '@mui/material/Table';
+import TableBody from '@mui/material/TableBody';
+import TableCell from '@mui/material/TableCell';
+import TableContainer from '@mui/material/TableContainer';
+import TableHead from '@mui/material/TableHead';
+import TableRow from '@mui/material/TableRow';
+import {
+  DataTableCell,
+  CodeBlock,
+  AccordionIconButton,
+} from '../../../Components/StyledComponents';
+import KeyboardArrowDownIcon from '@mui/icons-material/KeyboardArrowDown';
+import KeyboardArrowUpIcon from '@mui/icons-material/KeyboardArrowUp';
+import Collapse from '@mui/material/Collapse';
 
-export default function Output({ shard, output }: { shard: string; output: any[] }) {
+function RowData({ row, justify }: any) {
+  const [open, setOpen] = useState(false);
 
   return (
-    <div id={shard} className="output">
-      <b>Shard : </b>
-      <span className="key">{shard}</span>
-      <table>
-        <thead>
-          <tr>
-            <th>Height</th>
-            <th>Node hash</th>
-              <th>Pledges</th>
-              <th>Justify</th>
-          </tr>
-        </thead>
-        <tbody>
-          {output.map((row) => {
-              let justify = JSON.parse(row.justify);
-            return (
-              <tr key={toHexString(row.node_hash)}>
-                <td>{row.height}</td>
-                <td className="key">{toHexString(row.node_hash)}</td>
-                  <td>
-                      <table>
-                          <thead><tr>
-                              <th>Shard</th>
-                              <th>Current state</th>
-                              <th>Pledged to</th>
-                          </tr></thead>
-                          <tbody>
-                          { justify.all_shard_pledges.map((pledge:any) => {
-                              // This enum gets serialized different ways... should be fixed in the rust
-                              let currentState = Object.keys(pledge.pledge.current_state);
-                                return (
-                                    <tr key={pledge.shard_id}>
-                                        <td>{pledge.shard_id}</td>
-                                        <td>{currentState[0] !== "0" ? currentState[0] : pledge.pledge.current_state }</td>
-                                        <td>{pledge.pledge.pledged_to_payload.id}</td>
-                                    </tr>
-                                )
-                          }) }
+    <>
+      <TableRow
+        key={toHexString(row.node_hash)}
+        style={{ verticalAlign: 'top', borderBottom: 'none' }}
+      >
+        <DataTableCell style={{ borderBottom: 'none' }}>
+          {row.height}
+        </DataTableCell>
+        <DataTableCell style={{ borderBottom: 'none' }} className="key">
+          {toHexString(row.node_hash)}
+        </DataTableCell>
+        <TableCell style={{ borderBottom: 'none', padding: 0 }}>
+          <TableContainer>
+            <Table>
+              <TableHead>
+                <TableRow>
+                  <TableCell>Shard</TableCell>
+                  <TableCell>Current state</TableCell>
+                  <TableCell>Pledged to</TableCell>
+                </TableRow>
+              </TableHead>
+              <TableBody>
+                {Array.isArray(justify.all_shard_pledges?.pledges) ? (
+                  justify.all_shard_pledges.pledges.map((pledge: any) => {
+                    // This enum gets serialized different ways... should be fixed in the rust
+                    let currentState = Object.keys(pledge.pledge.current_state);
+                    return (
+                      <TableRow
+                        key={pledge.shard_id}
+                        sx={{ borderBottom: 'none' }}
+                      >
+                        <DataTableCell>{pledge.shard_id}</DataTableCell>
+                        <DataTableCell>
+                          {currentState[0] !== '0'
+                            ? currentState[0]
+                            : pledge.pledge.current_state}
+                        </DataTableCell>
+                        <DataTableCell>
+                          {pledge.pledge.pledged_to_payload.id}
+                        </DataTableCell>
+                      </TableRow>
+                    );
+                  })
+                ) : (
+                  <TableRow>
+                    <DataTableCell colSpan={3} style={{ borderBottom: 'none' }}>
+                      No pledges
+                    </DataTableCell>
+                  </TableRow>
+                )}
+              </TableBody>
+            </Table>
+          </TableContainer>
+        </TableCell>
+        <TableCell sx={{ borderBottom: 'none', textAlign: 'center' }}>
+          <AccordionIconButton
+            open={open}
+            aria-label="expand row"
+            size="small"
+            onClick={() => {
+              setOpen(!open);
+            }}
+          >
+            {open ? <KeyboardArrowUpIcon /> : <KeyboardArrowDownIcon />}
+          </AccordionIconButton>
+        </TableCell>
+      </TableRow>
+      <TableRow>
+        <DataTableCell
+          style={{
+            paddingBottom: 0,
+            paddingTop: 0,
+          }}
+          colSpan={4}
+        >
+          <Collapse in={open} timeout="auto" unmountOnExit>
+            <CodeBlock style={{ marginBottom: '10px' }}>
+              {row.justify ? renderJson(JSON.parse(row.justify)) : ''}
+            </CodeBlock>
+          </Collapse>
+        </DataTableCell>
+      </TableRow>
+    </>
+  );
+}
 
-                          </tbody>
-                      </table>
-                  </td>
-                  <td><pre style={{ height: "200px", overflow : "scroll"}}>{ row.justify ? renderJson(JSON.parse(row.justify)) :  ""}</pre></td>
-              </tr>
-            );
-          })}
-        </tbody>
-      </table>
+export default function Output({
+  shard,
+  output,
+}: {
+  shard: string;
+  output: any[];
+}) {
+  return (
+    <div id={shard} className="output">
+      <TableContainer>
+        <b>Shard : </b>
+        <span className="key">{shard}</span>
+        <Table>
+          <TableHead>
+            <TableRow>
+              <TableCell>Height</TableCell>
+              <TableCell>Node hash</TableCell>
+              <TableCell>Pledges</TableCell>
+              <TableCell>Justify</TableCell>
+            </TableRow>
+          </TableHead>
+          <TableBody>
+            {output.map((row) => {
+              let justify = JSON.parse(row.justify);
+              return <RowData row={row} justify={justify} />;
+            })}
+          </TableBody>
+        </Table>
+      </TableContainer>
     </div>
   );
 }

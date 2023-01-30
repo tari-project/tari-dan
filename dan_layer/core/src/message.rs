@@ -29,12 +29,12 @@ use crate::models::{vote_message::VoteMessage, HotStuffMessage};
 #[derive(Debug, Clone, Serialize)]
 pub enum DanMessage<TPayload, TAddr> {
     // Consensus
-    HotStuffMessage(HotStuffMessage<TPayload, TAddr>),
+    HotStuffMessage(Box<HotStuffMessage<TPayload, TAddr>>),
     VoteMessage(VoteMessage),
     // Mempool
-    NewTransaction(Transaction),
+    NewTransaction(Box<Transaction>),
     // Network
-    NetworkAnnounce(NetworkAnnounce<TAddr>),
+    NetworkAnnounce(Box<NetworkAnnounce<TAddr>>),
 }
 
 impl<TPayload, TAddr> DanMessage<TPayload, TAddr> {

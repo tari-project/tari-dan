@@ -149,11 +149,11 @@ impl Networking {
                 self.outbound
                     .flood(
                         Default::default(),
-                        DanMessage::NetworkAnnounce(NetworkAnnounce {
+                        DanMessage::NetworkAnnounce(Box::new(NetworkAnnounce {
                             identity: self.node_identity.public_key().clone(),
                             addresses: vec![self.node_identity.public_address().clone()],
                             identity_signature,
-                        }),
+                        })),
                     )
                     .await?;
                 let _ignore = reply.send(Ok(()));
@@ -179,8 +179,10 @@ impl Networking {
         };
 
         if !peer.is_valid() {
-            // TODO: Ban sender?
-            return Err(anyhow!("Invalid peer"));
+            return Err(anyhow::anyhow!(
+                "Invalid announce: peer {} has an invalid signature",
+                peer.identity,
+            ));
         }
 
         match self.peer_provider.get_peer(&announce.identity).await.optional()? {
@@ -199,14 +201,14 @@ impl Networking {
 
                     // TODO: should not forward announce to sending peer
                     self.outbound
-                        .flood(Default::default(), DanMessage::NetworkAnnounce(announce))
+                        .flood(Default::default(), DanMessage::NetworkAnnounce(Box::new(announce)))
                         .await?;
                 }
             },
             None => {
                 self.peer_provider.add_peer(peer).await?;
                 self.outbound
-                    .flood(Default::default(), DanMessage::NetworkAnnounce(announce))
+                    .flood(Default::default(), DanMessage::NetworkAnnounce(Box::new(announce)))
                     .await?;
             },
         }

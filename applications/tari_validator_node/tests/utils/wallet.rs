@@ -28,12 +28,13 @@ use tari_app_grpc::{
     tari_rpc::{wallet_client::WalletClient, ConnectivityStatus, Empty, GetIdentityRequest, SetBaseNodeRequest},
 };
 use tari_app_utilities::common_cli_args::CommonCliArgs;
-use tari_common::{configuration::CommonConfig, initialize_logging};
+use tari_common::configuration::CommonConfig;
 use tari_common_types::grpc_authentication::GrpcAuthentication;
 use tari_comms::multiaddr::Multiaddr;
 use tari_comms_dht::{DbConnectionUrl, DhtConfig};
 use tari_console_wallet::{run_wallet_with_cli, ApplicationConfig};
 use tari_p2p::{auto_update::AutoUpdateConfig, Network, PeerSeedsConfig, TransportType};
+use tari_shutdown::Shutdown;
 use tari_wallet::WalletConfig;
 use tempfile::tempdir;
 use tokio::{runtime, runtime::Runtime};
@@ -52,13 +53,33 @@ pub struct WalletProcess {
     pub grpc_port: u16,
     pub handle: JoinHandle<()>,
     pub temp_dir_path: String,
+    pub shutdown: Shutdown,
 }
 
 impl WalletProcess {
     pub async fn create_client(&self) -> WalletGrpcClient {
         let wallet_addr = format!("http://127.0.0.1:{}", self.grpc_port);
-        eprintln!("Wallet GRPC at {}", wallet_addr);
-        let channel = Endpoint::from_str(&wallet_addr).unwrap().connect().await.unwrap();
+        let endpoint = Endpoint::from_str(&wallet_addr).unwrap();
+        let mut attempts = 0;
+        let channel = loop {
+            if self.handle.is_finished() {
+                panic!("Wallet thread has ended");
+            }
+            match endpoint.connect().await {
+                Ok(channel) => break channel,
+                Err(e) => {
+                    eprintln!(
+                        "Attempt: {}/10 Could not connect to wallet GRPC address {}: {}",
+                        attempts, wallet_addr, e
+                    );
+                    if attempts > 10 {
+                        panic!("Failed to connect to wallet GRPC address {}", wallet_addr);
+                    }
+                    tokio::time::sleep(Duration::from_secs(1)).await;
+                    attempts += 1;
+                },
+            }
+        };
         WalletClient::with_interceptor(
             channel,
             ClientAuthenticationInterceptor::create(&GrpcAuthentication::default()).unwrap(),
@@ -87,45 +108,50 @@ pub async fn spawn_wallet(world: &mut TariWorld, wallet_name: String, base_node_
     };
     let temp_dir = tempdir().unwrap();
     let temp_dir_path = temp_dir.path().display().to_string();
+    let shutdown = Shutdown::new();
 
-    let handle = thread::spawn(move || {
-        let mut wallet_config = tari_console_wallet::ApplicationConfig {
-            common: CommonConfig::default(),
-            auto_update: AutoUpdateConfig::default(),
-            wallet: WalletConfig::default(),
-            peer_seeds: PeerSeedsConfig::default(),
-        };
+    let handle = thread::spawn({
+        let mut shutdown = shutdown.clone();
+        move || {
+            let mut wallet_config = tari_console_wallet::ApplicationConfig {
+                common: CommonConfig::default(),
+                auto_update: AutoUpdateConfig::default(),
+                wallet: WalletConfig::default(),
+                peer_seeds: PeerSeedsConfig::default(),
+            };
 
-        eprintln!("Using wallet temp_dir: {}", temp_dir.path().display());
+            eprintln!("Using wallet temp_dir: {}", temp_dir.path().display());
 
-        wallet_config.wallet.network = Network::LocalNet;
-        wallet_config.wallet.password = Some("test".into());
-        wallet_config.wallet.grpc_enabled = true;
-        wallet_config.wallet.grpc_address =
-            Some(Multiaddr::from_str(&format!("/ip4/127.0.0.1/tcp/{}", grpc_port)).unwrap());
-        wallet_config.wallet.data_dir = temp_dir.path().join("data/wallet");
-        wallet_config.wallet.db_file = temp_dir.path().join("db/console_wallet.db");
+            wallet_config.wallet.network = Network::LocalNet;
+            wallet_config.wallet.password = Some("test".into());
+            wallet_config.wallet.grpc_enabled = true;
+            wallet_config.wallet.grpc_address =
+                Some(Multiaddr::from_str(&format!("/ip4/127.0.0.1/tcp/{}", grpc_port)).unwrap());
+            wallet_config.wallet.data_dir = temp_dir.path().join("data/wallet");
+            wallet_config.wallet.db_file = temp_dir.path().join("db/console_wallet.db");
 
-        wallet_config.wallet.p2p.transport.transport_type = TransportType::Tcp;
-        wallet_config.wallet.p2p.transport.tcp.listener_address =
-            Multiaddr::from_str(&format!("/ip4/127.0.0.1/tcp/{}", port)).unwrap();
-        wallet_config.wallet.p2p.public_address = Some(wallet_config.wallet.p2p.transport.tcp.listener_address.clone());
-        wallet_config.wallet.p2p.datastore_path = temp_dir.path().join("peer_db/wallet");
-        wallet_config.wallet.p2p.dht = DhtConfig {
-            // Not all platforms support sqlite memory connection urls
-            database_url: DbConnectionUrl::File(temp_dir.path().join("dht.sqlite")),
-            ..DhtConfig::default_testnet()
-        };
+            wallet_config.wallet.p2p.transport.transport_type = TransportType::Tcp;
+            wallet_config.wallet.p2p.transport.tcp.listener_address =
+                Multiaddr::from_str(&format!("/ip4/127.0.0.1/tcp/{}", port)).unwrap();
+            wallet_config.wallet.p2p.public_address =
+                Some(wallet_config.wallet.p2p.transport.tcp.listener_address.clone());
+            wallet_config.wallet.p2p.datastore_path = temp_dir.path().join("peer_db/wallet");
+            wallet_config.wallet.p2p.dht = DhtConfig {
+                // Not all platforms support sqlite memory connection urls
+                database_url: DbConnectionUrl::File(temp_dir.path().join("dht.sqlite")),
+                ..DhtConfig::default_local_test()
+            };
 
-        wallet_config.wallet.custom_base_node = Some(format!(
-            "{}::/ip4/127.0.0.1/tcp/{}",
-            base_node_public_key, base_node_port
-        ));
+            wallet_config.wallet.custom_base_node = Some(format!(
+                "{}::/ip4/127.0.0.1/tcp/{}",
+                base_node_public_key, base_node_port
+            ));
 
-        let mut builder = runtime::Builder::new_multi_thread();
-        let rt = builder.enable_all().build().unwrap();
+            let mut builder = runtime::Builder::new_multi_thread();
+            let rt = builder.enable_all().build().unwrap();
 
-        run_wallet(rt, &mut wallet_config);
+            run_wallet(rt, &mut wallet_config, &mut shutdown);
+        }
     });
 
     // make the new wallet able to be referenced by other processes
@@ -135,26 +161,25 @@ pub async fn spawn_wallet(world: &mut TariWorld, wallet_name: String, base_node_
         grpc_port,
         handle,
         temp_dir_path,
+        shutdown,
     };
 
-    // We need to give it time for the wallet to startup
-    // TODO: it would be better to scan the wallet to detect when it has started
-    tokio::time::sleep(Duration::from_secs(5)).await;
-
-    // TODO: fix the wallet configuration so the base node is correctly set on startup instead of afterwards
+    eprintln!(
+        "Wallet {} GRPC listening on port {}",
+        wallet_name, wallet_process.grpc_port
+    );
+    tokio::time::sleep(Duration::from_secs(2)).await;
     let mut wallet_client = wallet_process.create_client().await;
-    let _resp = wallet_client
-        .set_base_node(set_base_node_request.clone())
-        .await
-        .unwrap();
 
-    // TODO: Clean up
     let identity = wallet_client
         .identify(GetIdentityRequest {})
         .await
         .unwrap()
         .into_inner();
+
     eprintln!("Wallet {} comms address: {}", wallet_name, identity.public_address);
+
+    // TODO: Clean up
     let mut status = wallet_client.get_network_status(Empty {}).await.unwrap().into_inner();
     let mut counter = 0;
     while status.status != ConnectivityStatus::Online as i32 {
@@ -171,10 +196,9 @@ pub async fn spawn_wallet(world: &mut TariWorld, wallet_name: String, base_node_
     }
 
     world.wallets.insert(wallet_name.clone(), wallet_process);
-    tokio::time::sleep(Duration::from_secs(5)).await;
 }
 
-pub fn run_wallet(runtime: Runtime, config: &mut ApplicationConfig) {
+pub fn run_wallet(runtime: Runtime, config: &mut ApplicationConfig, shutdown: &mut Shutdown) {
     let data_dir = config.wallet.data_dir.clone();
     let data_dir_str = data_dir.clone().into_os_string().into_string().unwrap();
 
@@ -187,7 +211,7 @@ pub fn run_wallet(runtime: Runtime, config: &mut ApplicationConfig) {
         common: CommonCliArgs {
             base_path: data_dir_str,
             config: config_path.into_os_string().into_string().unwrap(),
-            log_config: Some(log_config.clone()),
+            log_config: Some(log_config),
             log_level: Some(Level::Debug),
             config_property_overrides: vec![],
         },
@@ -207,6 +231,7 @@ pub fn run_wallet(runtime: Runtime, config: &mut ApplicationConfig) {
         command2: None,
     };
 
-    initialize_logging(log_config.as_path(), "").unwrap();
-    run_wallet_with_cli(runtime, config, cli).unwrap()
+    if let Err(err) = run_wallet_with_cli(shutdown, runtime, config, cli) {
+        eprintln!("Wallet error: {}", err);
+    }
 }

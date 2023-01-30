@@ -22,21 +22,22 @@
 
 use std::mem::size_of;
 
+use tari_bor::{borsh, Decode, Encode};
 use tari_dan_engine::{
     packager::{PackageError, TemplateModuleLoader},
     transaction::TransactionError,
     wasm::{compile::compile_template, WasmExecutionError},
 };
-use tari_engine_types::instruction::Instruction;
+use tari_engine_types::{instruction::Instruction, substate::SubstateAddress};
 use tari_template_lib::{
     args,
     models::{Amount, ComponentAddress},
 };
-use tari_template_test_tooling::TemplateTest;
+use tari_template_test_tooling::{MockRuntimeInterface, SubstateType, TemplateTest};
 
 #[test]
 fn test_hello_world() {
-    let template_test = TemplateTest::new(vec!["tests/templates/hello_world"]);
+    let mut template_test = TemplateTest::new(vec!["tests/templates/hello_world"]);
     let result: String = template_test.call_function("HelloWorld", "greet", args![]);
 
     assert_eq!(result, "Hello World!");
@@ -44,7 +45,7 @@ fn test_hello_world() {
 
 #[test]
 fn test_state() {
-    let template_test = TemplateTest::new(vec!["tests/templates/state"]);
+    let mut template_test = TemplateTest::new(vec!["tests/templates/state"]);
     let store = template_test.read_only_state_store();
 
     // constructor
@@ -79,7 +80,7 @@ fn test_state() {
 
 #[test]
 fn test_composed() {
-    let template_test = TemplateTest::new(vec!["tests/templates/state", "tests/templates/hello_world"]);
+    let mut template_test = TemplateTest::new(vec!["tests/templates/state", "tests/templates/hello_world"]);
 
     let functions = template_test
         .get_module("HelloWorld")
@@ -144,69 +145,75 @@ fn test_dodgy_template() {
 
 #[test]
 fn test_account() {
-    let template_test = TemplateTest::new(vec!["tests/templates/account", "tests/templates/faucet"]);
+    let mut template_test = TemplateTest::new(vec!["tests/templates/faucet"]);
 
     let faucet_template = template_test.get_template_address("TestFaucet");
 
     let initial_supply = Amount(1_000_000_000_000);
-    let result = template_test.execute_and_commit(vec![Instruction::CallFunction {
-        template_address: faucet_template,
-        function: "mint".to_string(),
-        args: args![initial_supply],
-    }]);
+    let result = template_test
+        .execute_and_commit(vec![Instruction::CallFunction {
+            template_address: faucet_template,
+            function: "mint".to_string(),
+            args: args![initial_supply],
+        }])
+        .unwrap();
     let faucet_component: ComponentAddress = result.execution_results[0].decode().unwrap();
     let faucet_resource = result
         .result
         .expect("Faucet mint failed")
         .up_iter()
-        .find_map(|(_, s)| s.substate_value().resource_address())
+        .find_map(|(_, s)| s.substate_address().as_resource_address())
         .unwrap();
 
     // Create sender and receiver accounts
     let sender_address: ComponentAddress = template_test.call_function("Account", "new", args![]);
     let receiver_address: ComponentAddress = template_test.call_function("Account", "new", args![]);
 
-    let _result = template_test.execute_and_commit(vec![
-        Instruction::CallMethod {
-            component_address: faucet_component,
-            method: "take_free_coins".to_string(),
-            args: args![],
-        },
-        Instruction::PutLastInstructionOutputOnWorkspace {
-            key: b"free_coins".to_vec(),
-        },
-        Instruction::CallMethod {
-            component_address: sender_address,
-            method: "deposit".to_string(),
-            args: args![Variable("free_coins")],
-        },
-    ]);
+    let _result = template_test
+        .execute_and_commit(vec![
+            Instruction::CallMethod {
+                component_address: faucet_component,
+                method: "take_free_coins".to_string(),
+                args: args![],
+            },
+            Instruction::PutLastInstructionOutputOnWorkspace {
+                key: b"free_coins".to_vec(),
+            },
+            Instruction::CallMethod {
+                component_address: sender_address,
+                method: "deposit".to_string(),
+                args: args![Variable("free_coins")],
+            },
+        ])
+        .unwrap();
 
-    let result = template_test.execute_and_commit(vec![
-        Instruction::CallMethod {
-            component_address: sender_address,
-            method: "withdraw".to_string(),
-            args: args![faucet_resource, Amount(100)],
-        },
-        Instruction::PutLastInstructionOutputOnWorkspace {
-            key: b"foo_bucket".to_vec(),
-        },
-        Instruction::CallMethod {
-            component_address: receiver_address,
-            method: "deposit".to_string(),
-            args: args![Variable("foo_bucket")],
-        },
-        Instruction::CallMethod {
-            component_address: sender_address,
-            method: "balance".to_string(),
-            args: args![faucet_resource],
-        },
-        Instruction::CallMethod {
-            component_address: receiver_address,
-            method: "balance".to_string(),
-            args: args![faucet_resource],
-        },
-    ]);
+    let result = template_test
+        .execute_and_commit(vec![
+            Instruction::CallMethod {
+                component_address: sender_address,
+                method: "withdraw".to_string(),
+                args: args![faucet_resource, Amount(100)],
+            },
+            Instruction::PutLastInstructionOutputOnWorkspace {
+                key: b"foo_bucket".to_vec(),
+            },
+            Instruction::CallMethod {
+                component_address: receiver_address,
+                method: "deposit".to_string(),
+                args: args![Variable("foo_bucket")],
+            },
+            Instruction::CallMethod {
+                component_address: sender_address,
+                method: "balance".to_string(),
+                args: args![faucet_resource],
+            },
+            Instruction::CallMethod {
+                component_address: receiver_address,
+                method: "balance".to_string(),
+                args: args![faucet_resource],
+            },
+        ])
+        .unwrap();
     for log in result.logs {
         eprintln!("LOG: {}", log);
     }
@@ -218,7 +225,7 @@ fn test_account() {
 #[test]
 fn test_private_function() {
     // instantiate the counter
-    let template_test = TemplateTest::new(vec!["tests/templates/private_function"]);
+    let mut template_test = TemplateTest::new(vec!["tests/templates/private_function"]);
 
     // check that the private method and function are not exported
     let functions = template_test
@@ -239,7 +246,7 @@ fn test_private_function() {
 
 #[test]
 fn test_tuples() {
-    let template_test = TemplateTest::new(vec!["tests/templates/tuples"]);
+    let mut template_test = TemplateTest::new(vec!["tests/templates/tuples"]);
 
     // tuples returned in a regular function
     let (message, number): (String, u32) = template_test.call_function("Tuple", "tuple_output", args![]);
@@ -305,5 +312,431 @@ mod errors {
             },
             _ => panic!("Unexpected error: {}", err),
         }
+    }
+}
+
+mod basic_nft {
+
+    use super::*;
+
+    fn setup() -> (TemplateTest<MockRuntimeInterface>, ComponentAddress, ComponentAddress) {
+        let mut template_test = TemplateTest::new(vec!["tests/templates/nft/basic_nft"]);
+
+        let account_address: ComponentAddress = template_test.call_function("Account", "new", args![]);
+        let nft_component: ComponentAddress = template_test.call_function("SparkleNft", "new", args![]);
+
+        (template_test, account_address, nft_component)
+    }
+
+    #[test]
+    fn create_resource_mint_and_deposit() {
+        let (mut template_test, account_address, nft_component) = setup();
+
+        let vars = vec![
+            ("account", account_address.into()),
+            ("nft", nft_component.into()),
+            (
+                "nft_resx",
+                template_test.get_previous_output_address(SubstateType::Resource).into(),
+            ),
+        ];
+
+        let total_supply: Amount = template_test.call_method(nft_component, "total_supply", args![]);
+        assert_eq!(total_supply, Amount(4));
+
+        let result = template_test
+            .execute_and_commit_manifest(
+                r#"
+            let account = var!["account"];
+            let sparkle_nft = var!["nft"];
+        
+            let nft_bucket = sparkle_nft.mint();
+            account.deposit(nft_bucket);
+        "#,
+                vars.clone(),
+            )
+            .unwrap();
+
+        let diff = result.result.expect("execution failed");
+
+        // Resource is changed
+        assert_eq!(diff.down_iter().filter(|(addr, _)| addr.is_resource()).count(), 1);
+        assert_eq!(diff.up_iter().filter(|(addr, _)| addr.is_resource()).count(), 1);
+
+        // NFT and account components changed
+        assert_eq!(diff.down_iter().filter(|(addr, _)| addr.is_component()).count(), 2);
+        assert_eq!(diff.up_iter().filter(|(addr, _)| addr.is_component()).count(), 2);
+
+        // One new vault created
+        assert_eq!(diff.down_iter().filter(|(addr, _)| addr.is_vault()).count(), 0);
+        assert_eq!(diff.up_iter().filter(|(addr, _)| addr.is_vault()).count(), 1);
+
+        // One new NFT minted
+        assert_eq!(diff.down_iter().filter(|(addr, _)| addr.is_non_fungible()).count(), 0);
+        assert_eq!(diff.up_iter().filter(|(addr, _)| addr.is_non_fungible()).count(), 1);
+
+        let total_supply: Amount = template_test.call_method(nft_component, "total_supply", args![]);
+        assert_eq!(total_supply, Amount(5));
+
+        let result = template_test
+            .execute_and_commit_manifest(
+                r#"
+            let account = var!["account"];
+            let sparkle_nft = var!["nft"];
+        
+            let nft_bucket = sparkle_nft.withdraw_all();
+            account.deposit(nft_bucket);
+            sparkle_nft.inner_vault_balance();
+            
+            let nft_resx = var!["nft_resx"];
+            account.balance(nft_resx);
+            sparkle_nft.total_supply();
+        "#,
+                vars,
+            )
+            .unwrap();
+        result.result.expect("execution failed");
+        // sparkle_nft.inner_vault_balance()
+        assert_eq!(result.execution_results[3].decode::<Amount>().unwrap(), Amount(0));
+        // account.balance(nft_resx)
+        assert_eq!(result.execution_results[4].decode::<Amount>().unwrap(), Amount(5));
+        // sparkle_nft.total_supply()
+        assert_eq!(result.execution_results[5].decode::<Amount>().unwrap(), Amount(5));
+    }
+
+    #[test]
+    fn change_nft_mutable_data() {
+        let (mut template_test, account_address, nft_component) = setup();
+
+        let total_supply: Amount = template_test.call_method(nft_component, "total_supply", args![]);
+        assert_eq!(total_supply, Amount(4));
+
+        let vars = [("account", account_address.into()), ("nft", nft_component.into())];
+
+        let result = template_test
+            .execute_and_commit_manifest(
+                r#"
+            let account = var!["account"];
+            let sparkle_nft = var!["nft"];
+        
+            let nft_bucket = sparkle_nft.mint();
+            account.deposit(nft_bucket);
+        "#,
+                vars,
+            )
+            .unwrap();
+
+        result.result.expect("execution failed");
+
+        let nft_addr = template_test.get_previous_output_address(SubstateType::NonFungible);
+        let (nft_resource_addr, _) = nft_addr.as_non_fungible_address().unwrap();
+
+        let vars = [
+            ("account", account_address.into()),
+            ("nft", nft_component.into()),
+            ("nft_resx", (*nft_resource_addr).into()),
+            ("nft_id", nft_addr.clone().into()),
+        ];
+
+        template_test
+            .execute_and_commit_manifest(
+                r#"
+            let account = var!["account"];
+            let sparkle_nft_resource = var!["nft_resx"];
+            account.get_non_fungible_ids(sparkle_nft_resource);
+            
+            let sparkle_nft = var!["nft"];
+            let sparkle_nft_id = var!["nft_id"];
+            sparkle_nft.inc_brightness(sparkle_nft_id, 10u32);
+        "#,
+                vars.clone(),
+            )
+            .unwrap();
+
+        let nft = template_test
+            .read_only_state_store()
+            .get_substate(&nft_addr)
+            .unwrap()
+            .into_substate_value()
+            .into_non_fungible()
+            .unwrap();
+        #[derive(Debug, Clone, Encode, Decode)]
+        pub struct Sparkle {
+            pub brightness: u32,
+        }
+        assert_eq!(nft.get_data::<Sparkle>().brightness, 10);
+
+        let err = template_test
+            .execute_and_commit_manifest(
+                r#"
+            let sparkle_nft = var!["nft"];
+            let sparkle_nft_id = var!["nft_id"];
+            sparkle_nft.dec_brightness(sparkle_nft_id, 11u32);
+        "#,
+                vars,
+            )
+            .unwrap_err();
+
+        assert!(err.to_string().contains("Not enough brightness remaining"));
+    }
+
+    #[test]
+    fn mint_specific_id() {
+        let (mut template_test, account_address, nft_component) = setup();
+
+        let vars = vec![
+            ("account", account_address.into()),
+            ("nft", nft_component.into()),
+            (
+                "nft_resx",
+                template_test.get_previous_output_address(SubstateType::Resource).into(),
+            ),
+        ];
+
+        let total_supply: Amount = template_test.call_method(nft_component, "total_supply", args![]);
+        assert_eq!(total_supply, Amount(4));
+
+        let result = template_test
+            .execute_and_commit_manifest(
+                r#"
+            let account = var!["account"];
+            let sparkle_nft = var!["nft"];
+        
+            let nft_bucket = sparkle_nft.mint_specific(NonFungibleId("SpecialNft"));
+            account.deposit(nft_bucket);
+            
+            let nft_bucket = sparkle_nft.mint_specific(NonFungibleId(123u32));
+            account.deposit(nft_bucket);
+
+            let nft_bucket = sparkle_nft.mint_specific(NonFungibleId(456u64));
+            account.deposit(nft_bucket);
+
+            let nft_bucket = sparkle_nft.mint_specific(NonFungibleId(b"this will be interpreted as uuid"));
+            account.deposit(nft_bucket);
+            
+            sparkle_nft.total_supply();
+        "#,
+                vars.clone(),
+            )
+            .unwrap();
+
+        let diff = result.result.expect("execution failed");
+        let nfts = diff
+            .up_iter()
+            .filter_map(|(a, _)| match a {
+                SubstateAddress::NonFungible(_, id) => Some(id),
+                _ => None,
+            })
+            .collect::<Vec<_>>();
+        assert_eq!(
+            nfts.iter()
+                .filter(|n| n.to_canonical_string() == "str:SpecialNft")
+                .count(),
+            1
+        );
+        assert_eq!(nfts.iter().filter(|n| n.to_canonical_string() == "u32:123").count(), 1);
+        assert_eq!(nfts.iter().filter(|n| n.to_canonical_string() == "u64:456").count(), 1);
+        assert_eq!(
+            nfts.iter()
+                .filter(|n| n.to_canonical_string() ==
+                    "uuid:746869732077696c6c20626520696e7465727072657465642061732075756964")
+                .count(),
+            1
+        );
+        assert_eq!(nfts.len(), 4);
+        assert_eq!(result.execution_results[12].decode::<Amount>().unwrap(), Amount(8));
+
+        // Try mint 2 nfts with the same id in a single transaction - should fail
+        template_test
+            .execute_and_commit_manifest(
+                r#"
+            let account = var!["account"];
+            let sparkle_nft = var!["nft"];
+        
+            let nft_bucket1 = sparkle_nft.mint_specific(NonFungibleId("Duplicate"));
+            let nft_bucket2 = sparkle_nft.mint_specific(NonFungibleId("Duplicate"));
+            account.deposit(nft_bucket1);
+            account.deposit(nft_bucket2);
+        "#,
+                vars,
+            )
+            .unwrap_err();
+    }
+}
+
+mod emoji_id {
+    use tari_engine_types::commit_result::FinalizeResult;
+    use tari_template_lib::prelude::ResourceAddress;
+
+    use super::*;
+
+    #[derive(Debug, Clone, Encode, Decode, Hash)]
+    #[repr(i32)]
+    pub enum Emoji {
+        Smile = 0x00,
+        Sweat = 0x01,
+        Laugh = 0x02,
+        Wink = 0x03,
+    }
+
+    #[derive(Debug, Clone, Encode, Decode, Hash)]
+    pub struct EmojiId(Vec<Emoji>);
+
+    fn mint_emoji_id(
+        template_test: &mut TemplateTest<MockRuntimeInterface>,
+        account_address: ComponentAddress,
+        faucet_resource: ResourceAddress,
+        emoji_id_minter: ComponentAddress,
+        emoji_id: &EmojiId,
+    ) -> Result<FinalizeResult, anyhow::Error> {
+        template_test.execute_and_commit(vec![
+            Instruction::CallMethod {
+                component_address: account_address,
+                method: "withdraw".to_string(),
+                args: args![faucet_resource, Amount(25)],
+            },
+            Instruction::PutLastInstructionOutputOnWorkspace {
+                key: b"payment".to_vec(),
+            },
+            Instruction::CallMethod {
+                component_address: emoji_id_minter,
+                method: "mint".to_string(),
+                args: args![Literal(emoji_id.clone()), Variable("payment")],
+            },
+            Instruction::PutLastInstructionOutputOnWorkspace {
+                key: b"emoji_id".to_vec(),
+            },
+            Instruction::CallMethod {
+                component_address: account_address,
+                method: "deposit".to_string(),
+                args: args![Variable("emoji_id")],
+            },
+        ])
+    }
+
+    #[test]
+    fn mint_emoji_ids() {
+        let mut template_test = TemplateTest::new(vec!["tests/templates/faucet", "tests/templates/nft/emoji_id"]);
+
+        // create an account
+        let account_address: ComponentAddress = template_test.call_function("Account", "new", args![]);
+
+        // create a fungible token faucet, we are going to use those tokens as payments
+        // TODO: use Thaums instead when they're implemented
+        let faucet_template = template_test.get_template_address("TestFaucet");
+        let initial_supply = Amount(1_000_000_000_000);
+        let result = template_test
+            .execute_and_commit(vec![Instruction::CallFunction {
+                template_address: faucet_template,
+                function: "mint".to_string(),
+                args: args![initial_supply],
+            }])
+            .unwrap();
+        let faucet_component: ComponentAddress = result.execution_results[0].decode().unwrap();
+        let faucet_resource = result
+            .result
+            .expect("Faucet mint failed")
+            .up_iter()
+            .find_map(|(_, s)| s.substate_address().as_resource_address())
+            .unwrap();
+
+        // initialize the emoji id minter
+        let emoji_id_template = template_test.get_template_address("EmojiIdMinter");
+        let max_emoji_id_len = 10_u64;
+        let price = Amount(20);
+        let result = template_test
+            .execute_and_commit(vec![Instruction::CallFunction {
+                template_address: emoji_id_template,
+                function: "new".to_string(),
+                args: args![faucet_resource, max_emoji_id_len, price],
+            }])
+            .unwrap();
+        let emoji_id_minter: ComponentAddress = result.execution_results[0].decode().unwrap();
+        let emoji_id_resource = result
+            .result
+            .expect("Emoji id initialization failed")
+            .up_iter()
+            .find_map(|(_, s)| s.substate_address().as_resource_address())
+            .unwrap();
+
+        // at the beggining we don't have any emojis minted
+        let total_supply: Amount = template_test.call_method(emoji_id_minter, "total_supply", args![]);
+        assert_eq!(total_supply, Amount(0));
+
+        // get some funds into the account
+        let vars = vec![
+            ("account", account_address.into()),
+            ("faucet", faucet_component.into()),
+            ("emoji_id_minter", emoji_id_minter.into()),
+        ];
+        template_test
+            .execute_and_commit_manifest(
+                r#"
+            let account = var!["account"];
+            let faucet = var!["faucet"];
+        
+            let coins = faucet.take_free_coins();
+            account.deposit(coins);
+        "#,
+                vars.clone(),
+            )
+            .unwrap();
+
+        // mint a new emoji_id
+        // TODO: transaction manifests do not support passing a arbitrary type (like Vec<Emoji>)
+        let emoji_id = EmojiId(vec![Emoji::Smile, Emoji::Laugh]);
+        mint_emoji_id(
+            &mut template_test,
+            account_address,
+            faucet_resource,
+            emoji_id_minter,
+            &emoji_id,
+        )
+        .unwrap();
+
+        // check that the account holds the newly minted nft
+        let nft_balance: Amount = template_test.call_method(account_address, "balance", args![emoji_id_resource]);
+        assert_eq!(nft_balance, Amount(1));
+
+        // the supply of emoji ids should have increased
+        let total_supply: Amount = template_test.call_method(emoji_id_minter, "total_supply", args![]);
+        assert_eq!(total_supply, Amount(1));
+
+        // emoji id are unique, so minting the same emojis again must fail
+        mint_emoji_id(
+            &mut template_test,
+            account_address,
+            faucet_resource,
+            emoji_id_minter,
+            &emoji_id,
+        )
+        .unwrap_err();
+
+        // emoji ids with invalid lenght must fail
+        let mut too_long_emoji_id = vec![];
+        for _ in 0..=max_emoji_id_len {
+            too_long_emoji_id.push(Emoji::Smile);
+        }
+        let emoji_id = EmojiId(too_long_emoji_id);
+        mint_emoji_id(
+            &mut template_test,
+            account_address,
+            faucet_resource,
+            emoji_id_minter,
+            &emoji_id,
+        )
+        .unwrap_err();
+
+        // FIXME: trying to mint a new emoji id (different from the first) should work
+        //        but it gives a "Dangling bucket error"
+        // let emoji_id = EmojiId(vec![Emoji::Smile, Emoji::Wink]);
+        // mint_emoji_id(
+        // &mut template_test,
+        // account_address,
+        // faucet_resource,
+        // emoji_id_minter,
+        // &emoji_id,
+        // )
+        // .unwrap();
     }
 }

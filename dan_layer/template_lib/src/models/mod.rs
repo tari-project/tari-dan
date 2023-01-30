@@ -38,14 +38,14 @@ pub use layer_one_commitment::LayerOneCommitmentAddress;
 mod metadata;
 pub use metadata::Metadata;
 
+mod non_fungible;
+pub use non_fungible::{NonFungible, NonFungibleId};
+
 mod resource;
 pub use resource::ResourceAddress;
 
-mod package;
-pub use package::TemplateAddress;
+mod template;
+pub use template::TemplateAddress;
 
 mod vault;
 pub use vault::{Vault, VaultId, VaultRef};
-
-mod substate_address;
-pub use substate_address::SubstateAddress;

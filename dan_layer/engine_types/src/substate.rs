@@ -30,32 +30,46 @@ use tari_bor::{borsh, decode, encode, Decode, Encode};
 use tari_common_types::types::{Commitment, FixedHash};
 use tari_crypto::{keys::PublicKey, ristretto::RistrettoPublicKey};
 use tari_template_lib::{
-    models::{ComponentAddress, ComponentHeader, LayerOneCommitmentAddress, ResourceAddress, VaultId},
+    models::{
+        ComponentAddress,
+        ComponentHeader,
+        LayerOneCommitmentAddress,
+        NonFungible,
+        NonFungibleId,
+        ResourceAddress,
+        VaultId,
+    },
     Hash,
 };
 use tari_utilities::{hex::Hex, ByteArray};
 
-use crate::{resource::Resource, vault::Vault};
+use crate::{hashing::hasher, resource::Resource, vault::Vault};
 
 #[derive(Debug, Clone, Encode, Decode, Serialize, Deserialize)]
 pub struct Substate {
+    address: SubstateAddress,
     substate: SubstateValue,
     version: u32,
 }
 
 impl Substate {
-    pub fn new<T: Into<SubstateValue>>(version: u32, substate: T) -> Self {
+    pub fn new<T: Into<SubstateValue>>(address: SubstateAddress, version: u32, substate: T) -> Self {
         Self {
+            address,
             substate: substate.into(),
             version,
         }
+    }
+
+    pub fn substate_address(&self) -> &SubstateAddress {
+        &self.address
     }
 
     pub fn substate_value(&self) -> &SubstateValue {
         &self.substate
     }
 
-    pub fn into_substate(self) -> SubstateValue {
+    pub fn into_substate_value(self) -> SubstateValue {
         self.substate
     }
 
@@ -73,12 +87,13 @@ impl Substate {
 }
 
 /// Base object address, version tuples
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Encode, Decode, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Encode, Decode, Serialize, Deserialize)]
 pub enum SubstateAddress {
     Component(ComponentAddress),
     Resource(ResourceAddress),
     Vault(VaultId),
     LayerOneCommitment(LayerOneCommitmentAddress),
+    NonFungible(ResourceAddress, NonFungibleId),
 }
 
 impl SubstateAddress {
@@ -89,12 +104,30 @@ impl SubstateAddress {
         }
     }
 
-    pub fn hash(&self) -> &Hash {
+    pub fn as_vault_id(&self) -> Option<VaultId> {
+        match self {
+            Self::Vault(id) => Some(*id),
+            _ => None,
+        }
+    }
+
+    pub fn as_resource_address(&self) -> Option<ResourceAddress> {
+        match self {
+            Self::Resource(address) => Some(*address),
+            _ => None,
+        }
+    }
+
+    pub fn to_canonical_hash(&self) -> Hash {
         match self {
             SubstateAddress::Component(address) => address.hash(),
             SubstateAddress::Resource(address) => address.hash(),
             SubstateAddress::Vault(id) => id.hash(),
             SubstateAddress::LayerOneCommitment(address) => address.hash(),
+            SubstateAddress::NonFungible(resource_addr, id) => hasher("non_fungible_id")
+                .chain(resource_addr.hash())
+                .chain(&id)
+                .result(),
         }
     }
 
@@ -105,7 +138,31 @@ impl SubstateAddress {
             Self::Resource(addr) => addr.to_string(),
             Self::Vault(addr) => addr.to_string(),
             Self::LayerOneCommitment(addr) => addr.to_string(),
+            SubstateAddress::NonFungible(_, addr) => addr.to_string(),
         }
+    }
+
+    pub fn as_non_fungible_address(&self) -> Option<(&ResourceAddress, &NonFungibleId)> {
+        match self {
+            SubstateAddress::NonFungible(resource_address, nft_id) => Some((resource_address, nft_id)),
+            _ => None,
+        }
+    }
+
+    pub fn is_resource(&self) -> bool {
+        matches!(self, Self::Resource(_))
+    }
+
+    pub fn is_component(&self) -> bool {
+        matches!(self, Self::Component(_))
+    }
+
+    pub fn is_vault(&self) -> bool {
+        matches!(self, Self::Vault(_))
+    }
+
+    pub fn is_non_fungible(&self) -> bool {
+        matches!(self, Self::NonFungible(_, _))
     }
 }
 
@@ -129,7 +186,12 @@ impl From<VaultId> for SubstateAddress {
 
 impl Display for SubstateAddress {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.to_address_string())
+        match self {
+            SubstateAddress::Component(addr) => write!(f, "{}", addr),
+            SubstateAddress::Resource(addr) => write!(f, "{}", addr),
+            SubstateAddress::Vault(addr) => write!(f, "{}", addr),
+            SubstateAddress::NonFungible(resource_addr, addr) => write!(f, "{} {}", resource_addr, addr),
+        }
     }
 }
 
@@ -147,8 +209,25 @@ impl FromStr for SubstateAddress {
                 Ok(SubstateAddress::Component(addr))
             },
             Some(("resource", addr)) => {
-                let addr = ResourceAddress::from_hex(addr).map_err(|_| InvalidSubstateAddressFormat(s.to_string()))?;
-                Ok(SubstateAddress::Resource(addr))
+                match addr.split_once(' ') {
+                    // resource_xxxx nft_xxxxx
+                    Some((resource_str, addr)) => match addr.split_once('_') {
+                        Some(("nft", addr)) => {
+                            let resource_addr = ResourceAddress::from_hex(resource_str)
+                                .map_err(|_| InvalidSubstateAddressFormat(s.to_string()))?;
+                            let id = NonFungibleId::try_from_canonical_string(addr)
+                                .map_err(|_| InvalidSubstateAddressFormat(s.to_string()))?;
+                            Ok(SubstateAddress::NonFungible(resource_addr, id))
+                        },
+                        _ => Err(InvalidSubstateAddressFormat(s.to_string())),
+                    },
+                    // resource_xxxx
+                    None => {
+                        let addr =
+                            ResourceAddress::from_hex(addr).map_err(|_| InvalidSubstateAddressFormat(s.to_string()))?;
+                        Ok(SubstateAddress::Resource(addr))
+                    },
+                }
             },
             Some(("vault", addr)) => {
                 let id = VaultId::from_hex(addr).map_err(|_| InvalidSubstateAddressFormat(s.to_string()))?;
@@ -164,11 +243,19 @@ pub enum SubstateValue {
     Component(ComponentHeader),
     Resource(Resource),
     Vault(Vault),
+    NonFungible(NonFungible),
     LayerOneCommitment(Commitment),
 }
 
 impl SubstateValue {
     pub fn into_component(self) -> Option<ComponentHeader> {
+        match self {
+            SubstateValue::Component(component) => Some(component),
+            _ => None,
+        }
+    }
+
+    pub fn component(&self) -> Option<&ComponentHeader> {
         match self {
             SubstateValue::Component(component) => Some(component),
             _ => None,
@@ -198,17 +285,16 @@ impl SubstateValue {
 
     pub fn resource_address(&self) -> Option<ResourceAddress> {
         match self {
-            SubstateValue::Resource(resource) => Some(*resource.address()),
+            SubstateValue::Resource(resource) => Some(*resource.resource_address()),
             SubstateValue::Vault(vault) => Some(*vault.resource_address()),
             _ => None,
         }
     }
 
-    pub fn substate_address(&self) -> SubstateAddress {
+    pub fn into_non_fungible(self) -> Option<NonFungible> {
         match self {
-            SubstateValue::Component(component) => SubstateAddress::Component(*component.address()),
-            SubstateValue::Resource(resource) => SubstateAddress::Resource(*resource.address()),
-            SubstateValue::Vault(vault) => SubstateAddress::Vault(*vault.id()),
+            SubstateValue::NonFungible(nft) => Some(nft),
+            _ => None,
             // TODO: better type. Commitment does not implement Copy, so need to use an array that does
             SubstateValue::LayerOneCommitment(commitment) => SubstateAddress::LayerOneCommitment(
                 LayerOneCommitmentAddress::try_from_commitment(commitment.as_bytes()).unwrap(),
@@ -232,6 +318,12 @@ impl From<Resource> for SubstateValue {
 impl From<Vault> for SubstateValue {
     fn from(vault: Vault) -> Self {
         Self::Vault(vault)
+    }
+}
+
+impl From<NonFungible> for SubstateValue {
+    fn from(token: NonFungible) -> Self {
+        Self::NonFungible(token)
     }
 }
 
@@ -275,5 +367,36 @@ impl SubstateDiff {
 
     pub fn is_empty(&self) -> bool {
         self.len() == 0
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    mod substate_address_parse {
+        use super::*;
+
+        #[test]
+        fn it_parses_valid_substate_addresses() {
+            SubstateAddress::from_str("component_7cbfe29101c24924b1b6ccefbfff98986d648622272ae24f7585dab55ff1ff64")
+                .unwrap()
+                .as_component_address()
+                .unwrap();
+            SubstateAddress::from_str("vault_7cbfe29101c24924b1b6ccefbfff98986d648622272ae24f7585dab55ff1ff64")
+                .unwrap()
+                .as_vault_id()
+                .unwrap();
+            SubstateAddress::from_str("resource_7cbfe29101c24924b1b6ccefbfff98986d648622272ae24f7585dab55ff1ff64")
+                .unwrap()
+                .as_resource_address()
+                .unwrap();
+            SubstateAddress::from_str(
+                "resource_7cbfe29101c24924b1b6ccefbfff98986d648622272ae24f7585dab55ff1ff64 nft_str:SpecialNft",
+            )
+            .unwrap()
+            .as_non_fungible_address()
+            .unwrap();
+        }
     }
 }

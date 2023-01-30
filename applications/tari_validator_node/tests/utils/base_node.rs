@@ -28,6 +28,7 @@ use tari_common::configuration::CommonConfig;
 use tari_comms::{multiaddr::Multiaddr, peer_manager::PeerFeatures, NodeIdentity};
 use tari_comms_dht::{DbConnectionUrl, DhtConfig};
 use tari_p2p::{auto_update::AutoUpdateConfig, Network, PeerSeedsConfig, TransportType};
+use tari_shutdown::Shutdown;
 use tari_validator_node::GrpcBaseNodeClient;
 use tempfile::tempdir;
 use tokio::task;
@@ -42,14 +43,15 @@ pub struct BaseNodeProcess {
     pub identity: NodeIdentity,
     pub handle: task::JoinHandle<()>,
     pub temp_dir_path: String,
+    pub shutdown: Shutdown,
 }
 
 pub async fn spawn_base_node(world: &mut TariWorld, bn_name: String) {
     // each spawned base node will use different ports
     let (port, grpc_port) = get_os_assigned_ports();
-    // match world.base_nodes.values().last() {
-    //     Some(v) => (v.port + 1, v.grpc_port + 1),
-    //     None => (19000, 19500), // default ports if it's the first base node to be spawned
+    // let (port, grpc_port) = match world.base_nodes.values().last() {
+    // Some(v) => (v.port + 1, v.grpc_port + 1),
+    // None => (19000, 19500), // default ports if it's the first base node to be spawned
     // };
     let base_node_address = Multiaddr::from_str(&format!("/ip4/127.0.0.1/tcp/{}", port)).unwrap();
     let base_node_identity = NodeIdentity::random(&mut OsRng, base_node_address, PeerFeatures::COMMUNICATION_NODE);
@@ -59,44 +61,50 @@ pub async fn spawn_base_node(world: &mut TariWorld, bn_name: String) {
     let temp_dir_path = temp_dir.path().display().to_string();
     let base_node_name = bn_name.clone();
 
-    let handle = task::spawn(async move {
-        let mut base_node_config = tari_base_node::ApplicationConfig {
-            common: CommonConfig::default(),
-            auto_update: AutoUpdateConfig::default(),
-            base_node: BaseNodeConfig::default(),
-            peer_seeds: PeerSeedsConfig::default(),
-            metrics: MetricsConfig::default(),
-        };
+    let shutdown = Shutdown::new();
 
-        println!("Using base_node temp_dir: {}", temp_dir.path().display());
-        base_node_config.base_node.network = Network::LocalNet;
-        base_node_config.base_node.grpc_enabled = true;
-        base_node_config.base_node.grpc_address = Some(format!("/ip4/127.0.0.1/tcp/{}", grpc_port).parse().unwrap());
-        base_node_config.base_node.report_grpc_error = true;
+    let handle = task::spawn({
+        let shutdown = shutdown.clone();
+        async move {
+            let mut base_node_config = tari_base_node::ApplicationConfig {
+                common: CommonConfig::default(),
+                auto_update: AutoUpdateConfig::default(),
+                base_node: BaseNodeConfig::default(),
+                peer_seeds: PeerSeedsConfig::default(),
+                metrics: MetricsConfig::default(),
+            };
 
-        base_node_config.base_node.data_dir = temp_dir.path().join("db");
-        base_node_config.base_node.identity_file = temp_dir.path().join("base_node_id.json");
-        base_node_config.base_node.tor_identity_file = temp_dir.path().join("base_node_tor_id.json");
+            println!("Using base_node temp_dir: {}", temp_dir.path().display());
+            base_node_config.base_node.network = Network::LocalNet;
+            base_node_config.base_node.grpc_enabled = true;
+            base_node_config.base_node.grpc_address =
+                Some(format!("/ip4/127.0.0.1/tcp/{}", grpc_port).parse().unwrap());
+            base_node_config.base_node.report_grpc_error = true;
 
-        base_node_config.base_node.lmdb_path = temp_dir.path().to_path_buf();
-        base_node_config.base_node.p2p.transport.transport_type = TransportType::Tcp;
-        base_node_config.base_node.p2p.transport.tcp.listener_address =
-            format!("/ip4/127.0.0.1/tcp/{}", port).parse().unwrap();
-        base_node_config.base_node.p2p.public_address =
-            Some(base_node_config.base_node.p2p.transport.tcp.listener_address.clone());
-        base_node_config.base_node.p2p.datastore_path = temp_dir.path().join("peer_db/base-node");
-        base_node_config.base_node.p2p.dht = DhtConfig {
-            // Not all platforms support sqlite memory connection urls
-            database_url: DbConnectionUrl::File(temp_dir.path().join("dht.sqlite")),
-            ..DhtConfig::default_testnet()
-        };
+            base_node_config.base_node.data_dir = temp_dir.path().join("db");
+            base_node_config.base_node.identity_file = temp_dir.path().join("base_node_id.json");
+            base_node_config.base_node.tor_identity_file = temp_dir.path().join("base_node_tor_id.json");
 
-        let result = run_base_node(Arc::new(base_node_identity), Arc::new(base_node_config)).await;
-        if let Err(e) = result {
-            let dest = format!("./temp/base_node_{}", base_node_name);
-            std::fs::create_dir_all(&dest).unwrap();
-            std::fs::copy(temp_dir.path(), dest).unwrap();
-            panic!("{:?}", e);
+            base_node_config.base_node.lmdb_path = temp_dir.path().to_path_buf();
+            base_node_config.base_node.p2p.transport.transport_type = TransportType::Tcp;
+            base_node_config.base_node.p2p.transport.tcp.listener_address =
+                format!("/ip4/127.0.0.1/tcp/{}", port).parse().unwrap();
+            base_node_config.base_node.p2p.public_address =
+                Some(base_node_config.base_node.p2p.transport.tcp.listener_address.clone());
+            base_node_config.base_node.p2p.datastore_path = temp_dir.path().join("peer_db/base-node");
+            base_node_config.base_node.p2p.dht = DhtConfig {
+                // Not all platforms support sqlite memory connection urls
+                database_url: DbConnectionUrl::File(temp_dir.path().join("dht.sqlite")),
+                ..DhtConfig::default_local_test()
+            };
+
+            let result = run_base_node(shutdown, Arc::new(base_node_identity), Arc::new(base_node_config)).await;
+            if let Err(e) = result {
+                let dest = format!("./temp/base_node_{}", base_node_name);
+                std::fs::create_dir_all(&dest).unwrap();
+                std::fs::copy(temp_dir.path(), dest).unwrap();
+                panic!("{:?}", e);
+            }
         }
     });
 
@@ -108,6 +116,7 @@ pub async fn spawn_base_node(world: &mut TariWorld, bn_name: String) {
         identity,
         handle,
         temp_dir_path,
+        shutdown,
     };
     world.base_nodes.insert(bn_name, node_process);
 

@@ -23,8 +23,6 @@
 use tari_bor::{borsh, decode, Decode, Encode};
 use tari_template_abi::CallInfo;
 
-use crate::resource::ResourceManager;
-
 #[cfg(target_arch = "wasm32")]
 mod with_thread_local {
     use std::{borrow::Borrow, cell::RefCell};
@@ -56,7 +54,6 @@ pub struct AbiContext {
 #[derive(Debug)]
 pub struct SystemContext {
     _abi_context: AbiContext,
-    resource_manager: ResourceManager,
 }
 
 pub fn init_context(call_info: &CallInfo) {
@@ -64,7 +61,6 @@ pub fn init_context(call_info: &CallInfo) {
     with_context(|ctx| {
         *ctx = Some(SystemContext {
             _abi_context: abi_context,
-            resource_manager: ResourceManager::new(),
         });
     });
 }
@@ -85,7 +81,7 @@ impl Context {
     //     with_context(|ctx| ctx.as_ref().unwrap().abi_context.contract.clone())
     // }
 
-    pub fn with_resource_manager<R, F: FnOnce(&mut ResourceManager) -> R>(&self, f: F) -> R {
-        with_context(|ctx| f(&mut ctx.as_mut().unwrap().resource_manager))
-    }
+    // pub fn with_resource_manager<R, F: FnOnce(&mut ResourceManager) -> R>(&self, f: F) -> R {
+    //     with_context(|ctx| f(&mut ctx.as_mut().unwrap().resource_manager))
+    // }
 }
