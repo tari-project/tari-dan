@@ -20,9 +20,16 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-import { useEffect, useState } from "react";
-import { getConnections } from "../../../utils/json_rpc";
-import { toHexString } from "./helpers";
+import { useEffect, useState } from 'react';
+import { getConnections } from '../../../utils/json_rpc';
+import { toHexString } from './helpers';
+import Table from '@mui/material/Table';
+import TableBody from '@mui/material/TableBody';
+import TableCell from '@mui/material/TableCell';
+import TableContainer from '@mui/material/TableContainer';
+import TableHead from '@mui/material/TableHead';
+import TableRow from '@mui/material/TableRow';
+import { DataTableCell } from '../../../Components/StyledComponents';
 
 interface IConnection {
   address: string;
@@ -41,31 +48,34 @@ function Connections() {
   }, []);
 
   return (
-    <div className="section">
-      <div className="caption">Connections</div>
-      <table className="connections-table">
-        <thead>
-          <tr>
-            <th>Address</th>
-            <th>Age</th>
-            <th>Direction</th>
-            <th>Node id</th>
-            <th>Public key</th>
-          </tr>
-        </thead>
-        <tbody>
-          {connections.map(({ address, age, direction, node_id, public_key }) => (
-            <tr key={public_key}>
-              <td>{address}</td>
-              <td>{age}</td>
-              <td>{direction ? "Inbound" : "Outbound"}</td>
-              <td>{toHexString(node_id)}</td>
-              <td>{public_key}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
+    <TableContainer>
+      <Table>
+        <TableHead>
+          <TableRow>
+            <TableCell>Address</TableCell>
+            <TableCell>Age</TableCell>
+            <TableCell>Direction</TableCell>
+            <TableCell>Node id</TableCell>
+            <TableCell>Public key</TableCell>
+          </TableRow>
+        </TableHead>
+        <TableBody>
+          {connections.map(
+            ({ address, age, direction, node_id, public_key }) => (
+              <TableRow key={public_key}>
+                <DataTableCell>{address}</DataTableCell>
+                <DataTableCell>{age}</DataTableCell>
+                <DataTableCell>
+                  {direction ? 'Inbound' : 'Outbound'}
+                </DataTableCell>
+                <DataTableCell>{toHexString(node_id)}</DataTableCell>
+                <DataTableCell>{public_key}</DataTableCell>
+              </TableRow>
+            )
+          )}
+        </TableBody>
+      </Table>
+    </TableContainer>
   );
 }
 

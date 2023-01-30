@@ -20,30 +20,40 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-import { useEffect, useState } from 'react';
-import { getMempoolStats } from '../../../utils/json_rpc';
-import Error from './Error';
-import Typography from '@mui/material/Typography';
+import Paper from '@mui/material/Paper';
+import TableCell from '@mui/material/TableCell';
+import { styled } from '@mui/material/styles';
+import Box from '@mui/material/Box';
+import IconButton from '@mui/material/IconButton';
+import theme from '../theme';
 
-function Mempool() {
-  const [state, setState] = useState();
-  const [error, setError] = useState<String>();
-  useEffect(() => {
-    getMempoolStats()
-      .then((response) => {
-        setState(response.size);
-        setError(undefined);
-      })
-      .catch((reason) => {
-        setError(reason);
-      });
-  }, []);
-  if (error) {
-    return <Error component="Mempool" message={error} />;
-  }
-  return (
-    <Typography>Size {state === undefined ? 'checking...' : state}</Typography>
-  );
+interface IAccordionIconButton {
+  open: boolean;
 }
 
-export default Mempool;
+export const AccordionIconButton = styled(IconButton)<IAccordionIconButton>`
+  background-color: ${({ open }) =>
+    open ? theme.palette.primary.main : '#fff'};
+  color: ${({ open }) => (open ? '#fff' : theme.palette.primary.main)};
+  &:hover {
+    background-color: ${theme.palette.primary.main};
+    color: #fff;
+  }
+`;
+
+export const StyledPaper = styled(Paper)(({ theme }) => ({
+  padding: theme.spacing(3),
+  boxShadow: '10px 14px 28px rgba(35, 11, 73, 0.05)',
+}));
+
+export const DataTableCell = styled(TableCell)(({ theme }) => ({
+  fontFamily: "'Courier New', Courier, monospace",
+}));
+
+export const CodeBlock = styled(Box)(({ theme }) => ({
+  backgroundColor: '#F5F5F7',
+  borderRadius: theme.shape.borderRadius,
+  padding: theme.spacing(3),
+  maxHeight: '400px',
+  overflowY: 'scroll',
+}));

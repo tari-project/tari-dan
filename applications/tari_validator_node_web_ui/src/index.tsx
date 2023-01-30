@@ -20,27 +20,70 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-import React from "react";
-import ReactDOM from "react-dom/client";
-import "./index.css";
-import reportWebVitals from "./reportWebVitals";
-import { createBrowserRouter, RouterProvider, Route } from "react-router-dom";
-import ValidatorNode from "./routes/VN/ValidatorNode";
-import Transaction, { transactionLoader } from "./routes/Transaction/Transaction";
+import React from 'react';
+import ReactDOM from 'react-dom/client';
+import './index.css';
+import reportWebVitals from './reportWebVitals';
+import { createBrowserRouter, RouterProvider } from 'react-router-dom';
+import ValidatorNode from './routes/VN/ValidatorNode';
+import Transaction, {
+  transactionLoader,
+} from './routes/Transaction/Transaction';
+import App from './App';
+import Committees from './routes/Committees/Committees';
+import Connections from './routes/Connections/Connections';
+import Mempool from './routes/Mempool/Mempool';
+import RecentTransactions from './routes/RecentTransactions/RecentTransactions';
+import Templates from './routes/Templates/Templates';
+import ValidatorNodes from './routes/ValidatorNodes/ValidatorNodes';
+import ErrorPage from './routes/ErrorPage';
 
 const router = createBrowserRouter([
   {
-    path: "/",
-    element: <ValidatorNode />,
-  },
-  {
-    path: "transaction/:payloadId",
-    element: <Transaction />,
-    loader: transactionLoader,
+    path: '/',
+    element: <App />,
+    errorElement: <ErrorPage />,
+    children: [
+      {
+        path: 'connections',
+        element: <Connections />,
+      },
+      {
+        path: 'transactions',
+        element: <RecentTransactions />,
+      },
+      {
+        path: 'templates',
+        element: <Templates />,
+      },
+      {
+        path: 'vns',
+        element: <ValidatorNodes />,
+      },
+      {
+        path: 'app',
+        element: <App />,
+      },
+      {
+        path: 'mempool',
+        element: <Mempool />,
+      },
+      {
+        path: 'committees',
+        element: <Committees />,
+      },
+      {
+        path: 'transaction/:payloadId',
+        element: <Transaction />,
+        loader: transactionLoader,
+      },
+    ],
   },
 ]);
 
-const root = ReactDOM.createRoot(document.getElementById("root") as HTMLElement);
+const root = ReactDOM.createRoot(
+  document.getElementById('root') as HTMLElement
+);
 root.render(
   <React.StrictMode>
     <RouterProvider router={router} />
