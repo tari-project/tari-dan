@@ -93,8 +93,7 @@ mod emoji_id {
             );
 
             // process the payment
-            // no need to manually check the amount, as the split operation will fail if not enough funds
-            // TODO: let (cost, change) = payment.split(self.mint_price);
+            // TODO: use Bucket.split for change, the payment amount will be checked automatically
             // no need to manually check that the payment is in the same resource that we are accepting ...
             // ... the deposit will fail if it's different
             self.earnings.deposit(payment);

@@ -740,3 +740,61 @@ mod emoji_id {
         // .unwrap();
     }
 }
+
+mod tickets {
+    use super::*;
+
+    #[derive(Debug, Clone, Encode, Decode, Default)]
+    pub struct Ticket {
+        pub is_redeemed: bool,
+    }
+
+    #[test]
+    fn buy_ticket() {
+        let mut template_test = TemplateTest::new(vec!["tests/templates/faucet", "tests/templates/nft/tickets"]);
+
+        // create an account
+        let _account_address: ComponentAddress = template_test.call_function("Account", "new", args![]);
+
+        // create a fungible token faucet, we are going to use those tokens as payments
+        // TODO: use Thaums instead when they're implemented
+        let faucet_template = template_test.get_template_address("TestFaucet");
+        let initial_supply = Amount(1_000_000_000_000);
+        let result = template_test
+            .execute_and_commit(vec![Instruction::CallFunction {
+                template_address: faucet_template,
+                function: "mint".to_string(),
+                args: args![initial_supply],
+            }])
+            .unwrap();
+        let _faucet_component: ComponentAddress = result.execution_results[0].decode().unwrap();
+        let faucet_resource = result
+            .result
+            .expect("Faucet mint failed")
+            .up_iter()
+            .find_map(|(_, s)| s.substate_address().as_resource_address())
+            .unwrap();
+
+        // initialize the ticket seller
+        let ticket_template = template_test.get_template_address("TicketSeller");
+        // FIXME: very weird error, if the supply is "1000" for example, the execution panics with a "RuntimeError:
+        // unreachable"
+        let initial_supply: usize = 10;
+        let price = Amount(20);
+        let event_description = "My music festival".to_string();
+        let result = template_test
+            .execute_and_commit(vec![Instruction::CallFunction {
+                template_address: ticket_template,
+                function: "new".to_string(),
+                args: args![faucet_resource, initial_supply, price, event_description],
+            }])
+            .unwrap();
+        let _ticket_seller: ComponentAddress = result.execution_results[0].decode().unwrap();
+        let _ticket_resource = result
+            .result
+            .expect("Emoji id initialization failed")
+            .up_iter()
+            .find_map(|(_, s)| s.substate_address().as_resource_address())
+            .unwrap();
+    }
+}

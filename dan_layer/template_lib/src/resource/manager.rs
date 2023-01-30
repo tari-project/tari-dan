@@ -20,6 +20,8 @@
 //   WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //   USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+use std::collections::HashMap;
+
 use tari_bor::{encode, Encode};
 use tari_template_abi::{call_engine, EngineOp};
 
@@ -99,6 +101,17 @@ impl ResourceManager {
             mint_arg: MintArg::NonFungible {
                 tokens: Some((id, token)).into_iter().collect(),
             },
+        })
+    }
+
+    pub fn mint_many_non_fungible(&mut self, token: NonFungible, supply: usize) -> Bucket {
+        let mut tokens: HashMap<NonFungibleId, NonFungible> = HashMap::with_capacity(supply);
+        for _ in 0..supply {
+            let id = NonFungibleId::random();
+            tokens.insert(id, token.clone());
+        }
+        self.mint_internal(MintResourceArg {
+            mint_arg: MintArg::NonFungible { tokens },
         })
     }
 
