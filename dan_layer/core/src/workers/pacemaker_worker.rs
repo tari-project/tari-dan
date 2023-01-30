@@ -104,24 +104,29 @@ where T: Clone + Debug + PartialEq + Eq + Hash + Send + Sync + 'static
                         "Received start wait signal for value: {:?}", wait_over
                     );
                     let (tx, rx_stop_signal) = oneshot::channel();
-                    self.pending_timeouts.insert(wait_over.clone(), tx);
-                    self.waiting_futures.push(Box::pin(async move {
-                        tokio::select! {
-                            _ = tokio::time::sleep(duration_timeout) => {
-                                info!("The wait signal for value = {:?} has timeout", wait_over);
-                                Some(wait_over)
-                            },
-                            _ = rx_stop_signal => {
-                                info!("The wait signal for wait_over = {:?} has been shut down", wait_over);
-                                None
+                    if self.pending_timeouts.insert(wait_over.clone(), tx).is_none() {
+                        self.waiting_futures.push(Box::pin(async move {
+                            tokio::select! {
+                                _ = tokio::time::sleep(duration_timeout) => {
+                                    info!("The wait signal for value = {:?} has timeout", wait_over);
+                                    Some(wait_over)
+                                },
+                                _ = rx_stop_signal => {
+                                    info!("The wait signal for wait_over = {:?} has been shut down", wait_over);
+                                    None
+                                }
                             }
-                        }
-                    }));
+                        }));
+                    } else {
+                        info!(target: LOG_TARGET, "Already received an existing wait timer for value = {:?}", wait_over);
+                    }
                 },
-                Some(Some(t)) = self.waiting_futures.next() => {
-                    let send_status = self.tx_waiter_status.send(t);
-                    if send_status.await.is_err() {
-                        error!(target: LOG_TARGET, "Hotstuff waiter has shut down");
+                Some(msg) = self.waiting_futures.next() => {
+                    if let Some(t) = msg {
+                        let send_status = self.tx_waiter_status.send(t);
+                        if send_status.await.is_err() {
+                            error!(target: LOG_TARGET, "Hotstuff waiter has shut down");
+                        }
                     }
                 },
                 Some(t) = self.rx_stop_signal.recv() => {
@@ -175,22 +180,17 @@ impl<T: Debug> PacemakerHandle<T> {
 #[cfg(test)]
 mod tests {
     use tari_shutdown::Shutdown;
-    use tokio::sync::mpsc::channel;
 
     use super::*;
 
     #[tokio::test]
     async fn test_wait_timeout_pacemaker() {
-        let (tx_start_waiter_signal, rx_start_waiter_signal) = channel::<u32>(10);
-        let (tx_waiter_status, rx_waiter_status) = channel::<(u32, PacemakerWaitStatus)>(10);
-        let (tx_shutdown_waiter_signal, rx_shutdown_waiter_signal) = channel::<u32>(10);
-
         let shutdown = Shutdown::new();
-        let mut handle = Pacemakßer::spawn(shutdown.to_signal());
+        let mut handle = Pacemaker::spawn(shutdown.to_signal());
 
-        handle.start_timer(0_u32).await;
+        handle.start_timer(0_u32, Duration::from_millis(10)).await.unwrap();
         let msg = handle.on_timeout().await.unwrap();
-        handle.stop_timer(0_u32).await;
+        handle.stop_timer(0_u32).await.unwrap();
 
         tokio::time::sleep(Duration::from_millis(11)).await;
 
@@ -199,21 +199,17 @@ mod tests {
 
     #[tokio::test]
     async fn test_shutdown_pacemaker() {
-        let (tx_start_waiter_signal, rx_start_waiter_signal) = channel::<u32>(10);
-        let (tx_waiter_status, rx_waiter_status) = channel::<(u32, PacemakerWaitStatus)>(10);
-        let (tx_shutdown_waiter_signal, rx_shutdown_waiter_signal) = channel::<u32>(10);
-
         let shutdown = Shutdown::new();
         let mut handle = Pacemaker::spawn(shutdown.to_signal());
 
         // send start waiting signal to wait over
-        handle.start_timer(1_u32, Duration::from_millis(10)).await;
+        handle.start_timer(1_u32, Duration::from_millis(10)).await.unwrap();
 
         // wait 1 millisecond
         tokio::time::sleep(Duration::from_millis(1)).await;
 
         // send shutdown signal for pacemaker
-        handle.stop_timer(1).await;
+        handle.stop_timer(1).await.unwrap();
 
         assert!(tokio::time::timeout(Duration::from_millis(10), handle.on_timeout())
             .await
@@ -222,22 +218,19 @@ mod tests {
 
     #[tokio::test]
     async fn test_wait_timeout_one_out_of_three_pacemaker() {
-        let (tx_start_waiter_signal, rx_start_waiter_signal) = channel::<u32>(10);
-        let (tx_waiter_status, rx_waiter_status) = channel::<(u32, PacemakerWaitStatus)>(10);
-        let (tx_shutdown_waiter_signal, rx_shutdown_waiter_signal) = channel::<u32>(10);
-
         let shutdown = Shutdown::new();
         let mut handle = Pacemaker::spawn(shutdown.to_signal());
 
         // send three wait signals
-        handle.start_timer(0_u32, Duration::from_millis(10)).await;
-        handle.start_timer(1_u32, Duration::from_millis(10)).await;
-        handle.start_timer(2_u32, Duration::from_millis(10)).await;
+        handle.start_timer(0_u32, Duration::from_millis(10)).await.unwrap();
+        handle.start_timer(1_u32, Duration::from_millis(10)).await.unwrap();
+        handle.start_timer(2_u32, Duration::from_millis(10)).await.unwrap();
 
         tokio::time::sleep(Duration::from_millis(1)).await;
 
         // stop the middle waiter
-        handle.stop_timer(1_u32).await;
+        handle.stop_timer(1_u32).await.unwrap();
+        tokio::time::sleep(Duration::from_millis(5)).await;
 
         // we should receive two WaitTimeOut status, for the first and last messages
         // the middle one was stopped, so we don't expect any further status messages
