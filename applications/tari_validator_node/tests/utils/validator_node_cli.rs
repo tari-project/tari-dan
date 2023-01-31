@@ -123,7 +123,7 @@ pub async fn create_component(
 
 fn add_substate_addresses(world: &mut TariWorld, outputs_name: String, diff: &SubstateDiff) {
     let outputs = world.outputs.entry(outputs_name).or_default();
-    let mut counters = [0usize, 0, 0, 0];
+    let mut counters = [0usize, 0, 0, 0, 0];
     for (addr, data) in diff.up_iter() {
         match addr {
             SubstateAddress::Component(_) => {
@@ -157,6 +157,16 @@ fn add_substate_addresses(world: &mut TariWorld, outputs_name: String, diff: &Su
                     version: data.version(),
                 });
                 counters[3] += 1;
+            },
+            SubstateAddress::LayerOneCommitment(_) => {
+                outputs.insert(
+                    format!("layer_one_commitments/{}", counters[4]),
+                    VersionedSubstateAddress {
+                        address: addr.clone(),
+                        version: data.version(),
+                    },
+                );
+                counters[4] += 1;
             },
         }
     }

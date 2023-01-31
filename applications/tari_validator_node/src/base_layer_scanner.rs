@@ -341,20 +341,16 @@ impl BaseLayerScanner {
     }
 
     fn register_burnt_utxo(&mut self, commitment: Commitment) -> Result<(), BaseLayerScannerError> {
-        let substate = Substate::new(0, SubstateValue::LayerOneCommitment(commitment.clone()));
+        let address = SubstateAddress::LayerOneCommitment(
+            LayerOneCommitmentAddress::try_from_commitment(commitment.as_bytes()).expect("NOt a valid commitment"),
+        );
+        let substate = Substate::new(
+            address.clone(),
+            0,
+            SubstateValue::LayerOneCommitment(commitment.clone()),
+        );
         self.shard_store
-            .with_write_tx(|tx| {
-                tx.save_burnt_utxo(
-                    &substate,
-                    ShardId::from_address(
-                        &SubstateAddress::LayerOneCommitment(
-                            LayerOneCommitmentAddress::try_from_commitment(commitment.as_bytes())
-                                .expect("NOt a valid commitment"),
-                        ),
-                        0,
-                    ),
-                )
-            })
+            .with_write_tx(|tx| tx.save_burnt_utxo(&substate, ShardId::from_address(&address, 0)))
             .map_err(|source| BaseLayerScannerError::CouldNotRegisterBurntUtxo { commitment, source })?;
         Ok(())
     }

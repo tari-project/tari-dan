@@ -55,7 +55,6 @@ impl IdProvider {
             current_id: Arc::new(AtomicU32::new(0)),
             bucket_id: Arc::new(AtomicU32::new(1000)),
             confidential_bucket_id: Arc::new(AtomicU32::new(2000)),
-            max_ids,
             uuid: Arc::new(AtomicU32::new(0)),
         }
     }

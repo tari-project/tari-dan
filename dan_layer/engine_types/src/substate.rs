@@ -21,7 +21,7 @@
 //   USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 use std::{
-    fmt::{Display, Formatter},
+    fmt::{write, Display, Formatter},
     str::FromStr,
 };
 
@@ -120,10 +120,10 @@ impl SubstateAddress {
 
     pub fn to_canonical_hash(&self) -> Hash {
         match self {
-            SubstateAddress::Component(address) => address.hash(),
-            SubstateAddress::Resource(address) => address.hash(),
-            SubstateAddress::Vault(id) => id.hash(),
-            SubstateAddress::LayerOneCommitment(address) => address.hash(),
+            SubstateAddress::Component(address) => *address.hash(),
+            SubstateAddress::Resource(address) => *address.hash(),
+            SubstateAddress::Vault(id) => *id.hash(),
+            SubstateAddress::LayerOneCommitment(address) => *address.hash(),
             SubstateAddress::NonFungible(resource_addr, id) => hasher("non_fungible_id")
                 .chain(resource_addr.hash())
                 .chain(&id)
@@ -191,6 +191,7 @@ impl Display for SubstateAddress {
             SubstateAddress::Resource(addr) => write!(f, "{}", addr),
             SubstateAddress::Vault(addr) => write!(f, "{}", addr),
             SubstateAddress::NonFungible(resource_addr, addr) => write!(f, "{} {}", resource_addr, addr),
+            SubstateAddress::LayerOneCommitment(commitment_address) => write!(f, "{}", commitment_address),
         }
     }
 }
@@ -295,10 +296,6 @@ impl SubstateValue {
         match self {
             SubstateValue::NonFungible(nft) => Some(nft),
             _ => None,
-            // TODO: better type. Commitment does not implement Copy, so need to use an array that does
-            SubstateValue::LayerOneCommitment(commitment) => SubstateAddress::LayerOneCommitment(
-                LayerOneCommitmentAddress::try_from_commitment(commitment.as_bytes()).unwrap(),
-            ),
         }
     }
 }
