@@ -344,10 +344,18 @@ impl RuntimeInterface for RuntimeInterfaceImpl {
             BucketAction::GetResourceAddress => {
                 let bucket_id = bucket_ref.bucket_id().ok_or_else(|| RuntimeError::InvalidArgument {
                     argument: "bucket_ref",
-                    reason: "Create bucket action requires a bucket id".to_string(),
+                    reason: "GetResourceAddress action requires a bucket id".to_string(),
                 })?;
                 let bucket = self.tracker.get_bucket(bucket_id)?;
                 Ok(InvokeResult::encode(bucket.resource_address())?)
+            },
+            BucketAction::GetResourceType => {
+                let bucket_id = bucket_ref.bucket_id().ok_or_else(|| RuntimeError::InvalidArgument {
+                    argument: "bucket_ref",
+                    reason: "GetResourceType action requires a bucket id".to_string(),
+                })?;
+                let bucket = self.tracker.get_bucket(bucket_id)?;
+                Ok(InvokeResult::encode(&bucket.resource_type())?)
             },
             BucketAction::GetAmount => {
                 let bucket_id = bucket_ref.bucket_id().ok_or_else(|| RuntimeError::InvalidArgument {
