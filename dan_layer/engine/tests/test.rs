@@ -315,6 +315,80 @@ mod errors {
     }
 }
 
+mod fungible {
+    use super::*;
+
+    #[test]
+    fn fungible_mint_and_burn() {
+        let mut template_test = TemplateTest::new(vec!["tests/templates/faucet"]);
+
+        let faucet_template = template_test.get_template_address("TestFaucet");
+
+        let initial_supply = Amount(1_000_000_000_000);
+        template_test
+            .execute_and_commit(vec![Instruction::CallFunction {
+                template_address: faucet_template,
+                function: "mint".to_string(),
+                args: args![initial_supply],
+            }])
+            .unwrap();
+
+        let faucet_component = template_test
+            .get_previous_output_address(SubstateType::Component)
+            .as_component_address()
+            .unwrap();
+
+        let total_supply: Amount = template_test.call_method(faucet_component, "total_supply", args![]);
+
+        assert_eq!(total_supply, initial_supply);
+
+        let result = template_test
+            .execute_and_commit(vec![
+                Instruction::CallMethod {
+                    component_address: faucet_component,
+                    method: "burn_coins".to_string(),
+                    args: args![Amount(500)],
+                },
+                Instruction::CallMethod {
+                    component_address: faucet_component,
+                    method: "total_supply".to_string(),
+                    args: args![],
+                },
+            ])
+            .unwrap();
+
+        assert_eq!(
+            result.execution_results[1].decode::<Amount>().unwrap(),
+            initial_supply - Amount(500)
+        );
+
+        let result = template_test
+            .execute_and_commit(vec![
+                Instruction::CallMethod {
+                    component_address: faucet_component,
+                    method: "burn_coins".to_string(),
+                    args: args![initial_supply - Amount(500)],
+                },
+                Instruction::CallMethod {
+                    component_address: faucet_component,
+                    method: "total_supply".to_string(),
+                    args: args![],
+                },
+            ])
+            .unwrap();
+
+        assert_eq!(result.execution_results[1].decode::<Amount>().unwrap(), Amount(0));
+
+        template_test
+            .execute_and_commit(vec![Instruction::CallMethod {
+                component_address: faucet_component,
+                method: "burn_coins".to_string(),
+                args: args![Amount(1)],
+            }])
+            .unwrap_err();
+    }
+}
+
 mod basic_nft {
     use super::*;
 
