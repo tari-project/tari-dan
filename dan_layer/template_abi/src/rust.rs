@@ -25,7 +25,7 @@ mod no_std {
     extern crate alloc;
 
     pub use alloc::{format, str, string, vec};
-    pub use core::{cmp, fmt, mem, ptr, slice, write, writeln};
+    pub use core::{cmp, fmt, mem, ops, ptr, slice, write, writeln};
 
     pub mod collections {
         extern crate alloc;
@@ -43,7 +43,7 @@ pub use no_std::*;
 
 #[cfg(feature = "std")]
 mod rust_std {
-    pub use ::std::{cmp, fmt, format, io, mem, ptr, slice, str, string, vec, write, writeln};
+    pub use ::std::{cmp, fmt, format, io, mem, ops, ptr, slice, str, string, vec, write, writeln};
 
     pub mod collections {
         pub use ::std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
