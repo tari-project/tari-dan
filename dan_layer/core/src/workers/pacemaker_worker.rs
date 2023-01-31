@@ -123,9 +123,9 @@ where T: Clone + Debug + PartialEq + Eq + Hash + Send + Sync + 'static
                 },
                 Some(msg) = self.waiting_futures.next() => {
                     if let Some(t) = msg {
-                        let send_status = self.tx_waiter_status.send(t);
+                    let send_status = self.tx_waiter_status.send(t);
                         if send_status.await.is_err() {
-                            error!(target: LOG_TARGET, "Hotstuff waiter has shut down");
+                                error!(target: LOG_TARGET, "Hotstuff waiter has shut down");
                         }
                     }
                 },
@@ -243,6 +243,36 @@ mod tests {
 
         // assert that we don't receive any further timeout message
         assert!(tokio::time::timeout(Duration::from_millis(10), handle.on_timeout())
+            .await
+            .is_err());
+    }
+
+    #[tokio::test]
+    async fn test_multiple_messages() {
+        let shutdown = Shutdown::new();
+        let mut handle = Pacemaker::spawn(shutdown.to_signal());
+
+        // loop over start wait messages
+        for i in 0..100 {
+            handle.start_timer(i, Duration::from_millis(100)).await.unwrap();
+        }
+
+        tokio::time::sleep(Duration::from_millis(1)).await;
+
+        // stop waiting messages that are indexed by even numbers
+        for i in (0..100).filter(|i| i % 2 == 0) {
+            handle.stop_timer(i).await.unwrap();
+        }
+
+        // assert that timeouts occur if and only if messages are indexed by odd numbers
+        tokio::time::sleep(Duration::from_millis(100)).await;
+        for i in (0..100).filter(|i| i % 2 == 1) {
+            let val = handle.on_timeout().await.unwrap();
+            assert_eq!(i, val)
+        }
+
+        // no more messages are received
+        assert!(tokio::time::timeout(Duration::from_millis(100), handle.on_timeout())
             .await
             .is_err());
     }
