@@ -17,7 +17,7 @@ use tari_dan_core::{
         PayloadProcessorError,
         SigningService,
     },
-    workers::{hotstuff_error::HotStuffError, hotstuff_waiter::HotStuffWaiter},
+    workers::{hotstuff_error::HotStuffError, hotstuff_waiter::HotStuffWaiter, pacemaker_worker::Pacemaker},
 };
 use tari_engine_types::{
     commit_result::{FinalizeResult, RejectReason, TransactionResult},
@@ -139,6 +139,7 @@ impl HsTestHarness {
         let public_address = Multiaddr::from_str("/ip4/127.0.0.1/tcp/48000").unwrap();
         let node_identity = NodeIdentity::new(private_key, public_address, PeerFeatures::COMMUNICATION_NODE);
 
+        let pacemaker = Pacemaker::spawn(shutdown.clone().to_signal());
         let signing_service = NodeIdentitySigningService::new(Arc::new(node_identity));
         let hs_waiter = HotStuffWaiter::spawn(
             signing_service.clone(),
@@ -152,11 +153,13 @@ impl HsTestHarness {
             tx_broadcast,
             tx_vote_message,
             tx_events,
+            pacemaker,
             payload_processor,
             shard_store.clone(),
             shutdown.to_signal(),
             consensus_constants,
         );
+
         Self {
             identity,
             tx_new,

@@ -26,3 +26,4 @@
 pub mod events;
 pub mod hotstuff_error;
 pub mod hotstuff_waiter;
+pub mod pacemaker_worker;

@@ -21,7 +21,7 @@
 //   USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 use tari_bor::{encode, Encode};
-use tari_template_abi::{call_engine, EngineOp};
+use tari_template_abi::{call_engine, rust::collections::HashMap, EngineOp};
 
 use crate::{
     args::{
@@ -106,6 +106,23 @@ impl ResourceManager {
                     .into_iter()
                     .collect(),
             },
+        })
+    }
+
+    pub fn mint_many_non_fungible<T: Encode, U: Encode>(
+        &mut self,
+        metadata: &T,
+        mutable_data: &U,
+        supply: usize,
+    ) -> Bucket {
+        let mut tokens: HashMap<NonFungibleId, (Vec<u8>, Vec<u8>)> = HashMap::with_capacity(supply);
+        let token_data = (encode(metadata).unwrap(), encode(mutable_data).unwrap());
+        for _ in 0..supply {
+            let id = NonFungibleId::random();
+            tokens.insert(id, token_data.clone());
+        }
+        self.mint_internal(MintResourceArg {
+            mint_arg: MintArg::NonFungible { tokens },
         })
     }
 

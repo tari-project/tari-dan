@@ -20,7 +20,10 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use std::collections::{HashMap, HashSet};
+use std::{
+    collections::{HashMap, HashSet},
+    time::Duration,
+};
 
 use log::*;
 use tari_common_types::types::{FixedHash, PublicKey, Signature};
@@ -53,6 +56,7 @@ use tokio::{
     task::JoinHandle,
 };
 
+use super::pacemaker_worker::PacemakerHandle;
 use crate::{
     consensus_constants::ConsensusConstants,
     models::{
@@ -74,6 +78,7 @@ use crate::{
 };
 
 const LOG_TARGET: &str = "tari::dan_layer::hotstuff_waiter";
+pub const NETWORK_LATENCY: Duration = Duration::from_secs(10);
 
 pub struct HotStuffWaiter<
     TPayload,
@@ -104,6 +109,9 @@ pub struct HotStuffWaiter<
     tx_vote_message: Sender<(VoteMessage, TAddr)>,
     /// HotstuffEvent channel
     tx_events: broadcast::Sender<HotStuffEvent>,
+    /// The pacemaker handle. Provides an interface to request timing leader responses
+    #[allow(dead_code)]
+    pacemaker: PacemakerHandle<(PayloadId, ShardId, Committee<TAddr>)>,
     /// The payload processor. This determines whether a payload proposal results in an accepted or rejected vote.
     payload_processor: TPayloadProcessor,
     /// Store used to persist consensus state.
@@ -113,6 +121,9 @@ pub struct HotStuffWaiter<
     consensus_constants: ConsensusConstants,
     /// NEWVIEW message counts - TODO: this will bloat memory maybe moving to the db is better
     newview_message_counts: HashMap<(ShardId, PayloadId), HashSet<TAddr>>,
+    /// Network latency
+    #[allow(dead_code)]
+    network_latency: Duration,
 }
 
 impl<TPayload, TAddr, TLeaderStrategy, TEpochManager, TPayloadProcessor, TShardStore, TSigningService>
@@ -138,6 +149,7 @@ where
         tx_broadcast: Sender<(HotStuffMessage<TPayload, TAddr>, Vec<TAddr>)>,
         tx_vote_message: Sender<(VoteMessage, TAddr)>,
         tx_events: broadcast::Sender<HotStuffEvent>,
+        pacemaker: PacemakerHandle<(PayloadId, ShardId, Committee<TAddr>)>,
         payload_processor: TPayloadProcessor,
         shard_store: TShardStore,
         shutdown: ShutdownSignal,
@@ -155,6 +167,7 @@ where
             tx_broadcast,
             tx_vote_message,
             tx_events,
+            pacemaker,
             payload_processor,
             shard_store,
             consensus_constants,
@@ -174,6 +187,7 @@ where
         tx_broadcast: Sender<(HotStuffMessage<TPayload, TAddr>, Vec<TAddr>)>,
         tx_vote_message: Sender<(VoteMessage, TAddr)>,
         tx_events: broadcast::Sender<HotStuffEvent>,
+        pacemaker: PacemakerHandle<(PayloadId, ShardId, Committee<TAddr>)>,
         payload_processor: TPayloadProcessor,
         shard_store: TShardStore,
         consensus_constants: ConsensusConstants,
@@ -190,10 +204,12 @@ where
             tx_broadcast,
             tx_vote_message,
             tx_events,
+            pacemaker,
             payload_processor,
             shard_store,
             consensus_constants,
             newview_message_counts: HashMap::new(),
+            network_latency: NETWORK_LATENCY,
         }
     }
 
