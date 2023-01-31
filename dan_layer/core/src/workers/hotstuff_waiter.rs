@@ -870,10 +870,10 @@ where
                 }) => {
                     // To down a substate it should be pledged as up
                     if !matches!(current_state, SubstateState::Up { .. }) {
-                        missing_pledges.push((shard_id, SubstateChange::Exists));
+                        missing_pledges.push((shard_id, SubstateChange::Exists, address.clone(), *version));
                     }
                 },
-                None => missing_pledges.push((shard_id, SubstateChange::Exists)),
+                None => missing_pledges.push((shard_id, SubstateChange::Exists, address.clone(), *version)),
             }
         }
 
@@ -881,15 +881,34 @@ where
             let shard_id = ShardId::from_address(addr, substate.version());
             match shard_pledges.iter().find(|p| p.pledge.shard_id == shard_id) {
                 Some(ShardPledge {
-                    pledge: ObjectPledge { current_state, .. },
+                    pledge:
+                        ObjectPledge {
+                            current_state,
+                            pledged_to_payload,
+                            ..
+                        },
                     ..
                 }) => {
-                    // To up a substate it should be pledged as down
-                    if !matches!(current_state, SubstateState::DoesNotExist) {
-                        missing_pledges.push((shard_id, SubstateChange::Create));
+                    // To up a substate it should be pledged as never existing
+                    match current_state {
+                        SubstateState::DoesNotExist => {},
+                        SubstateState::Up { created_by, .. } => {
+                            return Err(HotStuffError::InvalidPledge {
+                                shard: shard_id,
+                                pledged_payload: *pledged_to_payload,
+                                details: format!("Pledged substate is already UP'd by payload {}", created_by),
+                            });
+                        },
+                        SubstateState::Down { deleted_by } => {
+                            return Err(HotStuffError::InvalidPledge {
+                                shard: shard_id,
+                                pledged_payload: *pledged_to_payload,
+                                details: format!("Pledged substate is already DOWN'd by payload {}", deleted_by),
+                            });
+                        },
                     }
                 },
-                None => missing_pledges.push((shard_id, SubstateChange::Create)),
+                None => missing_pledges.push((shard_id, SubstateChange::Create, addr.clone(), substate.version())),
             }
         }
 

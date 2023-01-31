@@ -3,20 +3,21 @@
 
 use std::str::FromStr;
 
-use proc_macro2::LexError;
 use syn::{parse2, Lit};
 use tari_engine_types::substate::SubstateAddress;
+use tari_template_lib::models::NonFungibleId;
 
 #[derive(Debug, Clone)]
 pub enum ManifestValue {
-    Address(SubstateAddress),
+    SubstateAddress(SubstateAddress),
     Literal(Lit),
+    NonFungibleId(NonFungibleId),
 }
 
 impl ManifestValue {
-    pub fn address(&self) -> Option<SubstateAddress> {
+    pub fn address(&self) -> Option<&SubstateAddress> {
         match self {
-            Self::Address(addr) => Some(*addr),
+            Self::SubstateAddress(addr) => Some(addr),
             _ => None,
         }
     }
@@ -24,7 +25,7 @@ impl ManifestValue {
 
 impl<T: Into<SubstateAddress>> From<T> for ManifestValue {
     fn from(addr: T) -> Self {
-        ManifestValue::Address(addr.into())
+        ManifestValue::SubstateAddress(addr.into())
     }
 }
 
@@ -32,39 +33,25 @@ impl FromStr for ManifestValue {
     type Err = ManifestParseError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        match SubstateAddress::from_str(s) {
-            Ok(addr) => Ok(ManifestValue::Address(addr)),
-            Err(_) => {
-                let tokens = s.parse()?;
-                let lit = parse2(tokens)?;
-                Ok(ManifestValue::Literal(lit))
-            },
-        }
+        SubstateAddress::from_str(s)
+            .ok()
+            .map(ManifestValue::SubstateAddress)
+            .or_else(|| {
+                let id = NonFungibleId::try_from_canonical_string(s).ok()?;
+                Some(ManifestValue::NonFungibleId(id))
+            })
+            .or_else(|| {
+                let tokens = s.parse().ok()?;
+                let lit = parse2(tokens).ok()?;
+                Some(ManifestValue::Literal(lit))
+            })
+            .ok_or_else(|| ManifestParseError(s.to_string()))
     }
 }
 
 #[derive(Debug, thiserror::Error)]
-pub enum ManifestParseError {
-    #[error("Invalid address format: {0}")]
-    AddressFormat(String),
-    #[error("Invalid constant: {0}")]
-    Constant(String),
-    #[error("Invalid tokens: {0}")]
-    Tokens(String),
-}
-
-// syn::Error and LexError use Rc's which are not Sync or Send
-impl From<syn::Error> for ManifestParseError {
-    fn from(e: syn::Error) -> Self {
-        Self::Constant(e.to_string())
-    }
-}
-
-impl From<LexError> for ManifestParseError {
-    fn from(e: LexError) -> Self {
-        Self::Tokens(e.to_string())
-    }
-}
+#[error("Invalid manifest value '{0}'")]
+pub struct ManifestParseError(String);
 
 #[cfg(test)]
 mod tests {
@@ -78,7 +65,7 @@ mod tests {
             .parse::<ManifestValue>()
             .unwrap();
         assert_eq!(
-            addr.address().unwrap(),
+            *addr.address().unwrap(),
             SubstateAddress::Component(
                 ComponentAddress::from_hex("0000000000000000000000000000000000000000000000000000000000000000").unwrap()
             )
@@ -88,7 +75,7 @@ mod tests {
             .parse::<ManifestValue>()
             .unwrap();
         assert_eq!(
-            addr.address().unwrap(),
+            *addr.address().unwrap(),
             SubstateAddress::Resource(
                 ResourceAddress::from_hex("0000000000000000000000000000000000000000000000000000000000000000").unwrap()
             )
@@ -98,7 +85,7 @@ mod tests {
             .parse::<ManifestValue>()
             .unwrap();
         assert_eq!(
-            addr.address().unwrap(),
+            *addr.address().unwrap(),
             SubstateAddress::Vault(
                 VaultId::from_hex("0000000000000000000000000000000000000000000000000000000000000000").unwrap()
             )

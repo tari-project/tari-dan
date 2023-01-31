@@ -7,6 +7,7 @@ pub mod execution_result;
 pub mod hashing;
 pub mod instruction;
 pub mod logs;
+pub mod non_fungible;
 pub mod resource;
 pub mod resource_container;
 pub mod signature;
@@ -14,5 +15,4 @@ pub mod substate;
 pub mod vault;
 
 mod template;
-
 pub use template::{calculate_template_binary_hash, TemplateAddress};

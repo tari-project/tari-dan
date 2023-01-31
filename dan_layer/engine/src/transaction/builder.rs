@@ -1,10 +1,13 @@
 //   Copyright 2022 The Tari Project
 //   SPDX-License-Identifier: BSD-3-Clause
 
+use std::convert::TryFrom;
+
 use tari_common_types::types::{PrivateKey, PublicKey};
 use tari_crypto::{keys::PublicKey as PublicKeyTrait, ristretto::RistrettoPublicKey};
 use tari_dan_common_types::{ObjectClaim, ShardId, SubstateChange};
-use tari_engine_types::{instruction::Instruction, signature::InstructionSignature};
+use tari_engine_types::{instruction::Instruction, signature::InstructionSignature, substate::SubstateAddress};
+use tari_template_lib::models::{NonFungibleId, ResourceAddress};
 
 use super::Transaction;
 use crate::{crypto::create_key_pair, runtime::IdProvider, transaction::TransactionMeta};
@@ -16,6 +19,7 @@ pub struct TransactionBuilder {
     meta: TransactionMeta,
     signature: Option<InstructionSignature>,
     sender_public_key: Option<RistrettoPublicKey>,
+    new_non_fungible_outputs: Vec<(ResourceAddress, u8)>,
 }
 
 impl TransactionBuilder {
@@ -26,6 +30,7 @@ impl TransactionBuilder {
             sender_public_key: None,
             fee: 0,
             meta: TransactionMeta::default(),
+            new_non_fungible_outputs: vec![],
         }
     }
 
@@ -99,6 +104,11 @@ impl TransactionBuilder {
         self
     }
 
+    pub fn with_new_non_fungible_outputs(&mut self, new_non_fungible_outputs: Vec<(ResourceAddress, u8)>) -> &mut Self {
+        self.new_non_fungible_outputs = new_non_fungible_outputs;
+        self
+    }
+
     pub fn build(mut self) -> Transaction {
         let mut transaction = Transaction::new(
             self.fee,
@@ -109,17 +119,39 @@ impl TransactionBuilder {
         );
 
         let max_outputs = transaction.meta().max_outputs;
-        let id_provider = IdProvider::new(transaction.hash, max_outputs);
+        let total_new_nft_outputs = self
+            .new_non_fungible_outputs
+            .iter()
+            .map(|(_, count)| u32::from(*count))
+            .sum::<u32>();
+        let id_provider = IdProvider::new(transaction.hash, max_outputs + total_new_nft_outputs);
 
         transaction.meta.involved_objects.extend((0..max_outputs).map(|_| {
             let new_hash = id_provider
                 .new_address_hash()
                 .expect("id provider provides num_outputs IDs");
             (
-                ShardId::from_hash(new_hash.into_array(), 0),
+                ShardId::from_hash(&new_hash, 0),
                 (SubstateChange::Create, ObjectClaim {}),
             )
         }));
+
+        let mut new_nft_outputs =
+            Vec::with_capacity(usize::try_from(total_new_nft_outputs).expect("too many new NFT outputs"));
+        for (resource_addr, count) in self.new_non_fungible_outputs {
+            new_nft_outputs.extend((0..count).map({
+                |_| {
+                    let new_hash = id_provider.new_uuid().expect("id provider provides num_outputs IDs");
+                    let new_addr = SubstateAddress::NonFungible(resource_addr, NonFungibleId::from_u256(new_hash));
+                    (
+                        ShardId::from_hash(&new_addr.to_canonical_hash(), 0),
+                        (SubstateChange::Create, ObjectClaim {}),
+                    )
+                }
+            }));
+        }
+
+        transaction.meta.involved_objects.extend(new_nft_outputs);
 
         transaction
     }

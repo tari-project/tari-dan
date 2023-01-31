@@ -31,9 +31,9 @@ use tari_template_abi::{
 };
 
 use crate::{
-    args::{InvokeResult, VaultAction, VaultInvokeArg},
+    args::{InvokeResult, VaultAction, VaultInvokeArg, VaultWithdrawArg},
     hash::HashParseError,
-    models::{Amount, Bucket, ResourceAddress},
+    models::{Amount, Bucket, NonFungibleId, ResourceAddress},
     Hash,
 };
 
@@ -119,7 +119,7 @@ impl Vault {
 
     pub fn deposit(&mut self, bucket: Bucket) {
         let result: InvokeResult = call_engine(EngineOp::VaultInvoke, &VaultInvokeArg {
-            vault_ref: VaultRef::Ref(self.vault_id()),
+            vault_ref: self.vault_ref(),
             action: VaultAction::Deposit,
             args: invoke_args![bucket.id()],
         });
@@ -129,9 +129,31 @@ impl Vault {
 
     pub fn withdraw(&mut self, amount: Amount) -> Bucket {
         let resp: InvokeResult = call_engine(EngineOp::VaultInvoke, &VaultInvokeArg {
-            vault_ref: VaultRef::Ref(self.vault_id()),
-            action: VaultAction::WithdrawFungible,
-            args: invoke_args![amount],
+            vault_ref: self.vault_ref(),
+            action: VaultAction::Withdraw,
+            args: invoke_args![VaultWithdrawArg::Fungible { amount }],
+        });
+
+        resp.decode().expect("failed to decode Bucket")
+    }
+
+    pub fn withdraw_non_fungibles<I: IntoIterator<Item = NonFungibleId>>(&mut self, ids: I) -> Bucket {
+        let resp: InvokeResult = call_engine(EngineOp::VaultInvoke, &VaultInvokeArg {
+            vault_ref: self.vault_ref(),
+            action: VaultAction::Withdraw,
+            args: invoke_args![VaultWithdrawArg::NonFungible {
+                ids: ids.into_iter().collect()
+            }],
+        });
+
+        resp.decode().expect("failed to decode Bucket")
+    }
+
+    pub fn withdraw_all(&mut self) -> Bucket {
+        let resp: InvokeResult = call_engine(EngineOp::VaultInvoke, &VaultInvokeArg {
+            vault_ref: self.vault_ref(),
+            action: VaultAction::WithdrawAll,
+            args: invoke_args![],
         });
 
         resp.decode().expect("failed to decode Bucket")
@@ -139,7 +161,7 @@ impl Vault {
 
     pub fn balance(&self) -> Amount {
         let resp: InvokeResult = call_engine(EngineOp::VaultInvoke, &VaultInvokeArg {
-            vault_ref: VaultRef::Ref(self.vault_id()),
+            vault_ref: self.vault_ref(),
             action: VaultAction::GetBalance,
             args: args![],
         });
@@ -147,9 +169,20 @@ impl Vault {
         resp.decode().expect("failed to decode Amount")
     }
 
+    pub fn get_non_fungible_ids(&self) -> Vec<NonFungibleId> {
+        let resp: InvokeResult = call_engine(EngineOp::VaultInvoke, &VaultInvokeArg {
+            vault_ref: self.vault_ref(),
+            action: VaultAction::GetNonFungibleIds,
+            args: invoke_args![],
+        });
+
+        resp.decode()
+            .expect("get_non_fungible_ids returned invalid non fungible ids")
+    }
+
     pub fn resource_address(&self) -> ResourceAddress {
         let resp: InvokeResult = call_engine(EngineOp::VaultInvoke, &VaultInvokeArg {
-            vault_ref: VaultRef::Ref(self.vault_id()),
+            vault_ref: self.vault_ref(),
             action: VaultAction::GetResourceAddress,
             args: invoke_args![],
         });
@@ -158,7 +191,7 @@ impl Vault {
             .expect("GetResourceAddress returned invalid resource address")
     }
 
-    pub fn vault_id(&self) -> VaultId {
-        self.vault_id
+    pub fn vault_ref(&self) -> VaultRef {
+        VaultRef::Ref(self.vault_id)
     }
 }

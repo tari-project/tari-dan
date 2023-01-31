@@ -20,15 +20,15 @@
 //   WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //   USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use std::{path::PathBuf, str::FromStr, time::Duration};
+use std::{str::FromStr, time::Duration};
 
 use reqwest::Url;
-use tari_app_utilities::common_cli_args::CommonCliArgs;
 use tari_common::configuration::{CommonConfig, StringList};
 use tari_comms::multiaddr::Multiaddr;
 use tari_comms_dht::{DbConnectionUrl, DhtConfig};
 use tari_p2p::{Network, PeerSeedsConfig, TransportType};
-use tari_validator_node::{cli::Cli, run_validator_node_with_cli, ApplicationConfig, ValidatorNodeConfig};
+use tari_shutdown::Shutdown;
+use tari_validator_node::{run_validator_node, ApplicationConfig, ValidatorNodeConfig};
 use tari_validator_node_client::ValidatorNodeClient;
 use tempfile::tempdir;
 use tokio::task;
@@ -45,6 +45,7 @@ pub struct ValidatorNodeProcess {
     pub base_node_grpc_port: u16,
     pub handle: task::JoinHandle<()>,
     pub temp_dir_path: String,
+    pub shutdown: Shutdown,
 }
 
 pub async fn spawn_validator_node(
@@ -54,7 +55,6 @@ pub async fn spawn_validator_node(
     wallet_name: String,
 ) {
     // each spawned VN will use different ports
-
     let (port, json_rpc_port) = get_os_assigned_ports();
     let http_ui_port = 21000;
     // let (port, json_rpc_port, http_ui_port) = match world.validator_nodes.values().last() {
@@ -72,6 +72,9 @@ pub async fn spawn_validator_node(
         .values()
         .map(|vn| format!("{}::/ip4/127.0.0.1/tcp/{}", vn.public_key, vn.port))
         .collect();
+
+    let shutdown = Shutdown::new();
+    let shutdown_signal = shutdown.to_signal();
 
     let handle = task::spawn(async move {
         let mut config = ApplicationConfig {
@@ -102,7 +105,7 @@ pub async fn spawn_validator_node(
         config.validator_node.p2p.dht = DhtConfig {
             // Not all platforms support sqlite memory connection urls
             database_url: DbConnectionUrl::File(temp_dir.join("dht.sqlite")),
-            ..DhtConfig::default_testnet()
+            ..DhtConfig::default_local_test()
         };
         config.validator_node.json_rpc_address = Some(format!("127.0.0.1:{}", json_rpc_port).parse().unwrap());
         config.validator_node.http_ui_address = Some(format!("127.0.0.1:{}", http_ui_port).parse().unwrap());
@@ -113,24 +116,7 @@ pub async fn spawn_validator_node(
         // Add all other VNs as peer seeds
         config.peer_seeds.peer_seeds = StringList::from(peer_seeds);
 
-        let data_dir = config.validator_node.data_dir.clone();
-        let data_dir_str = data_dir.clone().into_os_string().into_string().unwrap();
-        let config_path = data_dir.join("config.toml");
-        let cli = Cli {
-            common: CommonCliArgs {
-                base_path: data_dir_str,
-                config: config_path.into_os_string().into_string().unwrap(),
-                log_config: Some(get_config_file_path()),
-                log_level: None,
-                config_property_overrides: vec![],
-            },
-            tracing_enabled: true,
-            network: Some(Network::LocalNet.to_string()),
-            json_rpc_address: Some(format!("127.0.0.1:{}", json_rpc_port).parse().unwrap()),
-            debug_templates: vec![],
-        };
-
-        let result = run_validator_node_with_cli(&config, &cli).await;
+        let result = run_validator_node(&config, shutdown_signal).await;
         if let Err(e) = result {
             panic!("{:?}", e);
         }
@@ -153,14 +139,9 @@ pub async fn spawn_validator_node(
         handle,
         json_rpc_port,
         temp_dir_path,
+        shutdown,
     };
     world.validator_nodes.insert(name, validator_node_process);
-}
-
-fn get_config_file_path() -> PathBuf {
-    let mut config_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-    config_path.push("tests/log4rs/validator_node.yml");
-    config_path
 }
 
 pub async fn get_vn_client(port: u16) -> ValidatorNodeClient {

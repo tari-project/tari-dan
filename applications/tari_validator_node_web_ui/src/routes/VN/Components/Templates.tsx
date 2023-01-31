@@ -20,10 +20,17 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-import { useEffect, useState } from "react";
-import { ITemplate } from "../../../utils/interfaces";
-import { getTemplate, getTemplates } from "../../../utils/json_rpc";
-import "./Templates.css";
+import { useEffect, useState } from 'react';
+import { ITemplate } from '../../../utils/interfaces';
+import { getTemplate, getTemplates } from '../../../utils/json_rpc';
+import './Templates.css';
+import Table from '@mui/material/Table';
+import TableBody from '@mui/material/TableBody';
+import TableCell from '@mui/material/TableCell';
+import TableContainer from '@mui/material/TableContainer';
+import TableHead from '@mui/material/TableHead';
+import TableRow from '@mui/material/TableRow';
+import { DataTableCell } from '../../../Components/StyledComponents';
 
 function Templates() {
   const [templates, setTemplates] = useState([]);
@@ -44,64 +51,75 @@ function Templates() {
     });
   };
   const toHex = (str: Uint8Array) => {
-    return "0x" + Array.prototype.map.call(str, (x: number) => ("00" + x.toString(16)).slice(-2)).join("");
-  }
+    return (
+      '0x' +
+      Array.prototype.map
+        .call(str, (x: number) => ('00' + x.toString(16)).slice(-2))
+        .join('')
+    );
+  };
   const renderFunctions = (template: ITemplate) => {
     return (
-      <div>
+      <TableContainer>
         <div className="caption">{template.abi.template_name}</div>
-        <table>
-          <thead>
-            <th>Function</th>
-            <th>Args</th>
-            <th>Returns</th>
-          </thead>
-          <tbody>
+        <Table>
+          <TableHead>
+            <TableCell>Function</TableCell>
+            <TableCell>Args</TableCell>
+            <TableCell>Returns</TableCell>
+          </TableHead>
+          <TableBody>
             {template.abi.functions.map((fn) => (
-              <tr>
-                <td style={{ textAlign: "left" }}>{fn.name}</td>
-                <td>{fn.arguments.join(", ")}</td>
-                <td>{fn.output}</td>
-              </tr>
+              <TableRow>
+                <DataTableCell style={{ textAlign: 'left' }}>
+                  {fn.name}
+                </DataTableCell>
+                <DataTableCell>{fn.arguments.join(', ')}</DataTableCell>
+                <DataTableCell>{fn.output}</DataTableCell>
+              </TableRow>
             ))}
-          </tbody>
-        </table>
-      </div>
+          </TableBody>
+        </Table>
+      </TableContainer>
     );
   };
   return (
-    <div className="section">
-      <div className="caption">Templates</div>
-      <table className="templates">
-        <thead>
-          <tr>
-            <th>Address</th>
-            <th>Download URL</th>
-            <th>Mined Height</th>
-            <th>Status</th>
-          </tr>
-        </thead>
-        <tbody>
+    <TableContainer>
+      <Table>
+        <TableHead>
+          <TableRow>
+            <TableCell>Address</TableCell>
+            <TableCell>Download URL</TableCell>
+            <TableCell>Mined Height</TableCell>
+            <TableCell>Status</TableCell>
+          </TableRow>
+        </TableHead>
+        <TableBody>
           {templates.map(({ address, binary_sha, height, url }) => (
-            <tr key={address}>
-              <td onMouseOver={() => load(address)} className="tooltip">
-                <span className="key">{ toHex(address) }</span>
+            <TableRow key={address}>
+              <DataTableCell
+                onMouseOver={() => load(address)}
+                className="tooltip"
+              >
+                <span>{toHex(address)}</span>
                 {info?.[address] !== undefined ? (
-                  <span className="tooltiptext">{renderFunctions(info[address])}</span>
+                  <span className="tooltiptext">
+                    {renderFunctions(info[address])}
+                  </span>
                 ) : (
                   <></>
                 )}
-              </td>
-              <td>
+              </DataTableCell>
+              <DataTableCell>
                 <a href={url}>{url}</a>
-              </td>
-              <td>{height}</td>
-              <td>Active</td>
-            </tr>
+              </DataTableCell>
+              <DataTableCell>{height}</DataTableCell>
+              <DataTableCell>Active</DataTableCell>
+            </TableRow>
           ))}
-        </tbody>
-      </table>
-    </div>
+        </TableBody>
+      </Table>
+    </TableContainer>
   );
 }
 

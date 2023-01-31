@@ -116,7 +116,7 @@ fn load_template_addresses_for_components(
     for component in components {
         let component = access.get_state::<_, Substate>(&SubstateAddress::Component(*component))?;
         let component = component
-            .into_substate()
+            .into_substate_value()
             .into_component()
             .expect("Component substate should be a component");
         template_addresses.push(component.template_address);
@@ -134,7 +134,8 @@ fn create_populated_state_store<I: IntoIterator<Item = ObjectPledge>>(
     for input in inputs {
         match input.current_state {
             SubstateState::Up { data, .. } => {
-                let addr = *data.substate_address();
+                // TODO: address and state should be separate
+                let addr = data.substate_address().clone();
                 log::debug!(target: "tari::dan_layer::payload_processor",
                     "State store input substate: {} v{}",
                     addr,

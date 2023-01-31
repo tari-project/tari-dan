@@ -20,11 +20,22 @@
 //   WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //   USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+use tari_bor::{encode, Encode};
 use tari_template_abi::{call_engine, EngineOp};
 
 use crate::{
-    args::{CreateResourceArg, InvokeResult, MintArg, MintResourceArg, ResourceAction, ResourceInvokeArg, ResourceRef},
-    models::{Amount, Bucket, Metadata, NftToken, NftTokenId, ResourceAddress},
+    args::{
+        CreateResourceArg,
+        InvokeResult,
+        MintArg,
+        MintResourceArg,
+        ResourceAction,
+        ResourceGetNonFungibleArg,
+        ResourceInvokeArg,
+        ResourceRef,
+        ResourceUpdateNonFungibleDataArg,
+    },
+    models::{Amount, Bucket, Metadata, NonFungible, NonFungibleId, ResourceAddress},
     prelude::ResourceType,
 };
 
@@ -83,10 +94,17 @@ impl ResourceManager {
             .expect("[register_non_fungible] Failed to decode ResourceAddress")
     }
 
-    pub fn mint_non_fungible(&mut self, id: NftTokenId, token: NftToken) -> Bucket {
+    pub fn mint_non_fungible<T: Encode, U: Encode>(
+        &mut self,
+        id: NonFungibleId,
+        metadata: &T,
+        mutable_data: &U,
+    ) -> Bucket {
         self.mint_internal(MintResourceArg {
             mint_arg: MintArg::NonFungible {
-                tokens: Some((id, token)).into_iter().collect(),
+                tokens: Some((id, (encode(metadata).unwrap(), encode(mutable_data).unwrap())))
+                    .into_iter()
+                    .collect(),
             },
         })
     }
@@ -116,5 +134,29 @@ impl ResourceManager {
         });
 
         resp.decode().expect("[total_supply] Failed to decode Amount")
+    }
+
+    pub fn get_non_fungible(&self, id: &NonFungibleId) -> NonFungible {
+        let resp: InvokeResult = call_engine(EngineOp::ResourceInvoke, &ResourceInvokeArg {
+            resource_ref: self.expect_resource_address(),
+            action: ResourceAction::GetNonFungible,
+            args: invoke_args![ResourceGetNonFungibleArg { id: id.clone() }],
+        });
+
+        resp.decode().expect("[get_non_fungible] Failed to decode NonFungible")
+    }
+
+    pub fn update_non_fungible_data<T: Encode + ?Sized>(&self, id: NonFungibleId, data: &T) {
+        let resp: InvokeResult = call_engine(EngineOp::ResourceInvoke, &ResourceInvokeArg {
+            resource_ref: self.expect_resource_address(),
+            action: ResourceAction::UpdateNonFungibleData,
+            args: invoke_args![ResourceUpdateNonFungibleDataArg {
+                id,
+                data: encode(data).unwrap()
+            }],
+        });
+
+        resp.decode()
+            .expect("[update_non_fungible_data] Failed to decode Amount")
     }
 }

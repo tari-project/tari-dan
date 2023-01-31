@@ -83,7 +83,7 @@ fn manifest_smoke_test() {
         Instruction::CallMethod {
             component_address: account_component,
             method: "withdraw".to_string(),
-            args: args![SubstateAddress::Resource(xtr_resource), Amount(1_000)],
+            args: args![xtr_resource, Amount(1_000)],
         },
         Instruction::PutLastInstructionOutputOnWorkspace {
             key: b"bucket".to_vec(),

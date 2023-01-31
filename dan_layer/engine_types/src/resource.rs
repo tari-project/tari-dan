@@ -54,7 +54,27 @@ impl Resource {
     }
 
     pub fn increase_total_supply(&mut self, amount: Amount) {
+        assert!(
+            amount.is_positive(),
+            "Invariant violation in increase_total_supply: amount must be positive"
+        );
         self.total_supply += amount;
+    }
+
+    /// Decreases the total supply.
+    ///
+    /// ## Panics
+    /// Panics if the amount is not positive or if the amount is greater than the total supply.
+    pub fn decrease_total_supply(&mut self, amount: Amount) {
+        assert!(
+            amount.is_positive(),
+            "Invariant violation in decrease_total_supply: amount must be positive"
+        );
+        assert!(
+            self.total_supply >= amount,
+            "Invariant violation in decrease_total_supply: decrease total supply by more than total supply"
+        );
+        self.total_supply -= amount;
     }
 
     pub fn total_supply(&self) -> Amount {

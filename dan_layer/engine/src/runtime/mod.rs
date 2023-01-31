@@ -26,6 +26,9 @@ pub use id_provider::IdProvider;
 mod r#impl;
 pub use r#impl::RuntimeInterfaceImpl;
 
+mod engine_args;
+pub use crate::runtime::engine_args::EngineArgs;
+
 mod error;
 pub use error::{RuntimeError, TransactionCommitError};
 
@@ -33,6 +36,7 @@ mod tracker;
 
 #[cfg(test)]
 mod tests;
+mod working_state;
 
 use std::{fmt::Debug, sync::Arc};
 
@@ -46,13 +50,14 @@ use tari_template_lib::{
         ComponentRef,
         InvokeResult,
         LogLevel,
+        NonFungibleAction,
         ResourceAction,
         ResourceRef,
         VaultAction,
         WorkspaceAction,
     },
     invoke_args,
-    models::{ComponentAddress, ComponentHeader, ResourceAddress, VaultRef},
+    models::{ComponentAddress, ComponentHeader, NonFungibleAddress, ResourceAddress, VaultRef},
 };
 pub use tracker::{RuntimeState, StateTracker};
 
@@ -68,33 +73,40 @@ pub trait RuntimeInterface: Send + Sync {
         &self,
         component_ref: ComponentRef,
         action: ComponentAction,
-        args: Vec<Vec<u8>>,
+        args: EngineArgs,
     ) -> Result<InvokeResult, RuntimeError>;
 
     fn resource_invoke(
         &self,
         resource_ref: ResourceRef,
         action: ResourceAction,
-        args: Vec<Vec<u8>>,
+        args: EngineArgs,
     ) -> Result<InvokeResult, RuntimeError>;
 
     fn vault_invoke(
         &self,
         vault_ref: VaultRef,
         action: VaultAction,
-        args: Vec<Vec<u8>>,
+        args: EngineArgs,
     ) -> Result<InvokeResult, RuntimeError>;
 
     fn bucket_invoke(
         &self,
         bucket_ref: BucketRef,
         action: BucketAction,
-        args: Vec<Vec<u8>>,
+        args: EngineArgs,
     ) -> Result<InvokeResult, RuntimeError>;
 
-    fn workspace_invoke(&self, action: WorkspaceAction, args: Vec<Vec<u8>>) -> Result<InvokeResult, RuntimeError>;
+    fn workspace_invoke(&self, action: WorkspaceAction, args: EngineArgs) -> Result<InvokeResult, RuntimeError>;
 
-    fn generate_uuid(&self) -> Result<Vec<u8>, RuntimeError>;
+    fn non_fungible_invoke(
+        &self,
+        nf_addr: NonFungibleAddress,
+        action: NonFungibleAction,
+        args: EngineArgs,
+    ) -> Result<InvokeResult, RuntimeError>;
+
+    fn generate_uuid(&self) -> Result<[u8; 32], RuntimeError>;
 
     fn set_last_instruction_output(&self, value: Option<Vec<u8>>) -> Result<(), RuntimeError>;
 
@@ -114,7 +126,7 @@ impl Runtime {
                 Arg::Variable(key) => {
                     let value = self
                         .interface
-                        .workspace_invoke(WorkspaceAction::Take, invoke_args![key])?;
+                        .workspace_invoke(WorkspaceAction::Take, invoke_args![key].into())?;
                     resolved.push(value.decode()?);
                 },
                 Arg::Literal(v) => resolved.push(v),
