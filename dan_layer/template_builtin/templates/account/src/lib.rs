@@ -71,6 +71,15 @@ mod account_template {
             v.withdraw(amount)
         }
 
+        // #[access_rules(requires(owner_badge))]
+        pub fn withdraw_non_fungible(&mut self, resource: ResourceAddress, nf_id: NonFungibleId) -> Bucket {
+            let v = self
+                .get_vault_mut(resource)
+                .expect("This account does not have any of that resource");
+
+            v.withdraw_non_fungibles(Some(nf_id))
+        }
+
         // #[access_rules(allow_all)]
         pub fn deposit(&mut self, bucket: Bucket) {
             let resource_address = bucket.resource_address();

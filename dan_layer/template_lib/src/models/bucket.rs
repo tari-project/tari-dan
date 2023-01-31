@@ -66,8 +66,28 @@ impl Bucket {
         resp.decode().expect("Bucket Take returned invalid bucket")
     }
 
+    pub fn burn(&mut self) {
+        let resp: InvokeResult = call_engine(EngineOp::BucketInvoke, &BucketInvokeArg {
+            bucket_ref: BucketRef::Ref(self.id),
+            action: BucketAction::Burn,
+            args: invoke_args![],
+        });
+
+        resp.decode().expect("Bucket Burn returned invalid result")
+    }
+
     pub fn split(mut self, amount: Amount) -> (Self, Self) {
         let new_bucket = self.take(amount);
         (new_bucket, self)
+    }
+
+    pub fn amount(&self) -> Amount {
+        let resp: InvokeResult = call_engine(EngineOp::BucketInvoke, &BucketInvokeArg {
+            bucket_ref: BucketRef::Ref(self.id),
+            action: BucketAction::GetAmount,
+            args: invoke_args![],
+        });
+
+        resp.decode().expect("Bucket GetAmount returned invalid amount")
     }
 }

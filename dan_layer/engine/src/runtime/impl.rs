@@ -37,22 +37,19 @@ use tari_template_lib::{
         InvokeResult,
         LogLevel,
         MintResourceArg,
+        NonFungibleAction,
         ResourceAction,
         ResourceGetNonFungibleArg,
         ResourceRef,
         ResourceUpdateNonFungibleDataArg,
         VaultAction,
+        VaultWithdrawArg,
         WorkspaceAction,
     },
-    models::{Amount, BucketId, ComponentAddress, ComponentHeader, ResourceAddress, VaultRef},
+    models::{BucketId, ComponentAddress, ComponentHeader, NonFungibleAddress, ResourceAddress, VaultRef},
 };
 
-use crate::runtime::{
-    engine_args::EngineArgs,
-    tracker::{RuntimeState, StateTracker},
-    RuntimeError,
-    RuntimeInterface,
-};
+use crate::runtime::{engine_args::EngineArgs, tracker::StateTracker, RuntimeError, RuntimeInterface, RuntimeState};
 
 #[derive(Debug, Clone)]
 pub struct RuntimeInterfaceImpl {
@@ -177,8 +174,6 @@ impl RuntimeInterface for RuntimeInterfaceImpl {
                 Ok(InvokeResult::encode(&(resource_address, output_bucket))?)
             },
             ResourceAction::Mint => {
-                let mint_resource: MintResourceArg = args.get(0)?;
-
                 let resource_address =
                     resource_ref
                         .as_resource_address()
@@ -186,11 +181,12 @@ impl RuntimeInterface for RuntimeInterfaceImpl {
                             argument: "resource_ref",
                             reason: "Mint resource action requires a resource address".to_string(),
                         })?;
+                let mint_resource: MintResourceArg = args.get(0)?;
+
                 let bucket_id = self.tracker.mint_resource(resource_address, mint_resource.mint_arg)?;
                 let bucket = tari_template_lib::models::Bucket::from_id(bucket_id);
                 Ok(InvokeResult::encode(&bucket)?)
             },
-            ResourceAction::Burn => todo!(),
             ResourceAction::Deposit => todo!(),
             ResourceAction::Withdraw => todo!(),
             ResourceAction::GetNonFungible => {
@@ -202,8 +198,17 @@ impl RuntimeInterface for RuntimeInterfaceImpl {
                             reason: "GetNonFungible resource action requires a resource address".to_string(),
                         })?;
                 let arg: ResourceGetNonFungibleArg = args.get(0)?;
-                let nft = self.tracker.get_non_fungible(&resource_address, &arg.id)?;
-                Ok(InvokeResult::encode(&nft)?)
+                let nf_container = self.tracker.get_non_fungible(&resource_address, &arg.id)?;
+                if nf_container.is_burnt() {
+                    return Err(RuntimeError::InvalidOpNonFungibleBurnt {
+                        op: "GetNonFungible",
+                        nf_id: arg.id,
+                        resource_address,
+                    });
+                }
+                Ok(InvokeResult::encode(&tari_template_lib::models::NonFungible::new(
+                    NonFungibleAddress::new(resource_address, arg.id),
+                ))?)
             },
             ResourceAction::UpdateNonFungibleData => {
                 let resource_address =
@@ -214,8 +219,8 @@ impl RuntimeInterface for RuntimeInterfaceImpl {
                             reason: "UpdateNonFungibleData resource action requires a resource address".to_string(),
                         })?;
                 let arg: ResourceUpdateNonFungibleDataArg = args.get(0)?;
-                self.tracker
-                    .with_non_fungible_mut(resource_address, arg.id.clone(), move |nft| nft.set_data_raw(arg.data))?;
+                self.tracker.set_non_fungible_data(resource_address, arg.id, arg.data)?;
+
                 Ok(InvokeResult::unit())
             },
         }
@@ -257,11 +262,12 @@ impl RuntimeInterface for RuntimeInterfaceImpl {
                     argument: "vault_ref",
                     reason: "WithdrawFungible vault action requires a vault id".to_string(),
                 })?;
-                let amount: Amount = args.get(0)?;
+                let arg: VaultWithdrawArg = args.get(0)?;
 
-                let resource = self
-                    .tracker
-                    .borrow_vault_mut(&vault_id, |vault| vault.withdraw(amount))??;
+                let resource = self.tracker.borrow_vault_mut(&vault_id, |vault| match arg {
+                    VaultWithdrawArg::Fungible { amount } => vault.withdraw(amount),
+                    VaultWithdrawArg::NonFungible { ids } => vault.withdraw_non_fungibles(&ids),
+                })??;
                 let bucket = self.tracker.new_bucket(resource)?;
                 Ok(InvokeResult::encode(&bucket)?)
             },
@@ -343,6 +349,14 @@ impl RuntimeInterface for RuntimeInterfaceImpl {
                 let bucket = self.tracker.get_bucket(bucket_id)?;
                 Ok(InvokeResult::encode(bucket.resource_address())?)
             },
+            BucketAction::GetAmount => {
+                let bucket_id = bucket_ref.bucket_id().ok_or_else(|| RuntimeError::InvalidArgument {
+                    argument: "bucket_ref",
+                    reason: "GetAmount bucket action requires a bucket id".to_string(),
+                })?;
+                let bucket = self.tracker.get_bucket(bucket_id)?;
+                Ok(InvokeResult::encode(&bucket.amount())?)
+            },
             BucketAction::Take => {
                 let bucket_id = bucket_ref.bucket_id().ok_or_else(|| RuntimeError::InvalidArgument {
                     argument: "bucket_ref",
@@ -355,16 +369,13 @@ impl RuntimeInterface for RuntimeInterfaceImpl {
                 let bucket_id = self.tracker.new_bucket(resource)?;
                 Ok(InvokeResult::encode(&bucket_id)?)
             },
-            BucketAction::Drop => {
+            BucketAction::Burn => {
                 let bucket_id = bucket_ref.bucket_id().ok_or_else(|| RuntimeError::InvalidArgument {
                     argument: "bucket_ref",
-                    reason: "Create bucket action requires a bucket id".to_string(),
+                    reason: "Burn bucket action requires a bucket id".to_string(),
                 })?;
-                let bucket = self.tracker.take_bucket(bucket_id)?;
-                if !bucket.amount().is_zero() {
-                    return Err(RuntimeError::BucketNotEmpty { bucket_id });
-                }
-                Ok(InvokeResult::encode(bucket.resource_address())?)
+                self.tracker.burn_bucket(bucket_id)?;
+                Ok(InvokeResult::unit())
             },
         }
     }
@@ -389,6 +400,44 @@ impl RuntimeInterface for RuntimeInterfaceImpl {
                 let key: Vec<u8> = args.get(0)?;
                 let value = self.tracker.take_from_workspace(&key)?;
                 Ok(InvokeResult::encode(&value)?)
+            },
+        }
+    }
+
+    fn non_fungible_invoke(
+        &self,
+        nf_addr: NonFungibleAddress,
+        action: NonFungibleAction,
+        _args: EngineArgs,
+    ) -> Result<InvokeResult, RuntimeError> {
+        match action {
+            NonFungibleAction::GetData => {
+                let container = self
+                    .tracker
+                    .get_non_fungible(nf_addr.resource_address(), nf_addr.id())?;
+                let contents = container
+                    .contents()
+                    .ok_or_else(|| RuntimeError::InvalidOpNonFungibleBurnt {
+                        op: "GetData",
+                        resource_address: *nf_addr.resource_address(),
+                        nf_id: nf_addr.id().clone(),
+                    })?;
+
+                Ok(InvokeResult::raw(contents.data().to_vec()))
+            },
+            NonFungibleAction::GetMutableData => {
+                let container = self
+                    .tracker
+                    .get_non_fungible(nf_addr.resource_address(), nf_addr.id())?;
+                let contents = container
+                    .contents()
+                    .ok_or_else(|| RuntimeError::InvalidOpNonFungibleBurnt {
+                        op: "GetMutableData",
+                        resource_address: *nf_addr.resource_address(),
+                        nf_id: nf_addr.id().clone(),
+                    })?;
+
+                Ok(InvokeResult::raw(contents.mutable_data().to_vec()))
             },
         }
     }

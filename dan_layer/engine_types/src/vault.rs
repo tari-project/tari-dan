@@ -54,6 +54,13 @@ impl Vault {
         self.resource_container.withdraw(amount)
     }
 
+    pub fn withdraw_non_fungibles(
+        &mut self,
+        ids: &BTreeSet<NonFungibleId>,
+    ) -> Result<ResourceContainer, ResourceError> {
+        self.resource_container.withdraw_by_ids(ids)
+    }
+
     pub fn withdraw_all(&mut self) -> Result<ResourceContainer, ResourceError> {
         self.resource_container.withdraw(self.resource_container.amount())
     }
