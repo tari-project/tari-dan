@@ -116,9 +116,10 @@ impl ResourceManager {
         supply: usize,
     ) -> Bucket {
         let mut tokens: HashMap<NonFungibleId, (Vec<u8>, Vec<u8>)> = HashMap::with_capacity(supply);
+        let token_data = (encode(metadata).unwrap(), encode(mutable_data).unwrap());
         for _ in 0..supply {
             let id = NonFungibleId::random();
-            tokens.insert(id, (encode(metadata).unwrap(), encode(mutable_data).unwrap()));
+            tokens.insert(id, token_data.clone());
         }
         self.mint_internal(MintResourceArg {
             mint_arg: MintArg::NonFungible { tokens },

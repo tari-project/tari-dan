@@ -92,9 +92,9 @@ mod emoji_id {
             );
 
             // process the payment
-            // TODO: use Bucket.split for change, the payment amount will be checked automatically
+            assert_eq!(payment.amount(), self.mint_price, "Invalid payment amount");
             // no need to manually check that the payment is in the same resource that we are accepting ...
-            // ... the deposit will fail if it's different
+            // ... the deposit will fail if it's different       
             self.earnings.deposit(payment);
 
             // mint a new emoji id

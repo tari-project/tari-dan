@@ -74,8 +74,9 @@ mod tickets {
 
         // This method should be accesible to everyone
         // TODO: how do we ensure that the payment is in Thaums? On vault creation we specify the type of token?
-        // TODO: return change (or check bucket.value() == required_amount)
         pub fn buy_ticket(&mut self, payment: Bucket) -> Bucket {
+            assert_eq!(payment.amount(), self.price, "Invalid payment amount");
+
             self.earnings.deposit(payment);
 
             // no need to manually check that the tickes are all sold out, as the withdraw operation will fail automatically
