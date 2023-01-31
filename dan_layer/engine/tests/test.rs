@@ -752,7 +752,7 @@ mod emoji_id {
             Instruction::CallMethod {
                 component_address: account_address,
                 method: "withdraw".to_string(),
-                args: args![faucet_resource, Amount(25)],
+                args: args![faucet_resource, Amount(20)],
             },
             Instruction::PutLastInstructionOutputOnWorkspace {
                 key: b"payment".to_vec(),
@@ -939,8 +939,6 @@ mod tickets {
 
         // initialize the ticket seller
         let ticket_template = template_test.get_template_address("TicketSeller");
-        // FIXME: very weird error, if the supply is "1000" for example, the execution panics with a "RuntimeError:
-        // unreachable"
         let initial_supply: usize = 10;
         let price = Amount(20);
         let event_description = "My music festival".to_string();
