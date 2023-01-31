@@ -26,6 +26,7 @@ use tari_template_abi::{call_engine, EngineOp};
 use crate::{
     args::{BucketAction, BucketInvokeArg, BucketRef, InvokeResult},
     models::{Amount, ResourceAddress},
+    prelude::ResourceType,
 };
 
 pub type BucketId = u32;
@@ -52,7 +53,18 @@ impl Bucket {
         });
 
         resp.decode()
-            .expect("Bucket GetResource returned invalid resource address")
+            .expect("Bucket GetResourceAddress returned invalid resource address")
+    }
+
+    pub fn resource_type(&self) -> ResourceType {
+        let resp: InvokeResult = call_engine(EngineOp::BucketInvoke, &BucketInvokeArg {
+            bucket_ref: BucketRef::Ref(self.id),
+            action: BucketAction::GetResourceType,
+            args: invoke_args![],
+        });
+
+        resp.decode()
+            .expect("Bucket GetResourceType returned invalid resource type")
     }
 
     pub fn take(&mut self, amount: Amount) -> Self {

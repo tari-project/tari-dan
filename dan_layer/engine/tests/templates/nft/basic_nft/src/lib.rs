@@ -111,6 +111,11 @@ mod sparkle_nft_template {
         }
 
         pub fn burn(&mut self, mut bucket: Bucket) {
+            // this check is actually not needed, but with it we cover the "bucket.resource_type" method
+            assert!(
+                bucket.resource_type() == ResourceType::NonFungible,
+                "The resource is not a NFT"
+            );
             assert!(
                 bucket.resource_address() == self.address,
                 "Cannot burn bucket not from this collection"
