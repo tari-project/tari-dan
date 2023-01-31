@@ -752,7 +752,7 @@ mod emoji_id {
             Instruction::CallMethod {
                 component_address: account_address,
                 method: "withdraw".to_string(),
-                args: args![faucet_resource, Amount(25)],
+                args: args![faucet_resource, Amount(20)],
             },
             Instruction::PutLastInstructionOutputOnWorkspace {
                 key: b"payment".to_vec(),
