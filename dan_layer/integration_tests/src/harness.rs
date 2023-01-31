@@ -156,7 +156,7 @@ impl HsTestHarness {
             pacemaker,
             payload_processor,
             shard_store.clone(),
-            shutdown.to_signal().clone(),
+            shutdown.to_signal(),
             consensus_constants,
         );
 
