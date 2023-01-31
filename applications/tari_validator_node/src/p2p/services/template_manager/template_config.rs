@@ -25,9 +25,19 @@ use std::{collections::HashMap, path::PathBuf};
 use serde::{Deserialize, Serialize};
 use tari_engine_types::TemplateAddress;
 
-#[derive(Debug, Default, Serialize, Deserialize, Clone)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct TemplateConfig {
+    max_cache_size_bytes: u64,
     debug_replacements: Vec<String>,
+}
+
+impl Default for TemplateConfig {
+    fn default() -> Self {
+        Self {
+            max_cache_size_bytes: 200 * 1024 * 1024,
+            debug_replacements: Vec::new(),
+        }
+    }
 }
 
 impl TemplateConfig {
@@ -39,5 +49,9 @@ impl TemplateConfig {
             result.insert(template_address, path.into());
         }
         result
+    }
+
+    pub fn max_cache_size_bytes(&self) -> u64 {
+        self.max_cache_size_bytes
     }
 }
