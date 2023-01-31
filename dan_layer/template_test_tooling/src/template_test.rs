@@ -13,7 +13,6 @@ use tari_crypto::ristretto::RistrettoSecretKey;
 use tari_dan_engine::{
     crypto::create_key_pair,
     packager::{LoadedTemplate, Package, TemplateModuleLoader},
-    runtime::RuntimeInterface,
     state_store::{memory::MemoryStateStore, AtomicDb, StateReader, StateStoreError, StateWriter},
     transaction::{Transaction, TransactionError, TransactionProcessor},
     wasm::{compile::compile_template, LoadedWasmTemplate, WasmModule},
@@ -35,18 +34,21 @@ use super::MockRuntimeInterface;
 
 pub struct TemplateTest<R> {
     package: Package,
-    processor: TransactionProcessor<R>,
+    processor: TransactionProcessor<MockRuntimeInterface>,
     secret_key: RistrettoSecretKey,
     last_outputs: HashSet<SubstateAddress>,
     name_to_template: HashMap<String, TemplateAddress>,
     runtime_interface: R,
 }
 
-impl<R: RuntimeInterface + Clone + 'static> TemplateTest<R> {
-    pub fn with_runtime_interface<P: AsRef<Path>>(templates: Vec<P>, runtime_interface: R) -> Self {
+impl TemplateTest<MockRuntimeInterface> {
+    pub fn new<P: AsRef<Path>>(template_paths: Vec<P>) -> Self {
+        let runtime_interface = MockRuntimeInterface::default();
         let (secret_key, _pk) = create_key_pair();
 
-        let wasms = templates.into_iter().map(|path| compile_template(path, &[]).unwrap());
+        let wasms = template_paths
+            .into_iter()
+            .map(|path| compile_template(path, &[]).unwrap());
         let mut builder = Package::builder();
         let mut name_to_template = HashMap::new();
 
@@ -74,13 +76,6 @@ impl<R: RuntimeInterface + Clone + 'static> TemplateTest<R> {
             runtime_interface,
             last_outputs: HashSet::new(),
         }
-    }
-}
-
-impl TemplateTest<MockRuntimeInterface> {
-    pub fn new<P: AsRef<Path>>(template_paths: Vec<P>) -> Self {
-        let runtime_interface = MockRuntimeInterface::default();
-        Self::with_runtime_interface(template_paths, runtime_interface)
     }
 
     pub fn read_only_state_store(&self) -> ReadOnlyStateStore {
@@ -162,7 +157,7 @@ impl TemplateTest<MockRuntimeInterface> {
         result.execution_results[0].decode().unwrap()
     }
 
-    pub fn try_execute(&self, instructions: Vec<Instruction>) -> Result<FinalizeResult, TransactionError> {
+    pub fn try_execute(&mut self, instructions: Vec<Instruction>) -> Result<FinalizeResult, TransactionError> {
         let mut builder = Transaction::builder();
         for instruction in instructions {
             builder.add_instruction(instruction);
@@ -170,7 +165,20 @@ impl TemplateTest<MockRuntimeInterface> {
         builder.sign(&self.secret_key);
         let transaction = builder.build();
 
-        self.processor.execute(transaction)
+        match self.processor.execute(transaction) {
+            Ok(result) => Ok(result),
+            Err(err) => {
+                // If there's an error we want to clear state from the failed execution. This is equivalent to the
+                // payload executor behaviour which sets up new state for each transaction.
+                self.reset_runtime_state();
+                Err(err)
+            },
+        }
+    }
+
+    fn reset_runtime_state(&mut self) {
+        self.runtime_interface.reset_runtime();
+        self.processor = TransactionProcessor::new(self.runtime_interface.clone(), self.package.clone());
     }
 
     pub fn execute_and_commit(&mut self, instructions: Vec<Instruction>) -> anyhow::Result<FinalizeResult> {

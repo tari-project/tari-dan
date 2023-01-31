@@ -393,7 +393,9 @@ impl StateTracker {
     }
 
     pub fn finalize(&self) -> Result<SubstateDiff, TransactionCommitError> {
-        let substates = self.write_with(|state| {
+        let substates = self.write_with(|current_state| {
+            // Finalise will always reset the state
+            let state = mem::replace(current_state, WorkingState::new(current_state.state_store.clone()));
             state.validate_finalized()?;
 
             let tx = state
@@ -402,7 +404,7 @@ impl StateTracker {
                 .map_err(TransactionCommitError::StateStoreTransactionError)?;
             let mut substate_diff = SubstateDiff::new();
 
-            for (component_addr, substate) in state.new_components.drain() {
+            for (component_addr, substate) in state.new_components {
                 let addr = SubstateAddress::Component(component_addr);
                 let new_substate = match tx.get_state::<_, Substate>(&addr).optional()? {
                     Some(existing_state) => {
@@ -414,7 +416,7 @@ impl StateTracker {
                 substate_diff.up(addr, new_substate);
             }
 
-            for (vault_id, substate) in state.new_vaults.drain() {
+            for (vault_id, substate) in state.new_vaults {
                 let addr = SubstateAddress::Vault(vault_id);
                 let new_substate = match tx.get_state::<_, Substate>(&addr).optional()? {
                     Some(existing_state) => {
@@ -426,7 +428,7 @@ impl StateTracker {
                 substate_diff.up(addr, new_substate);
             }
 
-            for (resource_addr, substate) in state.new_resources.drain() {
+            for (resource_addr, substate) in state.new_resources {
                 let addr = SubstateAddress::Resource(resource_addr);
                 let new_substate = match tx.get_state::<_, Substate>(&addr).optional()? {
                     Some(existing_state) => {
@@ -438,7 +440,7 @@ impl StateTracker {
                 substate_diff.up(addr, new_substate);
             }
 
-            for ((resource_addr, id), substate) in state.new_non_fungibles.drain() {
+            for ((resource_addr, id), substate) in state.new_non_fungibles {
                 let addr = SubstateAddress::NonFungible(resource_addr, id);
                 let new_substate = match tx.get_state::<_, Substate>(&addr).optional()? {
                     Some(existing_state) => {

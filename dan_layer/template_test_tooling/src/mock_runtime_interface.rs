@@ -71,8 +71,19 @@ impl MockRuntimeInterface {
         self.calls.write().unwrap().clear();
     }
 
-    fn add_call(&self, call: &'static str) {
+    fn add_call(&self, call: &'static str) -> &Self {
         self.calls.write().unwrap().push(call);
+        self
+    }
+
+    pub fn set_invoke_result(&self, result: InvokeResult) -> &Self {
+        *self.invoke_result.write().unwrap() = Some(result);
+        self
+    }
+
+    pub fn reset_runtime(&mut self) {
+        let tracker = StateTracker::new(self.state.clone(), IdProvider::new(Hash::default(), 100));
+        self.inner = RuntimeInterfaceImpl::new(tracker);
     }
 }
 
