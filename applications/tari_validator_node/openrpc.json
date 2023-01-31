@@ -845,6 +845,163 @@
       ]
     },
     {
+      "name": "get_template",
+      "summary": "",
+      "tags": [
+      ],
+      "params": [
+        {
+          "name": "template_address",
+          "schema": {
+            "type": "array"
+          }
+        }
+      ],
+      "result": {
+        "name": "epoch_stats",
+        "description": "",
+        "schema": {
+          "$ref": "#/components/schemas/EpochStats"
+        }
+      },
+      "errors": [
+      ],
+      "examples": [
+        {
+          "name": "default",
+          "description": "",
+          "params": [
+          ],
+          "result": {
+            "name": "exmaple1",
+            "value": {
+              "abi": {
+                "functions": [
+                  {
+                    "arguments": [],
+                    "is_mut": false,
+                    "name": "new",
+                    "output": "U32"
+                  },
+                  {
+                    "arguments": [
+                      "U32",
+                      "ResourceAddress"
+                    ],
+                    "is_mut": false,
+                    "name": "balance",
+                    "output": "Amount"
+                  },
+                  {
+                    "arguments": [
+                      "U32",
+                      "ResourceAddress",
+                      "Amount"
+                    ],
+                    "is_mut": true,
+                    "name": "withdraw",
+                    "output": "Bucket"
+                  },
+                  {
+                    "arguments": [
+                      "U32",
+                      "Bucket"
+                    ],
+                    "is_mut": true,
+                    "name": "deposit",
+                    "output": "Unit"
+                  },
+                  {
+                    "arguments": [
+                      "U32",
+                      "ResourceAddress"
+                    ],
+                    "is_mut": false,
+                    "name": "get_non_fungible_ids",
+                    "output": "Vec"
+                  }
+                ],
+                "template_name": "Account"
+              },
+              "registration_metadata": {
+                "address": [
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0
+                ],
+                "binary_sha": [
+                  46,
+                  5,
+                  79,
+                  78,
+                  116,
+                  13,
+                  31,
+                  63,
+                  1,
+                  100,
+                  2,
+                  209,
+                  203,
+                  11,
+                  237,
+                  128,
+                  227,
+                  125,
+                  200,
+                  35,
+                  198,
+                  90,
+                  229,
+                  151,
+                  158,
+                  212,
+                  200,
+                  62,
+                  70,
+                  251,
+                  220,
+                  219
+                ],
+                "height": 0,
+                "name": "account",
+                "url": ""
+              }
+            }
+          }
+        }
+      ]
+    },
+    {
       "name": "register_validator_node",
       "summary": "Registers the validator node",
       "tags": [],
