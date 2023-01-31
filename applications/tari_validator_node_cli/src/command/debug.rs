@@ -20,37 +20,41 @@
 //   WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //   USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use clap::Subcommand;
+use clap::{Args, Subcommand};
+use tari_validator_node_client::ValidatorNodeClient;
 
-mod key;
-pub use key::KeysSubcommand;
-
-mod template;
-pub use template::TemplateSubcommand;
-
-mod vn;
-pub use vn::VnSubcommand;
-
-use crate::command::{debug::DebugSubcommand, manifest::ManifestSubcommand, transaction::TransactionSubcommand};
-
-mod debug;
-mod manifest;
-
-pub mod transaction;
-
-#[allow(clippy::large_enum_variant)]
 #[derive(Debug, Subcommand, Clone)]
-pub enum Command {
-    #[clap(subcommand)]
-    Vn(VnSubcommand),
-    #[clap(subcommand, alias = "template")]
-    Templates(TemplateSubcommand),
-    #[clap(subcommand, alias = "key")]
-    Keys(KeysSubcommand),
-    #[clap(subcommand, alias = "transaction")]
-    Transactions(TransactionSubcommand),
-    #[clap(subcommand, alias = "manifest")]
-    Manifests(ManifestSubcommand),
-    #[clap(subcommand)]
-    Debug(DebugSubcommand),
+pub enum DebugSubcommand {
+    ShowMessages(ShowMessagesArgs),
+}
+
+#[derive(Debug, Args, Clone)]
+pub struct ShowMessagesArgs {
+    pub message_tag: String,
+}
+
+impl DebugSubcommand {
+    pub async fn handle(self, client: ValidatorNodeClient) -> Result<(), anyhow::Error> {
+        #[allow(clippy::enum_glob_use)]
+        use DebugSubcommand::*;
+        match self {
+            ShowMessages(args) => handle_list_messages(client, args).await?,
+        }
+        Ok(())
+    }
+}
+
+async fn handle_list_messages(mut client: ValidatorNodeClient, args: ShowMessagesArgs) -> Result<(), anyhow::Error> {
+    let logs = client.get_message_logs(&args.message_tag).await?;
+    if logs.is_empty() {
+        println!("No messages found for tag '{}'", args.message_tag);
+        return Ok(());
+    }
+
+    println!("Messages for tag '{}':", args.message_tag);
+    for log in logs {
+        println!("{}", log);
+        println!();
+    }
+    Ok(())
 }

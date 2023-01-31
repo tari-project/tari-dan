@@ -34,6 +34,9 @@ message DanMessage {
     tari.dan.transaction.Transaction new_transaction = 3;
     NetworkAnnounce network_announce = 4;
   }
+
+  // Message tag for debugging purposes. This is typically set to some identifier that groups a set of messages together e.g. payload ID, or is not provided at all.
+  string message_tag = 5;
 }
 
 message NetworkAnnounce {
