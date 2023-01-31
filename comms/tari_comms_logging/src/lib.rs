@@ -7,5 +7,5 @@ extern crate diesel;
 extern crate diesel_migrations;
 
 mod sqlite_message_log;
-pub use sqlite_message_log::SqliteMessageLog;
+pub use sqlite_message_log::{LoggedMessage, SqliteMessageLog};
 mod schema;

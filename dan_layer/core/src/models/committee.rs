@@ -23,7 +23,7 @@
 use serde::Serialize;
 use tari_dan_common_types::NodeAddressable;
 
-#[derive(Debug, Clone, Serialize, Default)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Default, Hash)]
 pub struct Committee<TAddr> {
     // TODO: encapsulate
     pub members: Vec<TAddr>,

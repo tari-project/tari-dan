@@ -20,47 +20,41 @@
 //   WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //   USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use std::collections::BTreeSet;
+use clap::{Args, Subcommand};
+use tari_validator_node_client::ValidatorNodeClient;
 
-use tari_bor::{borsh, Decode, Encode};
-use tari_template_lib::{
-    models::{Amount, NonFungibleId, ResourceAddress},
-    prelude::ResourceType,
-};
-
-use crate::resource_container::{ResourceContainer, ResourceError};
-
-#[derive(Debug, Clone, Encode, Decode)]
-pub struct Bucket {
-    resource: ResourceContainer,
+#[derive(Debug, Subcommand, Clone)]
+pub enum DebugSubcommand {
+    ShowMessages(ShowMessagesArgs),
 }
 
-impl Bucket {
-    pub fn new(resource: ResourceContainer) -> Self {
-        Self { resource }
+#[derive(Debug, Args, Clone)]
+pub struct ShowMessagesArgs {
+    pub message_tag: String,
+}
+
+impl DebugSubcommand {
+    pub async fn handle(self, client: ValidatorNodeClient) -> Result<(), anyhow::Error> {
+        #[allow(clippy::enum_glob_use)]
+        use DebugSubcommand::*;
+        match self {
+            ShowMessages(args) => handle_list_messages(client, args).await?,
+        }
+        Ok(())
+    }
+}
+
+async fn handle_list_messages(mut client: ValidatorNodeClient, args: ShowMessagesArgs) -> Result<(), anyhow::Error> {
+    let logs = client.get_message_logs(&args.message_tag).await?;
+    if logs.is_empty() {
+        println!("No messages found for tag '{}'", args.message_tag);
+        return Ok(());
     }
 
-    pub fn amount(&self) -> Amount {
-        self.resource.amount()
+    println!("Messages for tag '{}':", args.message_tag);
+    for log in logs {
+        println!("{}", log);
+        println!();
     }
-
-    pub fn resource_address(&self) -> &ResourceAddress {
-        self.resource.resource_address()
-    }
-
-    pub fn resource_type(&self) -> ResourceType {
-        self.resource.resource_type()
-    }
-
-    pub fn into_resource(self) -> ResourceContainer {
-        self.resource
-    }
-
-    pub fn into_non_fungible_ids(self) -> Option<BTreeSet<NonFungibleId>> {
-        self.resource.into_non_fungible_ids()
-    }
-
-    pub fn take(&mut self, amount: Amount) -> Result<ResourceContainer, ResourceError> {
-        self.resource.withdraw(amount)
-    }
+    Ok(())
 }

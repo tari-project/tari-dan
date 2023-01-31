@@ -36,6 +36,7 @@ mod tracker;
 
 #[cfg(test)]
 mod tests;
+mod working_state;
 
 use std::{fmt::Debug, sync::Arc};
 
@@ -49,13 +50,14 @@ use tari_template_lib::{
         ComponentRef,
         InvokeResult,
         LogLevel,
+        NonFungibleAction,
         ResourceAction,
         ResourceRef,
         VaultAction,
         WorkspaceAction,
     },
     invoke_args,
-    models::{ComponentAddress, ComponentHeader, ResourceAddress, VaultRef},
+    models::{ComponentAddress, ComponentHeader, NonFungibleAddress, ResourceAddress, VaultRef},
 };
 pub use tracker::{RuntimeState, StateTracker};
 
@@ -96,6 +98,13 @@ pub trait RuntimeInterface: Send + Sync {
     ) -> Result<InvokeResult, RuntimeError>;
 
     fn workspace_invoke(&self, action: WorkspaceAction, args: EngineArgs) -> Result<InvokeResult, RuntimeError>;
+
+    fn non_fungible_invoke(
+        &self,
+        nf_addr: NonFungibleAddress,
+        action: NonFungibleAction,
+        args: EngineArgs,
+    ) -> Result<InvokeResult, RuntimeError>;
 
     fn generate_uuid(&self) -> Result<[u8; 32], RuntimeError>;
 

@@ -29,12 +29,14 @@ mod template;
 pub use template::TemplateSubcommand;
 
 mod vn;
-pub use transaction::handle_submit;
 pub use vn::VnSubcommand;
 
-pub mod manifest;
+use crate::command::{debug::DebugSubcommand, manifest::ManifestSubcommand, transaction::TransactionSubcommand};
+
+mod debug;
+mod manifest;
+
 pub mod transaction;
-use self::{manifest::ManifestSubcommand, transaction::TransactionSubcommand};
 
 #[allow(clippy::large_enum_variant)]
 #[derive(Debug, Subcommand, Clone)]
@@ -49,4 +51,6 @@ pub enum Command {
     Transactions(TransactionSubcommand),
     #[clap(subcommand, alias = "manifest")]
     Manifests(ManifestSubcommand),
+    #[clap(subcommand)]
+    Debug(DebugSubcommand),
 }

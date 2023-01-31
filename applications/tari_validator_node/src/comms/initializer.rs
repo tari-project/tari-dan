@@ -160,7 +160,7 @@ fn configure_comms(
 
     // Hook up messaging middlewares (currently none)
     let connectivity = comms.connectivity();
-    let logger1 = SqliteMessageLog::new(config.datastore_path.clone());
+    let logger1 = SqliteMessageLog::new(&config.datastore_path);
     let logger2 = logger1.clone();
     let messaging_pipeline = pipeline::Builder::new()
         .with_outbound_pipeline(outbound_rx, move |sink| {

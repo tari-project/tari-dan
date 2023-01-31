@@ -1,14 +1,19 @@
 //   Copyright 2023 The Tari Project
 //   SPDX-License-Identifier: BSD-3-Clause
 
-use tari_bor::{borsh, decode_exact, encode, Decode, Encode};
+use tari_bor::{borsh, Decode, Encode};
 use tari_template_abi::{
     call_engine,
     rust::{fmt, fmt::Display, write},
     EngineOp,
 };
 
-use crate::{models::Metadata, Hash};
+use crate::{
+    args::{InvokeResult, NonFungibleAction, NonFungibleInvokeArg},
+    models::ResourceAddress,
+    prelude::ResourceManager,
+    Hash,
+};
 
 const DELIM: char = ':';
 
@@ -39,19 +44,14 @@ impl NonFungibleId {
         Self::Uint64(id)
     }
 
-    /// Creates a string-based NonFungibleId.
-    ///
-    /// ## Panics
-    /// Panics if the string contains invalid characters. This function should only be used in contexts where panics are
-    /// acceptable (WASM). Otherwise, prefer `try_from_string`.
     pub fn from_string<T: Into<String>>(id: T) -> Self {
-        Self::try_from_string(id).expect("NonFungible string is invalid")
+        Self::String(id.into())
     }
 
     pub fn try_from_string<T: Into<String>>(id: T) -> Result<Self, ParseNonFungibleIdError> {
         let id = id.into();
         validate_nft_id_str(&id)?;
-        Ok(Self::String(id))
+        Ok(NonFungibleId::String(id))
     }
 
     /// A string in one of the following formats
@@ -153,47 +153,71 @@ fn validate_nft_id_str(s: &str) -> Result<(), ParseNonFungibleIdError> {
 
 impl Display for NonFungibleId {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "nft_{}", self.to_canonical_string())
+        match self {
+            NonFungibleId::U256(v) => write!(f, "uuid:{}", Hash::from(*v)),
+            NonFungibleId::String(s) => write!(f, "str:{}", s),
+            NonFungibleId::Uint32(v) => write!(f, "u32:{}", v),
+            NonFungibleId::Uint64(v) => write!(f, "u64:{}", v),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Encode, Decode)]
+#[cfg_attr(feature = "serde", derive(serde::Deserialize, serde::Serialize))]
+pub struct NonFungibleAddress {
+    resource_address: ResourceAddress,
+    id: NonFungibleId,
+}
+
+impl NonFungibleAddress {
+    pub fn new(resource_address: ResourceAddress, id: NonFungibleId) -> Self {
+        Self { resource_address, id }
+    }
+
+    pub fn resource_address(&self) -> &ResourceAddress {
+        &self.resource_address
+    }
+
+    pub fn id(&self) -> &NonFungibleId {
+        &self.id
     }
 }
 
 #[derive(Debug, Clone, Encode, Decode)]
 #[cfg_attr(feature = "serde", derive(serde::Deserialize, serde::Serialize))]
 pub struct NonFungible {
-    metadata: Metadata,
-    mutable_data: Vec<u8>,
+    address: NonFungibleAddress,
 }
 
 impl NonFungible {
-    pub fn new<T: Encode>(metadata: Metadata, mutable_data: &T) -> Self {
-        Self {
-            metadata,
-            mutable_data: encode(mutable_data).unwrap(),
-        }
-    }
-
-    pub fn metadata(&self) -> &Metadata {
-        &self.metadata
-    }
-
-    pub fn mutable_data(&self) -> &[u8] {
-        &self.mutable_data
+    pub fn new(address: NonFungibleAddress) -> Self {
+        Self { address }
     }
 
     pub fn get_data<T: Decode>(&self) -> T {
-        decode_exact(&self.mutable_data).expect("Failed to decode NonFungible data")
+        let resp: InvokeResult = call_engine(EngineOp::NonFungibleInvoke, &NonFungibleInvokeArg {
+            address: self.address.clone(),
+            action: NonFungibleAction::GetData,
+            args: vec![],
+        });
+
+        resp.decode().expect("[get_data] Failed to decode NonFungible data")
     }
 
-    pub fn get_data_raw(&self) -> &[u8] {
-        &self.mutable_data
+    pub fn get_mutable_data<T: Decode>(&self) -> T {
+        let resp: InvokeResult = call_engine(EngineOp::NonFungibleInvoke, &NonFungibleInvokeArg {
+            address: self.address.clone(),
+            action: NonFungibleAction::GetMutableData,
+            args: vec![],
+        });
+
+        resp.decode()
+            .expect("[get_mutable_data] Failed to decode raw NonFungible mutable data")
     }
 
-    pub fn set_data<T: Encode>(&mut self, data: &T) {
-        self.mutable_data = encode(data).unwrap();
-    }
-
-    pub fn set_data_raw(&mut self, data: Vec<u8>) {
-        self.mutable_data = data;
+    pub fn set_mutable_data<T: Encode + ?Sized>(&mut self, data: &T) {
+        ResourceManager::get(*self.address.resource_address())
+            .update_non_fungible_data(self.address.id().clone(), data);
     }
 }
 
@@ -201,6 +225,7 @@ impl NonFungible {
 pub enum ParseNonFungibleIdError {
     InvalidFormat,
     InvalidType,
+    InvalidString,
     InvalidStringLength,
     InvalidUuid,
     InvalidUint32,
@@ -218,6 +243,9 @@ mod tests {
         fn it_allows_a_valid_string() {
             NonFungibleId::try_from_string("_").unwrap();
             NonFungibleId::try_from_string("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789__").unwrap();
+            NonFungibleId::try_from_string("hello123____!").unwrap();
+            NonFungibleId::try_from_string("hello world").unwrap();
+            NonFungibleId::try_from_string("❌nope❌").unwrap();
         }
 
         #[test]
