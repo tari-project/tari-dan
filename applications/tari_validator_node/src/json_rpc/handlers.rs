@@ -639,7 +639,10 @@ async fn wait_for_transaction_result(
 
                     return Ok(JsonRpcResponse::success(answer_id, response));
                 },
-                Ok(HotStuffEvent::Failed(err)) => {
+                Ok(HotStuffEvent::Failed(payload_id, err)) => {
+                    if payload_id.as_bytes() != hash.as_ref() {
+                        continue;
+                    }
                     // May not be our tx that failed
                     warn!(target: LOG_TARGET, "Transaction failed: {}", err);
                     return Err(JsonRpcResponse::error(

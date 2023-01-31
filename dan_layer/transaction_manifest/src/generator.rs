@@ -4,13 +4,17 @@
 use std::collections::{HashMap, HashSet};
 
 use syn::Lit;
-use tari_engine_types::{instruction::Instruction, TemplateAddress};
-use tari_template_lib::{arg, args::Arg};
+use tari_engine_types::{instruction::Instruction, substate::SubstateAddress, TemplateAddress};
+use tari_template_lib::{
+    arg,
+    args::Arg,
+    models::{Amount, NonFungibleId},
+};
 
 use crate::{
     ast::ManifestAst,
     error::ManifestError,
-    parser::{InvokeIntent, LiteralOrVariable, ManifestIntent},
+    parser::{InvokeIntent, ManifestIntent, ManifestLiteral, SpecialLiteral},
     ManifestValue,
 };
 
@@ -123,37 +127,24 @@ impl ManifestInstructionGenerator {
         }
     }
 
-    fn process_args(&self, args: Vec<LiteralOrVariable>) -> Result<Vec<Arg>, ManifestError> {
-        fn lit_to_arg(lit: &Lit) -> Result<Arg, ManifestError> {
-            match lit {
-                Lit::Str(s) => Ok(arg!(s.value())),
-                Lit::Int(i) => Ok(arg!(i.base10_parse::<u64>()?)),
-                Lit::Bool(b) => Ok(arg!(b.value())),
-                Lit::ByteStr(v) => Ok(arg!(v.value())),
-                Lit::Byte(v) => Ok(arg!(v.value())),
-                Lit::Char(v) => Ok(arg!(v.value().to_string())),
-                Lit::Float(v) => Err(ManifestError::UnsupportedExpr(format!(
-                    "Float literals not supported ({})",
-                    v
-                ))),
-                Lit::Verbatim(v) => Err(ManifestError::UnsupportedExpr(format!(
-                    "Raw token literals not supported ({})",
-                    v
-                ))),
-            }
-        }
-
+    fn process_args(&self, args: Vec<ManifestLiteral>) -> Result<Vec<Arg>, ManifestError> {
         args.into_iter()
             .map(|arg| match arg {
-                LiteralOrVariable::Lit(lit) => lit_to_arg(&lit),
-                LiteralOrVariable::Variable(ident) => {
+                ManifestLiteral::Lit(lit) => lit_to_arg(&lit),
+                ManifestLiteral::Variable(ident) => {
                     // Is it a global?
                     self.globals
                         .get(&ident.to_string())
                         .or_else(|| self.global_aliases.get(&ident.to_string()))
                         .map(|v| match v {
-                            ManifestValue::Address(addr) => Ok(arg!(*addr)),
+                            ManifestValue::SubstateAddress(addr) => match addr {
+                                SubstateAddress::Component(addr) => Ok(arg!(*addr)),
+                                SubstateAddress::Resource(addr) => Ok(arg!(*addr)),
+                                SubstateAddress::Vault(addr) => Ok(arg!(*addr)),
+                                SubstateAddress::NonFungible(_, id) => Ok(arg!(*id)),
+                            },
                             ManifestValue::Literal(lit) => lit_to_arg(lit),
+                            ManifestValue::NonFungibleId(id) => Ok(arg!(id.clone())),
                         })
                         .or_else(|| {
                             // Or is it a variable on the worktop?
@@ -169,6 +160,11 @@ impl ManifestInstructionGenerator {
                                 name: ident.to_string(),
                             }
                         })?
+                },
+                ManifestLiteral::Special(SpecialLiteral::Amount(amount)) => Ok(arg!(Amount(amount))),
+                ManifestLiteral::Special(SpecialLiteral::NonFungibleId(lit)) => {
+                    let id = lit_to_nonfungible_id(&lit)?;
+                    Ok(arg!(id))
                 },
             })
             .collect()
@@ -191,5 +187,78 @@ impl ManifestInstructionGenerator {
         self.globals
             .get(name)
             .ok_or_else(|| ManifestError::UndefinedGlobal { name: name.to_string() })
+    }
+}
+
+fn lit_to_arg(lit: &Lit) -> Result<Arg, ManifestError> {
+    match lit {
+        Lit::Str(s) => Ok(arg!(s.value())),
+        Lit::Int(i) => match i.suffix() {
+            "u8" => Ok(arg!(i.base10_parse::<u8>()?)),
+            "u16" => Ok(arg!(i.base10_parse::<u16>()?)),
+            "u32" => Ok(arg!(i.base10_parse::<u32>()?)),
+            "u64" => Ok(arg!(i.base10_parse::<u64>()?)),
+            "u128" => Ok(arg!(i.base10_parse::<u128>()?)),
+            "i8" => Ok(arg!(i.base10_parse::<i8>()?)),
+            "i16" => Ok(arg!(i.base10_parse::<i16>()?)),
+            "" | "i32" => Ok(arg!(i.base10_parse::<i32>()?)),
+            "i64" => Ok(arg!(i.base10_parse::<i64>()?)),
+            "i128" => Ok(arg!(i.base10_parse::<i128>()?)),
+            _ => Err(ManifestError::UnsupportedExpr(format!(
+                r#"Unsupported integer suffix "{}""#,
+                i.suffix()
+            ))),
+        },
+        Lit::Bool(b) => Ok(arg!(b.value())),
+        Lit::ByteStr(v) => Ok(arg!(v.value())),
+        Lit::Byte(v) => Ok(arg!(v.value())),
+        Lit::Char(v) => Ok(arg!(v.value().to_string())),
+        Lit::Float(v) => Err(ManifestError::UnsupportedExpr(format!(
+            "Float literals not supported ({})",
+            v
+        ))),
+        Lit::Verbatim(v) => Err(ManifestError::UnsupportedExpr(format!(
+            "Raw token literals not supported ({})",
+            v
+        ))),
+    }
+}
+
+fn lit_to_nonfungible_id(lit: &Lit) -> Result<NonFungibleId, ManifestError> {
+    match lit {
+        Lit::Str(s) => Ok(NonFungibleId::try_from_string(s.value()).map_err(|e| {
+            ManifestError::UnsupportedExpr(format!(
+                "Invalid non-fungible ID string literal ({:?}) ({})",
+                e,
+                s.value()
+            ))
+        })?),
+        Lit::ByteStr(v) => {
+            let bytes = v.value();
+            if bytes.len() != 32 {
+                return Err(ManifestError::UnsupportedExpr(
+                    "Non-fungible ID byte string literal length must be less than 32 bytes".to_string(),
+                ));
+            }
+
+            let mut id = [0u8; 32];
+            id.copy_from_slice(&bytes);
+            Ok(NonFungibleId::from_u256(id))
+        },
+        Lit::Int(v) => match v.suffix() {
+            "u8" | "u16" | "u32" => Ok(NonFungibleId::from_u32(v.base10_parse()?)),
+            "u64" => Ok(NonFungibleId::from_u64(v.base10_parse()?)),
+            "" => Err(ManifestError::UnsupportedExpr(
+                "Non-fungible ID integer literal must have a type suffix specified (1u32, 2u64 etc)".to_string(),
+            )),
+            _ => Err(ManifestError::UnsupportedExpr(format!(
+                "Invalid non-fungible ID integer literal suffix ({})",
+                v.suffix()
+            ))),
+        },
+        _ => Err(ManifestError::UnsupportedExpr(format!(
+            "Unsupported non-fungible ID literal ({:?})",
+            lit
+        ))),
     }
 }

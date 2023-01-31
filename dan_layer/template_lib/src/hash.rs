@@ -22,6 +22,7 @@
 
 use std::{
     error::Error,
+    fmt,
     fmt::{Display, Formatter},
     io,
     io::Write,
@@ -30,11 +31,15 @@ use std::{
 
 use tari_bor::{Decode, Encode};
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Ord, PartialOrd, Hash, Default)]
 #[cfg_attr(feature = "serde", derive(serde::Deserialize, serde::Serialize))]
 pub struct Hash(#[cfg_attr(feature = "json", serde(with = "hex"))] [u8; 32]);
 
 impl Hash {
+    pub const fn from_array(bytes: [u8; 32]) -> Self {
+        Self(bytes)
+    }
+
     pub fn into_array(self) -> [u8; 32] {
         self.0
     }
@@ -49,6 +54,17 @@ impl Hash {
             *h = u8::from_str_radix(&s[2 * i..2 * (i + 1)], 16).map_err(|_| HashParseError)?;
         }
         Ok(Hash(hash))
+    }
+
+    pub fn write_hex_fmt<W: fmt::Write>(&self, writer: &mut W) -> fmt::Result {
+        for b in self.0 {
+            write!(writer, "{:02x?}", b)?;
+        }
+        Ok(())
+    }
+
+    pub fn try_from_vec(data: Vec<u8>) -> Result<Self, HashParseError> {
+        Self::try_from(data.as_slice())
     }
 }
 

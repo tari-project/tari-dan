@@ -20,48 +20,60 @@
 //   WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //   USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+use std::collections::BTreeSet;
+
 use serde::{Deserialize, Serialize};
 use tari_bor::{borsh, Decode, Encode};
-use tari_template_lib::models::{Amount, ResourceAddress, VaultId};
+use tari_template_lib::models::{Amount, NonFungibleId, ResourceAddress, VaultId};
 
 use crate::{
     bucket::Bucket,
-    resource::{Resource, ResourceError},
+    resource_container::{ResourceContainer, ResourceError},
 };
 
 #[derive(Debug, Clone, Encode, Decode, Serialize, Deserialize, PartialEq)]
 pub struct Vault {
     vault_id: VaultId,
-    resource: Resource,
+    resource_container: ResourceContainer,
 }
 
 impl Vault {
-    pub fn new(vault_id: VaultId, resource: Resource) -> Self {
-        Self { vault_id, resource }
+    pub fn new(vault_id: VaultId, resource: ResourceContainer) -> Self {
+        Self {
+            vault_id,
+            resource_container: resource,
+        }
     }
 
     pub fn deposit(&mut self, bucket: Bucket) -> Result<(), ResourceError> {
-        self.resource.deposit(bucket.into_resource())?;
+        self.resource_container.deposit(bucket.into_resource())?;
         Ok(())
     }
 
-    pub fn withdraw(&mut self, amount: Amount) -> Result<Resource, ResourceError> {
-        self.resource.withdraw(amount)
+    pub fn withdraw(&mut self, amount: Amount) -> Result<ResourceContainer, ResourceError> {
+        self.resource_container.withdraw(amount)
+    }
+
+    pub fn withdraw_non_fungibles(
+        &mut self,
+        ids: &BTreeSet<NonFungibleId>,
+    ) -> Result<ResourceContainer, ResourceError> {
+        self.resource_container.withdraw_by_ids(ids)
+    }
+
+    pub fn withdraw_all(&mut self) -> Result<ResourceContainer, ResourceError> {
+        self.resource_container.withdraw(self.resource_container.amount())
     }
 
     pub fn balance(&self) -> Amount {
-        self.resource.amount()
-    }
-
-    pub fn id(&self) -> &VaultId {
-        &self.vault_id
+        self.resource_container.amount()
     }
 
     pub fn resource_address(&self) -> &ResourceAddress {
-        self.resource.address()
+        self.resource_container.resource_address()
     }
 
-    pub fn resource(&self) -> &Resource {
-        &self.resource
+    pub fn get_non_fungible_ids(&self) -> Option<&BTreeSet<NonFungibleId>> {
+        self.resource_container.non_fungible_token_ids()
     }
 }

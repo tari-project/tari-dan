@@ -20,11 +20,9 @@
 //   WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //   USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use tari_template_abi::{debug, on_panic};
+use tari_template_abi::on_panic;
 
 fn hook(info: &std::panic::PanicInfo<'_>) {
-    unsafe { debug("PANIC!".as_ptr(), 6) };
-
     let error_msg = info
         .payload()
         .downcast_ref::<String>()

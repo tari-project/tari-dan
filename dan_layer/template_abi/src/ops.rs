@@ -31,6 +31,8 @@ pub enum EngineOp {
     VaultInvoke = 0x03,
     BucketInvoke = 0x04,
     WorkspaceInvoke = 0x05,
+    NonFungibleInvoke = 0x06,
+    GenerateUniqueId = 0x07,
 }
 
 impl EngineOp {
@@ -42,6 +44,8 @@ impl EngineOp {
             0x03 => Some(EngineOp::VaultInvoke),
             0x04 => Some(EngineOp::BucketInvoke),
             0x05 => Some(EngineOp::WorkspaceInvoke),
+            0x06 => Some(EngineOp::NonFungibleInvoke),
+            0x07 => Some(EngineOp::GenerateUniqueId),
             _ => None,
         }
     }

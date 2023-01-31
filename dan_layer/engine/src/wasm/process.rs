@@ -30,6 +30,7 @@ use tari_template_lib::{
         ComponentInvokeArg,
         EmitLogArg,
         LogLevel,
+        NonFungibleInvokeArg,
         ResourceInvokeArg,
         VaultInvokeArg,
         WorkspaceInvokeArg,
@@ -106,32 +107,40 @@ impl WasmProcess {
             EngineOp::ComponentInvoke => Self::handle(env, arg, |env, arg: ComponentInvokeArg| {
                 env.state()
                     .interface()
-                    .component_invoke(arg.component_ref, arg.action, arg.args)
+                    .component_invoke(arg.component_ref, arg.action, arg.args.into())
             }),
             EngineOp::ResourceInvoke => Self::handle(env, arg, |env, arg: ResourceInvokeArg| {
                 env.state()
                     .interface()
-                    .resource_invoke(arg.resource_ref, arg.action, arg.args)
+                    .resource_invoke(arg.resource_ref, arg.action, arg.args.into())
             }),
             EngineOp::VaultInvoke => Self::handle(env, arg, |env, arg: VaultInvokeArg| {
                 env.state()
                     .interface()
-                    .vault_invoke(arg.vault_ref, arg.action, arg.args)
+                    .vault_invoke(arg.vault_ref, arg.action, arg.args.into())
             }),
             EngineOp::BucketInvoke => Self::handle(env, arg, |env, arg: BucketInvokeArg| {
                 env.state()
                     .interface()
-                    .bucket_invoke(arg.bucket_ref, arg.action, arg.args)
+                    .bucket_invoke(arg.bucket_ref, arg.action, arg.args.into())
             }),
             EngineOp::WorkspaceInvoke => Self::handle(env, arg, |env, arg: WorkspaceInvokeArg| {
-                env.state().interface().workspace_invoke(arg.action, arg.args)
+                env.state().interface().workspace_invoke(arg.action, arg.args.into())
             }),
+            EngineOp::NonFungibleInvoke => Self::handle(env, arg, |env, arg: NonFungibleInvokeArg| {
+                env.state()
+                    .interface()
+                    .non_fungible_invoke(arg.address, arg.action, arg.args.into())
+            }),
+            EngineOp::GenerateUniqueId => {
+                Self::handle(env, arg, |env, _arg: ()| env.state().interface().generate_uuid())
+            },
         };
 
         result.unwrap_or_else(|err| {
             env.state()
                 .interface()
-                .emit_log(LogLevel::Error, format!("Execution error:{}", err));
+                .emit_log(LogLevel::Error, format!("Execution error: {}", err));
             eprintln!("{}", err);
             log::error!(target: LOG_TARGET, "{}", err);
             0

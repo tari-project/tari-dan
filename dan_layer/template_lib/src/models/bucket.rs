@@ -36,17 +36,8 @@ pub struct Bucket {
 }
 
 impl Bucket {
-    pub(crate) fn new(resource_addr: ResourceAddress) -> Self {
-        let resp: InvokeResult = call_engine(EngineOp::BucketInvoke, &BucketInvokeArg {
-            bucket_ref: BucketRef::Bucket(resource_addr),
-            action: BucketAction::Create,
-            args: invoke_args![],
-        });
-
-        // TODO: Create bucket with the given resource and get the id
-        Self {
-            id: resp.decode().expect("Create bucket returned invalid bucket id"),
-        }
+    pub fn from_id(id: BucketId) -> Self {
+        Self { id }
     }
 
     pub fn id(&self) -> BucketId {
@@ -75,8 +66,28 @@ impl Bucket {
         resp.decode().expect("Bucket Take returned invalid bucket")
     }
 
+    pub fn burn(&mut self) {
+        let resp: InvokeResult = call_engine(EngineOp::BucketInvoke, &BucketInvokeArg {
+            bucket_ref: BucketRef::Ref(self.id),
+            action: BucketAction::Burn,
+            args: invoke_args![],
+        });
+
+        resp.decode().expect("Bucket Burn returned invalid result")
+    }
+
     pub fn split(mut self, amount: Amount) -> (Self, Self) {
         let new_bucket = self.take(amount);
         (new_bucket, self)
+    }
+
+    pub fn amount(&self) -> Amount {
+        let resp: InvokeResult = call_engine(EngineOp::BucketInvoke, &BucketInvokeArg {
+            bucket_ref: BucketRef::Ref(self.id),
+            action: BucketAction::GetAmount,
+            args: invoke_args![],
+        });
+
+        resp.decode().expect("Bucket GetAmount returned invalid amount")
     }
 }

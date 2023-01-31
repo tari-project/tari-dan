@@ -119,7 +119,7 @@ async fn handle_publish(args: PublishTemplateArgs, mut client: ValidatorNodeClie
     println!("⏳️ Compiling template...");
 
     // compile the code and retrieve the binary content of the wasm
-    let wasm_module = compile_template(root_folder.as_path(), &[]).unwrap();
+    let wasm_module = compile_template(root_folder.as_path(), &[])?;
     let wasm_code = wasm_module.code();
     println!(
         "✅ Template compilation successful (WASM file size: {} bytes)",
@@ -175,7 +175,7 @@ async fn handle_publish(args: PublishTemplateArgs, mut client: ValidatorNodeClie
     println!();
     println!(
         "The template address will be {}",
-        TemplateAddress::try_from(resp.template_address.as_slice()).unwrap()
+        TemplateAddress::try_from(resp.template_address.as_slice())?
     );
 
     Ok(())

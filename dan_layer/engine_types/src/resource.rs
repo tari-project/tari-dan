@@ -22,121 +22,62 @@
 
 use serde::{Deserialize, Serialize};
 use tari_bor::{borsh, Decode, Encode};
-use tari_template_lib::models::{Amount, Metadata, ResourceAddress};
+use tari_template_lib::{
+    models::{Amount, Metadata, ResourceAddress},
+    resource::ResourceType,
+};
 
 #[derive(Debug, Clone, Encode, Decode, Serialize, Deserialize, PartialEq)]
 pub struct Resource {
     resource_address: ResourceAddress,
-    state: ResourceState,
+    resource_type: ResourceType,
     metadata: Metadata,
+    total_supply: Amount,
 }
 
 impl Resource {
-    pub fn fungible(resource_address: ResourceAddress, amount: Amount, metadata: Metadata) -> Self {
+    pub fn new(resource_type: ResourceType, resource_address: ResourceAddress, metadata: Metadata) -> Self {
         Self {
             resource_address,
-            state: ResourceState::Fungible { amount },
+            resource_type,
             metadata,
+            total_supply: 0.into(),
         }
     }
 
-    pub fn non_fungible(resource_address: ResourceAddress, token_ids: Vec<u64>, metadata: Metadata) -> Self {
-        Self {
-            resource_address,
-            state: ResourceState::NonFungible { token_ids },
-            metadata,
-        }
-    }
-
-    pub fn amount(&self) -> Amount {
-        match &self.state {
-            ResourceState::Fungible { amount } => *amount,
-            ResourceState::NonFungible { token_ids } => token_ids.len().into(),
-        }
-    }
-
-    pub fn address(&self) -> &ResourceAddress {
+    pub fn resource_address(&self) -> &ResourceAddress {
         &self.resource_address
     }
 
-    pub fn non_fungible_token_ids(&self) -> Vec<u64> {
-        match &self.state {
-            ResourceState::NonFungible { token_ids } => token_ids.clone(),
-            _ => Vec::new(),
-        }
+    pub fn resource_type(&self) -> ResourceType {
+        self.resource_type
     }
 
-    pub fn deposit(&mut self, other: Resource) -> Result<(), ResourceError> {
-        if self.resource_address != other.resource_address {
-            return Err(ResourceError::ResourceAddressMismatch {
-                expected: self.resource_address,
-                actual: other.resource_address,
-            });
-        }
-
-        #[allow(clippy::enum_glob_use)]
-        use ResourceState::*;
-        match (&mut self.state, other.state) {
-            (Fungible { amount }, Fungible { amount: other_amount }) => {
-                *amount += other_amount;
-            },
-            (
-                NonFungible { token_ids },
-                NonFungible {
-                    token_ids: other_token_ids,
-                },
-            ) => {
-                token_ids.extend(other_token_ids);
-            },
-            _ => return Err(ResourceError::FungibilityMismatch),
-        }
-        Ok(())
+    pub fn increase_total_supply(&mut self, amount: Amount) {
+        assert!(
+            amount.is_positive(),
+            "Invariant violation in increase_total_supply: amount must be positive"
+        );
+        self.total_supply += amount;
     }
 
-    pub fn withdraw(&mut self, amt: Amount) -> Result<Resource, ResourceError> {
-        if !amt.is_positive() || amt.is_zero() {
-            return Err(ResourceError::InvariantError(
-                "Amount must be positive and non-zero".to_string(),
-            ));
-        }
-        match &mut self.state {
-            ResourceState::Fungible { amount } => {
-                if amt > *amount {
-                    return Err(ResourceError::InsufficientBalance {
-                        details: "Bucket contained insufficient funds".to_string(),
-                    });
-                }
-                *amount -= amt;
-                Ok(Resource::fungible(self.resource_address, amt, Metadata::default()))
-            },
-            // TODO: implement an amount type that can apply to both fungible and non fungible resources
-            ResourceState::NonFungible { .. } => todo!(),
-        }
+    /// Decreases the total supply.
+    ///
+    /// ## Panics
+    /// Panics if the amount is not positive or if the amount is greater than the total supply.
+    pub fn decrease_total_supply(&mut self, amount: Amount) {
+        assert!(
+            amount.is_positive(),
+            "Invariant violation in decrease_total_supply: amount must be positive"
+        );
+        assert!(
+            self.total_supply >= amount,
+            "Invariant violation in decrease_total_supply: decrease total supply by more than total supply"
+        );
+        self.total_supply -= amount;
     }
-}
 
-#[derive(Debug, Clone, Encode, Decode, Serialize, Deserialize, PartialEq)]
-pub enum ResourceState {
-    Fungible { amount: Amount },
-    NonFungible { token_ids: Vec<u64> },
-    // Confidential {
-    //     inputs: Vec<Commitment>,
-    //     outputs: Vec<Commitment>,
-    //     kernels: Vec<Kernel>,
-    // },
-}
-
-#[derive(Debug, thiserror::Error)]
-pub enum ResourceError {
-    #[error("Resource fungibility does not match")]
-    FungibilityMismatch,
-    #[error("Resource addresses do not match: expected:{expected}, actual:{actual}")]
-    ResourceAddressMismatch {
-        expected: ResourceAddress,
-        actual: ResourceAddress,
-    },
-    #[error("Resource did not contain sufficient balance: {details}")]
-    InsufficientBalance { details: String },
-    #[error("Invariant error: {0}")]
-    InvariantError(String),
+    pub fn total_supply(&self) -> Amount {
+        self.total_supply
+    }
 }

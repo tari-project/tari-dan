@@ -22,8 +22,8 @@
 
 use clap::Subcommand;
 
-mod account;
-pub use account::AccountsSubcommand;
+mod key;
+pub use key::KeysSubcommand;
 
 mod template;
 pub use template::TemplateSubcommand;
@@ -45,8 +45,8 @@ pub enum Command {
     Vn(VnSubcommand),
     #[clap(subcommand, alias = "template")]
     Templates(TemplateSubcommand),
-    #[clap(subcommand, alias = "account")]
-    Accounts(AccountsSubcommand),
+    #[clap(subcommand, alias = "key")]
+    Keys(KeysSubcommand),
     #[clap(subcommand, alias = "transaction")]
     Transactions(TransactionSubcommand),
     #[clap(subcommand, alias = "manifest")]

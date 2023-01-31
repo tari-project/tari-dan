@@ -6,6 +6,7 @@ edition = "2021"
 [dependencies]
 tari_template_lib = { path = "../template_lib" }
 tari_engine_types = { path = "../engine_types" }
+tari_template_builtin = { path = "../template_builtin" }
 
 proc-macro2 = "1.0.42"
 quote = "1.0.20"

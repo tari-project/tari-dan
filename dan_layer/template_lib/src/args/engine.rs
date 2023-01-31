@@ -20,16 +20,30 @@
 //   WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //   USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use std::{fmt::Formatter, str::FromStr};
+use std::collections::BTreeSet;
 
-use tari_bor::{borsh, decode, encode, Decode, Encode};
-use tari_template_abi::rust::{fmt::Display, io};
+use tari_bor::{borsh, Decode, Encode};
+use tari_template_abi::rust::{
+    collections::HashMap,
+    fmt::{Display, Formatter},
+    str::FromStr,
+};
 
 use crate::{
-    models::{Amount, BucketId, ComponentAddress, Metadata, ResourceAddress, VaultRef},
+    models::{
+        Amount,
+        BucketId,
+        ComponentAddress,
+        Metadata,
+        NonFungibleAddress,
+        NonFungibleId,
+        ResourceAddress,
+        VaultRef,
+    },
     resource::ResourceType,
 };
 
+// -------------------------------- LOGS -------------------------------- //
 #[derive(Debug, Clone, Encode, Decode)]
 pub struct EmitLogArg {
     pub message: String,
@@ -81,6 +95,7 @@ impl Display for LogLevelParseError {
 
 impl std::error::Error for LogLevelParseError {}
 
+// -------------------------------- Component -------------------------------- //
 #[derive(Debug, Clone, Encode, Decode)]
 pub struct ComponentInvokeArg {
     pub component_ref: ComponentRef,
@@ -110,6 +125,7 @@ impl ComponentRef {
     }
 }
 
+// -------------------------------- Resource -------------------------------- //
 #[derive(Clone, Debug, Decode, Encode)]
 pub struct ResourceInvokeArg {
     pub resource_ref: ResourceRef,
@@ -123,6 +139,15 @@ pub enum ResourceRef {
     Ref(ResourceAddress),
 }
 
+impl ResourceRef {
+    pub fn as_resource_address(&self) -> Option<ResourceAddress> {
+        match self {
+            ResourceRef::Resource => None,
+            ResourceRef::Ref(addr) => Some(*addr),
+        }
+    }
+}
+
 impl From<ResourceAddress> for ResourceRef {
     fn from(addr: ResourceAddress) -> Self {
         ResourceRef::Ref(addr)
@@ -131,61 +156,50 @@ impl From<ResourceAddress> for ResourceRef {
 
 #[derive(Clone, Debug, Decode, Encode)]
 pub enum ResourceAction {
+    GetTotalSupply,
+    GetResourceType,
+    GetNonFungible,
+    Create,
     Mint,
-    Burn,
     Deposit,
     Withdraw,
-    Update,
+    UpdateNonFungibleData,
 }
 
 #[derive(Clone, Debug, Decode, Encode)]
-pub enum MintResourceArg {
+pub enum MintArg {
     Fungible {
-        resource_address: Option<ResourceAddress>,
         amount: Amount,
-        metadata: Metadata,
     },
     NonFungible {
-        resource_address: Option<ResourceAddress>,
-        token_ids: Vec<u64>,
-        metadata: Metadata,
+        tokens: HashMap<NonFungibleId, (Vec<u8>, Vec<u8>)>,
     },
-    // Confidential
-}
-impl MintResourceArg {
-    pub fn to_resource_type(&self) -> ResourceType {
-        match self {
-            MintResourceArg::Fungible { .. } => ResourceType::Fungible,
-            MintResourceArg::NonFungible { .. } => ResourceType::NonFungible,
-        }
-    }
 }
 
 #[derive(Clone, Debug, Decode, Encode)]
-pub struct InvokeResult(Result<Vec<u8>, String>);
-
-impl InvokeResult {
-    pub fn encode<T: Encode>(output: &T) -> io::Result<Self> {
-        let output = encode(output)?;
-        Ok(Self(Ok(output)))
-    }
-
-    pub fn decode<T: Decode>(self) -> io::Result<T> {
-        match self.0 {
-            Ok(output) => decode(&output),
-            Err(err) => Err(io::Error::new(io::ErrorKind::Other, err)),
-        }
-    }
-
-    pub fn unwrap_decode<T: Decode>(self) -> T {
-        self.decode().unwrap()
-    }
-
-    pub fn unit() -> Self {
-        Self(Ok(encode(&()).unwrap()))
-    }
+pub struct CreateResourceArg {
+    pub resource_type: ResourceType,
+    pub metadata: Metadata,
+    pub mint_arg: Option<MintArg>,
 }
 
+#[derive(Clone, Debug, Decode, Encode)]
+pub struct MintResourceArg {
+    pub mint_arg: MintArg,
+}
+
+#[derive(Clone, Debug, Decode, Encode)]
+pub struct ResourceGetNonFungibleArg {
+    pub id: NonFungibleId,
+}
+
+#[derive(Clone, Debug, Decode, Encode)]
+pub struct ResourceUpdateNonFungibleDataArg {
+    pub id: NonFungibleId,
+    pub data: Vec<u8>,
+}
+
+// -------------------------------- Vault -------------------------------- //
 #[derive(Clone, Debug, Decode, Encode)]
 pub struct VaultInvokeArg {
     pub vault_ref: VaultRef,
@@ -197,11 +211,20 @@ pub struct VaultInvokeArg {
 pub enum VaultAction {
     Create,
     Deposit,
-    WithdrawFungible,
+    Withdraw,
+    WithdrawAll,
     GetBalance,
     GetResourceAddress,
+    GetNonFungibleIds,
 }
 
+#[derive(Clone, Debug, Decode, Encode)]
+pub enum VaultWithdrawArg {
+    Fungible { amount: Amount },
+    NonFungible { ids: BTreeSet<NonFungibleId> },
+}
+
+// -------------------------------- Bucket -------------------------------- //
 #[derive(Clone, Debug, Decode, Encode)]
 pub struct BucketInvokeArg {
     pub bucket_ref: BucketRef,
@@ -235,10 +258,17 @@ impl BucketRef {
 pub enum BucketAction {
     Create,
     GetResourceAddress,
+    GetAmount,
     Take,
-    Drop,
+    Burn,
 }
 
+#[derive(Clone, Debug, Decode, Encode)]
+pub struct BucketBurnArg {
+    pub bucket_id: BucketId,
+}
+
+// -------------------------------- Workspace -------------------------------- //
 #[derive(Clone, Copy, Debug, Decode, Encode)]
 pub enum WorkspaceAction {
     Put,
@@ -251,4 +281,18 @@ pub enum WorkspaceAction {
 pub struct WorkspaceInvokeArg {
     pub action: WorkspaceAction,
     pub args: Vec<Vec<u8>>,
+}
+
+// -------------------------------- NonFungible -------------------------------- //
+#[derive(Clone, Debug, Decode, Encode)]
+pub struct NonFungibleInvokeArg {
+    pub address: NonFungibleAddress,
+    pub action: NonFungibleAction,
+    pub args: Vec<Vec<u8>>,
+}
+
+#[derive(Clone, Debug, Decode, Encode)]
+pub enum NonFungibleAction {
+    GetData,
+    GetMutableData,
 }

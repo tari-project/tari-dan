@@ -47,7 +47,6 @@ use tari_app_utilities::identity_management::setup_node_identity;
 use tari_common::{
     configuration::bootstrap::{grpc_default_port, ApplicationType},
     exit_codes::{ExitCode, ExitError},
-    initialize_logging,
 };
 use tari_dan_common_types::ShardId;
 use tari_dan_core::{
@@ -57,12 +56,11 @@ use tari_dan_core::{
     DigitalAssetError,
 };
 use tari_dan_storage_sqlite::SqliteDbFactory;
-use tari_shutdown::{Shutdown, ShutdownSignal};
+use tari_shutdown::ShutdownSignal;
 use tokio::task;
 
 use crate::{
     bootstrap::{spawn_services, Services},
-    cli::Cli,
     dan_node::DanNode,
     http_ui::server::run_http_ui_server,
     json_rpc::{run_json_rpc, JsonRpcHandlers},
@@ -101,16 +99,7 @@ pub struct ShardKey {
     shard_id: Option<ShardId>,
 }
 
-pub async fn run_validator_node_with_cli(config: &ApplicationConfig, cli: &Cli) -> Result<(), ExitError> {
-    if let Err(e) = initialize_logging(
-        &cli.common.log_config_path("validator"),
-        include_str!("../log4rs_sample.yml"),
-    ) {
-        warn!("{}", e);
-    }
-
-    let shutdown = Shutdown::new();
-
+pub async fn run_validator_node(config: &ApplicationConfig, shutdown_signal: ShutdownSignal) -> Result<(), ExitError> {
     let node_identity = setup_node_identity(
         &config.validator_node.identity_file,
         config.validator_node.public_address.as_ref(),
@@ -135,7 +124,7 @@ pub async fn run_validator_node_with_cli(config: &ApplicationConfig, cli: &Cli) 
     let (base_node_client, wallet_client) = create_base_layer_clients(config).await?;
     let services = spawn_services(
         config,
-        shutdown.to_signal(),
+        shutdown_signal.clone(),
         node_identity.clone(),
         global_db,
         ConsensusConstants::devnet(), // TODO: change this eventually
@@ -163,7 +152,7 @@ pub async fn run_validator_node_with_cli(config: &ApplicationConfig, cli: &Cli) 
         ));
     }
 
-    run_dan_node(services, shutdown.to_signal()).await?;
+    run_dan_node(services, shutdown_signal).await?;
 
     Ok(())
 }

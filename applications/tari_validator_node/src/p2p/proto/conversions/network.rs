@@ -49,11 +49,15 @@ impl From<DanMessage<TariDanPayload, CommsPublicKey>> for proto::network::DanMes
                 message_tag,
             },
             DanMessage::NewTransaction(transaction) => Self {
-                message: Some(proto::network::dan_message::Message::NewTransaction(transaction.into())),
+                message: Some(proto::network::dan_message::Message::NewTransaction(
+                    (*transaction).into(),
+                )),
                 message_tag,
             },
             DanMessage::NetworkAnnounce(announce) => Self {
-                message: Some(proto::network::dan_message::Message::NetworkAnnounce(announce.into())),
+                message: Some(proto::network::dan_message::Message::NetworkAnnounce(
+                    (*announce).into(),
+                )),
                 message_tag,
             },
         }
@@ -71,10 +75,10 @@ impl TryFrom<proto::network::DanMessage> for DanMessage<TariDanPayload, CommsPub
             },
             proto::network::dan_message::Message::Vote(msg) => Ok(DanMessage::VoteMessage(msg.try_into()?)),
             proto::network::dan_message::Message::NewTransaction(msg) => {
-                Ok(DanMessage::NewTransaction(msg.try_into()?))
+                Ok(DanMessage::NewTransaction(Box::new(msg.try_into()?)))
             },
             proto::network::dan_message::Message::NetworkAnnounce(msg) => {
-                Ok(DanMessage::NetworkAnnounce(msg.try_into()?))
+                Ok(DanMessage::NetworkAnnounce(Box::new(msg.try_into()?)))
             },
         }
     }

@@ -20,7 +20,7 @@
 //   WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //   USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use tari_dan_common_types::QuorumCertificate;
+use tari_dan_common_types::{PayloadId, QuorumCertificate};
 use tari_engine_types::commit_result::FinalizeResult;
 use tokio::sync::broadcast;
 
@@ -47,5 +47,5 @@ impl<T> Clone for EventSubscription<T> {
 #[derive(Debug, Clone)]
 pub enum HotStuffEvent {
     OnFinalized(Box<QuorumCertificate>, FinalizeResult),
-    Failed(String),
+    Failed(PayloadId, String),
 }

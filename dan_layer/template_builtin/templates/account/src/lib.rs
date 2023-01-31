@@ -55,7 +55,10 @@ mod account_template {
         }
 
         pub fn balance(&self, resource: ResourceAddress) -> Amount {
-            let v = self.get_vault(resource).expect("No vault for this resource");
+            let v = self
+                .get_vault(resource)
+                .ok_or_else(|| format!("No vault for resource {}", resource))
+                .unwrap();
             v.balance()
         }
 
@@ -68,23 +71,39 @@ mod account_template {
             v.withdraw(amount)
         }
 
+        // #[access_rules(requires(owner_badge))]
+        pub fn withdraw_non_fungible(&mut self, resource: ResourceAddress, nf_id: NonFungibleId) -> Bucket {
+            let v = self
+                .get_vault_mut(resource)
+                .expect("This account does not have any of that resource");
+
+            v.withdraw_non_fungibles(Some(nf_id))
+        }
+
         // #[access_rules(allow_all)]
         pub fn deposit(&mut self, bucket: Bucket) {
             let resource_address = bucket.resource_address();
             if let Some(v) = self.get_vault_mut(resource_address) {
                 v.deposit(bucket);
             } else {
-                // TODO: Get the resource type from the resource address
-                let mut new_vault = Vault::new_empty(resource_address, ResourceType::Fungible);
+                let mut new_vault = Vault::new_empty(resource_address);
                 new_vault.deposit(bucket);
                 self.vaults.push((resource_address, new_vault));
             }
         }
 
+        // #[access_rules(require(owner_badge))]
+        pub fn get_non_fungible_ids(&self, resource: ResourceAddress) -> Vec<NonFungibleId> {
+            let v = self
+                .get_vault(resource)
+                .ok_or_else(|| format!("No vault for resource {}", resource))
+                .unwrap();
+            v.get_non_fungible_ids()
+        }
+
         // pub fn deposit_all_from_workspace(&mut self) {
-        //     for bucket_id in WorkspaceManager::list_buckets() {
-        //         debug(format!("bucket: {}", bucket_id));
-        //         let bucket = WorkspaceManager::take_bucket(bucket_id);
+        //     for bucket in WorkspaceManager::take_all_buckets() {
+        //         debug(format!("bucket: {}", bucket));
         //         self.deposit(bucket);
         //     }
         // }

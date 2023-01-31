@@ -1,0 +1,253 @@
+//   Copyright 2023 The Tari Project
+//   SPDX-License-Identifier: BSD-3-Clause
+
+use std::collections::HashMap;
+
+use tari_dan_common_types::optional::Optional;
+use tari_engine_types::{
+    bucket::Bucket,
+    logs::LogEntry,
+    non_fungible::NonFungibleContainer,
+    resource::Resource,
+    substate::{Substate, SubstateAddress},
+    vault::Vault,
+};
+use tari_template_lib::models::{BucketId, ComponentAddress, ComponentHeader, NonFungibleId, ResourceAddress, VaultId};
+
+use crate::{
+    runtime::{RuntimeError, RuntimeState, TransactionCommitError},
+    state_store::{memory::MemoryStateStore, AtomicDb, StateReader},
+};
+
+#[derive(Debug, Clone)]
+pub(super) struct WorkingState {
+    pub logs: Vec<LogEntry>,
+    pub buckets: HashMap<BucketId, Bucket>,
+    // These could be "new_substates"
+    pub new_resources: HashMap<ResourceAddress, Resource>,
+    pub new_components: HashMap<ComponentAddress, ComponentHeader>,
+    pub new_vaults: HashMap<VaultId, Vault>,
+    pub new_non_fungibles: HashMap<(ResourceAddress, NonFungibleId), NonFungibleContainer>,
+
+    pub runtime_state: Option<RuntimeState>,
+    pub last_instruction_output: Option<Vec<u8>>,
+    pub workspace: HashMap<Vec<u8>, Vec<u8>>,
+    pub state_store: MemoryStateStore,
+}
+
+impl WorkingState {
+    pub fn new(state_store: MemoryStateStore) -> Self {
+        Self {
+            logs: Vec::new(),
+            buckets: HashMap::new(),
+            new_resources: HashMap::new(),
+            new_components: HashMap::new(),
+            new_vaults: HashMap::new(),
+            new_non_fungibles: HashMap::new(),
+            runtime_state: None,
+            last_instruction_output: None,
+            workspace: HashMap::new(),
+            state_store,
+        }
+    }
+
+    pub fn get_resource(&self, address: &ResourceAddress) -> Result<Resource, RuntimeError> {
+        match self.new_resources.get(address).cloned() {
+            Some(resource) => Ok(resource),
+            None => {
+                let tx = self.state_store.read_access()?;
+                let resource = tx
+                    .get_state::<_, Substate>(&SubstateAddress::Resource(*address))
+                    .optional()?
+                    .ok_or(RuntimeError::ResourceNotFound {
+                        resource_address: *address,
+                    })?;
+                Ok(resource
+                    .into_substate_value()
+                    .into_resource()
+                    .expect("Substate was not a resource type at resource address"))
+            },
+        }
+    }
+
+    pub fn get_non_fungible(
+        &self,
+        resource_address: &ResourceAddress,
+        nft_id: &NonFungibleId,
+    ) -> Result<NonFungibleContainer, RuntimeError> {
+        match self
+            .new_non_fungibles
+            .get(&(*resource_address, nft_id.clone()))
+            .cloned()
+        {
+            Some(nft) => Ok(nft),
+            None => {
+                let tx = self.state_store.read_access()?;
+                let nft = tx
+                    .get_state::<_, Substate>(&SubstateAddress::NonFungible(*resource_address, nft_id.clone()))
+                    .optional()?
+                    .ok_or_else(|| RuntimeError::NonFungibleNotFound {
+                        resource_address: *resource_address,
+                        nft_id: nft_id.clone(),
+                    })?;
+                Ok(nft
+                    .into_substate_value()
+                    .into_non_fungible()
+                    .expect("Substate was not a non-fungible type at non-fungible address"))
+            },
+        }
+    }
+
+    pub fn get_component(&self, addr: &ComponentAddress) -> Result<ComponentHeader, RuntimeError> {
+        let component = self.new_components.get(addr).cloned();
+        match component {
+            Some(component) => Ok(component),
+            None => {
+                let tx = self.state_store.read_access()?;
+                let value = tx
+                    .get_state::<_, Substate>(&SubstateAddress::Component(*addr))
+                    .optional()?
+                    .ok_or(RuntimeError::ComponentNotFound { address: *addr })?;
+                Ok(value
+                    .into_substate_value()
+                    .into_component()
+                    .expect("Substate was not a component type at component address"))
+            },
+        }
+    }
+
+    pub fn with_non_fungible_mut<R, F: FnOnce(&mut NonFungibleContainer) -> Result<R, RuntimeError>>(
+        &mut self,
+        resource_address: ResourceAddress,
+        nft_id: NonFungibleId,
+        callback: F,
+    ) -> Result<R, RuntimeError> {
+        let nft_mut = self.new_non_fungibles.get_mut(&(resource_address, nft_id.clone()));
+        match nft_mut {
+            Some(nft_mut) => Ok(callback(nft_mut)?),
+            None => {
+                let substate = self
+                    .state_store
+                    .read_access()
+                    .unwrap()
+                    .get_state::<_, Substate>(&SubstateAddress::NonFungible(resource_address, nft_id.clone()))
+                    .optional()?
+                    .ok_or_else(|| RuntimeError::NonFungibleNotFound {
+                        resource_address,
+                        nft_id: nft_id.clone(),
+                    })?;
+
+                let mut nft = substate.into_substate_value().into_non_fungible().unwrap_or_else(|| {
+                    panic!(
+                        "Substate was not a NonFungible type at ({}, {})",
+                        resource_address, nft_id
+                    )
+                });
+                let ret = callback(&mut nft)?;
+                self.new_non_fungibles.insert((resource_address, nft_id), nft);
+                Ok(ret)
+            },
+        }
+    }
+
+    pub fn borrow_vault<R, F: FnOnce(&Vault) -> R>(&self, vault_id: &VaultId, f: F) -> Result<R, RuntimeError> {
+        match self.new_vaults.get(vault_id) {
+            Some(vault) => Ok(f(vault)),
+            None => {
+                let substate = self
+                    .state_store
+                    .read_access()?
+                    .get_state::<_, Substate>(&SubstateAddress::Vault(*vault_id))
+                    .optional()?
+                    .ok_or(RuntimeError::VaultNotFound { vault_id: *vault_id })?;
+
+                let vault = substate
+                    .into_substate_value()
+                    .into_vault()
+                    .expect("Substate was not a vault type at vault address");
+
+                Ok(f(&vault))
+            },
+        }
+    }
+
+    pub fn borrow_vault_mut<R, F: FnOnce(&mut Vault) -> R>(
+        &mut self,
+        vault_id: &VaultId,
+        f: F,
+    ) -> Result<R, RuntimeError> {
+        let vault_mut = self.new_vaults.get_mut(vault_id);
+        match vault_mut {
+            Some(vault_mut) => Ok(f(vault_mut)),
+            None => {
+                let substate = self
+                    .state_store
+                    .read_access()
+                    .unwrap()
+                    .get_state::<_, Substate>(&SubstateAddress::Vault(*vault_id))
+                    .optional()?
+                    .ok_or(RuntimeError::VaultNotFound { vault_id: *vault_id })?;
+
+                let mut vault = substate
+                    .into_substate_value()
+                    .into_vault()
+                    .expect("Substate was not a vault type at vault address");
+                let ret = f(&mut vault);
+                self.new_vaults.insert(*vault_id, vault);
+                Ok(ret)
+            },
+        }
+    }
+
+    pub fn borrow_resource_mut<R, F: FnOnce(&mut Resource) -> R>(
+        &mut self,
+        resource_address: &ResourceAddress,
+        f: F,
+    ) -> Result<R, RuntimeError> {
+        let resource_mut = self.new_resources.get_mut(resource_address);
+        match resource_mut {
+            Some(resource_mut) => Ok(f(resource_mut)),
+            None => {
+                let substate = self
+                    .state_store
+                    .read_access()
+                    .unwrap()
+                    .get_state::<_, Substate>(&SubstateAddress::Resource(*resource_address))
+                    .optional()?
+                    .ok_or(RuntimeError::ResourceNotFound {
+                        resource_address: *resource_address,
+                    })?;
+
+                let mut resource = substate
+                    .into_substate_value()
+                    .into_resource()
+                    .expect("Substate was not a resource type at resource address");
+                let ret = f(&mut resource);
+                self.new_resources.insert(*resource_address, resource);
+                Ok(ret)
+            },
+        }
+    }
+
+    pub fn take_bucket(&mut self, bucket_id: BucketId) -> Result<Bucket, RuntimeError> {
+        self.buckets
+            .remove(&bucket_id)
+            .ok_or(RuntimeError::BucketNotFound { bucket_id })
+    }
+
+    pub(super) fn validate_finalized(&self) -> Result<(), TransactionCommitError> {
+        if !self.buckets.is_empty() {
+            return Err(TransactionCommitError::DanglingBuckets {
+                count: self.buckets.len(),
+            });
+        }
+
+        if !self.workspace.is_empty() {
+            return Err(TransactionCommitError::WorkspaceNotEmpty {
+                count: self.workspace.len(),
+            });
+        }
+
+        Ok(())
+    }
+}

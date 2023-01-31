@@ -20,18 +20,23 @@
 //   WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //   USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use tari_bor::{borsh, Decode, Encode};
-use tari_template_lib::models::{Amount, ResourceAddress};
+use std::collections::BTreeSet;
 
-use crate::resource::{Resource, ResourceError};
+use tari_bor::{borsh, Decode, Encode};
+use tari_template_lib::{
+    models::{Amount, NonFungibleId, ResourceAddress},
+    prelude::ResourceType,
+};
+
+use crate::resource_container::{ResourceContainer, ResourceError};
 
 #[derive(Debug, Clone, Encode, Decode)]
 pub struct Bucket {
-    resource: Resource,
+    resource: ResourceContainer,
 }
 
 impl Bucket {
-    pub fn new(resource: Resource) -> Self {
+    pub fn new(resource: ResourceContainer) -> Self {
         Self { resource }
     }
 
@@ -40,18 +45,22 @@ impl Bucket {
     }
 
     pub fn resource_address(&self) -> &ResourceAddress {
-        self.resource.address()
+        self.resource.resource_address()
     }
 
-    pub fn resource(&self) -> &Resource {
-        &self.resource
+    pub fn resource_type(&self) -> ResourceType {
+        self.resource.resource_type()
     }
 
-    pub fn into_resource(self) -> Resource {
+    pub fn into_resource(self) -> ResourceContainer {
         self.resource
     }
 
-    pub fn take(&mut self, amount: Amount) -> Result<Resource, ResourceError> {
+    pub fn into_non_fungible_ids(self) -> Option<BTreeSet<NonFungibleId>> {
+        self.resource.into_non_fungible_ids()
+    }
+
+    pub fn take(&mut self, amount: Amount) -> Result<ResourceContainer, ResourceError> {
         self.resource.withdraw(amount)
     }
 }

@@ -146,6 +146,7 @@ fn configure_comms(
         parse_cidrs(&config.listener_liveness_allowlist_cidrs).map_err(|e| anyhow!("{}", e))?;
 
     let builder = builder
+        .set_liveness_check(Some(Duration::from_secs(10)))
         .with_listener_liveness_max_sessions(config.listener_liveness_max_sessions)
         .with_listener_liveness_allowlist_cidrs(listener_liveness_allowlist_cidrs)
         .with_dial_backoff(ConstantBackoff::new(Duration::from_millis(500)))

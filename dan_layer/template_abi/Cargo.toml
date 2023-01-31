@@ -6,6 +6,10 @@ edition = "2021"
 [dependencies]
 tari_bor = { path = "../tari_bor", default-features = false }
 
+hashbrown = { version = "0.13.2", optional = true }
+
 [features]
 default = ["std"]
 std = ["tari_bor/std"]
+# TODO: look into how this is done properly
+alloc = ["hashbrown"]
