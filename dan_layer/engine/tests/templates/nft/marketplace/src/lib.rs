@@ -107,9 +107,8 @@ mod marketplace {
             // the data MUST be immutable, to avoid security exploits (changing the nft which it points to afterwards)
             let mut immutable_data = Metadata::new();
             immutable_data
-                .insert("nft_address", auction.vault.resource_address());
-            let badge = NonFungible::new(immutable_data, &{});
-            ResourceManager::get(self.seller_badge_resource).mint_non_fungible(badge_id, badge)
+                .insert("nft_address", nft_address);
+            ResourceManager::get(self.sell_orders_badge_resource).mint_non_fungible(badge_id, immutable_data, &());
         }
 
         // process the bid:
