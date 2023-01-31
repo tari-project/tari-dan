@@ -81,10 +81,19 @@ mod marketplace {
             }
         }
 
-        // TODO: how to ensure the bucket contains a single NFT item? Passing both the address and id seems a bit too unconvenient
         // returns a badge used to cancel the sell order in the future
         //      the badge will contain a immutable metadata with a reference to the nft being sold
         pub fn start_auction(&mut self, nft_bucket: Bucket, seller_address: ComponentAddress, payment_resource_address: ResourceAddress, min_price: Option<Amount>, buy_price: Option<Amount>, epoch_period: u64) -> Bucket {
+            assert!(
+                nft_bucket.resource_type() == ResourceType::NonFungible,
+                "The resource is not a NFT"
+            );
+
+            assert!(
+                nft_bucket.amount() == Amount(1),
+                "Can only start an auction of a single NFT"
+            );
+            
             assert!(
                 epoch_period > 0,
                 "Invalid auction period"
@@ -115,7 +124,6 @@ mod marketplace {
         //  - ignoring it (throws panic) if lower than the current highest
         //  - setting it up as the new highest bid 
         //  - performs the payment to the seller + the nft to the buyer if the buy price was met
-        // TODO: we need to handle the payment change (or just check that the payment is within a valid range)
         pub fn bid(&mut self, bidder_account_address: ComponentAddress, nft_address: ResourceAddress, payment: Bucket) {
             let mut auction = self.auctions.get_mut(nft_address)
                 .expect("Auction does not exist");
