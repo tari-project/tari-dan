@@ -53,14 +53,13 @@ fn airdrop() {
         .execute_and_commit(
             addresses
                 .iter()
-                .map(|addr| {
+                .flat_map(|addr| {
                     [Instruction::CallMethod {
                         component_address: airdrop,
                         method: "add_recipient".to_string(),
                         args: args![addr],
                     }]
                 })
-                .flatten()
                 .collect(),
         )
         .unwrap();
@@ -69,7 +68,7 @@ fn airdrop() {
         .execute_and_commit(
             addresses
                 .into_iter()
-                .map(|addr| {
+                .flat_map(|addr| {
                     [
                         Instruction::CallMethod {
                             component_address: airdrop,
@@ -91,7 +90,6 @@ fn airdrop() {
                         },
                     ]
                 })
-                .flatten()
                 .collect(),
         )
         .unwrap();
