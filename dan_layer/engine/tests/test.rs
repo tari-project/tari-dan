@@ -1009,7 +1009,6 @@ mod tickets {
         let vars = [
             ("account", account_address.into()),
             ("ticket_seller", ticket_seller.into()),
-            ("ticket_resource", ticket_resource.into()),
             // TODO: it's weird that the "redeem_ticket" method accepts a NonFungibleId, but we are passing a
             // SubstateAddress variable
             ("ticket_addr", ticket_substate_addr.clone().into()),
@@ -1019,16 +1018,19 @@ mod tickets {
             .execute_and_commit_manifest(
                 r#"
                 let account = var!["account"];
-                let ticket_resource = var!["ticket_resource"];
-                account.get_non_fungible_ids(ticket_resource);
-                
                 let ticket_seller = var!["ticket_seller"];
                 let ticket_addr = var!["ticket_addr"];
+
                 ticket_seller.redeem_ticket(ticket_addr);
             "#,
                 vars.clone(),
             )
             .unwrap();
+
+        #[derive(Debug, Clone, Encode, Decode, Default)]
+        pub struct Ticket {
+            pub is_redeemed: bool,
+        }
 
         let ticket_nft = template_test
             .read_only_state_store()
@@ -1037,10 +1039,14 @@ mod tickets {
             .into_substate_value()
             .into_non_fungible()
             .unwrap();
-        #[derive(Debug, Clone, Encode, Decode, Default)]
-        pub struct Ticket {
-            pub is_redeemed: bool,
-        }
-        assert!(ticket_nft.get_data::<Ticket>().is_redeemed);
+
+        assert!(
+            ticket_nft
+                .contents()
+                .unwrap()
+                .decode_mutable_data::<Ticket>()
+                .unwrap()
+                .is_redeemed
+        );
     }
 }

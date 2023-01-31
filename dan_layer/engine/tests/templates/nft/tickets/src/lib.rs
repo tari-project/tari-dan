@@ -51,9 +51,8 @@ mod tickets {
                 .build();
 
             // Mint the initial tickets
-            let sample_ticket = NonFungible::new(Metadata::new(), &Ticket::default());
             let ticket_bucket = ResourceManager::get(resource_address)
-                .mint_many_non_fungible(sample_ticket, initial_supply);
+                .mint_many_non_fungible(&Metadata::new(), &Ticket::default(), initial_supply);
             let tickets = Vault::from_bucket(ticket_bucket);
  
             let earnings = Vault::new_empty(payment_resource_address);
@@ -68,9 +67,8 @@ mod tickets {
 
         // TODO: this method should only be allowed for the owner, when they want to increase attendance of the event
         pub fn mint_more_tickets(&mut self, supply: usize) {
-            let sample_ticket = NonFungible::new(Metadata::new(), &Ticket::default());
             let ticket_bucket = ResourceManager::get(self.resource_address)
-                .mint_many_non_fungible(sample_ticket, supply);
+                .mint_many_non_fungible(&Metadata::new(), &Ticket::default(), supply);
             self.tickets.deposit(ticket_bucket);
         }
 
@@ -90,10 +88,10 @@ mod tickets {
         // TODO: pass the token id or use buckets? we need a way to ensure that the caller has the nft
         pub fn redeem_ticket(&self, id: NonFungibleId) {
             let resource_manager = ResourceManager::get(self.resource_address);
-            let nft = resource_manager.get_non_fungible(&id);
-            let mut data = nft.get_data::<Ticket>();
+            let mut nft = resource_manager.get_non_fungible(&id);
+            let mut data = nft.get_mutable_data::<Ticket>();
             data.is_redeemed = true;
-            resource_manager.update_non_fungible_data(id, &data);
+            nft.set_mutable_data(&data);
         }
 
         pub fn total_supply(&self) -> Amount {

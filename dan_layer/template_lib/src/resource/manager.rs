@@ -20,10 +20,8 @@
 //   WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //   USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use std::collections::HashMap;
-
 use tari_bor::{encode, Encode};
-use tari_template_abi::{call_engine, EngineOp};
+use tari_template_abi::{call_engine, rust::collections::HashMap, EngineOp};
 
 use crate::{
     args::{
@@ -111,11 +109,16 @@ impl ResourceManager {
         })
     }
 
-    pub fn mint_many_non_fungible(&mut self, token: NonFungible, supply: usize) -> Bucket {
-        let mut tokens: HashMap<NonFungibleId, NonFungible> = HashMap::with_capacity(supply);
+    pub fn mint_many_non_fungible<T: Encode, U: Encode>(
+        &mut self,
+        metadata: &T,
+        mutable_data: &U,
+        supply: usize,
+    ) -> Bucket {
+        let mut tokens: HashMap<NonFungibleId, (Vec<u8>, Vec<u8>)> = HashMap::with_capacity(supply);
         for _ in 0..supply {
             let id = NonFungibleId::random();
-            tokens.insert(id, token.clone());
+            tokens.insert(id, (encode(metadata).unwrap(), encode(mutable_data).unwrap()));
         }
         self.mint_internal(MintResourceArg {
             mint_arg: MintArg::NonFungible { tokens },
