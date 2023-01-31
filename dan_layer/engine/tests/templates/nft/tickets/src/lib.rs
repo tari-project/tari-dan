@@ -41,77 +41,62 @@ mod tickets {
     }
 
     impl TicketSeller {
-        pub fn new(initial_supply: u64, price: Amount, event_metadate: Metadata) -> Self {
+        // TODO: in this example we need to specify the payment resource, but there should be native support for Thaums
+        pub fn new(payment_resource_address: ResourceAddress, initial_supply: usize, price: Amount, event_description: String) -> Self {
             // Create the non-fungible resource
             // TODO: restrict minting to only the owner
             let resource_address = ResourceBuilder::non_fungible()
-                // The event metadata is common for all tickets, so it's stored only once in the resource, not in every ticket individually
-                .with_metadata(event_metadata)
+                // The event description is common for all tickets
+                .add_metadata("event", event_description)
                 .build();
 
             // Mint the initial tickets
-            let sample_ticket = Ticket::new();
-            let ticket_bucket = ResourceBuilder::get(resource_address)
-                .mint_many_non_fungible(sample_ticket, initial_supply);
-
-            // TODO: how do you initialize a Thaum vault? Could it be similar with non-Thaum fungible resources?    
-            let earnings = Vault::new_empty::<Thaum>();
+            let ticket_bucket = ResourceManager::get(resource_address)
+                .mint_many_non_fungible(&Metadata::new(), &Ticket::default(), initial_supply);
+            let tickets = Vault::from_bucket(ticket_bucket);
+ 
+            let earnings = Vault::new_empty(payment_resource_address);
 
             Self {
                 resource_address,
-                tickets: Vault::from_bucket(ticket_bucket),
+                tickets,
                 price,
                 earnings,
             }
         }
 
         // TODO: this method should only be allowed for the owner, when they want to increase attendance of the event
-        pub fn mint_more_tickets(&mut self, supply: u64) {
-            let sample_ticket = Ticket::new();
-            let ticket_bucket = ResourceBuilder::get(resource_address)
-                .mint_many_non_fungible(sample_ticket, supply);
+        pub fn mint_more_tickets(&mut self, supply: usize) {
+            let ticket_bucket = ResourceManager::get(self.resource_address)
+                .mint_many_non_fungible(&Metadata::new(), &Ticket::default(), supply);
             self.tickets.deposit(ticket_bucket);
         }
 
         // This method should be accesible to everyone
         // TODO: how do we ensure that the payment is in Thaums? On vault creation we specify the type of token?
-        pub fn sell_ticket(&mut self, payment: Bucket) -> (Bucket, Bucket) {
-            // no need to manually check the amount, as the split operation will fail if not enough funds
-            let (cost, change) = payment.split(self.mint_price);
-            self.earnings.put(cost);
+        pub fn buy_ticket(&mut self, payment: Bucket) -> Bucket {
+            assert_eq!(payment.amount(), self.price, "Invalid payment amount");
+
+            self.earnings.deposit(payment);
 
             // no need to manually check that the tickes are all sold out, as the withdraw operation will fail automatically
-            let ticket_bucket = self.tickets.withdraw(1);
-
-            (ticket_bucket, change)
-        }
-
-        // TODO: badge system should allow only the component owner to reddem, or emit "redeemer" badges
-        // TODO: pass the token id or use buckets? we need a way to ensure that the caller has the nft and buckets do the trick
-        pub fn redeem_ticket(&self, ticket_bucket: Bucket) -> Bucket {
-            // TODO: should it be better, implicit way of checking that the bucket is compatible?
-            assert!(
-                ticket_bucket.resource_address() == self.resource_address,
-                "Invalid Ticket NFT"
-            );
-
-            assert!(
-                ticket_bucket.amount() == 1,
-                "Cannot redeem more than 1 ticket"
-            );
-
-            let ticket = ticket_bucket.withdraw(1);
-            let mut data = nft.get_data::<Ticket>();
-            data.is_redeemed = true;
-
-            let resource_manager = ResourceManager::get(self.resource_address);
-            resource_manager.update_non_fungible_data(nft.id, &data);
+            let ticket_bucket = self.tickets.withdraw(Amount(1));
 
             ticket_bucket
         }
 
+        // TODO: badge system should allow only the component owner to reddem, or emit "redeemer" badges
+        // TODO: pass the token id or use buckets? we need a way to ensure that the caller has the nft
+        pub fn redeem_ticket(&self, id: NonFungibleId) {
+            let resource_manager = ResourceManager::get(self.resource_address);
+            let mut nft = resource_manager.get_non_fungible(&id);
+            let mut data = nft.get_mutable_data::<Ticket>();
+            data.is_redeemed = true;
+            nft.set_mutable_data(&data);
+        }
+
         pub fn total_supply(&self) -> Amount {
-            ResourceManager::get(self.address).total_supply()
+            ResourceManager::get(self.resource_address).total_supply()
         }
     }
 }

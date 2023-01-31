@@ -84,7 +84,7 @@ mod emoji_id {
             }
         }
 
-        // TODO: return change
+        // TODO: return change (or check bucket.value() == required_amount)
         pub fn mint(&mut self, emoji_id: EmojiId, payment: Bucket) -> Bucket {
             assert!(
                 !emoji_id.0.is_empty() && emoji_id.0.len() as u64 <= self.max_emoji_id_len,
@@ -92,10 +92,9 @@ mod emoji_id {
             );
 
             // process the payment
-            // no need to manually check the amount, as the split operation will fail if not enough funds
-            // TODO: let (cost, change) = payment.split(self.mint_price);
+            assert_eq!(payment.amount(), self.mint_price, "Invalid payment amount");
             // no need to manually check that the payment is in the same resource that we are accepting ...
-            // ... the deposit will fail if it's different
+            // ... the deposit will fail if it's different       
             self.earnings.deposit(payment);
 
             // mint a new emoji id
