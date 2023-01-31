@@ -4,7 +4,10 @@
 use serde::{Deserialize, Serialize};
 use tari_bor::{borsh, Decode, Encode};
 use tari_template_abi::rust::collections::BTreeSet;
-use tari_template_lib::models::{Amount, NonFungibleId, ResourceAddress};
+use tari_template_lib::{
+    models::{Amount, NonFungibleId, ResourceAddress},
+    prelude::ResourceType,
+};
 
 /// Instances of a single resource kept in Buckets and Vaults
 #[derive(Debug, Clone, Encode, Decode, Serialize, Deserialize, PartialEq)]
@@ -47,7 +50,21 @@ impl ResourceContainer {
         }
     }
 
+    pub fn resource_type(&self) -> ResourceType {
+        match self {
+            ResourceContainer::Fungible { .. } => ResourceType::Fungible,
+            ResourceContainer::NonFungible { .. } => ResourceType::NonFungible,
+        }
+    }
+
     pub fn non_fungible_token_ids(&self) -> Option<&BTreeSet<NonFungibleId>> {
+        match self {
+            ResourceContainer::NonFungible { token_ids, .. } => Some(token_ids),
+            _ => None,
+        }
+    }
+
+    pub fn into_non_fungible_ids(self) -> Option<BTreeSet<NonFungibleId>> {
         match self {
             ResourceContainer::NonFungible { token_ids, .. } => Some(token_ids),
             _ => None,

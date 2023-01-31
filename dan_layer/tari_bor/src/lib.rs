@@ -22,7 +22,7 @@ pub fn encode_into<T: Encode + ?Sized, W: io::Write>(val: &T, writer: &mut W) ->
     val.serialize(writer)
 }
 
-pub fn encode<T: Encode>(val: &T) -> io::Result<Vec<u8>> {
+pub fn encode<T: Encode + ?Sized>(val: &T) -> io::Result<Vec<u8>> {
     let mut buf = Vec::with_capacity(512);
     encode_into(val, &mut buf)?;
     Ok(buf)

@@ -54,6 +54,12 @@ pub enum RuntimeError {
         resource_address: ResourceAddress,
         nft_id: NonFungibleId,
     },
+    #[error("Invalid op '{op}' on burnt non-fungible {resource_address} id {nf_id}")]
+    InvalidOpNonFungibleBurnt {
+        op: &'static str,
+        resource_address: ResourceAddress,
+        nf_id: NonFungibleId,
+    },
     #[error("Bucket not found with id {bucket_id}")]
     BucketNotFound { bucket_id: BucketId },
     #[error("Resource not found with address {resource_address}")]

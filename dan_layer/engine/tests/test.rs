@@ -315,30 +315,107 @@ mod errors {
     }
 }
 
-mod basic_nft {
-
+mod fungible {
     use super::*;
 
-    fn setup() -> (TemplateTest<MockRuntimeInterface>, ComponentAddress, ComponentAddress) {
+    #[test]
+    fn fungible_mint_and_burn() {
+        let mut template_test = TemplateTest::new(vec!["tests/templates/faucet"]);
+
+        let faucet_template = template_test.get_template_address("TestFaucet");
+
+        let initial_supply = Amount(1_000_000_000_000);
+        template_test
+            .execute_and_commit(vec![Instruction::CallFunction {
+                template_address: faucet_template,
+                function: "mint".to_string(),
+                args: args![initial_supply],
+            }])
+            .unwrap();
+
+        let faucet_component = template_test
+            .get_previous_output_address(SubstateType::Component)
+            .as_component_address()
+            .unwrap();
+
+        let total_supply: Amount = template_test.call_method(faucet_component, "total_supply", args![]);
+
+        assert_eq!(total_supply, initial_supply);
+
+        let result = template_test
+            .execute_and_commit(vec![
+                Instruction::CallMethod {
+                    component_address: faucet_component,
+                    method: "burn_coins".to_string(),
+                    args: args![Amount(500)],
+                },
+                Instruction::CallMethod {
+                    component_address: faucet_component,
+                    method: "total_supply".to_string(),
+                    args: args![],
+                },
+            ])
+            .unwrap();
+
+        assert_eq!(
+            result.execution_results[1].decode::<Amount>().unwrap(),
+            initial_supply - Amount(500)
+        );
+
+        let result = template_test
+            .execute_and_commit(vec![
+                Instruction::CallMethod {
+                    component_address: faucet_component,
+                    method: "burn_coins".to_string(),
+                    args: args![initial_supply - Amount(500)],
+                },
+                Instruction::CallMethod {
+                    component_address: faucet_component,
+                    method: "total_supply".to_string(),
+                    args: args![],
+                },
+            ])
+            .unwrap();
+
+        assert_eq!(result.execution_results[1].decode::<Amount>().unwrap(), Amount(0));
+
+        template_test
+            .execute_and_commit(vec![Instruction::CallMethod {
+                component_address: faucet_component,
+                method: "burn_coins".to_string(),
+                args: args![Amount(1)],
+            }])
+            .unwrap_err();
+    }
+}
+
+mod basic_nft {
+    use super::*;
+
+    fn setup() -> (
+        TemplateTest<MockRuntimeInterface>,
+        ComponentAddress,
+        ComponentAddress,
+        SubstateAddress,
+    ) {
         let mut template_test = TemplateTest::new(vec!["tests/templates/nft/basic_nft"]);
 
         let account_address: ComponentAddress = template_test.call_function("Account", "new", args![]);
         let nft_component: ComponentAddress = template_test.call_function("SparkleNft", "new", args![]);
 
-        (template_test, account_address, nft_component)
+        let nft_resx = template_test.get_previous_output_address(SubstateType::Resource);
+
+        (template_test, account_address, nft_component, nft_resx)
     }
 
     #[test]
     fn create_resource_mint_and_deposit() {
-        let (mut template_test, account_address, nft_component) = setup();
+        let (mut template_test, account_address, nft_component, nft_resx) = setup();
 
         let vars = vec![
             ("account", account_address.into()),
             ("nft", nft_component.into()),
-            (
-                "nft_resx",
-                template_test.get_previous_output_address(SubstateType::Resource).into(),
-            ),
+            ("nft_resx", nft_resx.into()),
         ];
 
         let total_supply: Amount = template_test.call_method(nft_component, "total_supply", args![]);
@@ -406,7 +483,7 @@ mod basic_nft {
 
     #[test]
     fn change_nft_mutable_data() {
-        let (mut template_test, account_address, nft_component) = setup();
+        let (mut template_test, account_address, nft_component, _nft_resx) = setup();
 
         let total_supply: Amount = template_test.call_method(nft_component, "total_supply", args![]);
         assert_eq!(total_supply, Amount(4));
@@ -426,16 +503,32 @@ mod basic_nft {
             )
             .unwrap();
 
-        result.result.expect("execution failed");
+        let diff = result.result.expect("execution failed");
+        let (_, state) = diff.up_iter().find(|(addr, _)| addr.is_non_fungible()).unwrap();
 
-        let nft_addr = template_test.get_previous_output_address(SubstateType::NonFungible);
-        let (nft_resource_addr, _) = nft_addr.as_non_fungible_address().unwrap();
+        #[derive(Debug, Clone, Encode, Decode)]
+        pub struct Sparkle {
+            pub brightness: u32,
+        }
+
+        let sparkle = state
+            .substate_value()
+            .non_fungible()
+            .unwrap()
+            .contents()
+            .unwrap()
+            .decode_mutable_data::<Sparkle>()
+            .unwrap();
+        assert_eq!(sparkle.brightness, 0);
+
+        let substate_addr = template_test.get_previous_output_address(SubstateType::NonFungible);
+        let nft_addr = substate_addr.as_non_fungible_address().unwrap();
 
         let vars = [
             ("account", account_address.into()),
             ("nft", nft_component.into()),
-            ("nft_resx", (*nft_resource_addr).into()),
-            ("nft_id", nft_addr.clone().into()),
+            ("nft_resx", (*nft_addr.resource_address()).into()),
+            ("nft_id", substate_addr.clone().into()),
         ];
 
         template_test
@@ -455,16 +548,20 @@ mod basic_nft {
 
         let nft = template_test
             .read_only_state_store()
-            .get_substate(&nft_addr)
+            .get_substate(&substate_addr)
             .unwrap()
             .into_substate_value()
             .into_non_fungible()
             .unwrap();
-        #[derive(Debug, Clone, Encode, Decode)]
-        pub struct Sparkle {
-            pub brightness: u32,
-        }
-        assert_eq!(nft.get_data::<Sparkle>().brightness, 10);
+
+        assert_eq!(
+            nft.contents()
+                .unwrap()
+                .decode_mutable_data::<Sparkle>()
+                .unwrap()
+                .brightness,
+            10
+        );
 
         let err = template_test
             .execute_and_commit_manifest(
@@ -482,15 +579,12 @@ mod basic_nft {
 
     #[test]
     fn mint_specific_id() {
-        let (mut template_test, account_address, nft_component) = setup();
+        let (mut template_test, account_address, nft_component, nft_resx) = setup();
 
         let vars = vec![
             ("account", account_address.into()),
             ("nft", nft_component.into()),
-            (
-                "nft_resx",
-                template_test.get_previous_output_address(SubstateType::Resource).into(),
-            ),
+            ("nft_resx", nft_resx.into()),
         ];
 
         let total_supply: Amount = template_test.call_method(nft_component, "total_supply", args![]);
@@ -559,6 +653,71 @@ mod basic_nft {
             account.deposit(nft_bucket2);
         "#,
                 vars,
+            )
+            .unwrap_err();
+    }
+
+    #[test]
+    fn burn_nft() {
+        let (mut template_test, account_address, nft_component, nft_resx) = setup();
+
+        let vars = vec![
+            ("account", account_address.into()),
+            ("nft", nft_component.into()),
+            ("nft_resx", nft_resx.into()),
+        ];
+
+        let total_supply: Amount = template_test.call_method(nft_component, "total_supply", args![]);
+        assert_eq!(total_supply, Amount(4));
+
+        template_test
+            .execute_and_commit_manifest(
+                r#"
+            let account = var!["account"];
+            let sparkle_nft = var!["nft"];
+        
+            let nft_bucket = sparkle_nft.mint_specific(NonFungibleId("Burn!"));
+            account.deposit(nft_bucket);
+        "#,
+                vars.clone(),
+            )
+            .unwrap();
+
+        let total_supply: Amount = template_test.call_method(nft_component, "total_supply", args![]);
+        assert_eq!(total_supply, Amount(5));
+
+        let result = template_test
+            .execute_and_commit_manifest(
+                r#"
+            let account = var!["account"];
+            let sparkle_nft = var!["nft"];
+            let nft_resx = var!["nft_resx"];
+        
+            let bucket = account.withdraw_non_fungible(nft_resx, NonFungibleId("Burn!"));
+            sparkle_nft.burn(bucket);
+            sparkle_nft.total_supply();
+        "#,
+                vars.clone(),
+            )
+            .unwrap();
+
+        assert_eq!(result.execution_results[3].decode::<Amount>().unwrap(), Amount(4));
+
+        let total_supply: Amount = template_test.call_method(nft_component, "total_supply", args![]);
+        assert_eq!(total_supply, Amount(4));
+
+        // Cannot mint it again
+        template_test
+            .execute_and_commit_manifest(
+                r#"
+            let account = var!["account"];
+            let sparkle_nft = var!["nft"];
+            let nft_resx = var!["nft_resx"];
+        
+            let nft_bucket = sparkle_nft.mint_specific(NonFungibleId("Burn!"));
+            account.deposit(nft_bucket);
+        "#,
+                vars.clone(),
             )
             .unwrap_err();
     }

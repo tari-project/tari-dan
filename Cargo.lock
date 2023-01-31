@@ -5790,6 +5790,7 @@ dependencies = [
 name = "tari_comms_logging"
 version = "0.1.0"
 dependencies = [
+ "chrono",
  "diesel",
  "diesel_migrations",
  "log",
@@ -6487,6 +6488,7 @@ dependencies = [
  "serde",
  "serde_json",
  "tari_common_types",
+ "tari_comms_logging",
  "tari_dan_common_types",
  "tari_engine_types",
 ]

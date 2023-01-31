@@ -96,10 +96,17 @@ impl ResourceManager {
             .expect("[register_non_fungible] Failed to decode ResourceAddress")
     }
 
-    pub fn mint_non_fungible(&mut self, id: NonFungibleId, token: NonFungible) -> Bucket {
+    pub fn mint_non_fungible<T: Encode, U: Encode>(
+        &mut self,
+        id: NonFungibleId,
+        metadata: &T,
+        mutable_data: &U,
+    ) -> Bucket {
         self.mint_internal(MintResourceArg {
             mint_arg: MintArg::NonFungible {
-                tokens: Some((id, token)).into_iter().collect(),
+                tokens: Some((id, (encode(metadata).unwrap(), encode(mutable_data).unwrap())))
+                    .into_iter()
+                    .collect(),
             },
         })
     }
@@ -149,10 +156,10 @@ impl ResourceManager {
             args: invoke_args![ResourceGetNonFungibleArg { id: id.clone() }],
         });
 
-        resp.decode().expect("[get_non_fungible] Failed to decode Amount")
+        resp.decode().expect("[get_non_fungible] Failed to decode NonFungible")
     }
 
-    pub fn update_non_fungible_data<T: Encode>(&self, id: NonFungibleId, data: &T) {
+    pub fn update_non_fungible_data<T: Encode + ?Sized>(&self, id: NonFungibleId, data: &T) {
         let resp: InvokeResult = call_engine(EngineOp::ResourceInvoke, &ResourceInvokeArg {
             resource_ref: self.expect_resource_address(),
             action: ResourceAction::UpdateNonFungibleData,

@@ -101,6 +101,7 @@ where
         let logger = self.logger.clone();
 
         Box::pin(async move {
+            let message_tag = msg.get_message_tag();
             let type_str = msg.as_type_str();
             let bytes = encode_message(&proto::network::DanMessage::from(msg.clone()));
 
@@ -114,13 +115,13 @@ where
             let svc = next_service.ready().await?;
             match dest {
                 Destination::Peer(pk) => {
-                    logger.log_outbound_message("Peer", pk.to_vec(), type_str, &msg);
+                    logger.log_outbound_message("Peer", pk.to_vec(), type_str, message_tag, &msg);
                     svc.call(OutboundMessage::new(NodeId::from_public_key(&pk), bytes))
                         .await?;
                 },
                 Destination::Selected(pks) => {
                     let iter = pks.iter().map(NodeId::from_public_key).map(|n| {
-                        logger.log_outbound_message("Selected", n.to_vec(), type_str, &msg);
+                        logger.log_outbound_message("Selected", n.to_vec(), type_str, message_tag.clone(), &msg);
                         OutboundMessage::new(n, bytes.clone())
                     });
                     svc.call_all(stream::iter(iter))
@@ -139,7 +140,13 @@ where
                         warn!(target: LOG_TARGET, "No active connections to flood to");
                     }
                     let iter = conns.into_iter().map(|c| c.peer_node_id().clone()).map(|n| {
-                        logger.log_outbound_message("Flood", n.as_bytes().to_vec(), type_str, &msg);
+                        logger.log_outbound_message(
+                            "Flood",
+                            n.as_bytes().to_vec(),
+                            type_str,
+                            message_tag.clone(),
+                            &msg,
+                        );
                         OutboundMessage::new(n, bytes.clone())
                     });
                     svc.call_all(stream::iter(iter))
