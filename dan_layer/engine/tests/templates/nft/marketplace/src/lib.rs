@@ -160,7 +160,11 @@ mod marketplace {
 
             // if the bid meets the buying price, we process the sell immediatly
             if let Some(buy_price) = auction.buy_price {
-                if payment.amount() >= buy_price {
+                assert!(
+                    payment.amount() <= buy_price,
+                    "Payment is too big"
+                );
+                if payment.amount() == buy_price {
                     self.process_auction_payments(nft_address, auction);
                 }
             }
