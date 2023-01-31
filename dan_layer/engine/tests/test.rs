@@ -57,7 +57,6 @@ fn test_state() {
         "set_last_instruction_output",
         "finalize",
     ]);
-    template_test.clear_calls();
 
     let component_address2: ComponentAddress = template_test.call_function("State", "new", args![]);
     assert_ne!(component_address1, component_address2);
@@ -254,7 +253,6 @@ fn test_tuples() {
     assert_eq!(number, 100);
 
     // tuples returned in a constructor
-    template_test.clear_calls();
     let (component_id, message): (ComponentAddress, String) = template_test.call_function("Tuple", "new", args![]);
     assert_eq!(message, "Hello World!");
 
@@ -270,7 +268,7 @@ mod errors {
 
     #[test]
     fn panic() {
-        let template_test = TemplateTest::new(vec!["tests/templates/errors"]);
+        let mut template_test = TemplateTest::new(vec!["tests/templates/errors"]);
 
         let err = template_test
             .try_execute(vec![Instruction::CallFunction {
@@ -289,7 +287,7 @@ mod errors {
 
     #[test]
     fn invalid_args() {
-        let template_test = TemplateTest::new(vec!["tests/templates/errors"]);
+        let mut template_test = TemplateTest::new(vec!["tests/templates/errors"]);
 
         let text = "this isn't an amount";
         let err = template_test
@@ -724,6 +722,8 @@ mod basic_nft {
 }
 
 mod emoji_id {
+    use std::iter;
+
     use tari_engine_types::commit_result::FinalizeResult;
     use tari_template_lib::prelude::ResourceAddress;
 
@@ -871,11 +871,8 @@ mod emoji_id {
         )
         .unwrap_err();
 
-        // emoji ids with invalid lenght must fail
-        let mut too_long_emoji_id = vec![];
-        for _ in 0..=max_emoji_id_len {
-            too_long_emoji_id.push(Emoji::Smile);
-        }
+        // emoji ids with invalid length must fail
+        let too_long_emoji_id = iter::repeat(Emoji::Smile).take(max_emoji_id_len as usize + 1).collect();
         let emoji_id = EmojiId(too_long_emoji_id);
         mint_emoji_id(
             &mut template_test,
@@ -886,17 +883,16 @@ mod emoji_id {
         )
         .unwrap_err();
 
-        // FIXME: trying to mint a new emoji id (different from the first) should work
-        //        but it gives a "Dangling bucket error"
-        // let emoji_id = EmojiId(vec![Emoji::Smile, Emoji::Wink]);
-        // mint_emoji_id(
-        // &mut template_test,
-        // account_address,
-        // faucet_resource,
-        // emoji_id_minter,
-        // &emoji_id,
-        // )
-        // .unwrap();
+        // mint another unique emoji id
+        let emoji_id = EmojiId(vec![Emoji::Smile, Emoji::Wink]);
+        mint_emoji_id(
+            &mut template_test,
+            account_address,
+            faucet_resource,
+            emoji_id_minter,
+            &emoji_id,
+        )
+        .unwrap();
     }
 }
 
