@@ -20,8 +20,6 @@
 //   WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //   USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use std::sync::Arc;
-
 use futures::executor::block_on;
 use tari_dan_core::services::epoch_manager::EpochManager;
 use tari_dan_engine::runtime::ConsensusProvider;
@@ -30,11 +28,11 @@ use crate::p2p::services::epoch_manager::handle::EpochManagerHandle;
 
 #[derive(Debug, Clone)]
 pub struct TariDanConsensusProvider {
-    epoch_manager: Arc<EpochManagerHandle>,
+    epoch_manager: EpochManagerHandle,
 }
 
 impl TariDanConsensusProvider {
-    pub fn new(epoch_manager: Arc<EpochManagerHandle>) -> Self {
+    pub fn new(epoch_manager: EpochManagerHandle) -> Self {
         Self { epoch_manager }
     }
 }

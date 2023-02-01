@@ -62,7 +62,7 @@ impl<TTemplateProvider, TConsensusProvider> PayloadProcessor<TariDanPayload>
     for TariDanPayloadProcessor<TTemplateProvider, TConsensusProvider>
 where
     TTemplateProvider: TemplateProvider,
-    TConsensusProvider: ConsensusProvider + Clone + Send + Sync + 'static,
+    TConsensusProvider: ConsensusProvider + 'static,
 {
     fn process_payload(
         &self,

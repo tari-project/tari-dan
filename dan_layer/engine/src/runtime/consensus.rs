@@ -20,6 +20,6 @@
 //   WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //   USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-pub trait ConsensusProvider {
+pub trait ConsensusProvider: Clone + Send + Sync {
     fn current_epoch(&self) -> u64;
 }

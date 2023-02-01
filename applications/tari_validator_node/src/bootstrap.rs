@@ -160,7 +160,7 @@ pub async fn spawn_services(
     );
 
     // Payload processor
-    let consensus_provider = TariDanConsensusProvider::new(Arc::new(epoch_manager.clone()));
+    let consensus_provider = TariDanConsensusProvider::new(epoch_manager.clone());
     let payload_processor = TariDanPayloadProcessor::new(template_manager, consensus_provider);
 
     // Consensus

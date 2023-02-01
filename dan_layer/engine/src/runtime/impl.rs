@@ -60,12 +60,12 @@ use crate::runtime::{
 };
 
 #[derive(Debug, Clone)]
-pub struct RuntimeInterfaceImpl<C: ConsensusProvider + Send + Sync> {
+pub struct RuntimeInterfaceImpl<C: ConsensusProvider> {
     tracker: StateTracker,
     consensus_provider: C,
 }
 
-impl<C: ConsensusProvider + Send + Sync> RuntimeInterfaceImpl<C> {
+impl<C: ConsensusProvider> RuntimeInterfaceImpl<C> {
     pub fn new(tracker: StateTracker, consensus_provider: C) -> Self {
         Self {
             tracker,
@@ -74,7 +74,7 @@ impl<C: ConsensusProvider + Send + Sync> RuntimeInterfaceImpl<C> {
     }
 }
 
-impl<C: ConsensusProvider + Send + Sync> RuntimeInterface for RuntimeInterfaceImpl<C> {
+impl<C: ConsensusProvider> RuntimeInterface for RuntimeInterfaceImpl<C> {
     fn set_current_runtime_state(&self, state: RuntimeState) {
         self.tracker.set_current_runtime_state(state);
     }
