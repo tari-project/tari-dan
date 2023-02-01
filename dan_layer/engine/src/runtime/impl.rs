@@ -33,6 +33,7 @@ use tari_template_lib::{
         BucketRef,
         ComponentAction,
         ComponentRef,
+        ConsensusAction,
         CreateResourceArg,
         InvokeResult,
         LogLevel,
@@ -49,20 +50,31 @@ use tari_template_lib::{
     models::{BucketId, ComponentAddress, ComponentHeader, NonFungibleAddress, ResourceAddress, VaultRef},
 };
 
-use crate::runtime::{engine_args::EngineArgs, tracker::StateTracker, RuntimeError, RuntimeInterface, RuntimeState};
+use crate::runtime::{
+    consensus::ConsensusProvider,
+    engine_args::EngineArgs,
+    tracker::StateTracker,
+    RuntimeError,
+    RuntimeInterface,
+    RuntimeState,
+};
 
 #[derive(Debug, Clone)]
-pub struct RuntimeInterfaceImpl {
+pub struct RuntimeInterfaceImpl<C: ConsensusProvider + Send + Sync> {
     tracker: StateTracker,
+    consensus_provider: C,
 }
 
-impl RuntimeInterfaceImpl {
-    pub fn new(tracker: StateTracker) -> Self {
-        RuntimeInterfaceImpl { tracker }
+impl<C: ConsensusProvider + Send + Sync> RuntimeInterfaceImpl<C> {
+    pub fn new(tracker: StateTracker, consensus_provider: C) -> Self {
+        Self {
+            tracker,
+            consensus_provider,
+        }
     }
 }
 
-impl RuntimeInterface for RuntimeInterfaceImpl {
+impl<C: ConsensusProvider + Send + Sync> RuntimeInterface for RuntimeInterfaceImpl<C> {
     fn set_current_runtime_state(&self, state: RuntimeState) {
         self.tracker.set_current_runtime_state(state);
     }
@@ -446,6 +458,15 @@ impl RuntimeInterface for RuntimeInterfaceImpl {
                     })?;
 
                 Ok(InvokeResult::raw(contents.mutable_data().to_vec()))
+            },
+        }
+    }
+
+    fn consensus_invoke(&self, action: ConsensusAction) -> Result<InvokeResult, RuntimeError> {
+        match action {
+            ConsensusAction::GetCurrentEpoch => {
+                let current_epoch = self.consensus_provider.current_epoch();
+                Ok(InvokeResult::encode(&current_epoch)?)
             },
         }
     }

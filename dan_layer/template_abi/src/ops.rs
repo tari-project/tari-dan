@@ -33,6 +33,7 @@ pub enum EngineOp {
     WorkspaceInvoke = 0x05,
     NonFungibleInvoke = 0x06,
     GenerateUniqueId = 0x07,
+    ConsensusInvoke = 0x08,
 }
 
 impl EngineOp {
@@ -46,6 +47,7 @@ impl EngineOp {
             0x05 => Some(EngineOp::WorkspaceInvoke),
             0x06 => Some(EngineOp::NonFungibleInvoke),
             0x07 => Some(EngineOp::GenerateUniqueId),
+            0x08 => Some(EngineOp::ConsensusInvoke),
             _ => None,
         }
     }

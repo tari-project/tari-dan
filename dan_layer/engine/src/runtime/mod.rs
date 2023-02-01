@@ -26,6 +26,9 @@ pub use id_provider::IdProvider;
 mod r#impl;
 pub use r#impl::RuntimeInterfaceImpl;
 
+mod consensus;
+pub use consensus::ConsensusProvider;
+
 mod engine_args;
 pub use crate::runtime::engine_args::EngineArgs;
 
@@ -48,6 +51,7 @@ use tari_template_lib::{
         BucketRef,
         ComponentAction,
         ComponentRef,
+        ConsensusAction,
         InvokeResult,
         LogLevel,
         NonFungibleAction,
@@ -105,6 +109,8 @@ pub trait RuntimeInterface: Send + Sync {
         action: NonFungibleAction,
         args: EngineArgs,
     ) -> Result<InvokeResult, RuntimeError>;
+
+    fn consensus_invoke(&self, action: ConsensusAction) -> Result<InvokeResult, RuntimeError>;
 
     fn generate_uuid(&self) -> Result<[u8; 32], RuntimeError>;
 

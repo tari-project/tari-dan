@@ -25,6 +25,7 @@ mod bootstrap;
 pub mod cli;
 mod comms;
 mod config;
+mod consensus_provider;
 mod dan_node;
 mod default_service_specification;
 mod dry_run_transaction_processor;

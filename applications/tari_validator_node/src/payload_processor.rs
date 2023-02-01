@@ -32,7 +32,7 @@ use tari_dan_core::{
 };
 use tari_dan_engine::{
     packager::{Package, TemplateModuleLoader},
-    runtime::{IdProvider, RuntimeInterfaceImpl, StateTracker},
+    runtime::{ConsensusProvider, IdProvider, RuntimeInterfaceImpl, StateTracker},
     state_store::{memory::MemoryStateStore, AtomicDb, StateReader, StateStoreError, StateWriter},
     transaction::{TransactionError, TransactionProcessor},
     wasm::WasmExecutionError,
@@ -44,18 +44,25 @@ use tari_engine_types::{
 use tari_template_lib::models::{ComponentAddress, TemplateAddress};
 
 #[derive(Debug, Default, Clone)]
-pub struct TariDanPayloadProcessor<TTemplateProvider> {
+pub struct TariDanPayloadProcessor<TTemplateProvider, TConsensusProvider> {
     template_provider: TTemplateProvider,
+    consensus_provider: TConsensusProvider,
 }
 
-impl<TTemplateProvider> TariDanPayloadProcessor<TTemplateProvider> {
-    pub fn new(template_provider: TTemplateProvider) -> Self {
-        Self { template_provider }
+impl<TTemplateProvider, TConsensusProvider> TariDanPayloadProcessor<TTemplateProvider, TConsensusProvider> {
+    pub fn new(template_provider: TTemplateProvider, consensus_provider: TConsensusProvider) -> Self {
+        Self {
+            template_provider,
+            consensus_provider,
+        }
     }
 }
 
-impl<TTemplateProvider> PayloadProcessor<TariDanPayload> for TariDanPayloadProcessor<TTemplateProvider>
-where TTemplateProvider: TemplateProvider
+impl<TTemplateProvider, TConsensusProvider> PayloadProcessor<TariDanPayload>
+    for TariDanPayloadProcessor<TTemplateProvider, TConsensusProvider>
+where
+    TTemplateProvider: TemplateProvider,
+    TConsensusProvider: ConsensusProvider + Clone + Send + Sync + 'static,
 {
     fn process_payload(
         &self,
@@ -74,8 +81,7 @@ where TTemplateProvider: TemplateProvider
         // Execution will fail if more than 64 new addresses are created
         let id_provider = IdProvider::new(*transaction.hash(), 64);
         let tracker = StateTracker::new(state_db, id_provider);
-        let runtime = RuntimeInterfaceImpl::new(tracker);
-
+        let runtime = RuntimeInterfaceImpl::new(tracker, self.consensus_provider.clone());
         let mut builder = Package::builder();
 
         for addr in template_addresses {

@@ -49,6 +49,7 @@ use tokio::sync::{
 };
 
 use crate::{
+    consensus_provider::TariDanConsensusProvider,
     p2p::services::{
         epoch_manager::handle::EpochManagerHandle,
         mempool::MempoolHandle,
@@ -81,7 +82,7 @@ impl HotstuffService {
         epoch_manager: EpochManagerHandle,
         mempool: MempoolHandle,
         outbound: OutboundMessaging,
-        payload_processor: TariDanPayloadProcessor<TemplateManager>,
+        payload_processor: TariDanPayloadProcessor<TemplateManager, TariDanConsensusProvider>,
         shard_store_factory: SqliteShardStore,
         rx_hotstuff_messages: Receiver<(CommsPublicKey, HotStuffMessage<TariDanPayload, CommsPublicKey>)>,
         rx_vote_messages: Receiver<(CommsPublicKey, VoteMessage)>,

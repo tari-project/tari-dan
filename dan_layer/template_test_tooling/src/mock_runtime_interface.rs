@@ -6,6 +6,7 @@ use std::sync::{Arc, RwLock};
 
 use tari_dan_engine::{
     runtime::{
+        ConsensusProvider,
         EngineArgs,
         IdProvider,
         RuntimeError,
@@ -23,6 +24,7 @@ use tari_template_lib::{
         BucketRef,
         ComponentAction,
         ComponentRef,
+        ConsensusAction,
         InvokeResult,
         LogLevel,
         NonFungibleAction,
@@ -40,7 +42,7 @@ pub struct MockRuntimeInterface {
     state: MemoryStateStore,
     calls: Arc<RwLock<Vec<&'static str>>>,
     invoke_result: Arc<RwLock<Option<InvokeResult>>>,
-    inner: RuntimeInterfaceImpl,
+    inner: RuntimeInterfaceImpl<MockConsensusProvider>,
 }
 
 impl Default for MockRuntimeInterface {
@@ -49,11 +51,12 @@ impl Default for MockRuntimeInterface {
         let tx_hash = Hash::default();
         let state = MemoryStateStore::default();
         let tracker = StateTracker::new(state.clone(), IdProvider::new(tx_hash, 100));
+        let consensus_provider = MockConsensusProvider::default();
         Self {
             state,
             calls: Arc::new(RwLock::new(vec![])),
             invoke_result: Arc::new(RwLock::new(None)),
-            inner: RuntimeInterfaceImpl::new(tracker),
+            inner: RuntimeInterfaceImpl::new(tracker, consensus_provider),
         }
     }
 }
@@ -83,7 +86,8 @@ impl MockRuntimeInterface {
 
     pub fn reset_runtime(&mut self) {
         let tracker = StateTracker::new(self.state.clone(), IdProvider::new(Hash::default(), 100));
-        self.inner = RuntimeInterfaceImpl::new(tracker);
+        let consensus_provider = MockConsensusProvider::default();
+        self.inner = RuntimeInterfaceImpl::new(tracker, consensus_provider);
     }
 }
 
@@ -184,6 +188,14 @@ impl RuntimeInterface for MockRuntimeInterface {
         }
     }
 
+    fn consensus_invoke(&self, action: ConsensusAction) -> Result<InvokeResult, RuntimeError> {
+        self.add_call("consensus_invoke");
+        match self.invoke_result.read().unwrap().as_ref() {
+            Some(result) => Ok(result.clone()),
+            None => self.inner.consensus_invoke(action),
+        }
+    }
+
     fn generate_uuid(&self) -> Result<[u8; 32], RuntimeError> {
         self.add_call("generate_uuid");
         self.inner.generate_uuid()
@@ -197,5 +209,14 @@ impl RuntimeInterface for MockRuntimeInterface {
     fn finalize(&self) -> Result<FinalizeResult, RuntimeError> {
         self.add_call("finalize");
         self.inner.finalize()
+    }
+}
+
+#[derive(Debug, Clone, Default)]
+pub struct MockConsensusProvider {}
+
+impl ConsensusProvider for MockConsensusProvider {
+    fn current_epoch(&self) -> u64 {
+        0_u64
     }
 }

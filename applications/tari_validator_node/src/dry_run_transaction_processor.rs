@@ -50,6 +50,7 @@ use tari_engine_types::{commit_result::FinalizeResult, substate::Substate};
 use thiserror::Error;
 
 use crate::{
+    consensus_provider::TariDanConsensusProvider,
     p2p::{
         proto::rpc::VnStateSyncResponse,
         services::{
@@ -80,7 +81,7 @@ pub enum DryRunTransactionProcessorError {
 #[derive(Clone)]
 pub struct DryRunTransactionProcessor {
     epoch_manager: EpochManagerHandle,
-    payload_processor: TariDanPayloadProcessor<TemplateManager>,
+    payload_processor: TariDanPayloadProcessor<TemplateManager, TariDanConsensusProvider>,
     shard_store: SqliteShardStore,
     validator_node_client_factory: TariCommsValidatorNodeClientFactory,
     node_identity: Arc<NodeIdentity>,
@@ -89,7 +90,7 @@ pub struct DryRunTransactionProcessor {
 impl DryRunTransactionProcessor {
     pub fn new(
         epoch_manager: EpochManagerHandle,
-        payload_processor: TariDanPayloadProcessor<TemplateManager>,
+        payload_processor: TariDanPayloadProcessor<TemplateManager, TariDanConsensusProvider>,
         shard_store: SqliteShardStore,
         validator_node_client_factory: TariCommsValidatorNodeClientFactory,
         node_identity: Arc<NodeIdentity>,
