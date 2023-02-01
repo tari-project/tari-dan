@@ -26,7 +26,7 @@ use tari_bor::{borsh, Decode, Encode};
 
 use crate::{hash::HashParseError, models::TemplateAddress, Hash};
 
-#[derive(Debug, Clone, Copy, Hash, PartialEq, Eq, Encode, Decode)]
+#[derive(Debug, Clone, Copy, Hash, PartialEq, Eq, PartialOrd, Ord, Encode, Decode)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct ComponentAddress(Hash);
 

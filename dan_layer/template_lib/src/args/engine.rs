@@ -258,6 +258,7 @@ impl BucketRef {
 pub enum BucketAction {
     Create,
     GetResourceAddress,
+    GetResourceType,
     GetAmount,
     Take,
     Burn,

@@ -56,7 +56,7 @@ pub fn generate_template(input: TokenStream) -> Result<TokenStream> {
         #dispatcher
     };
 
-    // eprintln!("output = {}", output.to_string());
+    // eprintln!("output = {}", output);
 
     Ok(output)
 }
