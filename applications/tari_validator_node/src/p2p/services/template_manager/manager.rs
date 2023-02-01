@@ -20,11 +20,14 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use std::{collections::HashMap, fs};
+use std::{collections::HashMap, convert::TryFrom, fs};
 
-use log::info;
+use log::*;
 use tari_dan_core::services::TemplateProvider;
-use tari_dan_engine::wasm::WasmModule;
+use tari_dan_engine::{
+    packager::{LoadedTemplate, TemplateModuleLoader},
+    wasm::WasmModule,
+};
 use tari_dan_storage::global::{DbTemplate, DbTemplateUpdate, GlobalDb, TemplateStatus};
 use tari_dan_storage_sqlite::global::SqliteGlobalDbAdapter;
 use tari_engine_types::calculate_template_binary_hash;
@@ -103,6 +106,7 @@ pub struct TemplateManager {
     global_db: GlobalDb<SqliteGlobalDbAdapter>,
     config: TemplateConfig,
     builtin_templates: HashMap<TemplateAddress, Template>,
+    cache: mini_moka::sync::Cache<TemplateAddress, LoadedTemplate>,
 }
 
 impl TemplateManager {
@@ -112,8 +116,12 @@ impl TemplateManager {
 
         Self {
             global_db,
-            config,
             builtin_templates,
+            cache: mini_moka::sync::Cache::builder()
+                .weigher(|_, t: &LoadedTemplate| u32::try_from(t.code_size()).unwrap_or(u32::MAX))
+                .max_capacity(config.max_cache_size_bytes())
+                .build(),
+            config,
         }
     }
 
@@ -239,10 +247,20 @@ impl TemplateManager {
 
 impl TemplateProvider for TemplateManager {
     type Error = TemplateManagerError;
-    type Template = WasmModule;
+    type Template = LoadedTemplate;
 
     fn get_template_module(&self, address: &TemplateAddress) -> Result<Self::Template, Self::Error> {
+        if let Some(template) = self.cache.get(address) {
+            debug!(target: LOG_TARGET, "CACHE HIT: Template {}", address);
+            return Ok(template);
+        }
+
         let template = self.fetch_template(address)?;
-        Ok(WasmModule::from_code(template.compiled_code))
+        debug!(target: LOG_TARGET, "CACHE MISS: Template {}", address);
+        let module = WasmModule::from_code(template.compiled_code);
+        let loaded = module.load_template()?;
+        self.cache.insert(*address, loaded.clone());
+
+        Ok(loaded)
     }
 }
