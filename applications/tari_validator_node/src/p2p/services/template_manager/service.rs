@@ -25,7 +25,6 @@ use std::convert::TryFrom;
 use log::*;
 use tari_common_types::types::FixedHash;
 use tari_dan_core::services::TemplateProvider;
-use tari_dan_engine::packager::TemplateModuleLoader;
 use tari_dan_storage::global::{DbTemplateUpdate, TemplateStatus};
 use tari_engine_types::calculate_template_binary_hash;
 use tari_shutdown::ShutdownSignal;
@@ -126,8 +125,7 @@ impl TemplateManagerService {
     }
 
     fn handle_load_template_abi(&mut self, address: TemplateAddress) -> Result<TemplateAbi, TemplateManagerError> {
-        let template = self.manager.get_template_module(&address)?;
-        let loaded = template.load_template()?;
+        let loaded = self.manager.get_template_module(&address)?;
         Ok(TemplateAbi {
             template_name: loaded.template_def().template_name.clone(),
             functions: loaded

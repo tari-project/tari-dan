@@ -27,6 +27,16 @@ pub use tari_template_macros::template;
 pub use crate::{
     component::ComponentManager,
     consensus::Consensus,
-    models::{Amount, Bucket, BucketId, Metadata, NonFungible, NonFungibleId, ResourceAddress, Vault},
+    models::{
+        Amount,
+        Bucket,
+        BucketId,
+        ComponentAddress,
+        Metadata,
+        NonFungible,
+        NonFungibleId,
+        ResourceAddress,
+        Vault,
+    },
     resource::{ResourceBuilder, ResourceManager, ResourceType},
 };

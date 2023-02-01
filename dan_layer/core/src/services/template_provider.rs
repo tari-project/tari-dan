@@ -20,11 +20,10 @@
 //   WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //   USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use tari_dan_engine::packager::TemplateModuleLoader;
 use tari_engine_types::TemplateAddress;
 
 pub trait TemplateProvider {
-    type Template: TemplateModuleLoader;
+    type Template;
     type Error: std::error::Error + Sync + Send + 'static;
 
     fn get_template_module(&self, id: &TemplateAddress) -> Result<Self::Template, Self::Error>;

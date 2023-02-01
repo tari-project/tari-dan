@@ -31,7 +31,7 @@ use tari_dan_core::{
     services::{PayloadProcessor, PayloadProcessorError, TemplateProvider},
 };
 use tari_dan_engine::{
-    packager::{Package, TemplateModuleLoader},
+    packager::{LoadedTemplate, Package},
     runtime::{ConsensusProvider, IdProvider, RuntimeInterfaceImpl, StateTracker},
     state_store::{memory::MemoryStateStore, AtomicDb, StateReader, StateStoreError, StateWriter},
     transaction::{TransactionError, TransactionProcessor},
@@ -61,7 +61,7 @@ impl<TTemplateProvider, TConsensusProvider> TariDanPayloadProcessor<TTemplatePro
 impl<TTemplateProvider, TConsensusProvider> PayloadProcessor<TariDanPayload>
     for TariDanPayloadProcessor<TTemplateProvider, TConsensusProvider>
 where
-    TTemplateProvider: TemplateProvider,
+    TTemplateProvider: TemplateProvider<Template = LoadedTemplate>,
     TConsensusProvider: ConsensusProvider + 'static,
 {
     fn process_payload(
@@ -89,10 +89,7 @@ where
                 .template_provider
                 .get_template_module(&addr)
                 .map_err(|err| PayloadProcessorError::FailedToLoadTemplate(err.into()))?;
-            let loaded_template = template
-                .load_template()
-                .map_err(|err| PayloadProcessorError::FailedToLoadTemplate(err.into()))?;
-            builder.add_template(addr, loaded_template);
+            builder.add_template(addr, template);
         }
         let package = builder.build();
 

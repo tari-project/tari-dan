@@ -51,7 +51,7 @@ impl Default for MockRuntimeInterface {
         // TODO: We use a zero transaction hash for tests, however this isn't correct and won't always work.
         let tx_hash = Hash::default();
         let state = MemoryStateStore::default();
-        let tracker = StateTracker::new(state.clone(), IdProvider::new(tx_hash, 100));
+        let tracker = StateTracker::new(state.clone(), IdProvider::new(tx_hash, 1000));
         let consensus_provider = MockConsensusProvider::default();
         Self {
             state,
@@ -91,7 +91,7 @@ impl MockRuntimeInterface {
     }
 
     pub fn reset_runtime(&mut self) {
-        let tracker = StateTracker::new(self.state.clone(), IdProvider::new(Hash::default(), 100));
+        let tracker = StateTracker::new(self.state.clone(), IdProvider::new(Hash::default(), 1000));
         let consensus_provider = MockConsensusProvider::default();
         self.inner = RuntimeInterfaceImpl::new(tracker, consensus_provider);
     }
