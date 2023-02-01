@@ -43,6 +43,7 @@ pub struct MockRuntimeInterface {
     calls: Arc<RwLock<Vec<&'static str>>>,
     invoke_result: Arc<RwLock<Option<InvokeResult>>>,
     inner: RuntimeInterfaceImpl<MockConsensusProvider>,
+    consensus_provider_data: Arc<RwLock<MockConsensusProviderData>>,
 }
 
 impl Default for MockRuntimeInterface {
@@ -56,7 +57,8 @@ impl Default for MockRuntimeInterface {
             state,
             calls: Arc::new(RwLock::new(vec![])),
             invoke_result: Arc::new(RwLock::new(None)),
-            inner: RuntimeInterfaceImpl::new(tracker, consensus_provider),
+            inner: RuntimeInterfaceImpl::new(tracker, consensus_provider.clone()),
+            consensus_provider_data: consensus_provider.get_provider_data(),
         }
     }
 }
@@ -82,6 +84,10 @@ impl MockRuntimeInterface {
     pub fn set_invoke_result(&self, result: InvokeResult) -> &Self {
         *self.invoke_result.write().unwrap() = Some(result);
         self
+    }
+
+    pub fn get_consensus_provider_data(&self) -> Arc<RwLock<MockConsensusProviderData>> {
+        self.consensus_provider_data.clone()
     }
 
     pub fn reset_runtime(&mut self) {
@@ -213,10 +219,24 @@ impl RuntimeInterface for MockRuntimeInterface {
 }
 
 #[derive(Debug, Clone, Default)]
-pub struct MockConsensusProvider {}
+pub struct MockConsensusProvider {
+    pub data: Arc<RwLock<MockConsensusProviderData>>,
+}
+
+impl MockConsensusProvider {
+    fn get_provider_data(&self) -> Arc<RwLock<MockConsensusProviderData>> {
+        self.data.clone()
+    }
+}
 
 impl ConsensusProvider for MockConsensusProvider {
     fn current_epoch(&self) -> u64 {
-        0_u64
+        let data = self.data.read().unwrap();
+        data.current_epoch
     }
+}
+
+#[derive(Debug, Clone, Default)]
+pub struct MockConsensusProviderData {
+    pub current_epoch: u64,
 }

@@ -31,6 +31,7 @@ use tari_template_lib::{
 use tari_transaction_manifest::{parse_manifest, ManifestValue};
 
 use super::MockRuntimeInterface;
+use crate::MockConsensusProviderData;
 
 pub struct TemplateTest<R> {
     package: Package,
@@ -76,6 +77,12 @@ impl TemplateTest<MockRuntimeInterface> {
             runtime_interface,
             last_outputs: HashSet::new(),
         }
+    }
+
+    pub fn set_consensus_provider_data(&self, data: MockConsensusProviderData) {
+        let binding = self.runtime_interface.get_consensus_provider_data();
+        let mut guard = binding.write().unwrap();
+        *guard = data
     }
 
     pub fn read_only_state_store(&self) -> ReadOnlyStateStore {
