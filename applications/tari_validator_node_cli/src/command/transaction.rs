@@ -41,7 +41,7 @@ use tari_engine_types::{
 use tari_template_lib::{
     arg,
     args::Arg,
-    models::{Amount, NonFungibleId},
+    models::{Amount, NonFungibleAddress, NonFungibleId},
     prelude::ResourceAddress,
 };
 use tari_transaction_manifest::parse_manifest;
@@ -237,7 +237,7 @@ pub async fn submit_transaction(
         common
             .non_fungible_mint_outputs
             .into_iter()
-            .map(|m| ShardId::from_address(&SubstateAddress::NonFungible(m.resource_address, m.non_fungible_id), 0)),
+            .map(|m| ShardId::from_address(&m.to_substate_address(), 0)),
     );
 
     // Convert to shard id
@@ -597,8 +597,17 @@ impl CliArg {
 
 #[derive(Debug, Clone)]
 pub struct SpecificNonFungibleMintOutput {
-    pub resource_address: ResourceAddress,
-    pub non_fungible_id: NonFungibleId,
+    resource_address: ResourceAddress,
+    non_fungible_id: NonFungibleId,
+}
+
+impl SpecificNonFungibleMintOutput {
+    pub fn to_substate_address(&self) -> SubstateAddress {
+        SubstateAddress::NonFungible(NonFungibleAddress::new(
+            self.resource_address,
+            self.non_fungible_id.clone(),
+        ))
+    }
 }
 
 impl FromStr for SpecificNonFungibleMintOutput {

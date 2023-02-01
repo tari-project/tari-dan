@@ -198,7 +198,9 @@ impl RuntimeInterface for RuntimeInterfaceImpl {
                             reason: "GetNonFungible resource action requires a resource address".to_string(),
                         })?;
                 let arg: ResourceGetNonFungibleArg = args.get(0)?;
-                let nf_container = self.tracker.get_non_fungible(&resource_address, &arg.id)?;
+                let nf_container = self
+                    .tracker
+                    .get_non_fungible(&NonFungibleAddress::new(resource_address, arg.id.clone()))?;
                 if nf_container.is_burnt() {
                     return Err(RuntimeError::InvalidOpNonFungibleBurnt {
                         op: "GetNonFungible",
@@ -219,7 +221,8 @@ impl RuntimeInterface for RuntimeInterfaceImpl {
                             reason: "UpdateNonFungibleData resource action requires a resource address".to_string(),
                         })?;
                 let arg: ResourceUpdateNonFungibleDataArg = args.get(0)?;
-                self.tracker.set_non_fungible_data(resource_address, arg.id, arg.data)?;
+                self.tracker
+                    .set_non_fungible_data(&NonFungibleAddress::new(resource_address, arg.id), arg.data)?;
 
                 Ok(InvokeResult::unit())
             },
@@ -420,9 +423,7 @@ impl RuntimeInterface for RuntimeInterfaceImpl {
     ) -> Result<InvokeResult, RuntimeError> {
         match action {
             NonFungibleAction::GetData => {
-                let container = self
-                    .tracker
-                    .get_non_fungible(nf_addr.resource_address(), nf_addr.id())?;
+                let container = self.tracker.get_non_fungible(&nf_addr)?;
                 let contents = container
                     .contents()
                     .ok_or_else(|| RuntimeError::InvalidOpNonFungibleBurnt {
@@ -434,9 +435,7 @@ impl RuntimeInterface for RuntimeInterfaceImpl {
                 Ok(InvokeResult::raw(contents.data().to_vec()))
             },
             NonFungibleAction::GetMutableData => {
-                let container = self
-                    .tracker
-                    .get_non_fungible(nf_addr.resource_address(), nf_addr.id())?;
+                let container = self.tracker.get_non_fungible(&nf_addr)?;
                 let contents = container
                     .contents()
                     .ok_or_else(|| RuntimeError::InvalidOpNonFungibleBurnt {

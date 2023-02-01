@@ -87,7 +87,7 @@ impl ComponentManager {
                 },
                 addr @ SubstateAddress::Resource(_) |
                 addr @ SubstateAddress::Vault(_) |
-                addr @ SubstateAddress::NonFungible(_, _) => {
+                addr @ SubstateAddress::NonFungible(_) => {
                     children.push(VersionedSubstateAddress {
                         address: addr.clone(),
                         version: substate.version(),
