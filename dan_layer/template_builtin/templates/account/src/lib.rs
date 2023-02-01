@@ -20,9 +20,6 @@
 //   WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //   USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-// The Github CI tries to fmt and check inside the templates folder
-#![allow(clippy::all)]
-
 use tari_template_lib::prelude::*;
 
 #[template]
@@ -36,6 +33,7 @@ mod account_template {
     }
 
     impl Account {
+        #[allow(clippy::new_without_default)]
         pub fn new() -> Self {
             Self { vaults: Vec::new() }
         }

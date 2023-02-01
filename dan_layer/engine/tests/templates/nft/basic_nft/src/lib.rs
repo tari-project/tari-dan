@@ -46,7 +46,7 @@ mod sparkle_nft_template {
             ];
             let bucket = ResourceBuilder::non_fungible()
                 .with_token_symbol("SPKL")
-                .with_tokens(tokens)
+                .with_non_fungibles(tokens)
                 .build_bucket();
 
             Self {
