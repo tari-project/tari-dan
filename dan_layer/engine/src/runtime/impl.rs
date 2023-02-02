@@ -33,6 +33,7 @@ use tari_template_lib::{
         BucketRef,
         ComponentAction,
         ComponentRef,
+        ConsensusAction,
         CreateResourceArg,
         InvokeResult,
         LogLevel,
@@ -49,16 +50,24 @@ use tari_template_lib::{
     models::{BucketId, ComponentAddress, ComponentHeader, NonFungibleAddress, ResourceAddress, VaultRef},
 };
 
-use crate::runtime::{engine_args::EngineArgs, tracker::StateTracker, RuntimeError, RuntimeInterface, RuntimeState};
+use crate::runtime::{
+    engine_args::EngineArgs,
+    tracker::StateTracker,
+    ConsensusContext,
+    RuntimeError,
+    RuntimeInterface,
+    RuntimeState,
+};
 
 #[derive(Debug, Clone)]
 pub struct RuntimeInterfaceImpl {
     tracker: StateTracker,
+    consensus: ConsensusContext,
 }
 
 impl RuntimeInterfaceImpl {
-    pub fn new(tracker: StateTracker) -> Self {
-        RuntimeInterfaceImpl { tracker }
+    pub fn new(tracker: StateTracker, consensus: ConsensusContext) -> Self {
+        Self { tracker, consensus }
     }
 }
 
@@ -447,6 +456,12 @@ impl RuntimeInterface for RuntimeInterfaceImpl {
 
                 Ok(InvokeResult::raw(contents.mutable_data().to_vec()))
             },
+        }
+    }
+
+    fn consensus_invoke(&self, action: ConsensusAction) -> Result<InvokeResult, RuntimeError> {
+        match action {
+            ConsensusAction::GetCurrentEpoch => Ok(InvokeResult::encode(&self.consensus.current_epoch)?),
         }
     }
 

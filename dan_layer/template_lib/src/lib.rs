@@ -27,8 +27,8 @@ pub use hash::Hash;
 pub mod args;
 pub mod models;
 
-pub mod chain_time;
 pub mod component;
+pub mod consensus;
 
 mod context;
 pub use context::{get_context, init_context, AbiContext};

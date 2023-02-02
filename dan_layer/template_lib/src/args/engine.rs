@@ -297,3 +297,14 @@ pub enum NonFungibleAction {
     GetData,
     GetMutableData,
 }
+
+// -------------------------------- Consensus -------------------------------- //
+#[derive(Clone, Debug, Decode, Encode)]
+pub struct ConsensusInvokeArg {
+    pub action: ConsensusAction,
+}
+
+#[derive(Clone, Debug, Decode, Encode)]
+pub enum ConsensusAction {
+    GetCurrentEpoch,
+}

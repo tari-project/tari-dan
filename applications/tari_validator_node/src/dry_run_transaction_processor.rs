@@ -44,7 +44,7 @@ use tari_dan_core::{
         StorageError,
     },
 };
-use tari_dan_engine::transaction::Transaction;
+use tari_dan_engine::{runtime::ConsensusContext, transaction::Transaction};
 use tari_dan_storage_sqlite::sqlite_shard_store_factory::SqliteShardStore;
 use tari_engine_types::{commit_result::FinalizeResult, substate::Substate};
 use thiserror::Error;
@@ -127,8 +127,17 @@ impl DryRunTransactionProcessor {
         }
 
         // execute the payload in the WASM engine and return the result
-        let result = self.payload_processor.process_payload(payload, shard_pledges)?;
+        let consensus_context = self.get_consensus_context().await?;
+        let result = self
+            .payload_processor
+            .process_payload(payload, shard_pledges, consensus_context)?;
         Ok(result)
+    }
+
+    async fn get_consensus_context(&self) -> Result<ConsensusContext, DryRunTransactionProcessorError> {
+        let current_epoch = self.epoch_manager.current_epoch().await?.as_u64();
+        let consensus_context = ConsensusContext { current_epoch };
+        Ok(consensus_context)
     }
 
     async fn get_local_pledges(

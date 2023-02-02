@@ -25,6 +25,7 @@ use std::{
     time::Duration,
 };
 
+use futures::executor::block_on;
 use log::*;
 use tari_common_types::types::{FixedHash, PublicKey, Signature};
 use tari_core::{ValidatorNodeMmr, ValidatorNodeMmrHasherBlake256};
@@ -43,6 +44,7 @@ use tari_dan_common_types::{
     SubstateState,
     TreeNodeHash,
 };
+use tari_dan_engine::runtime::ConsensusContext;
 use tari_engine_types::{
     commit_result::{FinalizeResult, RejectReason, TransactionResult},
     substate::SubstateDiff,
@@ -1310,8 +1312,17 @@ where
             );
         }
 
-        let finalize_result = self.payload_processor.process_payload(payload, pledges)?;
+        let consensus_context = self.get_consensus_context()?;
+        let finalize_result = self
+            .payload_processor
+            .process_payload(payload, pledges, consensus_context)?;
         Ok(finalize_result)
+    }
+
+    fn get_consensus_context(&self) -> Result<ConsensusContext, HotStuffError> {
+        let current_epoch = block_on(self.epoch_manager.current_epoch())?.as_u64();
+        let consensus_context = ConsensusContext { current_epoch };
+        Ok(consensus_context)
     }
 
     async fn get_leader(&self, node: &HotStuffTreeNode<TAddr, TPayload>) -> Result<TAddr, HotStuffError> {

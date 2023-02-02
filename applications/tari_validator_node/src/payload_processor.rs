@@ -32,7 +32,7 @@ use tari_dan_core::{
 };
 use tari_dan_engine::{
     packager::{LoadedTemplate, Package},
-    runtime::{IdProvider, RuntimeInterfaceImpl, StateTracker},
+    runtime::{ConsensusContext, IdProvider, RuntimeInterfaceImpl, StateTracker},
     state_store::{memory::MemoryStateStore, AtomicDb, StateReader, StateStoreError, StateWriter},
     transaction::{TransactionError, TransactionProcessor},
     wasm::WasmExecutionError,
@@ -61,6 +61,7 @@ where TTemplateProvider: TemplateProvider<Template = LoadedTemplate>
         &self,
         payload: TariDanPayload,
         pledges: HashMap<ShardId, ObjectPledge>,
+        consensus: ConsensusContext,
     ) -> Result<FinalizeResult, PayloadProcessorError> {
         let transaction = payload.into_payload();
         let mut template_addresses = HashSet::<_, RandomState>::from_iter(transaction.required_templates());
@@ -74,8 +75,7 @@ where TTemplateProvider: TemplateProvider<Template = LoadedTemplate>
         // Execution will fail if more than 64 new addresses are created
         let id_provider = IdProvider::new(*transaction.hash(), 64);
         let tracker = StateTracker::new(state_db, id_provider);
-        let runtime = RuntimeInterfaceImpl::new(tracker);
-
+        let runtime = RuntimeInterfaceImpl::new(tracker, consensus);
         let mut builder = Package::builder();
 
         for addr in template_addresses {
