@@ -13,6 +13,7 @@ use tari_crypto::ristretto::RistrettoSecretKey;
 use tari_dan_engine::{
     crypto::create_key_pair,
     packager::{LoadedTemplate, Package, TemplateModuleLoader},
+    runtime::ConsensusContext,
     state_store::{memory::MemoryStateStore, AtomicDb, StateReader, StateStoreError, StateWriter},
     transaction::{Transaction, TransactionError, TransactionProcessor},
     wasm::{compile::compile_template, LoadedWasmTemplate, WasmModule},
@@ -25,6 +26,7 @@ use tari_engine_types::{
 };
 use tari_template_builtin::{get_template_builtin, ACCOUNT_TEMPLATE_ADDRESS};
 use tari_template_lib::{
+    args,
     args::Arg,
     models::{ComponentAddress, ComponentHeader, TemplateAddress},
 };
@@ -76,6 +78,11 @@ impl TemplateTest<MockRuntimeInterface> {
             runtime_interface,
             last_outputs: HashSet::new(),
         }
+    }
+
+    pub fn set_consensus_context(&mut self, consensus: ConsensusContext) {
+        self.runtime_interface.set_consensus_context(consensus);
+        self.processor = TransactionProcessor::new(self.runtime_interface.clone(), self.package.clone());
     }
 
     pub fn read_only_state_store(&self) -> ReadOnlyStateStore {
@@ -142,6 +149,10 @@ impl TemplateTest<MockRuntimeInterface> {
             }])
             .unwrap();
         result.execution_results[0].decode().unwrap()
+    }
+
+    pub fn create_account(&mut self) -> ComponentAddress {
+        self.call_function("Account", "new", args![])
     }
 
     pub fn call_method<T>(&mut self, component_address: ComponentAddress, method_name: &str, args: Vec<Arg>) -> T

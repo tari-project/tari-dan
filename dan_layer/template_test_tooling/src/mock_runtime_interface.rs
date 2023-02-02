@@ -6,6 +6,7 @@ use std::sync::{Arc, RwLock};
 
 use tari_dan_engine::{
     runtime::{
+        ConsensusContext,
         EngineArgs,
         IdProvider,
         RuntimeError,
@@ -23,6 +24,7 @@ use tari_template_lib::{
         BucketRef,
         ComponentAction,
         ComponentRef,
+        ConsensusAction,
         InvokeResult,
         LogLevel,
         NonFungibleAction,
@@ -34,6 +36,8 @@ use tari_template_lib::{
     models::{ComponentAddress, ComponentHeader, NonFungibleAddress, ResourceAddress, VaultRef},
     Hash,
 };
+
+const MAX_IDS: u32 = 1000;
 
 #[derive(Debug, Clone)]
 pub struct MockRuntimeInterface {
@@ -48,12 +52,12 @@ impl Default for MockRuntimeInterface {
         // TODO: We use a zero transaction hash for tests, however this isn't correct and won't always work.
         let tx_hash = Hash::default();
         let state = MemoryStateStore::default();
-        let tracker = StateTracker::new(state.clone(), IdProvider::new(tx_hash, 1000));
+        let tracker = StateTracker::new(state.clone(), IdProvider::new(tx_hash, MAX_IDS));
         Self {
             state,
             calls: Arc::new(RwLock::new(vec![])),
             invoke_result: Arc::new(RwLock::new(None)),
-            inner: RuntimeInterfaceImpl::new(tracker),
+            inner: RuntimeInterfaceImpl::new(tracker, ConsensusContext::default()),
         }
     }
 }
@@ -81,9 +85,14 @@ impl MockRuntimeInterface {
         self
     }
 
+    pub fn set_consensus_context(&mut self, consensus: ConsensusContext) {
+        let tracker = StateTracker::new(self.state.clone(), IdProvider::new(Hash::default(), MAX_IDS));
+        self.inner = RuntimeInterfaceImpl::new(tracker, consensus);
+    }
+
     pub fn reset_runtime(&mut self) {
-        let tracker = StateTracker::new(self.state.clone(), IdProvider::new(Hash::default(), 1000));
-        self.inner = RuntimeInterfaceImpl::new(tracker);
+        let tracker = StateTracker::new(self.state.clone(), IdProvider::new(Hash::default(), MAX_IDS));
+        self.inner = RuntimeInterfaceImpl::new(tracker, ConsensusContext::default());
     }
 }
 
@@ -181,6 +190,14 @@ impl RuntimeInterface for MockRuntimeInterface {
         match self.invoke_result.read().unwrap().as_ref() {
             Some(result) => Ok(result.clone()),
             None => self.inner.non_fungible_invoke(nf_addr, action, args),
+        }
+    }
+
+    fn consensus_invoke(&self, action: ConsensusAction) -> Result<InvokeResult, RuntimeError> {
+        self.add_call("consensus_invoke");
+        match self.invoke_result.read().unwrap().as_ref() {
+            Some(result) => Ok(result.clone()),
+            None => self.inner.consensus_invoke(action),
         }
     }
 

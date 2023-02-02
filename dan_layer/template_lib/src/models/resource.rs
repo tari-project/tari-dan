@@ -28,7 +28,7 @@ use tari_template_abi::rust::{
 
 use crate::{hash::HashParseError, Hash};
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Encode, Decode)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Encode, Decode)]
 #[cfg_attr(feature = "serde", derive(serde::Deserialize, serde::Serialize))]
 pub struct ResourceAddress(Hash);
 

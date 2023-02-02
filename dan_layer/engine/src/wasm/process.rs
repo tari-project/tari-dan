@@ -28,6 +28,7 @@ use tari_template_lib::{
         Arg,
         BucketInvokeArg,
         ComponentInvokeArg,
+        ConsensusInvokeArg,
         EmitLogArg,
         LogLevel,
         NonFungibleInvokeArg,
@@ -135,6 +136,9 @@ impl WasmProcess {
             EngineOp::GenerateUniqueId => {
                 Self::handle(env, arg, |env, _arg: ()| env.state().interface().generate_uuid())
             },
+            EngineOp::ConsensusInvoke => Self::handle(env, arg, |env, arg: ConsensusInvokeArg| {
+                env.state().interface().consensus_invoke(arg.action)
+            }),
         };
 
         result.unwrap_or_else(|err| {

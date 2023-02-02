@@ -165,8 +165,8 @@ fn test_account() {
         .unwrap();
 
     // Create sender and receiver accounts
-    let sender_address: ComponentAddress = template_test.call_function("Account", "new", args![]);
-    let receiver_address: ComponentAddress = template_test.call_function("Account", "new", args![]);
+    let sender_address: ComponentAddress = template_test.create_account();
+    let receiver_address: ComponentAddress = template_test.create_account();
 
     let _result = template_test
         .execute_and_commit(vec![
@@ -313,6 +313,28 @@ mod errors {
     }
 }
 
+mod consensus {
+    use tari_dan_engine::runtime::ConsensusContext;
+
+    use super::*;
+
+    #[test]
+    fn current_epoch() {
+        let mut template_test = TemplateTest::new(vec!["tests/templates/consensus"]);
+
+        // the default value for a current epoch in the mocks is 0
+        let result: u64 = template_test.call_function("TestConsensus", "current_epoch", args![]);
+        assert_eq!(result, 0);
+
+        // set the value of current epoch to "1" and call the template function again to check that it reads the new
+        // value
+        let new_consensus_context = ConsensusContext { current_epoch: 1 };
+        template_test.set_consensus_context(new_consensus_context);
+        let result: u64 = template_test.call_function("TestConsensus", "current_epoch", args![]);
+        assert_eq!(result, 1);
+    }
+}
+
 mod fungible {
     use super::*;
 
@@ -398,7 +420,7 @@ mod basic_nft {
     ) {
         let mut template_test = TemplateTest::new(vec!["tests/templates/nft/basic_nft"]);
 
-        let account_address: ComponentAddress = template_test.call_function("Account", "new", args![]);
+        let account_address: ComponentAddress = template_test.create_account();
         let nft_component: ComponentAddress = template_test.call_function("SparkleNft", "new", args![]);
 
         let nft_resx = template_test.get_previous_output_address(SubstateType::Resource);
@@ -778,7 +800,7 @@ mod emoji_id {
         let mut template_test = TemplateTest::new(vec!["tests/templates/faucet", "tests/templates/nft/emoji_id"]);
 
         // create an account
-        let account_address: ComponentAddress = template_test.call_function("Account", "new", args![]);
+        let account_address: ComponentAddress = template_test.create_account();
 
         // create a fungible token faucet, we are going to use those tokens as payments
         // TODO: use Thaums instead when they're implemented
@@ -912,7 +934,7 @@ mod tickets {
         let mut template_test = TemplateTest::new(vec!["tests/templates/faucet", "tests/templates/nft/tickets"]);
 
         // create an account
-        let account_address: ComponentAddress = template_test.call_function("Account", "new", args![]);
+        let account_address: ComponentAddress = template_test.create_account();
 
         // create a fungible token faucet, we are going to use those tokens as payments
         // TODO: use Thaums instead when they're implemented

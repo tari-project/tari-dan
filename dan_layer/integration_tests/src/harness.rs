@@ -19,6 +19,7 @@ use tari_dan_core::{
     },
     workers::{hotstuff_error::HotStuffError, hotstuff_waiter::HotStuffWaiter, pacemaker_worker::Pacemaker},
 };
+use tari_dan_engine::runtime::ConsensusContext;
 use tari_engine_types::{
     commit_result::{FinalizeResult, RejectReason, TransactionResult},
     substate::SubstateDiff,
@@ -53,6 +54,7 @@ impl PayloadProcessor<TariDanPayload> for PayloadProcessorListener {
         &self,
         payload: TariDanPayload,
         pledges: HashMap<ShardId, ObjectPledge>,
+        _consensus: ConsensusContext,
     ) -> Result<FinalizeResult, PayloadProcessorError> {
         self.sender.send((payload, pledges)).unwrap();
         Ok(FinalizeResult::new(
@@ -76,6 +78,7 @@ impl PayloadProcessor<TariDanPayload> for NullPayloadProcessor {
         &self,
         payload: TariDanPayload,
         _pledges: HashMap<ShardId, ObjectPledge>,
+        _consensus: ConsensusContext,
     ) -> Result<FinalizeResult, PayloadProcessorError> {
         Ok(FinalizeResult::new(
             payload.to_id().into_array().into(),
