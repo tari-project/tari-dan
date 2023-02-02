@@ -20,19 +20,30 @@
 //   WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //   USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use tari_bor::{borsh, decode, encode, Decode, Encode};
+use std::collections::BTreeSet;
+
+use tari_bor::{borsh, Decode, Encode};
 use tari_template_abi::rust::{
     collections::HashMap,
     fmt::{Display, Formatter},
-    io,
     str::FromStr,
 };
 
 use crate::{
-    models::{Amount, BucketId, ComponentAddress, Metadata, NonFungible, NonFungibleId, ResourceAddress, VaultRef},
+    models::{
+        Amount,
+        BucketId,
+        ComponentAddress,
+        Metadata,
+        NonFungibleAddress,
+        NonFungibleId,
+        ResourceAddress,
+        VaultRef,
+    },
     resource::ResourceType,
 };
 
+// -------------------------------- LOGS -------------------------------- //
 #[derive(Debug, Clone, Encode, Decode)]
 pub struct EmitLogArg {
     pub message: String,
@@ -84,6 +95,7 @@ impl Display for LogLevelParseError {
 
 impl std::error::Error for LogLevelParseError {}
 
+// -------------------------------- Component -------------------------------- //
 #[derive(Debug, Clone, Encode, Decode)]
 pub struct ComponentInvokeArg {
     pub component_ref: ComponentRef,
@@ -113,6 +125,7 @@ impl ComponentRef {
     }
 }
 
+// -------------------------------- Resource -------------------------------- //
 #[derive(Clone, Debug, Decode, Encode)]
 pub struct ResourceInvokeArg {
     pub resource_ref: ResourceRef,
@@ -148,7 +161,6 @@ pub enum ResourceAction {
     GetNonFungible,
     Create,
     Mint,
-    Burn,
     Deposit,
     Withdraw,
     UpdateNonFungibleData,
@@ -160,7 +172,7 @@ pub enum MintArg {
         amount: Amount,
     },
     NonFungible {
-        tokens: HashMap<NonFungibleId, NonFungible>,
+        tokens: HashMap<NonFungibleId, (Vec<u8>, Vec<u8>)>,
     },
 }
 
@@ -187,31 +199,7 @@ pub struct ResourceUpdateNonFungibleDataArg {
     pub data: Vec<u8>,
 }
 
-#[derive(Clone, Debug, Decode, Encode)]
-pub struct InvokeResult(Result<Vec<u8>, String>);
-
-impl InvokeResult {
-    pub fn encode<T: Encode>(output: &T) -> io::Result<Self> {
-        let output = encode(output)?;
-        Ok(Self(Ok(output)))
-    }
-
-    pub fn decode<T: Decode>(self) -> io::Result<T> {
-        match self.0 {
-            Ok(output) => decode(&output),
-            Err(err) => Err(io::Error::new(io::ErrorKind::Other, err)),
-        }
-    }
-
-    pub fn unwrap_decode<T: Decode>(self) -> T {
-        self.decode().unwrap()
-    }
-
-    pub fn unit() -> Self {
-        Self(Ok(encode(&()).unwrap()))
-    }
-}
-
+// -------------------------------- Vault -------------------------------- //
 #[derive(Clone, Debug, Decode, Encode)]
 pub struct VaultInvokeArg {
     pub vault_ref: VaultRef,
@@ -230,6 +218,13 @@ pub enum VaultAction {
     GetNonFungibleIds,
 }
 
+#[derive(Clone, Debug, Decode, Encode)]
+pub enum VaultWithdrawArg {
+    Fungible { amount: Amount },
+    NonFungible { ids: BTreeSet<NonFungibleId> },
+}
+
+// -------------------------------- Bucket -------------------------------- //
 #[derive(Clone, Debug, Decode, Encode)]
 pub struct BucketInvokeArg {
     pub bucket_ref: BucketRef,
@@ -263,10 +258,18 @@ impl BucketRef {
 pub enum BucketAction {
     Create,
     GetResourceAddress,
+    GetResourceType,
+    GetAmount,
     Take,
-    Drop,
+    Burn,
 }
 
+#[derive(Clone, Debug, Decode, Encode)]
+pub struct BucketBurnArg {
+    pub bucket_id: BucketId,
+}
+
+// -------------------------------- Workspace -------------------------------- //
 #[derive(Clone, Copy, Debug, Decode, Encode)]
 pub enum WorkspaceAction {
     Put,
@@ -279,4 +282,18 @@ pub enum WorkspaceAction {
 pub struct WorkspaceInvokeArg {
     pub action: WorkspaceAction,
     pub args: Vec<Vec<u8>>,
+}
+
+// -------------------------------- NonFungible -------------------------------- //
+#[derive(Clone, Debug, Decode, Encode)]
+pub struct NonFungibleInvokeArg {
+    pub address: NonFungibleAddress,
+    pub action: NonFungibleAction,
+    pub args: Vec<Vec<u8>>,
+}
+
+#[derive(Clone, Debug, Decode, Encode)]
+pub enum NonFungibleAction {
+    GetData,
+    GetMutableData,
 }

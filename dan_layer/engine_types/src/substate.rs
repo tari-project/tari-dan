@@ -34,7 +34,7 @@ use tari_template_lib::{
         ComponentAddress,
         ComponentHeader,
         LayerOneCommitmentAddress,
-        NonFungible,
+        NonFungibleAddress,
         NonFungibleId,
         ResourceAddress,
         VaultId,
@@ -43,7 +43,7 @@ use tari_template_lib::{
 };
 use tari_utilities::{hex::Hex, ByteArray};
 
-use crate::{hashing::hasher, resource::Resource, vault::Vault};
+use crate::{hashing::hasher, non_fungible::NonFungibleContainer, resource::Resource, vault::Vault};
 
 #[derive(Debug, Clone, Encode, Decode, Serialize, Deserialize)]
 pub struct Substate {
@@ -142,9 +142,11 @@ impl SubstateAddress {
         }
     }
 
-    pub fn as_non_fungible_address(&self) -> Option<(&ResourceAddress, &NonFungibleId)> {
+    pub fn as_non_fungible_address(&self) -> Option<NonFungibleAddress> {
         match self {
-            SubstateAddress::NonFungible(resource_address, nft_id) => Some((resource_address, nft_id)),
+            SubstateAddress::NonFungible(resource_address, nft_id) => {
+                Some(NonFungibleAddress::new(*resource_address, nft_id.clone()))
+            },
             _ => None,
         }
     }
@@ -181,6 +183,12 @@ impl From<ResourceAddress> for SubstateAddress {
 impl From<VaultId> for SubstateAddress {
     fn from(address: VaultId) -> Self {
         Self::Vault(address)
+    }
+}
+
+impl From<NonFungibleAddress> for SubstateAddress {
+    fn from(address: NonFungibleAddress) -> Self {
+        Self::NonFungible(*address.resource_address(), address.id().clone())
     }
 }
 
@@ -244,7 +252,7 @@ pub enum SubstateValue {
     Component(ComponentHeader),
     Resource(Resource),
     Vault(Vault),
-    NonFungible(NonFungible),
+    NonFungible(NonFungibleContainer),
     LayerOneCommitment(Commitment),
 }
 
@@ -292,7 +300,14 @@ impl SubstateValue {
         }
     }
 
-    pub fn into_non_fungible(self) -> Option<NonFungible> {
+    pub fn non_fungible(&self) -> Option<&NonFungibleContainer> {
+        match self {
+            SubstateValue::NonFungible(nft) => Some(nft),
+            _ => None,
+        }
+    }
+
+    pub fn into_non_fungible(self) -> Option<NonFungibleContainer> {
         match self {
             SubstateValue::NonFungible(nft) => Some(nft),
             _ => None,
@@ -318,8 +333,8 @@ impl From<Vault> for SubstateValue {
     }
 }
 
-impl From<NonFungible> for SubstateValue {
-    fn from(token: NonFungible) -> Self {
+impl From<NonFungibleContainer> for SubstateValue {
+    fn from(token: NonFungibleContainer) -> Self {
         Self::NonFungible(token)
     }
 }

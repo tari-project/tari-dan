@@ -32,6 +32,7 @@ use log::*;
 use serde::Serialize;
 use serde_json::{self as json, json};
 use tari_comms::{multiaddr::Multiaddr, peer_manager::NodeId, types::CommsPublicKey, CommsNode, NodeIdentity};
+use tari_comms_logging::SqliteMessageLog;
 use tari_crypto::tari_utilities::hex::Hex;
 use tari_dan_common_types::{PayloadId, QuorumCertificate, QuorumDecision, ShardId, SubstateChange};
 use tari_dan_core::{
@@ -74,6 +75,7 @@ use crate::{
     },
     registration,
     Services,
+    ValidatorNodeConfig,
 };
 
 const LOG_TARGET: &str = "tari::validator_node::json_rpc::handlers";
@@ -89,6 +91,7 @@ pub struct JsonRpcHandlers {
     base_node_client: GrpcBaseNodeClient,
     shard_store: SqliteShardStore,
     dry_run_transaction_processor: DryRunTransactionProcessor,
+    config: ValidatorNodeConfig,
 }
 
 impl JsonRpcHandlers {
@@ -96,8 +99,10 @@ impl JsonRpcHandlers {
         wallet_grpc_client: GrpcWalletClient,
         base_node_client: GrpcBaseNodeClient,
         services: &Services,
+        config: ValidatorNodeConfig,
     ) -> Self {
         Self {
+            config,
             node_identity: services.comms.node_identity(),
             wallet_grpc_client,
             mempool: services.mempool.clone(),
@@ -571,6 +576,28 @@ impl JsonRpcHandlers {
             ))
         }
     }
+
+    pub async fn get_logged_messages(&self, value: JsonRpcExtractor) -> JrpcResult {
+        let answer_id = value.get_answer_id();
+        let request = value.parse_params::<json::Value>()?;
+        let logger = SqliteMessageLog::new(&self.config.p2p.datastore_path);
+        let message_tag = request["message_tag"]
+            .as_str()
+            .map(ToString::to_string)
+            .ok_or_else(|| {
+                JsonRpcResponse::error(
+                    answer_id,
+                    JsonRpcError::new(
+                        JsonRpcErrorReason::InvalidParams,
+                        "message_tag is required".to_string(),
+                        json::Value::Null,
+                    ),
+                )
+            })?;
+        let messages = logger.get_messages_by_tag(message_tag);
+        let response = json!({ "messages": messages });
+        Ok(JsonRpcResponse::success(answer_id, response))
+    }
 }
 
 #[derive(Serialize, Debug)]
@@ -612,7 +639,10 @@ async fn wait_for_transaction_result(
 
                     return Ok(JsonRpcResponse::success(answer_id, response));
                 },
-                Ok(HotStuffEvent::Failed(err)) => {
+                Ok(HotStuffEvent::Failed(payload_id, err)) => {
+                    if payload_id.as_bytes() != hash.as_ref() {
+                        continue;
+                    }
                     // May not be our tx that failed
                     warn!(target: LOG_TARGET, "Transaction failed: {}", err);
                     return Err(JsonRpcResponse::error(

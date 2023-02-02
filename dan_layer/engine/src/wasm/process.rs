@@ -30,6 +30,7 @@ use tari_template_lib::{
         ComponentInvokeArg,
         EmitLogArg,
         LogLevel,
+        NonFungibleInvokeArg,
         ResourceInvokeArg,
         VaultInvokeArg,
         WorkspaceInvokeArg,
@@ -125,6 +126,11 @@ impl WasmProcess {
             }),
             EngineOp::WorkspaceInvoke => Self::handle(env, arg, |env, arg: WorkspaceInvokeArg| {
                 env.state().interface().workspace_invoke(arg.action, arg.args.into())
+            }),
+            EngineOp::NonFungibleInvoke => Self::handle(env, arg, |env, arg: NonFungibleInvokeArg| {
+                env.state()
+                    .interface()
+                    .non_fungible_invoke(arg.address, arg.action, arg.args.into())
             }),
             EngineOp::GenerateUniqueId => {
                 Self::handle(env, arg, |env, _arg: ()| env.state().interface().generate_uuid())

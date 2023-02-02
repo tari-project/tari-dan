@@ -134,7 +134,12 @@ pub async fn run_validator_node(config: &ApplicationConfig, shutdown_signal: Shu
     // Run the JSON-RPC API
     if let Some(address) = config.validator_node.json_rpc_address {
         info!(target: LOG_TARGET, "🌐 Started JSON-RPC server on {}", address);
-        let handlers = JsonRpcHandlers::new(wallet_client, base_node_client, &services);
+        let handlers = JsonRpcHandlers::new(
+            wallet_client,
+            base_node_client,
+            &services,
+            config.validator_node.clone(),
+        );
         task::spawn(run_json_rpc(address, handlers));
     }
 

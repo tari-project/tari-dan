@@ -153,7 +153,6 @@ where TRuntimeInterface: RuntimeInterface + Clone + 'static
     ) -> Result<ExecutionResult, TransactionError> {
         let result = match module {
             LoadedTemplate::Wasm(wasm_module) => {
-                // TODO: implement intelligent instance caching
                 let process = WasmProcess::start(wasm_module, runtime)?;
                 process.invoke_by_name(function, args)?
             },

@@ -7,10 +7,7 @@ use tari_engine_types::substate::{SubstateAddress, SubstateDiff};
 use tari_template_builtin::ACCOUNT_TEMPLATE_ADDRESS;
 use tari_transaction_manifest::parse_manifest;
 use tari_validator_node_cli::{
-    command::{
-        handle_submit,
-        transaction::{submit_transaction, CliArg, CliInstruction, CommonSubmitArgs, SubmitArgs},
-    },
+    command::transaction::{handle_submit, submit_transaction, CliArg, CliInstruction, CommonSubmitArgs, SubmitArgs},
     from_hex::FromHex,
     key_manager::KeyManager,
     versioned_substate_address::VersionedSubstateAddress,

@@ -20,8 +20,13 @@
 //   WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //   USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+use std::collections::BTreeSet;
+
 use tari_bor::{borsh, Decode, Encode};
-use tari_template_lib::models::{Amount, ResourceAddress};
+use tari_template_lib::{
+    models::{Amount, NonFungibleId, ResourceAddress},
+    prelude::ResourceType,
+};
 
 use crate::resource_container::{ResourceContainer, ResourceError};
 
@@ -43,8 +48,16 @@ impl Bucket {
         self.resource.resource_address()
     }
 
-    pub(crate) fn into_resource(self) -> ResourceContainer {
+    pub fn resource_type(&self) -> ResourceType {
+        self.resource.resource_type()
+    }
+
+    pub fn into_resource(self) -> ResourceContainer {
         self.resource
+    }
+
+    pub fn into_non_fungible_ids(self) -> Option<BTreeSet<NonFungibleId>> {
+        self.resource.into_non_fungible_ids()
     }
 
     pub fn take(&mut self, amount: Amount) -> Result<ResourceContainer, ResourceError> {

@@ -20,11 +20,12 @@
 //   WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //   USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use tari_template_abi::rust::collections::HashMap;
+use tari_bor::{encode, Encode};
+use tari_template_abi::rust::{collections::HashMap, fmt, ops::RangeInclusive};
 
 use crate::{
     args::MintArg,
-    models::{Amount, Bucket, Metadata, NonFungible, NonFungibleId, ResourceAddress},
+    models::{Amount, Bucket, Metadata, NonFungibleId, ResourceAddress},
     prelude::ResourceType,
     resource::ResourceManager,
 };
@@ -72,6 +73,11 @@ impl FungibleResourceBuilder {
     }
 
     pub fn build(self) -> ResourceAddress {
+        // TODO: Improve API
+        assert!(
+            self.initial_supply.is_zero(),
+            "call build_bucket when initial supply set"
+        );
         let (address, _) = Self::build_internal(self.metadata, None);
         address
     }
@@ -92,7 +98,7 @@ impl FungibleResourceBuilder {
 
 pub struct NonFungibleResourceBuilder {
     metadata: Metadata,
-    tokens_ids: HashMap<NonFungibleId, NonFungible>,
+    tokens_ids: HashMap<NonFungibleId, (Vec<u8>, Vec<u8>)>,
 }
 
 impl NonFungibleResourceBuilder {
@@ -113,12 +119,33 @@ impl NonFungibleResourceBuilder {
         self
     }
 
-    pub fn with_tokens<I: IntoIterator<Item = (NonFungibleId, NonFungible)>>(mut self, tokens: I) -> Self {
-        self.tokens_ids.extend(tokens);
+    pub fn with_non_fungibles<'a, I, T, U>(mut self, tokens: I) -> Self
+    where
+        I: IntoIterator<Item = (NonFungibleId, (&'a T, &'a U))>,
+        T: Encode + 'a,
+        U: Encode + 'a,
+    {
+        self.tokens_ids.extend(
+            tokens
+                .into_iter()
+                .map(|(id, (data, mutable))| (id, (encode(data).unwrap(), encode(mutable).unwrap()))),
+        );
+        self
+    }
+
+    pub fn mint_many_with<F, T>(mut self, bounds: RangeInclusive<usize>, mut f: F) -> Self
+    where
+        F: FnMut(T) -> (NonFungibleId, (Vec<u8>, Vec<u8>)),
+        T: TryFrom<usize>,
+        T::Error: fmt::Debug,
+    {
+        self.tokens_ids.extend(bounds.map(|n| f(n.try_into().unwrap())));
         self
     }
 
     pub fn build(self) -> ResourceAddress {
+        // TODO: Improve API
+        assert!(self.tokens_ids.is_empty(), "call build_bucket with initial tokens set");
         let (address, _) = Self::build_internal(self.metadata, None);
         address
     }

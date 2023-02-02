@@ -8,6 +8,7 @@ pub mod execution_result;
 pub mod hashing;
 pub mod instruction;
 pub mod logs;
+pub mod non_fungible;
 pub mod resource;
 pub mod resource_container;
 pub mod signature;

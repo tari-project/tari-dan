@@ -26,12 +26,20 @@ use tari_template_lib::{
         ComponentRef,
         InvokeResult,
         LogLevel,
+        NonFungibleAction,
         ResourceAction,
         ResourceRef,
         VaultAction,
         WorkspaceAction,
     },
-    models::{ComponentAddress, ComponentHeader, LayerOneCommitmentAddress, ResourceAddress, VaultRef},
+    models::{
+        ComponentAddress,
+        ComponentHeader,
+        LayerOneCommitmentAddress,
+        NonFungibleAddress,
+        ResourceAddress,
+        VaultRef,
+    },
     Hash,
 };
 
@@ -48,7 +56,7 @@ impl Default for MockRuntimeInterface {
         // TODO: We use a zero transaction hash for tests, however this isn't correct and won't always work.
         let tx_hash = Hash::default();
         let state = MemoryStateStore::default();
-        let tracker = StateTracker::new(state.clone(), IdProvider::new(tx_hash, 100));
+        let tracker = StateTracker::new(state.clone(), IdProvider::new(tx_hash, 1000));
         Self {
             state,
             calls: Arc::new(RwLock::new(vec![])),
@@ -71,8 +79,19 @@ impl MockRuntimeInterface {
         self.calls.write().unwrap().clear();
     }
 
-    fn add_call(&self, call: &'static str) {
+    fn add_call(&self, call: &'static str) -> &Self {
         self.calls.write().unwrap().push(call);
+        self
+    }
+
+    pub fn set_invoke_result(&self, result: InvokeResult) -> &Self {
+        *self.invoke_result.write().unwrap() = Some(result);
+        self
+    }
+
+    pub fn reset_runtime(&mut self) {
+        let tracker = StateTracker::new(self.state.clone(), IdProvider::new(Hash::default(), 1000));
+        self.inner = RuntimeInterfaceImpl::new(tracker);
     }
 }
 
@@ -157,6 +176,19 @@ impl RuntimeInterface for MockRuntimeInterface {
         match self.invoke_result.read().unwrap().as_ref() {
             Some(result) => Ok(result.clone()),
             None => self.inner.workspace_invoke(action, args),
+        }
+    }
+
+    fn non_fungible_invoke(
+        &self,
+        nf_addr: NonFungibleAddress,
+        action: NonFungibleAction,
+        args: EngineArgs,
+    ) -> Result<InvokeResult, RuntimeError> {
+        self.add_call("non_fungible_invoke");
+        match self.invoke_result.read().unwrap().as_ref() {
+            Some(result) => Ok(result.clone()),
+            None => self.inner.non_fungible_invoke(nf_addr, action, args),
         }
     }
 

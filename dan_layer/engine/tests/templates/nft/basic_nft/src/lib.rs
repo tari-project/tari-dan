@@ -39,24 +39,16 @@ mod sparkle_nft_template {
         pub fn new() -> Self {
             // Create the non-fungible resource with 1 token (optional)
             let tokens = [
-                (NonFungibleId::from_u32(1), NonFungible::new(Metadata::new(), &())),
-                (
-                    NonFungibleId::from_u64(u64::MAX),
-                    NonFungible::new(Metadata::new(), &()),
-                ),
-                (
-                    NonFungibleId::from_string("Sparkle1"),
-                    NonFungible::new(Metadata::new(), &()),
-                ),
-                (
-                    NonFungibleId::from_u256([0u8; 32]),
-                    NonFungible::new(Metadata::new(), &()),
-                ),
+                (NonFungibleId::from_u32(1), (&(), &())),
+                (NonFungibleId::from_u64(u64::MAX), (&(), &())),
+                (NonFungibleId::from_string("Sparkle1"), (&(), &())),
+                (NonFungibleId::from_u256([0u8; 32]), (&(), &())),
             ];
             let bucket = ResourceBuilder::non_fungible()
                 .with_token_symbol("SPKL")
-                .with_tokens(tokens)
+                .with_non_fungibles(tokens)
                 .build_bucket();
+
             Self {
                 address: bucket.resource_address(),
                 vault: Vault::from_bucket(bucket),
@@ -78,8 +70,7 @@ mod sparkle_nft_template {
                 .insert("image_url", format!("https://nft.storage/sparkle{}.png", id));
 
             // Mint the NFT, this will fail if the token ID already exists
-            ResourceManager::get(self.address)
-                .mint_non_fungible(id, NonFungible::new(immutable_data, &Sparkle { brightness: 0 }))
+            ResourceManager::get(self.address).mint_non_fungible(id, &immutable_data, &Sparkle { brightness: 0 })
         }
 
         pub fn total_supply(&self) -> Amount {
@@ -105,10 +96,10 @@ mod sparkle_nft_template {
 
         fn with_sparkle_mut<F: FnOnce(&mut Sparkle)>(&self, id: NonFungibleId, f: F) {
             let resource_manager = ResourceManager::get(self.address);
-            let nft = resource_manager.get_non_fungible(&id);
-            let mut data = nft.get_data::<Sparkle>();
+            let mut nft = resource_manager.get_non_fungible(&id);
+            let mut data = nft.get_mutable_data::<Sparkle>();
             f(&mut data);
-            resource_manager.update_non_fungible_data(id, &data);
+            nft.set_mutable_data(&data);
         }
 
         pub fn withdraw_all(&mut self) -> Bucket {
@@ -117,6 +108,22 @@ mod sparkle_nft_template {
 
         pub fn inner_vault_balance(&self) -> Amount {
             self.vault.balance()
+        }
+
+        pub fn burn(&mut self, mut bucket: Bucket) {
+            // this check is actually not needed, but with it we cover the "bucket.resource_type" method
+            assert!(
+                bucket.resource_type() == ResourceType::NonFungible,
+                "The resource is not a NFT"
+            );
+            assert!(
+                bucket.resource_address() == self.address,
+                "Cannot burn bucket not from this collection"
+            );
+            debug(format!("Burning bucket {} containing {}", bucket.id(), bucket.amount()));
+            // This is all that's required, typically the template would not need to include a burn function because a
+            // native instruction can be used instead
+            bucket.burn();
         }
     }
 }

@@ -31,7 +31,7 @@ use tari_template_abi::{
 };
 
 use crate::{
-    args::{InvokeResult, VaultAction, VaultInvokeArg},
+    args::{InvokeResult, VaultAction, VaultInvokeArg, VaultWithdrawArg},
     hash::HashParseError,
     models::{Amount, Bucket, NonFungibleId, ResourceAddress},
     Hash,
@@ -131,7 +131,19 @@ impl Vault {
         let resp: InvokeResult = call_engine(EngineOp::VaultInvoke, &VaultInvokeArg {
             vault_ref: self.vault_ref(),
             action: VaultAction::Withdraw,
-            args: invoke_args![amount],
+            args: invoke_args![VaultWithdrawArg::Fungible { amount }],
+        });
+
+        resp.decode().expect("failed to decode Bucket")
+    }
+
+    pub fn withdraw_non_fungibles<I: IntoIterator<Item = NonFungibleId>>(&mut self, ids: I) -> Bucket {
+        let resp: InvokeResult = call_engine(EngineOp::VaultInvoke, &VaultInvokeArg {
+            vault_ref: self.vault_ref(),
+            action: VaultAction::Withdraw,
+            args: invoke_args![VaultWithdrawArg::NonFungible {
+                ids: ids.into_iter().collect()
+            }],
         });
 
         resp.decode().expect("failed to decode Bucket")

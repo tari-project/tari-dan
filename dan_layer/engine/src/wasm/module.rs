@@ -95,7 +95,7 @@ impl TemplateModuleLoader for WasmModule {
         if violation_flag.load(Ordering::Relaxed) {
             return Err(PackageError::TemplateCalledEngineDuringInitialization);
         }
-        Ok(LoadedWasmTemplate::new(template, module).into())
+        Ok(LoadedWasmTemplate::new(template, module, self.code.len()).into())
     }
 }
 
@@ -127,13 +127,18 @@ fn initialize_and_load_template_abi(
 
 #[derive(Debug, Clone)]
 pub struct LoadedWasmTemplate {
-    template: TemplateDef,
+    template_def: Arc<TemplateDef>,
     module: wasmer::Module,
+    code_size: usize,
 }
 
 impl LoadedWasmTemplate {
-    pub fn new(template: TemplateDef, module: wasmer::Module) -> Self {
-        Self { template, module }
+    pub fn new(template_def: TemplateDef, module: wasmer::Module, code_size: usize) -> Self {
+        Self {
+            template_def: Arc::new(template_def),
+            module,
+            code_size,
+        }
     }
 
     pub fn wasm_module(&self) -> &wasmer::Module {
@@ -141,15 +146,19 @@ impl LoadedWasmTemplate {
     }
 
     pub fn template_name(&self) -> &str {
-        &self.template.template_name
+        &self.template_def.template_name
     }
 
     pub fn template_def(&self) -> &TemplateDef {
-        &self.template
+        &self.template_def
     }
 
     pub fn find_func_by_name(&self, function_name: &str) -> Option<&FunctionDef> {
-        self.template.functions.iter().find(|f| f.name == *function_name)
+        self.template_def.functions.iter().find(|f| f.name == *function_name)
+    }
+
+    pub fn code_size(&self) -> usize {
+        self.code_size
     }
 }
 

@@ -20,9 +20,9 @@
 //   WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //   USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+use std::{fmt, vec::Vec};
+
 use tari_template_lib::prelude::*;
-use std::fmt;
-use std::vec::Vec;
 
 #[derive(Debug, Clone, Encode, Decode, Hash)]
 #[repr(i32)]
@@ -30,7 +30,7 @@ pub enum Emoji {
     Smile = 0x00,
     Sweat = 0x01,
     Laugh = 0x02,
-    Wink =0x03,
+    Wink = 0x03,
 }
 
 impl fmt::Display for Emoji {
@@ -60,8 +60,8 @@ impl fmt::Display for EmojiId {
 /// This template implements a classic, first come first served, constant price NFT drop
 #[template]
 mod emoji_id {
-    use super::*;  
-    
+    use super::*;
+
     pub struct EmojiIdMinter {
         max_emoji_id_len: u64,
         mint_price: Amount,
@@ -74,8 +74,7 @@ mod emoji_id {
         // TODO: decoding fails if "max_emoji_id_len" is usize instead of u64, we may need to add support for it
         pub fn new(payment_resource_address: ResourceAddress, max_emoji_id_len: u64, mint_price: Amount) -> Self {
             // Create the non-fungible resource with empty initial supply
-            let resource_address = ResourceBuilder::non_fungible()
-                .build(); 
+            let resource_address = ResourceBuilder::non_fungible().build();
             let earnings = Vault::new_empty(payment_resource_address);
             Self {
                 max_emoji_id_len,
@@ -85,7 +84,7 @@ mod emoji_id {
             }
         }
 
-        // TODO: return change
+        // TODO: return change (or check bucket.value() == required_amount)
         pub fn mint(&mut self, emoji_id: EmojiId, payment: Bucket) -> Bucket {
             assert!(
                 !emoji_id.0.is_empty() && emoji_id.0.len() as u64 <= self.max_emoji_id_len,
@@ -93,10 +92,9 @@ mod emoji_id {
             );
 
             // process the payment
-            // no need to manually check the amount, as the split operation will fail if not enough funds
-            // TODO: let (cost, change) = payment.split(self.mint_price);
+            assert_eq!(payment.amount(), self.mint_price, "Invalid payment amount");
             // no need to manually check that the payment is in the same resource that we are accepting ...
-            // ... the deposit will fail if it's different
+            // ... the deposit will fail if it's different       
             self.earnings.deposit(payment);
 
             // mint a new emoji id
@@ -108,12 +106,11 @@ mod emoji_id {
             let id = NonFungibleId::from_string(emoji_id.to_string());
             let mut immutable_data = Metadata::new();
             immutable_data.insert("emoji id", emoji_id.to_string());
-            let nft = NonFungible::new(immutable_data, &{});
-            
+
             // if a previous emoji id was minted with the same emojis, the hash will be the same
             // so consensus will fail when running "mint_non_fungible"
-            let emoji_id_bucket = ResourceManager::get(self.resource_address)
-                .mint_non_fungible(id, nft);
+            let emoji_id_bucket =
+                ResourceManager::get(self.resource_address).mint_non_fungible(id, &immutable_data, &{});
 
             emoji_id_bucket
         }

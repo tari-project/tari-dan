@@ -125,7 +125,9 @@ impl<TAddr: NodeAddressable, TPayload: Payload> HotStuffTreeNode<TAddr, TPayload
             .into_array()
             .into()
     }
+}
 
+impl<TAddr, TPayload> HotStuffTreeNode<TAddr, TPayload> {
     pub fn hash(&self) -> &TreeNodeHash {
         &self.hash
     }
@@ -187,7 +189,7 @@ impl<TAddr: NodeAddressable, TPayload: Payload> PartialEq for HotStuffTreeNode<T
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum HotstuffPhase {
     Genesis,
     Prepare,
