@@ -122,10 +122,10 @@ where T: Clone + Debug + PartialEq + Eq + Hash + Send + Sync + 'static
                     }
                 },
                 Some((wait_over, has_timed_out)) = self.waiting_futures.next() => {
+                    // at this point it is safe to remove the wait_over from pending_timeouts
+                    // so that this data structure doesn't grow every time
+                    self.pending_timeouts.remove(&wait_over);
                     if has_timed_out {
-                        // at this point it is safe to remove the wait_over from pending_timeouts
-                        // so that this data structure doesn't grow every time
-                        self.pending_timeouts.remove(&wait_over);
                         // send status to the other side of the channel
                         let send_status = self.tx_waiter_status.send(wait_over);
                         if send_status.await.is_err() {
