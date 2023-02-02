@@ -28,15 +28,12 @@ import Box from '@mui/material/Box';
 import MuiAppBar, { AppBarProps as MuiAppBarProps } from '@mui/material/AppBar';
 import Toolbar from '@mui/material/Toolbar';
 import List from '@mui/material/List';
-import Divider from '@mui/material/Divider';
 import IconButton from '@mui/material/IconButton';
-import Container from '@mui/material/Container';
 import MenuOpenOutlinedIcon from '@mui/icons-material/MenuOpenOutlined';
 import MenuOutlinedIcon from '@mui/icons-material/MenuOutlined';
 import { mainListItems } from './Components/MenuItems';
-import Copyright from './Components/Copyright';
 import TariLogo from './assets/images/TariLogoBlack.svg';
-import { ThemeProvider, Typography } from '@mui/material';
+import { ThemeProvider } from '@mui/material';
 import theme from './theme';
 import { Routes, Route, Outlet, Link } from 'react-router-dom';
 import Mempool from './routes/Mempool/Mempool';
@@ -48,8 +45,9 @@ import Templates from './routes/Templates/Templates';
 import ValidatorNodes from './routes/ValidatorNodes/ValidatorNodes';
 import ErrorPage from './routes/ErrorPage';
 import Transaction from './routes/Transaction/Transaction';
+import Logo from './Components/Logo';
 
-const drawerWidth: number = 300;
+const drawerWidth = 300;
 
 interface AppBarProps extends MuiAppBarProps {
   open?: boolean;
@@ -139,14 +137,7 @@ function Layout() {
               <MenuOutlinedIcon />
             </IconButton>
             <Link to="/">
-              <Box
-                component="img"
-                sx={{
-                  width: 280,
-                  padding: '10px 20px 3px 20px',
-                }}
-                src={TariLogo}
-              />
+              <Logo />
             </Link>
           </Toolbar>
         </AppBar>
@@ -163,11 +154,7 @@ function Layout() {
               <MenuOpenOutlinedIcon />
             </IconButton>
           </Toolbar>
-          {/* <Divider /> */}
-          <List component="nav">
-            {mainListItems}
-            {/* <Divider sx={{ my: 1 }} /> */}
-          </List>
+          <List component="nav">{mainListItems}</List>
         </Drawer>
         <Box
           component="main"
@@ -182,12 +169,9 @@ function Layout() {
           }}
         >
           <Toolbar />
-          {/* <Container maxWidth="lg" sx={{ mt: 4, mb: 4 }}> */}
           <div style={{ padding: theme.spacing(10) }}>
             <Outlet />
           </div>
-          {/* </Container> */}
-          {/* <Copyright /> */}
         </Box>
       </Box>
     </ThemeProvider>

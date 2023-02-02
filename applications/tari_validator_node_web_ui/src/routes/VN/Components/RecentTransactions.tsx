@@ -23,7 +23,7 @@
 import { useEffect, useState } from 'react';
 import { getRecentTransactions } from '../../../utils/json_rpc';
 import { toHexString } from './helpers';
-import { Outlet, Link } from 'react-router-dom';
+import { Link } from 'react-router-dom';
 import { renderJson } from '../../../utils/helpers';
 import Table from '@mui/material/Table';
 import TableBody from '@mui/material/TableBody';
@@ -39,6 +39,10 @@ import {
 import KeyboardArrowDownIcon from '@mui/icons-material/KeyboardArrowDown';
 import KeyboardArrowUpIcon from '@mui/icons-material/KeyboardArrowUp';
 import Collapse from '@mui/material/Collapse';
+import TablePagination from '@mui/material/TablePagination';
+import FilterListIcon from '@mui/icons-material/FilterList';
+import IconButton from '@mui/material/IconButton';
+import { Typography } from '@mui/material';
 
 interface IRecentTransaction {
   payload_id: number[];
@@ -87,7 +91,7 @@ function RowData({
             borderBottom: 'none',
           }}
         >
-          {timestamp}
+          {timestamp.replace('T', ' ')}
         </DataTableCell>
         <DataTableCell sx={{ borderBottom: 'none', textAlign: 'center' }}>
           <AccordionIconButton
@@ -146,13 +150,34 @@ function RowData({
 }
 
 function RecentTransactions() {
-  const [recentTransacations, setRecentTransacations] = useState<
+  const [recentTransactions, setRecentTransactions] = useState<
     ITableRecentTransaction[]
   >([]);
   const [lastSort, setLastSort] = useState({ column: '', order: -1 });
+
+  const [page, setPage] = useState(0);
+  const [rowsPerPage, setRowsPerPage] = useState(10);
+
+  // Avoid a layout jump when reaching the last page with empty rows.
+  const emptyRows =
+    page > 0
+      ? Math.max(0, (1 + page) * rowsPerPage - recentTransactions.length)
+      : 0;
+
+  const handleChangePage = (event: unknown, newPage: number) => {
+    setPage(newPage);
+  };
+
+  const handleChangeRowsPerPage = (
+    event: React.ChangeEvent<HTMLInputElement>
+  ) => {
+    setRowsPerPage(parseInt(event.target.value, 10));
+    setPage(0);
+  };
+
   useEffect(() => {
     getRecentTransactions().then((recentTransactions) => {
-      setRecentTransacations(
+      setRecentTransactions(
         // Display from newest to oldest by reversing
         recentTransactions
           .slice()
@@ -179,18 +204,16 @@ function RecentTransactions() {
     if (lastSort.column === column) {
       order = -lastSort.order;
     }
-    setRecentTransacations(
-      [...recentTransacations].sort((r0, r1) =>
+    setRecentTransactions(
+      [...recentTransactions].sort((r0, r1) =>
         r0[column] > r1[column] ? order : r0[column] < r1[column] ? -order : 0
       )
     );
     setLastSort({ column, order });
   };
-  if (recentTransacations === undefined) {
+  if (recentTransactions === undefined) {
     return (
-      <div className="section">
-        <h4>Recent transactions ... loading</h4>
-      </div>
+      <Typography variant="h4">Recent transactions ... loading</Typography>
     );
   }
 
@@ -200,32 +223,55 @@ function RecentTransactions() {
         <TableHead>
           <TableRow>
             <TableCell onClick={() => sort('payload_id')}>
-              Payload id
-              <span className="sort-indicator">
-                {lastSort.column === 'payload_id'
-                  ? lastSort.order === 1
-                    ? '▲'
-                    : '▼'
-                  : ''}
-              </span>
+              <div
+                style={{
+                  display: 'flex',
+                  justifyContent: 'flex-start',
+                  alignItems: 'center',
+                  gap: '5px',
+                }}
+              >
+                Payload id
+                {lastSort.column === 'payload_id' ? (
+                  lastSort.order === 1 ? (
+                    <KeyboardArrowUpIcon />
+                  ) : (
+                    <KeyboardArrowDownIcon />
+                  )
+                ) : (
+                  ''
+                )}
+              </div>
             </TableCell>
             <TableCell onClick={() => sort('timestamp')}>
-              Timestamp
-              <span className="sort-indicator">
-                {lastSort.column === 'shard'
-                  ? lastSort.order === 1
-                    ? '▲'
-                    : '▼'
-                  : ''}
-              </span>
+              <div
+                style={{
+                  display: 'flex',
+                  justifyContent: 'flex-start',
+                  alignItems: 'center',
+                  gap: '5px',
+                }}
+              >
+                Timestamp
+                {lastSort.column === 'timestamp' ? (
+                  lastSort.order === 1 ? (
+                    <KeyboardArrowUpIcon />
+                  ) : (
+                    <KeyboardArrowDownIcon />
+                  )
+                ) : (
+                  ''
+                )}
+              </div>
             </TableCell>
             <TableCell style={{ textAlign: 'center' }}>Meta</TableCell>
             <TableCell style={{ textAlign: 'center' }}>Instructions</TableCell>
           </TableRow>
         </TableHead>
         <TableBody>
-          {recentTransacations.map(
-            ({ id, payload_id, timestamp, instructions, meta }) => (
+          {recentTransactions
+            .slice(page * rowsPerPage, page * rowsPerPage + rowsPerPage)
+            .map(({ id, payload_id, timestamp, instructions, meta }) => (
               <RowData
                 key={id}
                 id={id}
@@ -234,10 +280,27 @@ function RecentTransactions() {
                 instructions={instructions}
                 meta={meta}
               />
-            )
+            ))}
+          {emptyRows > 0 && (
+            <TableRow
+              style={{
+                height: 67 * emptyRows,
+              }}
+            >
+              <TableCell colSpan={4} />
+            </TableRow>
           )}
         </TableBody>
       </Table>
+      <TablePagination
+        rowsPerPageOptions={[10, 25, 50]}
+        component="div"
+        count={recentTransactions.length}
+        rowsPerPage={rowsPerPage}
+        page={page}
+        onPageChange={handleChangePage}
+        onRowsPerPageChange={handleChangeRowsPerPage}
+      />
     </TableContainer>
   );
 }
