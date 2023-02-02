@@ -32,6 +32,7 @@ use tari_crypto::tari_utilities::ByteArray;
 use tari_dan_core::{
     message::{DanMessage, NetworkAnnounce},
     models::TariDanPayload,
+    workers::hotstuff_waiter::RecoveryMessage,
 };
 
 use crate::p2p::proto;
@@ -60,6 +61,12 @@ impl From<DanMessage<TariDanPayload, CommsPublicKey>> for proto::network::DanMes
                 )),
                 message_tag,
             },
+            DanMessage::RecoveryMessage(recovery_msg) => Self {
+                message: Some(proto::network::dan_message::Message::RecoveryMessage(
+                    (*recovery_msg).into(),
+                )),
+                message_tag,
+            },
         }
     }
 }
@@ -79,6 +86,9 @@ impl TryFrom<proto::network::DanMessage> for DanMessage<TariDanPayload, CommsPub
             },
             proto::network::dan_message::Message::NetworkAnnounce(msg) => {
                 Ok(DanMessage::NetworkAnnounce(Box::new(msg.try_into()?)))
+            },
+            proto::network::dan_message::Message::RecoveryMessage(msg) => {
+                Ok(DanMessage::RecoveryMessage(Box::new(msg.try_into()?)))
             },
         }
     }
@@ -141,6 +151,58 @@ impl<T: Borrow<IdentitySignature>> From<T> for proto::network::IdentitySignature
             version: u32::from(sig.version()),
             signature: Some(sig.signature().into()),
             updated_at: sig.updated_at().timestamp(),
+        }
+    }
+}
+
+// -------------------------------- RecoveryMessage -------------------------------- //
+impl TryFrom<proto::network::RecoveryMessage> for RecoveryMessage {
+    type Error = anyhow::Error;
+
+    fn try_from(value: proto::network::RecoveryMessage) -> Result<Self, Self::Error> {
+        let msg_type = value.message.ok_or_else(|| anyhow!("Message type not provided"))?;
+        match msg_type {
+            proto::network::recovery_message::Message::MissingProposal(msg) => Ok(RecoveryMessage::MissingProposal(
+                msg.epoch.into(),
+                msg.shard_id.try_into()?,
+                msg.payload_id.try_into()?,
+                msg.last_known_height.into(),
+            )),
+            proto::network::recovery_message::Message::ElectionInProgress(msg) => {
+                Ok(RecoveryMessage::ElectionInProgress(
+                    msg.epoch.into(),
+                    msg.shard_id.try_into()?,
+                    msg.payload_id.try_into()?,
+                ))
+            },
+        }
+    }
+}
+
+impl From<RecoveryMessage> for proto::network::RecoveryMessage {
+    fn from(value: RecoveryMessage) -> Self {
+        match value {
+            RecoveryMessage::MissingProposal(epoch, shard_id, payload_id, last_known_height) => {
+                proto::network::RecoveryMessage {
+                    message: Some(proto::network::recovery_message::Message::MissingProposal(
+                        proto::network::MissingProposal {
+                            epoch: epoch.0,
+                            shard_id: shard_id.into(),
+                            payload_id: payload_id.as_bytes().into(),
+                            last_known_height: last_known_height.0,
+                        },
+                    )),
+                }
+            },
+            RecoveryMessage::ElectionInProgress(epoch, shard_id, payload_id) => proto::network::RecoveryMessage {
+                message: Some(proto::network::recovery_message::Message::ElectionInProgress(
+                    proto::network::ElectionInProgress {
+                        epoch: epoch.0,
+                        shard_id: shard_id.into(),
+                        payload_id: payload_id.as_bytes().into(),
+                    },
+                )),
+            },
         }
     }
 }

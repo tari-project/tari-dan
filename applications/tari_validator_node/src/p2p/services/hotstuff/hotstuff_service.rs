@@ -36,7 +36,7 @@ use tari_dan_core::{
     },
     workers::{
         events::{EventSubscription, HotStuffEvent},
-        hotstuff_waiter::HotStuffWaiter,
+        hotstuff_waiter::{HotStuffWaiter, RecoveryMessage, NETWORK_LATENCY},
         pacemaker_worker::Pacemaker,
     },
 };
@@ -70,6 +70,10 @@ pub struct HotstuffService {
     rx_leader: Receiver<(CommsPublicKey, HotStuffMessage<TariDanPayload, CommsPublicKey>)>,
     /// Outgoing proposal messages to be broadcast by the leader to all replicas
     rx_broadcast: Receiver<(HotStuffMessage<TariDanPayload, CommsPublicKey>, Vec<CommsPublicKey>)>,
+    /// Outgoing replica recovery response
+    rx_recovery: Receiver<(RecoveryMessage, CommsPublicKey)>,
+    /// Outgoing recovery request to be broadcast by all replicas to f+1 replicas in foreign committee
+    rx_recovery_broadcast: Receiver<(RecoveryMessage, Vec<CommsPublicKey>)>,
     /// Outgoing vote messages to be sent to the leader
     rx_vote_message: Receiver<(VoteMessage, CommsPublicKey)>,
     shutdown: ShutdownSignal, // waiter: HotstuffWaiter,
@@ -84,6 +88,7 @@ impl HotstuffService {
         payload_processor: TariDanPayloadProcessor<TemplateManager>,
         shard_store_factory: SqliteShardStore,
         rx_hotstuff_messages: Receiver<(CommsPublicKey, HotStuffMessage<TariDanPayload, CommsPublicKey>)>,
+        rx_recovery_messages: Receiver<(CommsPublicKey, RecoveryMessage)>,
         rx_vote_messages: Receiver<(CommsPublicKey, VoteMessage)>,
         shutdown: ShutdownSignal,
     ) -> EventSubscription<HotStuffEvent> {
@@ -91,6 +96,8 @@ impl HotstuffService {
         let (tx_new, rx_new) = channel(100);
         let (tx_leader, rx_leader) = channel(100);
         let (tx_broadcast, rx_broadcast) = channel(100);
+        let (tx_recovery, rx_recovery) = channel(100);
+        let (tx_recovery_broadcast, rx_recovery_broadcast) = channel(100);
         let (tx_vote_message, rx_vote_message) = channel(100);
         let (tx_events, _) = broadcast::channel(100);
 
@@ -108,9 +115,12 @@ impl HotstuffService {
             leader_strategy,
             rx_new,
             rx_hotstuff_messages,
+            rx_recovery_messages,
             rx_vote_messages,
             tx_leader,
             tx_broadcast,
+            tx_recovery,
+            tx_recovery_broadcast,
             tx_vote_message,
             tx_events.clone(),
             pacemaker,
@@ -118,6 +128,7 @@ impl HotstuffService {
             shard_store_factory,
             shutdown.clone(),
             consensus_constants,
+            NETWORK_LATENCY,
         );
 
         tokio::spawn(
@@ -128,6 +139,8 @@ impl HotstuffService {
                 tx_new,
                 rx_leader,
                 rx_broadcast,
+                rx_recovery,
+                rx_recovery_broadcast,
                 rx_vote_message,
                 shutdown,
             }
@@ -175,6 +188,33 @@ impl HotstuffService {
         Ok(())
     }
 
+    async fn handle_recovery_message(&mut self, msg: RecoveryMessage, to: CommsPublicKey) -> Result<(), anyhow::Error> {
+        trace!(target: LOG_TARGET, "Sending leader message to {}", to);
+        self.outbound
+            .send(
+                self.node_public_key.clone(),
+                to,
+                DanMessage::RecoveryMessage(Box::new(msg)),
+            )
+            .await?;
+        Ok(())
+    }
+
+    async fn handle_recovery_broadcast_message(
+        &mut self,
+        msg: RecoveryMessage,
+        nodes: Vec<CommsPublicKey>,
+    ) -> Result<(), anyhow::Error> {
+        self.outbound
+            .broadcast(
+                self.node_public_key.clone(),
+                &nodes,
+                DanMessage::RecoveryMessage(Box::new(msg)),
+            )
+            .await?;
+        Ok(())
+    }
+
     async fn handle_new_valid_transaction(&mut self, tx: Transaction, shard: ShardId) -> Result<(), anyhow::Error> {
         self.tx_new.send((TariDanPayload::new(tx), shard)).await?;
         Ok(())
@@ -202,6 +242,14 @@ impl HotstuffService {
                 Some((msg, dest_nodes)) = self.rx_broadcast.recv() => {
                     debug!(target: LOG_TARGET, "Received broadcast message: {}", &msg);
                     log(self.handle_broadcast_message(dest_nodes, msg).await, "broadcast message");
+                }
+                Some((msg, replica)) = self.rx_recovery.recv() =>{
+                    debug!(target: LOG_TARGET, "Received replica recovery response: {:?}", &msg);
+                    log(self.handle_recovery_message(msg, replica).await, "replice recovery response");
+                }
+                Some((msg, replicas)) = self.rx_recovery_broadcast.recv() =>{
+                    debug!(target: LOG_TARGET, "Received broadcast recovery request: {:?}", &msg);
+                    log(self.handle_recovery_broadcast_message(msg, replicas).await, "broadcast recovery request");
                 }
                 // Shutdown
                 _ = self.shutdown.wait() => {

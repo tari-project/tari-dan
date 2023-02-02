@@ -607,6 +607,33 @@ impl ShardStoreReadTransaction<PublicKey, TariDanPayload> for SqliteShardStoreRe
             .collect()
     }
 
+    // Get leader proposal with highest payload height for a particular shard.
+    fn get_last_payload_height_for_leader_proposal(
+        &self,
+        payload: PayloadId,
+        shard: ShardId,
+    ) -> Result<NodeHeight, StorageError> {
+        use crate::schema::leader_proposals;
+        let shard_bytes = shard.as_bytes();
+        let proposal: Option<LeaderProposal> = leader_proposals::table
+            .filter(
+                leader_proposals::payload_id
+                    .eq(payload.as_bytes())
+                    .and(leader_proposals::shard_id.eq(shard_bytes)),
+            )
+            .order_by(leader_proposals::payload_height.desc())
+            .first(self.transaction.connection())
+            .optional()
+            .map_err(|e| StorageError::QueryError {
+                reason: format!("Get payload vote: {}", e),
+            })?;
+        if let Some(proposal) = proposal {
+            Ok(NodeHeight(proposal.payload_height as u64))
+        } else {
+            Ok(NodeHeight(0))
+        }
+    }
+
     fn has_vote_for(&self, from: &PublicKey, node_hash: TreeNodeHash) -> Result<bool, StorageError> {
         use crate::schema::received_votes;
 
