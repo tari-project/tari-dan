@@ -17,7 +17,11 @@ use tari_dan_core::{
         PayloadProcessorError,
         SigningService,
     },
-    workers::{hotstuff_error::HotStuffError, hotstuff_waiter::HotStuffWaiter, pacemaker_worker::Pacemaker},
+    workers::{
+        hotstuff_error::HotStuffError,
+        hotstuff_waiter::{HotStuffWaiter, RecoveryMessage},
+        pacemaker_worker::Pacemaker,
+    },
 };
 use tari_dan_engine::runtime::ConsensusContext;
 use tari_engine_types::{
@@ -103,10 +107,13 @@ pub struct HsTestHarness {
     identity: PublicKey,
     pub tx_new: Sender<(TariDanPayload, ShardId)>,
     pub tx_hs_messages: Sender<(PublicKey, HotStuffMessage<TariDanPayload, PublicKey>)>,
+    pub tx_recovery_messages: Sender<(PublicKey, RecoveryMessage)>,
     pub rx_leader: Receiver<(PublicKey, HotStuffMessage<TariDanPayload, PublicKey>)>,
     shutdown: Shutdown,
     pub rx_broadcast: Receiver<(HotStuffMessage<TariDanPayload, PublicKey>, Vec<PublicKey>)>,
-    rx_vote_message: Receiver<(VoteMessage, PublicKey)>,
+    pub rx_recovery: Receiver<(RecoveryMessage, PublicKey)>,
+    pub rx_recovery_broadcast: Receiver<(RecoveryMessage, Vec<PublicKey>)>,
+    pub rx_vote_message: Receiver<(VoteMessage, PublicKey)>,
     pub tx_votes: Sender<(PublicKey, VoteMessage)>,
     rx_execute: broadcast::Receiver<(TariDanPayload, HashMap<ShardId, ObjectPledge>)>,
     shard_store: TempShardStoreFactory,
@@ -120,6 +127,7 @@ impl HsTestHarness {
         identity: PublicKey,
         epoch_manager: TEpochManager,
         leader: TLeader,
+        network_latency: Duration,
     ) -> Self
     where
         TEpochManager: EpochManager<PublicKey> + Send + Sync + 'static,
@@ -127,8 +135,11 @@ impl HsTestHarness {
     {
         let (tx_new, rx_new) = channel(1);
         let (tx_hs_messages, rx_hs_messages) = channel(1);
+        let (tx_recovery_messages, rx_recovery_messages) = channel(1);
         let (tx_leader, rx_leader) = channel(1);
         let (tx_broadcast, rx_broadcast) = channel(1);
+        let (tx_recovery, rx_recovery) = channel(1);
+        let (tx_recovery_broadcast, rx_recovery_broadcast) = channel(1);
         let (tx_vote_message, rx_vote_message) = channel(1);
         let (tx_votes, rx_votes) = channel(1);
         let (tx_events, _) = broadcast::channel(100);
@@ -151,9 +162,12 @@ impl HsTestHarness {
             leader,
             rx_new,
             rx_hs_messages,
+            rx_recovery_messages,
             rx_votes,
             tx_leader,
             tx_broadcast,
+            tx_recovery,
+            tx_recovery_broadcast,
             tx_vote_message,
             tx_events,
             pacemaker,
@@ -161,15 +175,19 @@ impl HsTestHarness {
             shard_store.clone(),
             shutdown.to_signal(),
             consensus_constants,
+            network_latency,
         );
 
         Self {
             identity,
             tx_new,
             tx_hs_messages,
+            tx_recovery_messages,
             rx_leader,
+            rx_recovery,
             shutdown,
             rx_broadcast,
+            rx_recovery_broadcast,
             rx_vote_message,
             tx_votes,
             rx_execute,

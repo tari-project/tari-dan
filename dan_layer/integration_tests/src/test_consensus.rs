@@ -25,14 +25,27 @@ use std::{collections::HashMap, sync::Arc, time::Duration};
 use lazy_static::lazy_static;
 use rand::rngs::OsRng;
 use tari_common_types::types::{PrivateKey, PublicKey};
-use tari_comms::{multiaddr::Multiaddr, peer_manager::PeerFeatures, NodeIdentity};
+use tari_comms::{
+    multiaddr::Multiaddr,
+    peer_manager::PeerFeatures,
+    protocol::rpc::__macro_reexports::future::join_all,
+    NodeIdentity,
+};
 use tari_core::ValidatorNodeMmr;
-use tari_crypto::keys::PublicKey as PublicKeyT;
-use tari_dan_common_types::{vn_mmr_node_hash, Epoch, QuorumCertificate, QuorumDecision, ShardId};
+use tari_crypto::{
+    keys::PublicKey as PublicKeyT,
+    ristretto::{RistrettoPublicKey, RistrettoSecretKey},
+};
+use tari_dan_common_types::{vn_mmr_node_hash, Epoch, NodeHeight, QuorumCertificate, QuorumDecision, ShardId};
 use tari_dan_core::{
-    models::{vote_message::VoteMessage, HotStuffMessage, Payload, TariDanPayload},
-    services::{epoch_manager::RangeEpochManager, leader_strategy::AlwaysFirstLeader, NodeIdentitySigningService},
+    models::{vote_message::VoteMessage, HotStuffMessage, HotstuffPhase, Payload, TariDanPayload},
+    services::{
+        epoch_manager::{EpochManager, RangeEpochManager},
+        leader_strategy::{AlwaysFirstLeader, RotatingLeader},
+        NodeIdentitySigningService,
+    },
     storage::shard_store::{ShardStore, ShardStoreWriteTransaction},
+    workers::hotstuff_waiter::RecoveryMessage,
 };
 use tari_dan_engine::transaction::{Transaction, TransactionBuilder};
 use tari_engine_types::instruction::Instruction;
@@ -102,6 +115,10 @@ fn create_test_qc(
 lazy_static! {
     static ref SHARD0: ShardId = ShardId::zero();
     static ref SHARD1: ShardId = ShardId([1u8; 32]);
+    static ref SHARD2: ShardId = ShardId([2u8; 32]);
+    static ref SHARD3: ShardId = ShardId([3u8; 32]);
+    static ref NEVER: Duration = Duration::from_secs(86400); // 1 day, can't use MAX, because there is multiplicator in the hotstuff_waitter
+    static ref ONE_SEC: Duration = Duration::from_secs(1);
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
@@ -110,7 +127,13 @@ async fn test_receives_new_payload_starts_new_chain() {
     let (node1_pk, node1) = PublicKey::random_keypair(&mut OsRng);
     let registered_vn_keys = vec![node1.clone()];
     let epoch_manager = RangeEpochManager::new(registered_vn_keys, *SHARD0..*SHARD1, vec![node1.clone()]);
-    let mut instance = HsTestHarness::new(node1_pk.clone(), node1.clone(), epoch_manager, AlwaysFirstLeader {});
+    let mut instance = HsTestHarness::new(
+        node1_pk.clone(),
+        node1.clone(),
+        epoch_manager,
+        AlwaysFirstLeader {},
+        *NEVER,
+    );
 
     let new_payload = TariDanPayload::new(Transaction::builder().sign(&node1_pk).clone().build());
     instance.tx_new.send((new_payload, *SHARD0)).await.unwrap();
@@ -126,7 +149,13 @@ async fn test_hs_waiter_leader_proposes() {
     let registered_vn_keys = vec![node1.clone(), node2.clone()];
     let epoch_manager =
         RangeEpochManager::new(registered_vn_keys, *SHARD0..*SHARD1, vec![node1.clone(), node2.clone()]);
-    let mut instance = HsTestHarness::new(node1_pk.clone(), node1.clone(), epoch_manager, AlwaysFirstLeader {});
+    let mut instance = HsTestHarness::new(
+        node1_pk.clone(),
+        node1.clone(),
+        epoch_manager,
+        AlwaysFirstLeader {},
+        *NEVER,
+    );
     // let payload = ("Hello World".to_string(), vec![*SHARD0]);
     let payload = TariDanPayload::new(
         Transaction::builder()
@@ -170,7 +199,13 @@ async fn test_hs_waiter_replica_sends_vote_for_proposal() {
     let registered_vn_keys = vec![node1.clone(), node2.clone()];
     let epoch_manager =
         RangeEpochManager::new(registered_vn_keys, *SHARD0..*SHARD1, vec![node1.clone(), node2.clone()]);
-    let mut instance = HsTestHarness::new(node1_pk.clone(), node1.clone(), epoch_manager, AlwaysFirstLeader {});
+    let mut instance = HsTestHarness::new(
+        node1_pk.clone(),
+        node1.clone(),
+        epoch_manager,
+        AlwaysFirstLeader {},
+        *NEVER,
+    );
     // let payload = ("Hello World".to_string(), vec![*SHARD0]);
     let payload = TariDanPayload::new(
         Transaction::builder()
@@ -233,7 +268,13 @@ async fn test_hs_waiter_leader_sends_new_proposal_when_enough_votes_are_received
 
     let epoch_manager =
         RangeEpochManager::new(registered_vn_keys, *SHARD0..*SHARD1, vec![node1.clone(), node2.clone()]);
-    let mut instance = HsTestHarness::new(node1_pk.clone(), node1.clone(), epoch_manager, AlwaysFirstLeader {});
+    let mut instance = HsTestHarness::new(
+        node1_pk.clone(),
+        node1.clone(),
+        epoch_manager,
+        AlwaysFirstLeader {},
+        *NEVER,
+    );
     let payload = TariDanPayload::new(
         Transaction::builder()
             .add_input(*SHARD0)
@@ -306,7 +347,13 @@ async fn test_hs_waiter_execute_called_at_prepare_phase_only() {
     let (node1_pk, node1) = PublicKey::random_keypair(&mut OsRng);
     let registered_vn_keys = vec![node1.clone()];
     let epoch_manager = RangeEpochManager::new(registered_vn_keys, *SHARD0..*SHARD1, vec![node1.clone()]);
-    let mut instance = HsTestHarness::new(node1_pk.clone(), node1.clone(), epoch_manager, AlwaysFirstLeader {});
+    let mut instance = HsTestHarness::new(
+        node1_pk.clone(),
+        node1.clone(),
+        epoch_manager,
+        AlwaysFirstLeader {},
+        *NEVER,
+    );
     let payload = TariDanPayload::new(
         Transaction::builder()
             .add_input(*SHARD0)
@@ -374,15 +421,22 @@ async fn test_hs_waiter_multishard_votes() {
     let registered_vn_keys = vec![node1.clone(), node2.clone()];
     let epoch_manager = RangeEpochManager::new_with_multiple(registered_vn_keys, &[
         (*SHARD0..*SHARD1, shard0_committee),
-        (*SHARD1..ShardId([2u8; 32]), shard1_committee),
+        (*SHARD1..*SHARD2, shard1_committee),
     ]);
     let mut node1_instance = HsTestHarness::new(
         node1_pk.clone(),
         node1.clone(),
         epoch_manager.clone(),
         AlwaysFirstLeader {},
+        *NEVER,
     );
-    let mut node2_instance = HsTestHarness::new(node2_pk.clone(), node2.clone(), epoch_manager, AlwaysFirstLeader {});
+    let mut node2_instance = HsTestHarness::new(
+        node2_pk.clone(),
+        node2.clone(),
+        epoch_manager,
+        AlwaysFirstLeader {},
+        *NEVER,
+    );
 
     let payload = TariDanPayload::new(
         Transaction::builder()
@@ -468,6 +522,476 @@ async fn test_hs_waiter_multishard_votes() {
 
     node1_instance.assert_shuts_down_safely().await;
     node2_instance.assert_shuts_down_safely().await;
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn test_local_leader_failure_after_on_next_sync_view() {
+    let (node1_pk, node1) = PublicKey::random_keypair(&mut OsRng);
+    let (node2_pk, node2) = PublicKey::random_keypair(&mut OsRng);
+    let registered_vn_keys = vec![node1.clone(), node2.clone()];
+
+    let epoch_manager =
+        RangeEpochManager::new(registered_vn_keys, *SHARD0..*SHARD1, vec![node1.clone(), node2.clone()]);
+    let mut instance = HsTestHarness::new(
+        node2_pk.clone(),
+        node2.clone(),
+        epoch_manager.clone(),
+        RotatingLeader {},
+        *ONE_SEC,
+    );
+    let payload = TariDanPayload::new(
+        Transaction::builder()
+            .add_input(*SHARD0)
+            // .add_output(*SHARD1)
+            .sign(&node1_pk)
+            .clone()
+            .build(),
+    );
+
+    instance.tx_new.send((payload.clone(), *SHARD0)).await.unwrap();
+    assert!(
+        timeout(Duration::from_secs(1), instance.rx_leader.recv()).await.is_ok(),
+        "node2 should have sent the vote from the new_sync_view"
+    );
+    // In the meantime we can test asking for recovery
+    instance
+        .tx_recovery_messages
+        .send((
+            node1,
+            RecoveryMessage::MissingProposal(
+                epoch_manager.current_epoch().await.unwrap(),
+                *SHARD0,
+                payload.to_id(),
+                NodeHeight(0),
+            ),
+        ))
+        .await
+        .unwrap();
+    // Awaiting recovery response
+    let mut recovery_response = None;
+    assert!(
+        timeout(Duration::from_secs(1), async {
+            recovery_response = instance.rx_recovery.recv().await;
+        })
+        .await
+        .is_ok(),
+        "node2 should send recovery response"
+    );
+    // Let's check if the node sent ElectionInProgress
+    assert!(matches!(
+        recovery_response.unwrap().0,
+        RecoveryMessage::ElectionInProgress(_, _, _)
+    ));
+    let mut vote = None;
+    assert!(
+        timeout(Duration::from_secs(2), async {
+            vote = instance.rx_leader.recv().await;
+        })
+        .await
+        .is_ok(),
+        "node2 should vote again, but this time different leader"
+    );
+    assert_eq!(vote.unwrap().0, node2, "node2 should be next leader in order");
+    instance.assert_shuts_down_safely().await;
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn test_local_leader_failure_after_on_receive_proposal() {
+    let (node1_pk, node1) = PublicKey::random_keypair(&mut OsRng);
+    let (node2_pk, node2) = PublicKey::random_keypair(&mut OsRng);
+    let registered_vn_keys = vec![node1.clone(), node2.clone()];
+
+    let epoch_manager =
+        RangeEpochManager::new(registered_vn_keys, *SHARD0..*SHARD1, vec![node1.clone(), node2.clone()]);
+    let mut instance1 = HsTestHarness::new(
+        node1_pk.clone(),
+        node1.clone(),
+        epoch_manager.clone(),
+        RotatingLeader {},
+        *ONE_SEC,
+    );
+    let mut instance2 = HsTestHarness::new(
+        node2_pk.clone(),
+        node2.clone(),
+        epoch_manager.clone(),
+        RotatingLeader {},
+        *ONE_SEC,
+    );
+    let payload = TariDanPayload::new(
+        Transaction::builder()
+            .add_input(*SHARD0)
+            .sign(&node1_pk)
+            .clone()
+            .build(),
+    );
+    // Let's call on_next_sync_view on node2, that way it knows later that it already voted for node1
+    instance2.tx_new.send((payload.clone(), *SHARD0)).await.unwrap();
+
+    let qc = create_test_default_qc(
+        vec![(node1.clone(), node1_pk.clone()), (node2.clone(), node2_pk.clone())],
+        vec![node1.clone(), node2.clone()],
+        &payload,
+    );
+    // The node1 receives new views from both node.
+    let new_view_message = HotStuffMessage::new_view(qc, *SHARD0, payload.clone());
+    instance1
+        .tx_hs_messages
+        .send((node2.clone(), new_view_message.clone()))
+        .await
+        .unwrap();
+    instance1
+        .tx_hs_messages
+        .send((node1.clone(), new_view_message.clone()))
+        .await
+        .unwrap();
+    // Get the node hash from the proposal
+    let (proposal_message, _broadcast_group) = instance1.recv_broadcast().await;
+
+    // Now we send the proposal to node2
+    instance2
+        .tx_hs_messages
+        .send((node1.clone(), proposal_message))
+        .await
+        .expect("Should not error");
+
+    // The node2 should send a vote back to leader
+    assert!(
+        timeout(Duration::from_secs(1), instance2.rx_leader.recv())
+            .await
+            .is_ok(),
+        "node2 should vote for this proposal"
+    );
+
+    // Node2 will not receive a response for it's vote, so it will trigger new election process.
+    let mut vote = None;
+    assert!(
+        timeout(Duration::from_secs(4), async {
+            vote = instance2.rx_leader.recv().await;
+        })
+        .await
+        .is_ok(),
+        "node2 should vote again, but this time different leader"
+    );
+    assert_eq!(vote.unwrap().0, node2, "node2 should be next leader in order");
+    instance1.assert_shuts_down_safely().await;
+    instance2.assert_shuts_down_safely().await;
+}
+
+async fn committee_sends_new_view(
+    payload: TariDanPayload,
+    committee: &[PublicKey],
+    instances: &mut [HsTestHarness],
+    shard: ShardId,
+) -> Option<(
+    HotStuffMessage<TariDanPayload, RistrettoPublicKey>,
+    Vec<RistrettoPublicKey>,
+)> {
+    let mut new_views = Vec::new();
+    for instance in instances.iter_mut() {
+        instance.tx_new.send((payload.clone(), shard)).await.unwrap();
+        let mut new_view = None;
+        assert!(
+            timeout(Duration::from_secs(2), async {
+                new_view = instance.rx_leader.recv().await;
+            })
+            .await
+            .is_ok(),
+            "new view should be sent"
+        );
+        new_views.push(new_view);
+    }
+    // Send these to the leader.
+    for (new_view, public_key) in new_views.iter_mut().zip(committee.iter()) {
+        instances[0]
+            .tx_hs_messages
+            .send((public_key.clone(), new_view.take().unwrap().1))
+            .await
+            .unwrap();
+    }
+    let mut proposal = None;
+    assert!(
+        timeout(Duration::from_secs(1), async {
+            proposal = instances[0].rx_broadcast.recv().await;
+        })
+        .await
+        .is_ok(),
+        "Leader should send proposal"
+    );
+    proposal
+}
+
+async fn get_votes(instances: &mut [HsTestHarness]) -> Vec<(VoteMessage, PublicKey)> {
+    let votes = timeout(
+        Duration::from_secs(1),
+        join_all(
+            instances
+                .iter_mut()
+                .map(|instance| instance.rx_vote_message.recv())
+                .collect::<Vec<_>>(),
+        ),
+    )
+    .await;
+    assert!(votes.is_ok(), "Failed to receive votes");
+    let votes = votes.unwrap();
+    assert!(votes.iter().all(Option::is_some), "Failed to get nodes");
+    votes.into_iter().map(|vote| vote.unwrap()).collect()
+}
+
+async fn send_votes_to_leader(leader_instance: &HsTestHarness, votes: Vec<VoteMessage>, committee: &[PublicKey]) {
+    assert!(
+        timeout(
+            Duration::from_secs(1),
+            join_all(
+                votes
+                    .into_iter()
+                    .zip(committee.iter())
+                    .map(|(vote, public_key)| leader_instance.tx_votes.send((public_key.clone(), vote)))
+                    .collect::<Vec<_>>(),
+            )
+        )
+        .await
+        .is_ok(),
+        "Failed to send votes to the leader"
+    );
+}
+
+async fn send_proposal_to_committee(
+    leader: &RistrettoPublicKey,
+    proposal: &HotStuffMessage<TariDanPayload, RistrettoPublicKey>,
+    instances: &[HsTestHarness],
+) {
+    let mut sends = Vec::new();
+    assert!(
+        timeout(Duration::from_secs(1), async {
+            sends = join_all(
+                instances
+                    .iter()
+                    .map(|instance| instance.tx_hs_messages.send((leader.clone(), proposal.clone())))
+                    .collect::<Vec<_>>(),
+            )
+            .await;
+        })
+        .await
+        .is_ok(),
+        "Failed to send proposal to the committee"
+    );
+    assert!(sends.iter().all(Result::is_ok), "Not all sends succeeded");
+}
+
+// async fn get_recovery_messages(
+//     instances: &mut Vec<HsTestHarness>,
+// ) -> Vec<Option<(RecoveryMessage, Vec<RistrettoPublicKey>)>> {
+//     join_all(
+//         instances
+//             .iter_mut()
+//             .map(|instance| instance.rx_recovery_broadcast.recv())
+//             .collect::<Vec<_>>(),
+//     )
+//     .await
+// }
+
+async fn get_message_to_leader(
+    instances: &mut [HsTestHarness],
+) -> Vec<Option<(RistrettoPublicKey, HotStuffMessage<TariDanPayload, RistrettoPublicKey>)>> {
+    join_all(
+        instances
+            .iter_mut()
+            .map(|instance| instance.rx_leader.recv())
+            .collect::<Vec<_>>(),
+    )
+    .await
+}
+
+#[allow(clippy::too_many_lines)]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn test_leader_fails_only_locally() {
+    // let mut builder = Builder::new();
+    // builder.filter_level(log::LevelFilter::Info);
+    // builder.init();
+    // We create 2 committees
+    // Committee0 will fail only locally
+    let committee0 = (0..4)
+        .map(|_| PublicKey::random_keypair(&mut OsRng))
+        .collect::<Vec<(RistrettoSecretKey, RistrettoPublicKey)>>();
+    // Committee1 will work fine
+    let committee1 = (0..1)
+        .map(|_| PublicKey::random_keypair(&mut OsRng))
+        .collect::<Vec<(RistrettoSecretKey, RistrettoPublicKey)>>();
+    let mut shard0_committee = committee0
+        .iter()
+        .map(|(_, public)| public.clone())
+        .collect::<Vec<RistrettoPublicKey>>();
+    let shard1_committee = committee1
+        .iter()
+        .map(|(_, public)| public.clone())
+        .collect::<Vec<RistrettoPublicKey>>();
+    let payload = TariDanPayload::new(
+        Transaction::builder()
+            .with_inputs(vec![*SHARD0, *SHARD1])
+            .sign(&committee0[0].0)
+            .clone()
+            .build(),
+    );
+    let registered_vn_keys = shard0_committee
+        .iter()
+        .chain(shard1_committee.iter())
+        .cloned()
+        .collect();
+    let epoch_manager = RangeEpochManager::new_with_multiple(registered_vn_keys, &[
+        (*SHARD0..*SHARD1, shard0_committee.clone()),
+        (*SHARD1..*SHARD2, shard1_committee.clone()),
+    ]);
+    let mut committee0_instances = committee0
+        .iter()
+        .map(|(private, public)| {
+            HsTestHarness::new(
+                private.clone(),
+                public.clone(),
+                epoch_manager.clone(),
+                RotatingLeader {},
+                *ONE_SEC,
+            )
+        })
+        .collect::<Vec<HsTestHarness>>();
+    let mut committee1_instances = committee1
+        .iter()
+        .map(|(private, public)| {
+            HsTestHarness::new(
+                private.clone(),
+                public.clone(),
+                epoch_manager.clone(),
+                RotatingLeader {},
+                *NEVER,
+            )
+        })
+        .collect::<Vec<HsTestHarness>>();
+    let prepare_proposal0 =
+        committee_sends_new_view(payload.clone(), &shard0_committee, &mut committee0_instances, *SHARD0)
+            .await
+            .unwrap()
+            .0;
+    assert_eq!(
+        prepare_proposal0.node().unwrap().payload_phase(),
+        HotstuffPhase::Prepare
+    );
+    let prepare_proposal1 =
+        committee_sends_new_view(payload.clone(), &shard1_committee, &mut committee1_instances, *SHARD1)
+            .await
+            .unwrap()
+            .0;
+    assert_eq!(
+        prepare_proposal1.node().unwrap().payload_phase(),
+        HotstuffPhase::Prepare
+    );
+    // Committee0 leader will now send only to foreigners, fails only locally.
+    send_proposal_to_committee(&shard0_committee[0], &prepare_proposal0, &committee1_instances).await;
+    // Now the leader goes offline.
+    shard0_committee.remove(0);
+    committee0_instances.remove(0);
+
+    // Committee1 will act normally.
+    send_proposal_to_committee(&shard1_committee[0], &prepare_proposal1, &committee0_instances).await;
+    send_proposal_to_committee(&shard1_committee[0], &prepare_proposal1, &committee1_instances).await;
+
+    // Committee1 can proceed normally.
+    let votes1 = get_votes(&mut committee1_instances)
+        .await
+        .into_iter()
+        .map(|a| a.0)
+        .collect::<Vec<_>>();
+    send_votes_to_leader(&committee1_instances[0], votes1, &shard1_committee).await;
+    let pre_commit_proposal1 = timeout(Duration::from_secs(1), committee1_instances[0].rx_broadcast.recv()).await;
+    assert!(pre_commit_proposal1.is_ok(), "The leader proposal should be send");
+    let pre_commit_proposal1 = pre_commit_proposal1.unwrap().unwrap().0;
+    assert_eq!(
+        pre_commit_proposal1.node().unwrap().payload_phase(),
+        HotstuffPhase::PreCommit
+    );
+    send_proposal_to_committee(&shard1_committee[0], &pre_commit_proposal1, &committee0_instances).await;
+    send_proposal_to_committee(&shard1_committee[0], &pre_commit_proposal1, &committee1_instances).await;
+
+    // Now the trigger of local leader failure will happen in committe0.
+    let mut to_leader_messages = Vec::new();
+    assert!(
+        timeout(*ONE_SEC * 2, async {
+            to_leader_messages = get_message_to_leader(&mut committee0_instances).await;
+        })
+        .await
+        .is_ok(),
+        "everyone in the committee0 should send a newview message"
+    );
+    // The leader should be rotate to index 1
+    // Send the new view message to the new leader (index 1)
+    join_all(
+        to_leader_messages
+            .into_iter()
+            .zip(shard0_committee.iter())
+            .map(|(msg, public_key)| {
+                let hs_msg = msg.unwrap().1;
+                committee0_instances[0]
+                    .tx_hs_messages
+                    .send((public_key.clone(), hs_msg))
+            })
+            .collect::<Vec<_>>(),
+    )
+    .await;
+
+    let prepare_proposal0 = timeout(Duration::from_secs(1), committee0_instances[0].rx_broadcast.recv()).await;
+    let prepare_proposal0 = prepare_proposal0.unwrap().unwrap().0;
+    assert_eq!(
+        prepare_proposal0.node().unwrap().payload_phase(),
+        HotstuffPhase::Prepare
+    );
+    send_proposal_to_committee(&shard0_committee[0], &prepare_proposal0, &committee0_instances).await;
+    send_proposal_to_committee(&shard0_committee[0], &prepare_proposal0, &committee1_instances).await;
+    // Committe1 should not react for the proposal, because it acted on the previous one for the same height.
+    let votes0 = get_votes(&mut committee0_instances).await;
+    send_votes_to_leader(
+        &committee0_instances[0],
+        votes0.into_iter().map(|vote| vote.0).collect::<Vec<_>>(),
+        &shard0_committee,
+    )
+    .await;
+    let pre_commit_proposal0 = timeout(Duration::from_secs(1), committee0_instances[0].rx_broadcast.recv()).await;
+    assert!(
+        pre_commit_proposal0.is_ok(),
+        "leader of committee0 should send proposal"
+    );
+    let pre_commit_proposal0 = pre_commit_proposal0.unwrap().unwrap().0;
+    assert_eq!(
+        pre_commit_proposal0.node().unwrap().payload_phase(),
+        HotstuffPhase::PreCommit
+    );
+    send_proposal_to_committee(&shard0_committee[0], &pre_commit_proposal0, &committee0_instances).await;
+    send_proposal_to_committee(&shard0_committee[0], &pre_commit_proposal0, &committee1_instances).await;
+    // Now both should be on the same height. Let's finish this transaction.
+    // TODO: Should also cover Decide, but it's not working right now
+    for phase in [HotstuffPhase::Commit] {
+        let votes0 = get_votes(&mut committee0_instances).await;
+        send_votes_to_leader(
+            &committee0_instances[0],
+            votes0.into_iter().map(|vote| vote.0).collect::<Vec<_>>(),
+            &shard0_committee,
+        )
+        .await;
+        let proposal0 = timeout(Duration::from_secs(1), committee0_instances[0].rx_broadcast.recv()).await;
+        assert!(proposal0.is_ok(), "leader of committee0 should send proposal");
+        let proposal0 = proposal0.unwrap().unwrap().0;
+        assert_eq!(proposal0.node().unwrap().payload_phase(), phase);
+
+        let votes1 = get_votes(&mut committee1_instances).await;
+        send_votes_to_leader(
+            &committee1_instances[0],
+            votes1.into_iter().map(|vote| vote.0).collect::<Vec<_>>(),
+            &shard1_committee,
+        )
+        .await;
+        let proposal1 = timeout(Duration::from_secs(1), committee1_instances[0].rx_broadcast.recv()).await;
+        // TODO: This should await `is_ok` but it's currently broken.
+        assert!(proposal1.is_err(), "leader of committee1 should send proposal");
+        // let proposal1 = proposal1.unwrap().unwrap().0;
+        // assert_eq!(proposal1.node().unwrap().payload_phase(), phase);
+    }
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
@@ -627,9 +1151,16 @@ async fn test_kitchen_sink() {
         node1.clone(),
         epoch_manager.clone(),
         AlwaysFirstLeader {},
+        *NEVER,
     );
     // node1_instance.add_package(package);
-    let node2_instance = HsTestHarness::new(node2_pk.clone(), node2.clone(), epoch_manager, AlwaysFirstLeader {});
+    let node2_instance = HsTestHarness::new(
+        node2_pk.clone(),
+        node2.clone(),
+        epoch_manager,
+        AlwaysFirstLeader {},
+        *NEVER,
+    );
     // TODO: Create a task that connects the two instances via their channels so that they can do the hotstuff rounds
     // node1_instance.connect(&node2_instance);
 

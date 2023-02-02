@@ -27,6 +27,8 @@ use std::{
 
 use futures::executor::block_on;
 use log::*;
+use rand::seq::SliceRandom;
+use serde::Serialize;
 use tari_common_types::types::{FixedHash, PublicKey, Signature};
 use tari_core::{ValidatorNodeMmr, ValidatorNodeMmrHasherBlake256};
 use tari_dan_common_types::{
@@ -80,7 +82,21 @@ use crate::{
 };
 
 const LOG_TARGET: &str = "tari::dan_layer::hotstuff_waiter";
-pub const NETWORK_LATENCY: Duration = Duration::from_secs(10);
+pub const NETWORK_LATENCY: Duration = Duration::from_secs(1);
+
+// This is the value that we wait over in the pacemaker. So when it trigger we know what triggered it.
+#[derive(Debug, Clone, Hash, PartialEq, Eq)]
+pub enum PacemakerEvents {
+    LocalCommittee(Epoch, ShardId, PayloadId),
+    ForeignCommittee(Epoch, ShardId, PayloadId),
+}
+
+// Messages that are send between replicas in case of leader failure
+#[derive(Debug, Serialize, Clone)]
+pub enum RecoveryMessage {
+    MissingProposal(Epoch, ShardId, PayloadId, NodeHeight),
+    ElectionInProgress(Epoch, ShardId, PayloadId),
+}
 
 pub struct HotStuffWaiter<
     TPayload,
@@ -101,19 +117,25 @@ pub struct HotStuffWaiter<
     /// Received replica hotstuff messages, namely Proposal messages from the leader or
     /// NewView messages from replicas.
     rx_hs_message: Receiver<(TAddr, HotStuffMessage<TPayload, TAddr>)>,
+    /// Received replica recovery message, namely request for missing node, response election in progress.
+    rx_recovery_message: Receiver<(TAddr, RecoveryMessage)>,
     /// Received vote messages
     rx_votes: Receiver<(TAddr, VoteMessage)>,
     /// Hotstuff messages that should be delivered to the leader
     tx_leader: Sender<(TAddr, HotStuffMessage<TPayload, TAddr>)>,
     /// Hotstuff messages that should be delivered to the replicas
     tx_broadcast: Sender<(HotStuffMessage<TPayload, TAddr>, Vec<TAddr>)>,
+    /// Recovery messages that should be delivered to replica that initiated recovery
+    tx_recovery: Sender<(RecoveryMessage, TAddr)>,
+    /// Recovery messages that should be delivered to foreign committee
+    tx_recovery_broadcast: Sender<(RecoveryMessage, Vec<TAddr>)>,
     /// Vote messages that should be delivered to the leader
     tx_vote_message: Sender<(VoteMessage, TAddr)>,
     /// HotstuffEvent channel
     tx_events: broadcast::Sender<HotStuffEvent>,
     /// The pacemaker handle. Provides an interface to request timing leader responses
     #[allow(dead_code)]
-    pacemaker: PacemakerHandle<(PayloadId, ShardId, Committee<TAddr>)>,
+    pacemaker: PacemakerHandle<PacemakerEvents>,
     /// The payload processor. This determines whether a payload proposal results in an accepted or rejected vote.
     payload_processor: TPayloadProcessor,
     /// Store used to persist consensus state.
@@ -126,6 +148,11 @@ pub struct HotStuffWaiter<
     /// Network latency
     #[allow(dead_code)]
     network_latency: Duration,
+    // We store what round is for next leader selection, default is 0.
+    current_leader_round: HashMap<(ShardId, PayloadId), u32>,
+    // We have to store if we are in the middle of an election, so that when someone sends a recovery message, we can
+    // responde that we are voting and he should wait.
+    election_in_progress: HashSet<(ShardId, PayloadId)>,
 }
 
 impl<TPayload, TAddr, TLeaderStrategy, TEpochManager, TPayloadProcessor, TShardStore, TSigningService>
@@ -146,16 +173,20 @@ where
         leader_strategy: TLeaderStrategy,
         rx_new: Receiver<(TPayload, ShardId)>,
         rx_hs_message: Receiver<(TAddr, HotStuffMessage<TPayload, TAddr>)>,
+        rx_recovery_message: Receiver<(TAddr, RecoveryMessage)>,
         rx_votes: Receiver<(TAddr, VoteMessage)>,
         tx_leader: Sender<(TAddr, HotStuffMessage<TPayload, TAddr>)>,
         tx_broadcast: Sender<(HotStuffMessage<TPayload, TAddr>, Vec<TAddr>)>,
+        tx_recovery: Sender<(RecoveryMessage, TAddr)>,
+        tx_recovery_broadcast: Sender<(RecoveryMessage, Vec<TAddr>)>,
         tx_vote_message: Sender<(VoteMessage, TAddr)>,
         tx_events: broadcast::Sender<HotStuffEvent>,
-        pacemaker: PacemakerHandle<(PayloadId, ShardId, Committee<TAddr>)>,
+        pacemaker: PacemakerHandle<PacemakerEvents>,
         payload_processor: TPayloadProcessor,
         shard_store: TShardStore,
         shutdown: ShutdownSignal,
         consensus_constants: ConsensusConstants,
+        network_latency: Duration,
     ) -> JoinHandle<Result<(), HotStuffError>> {
         let waiter = HotStuffWaiter::new(
             signing_service,
@@ -164,15 +195,19 @@ where
             leader_strategy,
             rx_new,
             rx_hs_message,
+            rx_recovery_message,
             rx_votes,
             tx_leader,
             tx_broadcast,
+            tx_recovery,
+            tx_recovery_broadcast,
             tx_vote_message,
             tx_events,
             pacemaker,
             payload_processor,
             shard_store,
             consensus_constants,
+            network_latency,
         );
         tokio::spawn(waiter.run(shutdown))
     }
@@ -184,15 +219,19 @@ where
         leader_strategy: TLeaderStrategy,
         rx_new: Receiver<(TPayload, ShardId)>,
         rx_hs_message: Receiver<(TAddr, HotStuffMessage<TPayload, TAddr>)>,
+        rx_recovery_message: Receiver<(TAddr, RecoveryMessage)>,
         rx_votes: Receiver<(TAddr, VoteMessage)>,
         tx_leader: Sender<(TAddr, HotStuffMessage<TPayload, TAddr>)>,
         tx_broadcast: Sender<(HotStuffMessage<TPayload, TAddr>, Vec<TAddr>)>,
+        tx_recovery: Sender<(RecoveryMessage, TAddr)>,
+        tx_recovery_broadcast: Sender<(RecoveryMessage, Vec<TAddr>)>,
         tx_vote_message: Sender<(VoteMessage, TAddr)>,
         tx_events: broadcast::Sender<HotStuffEvent>,
-        pacemaker: PacemakerHandle<(PayloadId, ShardId, Committee<TAddr>)>,
+        pacemaker: PacemakerHandle<PacemakerEvents>,
         payload_processor: TPayloadProcessor,
         shard_store: TShardStore,
         consensus_constants: ConsensusConstants,
+        network_latency: Duration,
     ) -> Self {
         Self {
             signing_service,
@@ -201,9 +240,12 @@ where
             leader_strategy,
             rx_new,
             rx_hs_message,
+            rx_recovery_message,
             rx_votes,
             tx_leader,
             tx_broadcast,
+            tx_recovery,
+            tx_recovery_broadcast,
             tx_vote_message,
             tx_events,
             pacemaker,
@@ -211,19 +253,30 @@ where
             shard_store,
             consensus_constants,
             newview_message_counts: HashMap::new(),
-            network_latency: NETWORK_LATENCY,
+            network_latency,
+            current_leader_round: HashMap::new(),
+            election_in_progress: HashSet::new(),
         }
     }
 
     /// Step 1: A new payload has been received. The payload is persisted and all nodes send a NEWVIEW to the leader.
-    async fn on_next_sync_view(&self, payload: TPayload, shard: ShardId) -> Result<(), HotStuffError> {
+    async fn on_next_sync_view(&mut self, payload: TPayload, shard: ShardId) -> Result<(), HotStuffError> {
         let epoch = self.epoch_manager.current_epoch().await?;
 
         let payload_id = payload.to_id();
+        let involved_shards = payload.involved_shards();
+        let local_shards = self
+            .epoch_manager
+            .filter_to_local_shards(epoch, &self.public_key, &involved_shards)
+            .await?;
         debug!(target: LOG_TARGET, "on_next_sync_view started: {}", payload_id);
 
         let committee = self.epoch_manager.get_committee(epoch, shard).await?;
-        let leader = self.leader_strategy.get_leader(&committee, payload_id, shard, 0);
+        // Here the current_leader is always zero.
+        let current_leader = self.current_leader_round.entry((shard, payload_id)).or_default();
+        let leader = self
+            .leader_strategy
+            .get_leader(&committee, payload_id, shard, *current_leader);
 
         let new_view = self.shard_store.with_write_tx(|tx| {
             let high_qc = tx
@@ -257,6 +310,33 @@ where
             .send((leader.clone(), new_view))
             .await
             .map_err(|_| HotStuffError::SendError)?;
+        // We store that we are running an election, so we know what to send when other nodes asks.
+        self.election_in_progress.insert((shard, payload_id));
+        // There is a lower timeout for local committee (delta).
+        self.pacemaker
+            .start_timer(
+                PacemakerEvents::LocalCommittee(epoch, shard, payload_id),
+                self.network_latency,
+            )
+            .await
+            .unwrap();
+
+        // We wait for the foreign committee twice as long (2*delta).
+        // We start timer for each involved shard, the pacemaker will take care of the duplicates. Because if we are in
+        // more than one committees this can be called multiple times. We have to take care of the local shards. They
+        // are added separately above.
+        for shard in involved_shards {
+            if !local_shards.contains(&shard) {
+                // This is shard for foreign committee.
+                self.pacemaker
+                    .start_timer(
+                        PacemakerEvents::ForeignCommittee(epoch, shard, payload_id),
+                        self.network_latency * 2,
+                    )
+                    .await
+                    .unwrap();
+            }
+        }
         Ok(())
     }
 
@@ -378,7 +458,7 @@ where
     /// Step 5: A replica receives a Proposal from the leader. The replicas including the leader, validate the proposal
     /// and, once proposals for all shards have been received, send votes for all shards.
     async fn on_receive_proposal(
-        &self,
+        &mut self,
         from: TAddr,
         node: HotStuffTreeNode<TAddr, TPayload>,
     ) -> Result<(), HotStuffError> {
@@ -395,6 +475,23 @@ where
         );
 
         self.validate_proposal(&node)?;
+
+        // We remove the shard from pacemaker, so it will not trigger. We don't have to check if it's local shard or
+        // not, we just remove them both, one of them will not exists, but pacemaker will take care of that.
+        self.pacemaker
+            .stop_timer(PacemakerEvents::LocalCommittee(node.epoch(), node.shard(), payload_id))
+            .await?;
+
+        self.pacemaker
+            .stop_timer(PacemakerEvents::ForeignCommittee(
+                node.epoch(),
+                node.shard(),
+                payload_id,
+            ))
+            .await?;
+
+        // We did receive something from the leader, so he was elected.
+        self.election_in_progress.remove(&(node.shard(), payload_id));
 
         let shard = node.shard();
         let payload;
@@ -471,6 +568,182 @@ where
         self.finalize_payload(&involved_shards, &node).await?;
 
         Ok(())
+    }
+
+    // Pacemaker triggered for the local leader. Replica sends a newview.
+    async fn pacemaker_trigger_local_leader_fail(
+        &mut self,
+        epoch: Epoch,
+        payload_id: PayloadId,
+        shard_id: ShardId,
+    ) -> Result<(), HotStuffError> {
+        let high_qc = self
+            .shard_store
+            .create_read_tx()?
+            .get_high_qc_for(payload_id, shard_id)
+            .optional()?
+            .unwrap_or_else(|| QuorumCertificate::genesis(epoch, payload_id, shard_id));
+
+        // TODO: should we send this? the new leader probably has it
+        let payload = self.shard_store.create_read_tx()?.get_payload(&payload_id).unwrap();
+
+        // We leave the payload empty, this is just new round, so the nodes should have it.
+        let new_view = HotStuffMessage::new_view(high_qc, shard_id, payload);
+        let current_leader = self
+            .current_leader_round
+            .entry((shard_id, payload_id))
+            .and_modify(|round| *round += 1)
+            .or_default();
+        let committee = self.epoch_manager.get_committee(epoch, shard_id).await?;
+        let leader = self
+            .leader_strategy
+            .get_leader(&committee, payload_id, shard_id, *current_leader);
+        self.tx_leader
+            .send((leader.clone(), new_view))
+            .await
+            .map_err(|_| HotStuffError::SendError)?;
+        // Election started
+        self.election_in_progress.insert((shard_id, payload_id));
+        Ok(())
+    }
+
+    async fn pacemaker_trigger_foreign_leader_fail(
+        &self,
+        epoch: Epoch,
+        payload_id: PayloadId,
+        shard_id: ShardId,
+    ) -> Result<(), HotStuffError> {
+        // TODO: We should check if this is triggered second time. If that's the case, then foreign committee didn't
+        // responded to our first recovery request. So they probably can't reach consensus and this transaction should
+        // be thrown away.
+
+        // The foreign leader failed to send a proposal. Let's check what's going on in the
+        // foreign committee. We will asks f+1 nodes, so that at least one of the should be honest, so if the
+        // committee reached a decision, it will sent it back. Now broadcast to these nodes that I didn't
+        // received new proposal from their leader, someone should have it, or the QC was not reached. Send the
+        // last know height (0 in case we haven't received any proposal yet from this committee).
+        let foreign_committee = self.epoch_manager.get_committee(epoch, shard_id).await.unwrap();
+        let how_many_to_ask = foreign_committee.len() / 3 + 1; // f+1
+
+        // We select the subset of the committee by random.
+        let selected_foreing_committee_members: Vec<_> = foreign_committee
+            .members
+            .choose_multiple(&mut rand::thread_rng(), how_many_to_ask)
+            .cloned()
+            .collect();
+        let last_height = self
+            .shard_store
+            .create_read_tx()?
+            .get_last_payload_height_for_leader_proposal(payload_id, shard_id)?;
+        self.tx_recovery_broadcast
+            .send((
+                RecoveryMessage::MissingProposal(epoch, shard_id, payload_id, last_height),
+                selected_foreing_committee_members,
+            ))
+            .await
+            .unwrap();
+        self.pacemaker
+            .start_timer(
+                PacemakerEvents::ForeignCommittee(epoch, shard_id, payload_id),
+                self.network_latency * 2,
+            )
+            .await
+            .unwrap();
+        Ok(())
+    }
+
+    // Sender is asking if we have anything newer that he has from our local leader. That means that he didn't
+    // received response from our leader maybe there is nothing.
+    async fn on_receive_missing_proposal(
+        &self,
+        from: TAddr,
+        epoch: Epoch,
+        shard_id: ShardId,
+        payload_id: PayloadId,
+        last_height: NodeHeight,
+    ) -> Result<(), HotStuffError> {
+        // TODO maybe we should check that `from` is from someone from any committee on this transaction.
+        let leader_proposals =
+            self.shard_store
+                .create_write_tx()?
+                .get_leader_proposals(payload_id, last_height + NodeHeight(1), &[shard_id]);
+        // We know the last payload, so we check if we have higher height
+        if let Ok(result) = leader_proposals {
+            assert!(
+                result.len() <= 1,
+                "We can't have more than one proposal at certain height for one particular shard"
+            );
+            // TODO: I should receive messages only for shard_id where I'm part of the committee.
+            // Do we have such a node? If not, maybe our leader failed. So I don't send anything and this node will
+            // receive its own pacemaker trigger as well.
+            if let Some(node) = result.get(0) {
+                // We use the leader channel, but for the node it doesn't really matter, because it doesn't check where
+                // is the node coming from as long it's valid.
+                self.tx_leader
+                    .send((from, HotStuffMessage::new_proposal(node.clone(), shard_id)))
+                    .await?;
+            } else {
+                // Maybe we are selecting a new leader right now.
+                if self.election_in_progress.contains(&(shard_id, payload_id)) {
+                    self.tx_recovery
+                        .send((RecoveryMessage::ElectionInProgress(epoch, shard_id, payload_id), from))
+                        .await?;
+                }
+                // If we don't send anything, that means the TX is invalid, this will also trigger invalid in all
+                // committees that are asking us for update.
+            }
+        }
+        Ok(())
+    }
+
+    // We are running a pacemaker for the proposal. But the other committee is still having an election. Let's postpone
+    // the pacemaker.
+    async fn on_receive_election_in_progress(
+        &self,
+        _from: TAddr,
+        epoch: Epoch,
+        shard_id: ShardId,
+        payload_id: PayloadId,
+    ) -> Result<(), HotStuffError> {
+        // TODO: if there is a byzantine replica, he can always send election in progress. We should count the election
+        // rounds. Be aware that the election rounds are based on delta time, and this trigger is 2*delta.
+        // We restart the timer.
+        self.pacemaker
+            .stop_timer(PacemakerEvents::ForeignCommittee(epoch, shard_id, payload_id))
+            .await?;
+        self.pacemaker
+            .start_timer(
+                PacemakerEvents::ForeignCommittee(epoch, shard_id, payload_id),
+                self.network_latency * 2,
+            )
+            .await?;
+        Ok(())
+    }
+
+    async fn on_receive_recovery_message(&self, from: TAddr, msg: RecoveryMessage) -> Result<(), HotStuffError> {
+        match msg {
+            RecoveryMessage::MissingProposal(epoch, shard_id, payload_id, last_height) => {
+                self.on_receive_missing_proposal(from, epoch, shard_id, payload_id, last_height)
+                    .await
+            },
+            RecoveryMessage::ElectionInProgress(epoch, shard_id, payload_id) => {
+                self.on_receive_election_in_progress(from, epoch, shard_id, payload_id)
+                    .await
+            },
+        }
+    }
+
+    async fn on_pacemaker_trigger(&mut self, message: PacemakerEvents) -> Result<(), HotStuffError> {
+        match message {
+            PacemakerEvents::LocalCommittee(epoch, shard_id, payload_id) => {
+                self.pacemaker_trigger_local_leader_fail(epoch, payload_id, shard_id)
+                    .await
+            },
+            PacemakerEvents::ForeignCommittee(epoch, shard_id, payload_id) => {
+                self.pacemaker_trigger_foreign_leader_fail(epoch, payload_id, shard_id)
+                    .await
+            },
+        }
     }
 
     /// Checks that all pledges have been resolved (completed/abandoned). If so, atomically commit the changeset for the
@@ -632,6 +905,18 @@ where
         for node in proposed_nodes {
             // Check that this node is a node we need to vote on
             if !local_shards.contains(&node.shard()) {
+                if node.payload_phase() != HotstuffPhase::Decide &&
+                    !(is_all_rejected && node.payload_phase() == HotstuffPhase::PreCommit)
+                {
+                    // If we are not in decide phase, we are going to send a vote, we expect that the vote will be
+                    // propagated to foreign committees and that we will get a proposal from respective foreing leaders.
+                    self.pacemaker
+                        .start_timer(
+                            PacemakerEvents::ForeignCommittee(epoch, node.shard(), payload_id),
+                            self.network_latency * 2,
+                        )
+                        .await?;
+                }
                 continue;
             }
 
@@ -679,6 +964,13 @@ where
 
             let leader = self.get_leader(&node).await?;
             self.tx_vote_message.send((vote_msg, leader)).await?;
+            // We add timer for each local committee.
+            self.pacemaker
+                .start_timer(
+                    PacemakerEvents::LocalCommittee(epoch, node.shard(), payload_id),
+                    self.network_latency,
+                )
+                .await?;
         }
 
         if is_all_rejected {
@@ -1042,9 +1334,16 @@ where
         shard: ShardId,
         committee: &Committee<TAddr>,
     ) -> Result<bool, HotStuffError> {
-        Ok(self
-            .leader_strategy
-            .is_leader(&self.public_key, committee, payload, shard, 0))
+        // TODO: What if the leader doesn't know that he is the leader? e.g. didn't get the message. The leader (index
+        // 0) failed. Now index 1 should be leader, but he doesn't know, so he ignores the newviews (should we ignore
+        // the newviews?)
+        Ok(self.leader_strategy.is_leader(
+            &self.public_key,
+            committee,
+            payload,
+            shard,
+            *self.current_leader_round.get(&(shard, payload)).unwrap_or(&0),
+        ))
     }
 
     async fn validate_from_committee(&self, from: &TAddr, epoch: Epoch, shard: ShardId) -> Result<(), HotStuffError> {
@@ -1450,6 +1749,18 @@ where
                         error!(target: LOG_TARGET, "Error while processing vote (on_receive_vote): {}", e);
                     }
                 },
+                Some((from,msg)) = self.rx_recovery_message.recv() => {
+                    debug!(target:LOG_TARGET, "Received recovery message from {}", from);
+                    if let Err(e) = self.on_receive_recovery_message(from, msg).await {
+                        error!(target: LOG_TARGET, "Error while processing recovery message (on_receive_recovery_message): {}", e);
+                    }
+                },
+                Some(timeout) = self.pacemaker.on_timeout() => {
+                    debug!(target:LOG_TARGET, "Received timeout message for {:?}", timeout);
+                    if let Err(e) = self.on_pacemaker_trigger(timeout).await {
+                        error!(target: LOG_TARGET, "Error while processing timeout message (on_timeout): {}", e);
+                    }
+                }
                 _ = shutdown.wait() => {
                     info!(target: LOG_TARGET, "💤 Shutting down");
                     break;
