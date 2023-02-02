@@ -802,6 +802,7 @@ async fn get_message_to_leader(
     .await
 }
 
+#[allow(clippy::too_many_lines)]
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn test_leader_fails_only_locally() {
     // let mut builder = Builder::new();
