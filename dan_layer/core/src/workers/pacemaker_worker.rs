@@ -20,7 +20,13 @@
 // WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 // USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use std::{collections::HashMap, fmt::Debug, hash::Hash, time::Duration};
+use std::{
+    collections::HashMap,
+    fmt::Debug,
+    hash::Hash,
+    sync::{Arc, Mutex},
+    time::Duration,
+};
 
 use futures::{future::BoxFuture, stream::FuturesUnordered, StreamExt};
 use log::*;
@@ -56,7 +62,7 @@ pub struct Pacemaker<T> {
     /// Keeps track of waiting timers, parametrized by values of `T`
     waiting_futures: FuturesUnordered<BoxFuture<'static, Option<T>>>,
     /// For each pending timeout, we keep track of inner oneshot channels for communication
-    pending_timeouts: HashMap<T, oneshot::Sender<()>>,
+    pending_timeouts: Arc<Mutex<HashMap<T, oneshot::Sender<()>>>>,
     /// Sender which sends Timeout status to the other end of the channel
     tx_waiter_status: Sender<T>,
 }
@@ -84,13 +90,13 @@ where T: Clone + Debug + PartialEq + Eq + Hash + Send + Sync + 'static
             rx_start_signal,
             rx_stop_signal,
             waiting_futures: FuturesUnordered::new(),
-            pending_timeouts: HashMap::new(),
+            pending_timeouts: Arc::new(Mutex::new(HashMap::new())),
             tx_waiter_status,
         }
     }
 
     fn handle_stop_signal(&mut self, t: T) {
-        if let Some(signal) = self.pending_timeouts.remove(&t) {
+        if let Some(signal) = self.pending_timeouts.lock().unwrap().remove(&t) {
             let _ = signal.send(());
         }
     }
@@ -104,11 +110,15 @@ where T: Clone + Debug + PartialEq + Eq + Hash + Send + Sync + 'static
                         "Received start wait signal for value: {:?}", wait_over
                     );
                     let (tx, rx_stop_signal) = oneshot::channel();
-                    if self.pending_timeouts.insert(wait_over.clone(), tx).is_none() {
+                    let pending_timeouts = self.pending_timeouts.clone();
+                    if pending_timeouts.lock().unwrap().insert(wait_over.clone(), tx).is_none() {
                         self.waiting_futures.push(Box::pin(async move {
                             tokio::select! {
                                 _ = tokio::time::sleep(duration_timeout) => {
                                     info!("The wait signal for value = {:?} has timeout", wait_over);
+                                    // remove the wait_over from the pending_timeouts
+                                    // so that this data structure doesn't grow every time
+                                    pending_timeouts.lock().unwrap().remove(&wait_over);
                                     Some(wait_over)
                                 },
                                 _ = rx_stop_signal => {
