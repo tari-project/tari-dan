@@ -165,8 +165,8 @@ fn test_account() {
         .unwrap();
 
     // Create sender and receiver accounts
-    let sender_address: ComponentAddress = template_test.call_function("Account", "new", args![]);
-    let receiver_address: ComponentAddress = template_test.call_function("Account", "new", args![]);
+    let sender_address: ComponentAddress = template_test.create_account();
+    let receiver_address: ComponentAddress = template_test.create_account();
 
     let _result = template_test
         .execute_and_commit(vec![
@@ -420,7 +420,7 @@ mod basic_nft {
     ) {
         let mut template_test = TemplateTest::new(vec!["tests/templates/nft/basic_nft"]);
 
-        let account_address: ComponentAddress = template_test.call_function("Account", "new", args![]);
+        let account_address: ComponentAddress = template_test.create_account();
         let nft_component: ComponentAddress = template_test.call_function("SparkleNft", "new", args![]);
 
         let nft_resx = template_test.get_previous_output_address(SubstateType::Resource);
@@ -800,7 +800,7 @@ mod emoji_id {
         let mut template_test = TemplateTest::new(vec!["tests/templates/faucet", "tests/templates/nft/emoji_id"]);
 
         // create an account
-        let account_address: ComponentAddress = template_test.call_function("Account", "new", args![]);
+        let account_address: ComponentAddress = template_test.create_account();
 
         // create a fungible token faucet, we are going to use those tokens as payments
         // TODO: use Thaums instead when they're implemented
@@ -934,7 +934,7 @@ mod tickets {
         let mut template_test = TemplateTest::new(vec!["tests/templates/faucet", "tests/templates/nft/tickets"]);
 
         // create an account
-        let account_address: ComponentAddress = template_test.call_function("Account", "new", args![]);
+        let account_address: ComponentAddress = template_test.create_account();
 
         // create a fungible token faucet, we are going to use those tokens as payments
         // TODO: use Thaums instead when they're implemented

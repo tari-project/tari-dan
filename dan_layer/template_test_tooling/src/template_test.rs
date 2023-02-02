@@ -26,6 +26,7 @@ use tari_engine_types::{
 };
 use tari_template_builtin::{get_template_builtin, ACCOUNT_TEMPLATE_ADDRESS};
 use tari_template_lib::{
+    args,
     args::Arg,
     models::{ComponentAddress, ComponentHeader, TemplateAddress},
 };
@@ -148,6 +149,10 @@ impl TemplateTest<MockRuntimeInterface> {
             }])
             .unwrap();
         result.execution_results[0].decode().unwrap()
+    }
+
+    pub fn create_account(&mut self) -> ComponentAddress {
+        self.call_function("Account", "new", args![])
     }
 
     pub fn call_method<T>(&mut self, component_address: ComponentAddress, method_name: &str, args: Vec<Arg>) -> T

@@ -20,36 +20,26 @@
 //   WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //   USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+// TODO: Account should probably be no_std
+
 use tari_template_lib::prelude::*;
 
 #[template]
 mod account_template {
+    use std::collections::HashMap;
+
     use super::*;
 
     pub struct Account {
         // owner_address: RistrettoPublicKey,
         // TODO: Lazy key value map/store
-        vaults: Vec<(ResourceAddress, Vault)>,
+        vaults: HashMap<ResourceAddress, Vault>,
     }
 
     impl Account {
         #[allow(clippy::new_without_default)]
         pub fn new() -> Self {
-            Self { vaults: Vec::new() }
-        }
-
-        fn get_vault(&self, resource: ResourceAddress) -> Option<&Vault> {
-            self.vaults
-                .iter()
-                .find(|(addr, _)| *addr == resource)
-                .map(|(_, vault)| vault)
-        }
-
-        fn get_vault_mut(&mut self, resource: ResourceAddress) -> Option<&mut Vault> {
-            self.vaults
-                .iter_mut()
-                .find(|(addr, _)| *addr == resource)
-                .map(|(_, vault)| vault)
+            Self { vaults: HashMap::new() }
         }
 
         pub fn balance(&self, resource: ResourceAddress) -> Amount {
@@ -81,12 +71,16 @@ mod account_template {
         // #[access_rules(allow_all)]
         pub fn deposit(&mut self, bucket: Bucket) {
             let resource_address = bucket.resource_address();
-            if let Some(v) = self.get_vault_mut(resource_address) {
-                v.deposit(bucket);
-            } else {
-                let mut new_vault = Vault::new_empty(resource_address);
-                new_vault.deposit(bucket);
-                self.vaults.push((resource_address, new_vault));
+            let vault_mut = self
+                .vaults
+                .entry(resource_address)
+                .or_insert_with(|| Vault::new_empty(resource_address));
+            vault_mut.deposit(bucket);
+        }
+
+        pub fn deposit_all(&mut self, buckets: Vec<Bucket>) {
+            for bucket in buckets {
+                self.deposit(bucket);
             }
         }
 
@@ -94,16 +88,16 @@ mod account_template {
         pub fn get_non_fungible_ids(&self, resource: ResourceAddress) -> Vec<NonFungibleId> {
             let v = self
                 .get_vault(resource)
-                .ok_or_else(|| format!("No vault for resource {}", resource))
-                .unwrap();
+                .unwrap_or_else(|| panic!("No vault for resource {}", resource));
             v.get_non_fungible_ids()
         }
 
-        // pub fn deposit_all_from_workspace(&mut self) {
-        //     for bucket in WorkspaceManager::take_all_buckets() {
-        //         debug(format!("bucket: {}", bucket));
-        //         self.deposit(bucket);
-        //     }
-        // }
+        fn get_vault(&self, resource: ResourceAddress) -> Option<&Vault> {
+            self.vaults.get(&resource)
+        }
+
+        fn get_vault_mut(&mut self, resource: ResourceAddress) -> Option<&mut Vault> {
+            self.vaults.get_mut(&resource)
+        }
     }
 }
