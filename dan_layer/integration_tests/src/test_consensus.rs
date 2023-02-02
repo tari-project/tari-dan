@@ -639,13 +639,11 @@ async fn test_local_leader_failure_after_on_receive_proposal() {
         .send((node2.clone(), new_view_message.clone()))
         .await
         .unwrap();
-    dbg!();
     instance1
         .tx_hs_messages
         .send((node1.clone(), new_view_message.clone()))
         .await
         .unwrap();
-    dbg!();
     // Get the node hash from the proposal
     let (proposal_message, _broadcast_group) = instance1.recv_broadcast().await;
 
@@ -805,7 +803,7 @@ async fn get_message_to_leader(
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-async fn test_leader_fail_only_locally() {
+async fn test_leader_fails_only_locally() {
     // let mut builder = Builder::new();
     // builder.filter_level(log::LevelFilter::Info);
     // builder.init();
