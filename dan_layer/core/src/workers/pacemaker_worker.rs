@@ -133,9 +133,9 @@ where T: Clone + Debug + PartialEq + Eq + Hash + Send + Sync + 'static
                 },
                 Some(msg) = self.waiting_futures.next() => {
                     if let Some(t) = msg {
-                    let send_status = self.tx_waiter_status.send(t);
+                        let send_status = self.tx_waiter_status.send(t);
                         if send_status.await.is_err() {
-                                error!(target: LOG_TARGET, "Hotstuff waiter has shut down");
+                            error!(target: LOG_TARGET, "Hotstuff waiter has shut down");
                         }
                     }
                 },
