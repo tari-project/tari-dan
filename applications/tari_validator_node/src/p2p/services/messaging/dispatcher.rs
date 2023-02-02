@@ -62,6 +62,9 @@ impl MessageDispatcher {
                     .send((from, *announce))
                     .await
                     .ok(),
+                DanMessage::RecoveryMessage(msg) => {
+                    self.message_senders.tx_recovery_message.send((from, *msg)).await.ok()
+                },
             };
 
             if result.is_none() {
