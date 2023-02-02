@@ -32,7 +32,7 @@ use tari_dan_core::{
 };
 use tari_dan_engine::{
     packager::{LoadedTemplate, Package},
-    runtime::{ConsensusProvider, IdProvider, RuntimeInterfaceImpl, StateTracker},
+    runtime::{ConsensusContext, IdProvider, RuntimeInterfaceImpl, StateTracker},
     state_store::{memory::MemoryStateStore, AtomicDb, StateReader, StateStoreError, StateWriter},
     transaction::{TransactionError, TransactionProcessor},
     wasm::WasmExecutionError,
@@ -44,30 +44,24 @@ use tari_engine_types::{
 use tari_template_lib::models::{ComponentAddress, TemplateAddress};
 
 #[derive(Debug, Default, Clone)]
-pub struct TariDanPayloadProcessor<TTemplateProvider, TConsensusProvider> {
+pub struct TariDanPayloadProcessor<TTemplateProvider> {
     template_provider: TTemplateProvider,
-    consensus_provider: TConsensusProvider,
 }
 
-impl<TTemplateProvider, TConsensusProvider> TariDanPayloadProcessor<TTemplateProvider, TConsensusProvider> {
-    pub fn new(template_provider: TTemplateProvider, consensus_provider: TConsensusProvider) -> Self {
-        Self {
-            template_provider,
-            consensus_provider,
-        }
+impl<TTemplateProvider> TariDanPayloadProcessor<TTemplateProvider> {
+    pub fn new(template_provider: TTemplateProvider) -> Self {
+        Self { template_provider }
     }
 }
 
-impl<TTemplateProvider, TConsensusProvider> PayloadProcessor<TariDanPayload>
-    for TariDanPayloadProcessor<TTemplateProvider, TConsensusProvider>
-where
-    TTemplateProvider: TemplateProvider<Template = LoadedTemplate>,
-    TConsensusProvider: ConsensusProvider + 'static,
+impl<TTemplateProvider> PayloadProcessor<TariDanPayload> for TariDanPayloadProcessor<TTemplateProvider>
+where TTemplateProvider: TemplateProvider<Template = LoadedTemplate>
 {
     fn process_payload(
         &self,
         payload: TariDanPayload,
         pledges: HashMap<ShardId, ObjectPledge>,
+        consensus: ConsensusContext,
     ) -> Result<FinalizeResult, PayloadProcessorError> {
         let transaction = payload.into_payload();
         let mut template_addresses = HashSet::<_, RandomState>::from_iter(transaction.required_templates());
@@ -81,7 +75,7 @@ where
         // Execution will fail if more than 64 new addresses are created
         let id_provider = IdProvider::new(*transaction.hash(), 64);
         let tracker = StateTracker::new(state_db, id_provider);
-        let runtime = RuntimeInterfaceImpl::new(tracker, self.consensus_provider.clone());
+        let runtime = RuntimeInterfaceImpl::new(tracker, consensus);
         let mut builder = Package::builder();
 
         for addr in template_addresses {

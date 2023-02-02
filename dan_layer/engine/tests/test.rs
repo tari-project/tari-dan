@@ -314,7 +314,7 @@ mod errors {
 }
 
 mod consensus {
-    use tari_template_test_tooling::MockConsensusProviderData;
+    use tari_dan_engine::runtime::ConsensusContext;
 
     use super::*;
 
@@ -328,8 +328,8 @@ mod consensus {
 
         // set the value of current epoch to "1" and call the template function again to check that it reads the new
         // value
-        let new_consensus_data = MockConsensusProviderData { current_epoch: 1 };
-        template_test.set_consensus_provider_data(new_consensus_data);
+        let new_consensus_context = ConsensusContext { current_epoch: 1 };
+        template_test.set_consensus_context(new_consensus_context);
         let result: u64 = template_test.call_function("TestConsensus", "current_epoch", args![]);
         assert_eq!(result, 1);
     }

@@ -28,7 +28,6 @@ use tari_dan_core::{
 use tari_dan_storage_sqlite::{global::SqliteGlobalDbAdapter, SqliteDbFactory};
 
 use crate::{
-    consensus_provider::TariDanConsensusProvider,
     grpc::services::{base_node_client::GrpcBaseNodeClient, wallet_client::GrpcWalletClient},
     p2p::services::{
         comms_peer_provider::CommsPeerProvider,
@@ -50,7 +49,7 @@ impl ServiceSpecification for DefaultServiceSpecification {
     type GlobalDbAdapter = SqliteGlobalDbAdapter;
     type OutboundService = OutboundMessaging;
     type Payload = TariDanPayload;
-    type PayloadProcessor = TariDanPayloadProcessor<TemplateManager, TariDanConsensusProvider>;
+    type PayloadProcessor = TariDanPayloadProcessor<TemplateManager>;
     type PeerProvider = CommsPeerProvider;
     type SigningService = NodeIdentitySigningService;
     type ValidatorNodeClientFactory = TariCommsValidatorNodeClientFactory;

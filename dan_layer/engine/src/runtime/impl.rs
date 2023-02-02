@@ -51,30 +51,27 @@ use tari_template_lib::{
 };
 
 use crate::runtime::{
-    consensus::ConsensusProvider,
     engine_args::EngineArgs,
     tracker::StateTracker,
+    ConsensusContext,
     RuntimeError,
     RuntimeInterface,
     RuntimeState,
 };
 
 #[derive(Debug, Clone)]
-pub struct RuntimeInterfaceImpl<C: ConsensusProvider> {
+pub struct RuntimeInterfaceImpl {
     tracker: StateTracker,
-    consensus_provider: C,
+    consensus: ConsensusContext,
 }
 
-impl<C: ConsensusProvider> RuntimeInterfaceImpl<C> {
-    pub fn new(tracker: StateTracker, consensus_provider: C) -> Self {
-        Self {
-            tracker,
-            consensus_provider,
-        }
+impl RuntimeInterfaceImpl {
+    pub fn new(tracker: StateTracker, consensus: ConsensusContext) -> Self {
+        Self { tracker, consensus }
     }
 }
 
-impl<C: ConsensusProvider> RuntimeInterface for RuntimeInterfaceImpl<C> {
+impl RuntimeInterface for RuntimeInterfaceImpl {
     fn set_current_runtime_state(&self, state: RuntimeState) {
         self.tracker.set_current_runtime_state(state);
     }
@@ -464,10 +461,7 @@ impl<C: ConsensusProvider> RuntimeInterface for RuntimeInterfaceImpl<C> {
 
     fn consensus_invoke(&self, action: ConsensusAction) -> Result<InvokeResult, RuntimeError> {
         match action {
-            ConsensusAction::GetCurrentEpoch => {
-                let current_epoch = self.consensus_provider.current_epoch();
-                Ok(InvokeResult::encode(&current_epoch)?)
-            },
+            ConsensusAction::GetCurrentEpoch => Ok(InvokeResult::encode(&self.consensus.current_epoch)?),
         }
     }
 

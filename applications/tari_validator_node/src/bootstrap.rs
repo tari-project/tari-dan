@@ -44,7 +44,6 @@ use tari_shutdown::ShutdownSignal;
 use crate::{
     base_layer_scanner,
     comms,
-    consensus_provider::TariDanConsensusProvider,
     dry_run_transaction_processor::DryRunTransactionProcessor,
     grpc::services::base_node_client::GrpcBaseNodeClient,
     p2p::{
@@ -135,7 +134,6 @@ pub async fn spawn_services(
     );
 
     // Template manager
-
     let template_manager = TemplateManager::new(global_db.clone(), config.validator_node.templates.clone());
     let template_manager_service = template_manager::spawn(template_manager.clone(), shutdown.clone());
 
@@ -160,8 +158,7 @@ pub async fn spawn_services(
     );
 
     // Payload processor
-    let consensus_provider = TariDanConsensusProvider::new(epoch_manager.clone());
-    let payload_processor = TariDanPayloadProcessor::new(template_manager, consensus_provider);
+    let payload_processor = TariDanPayloadProcessor::new(template_manager);
 
     // Consensus
     let hotstuff_events = hotstuff::try_spawn(

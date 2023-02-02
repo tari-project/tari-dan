@@ -6,7 +6,7 @@ use std::sync::{Arc, RwLock};
 
 use tari_dan_engine::{
     runtime::{
-        ConsensusProvider,
+        ConsensusContext,
         EngineArgs,
         IdProvider,
         RuntimeError,
@@ -37,13 +37,14 @@ use tari_template_lib::{
     Hash,
 };
 
+const MAX_IDS: u32 = 1000;
+
 #[derive(Debug, Clone)]
 pub struct MockRuntimeInterface {
     state: MemoryStateStore,
     calls: Arc<RwLock<Vec<&'static str>>>,
     invoke_result: Arc<RwLock<Option<InvokeResult>>>,
-    inner: RuntimeInterfaceImpl<MockConsensusProvider>,
-    consensus_provider_data: Arc<RwLock<MockConsensusProviderData>>,
+    inner: RuntimeInterfaceImpl,
 }
 
 impl Default for MockRuntimeInterface {
@@ -51,14 +52,12 @@ impl Default for MockRuntimeInterface {
         // TODO: We use a zero transaction hash for tests, however this isn't correct and won't always work.
         let tx_hash = Hash::default();
         let state = MemoryStateStore::default();
-        let tracker = StateTracker::new(state.clone(), IdProvider::new(tx_hash, 1000));
-        let consensus_provider = MockConsensusProvider::default();
+        let tracker = StateTracker::new(state.clone(), IdProvider::new(tx_hash, MAX_IDS));
         Self {
             state,
             calls: Arc::new(RwLock::new(vec![])),
             invoke_result: Arc::new(RwLock::new(None)),
-            inner: RuntimeInterfaceImpl::new(tracker, consensus_provider.clone()),
-            consensus_provider_data: consensus_provider.get_provider_data(),
+            inner: RuntimeInterfaceImpl::new(tracker, ConsensusContext::default()),
         }
     }
 }
@@ -86,14 +85,14 @@ impl MockRuntimeInterface {
         self
     }
 
-    pub fn get_consensus_provider_data(&self) -> Arc<RwLock<MockConsensusProviderData>> {
-        self.consensus_provider_data.clone()
+    pub fn set_consensus_context(&mut self, consensus: ConsensusContext) {
+        let tracker = StateTracker::new(self.state.clone(), IdProvider::new(Hash::default(), MAX_IDS));
+        self.inner = RuntimeInterfaceImpl::new(tracker, consensus);
     }
 
     pub fn reset_runtime(&mut self) {
-        let tracker = StateTracker::new(self.state.clone(), IdProvider::new(Hash::default(), 1000));
-        let consensus_provider = MockConsensusProvider::default();
-        self.inner = RuntimeInterfaceImpl::new(tracker, consensus_provider);
+        let tracker = StateTracker::new(self.state.clone(), IdProvider::new(Hash::default(), MAX_IDS));
+        self.inner = RuntimeInterfaceImpl::new(tracker, ConsensusContext::default());
     }
 }
 
@@ -216,27 +215,4 @@ impl RuntimeInterface for MockRuntimeInterface {
         self.add_call("finalize");
         self.inner.finalize()
     }
-}
-
-#[derive(Debug, Clone, Default)]
-pub struct MockConsensusProvider {
-    pub data: Arc<RwLock<MockConsensusProviderData>>,
-}
-
-impl MockConsensusProvider {
-    fn get_provider_data(&self) -> Arc<RwLock<MockConsensusProviderData>> {
-        self.data.clone()
-    }
-}
-
-impl ConsensusProvider for MockConsensusProvider {
-    fn current_epoch(&self) -> u64 {
-        let data = self.data.read().unwrap();
-        data.current_epoch
-    }
-}
-
-#[derive(Debug, Clone, Default)]
-pub struct MockConsensusProviderData {
-    pub current_epoch: u64,
 }

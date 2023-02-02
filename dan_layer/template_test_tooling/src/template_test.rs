@@ -13,6 +13,7 @@ use tari_crypto::ristretto::RistrettoSecretKey;
 use tari_dan_engine::{
     crypto::create_key_pair,
     packager::{LoadedTemplate, Package, TemplateModuleLoader},
+    runtime::ConsensusContext,
     state_store::{memory::MemoryStateStore, AtomicDb, StateReader, StateStoreError, StateWriter},
     transaction::{Transaction, TransactionError, TransactionProcessor},
     wasm::{compile::compile_template, LoadedWasmTemplate, WasmModule},
@@ -31,7 +32,6 @@ use tari_template_lib::{
 use tari_transaction_manifest::{parse_manifest, ManifestValue};
 
 use super::MockRuntimeInterface;
-use crate::MockConsensusProviderData;
 
 pub struct TemplateTest<R> {
     package: Package,
@@ -79,10 +79,9 @@ impl TemplateTest<MockRuntimeInterface> {
         }
     }
 
-    pub fn set_consensus_provider_data(&self, data: MockConsensusProviderData) {
-        let binding = self.runtime_interface.get_consensus_provider_data();
-        let mut guard = binding.write().unwrap();
-        *guard = data
+    pub fn set_consensus_context(&mut self, consensus: ConsensusContext) {
+        self.runtime_interface.set_consensus_context(consensus);
+        self.processor = TransactionProcessor::new(self.runtime_interface.clone(), self.package.clone());
     }
 
     pub fn read_only_state_store(&self) -> ReadOnlyStateStore {

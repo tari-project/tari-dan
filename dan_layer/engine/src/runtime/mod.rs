@@ -27,7 +27,7 @@ mod r#impl;
 pub use r#impl::RuntimeInterfaceImpl;
 
 mod consensus;
-pub use consensus::ConsensusProvider;
+pub use consensus::ConsensusContext;
 
 mod engine_args;
 pub use crate::runtime::engine_args::EngineArgs;

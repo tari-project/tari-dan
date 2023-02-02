@@ -32,7 +32,6 @@ use tari_shutdown::ShutdownSignal;
 use tokio::sync::mpsc;
 
 use crate::{
-    consensus_provider::TariDanConsensusProvider,
     p2p::services::{
         epoch_manager::handle::EpochManagerHandle,
         hotstuff::hotstuff_service::HotstuffService,
@@ -49,7 +48,7 @@ pub fn try_spawn(
     outbound: OutboundMessaging,
     epoch_manager: EpochManagerHandle,
     mempool: MempoolHandle,
-    payload_processor: TariDanPayloadProcessor<TemplateManager, TariDanConsensusProvider>,
+    payload_processor: TariDanPayloadProcessor<TemplateManager>,
     rx_consensus_message: mpsc::Receiver<(CommsPublicKey, HotStuffMessage<TariDanPayload, CommsPublicKey>)>,
     rx_vote_message: mpsc::Receiver<(CommsPublicKey, VoteMessage)>,
     shutdown: ShutdownSignal,
