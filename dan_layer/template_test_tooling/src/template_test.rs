@@ -9,11 +9,12 @@ use std::{
 
 use anyhow::anyhow;
 use borsh::BorshDeserialize;
-use tari_crypto::ristretto::RistrettoSecretKey;
+use tari_crypto::{ristretto::RistrettoSecretKey, tari_utilities::ByteArray};
 use tari_dan_engine::{
+    bootstrap_state,
     crypto::create_key_pair,
     packager::{LoadedTemplate, Package, TemplateModuleLoader},
-    runtime::ConsensusContext,
+    runtime::{AuthParams, ConsensusContext, RuntimeModule},
     state_store::{memory::MemoryStateStore, AtomicDb, StateReader, StateStoreError, StateWriter},
     transaction::{Transaction, TransactionError, TransactionProcessor},
     wasm::{compile::compile_template, LoadedWasmTemplate, WasmModule},
@@ -28,24 +29,26 @@ use tari_template_builtin::{get_template_builtin, ACCOUNT_TEMPLATE_ADDRESS};
 use tari_template_lib::{
     args,
     args::Arg,
-    models::{ComponentAddress, ComponentHeader, TemplateAddress},
+    crypto::Ed25519PublicKey,
+    models::{ComponentAddress, ComponentHeader, NonFungibleAddress, TemplateAddress},
 };
 use tari_transaction_manifest::{parse_manifest, ManifestValue};
 
-use super::MockRuntimeInterface;
+use crate::track_calls::TrackCallsModule;
 
-pub struct TemplateTest<R> {
+pub struct TemplateTest {
     package: Package,
-    processor: TransactionProcessor<MockRuntimeInterface>,
+    track_calls: TrackCallsModule,
     secret_key: RistrettoSecretKey,
     last_outputs: HashSet<SubstateAddress>,
     name_to_template: HashMap<String, TemplateAddress>,
-    runtime_interface: R,
+    state_store: MemoryStateStore,
+    // TODO: cleanup
+    consensus_context: ConsensusContext,
 }
 
-impl TemplateTest<MockRuntimeInterface> {
+impl TemplateTest {
     pub fn new<P: AsRef<Path>>(template_paths: Vec<P>) -> Self {
-        let runtime_interface = MockRuntimeInterface::default();
         let (secret_key, _pk) = create_key_pair();
 
         let wasms = template_paths
@@ -68,34 +71,36 @@ impl TemplateTest<MockRuntimeInterface> {
             builder.add_template(template_addr, wasm);
         }
         let package = builder.build();
-        let processor = TransactionProcessor::new(runtime_interface.clone(), package.clone());
+        let state_store = MemoryStateStore::default();
+        bootstrap_state(&mut state_store.write_access().unwrap()).unwrap();
 
         Self {
             package,
-            processor,
+            track_calls: TrackCallsModule::new(),
             secret_key,
             name_to_template,
-            runtime_interface,
             last_outputs: HashSet::new(),
+            state_store,
+            // TODO: cleanup
+            consensus_context: ConsensusContext { current_epoch: 0 },
         }
     }
 
     pub fn set_consensus_context(&mut self, consensus: ConsensusContext) {
-        self.runtime_interface.set_consensus_context(consensus);
-        self.processor = TransactionProcessor::new(self.runtime_interface.clone(), self.package.clone());
+        self.consensus_context = consensus;
     }
 
     pub fn read_only_state_store(&self) -> ReadOnlyStateStore {
-        ReadOnlyStateStore::new(self.runtime_interface.state_store())
+        ReadOnlyStateStore::new(self.state_store.clone())
     }
 
     pub fn assert_calls(&self, expected: &[&'static str]) {
-        let calls = self.runtime_interface.get_calls();
+        let calls = self.track_calls.get();
         assert_eq!(calls, expected);
     }
 
     pub fn clear_calls(&self) {
-        self.runtime_interface.clear_calls();
+        self.track_calls.clear();
     }
 
     pub fn get_previous_output_address(&self, ty: SubstateType) -> SubstateAddress {
@@ -107,9 +112,8 @@ impl TemplateTest<MockRuntimeInterface> {
     }
 
     fn commit_diff(&mut self, diff: &SubstateDiff) {
-        let store = self.runtime_interface.state_store();
-        let mut tx = store.write_access().unwrap();
         self.last_outputs.clear();
+        let mut tx = self.state_store.write_access().unwrap();
 
         for (address, _) in diff.down_iter() {
             eprintln!("DOWN substate: {}", address);
@@ -139,36 +143,71 @@ impl TemplateTest<MockRuntimeInterface> {
             .unwrap_or_else(|| panic!("No template with name {}", name))
     }
 
-    pub fn call_function<T>(&mut self, template_name: &str, func_name: &str, args: Vec<Arg>) -> T
-    where T: BorshDeserialize {
+    pub fn call_function<T>(
+        &mut self,
+        template_name: &str,
+        func_name: &str,
+        args: Vec<Arg>,
+        proofs: Vec<NonFungibleAddress>,
+    ) -> T
+    where
+        T: BorshDeserialize,
+    {
         let result = self
-            .execute_and_commit(vec![Instruction::CallFunction {
-                template_address: self.get_template_address(template_name),
-                function: func_name.to_owned(),
-                args,
-            }])
+            .execute_and_commit(
+                vec![Instruction::CallFunction {
+                    template_address: self.get_template_address(template_name),
+                    function: func_name.to_owned(),
+                    args,
+                }],
+                proofs,
+            )
             .unwrap();
         result.execution_results[0].decode().unwrap()
     }
 
-    pub fn create_account(&mut self) -> ComponentAddress {
-        self.call_function("Account", "new", args![])
-    }
-
-    pub fn call_method<T>(&mut self, component_address: ComponentAddress, method_name: &str, args: Vec<Arg>) -> T
-    where T: BorshDeserialize {
+    pub fn call_method<T>(
+        &mut self,
+        component_address: ComponentAddress,
+        method_name: &str,
+        args: Vec<Arg>,
+        proofs: Vec<NonFungibleAddress>,
+    ) -> T
+    where
+        T: BorshDeserialize,
+    {
         let result = self
-            .execute_and_commit(vec![Instruction::CallMethod {
-                component_address,
-                method: method_name.to_owned(),
-                args,
-            }])
+            .execute_and_commit(
+                vec![Instruction::CallMethod {
+                    component_address,
+                    method: method_name.to_owned(),
+                    args,
+                }],
+                proofs,
+            )
             .unwrap();
 
         result.execution_results[0].decode().unwrap()
     }
 
-    pub fn try_execute(&mut self, instructions: Vec<Instruction>) -> Result<FinalizeResult, TransactionError> {
+    pub fn create_owned_account(&mut self) -> (ComponentAddress, NonFungibleAddress, RistrettoSecretKey) {
+        let (owner_proof, secret_key) = self.create_owner_proof();
+        let component = self.call_function("Account", "create", args![owner_proof], vec![owner_proof.clone()]);
+        (component, owner_proof, secret_key)
+    }
+
+    pub fn create_owner_proof(&self) -> (NonFungibleAddress, RistrettoSecretKey) {
+        let (secret_key, public_key) = create_key_pair();
+        let public_key = Ed25519PublicKey::from_bytes(public_key.as_bytes()).unwrap();
+        let owner_token = NonFungibleAddress::from_public_key(public_key);
+        (owner_token, secret_key)
+    }
+
+    pub fn try_execute(
+        &mut self,
+        instructions: Vec<Instruction>,
+        proofs: Vec<NonFungibleAddress>,
+    ) -> Result<FinalizeResult, TransactionError> {
         let mut builder = Transaction::builder();
         for instruction in instructions {
             builder.add_instruction(instruction);
@@ -176,24 +215,30 @@ impl TemplateTest<MockRuntimeInterface> {
         builder.sign(&self.secret_key);
         let transaction = builder.build();
 
-        match self.processor.execute(transaction) {
+        let modules: Vec<Box<dyn RuntimeModule>> = vec![Box::new(self.track_calls.clone())];
+        let auth_params = AuthParams {
+            initial_ownership_proofs: proofs,
+        };
+        let processor = TransactionProcessor::new(
+            self.package.clone(),
+            self.state_store.clone(),
+            auth_params,
+            self.consensus_context.clone(),
+            modules,
+        );
+
+        match processor.execute(transaction) {
             Ok(result) => Ok(result),
-            Err(err) => {
-                // If there's an error we want to clear state from the failed execution. This is equivalent to the
-                // payload executor behaviour which sets up new state for each transaction.
-                self.reset_runtime_state();
-                Err(err)
-            },
+            Err(err) => Err(err),
         }
     }
 
-    fn reset_runtime_state(&mut self) {
-        self.runtime_interface.reset_runtime();
-        self.processor = TransactionProcessor::new(self.runtime_interface.clone(), self.package.clone());
-    }
-
-    pub fn execute_and_commit(&mut self, instructions: Vec<Instruction>) -> anyhow::Result<FinalizeResult> {
-        let result = self.try_execute(instructions)?;
+    pub fn execute_and_commit(
+        &mut self,
+        instructions: Vec<Instruction>,
+        proofs: Vec<NonFungibleAddress>,
+    ) -> anyhow::Result<FinalizeResult> {
+        let result = self.try_execute(instructions, proofs)?;
         let diff = result
             .result
             .accept()
@@ -209,6 +254,7 @@ impl TemplateTest<MockRuntimeInterface> {
         &mut self,
         manifest: &str,
         variables: I,
+        proofs: Vec<NonFungibleAddress>,
     ) -> anyhow::Result<FinalizeResult> {
         let template_imports = self
             .name_to_template
@@ -222,7 +268,7 @@ impl TemplateTest<MockRuntimeInterface> {
             variables.into_iter().map(|(a, b)| (a.to_string(), b)).collect(),
         )
         .unwrap();
-        self.execute_and_commit(instructions)
+        self.execute_and_commit(instructions, proofs)
     }
 }
 
