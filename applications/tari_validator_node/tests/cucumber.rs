@@ -260,6 +260,30 @@ async fn call_template_constructor(
     tokio::time::sleep(Duration::from_secs(4)).await;
 }
 
+#[when(expr = r#"I call function "{word}" on template "{word}" on {word} with {int} outputs named "{word}""#)]
+async fn call_template_constructor_with_no_args(
+    world: &mut TariWorld,
+    function_call: String,
+    template_name: String,
+    vn_name: String,
+    num_outputs: u64,
+    outputs_name: String,
+) {
+    validator_node_cli::create_component(
+        world,
+        outputs_name,
+        template_name,
+        vn_name,
+        function_call,
+        vec![],
+        num_outputs,
+    )
+    .await;
+
+    // give it some time between transactions
+    tokio::time::sleep(Duration::from_secs(4)).await;
+}
+
 #[when(expr = r#"I create a component {word} of template "{word}" on {word} using "{word}""#)]
 async fn call_template_constructor_without_args(
     world: &mut TariWorld,

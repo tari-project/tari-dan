@@ -1,13 +1,21 @@
 //  Copyright 2022 The Tari Project
 //  SPDX-License-Identifier: BSD-3-Clause
 
-use std::{path::PathBuf, str::FromStr};
+use std::{collections::HashMap, path::PathBuf, str::FromStr};
 
 use tari_engine_types::substate::{SubstateAddress, SubstateDiff};
 use tari_template_builtin::ACCOUNT_TEMPLATE_ADDRESS;
-use tari_transaction_manifest::parse_manifest;
+use tari_transaction_manifest::{parse_manifest, ManifestValue};
 use tari_validator_node_cli::{
-    command::transaction::{handle_submit, submit_transaction, CliArg, CliInstruction, CommonSubmitArgs, SubmitArgs},
+    command::transaction::{
+        handle_submit,
+        submit_transaction,
+        CliArg,
+        CliInstruction,
+        CommonSubmitArgs,
+        NewNonFungibleMintOutput,
+        SubmitArgs,
+    },
     from_hex::FromHex,
     key_manager::KeyManager,
     versioned_substate_address::VersionedSubstateAddress,
@@ -232,7 +240,7 @@ pub async fn submit_manifest(
 ) {
     let input_groups = inputs.split(',').map(|s| s.trim()).collect::<Vec<_>>();
     // generate globals for components addresses
-    let globals = world
+    let globals: HashMap<String, ManifestValue> = world
         .outputs
         .iter()
         .filter(|(name, _)| input_groups.contains(&name.as_str()))
@@ -240,6 +248,22 @@ pub async fn submit_manifest(
             outputs
                 .iter()
                 .map(move |(child_name, addr)| (format!("{}/{}", name, child_name), addr.address.clone().into()))
+        })
+        .collect();
+
+    // parse the minting outputs (if any) specified in the manifest
+    let new_non_fungible_outputs: Vec<NewNonFungibleMintOutput> = manifest_content
+        .lines()
+        .filter(|l| l.starts_with("// mint "))
+        .map(|l| l.split_whitespace().skip(2).collect::<Vec<&str>>())
+        .map(|l| {
+            let manifest_value = globals.get(l[0]).unwrap();
+            let resource_address = manifest_value.address().unwrap().as_resource_address().unwrap();
+            let count = l[1].parse().unwrap();
+            NewNonFungibleMintOutput {
+                resource_address,
+                count,
+            }
         })
         .collect();
 
@@ -278,7 +302,7 @@ pub async fn submit_manifest(
         account_template_address: None,
         dry_run: false,
         non_fungible_mint_outputs: vec![],
-        new_non_fungible_outputs: vec![],
+        new_non_fungible_outputs,
     };
     let resp = submit_transaction(instructions, args, data_dir, &mut client)
         .await
