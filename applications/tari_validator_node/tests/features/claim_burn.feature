@@ -16,3 +16,5 @@ Feature: Claim Burn
     When validator node VN sends a registration transaction
     When miner MINER mines 20 new blocks
     Then the validator node VN is listed as registered
+    When I burn 10T on wallet WALLET
+    When miner MINER mines 3 new blocks
