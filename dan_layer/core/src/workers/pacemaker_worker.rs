@@ -108,26 +108,27 @@ where T: Clone + Debug + PartialEq + Eq + Hash + Send + Sync + 'static
                             target: LOG_TARGET,
                             "Received start wait signal for value: {:?}", wait_over
                         );
-                        if !self.pending_timeouts.contains_key(&wait_over) {
+                        if self.pending_timeouts.contains_key(&wait_over) {
+                            info!(target: LOG_TARGET, "Already received an existing wait timer for value = {:?}", wait_over);
+                        } else {
                             let (tx, rx_stop_signal) = oneshot::channel();
                             self.pending_timeouts.insert(wait_over.clone(), tx);
                             self.waiting_futures.push(Box::pin(async move {
-                                tokio::select! {
-                                    _ = tokio::time::sleep(duration_timeout) => {
-                                        info!("The wait signal for value = {:?} has timeout", wait_over);
-                                        (wait_over, true)
-                                    },
-                                    _ = rx_stop_signal => {
-                                        info!("The wait signal for wait_over = {:?} has been shut down", wait_over);
-                                        (wait_over, false)
+                                    tokio::select! {
+                                        _ = tokio::time::sleep(duration_timeout) => {
+                                            info!("The wait signal for value = {:?} has timeout", wait_over);
+                                            (wait_over, true)
+                                        },
+                                        _ = rx_stop_signal => {
+                                            info!("The wait signal for wait_over = {:?} has been shut down", wait_over);
+                                            (wait_over, false)
+                                        }
                                     }
                                 }
-                            }
-                        ));
-                    } else {
-                        info!(target: LOG_TARGET, "Already received an existing wait timer for value = {:?}", wait_over);
+                            ));
+                        }
                     }
-                }}
+                }
                 },
                 Some((wait_over, has_timed_out)) = self.waiting_futures.next() => {
                     // at this point it is safe to remove the wait_over from pending_timeouts
