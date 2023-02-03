@@ -25,7 +25,6 @@ use std::{
     time::Duration,
 };
 
-use futures::executor::block_on;
 use log::*;
 use rand::seq::SliceRandom;
 use serde::Serialize;
@@ -952,7 +951,7 @@ where
                 continue;
             }
 
-            let finalize_result = self.decide(&node, payload.clone(), &shard_pledges)?;
+            let finalize_result = self.decide(&node, payload.clone(), &shard_pledges).await?;
 
             let vote_msg = self.create_vote(
                 *node.hash(),
@@ -1038,7 +1037,7 @@ where
     }
 
     #[allow(clippy::too_many_lines)]
-    fn decide(
+    async fn decide(
         &self,
         node: &HotStuffTreeNode<TAddr, TPayload>,
         payload: TPayload,
@@ -1103,7 +1102,7 @@ where
                     return Ok(finalize_result);
                 }
 
-                let finalize_result = match self.execute(payload, shard_pledges) {
+                let finalize_result = match self.execute(payload, shard_pledges).await {
                     Ok(finalize_result) => finalize_result,
                     Err(err) => FinalizeResult::reject(
                         payload_id.into_array().into(),
@@ -1575,7 +1574,7 @@ where
         Ok(())
     }
 
-    fn execute(
+    async fn execute(
         &self,
         payload: TPayload,
         shard_pledges: &ShardPledgeCollection,
@@ -1611,15 +1610,15 @@ where
             );
         }
 
-        let consensus_context = self.get_consensus_context()?;
+        let consensus_context = self.get_consensus_context().await?;
         let finalize_result = self
             .payload_processor
             .process_payload(payload, pledges, consensus_context)?;
         Ok(finalize_result)
     }
 
-    fn get_consensus_context(&self) -> Result<ConsensusContext, HotStuffError> {
-        let current_epoch = block_on(self.epoch_manager.current_epoch())?.as_u64();
+    async fn get_consensus_context(&self) -> Result<ConsensusContext, HotStuffError> {
+        let current_epoch = self.epoch_manager.current_epoch().await?.as_u64();
         let consensus_context = ConsensusContext { current_epoch };
         Ok(consensus_context)
     }
