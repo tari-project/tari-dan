@@ -24,7 +24,7 @@ use std::fmt::{Display, Formatter};
 
 use tari_bor::{borsh, Decode, Encode};
 
-use crate::{hash::HashParseError, models::TemplateAddress, Hash};
+use crate::{hash::HashParseError, models::TemplateAddress, prelude::AccessRules, Hash};
 
 #[derive(Debug, Clone, Copy, Hash, PartialEq, Eq, PartialOrd, Ord, Encode, Decode)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
@@ -77,6 +77,8 @@ pub struct ComponentHeader {
     pub component_address: ComponentAddress,
     pub template_address: TemplateAddress,
     pub module_name: String,
+    // TODO: Access rules should be a separate substate?
+    pub access_rules: AccessRules,
     // TODO: Split the state from the header
     pub state: ComponentBody,
 }

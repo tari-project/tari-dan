@@ -10,6 +10,8 @@ use tari_template_abi::{
 
 use crate::{
     args::{InvokeResult, NonFungibleAction, NonFungibleInvokeArg},
+    constants::ED25519_RESOURCE,
+    crypto::Ed25519PublicKey,
     models::ResourceAddress,
     prelude::ResourceManager,
     Hash,
@@ -181,11 +183,15 @@ impl NonFungibleAddress {
     pub fn id(&self) -> &NonFungibleId {
         &self.id
     }
+
+    pub fn from_public_key(public_key: Ed25519PublicKey) -> Self {
+        Self::new(ED25519_RESOURCE, NonFungibleId::U256(public_key.into_array()))
+    }
 }
 
 impl Display for NonFungibleAddress {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{} {}", self.resource_address, self.id)
+        write!(f, "{} nft_{}", self.resource_address, self.id)
     }
 }
 
