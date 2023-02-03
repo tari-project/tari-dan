@@ -267,24 +267,29 @@ impl BaseLayerScanner {
 
             for output in utxos.outputs {
                 let output_hash = output.hash();
-                let sidechain_feature = output.features.sidechain_feature.ok_or_else(|| {
-                    BaseLayerScannerError::InvalidSideChainUtxoResponse(
-                        "Validator node registration output must have a sidechain features".to_string(),
-                    )
-                })?;
-                match sidechain_feature {
-                    SideChainFeature::ValidatorNodeRegistration(reg) => {
-                        self.register_validator_node_registration(current_height, reg).await?;
-                    },
-                    SideChainFeature::TemplateRegistration(reg) => {
-                        self.register_code_template_registration(
-                            reg.clone().template_name.into_string(),
-                            (*output_hash).into(),
-                            reg,
-                            &block_info,
+                if output.is_burned() {
+                    warn!(target: LOG_TARGET, "Burned output encountered. Not yet implemented");
+                    // self.register_burnt_utxo(output.commitment);
+                } else {
+                    let sidechain_feature = output.features.sidechain_feature.ok_or_else(|| {
+                        BaseLayerScannerError::InvalidSideChainUtxoResponse(
+                            "Validator node registration output must have a sidechain features".to_string(),
                         )
-                        .await?;
-                    },
+                    })?;
+                    match sidechain_feature {
+                        SideChainFeature::ValidatorNodeRegistration(reg) => {
+                            self.register_validator_node_registration(current_height, reg).await?;
+                        },
+                        SideChainFeature::TemplateRegistration(reg) => {
+                            self.register_code_template_registration(
+                                reg.clone().template_name.into_string(),
+                                (*output_hash).into(),
+                                reg,
+                                &block_info,
+                            )
+                            .await?;
+                        },
+                    }
                 }
             }
 
