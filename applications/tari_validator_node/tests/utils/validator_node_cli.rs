@@ -44,7 +44,7 @@ pub async fn create_account(world: &mut TariWorld, account_name: String, validat
     let instruction = CliInstruction::CallFunction {
         // The "account" template is builtin in the validator nodes with a constant address
         template_address: FromHex(ACCOUNT_TEMPLATE_ADDRESS),
-        function_name: "new".to_owned(),
+        function_name: "create".to_owned(),
         args: vec![], // the account constructor does not have args
     };
     let args = SubmitArgs {
