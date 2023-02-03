@@ -22,9 +22,9 @@ impl EngineArgs {
             .get(index)
             .map(|arg| decode_exact(arg))
             .transpose()
-            .map_err(|_| RuntimeError::InvalidArgument {
+            .map_err(|e| RuntimeError::InvalidArgument {
                 argument: type_name::<T>(),
-                reason: "Argument failed to decode".to_string(),
+                reason: format!("Argument failed to decode. Err: {}", e),
             })?
             .ok_or_else(|| RuntimeError::InvalidArgument {
                 argument: type_name::<T>(),

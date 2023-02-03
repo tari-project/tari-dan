@@ -21,7 +21,7 @@
 //   USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 use std::{
-    collections::BTreeSet,
+    collections::{BTreeSet, HashMap},
     mem,
     sync::{Arc, RwLock},
 };
@@ -38,8 +38,10 @@ use tari_engine_types::{
     vault::Vault,
     TemplateAddress,
 };
+use tari_template_abi::TemplateDef;
 use tari_template_lib::{
     args::MintArg,
+    auth::AccessRules,
     models::{
         Amount,
         BucketId,
@@ -66,7 +68,10 @@ const LOG_TARGET: &str = "tari::engine::runtime::state_tracker";
 pub struct StateTracker {
     working_state: Arc<RwLock<WorkingState>>,
     id_provider: IdProvider,
+    template_defs: HashMap<TemplateAddress, TemplateDef>,
 }
+
+impl StateTracker {}
 
 #[derive(Debug, Clone)]
 pub struct RuntimeState {
@@ -74,10 +79,15 @@ pub struct RuntimeState {
 }
 
 impl StateTracker {
-    pub fn new(state_store: MemoryStateStore, id_provider: IdProvider) -> Self {
+    pub fn new(
+        state_store: MemoryStateStore,
+        id_provider: IdProvider,
+        template_defs: HashMap<TemplateAddress, TemplateDef>,
+    ) -> Self {
         Self {
             working_state: Arc::new(RwLock::new(WorkingState::new(state_store))),
             id_provider,
+            template_defs,
         }
     }
 
@@ -87,6 +97,14 @@ impl StateTracker {
 
     pub fn take_logs(&self) -> Vec<LogEntry> {
         self.write_with(|state| mem::take(&mut state.logs))
+    }
+
+    pub fn get_template_def(&self) -> Result<&TemplateDef, RuntimeError> {
+        let runtime_state = self.runtime_state()?;
+        Ok(self
+            .template_defs
+            .get(&runtime_state.template_address)
+            .expect("Template def not found for current template"))
     }
 
     fn check_amount(&self, amount: Amount) -> Result<(), RuntimeError> {
@@ -284,7 +302,12 @@ impl StateTracker {
         })
     }
 
-    pub fn new_component(&self, module_name: String, state: Vec<u8>) -> Result<ComponentAddress, RuntimeError> {
+    pub fn new_component(
+        &self,
+        module_name: String,
+        state: Vec<u8>,
+        access_rules: AccessRules,
+    ) -> Result<ComponentAddress, RuntimeError> {
         let runtime_state = self.runtime_state()?;
         let component = ComponentBody { state };
         let component_address = self.id_provider().new_component_address()?;
@@ -293,6 +316,7 @@ impl StateTracker {
             component_address,
             template_address: runtime_state.template_address,
             module_name,
+            access_rules,
             state: component,
         };
 

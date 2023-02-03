@@ -45,10 +45,6 @@ impl Resource {
         }
     }
 
-    pub fn resource_address(&self) -> &ResourceAddress {
-        &self.resource_address
-    }
-
     pub fn resource_type(&self) -> ResourceType {
         self.resource_type
     }

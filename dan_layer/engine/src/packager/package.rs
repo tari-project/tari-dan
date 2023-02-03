@@ -22,6 +22,7 @@
 
 use std::collections::HashMap;
 
+use tari_template_abi::TemplateDef;
 use tari_template_lib::models::TemplateAddress;
 
 use crate::packager::template::LoadedTemplate;
@@ -38,6 +39,13 @@ impl Package {
 
     pub fn get_template_by_address(&self, addr: &TemplateAddress) -> Option<&LoadedTemplate> {
         self.templates.get(addr)
+    }
+
+    pub fn get_template_defs(&self) -> HashMap<TemplateAddress, TemplateDef> {
+        self.templates
+            .iter()
+            .map(|(addr, template)| (*addr, template.template_def().clone()))
+            .collect()
     }
 }
 
