@@ -13,11 +13,7 @@ pub fn bootstrap_state<T: StateWriter>(state_db: &mut T) -> Result<(), StateStor
     let address = SubstateAddress::Resource(ED25519_RESOURCE);
     state_db.set_state(
         &address.clone(),
-        Substate::new(
-            address,
-            0,
-            Resource::new(ResourceType::NonFungible, ED25519_RESOURCE, Default::default()),
-        ),
+        Substate::new(address, 0, Resource::new(ResourceType::NonFungible, Default::default())),
     )?;
 
     Ok(())

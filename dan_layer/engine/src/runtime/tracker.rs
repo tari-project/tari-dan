@@ -123,7 +123,7 @@ impl StateTracker {
         metadata: Metadata,
     ) -> Result<ResourceAddress, RuntimeError> {
         let resource_address = self.id_provider.new_resource_address()?;
-        let resource = Resource::new(resource_type, resource_address, metadata);
+        let resource = Resource::new(resource_type, metadata);
         self.write_with(|state| {
             state.new_resources.insert(resource_address, resource);
         });
