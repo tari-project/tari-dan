@@ -12,7 +12,14 @@ use tari_engine_types::{
     substate::{Substate, SubstateAddress},
     vault::Vault,
 };
-use tari_template_lib::models::{BucketId, ComponentAddress, ComponentHeader, NonFungibleId, ResourceAddress, VaultId};
+use tari_template_lib::models::{
+    BucketId,
+    ComponentAddress,
+    ComponentHeader,
+    NonFungibleAddress,
+    ResourceAddress,
+    VaultId,
+};
 
 use crate::{
     runtime::{RuntimeError, RuntimeState, TransactionCommitError},
@@ -27,7 +34,7 @@ pub(super) struct WorkingState {
     pub new_resources: HashMap<ResourceAddress, Resource>,
     pub new_components: HashMap<ComponentAddress, ComponentHeader>,
     pub new_vaults: HashMap<VaultId, Vault>,
-    pub new_non_fungibles: HashMap<(ResourceAddress, NonFungibleId), NonFungibleContainer>,
+    pub new_non_fungibles: HashMap<NonFungibleAddress, NonFungibleContainer>,
 
     pub runtime_state: Option<RuntimeState>,
     pub last_instruction_output: Option<Vec<u8>>,
@@ -70,25 +77,17 @@ impl WorkingState {
         }
     }
 
-    pub fn get_non_fungible(
-        &self,
-        resource_address: &ResourceAddress,
-        nft_id: &NonFungibleId,
-    ) -> Result<NonFungibleContainer, RuntimeError> {
-        match self
-            .new_non_fungibles
-            .get(&(*resource_address, nft_id.clone()))
-            .cloned()
-        {
+    pub fn get_non_fungible(&self, address: &NonFungibleAddress) -> Result<NonFungibleContainer, RuntimeError> {
+        match self.new_non_fungibles.get(address).cloned() {
             Some(nft) => Ok(nft),
             None => {
                 let tx = self.state_store.read_access()?;
                 let nft = tx
-                    .get_state::<_, Substate>(&SubstateAddress::NonFungible(*resource_address, nft_id.clone()))
+                    .get_state::<_, Substate>(&SubstateAddress::NonFungible(address.clone()))
                     .optional()?
                     .ok_or_else(|| RuntimeError::NonFungibleNotFound {
-                        resource_address: *resource_address,
-                        nft_id: nft_id.clone(),
+                        resource_address: *address.resource_address(),
+                        nft_id: address.id().clone(),
                     })?;
                 Ok(nft
                     .into_substate_value()
@@ -118,11 +117,10 @@ impl WorkingState {
 
     pub fn with_non_fungible_mut<R, F: FnOnce(&mut NonFungibleContainer) -> Result<R, RuntimeError>>(
         &mut self,
-        resource_address: ResourceAddress,
-        nft_id: NonFungibleId,
+        address: &NonFungibleAddress,
         callback: F,
     ) -> Result<R, RuntimeError> {
-        let nft_mut = self.new_non_fungibles.get_mut(&(resource_address, nft_id.clone()));
+        let nft_mut = self.new_non_fungibles.get_mut(address);
         match nft_mut {
             Some(nft_mut) => Ok(callback(nft_mut)?),
             None => {
@@ -130,21 +128,22 @@ impl WorkingState {
                     .state_store
                     .read_access()
                     .unwrap()
-                    .get_state::<_, Substate>(&SubstateAddress::NonFungible(resource_address, nft_id.clone()))
+                    .get_state::<_, Substate>(&SubstateAddress::NonFungible(address.clone()))
                     .optional()?
                     .ok_or_else(|| RuntimeError::NonFungibleNotFound {
-                        resource_address,
-                        nft_id: nft_id.clone(),
+                        resource_address: *address.resource_address(),
+                        nft_id: address.id().clone(),
                     })?;
 
                 let mut nft = substate.into_substate_value().into_non_fungible().unwrap_or_else(|| {
                     panic!(
                         "Substate was not a NonFungible type at ({}, {})",
-                        resource_address, nft_id
+                        address.resource_address(),
+                        address.id()
                     )
                 });
                 let ret = callback(&mut nft)?;
-                self.new_non_fungibles.insert((resource_address, nft_id), nft);
+                self.new_non_fungibles.insert(address.clone(), nft);
                 Ok(ret)
             },
         }

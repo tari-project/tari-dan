@@ -29,6 +29,13 @@ impl<T: Into<SubstateAddress>> From<T> for ManifestValue {
     }
 }
 
+// https://github.com/rust-lang/rfcs/issues/2758 :/
+// impl From<NonFungibleId> for ManifestValue {
+//     fn from(id: NonFungibleId) -> Self {
+//         ManifestValue::NonFungibleId(id)
+//     }
+// }
+
 impl FromStr for ManifestValue {
     type Err = ManifestParseError;
 

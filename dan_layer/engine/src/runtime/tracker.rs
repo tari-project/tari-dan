@@ -47,7 +47,7 @@ use tari_template_lib::{
         ComponentBody,
         ComponentHeader,
         Metadata,
-        NonFungibleId,
+        NonFungibleAddress,
         ResourceAddress,
         VaultId,
     },
@@ -137,13 +137,15 @@ impl StateTracker {
                     );
                     let mut token_ids = BTreeSet::new();
                     for (id, (data, mut_data)) in tokens {
-                        if state.get_non_fungible(&resource_address, &id).optional()?.is_some() {
-                            return Err(RuntimeError::DuplicateNonFungibleId { token_id: id });
+                        let address = NonFungibleAddress::new(resource_address, id.clone());
+                        if state.get_non_fungible(&address).optional()?.is_some() {
+                            return Err(RuntimeError::DuplicateNonFungibleId {
+                                token_id: address.id().clone(),
+                            });
                         }
-                        state.new_non_fungibles.insert(
-                            (resource_address, id.clone()),
-                            NonFungibleContainer::new(data, mut_data),
-                        );
+                        state
+                            .new_non_fungibles
+                            .insert(address, NonFungibleContainer::new(data, mut_data));
                         if !token_ids.insert(id.clone()) {
                             return Err(RuntimeError::DuplicateNonFungibleId { token_id: id });
                         }
@@ -169,26 +171,17 @@ impl StateTracker {
         self.read_with(|state| state.get_resource(address))
     }
 
-    pub fn get_non_fungible(
-        &self,
-        resource_address: &ResourceAddress,
-        nft_id: &NonFungibleId,
-    ) -> Result<NonFungibleContainer, RuntimeError> {
-        self.read_with(|state| state.get_non_fungible(resource_address, nft_id))
+    pub fn get_non_fungible(&self, address: &NonFungibleAddress) -> Result<NonFungibleContainer, RuntimeError> {
+        self.read_with(|state| state.get_non_fungible(address))
     }
 
-    pub fn set_non_fungible_data(
-        &self,
-        resource_address: ResourceAddress,
-        nf_id: NonFungibleId,
-        data: Vec<u8>,
-    ) -> Result<(), RuntimeError> {
+    pub fn set_non_fungible_data(&self, address: &NonFungibleAddress, data: Vec<u8>) -> Result<(), RuntimeError> {
         self.write_with(|state| {
-            state.with_non_fungible_mut(resource_address, nf_id.clone(), move |nft| {
+            state.with_non_fungible_mut(address, move |nft| {
                 let contents = nft.contents_mut().ok_or(RuntimeError::InvalidOpNonFungibleBurnt {
                     op: "UpdateNonFungibleData",
-                    resource_address,
-                    nf_id,
+                    resource_address: *address.resource_address(),
+                    nf_id: address.id().clone(),
                 })?;
                 contents.set_mutable_data(data);
                 Ok(())
@@ -270,17 +263,18 @@ impl StateTracker {
             let burnt_amount = bucket.amount();
             let mut resource = state.get_resource(&resource_address)?;
             for token_id in bucket.into_non_fungible_ids().into_iter().flatten() {
-                let mut nft = state.get_non_fungible(&resource_address, &token_id)?;
+                let address = NonFungibleAddress::new(resource_address, token_id);
+                let mut nft = state.get_non_fungible(&address)?;
 
                 if nft.is_burnt() {
                     return Err(RuntimeError::InvalidOpNonFungibleBurnt {
                         op: "burn_bucket",
                         resource_address,
-                        nf_id: token_id,
+                        nf_id: address.id().clone(),
                     });
                 }
                 nft.burn();
-                state.new_non_fungibles.insert((resource_address, token_id), nft);
+                state.new_non_fungibles.insert(address, nft);
             }
 
             resource.decrease_total_supply(burnt_amount);
@@ -440,8 +434,8 @@ impl StateTracker {
                 substate_diff.up(addr, new_substate);
             }
 
-            for ((resource_addr, id), substate) in state.new_non_fungibles {
-                let addr = SubstateAddress::NonFungible(resource_addr, id);
+            for (address, substate) in state.new_non_fungibles {
+                let addr = SubstateAddress::NonFungible(address);
                 let new_substate = match tx.get_state::<_, Substate>(&addr).optional()? {
                     Some(existing_state) => {
                         substate_diff.down(addr.clone(), existing_state.version());
