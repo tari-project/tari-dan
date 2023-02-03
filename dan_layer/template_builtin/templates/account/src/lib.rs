@@ -28,8 +28,6 @@ mod account_template {
     use super::*;
 
     pub struct Account {
-        // owner_address: RistrettoPublicKey,
-        // owner_token: NonFungibleId,
         // TODO: Lazy key value map/store
         vaults: HashMap<ResourceAddress, Vault>,
     }
