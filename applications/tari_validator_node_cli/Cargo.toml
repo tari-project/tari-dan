@@ -17,6 +17,7 @@ tari_utilities = { git = "https://github.com/tari-project/tari_utilities.git", t
 tari_validator_node_client = { path = "../../clients/validator_node_client" }
 tari_template_lib = { path = "../../dan_layer/template_lib" }
 tari_transaction_manifest = { path = "../../dan_layer/transaction_manifest" }
+tari_template_builtin = { path = "../../dan_layer/template_builtin" }
 
 anyhow = "1.0.65"
 clap = { version = "3.2.22", features = ["derive", "env"] }
