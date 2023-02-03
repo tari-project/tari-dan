@@ -678,6 +678,7 @@ async fn test_local_leader_failure_after_on_receive_proposal() {
 }
 
 // This test triggers foreign recovery on every possible step.
+#[allow(clippy::too_many_lines)]
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn test_leader_fails_only_foreignly() {
     let (node0_pk, node0) = PublicKey::random_keypair(&mut OsRng);
