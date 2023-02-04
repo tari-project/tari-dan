@@ -40,16 +40,26 @@ Feature: NFTs
     # Submit a transaction with NFT operations
     When I submit a transaction manifest on VN with inputs "NFT, ACCOUNT" and 3 outputs named "TX1"
         ```
-            // mint NFT/resources/0 1
-            // mint_specific NFT/resources/0 str:SpecialNft
+            // $mint NFT/resources/0 1
+            // $mint_specific NFT/resources/0 str:SpecialNft
+            // $mint_specific NFT/resources/0 str:Burn!
             let sparkle_nft = global!["NFT/components/SparkleNft"];
+            let sparkle_res = global!["NFT/resources/0"];
             let mut account = global!["ACCOUNT/components/Account"];
 
+            // mint a new nft with random id
             let nft_bucket = sparkle_nft.mint();
             account.deposit(nft_bucket);
 
+            // mint a new nft with specific id
             let nft_bucket = sparkle_nft.mint_specific(NonFungibleId("SpecialNft"));
             account.deposit(nft_bucket);
+
+            // burn a nft
+            let nft_bucket = sparkle_nft.mint_specific(NonFungibleId("Burn!"));
+            account.deposit(nft_bucket);
+            let acc_bucket = account.withdraw_non_fungible(sparkle_res, NonFungibleId("Burn!"));
+            sparkle_nft.burn(acc_bucket);
         ```
     When I print the cucumber world
 

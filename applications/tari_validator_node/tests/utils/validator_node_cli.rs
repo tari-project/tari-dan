@@ -256,7 +256,7 @@ pub async fn submit_manifest(
     // parse the minting outputs (if any) specified in the manifest as comments
     let new_non_fungible_outputs: Vec<NewNonFungibleMintOutput> = manifest_content
         .lines()
-        .filter(|l| l.starts_with("// mint "))
+        .filter(|l| l.starts_with("// $mint "))
         .map(|l| l.split_whitespace().skip(2).collect::<Vec<&str>>())
         .map(|l| {
             let manifest_value = globals.get(l[0]).unwrap();
@@ -272,7 +272,7 @@ pub async fn submit_manifest(
     // parse the minting specific outputs (if any) specified in the manifest as comments
     let non_fungible_mint_outputs: Vec<SpecificNonFungibleMintOutput> = manifest_content
         .lines()
-        .filter(|l| l.starts_with("// mint_specific "))
+        .filter(|l| l.starts_with("// $mint_specific "))
         .map(|l| l.split_whitespace().skip(2).collect::<Vec<&str>>())
         .map(|l| {
             let manifest_value = globals.get(l[0]).unwrap();
