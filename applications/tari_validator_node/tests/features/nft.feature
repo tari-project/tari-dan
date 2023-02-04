@@ -55,6 +55,9 @@ Feature: NFTs
             let nft_bucket = sparkle_nft.mint_specific(NonFungibleId("SpecialNft"));
             account.deposit(nft_bucket);
 
+            // mutate nft
+            sparkle_nft.inc_brightness(NonFungibleId("SpecialNft"), 10u32);
+
             // burn a nft
             let nft_bucket = sparkle_nft.mint_specific(NonFungibleId("Burn!"));
             account.deposit(nft_bucket);

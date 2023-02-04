@@ -76,16 +76,6 @@ mod sparkle_nft_template {
             });
         }
 
-        pub fn dec_brightness(&mut self, id: NonFungibleId, brightness: u32) {
-            debug(format!("Decrease brightness on {} by {}", id, brightness));
-            self.with_sparkle_mut(id, |data| {
-                data.brightness = data
-                    .brightness
-                    .checked_sub(brightness)
-                    .expect("Not enough brightness remaining");
-            });
-        }
-
         fn with_sparkle_mut<F: FnOnce(&mut Sparkle)>(&self, id: NonFungibleId, f: F) {
             let resource_manager = ResourceManager::get(self.address);
             let mut nft = resource_manager.get_non_fungible(&id);
