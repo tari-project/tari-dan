@@ -158,7 +158,7 @@ fn add_substate_addresses(world: &mut TariWorld, outputs_name: String, diff: &Su
                 });
                 counters[2] += 1;
             },
-            SubstateAddress::NonFungible(_, _) => {
+            SubstateAddress::NonFungible(_) => {
                 outputs.insert(format!("nfts/{}", counters[3]), VersionedSubstateAddress {
                     address: addr.clone(),
                     version: data.version(),

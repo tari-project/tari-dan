@@ -162,7 +162,7 @@ impl Display for NonFungibleId {
     }
 }
 
-#[derive(Debug, Clone, Encode, Decode)]
+#[derive(Debug, Clone, Encode, Decode, PartialEq, Eq, Hash)]
 #[cfg_attr(feature = "serde", derive(serde::Deserialize, serde::Serialize))]
 pub struct NonFungibleAddress {
     resource_address: ResourceAddress,
@@ -180,6 +180,12 @@ impl NonFungibleAddress {
 
     pub fn id(&self) -> &NonFungibleId {
         &self.id
+    }
+}
+
+impl Display for NonFungibleAddress {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{} {}", self.resource_address, self.id)
     }
 }
 

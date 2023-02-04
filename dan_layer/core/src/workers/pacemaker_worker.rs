@@ -53,7 +53,7 @@ pub struct Pacemaker<T> {
     /// received that same value first). If such value is received, then we stop the waiting process
     rx_signal: Receiver<PacemakerTimer<T>>,
     /// Keeps track of waiting timers, parametrized by values of `T`
-    waiting_futures: FuturesUnordered<BoxFuture<'static, Option<T>>>,
+    waiting_futures: FuturesUnordered<BoxFuture<'static, (T, bool)>>,
     /// For each pending timeout, we keep track of inner oneshot channels for communication
     pending_timeouts: HashMap<T, oneshot::Sender<()>>,
     /// Sender which sends Timeout status to the other end of the channel
@@ -114,11 +114,11 @@ where T: Clone + Debug + PartialEq + Eq + Hash + Send + Sync + 'static
                             tokio::select! {
                                 _ = tokio::time::sleep(duration_timeout) => {
                                     info!("The wait signal for value = {:?} has timeout", wait_over);
-                                    Some(wait_over)
+                                    (wait_over, true)
                                 },
                                 _ = rx_stop_signal => {
                                     info!("The wait signal for wait_over = {:?} has been shut down", wait_over);
-                                    None
+                                    (wait_over, false)
                                 }
                             }
                         }));
@@ -127,11 +127,15 @@ where T: Clone + Debug + PartialEq + Eq + Hash + Send + Sync + 'static
                     }
                 }}
                 },
-                Some(msg) = self.waiting_futures.next() => {
-                    if let Some(t) = msg {
-                    let send_status = self.tx_waiter_status.send(t);
+                Some((wait_over, has_timed_out)) = self.waiting_futures.next() => {
+                    // at this point it is safe to remove the wait_over from pending_timeouts
+                    // so that this data structure doesn't grow every time
+                    self.pending_timeouts.remove(&wait_over);
+                    if has_timed_out {
+                        // send status to the other side of the channel
+                        let send_status = self.tx_waiter_status.send(wait_over);
                         if send_status.await.is_err() {
-                                error!(target: LOG_TARGET, "Hotstuff waiter has shut down");
+                            error!(target: LOG_TARGET, "Hotstuff waiter has shut down");
                         }
                     }
                 },

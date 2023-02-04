@@ -81,7 +81,7 @@ pub enum SubstateAddress {
     Component(ComponentAddress),
     Resource(ResourceAddress),
     Vault(VaultId),
-    NonFungible(ResourceAddress, NonFungibleId),
+    NonFungible(NonFungibleAddress),
 }
 
 impl SubstateAddress {
@@ -111,9 +111,9 @@ impl SubstateAddress {
             SubstateAddress::Component(address) => *address.hash(),
             SubstateAddress::Resource(address) => *address.hash(),
             SubstateAddress::Vault(id) => *id.hash(),
-            SubstateAddress::NonFungible(resource_addr, id) => hasher("non_fungible_id")
-                .chain(resource_addr.hash())
-                .chain(&id)
+            SubstateAddress::NonFungible(address) => hasher("non_fungible_id")
+                .chain(address.resource_address().hash())
+                .chain(address.id())
                 .result(),
         }
     }
@@ -124,15 +124,13 @@ impl SubstateAddress {
             SubstateAddress::Component(addr) => addr.to_string(),
             SubstateAddress::Resource(addr) => addr.to_string(),
             SubstateAddress::Vault(addr) => addr.to_string(),
-            SubstateAddress::NonFungible(_, addr) => addr.to_string(),
+            SubstateAddress::NonFungible(addr) => addr.to_string(),
         }
     }
 
-    pub fn as_non_fungible_address(&self) -> Option<NonFungibleAddress> {
+    pub fn as_non_fungible_address(&self) -> Option<&NonFungibleAddress> {
         match self {
-            SubstateAddress::NonFungible(resource_address, nft_id) => {
-                Some(NonFungibleAddress::new(*resource_address, nft_id.clone()))
-            },
+            SubstateAddress::NonFungible(addr) => Some(addr),
             _ => None,
         }
     }
@@ -150,7 +148,7 @@ impl SubstateAddress {
     }
 
     pub fn is_non_fungible(&self) -> bool {
-        matches!(self, Self::NonFungible(_, _))
+        matches!(self, Self::NonFungible(_))
     }
 }
 
@@ -174,7 +172,7 @@ impl From<VaultId> for SubstateAddress {
 
 impl From<NonFungibleAddress> for SubstateAddress {
     fn from(address: NonFungibleAddress) -> Self {
-        Self::NonFungible(*address.resource_address(), address.id().clone())
+        Self::NonFungible(address)
     }
 }
 
@@ -184,7 +182,7 @@ impl Display for SubstateAddress {
             SubstateAddress::Component(addr) => write!(f, "{}", addr),
             SubstateAddress::Resource(addr) => write!(f, "{}", addr),
             SubstateAddress::Vault(addr) => write!(f, "{}", addr),
-            SubstateAddress::NonFungible(resource_addr, addr) => write!(f, "{} {}", resource_addr, addr),
+            SubstateAddress::NonFungible(addr) => write!(f, "{}", addr),
         }
     }
 }
@@ -211,7 +209,7 @@ impl FromStr for SubstateAddress {
                                 .map_err(|_| InvalidSubstateAddressFormat(s.to_string()))?;
                             let id = NonFungibleId::try_from_canonical_string(addr)
                                 .map_err(|_| InvalidSubstateAddressFormat(s.to_string()))?;
-                            Ok(SubstateAddress::NonFungible(resource_addr, id))
+                            Ok(SubstateAddress::NonFungible(NonFungibleAddress::new(resource_addr, id)))
                         },
                         _ => Err(InvalidSubstateAddressFormat(s.to_string())),
                     },

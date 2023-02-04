@@ -19,8 +19,7 @@
 //   SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY,
 //   WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //   USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-
-use std::mem::size_of;
+use std::{iter, mem::size_of};
 
 use tari_bor::{borsh, Decode, Encode};
 use tari_dan_engine::{
@@ -28,12 +27,14 @@ use tari_dan_engine::{
     transaction::TransactionError,
     wasm::{compile::compile_template, WasmExecutionError},
 };
-use tari_engine_types::{instruction::Instruction, substate::SubstateAddress};
+use tari_engine_types::{commit_result::FinalizeResult, instruction::Instruction, substate::SubstateAddress};
 use tari_template_lib::{
     args,
-    models::{Amount, ComponentAddress},
+    models::{Amount, ComponentAddress, NonFungibleAddress},
+    prelude::{NonFungibleId, ResourceAddress},
 };
 use tari_template_test_tooling::{MockRuntimeInterface, SubstateType, TemplateTest};
+use tari_transaction_manifest::ManifestValue;
 
 #[test]
 fn test_hello_world() {
@@ -543,12 +544,14 @@ mod basic_nft {
 
         let substate_addr = template_test.get_previous_output_address(SubstateType::NonFungible);
         let nft_addr = substate_addr.as_non_fungible_address().unwrap();
-
         let vars = [
             ("account", account_address.into()),
             ("nft", nft_component.into()),
             ("nft_resx", (*nft_addr.resource_address()).into()),
-            ("nft_id", substate_addr.clone().into()),
+            (
+                "nft_id",
+                ManifestValue::NonFungibleId(substate_addr.as_non_fungible_address().unwrap().id().clone()),
+            ),
         ];
 
         template_test
@@ -638,7 +641,7 @@ mod basic_nft {
         let nfts = diff
             .up_iter()
             .filter_map(|(a, _)| match a {
-                SubstateAddress::NonFungible(_, id) => Some(id),
+                SubstateAddress::NonFungible(address) => Some(address.id()),
                 _ => None,
             })
             .collect::<Vec<_>>();
@@ -744,10 +747,6 @@ mod basic_nft {
 }
 
 mod emoji_id {
-    use std::iter;
-
-    use tari_engine_types::commit_result::FinalizeResult;
-    use tari_template_lib::prelude::ResourceAddress;
 
     use super::*;
 
@@ -919,7 +918,6 @@ mod emoji_id {
 }
 
 mod tickets {
-    use tari_template_lib::prelude::NonFungibleId;
 
     use super::*;
 
@@ -1020,14 +1018,13 @@ mod tickets {
             template_test.call_method(account_address, "get_non_fungible_ids", args![ticket_resource]);
         assert_eq!(ticket_ids.len(), 1);
         let ticket_id = ticket_ids.first().unwrap().clone();
-        let ticket_substate_addr = SubstateAddress::NonFungible(ticket_resource, ticket_id);
 
         let vars = [
             ("account", account_address.into()),
             ("ticket_seller", ticket_seller.into()),
             // TODO: it's weird that the "redeem_ticket" method accepts a NonFungibleId, but we are passing a
             // SubstateAddress variable
-            ("ticket_addr", ticket_substate_addr.clone().into()),
+            ("ticket_addr", ManifestValue::NonFungibleId(ticket_id.clone())),
         ];
 
         template_test
@@ -1048,6 +1045,7 @@ mod tickets {
             pub is_redeemed: bool,
         }
 
+        let ticket_substate_addr = SubstateAddress::NonFungible(NonFungibleAddress::new(ticket_resource, ticket_id));
         let ticket_nft = template_test
             .read_only_state_store()
             .get_substate(&ticket_substate_addr)

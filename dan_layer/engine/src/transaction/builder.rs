@@ -7,7 +7,7 @@ use tari_common_types::types::{PrivateKey, PublicKey};
 use tari_crypto::{keys::PublicKey as PublicKeyTrait, ristretto::RistrettoPublicKey};
 use tari_dan_common_types::{ObjectClaim, ShardId, SubstateChange};
 use tari_engine_types::{instruction::Instruction, signature::InstructionSignature, substate::SubstateAddress};
-use tari_template_lib::models::{NonFungibleId, ResourceAddress};
+use tari_template_lib::models::{NonFungibleAddress, NonFungibleId, ResourceAddress};
 
 use super::Transaction;
 use crate::{crypto::create_key_pair, runtime::IdProvider, transaction::TransactionMeta};
@@ -142,7 +142,8 @@ impl TransactionBuilder {
             new_nft_outputs.extend((0..count).map({
                 |_| {
                     let new_hash = id_provider.new_uuid().expect("id provider provides num_outputs IDs");
-                    let new_addr = SubstateAddress::NonFungible(resource_addr, NonFungibleId::from_u256(new_hash));
+                    let address = NonFungibleAddress::new(resource_addr, NonFungibleId::from_u256(new_hash));
+                    let new_addr = SubstateAddress::NonFungible(address);
                     (
                         ShardId::from_hash(&new_addr.to_canonical_hash(), 0),
                         (SubstateChange::Create, ObjectClaim {}),

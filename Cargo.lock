@@ -6140,6 +6140,7 @@ dependencies = [
  "tari_template_abi",
  "tari_template_lib",
  "tari_template_test_tooling",
+ "tari_transaction_manifest",
  "tari_utilities",
  "tempfile",
  "thiserror",

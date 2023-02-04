@@ -261,7 +261,7 @@ impl SubstateType {
             (SubstateType::Component, SubstateAddress::Component(_)) => true,
             (SubstateType::Resource, SubstateAddress::Resource(_)) => true,
             (SubstateType::Vault, SubstateAddress::Vault(_)) => true,
-            (SubstateType::NonFungible, SubstateAddress::NonFungible(_, _)) => true,
+            (SubstateType::NonFungible, SubstateAddress::NonFungible(_)) => true,
             _ => false,
         }
     }
