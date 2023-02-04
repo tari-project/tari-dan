@@ -37,14 +37,19 @@ Feature: NFTs
     # Create an account to deposit the minted nfts
     When I create an account ACCOUNT on VN
 
-    # Submit a transaction manifest
+    # Submit a transaction with NFT operations
     When I submit a transaction manifest on VN with inputs "NFT, ACCOUNT" and 3 outputs named "TX1"
         ```
             // mint NFT/resources/0 1
+            // mint_specific NFT/resources/0 str:SpecialNft
             let sparkle_nft = global!["NFT/components/SparkleNft"];
             let mut account = global!["ACCOUNT/components/Account"];
 
             let nft_bucket = sparkle_nft.mint();
             account.deposit(nft_bucket);
+
+            let nft_bucket = sparkle_nft.mint_specific(NonFungibleId("SpecialNft"));
+            account.deposit(nft_bucket);
         ```
     When I print the cucumber world
+

@@ -5,6 +5,7 @@ use std::{collections::HashMap, path::PathBuf, str::FromStr};
 
 use tari_engine_types::substate::{SubstateAddress, SubstateDiff};
 use tari_template_builtin::ACCOUNT_TEMPLATE_ADDRESS;
+use tari_template_lib::prelude::NonFungibleId;
 use tari_transaction_manifest::{parse_manifest, ManifestValue};
 use tari_validator_node_cli::{
     command::transaction::{
@@ -14,6 +15,7 @@ use tari_validator_node_cli::{
         CliInstruction,
         CommonSubmitArgs,
         NewNonFungibleMintOutput,
+        SpecificNonFungibleMintOutput,
         SubmitArgs,
     },
     from_hex::FromHex,
@@ -251,7 +253,7 @@ pub async fn submit_manifest(
         })
         .collect();
 
-    // parse the minting outputs (if any) specified in the manifest
+    // parse the minting outputs (if any) specified in the manifest as comments
     let new_non_fungible_outputs: Vec<NewNonFungibleMintOutput> = manifest_content
         .lines()
         .filter(|l| l.starts_with("// mint "))
@@ -263,6 +265,22 @@ pub async fn submit_manifest(
             NewNonFungibleMintOutput {
                 resource_address,
                 count,
+            }
+        })
+        .collect();
+
+    // parse the minting specific outputs (if any) specified in the manifest as comments
+    let non_fungible_mint_outputs: Vec<SpecificNonFungibleMintOutput> = manifest_content
+        .lines()
+        .filter(|l| l.starts_with("// mint_specific "))
+        .map(|l| l.split_whitespace().skip(2).collect::<Vec<&str>>())
+        .map(|l| {
+            let manifest_value = globals.get(l[0]).unwrap();
+            let resource_address = manifest_value.address().unwrap().as_resource_address().unwrap();
+            let non_fungible_id = NonFungibleId::try_from_canonical_string(l[1]).unwrap();
+            SpecificNonFungibleMintOutput {
+                resource_address,
+                non_fungible_id,
             }
         })
         .collect();
@@ -301,7 +319,7 @@ pub async fn submit_manifest(
         dump_outputs_into: None,
         account_template_address: None,
         dry_run: false,
-        non_fungible_mint_outputs: vec![],
+        non_fungible_mint_outputs,
         new_non_fungible_outputs,
     };
     let resp = submit_transaction(instructions, args, data_dir, &mut client)
