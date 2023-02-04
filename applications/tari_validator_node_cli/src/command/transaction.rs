@@ -597,8 +597,8 @@ impl CliArg {
 
 #[derive(Debug, Clone)]
 pub struct SpecificNonFungibleMintOutput {
-    resource_address: ResourceAddress,
-    non_fungible_id: NonFungibleId,
+    pub resource_address: ResourceAddress,
+    pub non_fungible_id: NonFungibleId,
 }
 
 impl SpecificNonFungibleMintOutput {

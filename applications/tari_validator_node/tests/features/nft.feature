@@ -3,9 +3,8 @@
 
 Feature: NFTs
 
-  @current
   @serial
-  Scenario: Mint non fungible tokens
+  Scenario: Mint, mutate and burn non fungible tokens
     # Initialize a base node, wallet, miner and VN
     Given a base node BASE
     Given a wallet WALLET connected to base node BASE
@@ -55,7 +54,7 @@ Feature: NFTs
             let nft_bucket = sparkle_nft.mint_specific(NonFungibleId("SpecialNft"));
             account.deposit(nft_bucket);
 
-            // mutate nft
+            // mutate a nft
             sparkle_nft.inc_brightness(NonFungibleId("SpecialNft"), 10u32);
 
             // burn a nft
