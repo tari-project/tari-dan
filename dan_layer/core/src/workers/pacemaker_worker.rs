@@ -86,6 +86,34 @@ where T: Clone + Debug + PartialEq + Eq + Hash + Send + Sync + 'static
         }
     }
 
+    fn handle_start_signal(&mut self, wait_over: T, duration: Duration) {
+        info!(
+            target: LOG_TARGET,
+            "Received start wait signal for value: {:?}", wait_over
+        );
+        if self.pending_timeouts.contains_key(&wait_over) {
+            info!(
+                target: LOG_TARGET,
+                "Already received an existing wait timer for value = {:?}", wait_over
+            );
+        } else {
+            let (tx, rx_stop_signal) = oneshot::channel();
+            self.pending_timeouts.insert(wait_over.clone(), tx);
+            self.waiting_futures.push(Box::pin(async move {
+                tokio::select! {
+                    _ = tokio::time::sleep(duration) => {
+                        info!("The wait signal for value = {:?} has timeout", wait_over);
+                        (wait_over, true)
+                    },
+                    _ = rx_stop_signal => {
+                        info!("The wait signal for wait_over = {:?} has been shut down", wait_over);
+                        (wait_over, false)
+                    }
+                }
+            }));
+        }
+    }
+
     fn handle_stop_signal(&mut self, wait_over: T) {
         if let Some(signal) = self.pending_timeouts.remove(&wait_over) {
             info!(
@@ -101,37 +129,13 @@ where T: Clone + Debug + PartialEq + Eq + Hash + Send + Sync + 'static
             PacemakerTimer::Stop(wait_over) => {
                 self.handle_stop_signal(wait_over);
             },
-            PacemakerTimer::Start(wait_over, duration_timeout) => {
-                info!(
-                    target: LOG_TARGET,
-                    "Received start wait signal for value: {:?}", wait_over
-                );
-                if self.pending_timeouts.contains_key(&wait_over) {
-                    info!(
-                        target: LOG_TARGET,
-                        "Already received an existing wait timer for value = {:?}", wait_over
-                    );
-                } else {
-                    let (tx, rx_stop_signal) = oneshot::channel();
-                    self.pending_timeouts.insert(wait_over.clone(), tx);
-                    self.waiting_futures.push(Box::pin(async move {
-                        tokio::select! {
-                            _ = tokio::time::sleep(duration_timeout) => {
-                                info!("The wait signal for value = {:?} has timeout", wait_over);
-                                (wait_over, true)
-                            },
-                            _ = rx_stop_signal => {
-                                info!("The wait signal for wait_over = {:?} has been shut down", wait_over);
-                                (wait_over, false)
-                            }
-                        }
-                    }));
-                }
+            PacemakerTimer::Start(wait_over, duration) => {
+                self.handle_start_signal(wait_over, duration);
             },
         }
     }
 
-    async fn handle_timeout(&mut self, wait_over: T, has_timed_out: bool) {
+    async fn handle_pending_timeout_ended(&mut self, wait_over: T, has_timed_out: bool) {
         if has_timed_out {
             // at this point it is safe to remove the wait_over from pending_timeouts
             // so that this data structure doesn't grow every time.
@@ -150,7 +154,7 @@ where T: Clone + Debug + PartialEq + Eq + Hash + Send + Sync + 'static
             tokio::select! {
                 Some(signal) = self.rx_signal.recv() => { self.handle_signal(signal) },
                 Some((wait_over, has_timed_out)) = self.waiting_futures.next() => {
-                    self.handle_timeout(wait_over, has_timed_out).await
+                    self.handle_pending_timeout_ended(wait_over, has_timed_out).await
                 },
                 _ = shutdown.wait() => {
                     info!("Shutting down pacemaker service..");
@@ -279,13 +283,13 @@ mod tests {
         tokio::time::sleep(Duration::from_millis(1)).await;
 
         // stop waiting messages that are indexed by even numbers
-        for i in (0..100).filter(|i| i % 2 == 0) {
+        for i in (0..100).step_by(2) {
             handle.stop_timer(i).await.unwrap();
         }
 
         // assert that timeouts occur if and only if messages are indexed by odd numbers
         tokio::time::sleep(Duration::from_millis(100)).await;
-        for i in (0..100).filter(|i| i % 2 == 1) {
+        for i in (1..100).step_by(2) {
             let val = handle.on_timeout().await.unwrap();
             assert_eq!(i, val)
         }
@@ -311,15 +315,15 @@ mod tests {
 
         // stop waiting messages that are indexed by even numbers, and check that the corresponding
         // pending timeouts are removed from the pending_timeouts hash map
-        for i in (0..100).filter(|i| i % 2 == 0) {
+        for i in (0..100).step_by(2) {
             pacemaker.handle_signal(PacemakerTimer::Stop(i));
             assert_eq!(pacemaker.pending_timeouts.len(), 100 - (i / 2) as usize - 1);
         }
 
         // assert that timeouts occur and they are removed from pending_timeouts hash map,
         // for each odd number in 0..100
-        for i in (0..100).filter(|i| i % 2 == 1) {
-            pacemaker.handle_timeout(i, true).await;
+        for i in (1..100).step_by(2) {
+            pacemaker.handle_pending_timeout_ended(i, true).await;
             assert_eq!(pacemaker.pending_timeouts.len(), 50 - (i / 2) as usize - 1);
         }
     }
