@@ -301,15 +301,13 @@ mod tests {
         let (_, rx_signal) = channel::<PacemakerTimer<u8>>(10);
         let (tx_waiter_status, _) = channel::<u8>(10);
 
-        let mut pacemaker = Box::new(Pacemaker::new(rx_signal, tx_waiter_status));
+        let mut pacemaker = Pacemaker::new(rx_signal, tx_waiter_status);
 
         // loop over start wait messages
         for i in 0..100 {
             pacemaker.handle_signal(PacemakerTimer::Start(i, Duration::from_millis(2000)));
             assert_eq!(pacemaker.pending_timeouts.len(), i as usize + 1);
         }
-
-        tokio::time::sleep(Duration::from_millis(1)).await;
 
         // stop waiting messages that are indexed by even numbers, and check that the corresponding
         // pending timeouts are removed from the pending_timeouts hash map
@@ -320,7 +318,6 @@ mod tests {
 
         // assert that timeouts occur and they are removed from pending_timeouts hash map,
         // for each odd number in 0..100
-        tokio::time::sleep(Duration::from_millis(100)).await;
         for i in (0..100).filter(|i| i % 2 == 1) {
             pacemaker.handle_timeout(i, true).await;
             assert_eq!(pacemaker.pending_timeouts.len(), 50 - (i / 2) as usize - 1);
