@@ -127,6 +127,7 @@ diesel::table! {
     substates (id) {
         id -> Integer,
         shard_id -> Binary,
+        address -> Text,
         version -> BigInt,
         data -> Text,
         created_by_payload_id -> Binary,

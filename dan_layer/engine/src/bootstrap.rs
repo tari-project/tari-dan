@@ -12,8 +12,8 @@ use crate::state_store::{StateStoreError, StateWriter};
 pub fn bootstrap_state<T: StateWriter>(state_db: &mut T) -> Result<(), StateStoreError> {
     let address = SubstateAddress::Resource(PUBLIC_IDENTITY_RESOURCE);
     state_db.set_state(
-        &address.clone(),
-        Substate::new(address, 0, Resource::new(ResourceType::NonFungible, Default::default())),
+        &address,
+        Substate::new(0, Resource::new(ResourceType::NonFungible, Default::default())),
     )?;
 
     Ok(())

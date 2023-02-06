@@ -46,7 +46,10 @@ use tari_dan_core::{
 };
 use tari_dan_engine::{runtime::ConsensusContext, transaction::Transaction};
 use tari_dan_storage_sqlite::sqlite_shard_store_factory::SqliteShardStore;
-use tari_engine_types::{commit_result::FinalizeResult, substate::Substate};
+use tari_engine_types::{
+    commit_result::FinalizeResult,
+    substate::{Substate, SubstateAddress},
+};
 use thiserror::Error;
 
 use crate::{
@@ -233,6 +236,7 @@ impl DryRunTransactionProcessor {
             let substate = Substate::from_bytes(&msg.substate)?;
             SubstateState::Up {
                 created_by: msg.created_payload_id.try_into()?,
+                address: SubstateAddress::from_bytes(&msg.address)?,
                 data: substate,
             }
         };

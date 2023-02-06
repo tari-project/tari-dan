@@ -10,11 +10,12 @@ use tari_dan_common_types::{
     SubstateState,
     TreeNodeHash,
 };
-use tari_engine_types::substate::Substate;
+use tari_engine_types::substate::{Substate, SubstateAddress};
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct SubstateShardData {
     shard_id: ShardId,
+    address: SubstateAddress,
     version: u32,
     substate: Substate,
     created_height: NodeHeight,
@@ -30,6 +31,7 @@ pub struct SubstateShardData {
 impl SubstateShardData {
     pub fn new(
         shard_id: ShardId,
+        address: SubstateAddress,
         version: u32,
         substate: Substate,
         created_height: NodeHeight,
@@ -43,6 +45,7 @@ impl SubstateShardData {
     ) -> Self {
         Self {
             shard_id,
+            address,
             version,
             substate,
             created_height,
@@ -58,6 +61,10 @@ impl SubstateShardData {
 
     pub fn shard_id(&self) -> ShardId {
         self.shard_id
+    }
+
+    pub fn substate_address(&self) -> &SubstateAddress {
+        &self.address
     }
 
     pub fn substate(&self) -> &Substate {
@@ -109,6 +116,7 @@ impl SubstateShardData {
             SubstateState::Down { deleted_by: payload_id }
         } else {
             SubstateState::Up {
+                address: self.address.clone(),
                 created_by: self.created_payload_id(),
                 data: self.into_substate(),
             }

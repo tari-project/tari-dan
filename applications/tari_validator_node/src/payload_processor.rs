@@ -154,15 +154,13 @@ fn create_populated_state_store<I: IntoIterator<Item = ObjectPledge>>(
 
     for input in inputs {
         match input.current_state {
-            SubstateState::Up { data, .. } => {
-                // TODO: address and state should be separate
-                let addr = data.substate_address().clone();
+            SubstateState::Up { address, data, .. } => {
                 log::debug!(target: "tari::dan_layer::payload_processor",
                     "State store input substate: {} v{}",
-                    addr,
+                    address,
                     data.version()
                 );
-                tx.set_state(&addr, data)?;
+                tx.set_state(&address, data)?;
             },
             SubstateState::DoesNotExist | SubstateState::Down { .. } => { /* Do nothing */ },
         }
