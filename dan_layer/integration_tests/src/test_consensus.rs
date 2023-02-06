@@ -677,6 +677,125 @@ async fn test_local_leader_failure_after_on_receive_proposal() {
     instance2.assert_shuts_down_safely().await;
 }
 
+// This test triggers foreign recovery on every possible step.
+#[allow(clippy::too_many_lines)]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn test_leader_fails_only_foreignly() {
+    let (node0_pk, node0) = PublicKey::random_keypair(&mut OsRng);
+    let (node1_pk, node1) = PublicKey::random_keypair(&mut OsRng);
+    let shard0_committee = vec![node0.clone()];
+    let shard1_committee = vec![node1.clone()];
+    let registered_vn_keys = vec![node0.clone(), node1.clone()];
+    let epoch_manager = RangeEpochManager::new_with_multiple(registered_vn_keys, &[
+        (*SHARD0..*SHARD1, shard0_committee),
+        (*SHARD1..*SHARD2, shard1_committee),
+    ]);
+
+    let mut instance0 = HsTestHarness::new(
+        node0_pk.clone(),
+        node0.clone(),
+        epoch_manager.clone(),
+        RotatingLeader {},
+        *ONE_SEC,
+    );
+    let mut instance1 = HsTestHarness::new(
+        node1_pk.clone(),
+        node1.clone(),
+        epoch_manager.clone(),
+        RotatingLeader {},
+        *NEVER,
+    );
+
+    let payload = TariDanPayload::new(
+        Transaction::builder()
+            .add_input(*SHARD0)
+            .add_input(*SHARD1)
+            .sign(&node0_pk)
+            .clone()
+            .build(),
+    );
+
+    // Start TX
+    instance0.tx_new.send((payload.clone(), *SHARD0)).await.unwrap();
+    instance1.tx_new.send((payload.clone(), *SHARD1)).await.unwrap();
+    // Get new views
+    let new_view0 = timeout(*ONE_SEC, instance0.rx_leader.recv()).await;
+    let new_view1 = timeout(*ONE_SEC, instance1.rx_leader.recv()).await;
+    assert!(new_view0.is_ok(), "New_view0 was send");
+    assert!(new_view1.is_ok(), "New_view1 was send");
+    let new_view0 = new_view0.unwrap().unwrap().1;
+    let new_view1 = new_view1.unwrap().unwrap().1;
+    // Leaders are selected
+    instance0.tx_hs_messages.send((node0.clone(), new_view0)).await.unwrap();
+    instance1.tx_hs_messages.send((node1.clone(), new_view1)).await.unwrap();
+    for phase in [
+        HotstuffPhase::Prepare,
+        HotstuffPhase::PreCommit,
+        HotstuffPhase::Commit,
+        HotstuffPhase::Decide,
+    ] {
+        tokio::time::sleep(Duration::from_millis(100)).await;
+        // Proposals should be send
+        let proposal0 = timeout(*ONE_SEC, instance0.rx_broadcast.recv()).await;
+        let proposal1 = timeout(*ONE_SEC, instance1.rx_broadcast.recv()).await;
+        assert!(proposal0.is_ok(), "Proposal0 should be send");
+        assert!(proposal1.is_ok(), "Proposal1 should be send");
+        // Now don't send the proposal1 to commmittee0
+        let proposal0 = proposal0.unwrap().unwrap().0;
+        let proposal1 = proposal1.unwrap().unwrap().0;
+        assert_eq!(proposal0.node().unwrap().payload_phase(), phase);
+        assert_eq!(proposal1.node().unwrap().payload_phase(), phase);
+        // Node1 will never send proposal directly, only from recovery.
+        instance0
+            .tx_hs_messages
+            .send((node0.clone(), proposal0.clone()))
+            .await
+            .unwrap();
+        instance1.tx_hs_messages.send((node0.clone(), proposal0)).await.unwrap();
+        instance1.tx_hs_messages.send((node1.clone(), proposal1)).await.unwrap();
+        let recovery_message = timeout(*ONE_SEC * 10, instance0.rx_recovery_broadcast.recv()).await;
+        assert!(
+            recovery_message.is_ok(),
+            "Recovery message should be send from committee0"
+        );
+        let recovery_message = recovery_message.unwrap().unwrap().0;
+        assert!(matches!(recovery_message, RecoveryMessage::MissingProposal(..)));
+        // Now we send the request and get the missing proposal
+        instance1
+            .tx_recovery_messages
+            .send((node0.clone(), recovery_message))
+            .await
+            .unwrap();
+        // The node should send it on normal channel, not the recovery
+        let recovery_proposal1 = timeout(*ONE_SEC * 10, instance1.rx_leader.recv()).await;
+        assert!(
+            recovery_proposal1.is_ok(),
+            "The node should send proposal as a response to the recovery request"
+        );
+        let recovery_proposal1 = recovery_proposal1.unwrap().unwrap().1;
+        assert_eq!(recovery_proposal1.node().unwrap().payload_phase(), phase);
+        instance0
+            .tx_hs_messages
+            .send((node1.clone(), recovery_proposal1))
+            .await
+            .unwrap();
+        if phase != HotstuffPhase::Decide {
+            tokio::time::sleep(Duration::from_millis(100)).await;
+            // Now the node0 has both proposal and if they are valid it should send a vote.
+            let vote0 = timeout(*ONE_SEC, instance0.rx_vote_message.recv()).await;
+            let vote1 = timeout(*ONE_SEC, instance1.rx_vote_message.recv()).await;
+            assert!(vote0.is_ok(), "The node0 should send a vote once it has both proposals"); // This one is from the recovered proposal.
+            assert!(vote1.is_ok(), "The node1 should send a vote");
+            let vote0 = vote0.unwrap().unwrap().0;
+            let vote1 = vote1.unwrap().unwrap().0;
+            instance0.tx_votes.send((node0.clone(), vote0)).await.unwrap();
+            instance1.tx_votes.send((node1.clone(), vote1)).await.unwrap();
+        }
+    }
+    instance0.assert_shuts_down_safely().await;
+    instance1.assert_shuts_down_safely().await;
+}
+
 async fn committee_sends_new_view(
     payload: TariDanPayload,
     committee: &[PublicKey],

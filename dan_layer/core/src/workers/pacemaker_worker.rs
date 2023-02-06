@@ -104,34 +104,38 @@ where T: Clone + Debug + PartialEq + Eq + Hash + Send + Sync + 'static
                             self.handle_stop_signal(wait_over);
                         }
                         PacemakerTimer::Start(wait_over, duration_timeout) => {
-                    info!(
-                        target: LOG_TARGET,
-                        "Received start wait signal for value: {:?}", wait_over
-                    );
-                    let (tx, rx_stop_signal) = oneshot::channel();
-                    if self.pending_timeouts.insert(wait_over.clone(), tx).is_none() {
-                        self.waiting_futures.push(Box::pin(async move {
-                            tokio::select! {
-                                _ = tokio::time::sleep(duration_timeout) => {
-                                    info!("The wait signal for value = {:?} has timeout", wait_over);
-                                    (wait_over, true)
-                                },
-                                _ = rx_stop_signal => {
-                                    info!("The wait signal for wait_over = {:?} has been shut down", wait_over);
-                                    (wait_over, false)
+                        info!(
+                            target: LOG_TARGET,
+                            "Received start wait signal for value: {:?}", wait_over
+                        );
+                        if self.pending_timeouts.contains_key(&wait_over) {
+                            info!(target: LOG_TARGET, "Already received an existing wait timer for value = {:?}", wait_over);
+                        } else {
+                            let (tx, rx_stop_signal) = oneshot::channel();
+                            self.pending_timeouts.insert(wait_over.clone(), tx);
+                            self.waiting_futures.push(Box::pin(async move {
+                                    tokio::select! {
+                                        _ = tokio::time::sleep(duration_timeout) => {
+                                            info!("The wait signal for value = {:?} has timeout", wait_over);
+                                            (wait_over, true)
+                                        },
+                                        _ = rx_stop_signal => {
+                                            info!("The wait signal for wait_over = {:?} has been shut down", wait_over);
+                                            (wait_over, false)
+                                        }
+                                    }
                                 }
-                            }
-                        }));
-                    } else {
-                        info!(target: LOG_TARGET, "Already received an existing wait timer for value = {:?}", wait_over);
+                            ));
+                        }
                     }
-                }}
+                }
                 },
                 Some((wait_over, has_timed_out)) = self.waiting_futures.next() => {
                     // at this point it is safe to remove the wait_over from pending_timeouts
                     // so that this data structure doesn't grow every time
-                    self.pending_timeouts.remove(&wait_over);
                     if has_timed_out {
+                        // When the signal was triggered it was removed in the handle_stop_signal.
+                        self.pending_timeouts.remove(&wait_over);
                         // send status to the other side of the channel
                         let send_status = self.tx_waiter_status.send(wait_over);
                         if send_status.await.is_err() {
@@ -279,6 +283,23 @@ mod tests {
 
         // no more messages are received
         assert!(tokio::time::timeout(Duration::from_millis(100), handle.on_timeout())
+            .await
+            .is_err());
+    }
+
+    #[tokio::test]
+    async fn test_double_add() {
+        let shutdown = Shutdown::new();
+        let mut handle = Pacemaker::spawn(shutdown.to_signal());
+        handle.start_timer(1, Duration::from_millis(100)).await.unwrap();
+        handle.start_timer(1, Duration::from_millis(100)).await.unwrap();
+        assert!(tokio::time::timeout(Duration::from_millis(300), handle.on_timeout())
+            .await
+            .is_ok());
+        handle.start_timer(2, Duration::from_millis(100)).await.unwrap();
+        handle.start_timer(2, Duration::from_millis(100)).await.unwrap();
+        handle.stop_timer(2).await.unwrap();
+        assert!(tokio::time::timeout(Duration::from_millis(300), handle.on_timeout())
             .await
             .is_err());
     }
