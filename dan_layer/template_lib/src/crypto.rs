@@ -5,17 +5,17 @@ const KEY_LEN: usize = 32;
 
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub struct Ed25519PublicKey(#[cfg_attr(feature = "serde", serde(with = "hex::serde"))] [u8; KEY_LEN]);
+pub struct RistrettoPublicKeyBytes(#[cfg_attr(feature = "serde", serde(with = "hex::serde"))] [u8; KEY_LEN]);
 
-impl Ed25519PublicKey {
-    pub fn from_bytes(bytes: &[u8]) -> Result<Self, ParseEd25519PublicKeyError> {
+impl RistrettoPublicKeyBytes {
+    pub fn from_bytes(bytes: &[u8]) -> Result<Self, ParseRistrettoPublicKeyError> {
         if bytes.len() != KEY_LEN {
-            return Err(ParseEd25519PublicKeyError::InvalidLength { size: bytes.len() });
+            return Err(ParseRistrettoPublicKeyError::InvalidLength { size: bytes.len() });
         }
 
         let mut key = [0u8; KEY_LEN];
         key.copy_from_slice(bytes);
-        Ok(Ed25519PublicKey(key))
+        Ok(RistrettoPublicKeyBytes(key))
     }
 
     pub fn as_bytes(&self) -> &[u8] {
@@ -27,8 +27,8 @@ impl Ed25519PublicKey {
     }
 }
 
-impl TryFrom<&[u8]> for Ed25519PublicKey {
-    type Error = ParseEd25519PublicKeyError;
+impl TryFrom<&[u8]> for RistrettoPublicKeyBytes {
+    type Error = ParseRistrettoPublicKeyError;
 
     fn try_from(value: &[u8]) -> Result<Self, Self::Error> {
         Self::from_bytes(value)
@@ -36,6 +36,6 @@ impl TryFrom<&[u8]> for Ed25519PublicKey {
 }
 
 #[derive(Debug, PartialEq, Eq)]
-pub enum ParseEd25519PublicKeyError {
+pub enum ParseRistrettoPublicKeyError {
     InvalidLength { size: usize },
 }

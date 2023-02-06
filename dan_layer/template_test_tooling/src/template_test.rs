@@ -29,7 +29,7 @@ use tari_template_builtin::{get_template_builtin, ACCOUNT_TEMPLATE_ADDRESS};
 use tari_template_lib::{
     args,
     args::Arg,
-    crypto::Ed25519PublicKey,
+    crypto::RistrettoPublicKeyBytes,
     models::{ComponentAddress, ComponentHeader, NonFungibleAddress, TemplateAddress},
 };
 use tari_transaction_manifest::{parse_manifest, ManifestValue};
@@ -198,7 +198,7 @@ impl TemplateTest {
 
     pub fn create_owner_proof(&self) -> (NonFungibleAddress, RistrettoSecretKey) {
         let (secret_key, public_key) = create_key_pair();
-        let public_key = Ed25519PublicKey::from_bytes(public_key.as_bytes()).unwrap();
+        let public_key = RistrettoPublicKeyBytes::from_bytes(public_key.as_bytes()).unwrap();
         let owner_token = NonFungibleAddress::from_public_key(public_key);
         (owner_token, secret_key)
     }

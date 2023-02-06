@@ -5,12 +5,12 @@ use tari_engine_types::{
     resource::Resource,
     substate::{Substate, SubstateAddress},
 };
-use tari_template_lib::{constants::ED25519_RESOURCE, prelude::ResourceType};
+use tari_template_lib::{constants::PUBLIC_IDENTITY_RESOURCE, prelude::ResourceType};
 
 use crate::state_store::{StateStoreError, StateWriter};
 
 pub fn bootstrap_state<T: StateWriter>(state_db: &mut T) -> Result<(), StateStoreError> {
-    let address = SubstateAddress::Resource(ED25519_RESOURCE);
+    let address = SubstateAddress::Resource(PUBLIC_IDENTITY_RESOURCE);
     state_db.set_state(
         &address.clone(),
         Substate::new(address, 0, Resource::new(ResourceType::NonFungible, Default::default())),

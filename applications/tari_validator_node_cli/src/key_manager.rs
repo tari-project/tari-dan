@@ -33,7 +33,7 @@ use tari_common_types::types::{PrivateKey, PublicKey};
 use tari_crypto::keys::PublicKey as PublicKeyT;
 use tari_dan_common_types::NodeAddressable;
 use tari_dan_engine::crypto::create_key_pair;
-use tari_template_lib::{crypto::Ed25519PublicKey, models::NonFungibleAddress};
+use tari_template_lib::{crypto::RistrettoPublicKeyBytes, models::NonFungibleAddress};
 use tari_utilities::hex::Hex;
 
 #[derive(Debug)]
@@ -134,7 +134,7 @@ pub struct KeyPair {
 
 impl KeyPair {
     pub fn to_owner_token(&self) -> NonFungibleAddress {
-        NonFungibleAddress::from_public_key(Ed25519PublicKey::from_bytes(self.public_key.as_bytes()).unwrap())
+        NonFungibleAddress::from_public_key(RistrettoPublicKeyBytes::from_bytes(self.public_key.as_bytes()).unwrap())
     }
 }
 

@@ -44,7 +44,7 @@ use tari_engine_types::{
     substate::{Substate, SubstateAddress},
 };
 use tari_template_lib::{
-    crypto::Ed25519PublicKey,
+    crypto::RistrettoPublicKeyBytes,
     models::{ComponentAddress, TemplateAddress},
     prelude::NonFungibleAddress,
 };
@@ -118,7 +118,7 @@ fn build_package<TTemplateProvider: TemplateProvider<Template = LoadedTemplate>>
 }
 
 fn get_auth_token(transaction: &Transaction) -> NonFungibleAddress {
-    let public_key = Ed25519PublicKey::from_bytes(transaction.sender_public_key().as_bytes())
+    let public_key = RistrettoPublicKeyBytes::from_bytes(transaction.sender_public_key().as_bytes())
         .expect("Expected public key to be 32 bytes");
     NonFungibleAddress::from_public_key(public_key)
 }
