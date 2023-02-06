@@ -54,7 +54,7 @@ function ValidatorNode() {
         }
       })
       .catch((reason) => {
-        console.log(reason);
+        console.error(reason);
         setError('Json RPC error, please check console');
       });
   };

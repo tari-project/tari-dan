@@ -476,29 +476,29 @@ impl JsonRpcHandlers {
 
     pub async fn get_epoch_manager_stats(&self, value: JsonRpcExtractor) -> JrpcResult {
         let answer_id = value.get_answer_id();
-        if let Ok(current_epoch) = self.epoch_manager.current_epoch().await {
-            if let Ok(is_valid) = self.epoch_manager.is_epoch_valid(current_epoch).await {
+        match self.epoch_manager.current_epoch().await {
+            Ok(current_epoch) => {
+                let is_valid = self.epoch_manager.is_epoch_valid(current_epoch).await.map_err(|err| {
+                    JsonRpcResponse::error(
+                        answer_id,
+                        JsonRpcError::new(
+                            JsonRpcErrorReason::InvalidParams,
+                            format!("Epoch is not valid:{}", err),
+                            json::Value::Null,
+                        ),
+                    )
+                })?;
                 let response = json!({ "current_epoch": current_epoch.0,"is_valid":is_valid });
                 Ok(JsonRpcResponse::success(answer_id, response))
-            } else {
-                Err(JsonRpcResponse::error(
-                    answer_id,
-                    JsonRpcError::new(
-                        JsonRpcErrorReason::InvalidParams,
-                        "Something went wrong".to_string(),
-                        json::Value::Null,
-                    ),
-                ))
-            }
-        } else {
-            Err(JsonRpcResponse::error(
+            },
+            Err(e) => Err(JsonRpcResponse::error(
                 answer_id,
                 JsonRpcError::new(
                     JsonRpcErrorReason::InvalidParams,
-                    "Something went wrong".to_string(),
+                    format!("Could not get current epoch: {}", e),
                     json::Value::Null,
                 ),
-            ))
+            )),
         }
     }
 
