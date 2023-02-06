@@ -45,6 +45,9 @@ async function jsonRpc(method: string, params: any = null) {
     },
   });
   let json = await response.json();
+  if (json.error) {
+    throw json.error;
+  }
   return json.result;
 }
 async function getIdentity() {
