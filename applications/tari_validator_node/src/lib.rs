@@ -145,7 +145,6 @@ pub async fn run_validator_node(config: &ApplicationConfig, shutdown_signal: Shu
 
     // Run the http ui
     if let Some(address) = config.validator_node.http_ui_address {
-        info!(target: LOG_TARGET, "🕸️ Started HTTP UI server on {}", address);
         task::spawn(run_http_ui_server(
             address,
             config.validator_node.json_rpc_address.map(|addr| addr.to_string()),
