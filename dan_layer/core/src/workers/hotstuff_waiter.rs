@@ -1626,9 +1626,15 @@ where
     async fn get_leader(&self, node: &HotStuffTreeNode<TAddr, TPayload>) -> Result<TAddr, HotStuffError> {
         let epoch = self.epoch_manager.current_epoch().await?;
         let committee = self.epoch_manager.get_committee(epoch, node.shard()).await?;
-        let leader = self
-            .leader_strategy
-            .get_leader(&committee, node.payload_id(), node.shard(), 0);
+        let leader = self.leader_strategy.get_leader(
+            &committee,
+            node.payload_id(),
+            node.shard(),
+            *self
+                .current_leader_round
+                .get(&(node.shard(), node.payload_id()))
+                .unwrap_or(&0),
+        );
         Ok(leader.clone())
     }
 
