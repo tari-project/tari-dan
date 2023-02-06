@@ -777,7 +777,7 @@ mod emoji_id {
             .result
             .expect("Faucet mint failed")
             .up_iter()
-            .find_map(|(_, s)| s.substate_address().as_resource_address())
+            .find_map(|(addr, _)| addr.as_resource_address())
             .unwrap();
 
         // initialize the emoji id minter
@@ -799,7 +799,7 @@ mod emoji_id {
             .result
             .expect("Emoji id initialization failed")
             .up_iter()
-            .find_map(|(_, s)| s.substate_address().as_resource_address())
+            .find_map(|(addr, _)| addr.as_resource_address())
             .unwrap();
 
         // at the beggining we don't have any emojis minted
@@ -922,7 +922,7 @@ mod tickets {
             .result
             .expect("Faucet mint failed")
             .up_iter()
-            .find_map(|(_, s)| s.substate_address().as_resource_address())
+            .find_map(|(addr, _)| addr.as_resource_address())
             .unwrap();
 
         // initialize the ticket seller
@@ -945,7 +945,7 @@ mod tickets {
             .result
             .expect("TicketSeller initialization failed")
             .up_iter()
-            .find_map(|(_, s)| s.substate_address().as_resource_address())
+            .find_map(|(addr, _)| addr.as_resource_address())
             .unwrap();
 
         // at the beggining we have the initial supply of tickeds

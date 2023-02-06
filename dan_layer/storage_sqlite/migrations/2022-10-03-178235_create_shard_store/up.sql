@@ -113,6 +113,7 @@ create table substates
 (
     id                      integer   not NULL primary key AUTOINCREMENT,
     shard_id                blob      not NULL,
+    address                 text      not NULL,
     -- To be deleted in future
     version                 bigint    not NULL,
     data                    text      not NULL,

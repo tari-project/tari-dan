@@ -36,7 +36,7 @@ use tari_dan_common_types::{
     ValidatorMetadata,
 };
 use tari_dan_core::models::{vote_message::VoteMessage, HotStuffMessage, HotStuffTreeNode, Node, TariDanPayload};
-use tari_engine_types::substate::Substate;
+use tari_engine_types::substate::{Substate, SubstateAddress};
 
 use crate::p2p::proto;
 
@@ -253,6 +253,7 @@ impl TryFrom<proto::consensus::SubstateState> for SubstateState {
         match value.state {
             Some(State::DoesNotExist(_)) => Ok(Self::DoesNotExist),
             Some(State::Up(up)) => Ok(Self::Up {
+                address: SubstateAddress::from_bytes(&up.address)?,
                 created_by: up.created_by.try_into()?,
                 data: Substate::from_bytes(&up.data)?,
             }),
@@ -271,8 +272,13 @@ impl From<SubstateState> for proto::consensus::SubstateState {
             SubstateState::DoesNotExist => Self {
                 state: Some(State::DoesNotExist(true)),
             },
-            SubstateState::Up { created_by, data } => Self {
+            SubstateState::Up {
+                created_by,
+                data,
+                address,
+            } => Self {
                 state: Some(State::Up(proto::consensus::UpState {
+                    address: address.to_bytes(),
                     created_by: created_by.as_bytes().to_vec(),
                     data: data.to_bytes(),
                 })),

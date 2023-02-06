@@ -1796,6 +1796,7 @@ fn extract_changes_for_shards(
         let shard_id = ShardId::from_address(address, substate.version());
         if shard_ids.contains(&shard_id) {
             changes.entry(shard_id).or_default().push(SubstateState::Up {
+                address: address.clone(),
                 created_by: payload_id,
                 data: substate.clone(),
             });
