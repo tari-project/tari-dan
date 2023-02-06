@@ -6241,6 +6241,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "tari_indexer"
+version = "0.35.1"
+dependencies = [
+ "clap 3.2.23",
+]
+
+[[package]]
 name = "tari_key_manager"
 version = "0.44.1"
 source = "git+https://github.com/tari-project/tari.git?branch=development#5f7f04b599ab49765466fb7e0faa37e2dfec4afe"

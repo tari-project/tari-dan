@@ -1,0 +1,11 @@
+[package]
+name = "tari_indexer"
+authors = ["The Tari Development Community"]
+description = "The Tari DAN indexer implementation"
+repository = "https://github.com/tari-project/tari"
+license = "BSD-3-Clause"
+version = "0.35.1"
+edition = "2018"
+
+[dependencies]
+clap = { version = "3.2.22", features = ["derive", "env"] }

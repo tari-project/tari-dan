@@ -16,6 +16,7 @@ members = [
     "dan_layer/tari_bor",
     "applications/tari_validator_node",
     "applications/tari_validator_node_cli",
+    "applications/tari_indexer",
 ]
 #
 resolver = "2"
