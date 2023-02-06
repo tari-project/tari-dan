@@ -32,7 +32,6 @@ import IconButton from '@mui/material/IconButton';
 import MenuOpenOutlinedIcon from '@mui/icons-material/MenuOpenOutlined';
 import MenuOutlinedIcon from '@mui/icons-material/MenuOutlined';
 import { mainListItems } from './Components/MenuItems';
-import TariLogo from './assets/images/TariLogoBlack.svg';
 import { ThemeProvider } from '@mui/material';
 import theme from './theme';
 import { Routes, Route, Outlet, Link } from 'react-router-dom';
@@ -42,6 +41,7 @@ import ValidatorNode from './routes/VN/ValidatorNode';
 import Connections from './routes/Connections/Connections';
 import RecentTransactions from './routes/RecentTransactions/RecentTransactions';
 import Templates from './routes/Templates/Templates';
+import Address from './routes/Templates/Address';
 import ValidatorNodes from './routes/ValidatorNodes/ValidatorNodes';
 import ErrorPage from './routes/ErrorPage';
 import Transaction from './routes/Transaction/Transaction';
@@ -191,6 +191,7 @@ export default function App() {
           <Route path="vns" element={<ValidatorNodes />} />
           <Route path="mempool" element={<Mempool />} />
           <Route path="transaction/:payloadId" element={<Transaction />} />
+          <Route path="templates/:address" element={<Address />} />
           <Route path="*" element={<ErrorPage />} />
         </Route>
       </Routes>

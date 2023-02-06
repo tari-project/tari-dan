@@ -20,45 +20,48 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-import React, { useEffect, useState } from 'react';
-import { getAllVns } from '../../../utils/json_rpc';
-import Table from '@mui/material/Table';
-import TableBody from '@mui/material/TableBody';
-import TableCell from '@mui/material/TableCell';
-import TableContainer from '@mui/material/TableContainer';
-import TableHead from '@mui/material/TableHead';
-import TableRow from '@mui/material/TableRow';
+import { useEffect, useState } from 'react';
+import PageHeading from '../../Components/PageHeading';
+import Grid from '@mui/material/Grid';
+import { StyledPaper } from '../../Components/StyledComponents';
 import Typography from '@mui/material/Typography';
-import { DataTableCell } from '../../../Components/StyledComponents';
+import { useLoaderData } from 'react-router-dom';
+import { getTemplate, getTemplates } from '../../utils/json_rpc';
+import { ITemplate } from '../../utils/interfaces';
 
-function AllVNs({ epoch }: { epoch: number }) {
-  const [vns, setVns] = useState([]);
-  useEffect(() => {
-    getAllVns(epoch).then((response) => {
-      setVns(response.vns);
-    });
-  }, [epoch]);
-  if (!(vns?.length > 0)) return <Typography>All VNS are loading</Typography>;
+type loaderData = [string];
+
+const toHex = (str: Uint8Array) => {
   return (
-    <TableContainer>
-      <Table>
-        <TableHead>
-          <TableRow>
-            <TableCell>Public key</TableCell>
-            <TableCell>Shard key</TableCell>
-          </TableRow>
-        </TableHead>
-        <TableBody>
-          {vns.map(({ public_key, shard_key }, i) => (
-            <TableRow key={public_key}>
-              <DataTableCell>{public_key}</DataTableCell>
-              <DataTableCell>{shard_key}</DataTableCell>
-            </TableRow>
-          ))}
-        </TableBody>
-      </Table>
-    </TableContainer>
+    '0x' +
+    Array.prototype.map
+      .call(str, (x: number) => ('00' + x.toString(16)).slice(-2))
+      .join('')
+  );
+};
+
+export async function addressLoader({ params }: { params: any }) {
+  const { address } = params;
+  const data = await getTemplate(address).then((response) => {
+    console.log('address:', address);
+    console.log('response:', response);
+  });
+  return [address];
+}
+
+function Address() {
+  const [address] = useLoaderData() as loaderData;
+
+  return (
+    <Grid container spacing={5}>
+      <PageHeading>Address</PageHeading>
+      <Grid item xs={12} md={12} lg={12}>
+        <StyledPaper>
+          <Typography>Address: {address}</Typography>
+        </StyledPaper>
+      </Grid>
+    </Grid>
   );
 }
 
-export default AllVNs;
+export default Address;

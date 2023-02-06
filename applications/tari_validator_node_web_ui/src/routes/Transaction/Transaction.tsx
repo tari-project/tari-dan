@@ -89,8 +89,6 @@ function mapHeight(height: number) {
 }
 export default function Transaction() {
   const [payloadId, substates, outputs] = useLoaderData() as loaderData;
-  console.log(substates);
-  console.log(outputs);
   let mermaid = 'gantt\ndateFormat YYYY-MM-DDTHH:mm:ss\naxisFormat  %Hh%M:%S';
   let shardNo = 0;
   for (let [shard, output] of Array.from(outputs.entries())) {

@@ -21,6 +21,7 @@
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 import { useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { ITemplate } from '../../../utils/interfaces';
 import { getTemplate, getTemplates } from '../../../utils/json_rpc';
 import './Templates.css';
@@ -31,11 +32,15 @@ import TableContainer from '@mui/material/TableContainer';
 import TableHead from '@mui/material/TableHead';
 import TableRow from '@mui/material/TableRow';
 import { DataTableCell } from '../../../Components/StyledComponents';
+import TablePagination from '@mui/material/TablePagination';
 
 function Templates() {
   const [templates, setTemplates] = useState([]);
   const [info, setInfo] = useState<{ [id: string]: ITemplate }>();
   const [loading, setLoading] = useState<{ [id: string]: Boolean }>();
+  const [page, setPage] = useState(0);
+  const [rowsPerPage, setRowsPerPage] = useState(10);
+
   useEffect(() => {
     getTemplates(10).then((response) => {
       setTemplates(response.templates);
@@ -58,6 +63,21 @@ function Templates() {
         .join('')
     );
   };
+
+  const emptyRows =
+    page > 0 ? Math.max(0, (1 + page) * rowsPerPage - templates.length) : 0;
+
+  const handleChangePage = (event: unknown, newPage: number) => {
+    setPage(newPage);
+  };
+
+  const handleChangeRowsPerPage = (
+    event: React.ChangeEvent<HTMLInputElement>
+  ) => {
+    setRowsPerPage(parseInt(event.target.value, 10));
+    setPage(0);
+  };
+
   const renderFunctions = (template: ITemplate) => {
     return (
       <TableContainer>
@@ -90,35 +110,67 @@ function Templates() {
           <TableRow>
             <TableCell>Address</TableCell>
             <TableCell>Download URL</TableCell>
-            <TableCell>Mined Height</TableCell>
-            <TableCell>Status</TableCell>
+            <TableCell style={{ textAlign: 'center' }}>Mined Height</TableCell>
+            <TableCell style={{ textAlign: 'center' }}>Status</TableCell>
           </TableRow>
         </TableHead>
         <TableBody>
           {templates.map(({ address, binary_sha, height, url }) => (
-            <TableRow key={address}>
-              <DataTableCell
-                onMouseOver={() => load(address)}
-                className="tooltip"
-              >
-                <span>{toHex(address)}</span>
-                {info?.[address] !== undefined ? (
-                  <span className="tooltiptext">
-                    {renderFunctions(info[address])}
-                  </span>
-                ) : (
-                  <></>
-                )}
+            <TableRow key={address} style={{ verticalAlign: 'top' }}>
+              <DataTableCell onClick={() => load(address)}>
+                <Link
+                  style={{ textDecoration: 'none' }}
+                  to={`templates/${address}`}
+                >
+                  Go to new page: {toHex(address)}
+                </Link>
+                <div
+                  style={{
+                    marginBottom: '20px',
+                    marginTop: '20px',
+                  }}
+                >
+                  Old link (click to see data): {toHex(address)}
+                </div>
+                <div>
+                  {info?.[address] !== undefined ? (
+                    <span>{renderFunctions(info[address])}</span>
+                  ) : (
+                    <></>
+                  )}
+                </div>
               </DataTableCell>
               <DataTableCell>
                 <a href={url}>{url}</a>
               </DataTableCell>
-              <DataTableCell>{height}</DataTableCell>
-              <DataTableCell>Active</DataTableCell>
+              <DataTableCell style={{ textAlign: 'center' }}>
+                {height}
+              </DataTableCell>
+              <DataTableCell style={{ textAlign: 'center' }}>
+                Active
+              </DataTableCell>
             </TableRow>
           ))}
+          {emptyRows > 0 && (
+            <TableRow
+              style={{
+                height: 67 * emptyRows,
+              }}
+            >
+              <TableCell colSpan={4} />
+            </TableRow>
+          )}
         </TableBody>
       </Table>
+      <TablePagination
+        rowsPerPageOptions={[10, 25, 50]}
+        component="div"
+        count={templates.length}
+        rowsPerPage={rowsPerPage}
+        page={page}
+        onPageChange={handleChangePage}
+        onRowsPerPageChange={handleChangeRowsPerPage}
+      />
     </TableContainer>
   );
 }

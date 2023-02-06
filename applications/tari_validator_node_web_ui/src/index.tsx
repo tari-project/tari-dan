@@ -37,10 +37,11 @@ import RecentTransactions from './routes/RecentTransactions/RecentTransactions';
 import Templates from './routes/Templates/Templates';
 import ValidatorNodes from './routes/ValidatorNodes/ValidatorNodes';
 import ErrorPage from './routes/ErrorPage';
+import Address, { addressLoader } from './routes/Templates/Address';
 
 const router = createBrowserRouter([
   {
-    path: '/',
+    path: '*',
     element: <App />,
     errorElement: <ErrorPage />,
     children: [
@@ -76,6 +77,11 @@ const router = createBrowserRouter([
         path: 'transaction/:payloadId',
         element: <Transaction />,
         loader: transactionLoader,
+      },
+      {
+        path: 'templates/:address',
+        element: <Address />,
+        loader: addressLoader,
       },
     ],
   },
