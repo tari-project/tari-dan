@@ -288,7 +288,7 @@ impl BaseLayerScanner {
             for output in utxos.outputs {
                 let output_hash = output.hash();
                 if output.is_burned() {
-                    dbg!("Burned output");
+                    info!(target: LOG_TARGET, "Found burned output: {}", output_hash);
                     self.register_burnt_utxo(output.commitment);
                 } else {
                     let sidechain_feature = output.features.sidechain_feature.ok_or_else(|| {
