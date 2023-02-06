@@ -92,10 +92,19 @@ impl PeerProvider for CommsPeerProvider {
         if !self.peer_manager.exists(&peer.identity).await {
             return Err(CommsPeerProviderError::PeerNotFound);
         }
+        let identity_signature = peer.identity_signature;
+        let mut peer = Peer::new(
+            peer.identity,
+            node_id,
+            peer.addresses.into(),
+            PeerFlags::NONE,
+            PeerFeatures::COMMUNICATION_NODE,
+            vec![],
+            String::new(),
+        );
+        peer.identity_signature = identity_signature;
 
-        self.peer_manager
-            .add_or_update_online_peer(&peer.identity, node_id, peer.addresses, PeerFeatures::NONE)
-            .await?;
+        self.peer_manager.add_peer(peer).await?;
 
         Ok(())
     }
