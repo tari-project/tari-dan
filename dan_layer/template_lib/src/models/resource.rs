@@ -33,7 +33,7 @@ use crate::{hash::HashParseError, Hash};
 pub struct ResourceAddress(Hash);
 
 impl ResourceAddress {
-    pub fn new(address: Hash) -> Self {
+    pub const fn new(address: Hash) -> Self {
         Self(address)
     }
 

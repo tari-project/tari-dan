@@ -9,6 +9,10 @@ use tari_bor::{borsh, decode_exact, Decode, Encode};
 pub struct NonFungibleContainer(Option<NonFungible>);
 
 impl NonFungibleContainer {
+    pub fn no_data() -> Self {
+        Self::new(Vec::new(), Vec::new())
+    }
+
     pub fn new(data: Vec<u8>, mutable_data: Vec<u8>) -> Self {
         Self(Some(NonFungible::new(data, mutable_data)))
     }

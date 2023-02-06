@@ -36,6 +36,7 @@ use crate::{hashing::hasher, non_fungible::NonFungibleContainer, resource::Resou
 
 #[derive(Debug, Clone, Encode, Decode, Serialize, Deserialize)]
 pub struct Substate {
+    // TODO: Remove address
     address: SubstateAddress,
     substate: SubstateValue,
     version: u32,
@@ -78,6 +79,7 @@ impl Substate {
 /// Base object address, version tuples
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Encode, Decode, Serialize, Deserialize)]
 pub enum SubstateAddress {
+    // System(SystemAddress),
     Component(ComponentAddress),
     Resource(ResourceAddress),
     Vault(VaultId),
@@ -270,14 +272,6 @@ impl SubstateValue {
     pub fn into_resource(self) -> Option<Resource> {
         match self {
             SubstateValue::Resource(resource) => Some(resource),
-            _ => None,
-        }
-    }
-
-    pub fn resource_address(&self) -> Option<ResourceAddress> {
-        match self {
-            SubstateValue::Resource(resource) => Some(*resource.resource_address()),
-            SubstateValue::Vault(vault) => Some(*vault.resource_address()),
             _ => None,
         }
     }

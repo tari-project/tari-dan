@@ -55,22 +55,6 @@ mod airdrop_template {
             self.allow_list.insert(address);
         }
 
-        // pub fn do_airdrop(&mut self) {
-        //     assert!(!self.is_airdrop_done, "Airdrop already done");
-        //     assert!(!self.allow_list.is_empty(), "Allow list is empty");
-        //
-        //     for (i, account_address) in self.allow_list.drain(..).enumerate() {
-        //         let bucket = self
-        //             .vault
-        //             .withdraw_non_fungible(self.address, NonFungibleId::from_u32(i as u32));
-        //
-        //         TODO: Cross-template calls are not yet supported
-        //         system().invoke_component::<()>(account_address, "deposit", args![bucket]);
-        //     }
-        //
-        //     self.is_airdrop_done = true;
-        // }
-
         pub fn open_airdrop(&mut self) {
             assert!(!self.is_airdrop_open, "Airdrop already open");
             self.is_airdrop_open = true;
@@ -112,5 +96,21 @@ mod airdrop_template {
         pub fn vault_balance(&self) -> Amount {
             self.vault.balance()
         }
+
+        // pub fn do_airdrop(&mut self) {
+        //     assert!(!self.is_airdrop_done, "Airdrop already done");
+        //     assert!(!self.allow_list.is_empty(), "Allow list is empty");
+        //
+        //     for (i, account_address) in self.allow_list.drain(..).enumerate() {
+        //         let bucket = self
+        //             .vault
+        //             .withdraw_non_fungible(self.address, NonFungibleId::from_u32(i as u32));
+        //
+        //         TODO: Cross-template calls are not yet supported
+        //         system().invoke_component::<()>(account_address, "deposit", args![bucket]);
+        //     }
+        //
+        //     self.is_airdrop_done = true;
+        // }
     }
 }

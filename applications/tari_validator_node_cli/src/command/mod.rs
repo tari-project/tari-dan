@@ -31,11 +31,17 @@ pub use template::TemplateSubcommand;
 mod vn;
 pub use vn::VnSubcommand;
 
-use crate::command::{debug::DebugSubcommand, manifest::ManifestSubcommand, transaction::TransactionSubcommand};
+use crate::command::{
+    account::AccountsSubcommand,
+    debug::DebugSubcommand,
+    manifest::ManifestSubcommand,
+    transaction::TransactionSubcommand,
+};
 
 mod debug;
 mod manifest;
 
+mod account;
 pub mod transaction;
 
 #[allow(clippy::large_enum_variant)]
@@ -49,6 +55,8 @@ pub enum Command {
     Keys(KeysSubcommand),
     #[clap(subcommand, alias = "transaction")]
     Transactions(TransactionSubcommand),
+    #[clap(subcommand, alias = "accounts")]
+    Accounts(AccountsSubcommand),
     #[clap(subcommand, alias = "manifest")]
     Manifests(ManifestSubcommand),
     #[clap(subcommand)]

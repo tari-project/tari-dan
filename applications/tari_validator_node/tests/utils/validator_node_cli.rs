@@ -3,9 +3,12 @@
 
 use std::{collections::HashMap, path::PathBuf, str::FromStr};
 
-use tari_engine_types::substate::{SubstateAddress, SubstateDiff};
+use tari_engine_types::{
+    instruction::Instruction,
+    substate::{SubstateAddress, SubstateDiff},
+};
 use tari_template_builtin::ACCOUNT_TEMPLATE_ADDRESS;
-use tari_template_lib::prelude::NonFungibleId;
+use tari_template_lib::{args, prelude::NonFungibleId};
 use tari_transaction_manifest::{parse_manifest, ManifestValue};
 use tari_validator_node_cli::{
     command::transaction::{
@@ -28,42 +31,45 @@ use tempfile::tempdir;
 use super::validator_node::get_vn_client;
 use crate::TariWorld;
 
-pub async fn create_dan_wallet(world: &mut TariWorld) {
+pub fn get_key_manager(world: &mut TariWorld) -> KeyManager {
     let data_dir = get_cli_data_dir(world);
 
     // initialize the account public/private keys
     let path = PathBuf::from(data_dir);
-    let account_manager = KeyManager::init(path).unwrap();
-    account_manager.create().unwrap();
+    KeyManager::init(path).unwrap()
+}
+
+pub fn create_dan_wallet(world: &mut TariWorld) {
+    get_key_manager(world).create().unwrap();
 }
 
 pub async fn create_account(world: &mut TariWorld, account_name: String, validator_node_name: String) {
     let data_dir = get_cli_data_dir(world);
-
+    let key = get_key_manager(world).get_active_key().expect("No active keypair");
+    let owner_token = key.to_owner_token();
     // create an account component
-    let instruction = CliInstruction::CallFunction {
+    let instruction = Instruction::CallFunction {
         // The "account" template is builtin in the validator nodes with a constant address
-        template_address: FromHex(ACCOUNT_TEMPLATE_ADDRESS),
-        function_name: "new".to_owned(),
-        args: vec![], // the account constructor does not have args
+        template_address: ACCOUNT_TEMPLATE_ADDRESS,
+        function: "create".to_string(),
+        args: args!(owner_token),
     };
-    let args = SubmitArgs {
-        instruction,
-        common: CommonSubmitArgs {
-            wait_for_result: true,
-            wait_for_result_timeout: Some(60),
-            num_outputs: Some(1),
-            inputs: vec![],
-            version: None,
-            dump_outputs_into: None,
-            account_template_address: None,
-            dry_run: false,
-            non_fungible_mint_outputs: vec![],
-            new_non_fungible_outputs: vec![],
-        },
+    let common = CommonSubmitArgs {
+        wait_for_result: true,
+        wait_for_result_timeout: Some(60),
+        num_outputs: Some(1),
+        inputs: vec![],
+        version: None,
+        dump_outputs_into: None,
+        account_template_address: None,
+        dry_run: false,
+        non_fungible_mint_outputs: vec![],
+        new_non_fungible_outputs: vec![],
     };
     let mut client = get_validator_node_client(world, validator_node_name).await;
-    let resp = handle_submit(args, data_dir, &mut client).await.unwrap();
+    let resp = submit_transaction(vec![instruction], common, data_dir, &mut client)
+        .await
+        .unwrap();
 
     // store the account component address and other substate addresses for later reference
     add_substate_addresses(

@@ -23,30 +23,24 @@
 use serde::{Deserialize, Serialize};
 use tari_bor::{borsh, Decode, Encode};
 use tari_template_lib::{
-    models::{Amount, Metadata, ResourceAddress},
+    models::{Amount, Metadata},
     resource::ResourceType,
 };
 
 #[derive(Debug, Clone, Encode, Decode, Serialize, Deserialize, PartialEq)]
 pub struct Resource {
-    resource_address: ResourceAddress,
     resource_type: ResourceType,
     metadata: Metadata,
     total_supply: Amount,
 }
 
 impl Resource {
-    pub fn new(resource_type: ResourceType, resource_address: ResourceAddress, metadata: Metadata) -> Self {
+    pub fn new(resource_type: ResourceType, metadata: Metadata) -> Self {
         Self {
-            resource_address,
             resource_type,
             metadata,
             total_supply: 0.into(),
         }
-    }
-
-    pub fn resource_address(&self) -> &ResourceAddress {
-        &self.resource_address
     }
 
     pub fn resource_type(&self) -> ResourceType {
