@@ -15,8 +15,15 @@ async fn start_wallet(world: &mut TariWorld, wallet_name: String, bn_name: Strin
     spawn_wallet(world, wallet_name, bn_name).await;
 }
 
-#[when(expr = "I burn {int}T on wallet {word}")]
-async fn when_I_burn_on_wallet(world: &mut TariWorld, amount: u64, wallet_name: String) {
+#[when(expr = "I burn {int}T on wallet {word} into commitment {word} with proof {word} and range proof {word}")]
+async fn when_I_burn_on_wallet(
+    world: &mut TariWorld,
+    amount: u64,
+    wallet_name: String,
+    commitment: String,
+    proof: String,
+    range_proof: String,
+) {
     let wallet = world
         .wallets
         .get(&wallet_name)
@@ -32,7 +39,11 @@ async fn when_I_burn_on_wallet(world: &mut TariWorld, amount: u64, wallet_name: 
         .await
         .unwrap()
         .into_inner();
+
     assert!(resp.is_success);
+    world.commitments.insert(commitment, resp.commitment);
+    world.commitment_ownership_proofs.insert(proof, resp.ownership_proof);
+    world.rangeproofs.insert(range_proof, resp.rangeproof);
 }
 
 #[when(expr = "wallet {word} has at least {int} uT")]

@@ -48,6 +48,12 @@ pub struct ValidatorNodeProcess {
     pub shutdown: Shutdown,
 }
 
+impl ValidatorNodeProcess {
+    pub async fn create_client(&self) -> ValidatorNodeClient {
+        get_vn_client(self.json_rpc_port).await
+    }
+}
+
 pub async fn spawn_validator_node(
     world: &mut TariWorld,
     validator_node_name: String,

@@ -11,6 +11,10 @@ use crate::{hash::HashParseError, Hash};
 pub struct LayerOneCommitmentAddress(Hash);
 
 impl LayerOneCommitmentAddress {
+    pub fn from_hex(hex: &str) -> Result<Self, HashParseError> {
+        Ok(Self(Hash::from_hex(hex)?))
+    }
+
     pub fn try_from_commitment(commitment_bytes: &[u8]) -> Result<Self, HashParseError> {
         Ok(Self(Hash::try_from(commitment_bytes)?))
     }

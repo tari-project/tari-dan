@@ -1577,9 +1577,9 @@ dependencies = [
 
 [[package]]
 name = "curve25519-dalek"
-version = "4.0.0-pre.5"
+version = "4.0.0-rc.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "67bc65846be335cb20f4e52d49a437b773a2c1fdb42b19fc84e79e6f6771536f"
+checksum = "8da00a7a9a4eb92a0a0f8e75660926d48f0d0f3c537e455c457bcdaa1e16b1ac"
 dependencies = [
  "cfg-if",
  "fiat-crypto",
@@ -5369,14 +5369,14 @@ checksum = "a507befe795404456341dfab10cef66ead4c041f62b8b11bbb92bffe5d0953e0"
 
 [[package]]
 name = "snow"
-version = "0.9.0"
+version = "0.9.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "774d05a3edae07ce6d68ea6984f3c05e9bba8927e3dd591e3b479e5b03213d0d"
+checksum = "12ba5f4d4ff12bdb6a169ed51b7c48c0e0ac4b0b4b31012b2571e97d78d3201d"
 dependencies = [
  "aes-gcm",
  "blake2 0.10.6",
  "chacha20poly1305 0.9.1",
- "curve25519-dalek 4.0.0-pre.5",
+ "curve25519-dalek 4.0.0-rc.0",
  "rand_core 0.6.4",
  "rustc_version",
  "sha2 0.10.6",
@@ -5598,15 +5598,13 @@ checksum = "9410d0f6853b1d94f0e519fb95df60f29d2c1eff2d921ffdf01a4c8a3b54f12d"
 [[package]]
 name = "tari_app_grpc"
 version = "0.44.1"
-source = "git+https://github.com/tari-project/tari.git?branch=development#5f7f04b599ab49765466fb7e0faa37e2dfec4afe"
+source = "git+https://github.com/stringhandler/tari.git?branch=st-add-burn-proof#5c582801ba59fffa4007620d5cc515867dfb99fc"
 dependencies = [
  "argon2",
  "base64 0.13.1",
  "borsh",
  "chrono",
- "digest 0.9.0",
  "log",
- "num-traits",
  "prost",
  "prost-types",
  "rand 0.8.5",
@@ -5625,21 +5623,17 @@ dependencies = [
 [[package]]
 name = "tari_app_utilities"
 version = "0.44.1"
-source = "git+https://github.com/tari-project/tari.git?branch=development#5f7f04b599ab49765466fb7e0faa37e2dfec4afe"
+source = "git+https://github.com/stringhandler/tari.git?branch=st-add-burn-proof#5c582801ba59fffa4007620d5cc515867dfb99fc"
 dependencies = [
  "clap 3.2.23",
- "config",
- "dirs-next 1.0.2",
  "futures 0.3.25",
  "json5 0.2.8",
  "log",
  "rand 0.7.3",
  "serde",
- "structopt",
  "tari_common",
  "tari_common_types",
  "tari_comms",
- "tari_crypto",
  "tari_utilities",
  "thiserror",
  "tokio",
@@ -5681,7 +5675,7 @@ dependencies = [
  "tari_comms_dht",
  "tari_core",
  "tari_crypto",
- "tari_metrics",
+ "tari_metrics 0.1.0 (git+https://github.com/tari-project/tari.git?branch=development)",
  "tari_mmr",
  "tari_p2p",
  "tari_service_framework",
@@ -5697,7 +5691,7 @@ dependencies = [
 [[package]]
 name = "tari_base_node_grpc_client"
 version = "0.1.0"
-source = "git+https://github.com/tari-project/tari.git?branch=development#5f7f04b599ab49765466fb7e0faa37e2dfec4afe"
+source = "git+https://github.com/stringhandler/tari.git?branch=st-add-burn-proof#5c582801ba59fffa4007620d5cc515867dfb99fc"
 dependencies = [
  "tari_app_grpc",
 ]
@@ -5753,12 +5747,11 @@ dependencies = [
 [[package]]
 name = "tari_common"
 version = "0.44.1"
-source = "git+https://github.com/tari-project/tari.git?branch=development#5f7f04b599ab49765466fb7e0faa37e2dfec4afe"
+source = "git+https://github.com/stringhandler/tari.git?branch=st-add-burn-proof#5c582801ba59fffa4007620d5cc515867dfb99fc"
 dependencies = [
  "anyhow",
  "blake2 0.9.2",
  "config",
- "derivative",
  "dirs-next 1.0.2",
  "git2",
  "log",
@@ -5769,7 +5762,6 @@ dependencies = [
  "serde",
  "serde_json",
  "sha2 0.9.9",
- "sha3",
  "structopt",
  "tari_crypto",
  "tempfile",
@@ -5780,7 +5772,7 @@ dependencies = [
 [[package]]
 name = "tari_common_sqlite"
 version = "0.44.1"
-source = "git+https://github.com/tari-project/tari.git?branch=development#5f7f04b599ab49765466fb7e0faa37e2dfec4afe"
+source = "git+https://github.com/stringhandler/tari.git?branch=st-add-burn-proof#5c582801ba59fffa4007620d5cc515867dfb99fc"
 dependencies = [
  "diesel",
  "log",
@@ -5790,9 +5782,8 @@ dependencies = [
 [[package]]
 name = "tari_common_types"
 version = "0.44.1"
-source = "git+https://github.com/tari-project/tari.git?branch=development#5f7f04b599ab49765466fb7e0faa37e2dfec4afe"
+source = "git+https://github.com/stringhandler/tari.git?branch=st-add-burn-proof#5c582801ba59fffa4007620d5cc515867dfb99fc"
 dependencies = [
- "base64 0.13.1",
  "borsh",
  "digest 0.9.0",
  "lazy_static",
@@ -5804,13 +5795,12 @@ dependencies = [
  "tari_utilities",
  "thiserror",
  "tokio",
- "zeroize",
 ]
 
 [[package]]
 name = "tari_comms"
 version = "0.44.1"
-source = "git+https://github.com/tari-project/tari.git?branch=development#5f7f04b599ab49765466fb7e0faa37e2dfec4afe"
+source = "git+https://github.com/stringhandler/tari.git?branch=st-add-burn-proof#5c582801ba59fffa4007620d5cc515867dfb99fc"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -5832,14 +5822,13 @@ dependencies = [
  "once_cell",
  "pin-project 1.0.12",
  "prost",
- "prost-types",
  "rand 0.7.3",
  "serde",
  "serde_derive",
  "snow",
  "tari_common",
  "tari_crypto",
- "tari_metrics",
+ "tari_metrics 0.1.0 (git+https://github.com/stringhandler/tari.git?branch=st-add-burn-proof)",
  "tari_shutdown",
  "tari_storage",
  "tari_utilities",
@@ -5856,7 +5845,7 @@ dependencies = [
 [[package]]
 name = "tari_comms_dht"
 version = "0.44.1"
-source = "git+https://github.com/tari-project/tari.git?branch=development#5f7f04b599ab49765466fb7e0faa37e2dfec4afe"
+source = "git+https://github.com/stringhandler/tari.git?branch=st-add-burn-proof#5c582801ba59fffa4007620d5cc515867dfb99fc"
 dependencies = [
  "anyhow",
  "bitflags 1.3.2",
@@ -5874,7 +5863,6 @@ dependencies = [
  "prost-types",
  "rand 0.7.3",
  "serde",
- "serde_derive",
  "tari_common",
  "tari_common_sqlite",
  "tari_comms",
@@ -5904,7 +5892,7 @@ dependencies = [
 [[package]]
 name = "tari_comms_rpc_macros"
 version = "0.44.1"
-source = "git+https://github.com/tari-project/tari.git?branch=development#5f7f04b599ab49765466fb7e0faa37e2dfec4afe"
+source = "git+https://github.com/stringhandler/tari.git?branch=st-add-burn-proof#5c582801ba59fffa4007620d5cc515867dfb99fc"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -5914,9 +5902,8 @@ dependencies = [
 [[package]]
 name = "tari_console_wallet"
 version = "0.44.1"
-source = "git+https://github.com/tari-project/tari.git?branch=development#5f7f04b599ab49765466fb7e0faa37e2dfec4afe"
+source = "git+https://github.com/stringhandler/tari.git?branch=st-add-burn-proof#5c582801ba59fffa4007620d5cc515867dfb99fc"
 dependencies = [
- "base64 0.13.1",
  "bitflags 1.3.2",
  "chrono",
  "clap 3.2.23",
@@ -5952,7 +5939,6 @@ dependencies = [
  "thiserror",
  "tokio",
  "tonic",
- "tracing",
  "tui",
  "unicode-segmentation",
  "unicode-width",
@@ -5963,9 +5949,8 @@ dependencies = [
 [[package]]
 name = "tari_core"
 version = "0.44.1"
-source = "git+https://github.com/tari-project/tari.git?branch=development#5f7f04b599ab49765466fb7e0faa37e2dfec4afe"
+source = "git+https://github.com/stringhandler/tari.git?branch=st-add-burn-proof#5c582801ba59fffa4007620d5cc515867dfb99fc"
 dependencies = [
- "async-trait",
  "bincode",
  "bitflags 1.3.2",
  "blake2 0.9.2",
@@ -6005,19 +5990,18 @@ dependencies = [
  "tari_comms_dht",
  "tari_comms_rpc_macros",
  "tari_crypto",
- "tari_metrics",
+ "tari_metrics 0.1.0 (git+https://github.com/stringhandler/tari.git?branch=st-add-burn-proof)",
  "tari_mmr",
  "tari_p2p",
  "tari_script",
  "tari_service_framework",
  "tari_shutdown",
  "tari_storage",
- "tari_test_utils",
+ "tari_test_utils 0.44.1 (git+https://github.com/stringhandler/tari.git?branch=st-add-burn-proof)",
  "tari_utilities",
  "thiserror",
  "tokio",
  "tracing",
- "tracing-attributes",
  "uint",
  "zeroize",
 ]
@@ -6111,7 +6095,7 @@ dependencies = [
  "tari_service_framework",
  "tari_shutdown",
  "tari_storage",
- "tari_test_utils",
+ "tari_test_utils 0.44.1 (git+https://github.com/tari-project/tari.git?branch=development)",
  "tari_utilities",
  "thiserror",
  "tokio",
@@ -6218,7 +6202,7 @@ dependencies = [
  "tari_mmr",
  "tari_shutdown",
  "tari_template_lib",
- "tari_test_utils",
+ "tari_test_utils 0.44.1 (git+https://github.com/tari-project/tari.git?branch=development)",
  "tari_utilities",
  "tempdir",
  "tokio",
@@ -6242,7 +6226,7 @@ dependencies = [
 [[package]]
 name = "tari_key_manager"
 version = "0.44.1"
-source = "git+https://github.com/tari-project/tari.git?branch=development#5f7f04b599ab49765466fb7e0faa37e2dfec4afe"
+source = "git+https://github.com/stringhandler/tari.git?branch=st-add-burn-proof#5c582801ba59fffa4007620d5cc515867dfb99fc"
 dependencies = [
  "argon2",
  "blake2 0.9.2",
@@ -6252,8 +6236,6 @@ dependencies = [
  "digest 0.9.0",
  "rand 0.7.3",
  "serde",
- "serde_derive",
- "serde_json",
  "strum",
  "strum_macros",
  "subtle",
@@ -6280,9 +6262,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "tari_metrics"
+version = "0.1.0"
+source = "git+https://github.com/stringhandler/tari.git?branch=st-add-burn-proof#5c582801ba59fffa4007620d5cc515867dfb99fc"
+dependencies = [
+ "once_cell",
+ "prometheus",
+ "thiserror",
+]
+
+[[package]]
 name = "tari_mmr"
 version = "0.44.1"
-source = "git+https://github.com/tari-project/tari.git?branch=development#5f7f04b599ab49765466fb7e0faa37e2dfec4afe"
+source = "git+https://github.com/stringhandler/tari.git?branch=st-add-burn-proof#5c582801ba59fffa4007620d5cc515867dfb99fc"
 dependencies = [
  "croaring",
  "digest 0.9.0",
@@ -6297,11 +6289,9 @@ dependencies = [
 [[package]]
 name = "tari_p2p"
 version = "0.44.1"
-source = "git+https://github.com/tari-project/tari.git?branch=development#5f7f04b599ab49765466fb7e0faa37e2dfec4afe"
+source = "git+https://github.com/stringhandler/tari.git?branch=st-add-burn-proof#5c582801ba59fffa4007620d5cc515867dfb99fc"
 dependencies = [
  "anyhow",
- "bytes 0.5.6",
- "chrono",
  "fs2",
  "futures 0.3.25",
  "lmdb-zero",
@@ -6313,7 +6303,6 @@ dependencies = [
  "rustls",
  "semver",
  "serde",
- "serde_derive",
  "tari_common",
  "tari_comms",
  "tari_comms_dht",
@@ -6326,7 +6315,6 @@ dependencies = [
  "tokio",
  "tokio-stream",
  "tower",
- "tower-service",
  "trust-dns-client",
  "webpki 0.21.4",
 ]
@@ -6334,7 +6322,7 @@ dependencies = [
 [[package]]
 name = "tari_script"
 version = "0.12.0"
-source = "git+https://github.com/tari-project/tari.git?branch=development#5f7f04b599ab49765466fb7e0faa37e2dfec4afe"
+source = "git+https://github.com/stringhandler/tari.git?branch=st-add-burn-proof#5c582801ba59fffa4007620d5cc515867dfb99fc"
 dependencies = [
  "blake2 0.9.2",
  "borsh",
@@ -6351,7 +6339,7 @@ dependencies = [
 [[package]]
 name = "tari_service_framework"
 version = "0.44.1"
-source = "git+https://github.com/tari-project/tari.git?branch=development#5f7f04b599ab49765466fb7e0faa37e2dfec4afe"
+source = "git+https://github.com/stringhandler/tari.git?branch=st-add-burn-proof#5c582801ba59fffa4007620d5cc515867dfb99fc"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -6366,7 +6354,7 @@ dependencies = [
 [[package]]
 name = "tari_shutdown"
 version = "0.44.1"
-source = "git+https://github.com/tari-project/tari.git?branch=development#5f7f04b599ab49765466fb7e0faa37e2dfec4afe"
+source = "git+https://github.com/stringhandler/tari.git?branch=st-add-burn-proof#5c582801ba59fffa4007620d5cc515867dfb99fc"
 dependencies = [
  "futures 0.3.25",
 ]
@@ -6374,13 +6362,12 @@ dependencies = [
 [[package]]
 name = "tari_storage"
 version = "0.44.1"
-source = "git+https://github.com/tari-project/tari.git?branch=development#5f7f04b599ab49765466fb7e0faa37e2dfec4afe"
+source = "git+https://github.com/stringhandler/tari.git?branch=st-add-burn-proof#5c582801ba59fffa4007620d5cc515867dfb99fc"
 dependencies = [
  "bincode",
  "lmdb-zero",
  "log",
  "serde",
- "serde_derive",
  "thiserror",
 ]
 
@@ -6443,6 +6430,18 @@ dependencies = [
 name = "tari_test_utils"
 version = "0.44.1"
 source = "git+https://github.com/tari-project/tari.git?branch=development#5f7f04b599ab49765466fb7e0faa37e2dfec4afe"
+dependencies = [
+ "futures 0.3.25",
+ "rand 0.7.3",
+ "tari_shutdown",
+ "tempfile",
+ "tokio",
+]
+
+[[package]]
+name = "tari_test_utils"
+version = "0.44.1"
+source = "git+https://github.com/stringhandler/tari.git?branch=st-add-burn-proof#5c582801ba59fffa4007620d5cc515867dfb99fc"
 dependencies = [
  "futures 0.3.25",
  "rand 0.7.3",
@@ -6540,7 +6539,7 @@ dependencies = [
  "tari_storage",
  "tari_template_builtin",
  "tari_template_lib",
- "tari_test_utils",
+ "tari_test_utils 0.44.1 (git+https://github.com/tari-project/tari.git?branch=development)",
  "tari_transaction_manifest",
  "tari_validator_node_cli",
  "tari_validator_node_client",
@@ -6601,7 +6600,7 @@ dependencies = [
 [[package]]
 name = "tari_wallet"
 version = "0.44.1"
-source = "git+https://github.com/tari-project/tari.git?branch=development#5f7f04b599ab49765466fb7e0faa37e2dfec4afe"
+source = "git+https://github.com/stringhandler/tari.git?branch=st-add-burn-proof#5c582801ba59fffa4007620d5cc515867dfb99fc"
 dependencies = [
  "argon2",
  "async-trait",
@@ -6618,9 +6617,7 @@ dependencies = [
  "futures 0.3.25",
  "itertools",
  "libsqlite3-sys",
- "lmdb-zero",
  "log",
- "log4rs",
  "prost",
  "rand 0.7.3",
  "serde",
@@ -6640,7 +6637,6 @@ dependencies = [
  "tari_script",
  "tari_service_framework",
  "tari_shutdown",
- "tari_storage",
  "tari_utilities",
  "tempfile",
  "thiserror",
@@ -6652,7 +6648,7 @@ dependencies = [
 [[package]]
 name = "tari_wallet_grpc_client"
 version = "0.1.0"
-source = "git+https://github.com/tari-project/tari.git?branch=development#5f7f04b599ab49765466fb7e0faa37e2dfec4afe"
+source = "git+https://github.com/stringhandler/tari.git?branch=st-add-burn-proof#5c582801ba59fffa4007620d5cc515867dfb99fc"
 dependencies = [
  "tari_app_grpc",
  "tari_common_types",

@@ -16,8 +16,10 @@ Feature: Claim Burn
     When validator node VN sends a registration transaction
     When miner MINER mines 20 new blocks
     Then the validator node VN is listed as registered
-    When I burn 10T on wallet WALLET
+    When I burn 10T on wallet WALLET into commitment COMMITMENT with proof PROOF and range proof RANGEPROOF
     When miner MINER mines 10 new blocks
+    When I convert commitment COMMITMENT into COMM_ADDRESS address
+    Then validator node VN has state at COMM_ADDRESS
 
     When validator node VN registers the template "fees"
     When miner MINER mines 5 new blocks
@@ -25,4 +27,14 @@ Feature: Claim Burn
         # A file-base CLI account must be created to sign future calls
     When I create a DAN wallet
     When I create a component SECOND_LAYER_TARI of template "fees" on VN using "new"
-    When I print the cucumber world
+    When I create an account ACC_1 on VN
+    When I submit a transaction manifest on VN with inputs "COMM_ADDRESS, ACC_1" and 3 outputs named "TX1"
+  ```
+    let confidential_bucket = burnt_to_bucket!["COMMITMENT", "PROOF", "RANGEPROOF"];
+
+    let mut acc1 = global!["ACC_1/components/Account"];
+
+    // get tokens from the faucet
+    //let faucet_bucket = faucet.take_free_coins();
+    acc1.deposit(confidential_bucket);
+  ```

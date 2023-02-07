@@ -79,6 +79,10 @@ pub struct TariWorld {
     http_server: Option<MockHttpServer>,
     cli_data_dir: Option<String>,
     current_scenario_name: Option<String>,
+    commitments: IndexMap<String, Vec<u8>>,
+    commitment_ownership_proofs: IndexMap<String, Vec<u8>>,
+    rangeproofs: IndexMap<String, Vec<u8>>,
+    addresses: IndexMap<String, String>,
 }
 
 impl TariWorld {
@@ -151,6 +155,7 @@ async fn main() {
             }
             Box::pin(future::ready(()))
         })
+        .fail_on_skipped()
         .run_and_exit("tests/features/")
         .await;
 }

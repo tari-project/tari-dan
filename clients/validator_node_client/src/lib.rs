@@ -37,6 +37,8 @@ use types::{
 
 use crate::types::{
     GetIdentityResponse,
+    GetStateRequest,
+    GetStateResponse,
     GetTemplateRequest,
     GetTemplateResponse,
     GetTemplatesRequest,
@@ -92,6 +94,10 @@ impl ValidatorNodeClient {
         request: GetTemplatesRequest,
     ) -> Result<GetTemplatesResponse, anyhow::Error> {
         self.send_request("get_templates", request).await
+    }
+
+    pub async fn get_state(&mut self, request: GetStateRequest) -> Result<GetStateResponse, anyhow::Error> {
+        self.send_request("get_state", request).await
     }
 
     pub async fn get_template(&mut self, request: GetTemplateRequest) -> Result<GetTemplateResponse, anyhow::Error> {

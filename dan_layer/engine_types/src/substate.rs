@@ -242,6 +242,11 @@ impl FromStr for SubstateAddress {
                 let id = VaultId::from_hex(addr).map_err(|_| InvalidSubstateAddressFormat(s.to_string()))?;
                 Ok(SubstateAddress::Vault(id))
             },
+            Some(("commitment", addr)) => {
+                let commitment_address = LayerOneCommitmentAddress::from_hex(addr)
+                    .map_err(|_| InvalidSubstateAddressFormat(s.to_string()))?;
+                Ok(SubstateAddress::LayerOneCommitment(commitment_address))
+            },
             Some(_) | None => Err(InvalidSubstateAddressFormat(s.to_string())),
         }
     }

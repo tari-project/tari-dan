@@ -369,19 +369,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "counter"
-version = "0.1.0"
-dependencies = [
- "tari_common_types",
- "tari_crypto",
- "tari_dan_common_types",
- "tari_dan_engine",
- "tari_template_abi 0.35.1",
- "tari_template_lib 0.35.1",
- "tari_template_macros",
-]
-
-[[package]]
 name = "cpufeatures"
 version = "0.2.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -695,6 +682,19 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a7a407cfaa3385c4ae6b23e84623d48c2798d06e3e6a1878f7f59f17b3f86499"
 dependencies = [
  "instant",
+]
+
+[[package]]
+name = "fees"
+version = "0.1.0"
+dependencies = [
+ "tari_common_types",
+ "tari_crypto",
+ "tari_dan_common_types",
+ "tari_dan_engine",
+ "tari_template_abi 0.35.1",
+ "tari_template_lib 0.35.1",
+ "tari_template_macros",
 ]
 
 [[package]]

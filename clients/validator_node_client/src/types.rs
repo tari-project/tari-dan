@@ -208,3 +208,13 @@ pub struct GetShardKey {
     pub height: u64,
     pub public_key: PublicKey,
 }
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct GetStateRequest {
+    pub shard_id: ShardId,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct GetStateResponse {
+    pub data: Vec<u8>,
+}
