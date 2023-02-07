@@ -11,6 +11,10 @@ use crate::{hash::HashParseError, Hash};
 pub struct LayerOneCommitmentAddress(Hash);
 
 impl LayerOneCommitmentAddress {
+    pub fn new(hash: Hash) -> Self {
+        Self(hash)
+    }
+
     pub fn from_hex(hex: &str) -> Result<Self, HashParseError> {
         Ok(Self(Hash::from_hex(hex)?))
     }
@@ -30,6 +34,6 @@ impl LayerOneCommitmentAddress {
 
 impl Display for LayerOneCommitmentAddress {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(f, "l1_commitment_{}", self.0)
+        write!(f, "commitment_{}", self.0)
     }
 }

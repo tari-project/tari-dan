@@ -258,7 +258,7 @@ pub enum SubstateValue {
     Resource(Resource),
     Vault(Vault),
     NonFungible(NonFungibleContainer),
-    LayerOneCommitment(Commitment),
+    LayerOneCommitment(Vec<u8>),
 }
 
 impl SubstateValue {

@@ -37,9 +37,9 @@ pub enum Instruction {
         message: String,
     },
     ClaimBurn {
-        commitment_address: LayerOneCommitmentAddress,
-        range_proof: BulletRangeProof,
-        proof_of_knowledge: RistrettoComSig,
+        commitment_address: Vec<u8>,
+        range_proof: Vec<u8>,
+        proof_of_knowledge: Vec<u8>,
     },
 }
 
