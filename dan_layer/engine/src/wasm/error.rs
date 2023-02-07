@@ -46,8 +46,8 @@ pub enum WasmExecutionError {
     EngineArgDecodeFailed(io::Error),
     #[error("maximum module memory size exceeded")]
     MaxMemorySizeExceeded,
-    #[error("Failed to decode ABI")]
-    AbiDecodeError,
+    #[error("Failed to decode ABI: {0}")]
+    AbiDecodeError(io::Error),
     #[error("package ABI function returned an invalid type")]
     InvalidReturnTypeFromAbiFunc,
     #[error("package did not contain an ABI definition")]

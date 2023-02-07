@@ -63,19 +63,13 @@ pub fn generate_dispatcher(ast: &TemplateAst) -> Result<TokenStream> {
     Ok(output)
 }
 
-fn get_function_names(ast: &TemplateAst) -> Vec<String> {
-    ast.get_functions().iter().map(|f| f.name.clone()).collect()
+fn get_function_names(ast: &TemplateAst) -> impl Iterator<Item = String> + '_ {
+    ast.get_functions().map(|f| f.name)
 }
 
-fn get_function_blocks(ast: &TemplateAst) -> Vec<Expr> {
-    let mut blocks = vec![];
-
-    for function in ast.get_functions() {
-        let block = get_function_block(&ast.template_name, function);
-        blocks.push(block);
-    }
-
-    blocks
+fn get_function_blocks(ast: &TemplateAst) -> impl Iterator<Item = Expr> + '_ {
+    ast.get_functions()
+        .map(|function| get_function_block(&ast.template_name, function))
 }
 
 fn get_function_block(template_ident: &Ident, ast: FunctionAst) -> Expr {

@@ -130,7 +130,7 @@ fn test_dodgy_template() {
         .unwrap_err();
     assert!(matches!(
         err,
-        PackageError::WasmModuleError(WasmExecutionError::AbiDecodeError)
+        PackageError::WasmModuleError(WasmExecutionError::AbiDecodeError(_))
     ));
 
     let err = compile_template("tests/templates/buggy", &["unexpected_export_function"])

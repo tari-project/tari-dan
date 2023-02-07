@@ -21,6 +21,7 @@
 //   USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 use std::{
+    fmt,
     path::{Path, PathBuf},
     str::FromStr,
     time::{Duration, Instant},
@@ -33,7 +34,7 @@ use tari_dan_common_types::{ShardId, SubstateChange};
 use tari_dan_engine::transaction::Transaction;
 use tari_engine_types::{
     commit_result::{FinalizeResult, TransactionResult},
-    execution_result::Type,
+    execution_result::{ExecutionResult, Type},
     instruction::Instruction,
     substate::{SubstateAddress, SubstateValue},
     TemplateAddress,
@@ -413,7 +414,7 @@ fn summarize_finalize_result(finalize: &FinalizeResult) {
 
     println!("========= Return Values =========");
     for result in &finalize.execution_results {
-        match result.return_type {
+        match &result.return_type {
             Type::Unit => {},
             Type::Bool => {
                 println!("bool: {}", result.decode::<bool>().unwrap());
@@ -451,11 +452,20 @@ fn summarize_finalize_result(finalize: &FinalizeResult) {
             Type::String => {
                 println!("string: {}", result.decode::<String>().unwrap());
             },
+            Type::Vec(ty) => {
+                let mut vec_ty = String::new();
+                display_vec(&mut vec_ty, ty, result).unwrap();
+                match &**ty {
+                    Type::Other { name } => {
+                        println!("Vec<{}>: {}", name, vec_ty);
+                    },
+                    _ => {
+                        println!("Vec<{:?}>: {}", ty, vec_ty);
+                    },
+                }
+            },
             Type::Other { ref name } if name == "Amount" => {
                 println!("{}: {}", name, result.decode::<Amount>().unwrap());
-            },
-            Type::Other { ref name } if name == "Vec" => {
-                println!("Raw Vec: {}", String::from_utf8_lossy(&result.raw));
             },
             Type::Other { ref name } => {
                 println!("{}: {}", name, to_hex(&result.raw));
@@ -468,6 +478,78 @@ fn summarize_finalize_result(finalize: &FinalizeResult) {
     for log in &finalize.logs {
         println!("{}", log);
     }
+}
+
+fn display_vec<W: fmt::Write>(writer: &mut W, ty: &Type, result: &ExecutionResult) -> fmt::Result {
+    fn stringify_slice<T: fmt::Display>(slice: &[T]) -> String {
+        slice.iter().map(|v| v.to_string()).collect::<Vec<_>>().join(", ")
+    }
+
+    match &ty {
+        Type::Unit => {},
+        Type::Bool => {
+            write!(writer, "{}", stringify_slice(&result.decode::<Vec<bool>>().unwrap()))?;
+        },
+        Type::I8 => {
+            write!(writer, "{}", stringify_slice(&result.decode::<Vec<i8>>().unwrap()))?;
+        },
+        Type::I16 => {
+            write!(writer, "{}", stringify_slice(&result.decode::<Vec<i16>>().unwrap()))?;
+        },
+        Type::I32 => {
+            write!(writer, "{}", stringify_slice(&result.decode::<Vec<i32>>().unwrap()))?;
+        },
+        Type::I64 => {
+            write!(writer, "{}", stringify_slice(&result.decode::<Vec<i64>>().unwrap()))?;
+        },
+        Type::I128 => {
+            write!(writer, "{}", stringify_slice(&result.decode::<Vec<i128>>().unwrap()))?;
+        },
+        Type::U8 => {
+            write!(writer, "{}", stringify_slice(&result.decode::<Vec<u8>>().unwrap()))?;
+        },
+        Type::U16 => {
+            write!(writer, "{}", stringify_slice(&result.decode::<Vec<u16>>().unwrap()))?;
+        },
+        Type::U32 => {
+            write!(writer, "{}", stringify_slice(&result.decode::<Vec<u32>>().unwrap()))?;
+        },
+        Type::U64 => {
+            write!(writer, "{}", stringify_slice(&result.decode::<Vec<u64>>().unwrap()))?;
+        },
+        Type::U128 => {
+            write!(writer, "{}", stringify_slice(&result.decode::<Vec<u128>>().unwrap()))?;
+        },
+        Type::String => {
+            write!(writer, "{}", result.decode::<Vec<String>>().unwrap().join(", "))?;
+        },
+        Type::Vec(ty) => {
+            let mut vec_ty = String::new();
+            display_vec(&mut vec_ty, ty, result)?;
+            match &**ty {
+                Type::Other { name } => {
+                    write!(writer, "Vec<{}>: {}", name, vec_ty)?;
+                },
+                _ => {
+                    write!(writer, "Vec<{:?}>: {}", ty, vec_ty)?;
+                },
+            }
+        },
+        Type::Other { name } if name == "Amount" => {
+            write!(writer, "{}", stringify_slice(&result.decode::<Vec<Amount>>().unwrap()))?;
+        },
+        Type::Other { name } if name == "NonFungibleId" => {
+            write!(
+                writer,
+                "{}",
+                stringify_slice(&result.decode::<Vec<NonFungibleId>>().unwrap())
+            )?;
+        },
+        Type::Other { .. } => {
+            write!(writer, "{}", to_hex(&result.raw))?;
+        },
+    }
+    Ok(())
 }
 
 fn load_inputs(

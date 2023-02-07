@@ -22,14 +22,14 @@
 
 use proc_macro2::TokenStream;
 use quote::{format_ident, quote};
-use syn::{parse_quote, Expr, Result};
+use syn::{parse_quote, AngleBracketedGenericArguments, Expr, GenericArgument, PathArguments, Result, Type};
 
 use crate::template::ast::{FunctionAst, TemplateAst, TypeAst};
 
 pub fn generate_abi(ast: &TemplateAst) -> Result<TokenStream> {
     let abi_function_name = format_ident!("{}_abi", ast.template_name);
     let template_name_as_str = ast.template_name.to_string();
-    let function_defs: Vec<Expr> = ast.get_functions().iter().map(generate_function_def).collect();
+    let function_defs = ast.get_functions().map(|func| generate_function_def(&func));
 
     let output = quote! {
         #[no_mangle]
@@ -52,9 +52,8 @@ pub fn generate_abi(ast: &TemplateAst) -> Result<TokenStream> {
 
 fn generate_function_def(f: &FunctionAst) -> Expr {
     let name = f.name.clone();
-
     let is_mut = f.input_types.first().map(|a| a.is_mut()).unwrap_or(false);
-    let arguments: Vec<Expr> = f.input_types.iter().map(generate_abi_type).collect();
+    let arguments = f.input_types.iter().map(generate_abi_type);
 
     let output = match &f.output_type {
         Some(type_ast) => generate_abi_type(type_ast),
@@ -91,8 +90,45 @@ fn generate_abi_type(rust_type: &TypeAst) -> Expr {
             "u64" => parse_quote!(Type::U64),
             "u128" => parse_quote!(Type::U128),
             "String" => parse_quote!(Type::String),
+            "Vec" => {
+                let ty = match &path.path.segments[0].arguments {
+                    PathArguments::AngleBracketed(AngleBracketedGenericArguments { args, .. }) => {
+                        match &args[0] {
+                            GenericArgument::Type(Type::Path(path)) => {
+                                match path.path.segments[0].ident.to_string().as_str() {
+                                    "" => parse_quote!(Type::Unit),
+                                    "bool" => parse_quote!(Type::Bool),
+                                    "i8" => parse_quote!(Type::I8),
+                                    "i16" => parse_quote!(Type::I16),
+                                    "i32" => parse_quote!(Type::I32),
+                                    "i64" => parse_quote!(Type::I64),
+                                    "i128" => parse_quote!(Type::I128),
+                                    "u8" => parse_quote!(Type::U8),
+                                    "u16" => parse_quote!(Type::U16),
+                                    "u32" => parse_quote!(Type::U32),
+                                    "u64" => parse_quote!(Type::U64),
+                                    "u128" => parse_quote!(Type::U128),
+                                    "String" => parse_quote!(Type::String),
+                                    "Vec" => {
+                                        panic!("Nested Vecs are not supported")
+                                    },
+                                    "Self" => get_component_address_type(),
+                                    name => parse_quote!(Type::Other { name: #name.to_string() }),
+                                }
+                            },
+                            // TODO: These should be errors
+                            a => panic!("Invalid vec generic argument {:?}", a),
+                        }
+                    },
+                    PathArguments::Parenthesized(_) | PathArguments::None => {
+                        panic!("Vec must specify a type {:?}", path.path)
+                    },
+                };
+
+                parse_quote!(Type::Vec(Box::new(#ty)))
+            },
             "Self" => get_component_address_type(),
-            name => parse_quote!(Type::Other{ name: #name.to_string() }),
+            name => parse_quote!(Type::Other { name: #name.to_string() }),
         },
 
         TypeAst::Tuple(_) => {
@@ -105,7 +141,9 @@ fn generate_abi_type(rust_type: &TypeAst) -> Expr {
 }
 
 fn get_component_address_type() -> Expr {
-    parse_quote!(Type::U32)
+    parse_quote!(Type::Other {
+        name: "pointer".to_string()
+    })
 }
 
 #[cfg(test)]
