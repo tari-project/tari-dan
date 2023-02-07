@@ -213,12 +213,12 @@ mod tests {
                         FunctionDef {
                             name: "constructor".to_string(),
                             arguments: vec![],
-                            output: Type::U32,
+                            output: Type::Other { name: "pointer".to_string() },
                             is_mut: false,
                         },
                         FunctionDef {
                             name: "method".to_string(),
-                            arguments: vec![Type::U32],
+                            arguments: vec![Type::Other { name: "pointer".to_string() }],
                             output: Type::Unit,
                             is_mut: false,
                         }
