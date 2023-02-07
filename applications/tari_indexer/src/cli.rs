@@ -31,7 +31,7 @@ pub struct Cli {
     pub address: Vec<SubstateAddress>,
 
     #[clap(long, short = 'p')]
-    pub poll_time_ms: Option<usize>,
+    pub poll_time_ms: Option<u64>,
 }
 
 impl Cli {

@@ -20,10 +20,70 @@
 // WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 // USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+use std::{panic, process};
 mod cli;
 use cli::Cli;
+use log::*;
+use tari_common::exit_codes::ExitError;
+use tari_engine_types::substate::SubstateAddress;
+use tari_shutdown::{Shutdown, ShutdownSignal};
+use tokio::{time, time::Duration};
 
-fn main() {
-    let args = Cli::init();
-    println!("{:?}", args);
+const LOG_TARGET: &str = "tari::indexer::app";
+const DEFAULT_POLL_TIME_MS: u64 = 200;
+
+#[tokio::main]
+async fn main() {
+    // Uncomment to enable tokio tracing via tokio-console
+    // console_subscriber::init();
+
+    // Setup a panic hook which prints the default rust panic message but also exits the process. This makes a panic in
+    // any thread "crash" the system instead of silently continuing.
+    let default_hook = panic::take_hook();
+    panic::set_hook(Box::new(move |info| {
+        default_hook(info);
+        process::exit(1);
+    }));
+
+    if let Err(err) = main_inner().await {
+        let exit_code = err.exit_code;
+        eprintln!("{:?}", err);
+        error!(
+            target: LOG_TARGET,
+            "Exiting with code ({}): {:?}", exit_code as i32, exit_code
+        );
+        process::exit(exit_code as i32);
+    }
+}
+
+async fn main_inner() -> Result<(), ExitError> {
+    let cli = Cli::init();
+    let mut shutdown = Shutdown::new();
+
+    run_indexer(cli, shutdown.to_signal()).await?;
+    shutdown.trigger();
+
+    Ok(())
+}
+
+pub async fn run_indexer(cli: Cli, mut shutdown_signal: ShutdownSignal) -> Result<(), ExitError> {
+    let poll_time_ms = cli.poll_time_ms.unwrap_or(DEFAULT_POLL_TIME_MS);
+    loop {
+        tokio::select! {
+            _ = time::sleep(Duration::from_millis(poll_time_ms)) => {
+                scan_substates(&cli.address).await;
+            },
+
+            _ = shutdown_signal.wait() => {
+                break;
+            },
+        }
+    }
+
+    Ok(())
+}
+
+async fn scan_substates(addresses: &[SubstateAddress]) {
+    // TODO
+    println!("scan_substates for {:?}", addresses);
 }
