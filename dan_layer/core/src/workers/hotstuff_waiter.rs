@@ -149,9 +149,14 @@ pub struct HotStuffWaiter<
     network_latency: Duration,
     // We store what round is for next leader selection, default is 0.
     current_leader_round: HashMap<(ShardId, PayloadId), u32>,
-    // We have to store if we are in the middle of an election, so that when someone sends a recovery message, we can
-    // responde that we are voting and he should wait.
+    // We have to store if we are in the middle of an election, so that when we receive a recovery message
+    // from another VN, we can answer that we are electing and it should wait.
     election_in_progress: HashSet<(ShardId, PayloadId)>,
+    // We keep track of the foreign leader committee messages, so that we abandon payloads in which
+    // we trigger foreign leader failure, multiple times
+    foreign_leader_failures: HashSet<PacemakerEvents>,
+    // Stores the number of election rounds for a given pacemaker event
+    elections_rounds: HashMap<(ShardId, PayloadId), u8>,
 }
 
 impl<TPayload, TAddr, TLeaderStrategy, TEpochManager, TPayloadProcessor, TShardStore, TSigningService>
@@ -255,6 +260,8 @@ where
             network_latency,
             current_leader_round: HashMap::new(),
             election_in_progress: HashSet::new(),
+            foreign_leader_failures: HashSet::new(),
+            elections_rounds: HashMap::new(),
         }
     }
 
@@ -612,9 +619,23 @@ where
         payload_id: PayloadId,
         shard_id: ShardId,
     ) -> Result<(), HotStuffError> {
-        // TODO: We should check if this is triggered second time. If that's the case, then foreign committee didn't
-        // responded to our first recovery request. So they probably can't reach consensus and this transaction should
-        // be thrown away.
+        // Check if this is the second time we are triggering a foreign leader request
+        if self
+            .foreign_leader_failures
+            .contains(&PacemakerEvents::ForeignCommittee(epoch, shard_id, payload_id))
+        {
+            // This is the second time we are triggering a foreign leader request, for the same triplet
+            // (epoch, shard_id, payload_id). This means that they probably can't reach consensus, so we throw
+            // away this transaction
+            self.shard_store.with_write_tx(|tx| {
+                let (node_hash, _) = tx.get_locked_node_hash_and_height(payload_id, shard_id)?;
+                tx.abandon_pledges(shard_id, payload_id, &node_hash)
+                    // If the substate was pledged to a different payload, we didn't pledge for this payload so the pledge may not exist
+                    .optional()
+            })?;
+        }
+        self.foreign_leader_failures
+            .insert(&PacemakerEvents::ForeignCommittee(epoch, shard_id, payload_id));
 
         // The foreign leader failed to send a proposal. Let's check what's going on in the
         // foreign committee. We will asks f+1 nodes, so that at least one of the should be honest, so if the
@@ -651,8 +672,8 @@ where
         Ok(())
     }
 
-    // Sender is asking if we have anything newer that he has from our local leader. That means that he didn't
-    // received response from our leader maybe there is nothing.
+    // Sender asks if there is a newer local state, that he is not in possession of. This means that Sender didn't
+    // receive a response from our local leader. In this case, we might be in the presence of a faulty leader
     async fn on_receive_missing_proposal(
         &self,
         from: TAddr,
@@ -661,7 +682,33 @@ where
         payload_id: PayloadId,
         last_height: NodeHeight,
     ) -> Result<(), HotStuffError> {
-        // TODO maybe we should check that `from` is from someone from any committee on this transaction.
+        // If the current replica does not stored the payload, we simply don't do anything else and return
+        let payload = match self.shard_store.create_read_tx()?.get_payload(&payload_id) {
+            Ok(payload) => payload,
+            Err(e) => {
+                info!(
+                    target: LOG_TARGET,
+                    "Payload = {} is missing from node shard store {}", payload_id, e
+                );
+                return;
+            },
+        };
+
+        let involved_shards = payload.involved_shards();
+        let local_shards = self
+            .epoch_manager
+            .filter_to_local_shards(epoch, &from, involved_shards.as_ref())
+            .await?;
+
+        // if from doesn't belong to any shard involved in processing the current payload, we should ignore it
+        if local_shards.is_empty() {
+            info!(
+                target: LOG_TARGET,
+                "Missing proposal sent by node = {} which is not processing current payload = {}", from, payload_id
+            );
+            return;
+        }
+
         let leader_proposals =
             self.shard_store
                 .create_write_tx()?
@@ -672,24 +719,31 @@ where
                 result.len() <= 1,
                 "We can't have more than one proposal at certain height for one particular shard"
             );
-            // TODO: I should receive messages only for shard_id where I'm part of the committee.
+            let committee = self.epoch_manager.get_committee(epoch, shard_id).await?;
+            if !committee.contains(&self.public_key) {
+                info!(
+                    target: LOG_TARGET,
+                    "Current node with public key = {} is not involved in processing payload = {}",
+                    self.public_key,
+                    payload_id
+                );
+                return Err(HotStuffError::NodeIsNotInvolvedInPayload { payload_id });
+            }
             // Do we have such a node? If not, maybe our leader failed. So I don't send anything and this node will
             // receive its own pacemaker trigger as well.
             if let Some(node) = result.get(0) {
-                // We use the leader channel, but for the node it doesn't really matter, because it doesn't check where
-                // is the node coming from as long it's valid.
                 self.tx_leader
                     .send((from, HotStuffMessage::new_proposal(node.clone(), shard_id)))
                     .await?;
             } else {
-                // Maybe we are selecting a new leader right now.
+                // We check if we are electing a new leader, right now.
                 if self.election_in_progress.contains(&(shard_id, payload_id)) {
                     self.tx_recovery
                         .send((RecoveryMessage::ElectionInProgress(epoch, shard_id, payload_id), from))
                         .await?;
                 }
-                // If we don't send anything, that means the TX is invalid, this will also trigger invalid in all
-                // committees that are asking us for update.
+                // If we are not electing a new leader, then we don't send anything, that means the TX is invalid. This
+                // will also trigger invalid in all committees that are asking us for update.
             }
         }
         Ok(())
@@ -706,6 +760,22 @@ where
     ) -> Result<(), HotStuffError> {
         // TODO: if there is a byzantine replica, he can always send election in progress. We should count the election
         // rounds. Be aware that the election rounds are based on delta time, and this trigger is 2*delta.
+        let election_rounds = self.elections_rounds.entry(&(shard_id, payload_id)).or_default();
+        election_rounds += 1;
+
+        // For now, we hardcode the max num of election rounds as 4, before we cancel the transaction
+        if election_rounds >= 4 {
+            // We are in the situation of a Byzantine replica, so we don't restart a pacemaker trigger. Instead,
+            // we allow it to timeout. In the meantime, we remove any stored pledges associated with this
+            // shard_id and payload_id.
+            self.shard_store.with_write_tx(|tx| {
+                let (node_hash, _) = tx.get_locked_node_hash_and_height(payload_id, shard_id)?;
+                tx.abandon_pledges(shard_id, payload_id, &node_hash)
+                    // If the substate was pledged to a different payload, we didn't pledge for this payload so the pledge may not exist
+                    .optional()
+            })?;
+            return Ok(());
+        }
         // We restart the timer.
         self.pacemaker
             .stop_timer(PacemakerEvents::ForeignCommittee(epoch, shard_id, payload_id))
@@ -928,6 +998,10 @@ where
                     node.payload_id(),
                     node.shard()
                 );
+                // in this case, we can remove any leader failures
+                // that have occurred for the triplet (epoch, payload_id, shard_id)
+                self.foreign_leader_failures
+                    .remove(&PacemakerEvents::ForeignCommittee(epoch, payload_id, shard_id));
                 continue;
             }
 
