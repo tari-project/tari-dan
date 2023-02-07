@@ -33,7 +33,8 @@ use std::{
 const TEMPLATE_BUILTINS: &[&str] = &["templates/account"];
 
 fn main() -> Result<(), Box<dyn Error>> {
-    // Rebuild templates if lib changed
+    // Rebuild templates if abi or lib changes
+    println!("cargo:rerun-if-changed=../template_abi");
     println!("cargo:rerun-if-changed=../template_lib");
     for template in TEMPLATE_BUILTINS {
         // we only want to rebuild if a template was added/modified
