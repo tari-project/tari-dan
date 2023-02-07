@@ -23,7 +23,6 @@
 use std::sync::Arc;
 
 use anyhow::anyhow;
-use futures::StreamExt;
 use log::*;
 use tari_comms::{
     connectivity::{ConnectivityEvent, ConnectivityRequester},
@@ -110,20 +109,13 @@ impl Networking {
         }
     }
 
-    async fn dial_seed_peers(&mut self) -> Result<(), NetworkingError> {
+    async fn dial_seed_peers(&self) -> Result<(), NetworkingError> {
         let seed_peers = self.peer_provider.get_seed_peers().await?;
         info!(target: LOG_TARGET, "☎️ Dialing {} seed peers", seed_peers.len());
 
-        let dials = self
-            .connectivity
-            .dial_many_peers(seed_peers.into_iter().map(|p| NodeId::from_public_key(&p.identity)));
-        dials
-            .for_each(|res| async move {
-                if let Err(err) = res {
-                    error!(target: LOG_TARGET, "🚨 Failed to dial seed peer: {}", err);
-                }
-            })
-            .await;
+        self.connectivity
+            .request_many_dials(seed_peers.into_iter().map(|p| NodeId::from_public_key(&p.identity)))
+            .await?;
         Ok(())
     }
 
@@ -146,7 +138,9 @@ impl Networking {
                 info!(target: LOG_TARGET, "📢 Announcing presence to network");
                 // TODO: Identity signature can never be empty, but handle the case properly anyway
                 let identity_signature = self.node_identity.identity_signature_read().clone().unwrap();
-                self.outbound
+
+                let res = self
+                    .outbound
                     .flood(
                         Default::default(),
                         DanMessage::NetworkAnnounce(Box::new(NetworkAnnounce {
@@ -155,8 +149,8 @@ impl Networking {
                             identity_signature,
                         })),
                     )
-                    .await?;
-                let _ignore = reply.send(Ok(()));
+                    .await;
+                let _ignore = reply.send(res.map_err(Into::into));
             },
         }
 

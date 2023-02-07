@@ -159,7 +159,9 @@ pub async fn run_validator_node(config: &ApplicationConfig, shutdown_signal: Shu
 async fn run_dan_node(services: Services, shutdown_signal: ShutdownSignal) -> Result<(), ExitError> {
     let node = DanNode::new(services);
     info!(target: LOG_TARGET, "🚀 Validator node started!");
-    node.start(shutdown_signal).await
+    node.start(shutdown_signal)
+        .await
+        .map_err(|e| ExitError::new(ExitCode::UnknownError, e))
 }
 
 async fn create_base_layer_clients(
