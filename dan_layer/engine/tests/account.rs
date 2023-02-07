@@ -30,7 +30,7 @@ fn basic_faucet_transfer() {
         .result
         .expect("Faucet mint failed")
         .up_iter()
-        .find_map(|(_, s)| s.substate_address().as_resource_address())
+        .find_map(|(address, _)| address.as_resource_address())
         .unwrap();
 
     // Create sender and receiver accounts
@@ -119,7 +119,7 @@ fn withdraw_from_account_prevented() {
         .result
         .expect("Faucet mint failed")
         .up_iter()
-        .find_map(|(_, s)| s.substate_address().as_resource_address())
+        .find_map(|(addr, _)| addr.as_resource_address())
         .unwrap();
 
     // Create sender and receiver accounts

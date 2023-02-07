@@ -94,13 +94,14 @@ message VNStateSyncRequest {
 message VNStateSyncResponse {
   bytes shard_id = 1;
   uint32 version = 2;
-  bytes substate =3;
-  uint64 created_height = 4;
-  uint64 destroyed_height = 5;
-  bytes created_node_hash = 6;
-  bytes destroyed_node_hash = 7;
-  bytes created_payload_id = 8;
-  bytes destroyed_payload_id = 9;
-  tari.dan.consensus.QuorumCertificate created_justify = 10;
-  tari.dan.consensus.QuorumCertificate destroyed_justify = 11;
+  bytes address = 3;
+  bytes substate = 4;
+  uint64 created_height = 5;
+  uint64 destroyed_height = 6;
+  bytes created_node_hash = 7;
+  bytes destroyed_node_hash = 8;
+  bytes created_payload_id = 9;
+  bytes destroyed_payload_id = 10;
+  tari.dan.consensus.QuorumCertificate created_justify = 11;
+  tari.dan.consensus.QuorumCertificate destroyed_justify = 12;
 }

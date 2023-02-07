@@ -248,6 +248,7 @@ impl<'a> SqliteShardStoreReadTransaction<'a> {
     fn map_substate_to_shard_data(ss: &Substate) -> Result<SubstateShardData, StorageError> {
         Ok(SubstateShardData::new(
             ShardId::try_from(ss.shard_id.clone())?,
+            ss.address.parse().map_err(|_| StorageError::DecodingError)?,
             ss.version as u32,
             serde_json::from_str(&ss.data).unwrap(),
             NodeHeight(ss.created_height as u64),
@@ -808,6 +809,7 @@ impl<'a> SqliteShardStoreWriteTransaction<'a> {
                     }
                 } else {
                     SubstateState::Up {
+                        address: current_state.address.parse().map_err(|_| StorageError::DecodingError)?,
                         created_by: PayloadId::try_from(current_state.created_by_payload_id)?,
                         data: serde_json::from_str::<tari_engine_types::substate::Substate>(&current_state.data)
                             .unwrap(),
@@ -1121,7 +1123,7 @@ impl ShardStoreWriteTransaction<PublicKey, TariDanPayload> for SqliteShardStoreW
         for st_change in changes {
             match st_change {
                 SubstateState::DoesNotExist => (),
-                SubstateState::Up { data: d, .. } => {
+                SubstateState::Up { address, data: d, .. } => {
                     if let Some(s) = &current_state {
                         if !s.is_destroyed() {
                             return Err(StorageError::QueryError {
@@ -1135,6 +1137,7 @@ impl ShardStoreWriteTransaction<PublicKey, TariDanPayload> for SqliteShardStoreW
                     let pretty_data = serde_json::to_string_pretty(d).unwrap();
                     let new_row = NewSubstate {
                         shard_id: node.shard().as_bytes().to_vec(),
+                        address: address.to_string(),
                         version: d.version().into(),
                         data: pretty_data,
                         created_by_payload_id: node.payload_id().as_bytes().to_vec(),
@@ -1194,6 +1197,7 @@ impl ShardStoreWriteTransaction<PublicKey, TariDanPayload> for SqliteShardStoreW
 
         let new_row = ImportedSubstate {
             shard_id: substate_data.shard_id().as_bytes().to_vec(),
+            address: substate_data.substate_address().to_string(),
             version: i64::from(substate_data.version()),
             data: serde_json::to_string_pretty(substate_data.substate()).unwrap(),
             created_by_payload_id: substate_data.created_payload_id().as_bytes().to_vec(),

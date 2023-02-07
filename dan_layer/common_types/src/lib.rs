@@ -9,7 +9,7 @@ use std::{
 use ::serde::{Deserialize, Serialize};
 use tari_bor::{borsh, Decode, Encode};
 use tari_common_types::types::{FixedHash, FixedHashSizeError};
-use tari_engine_types::substate::Substate;
+use tari_engine_types::substate::{Substate, SubstateAddress};
 use tari_utilities::hex::Hex;
 
 pub mod proto;
@@ -68,8 +68,14 @@ impl Display for SubstateChange {
 #[derive(Debug, Clone, Encode, Decode, Deserialize, Serialize)]
 pub enum SubstateState {
     DoesNotExist,
-    Up { created_by: PayloadId, data: Substate },
-    Down { deleted_by: PayloadId },
+    Up {
+        created_by: PayloadId,
+        address: SubstateAddress,
+        data: Substate,
+    },
+    Down {
+        deleted_by: PayloadId,
+    },
 }
 
 impl SubstateState {

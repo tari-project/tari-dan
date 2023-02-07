@@ -27,6 +27,7 @@ use crate::schema::*;
 pub struct Substate {
     pub id: i32,
     pub shard_id: Vec<u8>,
+    pub address: String,
     pub version: i64,
     pub data: String,
     pub created_by_payload_id: Vec<u8>,
@@ -45,6 +46,7 @@ pub struct Substate {
 #[table_name = "substates"]
 pub struct NewSubstate {
     pub shard_id: Vec<u8>,
+    pub address: String,
     pub version: i64,
     pub data: String,
     pub created_by_payload_id: Vec<u8>,
@@ -57,6 +59,7 @@ pub struct NewSubstate {
 #[table_name = "substates"]
 pub struct ImportedSubstate {
     pub shard_id: Vec<u8>,
+    pub address: String,
     pub version: i64,
     pub data: String,
     pub created_by_payload_id: Vec<u8>,

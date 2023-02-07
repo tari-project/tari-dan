@@ -386,24 +386,16 @@ fn summarize_finalize_result(finalize: &FinalizeResult) {
                 println!("      🧩 Shard: {}", ShardId::from_address(address, substate.version()));
                 match substate.substate_value() {
                     SubstateValue::Component(component) => {
-                        println!(
-                            "      ▶ component ({}): {}",
-                            component.module_name,
-                            substate.substate_address()
-                        );
+                        println!("      ▶ component ({}): {}", component.module_name, address,);
                     },
                     SubstateValue::Resource(_) => {
-                        println!("      ▶ resource: {}", substate.substate_address());
+                        println!("      ▶ resource: {}", address);
                     },
                     SubstateValue::Vault(vault) => {
-                        println!(
-                            "      ▶ vault: {} {}",
-                            substate.substate_address(),
-                            vault.resource_address()
-                        );
+                        println!("      ▶ vault: {} {}", address, vault.resource_address());
                     },
                     SubstateValue::NonFungible(_) => {
-                        println!("      ▶ NFT: {}", substate.substate_address(),);
+                        println!("      ▶ NFT: {}", address);
                     },
                 }
                 println!();

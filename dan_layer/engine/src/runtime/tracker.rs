@@ -313,7 +313,6 @@ impl StateTracker {
         let component_address = self.id_provider().new_component_address()?;
         debug!(target: LOG_TARGET, "New component created: {}", component_address);
         let component = ComponentHeader {
-            component_address,
             template_address: runtime_state.template_address,
             module_name,
             access_rules,
@@ -427,9 +426,9 @@ impl StateTracker {
                 let new_substate = match tx.get_state::<_, Substate>(&addr).optional()? {
                     Some(existing_state) => {
                         substate_diff.down(addr.clone(), existing_state.version());
-                        Substate::new(addr.clone(), existing_state.version() + 1, substate)
+                        Substate::new(existing_state.version() + 1, substate)
                     },
-                    None => Substate::new(addr.clone(), 0, substate),
+                    None => Substate::new(0, substate),
                 };
                 substate_diff.up(addr, new_substate);
             }
@@ -439,9 +438,9 @@ impl StateTracker {
                 let new_substate = match tx.get_state::<_, Substate>(&addr).optional()? {
                     Some(existing_state) => {
                         substate_diff.down(addr.clone(), existing_state.version());
-                        Substate::new(addr.clone(), existing_state.version() + 1, substate)
+                        Substate::new(existing_state.version() + 1, substate)
                     },
-                    None => Substate::new(addr.clone(), 0, substate),
+                    None => Substate::new(0, substate),
                 };
                 substate_diff.up(addr, new_substate);
             }
@@ -451,9 +450,9 @@ impl StateTracker {
                 let new_substate = match tx.get_state::<_, Substate>(&addr).optional()? {
                     Some(existing_state) => {
                         substate_diff.down(addr.clone(), existing_state.version());
-                        Substate::new(addr.clone(), existing_state.version() + 1, substate)
+                        Substate::new(existing_state.version() + 1, substate)
                     },
-                    None => Substate::new(addr.clone(), 0, substate),
+                    None => Substate::new(0, substate),
                 };
                 substate_diff.up(addr, new_substate);
             }
@@ -463,9 +462,9 @@ impl StateTracker {
                 let new_substate = match tx.get_state::<_, Substate>(&addr).optional()? {
                     Some(existing_state) => {
                         substate_diff.down(addr.clone(), existing_state.version());
-                        Substate::new(addr.clone(), existing_state.version() + 1, substate)
+                        Substate::new(existing_state.version() + 1, substate)
                     },
-                    None => Substate::new(addr.clone(), 0, substate),
+                    None => Substate::new(0, substate),
                 };
                 substate_diff.up(addr, new_substate);
             }

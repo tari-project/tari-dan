@@ -26,7 +26,7 @@ use std::{
 };
 
 use serde::{Deserialize, Serialize};
-use tari_bor::{borsh, decode, encode, Decode, Encode};
+use tari_bor::{borsh, decode, decode_exact, encode, Decode, Encode};
 use tari_template_lib::{
     models::{ComponentAddress, ComponentHeader, NonFungibleAddress, NonFungibleId, ResourceAddress, VaultId},
     Hash,
@@ -36,23 +36,16 @@ use crate::{hashing::hasher, non_fungible::NonFungibleContainer, resource::Resou
 
 #[derive(Debug, Clone, Encode, Decode, Serialize, Deserialize)]
 pub struct Substate {
-    // TODO: Remove address
-    address: SubstateAddress,
     substate: SubstateValue,
     version: u32,
 }
 
 impl Substate {
-    pub fn new<T: Into<SubstateValue>>(address: SubstateAddress, version: u32, substate: T) -> Self {
+    pub fn new<T: Into<SubstateValue>>(version: u32, substate: T) -> Self {
         Self {
-            address,
             substate: substate.into(),
             version,
         }
-    }
-
-    pub fn substate_address(&self) -> &SubstateAddress {
-        &self.address
     }
 
     pub fn substate_value(&self) -> &SubstateValue {
@@ -79,7 +72,6 @@ impl Substate {
 /// Base object address, version tuples
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Encode, Decode, Serialize, Deserialize)]
 pub enum SubstateAddress {
-    // System(SystemAddress),
     Component(ComponentAddress),
     Resource(ResourceAddress),
     Vault(VaultId),
@@ -120,14 +112,17 @@ impl SubstateAddress {
         }
     }
 
+    pub fn to_bytes(&self) -> Vec<u8> {
+        encode(self).unwrap()
+    }
+
+    pub fn from_bytes(bytes: &[u8]) -> std::io::Result<Self> {
+        decode_exact(bytes)
+    }
+
     // TODO: look at using BECH32 standard
     pub fn to_address_string(&self) -> String {
-        match self {
-            SubstateAddress::Component(addr) => addr.to_string(),
-            SubstateAddress::Resource(addr) => addr.to_string(),
-            SubstateAddress::Vault(addr) => addr.to_string(),
-            SubstateAddress::NonFungible(addr) => addr.to_string(),
-        }
+        self.to_string()
     }
 
     pub fn as_non_fungible_address(&self) -> Option<&NonFungibleAddress> {

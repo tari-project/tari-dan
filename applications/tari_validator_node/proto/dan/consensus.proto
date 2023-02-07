@@ -98,7 +98,8 @@ message SubstateState {
 
 message UpState {
   bytes created_by = 1;
-  bytes data = 2;
+  bytes address = 2;
+  bytes data = 3;
 }
 
 message DownState {
