@@ -20,11 +20,10 @@
 //   WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //   USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use futures::channel::oneshot;
 use tari_dan_common_types::ShardId;
 use tari_dan_engine::transaction::Transaction;
 use tari_template_lib::Hash;
-use tokio::sync::{broadcast, broadcast::error::RecvError, mpsc};
+use tokio::sync::{broadcast, broadcast::error::RecvError, mpsc, oneshot};
 
 use crate::p2p::services::mempool::MempoolError;
 

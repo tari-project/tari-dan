@@ -148,7 +148,7 @@ impl From<tari_engine_types::instruction::Instruction> for proto::transaction::I
                 args,
             } => {
                 result.instruction_type = 1;
-                result.component_address = component_address.to_vec();
+                result.component_address = component_address.as_bytes().to_vec();
                 result.method = method;
                 result.args = args.into_iter().map(|a| a.into()).collect();
             },

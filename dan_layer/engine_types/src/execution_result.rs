@@ -61,6 +61,7 @@ pub enum Type {
     U64,
     U128,
     String,
+    Vec(Box<Type>),
     Other { name: String },
 }
 
@@ -80,6 +81,7 @@ impl From<tari_template_abi::Type> for Type {
             tari_template_abi::Type::U64 => Type::U64,
             tari_template_abi::Type::U128 => Type::U128,
             tari_template_abi::Type::String => Type::String,
+            tari_template_abi::Type::Vec(t) => Type::Vec(Box::new((*t).into())),
             tari_template_abi::Type::Other { name } => Type::Other { name },
         }
     }
