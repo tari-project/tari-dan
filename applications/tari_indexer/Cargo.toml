@@ -8,4 +8,7 @@ version = "0.35.1"
 edition = "2018"
 
 [dependencies]
+tari_engine_types = { path = "../../dan_layer/engine_types" }
+tari_template_lib = { path = "../../dan_layer/template_lib" }
+
 clap = { version = "3.2.22", features = ["derive", "env"] }

@@ -6245,6 +6245,8 @@ name = "tari_indexer"
 version = "0.35.1"
 dependencies = [
  "clap 3.2.23",
+ "tari_engine_types",
+ "tari_template_lib",
 ]
 
 [[package]]

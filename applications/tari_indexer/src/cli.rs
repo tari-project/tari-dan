@@ -21,16 +21,14 @@
 // USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 use clap::Parser;
+use tari_engine_types::substate::SubstateAddress;
 
 #[derive(Parser, Debug)]
 #[clap(author, version, about, long_about = None)]
 #[clap(propagate_version = true)]
 pub struct Cli {
-    #[clap(long, short = 'c', multiple_values = true)]
-    pub component: Vec<String>,
-
-    #[clap(long, short = 'r', multiple_values = true)]
-    pub resource: Vec<String>,
+    #[clap(long, short = 'a', multiple_values = true)]
+    pub address: Vec<SubstateAddress>,
 
     #[clap(long, short = 'p')]
     pub poll_time_ms: Option<usize>,
