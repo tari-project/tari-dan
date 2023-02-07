@@ -20,23 +20,25 @@
 // WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 // USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use std::{panic, process};
 mod cli;
+mod json_rpc;
+
+use std::{panic, process};
+
 use cli::Cli;
 use log::*;
 use tari_common::exit_codes::ExitError;
 use tari_engine_types::substate::SubstateAddress;
 use tari_shutdown::{Shutdown, ShutdownSignal};
-use tokio::{time, time::Duration};
+use tokio::{task, time, time::Duration};
+
+use crate::json_rpc::{run_json_rpc, JsonRpcHandlers};
 
 const LOG_TARGET: &str = "tari::indexer::app";
 const DEFAULT_POLL_TIME_MS: u64 = 200;
 
 #[tokio::main]
 async fn main() {
-    // Uncomment to enable tokio tracing via tokio-console
-    // console_subscriber::init();
-
     // Setup a panic hook which prints the default rust panic message but also exits the process. This makes a panic in
     // any thread "crash" the system instead of silently continuing.
     let default_hook = panic::take_hook();
@@ -67,6 +69,13 @@ async fn main_inner() -> Result<(), ExitError> {
 }
 
 pub async fn run_indexer(cli: Cli, mut shutdown_signal: ShutdownSignal) -> Result<(), ExitError> {
+    // Run the JSON-RPC API
+    if let Some(json_rpc_address) = cli.json_rpc_address {
+        info!(target: LOG_TARGET, "🌐 Started JSON-RPC server on {}", json_rpc_address);
+        let handlers = JsonRpcHandlers::new(cli.address.clone());
+        task::spawn(run_json_rpc(json_rpc_address, handlers));
+    }
+
     let poll_time_ms = cli.poll_time_ms.unwrap_or(DEFAULT_POLL_TIME_MS);
     loop {
         tokio::select! {
@@ -83,7 +92,6 @@ pub async fn run_indexer(cli: Cli, mut shutdown_signal: ShutdownSignal) -> Resul
     Ok(())
 }
 
-async fn scan_substates(addresses: &[SubstateAddress]) {
+async fn scan_substates(_addresses: &[SubstateAddress]) {
     // TODO
-    println!("scan_substates for {:?}", addresses);
 }

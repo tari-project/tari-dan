@@ -20,6 +20,8 @@
 // WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 // USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+use std::net::SocketAddr;
+
 use clap::Parser;
 use tari_engine_types::substate::SubstateAddress;
 
@@ -32,6 +34,10 @@ pub struct Cli {
 
     #[clap(long, short = 'p')]
     pub poll_time_ms: Option<u64>,
+
+    /// Bind address for JSON-rpc server
+    #[clap(long, short = 'r', alias = "rpc-address")]
+    pub json_rpc_address: Option<SocketAddr>,
 }
 
 impl Cli {

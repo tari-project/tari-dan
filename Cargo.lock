@@ -6244,13 +6244,21 @@ dependencies = [
 name = "tari_indexer"
 version = "0.35.1"
 dependencies = [
+ "anyhow",
+ "axum",
+ "axum-jrpc",
  "clap 3.2.23",
  "log",
+ "serde",
+ "serde_json",
  "tari_common",
  "tari_engine_types",
  "tari_shutdown",
  "tari_template_lib",
  "tokio",
+ "tower",
+ "tower-http",
+ "tower-layer",
 ]
 
 [[package]]
