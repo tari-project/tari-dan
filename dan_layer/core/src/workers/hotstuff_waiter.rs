@@ -951,7 +951,7 @@ where
                 continue;
             }
 
-            let finalize_result = self.decide(&node, payload.clone(), &shard_pledges).await?;
+            let finalize_result = self.decide(&node, payload.clone(), &shard_pledges)?;
 
             let vote_msg = self.create_vote(
                 *node.hash(),
@@ -1037,7 +1037,7 @@ where
     }
 
     #[allow(clippy::too_many_lines)]
-    async fn decide(
+    fn decide(
         &self,
         node: &HotStuffTreeNode<TAddr, TPayload>,
         payload: TPayload,
@@ -1101,8 +1101,7 @@ where
 
                     return Ok(finalize_result);
                 }
-
-                let finalize_result = match self.execute(payload, shard_pledges).await {
+                let finalize_result = match self.execute(payload, shard_pledges, node.epoch()) {
                     Ok(finalize_result) => finalize_result,
                     Err(err) => FinalizeResult::reject(
                         payload_id.into_array().into(),
@@ -1574,10 +1573,11 @@ where
         Ok(())
     }
 
-    async fn execute(
+    fn execute(
         &self,
         payload: TPayload,
         shard_pledges: &ShardPledgeCollection,
+        epoch: Epoch,
     ) -> Result<FinalizeResult, HotStuffError> {
         let maybe_payload_result = self
             .shard_store
@@ -1610,17 +1610,13 @@ where
             );
         }
 
-        let consensus_context = self.get_consensus_context().await?;
+        let consensus_context = ConsensusContext {
+            current_epoch: epoch.as_u64(),
+        };
         let finalize_result = self
             .payload_processor
             .process_payload(payload, pledges, consensus_context)?;
         Ok(finalize_result)
-    }
-
-    async fn get_consensus_context(&self) -> Result<ConsensusContext, HotStuffError> {
-        let current_epoch = self.epoch_manager.current_epoch().await?.as_u64();
-        let consensus_context = ConsensusContext { current_epoch };
-        Ok(consensus_context)
     }
 
     async fn get_leader(&self, node: &HotStuffTreeNode<TAddr, TPayload>) -> Result<TAddr, HotStuffError> {
