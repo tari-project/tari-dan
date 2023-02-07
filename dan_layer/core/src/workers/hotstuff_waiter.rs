@@ -614,7 +614,7 @@ where
     }
 
     async fn pacemaker_trigger_foreign_leader_fail(
-        &self,
+        &mut self,
         epoch: Epoch,
         payload_id: PayloadId,
         shard_id: ShardId,
@@ -635,7 +635,7 @@ where
             })?;
         }
         self.foreign_leader_failures
-            .insert(&PacemakerEvents::ForeignCommittee(epoch, shard_id, payload_id));
+            .insert(PacemakerEvents::ForeignCommittee(epoch, shard_id, payload_id));
 
         // The foreign leader failed to send a proposal. Let's check what's going on in the
         // foreign committee. We will asks f+1 nodes, so that at least one of the should be honest, so if the
@@ -690,7 +690,7 @@ where
                     target: LOG_TARGET,
                     "Payload = {} is missing from node shard store {}", payload_id, e
                 );
-                return;
+                return Ok(());
             },
         };
 
@@ -706,7 +706,7 @@ where
                 target: LOG_TARGET,
                 "Missing proposal sent by node = {} which is not processing current payload = {}", from, payload_id
             );
-            return;
+            return Ok(());
         }
 
         let leader_proposals =
@@ -752,7 +752,7 @@ where
     // We are running a pacemaker for the proposal. But the other committee is still having an election. Let's postpone
     // the pacemaker.
     async fn on_receive_election_in_progress(
-        &self,
+        &mut self,
         _from: TAddr,
         epoch: Epoch,
         shard_id: ShardId,
@@ -760,11 +760,11 @@ where
     ) -> Result<(), HotStuffError> {
         // TODO: if there is a byzantine replica, he can always send election in progress. We should count the election
         // rounds. Be aware that the election rounds are based on delta time, and this trigger is 2*delta.
-        let election_rounds = self.elections_rounds.entry(&(shard_id, payload_id)).or_default();
-        election_rounds += 1;
+        let election_rounds = self.elections_rounds.entry((shard_id, payload_id)).or_default();
+        *election_rounds += 1;
 
         // For now, we hardcode the max num of election rounds as 4, before we cancel the transaction
-        if election_rounds >= 4 {
+        if *election_rounds >= 4 {
             // We are in the situation of a Byzantine replica, so we don't restart a pacemaker trigger. Instead,
             // we allow it to timeout. In the meantime, we remove any stored pledges associated with this
             // shard_id and payload_id.
@@ -789,7 +789,7 @@ where
         Ok(())
     }
 
-    async fn on_receive_recovery_message(&self, from: TAddr, msg: RecoveryMessage) -> Result<(), HotStuffError> {
+    async fn on_receive_recovery_message(&mut self, from: TAddr, msg: RecoveryMessage) -> Result<(), HotStuffError> {
         match msg {
             RecoveryMessage::MissingProposal(epoch, shard_id, payload_id, last_height) => {
                 self.on_receive_missing_proposal(from, epoch, shard_id, payload_id, last_height)
@@ -931,7 +931,7 @@ where
     }
 
     async fn decide_and_vote_on_all_nodes(
-        &self,
+        &mut self,
         payload: TPayload,
         proposed_nodes: Vec<HotStuffTreeNode<TAddr, TPayload>>,
     ) -> Result<(), HotStuffError> {
@@ -999,9 +999,12 @@ where
                     node.shard()
                 );
                 // in this case, we can remove any leader failures
-                // that have occurred for the triplet (epoch, payload_id, shard_id)
-                self.foreign_leader_failures
-                    .remove(&PacemakerEvents::ForeignCommittee(epoch, payload_id, shard_id));
+                // that have occurred for the node's (epoch, payload_id, shard_id)
+                self.foreign_leader_failures.remove(&PacemakerEvents::ForeignCommittee(
+                    epoch,
+                    node.shard(),
+                    node.payload_id(),
+                ));
                 continue;
             }
 
