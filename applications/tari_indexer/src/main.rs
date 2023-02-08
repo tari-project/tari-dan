@@ -21,7 +21,9 @@
 // USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 mod cli;
+mod grpc;
 mod json_rpc;
+mod p2p;
 
 use std::{panic, process};
 
