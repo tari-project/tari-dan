@@ -34,15 +34,15 @@ use serde_json::{self as json, json};
 use tari_comms::{multiaddr::Multiaddr, peer_manager::NodeId, types::CommsPublicKey, CommsNode, NodeIdentity};
 use tari_comms_logging::SqliteMessageLog;
 use tari_crypto::tari_utilities::hex::Hex;
-use tari_dan_common_types::{PayloadId, QuorumCertificate, QuorumDecision, ShardId, SubstateChange};
+use tari_dan_common_types::{PayloadId, QuorumCertificate, QuorumDecision, ShardId};
 use tari_dan_core::{
     services::{epoch_manager::EpochManager, BaseNodeClient},
     storage::shard_store::{ShardStore, ShardStoreReadTransaction},
     workers::events::{EventSubscription, HotStuffEvent},
 };
-use tari_dan_engine::transaction::TransactionBuilder;
 use tari_dan_storage_sqlite::sqlite_shard_store_factory::SqliteShardStore;
 use tari_template_lib::Hash;
+use tari_transaction::{SubstateChange, TransactionBuilder};
 use tari_validator_node_client::types::{
     GetCommitteeRequest,
     GetIdentityResponse,

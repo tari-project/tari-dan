@@ -10,13 +10,13 @@ use std::{
 use anyhow::anyhow;
 use borsh::BorshDeserialize;
 use tari_crypto::{ristretto::RistrettoSecretKey, tari_utilities::ByteArray};
+use tari_dan_common_types::crypto::create_key_pair;
 use tari_dan_engine::{
     bootstrap_state,
-    crypto::create_key_pair,
     packager::{LoadedTemplate, Package, TemplateModuleLoader},
     runtime::{AuthParams, ConsensusContext, RuntimeModule},
     state_store::{memory::MemoryStateStore, AtomicDb, StateReader, StateStoreError, StateWriter},
-    transaction::{Transaction, TransactionError, TransactionProcessor},
+    transaction::{TransactionError, TransactionProcessor},
     wasm::{compile::compile_template, LoadedWasmTemplate, WasmModule},
 };
 use tari_engine_types::{
@@ -32,6 +32,7 @@ use tari_template_lib::{
     crypto::RistrettoPublicKeyBytes,
     models::{ComponentAddress, ComponentHeader, NonFungibleAddress, TemplateAddress},
 };
+use tari_transaction::Transaction;
 use tari_transaction_manifest::{parse_manifest, ManifestValue};
 
 use crate::track_calls::TrackCallsModule;

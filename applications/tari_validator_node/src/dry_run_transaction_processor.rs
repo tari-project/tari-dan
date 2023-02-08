@@ -44,12 +44,13 @@ use tari_dan_core::{
         StorageError,
     },
 };
-use tari_dan_engine::{runtime::ConsensusContext, transaction::Transaction};
+use tari_dan_engine::runtime::ConsensusContext;
 use tari_dan_storage_sqlite::sqlite_shard_store_factory::SqliteShardStore;
 use tari_engine_types::{
     commit_result::FinalizeResult,
     substate::{Substate, SubstateAddress},
 };
+use tari_transaction::Transaction;
 use thiserror::Error;
 
 use crate::{

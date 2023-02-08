@@ -4,9 +4,10 @@
 use std::collections::HashMap;
 
 use tari_template_lib::{auth::AccessRules, Hash};
+use tari_transaction::id_provider::IdProvider;
 
 use crate::{
-    runtime::{IdProvider, RuntimeState, StateTracker},
+    runtime::{RuntimeState, StateTracker},
     state_store::memory::MemoryStateStore,
 };
 

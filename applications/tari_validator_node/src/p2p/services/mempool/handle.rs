@@ -21,8 +21,8 @@
 //   USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 use tari_dan_common_types::ShardId;
-use tari_dan_engine::transaction::Transaction;
 use tari_template_lib::Hash;
+use tari_transaction::Transaction;
 use tokio::sync::{broadcast, broadcast::error::RecvError, mpsc, oneshot};
 
 use crate::p2p::services::mempool::MempoolError;

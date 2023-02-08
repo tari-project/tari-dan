@@ -25,9 +25,9 @@ use std::fmt::Debug;
 use chrono::Utc;
 use serde::{Deserialize, Serialize};
 use tari_common_types::types::FixedHash;
-use tari_dan_common_types::{ObjectClaim, ShardId, SubstateChange};
-use tari_dan_engine::transaction::Transaction;
+use tari_dan_common_types::ShardId;
 use tari_engine_types::commit_result::FinalizeResult;
+use tari_transaction::{ObjectClaim, SubstateChange, Transaction};
 
 use crate::models::{ConsensusHash, Payload};
 

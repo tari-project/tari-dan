@@ -12,6 +12,7 @@ use tari_common_types::types::{FixedHash, FixedHashSizeError};
 use tari_engine_types::substate::{Substate, SubstateAddress};
 use tari_utilities::hex::Hex;
 
+pub mod crypto;
 pub mod proto;
 
 mod epoch;
@@ -43,27 +44,8 @@ mod node_addressable;
 pub use node_addressable::NodeAddressable;
 
 mod shard_id;
+
 pub use shard_id::ShardId;
-
-#[derive(Clone, Debug, Copy, PartialEq, Eq, Hash, Deserialize, Serialize)]
-pub enum SubstateChange {
-    /// An "Up" state
-    Create,
-    /// Substate exists but will not be created/destroyed
-    Exists,
-    /// A "Down" state
-    Destroy,
-}
-
-impl Display for SubstateChange {
-    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        match self {
-            SubstateChange::Create => write!(f, "Create"),
-            SubstateChange::Exists => write!(f, "Exists"),
-            SubstateChange::Destroy => write!(f, "Destroy"),
-        }
-    }
-}
 
 #[derive(Debug, Clone, Encode, Decode, Deserialize, Serialize)]
 pub enum SubstateState {
@@ -85,16 +67,6 @@ impl SubstateState {
             Self::Up { .. } => "Up",
             Self::Down { .. } => "Down",
         }
-    }
-}
-
-#[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
-pub struct ObjectClaim {}
-
-impl ObjectClaim {
-    pub fn is_valid(&self, _payload: PayloadId) -> bool {
-        // TODO: Implement this
-        true
     }
 }
 

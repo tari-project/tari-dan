@@ -542,7 +542,8 @@ impl RuntimeInterface for RuntimeInterfaceImpl {
 
     fn generate_uuid(&self) -> Result<[u8; 32], RuntimeError> {
         self.invoke_on_runtime_call_modules("generate_uuid")?;
-        self.tracker.id_provider().new_uuid()
+        let uuid = self.tracker.id_provider().new_uuid()?;
+        Ok(uuid)
     }
 
     fn set_last_instruction_output(&self, value: Option<Vec<u8>>) -> Result<(), RuntimeError> {

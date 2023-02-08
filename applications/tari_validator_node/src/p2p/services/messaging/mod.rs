@@ -39,7 +39,7 @@ use tari_dan_core::{
     models::{vote_message::VoteMessage, HotStuffMessage, TariDanPayload},
     workers::hotstuff_waiter::RecoveryMessage,
 };
-use tari_dan_engine::transaction::Transaction;
+use tari_transaction::Transaction;
 use tokio::sync::mpsc;
 
 use crate::comms::MessageChannel;

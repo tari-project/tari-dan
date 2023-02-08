@@ -26,9 +26,10 @@ use anyhow::anyhow;
 use tari_dan_common_types::optional::IsNotFoundError;
 use tari_engine_types::{resource_container::ResourceError, substate::SubstateAddress};
 use tari_template_lib::models::{Amount, BucketId, ComponentAddress, NonFungibleId, ResourceAddress, VaultId};
+use tari_transaction::id_provider::MaxIdsExceeded;
 
 use crate::{
-    runtime::{id_provider::MaxIdsExceeded, FunctionIdent, RuntimeModuleError},
+    runtime::{FunctionIdent, RuntimeModuleError},
     state_store::StateStoreError,
 };
 
