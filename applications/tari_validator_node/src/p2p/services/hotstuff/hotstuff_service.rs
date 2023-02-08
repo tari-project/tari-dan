@@ -40,9 +40,9 @@ use tari_dan_core::{
         pacemaker_worker::Pacemaker,
     },
 };
-use tari_dan_engine::transaction::Transaction;
 use tari_dan_storage_sqlite::sqlite_shard_store_factory::SqliteShardStore;
 use tari_shutdown::ShutdownSignal;
+use tari_transaction::Transaction;
 use tokio::sync::{
     broadcast,
     mpsc::{channel, Receiver, Sender},

@@ -69,8 +69,8 @@ use tari_dan_core::{
         StorageError,
     },
 };
-use tari_dan_engine::transaction::{Transaction, TransactionMeta};
 use tari_engine_types::{instruction::Instruction, signature::InstructionSignature};
+use tari_transaction::{Transaction, TransactionMeta};
 use tari_utilities::{
     hex::{to_hex, Hex},
     ByteArray,

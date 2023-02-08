@@ -1,0 +1,18 @@
+[package]
+name = "tari_transaction"
+version = "0.1.0"
+edition = "2021"
+
+
+[dependencies]
+#tari_bor = { path = "../tari_bor" }
+tari_common_types = { git = "https://github.com/tari-project/tari.git", branch = "development" }
+tari_engine_types = { path = "../engine_types" }
+tari_dan_common_types = { path = "../common_types" }
+tari_crypto = { git = "https://github.com/tari-project/tari-crypto.git", tag = "v0.16.6", features = ["borsh"] }
+#tari_template_abi = { path = "../template_abi", features = ["std"] }
+tari_template_lib = { path = "../template_lib", default-features = false, features = ["serde"] }
+#tari_utilities = { git = "https://github.com/tari-project/tari_utilities.git", tag = "v0.4.10" }
+
+serde = "1.0.126"
+thiserror = "1"

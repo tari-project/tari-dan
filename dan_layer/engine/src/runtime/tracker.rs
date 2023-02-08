@@ -56,9 +56,10 @@ use tari_template_lib::{
     resource::ResourceType,
     Hash,
 };
+use tari_transaction::id_provider::IdProvider;
 
 use crate::{
-    runtime::{id_provider::IdProvider, working_state::WorkingState, RuntimeError, TransactionCommitError},
+    runtime::{working_state::WorkingState, RuntimeError, TransactionCommitError},
     state_store::{memory::MemoryStateStore, AtomicDb, StateReader},
 };
 

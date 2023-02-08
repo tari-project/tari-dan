@@ -47,9 +47,9 @@ use tari_dan_core::{
     storage::shard_store::{ShardStore, ShardStoreWriteTransaction},
     workers::hotstuff_waiter::RecoveryMessage,
 };
-use tari_dan_engine::transaction::{Transaction, TransactionBuilder};
 use tari_engine_types::instruction::Instruction;
 use tari_template_lib::{args, models::TemplateAddress};
+use tari_transaction::{Transaction, TransactionBuilder};
 use tari_utilities::ByteArray;
 use tokio::time::timeout;
 

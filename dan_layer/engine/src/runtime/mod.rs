@@ -23,9 +23,6 @@
 mod auth;
 pub use auth::{AuthParams, AuthorizationScope};
 
-mod id_provider;
-pub use id_provider::IdProvider;
-
 mod r#impl;
 pub use r#impl::RuntimeInterfaceImpl;
 

@@ -28,10 +28,10 @@ use std::{
 use anyhow::anyhow;
 use tari_common_types::types::{PublicKey, Signature};
 use tari_crypto::tari_utilities::ByteArray;
-use tari_dan_common_types::{ObjectClaim, ShardId, SubstateChange};
-use tari_dan_engine::transaction::{Transaction, TransactionMeta};
+use tari_dan_common_types::ShardId;
 use tari_engine_types::instruction::Instruction;
 use tari_template_lib::{args::Arg, Hash};
+use tari_transaction::{ObjectClaim, SubstateChange, Transaction, TransactionMeta};
 
 use crate::p2p::proto;
 

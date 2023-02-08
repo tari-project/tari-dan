@@ -41,7 +41,6 @@ use tari_dan_common_types::{
     ShardId,
     ShardPledge,
     ShardPledgeCollection,
-    SubstateChange,
     SubstateState,
     TreeNodeHash,
 };
@@ -51,6 +50,7 @@ use tari_engine_types::{
     substate::SubstateDiff,
 };
 use tari_shutdown::ShutdownSignal;
+use tari_transaction::SubstateChange;
 use tokio::{
     sync::{
         broadcast,

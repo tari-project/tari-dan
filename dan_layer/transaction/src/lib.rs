@@ -20,8 +20,13 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-mod error;
-pub use error::TransactionError;
+mod builder;
+mod change;
+pub mod id_provider;
+mod object_claim;
+mod transaction;
 
-mod processor;
-pub use processor::TransactionProcessor;
+pub use builder::TransactionBuilder;
+pub use change::SubstateChange;
+pub use object_claim::ObjectClaim;
+pub use transaction::{Transaction, TransactionMeta};

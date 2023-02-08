@@ -1,16 +1,16 @@
-//   Copyright 2022 The Tari Project
+//   Copyright 2023 The Tari Project
 //   SPDX-License-Identifier: BSD-3-Clause
 
 use std::convert::TryFrom;
 
 use tari_common_types::types::{PrivateKey, PublicKey};
 use tari_crypto::{keys::PublicKey as PublicKeyTrait, ristretto::RistrettoPublicKey};
-use tari_dan_common_types::{ObjectClaim, ShardId, SubstateChange};
+use tari_dan_common_types::ShardId;
 use tari_engine_types::{instruction::Instruction, signature::InstructionSignature, substate::SubstateAddress};
 use tari_template_lib::models::{NonFungibleAddress, NonFungibleId, ResourceAddress};
 
 use super::Transaction;
-use crate::{crypto::create_key_pair, runtime::IdProvider, transaction::TransactionMeta};
+use crate::{change::SubstateChange, id_provider::IdProvider, transaction::TransactionMeta, ObjectClaim};
 
 #[derive(Debug, Clone, Default)]
 pub struct TransactionBuilder {
@@ -64,8 +64,7 @@ impl TransactionBuilder {
     }
 
     pub fn sign(&mut self, secret_key: &PrivateKey) -> &mut Self {
-        let (nonce, _nonce_pk) = create_key_pair();
-        self.signature = Some(InstructionSignature::sign(secret_key, nonce, &self.instructions));
+        self.signature = Some(InstructionSignature::sign(secret_key, &self.instructions));
         self.sender_public_key = Some(PublicKey::from_secret_key(secret_key));
         self
     }
@@ -73,7 +72,7 @@ impl TransactionBuilder {
     /// Add an input to be consumed
     pub fn add_input(&mut self, input_object: ShardId) -> &mut Self {
         self.meta
-            .involved_objects
+            .involved_objects_mut()
             .insert(input_object, (SubstateChange::Destroy, ObjectClaim {}));
         self
     }
@@ -94,13 +93,13 @@ impl TransactionBuilder {
 
     pub fn add_output(&mut self, output_object: ShardId) -> &mut Self {
         self.meta
-            .involved_objects
+            .involved_objects_mut()
             .insert(output_object, (SubstateChange::Create, ObjectClaim {}));
         self
     }
 
     pub fn with_new_outputs(&mut self, num_outputs: u8) -> &mut Self {
-        self.meta.max_outputs = num_outputs.into();
+        self.meta.set_max_outputs(num_outputs.into());
         self
     }
 
@@ -118,23 +117,26 @@ impl TransactionBuilder {
             self.meta,
         );
 
-        let max_outputs = transaction.meta().max_outputs;
+        let max_outputs = transaction.meta().max_outputs();
         let total_new_nft_outputs = self
             .new_non_fungible_outputs
             .iter()
             .map(|(_, count)| u32::from(*count))
             .sum::<u32>();
-        let id_provider = IdProvider::new(transaction.hash, max_outputs + total_new_nft_outputs);
+        let id_provider = IdProvider::new(*transaction.hash(), max_outputs + total_new_nft_outputs);
 
-        transaction.meta.involved_objects.extend((0..max_outputs).map(|_| {
-            let new_hash = id_provider
-                .new_address_hash()
-                .expect("id provider provides num_outputs IDs");
-            (
-                ShardId::from_hash(&new_hash, 0),
-                (SubstateChange::Create, ObjectClaim {}),
-            )
-        }));
+        transaction
+            .meta_mut()
+            .involved_objects_mut()
+            .extend((0..max_outputs).map(|_| {
+                let new_hash = id_provider
+                    .new_address_hash()
+                    .expect("id provider provides num_outputs IDs");
+                (
+                    ShardId::from_hash(&new_hash, 0),
+                    (SubstateChange::Create, ObjectClaim {}),
+                )
+            }));
 
         let mut new_nft_outputs =
             Vec::with_capacity(usize::try_from(total_new_nft_outputs).expect("too many new NFT outputs"));
@@ -152,7 +154,7 @@ impl TransactionBuilder {
             }));
         }
 
-        transaction.meta.involved_objects.extend(new_nft_outputs);
+        transaction.meta_mut().involved_objects_mut().extend(new_nft_outputs);
 
         transaction
     }

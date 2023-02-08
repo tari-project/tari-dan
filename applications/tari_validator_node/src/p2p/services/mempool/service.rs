@@ -32,8 +32,8 @@ use tari_dan_core::{
     message::DanMessage,
     services::{epoch_manager::EpochManager, infrastructure_services::OutboundService},
 };
-use tari_dan_engine::transaction::Transaction;
 use tari_template_lib::Hash;
+use tari_transaction::Transaction;
 use tokio::sync::{broadcast, mpsc};
 
 use super::MempoolError;

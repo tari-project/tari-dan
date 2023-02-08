@@ -29,8 +29,8 @@ use tari_dan_core::{
     services::PeerProvider,
     storage::shard_store::{ShardStore, ShardStoreReadTransaction},
 };
-use tari_dan_engine::transaction::Transaction;
 use tari_dan_storage_sqlite::sqlite_shard_store_factory::SqliteShardStore;
+use tari_transaction::Transaction;
 use tokio::{sync::mpsc, task};
 
 use crate::p2p::proto::rpc::{VnStateSyncRequest, VnStateSyncResponse};

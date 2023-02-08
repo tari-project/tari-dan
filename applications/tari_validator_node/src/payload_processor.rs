@@ -36,7 +36,7 @@ use tari_dan_engine::{
     packager::{LoadedTemplate, Package},
     runtime::{AuthParams, ConsensusContext},
     state_store::{memory::MemoryStateStore, AtomicDb, StateReader, StateStoreError, StateWriter},
-    transaction::{Transaction, TransactionError, TransactionProcessor},
+    transaction::{TransactionError, TransactionProcessor},
     wasm::WasmExecutionError,
 };
 use tari_engine_types::{
@@ -48,6 +48,7 @@ use tari_template_lib::{
     models::{ComponentAddress, TemplateAddress},
     prelude::NonFungibleAddress,
 };
+use tari_transaction::Transaction;
 
 #[derive(Debug, Default, Clone)]
 pub struct TariDanPayloadProcessor<TTemplateProvider> {

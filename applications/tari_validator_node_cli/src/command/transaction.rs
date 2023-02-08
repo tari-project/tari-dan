@@ -30,8 +30,7 @@ use std::{
 use anyhow::anyhow;
 use clap::{Args, Subcommand};
 use tari_common_types::types::FixedHash;
-use tari_dan_common_types::{ShardId, SubstateChange};
-use tari_dan_engine::transaction::Transaction;
+use tari_dan_common_types::ShardId;
 use tari_engine_types::{
     commit_result::{FinalizeResult, TransactionResult},
     execution_result::{ExecutionResult, Type},
@@ -45,6 +44,7 @@ use tari_template_lib::{
     models::{Amount, NonFungibleAddress, NonFungibleId},
     prelude::ResourceAddress,
 };
+use tari_transaction::{SubstateChange, Transaction};
 use tari_transaction_manifest::parse_manifest;
 use tari_utilities::hex::to_hex;
 use tari_validator_node_client::{

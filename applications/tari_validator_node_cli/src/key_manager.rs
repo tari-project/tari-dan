@@ -31,8 +31,7 @@ use serde_json as json;
 use serde_json::json;
 use tari_common_types::types::{PrivateKey, PublicKey};
 use tari_crypto::keys::PublicKey as PublicKeyT;
-use tari_dan_common_types::NodeAddressable;
-use tari_dan_engine::crypto::create_key_pair;
+use tari_dan_common_types::{crypto::create_key_pair, NodeAddressable};
 use tari_template_lib::{crypto::RistrettoPublicKeyBytes, models::NonFungibleAddress};
 use tari_utilities::hex::Hex;
 

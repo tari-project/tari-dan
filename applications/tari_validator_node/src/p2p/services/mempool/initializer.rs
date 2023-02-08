@@ -23,7 +23,7 @@
 use std::sync::Arc;
 
 use tari_comms::NodeIdentity;
-use tari_dan_engine::transaction::Transaction;
+use tari_transaction::Transaction;
 use tokio::{
     sync::{broadcast, mpsc},
     task,

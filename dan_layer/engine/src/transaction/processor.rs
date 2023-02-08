@@ -29,6 +29,7 @@ use tari_template_lib::{
     args::{Arg, WorkspaceAction},
     invoke_args,
 };
+use tari_transaction::{id_provider::IdProvider, Transaction};
 
 use crate::{
     packager::{LoadedTemplate, Package},
@@ -37,7 +38,6 @@ use crate::{
         AuthorizationScope,
         ConsensusContext,
         FunctionIdent,
-        IdProvider,
         Runtime,
         RuntimeInterfaceImpl,
         RuntimeModule,
@@ -46,7 +46,7 @@ use crate::{
     },
     state_store::memory::MemoryStateStore,
     traits::Invokable,
-    transaction::{Transaction, TransactionError},
+    transaction::TransactionError,
     wasm::WasmProcess,
 };
 
@@ -89,7 +89,7 @@ impl TransactionProcessor {
         let auth_scope = AuthorizationScope::new(&initial_proofs);
         let runtime = Runtime::new(Arc::new(runtime_interface));
         let exec_results = transaction
-            .instructions
+            .into_instructions()
             .into_iter()
             .map(|instruction| Self::process_instruction(&package, &runtime, &auth_scope, instruction))
             .collect::<Result<Vec<_>, _>>()?;
