@@ -468,12 +468,14 @@ where
         from: TAddr,
         node: HotStuffTreeNode<TAddr, TPayload>,
     ) -> Result<(), HotStuffError> {
+        let epoch = node.epoch();
         let payload_id = node.payload_id();
+        let shard_id = node.shard();
         info!(
             target: LOG_TARGET,
             "🔥 Receive PROPOSAL for payload {}, shard {}, height {}, payload phase {:?}, hash {} from {}",
             payload_id,
-            node.shard(),
+            shard_id,
             node.height(),
             node.payload_phase(),
             node.hash(),
@@ -498,6 +500,10 @@ where
 
         // We did receive something from the leader, so he was elected.
         self.election_in_progress.remove(&(node.shard(), payload_id));
+
+        // We also remove any possible state stored in foreign_leader_failures
+        self.foreign_leader_failures
+            .remove(&PacemakerEvents::ForeignCommittee(epoch, shard_id, payload_id));
 
         let shard = node.shard();
         let payload;
@@ -625,14 +631,22 @@ where
             .contains(&PacemakerEvents::ForeignCommittee(epoch, shard_id, payload_id))
         {
             // This is the second time we are triggering a foreign leader request, for the same triplet
-            // (epoch, shard_id, payload_id). This means that they probably can't reach consensus, so we throw
-            // away this transaction
+            // (epoch, shard_id, payload_id). This means that as a VN, I haven't received a message from their
+            // leader and neither from one of the f + 1 nodes selected. This means that they haven't reach consensus,
+            // so we throw the corresponding substate away (the transaction should be cancelled).
             self.shard_store.with_write_tx(|tx| {
-                let (node_hash, _) = tx.get_locked_node_hash_and_height(payload_id, shard_id)?;
-                tx.abandon_pledges(shard_id, payload_id, &node_hash)
+                let payload = tx.get_payload(&payload_id)?;
+                let involved_shards = payload.involved_shards();
+                for shard in involved_shards {
+                    let (node_hash, _) = tx.get_locked_node_hash_and_height(payload_id, shard_id)?;
+                    tx.abandon_pledges(shard, payload_id, &node_hash)
                     // If the substate was pledged to a different payload, we didn't pledge for this payload so the pledge may not exist
-                    .optional()
+                    .optional()?;
+                }
+                Ok::<(), HotStuffError>(())
             })?;
+            // We return so that we don't reset the pacemaker timer again
+            return Ok(());
         }
         self.foreign_leader_failures
             .insert(PacemakerEvents::ForeignCommittee(epoch, shard_id, payload_id));
@@ -682,7 +696,7 @@ where
         payload_id: PayloadId,
         last_height: NodeHeight,
     ) -> Result<(), HotStuffError> {
-        // If the current replica does not stored the payload, we simply don't do anything else and return
+        // If the current replica did not store the payload, we simply don't do anything else and return
         let payload = match self.shard_store.create_read_tx()?.get_payload(&payload_id) {
             Ok(payload) => payload,
             Err(e) => {
@@ -700,7 +714,7 @@ where
             .filter_to_local_shards(epoch, &from, involved_shards.as_ref())
             .await?;
 
-        // if from doesn't belong to any shard involved in processing the current payload, we should ignore it
+        // if `from` doesn't belong to any shard involved in processing the current payload, we should ignore it
         if local_shards.is_empty() {
             info!(
                 target: LOG_TARGET,
@@ -713,7 +727,7 @@ where
             self.shard_store
                 .create_write_tx()?
                 .get_leader_proposals(payload_id, last_height + NodeHeight(1), &[shard_id]);
-        // We know the last payload, so we check if we have higher height
+        // We know the last payload, so we check if we have a higher height
         if let Ok(result) = leader_proposals {
             assert!(
                 result.len() <= 1,
@@ -769,13 +783,23 @@ where
             // we allow it to timeout. In the meantime, we remove any stored pledges associated with this
             // shard_id and payload_id.
             self.shard_store.with_write_tx(|tx| {
-                let (node_hash, _) = tx.get_locked_node_hash_and_height(payload_id, shard_id)?;
-                tx.abandon_pledges(shard_id, payload_id, &node_hash)
+                // we should delete the local substates for each involved shard id
+                let payload = tx.get_payload(&payload_id)?;
+                let involved_shards = payload.involved_shards();
+                for shard in involved_shards {
+                    let (node_hash, _) = tx.get_locked_node_hash_and_height(payload_id, shard_id)?;
+                    tx.abandon_pledges(shard, payload_id, &node_hash)
                     // If the substate was pledged to a different payload, we didn't pledge for this payload so the pledge may not exist
-                    .optional()
+                    .optional()?;
+                }
+                Ok::<(), HotStuffError>(())
             })?;
             return Ok(());
         }
+        // Remove any possible foreign_leader_failure
+        self.foreign_leader_failures
+            .remove(&PacemakerEvents::ForeignCommittee(epoch, shard_id, payload_id));
+
         // We restart the timer.
         self.pacemaker
             .stop_timer(PacemakerEvents::ForeignCommittee(epoch, shard_id, payload_id))
@@ -998,13 +1022,6 @@ where
                     node.payload_id(),
                     node.shard()
                 );
-                // in this case, we can remove any leader failures
-                // that have occurred for the node's (epoch, payload_id, shard_id)
-                self.foreign_leader_failures.remove(&PacemakerEvents::ForeignCommittee(
-                    epoch,
-                    node.shard(),
-                    node.payload_id(),
-                ));
                 continue;
             }
 
