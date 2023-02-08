@@ -31,6 +31,7 @@ pub enum QuorumRejectReason {
     PreviousQcRejection,
     ShardPledgedToAnotherPayload,
     ShardRejected,
+    ForeignLeaderFailure,
 }
 
 impl QuorumRejectReason {
@@ -41,6 +42,7 @@ impl QuorumRejectReason {
             QuorumRejectReason::PreviousQcRejection => 3,
             QuorumRejectReason::ShardPledgedToAnotherPayload => 4,
             QuorumRejectReason::ShardRejected => 5,
+            QuorumRejectReason::ForeignLeaderFailure => 6,
         }
     }
 }
@@ -75,6 +77,7 @@ impl<T: Borrow<RejectReason>> From<T> for QuorumRejectReason {
             RejectReason::PreviousQcRejection => QuorumRejectReason::PreviousQcRejection,
             RejectReason::ShardPledgedToAnotherPayload(_) => QuorumRejectReason::ShardPledgedToAnotherPayload,
             RejectReason::ShardRejected(_) => QuorumRejectReason::ShardRejected,
+            RejectReason::ForeignLeaderFailure(_) => QuorumRejectReason::ForeignLeaderFailure,
         }
     }
 }

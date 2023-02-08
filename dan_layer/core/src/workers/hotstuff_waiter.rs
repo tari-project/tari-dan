@@ -145,17 +145,16 @@ pub struct HotStuffWaiter<
     /// NEWVIEW message counts - TODO: this will bloat memory maybe moving to the db is better
     newview_message_counts: HashMap<(ShardId, PayloadId), HashSet<TAddr>>,
     /// Network latency
-    #[allow(dead_code)]
     network_latency: Duration,
-    // We store what round is for next leader selection, default is 0.
+    /// We store what round is for next leader selection, default is 0.
     current_leader_round: HashMap<(ShardId, PayloadId), u32>,
-    // We have to store if we are in the middle of an election, so that when we receive a recovery message
-    // from another VN, we can answer that we are electing and it should wait.
+    /// We have to store if we are in the middle of an election, so that when we receive a recovery message
+    /// from another VN, we can answer that we are electing and it should wait.
     election_in_progress: HashSet<(ShardId, PayloadId)>,
-    // We keep track of the foreign leader committee messages, so that we abandon payloads in which
-    // we trigger foreign leader failure, multiple times
+    /// We keep track of the foreign leader committee messages, so that we abandon payloads in which
+    /// we trigger foreign leader failure, multiple times
     foreign_leader_failures: HashSet<PacemakerEvents>,
-    // Stores the number of election rounds for a given pacemaker event
+    /// Stores the number of election rounds for a given pacemaker event
     elections_rounds: HashMap<(ShardId, PayloadId), u8>,
 }
 
@@ -634,20 +633,69 @@ where
             // (epoch, shard_id, payload_id). This means that as a VN, I haven't received a message from their
             // leader and neither from one of the f + 1 nodes selected. This means that they haven't reach consensus,
             // so we throw the corresponding substate away (the transaction should be cancelled).
+            self.publish_event(HotStuffEvent::Failed(
+                payload_id,
+                format!(
+                    "Foreign leader failure, for epoch = {}, shard_id = {} and payload_id {}",
+                    epoch, payload_id, shard_id
+                ),
+            ));
+
+            let mut all_proposed_nodes = vec![];
+            let mut payload_heights = vec![];
             self.shard_store.with_write_tx(|tx| {
                 let payload = tx.get_payload(&payload_id)?;
                 let involved_shards = payload.involved_shards();
-                for shard in involved_shards {
+
+                for shard in &involved_shards {
                     let (node_hash, _) = tx.get_locked_node_hash_and_height(payload_id, shard_id)?;
-                    tx.abandon_pledges(shard, payload_id, &node_hash)
+                    tx.abandon_pledges(*shard, payload_id, &node_hash)
                     // If the substate was pledged to a different payload, we didn't pledge for this payload so the pledge may not exist
                     .optional()?;
+
+                    let payload_height = tx.get_last_payload_height_for_leader_proposal(payload_id, *shard)?;
+                    if payload_heights.contains(&payload_height) {
+                        continue;
+                    }
+
+                    let proposed_nodes = tx.get_leader_proposals(payload_id, payload_height, &involved_shards)?;
+
+                    all_proposed_nodes.push(proposed_nodes);
+                    payload_heights.push(payload_height);
                 }
+
+                let finalize_result = FinalizeResult::reject(
+                    payload_id.into_array().into(),
+                    RejectReason::ForeignLeaderFailure(format!(
+                        "Foreign leader failure, for epoch = {}, shard_id = {} and payload_id {}",
+                        epoch, shard_id, payload_id
+                    )),
+                );
+                let all_proposed_nodes = all_proposed_nodes.into_iter().flatten().collect::<Vec<_>>();
+                let shard_pledges = all_proposed_nodes
+                    .iter()
+                    .map(|proposed_node| ShardPledge {
+                        shard_id: proposed_node.shard(),
+                        node_hash: *proposed_node.hash(),
+                        pledge: proposed_node
+                            .local_pledge()
+                            .expect("Pledge is empty. This should have been checked previously")
+                            .clone(),
+                    })
+                    .collect::<ShardPledgeCollection>();
+
+                tx.update_payload_result(&payload_id, PayloadResult {
+                    finalize_result,
+                    pledge_hash: shard_pledges.pledge_hash(),
+                })?;
+
                 Ok::<(), HotStuffError>(())
             })?;
+
             // We return so that we don't reset the pacemaker timer again
             return Ok(());
         }
+
         self.foreign_leader_failures
             .insert(PacemakerEvents::ForeignCommittee(epoch, shard_id, payload_id));
 
@@ -696,13 +744,13 @@ where
         payload_id: PayloadId,
         last_height: NodeHeight,
     ) -> Result<(), HotStuffError> {
-        // If the current replica did not store the payload, we simply don't do anything else and return
-        let payload = match self.shard_store.create_read_tx()?.get_payload(&payload_id) {
-            Ok(payload) => payload,
-            Err(e) => {
+        // If the current replica has not stored the payload, we simply don't do anything else and return
+        let payload = match self.shard_store.create_read_tx()?.get_payload(&payload_id).optional()? {
+            Some(payload) => payload,
+            None => {
                 info!(
                     target: LOG_TARGET,
-                    "Payload = {} is missing from node shard store {}", payload_id, e
+                    "Payload = {} is missing from node shard store", payload_id
                 );
                 return Ok(());
             },
