@@ -140,6 +140,11 @@ pub trait ShardStoreReadTransaction<TAddr: NodeAddressable, TPayload: Payload> {
         payload_height: NodeHeight,
         shards: &[ShardId],
     ) -> Result<Vec<HotStuffTreeNode<TAddr, TPayload>>, StorageError>;
+    fn get_last_payload_height_for_leader_proposal(
+        &self,
+        payload: PayloadId,
+        shard: ShardId,
+    ) -> Result<NodeHeight, StorageError>;
     fn has_vote_for(&self, from: &TAddr, node_hash: TreeNodeHash) -> Result<bool, StorageError>;
     fn get_received_votes_for(&self, node_hash: TreeNodeHash) -> Result<Vec<VoteMessage>, StorageError>;
     fn get_recent_transactions(&self) -> Result<Vec<RecentTransaction>, StorageError>;

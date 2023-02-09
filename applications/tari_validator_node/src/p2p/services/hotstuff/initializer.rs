@@ -25,7 +25,10 @@ use std::sync::Arc;
 use tari_comms::{types::CommsPublicKey, NodeIdentity};
 use tari_dan_core::{
     models::{vote_message::VoteMessage, HotStuffMessage, TariDanPayload},
-    workers::events::{EventSubscription, HotStuffEvent},
+    workers::{
+        events::{EventSubscription, HotStuffEvent},
+        hotstuff_waiter::RecoveryMessage,
+    },
 };
 use tari_dan_storage_sqlite::sqlite_shard_store_factory::SqliteShardStore;
 use tari_shutdown::ShutdownSignal;
@@ -50,6 +53,7 @@ pub fn try_spawn(
     mempool: MempoolHandle,
     payload_processor: TariDanPayloadProcessor<TemplateManager>,
     rx_consensus_message: mpsc::Receiver<(CommsPublicKey, HotStuffMessage<TariDanPayload, CommsPublicKey>)>,
+    rx_recovery_message: mpsc::Receiver<(CommsPublicKey, RecoveryMessage)>,
     rx_vote_message: mpsc::Receiver<(CommsPublicKey, VoteMessage)>,
     shutdown: ShutdownSignal,
 ) -> EventSubscription<HotStuffEvent> {
@@ -61,6 +65,7 @@ pub fn try_spawn(
         payload_processor,
         shard_store,
         rx_consensus_message,
+        rx_recovery_message,
         rx_vote_message,
         shutdown,
     )

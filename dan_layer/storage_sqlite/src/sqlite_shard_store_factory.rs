@@ -69,8 +69,8 @@ use tari_dan_core::{
         StorageError,
     },
 };
-use tari_dan_engine::transaction::{Transaction, TransactionMeta};
 use tari_engine_types::{instruction::Instruction, signature::InstructionSignature};
+use tari_transaction::{Transaction, TransactionMeta};
 use tari_utilities::{
     hex::{to_hex, Hex},
     ByteArray,
@@ -248,6 +248,7 @@ impl<'a> SqliteShardStoreReadTransaction<'a> {
     fn map_substate_to_shard_data(ss: &Substate) -> Result<SubstateShardData, StorageError> {
         Ok(SubstateShardData::new(
             ShardId::try_from(ss.shard_id.clone())?,
+            ss.address.parse().map_err(|_| StorageError::DecodingError)?,
             ss.version as u32,
             serde_json::from_str(&ss.data).unwrap(),
             NodeHeight(ss.created_height as u64),
@@ -607,6 +608,33 @@ impl ShardStoreReadTransaction<PublicKey, TariDanPayload> for SqliteShardStoreRe
             .collect()
     }
 
+    // Get leader proposal with highest payload height for a particular shard.
+    fn get_last_payload_height_for_leader_proposal(
+        &self,
+        payload: PayloadId,
+        shard: ShardId,
+    ) -> Result<NodeHeight, StorageError> {
+        use crate::schema::leader_proposals;
+        let shard_bytes = shard.as_bytes();
+        let proposal: Option<LeaderProposal> = leader_proposals::table
+            .filter(
+                leader_proposals::payload_id
+                    .eq(payload.as_bytes())
+                    .and(leader_proposals::shard_id.eq(shard_bytes)),
+            )
+            .order_by(leader_proposals::payload_height.desc())
+            .first(self.transaction.connection())
+            .optional()
+            .map_err(|e| StorageError::QueryError {
+                reason: format!("Get payload vote: {}", e),
+            })?;
+        if let Some(proposal) = proposal {
+            Ok(NodeHeight(proposal.payload_height as u64))
+        } else {
+            Ok(NodeHeight(0))
+        }
+    }
+
     fn has_vote_for(&self, from: &PublicKey, node_hash: TreeNodeHash) -> Result<bool, StorageError> {
         use crate::schema::received_votes;
 
@@ -781,6 +809,7 @@ impl<'a> SqliteShardStoreWriteTransaction<'a> {
                     }
                 } else {
                     SubstateState::Up {
+                        address: current_state.address.parse().map_err(|_| StorageError::DecodingError)?,
                         created_by: PayloadId::try_from(current_state.created_by_payload_id)?,
                         data: serde_json::from_str::<tari_engine_types::substate::Substate>(&current_state.data)
                             .unwrap(),
@@ -1094,7 +1123,7 @@ impl ShardStoreWriteTransaction<PublicKey, TariDanPayload> for SqliteShardStoreW
         for st_change in changes {
             match st_change {
                 SubstateState::DoesNotExist => (),
-                SubstateState::Up { data: d, .. } => {
+                SubstateState::Up { address, data: d, .. } => {
                     if let Some(s) = &current_state {
                         if !s.is_destroyed() {
                             return Err(StorageError::QueryError {
@@ -1108,6 +1137,7 @@ impl ShardStoreWriteTransaction<PublicKey, TariDanPayload> for SqliteShardStoreW
                     let pretty_data = serde_json::to_string_pretty(d).unwrap();
                     let new_row = NewSubstate {
                         shard_id: node.shard().as_bytes().to_vec(),
+                        address: address.to_string(),
                         version: d.version().into(),
                         data: pretty_data,
                         created_by_payload_id: node.payload_id().as_bytes().to_vec(),
@@ -1167,6 +1197,7 @@ impl ShardStoreWriteTransaction<PublicKey, TariDanPayload> for SqliteShardStoreW
 
         let new_row = ImportedSubstate {
             shard_id: substate_data.shard_id().as_bytes().to_vec(),
+            address: substate_data.substate_address().to_string(),
             version: i64::from(substate_data.version()),
             data: serde_json::to_string_pretty(substate_data.substate()).unwrap(),
             created_by_payload_id: substate_data.created_payload_id().as_bytes().to_vec(),

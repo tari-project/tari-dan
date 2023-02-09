@@ -25,8 +25,12 @@ pub use tari_bor::encode;
 pub use tari_template_macros::template;
 
 pub use crate::{
-    chain_time::ChainTime,
-    component::ComponentManager,
+    auth::{AccessRule, AccessRules, RestrictedAccessRule::*},
+    component::{
+        interface::{ComponentInstanceInterface, ComponentInterface},
+        ComponentManager,
+    },
+    consensus::Consensus,
     models::{
         Amount,
         Bucket,
@@ -34,6 +38,7 @@ pub use crate::{
         ComponentAddress,
         Metadata,
         NonFungible,
+        NonFungibleAddress,
         NonFungibleId,
         ResourceAddress,
         Vault,

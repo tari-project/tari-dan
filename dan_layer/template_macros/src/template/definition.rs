@@ -27,14 +27,38 @@ use crate::template::ast::TemplateAst;
 
 pub fn generate_definition(ast: &TemplateAst) -> TokenStream {
     let template_mod_name = format_ident!("{}_template", ast.template_name);
-    let (_, items) = &ast.module.content.as_ref().unwrap();
+    let component_ident = ast.template_name.clone();
+    let component_ident_as_str = component_ident.to_string();
+    let component_wrapper_ident = format_ident!("{}Component", ast.template_name);
+    let (_, items) = ast.module.content.as_ref().unwrap();
 
     quote! {
         #[allow(non_snake_case)]
         pub mod #template_mod_name {
-            use tari_template_lib::template_dependencies::*;
+            use ::tari_template_lib::template_dependencies::*;
 
             #(#items)*
+
+            impl ::tari_template_lib::component::interface::ComponentInterface for #component_ident {
+                type Component = #component_wrapper_ident;
+
+                fn create_with_access_rules(self, access_rules: ::tari_template_lib::auth::AccessRules) -> Self::Component {
+                    let address = engine().create_component(#component_ident_as_str.to_string(), self, access_rules);
+                    #component_wrapper_ident{ address }
+                }
+            }
+
+            #[derive(Decode, Encode)]
+            pub struct #component_wrapper_ident {
+                address: tari_template_lib::models::ComponentAddress,
+            }
+
+            impl ::tari_template_lib::component::interface::ComponentInstanceInterface for #component_wrapper_ident {
+                fn set_access_rules(self, rules: tari_template_lib::auth::AccessRules) -> Self {
+                    engine().component_manager(self.address).set_access_rules(rules);
+                    self
+                }
+            }
         }
     }
 }

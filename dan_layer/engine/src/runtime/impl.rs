@@ -45,12 +45,15 @@ use tari_engine_types::{
     substate::SubstateAddress,
 };
 use tari_mmr::Hash;
+use tari_template_abi::TemplateDef;
 use tari_template_lib::{
     args::{
         BucketAction,
         BucketRef,
         ComponentAction,
         ComponentRef,
+        ConsensusAction,
+        CreateComponentArg,
         CreateResourceArg,
         InvokeResult,
         LogLevel,
@@ -64,39 +67,80 @@ use tari_template_lib::{
         VaultWithdrawArg,
         WorkspaceAction,
     },
-    models::{
+    auth::AccessRules,models::{
         BucketId,
         ComponentAddress,
         ComponentHeader,
         LayerOneCommitmentAddress,
         NonFungibleAddress,
-        ResourceAddress,
+
         VaultRef,
     },
 };
 use tari_utilities::{hex::Hex, ByteArray};
 
-use crate::runtime::{engine_args::EngineArgs, tracker::StateTracker, RuntimeError, RuntimeInterface, RuntimeState};
+use crate::runtime::{
+    engine_args::EngineArgs,
+    tracker::StateTracker,
+    AuthParams,
+    ConsensusContext,
+    RuntimeError,
+    RuntimeInterface,
+    RuntimeModule,
+    RuntimeState,
+};
 
 const LOG_TARGET: &str = "tari::dan::engine::runtime::impl";
 
 #[derive(Debug, Clone)]
 pub struct RuntimeInterfaceImpl {
     tracker: StateTracker,
+    _auth_params: AuthParams,
+    consensus: ConsensusContext,
+    modules: Vec<Box<dyn RuntimeModule>>,
 }
 
 impl RuntimeInterfaceImpl {
-    pub fn new(tracker: StateTracker) -> Self {
-        RuntimeInterfaceImpl { tracker }
+    pub fn new(
+        tracker: StateTracker,
+        auth_params: AuthParams,
+        consensus: ConsensusContext,
+        modules: Vec<Box<dyn RuntimeModule>>,
+    ) -> Self {
+        Self {
+            tracker,
+            _auth_params: auth_params,
+            consensus,
+            modules,
+        }
+    }
+
+    // TODO: this will be needed when we restrict Resources
+    // fn check_access_rules(&self, function: FunctionIdent, access_rules: &AccessRules) -> Result<(), RuntimeError> {
+    //     // TODO: In this very basic auth system, you can only call on owned objects (because initial_ownership_proofs
+    // is     //       usually set to include the owner token).
+    //     let auth_zone = AuthorizationScope::new(&self.auth_params.initial_ownership_proofs);
+    //     auth_zone.check_access_rules(&function, access_rules)
+    // }
+
+    fn invoke_on_runtime_call_modules(&self, function: &'static str) -> Result<(), RuntimeError> {
+        for module in &self.modules {
+            module.on_runtime_call(&self.tracker, function)?;
+        }
+        Ok(())
     }
 }
 
 impl RuntimeInterface for RuntimeInterfaceImpl {
-    fn set_current_runtime_state(&self, state: RuntimeState) {
+    fn set_current_runtime_state(&self, state: RuntimeState) -> Result<(), RuntimeError> {
+        self.invoke_on_runtime_call_modules("set_current_runtime_state")?;
         self.tracker.set_current_runtime_state(state);
+        Ok(())
     }
 
-    fn emit_log(&self, level: LogLevel, message: String) {
+    fn emit_log(&self, level: LogLevel, message: String) -> Result<(), RuntimeError> {
+        self.invoke_on_runtime_call_modules("emit_log")?;
+
         let log_level = match level {
             LogLevel::Error => log::Level::Error,
             LogLevel::Warn => log::Level::Warn,
@@ -107,14 +151,12 @@ impl RuntimeInterface for RuntimeInterfaceImpl {
         eprintln!("{}: {}", log_level, message);
         log::log!(target: "tari::dan::engine::runtime", log_level, "{}", message);
         self.tracker.add_log(LogEntry::new(level, message));
+        Ok(())
     }
 
     fn get_component(&self, address: &ComponentAddress) -> Result<ComponentHeader, RuntimeError> {
+        self.invoke_on_runtime_call_modules("get_component")?;
         self.tracker.get_component(address)
-    }
-
-    fn get_resource(&self, address: &ResourceAddress) -> Result<Resource, RuntimeError> {
-        self.tracker.get_resource(address)
     }
 
     fn component_invoke(
@@ -123,7 +165,19 @@ impl RuntimeInterface for RuntimeInterfaceImpl {
         action: ComponentAction,
         args: EngineArgs,
     ) -> Result<InvokeResult, RuntimeError> {
+        self.invoke_on_runtime_call_modules("component_invoke")?;
+
         match action {
+            ComponentAction::Create => {
+                let arg: CreateComponentArg = args.get(0)?;
+                let template_def = self.tracker.get_template_def()?;
+                validate_access_rules(&arg.access_rules, template_def)?;
+                let component_address =
+                    self.tracker
+                        .new_component(arg.module_name, arg.encoded_state, arg.access_rules)?;
+                Ok(InvokeResult::encode(&component_address)?)
+            },
+
             ComponentAction::Get => {
                 let address = component_ref
                     .as_component_address()
@@ -133,12 +187,6 @@ impl RuntimeInterface for RuntimeInterfaceImpl {
                     })?;
                 let component = self.tracker.get_component(&address)?;
                 Ok(InvokeResult::encode(&component)?)
-            },
-            ComponentAction::Create => {
-                let module_name: String = args.get(0)?;
-                let state: Vec<u8> = args.get(1)?;
-                let component_address = self.tracker.new_component(module_name, state)?;
-                Ok(InvokeResult::encode(&component_address)?)
             },
             ComponentAction::SetState => {
                 let address = component_ref
@@ -150,8 +198,22 @@ impl RuntimeInterface for RuntimeInterfaceImpl {
                 let state = args.get(0)?;
                 let mut component = self.tracker.get_component(&address)?;
                 // TODO: Need to validate this state somehow - it could contain arbitrary data incl. vaults that are not
-                // owned       by this component
+                //       owned by this component.
                 component.state.set(state);
+                self.tracker.set_component(address, component)?;
+                Ok(InvokeResult::unit())
+            },
+            ComponentAction::SetAccessRules => {
+                let address = component_ref
+                    .as_component_address()
+                    .ok_or_else(|| RuntimeError::InvalidArgument {
+                        argument: "component_ref",
+                        reason: "SetAccessRules component action requires a component address".to_string(),
+                    })?;
+                let access_rules: AccessRules = args.get(0)?;
+                let mut component = self.tracker.get_component(&address)?;
+
+                component.access_rules = access_rules;
                 self.tracker.set_component(address, component)?;
                 Ok(InvokeResult::unit())
             },
@@ -164,31 +226,9 @@ impl RuntimeInterface for RuntimeInterfaceImpl {
         action: ResourceAction,
         args: EngineArgs,
     ) -> Result<InvokeResult, RuntimeError> {
+        self.invoke_on_runtime_call_modules("resource_invoke")?;
+
         match action {
-            ResourceAction::GetTotalSupply => {
-                let resource_address =
-                    resource_ref
-                        .as_resource_address()
-                        .ok_or_else(|| RuntimeError::InvalidArgument {
-                            argument: "resource_ref",
-                            reason: "GetResourceType resource action requires a resource address".to_string(),
-                        })?;
-                let resource = self.tracker.get_resource(&resource_address)?;
-                let total_supply = resource.total_supply();
-                Ok(InvokeResult::encode(&total_supply)?)
-            },
-            ResourceAction::GetResourceType => {
-                let resource_address =
-                    resource_ref
-                        .as_resource_address()
-                        .ok_or_else(|| RuntimeError::InvalidArgument {
-                            argument: "resource_ref",
-                            reason: "GetResourceType resource action requires a resource address".to_string(),
-                        })?;
-                let resource = self.tracker.get_resource(&resource_address)?;
-                let resource_type = resource.resource_type();
-                Ok(InvokeResult::encode(&resource_type)?)
-            },
             ResourceAction::Create => {
                 let arg: CreateResourceArg = args.get(0)?;
 
@@ -202,6 +242,37 @@ impl RuntimeInterface for RuntimeInterfaceImpl {
 
                 Ok(InvokeResult::encode(&(resource_address, output_bucket))?)
             },
+
+            ResourceAction::GetTotalSupply => {
+                let resource_address =
+                    resource_ref
+                        .as_resource_address()
+                        .ok_or_else(|| RuntimeError::InvalidArgument {
+                            argument: "resource_ref",
+                            reason: "GetResourceType resource action requires a resource address".to_string(),
+                        })?;
+                let resource = self.tracker.get_resource(&resource_address)?;
+                // TODO: access check
+                // self.check_access_rules(
+                //     FunctionIdent::Native(NativeFunctionCall::Resource(ResourceAction::GetTotalSupply)),
+                //     &component.access_rules,
+                // )?;
+                let total_supply = resource.total_supply();
+                Ok(InvokeResult::encode(&total_supply)?)
+            },
+            ResourceAction::GetResourceType => {
+                let resource_address =
+                    resource_ref
+                        .as_resource_address()
+                        .ok_or_else(|| RuntimeError::InvalidArgument {
+                            argument: "resource_ref",
+                            reason: "GetResourceType resource action requires a resource address".to_string(),
+                        })?;
+                let resource = self.tracker.get_resource(&resource_address)?;
+                // TODO: access check
+                let resource_type = resource.resource_type();
+                Ok(InvokeResult::encode(&resource_type)?)
+            },
             ResourceAction::Mint => {
                 let resource_address =
                     resource_ref
@@ -211,13 +282,11 @@ impl RuntimeInterface for RuntimeInterfaceImpl {
                             reason: "Mint resource action requires a resource address".to_string(),
                         })?;
                 let mint_resource: MintResourceArg = args.get(0)?;
-
+                // TODO: access check
                 let bucket_id = self.tracker.mint_resource(resource_address, mint_resource.mint_arg)?;
                 let bucket = tari_template_lib::models::Bucket::from_id(bucket_id);
                 Ok(InvokeResult::encode(&bucket)?)
             },
-            ResourceAction::Deposit => todo!(),
-            ResourceAction::Withdraw => todo!(),
             ResourceAction::GetNonFungible => {
                 let resource_address =
                     resource_ref
@@ -227,7 +296,10 @@ impl RuntimeInterface for RuntimeInterfaceImpl {
                             reason: "GetNonFungible resource action requires a resource address".to_string(),
                         })?;
                 let arg: ResourceGetNonFungibleArg = args.get(0)?;
-                let nf_container = self.tracker.get_non_fungible(&resource_address, &arg.id)?;
+                let nf_container = self
+                    .tracker
+                    .get_non_fungible(&NonFungibleAddress::new(resource_address, arg.id.clone()))?;
+                // TODO: access check
                 if nf_container.is_burnt() {
                     return Err(RuntimeError::InvalidOpNonFungibleBurnt {
                         op: "GetNonFungible",
@@ -248,7 +320,9 @@ impl RuntimeInterface for RuntimeInterfaceImpl {
                             reason: "UpdateNonFungibleData resource action requires a resource address".to_string(),
                         })?;
                 let arg: ResourceUpdateNonFungibleDataArg = args.get(0)?;
-                self.tracker.set_non_fungible_data(resource_address, arg.id, arg.data)?;
+                // TODO: access check
+                self.tracker
+                    .set_non_fungible_data(&NonFungibleAddress::new(resource_address, arg.id), arg.data)?;
 
                 Ok(InvokeResult::unit())
             },
@@ -261,6 +335,8 @@ impl RuntimeInterface for RuntimeInterfaceImpl {
         action: VaultAction,
         args: EngineArgs,
     ) -> Result<InvokeResult, RuntimeError> {
+        self.invoke_on_runtime_call_modules("vault_invoke")?;
+
         match action {
             VaultAction::Create => {
                 let resource_address = vault_ref
@@ -280,6 +356,7 @@ impl RuntimeInterface for RuntimeInterfaceImpl {
                     reason: "Put vault action requires a vault id".to_string(),
                 })?;
                 let bucket_id: BucketId = args.get(0)?;
+                // TODO: access check
 
                 let bucket = self.tracker.take_bucket(bucket_id)?;
                 self.tracker
@@ -293,6 +370,7 @@ impl RuntimeInterface for RuntimeInterfaceImpl {
                 })?;
                 let arg: VaultWithdrawArg = args.get(0)?;
 
+                // TODO: access check
                 let resource = self.tracker.borrow_vault_mut(&vault_id, |vault| match arg {
                     VaultWithdrawArg::Fungible { amount } => vault.withdraw(amount),
                     VaultWithdrawArg::NonFungible { ids } => vault.withdraw_non_fungibles(&ids),
@@ -306,6 +384,7 @@ impl RuntimeInterface for RuntimeInterfaceImpl {
                     reason: "WithdrawAll vault action requires a vault id".to_string(),
                 })?;
 
+                // TODO: access check
                 let resource = self
                     .tracker
                     .borrow_vault_mut(&vault_id, |vault| vault.withdraw_all())??;
@@ -317,6 +396,7 @@ impl RuntimeInterface for RuntimeInterfaceImpl {
                     argument: "vault_ref",
                     reason: "GetBalance vault action requires a vault id".to_string(),
                 })?;
+                // TODO: access check
 
                 let balance = self.tracker.borrow_vault(&vault_id, |v| v.balance())?;
                 Ok(InvokeResult::encode(&balance)?)
@@ -327,6 +407,7 @@ impl RuntimeInterface for RuntimeInterfaceImpl {
                     reason: "vault action requires a vault id".to_string(),
                 })?;
 
+                // TODO: access check
                 let address = self
                     .tracker
                     .borrow_vault_mut(&vault_id, |vault| *vault.resource_address())?;
@@ -338,6 +419,7 @@ impl RuntimeInterface for RuntimeInterfaceImpl {
                     reason: "vault action requires a vault id".to_string(),
                 })?;
 
+                // TODO: access check
                 let resp = self.tracker.borrow_vault(&vault_id, |vault| {
                     let empty = BTreeSet::new();
                     let ids = vault.get_non_fungible_ids().unwrap_or(&empty);
@@ -356,6 +438,8 @@ impl RuntimeInterface for RuntimeInterfaceImpl {
         action: BucketAction,
         args: EngineArgs,
     ) -> Result<InvokeResult, RuntimeError> {
+        self.invoke_on_runtime_call_modules("bucket_invoke")?;
+
         match action {
             BucketAction::Create => {
                 let resource_address = bucket_ref
@@ -418,6 +502,7 @@ impl RuntimeInterface for RuntimeInterfaceImpl {
     }
 
     fn workspace_invoke(&self, action: WorkspaceAction, args: EngineArgs) -> Result<InvokeResult, RuntimeError> {
+        self.invoke_on_runtime_call_modules("workspace_invoke")?;
         match action {
             WorkspaceAction::ListBuckets => {
                 let bucket_ids = self.tracker.list_buckets();
@@ -447,11 +532,11 @@ impl RuntimeInterface for RuntimeInterfaceImpl {
         action: NonFungibleAction,
         _args: EngineArgs,
     ) -> Result<InvokeResult, RuntimeError> {
+        self.invoke_on_runtime_call_modules("non_fungible_invoke")?;
         match action {
             NonFungibleAction::GetData => {
-                let container = self
-                    .tracker
-                    .get_non_fungible(nf_addr.resource_address(), nf_addr.id())?;
+                let container = self.tracker.get_non_fungible(&nf_addr)?;
+                // TODO: access check
                 let contents = container
                     .contents()
                     .ok_or_else(|| RuntimeError::InvalidOpNonFungibleBurnt {
@@ -463,9 +548,8 @@ impl RuntimeInterface for RuntimeInterfaceImpl {
                 Ok(InvokeResult::raw(contents.data().to_vec()))
             },
             NonFungibleAction::GetMutableData => {
-                let container = self
-                    .tracker
-                    .get_non_fungible(nf_addr.resource_address(), nf_addr.id())?;
+                let container = self.tracker.get_non_fungible(&nf_addr)?;
+                // TODO: access check
                 let contents = container
                     .contents()
                     .ok_or_else(|| RuntimeError::InvalidOpNonFungibleBurnt {
@@ -479,11 +563,21 @@ impl RuntimeInterface for RuntimeInterfaceImpl {
         }
     }
 
+    fn consensus_invoke(&self, action: ConsensusAction) -> Result<InvokeResult, RuntimeError> {
+        self.invoke_on_runtime_call_modules("consensus_invoke")?;
+        match action {
+            ConsensusAction::GetCurrentEpoch => Ok(InvokeResult::encode(&self.consensus.current_epoch)?),
+        }
+    }
+
     fn generate_uuid(&self) -> Result<[u8; 32], RuntimeError> {
-        self.tracker.id_provider().new_uuid()
+        self.invoke_on_runtime_call_modules("generate_uuid")?;
+        let uuid = self.tracker.id_provider().new_uuid()?;
+        Ok(uuid)
     }
 
     fn set_last_instruction_output(&self, value: Option<Vec<u8>>) -> Result<(), RuntimeError> {
+        self.invoke_on_runtime_call_modules("set_last_instruction_output")?;
         self.tracker.set_last_instruction_output(value);
         Ok(())
     }
@@ -540,6 +634,7 @@ impl RuntimeInterface for RuntimeInterfaceImpl {
     }
 
     fn finalize(&self) -> Result<FinalizeResult, RuntimeError> {
+        self.invoke_on_runtime_call_modules("finalize")?;
         let result = match self.tracker.finalize() {
             Ok(substate_diff) => TransactionResult::Accept(substate_diff),
             Err(err) => TransactionResult::Reject(RejectReason::ExecutionFailure(err.to_string())),
@@ -549,4 +644,16 @@ impl RuntimeInterface for RuntimeInterfaceImpl {
 
         Ok(commit)
     }
+}
+
+fn validate_access_rules(access_rules: &AccessRules, template_def: &TemplateDef) -> Result<(), RuntimeError> {
+    for (name, _) in access_rules.method_access_rules_iter() {
+        if template_def.functions.iter().all(|f| f.name != *name) {
+            return Err(RuntimeError::InvalidMethodAccessRule {
+                template_name: template_def.template_name.clone(),
+                details: format!("No method '{}' found in template", name),
+            });
+        }
+    }
+    Ok(())
 }

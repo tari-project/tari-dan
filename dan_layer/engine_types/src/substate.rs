@@ -26,7 +26,7 @@ use std::{
 };
 
 use serde::{Deserialize, Serialize};
-use tari_bor::{borsh, decode, encode, Decode, Encode};
+use tari_bor::{borsh, decode, decode_exact, encode, Decode, Encode};
 use tari_common_types::types::{Commitment, FixedHash};
 use tari_crypto::{keys::PublicKey, ristretto::RistrettoPublicKey};
 use tari_template_lib::{
@@ -47,22 +47,16 @@ use crate::{hashing::hasher, non_fungible::NonFungibleContainer, resource::Resou
 
 #[derive(Debug, Clone, Encode, Decode, Serialize, Deserialize)]
 pub struct Substate {
-    address: SubstateAddress,
     substate: SubstateValue,
     version: u32,
 }
 
 impl Substate {
-    pub fn new<T: Into<SubstateValue>>(address: SubstateAddress, version: u32, substate: T) -> Self {
+    pub fn new<T: Into<SubstateValue>>(version: u32, substate: T) -> Self {
         Self {
-            address,
             substate: substate.into(),
             version,
         }
-    }
-
-    pub fn substate_address(&self) -> &SubstateAddress {
-        &self.address
     }
 
     pub fn substate_value(&self) -> &SubstateValue {
@@ -93,7 +87,7 @@ pub enum SubstateAddress {
     Resource(ResourceAddress),
     Vault(VaultId),
     LayerOneCommitment(LayerOneCommitmentAddress),
-    NonFungible(ResourceAddress, NonFungibleId),
+    NonFungible(NonFungibleAddress),
 }
 
 impl SubstateAddress {
@@ -124,29 +118,29 @@ impl SubstateAddress {
             SubstateAddress::Resource(address) => *address.hash(),
             SubstateAddress::Vault(id) => *id.hash(),
             SubstateAddress::LayerOneCommitment(address) => *address.hash(),
-            SubstateAddress::NonFungible(resource_addr, id) => hasher("non_fungible_id")
-                .chain(resource_addr.hash())
-                .chain(&id)
+            SubstateAddress::NonFungible(address) => hasher("non_fungible_id")
+                .chain(address.resource_address().hash())
+                .chain(address.id())
                 .result(),
         }
     }
 
-    // TODO: look at using BECH32 standard
-    pub fn to_address_string(&self) -> String {
-        match self {
-            Self::Component(addr) => addr.to_string(),
-            Self::Resource(addr) => addr.to_string(),
-            Self::Vault(addr) => addr.to_string(),
-            Self::LayerOneCommitment(addr) => addr.to_string(),
-            SubstateAddress::NonFungible(_, addr) => addr.to_string(),
-        }
+    pub fn to_bytes(&self) -> Vec<u8> {
+        encode(self).unwrap()
     }
 
-    pub fn as_non_fungible_address(&self) -> Option<NonFungibleAddress> {
+    pub fn from_bytes(bytes: &[u8]) -> std::io::Result<Self> {
+        decode_exact(bytes)
+    }
+
+    // TODO: look at using BECH32 standard
+    pub fn to_address_string(&self) -> String {
+        self.to_string()
+    }
+
+    pub fn as_non_fungible_address(&self) -> Option<&NonFungibleAddress> {
         match self {
-            SubstateAddress::NonFungible(resource_address, nft_id) => {
-                Some(NonFungibleAddress::new(*resource_address, nft_id.clone()))
-            },
+            SubstateAddress::NonFungible(addr) => Some(addr),
             _ => None,
         }
     }
@@ -164,7 +158,7 @@ impl SubstateAddress {
     }
 
     pub fn is_non_fungible(&self) -> bool {
-        matches!(self, Self::NonFungible(_, _))
+        matches!(self, Self::NonFungible(_))
     }
 }
 
@@ -188,7 +182,7 @@ impl From<VaultId> for SubstateAddress {
 
 impl From<NonFungibleAddress> for SubstateAddress {
     fn from(address: NonFungibleAddress) -> Self {
-        Self::NonFungible(*address.resource_address(), address.id().clone())
+        Self::NonFungible(address)
     }
 }
 
@@ -198,7 +192,7 @@ impl Display for SubstateAddress {
             SubstateAddress::Component(addr) => write!(f, "{}", addr),
             SubstateAddress::Resource(addr) => write!(f, "{}", addr),
             SubstateAddress::Vault(addr) => write!(f, "{}", addr),
-            SubstateAddress::NonFungible(resource_addr, addr) => write!(f, "{} {}", resource_addr, addr),
+            SubstateAddress::NonFungible(addr) => write!(f, "{}", addr),
             SubstateAddress::LayerOneCommitment(commitment_address) => write!(f, "{}", commitment_address),
         }
     }
@@ -226,7 +220,7 @@ impl FromStr for SubstateAddress {
                                 .map_err(|_| InvalidSubstateAddressFormat(s.to_string()))?;
                             let id = NonFungibleId::try_from_canonical_string(addr)
                                 .map_err(|_| InvalidSubstateAddressFormat(s.to_string()))?;
-                            Ok(SubstateAddress::NonFungible(resource_addr, id))
+                            Ok(SubstateAddress::NonFungible(NonFungibleAddress::new(resource_addr, id)))
                         },
                         _ => Err(InvalidSubstateAddressFormat(s.to_string())),
                     },
@@ -293,14 +287,6 @@ impl SubstateValue {
     pub fn into_resource(self) -> Option<Resource> {
         match self {
             SubstateValue::Resource(resource) => Some(resource),
-            _ => None,
-        }
-    }
-
-    pub fn resource_address(&self) -> Option<ResourceAddress> {
-        match self {
-            SubstateValue::Resource(resource) => Some(*resource.resource_address()),
-            SubstateValue::Vault(vault) => Some(*vault.resource_address()),
             _ => None,
         }
     }

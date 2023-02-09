@@ -20,4 +20,18 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-pub struct ChainTime {}
+use tari_template_abi::{call_engine, EngineOp};
+
+use crate::args::{ConsensusAction, ConsensusInvokeArg, InvokeResult};
+
+pub struct Consensus {}
+
+impl Consensus {
+    pub fn current_epoch() -> u64 {
+        let resp: InvokeResult = call_engine(EngineOp::ConsensusInvoke, &ConsensusInvokeArg {
+            action: ConsensusAction::GetCurrentEpoch,
+        });
+        resp.decode()
+            .expect("Consensus GetCurrentEpoch returned invalid resource type")
+    }
+}

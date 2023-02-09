@@ -27,7 +27,6 @@ use tari_dan_common_types::{
     serde_with,
     Epoch,
     ShardId,
-    SubstateChange,
 };
 use tari_engine_types::{
     commit_result::FinalizeResult,
@@ -35,6 +34,7 @@ use tari_engine_types::{
     signature::InstructionSignature,
     TemplateAddress,
 };
+use tari_transaction::SubstateChange;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct GetIdentityResponse {

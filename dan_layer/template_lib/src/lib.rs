@@ -20,6 +20,8 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+pub mod auth;
+
 mod hash;
 pub use hash::Hash;
 
@@ -27,13 +29,15 @@ pub use hash::Hash;
 pub mod args;
 pub mod models;
 
-pub mod chain_time;
 pub mod component;
+pub mod consensus;
 
 mod context;
 pub use context::{get_context, init_context, AbiContext};
 
 pub mod resource;
+
+pub mod crypto;
 
 // ---------------------------------------- WASM target exports ------------------------------------------------
 
@@ -51,5 +55,6 @@ pub use prelude::template;
 // Re-export for macro
 pub use tari_bor::encode;
 
+pub mod constants;
 #[cfg(target_arch = "wasm32")]
 pub mod workspace;

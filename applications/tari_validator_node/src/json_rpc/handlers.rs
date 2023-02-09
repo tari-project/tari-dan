@@ -34,15 +34,15 @@ use serde_json::{self as json, json};
 use tari_comms::{multiaddr::Multiaddr, peer_manager::NodeId, types::CommsPublicKey, CommsNode, NodeIdentity};
 use tari_comms_logging::SqliteMessageLog;
 use tari_crypto::tari_utilities::hex::Hex;
-use tari_dan_common_types::{PayloadId, QuorumCertificate, QuorumDecision, ShardId, SubstateChange};
+use tari_dan_common_types::{PayloadId, QuorumCertificate, QuorumDecision, ShardId};
 use tari_dan_core::{
     services::{epoch_manager::EpochManager, BaseNodeClient},
     storage::shard_store::{ShardStore, ShardStoreReadTransaction},
     workers::events::{EventSubscription, HotStuffEvent},
 };
-use tari_dan_engine::transaction::TransactionBuilder;
 use tari_dan_storage_sqlite::sqlite_shard_store_factory::SqliteShardStore;
 use tari_template_lib::Hash;
+use tari_transaction::{SubstateChange, TransactionBuilder};
 use tari_validator_node_client::types::{
     GetCommitteeRequest,
     GetIdentityResponse,
@@ -501,29 +501,29 @@ impl JsonRpcHandlers {
 
     pub async fn get_epoch_manager_stats(&self, value: JsonRpcExtractor) -> JrpcResult {
         let answer_id = value.get_answer_id();
-        if let Ok(current_epoch) = self.epoch_manager.current_epoch().await {
-            if let Ok(is_valid) = self.epoch_manager.is_epoch_valid(current_epoch).await {
+        match self.epoch_manager.current_epoch().await {
+            Ok(current_epoch) => {
+                let is_valid = self.epoch_manager.is_epoch_valid(current_epoch).await.map_err(|err| {
+                    JsonRpcResponse::error(
+                        answer_id,
+                        JsonRpcError::new(
+                            JsonRpcErrorReason::InvalidParams,
+                            format!("Epoch is not valid:{}", err),
+                            json::Value::Null,
+                        ),
+                    )
+                })?;
                 let response = json!({ "current_epoch": current_epoch.0,"is_valid":is_valid });
                 Ok(JsonRpcResponse::success(answer_id, response))
-            } else {
-                Err(JsonRpcResponse::error(
-                    answer_id,
-                    JsonRpcError::new(
-                        JsonRpcErrorReason::InvalidParams,
-                        "Something went wrong".to_string(),
-                        json::Value::Null,
-                    ),
-                ))
-            }
-        } else {
-            Err(JsonRpcResponse::error(
+            },
+            Err(e) => Err(JsonRpcResponse::error(
                 answer_id,
                 JsonRpcError::new(
                     JsonRpcErrorReason::InvalidParams,
-                    "Something went wrong".to_string(),
+                    format!("Could not get current epoch: {}", e),
                     json::Value::Null,
                 ),
-            ))
+            )),
         }
     }
 

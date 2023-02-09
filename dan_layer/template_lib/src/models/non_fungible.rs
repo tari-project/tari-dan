@@ -10,6 +10,8 @@ use tari_template_abi::{
 
 use crate::{
     args::{InvokeResult, NonFungibleAction, NonFungibleInvokeArg},
+    constants::PUBLIC_IDENTITY_RESOURCE,
+    crypto::RistrettoPublicKeyBytes,
     models::ResourceAddress,
     prelude::ResourceManager,
     Hash,
@@ -162,7 +164,7 @@ impl Display for NonFungibleId {
     }
 }
 
-#[derive(Debug, Clone, Encode, Decode)]
+#[derive(Debug, Clone, Encode, Decode, PartialEq, Eq, Hash)]
 #[cfg_attr(feature = "serde", derive(serde::Deserialize, serde::Serialize))]
 pub struct NonFungibleAddress {
     resource_address: ResourceAddress,
@@ -180,6 +182,16 @@ impl NonFungibleAddress {
 
     pub fn id(&self) -> &NonFungibleId {
         &self.id
+    }
+
+    pub fn from_public_key(public_key: RistrettoPublicKeyBytes) -> Self {
+        Self::new(PUBLIC_IDENTITY_RESOURCE, NonFungibleId::U256(public_key.into_array()))
+    }
+}
+
+impl Display for NonFungibleAddress {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{} nft_{}", self.resource_address, self.id)
     }
 }
 

@@ -32,7 +32,7 @@ use include_dir::{include_dir, Dir};
 use log::{error, info};
 use reqwest::StatusCode;
 
-const LOG_TARGET: &str = "tari_validator_node::http_ui::server";
+const LOG_TARGET: &str = "tari::validator_node::http_ui::server";
 
 pub async fn run_http_ui_server(address: SocketAddr, json_rpc_address: Option<String>) -> Result<(), anyhow::Error> {
     let json_rpc_address = Arc::new(json_rpc_address);
@@ -49,17 +49,17 @@ pub async fn run_http_ui_server(address: SocketAddr, json_rpc_address: Option<St
         )
         .fallback(handler);
 
-    info!(target: LOG_TARGET, "🌐 HTTP UI started at {}", address);
+    info!(target: LOG_TARGET, "🕸️ HTTP UI started at {}", address);
     let server = axum::Server::try_bind(&address).or_else(|_| {
         error!(
             target: LOG_TARGET,
-            "🌐 Failed to bind on preferred address {}. Trying OS-assigned", address
+            "🕸️ Failed to bind on preferred address {}. Trying OS-assigned", address
         );
         axum::Server::try_bind(&"127.0.0.1:0".parse().unwrap())
     })?;
 
     let server = server.serve(router.into_make_service());
-    info!(target: LOG_TARGET, "🌐 HTTP UI listening on {}", server.local_addr());
+    info!(target: LOG_TARGET, "🕸️ HTTP UI listening on {}", server.local_addr());
     server.await?;
 
     info!(target: LOG_TARGET, "Stopping HTTP UI");

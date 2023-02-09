@@ -1,13 +1,26 @@
 //  Copyright 2022 The Tari Project
 //  SPDX-License-Identifier: BSD-3-Clause
 
-use std::{path::PathBuf, str::FromStr};
+use std::{collections::HashMap, path::PathBuf, str::FromStr};
 
-use tari_engine_types::substate::{SubstateAddress, SubstateDiff};
+use tari_engine_types::{
+    instruction::Instruction,
+    substate::{SubstateAddress, SubstateDiff},
+};
 use tari_template_builtin::ACCOUNT_TEMPLATE_ADDRESS;
-use tari_transaction_manifest::parse_manifest;
+use tari_template_lib::{args, prelude::NonFungibleId};
+use tari_transaction_manifest::{parse_manifest, ManifestValue};
 use tari_validator_node_cli::{
-    command::transaction::{handle_submit, submit_transaction, CliArg, CliInstruction, CommonSubmitArgs, SubmitArgs},
+    command::transaction::{
+        handle_submit,
+        submit_transaction,
+        CliArg,
+        CliInstruction,
+        CommonSubmitArgs,
+        NewNonFungibleMintOutput,
+        SpecificNonFungibleMintOutput,
+        SubmitArgs,
+    },
     from_hex::FromHex,
     key_manager::KeyManager,
     versioned_substate_address::VersionedSubstateAddress,
@@ -18,42 +31,45 @@ use tempfile::tempdir;
 use super::validator_node::get_vn_client;
 use crate::TariWorld;
 
-pub async fn create_dan_wallet(world: &mut TariWorld) {
+pub fn get_key_manager(world: &mut TariWorld) -> KeyManager {
     let data_dir = get_cli_data_dir(world);
 
     // initialize the account public/private keys
     let path = PathBuf::from(data_dir);
-    let account_manager = KeyManager::init(path).unwrap();
-    account_manager.create().unwrap();
+    KeyManager::init(path).unwrap()
+}
+
+pub fn create_dan_wallet(world: &mut TariWorld) {
+    get_key_manager(world).create().unwrap();
 }
 
 pub async fn create_account(world: &mut TariWorld, account_name: String, validator_node_name: String) {
     let data_dir = get_cli_data_dir(world);
-
+    let key = get_key_manager(world).get_active_key().expect("No active keypair");
+    let owner_token = key.to_owner_token();
     // create an account component
-    let instruction = CliInstruction::CallFunction {
+    let instruction = Instruction::CallFunction {
         // The "account" template is builtin in the validator nodes with a constant address
-        template_address: FromHex(ACCOUNT_TEMPLATE_ADDRESS),
-        function_name: "new".to_owned(),
-        args: vec![], // the account constructor does not have args
+        template_address: ACCOUNT_TEMPLATE_ADDRESS,
+        function: "create".to_string(),
+        args: args!(owner_token),
     };
-    let args = SubmitArgs {
-        instruction,
-        common: CommonSubmitArgs {
-            wait_for_result: true,
-            wait_for_result_timeout: Some(60),
-            num_outputs: Some(1),
-            inputs: vec![],
-            version: None,
-            dump_outputs_into: None,
-            account_template_address: None,
-            dry_run: false,
-            non_fungible_mint_outputs: vec![],
-            new_non_fungible_outputs: vec![],
-        },
+    let common = CommonSubmitArgs {
+        wait_for_result: true,
+        wait_for_result_timeout: Some(60),
+        num_outputs: Some(1),
+        inputs: vec![],
+        version: None,
+        dump_outputs_into: None,
+        account_template_address: None,
+        dry_run: false,
+        non_fungible_mint_outputs: vec![],
+        new_non_fungible_outputs: vec![],
     };
     let mut client = get_validator_node_client(world, validator_node_name).await;
-    let resp = handle_submit(args, data_dir, &mut client).await.unwrap();
+    let resp = submit_transaction(vec![instruction], common, data_dir, &mut client)
+        .await
+        .unwrap();
 
     // store the account component address and other substate addresses for later reference
     add_substate_addresses(
@@ -148,7 +164,7 @@ fn add_substate_addresses(world: &mut TariWorld, outputs_name: String, diff: &Su
                 });
                 counters[2] += 1;
             },
-            SubstateAddress::NonFungible(_, _) => {
+            SubstateAddress::NonFungible(_) => {
                 outputs.insert(format!("nfts/{}", counters[3]), VersionedSubstateAddress {
                     address: addr.clone(),
                     version: data.version(),
@@ -242,7 +258,7 @@ pub async fn submit_manifest(
 ) {
     let input_groups = inputs.split(',').map(|s| s.trim()).collect::<Vec<_>>();
     // generate globals for components addresses
-    let globals = world
+    let globals: HashMap<String, ManifestValue> = world
         .outputs
         .iter()
         .filter(|(name, _)| input_groups.contains(&name.as_str()))
@@ -250,6 +266,38 @@ pub async fn submit_manifest(
             outputs
                 .iter()
                 .map(move |(child_name, addr)| (format!("{}/{}", name, child_name), addr.address.clone().into()))
+        })
+        .collect();
+
+    // parse the minting outputs (if any) specified in the manifest as comments
+    let new_non_fungible_outputs: Vec<NewNonFungibleMintOutput> = manifest_content
+        .lines()
+        .filter(|l| l.starts_with("// $mint "))
+        .map(|l| l.split_whitespace().skip(2).collect::<Vec<&str>>())
+        .map(|l| {
+            let manifest_value = globals.get(l[0]).unwrap();
+            let resource_address = manifest_value.address().unwrap().as_resource_address().unwrap();
+            let count = l[1].parse().unwrap();
+            NewNonFungibleMintOutput {
+                resource_address,
+                count,
+            }
+        })
+        .collect();
+
+    // parse the minting specific outputs (if any) specified in the manifest as comments
+    let non_fungible_mint_outputs: Vec<SpecificNonFungibleMintOutput> = manifest_content
+        .lines()
+        .filter(|l| l.starts_with("// $mint_specific "))
+        .map(|l| l.split_whitespace().skip(2).collect::<Vec<&str>>())
+        .map(|l| {
+            let manifest_value = globals.get(l[0]).unwrap();
+            let resource_address = manifest_value.address().unwrap().as_resource_address().unwrap();
+            let non_fungible_id = NonFungibleId::try_from_canonical_string(l[1]).unwrap();
+            SpecificNonFungibleMintOutput {
+                resource_address,
+                non_fungible_id,
+            }
         })
         .collect();
 
@@ -287,8 +335,8 @@ pub async fn submit_manifest(
         dump_outputs_into: None,
         account_template_address: None,
         dry_run: false,
-        non_fungible_mint_outputs: vec![],
-        new_non_fungible_outputs: vec![],
+        non_fungible_mint_outputs,
+        new_non_fungible_outputs,
     };
     let resp = submit_transaction(instructions, args, data_dir, &mut client)
         .await

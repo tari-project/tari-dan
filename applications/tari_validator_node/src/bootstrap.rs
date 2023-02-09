@@ -106,6 +106,7 @@ pub async fn spawn_services(
         rx_vote_message,
         rx_new_transaction_message,
         rx_network_announce,
+        rx_recovery_message,
     } = message_receivers;
 
     // Networking
@@ -134,7 +135,6 @@ pub async fn spawn_services(
     );
 
     // Template manager
-
     let template_manager = TemplateManager::new(global_db.clone(), config.validator_node.templates.clone());
     let template_manager_service = template_manager::spawn(template_manager.clone(), shutdown.clone());
 
@@ -171,6 +171,7 @@ pub async fn spawn_services(
         mempool.clone(),
         payload_processor.clone(),
         rx_consensus_message,
+        rx_recovery_message,
         rx_vote_message,
         shutdown.clone(),
     );

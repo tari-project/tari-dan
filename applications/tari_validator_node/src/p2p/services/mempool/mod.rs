@@ -26,11 +26,10 @@ pub use initializer::spawn;
 
 mod handle;
 use async_trait::async_trait;
-use futures::channel::oneshot;
 pub use handle::{MempoolHandle, MempoolRequest};
 use tari_dan_core::services::epoch_manager::EpochManagerError;
 use thiserror::Error;
-use tokio::sync::mpsc::error::SendError;
+use tokio::sync::{mpsc::error::SendError, oneshot};
 
 use crate::p2p::services::{messaging::MessagingError, template_manager::TemplateManagerError};
 
@@ -55,8 +54,8 @@ impl From<SendError<MempoolRequest>> for MempoolError {
     }
 }
 
-impl From<oneshot::Canceled> for MempoolError {
-    fn from(_: oneshot::Canceled) -> Self {
+impl From<oneshot::error::RecvError> for MempoolError {
+    fn from(_: oneshot::error::RecvError) -> Self {
         Self::RequestCancelled
     }
 }

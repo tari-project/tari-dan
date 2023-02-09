@@ -25,14 +25,16 @@ use std::{
     iter::FromIterator,
 };
 
+use tari_crypto::tari_utilities::ByteArray;
 use tari_dan_common_types::{ObjectPledge, ShardId, SubstateState};
 use tari_dan_core::{
     models::TariDanPayload,
     services::{PayloadProcessor, PayloadProcessorError, TemplateProvider},
 };
 use tari_dan_engine::{
+    bootstrap_state,
     packager::{LoadedTemplate, Package},
-    runtime::{IdProvider, RuntimeInterfaceImpl, StateTracker},
+    runtime::{AuthParams, ConsensusContext},
     state_store::{memory::MemoryStateStore, AtomicDb, StateReader, StateStoreError, StateWriter},
     transaction::{TransactionError, TransactionProcessor},
     wasm::WasmExecutionError,
@@ -41,7 +43,12 @@ use tari_engine_types::{
     commit_result::{FinalizeResult, RejectReason},
     substate::{Substate, SubstateAddress},
 };
-use tari_template_lib::models::{ComponentAddress, TemplateAddress};
+use tari_template_lib::{
+    crypto::RistrettoPublicKeyBytes,
+    models::{ComponentAddress, TemplateAddress},
+    prelude::NonFungibleAddress,
+};
+use tari_transaction::Transaction;
 
 #[derive(Debug, Default, Clone)]
 pub struct TariDanPayloadProcessor<TTemplateProvider> {
@@ -61,33 +68,26 @@ where TTemplateProvider: TemplateProvider<Template = LoadedTemplate>
         &self,
         payload: TariDanPayload,
         pledges: HashMap<ShardId, ObjectPledge>,
+        consensus: ConsensusContext,
     ) -> Result<FinalizeResult, PayloadProcessorError> {
         let transaction = payload.into_payload();
         let mut template_addresses = HashSet::<_, RandomState>::from_iter(transaction.required_templates());
         let components = transaction.required_components();
 
-        let state_db = create_populated_state_store(pledges.into_values())?;
-        template_addresses.extend(load_template_addresses_for_components(&state_db, &components)?);
+        let state_store = create_populated_state_store(pledges.into_values())?;
+        template_addresses.extend(load_template_addresses_for_components(&state_store, &components)?);
 
-        // Execution will fail if more than the max addresses are created
-        // let id_provider = IdProvider::new(*transaction.hash(), transaction.meta().max_outputs());
-        // Execution will fail if more than 64 new addresses are created
-        let id_provider = IdProvider::new(*transaction.hash(), 64);
-        let tracker = StateTracker::new(state_db, id_provider);
-        let runtime = RuntimeInterfaceImpl::new(tracker);
+        let package = build_package(&self.template_provider, template_addresses)?;
 
-        let mut builder = Package::builder();
+        // Include ownership token for the signers of this in the auth scope
+        let owner_token = get_auth_token(&transaction);
+        let auth_params = AuthParams {
+            initial_ownership_proofs: vec![owner_token],
+        };
 
-        for addr in template_addresses {
-            let template = self
-                .template_provider
-                .get_template_module(&addr)
-                .map_err(|err| PayloadProcessorError::FailedToLoadTemplate(err.into()))?;
-            builder.add_template(addr, template);
-        }
-        let package = builder.build();
+        let modules = vec![]; // No modules for now, currently used in tests. Also will be useful for more advanced use-cases like fees, etc.
 
-        let processor = TransactionProcessor::new(runtime, package);
+        let processor = TransactionProcessor::new(package, state_store, auth_params, consensus, modules);
         let tx_hash = *transaction.hash();
         match processor.execute(transaction) {
             Ok(result) => Ok(result),
@@ -100,6 +100,28 @@ where TTemplateProvider: TemplateProvider<Template = LoadedTemplate>
             )),
         }
     }
+}
+
+fn build_package<TTemplateProvider: TemplateProvider<Template = LoadedTemplate>>(
+    template_provider: &TTemplateProvider,
+    template_addresses: HashSet<TemplateAddress>,
+) -> Result<Package, PayloadProcessorError> {
+    let mut builder = Package::builder();
+
+    for addr in template_addresses {
+        let template = template_provider
+            .get_template_module(&addr)
+            .map_err(|err| PayloadProcessorError::FailedToLoadTemplate(err.into()))?;
+        builder.add_template(addr, template);
+    }
+
+    Ok(builder.build())
+}
+
+fn get_auth_token(transaction: &Transaction) -> NonFungibleAddress {
+    let public_key = RistrettoPublicKeyBytes::from_bytes(transaction.sender_public_key().as_bytes())
+        .expect("Expected public key to be 32 bytes");
+    NonFungibleAddress::from_public_key(public_key)
 }
 
 fn load_template_addresses_for_components(
@@ -128,17 +150,18 @@ fn create_populated_state_store<I: IntoIterator<Item = ObjectPledge>>(
 
     // Populate state db with inputs
     let mut tx = state_db.write_access()?;
+    // Add bootstrapped substates
+    bootstrap_state(&mut tx)?;
+
     for input in inputs {
         match input.current_state {
-            SubstateState::Up { data, .. } => {
-                // TODO: address and state should be separate
-                let addr = data.substate_address().clone();
+            SubstateState::Up { address, data, .. } => {
                 log::debug!(target: "tari::dan_layer::payload_processor",
                     "State store input substate: {} v{}",
-                    addr,
+                    address,
                     data.version()
                 );
-                tx.set_state(&addr, data)?;
+                tx.set_state(&address, data)?;
             },
             SubstateState::DoesNotExist | SubstateState::Down { .. } => { /* Do nothing */ },
         }

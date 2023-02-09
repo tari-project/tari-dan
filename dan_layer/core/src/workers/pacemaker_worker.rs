@@ -34,9 +34,10 @@ use super::hotstuff_error::HotStuffError;
 
 const LOG_TARGET: &str = "tari::dan_layer::pacemaker_worker";
 
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum PacemakerWaitStatus {
-    WaitTimeOut,
+#[derive(Debug)]
+pub enum PacemakerTimer<T> {
+    Start(T, Duration),
+    Stop(T),
 }
 
 /// A pacemaker service that is responsible for:
@@ -48,13 +49,12 @@ pub enum PacemakerWaitStatus {
 pub struct Pacemaker<T> {
     /// Receiver for start signal. Whenever the service receives a new instance of (`T`, `Duration`)
     /// it starts a waiting time process for the T-value with timeout `Duration`
-    rx_start_signal: Receiver<(T, Duration)>,
     /// Receiver of stop/shutdown signal. It is assumed that whenever a new value `T` is
     /// received, that we are already waiting for timeout on that value (i.e. rx_start_signal,
     /// received that same value first). If such value is received, then we stop the waiting process
-    rx_stop_signal: Receiver<T>,
+    rx_signal: Receiver<PacemakerTimer<T>>,
     /// Keeps track of waiting timers, parametrized by values of `T`
-    waiting_futures: FuturesUnordered<BoxFuture<'static, Option<T>>>,
+    waiting_futures: FuturesUnordered<BoxFuture<'static, (T, bool)>>,
     /// For each pending timeout, we keep track of inner oneshot channels for communication
     pending_timeouts: HashMap<T, oneshot::Sender<()>>,
     /// Sender which sends Timeout status to the other end of the channel
@@ -66,71 +66,95 @@ where T: Clone + Debug + PartialEq + Eq + Hash + Send + Sync + 'static
 {
     pub fn spawn(shutdown: ShutdownSignal) -> PacemakerHandle<T> {
         let (tx_timeout_status, rx_timeout_status) = channel(100);
-        let (tx_start_waiter_signal, rx_start_waiter_signal) = channel(100);
-        let (tx_stop_waiter_signal, rx_stop_waiter_signal) = channel(100);
+        let (tx_signal, rx_signal) = channel(100);
 
-        let pacemaker = Self::new(rx_start_waiter_signal, rx_stop_waiter_signal, tx_timeout_status);
+        let pacemaker = Self::new(rx_signal, tx_timeout_status);
         tokio::spawn(pacemaker.run(shutdown));
 
         PacemakerHandle {
             rx_timeout_status,
-            tx_start_waiter_signal,
-            tx_stop_waiter_signal,
+            tx_signal,
         }
     }
 
-    fn new(rx_start_signal: Receiver<(T, Duration)>, rx_stop_signal: Receiver<T>, tx_waiter_status: Sender<T>) -> Self {
+    fn new(rx_signal: Receiver<PacemakerTimer<T>>, tx_waiter_status: Sender<T>) -> Self {
         Self {
-            rx_start_signal,
-            rx_stop_signal,
+            rx_signal,
             waiting_futures: FuturesUnordered::new(),
             pending_timeouts: HashMap::new(),
             tx_waiter_status,
         }
     }
 
-    fn handle_stop_signal(&mut self, t: T) {
-        if let Some(signal) = self.pending_timeouts.remove(&t) {
+    fn handle_start_signal(&mut self, wait_over: T, duration: Duration) {
+        info!(
+            target: LOG_TARGET,
+            "Received start wait signal for value: {:?}", wait_over
+        );
+        if self.pending_timeouts.contains_key(&wait_over) {
+            info!(
+                target: LOG_TARGET,
+                "Already received an existing wait timer for value = {:?}", wait_over
+            );
+        } else {
+            let (tx, rx_stop_signal) = oneshot::channel();
+            self.pending_timeouts.insert(wait_over.clone(), tx);
+            self.waiting_futures.push(Box::pin(async move {
+                tokio::select! {
+                    _ = tokio::time::sleep(duration) => {
+                        info!("The wait signal for value = {:?} has timeout", wait_over);
+                        (wait_over, true)
+                    },
+                    _ = rx_stop_signal => {
+                        info!("The wait signal for wait_over = {:?} has been shut down", wait_over);
+                        (wait_over, false)
+                    }
+                }
+            }));
+        }
+    }
+
+    fn handle_stop_signal(&mut self, wait_over: T) {
+        if let Some(signal) = self.pending_timeouts.remove(&wait_over) {
+            info!(
+                target: LOG_TARGET,
+                "Received stop wait signal for value: {:?}", wait_over
+            );
             let _ = signal.send(());
+        }
+    }
+
+    fn handle_signal(&mut self, signal: PacemakerTimer<T>) {
+        match signal {
+            PacemakerTimer::Stop(wait_over) => {
+                self.handle_stop_signal(wait_over);
+            },
+            PacemakerTimer::Start(wait_over, duration) => {
+                self.handle_start_signal(wait_over, duration);
+            },
+        }
+    }
+
+    async fn handle_pending_timeout_ended(&mut self, wait_over: T, has_timed_out: bool) {
+        if has_timed_out {
+            // at this point it is safe to remove the wait_over from pending_timeouts
+            // so that this data structure doesn't grow every time.
+            // When the signal was triggered it was removed in the handle_stop_signal.
+            self.pending_timeouts.remove(&wait_over);
+            // send status to the other side of the channel
+            let send_status = self.tx_waiter_status.send(wait_over);
+            if send_status.await.is_err() {
+                error!(target: LOG_TARGET, "Hotstuff waiter has shut down");
+            }
         }
     }
 
     pub async fn run(mut self, mut shutdown: ShutdownSignal) -> Result<(), HotStuffError> {
         loop {
             tokio::select! {
-                Some((wait_over, duration_timeout)) = self.rx_start_signal.recv() => {
-                    info!(
-                        target: LOG_TARGET,
-                        "Received start wait signal for value: {:?}", wait_over
-                    );
-                    let (tx, rx_stop_signal) = oneshot::channel();
-                    if self.pending_timeouts.insert(wait_over.clone(), tx).is_none() {
-                        self.waiting_futures.push(Box::pin(async move {
-                            tokio::select! {
-                                _ = tokio::time::sleep(duration_timeout) => {
-                                    info!("The wait signal for value = {:?} has timeout", wait_over);
-                                    Some(wait_over)
-                                },
-                                _ = rx_stop_signal => {
-                                    info!("The wait signal for wait_over = {:?} has been shut down", wait_over);
-                                    None
-                                }
-                            }
-                        }));
-                    } else {
-                        info!(target: LOG_TARGET, "Already received an existing wait timer for value = {:?}", wait_over);
-                    }
-                },
-                Some(msg) = self.waiting_futures.next() => {
-                    if let Some(t) = msg {
-                    let send_status = self.tx_waiter_status.send(t);
-                        if send_status.await.is_err() {
-                                error!(target: LOG_TARGET, "Hotstuff waiter has shut down");
-                        }
-                    }
-                },
-                Some(t) = self.rx_stop_signal.recv() => {
-                    self.handle_stop_signal(t);
+                Some(signal) = self.rx_signal.recv() => { self.handle_signal(signal) },
+                Some((wait_over, has_timed_out)) = self.waiting_futures.next() => {
+                    self.handle_pending_timeout_ended(wait_over, has_timed_out).await
                 },
                 _ = shutdown.wait() => {
                     info!("Shutting down pacemaker service..");
@@ -144,8 +168,7 @@ where T: Clone + Debug + PartialEq + Eq + Hash + Send + Sync + 'static
 }
 
 pub struct PacemakerHandle<T> {
-    tx_start_waiter_signal: Sender<(T, Duration)>,
-    tx_stop_waiter_signal: Sender<T>,
+    tx_signal: Sender<PacemakerTimer<T>>,
     rx_timeout_status: Receiver<T>,
 }
 
@@ -155,8 +178,8 @@ impl<T: Debug> PacemakerHandle<T> {
             target: LOG_TARGET,
             "Pacemaker: start wait timer for value = {:?}", wait_over
         );
-        self.tx_start_waiter_signal
-            .send((wait_over, duration_timeout))
+        self.tx_signal
+            .send(PacemakerTimer::Start(wait_over, duration_timeout))
             .await
             .map_err(|_| HotStuffError::SendError)
     }
@@ -166,8 +189,8 @@ impl<T: Debug> PacemakerHandle<T> {
             target: LOG_TARGET,
             "Pacemaker: stop wait timer for value = {:?}", wait_over
         );
-        self.tx_stop_waiter_signal
-            .send(wait_over)
+        self.tx_signal
+            .send(PacemakerTimer::Stop(wait_over))
             .await
             .map_err(|_| HotStuffError::SendError)
     }
@@ -260,19 +283,64 @@ mod tests {
         tokio::time::sleep(Duration::from_millis(1)).await;
 
         // stop waiting messages that are indexed by even numbers
-        for i in (0..100).filter(|i| i % 2 == 0) {
+        for i in (0..100).step_by(2) {
             handle.stop_timer(i).await.unwrap();
         }
 
         // assert that timeouts occur if and only if messages are indexed by odd numbers
         tokio::time::sleep(Duration::from_millis(100)).await;
-        for i in (0..100).filter(|i| i % 2 == 1) {
+        for i in (1..100).step_by(2) {
             let val = handle.on_timeout().await.unwrap();
             assert_eq!(i, val)
         }
 
         // no more messages are received
         assert!(tokio::time::timeout(Duration::from_millis(100), handle.on_timeout())
+            .await
+            .is_err());
+    }
+
+    #[tokio::test]
+    async fn test_remove_pending_timeouts() {
+        let (_, rx_signal) = channel::<PacemakerTimer<u8>>(10);
+        let (tx_waiter_status, _) = channel::<u8>(10);
+
+        let mut pacemaker = Pacemaker::new(rx_signal, tx_waiter_status);
+
+        // loop over start wait messages
+        for i in 0..100 {
+            pacemaker.handle_signal(PacemakerTimer::Start(i, Duration::from_millis(2000)));
+            assert_eq!(pacemaker.pending_timeouts.len(), i as usize + 1);
+        }
+
+        // stop waiting messages that are indexed by even numbers, and check that the corresponding
+        // pending timeouts are removed from the pending_timeouts hash map
+        for i in (0..100).step_by(2) {
+            pacemaker.handle_signal(PacemakerTimer::Stop(i));
+            assert_eq!(pacemaker.pending_timeouts.len(), 100 - (i / 2) as usize - 1);
+        }
+
+        // assert that timeouts occur and they are removed from pending_timeouts hash map,
+        // for each odd number in 0..100
+        for i in (1..100).step_by(2) {
+            pacemaker.handle_pending_timeout_ended(i, true).await;
+            assert_eq!(pacemaker.pending_timeouts.len(), 50 - (i / 2) as usize - 1);
+        }
+    }
+
+    #[tokio::test]
+    async fn test_double_add() {
+        let shutdown = Shutdown::new();
+        let mut handle = Pacemaker::spawn(shutdown.to_signal());
+        handle.start_timer(1, Duration::from_millis(100)).await.unwrap();
+        handle.start_timer(1, Duration::from_millis(100)).await.unwrap();
+        assert!(tokio::time::timeout(Duration::from_millis(300), handle.on_timeout())
+            .await
+            .is_ok());
+        handle.start_timer(2, Duration::from_millis(100)).await.unwrap();
+        handle.start_timer(2, Duration::from_millis(100)).await.unwrap();
+        handle.stop_timer(2).await.unwrap();
+        assert!(tokio::time::timeout(Duration::from_millis(300), handle.on_timeout())
             .await
             .is_err());
     }

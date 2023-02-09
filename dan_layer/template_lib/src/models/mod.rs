@@ -44,6 +44,9 @@ pub use non_fungible::{NonFungible, NonFungibleAddress, NonFungibleId};
 mod resource;
 pub use resource::ResourceAddress;
 
+mod system;
+pub use system::SystemAddress;
+
 mod template;
 pub use template::TemplateAddress;
 

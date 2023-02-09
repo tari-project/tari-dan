@@ -3,6 +3,7 @@
 
 use std::convert::TryFrom;
 
+use rand::rngs::OsRng;
 use serde::{Deserialize, Serialize};
 use tari_crypto::{
     keys::PublicKey as PublicKeyT,
@@ -16,11 +17,8 @@ use crate::{hashing::hasher, instruction::Instruction};
 pub struct InstructionSignature(RistrettoSchnorr);
 
 impl InstructionSignature {
-    pub fn sign(
-        secret_key: &RistrettoSecretKey,
-        secret_nonce: RistrettoSecretKey,
-        instructions: &[Instruction],
-    ) -> Self {
+    pub fn sign(secret_key: &RistrettoSecretKey, instructions: &[Instruction]) -> Self {
+        let (secret_nonce, _nonce_pk) = RistrettoPublicKey::random_keypair(&mut OsRng);
         let public_key = RistrettoPublicKey::from_secret_key(secret_key);
         let nonce_pk = RistrettoPublicKey::from_secret_key(&secret_nonce);
         // TODO: implement dan encoding for (a wrapper of) PublicKey

@@ -21,7 +21,7 @@
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 use log::*;
-use tari_common::exit_codes::ExitError;
+use tari_comms::connectivity::ConnectivityEvent;
 use tari_dan_core::workers::events::HotStuffEvent;
 use tari_shutdown::ShutdownSignal;
 use tari_template_lib::Hash;
@@ -39,16 +39,29 @@ impl DanNode {
         Self { services }
     }
 
-    pub async fn start(mut self, mut shutdown: ShutdownSignal) -> Result<(), ExitError> {
-        self.services.networking.announce().await?;
-
+    pub async fn start(mut self, mut shutdown: ShutdownSignal) -> Result<(), anyhow::Error> {
         let mut hotstuff_events = self.services.hotstuff_events.subscribe();
+
+        let mut connectivity_events = self.services.comms.connectivity().get_event_subscription();
+        let status = self.services.comms.connectivity().get_connectivity_status().await?;
+        if status.is_online() {
+            self.services.networking.announce().await?;
+        }
 
         loop {
             tokio::select! {
                 // Wait until killed
                 _ = shutdown.wait() => {
                      break;
+                },
+
+                Ok(event) = connectivity_events.recv() => {
+                    if let ConnectivityEvent::ConnectivityStateOnline(_) = event {
+                        // We're back online, announce
+                        if let Err(err) = self.services.networking.announce().await {
+                            error!(target: LOG_TARGET, "Failed to announce: {}", err);
+                        }
+                    }
                 },
 
                 Ok(event) = hotstuff_events.recv() => {

@@ -71,6 +71,14 @@ impl<TAddr: NodeAddressable> LeaderStrategy<TAddr> for AlwaysFirstLeader {
     }
 }
 
+pub struct RotatingLeader {}
+
+impl<TAddr: NodeAddressable> LeaderStrategy<TAddr> for RotatingLeader {
+    fn calculate_leader(&self, committee: &Committee<TAddr>, _payload: PayloadId, _shard: ShardId, round: u32) -> u32 {
+        round % (committee.len() as u32)
+    }
+}
+
 pub struct PayloadSpecificLeaderStrategy {}
 
 impl<TAddr: NodeAddressable> LeaderStrategy<TAddr> for PayloadSpecificLeaderStrategy {

@@ -63,19 +63,13 @@ pub fn generate_dispatcher(ast: &TemplateAst) -> Result<TokenStream> {
     Ok(output)
 }
 
-fn get_function_names(ast: &TemplateAst) -> Vec<String> {
-    ast.get_functions().iter().map(|f| f.name.clone()).collect()
+fn get_function_names(ast: &TemplateAst) -> impl Iterator<Item = String> + '_ {
+    ast.get_functions().map(|f| f.name)
 }
 
-fn get_function_blocks(ast: &TemplateAst) -> Vec<Expr> {
-    let mut blocks = vec![];
-
-    for function in ast.get_functions() {
-        let block = get_function_block(&ast.template_name, function);
-        blocks.push(block);
-    }
-
-    blocks
+fn get_function_blocks(ast: &TemplateAst) -> impl Iterator<Item = Expr> + '_ {
+    ast.get_functions()
+        .map(|function| get_function_block(&ast.template_name, function))
 }
 
 fn get_function_block(template_ident: &Ident, ast: FunctionAst) -> Expr {
@@ -103,13 +97,15 @@ fn get_function_block(template_ident: &Ident, ast: FunctionAst) -> Expr {
                 }
                 vec![
                     parse_quote! {
-                        let component =
-                            decode_exact::<::tari_template_lib::models::ComponentHeader>(&call_info.args[#i])
-                            .unwrap_or_else(|e| panic!("failed to decode component instance for function '{}': {}",  #func_name, e));
+                    let component_address =
+                        decode_exact::<::tari_template_lib::models::ComponentAddress>(&call_info.args[#i])
+                        .unwrap_or_else(|e| panic!("failed to decode component instance for function '{}': {}",  #func_name, e));
                     },
                     parse_quote! {
-                        let mut state = decode_exact::<#template_mod_name::#template_ident>(&component.state())
-                            .unwrap_or_else(|e| panic!("failed to decode component for function '{}': {}", #func_name, e));
+                        let component_manager = engine().component_manager(component_address);
+                    },
+                    parse_quote! {
+                        let mut state = component_manager.get_state::<#template_mod_name::#template_ident>();
                     },
                 ]
             },
@@ -139,7 +135,7 @@ fn get_function_block(template_ident: &Ident, ast: FunctionAst) -> Expr {
     });
 
     // replace "Self" if present in the return value
-    stmts.append(&mut replace_self_in_output(template_ident, &ast));
+    stmts.extend(replace_self_in_output(template_ident, &ast));
 
     // encode the result value
     stmts.push(parse_quote! {
@@ -149,7 +145,7 @@ fn get_function_block(template_ident: &Ident, ast: FunctionAst) -> Expr {
     // after user function invocation, update the component state
     if should_set_state {
         stmts.push(parse_quote! {
-            engine().set_component_state(*component.address(), state);
+            component_manager.set_state(state);
         });
     }
 
@@ -191,8 +187,9 @@ fn replace_self_in_single_value(template_ident: &Ident, type_path: &TypePath) ->
     let type_ident = &type_path.path.segments[0].ident;
 
     if type_ident == "Self" {
+        // TODO: AccessRules - currently we allow all calls for functions that return Self.
         return Some(parse_quote! {
-            let rtn = engine().instantiate(#template_name_str.to_string(), rtn);
+            let rtn = engine().create_component(#template_name_str.to_string(), rtn, ::tari_template_lib::auth::AccessRules::with_default_allow());
         });
     }
 
@@ -202,7 +199,7 @@ fn replace_self_in_single_value(template_ident: &Ident, type_path: &TypePath) ->
 fn replace_self_in_tuple(template_ident: &Ident, type_tuple: &TypeTuple) -> Stmt {
     let template_name_str = template_ident.to_string();
 
-    // build the expresions for each element in the tuple
+    // build the expressions for each element in the tuple
     let elems: Vec<Expr> = type_tuple
         .elems
         .iter()
@@ -212,8 +209,9 @@ fn replace_self_in_tuple(template_ident: &Ident, type_tuple: &TypeTuple) -> Stmt
                 let ident = path.path.segments[0].ident.clone();
                 let field_expr = build_tuple_field_expr("rtn".to_string(), i as u32);
                 if ident == "Self" {
+                    // TODO: AccessRules - currently we allow all calls for functions that return Self. 
                     parse_quote! {
-                        engine().instantiate(#template_name_str.to_string(), #field_expr)
+                        engine().create_component(#template_name_str.to_string(), #field_expr, ::tari_template_lib::auth::AccessRules::with_default_allow())
                     }
                 } else {
                     field_expr

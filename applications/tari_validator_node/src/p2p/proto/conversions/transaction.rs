@@ -28,10 +28,10 @@ use std::{
 use anyhow::anyhow;
 use tari_common_types::types::{PublicKey, Signature};
 use tari_crypto::tari_utilities::ByteArray;
-use tari_dan_common_types::{ObjectClaim, ShardId, SubstateChange};
-use tari_dan_engine::transaction::{Transaction, TransactionMeta};
+use tari_dan_common_types::ShardId;
 use tari_engine_types::instruction::Instruction;
 use tari_template_lib::{args::Arg, Hash};
+use tari_transaction::{ObjectClaim, SubstateChange, Transaction, TransactionMeta};
 
 use crate::p2p::proto;
 
@@ -148,7 +148,7 @@ impl From<tari_engine_types::instruction::Instruction> for proto::transaction::I
                 args,
             } => {
                 result.instruction_type = 1;
-                result.component_address = component_address.to_vec();
+                result.component_address = component_address.as_bytes().to_vec();
                 result.method = method;
                 result.args = args.into_iter().map(|a| a.into()).collect();
             },

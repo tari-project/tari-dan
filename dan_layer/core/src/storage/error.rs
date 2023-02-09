@@ -49,6 +49,7 @@ pub enum StorageError {
     #[error("File system path does not exist")]
     FileSystemPathDoesNotExist,
     #[error("Failed data decoding")]
+    // TODO: Add more details
     DecodingError,
     #[error("Failed data encoding")]
     EncodingError,

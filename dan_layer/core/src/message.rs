@@ -23,9 +23,12 @@
 use serde::Serialize;
 use tari_comms::{multiaddr::Multiaddr, peer_manager::IdentitySignature};
 use tari_dan_common_types::NodeAddressable;
-use tari_dan_engine::transaction::Transaction;
+use tari_transaction::Transaction;
 
-use crate::models::{vote_message::VoteMessage, HotStuffMessage};
+use crate::{
+    models::{vote_message::VoteMessage, HotStuffMessage},
+    workers::hotstuff_waiter::RecoveryMessage,
+};
 
 #[derive(Debug, Clone, Serialize)]
 pub enum DanMessage<TPayload, TAddr> {
@@ -36,6 +39,8 @@ pub enum DanMessage<TPayload, TAddr> {
     NewTransaction(Box<Transaction>),
     // Network
     NetworkAnnounce(Box<NetworkAnnounce<TAddr>>),
+    // Recovery
+    RecoveryMessage(Box<RecoveryMessage>),
 }
 
 impl<TPayload, TAddr: NodeAddressable> DanMessage<TPayload, TAddr> {
@@ -45,6 +50,7 @@ impl<TPayload, TAddr: NodeAddressable> DanMessage<TPayload, TAddr> {
             Self::VoteMessage(_) => "VoteMessage",
             Self::NewTransaction(_) => "NewTransaction",
             Self::NetworkAnnounce(_) => "NetworkAnnounce",
+            Self::RecoveryMessage(_) => "RecoveryMessage",
         }
     }
 
@@ -54,6 +60,7 @@ impl<TPayload, TAddr: NodeAddressable> DanMessage<TPayload, TAddr> {
             Self::VoteMessage(msg) => format!("node_{}", msg.local_node_hash()),
             Self::NewTransaction(tx) => format!("hash_{}", tx.hash()),
             Self::NetworkAnnounce(msg) => format!("pk_{}", msg.identity),
+            Self::RecoveryMessage(msg) => format!("recovery_{:?}", msg),
         }
     }
 }
