@@ -20,13 +20,9 @@
 //   WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //   USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-pub mod base_node;
-mod helpers;
-pub mod http_server;
-pub mod indexer;
-pub mod logging;
-pub mod miner;
-pub mod template;
-pub mod validator_node;
-pub mod validator_node_cli;
-pub mod wallet;
+use serde::{Deserialize, Serialize};
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct GetStatusResponse {
+    addresses: Vec<String>,
+}

@@ -6287,6 +6287,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "tari_indexer_client"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "reqwest",
+ "serde",
+ "serde_json",
+ "tari_common_types",
+ "tari_comms_logging",
+ "tari_dan_common_types",
+ "tari_engine_types",
+]
+
+[[package]]
 name = "tari_key_manager"
 version = "0.44.1"
 source = "git+https://github.com/tari-project/tari.git?branch=development#5f7f04b599ab49765466fb7e0faa37e2dfec4afe"
@@ -6580,6 +6594,8 @@ dependencies = [
  "tari_dan_storage",
  "tari_dan_storage_sqlite",
  "tari_engine_types",
+ "tari_indexer",
+ "tari_indexer_client",
  "tari_mmr",
  "tari_p2p",
  "tari_shutdown",

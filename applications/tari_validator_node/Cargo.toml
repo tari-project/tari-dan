@@ -82,6 +82,8 @@ tari_comms_dht = { git = "https://github.com/tari-project/tari.git", branch = "d
 tari_wallet = { git = "https://github.com/tari-project/tari.git", branch = "development", package = "tari_wallet" }
 tari_validator_node_cli = { path = "../tari_validator_node_cli" }
 tari_transaction_manifest = { path = "../../dan_layer/transaction_manifest" }
+tari_indexer = { path = "../tari_indexer" }
+tari_indexer_client = { path = "../../clients/tari_indexer_client" }
 #env_logger = "0.9.0"
 httpmock = "0.6.7"
 indexmap = "1.9.1"

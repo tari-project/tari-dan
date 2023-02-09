@@ -47,11 +47,13 @@ use tari_crypto::tari_utilities::hex::Hex;
 use tari_dan_common_types::QuorumDecision;
 use tari_dan_core::services::BaseNodeClient;
 use tari_engine_types::execution_result::Type;
+use tari_indexer_client::types::GetStatusResponse;
 use tari_template_lib::Hash;
 use tari_validator_node::GrpcBaseNodeClient;
 use tari_validator_node_cli::versioned_substate_address::VersionedSubstateAddress;
 use tari_validator_node_client::types::{GetIdentityResponse, GetTemplateRequest, TemplateRegistrationResponse};
 use utils::{
+    indexer::spawn_indexer,
     miner::{mine_blocks, register_miner_process},
     validator_node::spawn_validator_node,
     validator_node_cli,
@@ -61,6 +63,7 @@ use utils::{
 use crate::utils::{
     base_node::{get_base_node_client, spawn_base_node, BaseNodeProcess},
     http_server::MockHttpServer,
+    indexer::{get_indexer_client, IndexerProcess},
     logging::create_log_config_file,
     miner::MinerProcess,
     template::{send_template_registration, RegisteredTemplate},
@@ -73,6 +76,7 @@ pub struct TariWorld {
     base_nodes: IndexMap<String, BaseNodeProcess>,
     wallets: IndexMap<String, WalletProcess>,
     validator_nodes: IndexMap<String, ValidatorNodeProcess>,
+    indexers: IndexMap<String, IndexerProcess>,
     miners: IndexMap<String, MinerProcess>,
     templates: IndexMap<String, RegisteredTemplate>,
     outputs: IndexMap<String, IndexMap<String, VersionedSubstateAddress>>,
@@ -163,6 +167,11 @@ async fn start_base_node(world: &mut TariWorld, bn_name: String) {
 #[given(expr = "a validator node {word} connected to base node {word} and wallet {word}")]
 async fn start_validator_node(world: &mut TariWorld, vn_name: String, bn_name: String, wallet_name: String) {
     spawn_validator_node(world, vn_name, bn_name, wallet_name).await;
+}
+
+#[given(expr = "an indexer {word} connected to base node {word}")]
+async fn start_indexer(world: &mut TariWorld, indexer_name: String, bn_name: String) {
+    spawn_indexer(world, indexer_name, bn_name).await;
 }
 
 #[when(expr = "validator node {word} sends a registration transaction")]
@@ -389,6 +398,15 @@ fn wrap_manifest_in_main(world: &TariWorld, contents: &str) -> String {
         format!("{}\nuse template_{} as {};", acc, template.address, name)
     });
     format!("{} fn main() {{ {} }}", template_defs, contents)
+}
+
+#[then(expr = "the indexer {word} is connected")]
+async fn assert_indexer_is_connected(world: &mut TariWorld, indexer_name: String) {
+    let jrpc_port = world.indexers.get(&indexer_name).unwrap().json_rpc_port;
+    let mut client = get_indexer_client(jrpc_port).await;
+    let status: GetStatusResponse = client.get_status().await.unwrap();
+
+    eprintln!("Indexer GetStatusResponse: {:?}", status);
 }
 
 #[when(expr = "I wait {int} seconds")]
