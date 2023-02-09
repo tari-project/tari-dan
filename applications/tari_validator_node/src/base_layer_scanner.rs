@@ -347,7 +347,7 @@ impl BaseLayerScanner {
         let substate = Substate::new(
             address.clone(),
             0,
-            SubstateValue::LayerOneCommitment(commitment.clone()),
+            SubstateValue::LayerOneCommitment(commitment.as_bytes().to_vec()),
         );
         self.shard_store
             .with_write_tx(|tx| tx.save_burnt_utxo(&substate, ShardId::from_address(&address, 0)))

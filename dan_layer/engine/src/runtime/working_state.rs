@@ -3,6 +3,7 @@
 
 use std::collections::HashMap;
 
+use tari_common_types::types::Commitment;
 use tari_dan_common_types::optional::Optional;
 use tari_engine_types::{
     bucket::Bucket,
@@ -12,7 +13,15 @@ use tari_engine_types::{
     substate::{Substate, SubstateAddress},
     vault::Vault,
 };
-use tari_template_lib::models::{BucketId, ComponentAddress, ComponentHeader, NonFungibleId, ResourceAddress, VaultId};
+use tari_template_lib::models::{
+    BucketId,
+    ComponentAddress,
+    ComponentHeader,
+    LayerOneCommitmentAddress,
+    NonFungibleId,
+    ResourceAddress,
+    VaultId,
+};
 
 use crate::{
     runtime::{RuntimeError, RuntimeState, TransactionCommitError},
@@ -28,6 +37,7 @@ pub(super) struct WorkingState {
     pub new_components: HashMap<ComponentAddress, ComponentHeader>,
     pub new_vaults: HashMap<VaultId, Vault>,
     pub new_non_fungibles: HashMap<(ResourceAddress, NonFungibleId), NonFungibleContainer>,
+    pub claimed_layer_one_commitments: Vec<LayerOneCommitmentAddress>,
 
     pub runtime_state: Option<RuntimeState>,
     pub last_instruction_output: Option<Vec<u8>>,
@@ -44,6 +54,7 @@ impl WorkingState {
             new_components: HashMap::new(),
             new_vaults: HashMap::new(),
             new_non_fungibles: HashMap::new(),
+            claimed_layer_one_commitments: Vec::new(),
             runtime_state: None,
             last_instruction_output: None,
             workspace: HashMap::new(),
@@ -114,6 +125,26 @@ impl WorkingState {
                     .expect("Substate was not a component type at component address"))
             },
         }
+    }
+
+    pub fn get_layer_one_commitment(&self, addr: &LayerOneCommitmentAddress) -> Result<Commitment, RuntimeError> {
+        let tx = self.state_store.read_access()?;
+        let value = tx
+            .get_state::<_, Substate>(&SubstateAddress::LayerOneCommitment(*addr))
+            .optional()?
+            .ok_or(RuntimeError::LayerOneCommitmentNotFound { address: *addr })?;
+        Ok(value
+            .into_substate_value()
+            .into_layer_one_commitment()
+            .expect("Substate was not a layer one commitment at layer one commitment address"))
+    }
+
+    pub fn claim_layer_one_commitment(&mut self, addr: &LayerOneCommitmentAddress) -> Result<(), RuntimeError> {
+        if self.claimed_layer_one_commitments.contains(addr) {
+            return Err(RuntimeError::LayerOneCommitmentAlreadyClaimed { address: *addr });
+        }
+        self.claimed_layer_one_commitments.push(*addr);
+        Ok(())
     }
 
     pub fn with_non_fungible_mut<R, F: FnOnce(&mut NonFungibleContainer) -> Result<R, RuntimeError>>(

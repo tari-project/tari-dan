@@ -22,6 +22,7 @@
 
 use std::collections::BTreeSet;
 
+use log::warn;
 use tari_bor::decode;
 use tari_common_types::types::{BulletRangeProof, Commitment};
 use tari_crypto::{
@@ -73,9 +74,11 @@ use tari_template_lib::{
         VaultRef,
     },
 };
-use tari_utilities::ByteArray;
+use tari_utilities::{hex::Hex, ByteArray};
 
 use crate::runtime::{engine_args::EngineArgs, tracker::StateTracker, RuntimeError, RuntimeInterface, RuntimeState};
+
+const LOG_TARGET: &str = "tari::dan::engine::runtime::impl";
 
 #[derive(Debug, Clone)]
 pub struct RuntimeInterfaceImpl {
@@ -491,31 +494,43 @@ impl RuntimeInterface for RuntimeInterfaceImpl {
         range_proof: BulletRangeProof,
         owner_sig: RistrettoComSig,
     ) -> Result<(), RuntimeError> {
+        warn!(
+            target: LOG_TARGET,
+            "Claiming burn for commitment {}", commitment_address
+        );
         // TODO: this should a domain hash of the commitment
         // 1. Must exist
         let commitment = self.tracker.take_layer_one_commitment(commitment_address)?;
-
+        warn!(target: LOG_TARGET, "Commitment is {}", commitment.to_hex());
         // 2. owner_sig must be valid
         // TODO: Probably want a better challenge
         let factory = PedersenCommitmentFactory::default();
-        let challenge = [1u8; 32];
+        let challenge =
         if !owner_sig.verify(
             &commitment,
             &RistrettoSecretKey::from_bytes(&challenge).expect("todo"),
             &factory,
         ) {
+            warn!(target: LOG_TARGET, "Claim burn failed - Invalid signature");
             return Err(RuntimeError::InvalidClaimingSignature);
         }
+
+        dbg!("signature correct");
 
         // 3. range_proof must be valid
         let range_proof_service = BulletproofsPlusService::init(64, 1, ExtendedPedersenCommitmentFactory::default())
             .expect("Failed to init range proof service");
 
         if !range_proof_service.verify(&range_proof.0, &commitment) {
+            warn!(target: LOG_TARGET, "Claim burn failed - Invalid range proof");
             return Err(RuntimeError::InvalidRangeProof);
         }
 
+        dbg!("range proof correct");
         let confidential_bucket = ConfidentialBucket::new(commitment, range_proof);
+
+        dbg!(&confidential_bucket);
+
         self.tracker.new_confidential_bucket(confidential_bucket)?;
 
         // TODO: Down the old state

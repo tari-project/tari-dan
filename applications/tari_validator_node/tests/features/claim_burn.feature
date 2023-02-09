@@ -26,7 +26,7 @@ Feature: Claim Burn
 
         # A file-base CLI account must be created to sign future calls
     When I create a DAN wallet
-    When I create a component SECOND_LAYER_TARI of template "fees" on VN using "new"
+#    When I create a component SECOND_LAYER_TARI of template "fees" on VN using "new"
     When I create an account ACC_1 on VN
 #    When I submit a transaction manifest on VN with inputs "COMM_ADDRESS, ACC_1" and 3 outputs named "TX1"
 #  ```
@@ -38,6 +38,6 @@ Feature: Claim Burn
 #    //let faucet_bucket = faucet.take_free_coins();
 #    acc1.deposit(confidential_bucket);
 #  ```
-
+    When I save the state database of VN
     When I claim burn COMMITMENT with PROOF and RANGEPROOF and spend it into account ACC_1 on VN
     # Then account ACC_1 has one confidential bucket in it

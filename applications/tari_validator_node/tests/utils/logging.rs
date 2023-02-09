@@ -23,3 +23,8 @@ pub fn create_log_config_file() -> PathBuf {
     fs::write(&log_config, contents).unwrap();
     log_config
 }
+
+pub fn get_base_dir() -> PathBuf {
+    let crate_root = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    crate_root.join(format!("tests/temp/cucumber_{}", process::id()))
+}

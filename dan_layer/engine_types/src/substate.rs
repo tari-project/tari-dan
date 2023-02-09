@@ -318,6 +318,16 @@ impl SubstateValue {
             _ => None,
         }
     }
+
+    pub fn into_layer_one_commitment(self) -> Option<Commitment> {
+        match self {
+            SubstateValue::LayerOneCommitment(commitment) => Some(
+                Commitment::from_bytes(&commitment)
+                    .expect("Should never fail to parse commitment, because it's saved from the db"),
+            ),
+            _ => None,
+        }
+    }
 }
 
 impl From<ComponentHeader> for SubstateValue {

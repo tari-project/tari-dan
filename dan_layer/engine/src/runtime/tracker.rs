@@ -298,21 +298,12 @@ impl StateTracker {
         &self,
         commitment_address: LayerOneCommitmentAddress,
     ) -> Result<Commitment, RuntimeError> {
-        todo!()
-        // self.write_with(|state| {
-        //     let substate: Substate = self
-        //         .state_store
-        //         .read_access()?
-        //         .get_state(&SubstateAddress::LayerOneCommitment(commitment_address))?;
-        //
-        //     match substate.substate_value() {
-        //         SubstateValue::LayerOneCommitment(commitment) => {
-        //             state.claimed_layer_one_commitments.push(commitment_address);
-        //             Ok(commitment.clone())
-        //         },
-        //         _ => Err(RuntimeError::InvalidSubstateType),
-        //     }
-        // })
+        self.write_with(|state| {
+            let commitment = state.get_layer_one_commitment(&commitment_address)?;
+
+            state.claim_layer_one_commitment(&commitment_address);
+            Ok(commitment)
+        })
     }
 
     pub fn new_confidential_bucket(&self, bucket: ConfidentialBucket) -> Result<ConfidentialBucketId, RuntimeError> {

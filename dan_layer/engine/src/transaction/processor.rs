@@ -20,17 +20,26 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use std::sync::Arc;
+use std::{convert::TryFrom, sync::Arc};
 
 use log::*;
+use tari_common_types::types::{BulletRangeProof, Commitment};
+use tari_crypto::{
+    ristretto::{RistrettoComSig, RistrettoPublicKey, RistrettoSecretKey},
+    signatures::CommitmentSignature,
+};
 use tari_engine_types::{commit_result::FinalizeResult, execution_result::ExecutionResult, instruction::Instruction};
 use tari_template_lib::{
     arg,
     args::{Arg, WorkspaceAction},
     invoke_args,
+    models::LayerOneCommitmentAddress,
+    Hash,
 };
+use tari_utilities::ByteArray;
 
 use crate::{
+    function_definitions::ArgType::PublicKey,
     packager::{LoadedTemplate, Package},
     runtime::{Runtime, RuntimeInterface, RuntimeState},
     traits::Invokable,
@@ -136,9 +145,17 @@ where TRuntimeInterface: RuntimeInterface + Clone + 'static
                 // todo: Check signature. Where should that fail?
 
                 // Need to call it on the runtime so that a bucket is created.
-                runtime
-                    .interface()
-                    .claim_burn(commitment_address, range_proof, proof_of_knowledge)?;
+                runtime.interface().claim_burn(
+                    LayerOneCommitmentAddress::new(Hash::try_from_vec(commitment_address).unwrap()),
+                    BulletRangeProof(range_proof),
+                    RistrettoComSig::new(
+                        Commitment::from_public_key(
+                            &RistrettoPublicKey::from_bytes(&proof_of_knowledge[0..32]).unwrap(),
+                        ),
+                        RistrettoSecretKey::from_bytes(&proof_of_knowledge[32..64]).unwrap(),
+                        RistrettoSecretKey::from_bytes(&proof_of_knowledge[64..96]).unwrap(),
+                    ),
+                )?;
                 Ok(ExecutionResult::empty())
             },
         }

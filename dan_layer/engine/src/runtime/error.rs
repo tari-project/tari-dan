@@ -25,7 +25,15 @@ use std::{fmt::Display, io};
 use anyhow::anyhow;
 use tari_dan_common_types::optional::IsNotFoundError;
 use tari_engine_types::{resource_container::ResourceError, substate::SubstateAddress};
-use tari_template_lib::models::{Amount, BucketId, ComponentAddress, NonFungibleId, ResourceAddress, VaultId};
+use tari_template_lib::models::{
+    Amount,
+    BucketId,
+    ComponentAddress,
+    LayerOneCommitmentAddress,
+    NonFungibleId,
+    ResourceAddress,
+    VaultId,
+};
 
 use crate::{runtime::id_provider::MaxIdsExceeded, state_store::StateStoreError};
 
@@ -41,6 +49,8 @@ pub enum RuntimeError {
     SubstateNotFound { address: SubstateAddress },
     #[error("Component not found with address '{address}'")]
     ComponentNotFound { address: ComponentAddress },
+    #[error("Layer one commitment not found with address '{address}'")]
+    LayerOneCommitmentNotFound { address: LayerOneCommitmentAddress },
     #[error("Invalid argument {argument}: {reason}")]
     InvalidArgument { argument: &'static str, reason: String },
     #[error("Invalid amount '{amount}': {reason}")]
@@ -86,6 +96,8 @@ pub enum RuntimeError {
     InvalidRangeProof,
     #[error("Invalid substate type")]
     InvalidSubstateType,
+    #[error("Layer one commitment already claimed with address '{address}'")]
+    LayerOneCommitmentAlreadyClaimed { address: LayerOneCommitmentAddress },
 }
 
 impl RuntimeError {

@@ -27,6 +27,7 @@ use std::{
     convert::{Infallible, TryFrom},
     future,
     io,
+    path::Path,
     time::Duration,
 };
 
@@ -61,7 +62,7 @@ use utils::{
 use crate::utils::{
     base_node::{get_base_node_client, spawn_base_node, BaseNodeProcess},
     http_server::MockHttpServer,
-    logging::create_log_config_file,
+    logging::{create_log_config_file, get_base_dir},
     miner::MinerProcess,
     template::{send_template_registration, RegisteredTemplate},
     validator_node::{get_vn_client, ValidatorNodeProcess},
@@ -83,6 +84,7 @@ pub struct TariWorld {
     commitment_ownership_proofs: IndexMap<String, Vec<u8>>,
     rangeproofs: IndexMap<String, Vec<u8>>,
     addresses: IndexMap<String, String>,
+    num_databases_saved: usize,
 }
 
 impl TariWorld {
@@ -404,7 +406,7 @@ async fn print_world(world: &mut TariWorld) {
     // vns
     for (name, node) in world.validator_nodes.iter() {
         eprintln!(
-            "Validator node \"{}\": json rpc port \"{}\", http ui port \"{}\", temp dir path \"{}\"",
+            "Validator node \"{}\": json rpc port \"{}\", http ui port \"{}\", temp dir path \"{:?}\"",
             name, node.json_rpc_port, node.http_ui_port, node.temp_dir_path
         );
     }
@@ -425,4 +427,27 @@ async fn print_world(world: &mut TariWorld) {
     eprintln!();
     eprintln!("======================================");
     eprintln!();
+}
+
+#[when(expr = "I save the {word} database of {word}")]
+async fn when_i_save_the_database(world: &mut TariWorld, database_name: String, validator_name: String) {
+    let validator = world
+        .validator_nodes
+        .get(&validator_name)
+        .expect("validator node not found");
+    validator
+        .save_database(
+            database_name,
+            get_base_dir()
+                .join(
+                    world
+                        .current_scenario_name
+                        .as_ref()
+                        .unwrap_or(&"unknown_step".to_string()),
+                )
+                .join(format!("save_no_{}", world.num_databases_saved))
+                .as_path(),
+        )
+        .await;
+    world.num_databases_saved += 1;
 }
