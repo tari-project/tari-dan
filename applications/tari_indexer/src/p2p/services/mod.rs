@@ -22,5 +22,6 @@
 
 #![allow(dead_code)]
 
+pub mod comms_peer_provider;
 pub mod epoch_manager;
 pub mod rpc_client;
