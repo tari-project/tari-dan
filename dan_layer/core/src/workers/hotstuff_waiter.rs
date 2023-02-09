@@ -148,10 +148,10 @@ pub struct HotStuffWaiter<
     /// Network latency
     #[allow(dead_code)]
     network_latency: Duration,
-    // We store what round is for next leader selection, default is 0.
+    /// We store what round is for next leader selection, default is 0.
     current_leader_round: HashMap<(ShardId, PayloadId), u32>,
-    // We have to store if we are in the middle of an election, so that when someone sends a recovery message, we can
-    // responde that we are voting and he should wait.
+    /// We have to store if we are in the middle of an election, so that when we receive a recovery message
+    /// from another VN, we can answer that we are electing and it should wait.
     election_in_progress: HashSet<(ShardId, PayloadId)>,
 }
 
@@ -613,9 +613,13 @@ where
         payload_id: PayloadId,
         shard_id: ShardId,
     ) -> Result<(), HotStuffError> {
-        // TODO: We should check if this is triggered second time. If that's the case, then foreign committee didn't
-        // responded to our first recovery request. So they probably can't reach consensus and this transaction should
-        // be thrown away.
+        // TODO: If the pacemaker is triggered a second time for the same (epoch, shard_id, payload_id),
+        // means that the the second message request (on f + 1 node messages, from the foreign committee)
+        // didn't receive a response. This is possibly due to a lack of local consensus on the foreign committee
+        // (e.g., malformed transaction, etc). In this case, the honest 2f + 1 honest replicas in the foreign
+        // committee will reject the Payload and broadcast their decision to all involved shards, including ours.
+        // Therefore, on the call of `on_receive_proposal`, we will also reject this Payload. Summarizing, we
+        // shouldn't need to add further logic in the current method to deal with a second pacemaker trigger.
 
         // The foreign leader failed to send a proposal. Let's check what's going on in the
         // foreign committee. We will asks f+1 nodes, so that at least one of the should be honest, so if the
@@ -652,8 +656,8 @@ where
         Ok(())
     }
 
-    // Sender is asking if we have anything newer that he has from our local leader. That means that he didn't
-    // received response from our leader maybe there is nothing.
+    // Sender asks if there is a newer local state, that he is not in possession of. This means that Sender didn't
+    // receive a response from our local leader. In this case, we might be in the presence of a faulty leader
     async fn on_receive_missing_proposal(
         &self,
         from: TAddr,
@@ -662,18 +666,53 @@ where
         payload_id: PayloadId,
         last_height: NodeHeight,
     ) -> Result<(), HotStuffError> {
-        // TODO maybe we should check that `from` is from someone from any committee on this transaction.
+        // If the current replica has not stored the payload, we simply don't do anything else and return
+        let payload = match self.shard_store.create_read_tx()?.get_payload(&payload_id).optional()? {
+            Some(payload) => payload,
+            None => {
+                info!(
+                    target: LOG_TARGET,
+                    "Payload = {} is missing from node shard store", payload_id
+                );
+                return Ok(());
+            },
+        };
+
+        let involved_shards = payload.involved_shards();
+        let local_shards = self
+            .epoch_manager
+            .filter_to_local_shards(epoch, &from, involved_shards.as_ref())
+            .await?;
+
+        // if `from` doesn't belong to any shard involved in processing the current payload, we should ignore it
+        if local_shards.is_empty() {
+            info!(
+                target: LOG_TARGET,
+                "Missing proposal sent by node = {} which is not processing current payload = {}", from, payload_id
+            );
+            return Ok(());
+        }
+
         let leader_proposals =
             self.shard_store
                 .create_write_tx()?
                 .get_leader_proposals(payload_id, last_height + NodeHeight(1), &[shard_id]);
-        // We know the last payload, so we check if we have higher height
+        // We know the last payload, so we check if we have a higher height
         if let Ok(result) = leader_proposals {
             assert!(
                 result.len() <= 1,
                 "We can't have more than one proposal at certain height for one particular shard"
             );
-            // TODO: I should receive messages only for shard_id where I'm part of the committee.
+            let committee = self.epoch_manager.get_committee(epoch, shard_id).await?;
+            if !committee.contains(&self.public_key) {
+                info!(
+                    target: LOG_TARGET,
+                    "Current node with public key = {} is not involved in processing payload = {}",
+                    self.public_key,
+                    payload_id
+                );
+                return Err(HotStuffError::NodeIsNotInvolvedInPayload { payload_id });
+            }
             // Do we have such a node? If not, maybe our leader failed. So I don't send anything and this node will
             // receive its own pacemaker trigger as well.
             if let Some(node) = result.get(0) {
@@ -683,14 +722,14 @@ where
                     .send((from, HotStuffMessage::new_proposal(node.clone(), shard_id)))
                     .await?;
             } else {
-                // Maybe we are selecting a new leader right now.
+                // We check if we are electing a new leader, right now.
                 if self.election_in_progress.contains(&(shard_id, payload_id)) {
                     self.tx_recovery
                         .send((RecoveryMessage::ElectionInProgress(epoch, shard_id, payload_id), from))
                         .await?;
                 }
-                // If we don't send anything, that means the TX is invalid, this will also trigger invalid in all
-                // committees that are asking us for update.
+                // If we are not electing a new leader, then we don't send anything, that means the TX is invalid. This
+                // will also trigger invalid in all committees that are asking us for update.
             }
         }
         Ok(())
