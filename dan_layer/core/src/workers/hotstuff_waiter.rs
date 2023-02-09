@@ -56,6 +56,7 @@ use tokio::{
         broadcast,
         mpsc::{Receiver, Sender},
     },
+    task,
     task::JoinHandle,
 };
 
@@ -1101,7 +1102,8 @@ where
 
                     return Ok(finalize_result);
                 }
-                let finalize_result = match self.execute(payload, shard_pledges, node.epoch()) {
+                let finalize_result = match task::block_in_place(|| self.execute(payload, shard_pledges, node.epoch()))
+                {
                     Ok(finalize_result) => finalize_result,
                     Err(err) => FinalizeResult::reject(
                         payload_id.into_array().into(),
