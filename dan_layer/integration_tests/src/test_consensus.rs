@@ -36,11 +36,11 @@ use tari_crypto::{
     keys::PublicKey as PublicKeyT,
     ristretto::{RistrettoPublicKey, RistrettoSecretKey},
 };
-use tari_dan_common_types::{vn_mmr_node_hash, Epoch, NodeHeight, QuorumCertificate, QuorumDecision, ShardId};
+use tari_dan_common_types::{vn_mmr_node_hash, Epoch, QuorumCertificate, QuorumDecision, ShardId};
 use tari_dan_core::{
     models::{vote_message::VoteMessage, HotStuffMessage, HotstuffPhase, Payload, TariDanPayload},
     services::{
-        epoch_manager::{EpochManager, RangeEpochManager},
+        epoch_manager::RangeEpochManager,
         leader_strategy::{AlwaysFirstLeader, RotatingLeader},
         NodeIdentitySigningService,
     },
@@ -1161,13 +1161,13 @@ impl Committee {
         );
     }
 
-    pub fn get_previous_leader(&self) -> &RistrettoPublicKey {
-        self.previous_leader.as_ref().unwrap()
-    }
+    // pub fn get_previous_leader(&self) -> &RistrettoPublicKey {
+    //     self.previous_leader.as_ref().unwrap()
+    // }
 
-    pub fn get_current_leader(&self) -> &RistrettoPublicKey {
-        &self.shard_committee[0]
-    }
+    // pub fn get_current_leader(&self) -> &RistrettoPublicKey {
+    //     &self.shard_committee[0]
+    // }
 }
 
 pub struct Test {
@@ -1192,12 +1192,7 @@ impl Test {
         // Get all VNs keys flattened
         let registered_vn_keys = committees
             .iter()
-            .flat_map(|v| {
-                v.shard_committee
-                    .iter()
-                    .map(|public_key| public_key.clone())
-                    .collect::<Vec<_>>()
-            })
+            .flat_map(|v| v.shard_committee.to_vec())
             .collect::<Vec<_>>();
         let epoch_manager = RangeEpochManager::new_with_multiple(
             registered_vn_keys,
@@ -1226,37 +1221,37 @@ impl Test {
         Self { payload, committees }
     }
 
-    pub async fn remove_leader(&mut self, committee_id: usize) {
-        self.committees[committee_id].remove_leader();
-    }
+    // pub async fn remove_leader(&mut self, committee_id: usize) {
+    //     self.committees[committee_id].remove_leader();
+    // }
 
-    pub async fn send_tx_new_to_all(&mut self) {
-        let sent_payloads = timeout(
-            *TEN_SECONDS,
-            join_all(
-                self.committees
-                    .iter()
-                    .map(|committee| committee.send_tx_new(&self.payload))
-                    .collect::<Vec<_>>(),
-            ),
-        )
-        .await;
-        assert!(sent_payloads.is_ok(), "The payload should be send");
-    }
+    // pub async fn send_tx_new_to_all(&mut self) {
+    //     let sent_payloads = timeout(
+    //         *TEN_SECONDS,
+    //         join_all(
+    //             self.committees
+    //                 .iter()
+    //                 .map(|committee| committee.send_tx_new(&self.payload))
+    //                 .collect::<Vec<_>>(),
+    //         ),
+    //     )
+    //     .await;
+    //     assert!(sent_payloads.is_ok(), "The payload should be send");
+    // }
 
-    pub async fn receive_all_rx_leader(&mut self) -> Vec<Vec<HotStuffMessage<TariDanPayload, RistrettoPublicKey>>> {
-        timeout(
-            *TEN_SECONDS,
-            join_all(
-                self.committees
-                    .iter_mut()
-                    .map(|committee| committee.receive_rx_leader())
-                    .collect::<Vec<_>>(),
-            ),
-        )
-        .await
-        .unwrap()
-    }
+    // pub async fn receive_all_rx_leader(&mut self) -> Vec<Vec<HotStuffMessage<TariDanPayload, RistrettoPublicKey>>> {
+    //     timeout(
+    //         *TEN_SECONDS,
+    //         join_all(
+    //             self.committees
+    //                 .iter_mut()
+    //                 .map(|committee| committee.receive_rx_leader())
+    //                 .collect::<Vec<_>>(),
+    //         ),
+    //     )
+    //     .await
+    //     .unwrap()
+    // }
 
     // This is just for tests that use single committee to make it easier to read
     pub fn get_committee(&mut self, index: usize) -> Committee {

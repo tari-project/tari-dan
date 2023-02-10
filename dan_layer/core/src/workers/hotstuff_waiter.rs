@@ -524,10 +524,6 @@ where
             (node.height() == last_vote_height && node.leader_round() > last_leader_round)) &&
             (*node.parent() == locked_node || node.height() > locked_height)
         {
-            let local_shards = self
-                .epoch_manager
-                .filter_to_local_shards(node.epoch(), &self.public_key, &involved_shards)
-                .await?;
             let proposed_nodes = self.shard_store.with_write_tx(|tx| {
                 tx.save_node(node.clone())?;
                 tx.save_leader_proposals(
