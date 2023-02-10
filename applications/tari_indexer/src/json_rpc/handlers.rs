@@ -20,7 +20,7 @@
 //   WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //   USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use std::str::FromStr;
+use std::{convert::TryInto, str::FromStr};
 
 use axum_jrpc::{
     error::{JsonRpcError, JsonRpcErrorReason},
@@ -28,17 +28,26 @@ use axum_jrpc::{
     JsonRpcExtractor,
     JsonRpcResponse,
 };
+use futures::StreamExt;
+use log::info;
 use serde::Serialize;
 use serde_json::{self as json, json};
 use tari_comms::CommsNode;
-use tari_dan_common_types::ShardId;
-use tari_dan_core::services::{epoch_manager::EpochManager, BaseNodeClient};
+use tari_dan_common_types::{ShardId, SubstateState};
+use tari_dan_core::services::{epoch_manager::EpochManager, BaseNodeClient, ValidatorNodeClientFactory};
 use tari_dan_storage_sqlite::sqlite_shard_store_factory::SqliteShardStore;
-use tari_engine_types::substate::SubstateAddress;
+use tari_engine_types::substate::{Substate, SubstateAddress};
 
-use crate::{bootstrap::Services, p2p::services::epoch_manager::handle::EpochManagerHandle, GrpcBaseNodeClient};
+use crate::{
+    bootstrap::Services,
+    p2p::{
+        proto::rpc::VnStateSyncResponse,
+        services::{epoch_manager::handle::EpochManagerHandle, rpc_client::TariCommsValidatorNodeClientFactory},
+    },
+    GrpcBaseNodeClient,
+};
 
-const _LOG_TARGET: &str = "tari::indexer::json_rpc::handlers";
+const LOG_TARGET: &str = "tari::indexer::json_rpc::handlers";
 
 pub struct JsonRpcHandlers {
     addresses: Vec<SubstateAddress>,
@@ -46,6 +55,7 @@ pub struct JsonRpcHandlers {
     epoch_manager: EpochManagerHandle,
     _shard_store: SqliteShardStore,
     base_node_client: GrpcBaseNodeClient,
+    validator_node_client_factory: TariCommsValidatorNodeClientFactory,
 }
 
 impl JsonRpcHandlers {
@@ -56,6 +66,7 @@ impl JsonRpcHandlers {
             epoch_manager: services.epoch_manager.clone(),
             _shard_store: services.shard_store.clone(),
             base_node_client,
+            validator_node_client_factory: services.validator_node_client_factory.clone(),
         }
     }
 }
@@ -113,10 +124,65 @@ impl JsonRpcHandlers {
         let shard_id = ShardId::from_address(&substate_address, version);
 
         let epoch = self.epoch_manager.current_epoch().await.unwrap();
-        let response = self.epoch_manager.get_committee(epoch, shard_id).await.unwrap();
+        let committee = self.epoch_manager.get_committee(epoch, shard_id).await.unwrap();
 
-        Ok(JsonRpcResponse::success(answer_id, response))
+        for vn_public_key in committee.members {
+            // build a client with the VN
+            let mut sync_vn_client = self.validator_node_client_factory.create_client(&vn_public_key);
+            let mut sync_vn_rpc_client = sync_vn_client.create_connection().await.unwrap();
+
+            // request the shard substate to the VN
+            let shard_id_proto: crate::p2p::proto::common::ShardId = shard_id.into();
+            let request = crate::p2p::proto::rpc::VnStateSyncRequest {
+                start_shard_id: Some(shard_id_proto.clone()),
+                end_shard_id: Some(shard_id_proto),
+                inventory: vec![],
+            };
+
+            // get the VN's response
+            let mut vn_state_stream = match sync_vn_rpc_client.vn_state_sync(request).await {
+                Ok(stream) => stream,
+                Err(e) => {
+                    info!(target: LOG_TARGET, "Unable to connect to peer: {} ", e);
+                    // we do not stop when an indiviual VN does not respond, we try all VNs
+                    continue;
+                },
+            };
+
+            // return the substate from the response
+            if let Some(resp) = vn_state_stream.next().await {
+                let resp = resp.unwrap();
+                let state = extract_state_from_vn_sync_response(resp).unwrap();
+
+                return Ok(JsonRpcResponse::success(answer_id, state));
+            }
+        }
+
+        Err(JsonRpcResponse::error(
+            answer_id,
+            JsonRpcError::new(
+                JsonRpcErrorReason::InvalidParams,
+                "Could not retrieve the substate from the network".to_string(),
+                json::Value::Null,
+            ),
+        ))
     }
+}
+
+fn extract_state_from_vn_sync_response(msg: VnStateSyncResponse) -> Result<SubstateState, anyhow::Error> {
+    let state = if let Some(deleted_by) = Some(msg.destroyed_payload_id).filter(|p| !p.is_empty()) {
+        SubstateState::Down {
+            deleted_by: deleted_by.try_into()?,
+        }
+    } else {
+        let substate = Substate::from_bytes(&msg.substate)?;
+        SubstateState::Up {
+            created_by: msg.created_payload_id.try_into()?,
+            data: substate,
+        }
+    };
+
+    Ok(state)
 }
 
 #[derive(Serialize, Debug)]

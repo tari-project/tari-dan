@@ -116,6 +116,7 @@ pub async fn spawn_services(
         comms,
         epoch_manager,
         shard_store,
+        validator_node_client_factory,
     })
 }
 
@@ -123,6 +124,7 @@ pub struct Services {
     pub comms: CommsNode,
     pub epoch_manager: EpochManagerHandle,
     pub shard_store: SqliteShardStore,
+    pub validator_node_client_factory: TariCommsValidatorNodeClientFactory,
 }
 
 fn setup_p2p_rpc(
