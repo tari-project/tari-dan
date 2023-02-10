@@ -20,13 +20,24 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-import { useEffect, useState } from "react";
-import { getCommittee, getShardKey } from "../../../utils/json_rpc";
-import Committee from "./Committee";
-import { U256 } from "./helpers";
-import PropTypes from "prop-types";
+import { useEffect, useState } from 'react';
+import { getCommittee, getShardKey } from '../../../utils/json_rpc';
+import Committee from './Committee';
+import { U256 } from './helpers';
+import Table from '@mui/material/Table';
+import TableCell from '@mui/material/TableCell';
+import TableContainer from '@mui/material/TableContainer';
+import TableHead from '@mui/material/TableHead';
+import TableBody from '@mui/material/TableBody';
+import TableRow from '@mui/material/TableRow';
+import TablePagination from '@mui/material/TablePagination';
+import { Typography } from '@mui/material';
 
-async function get_all_committees(currentEpoch: number, shardKey: string, publicKey: string) {
+async function get_all_committees(
+  currentEpoch: number,
+  shardKey: string,
+  publicKey: string
+) {
   let shardKeyMap: { [id: string]: string } = { [publicKey]: shardKey };
   let committee = await getCommittee(currentEpoch, shardKey);
   if (committee?.committee?.members === undefined) {
@@ -40,14 +51,17 @@ async function get_all_committees(currentEpoch: number, shardKey: string, public
     nextCommittee.committee.members[nextCommittee.committee.members.length - 1]
   )) {
     if (!(member in shardKeyMap)) {
-      shardKeyMap[member] = (await getShardKey(currentEpoch * 10, member)).shard_key;
+      shardKeyMap[member] = (
+        await getShardKey(currentEpoch * 10, member)
+      ).shard_key;
     }
     if (lastMemberShardKey !== undefined) {
       let end = new U256(shardKeyMap[member]).dec();
       shardSpaces.push([
         lastMemberShardKey,
         end.n,
-        (await getCommittee(currentEpoch, lastMemberShardKey)).committee.members,
+        (await getCommittee(currentEpoch, lastMemberShardKey)).committee
+          .members,
       ]);
     }
     lastMemberShardKey = shardKeyMap[member];
@@ -65,7 +79,12 @@ function Committees({
   shardKey: string;
   publicKey: string;
 }) {
-  const [committees, setCommittees] = useState<Array<[string, string, Array<string>]>>([]);
+  const [committees, setCommittees] = useState<
+    Array<[string, string, Array<string>]>
+  >([]);
+  const [page, setPage] = useState(0);
+  const [rowsPerPage, setRowsPerPage] = useState(10);
+
   useEffect(() => {
     if (publicKey !== null) {
       get_all_committees(currentEpoch, shardKey, publicKey).then((response) => {
@@ -74,17 +93,66 @@ function Committees({
     }
   }, [currentEpoch, shardKey, publicKey]);
   if (!committees) {
-    return <div className="committees">Committees are loading</div>;
+    return <Typography>Committees are loading</Typography>;
   }
+
+  const emptyRows =
+    page > 0 ? Math.max(0, (1 + page) * rowsPerPage - committees.length) : 0;
+
+  const handleChangePage = (event: unknown, newPage: number) => {
+    setPage(newPage);
+  };
+
+  const handleChangeRowsPerPage = (
+    event: React.ChangeEvent<HTMLInputElement>
+  ) => {
+    setRowsPerPage(parseInt(event.target.value, 10));
+    setPage(0);
+  };
+
   return (
-    <div className="section">
-      <div className="caption">Committees</div>
-      <div className="committees">
-        {committees.map(([begin, end, committee]) => (
-          <Committee key={begin} begin={begin} end={end} members={committee} publicKey={publicKey} />
-        ))}
-      </div>
-    </div>
+    <>
+      <TableContainer>
+        <Table>
+          <TableHead>
+            <TableRow>
+              <TableCell>Range</TableCell>
+              <TableCell style={{ textAlign: 'center' }}>Members</TableCell>
+              {/* <TableCell style={{ textAlign: 'center' }}>Details</TableCell> */}
+            </TableRow>
+          </TableHead>
+          <TableBody>
+            {committees.map(([begin, end, committee]) => (
+              <Committee
+                key={begin}
+                begin={begin}
+                end={end}
+                members={committee}
+                publicKey={publicKey}
+              />
+            ))}
+            {emptyRows > 0 && (
+              <TableRow
+                style={{
+                  height: 67 * emptyRows,
+                }}
+              >
+                <TableCell colSpan={2} />
+              </TableRow>
+            )}
+          </TableBody>
+        </Table>
+        <TablePagination
+          rowsPerPageOptions={[10, 25, 50]}
+          component="div"
+          count={committees.length}
+          rowsPerPage={rowsPerPage}
+          page={page}
+          onPageChange={handleChangePage}
+          onRowsPerPageChange={handleChangeRowsPerPage}
+        />
+      </TableContainer>
+    </>
   );
 }
 
