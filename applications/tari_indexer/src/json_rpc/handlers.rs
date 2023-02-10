@@ -20,19 +20,38 @@
 //   WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //   USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use axum_jrpc::{JrpcResult, JsonRpcExtractor, JsonRpcResponse};
+use axum_jrpc::{
+    error::{JsonRpcError, JsonRpcErrorReason},
+    JrpcResult,
+    JsonRpcExtractor,
+    JsonRpcResponse,
+};
 use serde::Serialize;
+use serde_json::{self as json, json};
+use tari_comms::CommsNode;
+use tari_dan_core::services::BaseNodeClient;
+use tari_dan_storage_sqlite::sqlite_shard_store_factory::SqliteShardStore;
 use tari_engine_types::substate::SubstateAddress;
+
+use crate::{bootstrap::Services, GrpcBaseNodeClient};
 
 const _LOG_TARGET: &str = "tari::indexer::json_rpc::handlers";
 
 pub struct JsonRpcHandlers {
     addresses: Vec<SubstateAddress>,
+    comms: CommsNode,
+    _shard_store: SqliteShardStore,
+    base_node_client: GrpcBaseNodeClient,
 }
 
 impl JsonRpcHandlers {
-    pub fn new(addresses: Vec<SubstateAddress>) -> Self {
-        Self { addresses }
+    pub fn new(addresses: Vec<SubstateAddress>, services: &Services, base_node_client: GrpcBaseNodeClient) -> Self {
+        Self {
+            addresses,
+            comms: services.comms.clone(),
+            _shard_store: services.shard_store.clone(),
+            base_node_client,
+        }
     }
 }
 
@@ -44,6 +63,41 @@ impl JsonRpcHandlers {
         };
 
         Ok(JsonRpcResponse::success(answer_id, response))
+    }
+
+    pub async fn get_all_vns(&self, value: JsonRpcExtractor) -> JrpcResult {
+        let answer_id = value.get_answer_id();
+        let epoch: u64 = value.parse_params()?;
+        if let Ok(vns) = self.base_node_client.clone().get_validator_nodes(epoch * 10).await {
+            let response = json!({ "vns": vns });
+            Ok(JsonRpcResponse::success(answer_id, response))
+        } else {
+            Err(JsonRpcResponse::error(
+                answer_id,
+                JsonRpcError::new(
+                    JsonRpcErrorReason::InvalidParams,
+                    "Something went wrong".to_string(),
+                    json::Value::Null,
+                ),
+            ))
+        }
+    }
+
+    pub async fn get_comms_stats(&self, value: JsonRpcExtractor) -> JrpcResult {
+        let answer_id = value.get_answer_id();
+        if let Ok(stats) = self.comms.connectivity().get_connectivity_status().await {
+            let response = json!({ "connection_status": format!("{:?}", stats) });
+            Ok(JsonRpcResponse::success(answer_id, response))
+        } else {
+            Err(JsonRpcResponse::error(
+                answer_id,
+                JsonRpcError::new(
+                    JsonRpcErrorReason::InvalidParams,
+                    "Something went wrong".to_string(),
+                    json::Value::Null,
+                ),
+            ))
+        }
     }
 }
 

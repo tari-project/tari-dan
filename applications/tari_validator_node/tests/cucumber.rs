@@ -404,8 +404,8 @@ async fn start_indexer(world: &mut TariWorld, indexer_name: String, bn_name: Str
 async fn assert_indexer_is_connected(world: &mut TariWorld, indexer_name: String) {
     let jrpc_port = world.indexers.get(&indexer_name).unwrap().json_rpc_port;
     let mut client = get_indexer_client(jrpc_port).await;
+    
     let status: GetStatusResponse = client.get_status().await.unwrap();
-
     eprintln!("Indexer GetStatusResponse: {:?}", status);
 }
 
@@ -445,6 +445,15 @@ async fn print_world(world: &mut TariWorld) {
             name, node.json_rpc_port, node.http_ui_port, node.temp_dir_path
         );
     }
+
+    // indexes
+    for (name, node) in world.indexers.iter() {
+        eprintln!(
+            "Indexer \"{}\": json rpc port \"{}\", temp dir path \"{}\"",
+            name, node.json_rpc_port, node.temp_dir_path
+        );
+    }
+
 
     // templates
     for (name, template) in world.templates.iter() {

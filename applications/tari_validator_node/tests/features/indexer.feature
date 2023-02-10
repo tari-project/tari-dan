@@ -33,10 +33,10 @@ Feature: Indexer node
 
     # Create a new Counter component
     When I create a component COUNTER_1 of template "counter" on VAL_1 using "new"
-    When I print the cucumber world
 
     # Initialize an indexer
     Given an indexer IDX connected to base node BASE watching "COUNTER_1/components/Counter"
     Then the indexer IDX is connected
+    When I print the cucumber world
     
 

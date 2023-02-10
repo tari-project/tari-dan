@@ -48,7 +48,7 @@ use tari_validator_node::ApplicationConfig;
 use tokio::{task, time, time::Duration};
 
 use crate::{
-    bootstrap::spawn_services,
+    bootstrap::{spawn_services, Services},
     grpc::services::base_node_client::GrpcBaseNodeClient,
     json_rpc::{run_json_rpc, JsonRpcHandlers},
 };
@@ -77,8 +77,8 @@ pub async fn run_indexer(
         .get_or_create_global_db()
         .map_err(|e| ExitError::new(ExitCode::DatabaseError, e))?;
 
-    let _base_node_client = create_base_layer_clients(&config).await?;
-    let _services = spawn_services(
+    let base_node_client = create_base_layer_clients(&config).await?;
+    let services: Services = spawn_services(
         &config,
         shutdown_signal.clone(),
         node_identity.clone(),
@@ -90,7 +90,7 @@ pub async fn run_indexer(
     // Run the JSON-RPC API
     if let Some(json_rpc_address) = cli.json_rpc_address {
         info!(target: LOG_TARGET, "🌐 Started JSON-RPC server on {}", json_rpc_address);
-        let handlers = JsonRpcHandlers::new(cli.address.clone());
+        let handlers = JsonRpcHandlers::new(cli.address.clone(), &services, base_node_client);
         task::spawn(run_json_rpc(json_rpc_address, handlers));
     }
 
