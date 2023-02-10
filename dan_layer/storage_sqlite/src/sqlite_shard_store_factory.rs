@@ -161,6 +161,8 @@ impl From<QueryableTransaction> for SQLTransaction {
 pub struct QueryableSubstate {
     #[sql_type = "Binary"]
     pub shard_id: Vec<u8>,
+    #[sql_type = "Text"]
+    pub address: String,
     #[sql_type = "BigInt"]
     pub version: i64,
     #[sql_type = "Text"]
@@ -179,6 +181,7 @@ impl From<QueryableSubstate> for SQLSubstate {
     fn from(transaction: QueryableSubstate) -> Self {
         Self {
             shard_id: transaction.shard_id,
+            address: transaction.address,
             version: transaction.version,
             data: transaction.data,
             created_justify: transaction.created_justify,

@@ -189,6 +189,7 @@ pub struct SQLTransaction {
 #[derive(Debug, Serialize)]
 pub struct SQLSubstate {
     pub shard_id: Vec<u8>,
+    pub address: String,
     pub version: i64,
     pub data: String,
     pub created_justify: String,
