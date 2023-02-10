@@ -12,6 +12,8 @@ async fn when_i_convert_commitment_into_address(world: &mut TariWorld, commitmen
         .commitments
         .get(&commitment_name)
         .unwrap_or_else(|| panic!("Commitment {} not found", commitment_name));
+    dbg!(&commitment);
     let address = format!("commitment_{}", commitment.to_hex());
+    dbg!(&address);
     world.addresses.insert(new_name, address);
 }

@@ -24,7 +24,7 @@ use std::collections::BTreeSet;
 
 use log::warn;
 use tari_bor::decode;
-use tari_common_types::types::{BulletRangeProof, Commitment};
+use tari_common_types::types::{BulletRangeProof, Commitment, FixedHash};
 use tari_crypto::{
     range_proof::RangeProofService,
     ristretto::{
@@ -34,6 +34,7 @@ use tari_crypto::{
             extended_commitment_factory::ExtendedPedersenCommitmentFactory,
         },
         RistrettoComSig,
+        RistrettoPublicKey,
         RistrettoSecretKey,
     },
 };
@@ -72,15 +73,18 @@ use tari_template_lib::{
 };
 use tari_utilities::{hex::Hex, ByteArray};
 
-use crate::runtime::{
-    engine_args::EngineArgs,
-    tracker::StateTracker,
-    AuthParams,
-    ConsensusContext,
-    RuntimeError,
-    RuntimeInterface,
-    RuntimeModule,
-    RuntimeState,
+use crate::{
+    base_layer_hashers::BurntOutputDomainHasher,
+    runtime::{
+        engine_args::EngineArgs,
+        tracker::StateTracker,
+        AuthParams,
+        ConsensusContext,
+        RuntimeError,
+        RuntimeInterface,
+        RuntimeModule,
+        RuntimeState,
+    },
 };
 
 const LOG_TARGET: &str = "tari::dan::engine::runtime::impl";
@@ -89,6 +93,7 @@ pub struct RuntimeInterfaceImpl {
     tracker: StateTracker,
     _auth_params: AuthParams,
     consensus: ConsensusContext,
+    sender_public_key: RistrettoPublicKey,
     modules: Vec<Box<dyn RuntimeModule>>,
 }
 
@@ -97,12 +102,14 @@ impl RuntimeInterfaceImpl {
         tracker: StateTracker,
         auth_params: AuthParams,
         consensus: ConsensusContext,
+        sender_public_key: RistrettoPublicKey,
         modules: Vec<Box<dyn RuntimeModule>>,
     ) -> Self {
         Self {
             tracker,
             _auth_params: auth_params,
             consensus,
+            sender_public_key,
             modules,
         }
     }
@@ -591,10 +598,22 @@ impl RuntimeInterface for RuntimeInterfaceImpl {
         // 2. owner_sig must be valid
         // TODO: Probably want a better challenge
         let factory = PedersenCommitmentFactory::default();
-        let challenge = [1u8; 32];
+        let hasher = BurntOutputDomainHasher::new_with_label("commitment_signature")
+            .chain(owner_sig.public_nonce().as_bytes())
+            .chain(commitment.as_bytes())
+            .chain(self.sender_public_key.as_bytes());
+        warn!(
+            target: LOG_TARGET,
+            "Sender pub key: {}",
+            self.sender_public_key.to_hex()
+        );
+        warn!(target: LOG_TARGET, "Comsig: {}", owner_sig.to_vec().to_hex());
+        let challenge: FixedHash = digest::Digest::finalize(hasher).into();
+        warn!(target: LOG_TARGET, "Challenge is {}", challenge.to_hex());
         if !owner_sig.verify(
             &commitment,
-            &RistrettoSecretKey::from_bytes(&challenge).expect("todo"),
+            &RistrettoSecretKey::from_bytes(challenge.as_bytes())
+                .map_err(|_e| RuntimeError::InvalidClaimingSignature)?,
             &factory,
         ) {
             warn!(target: LOG_TARGET, "Claim burn failed - Invalid signature");

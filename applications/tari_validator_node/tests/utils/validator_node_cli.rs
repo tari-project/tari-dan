@@ -49,7 +49,7 @@ pub async fn create_account(world: &mut TariWorld, account_name: String, validat
     let owner_token = key.to_owner_token();
     world
         .account_public_keys
-        .insert(account_name.clone(), key.public_key.clone());
+        .insert(account_name.clone(), (key.secret_key.clone(), key.public_key.clone()));
     // create an account component
     let instruction = Instruction::CallFunction {
         // The "account" template is builtin in the validator nodes with a constant address

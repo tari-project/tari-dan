@@ -7,7 +7,7 @@ use cucumber::{then, when};
 use tari_crypto::{
     keys::{PublicKey, SecretKey},
     ristretto::{RistrettoPublicKey, RistrettoSecretKey},
-    tari_utilities::hex::Hex,
+    tari_utilities::{hex::Hex, ByteArray},
 };
 use tari_dan_common_types::ShardId;
 use tari_engine_types::{instruction::Instruction, signature::InstructionSignature, substate::SubstateAddress};
@@ -64,10 +64,10 @@ async fn when_i_claim_burn(
         0,
     );
 
-    // let account = world
-    //     .outputs
-    //     .get(&account_name)
-    //     .unwrap_or_else(|| panic!("Account {} not found", account_name));
+    let account = world
+        .account_public_keys
+        .get(&account_name)
+        .unwrap_or_else(|| panic!("Account {} not found", account_name));
 
     let instructions = [
         Instruction::ClaimBurn {
@@ -83,21 +83,18 @@ async fn when_i_claim_burn(
         // }
     ];
 
-    let (private_key, public_key) = RistrettoPublicKey::random_keypair(&mut rand::rngs::OsRng);
-
-    let signature = InstructionSignature::sign(&private_key, &instructions);
+    let signature = InstructionSignature::sign(&account.0, &instructions);
     let request = SubmitTransactionRequest {
         instructions: instructions.to_vec(),
         signature,
         fee: 0,
-        sender_public_key: public_key,
+        sender_public_key: account.1.clone(),
         inputs: vec![(shard_id, SubstateChange::Destroy)],
         num_outputs: 0,
         wait_for_result: true,
         wait_for_result_timeout: None,
         is_dry_run: false,
     };
-    dbg!(&request);
 
     let mut client = vn.create_client().await;
 

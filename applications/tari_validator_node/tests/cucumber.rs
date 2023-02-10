@@ -44,7 +44,7 @@ use cucumber::{
 use indexmap::IndexMap;
 use tari_common::initialize_logging;
 use tari_common_types::types::PublicKey;
-use tari_crypto::tari_utilities::hex::Hex;
+use tari_crypto::{keys::SecretKey, ristretto::RistrettoSecretKey, tari_utilities::hex::Hex};
 use tari_dan_common_types::QuorumDecision;
 use tari_dan_core::services::BaseNodeClient;
 use tari_engine_types::execution_result::Type;
@@ -85,7 +85,7 @@ pub struct TariWorld {
     rangeproofs: IndexMap<String, Vec<u8>>,
     addresses: IndexMap<String, String>,
     num_databases_saved: usize,
-    account_public_keys: IndexMap<String, PublicKey>,
+    account_public_keys: IndexMap<String, (RistrettoSecretKey, PublicKey)>,
 }
 
 impl TariWorld {

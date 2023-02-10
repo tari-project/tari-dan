@@ -44,14 +44,14 @@ async fn when_I_burn_on_wallet(
             amount: amount * 1_000_000,
             fee_per_gram: 1,
             message: "Burn".to_string(),
-            claim_public_key: public_key.to_vec(),
+            claim_public_key: public_key.1.to_vec(),
         })
         .await
         .unwrap()
         .into_inner();
 
     assert!(resp.is_success);
-    dbg!(&resp);
+    // dbg!(&resp);
     world.commitments.insert(commitment, resp.commitment);
     world.commitment_ownership_proofs.insert(proof, resp.ownership_proof);
     world.rangeproofs.insert(range_proof, resp.rangeproof);

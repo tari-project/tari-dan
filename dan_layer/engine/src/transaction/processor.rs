@@ -92,7 +92,13 @@ impl TransactionProcessor {
         let template_defs = self.package.get_template_defs();
         let tracker = StateTracker::new(self.state_db.clone(), id_provider, template_defs);
         let initial_proofs = self.auth_params.initial_ownership_proofs.clone();
-        let runtime_interface = RuntimeInterfaceImpl::new(tracker, self.auth_params, self.consensus, self.modules);
+        let runtime_interface = RuntimeInterfaceImpl::new(
+            tracker,
+            self.auth_params,
+            self.consensus,
+            transaction.sender_public_key().clone(),
+            self.modules,
+        );
         let package = self.package;
 
         let auth_scope = AuthorizationScope::new(&initial_proofs);
