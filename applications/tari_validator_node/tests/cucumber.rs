@@ -85,6 +85,7 @@ pub struct TariWorld {
     rangeproofs: IndexMap<String, Vec<u8>>,
     addresses: IndexMap<String, String>,
     num_databases_saved: usize,
+    account_public_keys: IndexMap<String, PublicKey>,
 }
 
 impl TariWorld {

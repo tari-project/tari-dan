@@ -76,6 +76,13 @@ impl GrpcBaseNodeClient {
         };
         Ok(consensus_constants)
     }
+
+    pub async fn get_mempool_transaction_count(&mut self) -> usize {
+        let inner = self.connection().await.unwrap();
+        let request = grpc::GetMempoolTransactionsRequest {};
+        let result = inner.get_mempool_transactions(request).await.unwrap().into_inner();
+        let mut count = 0;
+    }
 }
 
 #[async_trait]

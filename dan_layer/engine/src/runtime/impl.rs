@@ -67,15 +67,8 @@ use tari_template_lib::{
         VaultWithdrawArg,
         WorkspaceAction,
     },
-    auth::AccessRules,models::{
-        BucketId,
-        ComponentAddress,
-        ComponentHeader,
-        LayerOneCommitmentAddress,
-        NonFungibleAddress,
-
-        VaultRef,
-    },
+    auth::AccessRules,
+    models::{BucketId, ComponentAddress, ComponentHeader, LayerOneCommitmentAddress, NonFungibleAddress, VaultRef},
 };
 use tari_utilities::{hex::Hex, ByteArray};
 
@@ -92,7 +85,6 @@ use crate::runtime::{
 
 const LOG_TARGET: &str = "tari::dan::engine::runtime::impl";
 
-#[derive(Debug, Clone)]
 pub struct RuntimeInterfaceImpl {
     tracker: StateTracker,
     _auth_params: AuthParams,
@@ -599,7 +591,7 @@ impl RuntimeInterface for RuntimeInterfaceImpl {
         // 2. owner_sig must be valid
         // TODO: Probably want a better challenge
         let factory = PedersenCommitmentFactory::default();
-        let challenge =
+        let challenge = [1u8; 32];
         if !owner_sig.verify(
             &commitment,
             &RistrettoSecretKey::from_bytes(&challenge).expect("todo"),

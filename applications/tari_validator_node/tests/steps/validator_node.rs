@@ -9,8 +9,9 @@ use tari_crypto::{
     ristretto::{RistrettoPublicKey, RistrettoSecretKey},
     tari_utilities::hex::Hex,
 };
-use tari_dan_common_types::{ShardId, SubstateChange};
+use tari_dan_common_types::ShardId;
 use tari_engine_types::{instruction::Instruction, signature::InstructionSignature, substate::SubstateAddress};
+use tari_transaction::SubstateChange;
 use tari_validator_node_client::types::{GetStateRequest, SubmitTransactionRequest};
 
 use crate::TariWorld;
@@ -83,9 +84,8 @@ async fn when_i_claim_burn(
     ];
 
     let (private_key, public_key) = RistrettoPublicKey::random_keypair(&mut rand::rngs::OsRng);
-    let nonce = RistrettoSecretKey::random(&mut rand::rngs::OsRng);
 
-    let signature = InstructionSignature::sign(&private_key, nonce, &instructions);
+    let signature = InstructionSignature::sign(&private_key, &instructions);
     let request = SubmitTransactionRequest {
         instructions: instructions.to_vec(),
         signature,

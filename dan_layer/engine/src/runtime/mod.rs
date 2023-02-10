@@ -69,14 +69,7 @@ use tari_template_lib::{
         WorkspaceAction,
     },
     invoke_args,
-    models::{
-        ComponentAddress,
-        ComponentHeader,
-        LayerOneCommitmentAddress,
-        NonFungibleAddress,
-
-        VaultRef,
-    },
+    models::{ComponentAddress, ComponentHeader, LayerOneCommitmentAddress, NonFungibleAddress, VaultRef},
 };
 pub use tracker::{RuntimeState, StateTracker};
 

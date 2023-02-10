@@ -46,6 +46,12 @@ pub struct BaseNodeProcess {
     pub shutdown: Shutdown,
 }
 
+impl BaseNodeProcess {
+    pub fn create_client(&self) -> GrpcBaseNodeClient {
+        get_base_node_client(self.grpc_port)
+    }
+}
+
 pub async fn spawn_base_node(world: &mut TariWorld, bn_name: String) {
     // each spawned base node will use different ports
     let (port, grpc_port) = get_os_assigned_ports();
