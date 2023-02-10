@@ -46,6 +46,8 @@ pub struct HotStuffTreeNode<TAddr, TPayload> {
     payload: Option<TPayload>,
     /// How far in the consensus this payload is. It should be 4 in order to be committed.
     payload_height: NodeHeight,
+    // This something like view number, but we change it only on leader change.
+    leader_round: u32,
     local_pledge: Option<ObjectPledge>,
     epoch: Epoch,
     justify: QuorumCertificate,
@@ -61,6 +63,7 @@ impl<TAddr: NodeAddressable, TPayload: Payload> HotStuffTreeNode<TAddr, TPayload
         payload_id: PayloadId,
         payload: Option<TPayload>,
         payload_height: NodeHeight,
+        leader_round: u32,
         local_pledge: Option<ObjectPledge>,
         epoch: Epoch,
         proposed_by: TAddr,
@@ -74,6 +77,7 @@ impl<TAddr: NodeAddressable, TPayload: Payload> HotStuffTreeNode<TAddr, TPayload
             payload,
             epoch,
             height,
+            leader_round,
             justify,
             payload_height,
             local_pledge,
@@ -99,6 +103,7 @@ impl<TAddr: NodeAddressable, TPayload: Payload> HotStuffTreeNode<TAddr, TPayload
             payload_id,
             payload: None,
             payload_height: NodeHeight(0),
+            leader_round: 0,
             local_pledge,
             epoch,
             justify: QuorumCertificate::genesis(epoch, payload_id, shard_id),
@@ -153,6 +158,10 @@ impl<TAddr, TPayload> HotStuffTreeNode<TAddr, TPayload> {
     pub fn payload_height(&self) -> NodeHeight {
         // NodeHeight(self.payload_height.as_u64() % 4)
         self.payload_height
+    }
+
+    pub fn leader_round(&self) -> u32 {
+        self.leader_round
     }
 
     /// Returns the hotstuff phase corresponding to the payload height

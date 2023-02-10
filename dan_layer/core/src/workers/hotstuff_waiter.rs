@@ -25,7 +25,6 @@ use std::{
     time::Duration,
 };
 
-use futures::future::join_all;
 use log::*;
 use rand::seq::SliceRandom;
 use serde::Serialize;
@@ -379,7 +378,7 @@ where
 
     /// Step 4: Leader sends a Proposal to replica. A new leaf node is created that builds
     /// on the previous tree or else a genesis node is created and proposed.
-    async fn leader_on_propose(&self, shard: ShardId, payload_id: PayloadId) -> Result<(), HotStuffError> {
+    async fn leader_on_propose(&mut self, shard: ShardId, payload_id: PayloadId) -> Result<(), HotStuffError> {
         let high_qc;
         let payload;
         let current_leaf_node;
@@ -425,6 +424,7 @@ where
                 // message size.
                 maybe_payload,
                 parent_payload_height + NodeHeight(1),
+                *self.current_leader_round.entry((shard, payload_id)).or_default(),
                 Some(local_pledge),
                 epoch,
                 self.public_key.clone(),
@@ -450,8 +450,7 @@ where
                 HotStuffMessage::new_proposal(leaf_node, shard),
                 members.into_iter().collect(),
             ))
-            .await
-            .unwrap();
+            .await?;
 
         Ok(())
     }
@@ -492,17 +491,18 @@ where
             .await?;
 
         // We did receive something from the leader, so he was elected.
-        let was_in_election = self.election_in_progress.remove(&(node.shard(), payload_id));
+        self.election_in_progress.remove(&(node.shard(), payload_id));
 
         let shard = node.shard();
         let payload;
         let last_vote_height;
+        let last_leader_round;
         let locked_node;
         let locked_height;
         {
             let mut tx = self.shard_store.create_write_tx()?;
 
-            last_vote_height = tx.get_last_voted_height(node.shard(), node.payload_id())?;
+            (last_vote_height, last_leader_round) = tx.get_last_voted_height(node.shard(), node.payload_id())?;
             let (l_node, l_height) = tx.get_locked_node_hash_and_height(payload_id, shard)?;
             locked_node = l_node;
             locked_height = l_height;
@@ -521,7 +521,7 @@ where
         // Or if we already voted for this height but there was an election
         if (last_vote_height == NodeHeight(0) ||
             node.height() > last_vote_height ||
-            (node.height() == last_vote_height && was_in_election)) &&
+            (node.height() == last_vote_height && node.leader_round() > last_leader_round)) &&
             (*node.parent() == locked_node || node.height() > locked_height)
         {
             let local_shards = self
@@ -530,7 +530,13 @@ where
                 .await?;
             let proposed_nodes = self.shard_store.with_write_tx(|tx| {
                 tx.save_node(node.clone())?;
-                tx.save_leader_proposals(node.shard(), node.payload_id(), node.payload_height(), node.clone())?;
+                tx.save_leader_proposals(
+                    node.shard(),
+                    node.payload_id(),
+                    node.payload_height(),
+                    node.leader_round(),
+                    node.clone(),
+                )?;
                 tx.get_leader_proposals(node.payload_id(), node.payload_height(), &involved_shards)
             })?;
             // We group proposal by the shard id.
@@ -544,21 +550,8 @@ where
             }
             // And now for each shard id we select only one proposal
             let mut proposed_nodes = Vec::new();
-            for (shard_id, nodes) in proposed_nodes_grouped_by_shard_id.drain() {
-                if local_shards.contains(&shard_id) {
-                    let local_leader = self.get_leader(&nodes[0]).await.unwrap();
-                    // For local shard we have to select the one from current leader
-                    proposed_nodes.push(
-                        nodes
-                            .into_iter()
-                            .find(|node| node.proposed_by() == &local_leader)
-                            .unwrap(),
-                    )
-                } else {
-                    // For remote leader we don't care which one we select, we don't know who is the leader in
-                    // foreign committee
-                    proposed_nodes.push(nodes[0].clone())
-                }
+            for (_shard_id, nodes) in proposed_nodes_grouped_by_shard_id.drain() {
+                proposed_nodes.push(nodes.into_iter().max_by_key(|node| node.leader_round()).unwrap());
             }
 
             // Check the number of leader proposals for <shard, payload, node height>
@@ -586,7 +579,7 @@ where
             }
 
             let mut tx = self.shard_store.create_write_tx()?;
-            tx.set_last_voted_height(node.shard(), node.payload_id(), node.height())?;
+            tx.set_last_voted_height(node.shard(), node.payload_id(), node.height(), node.leader_round())?;
             tx.commit()?;
         } else {
             info!(
@@ -1283,11 +1276,7 @@ where
             let tx = self.shard_store.create_read_tx()?;
             // Avoid duplicates
             if tx.has_vote_for(&from, msg.local_node_hash())? {
-                info!(
-                    target: LOG_TARGET,
-                    "🔥 Vote with node hash {} already received",
-                    msg.local_node_hash()
-                );
+                println!("🔥 Vote with node hash {} already received", msg.local_node_hash());
                 return Ok(());
             }
 

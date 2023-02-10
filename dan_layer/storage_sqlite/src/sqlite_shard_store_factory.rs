@@ -397,6 +397,7 @@ impl ShardStoreReadTransaction<PublicKey, TariDanPayload> for SqliteShardStoreRe
         let payload = PayloadId::try_from(node.payload_id)?;
 
         let payload_hgt = node.payload_height as u64;
+        let leader_round = node.leader_round as u32;
         let local_pledge: Option<ObjectPledge> = serde_json::from_str(&node.local_pledges).unwrap();
 
         let epoch = node.epoch as u64;
@@ -411,6 +412,7 @@ impl ShardStoreReadTransaction<PublicKey, TariDanPayload> for SqliteShardStoreRe
             payload,
             None,
             NodeHeight(payload_hgt),
+            leader_round,
             local_pledge,
             Epoch(epoch),
             proposed_by,
@@ -556,13 +558,14 @@ impl ShardStoreReadTransaction<PublicKey, TariDanPayload> for SqliteShardStoreRe
         }
     }
 
-    fn get_last_voted_height(&self, shard: ShardId, payload_id: PayloadId) -> Result<NodeHeight, StorageError> {
+    fn get_last_voted_height(&self, shard: ShardId, payload_id: PayloadId) -> Result<(NodeHeight, u32), StorageError> {
         use crate::schema::last_voted_heights;
 
         let last_vote: Option<LastVotedHeight> = last_voted_heights::table
             .filter(last_voted_heights::shard_id.eq(shard.as_bytes().to_vec()))
             .filter(last_voted_heights::payload_id.eq(payload_id.as_bytes().to_vec()))
             .order_by(last_voted_heights::node_height.desc())
+            .then_order_by(last_voted_heights::leader_round.desc())
             .first(self.transaction.connection())
             .optional()
             .map_err(|e| StorageError::QueryError {
@@ -571,9 +574,10 @@ impl ShardStoreReadTransaction<PublicKey, TariDanPayload> for SqliteShardStoreRe
 
         if let Some(last_vote_height) = last_vote {
             let height = last_vote_height.node_height as u64;
-            Ok(NodeHeight(height))
+            let leader_round = last_vote_height.leader_round as u32;
+            Ok((NodeHeight(height), leader_round))
         } else {
-            Ok(NodeHeight(0))
+            Ok((NodeHeight(0), 0))
         }
     }
 
@@ -1013,6 +1017,7 @@ impl ShardStoreWriteTransaction<PublicKey, TariDanPayload> for SqliteShardStoreW
 
         let payload_id = Vec::from(node.payload_id().as_bytes());
         let payload_height = node.payload_height().as_u64() as i64;
+        let leader_round = node.leader_round() as i64;
 
         let local_pledges = json!(&node.local_pledge()).to_string();
 
@@ -1028,6 +1033,7 @@ impl ShardStoreWriteTransaction<PublicKey, TariDanPayload> for SqliteShardStoreW
             shard,
             payload_id,
             payload_height,
+            leader_round,
             local_pledges,
             epoch,
             proposed_by,
@@ -1228,6 +1234,7 @@ impl ShardStoreWriteTransaction<PublicKey, TariDanPayload> for SqliteShardStoreW
         shard: ShardId,
         payload_id: PayloadId,
         height: NodeHeight,
+        leader_round: u32,
     ) -> Result<(), StorageError> {
         use crate::schema::last_voted_heights;
 
@@ -1235,6 +1242,7 @@ impl ShardStoreWriteTransaction<PublicKey, TariDanPayload> for SqliteShardStoreW
             shard_id: shard.as_bytes().to_vec(),
             payload_id: payload_id.as_bytes().to_vec(),
             node_height: height.as_u64() as i64,
+            leader_round: leader_round as i64,
         };
 
         diesel::insert_into(last_voted_heights::table)
@@ -1251,6 +1259,7 @@ impl ShardStoreWriteTransaction<PublicKey, TariDanPayload> for SqliteShardStoreW
         shard: ShardId,
         payload: PayloadId,
         payload_height: NodeHeight,
+        leader_round: u32,
         node: HotStuffTreeNode<PublicKey, TariDanPayload>,
     ) -> Result<(), StorageError> {
         use crate::schema::leader_proposals;
@@ -1260,11 +1269,13 @@ impl ShardStoreWriteTransaction<PublicKey, TariDanPayload> for SqliteShardStoreW
         let payload_height = payload_height.as_u64() as i64;
         let node_hash = node.hash().as_bytes().to_vec();
         let node = serde_json::to_string_pretty(&node).unwrap();
+        let leader_round = leader_round as i64;
 
         let new_row = NewLeaderProposal {
             shard_id: shard,
             payload_id: payload,
             payload_height,
+            leader_round,
             node_hash,
             hotstuff_tree_node: node,
         };

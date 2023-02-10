@@ -28,6 +28,7 @@ diesel::table! {
         payload_id -> Binary,
         shard_id -> Binary,
         node_height -> BigInt,
+        leader_round -> BigInt,
         timestamp -> Timestamp,
     }
 }
@@ -38,6 +39,7 @@ diesel::table! {
         payload_id -> Binary,
         shard_id -> Binary,
         payload_height -> BigInt,
+        leader_round -> BigInt,
         node_hash -> Binary,
         hotstuff_tree_node -> Text,
         timestamp -> Timestamp,
@@ -76,6 +78,7 @@ diesel::table! {
         shard -> Binary,
         payload_id -> Binary,
         payload_height -> BigInt,
+        leader_round -> BigInt,
         local_pledges -> Text,
         epoch -> BigInt,
         proposed_by -> Binary,
