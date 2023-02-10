@@ -25,9 +25,10 @@ Feature: Claim Burn
     When I burn 10T on wallet WALLET into commitment COMMITMENT with proof PROOF for ACC_1 and range proof RANGEPROOF
 
     # unfortunately have to wait for this to get into the mempool....
-    Then there is 1 transaction(s) in the mempool of BASE
-#    When I wait 10 seconds
+    Then there is 1 transaction in the mempool of BASE within 10 seconds
     When miner MINER mines 10 new blocks
+    Then VN is on epoch 3 within 10 seconds
+
     When I convert commitment COMMITMENT into COMM_ADDRESS address
     Then validator node VN has state at COMM_ADDRESS
 

@@ -23,7 +23,7 @@ pub mod types;
 
 use anyhow::anyhow;
 use reqwest::{header, header::HeaderMap, IntoUrl, Url};
-use serde::{de::DeserializeOwned, Serialize};
+use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use serde_json as json;
 use serde_json::json;
 use tari_comms_logging::LoggedMessage;
@@ -53,6 +53,12 @@ pub struct ValidatorNodeClient {
     request_id: i64,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct EpochManagerStats {
+    pub current_epoch: usize,
+    pub is_valid: bool,
+}
+
 impl ValidatorNodeClient {
     pub fn connect<T: IntoUrl>(endpoint: T) -> Result<Self, anyhow::Error> {
         let client = reqwest::Client::builder()
@@ -72,6 +78,10 @@ impl ValidatorNodeClient {
 
     pub async fn get_identity(&mut self) -> Result<GetIdentityResponse, anyhow::Error> {
         self.send_request("get_identity", json!({})).await
+    }
+
+    pub async fn get_epoch_manager_stats(&mut self) -> Result<EpochManagerStats, anyhow::Error> {
+        self.send_request("get_epoch_manager_stats", json!({})).await
     }
 
     pub async fn register_validator_node(&mut self) -> Result<u64, anyhow::Error> {

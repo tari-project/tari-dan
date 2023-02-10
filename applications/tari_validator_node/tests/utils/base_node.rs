@@ -47,8 +47,8 @@ pub struct BaseNodeProcess {
 }
 
 impl BaseNodeProcess {
-    pub fn create_client(&self) -> GrpcBaseNodeClient {
-        get_base_node_client(self.grpc_port)
+    pub async fn create_client(&self) -> GrpcBaseNodeClient {
+        get_base_node_client(self.grpc_port).await
     }
 }
 

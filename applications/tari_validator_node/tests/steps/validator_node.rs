@@ -103,3 +103,22 @@ async fn when_i_claim_burn(
 
     client.submit_transaction(request).await.unwrap();
 }
+
+#[then(expr = "{word} is on epoch {int} within {int} seconds")]
+async fn vn_has_scanned_to_height(world: &mut TariWorld, vn_name: String, epoch: usize, seconds: usize) {
+    let vn = world
+        .validator_nodes
+        .get(&vn_name)
+        .unwrap_or_else(|| panic!("Validator node {} not found", vn_name));
+    let mut client = vn.create_client().await;
+    for _ in 0..seconds {
+        let stats = client.get_epoch_manager_stats().await.expect("Failed to get stats");
+        if stats.current_epoch == epoch {
+            return;
+        }
+        tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+    }
+
+    let stats = client.get_epoch_manager_stats().await.expect("Failed to get stats");
+    assert_eq!(stats.current_epoch, epoch);
+}
