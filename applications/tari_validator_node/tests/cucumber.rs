@@ -169,11 +169,6 @@ async fn start_validator_node(world: &mut TariWorld, vn_name: String, bn_name: S
     spawn_validator_node(world, vn_name, bn_name, wallet_name).await;
 }
 
-#[given(expr = "an indexer {word} connected to base node {word}")]
-async fn start_indexer(world: &mut TariWorld, indexer_name: String, bn_name: String) {
-    spawn_indexer(world, indexer_name, bn_name).await;
-}
-
 #[when(expr = "validator node {word} sends a registration transaction")]
 async fn send_vn_registration(world: &mut TariWorld, vn_name: String) {
     let jrpc_port = world.validator_nodes.get(&vn_name).unwrap().json_rpc_port;
@@ -398,6 +393,11 @@ fn wrap_manifest_in_main(world: &TariWorld, contents: &str) -> String {
         format!("{}\nuse template_{} as {};", acc, template.address, name)
     });
     format!("{} fn main() {{ {} }}", template_defs, contents)
+}
+
+#[given(regex = r#"^an indexer (\w+) connected to base node (\w+) watching "([^"]+)"$"#)]
+async fn start_indexer(world: &mut TariWorld, indexer_name: String, bn_name: String, inputs: String) {
+    spawn_indexer(world, indexer_name, bn_name, inputs).await;
 }
 
 #[then(expr = "the indexer {word} is connected")]

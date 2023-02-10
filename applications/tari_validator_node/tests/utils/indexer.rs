@@ -20,13 +20,14 @@
 //   WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //   USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use std::{str::FromStr, time::Duration};
+use std::{collections::HashMap, str::FromStr, time::Duration};
 
 use reqwest::Url;
 use tari_app_utilities::common_cli_args::CommonCliArgs;
 use tari_common::configuration::{CommonConfig, StringList};
 use tari_comms::multiaddr::Multiaddr;
 use tari_comms_dht::{DbConnectionUrl, DhtConfig};
+use tari_engine_types::substate::SubstateAddress;
 use tari_indexer::run_indexer;
 use tari_indexer_client::IndexerClient;
 use tari_p2p::{Network, PeerSeedsConfig, TransportType};
@@ -48,7 +49,9 @@ pub struct IndexerProcess {
     pub shutdown: Shutdown,
 }
 
-pub async fn spawn_indexer(world: &mut TariWorld, indexer_name: String, base_node_name: String) {
+pub async fn spawn_indexer(world: &mut TariWorld, indexer_name: String, base_node_name: String, inputs: String) {
+    let addresses = get_addresses_for_inputs(world, inputs);
+
     // each spawned indexer will use different ports
     let (port, json_rpc_port) = get_os_assigned_ports();
 
@@ -115,7 +118,7 @@ pub async fn spawn_indexer(world: &mut TariWorld, indexer_name: String, base_nod
                 config_property_overrides: vec![],
             },
             network: Some(config.network.to_string()),
-            address: vec![],
+            address: addresses,
             poll_time_ms: None,
             json_rpc_address: config.validator_node.json_rpc_address,
         };
@@ -146,4 +149,21 @@ pub async fn spawn_indexer(world: &mut TariWorld, indexer_name: String, base_nod
 pub async fn get_indexer_client(port: u16) -> IndexerClient {
     let endpoint: Url = Url::parse(&format!("http://localhost:{}", port)).unwrap();
     IndexerClient::connect(endpoint).unwrap()
+}
+
+fn get_addresses_for_inputs(world: &mut TariWorld, inputs: String) -> Vec<SubstateAddress> {
+    let input_groups = inputs.split(',').map(|s| s.trim()).collect::<Vec<_>>();
+
+    let address_map: HashMap<String, SubstateAddress> = world
+        .outputs
+        .iter()
+        .flat_map(|(name, outputs)| {
+            outputs
+                .iter()
+                .map(move |(child_name, addr)| (format!("{}/{}", name, child_name), addr.address.clone()))
+        })
+        .filter(|(name, _)| input_groups.contains(&name.as_str()))
+        .collect();
+
+    address_map.values().cloned().collect::<Vec<SubstateAddress>>()
 }
