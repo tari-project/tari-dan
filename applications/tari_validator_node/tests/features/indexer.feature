@@ -39,4 +39,4 @@ Feature: Indexer node
     Then the indexer IDX is connected
     When I print the cucumber world
     
-
+    When I wait 5000 seconds

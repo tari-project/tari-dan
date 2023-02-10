@@ -20,6 +20,8 @@
 //   WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //   USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+use std::str::FromStr;
+
 use axum_jrpc::{
     error::{JsonRpcError, JsonRpcErrorReason},
     JrpcResult,
@@ -29,17 +31,19 @@ use axum_jrpc::{
 use serde::Serialize;
 use serde_json::{self as json, json};
 use tari_comms::CommsNode;
-use tari_dan_core::services::BaseNodeClient;
+use tari_dan_common_types::ShardId;
+use tari_dan_core::services::{epoch_manager::EpochManager, BaseNodeClient};
 use tari_dan_storage_sqlite::sqlite_shard_store_factory::SqliteShardStore;
 use tari_engine_types::substate::SubstateAddress;
 
-use crate::{bootstrap::Services, GrpcBaseNodeClient};
+use crate::{bootstrap::Services, p2p::services::epoch_manager::handle::EpochManagerHandle, GrpcBaseNodeClient};
 
 const _LOG_TARGET: &str = "tari::indexer::json_rpc::handlers";
 
 pub struct JsonRpcHandlers {
     addresses: Vec<SubstateAddress>,
     comms: CommsNode,
+    epoch_manager: EpochManagerHandle,
     _shard_store: SqliteShardStore,
     base_node_client: GrpcBaseNodeClient,
 }
@@ -49,6 +53,7 @@ impl JsonRpcHandlers {
         Self {
             addresses,
             comms: services.comms.clone(),
+            epoch_manager: services.epoch_manager.clone(),
             _shard_store: services.shard_store.clone(),
             base_node_client,
         }
@@ -98,6 +103,19 @@ impl JsonRpcHandlers {
                 ),
             ))
         }
+    }
+
+    pub async fn get_substate(&self, value: JsonRpcExtractor) -> JrpcResult {
+        let answer_id = value.get_answer_id();
+        let substate_address_str: String = value.parse_params()?;
+        let substate_address = SubstateAddress::from_str(&substate_address_str).unwrap();
+        let version = 0;
+        let shard_id = ShardId::from_address(&substate_address, version);
+
+        let epoch = self.epoch_manager.current_epoch().await.unwrap();
+        let response = self.epoch_manager.get_committee(epoch, shard_id).await.unwrap();
+
+        Ok(JsonRpcResponse::success(answer_id, response))
     }
 }
 

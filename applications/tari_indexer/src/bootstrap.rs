@@ -39,6 +39,7 @@ use tari_dan_storage_sqlite::{global::SqliteGlobalDbAdapter, sqlite_shard_store_
 use tari_shutdown::ShutdownSignal;
 
 use crate::{
+    base_layer_scanner,
     comms,
     grpc::services::base_node_client::GrpcBaseNodeClient,
     p2p::{
@@ -90,6 +91,16 @@ pub async fn spawn_services(
         consensus_constants.clone(),
         shutdown.clone(),
         validator_node_client_factory.clone(),
+    );
+
+    // Base Node scanner
+    base_layer_scanner::spawn(
+        config.validator_node.clone(),
+        global_db,
+        base_node_client.clone(),
+        epoch_manager.clone(),
+        shutdown.clone(),
+        consensus_constants,
     );
 
     let comms = setup_p2p_rpc(config, comms, peer_provider, shard_store.clone());

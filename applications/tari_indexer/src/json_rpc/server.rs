@@ -59,6 +59,7 @@ async fn handler(Extension(handlers): Extension<Arc<JsonRpcHandlers>>, value: Js
         "get_status" => handlers.get_status(value),
         "get_all_vns" => handlers.get_all_vns(value).await,
         "get_comms_stats" => handlers.get_comms_stats(value).await,
+        "get_substate" => handlers.get_substate(value).await,
         method => Ok(value.method_not_found(method)),
     }
 }
