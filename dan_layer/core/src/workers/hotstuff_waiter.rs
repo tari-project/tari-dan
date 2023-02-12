@@ -376,6 +376,7 @@ where
         Ok(())
     }
 
+    #[allow(clippy::too_many_lines)]
     /// Step 4: Leader sends a Proposal to replica. A new leaf node is created that builds
     /// on the previous tree or else a genesis node is created and proposed.
     async fn leader_on_propose(&mut self, shard: ShardId, payload_id: PayloadId) -> Result<(), HotStuffError> {
