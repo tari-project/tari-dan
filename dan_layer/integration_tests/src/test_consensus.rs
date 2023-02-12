@@ -772,9 +772,6 @@ async fn get_message_to_leader(
 #[allow(clippy::too_many_lines)]
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn test_leader_fails_only_locally() {
-    // let mut builder = Builder::new();
-    // builder.filter_level(log::LevelFilter::Info);
-    // builder.init();
     // We create 2 committees
     // Committee0 will fail only locally
     let committee0 = (0..4)
@@ -932,8 +929,7 @@ async fn test_leader_fails_only_locally() {
     send_proposal_to_committee(&shard0_committee[0], &pre_commit_proposal0, &committee0_instances).await;
     send_proposal_to_committee(&shard0_committee[0], &pre_commit_proposal0, &committee1_instances).await;
     // Now both should be on the same height. Let's finish this transaction.
-    // TODO: Should also cover Decide, but it's not working right now
-    for phase in [HotstuffPhase::Commit] {
+    for phase in [HotstuffPhase::Commit, HotstuffPhase::Decide] {
         let votes0 = get_votes(&mut committee0_instances).await;
         send_votes_to_leader(
             &committee0_instances[0],
@@ -945,7 +941,20 @@ async fn test_leader_fails_only_locally() {
         assert!(proposal0.is_ok(), "leader of committee0 should send proposal");
         let proposal0 = proposal0.unwrap().unwrap().0;
         assert_eq!(proposal0.node().unwrap().payload_phase(), phase);
+        send_proposal_to_committee(&shard0_committee[0], &proposal0, &committee0_instances).await;
+        send_proposal_to_committee(&shard0_committee[0], &proposal0, &committee1_instances).await;
 
+        if phase == HotstuffPhase::Commit {
+            // Because it receives the proposal from committee0 again, it votes on it.
+            let votes1 = get_votes(&mut committee1_instances).await;
+            // These votes will be ignored
+            send_votes_to_leader(
+                &committee1_instances[0],
+                votes1.into_iter().map(|vote| vote.0).collect::<Vec<_>>(),
+                &shard1_committee,
+            )
+            .await;
+        }
         let votes1 = get_votes(&mut committee1_instances).await;
         send_votes_to_leader(
             &committee1_instances[0],
@@ -953,11 +962,12 @@ async fn test_leader_fails_only_locally() {
             &shard1_committee,
         )
         .await;
-        let proposal1 = timeout(Duration::from_secs(1), committee1_instances[0].rx_broadcast.recv()).await;
-        // TODO: This should await `is_ok` but it's currently broken.
-        assert!(proposal1.is_err(), "leader of committee1 should send proposal");
-        // let proposal1 = proposal1.unwrap().unwrap().0;
-        // assert_eq!(proposal1.node().unwrap().payload_phase(), phase);
+        let proposal1 = timeout(Duration::from_secs(10), committee1_instances[0].rx_broadcast.recv()).await;
+        assert!(proposal1.is_ok(), "leader of committee1 should send proposal");
+        let proposal1 = proposal1.unwrap().unwrap().0;
+        assert_eq!(proposal1.node().unwrap().payload_phase(), phase);
+        send_proposal_to_committee(&shard1_committee[0], &proposal1, &committee0_instances).await;
+        send_proposal_to_committee(&shard1_committee[0], &proposal1, &committee1_instances).await;
     }
 }
 
