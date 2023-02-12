@@ -1300,7 +1300,7 @@ where
 
             let votes = tx.get_received_votes_for(msg.local_node_hash())?;
 
-            if votes.len() >= valid_committee.consensus_threshold() {
+            if votes.len() == valid_committee.consensus_threshold() {
                 let validator_metadata = votes.iter().map(|v| v.validator_metadata().clone()).collect();
 
                 // TODO: Check all votes
