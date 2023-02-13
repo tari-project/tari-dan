@@ -189,8 +189,6 @@ impl TransactionProcessor {
                 range_proof,
                 proof_of_knowledge,
             } => {
-                // todo: Check signature. Where should that fail?
-
                 // Need to call it on the runtime so that a bucket is created.
                 runtime.interface().claim_burn(
                     LayerOneCommitmentAddress::new(Hash::try_from_vec(commitment_address).unwrap()),

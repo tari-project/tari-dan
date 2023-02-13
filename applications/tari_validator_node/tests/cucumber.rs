@@ -107,6 +107,22 @@ impl TariWorld {
             .unwrap_or_else(|| panic!("Base node {} not found", name))
     }
 
+    pub fn get_account_component_address(&self, name: &str) -> Option<String> {
+        let all_components = self
+            .outputs
+            .get(name)
+            .unwrap_or_else(|| panic!("Account component address {} not found", name));
+        all_components
+            .get("components/Account")
+            .map(|a| a.address.to_string().clone())
+        // for (address, value) in all_components {
+        // if address.starts_with("component") {
+        //     return Some(address.clone());
+        // }
+        // }
+        // None
+    }
+
     pub fn after(&mut self, _scenario: &Scenario) {
         for (name, mut p) in self.validator_nodes.drain(..) {
             println!("Shutting down validator node {}", name);

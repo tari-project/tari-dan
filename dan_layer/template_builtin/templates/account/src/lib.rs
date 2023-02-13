@@ -89,6 +89,15 @@ mod account_template {
             }
         }
 
+        pub fn deposit_confidential(&mut self, bucket: ConfidentialBucket) {
+            let resource_address = bucket.resource_address();
+            let vault_mut = self
+                .vaults
+                .entry(resource_address)
+                .or_insert_with(|| Vault::new_empty(resource_address));
+            vault_mut.deposit_confidential(bucket);
+        }
+
         // #[access_rules(require(owner_badge))]
         pub fn get_non_fungible_ids(&self, resource: ResourceAddress) -> Vec<NonFungibleId> {
             let v = self

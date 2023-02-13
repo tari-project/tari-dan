@@ -1,7 +1,7 @@
 //  Copyright 2022 The Tari Project
 //  SPDX-License-Identifier: BSD-3-Clause
 
-use std::str::FromStr;
+use std::{convert::TryFrom, str::FromStr};
 
 use cucumber::{then, when};
 use tari_crypto::{
@@ -11,6 +11,7 @@ use tari_crypto::{
 };
 use tari_dan_common_types::ShardId;
 use tari_engine_types::{instruction::Instruction, signature::InstructionSignature, substate::SubstateAddress};
+use tari_template_lib::{args::Arg, prelude::ComponentAddress};
 use tari_transaction::SubstateChange;
 use tari_validator_node_client::types::{GetStateRequest, SubmitTransactionRequest};
 
@@ -69,6 +70,9 @@ async fn when_i_claim_burn(
         .get(&account_name)
         .unwrap_or_else(|| panic!("Account {} not found", account_name));
 
+    let account_address = world.get_account_component_address(&account_name).unwrap();
+    // dbg!(&account_address);
+
     let instructions = [
         Instruction::ClaimBurn {
             commitment_address: commitment.to_vec(),
@@ -76,12 +80,14 @@ async fn when_i_claim_burn(
             proof_of_knowledge: proof.clone(),
         },
         Instruction::PutLastInstructionOutputOnWorkspace { key: b"burn".to_vec() },
-        // Instruction::CallMethod {
-        //     component_address: account.,
-        //     method: "".to_string(),
-        //     args: vec![],
-        // }
+        Instruction::CallMethod {
+            component_address: ComponentAddress::from_str(&account_address).expect("Invalid account address"),
+            method: "deposit_confidential".to_string(),
+            args: vec![Arg::Literal(b"burn".to_vec())],
+        },
     ];
+
+    let account_shard = ShardId::from_address(&SubstateAddress::from_str(&account_address).unwrap(), 0);
 
     let signature = InstructionSignature::sign(&account.0, &instructions);
     let request = SubmitTransactionRequest {
@@ -89,12 +95,17 @@ async fn when_i_claim_burn(
         signature,
         fee: 0,
         sender_public_key: account.1.clone(),
-        inputs: vec![(shard_id, SubstateChange::Destroy)],
-        num_outputs: 0,
+        inputs: vec![
+            (shard_id, SubstateChange::Destroy),
+            (account_shard, SubstateChange::Destroy),
+        ],
+        num_outputs: 2,
         wait_for_result: true,
         wait_for_result_timeout: None,
         is_dry_run: false,
     };
+
+    // dbg!(&request);
 
     let mut client = vn.create_client().await;
 

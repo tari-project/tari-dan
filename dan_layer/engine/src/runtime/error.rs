@@ -29,6 +29,7 @@ use tari_template_lib::models::{
     Amount,
     BucketId,
     ComponentAddress,
+    ConfidentialBucketId,
     LayerOneCommitmentAddress,
     NonFungibleId,
     ResourceAddress,
@@ -76,6 +77,8 @@ pub enum RuntimeError {
     },
     #[error("Bucket not found with id {bucket_id}")]
     BucketNotFound { bucket_id: BucketId },
+    #[error("Confidential bucket not found with id {bucket_id}")]
+    ConfidentialBucketNotFound { bucket_id: ConfidentialBucketId },
     #[error("Resource not found with address {resource_address}")]
     ResourceNotFound { resource_address: ResourceAddress },
     #[error(transparent)]

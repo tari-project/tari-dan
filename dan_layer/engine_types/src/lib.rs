@@ -16,4 +16,8 @@ pub mod substate;
 pub mod vault;
 
 mod template;
+
+use tari_template_lib::Hash;
 pub use template::{calculate_template_binary_hash, TemplateAddress};
+
+pub const LAYER_TWO_TARI_RESOURCE_ADDRESS: Hash = Hash::from_array([1u8; 32]);

@@ -59,6 +59,8 @@ use tari_template_lib::{
         BucketRef,
         ComponentAction,
         ComponentRef,
+        ConfidentialBucketAction,
+        ConfidentialBucketRef,
         ConsensusAction,
         InvokeResult,
         LogLevel,
@@ -105,6 +107,13 @@ pub trait RuntimeInterface: Send + Sync {
         &self,
         bucket_ref: BucketRef,
         action: BucketAction,
+        args: EngineArgs,
+    ) -> Result<InvokeResult, RuntimeError>;
+
+    fn confidential_bucket_invoke(
+        &self,
+        bucket_ref: ConfidentialBucketRef,
+        action: ConfidentialBucketAction,
         args: EngineArgs,
     ) -> Result<InvokeResult, RuntimeError>;
 

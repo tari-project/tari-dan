@@ -44,6 +44,7 @@ use tari_engine_types::{
     logs::LogEntry,
     resource::Resource,
     substate::SubstateAddress,
+    LAYER_TWO_TARI_RESOURCE_ADDRESS,
 };
 use tari_mmr::Hash;
 use tari_template_abi::TemplateDef;
@@ -53,6 +54,8 @@ use tari_template_lib::{
         BucketRef,
         ComponentAction,
         ComponentRef,
+        ConfidentialBucketAction,
+        ConfidentialBucketRef,
         ConsensusAction,
         CreateComponentArg,
         CreateResourceArg,
@@ -69,7 +72,16 @@ use tari_template_lib::{
         WorkspaceAction,
     },
     auth::AccessRules,
-    models::{BucketId, ComponentAddress, ComponentHeader, LayerOneCommitmentAddress, NonFungibleAddress, VaultRef},
+    models::{
+        BucketId,
+        ComponentAddress,
+        ComponentHeader,
+        ConfidentialBucketId,
+        LayerOneCommitmentAddress,
+        NonFungibleAddress,
+        ResourceAddress,
+        VaultRef,
+    },
 };
 use tari_utilities::{hex::Hex, ByteArray};
 
@@ -362,6 +374,19 @@ impl RuntimeInterface for RuntimeInterfaceImpl {
                     .borrow_vault_mut(&vault_id, |vault| vault.deposit(bucket))??;
                 Ok(InvokeResult::unit())
             },
+            VaultAction::DepositConfidential => {
+                let vault_id = vault_ref.vault_id().ok_or_else(|| RuntimeError::InvalidArgument {
+                    argument: "vault_ref",
+                    reason: "Put vault action requires a vault id".to_string(),
+                })?;
+                let bucket_id: ConfidentialBucketId = args.get(0)?;
+                // TODO: access check
+
+                let bucket = self.tracker.take_confidential_bucket(bucket_id)?;
+                self.tracker
+                    .borrow_vault_mut(&vault_id, |vault| vault.deposit_confidential(bucket))??;
+                Ok(InvokeResult::unit())
+            },
             VaultAction::Withdraw => {
                 let vault_id = vault_ref.vault_id().ok_or_else(|| RuntimeError::InvalidArgument {
                     argument: "vault_ref",
@@ -500,6 +525,26 @@ impl RuntimeInterface for RuntimeInterfaceImpl {
         }
     }
 
+    fn confidential_bucket_invoke(
+        &self,
+        bucket_ref: ConfidentialBucketRef,
+        action: ConfidentialBucketAction,
+        args: EngineArgs,
+    ) -> Result<InvokeResult, RuntimeError> {
+        self.invoke_on_runtime_call_modules("confidential_bucket_invoke")?;
+
+        match action {
+            ConfidentialBucketAction::GetResourceAddress => {
+                let bucket_id = bucket_ref.bucket_id().ok_or_else(|| RuntimeError::InvalidArgument {
+                    argument: "bucket_ref",
+                    reason: "GetResourceAddress action requires a bucket id".to_string(),
+                })?;
+                let bucket = self.tracker.get_confidential_bucket(bucket_id)?;
+                Ok(InvokeResult::encode(bucket.resource_address())?)
+            },
+        }
+    }
+
     fn workspace_invoke(&self, action: WorkspaceAction, args: EngineArgs) -> Result<InvokeResult, RuntimeError> {
         self.invoke_on_runtime_call_modules("workspace_invoke")?;
         match action {
@@ -587,14 +632,8 @@ impl RuntimeInterface for RuntimeInterfaceImpl {
         range_proof: BulletRangeProof,
         owner_sig: RistrettoComSig,
     ) -> Result<(), RuntimeError> {
-        warn!(
-            target: LOG_TARGET,
-            "Claiming burn for commitment {}", commitment_address
-        );
-        // TODO: this should a domain hash of the commitment
         // 1. Must exist
         let commitment = self.tracker.take_layer_one_commitment(commitment_address)?;
-        warn!(target: LOG_TARGET, "Commitment is {}", commitment.to_hex());
         // 2. owner_sig must be valid
         // TODO: Probably want a better challenge
         let factory = PedersenCommitmentFactory::default();
@@ -602,14 +641,8 @@ impl RuntimeInterface for RuntimeInterfaceImpl {
             .chain(owner_sig.public_nonce().as_bytes())
             .chain(commitment.as_bytes())
             .chain(self.sender_public_key.as_bytes());
-        warn!(
-            target: LOG_TARGET,
-            "Sender pub key: {}",
-            self.sender_public_key.to_hex()
-        );
-        warn!(target: LOG_TARGET, "Comsig: {}", owner_sig.to_vec().to_hex());
+
         let challenge: FixedHash = digest::Digest::finalize(hasher).into();
-        warn!(target: LOG_TARGET, "Challenge is {}", challenge.to_hex());
         if !owner_sig.verify(
             &commitment,
             &RistrettoSecretKey::from_bytes(challenge.as_bytes())
@@ -620,8 +653,6 @@ impl RuntimeInterface for RuntimeInterfaceImpl {
             return Err(RuntimeError::InvalidClaimingSignature);
         }
 
-        dbg!("signature correct");
-
         // 3. range_proof must be valid
         let range_proof_service = BulletproofsPlusService::init(64, 1, ExtendedPedersenCommitmentFactory::default())
             .expect("Failed to init range proof service");
@@ -631,17 +662,17 @@ impl RuntimeInterface for RuntimeInterfaceImpl {
             return Err(RuntimeError::InvalidRangeProof);
         }
 
-        dbg!("range proof correct");
-        let confidential_bucket = ConfidentialBucket::new(commitment, range_proof);
+        let confidential_bucket = ConfidentialBucket::new(
+            ResourceAddress::new(LAYER_TWO_TARI_RESOURCE_ADDRESS),
+            commitment,
+            range_proof,
+        );
 
-        dbg!(&confidential_bucket);
+        let bucket_id = self.tracker.new_confidential_bucket(confidential_bucket)?;
 
-        self.tracker.new_confidential_bucket(confidential_bucket)?;
-
-        // TODO: Down the old state
-        // TODO: Save the bucket to the workspace
-
-        todo!()
+        self.tracker
+            .set_last_instruction_output(Some(bucket_id.to_le_bytes().to_vec()));
+        Ok(())
     }
 
     fn finalize(&self) -> Result<FinalizeResult, RuntimeError> {

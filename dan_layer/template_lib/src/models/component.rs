@@ -47,6 +47,12 @@ impl ComponentAddress {
         let hash = Hash::from_hex(hex)?;
         Ok(Self::new(hash))
     }
+
+    pub fn from_str(s: &str) -> Result<Self, HashParseError> {
+        let s = if s.starts_with("component_") { &s[10..] } else { s };
+        let hash = Hash::from_hex(s)?;
+        Ok(Self::new(hash))
+    }
 }
 
 impl<T: Into<Hash>> From<T> for ComponentAddress {
