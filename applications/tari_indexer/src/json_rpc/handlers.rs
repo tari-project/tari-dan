@@ -20,7 +20,7 @@
 //   WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //   USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use std::{convert::TryInto, str::FromStr};
+use std::str::FromStr;
 
 use axum_jrpc::{
     error::{JsonRpcError, JsonRpcErrorReason},
@@ -33,7 +33,7 @@ use log::info;
 use serde::Serialize;
 use serde_json::{self as json, json};
 use tari_comms::CommsNode;
-use tari_dan_common_types::{ShardId, SubstateState};
+use tari_dan_common_types::ShardId;
 use tari_dan_core::services::{epoch_manager::EpochManager, BaseNodeClient, ValidatorNodeClientFactory};
 use tari_dan_storage_sqlite::sqlite_shard_store_factory::SqliteShardStore;
 use tari_engine_types::substate::{Substate, SubstateAddress};
@@ -152,9 +152,10 @@ impl JsonRpcHandlers {
             // return the substate from the response
             if let Some(resp) = vn_state_stream.next().await {
                 let resp = resp.unwrap();
-                let state = extract_state_from_vn_sync_response(resp).unwrap();
-
-                return Ok(JsonRpcResponse::success(answer_id, state));
+                match extract_substate_from_vn_sync_response(resp).unwrap() {
+                    Some(substate) => return Ok(JsonRpcResponse::success(answer_id, substate)),
+                    None => break,
+                }
             }
         }
 
@@ -169,20 +170,13 @@ impl JsonRpcHandlers {
     }
 }
 
-fn extract_state_from_vn_sync_response(msg: VnStateSyncResponse) -> Result<SubstateState, anyhow::Error> {
-    let state = if let Some(deleted_by) = Some(msg.destroyed_payload_id).filter(|p| !p.is_empty()) {
-        SubstateState::Down {
-            deleted_by: deleted_by.try_into()?,
-        }
-    } else {
+fn extract_substate_from_vn_sync_response(msg: VnStateSyncResponse) -> Result<Option<Substate>, anyhow::Error> {
+    if msg.destroyed_payload_id.is_empty() && !msg.created_payload_id.is_empty() {
         let substate = Substate::from_bytes(&msg.substate)?;
-        SubstateState::Up {
-            created_by: msg.created_payload_id.try_into()?,
-            data: substate,
-        }
-    };
+        return Ok(Some(substate));
+    }
 
-    Ok(state)
+    Ok(None)
 }
 
 #[derive(Serialize, Debug)]
