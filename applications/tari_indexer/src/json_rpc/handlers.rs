@@ -20,7 +20,7 @@
 //   WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //   USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use std::{convert::TryInto, str::FromStr};
+use std::str::FromStr;
 
 use axum_jrpc::{
     error::{JsonRpcError, JsonRpcErrorReason},
@@ -34,7 +34,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::{self as json, json};
 use tari_comms::CommsNode;
 use tari_crypto::ristretto::RistrettoPublicKey;
-use tari_dan_common_types::{Epoch, ShardId, SubstateState};
+use tari_dan_common_types::{Epoch, ShardId};
 use tari_dan_core::services::{epoch_manager::EpochManager, BaseNodeClient, ValidatorNodeClientFactory};
 use tari_dan_storage_sqlite::sqlite_shard_store_factory::SqliteShardStore;
 use tari_engine_types::substate::{Substate, SubstateAddress};
@@ -132,38 +132,39 @@ impl JsonRpcHandlers {
             None => self.get_latest_substate_from_commitee(&substate_address, epoch).await,
         };
 
-        if let Some(substate) = result {
-            return Ok(JsonRpcResponse::success(answer_id, substate));
+        match result {
+            SubstateResult::Up(substate) => Ok(JsonRpcResponse::success(answer_id, substate)),
+            SubstateResult::Down(substate) => Ok(JsonRpcResponse::success(answer_id, substate)),
+            SubstateResult::DoesNotExist => Err(JsonRpcResponse::error(
+                answer_id,
+                JsonRpcError::new(
+                    JsonRpcErrorReason::InvalidParams,
+                    "Could not retrieve the substate from the network".to_string(),
+                    json::Value::Null,
+                ),
+            )),
         }
-
-        Err(JsonRpcResponse::error(
-            answer_id,
-            JsonRpcError::new(
-                JsonRpcErrorReason::InvalidParams,
-                "Could not retrieve the substate from the network".to_string(),
-                json::Value::Null,
-            ),
-        ))
     }
 
     async fn get_latest_substate_from_commitee(
         &self,
         substate_address: &SubstateAddress,
         epoch: Epoch,
-    ) -> Option<Substate> {
-        let mut latest_substate = None;
+    ) -> SubstateResult {
+        // we keep asking from version 0 upwards
         let mut version = 0;
-
-        // we keep asking from version 0 upwards until a version does not exist
-        while let Some(substate) = self
-            .get_specific_substate_from_commitee(substate_address, version, epoch)
-            .await
-        {
-            latest_substate = Some(substate);
-            version += 1;
+        loop {
+            let substate_result = self
+                .get_specific_substate_from_commitee(substate_address, version, epoch)
+                .await;
+            match substate_result {
+                // when it's a "Down" state, we need to ask a higher version until we find an "Up" or "DoesNotExist"
+                SubstateResult::Down(_) => {
+                    version += 1;
+                },
+                _ => return substate_result,
+            }
         }
-
-        latest_substate
     }
 
     async fn get_specific_substate_from_commitee(
@@ -171,26 +172,26 @@ impl JsonRpcHandlers {
         substate_address: &SubstateAddress,
         version: u32,
         epoch: Epoch,
-    ) -> Option<Substate> {
+    ) -> SubstateResult {
         let shard_id = ShardId::from_address(substate_address, version);
         let committee = self.epoch_manager.get_committee(epoch, shard_id).await.unwrap();
 
         for vn_public_key in &committee.members {
-            let res = self.get_substate_state_from_vn(vn_public_key, shard_id).await;
+            let res = self.get_substate_from_vn(vn_public_key, shard_id).await;
 
-            if let Ok(SubstateState::Up { data: substate, .. }) = res {
-                return Some(substate);
+            if let Ok(substate_result) = res {
+                return substate_result;
             }
         }
 
-        None
+        SubstateResult::DoesNotExist
     }
 
-    async fn get_substate_state_from_vn(
+    async fn get_substate_from_vn(
         &self,
         vn_public_key: &RistrettoPublicKey,
         shard_id: ShardId,
-    ) -> Result<SubstateState, anyhow::Error> {
+    ) -> Result<SubstateResult, anyhow::Error> {
         // build a client with the VN
         let mut sync_vn_client = self.validator_node_client_factory.create_client(vn_public_key);
         let mut sync_vn_rpc_client = sync_vn_client.create_connection().await?;
@@ -219,24 +220,27 @@ impl JsonRpcHandlers {
             return Ok(state);
         }
 
-        Ok(SubstateState::DoesNotExist)
+        Ok(SubstateResult::DoesNotExist)
     }
 }
 
-fn extract_state_from_vn_response(msg: VnStateSyncResponse) -> Result<SubstateState, anyhow::Error> {
-    let state = if let Some(deleted_by) = Some(msg.destroyed_payload_id).filter(|p| !p.is_empty()) {
-        SubstateState::Down {
-            deleted_by: deleted_by.try_into()?,
-        }
+fn extract_state_from_vn_response(msg: VnStateSyncResponse) -> Result<SubstateResult, anyhow::Error> {
+    let substate = Substate::from_bytes(&msg.substate)?;
+
+    let result = if msg.destroyed_payload_id.is_empty() {
+        SubstateResult::Up(substate)
     } else {
-        let substate = Substate::from_bytes(&msg.substate)?;
-        SubstateState::Up {
-            created_by: msg.created_payload_id.try_into()?,
-            data: substate,
-        }
+        SubstateResult::Down(substate)
     };
 
-    Ok(state)
+    Ok(result)
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub enum SubstateResult {
+    DoesNotExist,
+    Up(Substate),
+    Down(Substate),
 }
 
 #[derive(Serialize, Debug)]

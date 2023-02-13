@@ -12,27 +12,46 @@ Feature: Indexer node
     Given a miner MINER connected to base node BASE and wallet WALLET
 
     # Initialize a VN
-    Given a validator node VAL_1 connected to base node BASE and wallet WALLET
+    Given a validator node VN connected to base node BASE and wallet WALLET
 
     # The wallet must have some funds before the VN sends transactions
     When miner MINER mines 12 new blocks
     When wallet WALLET has at least 1000000000 uT
 
     # VN registration
-    When validator node VAL_1 sends a registration transaction
+    When validator node VN sends a registration transaction
     When miner MINER mines 20 new blocks
-    Then the validator node VAL_1 is listed as registered
+    Then the validator node VN is listed as registered
 
-    # Register the "counter" template
-    When validator node VAL_1 registers the template "counter"
+    # Register some templates
+    When validator node VN registers the template "counter"
+    When validator node VN registers the template "basic_nft"
     When miner MINER mines 20 new blocks
-    Then the template "counter" is listed as registered by the validator node VAL_1
+    Then the template "counter" is listed as registered by the validator node VN
+    Then the template "basic_nft" is listed as registered by the validator node VN
 
     # A file-base CLI account must be created to sign future calls
     When I create a DAN wallet
 
-    # Create a new Counter component
-    When I create a component COUNTER_1 of template "counter" on VAL_1 using "new"
+    # Create a new Counter component and increase it to have a version 1
+    When I create a component COUNTER_1 of template "counter" on VN using "new"
+    When I invoke on VN on component COUNTER_1/components/Counter the method call "increase" with 1 outputs named "TX1"
+
+    # Create an account to deposit minted nfts
+    When I create an account ACC1 on VN
+
+    # Create a new SparkleNft component and mint an NFT
+    When I call function "new" on template "basic_nft" on VN with 3 outputs named "NFT"
+    When I submit a transaction manifest on VN with inputs "NFT, ACC1" and 3 outputs named "TX2"
+        ```
+            // $mint NFT/resources/0 1
+            let sparkle_nft = global!["NFT/components/SparkleNft"];
+            let mut acc1 = global!["ACC1/components/Account"];
+
+            // mint a new nft with random id
+            let nft_bucket = sparkle_nft.mint();
+            acc1.deposit(nft_bucket);
+        ```
 
     # Initialize an indexer
     Given an indexer IDX connected to base node BASE watching "COUNTER_1/components/Counter"
