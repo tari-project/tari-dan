@@ -188,7 +188,7 @@ pub struct GetRecentTransactionsRequest {}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct GetRecentTransactionsResponse {
-    pub transactions: Option<Vec<RecentTransaction>>,
+    pub transactions: Vec<RecentTransaction>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

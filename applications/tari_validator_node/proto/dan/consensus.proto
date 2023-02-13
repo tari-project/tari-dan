@@ -55,6 +55,7 @@ message HotStuffTreeNode {
   bytes proposed_by = 8;
   QuorumCertificate justify = 9;
   TariDanPayload payload = 10;
+  uint64 leader_round = 11;
 }
 
 message ValidatorMetadata {

@@ -108,10 +108,6 @@ where
     }
 
     fn remove_transaction(&mut self, hash: &Hash) {
-        info!(
-            target: LOG_TARGET,
-            "FLAG_CUCUMBER: current mempool is {:?}", self.transactions
-        );
         self.transactions.remove(hash);
     }
 

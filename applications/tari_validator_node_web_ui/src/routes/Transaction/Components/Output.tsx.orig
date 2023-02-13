@@ -55,59 +55,6 @@ export default function Output({
           <TableBody>
             {output.map((row) => {
               let justify = JSON.parse(row.justify);
-<<<<<<< HEAD
-              return (
-                <TableRow key={toHexString(row.node_hash)}>
-                  <DataTableCell>{row.height}</DataTableCell>
-                  <DataTableCell className="key">
-                    {toHexString(row.node_hash)}
-                  </DataTableCell>
-                  <TableCell>
-                    <TableContainer>
-                      <Table>
-                        <TableHead>
-                          <TableRow>
-                            <TableCell>Shard</TableCell>
-                            <TableCell>Current state</TableCell>
-                            <TableCell>Pledged to</TableCell>
-                          </TableRow>
-                        </TableHead>
-                        <TableBody>
-                          {justify.all_shard_pledges.map((pledge: any) => {
-                            // This enum gets serialized different ways... should be fixed in the rust
-                            let currentState = Object.keys(
-                              pledge.pledge.current_state
-                            );
-                            return (
-                              <TableRow key={pledge.shard_id}>
-                                <DataTableCell>{pledge.shard_id}</DataTableCell>
-                                <DataTableCell>
-                                  {currentState[0] !== '0'
-                                    ? currentState[0]
-                                    : pledge.pledge.current_state}
-                                </DataTableCell>
-                                <DataTableCell>
-                                  {pledge.pledge.pledged_to_payload.id}
-                                </DataTableCell>
-                              </TableRow>
-                            );
-                          })}
-                        </TableBody>
-                      </Table>
-                    </TableContainer>
-                  </TableCell>
-                  <TableCell>
-                    <pre style={{ height: '200px', overflow: 'scroll' }}>
-                      {row.justify ? renderJson(JSON.parse(row.justify)) : ''}
-                    </pre>
-                  </TableCell>
-                </TableRow>
-              );
-            })}
-          </TableBody>
-        </Table>
-      </TableContainer>
-=======
             return (
               <tr key={toHexString(row.node_hash)}>
                 <td>{row.height}</td>
@@ -141,7 +88,6 @@ export default function Output({
           })}
         </tbody>
       </table>
->>>>>>> a3c8275e711df244b3cd60d1d6a55c3af31fd479
     </div>
   );
 }

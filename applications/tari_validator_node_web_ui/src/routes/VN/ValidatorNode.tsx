@@ -102,6 +102,11 @@ function ValidatorNode() {
       <Grid item xs={12} md={12} lg={12}>
         <StyledPaper>
           <Info epoch={epoch} identity={identity} shardKey={shardKey} />
+        </StyledPaper>
+      </Grid>
+      <SecondaryHeading>Committees</SecondaryHeading>
+      <Grid item xs={12} md={12} lg={12}>
+        <StyledPaper>
           {shardKey ? (
             <Committees
               currentEpoch={epoch.current_epoch}
@@ -135,7 +140,7 @@ function ValidatorNode() {
           <Templates />
         </StyledPaper>
       </Grid>
-      <SecondaryHeading>Epoch</SecondaryHeading>
+      <SecondaryHeading>VNs</SecondaryHeading>
       <Grid item xs={12} md={12} lg={12}>
         <StyledPaper>
           <AllVNs epoch={epoch.current_epoch} />

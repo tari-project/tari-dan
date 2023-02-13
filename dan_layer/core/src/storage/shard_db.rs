@@ -54,7 +54,7 @@ pub struct MemoryShardDbInner<TAddr, TPayload> {
     shard_high_qcs: HashMap<ShardId, QuorumCertificate>,
     // pace maker data
     shard_leaf_nodes: HashMap<ShardId, (TreeNodeHash, NodeHeight)>,
-    last_voted_heights: HashMap<ShardId, NodeHeight>,
+    last_voted_heights: HashMap<ShardId, (NodeHeight, u32)>,
     lock_node_and_heights: HashMap<ShardId, (TreeNodeHash, NodeHeight)>,
     votes: HashMap<(TreeNodeHash, ShardId), Vec<(TAddr, VoteMessage)>>,
     nodes: HashMap<TreeNodeHash, HotStuffTreeNode<TAddr, TPayload>>,
@@ -139,7 +139,7 @@ impl<TAddr: NodeAddressable, TPayload: Payload> ShardStoreTransaction<TAddr, TPa
         Ok(())
     }
 
-    fn get_last_voted_height(&self, shard: ShardId) -> Result<NodeHeight, Self::Error> {
+    fn get_last_voted_height(&self, shard: ShardId) -> Result<(NodeHeight, u32), Self::Error> {
         Ok(self
             .inner
             .read()
@@ -147,10 +147,15 @@ impl<TAddr: NodeAddressable, TPayload: Payload> ShardStoreTransaction<TAddr, TPa
             .last_voted_heights
             .get(&shard)
             .copied()
-            .unwrap_or(NodeHeight(0)))
+            .unwrap_or((NodeHeight(0), 0)))
     }
 
-    fn set_last_voted_height(&mut self, shard: ShardId, height: NodeHeight) -> Result<(), Self::Error> {
+    fn set_last_voted_height(
+        &mut self,
+        shard: ShardId,
+        height: NodeHeight,
+        leader_round: u32,
+    ) -> Result<(), Self::Error> {
         let mut guard = self.inner.write().unwrap();
         let entry = guard.last_voted_heights.entry(shard).or_insert(height);
         *entry = height;
@@ -222,11 +227,13 @@ impl<TAddr: NodeAddressable, TPayload: Payload> ShardStoreTransaction<TAddr, TPa
         shard: ShardId,
         payload: PayloadId,
         payload_height: NodeHeight,
+        leader_round: u32,
         node: HotStuffTreeNode<TAddr, TPayload>,
     ) -> Result<(), Self::Error> {
         let mut guard = self.inner.write().unwrap();
         let payload_entry = guard.payload_votes.entry(payload).or_insert_with(HashMap::new);
         let height_entry = payload_entry.entry(payload_height).or_insert_with(HashMap::new);
+        let leader_round_entry = payload_entry.entry(leader_round).or_insert_with(HashMap::new);
         height_entry.insert(shard, node);
         Ok(())
     }

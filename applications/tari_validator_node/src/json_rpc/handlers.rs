@@ -46,6 +46,7 @@ use tari_transaction::{SubstateChange, TransactionBuilder};
 use tari_validator_node_client::types::{
     GetCommitteeRequest,
     GetIdentityResponse,
+    GetRecentTransactionsResponse,
     GetShardKey,
     GetTemplateRequest,
     GetTemplateResponse,
@@ -253,7 +254,10 @@ impl JsonRpcHandlers {
         let answer_id = value.get_answer_id();
         let tx = self.shard_store.create_read_tx().unwrap();
         if let Ok(recent_transactions) = tx.get_recent_transactions() {
-            Ok(JsonRpcResponse::success(answer_id, json!(recent_transactions)))
+            let res = GetRecentTransactionsResponse {
+                transactions: recent_transactions,
+            };
+            Ok(JsonRpcResponse::success(answer_id, res))
         } else {
             Err(JsonRpcResponse::error(
                 answer_id,

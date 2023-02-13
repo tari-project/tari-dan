@@ -158,22 +158,6 @@ function RecentTransactions() {
   useEffect(() => {
     getRecentTransactions().then((recentTransactions) => {
       setRecentTransacations(
-<<<<<<< HEAD
-        recentTransactions.map(
-          ({
-            instructions,
-            meta,
-            payload_id,
-            timestamp,
-          }: IRecentTransaction) => ({
-            id: toHexString(payload_id),
-            payload_id: toHexString(payload_id),
-            timestamp: timestamp,
-            meta: meta,
-            instructions: instructions,
-          })
-        )
-=======
         // Display from newest to oldest by reversing
         recentTransactions.slice().reverse().map(({ instructions, meta, payload_id, timestamp }: IRecentTransaction) => ({
           id: toHexString(payload_id),
@@ -182,7 +166,6 @@ function RecentTransactions() {
           meta: meta,
           instructions: instructions,
         }))
->>>>>>> a3c8275e711df244b3cd60d1d6a55c3af31fd479
       );
     });
   }, []);

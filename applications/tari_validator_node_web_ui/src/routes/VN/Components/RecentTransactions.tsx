@@ -40,8 +40,6 @@ import KeyboardArrowDownIcon from '@mui/icons-material/KeyboardArrowDown';
 import KeyboardArrowUpIcon from '@mui/icons-material/KeyboardArrowUp';
 import Collapse from '@mui/material/Collapse';
 import TablePagination from '@mui/material/TablePagination';
-import FilterListIcon from '@mui/icons-material/FilterList';
-import IconButton from '@mui/material/IconButton';
 import { Typography } from '@mui/material';
 
 interface IRecentTransaction {
@@ -176,10 +174,11 @@ function RecentTransactions() {
   };
 
   useEffect(() => {
-    getRecentTransactions().then((recentTransactions) => {
+    getRecentTransactions().then((resp) => {
       setRecentTransactions(
         // Display from newest to oldest by reversing
-        recentTransactions
+        resp
+          .transactions
           .slice()
           .reverse()
           .map(

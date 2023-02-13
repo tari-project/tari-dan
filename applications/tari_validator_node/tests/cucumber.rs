@@ -46,7 +46,7 @@ use tari_common_types::types::{FixedHash, PublicKey};
 use tari_crypto::tari_utilities::hex::Hex;
 use tari_dan_common_types::QuorumDecision;
 use tari_dan_core::services::BaseNodeClient;
-use tari_engine_types::{commit_result::TransactionResult, execution_result::Type};
+use tari_engine_types::execution_result::Type;
 use tari_template_lib::Hash;
 use tari_validator_node::GrpcBaseNodeClient;
 use tari_validator_node_cli::versioned_substate_address::VersionedSubstateAddress;
@@ -294,6 +294,26 @@ async fn assert_template_is_registered(world: &mut TariWorld, template_name: Str
     assert_eq!(resp.registration_metadata.address, template_address);
 }
 
+#[then(expr = "the template \"{word}\" is listed as registered by all validator nodes")]
+async fn assert_template_is_registered_by_all(world: &mut TariWorld, template_name: String) {
+    // give it some time for the template tx to be picked up by the VNs
+    tokio::time::sleep(Duration::from_secs(4)).await;
+
+    // retrieve the template address
+    let template_address = world.templates.get(&template_name).unwrap().address;
+
+    // try to get the template for each VN
+    for vn_ps in world.validator_nodes.values() {
+        let jrpc_port = vn_ps.json_rpc_port;
+        let mut client = get_vn_client(jrpc_port).await;
+        let req = GetTemplateRequest { template_address };
+        let resp = client.get_template(req).await.unwrap();
+
+        // check that the template is indeed in the response
+        assert_eq!(resp.registration_metadata.address, template_address);
+    }
+}
+
 #[when(
     expr = r#"I call function "{word}" on template "{word}" on {word} with args "{word}" and {int} outputs named "{word}""#
 )]
@@ -378,6 +398,33 @@ async fn call_component_method(
 }
 
 #[when(
+    expr = r#"I invoke on all validator nodes on component {word} the method call "{word}" with {int} outputs named "{word}""#
+)]
+async fn call_component_method_on_all_vns(
+    world: &mut TariWorld,
+    component_name: String,
+    method_call: String,
+    num_outputs: u64,
+    output_name: String,
+) {
+    let vn_names = world.validator_nodes.iter().map(|(v, _)| v.clone()).collect::<Vec<_>>();
+    for vn_name in vn_names {
+        let resp = validator_node_cli::call_method(
+            world,
+            vn_name,
+            component_name.clone(),
+            output_name.clone(),
+            method_call.clone(),
+            num_outputs,
+        )
+        .await;
+        assert_eq!(resp.result.unwrap().decision, QuorumDecision::Accept);
+    }
+    // give it some time between transactions
+    tokio::time::sleep(Duration::from_secs(4)).await;
+}
+
+#[when(
     expr = "I invoke on {word} on component {word} the method call \"{word}\" with {int} outputs the result is \
             \"{word}\""
 )]
@@ -411,6 +458,47 @@ async fn call_component_method_and_check_result(
         // TODO: handle other possible return types
         _ => todo!(),
     };
+
+    // give it some time between transactions
+    tokio::time::sleep(Duration::from_secs(4)).await;
+}
+
+#[when(
+    expr = "I invoke on all validator nodes on component {word} the method call \"{word}\" with {int} outputs the \
+            result is \"{word}\""
+)]
+async fn call_component_method_on_all_vns_and_check_result(
+    world: &mut TariWorld,
+    component_name: String,
+    method_call: String,
+    num_outputs: u64,
+    expected_result: String,
+) {
+    let vn_names = world.validator_nodes.iter().map(|(v, _)| v.clone()).collect::<Vec<_>>();
+    for vn_name in vn_names {
+        let resp = validator_node_cli::call_method(
+            world,
+            vn_name,
+            component_name.clone(),
+            "dummy_outputs".to_string(),
+            method_call.clone(),
+            num_outputs,
+        )
+        .await;
+        let finalize_result = resp.result.unwrap();
+        assert_eq!(finalize_result.decision, QuorumDecision::Accept);
+
+        let results = finalize_result.finalize.execution_results;
+        let result = results.first().unwrap();
+        match result.return_type {
+            Type::U32 => {
+                let u32_result: u32 = result.decode().unwrap();
+                assert_eq!(u32_result.to_string(), expected_result);
+            },
+            // TODO: handle other possible return types
+            _ => todo!(),
+        };
+    }
 
     // give it some time between transactions
     tokio::time::sleep(Duration::from_secs(4)).await;
@@ -469,7 +557,7 @@ async fn successful_transaction(world: &mut TariWorld) {
         let request = GetRecentTransactionsRequest {};
         let recent_transactions_res = client.get_recent_transactions(request).await.unwrap();
 
-        let recent_transactions = recent_transactions_res.transactions.unwrap();
+        let recent_transactions = recent_transactions_res.transactions;
         // check that all transactions have succeeded
         for tx in &recent_transactions {
             let payload_id = &tx.payload_id[..];
@@ -477,7 +565,7 @@ async fn successful_transaction(world: &mut TariWorld) {
 
             let hash = FixedHash::try_from(payload_id).unwrap();
             let get_transaction_req = GetTransactionRequest { hash };
-            let get_transaction_res = client.get_transaction(get_transaction_req).await.unwrap();
+            let get_transaction_res = client.get_transaction_result(get_transaction_req).await.unwrap();
             let finalized_tx = get_transaction_res.result.unwrap();
 
             assert!(finalized_tx.result.is_accept());
