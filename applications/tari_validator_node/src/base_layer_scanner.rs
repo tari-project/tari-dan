@@ -342,7 +342,9 @@ impl BaseLayerScanner {
 
     fn register_burnt_utxo(&mut self, commitment: Commitment) -> Result<(), BaseLayerScannerError> {
         let address = SubstateAddress::LayerOneCommitment(
-            LayerOneCommitmentAddress::try_from_commitment(commitment.as_bytes()).expect("NOt a valid commitment"),
+            LayerOneCommitmentAddress::try_from_commitment(commitment.as_bytes()).map_err(|e|
+                // Technically impossible, but anyway
+                BaseLayerScannerError::InvalidSideChainUtxoResponse("Invalid commitment".to_string()))?,
         );
         let substate = Substate::new(0, SubstateValue::LayerOneCommitment(commitment.as_bytes().to_vec()));
         self.shard_store
