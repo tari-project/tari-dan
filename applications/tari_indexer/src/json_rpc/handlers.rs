@@ -30,7 +30,7 @@ use axum_jrpc::{
 };
 use futures::StreamExt;
 use log::info;
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use serde_json::{self as json, json};
 use tari_comms::CommsNode;
 use tari_crypto::ristretto::RistrettoPublicKey;
@@ -119,20 +119,20 @@ impl JsonRpcHandlers {
 
     pub async fn get_substate(&self, value: JsonRpcExtractor) -> JrpcResult {
         let answer_id = value.get_answer_id();
-        let substate_address_str: String = value.parse_params()?;
+        let request: GetSubstateRequest = value.parse_params()?;
+        let substate_address_str: String = request.address;
         let substate_address = SubstateAddress::from_str(&substate_address_str).unwrap();
         let epoch = self.epoch_manager.current_epoch().await.unwrap();
 
-        let mut latest_substate = None;
-        let mut version = 0;
+        let result = match request.version {
+            Some(version) => {
+                self.get_specific_substate_from_commitee(&substate_address, version, epoch)
+                    .await
+            },
+            None => self.get_latest_substate_from_commitee(&substate_address, epoch).await,
+        };
 
-        // we keep asking from version 0 upwards until a version does not exist
-        while let Some(substate) = self.get_substate_from_commitee(&substate_address, version, epoch).await {
-            latest_substate = Some(substate);
-            version += 1;
-        }
-
-        if let Some(substate) = latest_substate {
+        if let Some(substate) = result {
             return Ok(JsonRpcResponse::success(answer_id, substate));
         }
 
@@ -146,7 +146,27 @@ impl JsonRpcHandlers {
         ))
     }
 
-    async fn get_substate_from_commitee(
+    async fn get_latest_substate_from_commitee(
+        &self,
+        substate_address: &SubstateAddress,
+        epoch: Epoch,
+    ) -> Option<Substate> {
+        let mut latest_substate = None;
+        let mut version = 0;
+
+        // we keep asking from version 0 upwards until a version does not exist
+        while let Some(substate) = self
+            .get_specific_substate_from_commitee(substate_address, version, epoch)
+            .await
+        {
+            latest_substate = Some(substate);
+            version += 1;
+        }
+
+        latest_substate
+    }
+
+    async fn get_specific_substate_from_commitee(
         &self,
         substate_address: &SubstateAddress,
         version: u32,
@@ -156,7 +176,7 @@ impl JsonRpcHandlers {
         let committee = self.epoch_manager.get_committee(epoch, shard_id).await.unwrap();
 
         for vn_public_key in &committee.members {
-            let res = self.get_substate_state_from_vn(vn_public_key, shard_id, version).await;
+            let res = self.get_substate_state_from_vn(vn_public_key, shard_id).await;
 
             if let Ok(SubstateState::Up { data: substate, .. }) = res {
                 return Some(substate);
@@ -170,7 +190,6 @@ impl JsonRpcHandlers {
         &self,
         vn_public_key: &RistrettoPublicKey,
         shard_id: ShardId,
-        _version: u32,
     ) -> Result<SubstateState, anyhow::Error> {
         // build a client with the VN
         let mut sync_vn_client = self.validator_node_client_factory.create_client(vn_public_key);
@@ -223,4 +242,10 @@ fn extract_state_from_vn_response(msg: VnStateSyncResponse) -> Result<SubstateSt
 #[derive(Serialize, Debug)]
 struct GetStatusResponse {
     addresses: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct GetSubstateRequest {
+    address: String,
+    version: Option<u32>,
 }
