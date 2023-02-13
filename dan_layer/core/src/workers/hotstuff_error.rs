@@ -87,6 +87,8 @@ pub enum HotStuffError {
     ShardPledgesChanged { payload_id: PayloadId },
     #[error("All shards rejected payload {payload_id}: {reason}")]
     AllShardsRejected { payload_id: PayloadId, reason: String },
+    #[error("Current node is not involved in processing payload {payload_id}")]
+    NodeIsNotInvolvedInPayload { payload_id: PayloadId },
 }
 
 impl<T> From<mpsc::error::SendError<T>> for HotStuffError {
