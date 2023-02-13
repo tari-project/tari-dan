@@ -791,6 +791,13 @@ where
                                 .completed_by_tree_node_hash
                                 .expect("[finalize_payload] Pledge MUST be completed");
                             let node = tx.get_node(&node_hash)?;
+                            info!(
+                                target: LOG_TARGET,
+                                "FLAG_CUCUMBER: we are saving substate changes for node hash = {:?} and vn public key \
+                                 = {:?}",
+                                node.hash(),
+                                self.public_key
+                            );
                             tx.save_substate_changes(node, changes)?;
                         }
                     }

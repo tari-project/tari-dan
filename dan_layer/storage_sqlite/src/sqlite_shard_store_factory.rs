@@ -37,7 +37,7 @@ use diesel::{
     sql_types::{BigInt, Binary, Nullable, Text, Timestamp},
     SqliteConnection,
 };
-use log::{debug, warn};
+use log::{debug, error, warn};
 use serde_json::json;
 use tari_common_types::types::{PrivateKey, PublicKey, Signature};
 use tari_dan_common_types::{
