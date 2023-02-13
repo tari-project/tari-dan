@@ -3,7 +3,6 @@
 
 Feature: Indexer node
 
-  @current
   @serial
   Scenario: Indexer is able to connect to validator nodes
     # Initialize a base node, wallet, miner and VN
@@ -55,6 +54,15 @@ Feature: Indexer node
 
     # Initialize an indexer
     Given an indexer IDX connected to base node BASE
+
+    # Get substate of a component (the counter has been increased, so the version is 1)
+    Then the indexer IDX returns version 1 for substate COUNTER_1/components/Counter
+
+    # Get substate of a resource (the nft resource has been mutated by the minting, so the version is 1)
+    Then the indexer IDX returns version 1 for substate NFT/resources/0
+
+    # Get substate of a nft (newly minted and not mutated, so version is 0)
+    Then the indexer IDX returns version 0 for substate TX2/nfts/0
     
-    When I print the cucumber world
-    When I wait 5000 seconds
+    # When I print the cucumber world
+    # When I wait 5000 seconds

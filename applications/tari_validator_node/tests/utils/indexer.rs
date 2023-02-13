@@ -20,13 +20,14 @@
 //   WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //   USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use std::{str::FromStr, time::Duration};
+use std::{collections::HashMap, str::FromStr, time::Duration};
 
 use reqwest::Url;
 use tari_common::configuration::{CommonConfig, StringList};
 use tari_comms::multiaddr::Multiaddr;
 use tari_comms_dht::{DbConnectionUrl, DhtConfig};
-use tari_indexer::run_indexer;
+use tari_engine_types::substate::{Substate, SubstateAddress};
+use tari_indexer::{run_indexer, GetSubstateRequest};
 use tari_indexer_client::IndexerClient;
 use tari_p2p::{Network, PeerSeedsConfig, TransportType};
 use tari_shutdown::Shutdown;
@@ -45,6 +46,38 @@ pub struct IndexerProcess {
     pub handle: task::JoinHandle<()>,
     pub temp_dir_path: String,
     pub shutdown: Shutdown,
+}
+
+impl IndexerProcess {
+    pub async fn get_substate(&self, world: &TariWorld, output_ref: String, version: u32) -> Substate {
+        let substate_address_map: HashMap<String, SubstateAddress> = world
+            .outputs
+            .iter()
+            .flat_map(|(name, outputs)| {
+                outputs
+                    .iter()
+                    .map(move |(child_name, addr)| (format!("{}/{}", name, child_name), addr.address.clone()))
+            })
+            .collect();
+        let address = substate_address_map.get(&output_ref).unwrap().to_string();
+
+        let params = GetSubstateRequest {
+            address,
+            version: Some(version),
+        };
+
+        let mut client = self.get_indexer_client().await;
+        let resp: Substate = client.send_request("get_substate", params).await.unwrap();
+        resp
+
+        // let substate: Substate = serde_json::from_str(resp).unwrap();
+        // substate
+    }
+
+    pub async fn get_indexer_client(&self) -> IndexerClient {
+        let endpoint: Url = Url::parse(&format!("http://localhost:{}", self.json_rpc_port)).unwrap();
+        IndexerClient::connect(endpoint).unwrap()
+    }
 }
 
 pub async fn spawn_indexer(world: &mut TariWorld, indexer_name: String, base_node_name: String) {
@@ -126,9 +159,4 @@ pub async fn spawn_indexer(world: &mut TariWorld, indexer_name: String, base_nod
         shutdown,
     };
     world.indexers.insert(name, indexer_process);
-}
-
-pub async fn get_indexer_client(port: u16) -> IndexerClient {
-    let endpoint: Url = Url::parse(&format!("http://localhost:{}", port)).unwrap();
-    IndexerClient::connect(endpoint).unwrap()
 }

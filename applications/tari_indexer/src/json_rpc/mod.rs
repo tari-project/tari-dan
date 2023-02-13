@@ -21,7 +21,7 @@
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 mod handlers;
-pub use handlers::JsonRpcHandlers;
+pub use handlers::{GetSubstateRequest, JsonRpcHandlers};
 
 mod server;
 

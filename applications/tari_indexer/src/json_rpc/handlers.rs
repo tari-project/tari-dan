@@ -230,7 +230,7 @@ pub enum SubstateResult {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-struct GetSubstateRequest {
-    address: String,
-    version: Option<u32>,
+pub struct GetSubstateRequest {
+    pub address: String,
+    pub version: Option<u32>,
 }

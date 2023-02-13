@@ -62,7 +62,7 @@ use utils::{
 use crate::utils::{
     base_node::{get_base_node_client, spawn_base_node, BaseNodeProcess},
     http_server::MockHttpServer,
-    indexer::{get_indexer_client, IndexerProcess},
+    indexer::IndexerProcess,
     logging::create_log_config_file,
     miner::MinerProcess,
     template::{send_template_registration, RegisteredTemplate},
@@ -399,10 +399,17 @@ async fn start_indexer(world: &mut TariWorld, indexer_name: String, bn_name: Str
     spawn_indexer(world, indexer_name, bn_name).await;
 }
 
-#[then(expr = "the indexer {word} is connected")]
-async fn assert_indexer_is_connected(world: &mut TariWorld, indexer_name: String) {
-    let jrpc_port = world.indexers.get(&indexer_name).unwrap().json_rpc_port;
-    let mut _client = get_indexer_client(jrpc_port).await;
+#[then(expr = "the indexer {word} returns version {int} for substate {word}")]
+async fn assert_indexer_substate_version(
+    world: &mut TariWorld,
+    indexer_name: String,
+    version: u32,
+    output_ref: String,
+) {
+    let indexer = world.indexers.get(&indexer_name).unwrap();
+    let substate = indexer.get_substate(world, output_ref, version).await;
+    eprintln!("indexer.get_substate result: {:?}", substate);
+    assert_eq!(substate.version(), version);
 }
 
 #[when(expr = "I wait {int} seconds")]

@@ -29,6 +29,7 @@ mod p2p;
 
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 
+pub use json_rpc::GetSubstateRequest;
 use log::*;
 use tari_app_utilities::identity_management::setup_node_identity;
 use tari_common::{
