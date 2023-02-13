@@ -19,15 +19,12 @@
 //   SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY,
 //   WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //   USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-pub mod types;
 
 use anyhow::anyhow;
 use reqwest::{header, header::HeaderMap, IntoUrl, Url};
 use serde::{de::DeserializeOwned, Serialize};
 use serde_json as json;
 use serde_json::json;
-
-use crate::types::GetStatusResponse;
 
 #[derive(Debug, Clone)]
 pub struct IndexerClient {
@@ -53,16 +50,12 @@ impl IndexerClient {
         })
     }
 
-    pub async fn get_status(&mut self) -> Result<GetStatusResponse, anyhow::Error> {
-        self.send_request("get_status", json!({})).await
-    }
-
     fn next_request_id(&mut self) -> i64 {
         self.request_id += 1;
         self.request_id
     }
 
-    async fn send_request<T: Serialize, R: DeserializeOwned>(
+    pub async fn send_request<T: Serialize, R: DeserializeOwned>(
         &mut self,
         method: &str,
         params: T,

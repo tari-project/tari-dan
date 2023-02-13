@@ -47,7 +47,6 @@ use tari_crypto::tari_utilities::hex::Hex;
 use tari_dan_common_types::QuorumDecision;
 use tari_dan_core::services::BaseNodeClient;
 use tari_engine_types::execution_result::Type;
-use tari_indexer_client::types::GetStatusResponse;
 use tari_template_lib::Hash;
 use tari_validator_node::GrpcBaseNodeClient;
 use tari_validator_node_cli::versioned_substate_address::VersionedSubstateAddress;
@@ -395,18 +394,15 @@ fn wrap_manifest_in_main(world: &TariWorld, contents: &str) -> String {
     format!("{} fn main() {{ {} }}", template_defs, contents)
 }
 
-#[given(regex = r#"^an indexer (\w+) connected to base node (\w+) watching "([^"]+)"$"#)]
-async fn start_indexer(world: &mut TariWorld, indexer_name: String, bn_name: String, inputs: String) {
-    spawn_indexer(world, indexer_name, bn_name, inputs).await;
+#[given(expr = "an indexer {word} connected to base node {word}")]
+async fn start_indexer(world: &mut TariWorld, indexer_name: String, bn_name: String) {
+    spawn_indexer(world, indexer_name, bn_name).await;
 }
 
 #[then(expr = "the indexer {word} is connected")]
 async fn assert_indexer_is_connected(world: &mut TariWorld, indexer_name: String) {
     let jrpc_port = world.indexers.get(&indexer_name).unwrap().json_rpc_port;
-    let mut client = get_indexer_client(jrpc_port).await;
-
-    let status: GetStatusResponse = client.get_status().await.unwrap();
-    eprintln!("Indexer GetStatusResponse: {:?}", status);
+    let mut _client = get_indexer_client(jrpc_port).await;
 }
 
 #[when(expr = "I wait {int} seconds")]

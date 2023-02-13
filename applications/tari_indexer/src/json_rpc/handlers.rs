@@ -36,7 +36,6 @@ use tari_comms::CommsNode;
 use tari_crypto::ristretto::RistrettoPublicKey;
 use tari_dan_common_types::{Epoch, ShardId};
 use tari_dan_core::services::{epoch_manager::EpochManager, BaseNodeClient, ValidatorNodeClientFactory};
-use tari_dan_storage_sqlite::sqlite_shard_store_factory::SqliteShardStore;
 use tari_engine_types::substate::{Substate, SubstateAddress};
 
 use crate::{
@@ -51,21 +50,17 @@ use crate::{
 const LOG_TARGET: &str = "tari::indexer::json_rpc::handlers";
 
 pub struct JsonRpcHandlers {
-    addresses: Vec<SubstateAddress>,
     comms: CommsNode,
     epoch_manager: EpochManagerHandle,
-    _shard_store: SqliteShardStore,
     base_node_client: GrpcBaseNodeClient,
     validator_node_client_factory: TariCommsValidatorNodeClientFactory,
 }
 
 impl JsonRpcHandlers {
-    pub fn new(addresses: Vec<SubstateAddress>, services: &Services, base_node_client: GrpcBaseNodeClient) -> Self {
+    pub fn new(services: &Services, base_node_client: GrpcBaseNodeClient) -> Self {
         Self {
-            addresses,
             comms: services.comms.clone(),
             epoch_manager: services.epoch_manager.clone(),
-            _shard_store: services.shard_store.clone(),
             base_node_client,
             validator_node_client_factory: services.validator_node_client_factory.clone(),
         }
@@ -73,15 +68,6 @@ impl JsonRpcHandlers {
 }
 
 impl JsonRpcHandlers {
-    pub fn get_status(&self, value: JsonRpcExtractor) -> JrpcResult {
-        let answer_id = value.get_answer_id();
-        let response = GetStatusResponse {
-            addresses: self.addresses.iter().map(SubstateAddress::to_string).collect(),
-        };
-
-        Ok(JsonRpcResponse::success(answer_id, response))
-    }
-
     pub async fn get_all_vns(&self, value: JsonRpcExtractor) -> JrpcResult {
         let answer_id = value.get_answer_id();
         let epoch: u64 = value.parse_params()?;
@@ -241,11 +227,6 @@ pub enum SubstateResult {
     DoesNotExist,
     Up(Substate),
     Down(Substate),
-}
-
-#[derive(Serialize, Debug)]
-struct GetStatusResponse {
-    addresses: Vec<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

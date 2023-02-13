@@ -54,8 +54,7 @@ Feature: Indexer node
         ```
 
     # Initialize an indexer
-    Given an indexer IDX connected to base node BASE watching "COUNTER_1/components/Counter"
-    Then the indexer IDX is connected
+    Given an indexer IDX connected to base node BASE
     
-    # When I print the cucumber world
-    # When I wait 5000 seconds
+    When I print the cucumber world
+    When I wait 5000 seconds

@@ -22,11 +22,12 @@
 
 use std::{panic, process};
 
+use clap::Parser;
 use log::*;
 use tari_common::{exit_codes::ExitError, load_configuration};
-use tari_indexer::{cli::Cli, run_indexer};
+use tari_indexer::run_indexer;
 use tari_shutdown::Shutdown;
-use tari_validator_node::ApplicationConfig;
+use tari_validator_node::{cli::Cli, ApplicationConfig};
 
 const LOG_TARGET: &str = "tari::indexer::app";
 
@@ -52,14 +53,14 @@ async fn main() {
 }
 
 async fn main_inner() -> Result<(), ExitError> {
-    let cli = Cli::init();
+    let cli = Cli::parse();
     let config_path = cli.common.config_path();
     let cfg = load_configuration(config_path, true, &cli)?;
     let config = ApplicationConfig::load_from(&cfg)?;
     println!("Starting validator node on network {}", config.network);
 
     let mut shutdown = Shutdown::new();
-    run_indexer(cli, config, shutdown.to_signal()).await?;
+    run_indexer(config, shutdown.to_signal()).await?;
     shutdown.trigger();
 
     Ok(())

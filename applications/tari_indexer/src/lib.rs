@@ -22,18 +22,13 @@
 
 mod base_layer_scanner;
 mod bootstrap;
-pub mod cli;
 mod comms;
 mod grpc;
 mod json_rpc;
 mod p2p;
 
-use std::{
-    net::{IpAddr, Ipv4Addr, SocketAddr},
-    panic,
-};
+use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 
-use cli::Cli;
 use log::*;
 use tari_app_utilities::identity_management::setup_node_identity;
 use tari_common::{
@@ -43,10 +38,9 @@ use tari_common::{
 use tari_comms::peer_manager::PeerFeatures;
 use tari_dan_core::{consensus_constants::ConsensusConstants, services::BaseNodeClient, storage::DbFactory};
 use tari_dan_storage_sqlite::SqliteDbFactory;
-use tari_engine_types::substate::SubstateAddress;
 use tari_shutdown::ShutdownSignal;
 use tari_validator_node::ApplicationConfig;
-use tokio::{task, time, time::Duration};
+use tokio::task;
 
 use crate::{
     bootstrap::{spawn_services, Services},
@@ -55,14 +49,9 @@ use crate::{
 };
 
 const LOG_TARGET: &str = "tari::indexer::app";
-const DEFAULT_POLL_TIME_MS: u64 = 200;
 pub const DAN_PEER_FEATURES: PeerFeatures = PeerFeatures::COMMUNICATION_NODE;
 
-pub async fn run_indexer(
-    cli: Cli,
-    config: ApplicationConfig,
-    mut shutdown_signal: ShutdownSignal,
-) -> Result<(), ExitError> {
+pub async fn run_indexer(config: ApplicationConfig, mut shutdown_signal: ShutdownSignal) -> Result<(), ExitError> {
     let node_identity = setup_node_identity(
         &config.validator_node.identity_file,
         config.validator_node.public_address.as_ref(),
@@ -89,30 +78,15 @@ pub async fn run_indexer(
     .await?;
 
     // Run the JSON-RPC API
-    if let Some(json_rpc_address) = cli.json_rpc_address {
+    if let Some(json_rpc_address) = config.validator_node.json_rpc_address {
         info!(target: LOG_TARGET, "🌐 Started JSON-RPC server on {}", json_rpc_address);
-        let handlers = JsonRpcHandlers::new(cli.address.clone(), &services, base_node_client);
+        let handlers = JsonRpcHandlers::new(&services, base_node_client);
         task::spawn(run_json_rpc(json_rpc_address, handlers));
     }
 
-    let poll_time_ms = cli.poll_time_ms.unwrap_or(DEFAULT_POLL_TIME_MS);
-    loop {
-        tokio::select! {
-            _ = time::sleep(Duration::from_millis(poll_time_ms)) => {
-                scan_substates(&cli.address).await;
-            },
-
-            _ = shutdown_signal.wait() => {
-                break;
-            },
-        }
-    }
+    shutdown_signal.wait().await;
 
     Ok(())
-}
-
-async fn scan_substates(_addresses: &[SubstateAddress]) {
-    // TODO
 }
 
 async fn create_base_layer_clients(config: &ApplicationConfig) -> Result<GrpcBaseNodeClient, ExitError> {
