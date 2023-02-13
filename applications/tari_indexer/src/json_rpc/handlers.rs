@@ -20,7 +20,7 @@
 //   WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //   USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use std::str::FromStr;
+use std::{str::FromStr, sync::Arc};
 
 use axum_jrpc::{
     error::{JsonRpcError, JsonRpcErrorReason},
@@ -28,41 +28,30 @@ use axum_jrpc::{
     JsonRpcExtractor,
     JsonRpcResponse,
 };
-use futures::StreamExt;
-use log::info;
 use serde::{Deserialize, Serialize};
 use serde_json::{self as json, json};
 use tari_comms::CommsNode;
-use tari_crypto::ristretto::RistrettoPublicKey;
-use tari_dan_common_types::{Epoch, ShardId};
-use tari_dan_core::services::{epoch_manager::EpochManager, BaseNodeClient, ValidatorNodeClientFactory};
-use tari_engine_types::substate::{Substate, SubstateAddress};
+use tari_dan_core::services::BaseNodeClient;
+use tari_engine_types::substate::SubstateAddress;
 
-use crate::{
-    bootstrap::Services,
-    p2p::{
-        proto::rpc::VnStateSyncResponse,
-        services::{epoch_manager::handle::EpochManagerHandle, rpc_client::TariCommsValidatorNodeClientFactory},
-    },
-    GrpcBaseNodeClient,
-};
-
-const LOG_TARGET: &str = "tari::indexer::json_rpc::handlers";
+use crate::{bootstrap::Services, dan_layer_scanner::DanLayerScanner, GrpcBaseNodeClient};
 
 pub struct JsonRpcHandlers {
     comms: CommsNode,
-    epoch_manager: EpochManagerHandle,
     base_node_client: GrpcBaseNodeClient,
-    validator_node_client_factory: TariCommsValidatorNodeClientFactory,
+    dan_layer_scanner: Arc<DanLayerScanner>,
 }
 
 impl JsonRpcHandlers {
-    pub fn new(services: &Services, base_node_client: GrpcBaseNodeClient) -> Self {
+    pub fn new(
+        services: &Services,
+        base_node_client: GrpcBaseNodeClient,
+        dan_layer_scanner: Arc<DanLayerScanner>,
+    ) -> Self {
         Self {
             comms: services.comms.clone(),
-            epoch_manager: services.epoch_manager.clone(),
             base_node_client,
-            validator_node_client_factory: services.validator_node_client_factory.clone(),
+            dan_layer_scanner,
         }
     }
 }
@@ -108,20 +97,14 @@ impl JsonRpcHandlers {
         let request: GetSubstateRequest = value.parse_params()?;
         let substate_address_str: String = request.address;
         let substate_address = SubstateAddress::from_str(&substate_address_str).unwrap();
-        let epoch = self.epoch_manager.current_epoch().await.unwrap();
 
-        let result = match request.version {
-            Some(version) => {
-                self.get_specific_substate_from_commitee(&substate_address, version, epoch)
-                    .await
-            },
-            None => self.get_latest_substate_from_commitee(&substate_address, epoch).await,
-        };
-
-        match result {
-            SubstateResult::Up(substate) => Ok(JsonRpcResponse::success(answer_id, substate)),
-            SubstateResult::Down(substate) => Ok(JsonRpcResponse::success(answer_id, substate)),
-            SubstateResult::DoesNotExist => Err(JsonRpcResponse::error(
+        match self
+            .dan_layer_scanner
+            .get_substate(substate_address, request.version)
+            .await
+        {
+            Some(substate) => Ok(JsonRpcResponse::success(answer_id, substate)),
+            None => Err(JsonRpcResponse::error(
                 answer_id,
                 JsonRpcError::new(
                     JsonRpcErrorReason::InvalidParams,
@@ -131,102 +114,6 @@ impl JsonRpcHandlers {
             )),
         }
     }
-
-    async fn get_latest_substate_from_commitee(
-        &self,
-        substate_address: &SubstateAddress,
-        epoch: Epoch,
-    ) -> SubstateResult {
-        // we keep asking from version 0 upwards
-        let mut version = 0;
-        loop {
-            let substate_result = self
-                .get_specific_substate_from_commitee(substate_address, version, epoch)
-                .await;
-            match substate_result {
-                // when it's a "Down" state, we need to ask a higher version until we find an "Up" or "DoesNotExist"
-                SubstateResult::Down(_) => {
-                    version += 1;
-                },
-                _ => return substate_result,
-            }
-        }
-    }
-
-    async fn get_specific_substate_from_commitee(
-        &self,
-        substate_address: &SubstateAddress,
-        version: u32,
-        epoch: Epoch,
-    ) -> SubstateResult {
-        let shard_id = ShardId::from_address(substate_address, version);
-        let committee = self.epoch_manager.get_committee(epoch, shard_id).await.unwrap();
-
-        for vn_public_key in &committee.members {
-            let res = self.get_substate_from_vn(vn_public_key, shard_id).await;
-
-            if let Ok(substate_result) = res {
-                return substate_result;
-            }
-        }
-
-        SubstateResult::DoesNotExist
-    }
-
-    async fn get_substate_from_vn(
-        &self,
-        vn_public_key: &RistrettoPublicKey,
-        shard_id: ShardId,
-    ) -> Result<SubstateResult, anyhow::Error> {
-        // build a client with the VN
-        let mut sync_vn_client = self.validator_node_client_factory.create_client(vn_public_key);
-        let mut sync_vn_rpc_client = sync_vn_client.create_connection().await?;
-
-        // request the shard substate to the VN
-        let shard_id_proto: crate::p2p::proto::common::ShardId = shard_id.into();
-        let request = crate::p2p::proto::rpc::VnStateSyncRequest {
-            start_shard_id: Some(shard_id_proto.clone()),
-            end_shard_id: Some(shard_id_proto),
-            inventory: vec![],
-        };
-
-        // get the VN's response
-        let mut vn_state_stream = match sync_vn_rpc_client.vn_state_sync(request).await {
-            Ok(stream) => stream,
-            Err(e) => {
-                info!(target: LOG_TARGET, "Unable to connect to peer: {} ", e);
-                return Err(e.into());
-            },
-        };
-
-        // return the substate from the response (there is going to be only 0 or 1 result)
-        if let Some(msg) = vn_state_stream.next().await {
-            let msg = msg?;
-            let state = extract_state_from_vn_response(msg)?;
-            return Ok(state);
-        }
-
-        Ok(SubstateResult::DoesNotExist)
-    }
-}
-
-fn extract_state_from_vn_response(msg: VnStateSyncResponse) -> Result<SubstateResult, anyhow::Error> {
-    let substate = Substate::from_bytes(&msg.substate)?;
-
-    let result = if msg.destroyed_payload_id.is_empty() {
-        SubstateResult::Up(substate)
-    } else {
-        SubstateResult::Down(substate)
-    };
-
-    Ok(result)
-}
-
-#[derive(Debug, Clone, Deserialize, Serialize)]
-pub enum SubstateResult {
-    DoesNotExist,
-    Up(Substate),
-    Down(Substate),
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

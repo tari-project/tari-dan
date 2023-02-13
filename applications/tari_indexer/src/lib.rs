@@ -23,12 +23,17 @@
 mod base_layer_scanner;
 mod bootstrap;
 mod comms;
+mod dan_layer_scanner;
 mod grpc;
 mod json_rpc;
 mod p2p;
 
-use std::net::{IpAddr, Ipv4Addr, SocketAddr};
+use std::{
+    net::{IpAddr, Ipv4Addr, SocketAddr},
+    sync::Arc,
+};
 
+use dan_layer_scanner::DanLayerScanner;
 pub use json_rpc::GetSubstateRequest;
 use log::*;
 use tari_app_utilities::identity_management::setup_node_identity;
@@ -78,10 +83,15 @@ pub async fn run_indexer(config: ApplicationConfig, mut shutdown_signal: Shutdow
     )
     .await?;
 
+    let dan_layer_scanner = DanLayerScanner::new(
+        services.epoch_manager.clone(),
+        services.validator_node_client_factory.clone(),
+    );
+
     // Run the JSON-RPC API
     if let Some(json_rpc_address) = config.validator_node.json_rpc_address {
         info!(target: LOG_TARGET, "🌐 Started JSON-RPC server on {}", json_rpc_address);
-        let handlers = JsonRpcHandlers::new(&services, base_node_client);
+        let handlers = JsonRpcHandlers::new(&services, base_node_client, Arc::new(dan_layer_scanner));
         task::spawn(run_json_rpc(json_rpc_address, handlers));
     }
 

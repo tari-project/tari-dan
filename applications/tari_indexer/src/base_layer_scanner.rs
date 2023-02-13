@@ -43,7 +43,7 @@ use tokio::{task, time};
 
 use crate::{p2p::services::epoch_manager::handle::EpochManagerHandle, GrpcBaseNodeClient};
 
-const LOG_TARGET: &str = "tari::validator_node::base_layer_scanner";
+const LOG_TARGET: &str = "tari::indexer::base_layer_scanner";
 
 pub fn spawn(
     config: ValidatorNodeConfig,
