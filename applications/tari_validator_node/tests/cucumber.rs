@@ -174,7 +174,7 @@ async fn start_seed_validator_node(world: &mut TariWorld, seed_vn_name: String, 
 
 #[given(expr = "{int} validator nodes connected to base node {word} and wallet {word}")]
 async fn start_multiple_validator_nodes(world: &mut TariWorld, num_nodes: u64, bn_name: String, wallet_name: String) {
-    for i in 1..num_nodes + 1 {
+    for i in 1..=num_nodes {
         let vn_name = format!("VAL_{i}");
         spawn_validator_node(world, vn_name, bn_name.clone(), wallet_name.clone(), false).await;
     }
