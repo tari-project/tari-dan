@@ -458,6 +458,7 @@ where
 
     /// Step 5: A replica receives a Proposal from the leader. The replicas including the leader, validate the proposal
     /// and, once proposals for all shards have been received, send votes for all shards.
+    #[allow(clippy::too_many_lines)]
     async fn on_receive_proposal(
         &mut self,
         from: TAddr,
