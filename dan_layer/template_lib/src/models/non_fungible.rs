@@ -185,7 +185,7 @@ impl NonFungibleAddress {
 
 impl Display for NonFungibleAddress {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{} {}", self.resource_address, self.id)
+        write!(f, "{} nft_{}", self.resource_address, self.id)
     }
 }
 

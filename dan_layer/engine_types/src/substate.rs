@@ -201,7 +201,7 @@ impl FromStr for SubstateAddress {
                 Ok(SubstateAddress::Component(addr))
             },
             Some(("resource", addr)) => {
-                match addr.split_once(':') {
+                match addr.split_once(' ') {
                     // resource_xxxx nft_xxxxx
                     Some((resource_str, addr)) => match addr.split_once('_') {
                         Some(("nft", addr)) => {
@@ -386,7 +386,15 @@ mod tests {
                 .as_resource_address()
                 .unwrap();
             SubstateAddress::from_str(
-                "resource_7cbfe29101c24924b1b6ccefbfff98986d648622272ae24f7585dab55ff1ff64:nft_str:SpecialNft",
+                "resource_7cbfe29101c24924b1b6ccefbfff98986d648622272ae24f7585dab55ff1ff64 nft_str:SpecialNft",
+            )
+            .unwrap()
+            .as_non_fungible_address()
+            .unwrap();
+
+            SubstateAddress::from_str(
+                "resource_a7cf4fd18ada7f367b1c102a9c158abc3754491665033231c5eb907fa14dfe2b \
+                 nft_uuid:7f19c3fe5fa13ff66a0d379fe5f9e3508acbd338db6bedd7350d8d565b2c5d32",
             )
             .unwrap()
             .as_non_fungible_address()
