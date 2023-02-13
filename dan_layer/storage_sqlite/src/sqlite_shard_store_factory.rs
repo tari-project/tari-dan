@@ -1017,7 +1017,7 @@ impl ShardStoreWriteTransaction<PublicKey, TariDanPayload> for SqliteShardStoreW
 
         let payload_id = Vec::from(node.payload_id().as_bytes());
         let payload_height = node.payload_height().as_u64() as i64;
-        let leader_round = node.leader_round() as i64;
+        let leader_round = i64::from(node.leader_round());
 
         let local_pledges = json!(&node.local_pledge()).to_string();
 
@@ -1242,7 +1242,7 @@ impl ShardStoreWriteTransaction<PublicKey, TariDanPayload> for SqliteShardStoreW
             shard_id: shard.as_bytes().to_vec(),
             payload_id: payload_id.as_bytes().to_vec(),
             node_height: height.as_u64() as i64,
-            leader_round: leader_round as i64,
+            leader_round: i64::from(leader_round),
         };
 
         diesel::insert_into(last_voted_heights::table)
@@ -1269,7 +1269,7 @@ impl ShardStoreWriteTransaction<PublicKey, TariDanPayload> for SqliteShardStoreW
         let payload_height = payload_height.as_u64() as i64;
         let node_hash = node.hash().as_bytes().to_vec();
         let node = serde_json::to_string_pretty(&node).unwrap();
-        let leader_round = leader_round as i64;
+        let leader_round = i64::from(leader_round);
 
         let new_row = NewLeaderProposal {
             shard_id: shard,

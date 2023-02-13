@@ -136,7 +136,7 @@ impl From<HotStuffTreeNode<CommsPublicKey, TariDanPayload>> for proto::consensus
             shard: source.shard().as_bytes().to_vec(),
             payload_id: source.payload_id().as_bytes().to_vec(),
             payload_height: source.payload_height().as_u64(),
-            leader_round: source.leader_round() as u64,
+            leader_round: u64::from(source.leader_round()),
             local_pledge: source.local_pledge().map(|p| p.clone().into()),
             epoch: source.epoch().as_u64(),
             proposed_by: source.proposed_by().as_bytes().to_vec(),

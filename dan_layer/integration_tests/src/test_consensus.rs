@@ -965,10 +965,9 @@ impl Test {
         );
 
         // Init the HsTestHarness instances for the committees.
-        let _ = committees
-            .iter_mut()
-            .map(|committee| committee.init_instances(epoch_manager.clone()))
-            .collect::<Vec<_>>();
+        for committee in &mut committees {
+            committee.init_instances(epoch_manager.clone());
+        }
 
         // Create payload
         let payload = TariDanPayload::new(
