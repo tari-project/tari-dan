@@ -1,5 +1,6 @@
 ./CODEOWNERS
 ./LICENSE
 ./comms/tari_comms_logging/src/schema.rs
+./dan_layer/wallet/storage_sqlite/src/schema.rs
 ./dan_layer/storage_sqlite/src/schema.rs
 ./scripts/env_sample
