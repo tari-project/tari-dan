@@ -1,0 +1,52 @@
+[package]
+name = "tari_dan_wallet_daemon"
+authors = ["The Tari Development Community"]
+description = "The Tari DAN wallet daemon"
+repository = "https://github.com/tari-project/tari"
+license = "BSD-3-Clause"
+version = "0.35.1"
+edition = "2018"
+
+[dependencies]
+tari_common = { git = "https://github.com/tari-project/tari.git", branch = "development" }
+tari_common_types = { git = "https://github.com/tari-project/tari.git", branch = "development" }
+tari_shutdown = { git = "https://github.com/tari-project/tari.git", branch = "development" }
+tari_dan_wallet_sdk = { path = "../../dan_layer/wallet/sdk" }
+tari_dan_wallet_storage_sqlite = { path = "../../dan_layer/wallet/storage_sqlite" }
+tari_transaction = { path = "../../dan_layer/transaction" }
+tari_dan_common_types = { path = "../../dan_layer/common_types" }
+tari_engine_types = { path = "../../dan_layer/engine_types" }
+tari_utilities = { git = "https://github.com/tari-project/tari_utilities.git", tag = "v0.4.10" }
+tari_wallet_daemon_client = { path = "../../clients/wallet_daemon_client" }
+tari_template_builtin = { path = "../../dan_layer/template_builtin" }
+# TODO: Ideally we should not have to include the WASM template lib, we should perhaps extract the address types into a separate crate (e.g. template_types)
+tari_template_lib = { path = "../../dan_layer/template_lib" }
+
+anyhow = "1.0.69"
+axum = "0.6"
+axum-jrpc = { version = "0.3.2", features = ["anyhow_error"] }
+clap = { version = "4.1.4", features = ["derive", "env"] }
+dirs = "4.0.0"
+futures = "0.3.26"
+log = "0.4.17"
+multiaddr = "0.17.0"
+serde = "1.0.152"
+serde_json = "1.0.92"
+thiserror = "1.0.38"
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "time"] }
+tokio-stream = "0.1.11"
+tower-http = { version = "0.3.5", default-features = false, features = ["cors", "trace"] }
+
+libsqlite3-sys = { version = "0.22.2", features = ["bundled"] }
+log4rs = { version = "1.1.1", features = ["rolling_file_appender", "compound_policy", "size_trigger", "fixed_window_roller"] }
+
+[dev-dependencies]
+tari_utilities = { git = "https://github.com/tari-project/tari_utilities.git", tag = "v0.4.10" }
+
+[package.metadata.cargo-machete]
+ignored = [
+    # We want to bundle this lib
+    "libsqlite3-sys",
+    # Want to enable some log4rs features
+    "log4rs",
+]

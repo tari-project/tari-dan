@@ -44,11 +44,16 @@ use tari_template_lib::{
     models::{Amount, NonFungibleAddress, NonFungibleId},
     prelude::ResourceAddress,
 };
-use tari_transaction::{SubstateChange, Transaction};
+use tari_transaction::Transaction;
 use tari_transaction_manifest::parse_manifest;
 use tari_utilities::hex::to_hex;
 use tari_validator_node_client::{
-    types::{GetTransactionRequest, SubmitTransactionRequest, SubmitTransactionResponse, TransactionFinalizeResult},
+    types::{
+        GetTransactionResponseRequest,
+        SubmitTransactionRequest,
+        SubmitTransactionResponse,
+        TransactionFinalizeResult,
+    },
     ValidatorNodeClient,
 };
 
@@ -150,7 +155,7 @@ impl TransactionSubcommand {
 }
 
 async fn handle_get(args: GetArgs, client: &mut ValidatorNodeClient) -> Result<(), anyhow::Error> {
-    let request = GetTransactionRequest {
+    let request = GetTransactionResponseRequest {
         hash: args.transaction_hash.into_inner(),
     };
     let resp = client.get_transaction_result(request).await?;
@@ -245,7 +250,10 @@ pub async fn submit_transaction(
     let inputs = inputs
         .into_iter()
         .map(|versioned_addr| ShardId::from_address(&versioned_addr.address, versioned_addr.version))
-        .collect();
+        .collect::<Vec<_>>();
+
+    summarize_request(&instructions, &inputs, &outputs, 1, common.dry_run);
+    println!();
 
     let mut builder = Transaction::builder();
 
@@ -266,35 +274,20 @@ pub async fn submit_transaction(
 
     let transaction = builder.build();
 
-    let inputs = transaction
-        .meta()
-        .involved_objects_iter()
-        .map(|(shard_id, (change, _))| (*shard_id, *change))
-        .collect();
-
+    if transaction.meta().involved_shards().is_empty() {
+        return Err(anyhow::anyhow!(
+            "No inputs or outputs, transaction will not be processed by the network"
+        ));
+    }
+    let tx_hash = *transaction.hash();
     let request = SubmitTransactionRequest {
-        // TODO: just pass the whole transaction in this request
-        // transaction,
-        instructions: transaction.instructions().to_vec(),
-        signature: transaction.signature().clone(),
-        fee: transaction.fee(),
-        sender_public_key: transaction.sender_public_key().clone(),
-        inputs,
-        num_outputs: common.num_outputs.unwrap_or(0),
+        transaction,
         wait_for_result: common.wait_for_result,
         is_dry_run: common.dry_run,
         wait_for_result_timeout: common.wait_for_result_timeout,
     };
 
-    if request.inputs.is_empty() && request.num_outputs == 0 {
-        return Err(anyhow::anyhow!(
-            "No inputs or outputs, transaction will not be processed by the network"
-        ));
-    }
-    println!();
-    println!("✅ Transaction {} submitted.", transaction.hash());
-    println!();
-    summarize_request(&request);
+    println!("✅ Transaction {} submitted.", tx_hash);
     println!();
 
     let timer = Instant::now();
@@ -314,42 +307,38 @@ pub async fn submit_transaction(
     Ok(resp)
 }
 
-fn summarize_request(request: &SubmitTransactionRequest) {
-    if request.is_dry_run {
+fn summarize_request(
+    instructions: &[Instruction],
+    inputs: &[ShardId],
+    outputs: &[ShardId],
+    fee: u64,
+    is_dry_run: bool,
+) {
+    if is_dry_run {
         println!("NOTE: Dry run is enabled. This transaction will not be processed by the network.");
         println!();
     }
-    println!("Fee: {}", request.fee);
+    println!("Fee: {}", fee);
     println!("Inputs:");
-    let mut iter = request
-        .inputs
-        .iter()
-        .filter(|(_, change)| *change == SubstateChange::Destroy)
-        .peekable();
-    if iter.peek().is_none() {
+    if inputs.is_empty() {
         println!("  None");
     } else {
-        for (shard_id, change) in iter {
-            println!("- {}: {}", shard_id, change);
+        for shard_id in inputs {
+            println!("- {}", shard_id);
         }
     }
     println!();
     println!("Outputs:");
-    let mut iter = request
-        .inputs
-        .iter()
-        .filter(|(_, change)| *change == SubstateChange::Create)
-        .peekable();
-    if iter.peek().is_none() {
+    if outputs.is_empty() {
         println!("  None");
     } else {
-        for (shard_id, change) in iter {
-            println!("- {}: {}", shard_id, change);
+        for shard_id in outputs {
+            println!("- {}", shard_id);
         }
     }
     println!();
     println!("🌟 Submitting instructions:");
-    for instruction in &request.instructions {
+    for instruction in instructions {
         println!("- {}", instruction);
     }
     println!();
