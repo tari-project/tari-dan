@@ -133,7 +133,7 @@ pub trait ShardStoreReadTransaction<TAddr: NodeAddressable, TPayload: Payload> {
     ) -> Result<Vec<SubstateShardData>, StorageError>;
     /// Returns the last voted height. A height of 0 means that no previous vote height has been recorded for the
     /// <shard, payload> pair.
-    fn get_last_voted_height(&self, shard: ShardId, payload_id: PayloadId) -> Result<NodeHeight, StorageError>;
+    fn get_last_voted_height(&self, shard: ShardId, payload_id: PayloadId) -> Result<(NodeHeight, u32), StorageError>;
     fn get_leader_proposals(
         &self,
         payload: PayloadId,
@@ -198,6 +198,7 @@ pub trait ShardStoreWriteTransaction<TAddr: NodeAddressable, TPayload: Payload> 
         shard: ShardId,
         payload_id: PayloadId,
         height: NodeHeight,
+        leader_round: u32,
     ) -> Result<(), StorageError>;
 
     fn save_leader_proposals(
@@ -205,6 +206,7 @@ pub trait ShardStoreWriteTransaction<TAddr: NodeAddressable, TPayload: Payload> 
         shard: ShardId,
         payload: PayloadId,
         payload_height: NodeHeight,
+        leader_round: u32,
         node: HotStuffTreeNode<TAddr, TPayload>,
     ) -> Result<(), StorageError>;
 
