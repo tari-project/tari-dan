@@ -1,5 +1,5 @@
-//  Copyright 2022 The Tari Project
-//  SPDX-License-Identifier: BSD-3-Clause
+//   Copyright 2023 The Tari Project
+//   SPDX-License-Identifier: BSD-3-Clause
 
 use std::convert::TryFrom;
 
@@ -9,11 +9,9 @@ use tari_crypto::{
     keys::PublicKey as PublicKeyT,
     ristretto::{RistrettoPublicKey, RistrettoSchnorr, RistrettoSecretKey},
 };
-use tari_utilities::ByteArray;
+use tari_engine_types::{hashing::hasher, instruction::Instruction};
 
-use crate::{hashing::hasher, instruction::Instruction};
-
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, Eq, PartialEq)]
 pub struct InstructionSignature(RistrettoSchnorr);
 
 impl InstructionSignature {
@@ -23,8 +21,8 @@ impl InstructionSignature {
         let nonce_pk = RistrettoPublicKey::from_secret_key(&secret_nonce);
         // TODO: implement dan encoding for (a wrapper of) PublicKey
         let challenge = hasher("instruction-signature")
-            .chain(nonce_pk.as_bytes())
-            .chain(public_key.as_bytes())
+            .chain(&nonce_pk)
+            .chain(&public_key)
             .chain(instructions)
             .result();
         Self(RistrettoSchnorr::sign_raw(secret_key, secret_nonce, &challenge).unwrap())

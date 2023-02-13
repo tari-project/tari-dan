@@ -6,11 +6,17 @@ use std::convert::TryFrom;
 use tari_common_types::types::{PrivateKey, PublicKey};
 use tari_crypto::{keys::PublicKey as PublicKeyTrait, ristretto::RistrettoPublicKey};
 use tari_dan_common_types::ShardId;
-use tari_engine_types::{instruction::Instruction, signature::InstructionSignature, substate::SubstateAddress};
+use tari_engine_types::{instruction::Instruction, substate::SubstateAddress};
 use tari_template_lib::models::{NonFungibleAddress, NonFungibleId, ResourceAddress};
 
 use super::Transaction;
-use crate::{change::SubstateChange, id_provider::IdProvider, transaction::TransactionMeta, ObjectClaim};
+use crate::{
+    change::SubstateChange,
+    id_provider::IdProvider,
+    transaction::TransactionMeta,
+    InstructionSignature,
+    ObjectClaim,
+};
 
 #[derive(Debug, Clone, Default)]
 pub struct TransactionBuilder {
