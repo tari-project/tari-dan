@@ -31,6 +31,7 @@ pub struct LastVotedHeight {
     pub payload_id: Vec<u8>,
     pub shard_id: Vec<u8>,
     pub node_height: i64,
+    pub leader_round: i64,
     pub timestamp: NaiveDateTime,
 }
 
@@ -40,4 +41,5 @@ pub struct NewLastVotedHeight {
     pub shard_id: Vec<u8>,
     pub payload_id: Vec<u8>,
     pub node_height: i64,
+    pub leader_round: i64,
 }

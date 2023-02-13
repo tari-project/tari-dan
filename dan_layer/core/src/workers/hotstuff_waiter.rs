@@ -376,9 +376,10 @@ where
         Ok(())
     }
 
+    #[allow(clippy::too_many_lines)]
     /// Step 4: Leader sends a Proposal to replica. A new leaf node is created that builds
     /// on the previous tree or else a genesis node is created and proposed.
-    async fn leader_on_propose(&self, shard: ShardId, payload_id: PayloadId) -> Result<(), HotStuffError> {
+    async fn leader_on_propose(&mut self, shard: ShardId, payload_id: PayloadId) -> Result<(), HotStuffError> {
         let high_qc;
         let payload;
         let current_leaf_node;
@@ -424,6 +425,7 @@ where
                 // message size.
                 maybe_payload,
                 parent_payload_height + NodeHeight(1),
+                *self.current_leader_round.entry((shard, payload_id)).or_default(),
                 Some(local_pledge),
                 epoch,
                 self.public_key.clone(),
@@ -449,14 +451,14 @@ where
                 HotStuffMessage::new_proposal(leaf_node, shard),
                 members.into_iter().collect(),
             ))
-            .await
-            .unwrap();
+            .await?;
 
         Ok(())
     }
 
     /// Step 5: A replica receives a Proposal from the leader. The replicas including the leader, validate the proposal
     /// and, once proposals for all shards have been received, send votes for all shards.
+    #[allow(clippy::too_many_lines)]
     async fn on_receive_proposal(
         &mut self,
         from: TAddr,
@@ -496,12 +498,13 @@ where
         let shard = node.shard();
         let payload;
         let last_vote_height;
+        let last_leader_round;
         let locked_node;
         let locked_height;
         {
             let mut tx = self.shard_store.create_write_tx()?;
 
-            last_vote_height = tx.get_last_voted_height(node.shard(), node.payload_id())?;
+            (last_vote_height, last_leader_round) = tx.get_last_voted_height(node.shard(), node.payload_id())?;
             let (l_node, l_height) = tx.get_locked_node_hash_and_height(payload_id, shard)?;
             locked_node = l_node;
             locked_height = l_height;
@@ -517,14 +520,37 @@ where
 
         let involved_shards = payload.involved_shards();
         // If we have not previously voted on this payload and the node extends the current locked node, then we vote
-        if (last_vote_height == NodeHeight(0) || node.height() > last_vote_height) &&
+        // Or if we already voted for this height but there was an election
+        if (last_vote_height == NodeHeight(0) ||
+            node.height() > last_vote_height ||
+            (node.height() == last_vote_height && node.leader_round() > last_leader_round)) &&
             (*node.parent() == locked_node || node.height() > locked_height)
         {
             let proposed_nodes = self.shard_store.with_write_tx(|tx| {
                 tx.save_node(node.clone())?;
-                tx.save_leader_proposals(node.shard(), node.payload_id(), node.payload_height(), node.clone())?;
+                tx.save_leader_proposals(
+                    node.shard(),
+                    node.payload_id(),
+                    node.payload_height(),
+                    node.leader_round(),
+                    node.clone(),
+                )?;
                 tx.get_leader_proposals(node.payload_id(), node.payload_height(), &involved_shards)
             })?;
+            // We group proposal by the shard id.
+            let mut proposed_nodes_grouped_by_shard_id: HashMap<ShardId, Vec<HotStuffTreeNode<TAddr, TPayload>>> =
+                HashMap::new();
+            for proposed_node in proposed_nodes {
+                proposed_nodes_grouped_by_shard_id
+                    .entry(proposed_node.shard())
+                    .or_default()
+                    .push(proposed_node);
+            }
+            // And now for each shard id we select only one proposal
+            let mut proposed_nodes = Vec::new();
+            for (_shard_id, nodes) in proposed_nodes_grouped_by_shard_id.drain() {
+                proposed_nodes.push(nodes.into_iter().max_by_key(|node| node.leader_round()).unwrap());
+            }
 
             // Check the number of leader proposals for <shard, payload, node height>
             // i.e. all proposed nodes for the shards for the payload are on the same hotstuff phase (payload height)
@@ -551,7 +577,7 @@ where
             }
 
             let mut tx = self.shard_store.create_write_tx()?;
-            tx.set_last_voted_height(node.shard(), node.payload_id(), node.height())?;
+            tx.set_last_voted_height(node.shard(), node.payload_id(), node.height(), node.leader_round())?;
             tx.commit()?;
         } else {
             info!(
@@ -1287,11 +1313,7 @@ where
             let tx = self.shard_store.create_read_tx()?;
             // Avoid duplicates
             if tx.has_vote_for(&from, msg.local_node_hash())? {
-                info!(
-                    target: LOG_TARGET,
-                    "🔥 Vote with node hash {} already received",
-                    msg.local_node_hash()
-                );
+                println!("🔥 Vote with node hash {} already received", msg.local_node_hash());
                 return Ok(());
             }
 
@@ -1319,7 +1341,7 @@ where
 
             let votes = tx.get_received_votes_for(msg.local_node_hash())?;
 
-            if votes.len() >= valid_committee.consensus_threshold() {
+            if votes.len() == valid_committee.consensus_threshold() {
                 let validator_metadata = votes.iter().map(|v| v.validator_metadata().clone()).collect();
 
                 // TODO: Check all votes
