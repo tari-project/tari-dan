@@ -25,6 +25,7 @@ pub struct Transaction {
     pub result: Option<String>,
     pub qcs: Option<String>,
     pub status: String,
+    pub is_dry_run: bool,
     pub updated_at: NaiveDateTime,
     pub created_at: NaiveDateTime,
 }
@@ -53,6 +54,7 @@ impl Transaction {
             })?,
             result: self.result.map(|r| deserialize_json(&r)).transpose()?,
             qcs: self.qcs.map(|q| deserialize_json(&q)).transpose()?.unwrap_or_default(),
+            is_dry_run: self.is_dry_run,
         })
     }
 }

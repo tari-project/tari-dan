@@ -43,22 +43,44 @@ impl<'a, TStore: WalletStore> TransactionApi<'a, TStore> {
     }
 
     pub async fn submit_to_vn(&self, transaction: Transaction) -> Result<FixedHash, TransactionApiError> {
-        self.store.with_write_tx(|tx| tx.transactions_insert(&transaction))?;
+        self.submit_to_vn_internal(transaction, false).await
+    }
+
+    pub async fn submit_dry_run_to_vn(&self, transaction: Transaction) -> Result<FixedHash, TransactionApiError> {
+        self.submit_to_vn_internal(transaction, true).await
+    }
+
+    async fn submit_to_vn_internal(
+        &self,
+        transaction: Transaction,
+        is_dry_run: bool,
+    ) -> Result<FixedHash, TransactionApiError> {
+        self.store
+            .with_write_tx(|tx| tx.transactions_insert(&transaction, is_dry_run))?;
 
         let mut client = self.get_validator_node_client()?;
 
         let resp = client
             .submit_transaction(SubmitTransactionRequest {
                 transaction,
-                wait_for_result: false,
+                wait_for_result: is_dry_run,
                 wait_for_result_timeout: None,
-                is_dry_run: false,
+                is_dry_run,
             })
             .await
             .map_err(TransactionApiError::ValidatorNodeClientError)?;
 
         self.store.with_write_tx(|tx| {
-            tx.transactions_set_result_and_status(resp.hash, None, None, TransactionStatus::Pending)
+            tx.transactions_set_result_and_status(
+                resp.hash,
+                resp.result.as_ref().map(|a| &a.finalize),
+                None,
+                if is_dry_run {
+                    TransactionStatus::DryRun
+                } else {
+                    TransactionStatus::Pending
+                },
+            )
         })?;
 
         Ok(resp.hash)
@@ -111,8 +133,10 @@ impl<'a, TStore: WalletStore> TransactionApi<'a, TStore> {
                     .map_err(TransactionApiError::ValidatorNodeClientError)?;
 
                 self.store.with_write_tx(|tx| {
-                    if let Some(diff) = result.result.accept() {
-                        self.commit_result(tx, hash, diff)?;
+                    if !transaction.is_dry_run {
+                        if let Some(diff) = result.result.accept() {
+                            self.commit_result(tx, hash, diff)?;
+                        }
                     }
 
                     tx.transactions_set_result_and_status(hash, Some(&result), Some(&qc_resp.qcs), new_status)?;
@@ -123,6 +147,7 @@ impl<'a, TStore: WalletStore> TransactionApi<'a, TStore> {
                     status: new_status,
                     result: Some(result),
                     qcs: qc_resp.qcs,
+                    is_dry_run: transaction.is_dry_run,
                 }))
             },
             None => Ok(None),

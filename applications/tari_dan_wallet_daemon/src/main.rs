@@ -35,7 +35,7 @@ use tari_shutdown::Shutdown;
 
 use crate::{cli::Cli, handlers::HandlerContext, notify::Notify, services::spawn_services};
 
-const LOG_TARGET: &str = "auth::tari::dan::wallet_daemon::main";
+const LOG_TARGET: &str = "tari::dan::wallet_daemon::main";
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {

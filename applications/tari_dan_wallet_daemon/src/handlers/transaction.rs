@@ -1,9 +1,9 @@
+//   Copyright 2023 The Tari Project
+//   SPDX-License-Identifier: BSD-3-Clause
 use std::time::Duration;
 
 use anyhow::anyhow;
 use futures::{future, future::Either};
-//   Copyright 2023 The Tari Project
-//   SPDX-License-Identifier: BSD-3-Clause
 use log::*;
 use tari_dan_common_types::{optional::Optional, ShardId};
 use tari_engine_types::{instruction::Instruction, substate::SubstateAddress};
@@ -27,7 +27,7 @@ use crate::{
     services::{TransactionSubmittedEvent, WalletEvent},
 };
 
-const LOG_TARGET: &str = "auth::tari::dan::wallet_daemon::handlers::transaction";
+const LOG_TARGET: &str = "tari::dan::wallet_daemon::handlers::transaction";
 
 pub async fn handle_submit(
     context: &HandlerContext,
@@ -77,10 +77,20 @@ pub async fn handle_submit(
 
     let transaction = builder.build();
 
-    let hash = sdk.transaction_api().submit_to_vn(transaction).await?;
-    info!(target: LOG_TARGET, "Submitted transaction with hash {}", hash);
+    info!(
+        target: LOG_TARGET,
+        "Submitted transaction with hash {}",
+        transaction.hash()
+    );
+    let hash = if req.is_dry_run {
+        sdk.transaction_api().submit_dry_run_to_vn(transaction).await?
+    } else {
+        sdk.transaction_api().submit_to_vn(transaction).await?
+    };
 
-    context.notifier().notify(TransactionSubmittedEvent { hash });
+    if !req.is_dry_run {
+        context.notifier().notify(TransactionSubmittedEvent { hash });
+    }
 
     Ok(TransactionSubmitResponse { hash, inputs, outputs })
 }

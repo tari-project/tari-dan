@@ -19,7 +19,7 @@ use tower_http::{cors::CorsLayer, trace::TraceLayer};
 use super::handlers::HandlerContext;
 use crate::handlers::{accounts, error::HandlerError, keys, transaction, Handler};
 
-const LOG_TARGET: &str = "auth::tari::dan::wallet_daemon::json_rpc";
+const LOG_TARGET: &str = "tari::dan::wallet_daemon::json_rpc";
 
 pub async fn listen(
     preferred_address: SocketAddr,

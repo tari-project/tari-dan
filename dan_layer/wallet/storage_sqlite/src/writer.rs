@@ -110,10 +110,16 @@ impl WalletStoreWriter for WriteTransaction<'_> {
         Ok(())
     }
 
-    fn transactions_insert(&self, transaction: &Transaction) -> Result<(), WalletStorageError> {
+    fn transactions_insert(&self, transaction: &Transaction, is_dry_run: bool) -> Result<(), WalletStorageError> {
+        let status = if is_dry_run {
+            TransactionStatus::DryRun
+        } else {
+            TransactionStatus::New
+        };
+
         sql_query(
-            "INSERT INTO transactions (hash, instructions, sender_address, fee, signature, meta, status) VALUES (?, \
-             ?, ?, ?, ?, ?, ?)",
+            "INSERT INTO transactions (hash, instructions, sender_address, fee, signature, meta, status, dry_run) \
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
         )
         .bind::<Text, _>(transaction.hash().to_string())
         .bind::<Text, _>(serialize_json(transaction.instructions())?)
@@ -121,7 +127,8 @@ impl WalletStoreWriter for WriteTransaction<'_> {
         .bind::<BigInt, _>(transaction.fee() as i64)
         .bind::<Text, _>(serialize_json(transaction.signature())?)
         .bind::<Text, _>(serialize_json(transaction.meta())?)
-        .bind::<Text, _>(TransactionStatus::New.as_key_str())
+        .bind::<Text, _>(status.as_key_str())
+        .bind::<Bool, _>(is_dry_run)
         .execute(self.connection())
         .map_err(|e| WalletStorageError::general("transactions_insert", e))?;
 

@@ -123,7 +123,7 @@ pub trait WalletStoreWriter {
     ) -> Result<(), WalletStorageError>;
 
     // Transactions
-    fn transactions_insert(&self, transaction: &Transaction) -> Result<(), WalletStorageError>;
+    fn transactions_insert(&self, transaction: &Transaction, is_dry_run: bool) -> Result<(), WalletStorageError>;
     fn transactions_set_result_and_status(
         &self,
         hash: FixedHash,

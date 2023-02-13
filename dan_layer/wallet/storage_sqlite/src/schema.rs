@@ -57,6 +57,7 @@ diesel::table! {
         result -> Nullable<Text>,
         qcs -> Nullable<Text>,
         status -> Text,
+        dry_run -> Bool,
         created_at -> Timestamp,
         updated_at -> Timestamp,
     }

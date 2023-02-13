@@ -15,12 +15,14 @@ pub struct WalletTransaction {
     pub status: TransactionStatus,
     pub result: Option<FinalizeResult>,
     pub qcs: Vec<QuorumCertificate>,
+    pub is_dry_run: bool,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize, Default)]
 pub enum TransactionStatus {
     #[default]
     New,
+    DryRun,
     Pending,
     Accepted,
     Rejected,
@@ -30,6 +32,7 @@ impl TransactionStatus {
     pub fn as_key_str(&self) -> &'static str {
         match self {
             TransactionStatus::New => "New",
+            TransactionStatus::DryRun => "DryRun",
             TransactionStatus::Pending => "Pending",
             TransactionStatus::Accepted => "Accepted",
             TransactionStatus::Rejected => "Rejected",
@@ -43,6 +46,7 @@ impl FromStr for TransactionStatus {
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s {
             "New" => Ok(TransactionStatus::New),
+            "DryRun" => Ok(TransactionStatus::DryRun),
             "Pending" => Ok(TransactionStatus::Pending),
             "Accepted" => Ok(TransactionStatus::Accepted),
             "Rejected" => Ok(TransactionStatus::Rejected),

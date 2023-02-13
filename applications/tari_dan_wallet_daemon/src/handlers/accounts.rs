@@ -27,7 +27,7 @@ use crate::{
     services::{TransactionSubmittedEvent, WalletEvent},
 };
 
-const LOG_TARGET: &str = "auth::tari::dan::wallet_daemon::handlers::transaction";
+const LOG_TARGET: &str = "tari::dan::wallet_daemon::handlers::transaction";
 
 pub async fn handle_create(
     context: &HandlerContext,

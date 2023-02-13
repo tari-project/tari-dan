@@ -22,7 +22,7 @@ use crate::{
     services::{TransactionFinalizedEvent, WalletEvent},
 };
 
-const LOG_TARGET: &str = "auth::tari::dan::wallet_daemon::transaction_service";
+const LOG_TARGET: &str = "tari::dan::wallet_daemon::transaction_service";
 
 pub struct TransactionService<TStore> {
     notify: Notify<WalletEvent>,
@@ -116,7 +116,7 @@ where TStore: WalletStore + Clone + Send + Sync + 'static
             pending_transactions.len()
         );
         for transaction in pending_transactions {
-            debug!(
+            info!(
                 target: LOG_TARGET,
                 "Requesting result for transaction {}",
                 transaction.transaction.hash()
@@ -162,30 +162,6 @@ where TStore: WalletStore + Clone + Send + Sync + 'static
         Ok(())
     }
 }
-
-// /// Creates a Stream that emits unit after 10s or when the trigger is fired. If the trigger is fired, the next timer
-// /// tick will be in 10s.
-// fn create_poller(tick_time: Duration, mut rx_trigger: watch::Receiver<()>) -> impl Stream<Item = ()> + Unpin {
-//     // Trigger the first poll immediately
-//     let mut sleep = Box::pin(time::sleep(Duration::from_secs(0)));
-//     let interval = futures::stream::unfold(
-//         (sleep, rx_trigger, tick_time),
-//         |(mut sleep, mut rx_trigger, duration)| async move {
-//             tokio::select! {
-//                 _ = &mut sleep => { },
-//                 res = rx_trigger.changed() => {
-//                     if res.is_err() {
-//                         return None;
-//                     }
-//                 }
-//             }
-//             // If either trigger happens we should wait another `duration` before polling again
-//             sleep.as_mut().reset(time::Instant::now() + duration);
-//             Some(((), (sleep, rx_trigger, duration)))
-//         },
-//     );
-//     Box::pin(interval)
-// }
 
 #[derive(Debug, thiserror::Error)]
 pub enum TransactionServiceError {

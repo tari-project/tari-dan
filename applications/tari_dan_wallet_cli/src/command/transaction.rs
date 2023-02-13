@@ -309,26 +309,35 @@ fn summarize_request(request: &TransactionSubmitRequest, inputs: &[ShardId], out
 
 #[allow(clippy::too_many_lines)]
 fn summarize(result: &TransactionWaitResultResponse, time_taken: Duration) {
-    let qc = result.qcs.first().unwrap();
     println!("✅️ Transaction finalized");
     println!();
-    println!("Epoch: {}", qc.epoch());
-    println!("Payload height: {}", qc.payload_height());
-    println!("Signed by: {} validator nodes", qc.validators_metadata().len());
+    if let Some(qc) = result.qcs.first() {
+        println!("Epoch: {}", qc.epoch());
+        println!("Payload height: {}", qc.payload_height());
+        println!("Signed by: {} validator nodes", qc.validators_metadata().len());
+    } else {
+        println!("No QC");
+    }
     println!();
 
     summarize_finalize_result(result.result.as_ref().unwrap());
 
-    println!();
-    println!("========= Pledges =========");
-    for p in qc.all_shard_pledges().iter() {
-        println!("Shard:{} Pledge:{}", p.shard_id, p.pledge.current_state.as_str());
+    if let Some(qc) = result.qcs.first() {
+        println!();
+        println!("========= Pledges =========");
+        for p in qc.all_shard_pledges().iter() {
+            println!("Shard:{} Pledge:{}", p.shard_id, p.pledge.current_state.as_str());
+        }
     }
 
     println!();
     println!("Time taken: {:?}", time_taken);
     println!();
-    println!("OVERALL DECISION: {:?}", qc.decision());
+    if let Some(qc) = result.qcs.first() {
+        println!("OVERALL DECISION: {:?}", qc.decision());
+    } else {
+        println!("STATUS: {:?}", result.status);
+    }
 }
 
 fn summarize_finalize_result(finalize: &FinalizeResult) {

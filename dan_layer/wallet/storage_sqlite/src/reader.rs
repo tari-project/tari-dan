@@ -129,6 +129,7 @@ impl WalletStoreReader for ReadTransaction<'_> {
 
         let rows = transactions::table
             .filter(transactions::status.eq(status.as_key_str()))
+            .filter(transactions::dry_run.eq(false))
             .load::<models::Transaction>(self.connection())
             .map_err(|e| WalletStorageError::general("transactions_fetch_all_by_status", e))?;
 

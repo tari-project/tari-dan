@@ -38,6 +38,7 @@ CREATE TABLE transactions
     result         TEXT     NULL,
     qcs            TEXT     NULL,
     status         TEXT     NOT NULL,
+    dry_run        BOOLEAN  NOT NULL,
     created_at     DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at     DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
 );

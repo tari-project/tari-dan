@@ -25,7 +25,7 @@ fn get_and_insert_transaction() {
     assert!(transaction.is_none());
     let transaction = build_transaction();
     let hash = *transaction.hash();
-    tx.transactions_insert(&transaction).unwrap();
+    tx.transactions_insert(&transaction, false).unwrap();
     tx.commit().unwrap();
 
     let tx = db.create_read_tx().unwrap();
