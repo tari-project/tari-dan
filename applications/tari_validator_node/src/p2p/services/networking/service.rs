@@ -79,7 +79,7 @@ impl Networking {
         }
     }
 
-    pub async fn run(mut self) {
+    pub async fn run(mut self) -> anyhow::Result<()> {
         let mut events = self.connectivity.get_event_subscription();
         if let Err(err) = self.dial_seed_peers().await {
             error!(target: LOG_TARGET, "🚨 Failed to dial seed peers: {}", err);
@@ -107,6 +107,7 @@ impl Networking {
                 else => break
             }
         }
+        Ok(())
     }
 
     async fn dial_seed_peers(&self) -> Result<(), NetworkingError> {

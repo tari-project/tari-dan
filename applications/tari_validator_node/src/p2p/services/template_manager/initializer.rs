@@ -21,7 +21,7 @@
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 use tari_shutdown::ShutdownSignal;
-use tokio::sync::mpsc;
+use tokio::{sync::mpsc, task::JoinHandle};
 
 use crate::p2p::services::template_manager::{
     downloader::TemplateDownloadWorker,
@@ -30,14 +30,18 @@ use crate::p2p::services::template_manager::{
     TemplateManager,
 };
 
-pub fn spawn(manager: TemplateManager, shutdown: ShutdownSignal) -> TemplateManagerHandle {
+pub fn spawn(
+    manager: TemplateManager,
+    shutdown: ShutdownSignal,
+) -> (TemplateManagerHandle, JoinHandle<anyhow::Result<()>>) {
     let (tx_request, rx_request) = mpsc::channel(1);
     let handle = TemplateManagerHandle::new(tx_request);
 
     let (tx_download_queue, rx_download_queue) = mpsc::channel(1);
     let (tx_completed_downloads, rx_completed_downloads) = mpsc::channel(1);
 
-    TemplateManagerService::spawn(rx_request, manager, tx_download_queue, rx_completed_downloads, shutdown);
+    let join_handle =
+        TemplateManagerService::spawn(rx_request, manager, tx_download_queue, rx_completed_downloads, shutdown);
     TemplateDownloadWorker::new(rx_download_queue, tx_completed_downloads).spawn();
-    handle
+    (handle, join_handle)
 }

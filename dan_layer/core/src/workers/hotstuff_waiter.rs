@@ -187,7 +187,7 @@ where
         shutdown: ShutdownSignal,
         consensus_constants: ConsensusConstants,
         network_latency: Duration,
-    ) -> JoinHandle<Result<(), HotStuffError>> {
+    ) -> JoinHandle<anyhow::Result<()>> {
         let waiter = HotStuffWaiter::new(
             signing_service,
             public_key,
@@ -209,7 +209,10 @@ where
             consensus_constants,
             network_latency,
         );
-        tokio::spawn(waiter.run(shutdown))
+        tokio::spawn(async move {
+            waiter.run(shutdown).await?;
+            Ok(())
+        })
     }
 
     pub fn new(
