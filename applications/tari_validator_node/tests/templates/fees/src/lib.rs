@@ -1,3 +1,6 @@
+//  Copyright 2023 The Tari Project
+//  SPDX-License-Identifier: BSD-3-Clause
+
 use tari_template_lib::prelude::*;
 
 #[template]
@@ -10,13 +13,5 @@ mod fees {
         pub fn new() -> Self {
             Self {}
         }
-
-        // pub fn value(&self) -> u32 {
-        //     self.value
-        // }
-
-        // pub fn increase(&mut self) {
-        //     self.value += 1;
-        // }
     }
 }
