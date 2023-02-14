@@ -4,7 +4,6 @@
 use serde::{Deserialize, Serialize};
 use tari_bor::{borsh, Decode, Encode};
 use tari_common_types::types::{BulletRangeProof, PublicKey};
-use tari_crypto::ristretto::RistrettoPublicKey;
 use tari_template_abi::rust::collections::BTreeSet;
 use tari_template_lib::{
     models::{Amount, NonFungibleId, ResourceAddress},

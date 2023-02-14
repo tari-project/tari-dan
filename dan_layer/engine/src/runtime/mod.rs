@@ -49,9 +49,9 @@ mod tests;
 
 use std::{fmt::Debug, sync::Arc};
 
-use tari_common_types::types::{BulletRangeProof, Commitment};
+use tari_common_types::types::BulletRangeProof;
 use tari_crypto::ristretto::RistrettoComSig;
-use tari_engine_types::{commit_result::FinalizeResult, resource::Resource, substate::SubstateAddress};
+use tari_engine_types::commit_result::FinalizeResult;
 use tari_template_lib::{
     args::{
         Arg,

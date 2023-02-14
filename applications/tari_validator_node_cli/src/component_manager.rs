@@ -93,8 +93,8 @@ impl ComponentManager {
                         version: substate.version(),
                     });
                 },
-                addr @ SubstateAddress::LayerOneCommitment(hash) => {
-                    dbg!("This is unexpected....");
+                _addr @ SubstateAddress::LayerOneCommitment(_hash) => {
+                    todo!("Not expected");
                 },
             }
         }

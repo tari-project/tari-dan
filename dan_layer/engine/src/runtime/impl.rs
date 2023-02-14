@@ -23,8 +23,7 @@
 use std::collections::BTreeSet;
 
 use log::warn;
-use tari_bor::decode;
-use tari_common_types::types::{BulletRangeProof, Commitment, FixedHash};
+use tari_common_types::types::{BulletRangeProof, FixedHash};
 use tari_crypto::{
     range_proof::RangeProofService,
     ristretto::{
@@ -42,11 +41,8 @@ use tari_engine_types::{
     commit_result::{FinalizeResult, RejectReason, TransactionResult},
     confidential_bucket::ConfidentialBucket,
     logs::LogEntry,
-    resource::Resource,
-    substate::SubstateAddress,
     LAYER_TWO_TARI_RESOURCE_ADDRESS,
 };
-use tari_mmr::Hash;
 use tari_template_abi::TemplateDef;
 use tari_template_lib::{
     args::{
@@ -83,7 +79,7 @@ use tari_template_lib::{
         VaultRef,
     },
 };
-use tari_utilities::{hex::Hex, ByteArray};
+use tari_utilities::ByteArray;
 
 use crate::{
     base_layer_hashers::BurntOutputDomainHasher,
@@ -529,7 +525,7 @@ impl RuntimeInterface for RuntimeInterfaceImpl {
         &self,
         bucket_ref: ConfidentialBucketRef,
         action: ConfidentialBucketAction,
-        args: EngineArgs,
+        _args: EngineArgs,
     ) -> Result<InvokeResult, RuntimeError> {
         self.invoke_on_runtime_call_modules("confidential_bucket_invoke")?;
 

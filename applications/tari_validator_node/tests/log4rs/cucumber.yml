@@ -18,7 +18,7 @@ appenders:
       pattern: "{d(%H:%M)} {h({l}):5} {m} [{f}:{L}]{n}"
     filters:
       - kind: threshold
-        level: info
+        level: warn
 
   # An appender named "dan_layer" that writes to a file with a custom pattern encoder
   dan_layer:

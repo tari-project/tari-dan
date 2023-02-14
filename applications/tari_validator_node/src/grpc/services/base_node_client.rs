@@ -23,7 +23,7 @@
 use std::{convert::TryInto, net::SocketAddr};
 
 use async_trait::async_trait;
-use log::trace;
+use log::{trace, warn};
 use tari_app_grpc::tari_rpc::{self as grpc, GetShardKeyRequest};
 use tari_base_node_grpc_client::BaseNodeGrpcClient;
 use tari_common_types::types::{FixedHash, PublicKey};
@@ -85,13 +85,14 @@ impl GrpcBaseNodeClient {
         let mut stream = inner.get_mempool_transactions(request).await?.into_inner();
         loop {
             match stream.message().await {
-                Ok(Some(val)) => {
+                Ok(Some(_val)) => {
                     count += 1;
                 },
                 Ok(None) => {
                     break;
                 },
                 Err(e) => {
+                    warn!(target: LOG_TARGET, "Error getting mempool transaction count: {}", e);
                     return Err(BaseNodeError::ConnectionError);
                 },
             }

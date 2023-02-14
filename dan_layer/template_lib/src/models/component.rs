@@ -20,7 +20,10 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use std::fmt::{Display, Formatter};
+use std::{
+    fmt::{Display, Formatter},
+    str::FromStr,
+};
 
 use tari_bor::{borsh, Decode, Encode};
 
@@ -47,9 +50,17 @@ impl ComponentAddress {
         let hash = Hash::from_hex(hex)?;
         Ok(Self::new(hash))
     }
+}
 
-    pub fn from_str(s: &str) -> Result<Self, HashParseError> {
-        let s = if s.starts_with("component_") { &s[10..] } else { s };
+impl FromStr for ComponentAddress {
+    type Err = HashParseError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let s = if let Some(stripped) = s.strip_prefix("component_") {
+            stripped
+        } else {
+            s
+        };
         let hash = Hash::from_hex(s)?;
         Ok(Self::new(hash))
     }

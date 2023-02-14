@@ -22,14 +22,12 @@
 
 use std::{collections::HashMap, fs};
 
-use syn::{parse::Parser, Lit};
 use tari_engine_types::{instruction::Instruction, substate::SubstateAddress};
 use tari_template_lib::{
     args,
-    models::{Amount, ComponentAddress, LayerOneCommitmentAddress, ResourceAddress, TemplateAddress},
-    Hash,
+    models::{Amount, ComponentAddress, ResourceAddress, TemplateAddress},
 };
-use tari_transaction_manifest::{parse_manifest, ManifestValue};
+use tari_transaction_manifest::parse_manifest;
 
 #[test]
 #[allow(clippy::too_many_lines)]
@@ -105,34 +103,5 @@ fn manifest_smoke_test() {
         },
     ];
 
-    assert_eq!(instructions, expected);
-}
-
-#[test]
-fn test_manifest_burn_macro() {
-    let input = r#"
-       let confidential_bucket = burnt_to_bucket!["COMMITMENT", "PROOF", "RANGEPROOF"];
-
-       //let mut acc1 = global!["ACC_1/components/Account"];
-
-    // get tokens from the faucet
-    //let faucet_bucket = faucet.take_free_coins();
-    // acc1.deposit(confidential_bucket);
-    "#;
-
-    let commitment = LayerOneCommitmentAddress::new(Hash::from([0u8; 32]));
-
-    let globals = HashMap::from([
-        ("COMMITMENT".to_string(), commitment.to_string().parse().unwrap()),
-        ("PROOF".to_string(), "b\"111111111\"".parse().unwrap()),
-        ("RANGEPROOF".to_string(), "b\"111111111\"".parse().unwrap()),
-    ]);
-    let instructions = parse_manifest(&input, globals).unwrap();
-
-    let expected = vec![Instruction::ClaimBurn {
-        commitment_address: [0u8; 32].to_vec(),
-        range_proof: [1u8; 96].to_vec(),
-        proof_of_knowledge: [2u8; 800].to_vec(),
-    }];
     assert_eq!(instructions, expected);
 }

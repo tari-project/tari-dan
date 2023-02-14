@@ -20,8 +20,6 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use std::convert::TryFrom;
-
 use log::*;
 use tari_common_types::types::{Commitment, FixedHash, FixedHashSizeError};
 use tari_core::transactions::transaction_components::{
@@ -30,7 +28,7 @@ use tari_core::transactions::transaction_components::{
     ValidatorNodeRegistration,
 };
 use tari_crypto::tari_utilities::ByteArray;
-use tari_dan_common_types::{optional::Optional, PayloadId, ShardId, SubstateState};
+use tari_dan_common_types::{optional::Optional, ShardId};
 use tari_dan_core::{
     consensus_constants::ConsensusConstants,
     models::BaseLayerMetadata,
@@ -54,10 +52,7 @@ use tari_dan_storage_sqlite::{
 };
 use tari_engine_types::substate::{Substate, SubstateAddress, SubstateValue};
 use tari_shutdown::ShutdownSignal;
-use tari_template_lib::{
-    models::{LayerOneCommitmentAddress, TemplateAddress},
-    Hash,
-};
+use tari_template_lib::models::{LayerOneCommitmentAddress, TemplateAddress};
 use tokio::{task, task::JoinHandle, time};
 
 use crate::{
@@ -288,7 +283,7 @@ impl BaseLayerScanner {
                 let output_hash = output.hash();
                 if output.is_burned() {
                     info!(target: LOG_TARGET, "Found burned output: {}", output_hash);
-                    self.register_burnt_utxo(output.commitment);
+                    self.register_burnt_utxo(output.commitment)?;
                 } else {
                     let sidechain_feature = output.features.sidechain_feature.ok_or_else(|| {
                         BaseLayerScannerError::InvalidSideChainUtxoResponse(
@@ -343,7 +338,7 @@ impl BaseLayerScanner {
         let address = SubstateAddress::LayerOneCommitment(
             LayerOneCommitmentAddress::try_from_commitment(commitment.as_bytes()).map_err(|e|
                 // Technically impossible, but anyway
-                BaseLayerScannerError::InvalidSideChainUtxoResponse("Invalid commitment".to_string()))?,
+                BaseLayerScannerError::InvalidSideChainUtxoResponse(format!("Invalid commitment: {}", e)))?,
         );
         let substate = Substate::new(0, SubstateValue::LayerOneCommitment(commitment.as_bytes().to_vec()));
         self.shard_store

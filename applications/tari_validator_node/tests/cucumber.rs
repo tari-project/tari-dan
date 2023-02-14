@@ -27,7 +27,6 @@ use std::{
     convert::{Infallible, TryFrom},
     future,
     io,
-    path::Path,
     time::Duration,
 };
 
@@ -44,7 +43,7 @@ use cucumber::{
 use indexmap::IndexMap;
 use tari_common::initialize_logging;
 use tari_common_types::types::PublicKey;
-use tari_crypto::{keys::SecretKey, ristretto::RistrettoSecretKey, tari_utilities::hex::Hex};
+use tari_crypto::{ristretto::RistrettoSecretKey, tari_utilities::hex::Hex};
 use tari_dan_common_types::QuorumDecision;
 use tari_dan_core::services::BaseNodeClient;
 use tari_engine_types::execution_result::Type;
@@ -112,15 +111,7 @@ impl TariWorld {
             .outputs
             .get(name)
             .unwrap_or_else(|| panic!("Account component address {} not found", name));
-        all_components
-            .get("components/Account")
-            .map(|a| a.address.to_string().clone())
-        // for (address, value) in all_components {
-        // if address.starts_with("component") {
-        //     return Some(address.clone());
-        // }
-        // }
-        // None
+        all_components.get("components/Account").map(|a| a.address.to_string())
     }
 
     pub fn after(&mut self, _scenario: &Scenario) {

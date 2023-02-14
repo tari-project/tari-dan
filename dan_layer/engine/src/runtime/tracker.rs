@@ -36,7 +36,7 @@ use tari_engine_types::{
     non_fungible::NonFungibleContainer,
     resource::Resource,
     resource_container::ResourceContainer,
-    substate::{Substate, SubstateAddress, SubstateDiff, SubstateValue},
+    substate::{Substate, SubstateAddress, SubstateDiff},
     vault::Vault,
     TemplateAddress,
 };
@@ -331,7 +331,7 @@ impl StateTracker {
         self.write_with(|state| {
             let commitment = state.get_layer_one_commitment(&commitment_address)?;
 
-            state.claim_layer_one_commitment(&commitment_address);
+            state.claim_layer_one_commitment(&commitment_address)?;
             Ok(commitment)
         })
     }

@@ -35,7 +35,6 @@ use tari_p2p::{Network, PeerSeedsConfig, TransportType};
 use tari_shutdown::Shutdown;
 use tari_validator_node::{run_validator_node, ApplicationConfig, ValidatorNodeConfig};
 use tari_validator_node_client::ValidatorNodeClient;
-use tempfile::tempdir;
 use tokio::task;
 
 use crate::{
@@ -87,9 +86,6 @@ pub async fn spawn_validator_node(
     let wallet_grpc_port = world.wallets.get(&wallet_name).unwrap().grpc_port;
     let name = validator_node_name.clone();
 
-    // let temp_dir = tempdir().unwrap();
-    // let temp_dir = tempdir.path().join(validator_node_name.clone());
-    // let temp_dir_path = temp_dir.display().to_string();
     let peer_seeds: Vec<String> = world
         .validator_nodes
         .values()
@@ -109,8 +105,6 @@ pub async fn spawn_validator_node(
         };
 
         // temporal folder for the VN files (e.g. sqlite file, json files, etc.)
-
-        // let temp_dir = tempdir().unwrap().path().join(validator_node_name.clone());
         println!("Using validator_node temp_dir: {}", temp_dir.display());
         config.validator_node.data_dir = temp_dir.to_path_buf();
         config.validator_node.shard_key_file = temp_dir.join("shard_key.json");

@@ -1,14 +1,10 @@
 //  Copyright 2022 The Tari Project
 //  SPDX-License-Identifier: BSD-3-Clause
 
-use std::{convert::TryFrom, str::FromStr};
+use std::str::FromStr;
 
 use cucumber::{then, when};
-use tari_crypto::{
-    keys::{PublicKey, SecretKey},
-    ristretto::{RistrettoPublicKey, RistrettoSecretKey},
-    tari_utilities::{hex::Hex, ByteArray},
-};
+use tari_crypto::tari_utilities::{hex::Hex, ByteArray};
 use tari_dan_common_types::ShardId;
 use tari_engine_types::{instruction::Instruction, signature::InstructionSignature, substate::SubstateAddress};
 use tari_template_lib::{args::Arg, prelude::ComponentAddress};
@@ -71,7 +67,6 @@ async fn when_i_claim_burn(
         .unwrap_or_else(|| panic!("Account {} not found", account_name));
 
     let account_address = world.get_account_component_address(&account_name).unwrap();
-    // dbg!(&account_address);
 
     let instructions = [
         Instruction::ClaimBurn {
@@ -83,7 +78,7 @@ async fn when_i_claim_burn(
         Instruction::CallMethod {
             component_address: ComponentAddress::from_str(&account_address).expect("Invalid account address"),
             method: "deposit_confidential".to_string(),
-            args: vec![Arg::Literal(b"burn".to_vec())],
+            args: vec![Arg::Variable(b"burn".to_vec())],
         },
     ];
 
@@ -105,10 +100,7 @@ async fn when_i_claim_burn(
         is_dry_run: false,
     };
 
-    // dbg!(&request);
-
     let mut client = vn.create_client().await;
-
     client.submit_transaction(request).await.unwrap();
 }
 

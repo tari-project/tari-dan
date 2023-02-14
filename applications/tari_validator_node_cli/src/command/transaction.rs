@@ -398,7 +398,7 @@ fn summarize_finalize_result(finalize: &FinalizeResult) {
                     SubstateValue::NonFungible(_) => {
                         println!("      ▶ NFT: {}", address);
                     },
-                    SubstateValue::LayerOneCommitment(hash) => {
+                    SubstateValue::LayerOneCommitment(_hash) => {
                         println!("     ! layer one commitment: Should never happen");
                     },
                 }

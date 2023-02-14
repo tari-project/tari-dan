@@ -20,14 +20,11 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use std::{convert::TryFrom, sync::Arc};
+use std::sync::Arc;
 
 use log::*;
 use tari_common_types::types::{BulletRangeProof, Commitment};
-use tari_crypto::{
-    ristretto::{RistrettoComSig, RistrettoPublicKey, RistrettoSecretKey},
-    signatures::CommitmentSignature,
-};
+use tari_crypto::ristretto::{RistrettoComSig, RistrettoPublicKey, RistrettoSecretKey};
 use tari_engine_types::{commit_result::FinalizeResult, execution_result::ExecutionResult, instruction::Instruction};
 use tari_template_lib::{
     arg,
@@ -40,7 +37,6 @@ use tari_transaction::{id_provider::IdProvider, Transaction};
 use tari_utilities::ByteArray;
 
 use crate::{
-    function_definitions::ArgType::PublicKey,
     packager::{LoadedTemplate, Package},
     runtime::{
         AuthParams,

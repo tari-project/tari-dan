@@ -5,16 +5,13 @@ use std::fmt::{Display, Formatter};
 
 use serde::{Deserialize, Serialize};
 use tari_bor::{borsh, Encode};
-use tari_common_types::types::{BulletRangeProof, Commitment};
-use tari_crypto::{ristretto::RistrettoComSig, signatures::CommitmentSignature};
 use tari_template_lib::{
     args::{Arg, LogLevel},
-    models::{ComponentAddress, LayerOneCommitmentAddress, TemplateAddress},
+    models::{ComponentAddress, TemplateAddress},
     Hash,
 };
-use tari_utilities::hex::Hex;
 
-use crate::{hashing::hasher, substate::SubstateAddress};
+use crate::hashing::hasher;
 
 #[derive(Debug, Clone, Encode, Deserialize, Serialize, PartialEq)]
 #[serde(tag = "type")]

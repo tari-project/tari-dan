@@ -5,7 +5,6 @@ use std::time::Duration;
 
 use cucumber::{given, when};
 use tari_app_grpc::tari_rpc::GetBalanceRequest;
-use tari_core::transactions::tari_amount::MicroTari;
 use tari_crypto::tari_utilities::ByteArray;
 use tokio::time::sleep;
 
@@ -19,7 +18,7 @@ async fn start_wallet(world: &mut TariWorld, wallet_name: String, bn_name: Strin
 #[when(
     expr = "I burn {int}T on wallet {word} into commitment {word} with proof {word} for {word} and range proof {word}"
 )]
-async fn when_I_burn_on_wallet(
+async fn when_i_burn_on_wallet(
     world: &mut TariWorld,
     amount: u64,
     wallet_name: String,
@@ -51,7 +50,6 @@ async fn when_I_burn_on_wallet(
         .into_inner();
 
     assert!(resp.is_success);
-    // dbg!(&resp);
     world.commitments.insert(commitment, resp.commitment);
     world.commitment_ownership_proofs.insert(proof, resp.ownership_proof);
     world.rangeproofs.insert(range_proof, resp.rangeproof);

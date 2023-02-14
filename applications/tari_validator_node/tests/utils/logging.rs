@@ -16,7 +16,7 @@ pub fn create_log_config_file() -> PathBuf {
             .into_os_string()
             .into_string()
             .unwrap()
-            .replace("\\", "\\\\")
+            .replace('\\', "\\\\")
             .as_str(),
     );
     let log_config = dest_path.join("log4rs.yml");

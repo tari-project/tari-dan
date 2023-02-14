@@ -21,14 +21,13 @@
 //   USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 use std::{
-    fmt::{write, Display, Formatter},
+    fmt::{Display, Formatter},
     str::FromStr,
 };
 
 use serde::{Deserialize, Serialize};
 use tari_bor::{borsh, decode, decode_exact, encode, Decode, Encode};
-use tari_common_types::types::{Commitment, FixedHash};
-use tari_crypto::{keys::PublicKey, ristretto::RistrettoPublicKey};
+use tari_common_types::types::Commitment;
 use tari_template_lib::{
     models::{
         ComponentAddress,
@@ -41,7 +40,7 @@ use tari_template_lib::{
     },
     Hash,
 };
-use tari_utilities::{hex::Hex, ByteArray};
+use tari_utilities::ByteArray;
 
 use crate::{hashing::hasher, non_fungible::NonFungibleContainer, resource::Resource, vault::Vault};
 

@@ -39,7 +39,7 @@ use diesel::{
 };
 use log::{debug, warn};
 use serde_json::json;
-use tari_common_types::types::{Commitment, PrivateKey, PublicKey, Signature};
+use tari_common_types::types::{PrivateKey, PublicKey, Signature};
 use tari_dan_common_types::{
     Epoch,
     NodeHeight,

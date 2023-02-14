@@ -22,7 +22,6 @@
 
 use std::ops::Deref;
 
-use tari_common_types::types::Commitment;
 use tari_dan_common_types::{
     NodeAddressable,
     NodeHeight,

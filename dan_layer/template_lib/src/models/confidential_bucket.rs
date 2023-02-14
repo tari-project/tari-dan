@@ -5,13 +5,7 @@ use tari_bor::{borsh, Decode, Encode};
 use tari_template_abi::{call_engine, EngineOp};
 
 use crate::{
-    args::{
-        BucketInvokeArg,
-        ConfidentialBucketAction,
-        ConfidentialBucketInvokeArg,
-        ConfidentialBucketRef,
-        InvokeResult,
-    },
+    args::{ConfidentialBucketAction, ConfidentialBucketInvokeArg, ConfidentialBucketRef, InvokeResult},
     models::ResourceAddress,
 };
 
