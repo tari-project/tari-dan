@@ -102,8 +102,7 @@ impl WasmProcess {
 
         let result = match op {
             EngineOp::EmitLog => Self::handle(env, arg, |env, arg: EmitLogArg| {
-                env.state().interface().emit_log(arg.level, arg.message);
-                Result::<_, WasmExecutionError>::Ok(())
+                env.state().interface().emit_log(arg.level, arg.message)
             }),
             EngineOp::ComponentInvoke => Self::handle(env, arg, |env, arg: ComponentInvokeArg| {
                 env.state()
@@ -142,9 +141,13 @@ impl WasmProcess {
         };
 
         result.unwrap_or_else(|err| {
-            env.state()
+            if let Err(err) = env
+                .state()
                 .interface()
-                .emit_log(LogLevel::Error, format!("Execution error: {}", err));
+                .emit_log(LogLevel::Error, format!("Execution error: {}", err))
+            {
+                log::error!(target: LOG_TARGET, "Error emitting log: {}", err);
+            }
             eprintln!("{}", err);
             log::error!(target: LOG_TARGET, "{}", err);
             0

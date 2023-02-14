@@ -42,37 +42,26 @@ impl MessageDispatcher {
         }
     }
 
-    pub fn spawn(self) -> task::JoinHandle<()> {
+    pub fn spawn(self) -> task::JoinHandle<anyhow::Result<()>> {
         task::spawn(self.run())
     }
 
-    pub async fn run(mut self) {
+    pub async fn run(mut self) -> anyhow::Result<()> {
         while let Some((from, msg)) = self.inbound.next_message().await {
-            let result = match msg {
+            match msg {
                 DanMessage::HotStuffMessage(msg) => {
-                    self.message_senders.tx_consensus_message.send((from, *msg)).await.ok()
+                    self.message_senders.tx_consensus_message.send((from, *msg)).await?
                 },
-                DanMessage::VoteMessage(msg) => self.message_senders.tx_vote_message.send((from, msg)).await.ok(),
-                DanMessage::NewTransaction(msg) => {
-                    self.message_senders.tx_new_transaction_message.send(*msg).await.ok()
+                DanMessage::VoteMessage(msg) => self.message_senders.tx_vote_message.send((from, msg)).await?,
+                DanMessage::NewTransaction(msg) => self.message_senders.tx_new_transaction_message.send(*msg).await?,
+                DanMessage::NetworkAnnounce(announce) => {
+                    self.message_senders.tx_network_announce.send((from, *announce)).await?
                 },
-                DanMessage::NetworkAnnounce(announce) => self
-                    .message_senders
-                    .tx_network_announce
-                    .send((from, *announce))
-                    .await
-                    .ok(),
-                DanMessage::RecoveryMessage(msg) => {
-                    self.message_senders.tx_recovery_message.send((from, *msg)).await.ok()
-                },
-            };
-
-            if result.is_none() {
-                info!(target: LOG_TARGET, "A message sender channel closed");
-                break;
+                DanMessage::RecoveryMessage(msg) => self.message_senders.tx_recovery_message.send((from, *msg)).await?,
             }
         }
 
         info!(target: LOG_TARGET, "Message dispatcher shutting down");
+        Ok(())
     }
 }

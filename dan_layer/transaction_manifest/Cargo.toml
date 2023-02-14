@@ -9,6 +9,5 @@ tari_engine_types = { path = "../engine_types" }
 tari_template_builtin = { path = "../template_builtin" }
 
 proc-macro2 = "1.0.42"
-quote = "1.0.20"
 syn = { version = "1.0.98", features = ["full", "extra-traits"] }
 thiserror = "1.0"

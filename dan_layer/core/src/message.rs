@@ -23,7 +23,7 @@
 use serde::Serialize;
 use tari_comms::{multiaddr::Multiaddr, peer_manager::IdentitySignature};
 use tari_dan_common_types::NodeAddressable;
-use tari_dan_engine::transaction::Transaction;
+use tari_transaction::Transaction;
 
 use crate::{
     models::{vote_message::VoteMessage, HotStuffMessage},

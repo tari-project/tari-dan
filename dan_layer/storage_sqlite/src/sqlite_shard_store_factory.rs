@@ -69,8 +69,8 @@ use tari_dan_core::{
         StorageError,
     },
 };
-use tari_dan_engine::transaction::{Transaction, TransactionMeta};
 use tari_engine_types::{instruction::Instruction, signature::InstructionSignature};
+use tari_transaction::{Transaction, TransactionMeta};
 use tari_utilities::{
     hex::{to_hex, Hex},
     ByteArray,
@@ -161,6 +161,8 @@ impl From<QueryableTransaction> for SQLTransaction {
 pub struct QueryableSubstate {
     #[sql_type = "Binary"]
     pub shard_id: Vec<u8>,
+    #[sql_type = "Text"]
+    pub address: String,
     #[sql_type = "BigInt"]
     pub version: i64,
     #[sql_type = "Text"]
@@ -179,6 +181,7 @@ impl From<QueryableSubstate> for SQLSubstate {
     fn from(transaction: QueryableSubstate) -> Self {
         Self {
             shard_id: transaction.shard_id,
+            address: transaction.address,
             version: transaction.version,
             data: transaction.data,
             created_justify: transaction.created_justify,
@@ -248,6 +251,7 @@ impl<'a> SqliteShardStoreReadTransaction<'a> {
     fn map_substate_to_shard_data(ss: &Substate) -> Result<SubstateShardData, StorageError> {
         Ok(SubstateShardData::new(
             ShardId::try_from(ss.shard_id.clone())?,
+            ss.address.parse().map_err(|_| StorageError::DecodingError)?,
             ss.version as u32,
             serde_json::from_str(&ss.data).unwrap(),
             NodeHeight(ss.created_height as u64),
@@ -396,6 +400,7 @@ impl ShardStoreReadTransaction<PublicKey, TariDanPayload> for SqliteShardStoreRe
         let payload = PayloadId::try_from(node.payload_id)?;
 
         let payload_hgt = node.payload_height as u64;
+        let leader_round = node.leader_round as u32;
         let local_pledge: Option<ObjectPledge> = serde_json::from_str(&node.local_pledges).unwrap();
 
         let epoch = node.epoch as u64;
@@ -410,6 +415,7 @@ impl ShardStoreReadTransaction<PublicKey, TariDanPayload> for SqliteShardStoreRe
             payload,
             None,
             NodeHeight(payload_hgt),
+            leader_round,
             local_pledge,
             Epoch(epoch),
             proposed_by,
@@ -555,13 +561,14 @@ impl ShardStoreReadTransaction<PublicKey, TariDanPayload> for SqliteShardStoreRe
         }
     }
 
-    fn get_last_voted_height(&self, shard: ShardId, payload_id: PayloadId) -> Result<NodeHeight, StorageError> {
+    fn get_last_voted_height(&self, shard: ShardId, payload_id: PayloadId) -> Result<(NodeHeight, u32), StorageError> {
         use crate::schema::last_voted_heights;
 
         let last_vote: Option<LastVotedHeight> = last_voted_heights::table
             .filter(last_voted_heights::shard_id.eq(shard.as_bytes().to_vec()))
             .filter(last_voted_heights::payload_id.eq(payload_id.as_bytes().to_vec()))
             .order_by(last_voted_heights::node_height.desc())
+            .then_order_by(last_voted_heights::leader_round.desc())
             .first(self.transaction.connection())
             .optional()
             .map_err(|e| StorageError::QueryError {
@@ -570,9 +577,10 @@ impl ShardStoreReadTransaction<PublicKey, TariDanPayload> for SqliteShardStoreRe
 
         if let Some(last_vote_height) = last_vote {
             let height = last_vote_height.node_height as u64;
-            Ok(NodeHeight(height))
+            let leader_round = last_vote_height.leader_round as u32;
+            Ok((NodeHeight(height), leader_round))
         } else {
-            Ok(NodeHeight(0))
+            Ok((NodeHeight(0), 0))
         }
     }
 
@@ -808,6 +816,7 @@ impl<'a> SqliteShardStoreWriteTransaction<'a> {
                     }
                 } else {
                     SubstateState::Up {
+                        address: current_state.address.parse().map_err(|_| StorageError::DecodingError)?,
                         created_by: PayloadId::try_from(current_state.created_by_payload_id)?,
                         data: serde_json::from_str::<tari_engine_types::substate::Substate>(&current_state.data)
                             .unwrap(),
@@ -1011,6 +1020,7 @@ impl ShardStoreWriteTransaction<PublicKey, TariDanPayload> for SqliteShardStoreW
 
         let payload_id = Vec::from(node.payload_id().as_bytes());
         let payload_height = node.payload_height().as_u64() as i64;
+        let leader_round = i64::from(node.leader_round());
 
         let local_pledges = json!(&node.local_pledge()).to_string();
 
@@ -1026,6 +1036,7 @@ impl ShardStoreWriteTransaction<PublicKey, TariDanPayload> for SqliteShardStoreW
             shard,
             payload_id,
             payload_height,
+            leader_round,
             local_pledges,
             epoch,
             proposed_by,
@@ -1121,7 +1132,7 @@ impl ShardStoreWriteTransaction<PublicKey, TariDanPayload> for SqliteShardStoreW
         for st_change in changes {
             match st_change {
                 SubstateState::DoesNotExist => (),
-                SubstateState::Up { data: d, .. } => {
+                SubstateState::Up { address, data: d, .. } => {
                     if let Some(s) = &current_state {
                         if !s.is_destroyed() {
                             return Err(StorageError::QueryError {
@@ -1135,6 +1146,7 @@ impl ShardStoreWriteTransaction<PublicKey, TariDanPayload> for SqliteShardStoreW
                     let pretty_data = serde_json::to_string_pretty(d).unwrap();
                     let new_row = NewSubstate {
                         shard_id: node.shard().as_bytes().to_vec(),
+                        address: address.to_string(),
                         version: d.version().into(),
                         data: pretty_data,
                         created_by_payload_id: node.payload_id().as_bytes().to_vec(),
@@ -1194,6 +1206,7 @@ impl ShardStoreWriteTransaction<PublicKey, TariDanPayload> for SqliteShardStoreW
 
         let new_row = ImportedSubstate {
             shard_id: substate_data.shard_id().as_bytes().to_vec(),
+            address: substate_data.substate_address().to_string(),
             version: i64::from(substate_data.version()),
             data: serde_json::to_string_pretty(substate_data.substate()).unwrap(),
             created_by_payload_id: substate_data.created_payload_id().as_bytes().to_vec(),
@@ -1224,6 +1237,7 @@ impl ShardStoreWriteTransaction<PublicKey, TariDanPayload> for SqliteShardStoreW
         shard: ShardId,
         payload_id: PayloadId,
         height: NodeHeight,
+        leader_round: u32,
     ) -> Result<(), StorageError> {
         use crate::schema::last_voted_heights;
 
@@ -1231,6 +1245,7 @@ impl ShardStoreWriteTransaction<PublicKey, TariDanPayload> for SqliteShardStoreW
             shard_id: shard.as_bytes().to_vec(),
             payload_id: payload_id.as_bytes().to_vec(),
             node_height: height.as_u64() as i64,
+            leader_round: i64::from(leader_round),
         };
 
         diesel::insert_into(last_voted_heights::table)
@@ -1247,6 +1262,7 @@ impl ShardStoreWriteTransaction<PublicKey, TariDanPayload> for SqliteShardStoreW
         shard: ShardId,
         payload: PayloadId,
         payload_height: NodeHeight,
+        leader_round: u32,
         node: HotStuffTreeNode<PublicKey, TariDanPayload>,
     ) -> Result<(), StorageError> {
         use crate::schema::leader_proposals;
@@ -1256,11 +1272,13 @@ impl ShardStoreWriteTransaction<PublicKey, TariDanPayload> for SqliteShardStoreW
         let payload_height = payload_height.as_u64() as i64;
         let node_hash = node.hash().as_bytes().to_vec();
         let node = serde_json::to_string_pretty(&node).unwrap();
+        let leader_round = i64::from(leader_round);
 
         let new_row = NewLeaderProposal {
             shard_id: shard,
             payload_id: payload,
             payload_height,
+            leader_round,
             node_hash,
             hotstuff_tree_node: node,
         };

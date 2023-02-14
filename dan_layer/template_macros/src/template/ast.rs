@@ -98,7 +98,7 @@ impl Parse for TemplateAst {
 }
 
 impl TemplateAst {
-    pub fn get_functions(&self) -> Vec<FunctionAst> {
+    pub fn get_functions(&self) -> impl Iterator<Item = FunctionAst> + '_ {
         self.module
             .content
             .iter()
@@ -110,7 +110,6 @@ impl TemplateAst {
             .flatten()
             .map(Self::get_function_from_item)
             .filter(|f| f.is_public)
-            .collect()
     }
 
     fn get_function_from_item(item: &ImplItem) -> FunctionAst {

@@ -59,7 +59,11 @@ impl Decode for Value {
             14u8 => Value::Tuple(Decode::deserialize(buf)?),
             15u8 => Value::ComponentAddress(Decode::deserialize(buf)?),
             _ => {
-                let msg = format!("Unexpected variant index: {:?}", variant_idx);
+                let msg = format!(
+                    "Unexpected argument Value variant index: {:?} ({} bytes left to decode)",
+                    variant_idx,
+                    buf.len()
+                );
                 return Err(io::Error::new(io::ErrorKind::InvalidInput, msg));
             },
         };

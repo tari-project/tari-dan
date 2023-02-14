@@ -20,37 +20,42 @@
 //   WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //   USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-// TODO: Account should probably be no_std
-
+use tari_template_abi::rust::collections::HashMap;
 use tari_template_lib::prelude::*;
 
 #[template]
 mod account_template {
-    use std::collections::HashMap;
-
     use super::*;
 
     pub struct Account {
-        // owner_address: RistrettoPublicKey,
         // TODO: Lazy key value map/store
         vaults: HashMap<ResourceAddress, Vault>,
     }
 
     impl Account {
-        #[allow(clippy::new_without_default)]
-        pub fn new() -> Self {
-            Self { vaults: HashMap::new() }
+        pub fn create(owner_token: NonFungibleAddress) -> AccountComponent {
+            let rules = AccessRules::new()
+                .add_method_rule("balance", AccessRule::AllowAll)
+                .add_method_rule("deposit", AccessRule::AllowAll)
+                .add_method_rule("deposit_all", AccessRule::AllowAll)
+                .add_method_rule("get_non_fungible_ids", AccessRule::AllowAll)
+                .default(AccessRule::Restricted(Require(owner_token)));
+
+            Self::create_with_rules(rules)
         }
 
+        pub fn create_with_rules(access_rules: AccessRules) -> AccountComponent {
+            Self { vaults: HashMap::new() }.create_with_access_rules(access_rules)
+        }
+
+        // #[access_rule(allow_all)]
         pub fn balance(&self, resource: ResourceAddress) -> Amount {
-            let v = self
-                .get_vault(resource)
-                .ok_or_else(|| format!("No vault for resource {}", resource))
-                .unwrap();
-            v.balance()
+            self.get_vault(resource)
+                .map(|v| v.balance())
+                .unwrap_or_else(Amount::zero)
         }
 
-        // #[access_rules(requires(owner_badge))]
+        // #[access_rule(requires(owner_badge))]
         pub fn withdraw(&mut self, resource: ResourceAddress, amount: Amount) -> Bucket {
             let v = self
                 .get_vault_mut(resource)

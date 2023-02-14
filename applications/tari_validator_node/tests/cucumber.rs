@@ -359,7 +359,7 @@ async fn call_component_method_and_check_result(
 
 #[when(expr = "I create a DAN wallet")]
 async fn create_dan_wallet(world: &mut TariWorld) {
-    validator_node_cli::create_dan_wallet(world).await;
+    validator_node_cli::create_dan_wallet(world);
 }
 
 #[when(expr = "I create an account {word} on {word}")]

@@ -50,6 +50,9 @@ function RowData({ substate }: any) {
         <DataTableCell sx={{ borderBottom: 'none' }}>
           {toHexString(substate.shard_id)}
         </DataTableCell>
+          <DataTableCell sx={{ borderBottom: 'none' }}>
+              {substate.address}:{substate.version}
+          </DataTableCell>
         <DataTableCell sx={{ borderBottom: 'none', textAlign: 'center' }}>
           <AccordionIconButton
             open={open1}
@@ -166,6 +169,7 @@ export default function Substates({ substates }: any) {
         <TableHead>
           <TableRow>
             <TableCell>Shard</TableCell>
+              <TableCell>Address</TableCell>
             <TableCell sx={{ textAlign: 'center', width: '120px' }}>
               Data
             </TableCell>

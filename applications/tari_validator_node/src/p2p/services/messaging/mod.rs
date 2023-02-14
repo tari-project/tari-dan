@@ -39,8 +39,8 @@ use tari_dan_core::{
     models::{vote_message::VoteMessage, HotStuffMessage, TariDanPayload},
     workers::hotstuff_waiter::RecoveryMessage,
 };
-use tari_dan_engine::transaction::Transaction;
-use tokio::sync::mpsc;
+use tari_transaction::Transaction;
+use tokio::{sync::mpsc, task::JoinHandle};
 
 use crate::comms::MessageChannel;
 
@@ -48,13 +48,13 @@ pub fn spawn(
     our_node_address: CommsPublicKey,
     (outbound_tx, inbound_rx): MessageChannel,
     message_senders: DanMessageSenders,
-) -> OutboundMessaging {
+) -> (OutboundMessaging, JoinHandle<anyhow::Result<()>>) {
     let (loopback_sender, loopback_receiver) = mpsc::channel(100);
     let inbound = InboundMessaging::new(our_node_address.clone(), inbound_rx, loopback_receiver);
     let outbound = OutboundMessaging::new(our_node_address, outbound_tx, loopback_sender);
     let dispatcher = MessageDispatcher::new(inbound, message_senders);
-    dispatcher.spawn();
-    outbound
+    let handle = dispatcher.spawn();
+    (outbound, handle)
 }
 
 #[derive(Debug, Clone)]

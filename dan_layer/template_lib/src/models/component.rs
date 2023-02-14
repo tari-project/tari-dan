@@ -24,7 +24,7 @@ use std::fmt::{Display, Formatter};
 
 use tari_bor::{borsh, Decode, Encode};
 
-use crate::{hash::HashParseError, models::TemplateAddress, Hash};
+use crate::{hash::HashParseError, models::TemplateAddress, prelude::AccessRules, Hash};
 
 #[derive(Debug, Clone, Copy, Hash, PartialEq, Eq, PartialOrd, Ord, Encode, Decode)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
@@ -39,8 +39,8 @@ impl ComponentAddress {
         &self.0
     }
 
-    pub fn to_vec(&self) -> Vec<u8> {
-        self.0.to_vec()
+    pub fn as_bytes(&self) -> &[u8] {
+        &self.0
     }
 
     pub fn from_hex(hex: &str) -> Result<Self, HashParseError> {
@@ -73,19 +73,15 @@ impl Display for ComponentAddress {
 #[derive(Debug, Clone, Encode, Decode)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct ComponentHeader {
-    // TODO: I dont think addresses should be in substates directly, this is only currently used by the template macro
-    pub component_address: ComponentAddress,
     pub template_address: TemplateAddress,
     pub module_name: String,
+    // TODO: Access rules should be a separate substate?
+    pub access_rules: AccessRules,
     // TODO: Split the state from the header
     pub state: ComponentBody,
 }
 
 impl ComponentHeader {
-    pub fn address(&self) -> &ComponentAddress {
-        &self.component_address
-    }
-
     pub fn into_component(self) -> ComponentBody {
         self.state
     }

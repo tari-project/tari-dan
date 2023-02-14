@@ -20,8 +20,8 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-mod id_provider;
-pub use id_provider::IdProvider;
+mod auth;
+pub use auth::{AuthParams, AuthorizationScope};
 
 mod r#impl;
 pub use r#impl::RuntimeInterfaceImpl;
@@ -35,15 +35,21 @@ pub use crate::runtime::engine_args::EngineArgs;
 mod error;
 pub use error::{RuntimeError, TransactionCommitError};
 
+mod functions;
+pub use functions::FunctionIdent;
+
+mod module;
+pub use module::{RuntimeModule, RuntimeModuleError};
+
 mod tracker;
+mod working_state;
 
 #[cfg(test)]
 mod tests;
-mod working_state;
 
 use std::{fmt::Debug, sync::Arc};
 
-use tari_engine_types::{commit_result::FinalizeResult, resource::Resource};
+use tari_engine_types::commit_result::FinalizeResult;
 use tari_template_lib::{
     args::{
         Arg,
@@ -61,17 +67,16 @@ use tari_template_lib::{
         WorkspaceAction,
     },
     invoke_args,
-    models::{ComponentAddress, ComponentHeader, NonFungibleAddress, ResourceAddress, VaultRef},
+    models::{ComponentAddress, ComponentHeader, NonFungibleAddress, VaultRef},
 };
 pub use tracker::{RuntimeState, StateTracker};
 
 pub trait RuntimeInterface: Send + Sync {
-    fn set_current_runtime_state(&self, state: RuntimeState);
+    fn set_current_runtime_state(&self, state: RuntimeState) -> Result<(), RuntimeError>;
 
-    fn emit_log(&self, level: LogLevel, message: String);
+    fn emit_log(&self, level: LogLevel, message: String) -> Result<(), RuntimeError>;
 
     fn get_component(&self, address: &ComponentAddress) -> Result<ComponentHeader, RuntimeError>;
-    fn get_resource(&self, address: &ResourceAddress) -> Result<Resource, RuntimeError>;
 
     fn component_invoke(
         &self,
@@ -143,8 +148,8 @@ impl Runtime {
 }
 
 impl Runtime {
-    pub fn new(engine: Arc<dyn RuntimeInterface>) -> Self {
-        Self { interface: engine }
+    pub fn new(interface: Arc<dyn RuntimeInterface>) -> Self {
+        Self { interface }
     }
 
     pub fn interface(&self) -> &dyn RuntimeInterface {

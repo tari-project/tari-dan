@@ -26,8 +26,12 @@ use anyhow::anyhow;
 use tari_dan_common_types::optional::IsNotFoundError;
 use tari_engine_types::{resource_container::ResourceError, substate::SubstateAddress};
 use tari_template_lib::models::{Amount, BucketId, ComponentAddress, NonFungibleId, ResourceAddress, VaultId};
+use tari_transaction::id_provider::MaxIdsExceeded;
 
-use crate::{runtime::id_provider::MaxIdsExceeded, state_store::StateStoreError};
+use crate::{
+    runtime::{FunctionIdent, RuntimeModuleError},
+    state_store::StateStoreError,
+};
 
 #[derive(Debug, thiserror::Error)]
 pub enum RuntimeError {
@@ -80,6 +84,12 @@ pub enum RuntimeError {
     TooManyOutputs(#[from] MaxIdsExceeded),
     #[error("Duplicate NFT token id: {token_id}")]
     DuplicateNonFungibleId { token_id: NonFungibleId },
+    #[error("Access Denied: {fn_ident}")]
+    AccessDenied { fn_ident: FunctionIdent },
+    #[error("Invalid method address rule for {template_name}: {details}")]
+    InvalidMethodAccessRule { template_name: String, details: String },
+    #[error("Runtime module error: {0}")]
+    ModuleError(#[from] RuntimeModuleError),
 }
 
 impl RuntimeError {

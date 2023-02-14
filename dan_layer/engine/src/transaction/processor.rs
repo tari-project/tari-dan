@@ -29,39 +29,69 @@ use tari_template_lib::{
     args::{Arg, WorkspaceAction},
     invoke_args,
 };
+use tari_transaction::{id_provider::IdProvider, Transaction};
 
 use crate::{
     packager::{LoadedTemplate, Package},
-    runtime::{Runtime, RuntimeInterface, RuntimeState},
+    runtime::{
+        AuthParams,
+        AuthorizationScope,
+        ConsensusContext,
+        FunctionIdent,
+        Runtime,
+        RuntimeInterfaceImpl,
+        RuntimeModule,
+        RuntimeState,
+        StateTracker,
+    },
+    state_store::memory::MemoryStateStore,
     traits::Invokable,
-    transaction::{Transaction, TransactionError},
+    transaction::TransactionError,
     wasm::WasmProcess,
 };
 
 const LOG_TARGET: &str = "dan::engine::instruction_processor";
 
-#[derive(Debug, Clone)]
-pub struct TransactionProcessor<TRuntimeInterface> {
+pub struct TransactionProcessor {
     package: Package,
-    runtime_interface: TRuntimeInterface,
+    state_db: MemoryStateStore,
+    auth_params: AuthParams,
+    consensus: ConsensusContext,
+    modules: Vec<Box<dyn RuntimeModule>>,
 }
 
-impl<TRuntimeInterface> TransactionProcessor<TRuntimeInterface>
-where TRuntimeInterface: RuntimeInterface + Clone + 'static
-{
-    pub fn new(runtime_interface: TRuntimeInterface, package: Package) -> Self {
+impl TransactionProcessor {
+    pub fn new(
+        package: Package,
+        state_db: MemoryStateStore,
+        auth_params: AuthParams,
+        consensus: ConsensusContext,
+        modules: Vec<Box<dyn RuntimeModule>>,
+    ) -> Self {
         Self {
             package,
-            runtime_interface,
+            state_db,
+            auth_params,
+            consensus,
+            modules,
         }
     }
 
-    pub fn execute(&self, transaction: Transaction) -> Result<FinalizeResult, TransactionError> {
-        let runtime = Runtime::new(Arc::new(self.runtime_interface.clone()));
+    pub fn execute(self, transaction: Transaction) -> Result<FinalizeResult, TransactionError> {
+        let id_provider = IdProvider::new(*transaction.hash(), 1000);
+        // TODO: We can avoid this for each execution with improved design
+        let template_defs = self.package.get_template_defs();
+        let tracker = StateTracker::new(self.state_db.clone(), id_provider, template_defs);
+        let initial_proofs = self.auth_params.initial_ownership_proofs.clone();
+        let runtime_interface = RuntimeInterfaceImpl::new(tracker, self.auth_params, self.consensus, self.modules);
+        let package = self.package;
+
+        let auth_scope = AuthorizationScope::new(&initial_proofs);
+        let runtime = Runtime::new(Arc::new(runtime_interface));
         let exec_results = transaction
-            .instructions
+            .into_instructions()
             .into_iter()
-            .map(|instruction| self.process_instruction(&runtime, instruction))
+            .map(|instruction| Self::process_instruction(&package, &runtime, &auth_scope, instruction))
             .collect::<Result<Vec<_>, _>>()?;
 
         let mut finalize_result = runtime.interface().finalize()?;
@@ -70,8 +100,9 @@ where TRuntimeInterface: RuntimeInterface + Clone + 'static
     }
 
     fn process_instruction(
-        &self,
+        package: &Package,
         runtime: &Runtime,
+        auth_scope: &AuthorizationScope<'_>,
         instruction: Instruction,
     ) -> Result<ExecutionResult, TransactionError> {
         debug!(target: LOG_TARGET, "instruction = {:?}", instruction);
@@ -83,15 +114,16 @@ where TRuntimeInterface: RuntimeInterface + Clone + 'static
             } => {
                 runtime
                     .interface()
-                    .set_current_runtime_state(RuntimeState { template_address });
+                    .set_current_runtime_state(RuntimeState { template_address })?;
 
-                let template = self.package.get_template_by_address(&template_address).ok_or(
-                    TransactionError::TemplateNotFound {
-                        address: template_address,
-                    },
-                )?;
+                let template =
+                    package
+                        .get_template_by_address(&template_address)
+                        .ok_or(TransactionError::TemplateNotFound {
+                            address: template_address,
+                        })?;
 
-                let result = self.invoke_template(template.clone(), runtime.clone(), &function, args)?;
+                let result = Self::invoke_template(template.clone(), runtime.clone(), &function, args)?;
                 Ok(result)
             },
             Instruction::CallMethod {
@@ -99,23 +131,32 @@ where TRuntimeInterface: RuntimeInterface + Clone + 'static
                 method,
                 args,
             } => {
-                let component = self.runtime_interface.get_component(&component_address)?;
-                let template = self
-                    .package
-                    .get_template_by_address(&component.template_address)
-                    .ok_or(TransactionError::TemplateNotFound {
+                let component = runtime.interface().get_component(&component_address)?;
+                // TODO: In this very basic auth system, you can only call on owned objects (because
+                // initial_ownership_proofs is       usually set to include the owner token).
+                auth_scope.check_access_rules(
+                    &FunctionIdent::Template {
+                        module_name: component.module_name.clone(),
+                        function: method.clone(),
+                    },
+                    &component.access_rules,
+                )?;
+
+                let template = package.get_template_by_address(&component.template_address).ok_or(
+                    TransactionError::TemplateNotFound {
                         address: component.template_address,
-                    })?;
+                    },
+                )?;
 
                 runtime.interface().set_current_runtime_state(RuntimeState {
                     template_address: component.template_address,
-                });
+                })?;
 
                 let mut final_args = Vec::with_capacity(args.len() + 1);
-                final_args.push(arg![component]);
+                final_args.push(arg![component_address]);
                 final_args.extend(args);
 
-                let result = self.invoke_template(template.clone(), runtime.clone(), &method, final_args)?;
+                let result = Self::invoke_template(template.clone(), runtime.clone(), &method, final_args)?;
                 Ok(result)
             },
             Instruction::PutLastInstructionOutputOnWorkspace { key } => {
@@ -125,14 +166,13 @@ where TRuntimeInterface: RuntimeInterface + Clone + 'static
                 Ok(ExecutionResult::empty())
             },
             Instruction::EmitLog { level, message } => {
-                runtime.interface().emit_log(level, message);
+                runtime.interface().emit_log(level, message)?;
                 Ok(ExecutionResult::empty())
             },
         }
     }
 
     fn invoke_template(
-        &self,
         module: LoadedTemplate,
         runtime: Runtime,
         function: &str,

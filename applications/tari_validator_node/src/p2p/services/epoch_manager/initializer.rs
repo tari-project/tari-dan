@@ -27,7 +27,7 @@ use tari_dan_core::consensus_constants::ConsensusConstants;
 use tari_dan_storage::global::GlobalDb;
 use tari_dan_storage_sqlite::{global::SqliteGlobalDbAdapter, sqlite_shard_store_factory::SqliteShardStore};
 use tari_shutdown::ShutdownSignal;
-use tokio::sync::mpsc;
+use tokio::{sync::mpsc, task::JoinHandle};
 
 use crate::{
     grpc::services::base_node_client::GrpcBaseNodeClient,
@@ -45,10 +45,10 @@ pub fn spawn(
     shutdown: ShutdownSignal,
     node_identity: Arc<NodeIdentity>,
     validator_node_client_factory: TariCommsValidatorNodeClientFactory,
-) -> EpochManagerHandle {
+) -> (EpochManagerHandle, JoinHandle<anyhow::Result<()>>) {
     let (tx_request, rx_request) = mpsc::channel(10);
-    let handle = EpochManagerHandle::new(tx_request);
-    EpochManagerService::spawn(
+    let epoch_manager = EpochManagerHandle::new(tx_request);
+    let handle = EpochManagerService::spawn(
         rx_request,
         shutdown,
         global_db,
@@ -58,5 +58,5 @@ pub fn spawn(
         node_identity,
         validator_node_client_factory,
     );
-    handle
+    (epoch_manager, handle)
 }

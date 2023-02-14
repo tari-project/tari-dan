@@ -10,6 +10,8 @@ use tari_template_abi::{
 
 use crate::{
     args::{InvokeResult, NonFungibleAction, NonFungibleInvokeArg},
+    constants::PUBLIC_IDENTITY_RESOURCE,
+    crypto::RistrettoPublicKeyBytes,
     models::ResourceAddress,
     prelude::ResourceManager,
     Hash,
@@ -180,6 +182,10 @@ impl NonFungibleAddress {
 
     pub fn id(&self) -> &NonFungibleId {
         &self.id
+    }
+
+    pub fn from_public_key(public_key: RistrettoPublicKeyBytes) -> Self {
+        Self::new(PUBLIC_IDENTITY_RESOURCE, NonFungibleId::U256(public_key.into_array()))
     }
 }
 

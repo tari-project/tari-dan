@@ -21,7 +21,7 @@
 //   USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 use std::{
-    collections::BTreeSet,
+    collections::{BTreeSet, HashMap},
     mem,
     sync::{Arc, RwLock},
 };
@@ -38,8 +38,10 @@ use tari_engine_types::{
     vault::Vault,
     TemplateAddress,
 };
+use tari_template_abi::TemplateDef;
 use tari_template_lib::{
     args::MintArg,
+    auth::AccessRules,
     models::{
         Amount,
         BucketId,
@@ -54,9 +56,10 @@ use tari_template_lib::{
     resource::ResourceType,
     Hash,
 };
+use tari_transaction::id_provider::IdProvider;
 
 use crate::{
-    runtime::{id_provider::IdProvider, working_state::WorkingState, RuntimeError, TransactionCommitError},
+    runtime::{working_state::WorkingState, RuntimeError, TransactionCommitError},
     state_store::{memory::MemoryStateStore, AtomicDb, StateReader},
 };
 
@@ -66,7 +69,10 @@ const LOG_TARGET: &str = "tari::engine::runtime::state_tracker";
 pub struct StateTracker {
     working_state: Arc<RwLock<WorkingState>>,
     id_provider: IdProvider,
+    template_defs: HashMap<TemplateAddress, TemplateDef>,
 }
+
+impl StateTracker {}
 
 #[derive(Debug, Clone)]
 pub struct RuntimeState {
@@ -74,10 +80,15 @@ pub struct RuntimeState {
 }
 
 impl StateTracker {
-    pub fn new(state_store: MemoryStateStore, id_provider: IdProvider) -> Self {
+    pub fn new(
+        state_store: MemoryStateStore,
+        id_provider: IdProvider,
+        template_defs: HashMap<TemplateAddress, TemplateDef>,
+    ) -> Self {
         Self {
             working_state: Arc::new(RwLock::new(WorkingState::new(state_store))),
             id_provider,
+            template_defs,
         }
     }
 
@@ -87,6 +98,14 @@ impl StateTracker {
 
     pub fn take_logs(&self) -> Vec<LogEntry> {
         self.write_with(|state| mem::take(&mut state.logs))
+    }
+
+    pub fn get_template_def(&self) -> Result<&TemplateDef, RuntimeError> {
+        let runtime_state = self.runtime_state()?;
+        Ok(self
+            .template_defs
+            .get(&runtime_state.template_address)
+            .expect("Template def not found for current template"))
     }
 
     fn check_amount(&self, amount: Amount) -> Result<(), RuntimeError> {
@@ -105,7 +124,7 @@ impl StateTracker {
         metadata: Metadata,
     ) -> Result<ResourceAddress, RuntimeError> {
         let resource_address = self.id_provider.new_resource_address()?;
-        let resource = Resource::new(resource_type, resource_address, metadata);
+        let resource = Resource::new(resource_type, metadata);
         self.write_with(|state| {
             state.new_resources.insert(resource_address, resource);
         });
@@ -284,15 +303,20 @@ impl StateTracker {
         })
     }
 
-    pub fn new_component(&self, module_name: String, state: Vec<u8>) -> Result<ComponentAddress, RuntimeError> {
+    pub fn new_component(
+        &self,
+        module_name: String,
+        state: Vec<u8>,
+        access_rules: AccessRules,
+    ) -> Result<ComponentAddress, RuntimeError> {
         let runtime_state = self.runtime_state()?;
         let component = ComponentBody { state };
         let component_address = self.id_provider().new_component_address()?;
         debug!(target: LOG_TARGET, "New component created: {}", component_address);
         let component = ComponentHeader {
-            component_address,
             template_address: runtime_state.template_address,
             module_name,
+            access_rules,
             state: component,
         };
 
@@ -403,9 +427,9 @@ impl StateTracker {
                 let new_substate = match tx.get_state::<_, Substate>(&addr).optional()? {
                     Some(existing_state) => {
                         substate_diff.down(addr.clone(), existing_state.version());
-                        Substate::new(addr.clone(), existing_state.version() + 1, substate)
+                        Substate::new(existing_state.version() + 1, substate)
                     },
-                    None => Substate::new(addr.clone(), 0, substate),
+                    None => Substate::new(0, substate),
                 };
                 substate_diff.up(addr, new_substate);
             }
@@ -415,9 +439,9 @@ impl StateTracker {
                 let new_substate = match tx.get_state::<_, Substate>(&addr).optional()? {
                     Some(existing_state) => {
                         substate_diff.down(addr.clone(), existing_state.version());
-                        Substate::new(addr.clone(), existing_state.version() + 1, substate)
+                        Substate::new(existing_state.version() + 1, substate)
                     },
-                    None => Substate::new(addr.clone(), 0, substate),
+                    None => Substate::new(0, substate),
                 };
                 substate_diff.up(addr, new_substate);
             }
@@ -427,9 +451,9 @@ impl StateTracker {
                 let new_substate = match tx.get_state::<_, Substate>(&addr).optional()? {
                     Some(existing_state) => {
                         substate_diff.down(addr.clone(), existing_state.version());
-                        Substate::new(addr.clone(), existing_state.version() + 1, substate)
+                        Substate::new(existing_state.version() + 1, substate)
                     },
-                    None => Substate::new(addr.clone(), 0, substate),
+                    None => Substate::new(0, substate),
                 };
                 substate_diff.up(addr, new_substate);
             }
@@ -439,9 +463,9 @@ impl StateTracker {
                 let new_substate = match tx.get_state::<_, Substate>(&addr).optional()? {
                     Some(existing_state) => {
                         substate_diff.down(addr.clone(), existing_state.version());
-                        Substate::new(addr.clone(), existing_state.version() + 1, substate)
+                        Substate::new(existing_state.version() + 1, substate)
                     },
-                    None => Substate::new(addr.clone(), 0, substate),
+                    None => Substate::new(0, substate),
                 };
                 substate_diff.up(addr, new_substate);
             }

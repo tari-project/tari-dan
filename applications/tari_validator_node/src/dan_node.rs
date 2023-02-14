@@ -21,8 +21,8 @@
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 use log::*;
-use tari_common::exit_codes::ExitError;
-use tari_dan_core::workers::events::HotStuffEvent;
+use tari_comms::{connectivity::ConnectivityEvent, peer_manager::NodeId};
+use tari_dan_core::{services::epoch_manager::EpochManager, workers::events::HotStuffEvent};
 use tari_shutdown::ShutdownSignal;
 use tari_template_lib::Hash;
 
@@ -39,16 +39,32 @@ impl DanNode {
         Self { services }
     }
 
-    pub async fn start(mut self, mut shutdown: ShutdownSignal) -> Result<(), ExitError> {
-        self.services.networking.announce().await?;
-
+    pub async fn start(mut self, mut shutdown: ShutdownSignal) -> Result<(), anyhow::Error> {
         let mut hotstuff_events = self.services.hotstuff_events.subscribe();
+
+        let mut connectivity_events = self.services.comms.connectivity().get_event_subscription();
+
+        self.dial_local_shard_peers().await?;
+
+        let status = self.services.comms.connectivity().get_connectivity_status().await?;
+        if status.is_online() {
+            self.services.networking.announce().await?;
+        }
 
         loop {
             tokio::select! {
                 // Wait until killed
                 _ = shutdown.wait() => {
                      break;
+                },
+
+                Ok(event) = connectivity_events.recv() => {
+                    if let ConnectivityEvent::ConnectivityStateOnline(_) = event {
+                        // We're back online, announce
+                        if let Err(err) = self.services.networking.announce().await {
+                            error!(target: LOG_TARGET, "Failed to announce: {}", err);
+                        }
+                    }
                 },
 
                 Ok(event) = hotstuff_events.recv() => {
@@ -60,9 +76,42 @@ impl DanNode {
                         }
                     }
                 }
+
+                Err(err) = self.services.on_any_exit() => {
+                    error!(target: LOG_TARGET, "Error in service: {}", err);
+                    return Err(err);
+                }
             }
         }
 
+        Ok(())
+    }
+
+    async fn dial_local_shard_peers(&mut self) -> Result<(), anyhow::Error> {
+        let epoch = self.services.epoch_manager.current_epoch().await?;
+        let shard_id = self
+            .services
+            .epoch_manager
+            .get_validator_shard_key(epoch, self.services.comms.node_identity().public_key().clone())
+            .await?;
+        let local_shard_peers = self.services.epoch_manager.get_committee(epoch, shard_id).await?;
+        info!(
+            target: LOG_TARGET,
+            "Dialing {} local shard peers",
+            local_shard_peers.members.len()
+        );
+        // TODO: Peer sync may not have completed yet, so some addresses for local shard peers may not be known yet.
+        self.services
+            .comms
+            .connectivity()
+            .request_many_dials(
+                local_shard_peers
+                    .members
+                    .into_iter()
+                    .filter(|pk| pk != self.services.comms.node_identity().public_key())
+                    .map(|pk| NodeId::from_public_key(&pk)),
+            )
+            .await?;
         Ok(())
     }
 }

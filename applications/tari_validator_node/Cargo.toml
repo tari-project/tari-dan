@@ -14,7 +14,6 @@ tari_common = { git = "https://github.com/tari-project/tari.git", branch = "deve
 tari_comms = { git = "https://github.com/tari-project/tari.git", branch = "development", package = "tari_comms" }
 tari_comms_rpc_macros = { git = "https://github.com/tari-project/tari.git", branch = "development", package = "tari_comms_rpc_macros" }
 tari_crypto = { git = "https://github.com/tari-project/tari-crypto.git", tag = "v0.16.6" }
-tari_mmr = { git = "https://github.com/tari-project/tari.git", branch = "development", package = "tari_mmr" }
 tari_p2p = { git = "https://github.com/tari-project/tari.git", branch = "development", package = "tari_p2p" }
 tari_shutdown = { git = "https://github.com/tari-project/tari.git", branch = "development", package = "tari_shutdown" }
 tari_storage = { git = "https://github.com/tari-project/tari.git", branch = "development", package = "tari_storage" }
@@ -32,41 +31,37 @@ tari_wallet_grpc_client = { git = "https://github.com/tari-project/tari.git", br
 tari_engine_types = { path = "../../dan_layer/engine_types" }
 tari_validator_node_client = { path = "../../clients/validator_node_client" }
 tari_comms_logging = { path = "../../comms/tari_comms_logging" }
+tari_transaction = { path = "../../dan_layer/transaction" }
 
 anyhow = "1.0.53"
 async-trait = "0.1.50"
 axum = "0.6.0"
 axum-jrpc = { version = "0.3.2", features = ["anyhow_error"] }
-bincode = "1.3.3"
-blake2 = "0.9.2"
-borsh = { version = "0.9.3", default-features = false }
 bytes = "1"
 chrono = "0.4.22"
 clap = { version = "3.2.5", features = ["env"] }
 config = "0.13.0"
-digest = "0.9.0"
-diesel = { version = "1.4.8", default-features = false, features = ["sqlite"] }
 futures = { version = "^0.3.1" }
-json5 = "0.2.2"
 include_dir = "0.7.2"
+json5 = "0.2.2"
+libsqlite3-sys = { version = "0.22.2", features = ["bundled"] }
+lmdb-zero = "0.4.4"
 log = { version = "0.4.8", features = ["std"] }
 log4rs = { version = "1.1.1", features = ["rolling_file_appender", "compound_policy", "size_trigger", "fixed_window_roller"] }
-lmdb-zero = "0.4.4"
-libsqlite3-sys = { version = "0.22.2", features = ["bundled"] }
 mini-moka = "0.10.0"
 prost = "0.9"
 rand = "0.7"
 reqwest = "0.11.11"
 serde = { version = "1.0.126", features = ["derive"] }
 serde_json = "1.0.64"
-time = "0.3.15"
 thiserror = "^1.0.20"
+time = "0.3.15"
 tokio = { version = "1.10", features = ["macros", "time", "sync", "rt-multi-thread"] }
 tokio-stream = { version = "0.1.7", features = ["sync"] }
 tonic = "0.6.2"
 tower = "0.4"
-tower-layer = "0.3"
 tower-http = { version = "0.3.0", features = ["cors"] }
+tower-layer = "0.3"
 
 [build-dependencies]
 tari_common = { git = "https://github.com/tari-project/tari.git", branch = "development", package = "tari_common", features = ["build"] }
@@ -91,3 +86,11 @@ indexmap = "1.9.1"
 [[test]]
 name = "cucumber" # this should be the same as the filename of your test target
 harness = false # allows Cucumber to print output instead of libtest
+
+[package.metadata.cargo-machete]
+ignored = [
+    # We want to bundle this lib
+    "libsqlite3-sys",
+    # Want to enable some log4rs features
+    "log4rs",
+]

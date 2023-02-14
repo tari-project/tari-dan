@@ -23,10 +23,11 @@
 use std::sync::Arc;
 
 use tari_comms::NodeIdentity;
-use tari_dan_engine::transaction::Transaction;
+use tari_transaction::Transaction;
 use tokio::{
     sync::{broadcast, mpsc},
     task,
+    task::JoinHandle,
 };
 
 use crate::p2p::services::{
@@ -42,7 +43,7 @@ pub fn spawn(
     epoch_manager: EpochManagerHandle,
     node_identity: Arc<NodeIdentity>,
     template_manager: TemplateManager,
-) -> MempoolHandle {
+) -> (MempoolHandle, JoinHandle<anyhow::Result<()>>) {
     let (tx_valid_transactions, rx_valid_transactions) = broadcast::channel(100);
     let (tx_mempool_request, rx_mempool_request) = mpsc::channel(1);
 
@@ -58,7 +59,7 @@ pub fn spawn(
     );
     let handle = MempoolHandle::new(rx_valid_transactions, tx_mempool_request);
 
-    task::spawn(mempool.run());
+    let join_handle = task::spawn(mempool.run());
 
-    handle
+    (handle, join_handle)
 }

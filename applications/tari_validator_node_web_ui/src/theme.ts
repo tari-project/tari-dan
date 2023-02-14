@@ -41,6 +41,31 @@ const theme = createTheme({
     },
     body2: {
       color: '#000000',
+      lineHeight: '1.5rem',
+    },
+    h1: {
+      fontSize: '2.2rem',
+      lineHeight: '3.2rem',
+    },
+    h2: {
+      fontSize: '1.9rem',
+      lineHeight: '2.9rem',
+    },
+    h3: {
+      fontSize: '1.6rem',
+      lineHeight: '2.6rem',
+    },
+    h4: {
+      fontSize: '1.3rem',
+      lineHeight: '2.3rem',
+    },
+    h5: {
+      fontSize: '1rem',
+      lineHeight: '2em',
+    },
+    h6: {
+      fontSize: '0.875rem',
+      lineHeight: '1.8rem',
     },
   },
   transitions: {
@@ -55,6 +80,13 @@ const theme = createTheme({
         disableRipple: true,
         style: {
           borderRadius: '5px',
+        },
+      },
+    },
+    MuiTableCell: {
+      defaultProps: {
+        sx: {
+          borderBottom: '1px solid #f5f5f5',
         },
       },
     },

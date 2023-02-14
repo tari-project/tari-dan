@@ -20,8 +20,9 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use tari_dan_common_types::{Epoch, NodeHeight, PayloadId, ShardId, SubstateChange};
+use tari_dan_common_types::{Epoch, NodeHeight, PayloadId, ShardId};
 use tari_engine_types::{commit_result::RejectReason, substate::SubstateAddress};
+use tari_transaction::SubstateChange;
 use thiserror::Error;
 use tokio::sync::mpsc;
 
@@ -86,6 +87,8 @@ pub enum HotStuffError {
     ShardPledgesChanged { payload_id: PayloadId },
     #[error("All shards rejected payload {payload_id}: {reason}")]
     AllShardsRejected { payload_id: PayloadId, reason: String },
+    #[error("Current node is not involved in processing payload {payload_id}")]
+    NodeIsNotInvolvedInPayload { payload_id: PayloadId },
 }
 
 impl<T> From<mpsc::error::SendError<T>> for HotStuffError {

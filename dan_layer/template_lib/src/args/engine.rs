@@ -40,6 +40,7 @@ use crate::{
         ResourceAddress,
         VaultRef,
     },
+    prelude::AccessRules,
     resource::ResourceType,
 };
 
@@ -103,11 +104,13 @@ pub struct ComponentInvokeArg {
     pub args: Vec<Vec<u8>>,
 }
 
-#[derive(Clone, Debug, Decode, Encode)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord, Decode, Encode)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub enum ComponentAction {
     Get,
     Create,
     SetState,
+    SetAccessRules,
 }
 
 #[derive(Clone, Copy, Hash, Debug, Decode, Encode)]
@@ -123,6 +126,13 @@ impl ComponentRef {
             ComponentRef::Ref(addr) => Some(*addr),
         }
     }
+}
+
+#[derive(Debug, Clone, Decode, Encode)]
+pub struct CreateComponentArg {
+    pub module_name: String,
+    pub encoded_state: Vec<u8>,
+    pub access_rules: AccessRules,
 }
 
 // -------------------------------- Resource -------------------------------- //
@@ -154,15 +164,14 @@ impl From<ResourceAddress> for ResourceRef {
     }
 }
 
-#[derive(Clone, Debug, Decode, Encode)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord, Decode, Encode)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub enum ResourceAction {
     GetTotalSupply,
     GetResourceType,
     GetNonFungible,
     Create,
     Mint,
-    Deposit,
-    Withdraw,
     UpdateNonFungibleData,
 }
 
@@ -207,7 +216,8 @@ pub struct VaultInvokeArg {
     pub args: Vec<Vec<u8>>,
 }
 
-#[derive(Clone, Debug, Decode, Encode)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord, Decode, Encode)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub enum VaultAction {
     Create,
     Deposit,

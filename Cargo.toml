@@ -9,6 +9,7 @@ members = [
     "dan_layer/template_abi",
     "dan_layer/template_builtin",
     "dan_layer/template_lib",
+    "dan_layer/transaction",
     "dan_layer/template_macros",
     "dan_layer/transaction_manifest",
     "dan_layer/template_test_tooling",
