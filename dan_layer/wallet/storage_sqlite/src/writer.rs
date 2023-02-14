@@ -66,13 +66,15 @@ impl WalletStoreWriter for WriteTransaction<'_> {
             .optional()
             .map_err(|e| WalletStorageError::general("key_manager_set_index", e))?;
 
-        sql_query("UPDATE key_manager_states SET `is_active` = 0 WHERE branch_seed = ?")
-            .bind::<Text, _>(branch)
-            .execute(self.connection())
-            .map_err(|e| WalletStorageError::general("key_manager_set_index", e))?;
+        sql_query(
+            "UPDATE key_manager_states SET `is_active` = 0, updated_at = CURRENT_TIMESTAMP WHERE branch_seed = ?",
+        )
+        .bind::<Text, _>(branch)
+        .execute(self.connection())
+        .map_err(|e| WalletStorageError::general("key_manager_set_index", e))?;
 
         if let Some(active_id) = maybe_active_id {
-            sql_query("UPDATE key_manager_states SET `is_active` = 1 WHERE id = ?")
+            sql_query("UPDATE key_manager_states SET `is_active` = 1, updated_at = CURRENT_TIMESTAMP WHERE id = ?")
                 .bind::<Integer, _>(active_id)
                 .execute(self.connection())
                 .map_err(|e| WalletStorageError::general("key_manager_set_index", e))?;
@@ -99,7 +101,7 @@ impl WalletStoreWriter for WriteTransaction<'_> {
             .map_err(|e| WalletStorageError::general("key_manager_set_index", e))?;
 
         if exists {
-            sql_query("UPDATE config SET value = ?, is_encrypted = ?, updated_at = NOW() WHERE key = ?")
+            sql_query("UPDATE config SET value = ?, is_encrypted = ?, updated_at = CURRENT_TIMESTAMP WHERE key = ?")
                 .bind::<Text, _>(serialize_json(value)?)
                 .bind::<Text, _>(key)
                 .execute(self.connection())
@@ -148,13 +150,15 @@ impl WalletStoreWriter for WriteTransaction<'_> {
         qcs: Option<&[QuorumCertificate]>,
         new_status: TransactionStatus,
     ) -> Result<(), WalletStorageError> {
-        let num_rows = sql_query("UPDATE transactions SET result = ?, status = ?, qcs = ? WHERE hash = ?")
-            .bind::<Nullable<Text>, _>(result.map(serialize_json).transpose()?)
-            .bind::<Text, _>(new_status.as_key_str())
-            .bind::<Nullable<Text>, _>(qcs.map(serialize_json).transpose()?)
-            .bind::<Text, _>(hash.to_string())
-            .execute(self.connection())
-            .map_err(|e| WalletStorageError::general("transactions_set_result_and_status", e))?;
+        let num_rows = sql_query(
+            "UPDATE transactions SET result = ?, status = ?, qcs = ?, updated_at = CURRENT_TIMESTAMP WHERE hash = ?",
+        )
+        .bind::<Nullable<Text>, _>(result.map(serialize_json).transpose()?)
+        .bind::<Text, _>(new_status.as_key_str())
+        .bind::<Nullable<Text>, _>(qcs.map(serialize_json).transpose()?)
+        .bind::<Text, _>(hash.to_string())
+        .execute(self.connection())
+        .map_err(|e| WalletStorageError::general("transactions_set_result_and_status", e))?;
 
         if num_rows == 0 {
             return Err(WalletStorageError::NotFound {
