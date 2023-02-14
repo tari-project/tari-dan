@@ -21,7 +21,7 @@
 //   USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 use serde::{Deserialize, Serialize};
-use tari_common_types::types::FixedHash;
+use tari_common_types::types::{FixedHash, PublicKey};
 use tari_dan_common_types::{serde_with, QuorumCertificate, ShardId};
 use tari_dan_wallet_sdk::models::{Account, TransactionStatus, VersionedSubstateAddress};
 use tari_engine_types::{commit_result::FinalizeResult, instruction::Instruction, substate::SubstateAddress};
@@ -100,11 +100,30 @@ pub struct TransactionWaitResultResponse {
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct KeysListRequest {}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct KeysListResponse {
+    pub keys: Vec<(u64, PublicKey, bool)>,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct KeysSetActiveRequest {
+    pub index: u64,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct KeysSetActiveResponse {
+    pub public_key: PublicKey,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct KeysCreateRequest {}
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct KeysCreateResponse {
     pub id: u64,
+    pub public_key: PublicKey,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]

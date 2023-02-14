@@ -48,7 +48,7 @@ pub async fn handle_create(
 
     let (key_index, signing_key) = sdk
         .key_manager_api()
-        .get_key_or_current(TRANSACTION_KEYMANAGER_BRANCH, req.signing_key_index)?;
+        .get_key_or_active(TRANSACTION_KEYMANAGER_BRANCH, req.signing_key_index)?;
     let owner_pk = sdk
         .key_manager_api()
         .get_public_key(TRANSACTION_KEYMANAGER_BRANCH, req.signing_key_index)?;
@@ -106,7 +106,7 @@ pub async fn handle_get_balances(
     let sdk = context.wallet_sdk();
     let (_, signing_key) = sdk
         .key_manager_api()
-        .get_key_or_current(TRANSACTION_KEYMANAGER_BRANCH, None)?;
+        .get_key_or_active(TRANSACTION_KEYMANAGER_BRANCH, None)?;
 
     let account_address = sdk.accounts_api().get_account_address_by_name(&req.account_name)?;
     let inputs = sdk

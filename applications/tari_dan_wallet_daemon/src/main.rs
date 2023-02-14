@@ -33,7 +33,12 @@ use tari_dan_wallet_sdk::{DanWalletSdk, WalletSdkConfig};
 use tari_dan_wallet_storage_sqlite::SqliteWalletStore;
 use tari_shutdown::Shutdown;
 
-use crate::{cli::Cli, handlers::HandlerContext, notify::Notify, services::spawn_services};
+use crate::{
+    cli::Cli,
+    handlers::{HandlerContext, TRANSACTION_KEYMANAGER_BRANCH},
+    notify::Notify,
+    services::spawn_services,
+};
 
 const LOG_TARGET: &str = "tari::dan::wallet_daemon::main";
 
@@ -75,6 +80,9 @@ async fn main() -> Result<(), Box<dyn Error>> {
         validator_node_jrpc_endpoint: cli.validator_node_endpoint(),
     };
     let wallet_sdk = DanWalletSdk::initialize(store, params)?;
+    wallet_sdk
+        .key_manager_api()
+        .get_or_create_initial(TRANSACTION_KEYMANAGER_BRANCH)?;
     let notify = Notify::new(100);
 
     let service_handles = spawn_services(shutdown_signal.clone(), notify.clone(), wallet_sdk.clone());

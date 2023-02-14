@@ -27,6 +27,7 @@ diesel::table! {
         id -> Integer,
         branch_seed -> Text,
         index -> BigInt,
+        is_active -> Bool,
         created_at -> Timestamp,
         updated_at -> Timestamp,
     }
@@ -63,4 +64,10 @@ diesel::table! {
     }
 }
 
-diesel::allow_tables_to_appear_in_same_query!(accounts, config, key_manager_states, substates, transactions,);
+diesel::allow_tables_to_appear_in_same_query!(
+    accounts,
+    config,
+    key_manager_states,
+    substates,
+    transactions,
+);

@@ -20,11 +20,35 @@ pub struct KeyManagerApi<'a, TStore> {
     cipher_seed: &'a CipherSeed,
 }
 
-impl<'a, TStore> KeyManagerApi<'a, TStore> {}
-
 impl<'a, TStore: WalletStore> KeyManagerApi<'a, TStore> {
     pub(crate) fn new(store: &'a TStore, cipher_seed: &'a CipherSeed) -> Self {
         Self { store, cipher_seed }
+    }
+
+    pub fn get_or_create_initial(&self, branch: &str) -> Result<(), KeyManagerApiError> {
+        let tx = self.store.create_write_tx()?;
+        if tx.key_manager_get_active_index(branch).optional()?.is_none() {
+            tx.key_manager_set_active_index(branch, 0)?;
+            tx.commit()?;
+        } else {
+            tx.rollback()?;
+        }
+        Ok(())
+    }
+
+    pub fn get_all_keys(&self, branch: &str) -> Result<Vec<(u64, PublicKey, bool)>, KeyManagerApiError> {
+        let tx = self.store.create_read_tx()?;
+        let all_keys = tx.key_manager_get_all(branch)?;
+        let mut keys = Vec::with_capacity(all_keys.len());
+        for (index, active) in all_keys {
+            let km = self.get_key_manager(branch, index);
+            let key = km
+                .derive_key(index)
+                .map_err(tari_key_manager::error::KeyManagerError::ByteArrayError)?;
+            let pk = PublicKey::from_secret_key(&key.k);
+            keys.push((index, pk, active));
+        }
+        Ok(keys)
     }
 
     pub fn derive_key(&self, branch: &str, index: u64) -> Result<DerivedKey<RistrettoSecretKey>, KeyManagerApiError> {
@@ -46,45 +70,56 @@ impl<'a, TStore: WalletStore> KeyManagerApi<'a, TStore> {
         })
     }
 
-    pub fn current_key(&self, branch: &str) -> Result<(u64, DerivedKey<RistrettoSecretKey>), KeyManagerApiError> {
+    pub fn set_active_key(&self, branch: &str, index: u64) -> Result<(), KeyManagerApiError> {
+        let tx = self.store.create_write_tx()?;
+        tx.key_manager_set_active_index(branch, index)?;
+        tx.commit()?;
+        Ok(())
+    }
+
+    pub fn get_active_key(&self, branch: &str) -> Result<(u64, DerivedKey<RistrettoSecretKey>), KeyManagerApiError> {
         let index = self
             .store
-            .with_read_tx(|tx| tx.key_manager_get_index(branch))
+            .with_read_tx(|tx| tx.key_manager_get_active_index(branch))
             .optional()?
             .unwrap_or(0);
         Ok((index, self.derive_key(branch, index)?))
     }
 
-    pub fn get_key_or_current(
+    pub fn get_key_or_active(
         &self,
         branch: &str,
         maybe_index: Option<u64>,
     ) -> Result<(u64, DerivedKey<RistrettoSecretKey>), KeyManagerApiError> {
         match maybe_index {
             Some(index) => Ok((index, self.derive_key(branch, index)?)),
-            None => self.current_key(branch),
+            None => self.get_active_key(branch),
         }
     }
 
     pub fn get_public_key(&self, branch: &str, key_index: Option<u64>) -> Result<PublicKey, KeyManagerApiError> {
-        let (_, key) = self.get_key_or_current(branch, key_index)?;
+        let (_, key) = self.get_key_or_active(branch, key_index)?;
         Ok(PublicKey::from_secret_key(&key.k))
     }
 
     fn get_or_create_key_manager(&self, branch: &str) -> Result<WalletKeyManager, KeyManagerApiError> {
         let tx = self.store.create_write_tx()?;
-        let index = match tx.key_manager_get_index(branch).optional()? {
+        let index = match tx.key_manager_get_active_index(branch).optional()? {
             Some(index) => {
                 tx.rollback()?;
                 index
             },
             None => {
-                tx.key_manager_set_index(branch, 0)?;
+                tx.key_manager_set_active_index(branch, 0)?;
                 tx.commit()?;
                 0
             },
         };
-        Ok(KeyManager::from(self.cipher_seed.clone(), branch.to_string(), index))
+        Ok(self.get_key_manager(branch, index))
+    }
+
+    fn get_key_manager(&self, branch: &str, index: u64) -> WalletKeyManager {
+        KeyManager::from(self.cipher_seed.clone(), branch.to_string(), index)
     }
 
     fn modify_key_manager_with<R, F: FnOnce(&mut WalletKeyManager) -> Result<R, KeyManagerApiError>>(
@@ -93,10 +128,10 @@ impl<'a, TStore: WalletStore> KeyManagerApi<'a, TStore> {
         f: F,
     ) -> Result<R, KeyManagerApiError> {
         let tx = self.store.create_write_tx()?;
-        let index = tx.key_manager_get_index(branch).optional()?.unwrap_or(0);
+        let index = tx.key_manager_get_active_index(branch).optional()?.unwrap_or(0);
         let mut key_manager = KeyManager::from(self.cipher_seed.clone(), branch.to_string(), index);
         let ret = f(&mut key_manager)?;
-        tx.key_manager_set_index(&key_manager.branch_seed, key_manager.key_index())?;
+        tx.key_manager_set_active_index(&key_manager.branch_seed, key_manager.key_index())?;
         tx.commit()?;
         Ok(ret)
     }

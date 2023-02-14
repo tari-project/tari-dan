@@ -38,6 +38,12 @@ use crate::{
         AccountsGetBalancesResponse,
         AccountsListRequest,
         AccountsListResponse,
+        KeysCreateRequest,
+        KeysCreateResponse,
+        KeysListRequest,
+        KeysListResponse,
+        KeysSetActiveRequest,
+        KeysSetActiveResponse,
         TransactionGetRequest,
         TransactionGetResponse,
         TransactionGetResultRequest,
@@ -90,6 +96,19 @@ impl WalletDaemonClient {
     // ) -> Result<GetTemplateResponse, WalletDaemonClientError> {
     //     self.send_request("templates/get", request).await
     // }
+
+    pub async fn create_key(&mut self) -> Result<KeysCreateResponse, WalletDaemonClientError> {
+        self.send_request("keys/create", &KeysCreateRequest {}).await
+    }
+
+    pub async fn set_active_key(&mut self, index: u64) -> Result<KeysSetActiveResponse, WalletDaemonClientError> {
+        self.send_request("keys/set_active", &KeysSetActiveRequest { index })
+            .await
+    }
+
+    pub async fn list_keys(&mut self) -> Result<KeysListResponse, WalletDaemonClientError> {
+        self.send_request("keys/list", &KeysListRequest {}).await
+    }
 
     pub async fn get_transaction<T: Borrow<TransactionGetRequest>>(
         &mut self,

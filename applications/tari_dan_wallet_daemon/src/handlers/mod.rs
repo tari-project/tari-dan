@@ -8,7 +8,7 @@ pub mod accounts;
 mod context;
 pub mod error;
 
-const TRANSACTION_KEYMANAGER_BRANCH: &str = "transactions";
+pub(crate) const TRANSACTION_KEYMANAGER_BRANCH: &str = "transactions";
 
 use std::future::Future;
 

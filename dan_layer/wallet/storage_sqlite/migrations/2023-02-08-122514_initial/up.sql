@@ -5,11 +5,12 @@ CREATE TABLE key_manager_states
     id          INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
     branch_seed TEXT                              NOT NULL,
     `index`     BIGINT                            NOT NULL,
+    is_active   BOOLEAN                           NOT NULL,
     created_at  DATETIME                          NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at  DATETIME                          NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
-CREATE UNIQUE INDEX key_manager_states_uniq_branch_seed on key_manager_states (branch_seed);
+CREATE UNIQUE INDEX key_manager_states_uniq_branch_seed_index on key_manager_states (branch_seed, `index`);
 
 -- Config
 

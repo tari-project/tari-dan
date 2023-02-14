@@ -6,6 +6,7 @@ use std::{ops::Deref, sync::MutexGuard};
 use diesel::{
     sql_query,
     sql_types::{BigInt, Bool, Integer, Nullable, Text},
+    OptionalExtension,
     QueryDsl,
     RunQueryDsl,
     SqliteConnection,
@@ -51,27 +52,32 @@ impl WalletStoreWriter for WriteTransaction<'_> {
         Ok(())
     }
 
-    fn key_manager_set_index(&self, branch: &str, index: u64) -> Result<(), WalletStorageError> {
+    fn key_manager_set_active_index(&self, branch: &str, index: u64) -> Result<(), WalletStorageError> {
         use crate::schema::key_manager_states;
         let index = i64::try_from(index)
             .map_err(|_| WalletStorageError::general("key_manager_set_index", "index is negative"))?;
 
-        let exists = key_manager_states::table
+        let maybe_active_id = key_manager_states::table
+            .select(key_manager_states::id)
             .filter(key_manager_states::branch_seed.eq(branch))
+            .filter(key_manager_states::index.eq(index))
             .limit(1)
-            .count()
-            .get_result(self.connection())
-            .map(|count: i64| count > 0)
+            .first::<i32>(self.connection())
+            .optional()
             .map_err(|e| WalletStorageError::general("key_manager_set_index", e))?;
 
-        if exists {
-            sql_query("UPDATE key_manager_states SET `index` = ? WHERE branch_seed = ?")
-                .bind::<BigInt, _>(index)
-                .bind::<Text, _>(branch)
+        sql_query("UPDATE key_manager_states SET `is_active` = 0 WHERE branch_seed = ?")
+            .bind::<Text, _>(branch)
+            .execute(self.connection())
+            .map_err(|e| WalletStorageError::general("key_manager_set_index", e))?;
+
+        if let Some(active_id) = maybe_active_id {
+            sql_query("UPDATE key_manager_states SET `is_active` = 1 WHERE id = ?")
+                .bind::<Integer, _>(active_id)
                 .execute(self.connection())
                 .map_err(|e| WalletStorageError::general("key_manager_set_index", e))?;
         } else {
-            sql_query("INSERT INTO key_manager_states (branch_seed, `index`) VALUES (?, ?)")
+            sql_query("INSERT INTO key_manager_states (branch_seed, `index`, is_active) VALUES (?, ?, 1)")
                 .bind::<Text, _>(branch)
                 .bind::<BigInt, _>(index)
                 .execute(self.connection())

@@ -21,20 +21,47 @@
 //   USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 use clap::Subcommand;
+use tari_wallet_daemon_client::WalletDaemonClient;
 
-use crate::command::{account::AccountsSubcommand, key::KeysSubcommand, transaction::TransactionSubcommand};
-
-mod account;
-mod key;
-pub mod transaction;
-
-#[allow(clippy::large_enum_variant)]
 #[derive(Debug, Subcommand, Clone)]
-pub enum Command {
-    #[clap(subcommand, alias = "keys")]
-    Keys(KeysSubcommand),
-    #[clap(subcommand, alias = "transaction")]
-    Transactions(TransactionSubcommand),
-    #[clap(subcommand, alias = "accounts")]
-    Accounts(AccountsSubcommand),
+pub enum KeysSubcommand {
+    #[clap(alias = "create")]
+    New,
+    List,
+    Use {
+        index: u64,
+    },
+}
+
+impl KeysSubcommand {
+    pub async fn handle(self, mut client: WalletDaemonClient) -> anyhow::Result<()> {
+        #[allow(clippy::enum_glob_use)]
+        use KeysSubcommand::*;
+        match self {
+            New => {
+                let key = client.create_key().await?;
+                println!("New key pair {} created", key.public_key);
+            },
+            List => {
+                println!("Key pairs:");
+                let resp = client.list_keys().await?;
+                if resp.keys.is_empty() {
+                    println!("No keys found. Use 'keys create' to create a new key pair");
+                    return Ok(());
+                }
+                for (index, key, is_active) in resp.keys {
+                    if is_active {
+                        println!("{}. {} (active)", index, key);
+                    } else {
+                        println!("{}. {}", index, key);
+                    }
+                }
+            },
+            Use { index } => {
+                let resp = client.set_active_key(index).await?;
+                println!("Key {} ({}) is now active", index, resp.public_key);
+            },
+        }
+        Ok(())
+    }
 }

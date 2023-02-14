@@ -10,15 +10,15 @@ fn get_and_set_branch_index() {
     let db = SqliteWalletStore::try_open(":memory:").unwrap();
     db.run_migrations().unwrap();
     let tx = db.create_write_tx().unwrap();
-    let index = tx.key_manager_get_index("").optional().unwrap();
+    let index = tx.key_manager_get_active_index("").optional().unwrap();
     assert!(index.is_none());
-    tx.key_manager_set_index("", 123).unwrap();
-    tx.key_manager_set_index("another", 321).unwrap();
+    tx.key_manager_set_active_index("", 123).unwrap();
+    tx.key_manager_set_active_index("another", 321).unwrap();
     tx.commit().unwrap();
 
     let tx = db.create_read_tx().unwrap();
-    let index = tx.key_manager_get_index("").unwrap();
+    let index = tx.key_manager_get_active_index("").unwrap();
     assert_eq!(index, 123);
-    let index = tx.key_manager_get_index("another").unwrap();
+    let index = tx.key_manager_get_active_index("another").unwrap();
     assert_eq!(index, 321);
 }

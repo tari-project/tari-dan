@@ -37,7 +37,7 @@ pub async fn handle_submit(
     let key_api = sdk.key_manager_api();
     // Fetch the key to sign the transaction
     // TODO: Ideally the SDK should take care of signing the transaction internally
-    let (_, key) = key_api.get_key_or_current(TRANSACTION_KEYMANAGER_BRANCH, req.signing_key_index)?;
+    let (_, key) = key_api.get_key_or_active(TRANSACTION_KEYMANAGER_BRANCH, req.signing_key_index)?;
 
     // let transaction_api = sdk.transaction_api();
     let inputs = if req.inputs.is_empty() {

@@ -89,7 +89,8 @@ impl WalletStorageError {
 
 pub trait WalletStoreReader {
     // Key manager
-    fn key_manager_get_index(&self, branch: &str) -> Result<u64, WalletStorageError>;
+    fn key_manager_get_all(&self, branch: &str) -> Result<Vec<(u64, bool)>, WalletStorageError>;
+    fn key_manager_get_active_index(&self, branch: &str) -> Result<u64, WalletStorageError>;
     // Config
     fn config_get<T: serde::de::DeserializeOwned>(&self, key: &str) -> Result<Config<T>, WalletStorageError>;
     // Transactions
@@ -112,7 +113,7 @@ pub trait WalletStoreWriter {
     fn rollback(self) -> Result<(), WalletStorageError>;
 
     // Key manager
-    fn key_manager_set_index(&self, branch: &str, index: u64) -> Result<(), WalletStorageError>;
+    fn key_manager_set_active_index(&self, branch: &str, index: u64) -> Result<(), WalletStorageError>;
 
     // Config
     fn config_set<T: serde::Serialize>(

@@ -62,12 +62,28 @@ impl<'a> ReadTransaction<'a> {
 }
 
 impl WalletStoreReader for ReadTransaction<'_> {
-    fn key_manager_get_index(&self, branch: &str) -> Result<u64, WalletStorageError> {
+    fn key_manager_get_all(&self, branch: &str) -> Result<Vec<(u64, bool)>, WalletStorageError> {
+        use crate::schema::key_manager_states;
+
+        let results = key_manager_states::table
+            .select((key_manager_states::index, key_manager_states::is_active))
+            .filter(key_manager_states::branch_seed.eq(branch))
+            .get_results::<(i64, bool)>(self.connection())
+            .map_err(|e| WalletStorageError::general("key_manager_get_index", e))?;
+
+        Ok(results
+            .into_iter()
+            .map(|(index, is_active)| (index as u64, is_active))
+            .collect())
+    }
+
+    fn key_manager_get_active_index(&self, branch: &str) -> Result<u64, WalletStorageError> {
         use crate::schema::key_manager_states;
 
         key_manager_states::table
             .select(key_manager_states::index)
             .filter(key_manager_states::branch_seed.eq(branch))
+            .filter(key_manager_states::is_active.eq(true))
             .first(self.connection())
             .optional()
             .map_err(|e| WalletStorageError::general("key_manager_get_index", e))?
