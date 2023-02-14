@@ -92,7 +92,7 @@ impl BaseLayerEpochManager {
         }
     }
 
-    pub async fn load_initial_state(&mut self) -> Result<(), EpochManagerError> {
+    pub fn load_initial_state(&mut self) -> Result<(), EpochManagerError> {
         let tx = self.global_db.create_transaction()?;
         let metadata = self.global_db.metadata(&tx);
         self.current_epoch = metadata.get_metadata(MetadataKey::CurrentEpoch)?.unwrap_or(Epoch(0));

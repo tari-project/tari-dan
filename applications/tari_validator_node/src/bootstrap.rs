@@ -27,6 +27,9 @@ use std::{
     sync::Arc,
 };
 
+use anyhow::anyhow;
+use futures::{future, FutureExt};
+use log::info;
 use tari_app_utilities::{identity_management, identity_management::load_from_json};
 use tari_common::{
     configuration::bootstrap::{grpc_default_port, ApplicationType},
@@ -40,6 +43,7 @@ use tari_dan_core::{
 use tari_dan_storage::global::GlobalDb;
 use tari_dan_storage_sqlite::{global::SqliteGlobalDbAdapter, sqlite_shard_store_factory::SqliteShardStore};
 use tari_shutdown::ShutdownSignal;
+use tokio::task::JoinHandle;
 
 use crate::{
     base_layer_scanner,
@@ -69,8 +73,9 @@ use crate::{
     ApplicationConfig,
 };
 
-const _LOG_TARGET: &str = "tari_validator_node::bootstrap";
+const LOG_TARGET: &str = "tari_validator_node::bootstrap";
 
+#[allow(clippy::too_many_lines)]
 pub async fn spawn_services(
     config: &ApplicationConfig,
     shutdown: ShutdownSignal,
@@ -78,6 +83,7 @@ pub async fn spawn_services(
     global_db: GlobalDb<SqliteGlobalDbAdapter>,
     consensus_constants: ConsensusConstants,
 ) -> Result<Services, anyhow::Error> {
+    let mut handles = Vec::with_capacity(3);
     let mut p2p_config = config.validator_node.p2p.clone();
     p2p_config.transport.tor.identity = load_from_json(&config.validator_node.tor_identity_file)
         .map_err(|e| ExitError::new(ExitCode::ConfigError, e))?;
@@ -95,11 +101,12 @@ pub async fn spawn_services(
 
     // Spawn messaging
     let (message_senders, message_receivers) = messaging::new_messaging_channel(10);
-    let outbound_messaging = messaging::spawn(
+    let (outbound_messaging, join_handle) = messaging::spawn(
         node_identity.public_key().clone(),
         message_channel,
         message_senders.clone(),
     );
+    handles.push(join_handle);
 
     let DanMessageReceivers {
         rx_consensus_message,
@@ -111,20 +118,21 @@ pub async fn spawn_services(
 
     // Networking
     let peer_provider = CommsPeerProvider::new(comms.peer_manager());
-    let networking = networking::spawn(
+    let (networking, join_handle) = networking::spawn(
         rx_network_announce,
         node_identity.clone(),
         outbound_messaging.clone(),
         peer_provider.clone(),
         comms.connectivity(),
     );
+    handles.push(join_handle);
 
     // Connect to shard db
     let shard_store = SqliteShardStore::try_create(config.validator_node.state_db_path())?;
 
     // Epoch manager
     let validator_node_client_factory = TariCommsValidatorNodeClientFactory::new(comms.connectivity());
-    let epoch_manager = epoch_manager::spawn(
+    let (epoch_manager, join_handle) = epoch_manager::spawn(
         global_db.clone(),
         shard_store.clone(),
         base_node_client.clone(),
@@ -133,22 +141,25 @@ pub async fn spawn_services(
         node_identity.clone(),
         validator_node_client_factory.clone(),
     );
+    handles.push(join_handle);
 
     // Template manager
     let template_manager = TemplateManager::new(global_db.clone(), config.validator_node.templates.clone());
-    let template_manager_service = template_manager::spawn(template_manager.clone(), shutdown.clone());
+    let (template_manager_service, join_handle) = template_manager::spawn(template_manager.clone(), shutdown.clone());
+    handles.push(join_handle);
 
     // Mempool
-    let mempool = mempool::spawn(
+    let (mempool, join_handle) = mempool::spawn(
         rx_new_transaction_message,
         outbound_messaging.clone(),
         epoch_manager.clone(),
         node_identity.clone(),
         template_manager.clone(),
     );
+    handles.push(join_handle);
 
     // Base Node scanner
-    base_layer_scanner::spawn(
+    let join_handle = base_layer_scanner::spawn(
         config.validator_node.clone(),
         global_db,
         base_node_client.clone(),
@@ -158,12 +169,13 @@ pub async fn spawn_services(
         consensus_constants,
         shard_store.clone(),
     );
+    handles.push(join_handle);
 
     // Payload processor
     let payload_processor = TariDanPayloadProcessor::new(template_manager);
 
     // Consensus
-    let hotstuff_events = hotstuff::try_spawn(
+    let (hotstuff_events, waiter_join_handle, service_join_handle) = hotstuff::try_spawn(
         node_identity.clone(),
         shard_store.clone(),
         outbound_messaging,
@@ -175,6 +187,8 @@ pub async fn spawn_services(
         rx_vote_message,
         shutdown.clone(),
     );
+    handles.push(waiter_join_handle);
+    handles.push(service_join_handle);
 
     let dry_run_transaction_processor = DryRunTransactionProcessor::new(
         epoch_manager.clone(),
@@ -194,7 +208,12 @@ pub async fn spawn_services(
     save_identities(config, &comms)?;
 
     // Auto-registration
-    registration::spawn(config.clone(), node_identity.clone(), epoch_manager.clone(), shutdown);
+    if config.validator_node.auto_register {
+        let handle = registration::spawn(config.clone(), node_identity.clone(), epoch_manager.clone(), shutdown);
+        handles.push(handle);
+    } else {
+        info!(target: LOG_TARGET, "♽️ Node auto registration is disabled");
+    }
 
     Ok(Services {
         comms,
@@ -205,6 +224,7 @@ pub async fn spawn_services(
         hotstuff_events,
         shard_store,
         dry_run_transaction_processor,
+        handles,
     })
 }
 
@@ -234,6 +254,19 @@ pub struct Services {
     pub hotstuff_events: EventSubscription<HotStuffEvent>,
     pub shard_store: SqliteShardStore,
     pub dry_run_transaction_processor: DryRunTransactionProcessor,
+    pub handles: Vec<JoinHandle<Result<(), anyhow::Error>>>,
+}
+
+impl Services {
+    pub async fn on_any_exit(&mut self) -> Result<(), anyhow::Error> {
+        // JoinHandler panics if polled again after reading the Result, we fuse the future to prevent this.
+        let fused = self.handles.iter_mut().map(|h| h.fuse());
+        let (res, _, _) = future::select_all(fused).await;
+        match res {
+            Ok(res) => res,
+            Err(e) => Err(anyhow!("Task panicked: {}", e)),
+        }
+    }
 }
 
 fn setup_p2p_rpc(

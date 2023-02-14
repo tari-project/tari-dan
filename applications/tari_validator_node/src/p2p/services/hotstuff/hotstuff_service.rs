@@ -43,9 +43,12 @@ use tari_dan_core::{
 use tari_dan_storage_sqlite::sqlite_shard_store_factory::SqliteShardStore;
 use tari_shutdown::ShutdownSignal;
 use tari_transaction::Transaction;
-use tokio::sync::{
-    broadcast,
-    mpsc::{channel, Receiver, Sender},
+use tokio::{
+    sync::{
+        broadcast,
+        mpsc::{channel, Receiver, Sender},
+    },
+    task::JoinHandle,
 };
 
 use crate::{
@@ -91,7 +94,11 @@ impl HotstuffService {
         rx_recovery_messages: Receiver<(CommsPublicKey, RecoveryMessage)>,
         rx_vote_messages: Receiver<(CommsPublicKey, VoteMessage)>,
         shutdown: ShutdownSignal,
-    ) -> EventSubscription<HotStuffEvent> {
+    ) -> (
+        EventSubscription<HotStuffEvent>,
+        JoinHandle<anyhow::Result<()>>,
+        JoinHandle<anyhow::Result<()>>,
+    ) {
         dbg!("Hotstuff starting");
         let (tx_new, rx_new) = channel(100);
         let (tx_leader, rx_leader) = channel(100);
@@ -106,7 +113,7 @@ impl HotstuffService {
         let node_public_key = node_identity.public_key().clone();
         let pacemaker = Pacemaker::spawn(shutdown.clone());
 
-        HotStuffWaiter::spawn(
+        let waiter_join_handle = HotStuffWaiter::spawn(
             NodeIdentitySigningService::new(node_identity),
             // TODO: we still need this because The signing service is not generic. Abstracting signatures and public
             // keys may add a lot of type complexity.
@@ -131,7 +138,7 @@ impl HotstuffService {
             NETWORK_LATENCY,
         );
 
-        tokio::spawn(
+        let service_join_handle = tokio::spawn(
             Self {
                 node_public_key,
                 mempool,
@@ -147,7 +154,11 @@ impl HotstuffService {
             .run(),
         );
 
-        EventSubscription::new(tx_events)
+        (
+            EventSubscription::new(tx_events),
+            waiter_join_handle,
+            service_join_handle,
+        )
     }
 
     async fn handle_leader_message(

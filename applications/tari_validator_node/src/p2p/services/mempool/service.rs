@@ -83,7 +83,7 @@ where
         }
     }
 
-    pub async fn run(mut self) {
+    pub async fn run(mut self) -> anyhow::Result<()> {
         loop {
             tokio::select! {
                 Some(req) = self.mempool_requests.recv() => self.handle_request(req).await,
@@ -95,6 +95,7 @@ where
                 }
             }
         }
+        Ok(())
     }
 
     async fn handle_request(&mut self, request: MempoolRequest) {

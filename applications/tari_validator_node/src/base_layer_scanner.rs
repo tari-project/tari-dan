@@ -58,7 +58,7 @@ use tari_template_lib::{
     models::{LayerOneCommitmentAddress, TemplateAddress},
     Hash,
 };
-use tokio::{task, time};
+use tokio::{task, task::JoinHandle, time};
 
 use crate::{
     p2p::services::{
@@ -80,7 +80,7 @@ pub fn spawn(
     shutdown: ShutdownSignal,
     consensus_constants: ConsensusConstants,
     shard_store: SqliteShardStore,
-) {
+) -> JoinHandle<anyhow::Result<()>> {
     task::spawn(async move {
         let base_layer_scanner = BaseLayerScanner::new(
             config,
@@ -93,10 +93,9 @@ pub fn spawn(
             shard_store,
         );
 
-        if let Err(err) = base_layer_scanner.start().await {
-            error!(target: LOG_TARGET, "Base layer scanner failed to initialize: {}", err);
-        }
-    });
+        base_layer_scanner.start().await?;
+        Ok(())
+    })
 }
 
 pub struct BaseLayerScanner {

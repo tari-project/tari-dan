@@ -148,10 +148,10 @@ impl EpochManagerService {
         consensus_constants: ConsensusConstants,
         node_identity: Arc<NodeIdentity>,
         validator_node_client_factory: TariCommsValidatorNodeClientFactory,
-    ) -> JoinHandle<()> {
+    ) -> JoinHandle<anyhow::Result<()>> {
         tokio::spawn(async move {
             let (tx, rx) = broadcast::channel(10);
-            let result = EpochManagerService {
+            EpochManagerService {
                 rx_request,
                 inner: BaseLayerEpochManager::new(
                     global_db,
@@ -165,17 +165,14 @@ impl EpochManagerService {
                 events: (tx, rx),
             }
             .run(shutdown)
-            .await;
-
-            if let Err(err) = result {
-                error!(target: LOG_TARGET, "Epoch manager service failed with error: {}", err);
-            }
+            .await?;
+            Ok(())
         })
     }
 
     pub async fn run(&mut self, mut shutdown: ShutdownSignal) -> Result<(), EpochManagerError> {
         // first, load initial state
-        self.inner.load_initial_state().await?;
+        self.inner.load_initial_state()?;
 
         loop {
             tokio::select! {

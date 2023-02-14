@@ -78,16 +78,18 @@ impl TemplateManagerService {
         download_queue: mpsc::Sender<DownloadRequest>,
         completed_downloads: mpsc::Receiver<DownloadResult>,
         shutdown: ShutdownSignal,
-    ) -> JoinHandle<Result<(), TemplateManagerError>> {
-        tokio::spawn(
+    ) -> JoinHandle<anyhow::Result<()>> {
+        tokio::spawn(async move {
             Self {
                 rx_request,
                 manager,
                 download_queue,
                 completed_downloads,
             }
-            .run(shutdown),
-        )
+            .run(shutdown)
+            .await?;
+            Ok(())
+        })
     }
 
     pub async fn run(mut self, mut shutdown: ShutdownSignal) -> Result<(), TemplateManagerError> {

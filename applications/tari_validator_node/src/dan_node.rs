@@ -21,8 +21,11 @@
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 use log::*;
-use tari_comms::connectivity::ConnectivityEvent;
-use tari_dan_core::workers::events::HotStuffEvent;
+use tari_comms::{connectivity::ConnectivityEvent, peer_manager::NodeId};
+use tari_dan_core::{
+    services::epoch_manager::{EpochManager, EpochManagerError},
+    workers::events::HotStuffEvent,
+};
 use tari_shutdown::ShutdownSignal;
 use tari_template_lib::Hash;
 
@@ -43,6 +46,11 @@ impl DanNode {
         let mut hotstuff_events = self.services.hotstuff_events.subscribe();
 
         let mut connectivity_events = self.services.comms.connectivity().get_event_subscription();
+
+        if let Err(err) = self.dial_local_shard_peers().await {
+            error!(target: LOG_TARGET, "Failed to dial local shard peers: {}", err);
+        }
+
         let status = self.services.comms.connectivity().get_connectivity_status().await?;
         if status.is_online() {
             self.services.networking.announce().await?;
@@ -73,9 +81,54 @@ impl DanNode {
                         }
                     }
                 }
+
+                Err(err) = self.services.on_any_exit() => {
+                    error!(target: LOG_TARGET, "Error in service: {}", err);
+                    return Err(err);
+                }
             }
         }
 
+        Ok(())
+    }
+
+    async fn dial_local_shard_peers(&mut self) -> Result<(), anyhow::Error> {
+        let epoch = self.services.epoch_manager.current_epoch().await?;
+        let res = self
+            .services
+            .epoch_manager
+            .get_validator_shard_key(epoch, self.services.comms.node_identity().public_key().clone())
+            .await;
+
+        let shard_id = match res {
+            Ok(shard_id) => shard_id,
+            Err(EpochManagerError::BaseLayerConsensusConstantsNotSet) => {
+                info!(target: LOG_TARGET, "Epoch manager has not synced with base layer yet");
+                return Ok(());
+            },
+            Err(err) => {
+                return Err(err.into());
+            },
+        };
+
+        let local_shard_peers = self.services.epoch_manager.get_committee(epoch, shard_id).await?;
+        info!(
+            target: LOG_TARGET,
+            "Dialing {} local shard peers",
+            local_shard_peers.members.len()
+        );
+
+        self.services
+            .comms
+            .connectivity()
+            .request_many_dials(
+                local_shard_peers
+                    .members
+                    .into_iter()
+                    .filter(|pk| pk != self.services.comms.node_identity().public_key())
+                    .map(|pk| NodeId::from_public_key(&pk)),
+            )
+            .await?;
         Ok(())
     }
 }

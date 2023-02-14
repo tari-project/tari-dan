@@ -6169,6 +6169,7 @@ dependencies = [
 name = "tari_dan_tests"
 version = "0.35.1"
 dependencies = [
+ "anyhow",
  "env_logger",
  "lazy_static",
  "log",

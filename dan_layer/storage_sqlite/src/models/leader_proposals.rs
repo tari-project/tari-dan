@@ -29,6 +29,7 @@ pub struct LeaderProposal {
     pub payload_id: Vec<u8>,
     pub shard_id: Vec<u8>,
     pub payload_height: i64,
+    pub leader_round: i64,
     pub node_hash: Vec<u8>,
     pub hotstuff_tree_node: String,
     pub timestamp: NaiveDateTime,
@@ -40,6 +41,7 @@ pub struct NewLeaderProposal {
     pub payload_id: Vec<u8>,
     pub shard_id: Vec<u8>,
     pub payload_height: i64,
+    pub leader_round: i64,
     pub node_hash: Vec<u8>,
     pub hotstuff_tree_node: String,
 }
