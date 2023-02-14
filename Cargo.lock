@@ -6263,6 +6263,7 @@ dependencies = [
  "tari_shutdown",
  "tari_storage",
  "tari_template_lib",
+ "tari_transaction",
  "tari_validator_node",
  "thiserror",
  "tokio",

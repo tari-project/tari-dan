@@ -1,11 +1,11 @@
-//  Copyright 2022 The Tari Project
+//  Copyright 2023 The Tari Project
 //  SPDX-License-Identifier: BSD-3-Clause
 
 use std::convert::{TryFrom, TryInto};
 
 use anyhow;
 use tari_dan_core::models::SubstateShardData;
-use tari_engine_types::substate::Substate;
+use tari_engine_types::substate::{Substate, SubstateAddress};
 
 use crate::p2p;
 
@@ -15,6 +15,7 @@ impl TryFrom<p2p::proto::rpc::VnStateSyncResponse> for SubstateShardData {
     fn try_from(value: p2p::proto::rpc::VnStateSyncResponse) -> Result<Self, Self::Error> {
         Ok(Self::new(
             value.shard_id.try_into()?,
+            SubstateAddress::from_bytes(&value.address)?,
             value.version,
             Substate::from_bytes(&value.substate)?,
             value.created_height.try_into()?,
@@ -52,6 +53,7 @@ impl TryFrom<SubstateShardData> for p2p::proto::rpc::VnStateSyncResponse {
         Ok(Self {
             shard_id: value.shard_id().as_bytes().to_vec(),
             version: value.version(),
+            address: value.substate_address().to_bytes(),
             substate: value.substate().to_bytes(),
             created_height: value.created_height().as_u64(),
             destroyed_height: value.destroyed_height().map(|v| v.as_u64()).unwrap_or(0),

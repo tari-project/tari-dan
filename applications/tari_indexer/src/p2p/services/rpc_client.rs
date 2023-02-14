@@ -33,7 +33,7 @@ use tari_comms::{
 };
 use tari_crypto::tari_utilities::ByteArray;
 use tari_dan_core::services::{DanPeer, ValidatorNodeClientError, ValidatorNodeClientFactory, ValidatorNodeRpcClient};
-use tari_dan_engine::transaction::Transaction;
+use tari_transaction::Transaction;
 use tokio_stream::StreamExt;
 
 use crate::p2p::{

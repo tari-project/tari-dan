@@ -29,6 +29,7 @@ tari_dan_storage = { path = "../../dan_layer/storage" }
 tari_dan_storage_sqlite = { path = "../../dan_layer/storage_sqlite" }
 tari_engine_types = { path = "../../dan_layer/engine_types" }
 tari_template_lib = { path = "../../dan_layer/template_lib" }
+tari_transaction = { path = "../../dan_layer/transaction" }
 tari_validator_node = { path = "../tari_validator_node" }
 
 anyhow = "1.0.53"
