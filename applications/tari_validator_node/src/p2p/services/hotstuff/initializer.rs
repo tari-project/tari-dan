@@ -32,7 +32,7 @@ use tari_dan_core::{
 };
 use tari_dan_storage_sqlite::sqlite_shard_store_factory::SqliteShardStore;
 use tari_shutdown::ShutdownSignal;
-use tokio::sync::mpsc;
+use tokio::{sync::mpsc, task::JoinHandle};
 
 use crate::{
     p2p::services::{
@@ -56,7 +56,11 @@ pub fn try_spawn(
     rx_recovery_message: mpsc::Receiver<(CommsPublicKey, RecoveryMessage)>,
     rx_vote_message: mpsc::Receiver<(CommsPublicKey, VoteMessage)>,
     shutdown: ShutdownSignal,
-) -> EventSubscription<HotStuffEvent> {
+) -> (
+    EventSubscription<HotStuffEvent>,
+    JoinHandle<anyhow::Result<()>>,
+    JoinHandle<anyhow::Result<()>>,
+) {
     HotstuffService::spawn(
         node_identity,
         epoch_manager,
