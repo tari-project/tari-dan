@@ -126,6 +126,12 @@ pub async fn spawn_validator_node(
     // TODO: it would be better to scan the VN to detect when it has started
     tokio::time::sleep(Duration::from_secs(5)).await;
 
+    // Check if the inner thread panicked
+    if handle.is_finished() {
+        handle.await.unwrap();
+        return;
+    }
+
     // get the public key of the VN
     let public_key = get_vn_identity(json_rpc_port).await;
 
