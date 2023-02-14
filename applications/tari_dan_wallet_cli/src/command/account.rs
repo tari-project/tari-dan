@@ -26,6 +26,8 @@ use tari_wallet_daemon_client::{
     WalletDaemonClient,
 };
 
+use crate::{table::Table, table_row};
+
 #[derive(Debug, Subcommand, Clone)]
 pub enum AccountsSubcommand {
     #[clap(alias = "new")]
@@ -113,11 +115,13 @@ async fn handle_list(client: &mut WalletDaemonClient) -> Result<(), anyhow::Erro
         return Ok(());
     }
 
+    let mut table = Table::new();
+    table.enable_row_count();
+    table.set_titles(vec!["Name", "Address", "Key Index"]);
     println!("Accounts:");
     for account in resp.accounts {
-        println!("- {} {}", account.name, account.address);
+        table.add_row(table_row!(account.name, account.address, account.key_index));
     }
-    println!();
-    println!("{} total accounts", resp.total);
+    table.print_stdout();
     Ok(())
 }

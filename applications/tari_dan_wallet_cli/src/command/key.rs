@@ -21,7 +21,10 @@
 //   USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 use clap::Subcommand;
+use tari_common_types::types::PublicKey;
 use tari_wallet_daemon_client::WalletDaemonClient;
+
+use crate::{table::Table, table_row};
 
 #[derive(Debug, Subcommand, Clone)]
 pub enum KeysSubcommand {
@@ -43,25 +46,33 @@ impl KeysSubcommand {
                 println!("New key pair {} created", key.public_key);
             },
             List => {
-                println!("Key pairs:");
                 let resp = client.list_keys().await?;
                 if resp.keys.is_empty() {
                     println!("No keys found. Use 'keys create' to create a new key pair");
                     return Ok(());
                 }
-                for (index, key, is_active) in resp.keys {
-                    if is_active {
-                        println!("{}. {} (active)", index, key);
-                    } else {
-                        println!("{}. {}", index, key);
-                    }
-                }
+                print_keys(resp.keys);
             },
             Use { index } => {
                 let resp = client.set_active_key(index).await?;
                 println!("Key {} ({}) is now active", index, resp.public_key);
+
+                let resp = client.list_keys().await?;
+                print_keys(resp.keys);
             },
         }
         Ok(())
     }
+}
+
+fn print_keys(keys: Vec<(u64, PublicKey, bool)>) {
+    println!("Key pairs:");
+    println!();
+
+    let mut table = Table::new();
+    table.set_titles(vec!["Index", "Public Key", "Active"]);
+    for (index, key, is_active) in keys {
+        table.add_row(table_row![index, key, if is_active { "✅" } else { "" }]);
+    }
+    table.print_stdout();
 }

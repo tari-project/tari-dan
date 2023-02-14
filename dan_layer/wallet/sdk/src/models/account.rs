@@ -7,4 +7,5 @@ use tari_engine_types::substate::SubstateAddress;
 pub struct Account {
     pub name: String,
     pub address: SubstateAddress,
+    pub key_index: u64,
 }

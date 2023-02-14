@@ -194,6 +194,7 @@ impl WalletStoreReader for ReadTransaction<'_> {
             .map(|row| Account {
                 name: row.name,
                 address: row.address.parse().unwrap(),
+                key_index: row.owner_key_index as u64,
             })
             .collect())
     }
@@ -226,6 +227,7 @@ impl WalletStoreReader for ReadTransaction<'_> {
         Ok(Account {
             name: row.name,
             address: row.address.parse().unwrap(),
+            key_index: row.owner_key_index as u64,
         })
     }
 }
