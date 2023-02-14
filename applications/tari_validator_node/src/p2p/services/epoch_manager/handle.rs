@@ -75,6 +75,16 @@ impl EpochManagerHandle {
         rx.await.map_err(|_| EpochManagerError::ReceiveError)?
     }
 
+    /// Returns the number of epochs remaining for the current registration if registered, otherwise None
+    pub async fn remaining_registration_epochs(&self) -> Result<Option<Epoch>, EpochManagerError> {
+        let (tx, rx) = oneshot::channel();
+        self.tx_request
+            .send(EpochManagerRequest::RemainingRegistrationEpochs { reply: tx })
+            .await
+            .map_err(|_| EpochManagerError::SendError)?;
+        rx.await.map_err(|_| EpochManagerError::ReceiveError)?
+    }
+
     pub async fn add_validator_node_registration(
         &self,
         block_height: u64,

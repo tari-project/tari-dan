@@ -27,6 +27,8 @@ use tari_app_grpc::tari_rpc::{
     BuildInfo,
     CreateTemplateRegistrationRequest,
     CreateTemplateRegistrationResponse,
+    GetBalanceRequest,
+    GetBalanceResponse,
     RegisterValidatorNodeRequest,
     RegisterValidatorNodeResponse,
     TemplateRegistration,
@@ -66,6 +68,12 @@ impl GrpcWalletClient {
         self.client
             .as_mut()
             .ok_or_else(|| DigitalAssetError::FatalError("no connection".into()))
+    }
+
+    pub async fn get_balance(&mut self) -> Result<GetBalanceResponse, DigitalAssetError> {
+        let inner = self.connection().await?;
+        let resp = inner.get_balance(GetBalanceRequest {}).await?;
+        Ok(resp.into_inner())
     }
 
     pub async fn register_validator_node(

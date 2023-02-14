@@ -131,6 +131,9 @@ pub enum EpochManagerRequest {
     NotifyScanningComplete {
         reply: Reply<()>,
     },
+    RemainingRegistrationEpochs {
+        reply: Reply<Option<Epoch>>,
+    },
 }
 
 #[derive(Debug, Clone)]
@@ -252,6 +255,9 @@ impl EpochManagerService {
             // TODO: This should be rather be a state machine event
             EpochManagerRequest::NotifyScanningComplete { reply } => {
                 handle(reply, self.inner.on_scanning_complete().await)
+            },
+            EpochManagerRequest::RemainingRegistrationEpochs { reply } => {
+                handle(reply, self.inner.remaining_registration_epochs().await)
             },
         }
     }
