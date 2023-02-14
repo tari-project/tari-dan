@@ -33,23 +33,23 @@ overflow-checks = true
 liblmdb-sys = { git = "https://github.com/tari-project/lmdb-rs", tag = "0.7.6-tari.1" }
 
 # Uncomment and replace myfork and mybranch with the name of your fork and the branch you want to temporarily use
-[patch."https://github.com/tari-project/tari.git"]
-tari_app_grpc = { git = "https://github.com/stringhandler/tari.git", branch = "st-add-burn-proof" }
-tari_app_utilities = { git = "https://github.com/stringhandler/tari.git", branch = "st-add-burn-proof" }
-tari_base_node_grpc_client = { git = "https://github.com/stringhandler/tari.git", branch = "st-add-burn-proof" }
-tari_common = { git = "https://github.com/stringhandler/tari.git", branch = "st-add-burn-proof" }
-tari_common_types = { git = "https://github.com/stringhandler/tari.git", branch = "st-add-burn-proof" }
-tari_comms = { git = "https://github.com/stringhandler/tari.git", branch = "st-add-burn-proof" }
-tari_comms_rpc_macros = { git = "https://github.com/stringhandler/tari.git", branch = "st-add-burn-proof" }
-tari_core = { git = "https://github.com/stringhandler/tari.git", branch = "st-add-burn-proof" }
-tari_mmr = { git = "https://github.com/stringhandler/tari.git", branch = "st-add-burn-proof" }
-tari_p2p = { git = "https://github.com/stringhandler/tari.git", branch = "st-add-burn-proof" }
-tari_shutdown = { git = "https://github.com/stringhandler/tari.git", branch = "st-add-burn-proof" }
-tari_storage = { git = "https://github.com/stringhandler/tari.git", branch = "st-add-burn-proof" }
-tari_wallet_grpc_client = { git = "https://github.com/stringhandler/tari.git", branch = "st-add-burn-proof" }
-tari_script = { git = "https://github.com/stringhandler/tari.git", branch = "st-add-burn-proof" }
-tari_wallet = { git = "https://github.com/stringhandler/tari.git", branch = "st-add-burn-proof" }
-tari_console_wallet = { git = "https://github.com/stringhandler/tari.git", branch = "st-add-burn-proof" }
-tari_service_framework = { git = "https://github.com/stringhandler/tari.git", branch = "st-add-burn-proof" }
-tari_comms_dht = { git = "https://github.com/stringhandler/tari.git", branch = "st-add-burn-proof" }
+#[patch."https://github.com/tari-project/tari.git"]
+#tari_app_grpc = { git = "https://github.com/myfork/tari.git", branch = "mybranch" }
+#tari_app_utilities = { git = "https://github.com/myfork/tari.git", branch = "mybranch" }
+#tari_base_node_grpc_client = { git = "https://github.com/myfork/tari.git", branch = "mybranch" }
+#tari_common = { git = "https://github.com/myfork/tari.git", branch = "mybranch" }
+#tari_common_types = { git = "https://github.com/myfork/tari.git", branch = "mybranch" }
+#tari_comms = { git = "https://github.com/myfork/tari.git", branch = "mybranch" }
+#tari_comms_rpc_macros = { git = "https://github.com/myfork/tari.git", branch = "mybranch" }
+#tari_core = { git = "https://github.com/myfork/tari.git", branch = "mybranch" }
+#tari_mmr = { git = "https://github.com/myfork/tari.git", branch = "mybranch" }
+#tari_p2p = { git = "https://github.com/myfork/tari.git", branch = "mybranch" }
+#tari_shutdown = { git = "https://github.com/myfork/tari.git", branch = "mybranch" }
+#tari_storage = { git = "https://github.com/myfork/tari.git", branch = "mybranch" }
+#tari_wallet_grpc_client = { git = "https://github.com/myfork/tari.git", branch = "mybranch" }
+#tari_script = { git = "https://github.com/myfork/tari.git", branch = "mybranch" }
+#tari_wallet = { git = "https://github.com/myfork/tari.git", branch = "mybranch" }
+#tari_console_wallet = { git = "https://github.com/myfork/tari.git", branch = "mybranch" }
+#tari_service_framework = { git = "https://github.com/myfork/tari.git", branch = "mybranch" }
+#tari_comms_dht = { git = "https://github.com/myfork/tari.git", branch = "mybranch" }
 
