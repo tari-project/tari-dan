@@ -172,7 +172,7 @@ impl EpochManagerService {
 
     pub async fn run(&mut self, mut shutdown: ShutdownSignal) -> Result<(), EpochManagerError> {
         // first, load initial state
-        self.inner.load_initial_state().await?;
+        self.inner.load_initial_state()?;
 
         loop {
             tokio::select! {
