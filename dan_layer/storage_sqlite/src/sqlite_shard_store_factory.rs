@@ -731,7 +731,6 @@ impl ShardStoreReadTransaction<PublicKey, TariDanPayload> for SqliteShardStoreRe
             reason: format!("Get transaction: {}", e),
         })?;
         let res = res.into_iter().map(|transaction| transaction.into()).collect();
-        println!("FLAG CUCUMBER: THE DATABASE RES = {:?}", res);
         Ok(res)
     }
 
