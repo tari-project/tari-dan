@@ -1492,7 +1492,7 @@ impl ShardStoreWriteTransaction<PublicKey, TariDanPayload> for SqliteShardStoreW
         let new_row = NewSubstate {
             shard_id: shard_id.as_bytes().to_vec(),
             address: commitment_address,
-            version: substate.version() as i64,
+            version: i64::from(substate.version()),
             data: serde_json::to_string_pretty(substate).unwrap(),
             created_by_payload_id: vec![0; 32],
             created_justify: serde_json::to_string_pretty(&QuorumCertificate::genesis(
