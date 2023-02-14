@@ -514,6 +514,15 @@ async fn create_account(world: &mut TariWorld, account_name: String, vn_name: St
     validator_node_cli::create_account(world, account_name, vn_name).await;
 }
 
+#[when(expr = "I create {int} accounts on {word}")]
+async fn create_multiple_accounts(world: &mut TariWorld, num_accounts: u64, vn_name: String) {
+    for i in 1..=num_accounts {
+        let account_name = format!("ACC_{i}");
+        validator_node_cli::create_account(world, account_name, vn_name.clone()).await;
+        tokio::time::sleep(Duration::from_millis(100)).await;
+    }
+}
+
 #[when(expr = r#"I submit a transaction manifest on {word} with {int} outputs named "{word}""#)]
 async fn submit_manifest(world: &mut TariWorld, step: &Step, vn_name: String, num_outputs: u64, output_name: String) {
     let manifest = wrap_manifest_in_main(world, step.docstring.as_ref().expect("manifest code not provided"));
@@ -546,7 +555,7 @@ async fn wait_seconds(_world: &mut TariWorld, seconds: u64) {
     tokio::time::sleep(Duration::from_secs(seconds)).await;
 }
 
-#[then(expr = "all transaction succeed on all validator nodes")]
+#[then(expr = "all transactions succeed on all validator nodes")]
 async fn successful_transaction(world: &mut TariWorld) {
     // loop over each validator node to check if transaction
     // was accepted by each
