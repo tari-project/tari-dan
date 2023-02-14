@@ -104,6 +104,11 @@ impl TariWorld {
     }
 
     pub fn after(&mut self, _scenario: &Scenario) {
+        for (name, mut p) in self.indexers.drain(..) {
+            println!("Shutting down indexer {}", name);
+            p.shutdown.trigger();
+        }
+
         for (name, mut p) in self.validator_nodes.drain(..) {
             println!("Shutting down validator node {}", name);
             p.shutdown.trigger();
