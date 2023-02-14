@@ -22,11 +22,15 @@
 
 use clap::{Args, Subcommand};
 use tari_wallet_daemon_client::{
-    types::{AccountsCreateRequest, AccountsGetBalancesRequest},
+    types::{AccountsCreateRequest, AccountsGetBalancesRequest, AccountsInvokeRequest},
     WalletDaemonClient,
 };
 
-use crate::{table::Table, table_row};
+use crate::{
+    command::transaction::{print_execution_results, CliArg},
+    table::Table,
+    table_row,
+};
 
 #[derive(Debug, Subcommand, Clone)]
 pub enum AccountsSubcommand {
@@ -35,6 +39,13 @@ pub enum AccountsSubcommand {
     #[clap(alias = "get-balance")]
     GetBalances(GetBalancesArgs),
     List,
+    Invoke {
+        #[clap(long, alias = "name", short = 'n')]
+        account: String,
+        method: String,
+        #[clap(long, short = 'a')]
+        args: Vec<CliArg>,
+    },
 }
 
 #[derive(Debug, Args, Clone)]
@@ -63,6 +74,9 @@ impl AccountsSubcommand {
             AccountsSubcommand::List => {
                 handle_list(&mut client).await?;
             },
+            AccountsSubcommand::Invoke { account, method, args } => {
+                hande_invoke(account, method, args, &mut client).await?
+            },
         }
         Ok(())
     }
@@ -82,6 +96,33 @@ async fn handle_create(args: CreateArgs, client: &mut WalletDaemonClient) -> Res
     println!();
     println!("✅ Account created");
     println!("   address: {}", resp.address);
+    Ok(())
+}
+
+async fn hande_invoke(
+    account: String,
+    method: String,
+    args: Vec<CliArg>,
+    client: &mut WalletDaemonClient,
+) -> Result<(), anyhow::Error> {
+    println!("Submitted invoke transaction for account {}...", account);
+    let resp = client
+        .invoke_account_method(AccountsInvokeRequest {
+            account_name: account,
+            method,
+            args: args.into_iter().map(|a| a.into_arg()).collect(),
+        })
+        .await?;
+
+    println!();
+    println!("✅ Account invoked succeeded");
+    println!();
+    match resp.result {
+        Some(result) => print_execution_results(&[result]),
+        None => {
+            println!("No result returned");
+        },
+    }
     Ok(())
 }
 

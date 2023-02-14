@@ -24,8 +24,14 @@ use serde::{Deserialize, Serialize};
 use tari_common_types::types::{FixedHash, PublicKey};
 use tari_dan_common_types::{serde_with, QuorumCertificate, ShardId};
 use tari_dan_wallet_sdk::models::{Account, TransactionStatus, VersionedSubstateAddress};
-use tari_engine_types::{commit_result::FinalizeResult, instruction::Instruction, substate::SubstateAddress};
+use tari_engine_types::{
+    commit_result::FinalizeResult,
+    execution_result::ExecutionResult,
+    instruction::Instruction,
+    substate::SubstateAddress,
+};
 use tari_template_lib::{
+    args::Arg,
     auth::AccessRules,
     models::{Amount, NonFungibleId, ResourceAddress},
 };
@@ -137,6 +143,18 @@ pub struct AccountsCreateRequest {
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct AccountsCreateResponse {
     pub address: SubstateAddress,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct AccountsInvokeRequest {
+    pub account_name: String,
+    pub method: String,
+    pub args: Vec<Arg>,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct AccountsInvokeResponse {
+    pub result: Option<ExecutionResult>,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]

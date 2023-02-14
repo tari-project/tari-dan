@@ -16,6 +16,8 @@ use tari_wallet_daemon_client::types::{
     AccountsCreateResponse,
     AccountsGetBalancesRequest,
     AccountsGetBalancesResponse,
+    AccountsInvokeRequest,
+    AccountsInvokeResponse,
     AccountsListRequest,
     AccountsListResponse,
 };
@@ -97,6 +99,53 @@ pub async fn handle_list(
     let total = sdk.accounts_api().count()?;
 
     Ok(AccountsListResponse { accounts, total })
+}
+
+pub async fn handle_invoke(
+    context: &HandlerContext,
+    req: AccountsInvokeRequest,
+) -> Result<AccountsInvokeResponse, anyhow::Error> {
+    let sdk = context.wallet_sdk();
+    let (_, signing_key) = sdk
+        .key_manager_api()
+        .get_key_or_active(TRANSACTION_KEYMANAGER_BRANCH, None)?;
+
+    let account_address = sdk.accounts_api().get_account_address_by_name(&req.account_name)?;
+    let inputs = sdk
+        .substate_api()
+        .load_dependent_substates(&[account_address.clone()])?;
+
+    let inputs = inputs
+        .into_iter()
+        .map(|s| ShardId::from_address(&s.address, s.version))
+        .collect();
+
+    let mut builder = Transaction::builder();
+    builder
+        .add_instruction(Instruction::CallMethod {
+            component_address: account_address.as_component_address().unwrap(),
+            method: req.method,
+            args: req.args,
+        })
+        .with_fee(1)
+        .with_inputs(inputs)
+        .with_new_outputs(0)
+        .sign(&signing_key.k);
+
+    let transaction = builder.build();
+
+    let tx_hash = sdk.transaction_api().submit_to_vn(transaction).await?;
+    let mut events = context.notifier().subscribe();
+    context.notifier().notify(TransactionSubmittedEvent { hash: tx_hash });
+
+    let mut finalized = wait_for_result(&mut events, tx_hash).await?;
+    if let Some(reject) = finalized.result.reject() {
+        return Err(anyhow!("Transaction rejected: {}", reject));
+    }
+
+    Ok(AccountsInvokeResponse {
+        result: finalized.execution_results.pop(),
+    })
 }
 
 pub async fn handle_get_balances(

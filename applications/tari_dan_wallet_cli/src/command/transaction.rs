@@ -375,65 +375,7 @@ fn summarize_finalize_result(finalize: &FinalizeResult) {
     }
 
     println!("========= Return Values =========");
-    for result in &finalize.execution_results {
-        match &result.return_type {
-            Type::Unit => {},
-            Type::Bool => {
-                println!("bool: {}", result.decode::<bool>().unwrap());
-            },
-            Type::I8 => {
-                println!("i8: {}", result.decode::<i8>().unwrap());
-            },
-            Type::I16 => {
-                println!("i16: {}", result.decode::<i16>().unwrap());
-            },
-            Type::I32 => {
-                println!("i32: {}", result.decode::<i32>().unwrap());
-            },
-            Type::I64 => {
-                println!("i64: {}", result.decode::<i64>().unwrap());
-            },
-            Type::I128 => {
-                println!("i128: {}", result.decode::<i128>().unwrap());
-            },
-            Type::U8 => {
-                println!("u8: {}", result.decode::<u8>().unwrap());
-            },
-            Type::U16 => {
-                println!("u16: {}", result.decode::<u16>().unwrap());
-            },
-            Type::U32 => {
-                println!("u32: {}", result.decode::<u32>().unwrap());
-            },
-            Type::U64 => {
-                println!("u64: {}", result.decode::<u64>().unwrap());
-            },
-            Type::U128 => {
-                println!("u128: {}", result.decode::<u128>().unwrap());
-            },
-            Type::String => {
-                println!("string: {}", result.decode::<String>().unwrap());
-            },
-            Type::Vec(ty) => {
-                let mut vec_ty = String::new();
-                display_vec(&mut vec_ty, ty, result).unwrap();
-                match &**ty {
-                    Type::Other { name } => {
-                        println!("Vec<{}>: {}", name, vec_ty);
-                    },
-                    _ => {
-                        println!("Vec<{:?}>: {}", ty, vec_ty);
-                    },
-                }
-            },
-            Type::Other { ref name } if name == "Amount" => {
-                println!("{}: {}", name, result.decode::<Amount>().unwrap());
-            },
-            Type::Other { ref name } => {
-                println!("{}: {}", name, to_hex(&result.raw));
-            },
-        }
-    }
+    print_execution_results(&finalize.execution_results);
 
     println!();
     println!("========= LOGS =========");
@@ -512,6 +454,68 @@ fn display_vec<W: fmt::Write>(writer: &mut W, ty: &Type, result: &ExecutionResul
         },
     }
     Ok(())
+}
+
+pub fn print_execution_results(results: &[ExecutionResult]) {
+    for result in results {
+        match &result.return_type {
+            Type::Unit => {},
+            Type::Bool => {
+                println!("bool: {}", result.decode::<bool>().unwrap());
+            },
+            Type::I8 => {
+                println!("i8: {}", result.decode::<i8>().unwrap());
+            },
+            Type::I16 => {
+                println!("i16: {}", result.decode::<i16>().unwrap());
+            },
+            Type::I32 => {
+                println!("i32: {}", result.decode::<i32>().unwrap());
+            },
+            Type::I64 => {
+                println!("i64: {}", result.decode::<i64>().unwrap());
+            },
+            Type::I128 => {
+                println!("i128: {}", result.decode::<i128>().unwrap());
+            },
+            Type::U8 => {
+                println!("u8: {}", result.decode::<u8>().unwrap());
+            },
+            Type::U16 => {
+                println!("u16: {}", result.decode::<u16>().unwrap());
+            },
+            Type::U32 => {
+                println!("u32: {}", result.decode::<u32>().unwrap());
+            },
+            Type::U64 => {
+                println!("u64: {}", result.decode::<u64>().unwrap());
+            },
+            Type::U128 => {
+                println!("u128: {}", result.decode::<u128>().unwrap());
+            },
+            Type::String => {
+                println!("string: {}", result.decode::<String>().unwrap());
+            },
+            Type::Vec(ty) => {
+                let mut vec_ty = String::new();
+                display_vec(&mut vec_ty, ty, result).unwrap();
+                match &**ty {
+                    Type::Other { name } => {
+                        println!("Vec<{}>: {}", name, vec_ty);
+                    },
+                    _ => {
+                        println!("Vec<{:?}>: {}", ty, vec_ty);
+                    },
+                }
+            },
+            Type::Other { ref name } if name == "Amount" => {
+                println!("{}: {}", name, result.decode::<Amount>().unwrap());
+            },
+            Type::Other { ref name } => {
+                println!("{}: {}", name, to_hex(&result.raw));
+            },
+        }
+    }
 }
 
 #[derive(Debug, Clone)]
