@@ -41,7 +41,7 @@ use tari_dan_core::{
 use tari_dan_storage_sqlite::error::SqliteStorageError;
 use tari_shutdown::ShutdownSignal;
 use tari_wallet_grpc_client::WalletClientError;
-use tokio::{task, time};
+use tokio::{task, task::JoinHandle, time};
 
 use crate::{
     grpc::services::base_node_client::GrpcBaseNodeClient,
@@ -122,19 +122,13 @@ pub fn spawn(
     node_identity: Arc<NodeIdentity>,
     epoch_manager: EpochManagerHandle,
     shutdown: ShutdownSignal,
-) {
-    if !config.validator_node.auto_register {
-        info!(target: LOG_TARGET, "♽️ Node auto registration is disabled");
-        return;
-    }
-
+) -> JoinHandle<Result<(), anyhow::Error>> {
     info!(target: LOG_TARGET, "♽️ Node configured for auto registration");
 
     task::spawn(async move {
-        if let Err(err) = start(config, node_identity, epoch_manager, shutdown).await {
-            error!(target: LOG_TARGET, "Auto registration failed to initialize: {}", err);
-        }
-    });
+        start(config, node_identity, epoch_manager, shutdown).await?;
+        Ok(())
+    })
 }
 
 async fn start(

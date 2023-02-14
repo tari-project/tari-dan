@@ -30,7 +30,7 @@ use tari_comms::{
     NodeIdentity,
 };
 use tari_dan_core::message::NetworkAnnounce;
-use tokio::sync::mpsc;
+use tokio::{sync::mpsc, task::JoinHandle};
 
 use crate::p2p::services::{comms_peer_provider::CommsPeerProvider, messaging::OutboundMessaging};
 
@@ -53,9 +53,9 @@ pub fn spawn(
     outbound: OutboundMessaging,
     peer_provider: CommsPeerProvider,
     connectivity: ConnectivityRequester,
-) -> NetworkingHandle {
+) -> (NetworkingHandle, JoinHandle<anyhow::Result<()>>) {
     let (tx, rx) = mpsc::channel(1);
-    tokio::spawn(
+    let handle = tokio::spawn(
         Networking::new(
             rx_network_announce,
             rx,
@@ -66,7 +66,7 @@ pub fn spawn(
         )
         .run(),
     );
-    NetworkingHandle::new(tx)
+    (NetworkingHandle::new(tx), handle)
 }
 
 #[async_trait]

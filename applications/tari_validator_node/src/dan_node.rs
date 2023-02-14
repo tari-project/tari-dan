@@ -73,6 +73,11 @@ impl DanNode {
                         }
                     }
                 }
+
+                Err(err) = self.services.on_any_exit() => {
+                    error!(target: LOG_TARGET, "Error in service: {}", err);
+                    return Err(err);
+                }
             }
         }
 

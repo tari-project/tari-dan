@@ -18,7 +18,6 @@ use tari_dan_core::{
         SigningService,
     },
     workers::{
-        hotstuff_error::HotStuffError,
         hotstuff_waiter::{HotStuffWaiter, RecoveryMessage},
         pacemaker_worker::Pacemaker,
     },
@@ -117,7 +116,7 @@ pub struct HsTestHarness {
     pub tx_votes: Sender<(PublicKey, VoteMessage)>,
     rx_execute: broadcast::Receiver<(TariDanPayload, HashMap<ShardId, ObjectPledge>)>,
     shard_store: TempShardStoreFactory,
-    hs_waiter: Option<JoinHandle<Result<(), HotStuffError>>>,
+    hs_waiter: Option<JoinHandle<anyhow::Result<()>>>,
     signing_service: NodeIdentitySigningService,
 }
 
