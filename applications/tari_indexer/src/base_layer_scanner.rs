@@ -38,15 +38,14 @@ use tari_dan_core::{
 use tari_dan_storage::global::{GlobalDb, MetadataKey};
 use tari_dan_storage_sqlite::{error::SqliteStorageError, global::SqliteGlobalDbAdapter};
 use tari_shutdown::ShutdownSignal;
-use tari_validator_node::ValidatorNodeConfig;
 use tokio::{task, time};
 
-use crate::{p2p::services::epoch_manager::handle::EpochManagerHandle, GrpcBaseNodeClient};
+use crate::{config::IndexerConfig, p2p::services::epoch_manager::handle::EpochManagerHandle, GrpcBaseNodeClient};
 
 const LOG_TARGET: &str = "tari::indexer::base_layer_scanner";
 
 pub fn spawn(
-    config: ValidatorNodeConfig,
+    config: IndexerConfig,
     global_db: GlobalDb<SqliteGlobalDbAdapter>,
     base_node_client: GrpcBaseNodeClient,
     epoch_manager: EpochManagerHandle,
@@ -70,7 +69,7 @@ pub fn spawn(
 }
 
 pub struct BaseLayerScanner {
-    config: ValidatorNodeConfig,
+    config: IndexerConfig,
     global_db: GlobalDb<SqliteGlobalDbAdapter>,
     last_scanned_height: u64,
     last_scanned_tip: Option<FixedHash>,
@@ -84,7 +83,7 @@ pub struct BaseLayerScanner {
 
 impl BaseLayerScanner {
     pub fn new(
-        config: ValidatorNodeConfig,
+        config: IndexerConfig,
         global_db: GlobalDb<SqliteGlobalDbAdapter>,
         base_node_client: GrpcBaseNodeClient,
         epoch_manager: EpochManagerHandle,
@@ -106,14 +105,6 @@ impl BaseLayerScanner {
     }
 
     pub async fn start(mut self) -> Result<(), BaseLayerScannerError> {
-        if !self.config.scan_base_layer {
-            info!(
-                target: LOG_TARGET,
-                "⚠️ scan_base_layer turned OFF. Base layer scanner is exiting."
-            );
-            return Ok(());
-        }
-
         self.load_initial_state()?;
         // Scan on startup
         if let Err(err) = self.scan_blockchain().await {

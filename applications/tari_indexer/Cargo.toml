@@ -38,6 +38,7 @@ axum = "0.6.0"
 axum-jrpc = { version = "0.3.2", features = ["anyhow_error"] }
 chrono = "0.4.22"
 clap = { version = "3.2.22", features = ["derive", "env"] }
+config = "0.13.0"
 futures = { version = "^0.3.1" }
 lmdb-zero = "0.4.4"
 log = { version = "0.4.8", features = ["std"] }

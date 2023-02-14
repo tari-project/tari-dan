@@ -27,11 +27,14 @@ use tari_common::configuration::{CommonConfig, StringList};
 use tari_comms::multiaddr::Multiaddr;
 use tari_comms_dht::{DbConnectionUrl, DhtConfig};
 use tari_engine_types::substate::{Substate, SubstateAddress};
-use tari_indexer::{run_indexer, GetSubstateRequest};
+use tari_indexer::{
+    config::{ApplicationConfig, IndexerConfig},
+    run_indexer,
+    GetSubstateRequest,
+};
 use tari_indexer_client::IndexerClient;
 use tari_p2p::{Network, PeerSeedsConfig, TransportType};
 use tari_shutdown::Shutdown;
-use tari_validator_node::{ApplicationConfig, ValidatorNodeConfig};
 use tempfile::tempdir;
 use tokio::task;
 
@@ -103,37 +106,31 @@ pub async fn spawn_indexer(world: &mut TariWorld, indexer_name: String, base_nod
     let handle = task::spawn(async move {
         let mut config = ApplicationConfig {
             common: CommonConfig::default(),
-            validator_node: ValidatorNodeConfig::default(),
             peer_seeds: PeerSeedsConfig::default(),
             network: Network::LocalNet,
+            indexer: IndexerConfig::default(),
         };
 
         // temporal folder for the VN files (e.g. sqlite file, json files, etc.)
         let temp_dir = tempdir().unwrap().path().join(indexer_name.clone());
         println!("Using indexer temp_dir: {}", temp_dir.display());
-        config.validator_node.data_dir = temp_dir.to_path_buf();
-        config.validator_node.shard_key_file = temp_dir.join("shard_key.json");
-        config.validator_node.identity_file = temp_dir.join("validator_node_id.json");
-        config.validator_node.tor_identity_file = temp_dir.join("validator_node_tor_id.json");
-        config.validator_node.base_node_grpc_address =
-            Some(format!("127.0.0.1:{}", base_node_grpc_port).parse().unwrap());
+        config.indexer.data_dir = temp_dir.to_path_buf();
+        config.indexer.identity_file = temp_dir.join("indexer_id.json");
+        config.indexer.tor_identity_file = temp_dir.join("indexer_tor_id.json");
+        config.indexer.base_node_grpc_address = Some(format!("127.0.0.1:{}", base_node_grpc_port).parse().unwrap());
 
-        config.validator_node.p2p.transport.transport_type = TransportType::Tcp;
-        config.validator_node.p2p.transport.tcp.listener_address =
+        config.indexer.p2p.transport.transport_type = TransportType::Tcp;
+        config.indexer.p2p.transport.tcp.listener_address =
             Multiaddr::from_str(&format!("/ip4/127.0.0.1/tcp/{}", port)).unwrap();
-        config.validator_node.p2p.public_address =
-            Some(config.validator_node.p2p.transport.tcp.listener_address.clone());
-        config.validator_node.public_address = Some(config.validator_node.p2p.transport.tcp.listener_address.clone());
-        config.validator_node.p2p.datastore_path = temp_dir.to_path_buf().join("peer_db/vn");
-        config.validator_node.p2p.dht = DhtConfig {
+        config.indexer.p2p.public_address = Some(config.indexer.p2p.transport.tcp.listener_address.clone());
+        config.indexer.public_address = Some(config.indexer.p2p.transport.tcp.listener_address.clone());
+        config.indexer.p2p.datastore_path = temp_dir.to_path_buf().join("peer_db/vn");
+        config.indexer.p2p.dht = DhtConfig {
             // Not all platforms support sqlite memory connection urls
             database_url: DbConnectionUrl::File(temp_dir.join("dht.sqlite")),
             ..DhtConfig::default_local_test()
         };
-        config.validator_node.json_rpc_address = Some(format!("127.0.0.1:{}", json_rpc_port).parse().unwrap());
-
-        // The VNS will try to auto register upon startup
-        config.validator_node.auto_register = false;
+        config.indexer.json_rpc_address = Some(format!("127.0.0.1:{}", json_rpc_port).parse().unwrap());
 
         // Add all other VNs as peer seeds
         config.peer_seeds.peer_seeds = StringList::from(peer_seeds);

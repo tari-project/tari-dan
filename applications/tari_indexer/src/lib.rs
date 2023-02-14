@@ -22,7 +22,9 @@
 
 mod base_layer_scanner;
 mod bootstrap;
+pub mod cli;
 mod comms;
+pub mod config;
 mod dan_layer_scanner;
 mod grpc;
 mod json_rpc;
@@ -45,11 +47,11 @@ use tari_comms::peer_manager::PeerFeatures;
 use tari_dan_core::{consensus_constants::ConsensusConstants, services::BaseNodeClient, storage::DbFactory};
 use tari_dan_storage_sqlite::SqliteDbFactory;
 use tari_shutdown::ShutdownSignal;
-use tari_validator_node::ApplicationConfig;
 use tokio::task;
 
 use crate::{
     bootstrap::{spawn_services, Services},
+    config::ApplicationConfig,
     grpc::services::base_node_client::GrpcBaseNodeClient,
     json_rpc::{run_json_rpc, JsonRpcHandlers},
 };
@@ -59,13 +61,13 @@ pub const DAN_PEER_FEATURES: PeerFeatures = PeerFeatures::COMMUNICATION_NODE;
 
 pub async fn run_indexer(config: ApplicationConfig, mut shutdown_signal: ShutdownSignal) -> Result<(), ExitError> {
     let node_identity = setup_node_identity(
-        &config.validator_node.identity_file,
-        config.validator_node.public_address.as_ref(),
+        &config.indexer.identity_file,
+        config.indexer.public_address.as_ref(),
         true,
         DAN_PEER_FEATURES,
     )?;
 
-    let db_factory = SqliteDbFactory::new(config.validator_node.data_dir.clone());
+    let db_factory = SqliteDbFactory::new(config.indexer.data_dir.clone());
     db_factory
         .migrate()
         .map_err(|e| ExitError::new(ExitCode::DatabaseError, e))?;
@@ -89,7 +91,7 @@ pub async fn run_indexer(config: ApplicationConfig, mut shutdown_signal: Shutdow
     );
 
     // Run the JSON-RPC API
-    if let Some(json_rpc_address) = config.validator_node.json_rpc_address {
+    if let Some(json_rpc_address) = config.indexer.json_rpc_address {
         info!(target: LOG_TARGET, "🌐 Started JSON-RPC server on {}", json_rpc_address);
         let handlers = JsonRpcHandlers::new(&services, base_node_client, Arc::new(dan_layer_scanner));
         task::spawn(run_json_rpc(json_rpc_address, handlers));
@@ -101,11 +103,10 @@ pub async fn run_indexer(config: ApplicationConfig, mut shutdown_signal: Shutdow
 }
 
 async fn create_base_layer_clients(config: &ApplicationConfig) -> Result<GrpcBaseNodeClient, ExitError> {
-    let mut base_node_client =
-        GrpcBaseNodeClient::new(config.validator_node.base_node_grpc_address.unwrap_or_else(|| {
-            let port = grpc_default_port(ApplicationType::BaseNode, config.network);
-            SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), port)
-        }));
+    let mut base_node_client = GrpcBaseNodeClient::new(config.indexer.base_node_grpc_address.unwrap_or_else(|| {
+        let port = grpc_default_port(ApplicationType::BaseNode, config.network);
+        SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), port)
+    }));
     base_node_client
         .test_connection()
         .await

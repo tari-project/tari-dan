@@ -60,9 +60,10 @@ use tari_storage::{
     lmdb_store::{LMDBBuilder, LMDBConfig},
     LMDBWrapper,
 };
-use tari_validator_node::ApplicationConfig;
 use tokio::sync::{broadcast, mpsc};
 use tower::ServiceBuilder;
+
+use crate::ApplicationConfig;
 
 const LOG_TARGET: &str = "dan::comms::initializer";
 
@@ -75,7 +76,7 @@ pub async fn initialize(
 ) -> Result<(UnspawnedCommsNode, MessageChannel), anyhow::Error> {
     debug!(target: LOG_TARGET, "Initializing DAN comms");
     let seed_peers = &config.peer_seeds;
-    let mut config = config.validator_node.p2p.clone();
+    let mut config = config.indexer.p2p.clone();
 
     let mut comms_builder = CommsBuilder::new()
         .with_shutdown_signal(shutdown_signal)

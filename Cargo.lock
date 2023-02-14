@@ -6237,6 +6237,7 @@ dependencies = [
  "axum-jrpc",
  "chrono",
  "clap 3.2.23",
+ "config",
  "futures 0.3.25",
  "lmdb-zero",
  "log",

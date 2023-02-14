@@ -22,12 +22,10 @@
 
 use std::{panic, process};
 
-use clap::Parser;
 use log::*;
 use tari_common::{exit_codes::ExitError, load_configuration};
-use tari_indexer::run_indexer;
+use tari_indexer::{cli::Cli, config::ApplicationConfig, run_indexer};
 use tari_shutdown::Shutdown;
-use tari_validator_node::{cli::Cli, ApplicationConfig};
 
 const LOG_TARGET: &str = "tari::indexer::app";
 
@@ -53,7 +51,7 @@ async fn main() {
 }
 
 async fn main_inner() -> Result<(), ExitError> {
-    let cli = Cli::parse();
+    let cli = Cli::init();
     let config_path = cli.common.config_path();
     let cfg = load_configuration(config_path, true, &cli)?;
     let config = ApplicationConfig::load_from(&cfg)?;

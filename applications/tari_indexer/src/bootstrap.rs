@@ -63,14 +63,13 @@ pub async fn spawn_services(
     global_db: GlobalDb<SqliteGlobalDbAdapter>,
     consensus_constants: ConsensusConstants,
 ) -> Result<Services, anyhow::Error> {
-    let mut p2p_config = config.validator_node.p2p.clone();
-    p2p_config.transport.tor.identity = load_from_json(&config.validator_node.tor_identity_file)
-        .map_err(|e| ExitError::new(ExitCode::ConfigError, e))?;
-
+    let mut p2p_config = config.indexer.p2p.clone();
+    p2p_config.transport.tor.identity =
+        load_from_json(&config.indexer.tor_identity_file).map_err(|e| ExitError::new(ExitCode::ConfigError, e))?;
     ensure_directories_exist(config)?;
 
     // Connection to base node
-    let base_node_client = GrpcBaseNodeClient::new(config.validator_node.base_node_grpc_address.unwrap_or_else(|| {
+    let base_node_client = GrpcBaseNodeClient::new(config.indexer.base_node_grpc_address.unwrap_or_else(|| {
         let port = grpc_default_port(ApplicationType::BaseNode, config.network);
         SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), port)
     }));
@@ -80,7 +79,7 @@ pub async fn spawn_services(
     let peer_provider = CommsPeerProvider::new(comms.peer_manager());
 
     // Connect to shard db
-    let shard_store = SqliteShardStore::try_create(config.validator_node.state_db_path())?;
+    let shard_store = SqliteShardStore::try_create(config.indexer.state_db_path())?;
 
     // Epoch manager
     let validator_node_client_factory = TariCommsValidatorNodeClientFactory::new(comms.connectivity());
@@ -95,7 +94,7 @@ pub async fn spawn_services(
 
     // Base Node scanner
     base_layer_scanner::spawn(
-        config.validator_node.clone(),
+        config.indexer.clone(),
         global_db,
         base_node_client.clone(),
         epoch_manager.clone(),
@@ -111,7 +110,6 @@ pub async fn spawn_services(
     // Save final node identity after comms has initialized. This is required because the public_address can be
     // changed by comms during initialization when using tor.
     save_identities(config, &comms)?;
-
     Ok(Services {
         comms,
         epoch_manager,
@@ -134,7 +132,7 @@ fn setup_p2p_rpc(
     shard_store_store: SqliteShardStore,
 ) -> UnspawnedCommsNode {
     let rpc_server = RpcServer::builder()
-        .with_maximum_simultaneous_sessions(config.validator_node.p2p.rpc_max_simultaneous_sessions)
+        .with_maximum_simultaneous_sessions(config.indexer.p2p.rpc_max_simultaneous_sessions)
         .finish()
         .add_service(create_validator_node_rpc_service(peer_provider, shard_store_store));
 
@@ -142,17 +140,17 @@ fn setup_p2p_rpc(
 }
 
 fn ensure_directories_exist(config: &ApplicationConfig) -> io::Result<()> {
-    fs::create_dir_all(&config.validator_node.data_dir)?;
-    fs::create_dir_all(&config.validator_node.p2p.datastore_path)?;
+    fs::create_dir_all(&config.indexer.data_dir)?;
+    fs::create_dir_all(&config.indexer.p2p.datastore_path)?;
     Ok(())
 }
 
 fn save_identities(config: &ApplicationConfig, comms: &CommsNode) -> Result<(), ExitError> {
-    identity_management::save_as_json(&config.validator_node.identity_file, &*comms.node_identity())
+    identity_management::save_as_json(&config.indexer.identity_file, &*comms.node_identity())
         .map_err(|e| ExitError::new(ExitCode::ConfigError, format!("Failed to save node identity: {}", e)))?;
 
     if let Some(hs) = comms.hidden_service() {
-        identity_management::save_as_json(&config.validator_node.tor_identity_file, hs.tor_identity())
+        identity_management::save_as_json(&config.indexer.tor_identity_file, hs.tor_identity())
             .map_err(|e| ExitError::new(ExitCode::ConfigError, format!("Failed to save tor identity: {}", e)))?;
     }
     Ok(())
