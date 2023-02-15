@@ -125,7 +125,9 @@ impl BaseLayerEpochManager {
         Ok(())
     }
 
-    async fn get_base_layer_consensus_constants(&mut self) -> Result<&BaseLayerConsensusConstants, EpochManagerError> {
+    pub async fn get_base_layer_consensus_constants(
+        &mut self,
+    ) -> Result<&BaseLayerConsensusConstants, EpochManagerError> {
         if let Some(ref constants) = self.base_layer_consensus_constants {
             return Ok(constants);
         }

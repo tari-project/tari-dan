@@ -75,8 +75,8 @@ pub async fn register(
     epoch_manager: &EpochManagerHandle,
 ) -> Result<RegisterValidatorNodeResponse, AutoRegistrationError> {
     let balance = wallet_client.get_balance().await?;
-    // TODO: Get the required amount for registration (currently 0)
-    if balance.available_balance == 0 {
+    let constants = epoch_manager.get_base_layer_consensus_constants().await?;
+    if balance.available_balance == constants.validator_node_registration_min_deposit_amount().as_u64() {
         return Err(AutoRegistrationError::RegistrationFailed {
             details: format!(
                 "Wallet does not have sufficient balance to pay for registration. Available funds: {}",
