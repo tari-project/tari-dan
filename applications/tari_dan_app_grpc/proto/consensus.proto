@@ -1,0 +1,108 @@
+// Copyright 2022 The Tari Project
+// SPDX-License-Identifier: BSD-3-Clause
+
+syntax = "proto3";
+
+package tari.dan.consensus;
+
+import "common.proto";
+import "transaction.proto";
+
+enum HotStuffMessageType {
+  NEW_VIEW = 0;
+  PROPOSAL = 1;
+}
+
+message HotStuffMessage {
+  HotStuffMessageType message_type = 1;
+  HotStuffTreeNode node = 2;
+  QuorumCertificate high_qc = 3;
+  bytes shard = 4;
+  TariDanPayload new_view_payload = 5;
+}
+
+message ShardPledge {
+  bytes shard_id = 1;
+  bytes node_hash = 2;
+  ObjectPledge pledge = 3;
+}
+
+message QuorumCertificate {
+  enum QuorumDecision {
+    QUORUM_DECISION_ACCEPT = 0;
+    QUORUM_DECISION_REJECT_SHARD_NOT_PLEDGED = 1;
+    QUORUM_DECISION_REJECT_EXECUTION_FAILURE = 2;
+  }
+  bytes payload_id = 1;
+  uint64 payload_height = 2;
+  bytes local_node_hash = 3;
+  uint64 local_node_height = 4;
+  bytes shard = 5;
+  uint64 epoch = 6;
+  QuorumDecision decision = 7;
+  repeated ShardPledge all_shard_pledges = 8;
+  repeated ValidatorMetadata validators_metadata = 9;
+}
+
+message HotStuffTreeNode {
+  bytes parent = 1;
+  bytes payload_id = 2;
+  uint64 height = 3;
+  bytes shard = 4;
+  uint64 payload_height = 5;
+  ObjectPledge local_pledge = 6;
+  uint64 epoch = 7;
+  bytes proposed_by = 8;
+  QuorumCertificate justify = 9;
+  TariDanPayload payload = 10;
+  uint64 leader_round = 11;
+}
+
+message ValidatorMetadata {
+  bytes public_key = 1;
+  bytes vn_shard_key = 2;
+  tari.dan.common.Signature signature = 3;
+  bytes merkle_proof = 4;
+  uint64 merkle_leaf_index = 5;
+}
+
+message TariDanPayload {
+  tari.dan.transaction.Transaction transaction = 1;
+}
+
+message VoteMessage {
+  bytes local_node_hash = 1;
+  QuorumDecision decision = 2;
+  repeated ShardPledge all_shard_pledges = 3;
+  ValidatorMetadata validator_metadata = 4;
+}
+
+enum QuorumDecision {
+  QUORUM_DECISION_UNKNOWN = 0;
+  QUORUM_DECISION_ACCEPT = 1;
+  QUORUM_DECISION_REJECT = 2;
+}
+
+message ObjectPledge {
+  bytes shard_id = 1;
+  SubstateState current_state = 2;
+  bytes pledged_to_payload = 3;
+}
+
+message SubstateState {
+  oneof state {
+    bool does_not_exist = 1;
+    UpState up = 2;
+    DownState down = 3;
+  }
+}
+
+message UpState {
+  bytes created_by = 1;
+  bytes address = 2;
+  bytes data = 3;
+}
+
+message DownState {
+  bytes deleted_by = 1;
+}
