@@ -24,13 +24,14 @@ use futures::StreamExt;
 use log::*;
 use serde::{Deserialize, Serialize};
 use tari_crypto::ristretto::RistrettoPublicKey;
+use tari_dan_app_grpc::proto::rpc::VnStateSyncResponse;
 use tari_dan_common_types::{Epoch, ShardId};
 use tari_dan_core::services::{epoch_manager::EpochManager, ValidatorNodeClientFactory};
 use tari_engine_types::substate::{Substate, SubstateAddress};
 
-use crate::p2p::{
-    proto::rpc::VnStateSyncResponse,
-    services::{epoch_manager::handle::EpochManagerHandle, rpc_client::TariCommsValidatorNodeClientFactory},
+use crate::p2p::services::{
+    epoch_manager::handle::EpochManagerHandle,
+    rpc_client::TariCommsValidatorNodeClientFactory,
 };
 
 const LOG_TARGET: &str = "tari::indexer::dan_layer_scanner";
@@ -120,8 +121,8 @@ impl DanLayerScanner {
         let mut sync_vn_rpc_client = sync_vn_client.create_connection().await?;
 
         // request the shard substate to the VN
-        let shard_id_proto: crate::p2p::proto::common::ShardId = shard_id.into();
-        let request = crate::p2p::proto::rpc::VnStateSyncRequest {
+        let shard_id_proto: tari_dan_app_grpc::proto::common::ShardId = shard_id.into();
+        let request = tari_dan_app_grpc::proto::rpc::VnStateSyncRequest {
             start_shard_id: Some(shard_id_proto.clone()),
             end_shard_id: Some(shard_id_proto),
             inventory: vec![],

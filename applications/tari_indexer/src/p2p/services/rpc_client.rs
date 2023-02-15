@@ -32,14 +32,12 @@ use tari_comms::{
     types::CommsPublicKey,
 };
 use tari_crypto::tari_utilities::ByteArray;
+use tari_dan_app_grpc::proto::rpc::{GetPeersRequest, SubmitTransactionRequest};
 use tari_dan_core::services::{DanPeer, ValidatorNodeClientError, ValidatorNodeClientFactory, ValidatorNodeRpcClient};
 use tari_transaction::Transaction;
 use tokio_stream::StreamExt;
 
-use crate::p2p::{
-    proto::rpc::{GetPeersRequest, SubmitTransactionRequest},
-    rpc,
-};
+use crate::p2p::rpc;
 
 pub struct TariCommsValidatorNodeRpcClient {
     connectivity: ConnectivityRequester,
