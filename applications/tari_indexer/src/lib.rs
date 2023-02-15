@@ -20,13 +20,11 @@
 // WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 // USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-mod base_layer_scanner;
 mod bootstrap;
 pub mod cli;
 mod comms;
 pub mod config;
 mod dan_layer_scanner;
-mod grpc;
 mod json_rpc;
 mod p2p;
 
@@ -44,6 +42,7 @@ use tari_common::{
     exit_codes::{ExitCode, ExitError},
 };
 use tari_comms::peer_manager::PeerFeatures;
+use tari_dan_app_utilities::base_node_client::GrpcBaseNodeClient;
 use tari_dan_core::{consensus_constants::ConsensusConstants, services::BaseNodeClient, storage::DbFactory};
 use tari_dan_storage_sqlite::SqliteDbFactory;
 use tari_shutdown::ShutdownSignal;
@@ -52,7 +51,6 @@ use tokio::task;
 use crate::{
     bootstrap::{spawn_services, Services},
     config::ApplicationConfig,
-    grpc::services::base_node_client::GrpcBaseNodeClient,
     json_rpc::{run_json_rpc, JsonRpcHandlers},
 };
 

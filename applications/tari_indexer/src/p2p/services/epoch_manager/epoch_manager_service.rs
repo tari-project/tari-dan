@@ -21,15 +21,11 @@
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 use log::error;
-use tari_common_types::types::FixedHash;
-use tari_comms::types::CommsPublicKey;
-use tari_core::transactions::transaction_components::ValidatorNodeRegistration;
-use tari_dan_common_types::{Epoch, ShardId};
-use tari_dan_core::{
-    consensus_constants::ConsensusConstants,
-    models::{Committee, ValidatorNode},
-    services::epoch_manager::{EpochManagerError, ShardCommitteeAllocation},
+use tari_dan_app_utilities::{
+    base_node_client::GrpcBaseNodeClient,
+    epoch_manager::{EpochManagerEvent, EpochManagerRequest},
 };
+use tari_dan_core::{consensus_constants::ConsensusConstants, services::epoch_manager::EpochManagerError};
 use tari_dan_storage::global::GlobalDb;
 use tari_dan_storage_sqlite::{global::SqliteGlobalDbAdapter, sqlite_shard_store_factory::SqliteShardStore};
 use tari_shutdown::ShutdownSignal;
@@ -38,12 +34,9 @@ use tokio::{
     task::JoinHandle,
 };
 
-use crate::{
-    grpc::services::base_node_client::GrpcBaseNodeClient,
-    p2p::services::{
-        epoch_manager::base_layer_epoch_manager::BaseLayerEpochManager,
-        rpc_client::TariCommsValidatorNodeClientFactory,
-    },
+use crate::p2p::services::{
+    epoch_manager::base_layer_epoch_manager::BaseLayerEpochManager,
+    rpc_client::TariCommsValidatorNodeClientFactory,
 };
 
 const LOG_TARGET: &str = "tari::indexer::epoch_manager";
@@ -55,58 +48,6 @@ pub struct EpochManagerService {
         broadcast::Sender<EpochManagerEvent>,
         broadcast::Receiver<EpochManagerEvent>,
     ),
-}
-
-type Reply<T> = oneshot::Sender<Result<T, EpochManagerError>>;
-
-#[derive(Debug)]
-pub enum EpochManagerRequest {
-    CurrentEpoch {
-        reply: Reply<Epoch>,
-    },
-    AddValidatorNodeRegistration {
-        block_height: u64,
-        registration: Box<ValidatorNodeRegistration>,
-        reply: Reply<()>,
-    },
-    UpdateEpoch {
-        block_height: u64,
-        block_hash: FixedHash,
-        reply: Reply<()>,
-    },
-    LastRegistrationEpoch {
-        reply: Reply<Option<Epoch>>,
-    },
-    UpdateLastRegistrationEpoch {
-        epoch: Epoch,
-        reply: Reply<()>,
-    },
-    IsEpochValid {
-        epoch: Epoch,
-        reply: Reply<bool>,
-    },
-    GetCommittees {
-        epoch: Epoch,
-        shards: Vec<ShardId>,
-        reply: Reply<Vec<ShardCommitteeAllocation<CommsPublicKey>>>,
-    },
-    GetCommittee {
-        epoch: Epoch,
-        shard: ShardId,
-        reply: Reply<Committee<CommsPublicKey>>,
-    },
-    GetValidatorNodesPerEpoch {
-        epoch: Epoch,
-        reply: Reply<Vec<ValidatorNode<CommsPublicKey>>>,
-    },
-    NotifyScanningComplete {
-        reply: Reply<()>,
-    },
-}
-
-#[derive(Debug, Clone)]
-pub enum EpochManagerEvent {
-    EpochChanged(Epoch),
 }
 
 impl EpochManagerService {
@@ -189,13 +130,21 @@ impl EpochManagerService {
             } => handle(
                 reply,
                 self.inner
-                    .add_validator_node_registration(block_height, *registration)
+                    .add_validator_node_registration(block_height, registration)
                     .await,
             ),
             // TODO: This should be rather be a state machine event
             EpochManagerRequest::NotifyScanningComplete { reply } => {
                 handle(reply, self.inner.on_scanning_complete().await)
             },
+            EpochManagerRequest::GetValidatorShardKey { .. } => todo!(),
+            EpochManagerRequest::GetValidatorNodeMmr { .. } => todo!(),
+            EpochManagerRequest::GetValidatorNodeMerkleRoot { .. } => todo!(),
+            EpochManagerRequest::IsValidatorInCommitteeForCurrentEpoch { .. } => todo!(),
+            EpochManagerRequest::FilterToLocalShards { .. } => todo!(),
+            EpochManagerRequest::Subscribe { .. } => todo!(),
+            EpochManagerRequest::RemainingRegistrationEpochs { .. } => todo!(),
+            EpochManagerRequest::GetBaseLayerConsensusConstants { .. } => todo!(),
         }
     }
 }

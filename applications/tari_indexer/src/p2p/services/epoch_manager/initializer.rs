@@ -20,18 +20,16 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+use tari_dan_app_utilities::{base_node_client::GrpcBaseNodeClient, epoch_manager::EpochManagerHandle};
 use tari_dan_core::consensus_constants::ConsensusConstants;
 use tari_dan_storage::global::GlobalDb;
 use tari_dan_storage_sqlite::{global::SqliteGlobalDbAdapter, sqlite_shard_store_factory::SqliteShardStore};
 use tari_shutdown::ShutdownSignal;
 use tokio::sync::mpsc;
 
-use crate::{
-    grpc::services::base_node_client::GrpcBaseNodeClient,
-    p2p::services::{
-        epoch_manager::{epoch_manager_service::EpochManagerService, handle::EpochManagerHandle},
-        rpc_client::TariCommsValidatorNodeClientFactory,
-    },
+use crate::p2p::services::{
+    epoch_manager::epoch_manager_service::EpochManagerService,
+    rpc_client::TariCommsValidatorNodeClientFactory,
 };
 
 pub fn spawn(

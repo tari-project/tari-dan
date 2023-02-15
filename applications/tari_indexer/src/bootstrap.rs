@@ -33,21 +33,25 @@ use tari_common::{
     exit_codes::{ExitCode, ExitError},
 };
 use tari_comms::{protocol::rpc::RpcServer, CommsNode, NodeIdentity, UnspawnedCommsNode};
+use tari_dan_app_utilities::{
+    base_layer_scanner,
+    base_node_client::GrpcBaseNodeClient,
+    epoch_manager::EpochManagerHandle,
+    template_manager::TemplateManagerHandle,
+};
 use tari_dan_core::consensus_constants::ConsensusConstants;
 use tari_dan_storage::global::GlobalDb;
 use tari_dan_storage_sqlite::{global::SqliteGlobalDbAdapter, sqlite_shard_store_factory::SqliteShardStore};
 use tari_shutdown::ShutdownSignal;
+use tokio::sync::mpsc;
 
 use crate::{
-    base_layer_scanner,
     comms,
-    grpc::services::base_node_client::GrpcBaseNodeClient,
     p2p::{
         create_validator_node_rpc_service,
         services::{
             comms_peer_provider::CommsPeerProvider,
             epoch_manager,
-            epoch_manager::handle::EpochManagerHandle,
             rpc_client::TariCommsValidatorNodeClientFactory,
         },
     },
@@ -94,12 +98,14 @@ pub async fn spawn_services(
 
     // Base Node scanner
     base_layer_scanner::spawn(
-        config.indexer.clone(),
         global_db,
         base_node_client.clone(),
         epoch_manager.clone(),
+        get_mock_template_manager_handle(),
         shutdown.clone(),
         consensus_constants,
+        true,
+        config.indexer.base_layer_scanning_interval,
     );
 
     let comms = setup_p2p_rpc(config, comms, peer_provider, shard_store.clone());
@@ -154,4 +160,11 @@ fn save_identities(config: &ApplicationConfig, comms: &CommsNode) -> Result<(), 
             .map_err(|e| ExitError::new(ExitCode::ConfigError, format!("Failed to save tor identity: {}", e)))?;
     }
     Ok(())
+}
+
+// The indexer application does not need to handle templates
+// so we just create a mock handle that ignores messages
+fn get_mock_template_manager_handle() -> TemplateManagerHandle {
+    let (tx_request, _) = mpsc::channel(10);
+    TemplateManagerHandle::new(tx_request)
 }

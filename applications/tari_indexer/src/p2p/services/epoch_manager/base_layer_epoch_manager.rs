@@ -27,6 +27,7 @@ use tari_common_types::types::FixedHash;
 use tari_comms::types::CommsPublicKey;
 use tari_core::{blocks::BlockHeader, transactions::transaction_components::ValidatorNodeRegistration};
 use tari_crypto::tari_utilities::ByteArray;
+use tari_dan_app_utilities::base_node_client::GrpcBaseNodeClient;
 use tari_dan_common_types::{Epoch, ShardId};
 use tari_dan_core::{
     consensus_constants::{BaseLayerConsensusConstants, ConsensusConstants},
@@ -39,10 +40,7 @@ use tari_dan_core::{
 use tari_dan_storage::global::{DbEpoch, DbValidatorNode, GlobalDb, MetadataKey};
 use tari_dan_storage_sqlite::{global::SqliteGlobalDbAdapter, sqlite_shard_store_factory::SqliteShardStore};
 
-use crate::{
-    grpc::services::base_node_client::GrpcBaseNodeClient,
-    p2p::services::rpc_client::TariCommsValidatorNodeClientFactory,
-};
+use crate::p2p::services::rpc_client::TariCommsValidatorNodeClientFactory;
 
 const LOG_TARGET: &str = "tari::indexer::epoch_manager::base_layer_epoch_manager";
 
