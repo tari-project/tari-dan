@@ -44,7 +44,6 @@ use tari_wallet_grpc_client::WalletClientError;
 use tokio::{task, task::JoinHandle, time};
 
 use crate::{
-    grpc::services::base_node_client::GrpcBaseNodeClient,
     p2p::services::epoch_manager::{epoch_manager_service::EpochManagerEvent, handle::EpochManagerHandle},
     ApplicationConfig,
     GrpcWalletClient,
@@ -68,8 +67,6 @@ pub enum AutoRegistrationError {
     SqliteStorageError(#[from] SqliteStorageError),
     #[error("Base node error: {0}")]
     BaseNodeError(#[from] BaseNodeError),
-    #[error("Math Overflow error")]
-    MathOverflow,
 }
 
 pub async fn register(
@@ -77,6 +74,17 @@ pub async fn register(
     node_identity: &NodeIdentity,
     epoch_manager: &EpochManagerHandle,
 ) -> Result<RegisterValidatorNodeResponse, AutoRegistrationError> {
+    let balance = wallet_client.get_balance().await?;
+    let constants = epoch_manager.get_base_layer_consensus_constants().await?;
+    if balance.available_balance == constants.validator_node_registration_min_deposit_amount().as_u64() {
+        return Err(AutoRegistrationError::RegistrationFailed {
+            details: format!(
+                "Wallet does not have sufficient balance to pay for registration. Available funds: {}",
+                balance.available_balance
+            ),
+        });
+    }
+
     let mut attempts = 1;
 
     loop {
@@ -143,8 +151,11 @@ async fn start(
         tokio::select! {
             Ok(event) = rx.recv() => {
                 match event {
-                    EpochManagerEvent::EpochChanged(current_epoch) =>
-                        handle_epoch_changed(current_epoch, &config, &node_identity, &epoch_manager, ).await?,
+                    EpochManagerEvent::EpochChanged(_) => {
+                        if let Err(err) = handle_epoch_changed(&config, &node_identity, &epoch_manager).await {
+                            error!(target: LOG_TARGET, "Auto-registration failed with error: {}", err);
+                        }
+                    }
                 }
             },
             _ = shutdown.wait() => break
@@ -155,39 +166,20 @@ async fn start(
 }
 
 async fn handle_epoch_changed(
-    current_epoch: Epoch,
     config: &ApplicationConfig,
     node_identity: &NodeIdentity,
     epoch_manager: &EpochManagerHandle,
 ) -> Result<(), AutoRegistrationError> {
-    let last_registration_epoch = epoch_manager.last_registration_epoch().await?.unwrap_or(Epoch(0));
+    if epoch_manager.last_registration_epoch().await?.is_none() {
+        info!(
+            target: LOG_TARGET,
+            "📋️ Validator has never registered. Auto-registration will only occur after initial registration."
+        );
+        return Ok(());
+    }
 
-    // TODO: This need to consider the validator node confirmation period and submit a reregistration which the tip
-    //       has progressed to the last valid epoch for this node
-
-    let mut base_node_client =
-        GrpcBaseNodeClient::new(config.validator_node.base_node_grpc_address.unwrap_or_else(|| {
-            let port = grpc_default_port(ApplicationType::BaseNode, config.network);
-            ([127, 0, 0, 1], port).into()
-        }));
-
-    // TODO: This logic probably need to move into the epoch manager because it is aware of the base layer consensus
-    //       constants
-    // e.g. if epoch_manager.epochs_until_next_registration() <= 1 { ... }
-    let current_block_height = current_epoch.as_u64() * 10 + 1;
-    let validator_node_registration_expiry = base_node_client
-        .get_consensus_constants(current_block_height)
-        .await
-        .map_err(AutoRegistrationError::BaseNodeError)?
-        .validator_node_registration_expiry()
-        .as_u64() *
-        10;
-
-    let last_registration_height = last_registration_epoch.as_u64() * 10 + 1;
-    let num_blocks_since_last_reg = current_block_height
-        .checked_sub(last_registration_height)
-        .ok_or(AutoRegistrationError::MathOverflow)?;
-    if num_blocks_since_last_reg >= validator_node_registration_expiry {
+    let remaining_epochs = epoch_manager.remaining_registration_epochs().await?.unwrap_or(Epoch(0));
+    if remaining_epochs.is_zero() {
         let wallet_client = GrpcWalletClient::new(config.validator_node.wallet_grpc_address.unwrap_or_else(|| {
             let port = grpc_default_port(ApplicationType::ConsoleWallet, config.network);
             SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), port)
@@ -195,5 +187,6 @@ async fn handle_epoch_changed(
 
         register(wallet_client, node_identity, epoch_manager).await?;
     }
+
     Ok(())
 }

@@ -24,7 +24,7 @@ use std::{convert::TryFrom, fmt::Debug};
 
 use anyhow::anyhow;
 use chrono::NaiveDateTime;
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use tari_common_types::types::FixedHash;
 
 mod base_layer_metadata;
@@ -165,7 +165,7 @@ impl From<u64> for ChainHeight {
     }
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct RecentTransaction {
     pub payload_id: Vec<u8>,
     pub timestamp: NaiveDateTime,
@@ -173,6 +173,7 @@ pub struct RecentTransaction {
     pub instructions: String,
 }
 
+// TODO: These should be well-formed structs, no SQL in core
 #[derive(Debug, Serialize)]
 pub struct SQLTransaction {
     pub node_hash: Vec<u8>,

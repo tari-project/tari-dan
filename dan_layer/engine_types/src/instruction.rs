@@ -13,7 +13,7 @@ use tari_template_lib::{
 
 use crate::hashing::hasher;
 
-#[derive(Debug, Clone, Encode, Deserialize, Serialize, PartialEq)]
+#[derive(Debug, Clone, Encode, Deserialize, Serialize, Eq, PartialEq)]
 #[serde(tag = "type")]
 pub enum Instruction {
     CallFunction {

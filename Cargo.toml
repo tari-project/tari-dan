@@ -1,23 +1,28 @@
 [workspace]
 
 members = [
+    "applications/tari_dan_wallet_cli",
+    "applications/tari_dan_wallet_daemon",
+    "applications/tari_validator_node",
+    "applications/tari_validator_node_cli",
+    "applications/tari_indexer",
     "clients/validator_node_client",
+    "clients/wallet_daemon_client",
     "dan_layer/core",
+    "dan_layer/integration_tests",
     "dan_layer/storage",
     "dan_layer/storage_lmdb",
     "dan_layer/storage_sqlite",
+    "dan_layer/tari_bor",
     "dan_layer/template_abi",
     "dan_layer/template_builtin",
     "dan_layer/template_lib",
     "dan_layer/transaction",
     "dan_layer/template_macros",
-    "dan_layer/transaction_manifest",
     "dan_layer/template_test_tooling",
-    "dan_layer/integration_tests",
-    "dan_layer/tari_bor",
-    "applications/tari_validator_node",
-    "applications/tari_validator_node_cli",
-    "applications/tari_indexer",
+    "dan_layer/transaction_manifest",
+    "dan_layer/wallet/sdk",
+    "dan_layer/wallet/storage_sqlite",
 ]
 #
 resolver = "2"
