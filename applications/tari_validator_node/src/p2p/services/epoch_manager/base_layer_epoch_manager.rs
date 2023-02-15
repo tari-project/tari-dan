@@ -31,6 +31,7 @@ use tari_core::{
     ValidatorNodeMmr,
 };
 use tari_crypto::tari_utilities::ByteArray;
+use tari_dan_app_utilities::{base_node_client::GrpcBaseNodeClient, epoch_manager::EpochManagerEvent};
 use tari_dan_common_types::{optional::Optional, vn_mmr_node_hash, Epoch, ShardId};
 use tari_dan_core::{
     consensus_constants::{BaseLayerConsensusConstants, ConsensusConstants},
@@ -44,13 +45,7 @@ use tari_dan_storage::global::{DbEpoch, DbValidatorNode, GlobalDb, MetadataKey};
 use tari_dan_storage_sqlite::{global::SqliteGlobalDbAdapter, sqlite_shard_store_factory::SqliteShardStore};
 use tokio::sync::broadcast;
 
-use crate::{
-    grpc::services::base_node_client::GrpcBaseNodeClient,
-    p2p::services::{
-        epoch_manager::{epoch_manager_service::EpochManagerEvent, PeerSyncManagerService},
-        rpc_client::TariCommsValidatorNodeClientFactory,
-    },
-};
+use crate::p2p::services::{epoch_manager::PeerSyncManagerService, rpc_client::TariCommsValidatorNodeClientFactory};
 
 const LOG_TARGET: &str = "tari::validator_node::epoch_manager::base_layer_epoch_manager";
 

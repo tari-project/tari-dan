@@ -19,6 +19,7 @@ tari_shutdown = { git = "https://github.com/tari-project/tari.git", branch = "de
 tari_storage = { git = "https://github.com/tari-project/tari.git", branch = "development", package = "tari_storage" }
 tari_core = { git = "https://github.com/tari-project/tari.git", branch = "development", package = "tari_core", default-features = false, features = ["transactions"] }
 tari_dan_app_grpc = { path = "../tari_dan_app_grpc" }
+tari_dan_app_utilities = { path = "../tari_dan_app_utilities" }
 tari_dan_core = { path = "../../dan_layer/core" }
 tari_dan_storage = { path = "../../dan_layer/storage" }
 tari_dan_storage_sqlite = { path = "../../dan_layer/storage_sqlite" }

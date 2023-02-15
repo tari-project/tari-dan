@@ -3,6 +3,7 @@
 
 Feature: Indexer node
 
+  @current
   @serial
   Scenario: Indexer is able to connect to validator nodes
     # Initialize a base node, wallet, miner and VN

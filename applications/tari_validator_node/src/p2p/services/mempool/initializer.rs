@@ -23,6 +23,7 @@
 use std::sync::Arc;
 
 use tari_comms::NodeIdentity;
+use tari_dan_app_utilities::epoch_manager::EpochManagerHandle;
 use tari_transaction::Transaction;
 use tokio::{
     sync::{broadcast, mpsc},
@@ -31,7 +32,6 @@ use tokio::{
 };
 
 use crate::p2p::services::{
-    epoch_manager::handle::EpochManagerHandle,
     mempool::{handle::MempoolHandle, service::MempoolService, validator::MempoolTransactionValidator},
     messaging::OutboundMessaging,
     template_manager::TemplateManager,

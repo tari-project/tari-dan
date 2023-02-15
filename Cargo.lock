@@ -6825,6 +6825,7 @@ dependencies = [
  "tari_core",
  "tari_crypto",
  "tari_dan_app_grpc",
+ "tari_dan_app_utilities",
  "tari_dan_common_types",
  "tari_dan_core",
  "tari_dan_engine",

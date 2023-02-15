@@ -30,6 +30,7 @@ use futures::StreamExt;
 use log::info;
 use tari_comms::{protocol::rpc::RpcStatus, NodeIdentity};
 use tari_dan_app_grpc::proto::rpc::VnStateSyncResponse;
+use tari_dan_app_utilities::epoch_manager::EpochManagerHandle;
 use tari_dan_common_types::{Epoch, ObjectPledge, PayloadId, ShardId, SubstateState};
 use tari_dan_core::{
     models::{Payload, TariDanPayload},
@@ -55,11 +56,7 @@ use tari_transaction::Transaction;
 use thiserror::Error;
 
 use crate::{
-    p2p::services::{
-        epoch_manager::handle::EpochManagerHandle,
-        rpc_client::TariCommsValidatorNodeClientFactory,
-        template_manager::TemplateManager,
-    },
+    p2p::services::{rpc_client::TariCommsValidatorNodeClientFactory, template_manager::TemplateManager},
     payload_processor::TariDanPayloadProcessor,
 };
 

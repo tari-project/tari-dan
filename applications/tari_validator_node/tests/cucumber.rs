@@ -44,11 +44,11 @@ use indexmap::IndexMap;
 use tari_common::initialize_logging;
 use tari_common_types::types::{FixedHash, PublicKey};
 use tari_crypto::tari_utilities::hex::Hex;
+use tari_dan_app_utilities::base_node_client::GrpcBaseNodeClient;
 use tari_dan_common_types::QuorumDecision;
 use tari_dan_core::services::BaseNodeClient;
 use tari_engine_types::execution_result::Type;
 use tari_template_lib::Hash;
-use tari_validator_node::GrpcBaseNodeClient;
 use tari_validator_node_cli::versioned_substate_address::VersionedSubstateAddress;
 use tari_validator_node_client::types::{
     GetIdentityResponse,
