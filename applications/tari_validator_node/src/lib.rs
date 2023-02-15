@@ -63,7 +63,7 @@ use crate::{
     bootstrap::{spawn_services, Services},
     dan_node::DanNode,
     http_ui::server::run_http_ui_server,
-    json_rpc::{run_json_rpc, JsonRpcHandlers},
+    json_rpc::{spawn_json_rpc, JsonRpcHandlers},
     p2p::services::networking::DAN_PEER_FEATURES,
 };
 pub use crate::{
@@ -132,7 +132,8 @@ pub async fn run_validator_node(config: &ApplicationConfig, shutdown_signal: Shu
     .await?;
 
     // Run the JSON-RPC API
-    if let Some(address) = config.validator_node.json_rpc_address {
+    let mut jrpc_address = config.validator_node.json_rpc_address;
+    if let Some(address) = jrpc_address.as_mut() {
         info!(target: LOG_TARGET, "🌐 Started JSON-RPC server on {}", address);
         let handlers = JsonRpcHandlers::new(
             wallet_client,
@@ -140,15 +141,12 @@ pub async fn run_validator_node(config: &ApplicationConfig, shutdown_signal: Shu
             &services,
             config.validator_node.clone(),
         );
-        task::spawn(run_json_rpc(address, handlers));
+        *address = spawn_json_rpc(*address, handlers)?;
     }
 
     // Run the http ui
     if let Some(address) = config.validator_node.http_ui_address {
-        task::spawn(run_http_ui_server(
-            address,
-            config.validator_node.json_rpc_address.map(|addr| addr.to_string()),
-        ));
+        task::spawn(run_http_ui_server(address, jrpc_address));
     }
 
     run_dan_node(services, shutdown_signal).await?;

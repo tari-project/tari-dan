@@ -33,7 +33,7 @@ use tari_dan_common_types::{
     TreeNodeHash,
     ValidatorMetadata,
 };
-use tari_mmr::MerkleProof;
+use tari_mmr::{common::LeafIndex, MerkleProof};
 
 use crate::{services::SigningService, workers::hotstuff_error::HotStuffError, TariDanCoreHashDomain};
 
@@ -97,15 +97,17 @@ impl VoteMessage {
             .expect("Unexpected Merkle Mountain Range error")
             .ok_or(HotStuffError::ValidatorNodeNotIncludedInMmr)?;
         let merkle_proof =
-            MerkleProof::for_leaf_node(vn_mmr, leaf_index as usize).expect("Merkle proof generation failed");
+            MerkleProof::for_leaf_node(vn_mmr, LeafIndex(leaf_index as usize)).expect("Merkle proof generation failed");
 
         let hash = vn_mmr_node_hash(signing_service.public_key(), &shard_id);
         let root = vn_mmr.get_merkle_root().unwrap();
         let idx = vn_mmr.find_leaf_index(&*hash).unwrap();
         // TODO: remove
-        if let Err(err) =
-            merkle_proof.verify_leaf::<tari_core::ValidatorNodeMmrHasherBlake256>(&root, &*hash, leaf_index as usize)
-        {
+        if let Err(err) = merkle_proof.verify_leaf::<tari_core::ValidatorNodeMmrHasherBlake256>(
+            &root,
+            &*hash,
+            LeafIndex(leaf_index as usize),
+        ) {
             log::warn!(
                 target: "tari::dan_layer::votemessage",
                 "Merkle proof verification failed for validator node {:?} at index {:?} with error: {}",

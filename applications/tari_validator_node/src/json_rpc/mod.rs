@@ -26,4 +26,4 @@ pub use handlers::JsonRpcHandlers;
 mod jrpc_errors;
 mod server;
 
-pub use server::run_json_rpc;
+pub use server::spawn_json_rpc;

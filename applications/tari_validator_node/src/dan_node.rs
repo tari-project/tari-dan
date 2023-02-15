@@ -22,7 +22,10 @@
 
 use log::*;
 use tari_comms::{connectivity::ConnectivityEvent, peer_manager::NodeId};
-use tari_dan_core::{services::epoch_manager::EpochManager, workers::events::HotStuffEvent};
+use tari_dan_core::{
+    services::epoch_manager::{EpochManager, EpochManagerError},
+    workers::events::HotStuffEvent,
+};
 use tari_shutdown::ShutdownSignal;
 use tari_template_lib::Hash;
 
@@ -44,7 +47,9 @@ impl DanNode {
 
         let mut connectivity_events = self.services.comms.connectivity().get_event_subscription();
 
-        self.dial_local_shard_peers().await?;
+        if let Err(err) = self.dial_local_shard_peers().await {
+            error!(target: LOG_TARGET, "Failed to dial local shard peers: {}", err);
+        }
 
         let status = self.services.comms.connectivity().get_connectivity_status().await?;
         if status.is_online() {
@@ -89,18 +94,30 @@ impl DanNode {
 
     async fn dial_local_shard_peers(&mut self) -> Result<(), anyhow::Error> {
         let epoch = self.services.epoch_manager.current_epoch().await?;
-        let shard_id = self
+        let res = self
             .services
             .epoch_manager
             .get_validator_shard_key(epoch, self.services.comms.node_identity().public_key().clone())
-            .await?;
+            .await;
+
+        let shard_id = match res {
+            Ok(shard_id) => shard_id,
+            Err(EpochManagerError::BaseLayerConsensusConstantsNotSet) => {
+                info!(target: LOG_TARGET, "Epoch manager has not synced with base layer yet");
+                return Ok(());
+            },
+            Err(err) => {
+                return Err(err.into());
+            },
+        };
+
         let local_shard_peers = self.services.epoch_manager.get_committee(epoch, shard_id).await?;
         info!(
             target: LOG_TARGET,
             "Dialing {} local shard peers",
             local_shard_peers.members.len()
         );
-        // TODO: Peer sync may not have completed yet, so some addresses for local shard peers may not be known yet.
+
         self.services
             .comms
             .connectivity()

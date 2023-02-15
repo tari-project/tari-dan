@@ -21,6 +21,7 @@
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 use serde::{Deserialize, Serialize};
+use tari_core::transactions::tari_amount::MicroTari;
 use tari_dan_common_types::{Epoch, NodeHeight};
 
 #[derive(Clone)]
@@ -48,6 +49,7 @@ impl ConsensusConstants {
 pub struct BaseLayerConsensusConstants {
     pub validator_node_registration_expiry: u64,
     pub epoch_length: u64,
+    pub validator_node_registration_min_deposit_amount: MicroTari,
 }
 
 impl BaseLayerConsensusConstants {
@@ -61,6 +63,10 @@ impl BaseLayerConsensusConstants {
 
     pub fn validator_node_registration_expiry(&self) -> Epoch {
         Epoch(self.validator_node_registration_expiry)
+    }
+
+    pub fn validator_node_registration_min_deposit_amount(&self) -> MicroTari {
+        self.validator_node_registration_min_deposit_amount
     }
 
     pub fn epoch_length(&self) -> u64 {
