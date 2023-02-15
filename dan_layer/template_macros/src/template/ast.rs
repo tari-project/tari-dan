@@ -20,11 +20,13 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+use quote::quote;
 use syn::{
     parse::{Parse, ParseStream},
     punctuated::Punctuated,
     token::Comma,
     Error,
+    Fields,
     FnArg,
     Ident,
     ImplItem,
@@ -35,6 +37,7 @@ use syn::{
     ReturnType,
     Signature,
     Stmt,
+    Type,
     TypePath,
     TypeTuple,
 };
@@ -43,6 +46,7 @@ use syn::{
 pub struct TemplateAst {
     pub template_name: Ident,
     pub module: ItemMod,
+    pub fields: Fields,
 }
 
 impl Parse for TemplateAst {
@@ -59,6 +63,7 @@ impl Parse for TemplateAst {
         // add derive macros to all structs
         let mut template_name = None;
         let mut has_impl = false;
+        let mut fields = None;
 
         for item in items {
             match item {
@@ -69,7 +74,11 @@ impl Parse for TemplateAst {
                     // #[template(Component)]
                     if template_name.is_none() {
                         template_name = Some(item.ident.clone());
+                        fields = Some(item.fields.clone());
                     }
+                },
+                Item::Enum(_) => {
+                    todo!("Enum components not supported yet");
                 },
                 // TODO: check name matches template name
                 Item::Impl(_) => {
@@ -82,6 +91,12 @@ impl Parse for TemplateAst {
         if template_name.is_none() {
             return Err(Error::new(module.ident.span(), "a template must define a struct"));
         }
+        if fields.is_none() {
+            return Err(Error::new(
+                module.ident.span(),
+                "a template must define a struct with fields",
+            ));
+        }
 
         if !has_impl {
             return Err(Error::new(
@@ -93,6 +108,7 @@ impl Parse for TemplateAst {
         Ok(Self {
             template_name: template_name.unwrap(),
             module,
+            fields: fields.unwrap(),
         })
     }
 }
@@ -110,6 +126,13 @@ impl TemplateAst {
             .flatten()
             .map(Self::get_function_from_item)
             .filter(|f| f.is_public)
+    }
+
+    pub fn owned_type_field_names(&self) -> impl Iterator<Item = &Ident> + '_ {
+        self.fields
+            .iter()
+            .filter(|f| Self::is_owned_type(&f.ty))
+            .filter_map(|f| f.ident.as_ref())
     }
 
     fn get_function_from_item(item: &ImplItem) -> FunctionAst {
@@ -182,6 +205,19 @@ impl TemplateAst {
 
     fn is_public_function(item: &ImplItemMethod) -> bool {
         matches!(item.vis, syn::Visibility::Public(_))
+    }
+
+    fn is_owned_type(ty: &Type) -> bool {
+        const OWNED_TYPES: &[&str] = &["Vault"];
+        match ty {
+            Type::Path(type_path) => type_path
+                .path
+                .segments
+                .iter()
+                .any(|s| OWNED_TYPES.iter().any(|ty_str| s.ident == *ty_str)),
+            Type::Array(ty_arr) => Self::is_owned_type(&ty_arr.elem),
+            _ => false,
+        }
     }
 }
 

@@ -20,7 +20,13 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+mod encode;
+pub use encode::encode_component;
+
 pub mod interface;
 
 mod manager;
 pub use manager::ComponentManager;
+
+mod owned_value;
+pub use owned_value::OwnedValue;

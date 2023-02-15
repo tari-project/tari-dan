@@ -20,13 +20,14 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use tari_bor::{decode_exact, encode, Decode, Encode};
+use tari_bor::{decode_exact, Decode, Encode};
 use tari_template_abi::{call_engine, EngineOp};
 
 use crate::{
-    args::{ComponentAction, ComponentInvokeArg, ComponentRef, InvokeResult},
+    args::{ComponentAction, ComponentInvokeArg, ComponentRef, InvokeResult, SetStateComponentArg},
     auth::AccessRules,
     models::{ComponentAddress, ComponentHeader},
+    prelude::ComponentInterface,
 };
 
 pub struct ComponentManager {
@@ -50,12 +51,12 @@ impl ComponentManager {
         decode_exact(component.state()).expect("Failed to decode component state")
     }
 
-    pub fn set_state<T: Encode>(&self, state: T) {
-        let state = encode(&state).expect("Failed to encode component state");
+    pub fn set_state<T: Encode + ComponentInterface>(&self, state: T) {
+        let owned_values = state.get_owned_values();
         let _result = call_engine::<_, InvokeResult>(EngineOp::ComponentInvoke, &ComponentInvokeArg {
             component_ref: ComponentRef::Ref(self.address),
             action: ComponentAction::SetState,
-            args: invoke_args![state],
+            args: invoke_args![SetStateComponentArg { state, owned_values }],
         });
     }
 

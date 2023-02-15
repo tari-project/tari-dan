@@ -44,6 +44,7 @@ use tari_template_lib::{
         ResourceGetNonFungibleArg,
         ResourceRef,
         ResourceUpdateNonFungibleDataArg,
+        SetStateComponentArg,
         VaultAction,
         VaultWithdrawArg,
         WorkspaceAction,
@@ -165,11 +166,12 @@ impl RuntimeInterface for RuntimeInterfaceImpl {
                         argument: "component_ref",
                         reason: "SetState component action requires a component address".to_string(),
                     })?;
-                let state = args.get(0)?;
+                let arg: SetStateComponentArg = args.get(0)?;
                 let mut component = self.tracker.get_component(&address)?;
                 // TODO: Need to validate this state somehow - it could contain arbitrary data incl. vaults that are not
                 //       owned by this component.
-                component.state.set(state);
+                component.state.set(arg.encoded_state);
+                component.state.set_owned_values(arg.owned_values);
                 self.tracker.set_component(address, component)?;
                 Ok(InvokeResult::unit())
             },

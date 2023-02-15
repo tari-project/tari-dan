@@ -22,6 +22,7 @@
 
 use proc_macro2::TokenStream;
 use quote::{format_ident, quote};
+use syn::Index;
 
 use crate::template::ast::TemplateAst;
 
@@ -31,6 +32,8 @@ pub fn generate_definition(ast: &TemplateAst) -> TokenStream {
     let component_ident_as_str = component_ident.to_string();
     let component_wrapper_ident = format_ident!("{}Component", ast.template_name);
     let (_, items) = ast.module.content.as_ref().unwrap();
+    let owned_value_names = ast.owned_type_field_names().collect::<Vec<_>>();
+    let n_owned_values = Index::from(owned_value_names.len());
 
     quote! {
         #[allow(non_snake_case)]
@@ -45,6 +48,16 @@ pub fn generate_definition(ast: &TemplateAst) -> TokenStream {
                 fn create_with_access_rules(self, access_rules: ::tari_template_lib::auth::AccessRules) -> Self::Component {
                     let address = engine().create_component(#component_ident_as_str.to_string(), self, access_rules);
                     #component_wrapper_ident{ address }
+                }
+
+                fn get_owned_values(&self) -> Vec<::tari_template_lib::component::OwnedValue> {
+                    let mut values = Vec::with_capacity(#n_owned_values);
+                    #(
+                        values.push(::tari_template_lib::component::OwnedValue::from(
+                            &self.#owned_value_names
+                        ));
+                    )*
+                    values
                 }
             }
 

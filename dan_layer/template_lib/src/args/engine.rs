@@ -30,6 +30,7 @@ use tari_template_abi::rust::{
 };
 
 use crate::{
+    component::OwnedValue,
     models::{
         Amount,
         BucketId,
@@ -133,6 +134,13 @@ pub struct CreateComponentArg {
     pub module_name: String,
     pub encoded_state: Vec<u8>,
     pub access_rules: AccessRules,
+    pub owned_values: Vec<OwnedValue>,
+}
+
+#[derive(Debug, Clone, Decode, Encode)]
+pub struct SetStateComponentArg {
+    pub encoded_state: Vec<u8>,
+    pub owned_values: Vec<OwnedValue>,
 }
 
 // -------------------------------- Resource -------------------------------- //

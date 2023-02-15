@@ -90,7 +90,7 @@ impl VaultRef {
     }
 }
 
-#[derive(Clone, Debug, Decode, Encode)]
+#[derive(Debug, Decode, Encode)]
 pub struct Vault {
     vault_id: VaultId,
 }
@@ -108,6 +108,10 @@ impl Vault {
         Self {
             vault_id: resp.decode().unwrap(),
         }
+    }
+
+    pub fn vault_id(&self) -> &VaultId {
+        &self.vault_id
     }
 
     pub fn from_bucket(bucket: Bucket) -> Self {

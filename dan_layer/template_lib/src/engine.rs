@@ -20,16 +20,16 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use tari_bor::{encode, Encode};
+use tari_bor::{encode, encode_into, Encode};
 use tari_template_abi::{call_engine, EngineOp};
 
 use crate::{
     args::{ComponentAction, ComponentInvokeArg, ComponentRef, CreateComponentArg, EmitLogArg, InvokeResult, LogLevel},
-    component::ComponentManager,
+    component::{encode_component, ComponentManager},
     context::Context,
     get_context,
     models::ComponentAddress,
-    prelude::AccessRules,
+    prelude::{AccessRules, ComponentInterface},
 };
 
 pub fn engine() -> TariEngine {
@@ -47,13 +47,14 @@ impl TariEngine {
         Self { _context: context }
     }
 
-    pub fn create_component<T: Encode>(
+    pub fn create_component<T: Encode + ComponentInterface>(
         &self,
         module_name: String,
         initial_state: T,
         access_rules: AccessRules,
     ) -> ComponentAddress {
         let encoded_state = encode(&initial_state).unwrap();
+        let owned_values = initial_state.get_owned_values();
 
         let result = call_engine::<_, InvokeResult>(EngineOp::ComponentInvoke, &ComponentInvokeArg {
             component_ref: ComponentRef::Component,
@@ -62,6 +63,7 @@ impl TariEngine {
                 module_name,
                 encoded_state,
                 access_rules,
+                owned_values,
             }],
         });
 

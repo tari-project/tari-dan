@@ -1,7 +1,7 @@
 //   Copyright 2023 The Tari Project
 //   SPDX-License-Identifier: BSD-3-Clause
 
-use crate::auth::AccessRules;
+use crate::{auth::AccessRules, component::OwnedValue};
 
 pub trait ComponentInterface {
     type Component: ComponentInstanceInterface;
@@ -13,6 +13,8 @@ pub trait ComponentInterface {
     }
 
     fn create_with_access_rules(self, access_rules: AccessRules) -> Self::Component;
+
+    fn get_owned_values(&self) -> Vec<OwnedValue>;
 }
 
 pub trait ComponentInstanceInterface {

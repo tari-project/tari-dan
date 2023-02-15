@@ -24,7 +24,7 @@ use std::fmt::{Display, Formatter};
 
 use tari_bor::{borsh, Decode, Encode};
 
-use crate::{hash::HashParseError, models::TemplateAddress, prelude::AccessRules, Hash};
+use crate::{component::OwnedValue, hash::HashParseError, models::TemplateAddress, prelude::AccessRules, Hash};
 
 #[derive(Debug, Clone, Copy, Hash, PartialEq, Eq, PartialOrd, Ord, Encode, Decode)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
@@ -95,11 +95,16 @@ impl ComponentHeader {
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct ComponentBody {
     pub state: Vec<u8>,
+    pub owned_values: Vec<OwnedValue>,
 }
 
 impl ComponentBody {
     pub fn set(&mut self, state: Vec<u8>) -> &mut Self {
         self.state = state;
         self
+    }
+
+    pub fn set_owned_values(&mut self, owned_values: Vec<OwnedValue>) {
+        self.owned_values = owned_values;
     }
 }
