@@ -30,8 +30,6 @@ use tari_comms_logging::LoggedMessage;
 use types::{
     GetRecentTransactionsRequest,
     GetRecentTransactionsResponse,
-    GetTransactionRequest,
-    GetTransactionResponse,
     GetTransactionResultRequest,
     GetTransactionResultResponse,
     SubmitTransactionRequest,

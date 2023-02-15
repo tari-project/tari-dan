@@ -54,7 +54,7 @@ use tari_validator_node_client::types::{
     GetIdentityResponse,
     GetRecentTransactionsRequest,
     GetTemplateRequest,
-    GetTransactionRequest,
+    GetTransactionResultRequest,
     TemplateRegistrationResponse,
 };
 use utils::{
@@ -573,7 +573,7 @@ async fn successful_transaction(world: &mut TariWorld) {
             assert_eq!(payload_id.len(), 32);
 
             let hash = FixedHash::try_from(payload_id).unwrap();
-            let get_transaction_req = GetTransactionRequest { hash };
+            let get_transaction_req = GetTransactionResultRequest { hash };
             let get_transaction_res = client.get_transaction_result(get_transaction_req).await.unwrap();
             let finalized_tx = get_transaction_res.result.unwrap();
 
