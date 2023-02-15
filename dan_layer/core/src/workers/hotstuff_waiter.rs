@@ -632,6 +632,13 @@ where
             .send((leader.clone(), new_view))
             .await
             .map_err(|_| HotStuffError::SendError)?;
+        self.pacemaker
+            .start_timer(
+                PacemakerEvents::LocalCommittee(epoch, shard_id, payload_id),
+                self.network_latency * (2 << *current_leader),
+            )
+            .await
+            .unwrap();
         // Election started
         self.election_in_progress.insert((shard_id, payload_id));
         Ok(())
