@@ -6172,6 +6172,32 @@ dependencies = [
 ]
 
 [[package]]
+name = "tari_dan_app_utilities"
+version = "0.45.0"
+dependencies = [
+ "anyhow",
+ "async-trait",
+ "log",
+ "tari_app_grpc",
+ "tari_base_node_grpc_client",
+ "tari_common_types",
+ "tari_comms",
+ "tari_core",
+ "tari_crypto",
+ "tari_dan_common_types",
+ "tari_dan_core",
+ "tari_dan_engine",
+ "tari_dan_storage",
+ "tari_dan_storage_sqlite",
+ "tari_shutdown",
+ "tari_template_lib",
+ "tari_validator_node_client",
+ "thiserror",
+ "tokio",
+ "tonic",
+]
+
+[[package]]
 name = "tari_dan_common_types"
 version = "0.35.1"
 dependencies = [
