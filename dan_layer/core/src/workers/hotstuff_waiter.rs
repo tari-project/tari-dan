@@ -83,7 +83,7 @@ use crate::{
 };
 
 const LOG_TARGET: &str = "tari::dan_layer::hotstuff_waiter";
-pub const NETWORK_LATENCY: Duration = Duration::from_secs(60);
+pub const NETWORK_LATENCY: Duration = Duration::from_secs(10);
 
 // This is the value that we wait over in the pacemaker. So when it trigger we know what triggered it.
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]

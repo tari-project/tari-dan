@@ -28,6 +28,10 @@ use serde_json as json;
 use serde_json::json;
 use tari_comms_logging::LoggedMessage;
 use types::{
+    GetRecentTransactionsRequest,
+    GetRecentTransactionsResponse,
+    GetTransactionRequest,
+    GetTransactionResponse,
     GetTransactionResponseRequest,
     GetTransactionResultResponse,
     SubmitTransactionRequest,
@@ -121,6 +125,13 @@ impl ValidatorNodeClient {
         request: GetTransactionQcsRequest,
     ) -> Result<GetTransactionQcsResponse, anyhow::Error> {
         self.send_request("get_transaction_qcs", request).await
+    }
+
+    pub async fn get_recent_transactions(
+        &mut self,
+        request: GetRecentTransactionsRequest,
+    ) -> Result<GetRecentTransactionsResponse, anyhow::Error> {
+        self.send_request("get_recent_transactions", request).await
     }
 
     pub async fn submit_transaction(

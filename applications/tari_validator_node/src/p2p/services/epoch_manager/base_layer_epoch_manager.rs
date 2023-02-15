@@ -429,9 +429,7 @@ impl BaseLayerEpochManager {
                 return Ok(());
             }
         }
-
         self.refresh_base_layer_consensus_constants().await?;
-
         let vn_shard_key = match self.get_validator_shard_key(self.current_epoch, self.node_identity.public_key())? {
             Some(vn_shard_key) => vn_shard_key,
             None => {

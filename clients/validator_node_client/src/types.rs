@@ -28,6 +28,7 @@ use tari_dan_common_types::{
     Epoch,
     ShardId,
 };
+use tari_dan_core::models::RecentTransaction;
 use tari_engine_types::{commit_result::FinalizeResult, TemplateAddress};
 use tari_transaction::Transaction;
 
@@ -180,6 +181,14 @@ pub struct GetTransactionQcsRequest {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct GetTransactionQcsResponse {
     pub qcs: Vec<QuorumCertificate>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct GetRecentTransactionsRequest {}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct GetRecentTransactionsResponse {
+    pub transactions: Vec<RecentTransaction>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

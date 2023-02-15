@@ -702,7 +702,7 @@ impl ShardStoreReadTransaction<PublicKey, TariDanPayload> for SqliteShardStoreRe
     }
 
     fn get_recent_transactions(&self) -> Result<Vec<RecentTransaction>, StorageError> {
-        let res = sql_query("select payload_id,timestamp,meta,instructions from payloads")
+        let res = sql_query("select payload_id,timestamp,meta,instructions from payloads order by timestamp desc")
             .load::<QueryableRecentTransaction>(self.transaction.connection())
             .map_err(|e| StorageError::QueryError {
                 reason: format!("Get recent transactions: {}", e),
@@ -749,7 +749,8 @@ impl ShardStoreReadTransaction<PublicKey, TariDanPayload> for SqliteShardStoreRe
         .map_err(|e| StorageError::QueryError {
             reason: format!("Get transaction: {}", e),
         })?;
-        Ok(res.into_iter().map(|transaction| transaction.into()).collect())
+        let res = res.into_iter().map(|transaction| transaction.into()).collect();
+        Ok(res)
     }
 
     fn get_substates_for_payload(
