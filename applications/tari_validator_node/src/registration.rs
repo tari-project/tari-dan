@@ -170,6 +170,14 @@ async fn handle_epoch_changed(
     node_identity: &NodeIdentity,
     epoch_manager: &EpochManagerHandle,
 ) -> Result<(), AutoRegistrationError> {
+    if epoch_manager.last_registration_epoch().await?.is_none() {
+        info!(
+            target: LOG_TARGET,
+            "📋️ Validator has never registered. Auto-registration will only occur after initial registration."
+        );
+        return Ok(());
+    }
+
     let remaining_epochs = epoch_manager.remaining_registration_epochs().await?.unwrap_or(Epoch(0));
     if remaining_epochs.is_zero() {
         let wallet_client = GrpcWalletClient::new(config.validator_node.wallet_grpc_address.unwrap_or_else(|| {
