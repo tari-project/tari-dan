@@ -12,7 +12,7 @@ use tari_engine_types::{
 };
 use tari_transaction::Transaction;
 use tari_validator_node_client::{
-    types::{GetTransactionQcsRequest, GetTransactionResponseRequest, SubmitTransactionRequest},
+    types::{GetTransactionQcsRequest, GetTransactionResultRequest, SubmitTransactionRequest},
     ValidatorNodeClient,
 };
 
@@ -114,7 +114,7 @@ impl<'a, TStore: WalletStore> TransactionApi<'a, TStore> {
         let mut client = self.get_validator_node_client()?;
 
         let resp = client
-            .get_transaction_result(GetTransactionResponseRequest { hash })
+            .get_transaction_result(GetTransactionResultRequest { hash })
             .await
             // TODO: If the transaction is not found, we should set the status to Rejected. We need better errors in the client for this.
             .map_err(TransactionApiError::ValidatorNodeClientError)?;

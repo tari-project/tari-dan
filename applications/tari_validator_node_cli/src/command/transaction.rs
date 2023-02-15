@@ -49,7 +49,7 @@ use tari_transaction_manifest::parse_manifest;
 use tari_utilities::hex::to_hex;
 use tari_validator_node_client::{
     types::{
-        GetTransactionResponseRequest,
+        GetTransactionResultRequest,
         SubmitTransactionRequest,
         SubmitTransactionResponse,
         TransactionFinalizeResult,
@@ -155,7 +155,7 @@ impl TransactionSubcommand {
 }
 
 async fn handle_get(args: GetArgs, client: &mut ValidatorNodeClient) -> Result<(), anyhow::Error> {
-    let request = GetTransactionResponseRequest {
+    let request = GetTransactionResultRequest {
         hash: args.transaction_hash.into_inner(),
     };
     let resp = client.get_transaction_result(request).await?;

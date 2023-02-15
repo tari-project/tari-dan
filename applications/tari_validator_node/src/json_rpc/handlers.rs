@@ -53,7 +53,7 @@ use tari_validator_node_client::types::{
     GetTemplatesResponse,
     GetTransactionQcsRequest,
     GetTransactionQcsResponse,
-    GetTransactionResponseRequest,
+    GetTransactionResultRequest,
     GetTransactionResultResponse,
     SubmitTransactionRequest,
     SubmitTransactionResponse,
@@ -243,7 +243,7 @@ impl JsonRpcHandlers {
 
     pub async fn get_transaction_result(&self, value: JsonRpcExtractor) -> JrpcResult {
         let answer_id = value.get_answer_id();
-        let request: GetTransactionResponseRequest = value.parse_params()?;
+        let request: GetTransactionResultRequest = value.parse_params()?;
         let payload_id = PayloadId::new(request.hash);
 
         let tx = self.shard_store.create_read_tx().unwrap();

@@ -32,7 +32,7 @@ use types::{
     GetRecentTransactionsResponse,
     GetTransactionRequest,
     GetTransactionResponse,
-    GetTransactionResponseRequest,
+    GetTransactionResultRequest,
     GetTransactionResultResponse,
     SubmitTransactionRequest,
     TemplateRegistrationRequest,
@@ -115,7 +115,7 @@ impl ValidatorNodeClient {
 
     pub async fn get_transaction_result(
         &mut self,
-        request: GetTransactionResponseRequest,
+        request: GetTransactionResultRequest,
     ) -> Result<GetTransactionResultResponse, anyhow::Error> {
         self.send_request("get_transaction_result", request).await
     }

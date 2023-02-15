@@ -162,7 +162,7 @@ pub struct SubstatesRequest {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct GetTransactionResponseRequest {
+pub struct GetTransactionResultRequest {
     #[serde(with = "serde_with::hex")]
     pub hash: FixedHash,
 }
