@@ -69,8 +69,8 @@ use tari_dan_core::{
         StorageError,
     },
 };
-use tari_engine_types::{instruction::Instruction, signature::InstructionSignature};
-use tari_transaction::{Transaction, TransactionMeta};
+use tari_engine_types::instruction::Instruction;
+use tari_transaction::{InstructionSignature, Transaction, TransactionMeta};
 use tari_utilities::{
     hex::{to_hex, Hex},
     ByteArray,
@@ -295,6 +295,24 @@ impl ShardStoreReadTransaction<PublicKey, TariDanPayload> for SqliteShardStoreRe
         Ok(qc)
     }
 
+    fn get_high_qcs(&self, payload_id: PayloadId) -> Result<Vec<QuorumCertificate>, StorageError> {
+        use crate::schema::high_qcs;
+
+        let qcs: Vec<HighQc> = high_qcs::table
+            .filter(high_qcs::payload_id.eq(payload_id.as_bytes()))
+            .order_by(high_qcs::height.desc())
+            .get_results(self.transaction.connection())
+            .map_err(|e| StorageError::QueryError {
+                reason: format!("Get high qc error: {}", e),
+            })?;
+
+        let qcs = qcs
+            .into_iter()
+            .map(|qc| serde_json::from_str(&qc.qc_json).unwrap())
+            .collect();
+        Ok(qcs)
+    }
+
     fn get_leaf_node(&self, payload_id: &PayloadId, shard: &ShardId) -> Result<LeafNode, StorageError> {
         use crate::schema::leaf_nodes;
         let leaf_node: Option<DbLeafNode> = leaf_nodes::table
@@ -345,9 +363,10 @@ impl ShardStoreReadTransaction<PublicKey, TariDanPayload> for SqliteShardStoreRe
         let signature =
             PrivateKey::from_bytes(payload.scalar.as_slice()).map_err(StorageError::InvalidByteArrayConversion)?;
 
-        let signature: InstructionSignature = InstructionSignature::try_from(Signature::new(public_nonce, signature))
-            .map_err(|e| StorageError::InvalidTypeCasting {
-            reason: format!("Get payload error: {}", e),
+        let signature = InstructionSignature::try_from(Signature::new(public_nonce, signature)).map_err(|e| {
+            StorageError::InvalidTypeCasting {
+                reason: format!("Get payload error: {}", e),
+            }
         })?;
 
         let sender_public_key =

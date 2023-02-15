@@ -173,6 +173,7 @@ pub struct RecentTransaction {
     pub instructions: String,
 }
 
+// TODO: These should be well-formed structs, no SQL in core
 #[derive(Debug, Serialize)]
 pub struct SQLTransaction {
     pub node_hash: Vec<u8>,
