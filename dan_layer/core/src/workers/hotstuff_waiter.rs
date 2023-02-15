@@ -635,7 +635,7 @@ where
         self.pacemaker
             .start_timer(
                 PacemakerEvents::LocalCommittee(epoch, shard_id, payload_id),
-                self.network_latency * 2,
+                self.network_latency * (2 << *current_leader),
             )
             .await
             .unwrap();
