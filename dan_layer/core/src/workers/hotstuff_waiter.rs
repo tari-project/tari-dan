@@ -49,6 +49,7 @@ use tari_engine_types::{
     commit_result::{FinalizeResult, RejectReason, TransactionResult},
     substate::SubstateDiff,
 };
+use tari_mmr::common::LeafIndex;
 use tari_shutdown::ShutdownSignal;
 use tari_transaction::SubstateChange;
 use tokio::{
@@ -1448,7 +1449,7 @@ where
                 .verify_leaf::<ValidatorNodeMmrHasherBlake256>(
                     &validator_node_root,
                     &*md.get_node_hash(),
-                    md.merkle_leaf_index as usize,
+                    LeafIndex(md.merkle_leaf_index as usize),
                 )
                 .map_err(|e| HotStuffError::InvalidQuorumCertificate(format!("invalid merkle proof: {}", e)))?;
         }

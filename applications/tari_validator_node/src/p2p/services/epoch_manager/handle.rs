@@ -26,6 +26,7 @@ use tari_comms::types::CommsPublicKey;
 use tari_core::{transactions::transaction_components::ValidatorNodeRegistration, ValidatorNodeMmr};
 use tari_dan_common_types::{Epoch, ShardId};
 use tari_dan_core::{
+    consensus_constants::BaseLayerConsensusConstants,
     models::{Committee, ValidatorNode},
     services::epoch_manager::{EpochManager, EpochManagerError, ShardCommitteeAllocation},
 };
@@ -56,6 +57,15 @@ impl EpochManagerHandle {
         rx.await.map_err(|_| EpochManagerError::ReceiveError)?
     }
 
+    pub async fn get_base_layer_consensus_constants(&self) -> Result<BaseLayerConsensusConstants, EpochManagerError> {
+        let (tx, rx) = oneshot::channel();
+        self.tx_request
+            .send(EpochManagerRequest::GetBaseLayerConsensusConstants { reply: tx })
+            .await
+            .map_err(|_| EpochManagerError::SendError)?;
+        rx.await.map_err(|_| EpochManagerError::ReceiveError)?
+    }
+
     pub async fn last_registration_epoch(&self) -> Result<Option<Epoch>, EpochManagerError> {
         let (tx, rx) = oneshot::channel();
         self.tx_request
@@ -72,6 +82,16 @@ impl EpochManagerHandle {
             .await
             .map_err(|_| EpochManagerError::SendError)?;
 
+        rx.await.map_err(|_| EpochManagerError::ReceiveError)?
+    }
+
+    /// Returns the number of epochs remaining for the current registration if registered, otherwise None
+    pub async fn remaining_registration_epochs(&self) -> Result<Option<Epoch>, EpochManagerError> {
+        let (tx, rx) = oneshot::channel();
+        self.tx_request
+            .send(EpochManagerRequest::RemainingRegistrationEpochs { reply: tx })
+            .await
+            .map_err(|_| EpochManagerError::SendError)?;
         rx.await.map_err(|_| EpochManagerError::ReceiveError)?
     }
 

@@ -125,7 +125,9 @@ impl BaseLayerEpochManager {
         Ok(())
     }
 
-    async fn get_base_layer_consensus_constants(&mut self) -> Result<&BaseLayerConsensusConstants, EpochManagerError> {
+    pub async fn get_base_layer_consensus_constants(
+        &mut self,
+    ) -> Result<&BaseLayerConsensusConstants, EpochManagerError> {
         if let Some(ref constants) = self.base_layer_consensus_constants {
             return Ok(constants);
         }
@@ -470,6 +472,24 @@ impl BaseLayerEpochManager {
         tx.commit()?;
 
         Ok(())
+    }
+
+    pub async fn remaining_registration_epochs(&mut self) -> Result<Option<Epoch>, EpochManagerError> {
+        let last_registration_epoch = match self.last_registration_epoch()? {
+            Some(epoch) => epoch,
+            None => return Ok(None),
+        };
+
+        let constants = self.get_base_layer_consensus_constants().await?;
+        let expiry = constants.validator_node_registration_expiry();
+
+        let num_blocks_since_last_reg = self
+            .current_epoch
+            .checked_sub(last_registration_epoch)
+            .expect("current epoch was less than the epoch we registered"); // Reorgs are not supported
+
+        // None indicates that we are not registered, or a previous registration has expired
+        Ok(expiry.checked_sub(num_blocks_since_last_reg))
     }
 }
 

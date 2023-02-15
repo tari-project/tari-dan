@@ -28,7 +28,7 @@ use tari_comms::{types::CommsPublicKey, NodeIdentity};
 use tari_core::{transactions::transaction_components::ValidatorNodeRegistration, ValidatorNodeMmr};
 use tari_dan_common_types::{Epoch, ShardId};
 use tari_dan_core::{
-    consensus_constants::ConsensusConstants,
+    consensus_constants::{BaseLayerConsensusConstants, ConsensusConstants},
     models::{Committee, ValidatorNode},
     services::epoch_manager::{EpochManagerError, ShardCommitteeAllocation},
 };
@@ -130,6 +130,12 @@ pub enum EpochManagerRequest {
     },
     NotifyScanningComplete {
         reply: Reply<()>,
+    },
+    RemainingRegistrationEpochs {
+        reply: Reply<Option<Epoch>>,
+    },
+    GetBaseLayerConsensusConstants {
+        reply: Reply<BaseLayerConsensusConstants>,
     },
 }
 
@@ -252,6 +258,12 @@ impl EpochManagerService {
             // TODO: This should be rather be a state machine event
             EpochManagerRequest::NotifyScanningComplete { reply } => {
                 handle(reply, self.inner.on_scanning_complete().await)
+            },
+            EpochManagerRequest::RemainingRegistrationEpochs { reply } => {
+                handle(reply, self.inner.remaining_registration_epochs().await)
+            },
+            EpochManagerRequest::GetBaseLayerConsensusConstants { reply } => {
+                handle(reply, self.inner.get_base_layer_consensus_constants().await.cloned())
             },
         }
     }

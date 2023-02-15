@@ -34,12 +34,20 @@ impl Epoch {
         self.0
     }
 
+    pub fn is_zero(&self) -> bool {
+        self.0 == 0
+    }
+
     pub fn to_le_bytes(self) -> [u8; 8] {
         self.0.to_le_bytes()
     }
 
     pub fn saturating_sub(&self, other: Epoch) -> Epoch {
         Epoch(self.0.saturating_sub(other.0))
+    }
+
+    pub fn checked_sub(&self, other: Self) -> Option<Epoch> {
+        self.0.checked_sub(other.0).map(Epoch)
     }
 }
 
