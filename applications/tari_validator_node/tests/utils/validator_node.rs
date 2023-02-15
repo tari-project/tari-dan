@@ -53,6 +53,7 @@ pub async fn spawn_validator_node(
     validator_node_name: String,
     base_node_name: String,
     wallet_name: String,
+    is_seed_vn: bool,
 ) {
     // each spawned VN will use different ports
     let (port, json_rpc_port) = get_os_assigned_ports();
@@ -68,7 +69,7 @@ pub async fn spawn_validator_node(
     let temp_dir = tempdir().unwrap().path().join(validator_node_name.clone());
     let temp_dir_path = temp_dir.display().to_string();
     let peer_seeds: Vec<String> = world
-        .validator_nodes
+        .vn_seeds
         .values()
         .map(|vn| format!("{}::/ip4/127.0.0.1/tcp/{}", vn.public_key, vn.port))
         .collect();
@@ -115,7 +116,6 @@ pub async fn spawn_validator_node(
 
         // Add all other VNs as peer seeds
         config.peer_seeds.peer_seeds = StringList::from(peer_seeds);
-
         let result = run_validator_node(&config, shutdown_signal).await;
         if let Err(e) = result {
             panic!("{:?}", e);
@@ -147,7 +147,11 @@ pub async fn spawn_validator_node(
         temp_dir_path,
         shutdown,
     };
-    world.validator_nodes.insert(name, validator_node_process);
+    if is_seed_vn {
+        world.vn_seeds.insert(name, validator_node_process);
+    } else {
+        world.validator_nodes.insert(name, validator_node_process);
+    }
 }
 
 pub async fn get_vn_client(port: u16) -> ValidatorNodeClient {
@@ -162,4 +166,10 @@ async fn get_vn_identity(jrpc_port: u16) -> String {
 
     assert!(!resp.public_key.is_empty());
     resp.public_key
+}
+
+impl ValidatorNodeProcess {
+    pub fn stop(&mut self) {
+        self.shutdown.trigger();
+    }
 }

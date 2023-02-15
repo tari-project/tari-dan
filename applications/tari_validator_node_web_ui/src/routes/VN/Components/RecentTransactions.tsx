@@ -174,10 +174,11 @@ function RecentTransactions() {
   };
 
   useEffect(() => {
-    getRecentTransactions().then((recentTransactions) => {
+    getRecentTransactions().then((resp) => {
       setRecentTransactions(
         // Display from newest to oldest by reversing
-        recentTransactions
+        resp
+          .transactions
           .slice()
           .reverse()
           .map(

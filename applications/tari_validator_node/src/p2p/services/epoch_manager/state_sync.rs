@@ -82,7 +82,6 @@ impl<TShardStore: ShardStore> PeerSyncManagerService<TShardStore> {
                 .create_connection()
                 .await
                 .map_err(EpochManagerError::ValidatorNodeClientError)?;
-
             let request = p2p::proto::rpc::VnStateSyncRequest {
                 start_shard_id: Some(start_shard_id.into()),
                 end_shard_id: Some(end_shard_id.into()),
@@ -92,7 +91,6 @@ impl<TShardStore: ShardStore> PeerSyncManagerService<TShardStore> {
                 .vn_state_sync(request)
                 .await
                 .map_err(EpochManagerError::RpcError)?;
-
             info!(target: LOG_TARGET, "🌍 Syncing...");
             let mut substate_count = 0;
             while let Some(resp) = vn_state_stream.next().await {
