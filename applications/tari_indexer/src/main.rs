@@ -23,7 +23,7 @@
 use std::{panic, process};
 
 use log::*;
-use tari_common::{exit_codes::ExitError, load_configuration};
+use tari_common::{exit_codes::ExitError, initialize_logging, load_configuration};
 use tari_indexer::{cli::Cli, config::ApplicationConfig, run_indexer};
 use tari_shutdown::Shutdown;
 
@@ -58,6 +58,13 @@ async fn main_inner() -> Result<(), ExitError> {
     println!("Starting validator node on network {}", config.network);
 
     let mut shutdown = Shutdown::new();
+    if let Err(e) = initialize_logging(
+        &cli.common.log_config_path("indexer"),
+        include_str!("../log4rs_sample.yml"),
+    ) {
+        eprintln!("{}", e);
+    }
+
     run_indexer(config, shutdown.to_signal()).await?;
     shutdown.trigger();
 
