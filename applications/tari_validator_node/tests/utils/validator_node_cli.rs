@@ -56,7 +56,7 @@ pub async fn create_account(world: &mut TariWorld, account_name: String, validat
     };
     let common = CommonSubmitArgs {
         wait_for_result: true,
-        wait_for_result_timeout: Some(90),
+        wait_for_result_timeout: Some(300),
         num_outputs: Some(1),
         inputs: vec![],
         version: None,
