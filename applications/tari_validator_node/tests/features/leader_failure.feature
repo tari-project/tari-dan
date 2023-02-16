@@ -67,7 +67,7 @@ Feature: Leader failure scenarios
     Then all validator nodes are listed as registered
 
     # Stop VN 4
-    # When I stop validator node VAL_4
+    When I stop validator node VAL_4
 
     # A file-base CLI account must be created to sign future calls
     When I create a DAN wallet
