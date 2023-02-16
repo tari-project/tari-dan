@@ -41,7 +41,7 @@ use tari_dan_app_utilities::{
 };
 use tari_dan_core::consensus_constants::ConsensusConstants;
 use tari_dan_storage::global::GlobalDb;
-use tari_dan_storage_sqlite::{global::SqliteGlobalDbAdapter, sqlite_shard_store_factory::SqliteShardStore};
+use tari_dan_storage_sqlite::global::SqliteGlobalDbAdapter;
 use tari_shutdown::ShutdownSignal;
 use tokio::sync::mpsc;
 
@@ -55,6 +55,7 @@ use crate::{
             rpc_client::TariCommsValidatorNodeClientFactory,
         },
     },
+    substate_storage_sqlite::sqlite_substate_store_factory::SqliteSubstateStore,
     ApplicationConfig,
 };
 
@@ -82,14 +83,13 @@ pub async fn spawn_services(
     let (comms, _) = comms::initialize(node_identity.clone(), config, shutdown.clone()).await?;
     let peer_provider = CommsPeerProvider::new(comms.peer_manager());
 
-    // Connect to shard db
-    let shard_store = SqliteShardStore::try_create(config.indexer.state_db_path())?;
+    // Connect to substate db
+    let _substate_store = SqliteSubstateStore::try_create(config.indexer.state_db_path())?;
 
     // Epoch manager
     let validator_node_client_factory = TariCommsValidatorNodeClientFactory::new(comms.connectivity());
     let epoch_manager = epoch_manager::spawn(
         global_db.clone(),
-        shard_store.clone(),
         base_node_client.clone(),
         consensus_constants.clone(),
         shutdown.clone(),
@@ -108,7 +108,7 @@ pub async fn spawn_services(
         config.indexer.base_layer_scanning_interval,
     );
 
-    let comms = setup_p2p_rpc(config, comms, peer_provider, shard_store.clone());
+    let comms = setup_p2p_rpc(config, comms, peer_provider);
     let comms = comms::spawn_comms_using_transport(comms, p2p_config.transport.clone())
         .await
         .map_err(|e| ExitError::new(ExitCode::ConfigError, format!("Could not spawn using transport: {}", e)))?;
@@ -119,7 +119,6 @@ pub async fn spawn_services(
     Ok(Services {
         comms,
         epoch_manager,
-        shard_store,
         validator_node_client_factory,
     })
 }
@@ -127,7 +126,6 @@ pub async fn spawn_services(
 pub struct Services {
     pub comms: CommsNode,
     pub epoch_manager: EpochManagerHandle,
-    pub shard_store: SqliteShardStore,
     pub validator_node_client_factory: TariCommsValidatorNodeClientFactory,
 }
 
@@ -135,12 +133,11 @@ fn setup_p2p_rpc(
     config: &ApplicationConfig,
     comms: UnspawnedCommsNode,
     peer_provider: CommsPeerProvider,
-    shard_store_store: SqliteShardStore,
 ) -> UnspawnedCommsNode {
     let rpc_server = RpcServer::builder()
         .with_maximum_simultaneous_sessions(config.indexer.p2p.rpc_max_simultaneous_sessions)
         .finish()
-        .add_service(create_validator_node_rpc_service(peer_provider, shard_store_store));
+        .add_service(create_validator_node_rpc_service(peer_provider));
 
     comms.add_protocol_extension(rpc_server)
 }

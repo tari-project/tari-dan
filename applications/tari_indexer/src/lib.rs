@@ -20,6 +20,11 @@
 // WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 // USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+#[macro_use]
+extern crate diesel;
+#[macro_use]
+extern crate diesel_migrations;
+
 mod bootstrap;
 pub mod cli;
 mod comms;
@@ -27,6 +32,7 @@ pub mod config;
 mod dan_layer_scanner;
 mod json_rpc;
 mod p2p;
+mod substate_storage_sqlite;
 
 use std::{
     net::{IpAddr, Ipv4Addr, SocketAddr},

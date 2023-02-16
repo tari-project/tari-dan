@@ -29,7 +29,6 @@ use tari_dan_app_grpc::{
 };
 use tari_dan_common_types::NodeAddressable;
 use tari_dan_core::services::PeerProvider;
-use tari_dan_storage_sqlite::sqlite_shard_store_factory::SqliteShardStore;
 use tokio::{sync::mpsc, task};
 
 const LOG_TARGET: &str = "vn::p2p::rpc";
@@ -38,15 +37,11 @@ use crate::p2p::rpc::ValidatorNodeRpcService;
 
 pub struct ValidatorNodeRpcServiceImpl<TPeerProvider> {
     peer_provider: TPeerProvider,
-    shard_state_store: SqliteShardStore,
 }
 
 impl<TPeerProvider: PeerProvider> ValidatorNodeRpcServiceImpl<TPeerProvider> {
-    pub fn new(peer_provider: TPeerProvider, shard_state_store: SqliteShardStore) -> Self {
-        Self {
-            peer_provider,
-            shard_state_store,
-        }
+    pub fn new(peer_provider: TPeerProvider) -> Self {
+        Self { peer_provider }
     }
 }
 

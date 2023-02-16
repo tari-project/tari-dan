@@ -1,4 +1,4 @@
-//  Copyright 2023. The Tari Project
+//  Copyright 2021. The Tari Project
 //
 //  Redistribution and use in source and binary forms, with or without modification, are permitted provided that the
 //  following conditions are met:
@@ -20,34 +20,4 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use tari_dan_app_utilities::{base_node_client::GrpcBaseNodeClient, epoch_manager::EpochManagerHandle};
-use tari_dan_core::consensus_constants::ConsensusConstants;
-use tari_dan_storage::global::GlobalDb;
-use tari_dan_storage_sqlite::global::SqliteGlobalDbAdapter;
-use tari_shutdown::ShutdownSignal;
-use tokio::sync::mpsc;
-
-use crate::p2p::services::{
-    epoch_manager::epoch_manager_service::EpochManagerService,
-    rpc_client::TariCommsValidatorNodeClientFactory,
-};
-
-pub fn spawn(
-    global_db: GlobalDb<SqliteGlobalDbAdapter>,
-    base_node_client: GrpcBaseNodeClient,
-    consensus_constants: ConsensusConstants,
-    shutdown: ShutdownSignal,
-    validator_node_client_factory: TariCommsValidatorNodeClientFactory,
-) -> EpochManagerHandle {
-    let (tx_request, rx_request) = mpsc::channel(10);
-    let handle = EpochManagerHandle::new(tx_request);
-    EpochManagerService::spawn(
-        rx_request,
-        shutdown,
-        global_db,
-        base_node_client,
-        consensus_constants,
-        validator_node_client_factory,
-    );
-    handle
-}
+pub mod substate;

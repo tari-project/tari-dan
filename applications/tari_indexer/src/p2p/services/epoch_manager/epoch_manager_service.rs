@@ -27,7 +27,7 @@ use tari_dan_app_utilities::{
 };
 use tari_dan_core::{consensus_constants::ConsensusConstants, services::epoch_manager::EpochManagerError};
 use tari_dan_storage::global::GlobalDb;
-use tari_dan_storage_sqlite::{global::SqliteGlobalDbAdapter, sqlite_shard_store_factory::SqliteShardStore};
+use tari_dan_storage_sqlite::global::SqliteGlobalDbAdapter;
 use tari_shutdown::ShutdownSignal;
 use tokio::{
     sync::{broadcast, mpsc::Receiver, oneshot},
@@ -55,7 +55,6 @@ impl EpochManagerService {
         rx_request: Receiver<EpochManagerRequest>,
         shutdown: ShutdownSignal,
         global_db: GlobalDb<SqliteGlobalDbAdapter>,
-        shard_store: SqliteShardStore,
         base_node_client: GrpcBaseNodeClient,
         consensus_constants: ConsensusConstants,
         validator_node_client_factory: TariCommsValidatorNodeClientFactory,
@@ -66,7 +65,6 @@ impl EpochManagerService {
                 rx_request,
                 inner: BaseLayerEpochManager::new(
                     global_db,
-                    shard_store,
                     base_node_client,
                     consensus_constants,
                     validator_node_client_factory,

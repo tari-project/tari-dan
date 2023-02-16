@@ -29,7 +29,6 @@ use tari_comms::protocol::rpc::{Request, Response, RpcStatus, Streaming};
 use tari_comms_rpc_macros::tari_rpc;
 use tari_dan_app_grpc::proto;
 use tari_dan_core::services::PeerProvider;
-use tari_dan_storage_sqlite::sqlite_shard_store_factory::SqliteShardStore;
 
 #[tari_rpc(protocol_name = b"t/vn/1", server_struct = ValidatorNodeRpcServer, client_struct = ValidatorNodeRpcClient)]
 pub trait ValidatorNodeRpcService: Send + Sync + 'static {
@@ -54,10 +53,7 @@ pub trait ValidatorNodeRpcService: Send + Sync + 'static {
 
 pub fn create_validator_node_rpc_service<TPeerProvider>(
     peer_provider: TPeerProvider,
-    shard_store_store: SqliteShardStore,
 ) -> ValidatorNodeRpcServer<ValidatorNodeRpcServiceImpl<TPeerProvider>>
-where
-    TPeerProvider: PeerProvider + Clone + Send + Sync + 'static,
-{
-    ValidatorNodeRpcServer::new(ValidatorNodeRpcServiceImpl::new(peer_provider, shard_store_store))
+where TPeerProvider: PeerProvider + Clone + Send + Sync + 'static {
+    ValidatorNodeRpcServer::new(ValidatorNodeRpcServiceImpl::new(peer_provider))
 }

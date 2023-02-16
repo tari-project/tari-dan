@@ -38,7 +38,7 @@ use tari_dan_core::{
     },
 };
 use tari_dan_storage::global::{DbEpoch, DbValidatorNode, GlobalDb, MetadataKey};
-use tari_dan_storage_sqlite::{global::SqliteGlobalDbAdapter, sqlite_shard_store_factory::SqliteShardStore};
+use tari_dan_storage_sqlite::global::SqliteGlobalDbAdapter;
 
 use crate::p2p::services::rpc_client::TariCommsValidatorNodeClientFactory;
 
@@ -47,7 +47,6 @@ const LOG_TARGET: &str = "tari::indexer::epoch_manager::base_layer_epoch_manager
 #[derive(Clone)]
 pub struct BaseLayerEpochManager {
     global_db: GlobalDb<SqliteGlobalDbAdapter>,
-    shard_store: SqliteShardStore,
     pub base_node_client: GrpcBaseNodeClient,
     consensus_constants: ConsensusConstants,
     current_epoch: Epoch,
@@ -58,14 +57,12 @@ pub struct BaseLayerEpochManager {
 impl BaseLayerEpochManager {
     pub fn new(
         global_db: GlobalDb<SqliteGlobalDbAdapter>,
-        shard_store: SqliteShardStore,
         base_node_client: GrpcBaseNodeClient,
         consensus_constants: ConsensusConstants,
         validator_node_client_factory: TariCommsValidatorNodeClientFactory,
     ) -> Self {
         Self {
             global_db,
-            shard_store,
             base_node_client,
             consensus_constants,
             current_epoch: Epoch(0),
