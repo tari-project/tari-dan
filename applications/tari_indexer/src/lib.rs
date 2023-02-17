@@ -32,6 +32,7 @@ pub mod config;
 mod dan_layer_scanner;
 mod json_rpc;
 mod p2p;
+mod substate_manager;
 mod substate_storage_sqlite;
 
 use std::{
@@ -42,6 +43,7 @@ use std::{
 use dan_layer_scanner::DanLayerScanner;
 pub use json_rpc::GetSubstateRequest;
 use log::*;
+use substate_manager::SubstateManager;
 use tari_app_utilities::identity_management::setup_node_identity;
 use tari_common::{
     configuration::bootstrap::{grpc_default_port, ApplicationType},
@@ -95,10 +97,12 @@ pub async fn run_indexer(config: ApplicationConfig, mut shutdown_signal: Shutdow
         services.substate_store.clone(),
     );
 
+    let substate_manager = SubstateManager::new(Arc::new(dan_layer_scanner), services.substate_store.clone());
+
     // Run the JSON-RPC API
     if let Some(json_rpc_address) = config.indexer.json_rpc_address {
         info!(target: LOG_TARGET, "🌐 Started JSON-RPC server on {}", json_rpc_address);
-        let handlers = JsonRpcHandlers::new(&services, base_node_client, Arc::new(dan_layer_scanner));
+        let handlers = JsonRpcHandlers::new(&services, base_node_client, Arc::new(substate_manager));
         task::spawn(run_json_rpc(json_rpc_address, handlers));
     }
 

@@ -65,4 +65,4 @@ Feature: Indexer node
     Then the indexer IDX returns version 0 for substate TX2/nfts/0
     
     # When I print the cucumber world
-    # When I wait 5000 seconds
+    # When I wait 5000 seconds

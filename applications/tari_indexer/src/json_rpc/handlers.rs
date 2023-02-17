@@ -22,7 +22,6 @@
 
 use std::{str::FromStr, sync::Arc};
 
-use anyhow::anyhow;
 use axum_jrpc::{
     error::{JsonRpcError, JsonRpcErrorReason},
     JrpcResult,
@@ -35,39 +34,24 @@ use tari_comms::CommsNode;
 use tari_dan_core::services::BaseNodeClient;
 use tari_engine_types::substate::SubstateAddress;
 
-use crate::{
-    bootstrap::Services,
-    dan_layer_scanner::DanLayerScanner,
-    substate_storage_sqlite::{
-        models::substate::NewSubstate,
-        sqlite_substate_store_factory::{
-            SqliteSubstateStore,
-            SubstateStore,
-            SubstateStoreReadTransaction,
-            SubstateStoreWriteTransaction,
-        },
-    },
-    GrpcBaseNodeClient,
-};
+use crate::{bootstrap::Services, substate_manager::SubstateManager, GrpcBaseNodeClient};
 
 pub struct JsonRpcHandlers {
     comms: CommsNode,
     base_node_client: GrpcBaseNodeClient,
-    dan_layer_scanner: Arc<DanLayerScanner>,
-    substate_store: SqliteSubstateStore,
+    substate_manager: Arc<SubstateManager>,
 }
 
 impl JsonRpcHandlers {
     pub fn new(
         services: &Services,
         base_node_client: GrpcBaseNodeClient,
-        dan_layer_scanner: Arc<DanLayerScanner>,
+        substate_manager: Arc<SubstateManager>,
     ) -> Self {
         Self {
             comms: services.comms.clone(),
             base_node_client,
-            dan_layer_scanner,
-            substate_store: services.substate_store.clone(),
+            substate_manager,
         }
     }
 }
@@ -97,14 +81,16 @@ impl JsonRpcHandlers {
     pub async fn get_substate(&self, value: JsonRpcExtractor) -> JrpcResult {
         let answer_id = value.get_answer_id();
         let request: GetSubstateRequest = value.parse_params()?;
-        let substate_address_str: String = request.address;
-        let substate_address = SubstateAddress::from_str(&substate_address_str).unwrap();
+        let substate_address = Self::parse_substate_address(&request.address, answer_id)?;
+        let version = request.version;
 
-        match self
-            .dan_layer_scanner
-            .get_substate(substate_address, request.version)
+        let res = self
+            .substate_manager
+            .get_substate(&substate_address, version)
             .await
-        {
+            .unwrap_or(None);
+
+        match res {
             Some(substate) => Ok(JsonRpcResponse::success(answer_id, substate)),
             None => Err(Self::generic_error_response(answer_id)),
         }
@@ -112,74 +98,53 @@ impl JsonRpcHandlers {
 
     pub async fn get_addresses(&self, value: JsonRpcExtractor) -> JrpcResult {
         let answer_id = value.get_answer_id();
-        let tx = self.substate_store.create_read_tx().unwrap();
-        if let Ok(addresses) = tx.get_all_addresses() {
-            Ok(JsonRpcResponse::success(answer_id, addresses))
-        } else {
-            Err(Self::generic_error_response(answer_id))
+
+        let res = self.substate_manager.get_all_addresses_from_db().await;
+
+        match res {
+            Ok(addresses) => Ok(JsonRpcResponse::success(answer_id, addresses)),
+            Err(_) => Err(Self::generic_error_response(answer_id)),
         }
     }
 
     pub async fn add_address(&self, value: JsonRpcExtractor) -> JrpcResult {
         let answer_id = value.get_answer_id();
         let request: AddAddressRequest = value.parse_params()?;
+        let substate_address = Self::parse_substate_address(&request.address, answer_id)?;
 
-        match self.add_address_inner(request.address).await {
+        match self
+            .substate_manager
+            .fetch_and_add_substate_to_db(&substate_address)
+            .await
+        {
             Ok(_) => Ok(JsonRpcResponse::success(answer_id, ())),
             Err(_) => Err(Self::generic_error_response(answer_id)),
         }
     }
 
-    // TODO: move to a separate service
-    async fn add_address_inner(&self, address: String) -> Result<(), anyhow::Error> {
-        let substate_address = SubstateAddress::from_str(&address).unwrap();
-
-        // get the last version of the substate from the dan layer
-        let substate_scan_result = self.dan_layer_scanner.get_substate(substate_address, None).await;
-
-        // store the substate into the database
-        if let Some(substate) = substate_scan_result {
-            let pretty_data = serde_json::to_string_pretty(&substate).unwrap();
-            let mut tx = self.substate_store.create_write_tx().unwrap();
-            let substate_row = NewSubstate {
-                address,
-                version: i64::from(substate.version()),
-                data: pretty_data,
-            };
-            // if the substate is already stored it will be updated with the new version and data,
-            // otherwise it will be inserted as a new row
-            tx.set_substate(substate_row)?;
-            tx.commit()?;
-
-            return Ok(());
-        }
-
-        Err(anyhow!("Substate not found in the network"))
-    }
-
     pub async fn delete_address(&self, value: JsonRpcExtractor) -> JrpcResult {
         let answer_id = value.get_answer_id();
         let request: DeleteAddressRequest = value.parse_params()?;
+        let substate_address = Self::parse_substate_address(&request.address, answer_id)?;
 
-        let mut tx = self.substate_store.create_write_tx().unwrap();
-        if tx.delete_substate(request.address).is_ok() {
-            tx.commit().unwrap();
-            return Ok(JsonRpcResponse::success(answer_id, ()));
+        match self.substate_manager.delete_substate_from_db(&substate_address).await {
+            Ok(_) => Ok(JsonRpcResponse::success(answer_id, ())),
+            Err(_) => Err(Self::generic_error_response(answer_id)),
         }
-
-        Err(Self::generic_error_response(answer_id))
     }
 
     pub async fn clear_addresses(&self, value: JsonRpcExtractor) -> JrpcResult {
         let answer_id = value.get_answer_id();
 
-        let mut tx = self.substate_store.create_write_tx().unwrap();
-        if tx.clear_substates().is_ok() {
-            tx.commit().unwrap();
-            return Ok(JsonRpcResponse::success(answer_id, ()));
+        match self.substate_manager.delete_all_substates_from_db().await {
+            Ok(_) => Ok(JsonRpcResponse::success(answer_id, ())),
+            Err(_) => Err(Self::generic_error_response(answer_id)),
         }
+    }
 
-        Err(Self::generic_error_response(answer_id))
+    fn parse_substate_address(address_str: &str, answer_id: i64) -> Result<SubstateAddress, JsonRpcResponse> {
+        let address = SubstateAddress::from_str(address_str).map_err(|_| Self::generic_error_response(answer_id))?;
+        Ok(address)
     }
 
     fn generic_error_response(answer_id: i64) -> JsonRpcResponse {

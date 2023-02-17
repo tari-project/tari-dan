@@ -60,12 +60,12 @@ impl DanLayerScanner {
         }
     }
 
-    pub async fn get_substate(&self, substate_address: SubstateAddress, version: Option<u32>) -> Option<Substate> {
+    pub async fn get_substate(&self, substate_address: &SubstateAddress, version: Option<u32>) -> Option<Substate> {
         let epoch = self.epoch_manager.current_epoch().await.unwrap();
 
         // we store the latest version of the substates in the watchlist,
         // so we will return the substate directly from database if it's there
-        if let Some(substate) = self.get_substate_from_db(&substate_address).await {
+        if let Some(substate) = self.get_substate_from_db(substate_address).await {
             match version {
                 // the user has not specified an specific version, so we return the substate
                 None => return Some(substate),
@@ -81,10 +81,10 @@ impl DanLayerScanner {
         // the substate is not in db (or is not the requested version) so we fetch it from the dan layer commitee
         let result = match version {
             Some(version) => {
-                self.get_specific_substate_from_commitee(&substate_address, version, epoch)
+                self.get_specific_substate_from_commitee(substate_address, version, epoch)
                     .await
             },
-            None => self.get_latest_substate_from_commitee(&substate_address, epoch).await,
+            None => self.get_latest_substate_from_commitee(substate_address, epoch).await,
         };
 
         match result {
