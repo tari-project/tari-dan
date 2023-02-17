@@ -9,3 +9,5 @@ use crate::{models::ResourceAddress, Hash};
 pub const PUBLIC_IDENTITY_RESOURCE: ResourceAddress = ResourceAddress::new(Hash::from_array([
     1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
 ]));
+
+pub const SECOND_LAYER_TARI_RESOURCE: ResourceAddress = ResourceAddress::new(Hash::from_array([1u8; 32]));

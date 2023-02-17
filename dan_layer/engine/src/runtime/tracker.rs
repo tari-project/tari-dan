@@ -400,7 +400,7 @@ impl StateTracker {
         let resource = match resource_type {
             ResourceType::Fungible => ResourceContainer::fungible(resource_address, 0.into()),
             ResourceType::NonFungible => ResourceContainer::non_fungible(resource_address, BTreeSet::new()),
-            ResourceType::Confidential => todo!("new_vault: thaum resource"),
+            ResourceType::Confidential => ResourceContainer::confidential(resource_address, vec![]),
         };
         let vault = Vault::new(vault_id, resource);
 

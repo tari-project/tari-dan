@@ -36,6 +36,13 @@ impl ResourceContainer {
         ResourceContainer::NonFungible { address, token_ids }
     }
 
+    pub fn confidential(
+        address: ResourceAddress,
+        commitments: Vec<(PublicKey, BulletRangeProof)>,
+    ) -> ResourceContainer {
+        ResourceContainer::Confidential { address, commitments }
+    }
+
     pub fn amount(&self) -> Amount {
         match self {
             ResourceContainer::Fungible { amount, .. } => *amount,

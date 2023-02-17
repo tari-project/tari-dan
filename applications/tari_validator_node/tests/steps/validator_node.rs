@@ -67,6 +67,7 @@ async fn when_i_claim_burn(
         .unwrap_or_else(|| panic!("Account {} not found", account_name));
 
     let account_address = world.get_account_component_address(&account_name).unwrap();
+    let component_address = ComponentAddress::from_str(&account_address).expect("Invalid account address");
 
     let instructions = [
         Instruction::ClaimBurn {
@@ -76,13 +77,14 @@ async fn when_i_claim_burn(
         },
         Instruction::PutLastInstructionOutputOnWorkspace { key: b"burn".to_vec() },
         Instruction::CallMethod {
-            component_address: ComponentAddress::from_str(&account_address).expect("Invalid account address"),
+            component_address,
             method: "deposit_confidential".to_string(),
             args: vec![Arg::Variable(b"burn".to_vec())],
         },
     ];
 
     let account_shard = ShardId::from_address(&SubstateAddress::from_str(&account_address).unwrap(), 0);
+    let next_account_shard = ShardId::from_address(&SubstateAddress::from_str(&account_address).unwrap(), 1);
 
     let signature = InstructionSignature::sign(&account.0, &instructions);
     let request = SubmitTransactionRequest {
@@ -93,8 +95,9 @@ async fn when_i_claim_burn(
         inputs: vec![
             (shard_id, SubstateChange::Destroy),
             (account_shard, SubstateChange::Destroy),
+            (next_account_shard, SubstateChange::Create),
         ],
-        num_outputs: 2,
+        num_outputs: 5,
         wait_for_result: true,
         wait_for_result_timeout: None,
         is_dry_run: false,
