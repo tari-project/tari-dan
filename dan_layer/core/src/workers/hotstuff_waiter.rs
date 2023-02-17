@@ -49,7 +49,7 @@ use tari_engine_types::{
     commit_result::{FinalizeResult, RejectReason, TransactionResult},
     substate::SubstateDiff,
 };
-use tari_mmr::common::LeafIndex;
+use tari_mmr::leaf_index::LeafIndex;
 use tari_shutdown::ShutdownSignal;
 use tari_transaction::SubstateChange;
 use tokio::{

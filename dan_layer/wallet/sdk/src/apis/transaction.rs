@@ -198,6 +198,9 @@ impl<'a, TStore: WalletStore> TransactionApi<'a, TStore> {
                         version: substate.version(),
                     });
                 },
+                addr @ SubstateAddress::LayerOneCommitment(_) => {
+                    todo!("Not supported");
+                },
             }
         }
 
