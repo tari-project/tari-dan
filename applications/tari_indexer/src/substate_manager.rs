@@ -20,7 +20,7 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use std::sync::Arc;
+use std::{str::FromStr, sync::Arc};
 
 use anyhow::anyhow;
 use log::info;
@@ -29,7 +29,7 @@ use tari_engine_types::substate::{Substate, SubstateAddress, SubstateValue};
 use crate::{
     dan_layer_scanner::DanLayerScanner,
     substate_storage_sqlite::{
-        models::substate::NewSubstate,
+        models::substate::{NewSubstate, Substate as SubstateRow},
         sqlite_substate_store_factory::{
             SqliteSubstateStore,
             SubstateStore,
@@ -61,15 +61,10 @@ impl SubstateManager {
         // store the substate into the database
         match substate_scan_result {
             Some(substate) => {
-                let pretty_data = serde_json::to_string_pretty(&substate).unwrap();
-                let mut tx = self.substate_store.create_write_tx().unwrap();
-                let substate_row = NewSubstate {
-                    address: substate_address.to_address_string(),
-                    version: i64::from(substate.version()),
-                    data: pretty_data,
-                };
                 // if the substate is already stored it will be updated with the new version and data,
                 // otherwise it will be inserted as a new row
+                let substate_row = map_substate_to_db_row(substate_address, &substate)?;
+                let mut tx = self.substate_store.create_write_tx().unwrap();
                 tx.set_substate(substate_row)?;
                 tx.commit()?;
 
@@ -142,9 +137,7 @@ impl SubstateManager {
             }
 
             // the substate is present in db and the version matches the requested version
-            let data: SubstateValue = serde_json::from_str(&row.data).unwrap();
-            let version = row.version as u32;
-            let substate = Substate::new(version, data);
+            let substate = map_db_row_to_substate(&row)?;
             return Ok(Some(substate));
         };
 
@@ -161,7 +154,40 @@ impl SubstateManager {
     }
 
     #[allow(dead_code)]
-    pub async fn scan_and_update_substates(&self) {
-        todo!()
+    pub async fn scan_and_update_substates(&self) -> Result<(), anyhow::Error> {
+        // fetch all substates from db
+        let mut tx = self.substate_store.create_write_tx().unwrap();
+        let db_rows: Vec<SubstateRow> = tx.get_all_substates()?;
+
+        // try to get the newest version of each substate in the dan layer, and update the row in the db
+        for row in db_rows {
+            let address = SubstateAddress::from_str(&row.address)?;
+            let res = self.dan_layer_scanner.get_substate(&address, None).await;
+            if let Some(substate) = res {
+                let updated_row = map_substate_to_db_row(&address, &substate)?;
+                tx.set_substate(updated_row)?;
+            }
+        }
+
+        tx.commit()?;
+
+        Ok(())
     }
+}
+
+fn map_db_row_to_substate(row: &SubstateRow) -> Result<Substate, anyhow::Error> {
+    let data: SubstateValue = serde_json::from_str(&row.data).unwrap();
+    let version = row.version as u32;
+    let substate = Substate::new(version, data);
+    Ok(substate)
+}
+
+fn map_substate_to_db_row(address: &SubstateAddress, substate: &Substate) -> Result<NewSubstate, anyhow::Error> {
+    let pretty_data = serde_json::to_string_pretty(&substate)?;
+    let row = NewSubstate {
+        address: address.to_address_string(),
+        version: i64::from(substate.version()),
+        data: pretty_data,
+    };
+    Ok(row)
 }

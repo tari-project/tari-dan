@@ -159,36 +159,53 @@ impl<'a> SqliteSubstateStoreReadTransaction<'a> {
 pub trait SubstateStoreReadTransaction {
     fn get_substate(&self, address: String) -> Result<Option<Substate>, StorageError>;
     fn get_all_addresses(&self) -> Result<Vec<String>, StorageError>;
+    fn get_all_substates(&self) -> Result<Vec<Substate>, StorageError>;
 }
 
 impl SubstateStoreReadTransaction for SqliteSubstateStoreReadTransaction<'_> {
     fn get_substate(&self, address: String) -> Result<Option<Substate>, StorageError> {
-        use crate::substate_storage_sqlite::schema::{substates, substates::address as address_field};
+        use crate::substate_storage_sqlite::schema::substates;
 
         let substate = substates::table
-            .filter(address_field.eq(address))
+            .filter(substates::address.eq(address))
             .first(self.connection())
             .optional()
             .map_err(|e| StorageError::QueryError {
-                reason: format!("Get substate: {}", e),
+                reason: format!("get_substate: {}", e),
             })?;
 
         Ok(substate)
     }
 
     fn get_all_addresses(&self) -> Result<Vec<String>, StorageError> {
-        use crate::substate_storage_sqlite::schema::{substates, substates::address as address_field};
+        use crate::substate_storage_sqlite::schema::substates;
 
         let addresses = substates::table
-            .select(address_field)
+            .select(substates::address)
             .get_results(self.connection())
             .optional()
             .map_err(|e| StorageError::QueryError {
-                reason: format!("Get substate: {}", e),
+                reason: format!("get_all_addresses: {}", e),
             })?;
 
         match addresses {
             Some(address_vec) => Ok(address_vec),
+            None => Ok(vec![]),
+        }
+    }
+
+    fn get_all_substates(&self) -> Result<Vec<Substate>, StorageError> {
+        use crate::substate_storage_sqlite::schema::substates;
+
+        let substates = substates::table
+            .get_results(self.connection())
+            .optional()
+            .map_err(|e| StorageError::QueryError {
+                reason: format!("get_all_substates: {}", e),
+            })?;
+
+        match substates {
+            Some(substates_vec) => Ok(substates_vec),
             None => Ok(vec![]),
         }
     }
