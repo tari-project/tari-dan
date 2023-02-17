@@ -28,8 +28,10 @@ use serde_json as json;
 use serde_json::json;
 use tari_comms_logging::LoggedMessage;
 use types::{
-    GetTransactionRequest,
-    GetTransactionResponse,
+    GetRecentTransactionsRequest,
+    GetRecentTransactionsResponse,
+    GetTransactionResultRequest,
+    GetTransactionResultResponse,
     SubmitTransactionRequest,
     TemplateRegistrationRequest,
     TemplateRegistrationResponse,
@@ -43,6 +45,8 @@ use crate::types::{
     GetTemplateResponse,
     GetTemplatesRequest,
     GetTemplatesResponse,
+    GetTransactionQcsRequest,
+    GetTransactionQcsResponse,
     SubmitTransactionResponse,
 };
 
@@ -59,6 +63,7 @@ pub struct EpochManagerStats {
     pub is_valid: bool,
 }
 
+// TODO: the client should return a proper error type
 impl ValidatorNodeClient {
     pub fn connect<T: IntoUrl>(endpoint: T) -> Result<Self, anyhow::Error> {
         let client = reqwest::Client::builder()
@@ -114,18 +119,33 @@ impl ValidatorNodeClient {
         self.send_request("get_template", request).await
     }
 
-    pub async fn get_transaction(
-        &mut self,
-        request: GetTransactionRequest,
-    ) -> Result<GetTransactionResponse, anyhow::Error> {
-        self.send_request("get_transaction", request).await
-    }
+    // TODO: This call is broken because it returns a Vec<SQLTransaction>. Bring this in-line with other requests
+    // pub async fn get_transaction(
+    //     &mut self,
+    //     request: GetTransactionResponseRequest,
+    // ) -> Result<GetTransactionResponse, anyhow::Error> {
+    //     self.send_request("get_transaction", request).await
+    // }
 
     pub async fn get_transaction_result(
         &mut self,
-        request: GetTransactionRequest,
-    ) -> Result<GetTransactionResponse, anyhow::Error> {
+        request: GetTransactionResultRequest,
+    ) -> Result<GetTransactionResultResponse, anyhow::Error> {
         self.send_request("get_transaction_result", request).await
+    }
+
+    pub async fn get_transaction_quorum_certificates(
+        &mut self,
+        request: GetTransactionQcsRequest,
+    ) -> Result<GetTransactionQcsResponse, anyhow::Error> {
+        self.send_request("get_transaction_qcs", request).await
+    }
+
+    pub async fn get_recent_transactions(
+        &mut self,
+        request: GetRecentTransactionsRequest,
+    ) -> Result<GetRecentTransactionsResponse, anyhow::Error> {
+        self.send_request("get_recent_transactions", request).await
     }
 
     pub async fn submit_transaction(

@@ -28,13 +28,9 @@ use tari_dan_common_types::{
     Epoch,
     ShardId,
 };
-use tari_engine_types::{
-    commit_result::FinalizeResult,
-    instruction::Instruction,
-    signature::InstructionSignature,
-    TemplateAddress,
-};
-use tari_transaction::SubstateChange;
+use tari_dan_core::models::RecentTransaction;
+use tari_engine_types::{commit_result::FinalizeResult, TemplateAddress};
+use tari_transaction::Transaction;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct GetIdentityResponse {
@@ -130,13 +126,7 @@ pub struct TemplateMetadata {
 /// ```
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SubmitTransactionRequest {
-    // pub transaction: Transaction,
-    pub instructions: Vec<Instruction>,
-    pub signature: InstructionSignature,
-    pub fee: u64,
-    pub sender_public_key: PublicKey,
-    pub inputs: Vec<(ShardId, SubstateChange)>,
-    pub num_outputs: u8,
+    pub transaction: Transaction,
     /// Set to true to wait for the transaction to complete before returning
     #[serde(default)]
     pub wait_for_result: bool,
@@ -172,14 +162,33 @@ pub struct SubstatesRequest {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct GetTransactionRequest {
+pub struct GetTransactionResultRequest {
     #[serde(with = "serde_with::hex")]
     pub hash: FixedHash,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct GetTransactionResponse {
+pub struct GetTransactionResultResponse {
     pub result: Option<FinalizeResult>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct GetTransactionQcsRequest {
+    #[serde(with = "serde_with::hex")]
+    pub hash: FixedHash,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct GetTransactionQcsResponse {
+    pub qcs: Vec<QuorumCertificate>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct GetRecentTransactionsRequest {}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct GetRecentTransactionsResponse {
+    pub transactions: Vec<RecentTransaction>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

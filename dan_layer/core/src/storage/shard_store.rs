@@ -112,6 +112,7 @@ impl From<StorageError> for StoreError {
 
 pub trait ShardStoreReadTransaction<TAddr: NodeAddressable, TPayload: Payload> {
     fn get_high_qc_for(&self, payload_id: PayloadId, shard: ShardId) -> Result<QuorumCertificate, StorageError>;
+    fn get_high_qcs(&self, payload_id: PayloadId) -> Result<Vec<QuorumCertificate>, StorageError>;
     /// Returns the current leaf node for the shard
     fn get_leaf_node(&self, payload_id: &PayloadId, shard: &ShardId) -> Result<LeafNode, StorageError>;
     fn get_payload(&self, payload_id: &PayloadId) -> Result<TPayload, StorageError>;

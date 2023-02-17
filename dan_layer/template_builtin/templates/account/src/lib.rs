@@ -36,6 +36,7 @@ mod account_template {
         pub fn create(owner_token: NonFungibleAddress) -> AccountComponent {
             let rules = AccessRules::new()
                 .add_method_rule("balance", AccessRule::AllowAll)
+                .add_method_rule("get_balances", AccessRule::AllowAll)
                 .add_method_rule("deposit", AccessRule::AllowAll)
                 .add_method_rule("deposit_all", AccessRule::AllowAll)
                 .add_method_rule("get_non_fungible_ids", AccessRule::AllowAll)
@@ -112,6 +113,10 @@ mod account_template {
 
         fn get_vault_mut(&mut self, resource: ResourceAddress) -> Option<&mut Vault> {
             self.vaults.get_mut(&resource)
+        }
+
+        pub fn get_balances(&self) -> Vec<(ResourceAddress, Amount)> {
+            self.vaults.iter().map(|(k, v)| (*k, v.balance())).collect()
         }
     }
 }

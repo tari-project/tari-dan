@@ -116,6 +116,16 @@ fn generate_abi_type(rust_type: &TypeAst) -> Expr {
                                     name => parse_quote!(Type::Other { name: #name.to_string() }),
                                 }
                             },
+                            GenericArgument::Type(Type::Tuple(tuple)) => {
+                                // FIXME: improve
+                                let tuple_str = tuple
+                                    .elems
+                                    .iter()
+                                    .map(|t| format!("{:?}", t))
+                                    .collect::<Vec<_>>()
+                                    .join(",");
+                                parse_quote!(Type::Other { name: #tuple_str.to_string() })
+                            },
                             // TODO: These should be errors
                             a => panic!("Invalid vec generic argument {:?}", a),
                         }

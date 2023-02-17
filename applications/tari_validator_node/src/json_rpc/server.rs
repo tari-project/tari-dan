@@ -31,7 +31,7 @@ use super::handlers::JsonRpcHandlers;
 
 const LOG_TARGET: &str = "tari::validator_node::json_rpc";
 
-pub async fn run_json_rpc(preferred_address: SocketAddr, handlers: JsonRpcHandlers) -> Result<(), anyhow::Error> {
+pub fn spawn_json_rpc(preferred_address: SocketAddr, handlers: JsonRpcHandlers) -> Result<SocketAddr, anyhow::Error> {
     let router = Router::new()
         .route("/", post(handler))
         .route("/json_rpc", post(handler))
@@ -46,11 +46,12 @@ pub async fn run_json_rpc(preferred_address: SocketAddr, handlers: JsonRpcHandle
         axum::Server::try_bind(&"127.0.0.1:0".parse().unwrap())
     })?;
     let server = server.serve(router.into_make_service());
-    info!(target: LOG_TARGET, "🌐 JSON-RPC listening on {}", server.local_addr());
-    server.await?;
+    let addr = server.local_addr();
+    info!(target: LOG_TARGET, "🌐 JSON-RPC listening on {}", addr);
+    tokio::spawn(server);
 
     info!(target: LOG_TARGET, "💤 Stopping JSON-RPC");
-    Ok(())
+    Ok(addr)
 }
 
 async fn handler(Extension(handlers): Extension<Arc<JsonRpcHandlers>>, value: JsonRpcExtractor) -> JrpcResult {
@@ -62,6 +63,7 @@ async fn handler(Extension(handlers): Extension<Arc<JsonRpcHandlers>>, value: Js
         "get_recent_transactions" => handlers.get_recent_transactions(value).await,
         "get_transaction" => handlers.get_transaction(value).await,
         "get_transaction_result" => handlers.get_transaction_result(value).await,
+        "get_transaction_qcs" => handlers.get_transaction_qcs(value).await,
         "get_state" => handlers.get_state(value).await,
         "get_substates" => handlers.get_substates(value).await,
         // Template

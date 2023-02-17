@@ -73,6 +73,9 @@ impl GrpcBaseNodeClient {
         let consensus_constants = BaseLayerConsensusConstants {
             validator_node_registration_expiry: result.validator_node_validity_period,
             epoch_length: result.epoch_length,
+            validator_node_registration_min_deposit_amount: result
+                .validator_node_registration_min_deposit_amount
+                .into(),
         };
         Ok(consensus_constants)
     }

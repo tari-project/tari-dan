@@ -137,6 +137,7 @@ where T: Clone + Debug + PartialEq + Eq + Hash + Send + Sync + 'static
 
     async fn handle_pending_timeout_ended(&mut self, wait_over: T, has_timed_out: bool) {
         if has_timed_out {
+            info!(target: LOG_TARGET, "Waiter has timed out for value: {:?}", wait_over);
             // at this point it is safe to remove the wait_over from pending_timeouts
             // so that this data structure doesn't grow every time.
             // When the signal was triggered it was removed in the handle_stop_signal.

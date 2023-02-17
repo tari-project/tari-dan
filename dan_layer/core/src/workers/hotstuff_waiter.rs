@@ -49,6 +49,7 @@ use tari_engine_types::{
     commit_result::{FinalizeResult, RejectReason, TransactionResult},
     substate::SubstateDiff,
 };
+use tari_mmr::common::LeafIndex;
 use tari_shutdown::ShutdownSignal;
 use tari_transaction::SubstateChange;
 use tokio::{
@@ -82,7 +83,7 @@ use crate::{
 };
 
 const LOG_TARGET: &str = "tari::dan_layer::hotstuff_waiter";
-pub const NETWORK_LATENCY: Duration = Duration::from_secs(60);
+pub const NETWORK_LATENCY: Duration = Duration::from_secs(10);
 
 // This is the value that we wait over in the pacemaker. So when it trigger we know what triggered it.
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]
@@ -631,6 +632,13 @@ where
             .send((leader.clone(), new_view))
             .await
             .map_err(|_| HotStuffError::SendError)?;
+        self.pacemaker
+            .start_timer(
+                PacemakerEvents::LocalCommittee(epoch, shard_id, payload_id),
+                self.network_latency * (2 << *current_leader),
+            )
+            .await
+            .unwrap();
         // Election started
         self.election_in_progress.insert((shard_id, payload_id));
         Ok(())
@@ -1448,7 +1456,7 @@ where
                 .verify_leaf::<ValidatorNodeMmrHasherBlake256>(
                     &validator_node_root,
                     &*md.get_node_hash(),
-                    md.merkle_leaf_index as usize,
+                    LeafIndex(md.merkle_leaf_index as usize),
                 )
                 .map_err(|e| HotStuffError::InvalidQuorumCertificate(format!("invalid merkle proof: {}", e)))?;
         }
