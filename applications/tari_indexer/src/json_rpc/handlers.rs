@@ -34,12 +34,26 @@ use tari_comms::CommsNode;
 use tari_dan_core::services::BaseNodeClient;
 use tari_engine_types::substate::SubstateAddress;
 
-use crate::{bootstrap::Services, dan_layer_scanner::DanLayerScanner, GrpcBaseNodeClient};
+use crate::{
+    bootstrap::Services,
+    dan_layer_scanner::DanLayerScanner,
+    substate_storage_sqlite::{
+        models::substate::NewSubstate,
+        sqlite_substate_store_factory::{
+            SqliteSubstateStore,
+            SubstateStore,
+            SubstateStoreReadTransaction,
+            SubstateStoreWriteTransaction,
+        },
+    },
+    GrpcBaseNodeClient,
+};
 
 pub struct JsonRpcHandlers {
     comms: CommsNode,
     base_node_client: GrpcBaseNodeClient,
     dan_layer_scanner: Arc<DanLayerScanner>,
+    substate_store: SqliteSubstateStore,
 }
 
 impl JsonRpcHandlers {
@@ -52,6 +66,7 @@ impl JsonRpcHandlers {
             comms: services.comms.clone(),
             base_node_client,
             dan_layer_scanner,
+            substate_store: services.substate_store.clone(),
         }
     }
 }
@@ -64,14 +79,7 @@ impl JsonRpcHandlers {
             let response = json!({ "vns": vns });
             Ok(JsonRpcResponse::success(answer_id, response))
         } else {
-            Err(JsonRpcResponse::error(
-                answer_id,
-                JsonRpcError::new(
-                    JsonRpcErrorReason::InvalidParams,
-                    "Something went wrong".to_string(),
-                    json::Value::Null,
-                ),
-            ))
+            Err(Self::generic_error_response(answer_id))
         }
     }
 
@@ -81,14 +89,7 @@ impl JsonRpcHandlers {
             let response = json!({ "connection_status": format!("{:?}", stats) });
             Ok(JsonRpcResponse::success(answer_id, response))
         } else {
-            Err(JsonRpcResponse::error(
-                answer_id,
-                JsonRpcError::new(
-                    JsonRpcErrorReason::InvalidParams,
-                    "Something went wrong".to_string(),
-                    json::Value::Null,
-                ),
-            ))
+            Err(Self::generic_error_response(answer_id))
         }
     }
 
@@ -104,15 +105,80 @@ impl JsonRpcHandlers {
             .await
         {
             Some(substate) => Ok(JsonRpcResponse::success(answer_id, substate)),
-            None => Err(JsonRpcResponse::error(
-                answer_id,
-                JsonRpcError::new(
-                    JsonRpcErrorReason::InvalidParams,
-                    "Could not retrieve the substate from the network".to_string(),
-                    json::Value::Null,
-                ),
-            )),
+            None => Err(Self::generic_error_response(answer_id)),
         }
+    }
+
+    pub async fn get_addresses(&self, value: JsonRpcExtractor) -> JrpcResult {
+        let answer_id = value.get_answer_id();
+        let tx = self.substate_store.create_read_tx().unwrap();
+        if let Ok(addresses) = tx.get_all_addresses() {
+            Ok(JsonRpcResponse::success(answer_id, addresses))
+        } else {
+            Err(Self::generic_error_response(answer_id))
+        }
+    }
+
+    pub async fn add_address(&self, value: JsonRpcExtractor) -> JrpcResult {
+        let answer_id = value.get_answer_id();
+        let request: AddAddressRequest = value.parse_params()?;
+        let substate_address_str: String = request.address;
+        let substate_address = SubstateAddress::from_str(&substate_address_str).unwrap();
+
+        // get the last version of the substate from the dan layer
+        let substate_scan_result = self.dan_layer_scanner.get_substate(substate_address, None).await;
+
+        // store the substate into the database
+        if let Some(substate) = substate_scan_result {
+            let pretty_data = serde_json::to_string_pretty(&substate).unwrap();
+            let mut tx = self.substate_store.create_write_tx().unwrap();
+            let substate_row = NewSubstate {
+                address: substate_address_str,
+                version: i64::from(substate.version()),
+                data: pretty_data,
+            };
+            // if the substate is already stored it will be updated with the new version and data,
+            // otherwise it will be inserted as a new row
+            if tx.set_substate(substate_row).is_ok() {
+                return Ok(JsonRpcResponse::success(answer_id, ()));
+            }
+        }
+
+        Err(Self::generic_error_response(answer_id))
+    }
+
+    pub async fn delete_address(&self, value: JsonRpcExtractor) -> JrpcResult {
+        let answer_id = value.get_answer_id();
+        let request: DeleteAddressRequest = value.parse_params()?;
+
+        let mut tx = self.substate_store.create_write_tx().unwrap();
+        if tx.delete_substate(request.address).is_ok() {
+            return Ok(JsonRpcResponse::success(answer_id, ()));
+        }
+
+        Err(Self::generic_error_response(answer_id))
+    }
+
+    pub async fn clear_addresses(&self, value: JsonRpcExtractor) -> JrpcResult {
+        let answer_id = value.get_answer_id();
+
+        let mut tx = self.substate_store.create_write_tx().unwrap();
+        if tx.clear_substates().is_ok() {
+            return Ok(JsonRpcResponse::success(answer_id, ()));
+        }
+
+        Err(Self::generic_error_response(answer_id))
+    }
+
+    fn generic_error_response(answer_id: i64) -> JsonRpcResponse {
+        JsonRpcResponse::error(
+            answer_id,
+            JsonRpcError::new(
+                JsonRpcErrorReason::InvalidParams,
+                "Something went wrong".to_string(),
+                json::Value::Null,
+            ),
+        )
     }
 }
 
@@ -120,4 +186,14 @@ impl JsonRpcHandlers {
 pub struct GetSubstateRequest {
     pub address: String,
     pub version: Option<u32>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AddAddressRequest {
+    pub address: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DeleteAddressRequest {
+    pub address: String,
 }

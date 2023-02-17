@@ -84,7 +84,7 @@ pub async fn spawn_services(
     let peer_provider = CommsPeerProvider::new(comms.peer_manager());
 
     // Connect to substate db
-    let _substate_store = SqliteSubstateStore::try_create(config.indexer.state_db_path())?;
+    let substate_store = SqliteSubstateStore::try_create(config.indexer.state_db_path())?;
 
     // Epoch manager
     let validator_node_client_factory = TariCommsValidatorNodeClientFactory::new(comms.connectivity());
@@ -120,6 +120,7 @@ pub async fn spawn_services(
         comms,
         epoch_manager,
         validator_node_client_factory,
+        substate_store,
     })
 }
 
@@ -127,6 +128,7 @@ pub struct Services {
     pub comms: CommsNode,
     pub epoch_manager: EpochManagerHandle,
     pub validator_node_client_factory: TariCommsValidatorNodeClientFactory,
+    pub substate_store: SqliteSubstateStore,
 }
 
 fn setup_p2p_rpc(

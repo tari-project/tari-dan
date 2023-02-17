@@ -29,12 +29,7 @@ use std::{
 
 use diesel::{prelude::*, SqliteConnection};
 use log::warn;
-use tari_common_types::types::PublicKey;
-use tari_dan_common_types::NodeAddressable;
-use tari_dan_core::{
-    models::{Payload, TariDanPayload},
-    storage::StorageError,
-};
+use tari_dan_core::storage::StorageError;
 use tari_dan_storage_sqlite::{error::SqliteStorageError, SqliteTransaction};
 use thiserror::Error;
 
@@ -69,15 +64,25 @@ impl SqliteSubstateStore {
             connection: Arc::new(Mutex::new(connection)),
         })
     }
+
+    pub fn find_by_address(address: String, conn: &SqliteConnection) -> Result<Option<Substate>, StorageError> {
+        use crate::substate_storage_sqlite::schema::substates;
+
+        let substate_option = substates::table
+            .filter(substates::address.eq(address))
+            .first(conn)
+            .optional()
+            .map_err(|e| StorageError::QueryError {
+                reason: format!("find_by_address: {}", e),
+            })?;
+
+        Ok(substate_option)
+    }
 }
 pub trait SubstateStore {
-    type Addr: NodeAddressable;
-    type Payload: Payload;
-
-    type ReadTransaction<'a>: SubstateStoreReadTransaction<Self::Addr, Self::Payload>
+    type ReadTransaction<'a>: SubstateStoreReadTransaction
     where Self: 'a;
-    type WriteTransaction<'a>: SubstateStoreWriteTransaction<Self::Addr, Self::Payload>
-        + Deref<Target = Self::ReadTransaction<'a>>
+    type WriteTransaction<'a>: SubstateStoreWriteTransaction + Deref<Target = Self::ReadTransaction<'a>>
     where Self: 'a;
 
     fn create_read_tx(&self) -> Result<Self::ReadTransaction<'_>, StorageError>;
@@ -123,8 +128,6 @@ impl From<StorageError> for StoreError {
 }
 
 impl SubstateStore for SqliteSubstateStore {
-    type Addr = PublicKey;
-    type Payload = TariDanPayload;
     type ReadTransaction<'a> = SqliteSubstateStoreReadTransaction<'a>;
     type WriteTransaction<'a> = SqliteSubstateStoreWriteTransaction<'a>;
 
@@ -153,11 +156,12 @@ impl<'a> SqliteSubstateStoreReadTransaction<'a> {
     }
 }
 
-pub trait SubstateStoreReadTransaction<TAddr: NodeAddressable, TPayload: Payload> {
+pub trait SubstateStoreReadTransaction {
     fn get_substate(&self, address: String) -> Result<Option<Substate>, StorageError>;
+    fn get_all_addresses(&self) -> Result<Vec<String>, StorageError>;
 }
 
-impl SubstateStoreReadTransaction<PublicKey, TariDanPayload> for SqliteSubstateStoreReadTransaction<'_> {
+impl SubstateStoreReadTransaction for SqliteSubstateStoreReadTransaction<'_> {
     fn get_substate(&self, address: String) -> Result<Option<Substate>, StorageError> {
         use crate::substate_storage_sqlite::schema::{substates, substates::address as address_field};
 
@@ -170,6 +174,23 @@ impl SubstateStoreReadTransaction<PublicKey, TariDanPayload> for SqliteSubstateS
             })?;
 
         Ok(substate)
+    }
+
+    fn get_all_addresses(&self) -> Result<Vec<String>, StorageError> {
+        use crate::substate_storage_sqlite::schema::{substates, substates::address as address_field};
+
+        let addresses = substates::table
+            .select(address_field)
+            .get_results(self.connection())
+            .optional()
+            .map_err(|e| StorageError::QueryError {
+                reason: format!("Get substate: {}", e),
+            })?;
+
+        match addresses {
+            Some(address_vec) => Ok(address_vec),
+            None => Ok(vec![]),
+        }
     }
 }
 
@@ -192,13 +213,15 @@ impl<'a> SqliteSubstateStoreWriteTransaction<'a> {
     }
 }
 
-pub trait SubstateStoreWriteTransaction<TAddr: NodeAddressable, TPayload: Payload> {
+pub trait SubstateStoreWriteTransaction {
     fn commit(self) -> Result<(), StorageError>;
     fn rollback(self) -> Result<(), StorageError>;
-    fn set_substate(&mut self, substate: Substate) -> Result<(), StorageError>;
+    fn set_substate(&mut self, new_substate: NewSubstate) -> Result<(), StorageError>;
+    fn delete_substate(&mut self, address: String) -> Result<(), StorageError>;
+    fn clear_substates(&mut self) -> Result<(), StorageError>;
 }
 
-impl SubstateStoreWriteTransaction<PublicKey, TariDanPayload> for SqliteSubstateStoreWriteTransaction<'_> {
+impl SubstateStoreWriteTransaction for SqliteSubstateStoreWriteTransaction<'_> {
     fn commit(mut self) -> Result<(), StorageError> {
         self.transaction.transaction.commit()?;
         self.is_complete = true;
@@ -211,42 +234,57 @@ impl SubstateStoreWriteTransaction<PublicKey, TariDanPayload> for SqliteSubstate
         Ok(())
     }
 
-    fn set_substate(&mut self, substate_model: Substate) -> Result<(), StorageError> {
-        use crate::substate_storage_sqlite::schema::{substates, substates::address};
+    fn set_substate(&mut self, new_substate: NewSubstate) -> Result<(), StorageError> {
+        use crate::substate_storage_sqlite::schema::substates;
 
-        let new_substate_row = NewSubstate {
-            address: substate_model.address.clone(),
-            version: substate_model.version,
-            data: substate_model.data,
-        };
+        let address = &new_substate.address;
+        let conn = self.connection();
+        let current_substate = SqliteSubstateStore::find_by_address(address.clone(), conn)?;
 
-        let current_substate_row: Option<Substate> = substates::table
-            .filter(address.eq(substate_model.address.clone()))
-            .first(self.connection())
-            .optional()
-            .map_err(|e| StorageError::QueryError {
-                reason: format!("Get substate: {}", e),
-            })?;
-
-        match current_substate_row {
+        match current_substate {
             Some(_) => {
                 diesel::update(substates::table)
-                    .set(&new_substate_row)
-                    .filter(address.eq(substate_model.address))
-                    .execute(self.connection())
+                    .set(&new_substate)
+                    .filter(substates::address.eq(address))
+                    .execute(conn)
                     .map_err(|e| StorageError::QueryError {
                         reason: format!("Update leaf node: {}", e),
                     })?;
             },
             None => {
                 diesel::insert_into(substates::table)
-                    .values(&new_substate_row)
-                    .execute(self.connection())
+                    .values(&new_substate)
+                    .execute(conn)
                     .map_err(|e| StorageError::QueryError {
                         reason: format!("Update substate error: {}", e),
                     })?;
             },
         };
+
+        Ok(())
+    }
+
+    fn delete_substate(&mut self, address: String) -> Result<(), StorageError> {
+        use crate::substate_storage_sqlite::schema::substates;
+
+        diesel::delete(substates::table)
+            .filter(substates::address.eq(address))
+            .execute(self.connection())
+            .map_err(|e| StorageError::QueryError {
+                reason: format!("delete substate error: {}", e),
+            })?;
+
+        Ok(())
+    }
+
+    fn clear_substates(&mut self) -> Result<(), StorageError> {
+        use crate::substate_storage_sqlite::schema::substates;
+
+        diesel::delete(substates::table)
+            .execute(self.connection())
+            .map_err(|e| StorageError::QueryError {
+                reason: format!("clear_substates error: {}", e),
+            })?;
 
         Ok(())
     }
