@@ -22,6 +22,7 @@
 
 use std::{str::FromStr, sync::Arc};
 
+use anyhow::anyhow;
 use axum_jrpc::{
     error::{JsonRpcError, JsonRpcErrorReason},
     JrpcResult,
@@ -122,8 +123,16 @@ impl JsonRpcHandlers {
     pub async fn add_address(&self, value: JsonRpcExtractor) -> JrpcResult {
         let answer_id = value.get_answer_id();
         let request: AddAddressRequest = value.parse_params()?;
-        let substate_address_str: String = request.address;
-        let substate_address = SubstateAddress::from_str(&substate_address_str).unwrap();
+
+        match self.add_address_inner(request.address).await {
+            Ok(_) => Ok(JsonRpcResponse::success(answer_id, ())),
+            Err(_) => Err(Self::generic_error_response(answer_id)),
+        }
+    }
+
+    // TODO: move to a separate service
+    async fn add_address_inner(&self, address: String) -> Result<(), anyhow::Error> {
+        let substate_address = SubstateAddress::from_str(&address).unwrap();
 
         // get the last version of the substate from the dan layer
         let substate_scan_result = self.dan_layer_scanner.get_substate(substate_address, None).await;
@@ -133,18 +142,19 @@ impl JsonRpcHandlers {
             let pretty_data = serde_json::to_string_pretty(&substate).unwrap();
             let mut tx = self.substate_store.create_write_tx().unwrap();
             let substate_row = NewSubstate {
-                address: substate_address_str,
+                address,
                 version: i64::from(substate.version()),
                 data: pretty_data,
             };
             // if the substate is already stored it will be updated with the new version and data,
             // otherwise it will be inserted as a new row
-            if tx.set_substate(substate_row).is_ok() {
-                return Ok(JsonRpcResponse::success(answer_id, ()));
-            }
+            tx.set_substate(substate_row)?;
+            tx.commit()?;
+
+            return Ok(());
         }
 
-        Err(Self::generic_error_response(answer_id))
+        Err(anyhow!("Substate not found in the network"))
     }
 
     pub async fn delete_address(&self, value: JsonRpcExtractor) -> JrpcResult {
@@ -153,6 +163,7 @@ impl JsonRpcHandlers {
 
         let mut tx = self.substate_store.create_write_tx().unwrap();
         if tx.delete_substate(request.address).is_ok() {
+            tx.commit().unwrap();
             return Ok(JsonRpcResponse::success(answer_id, ()));
         }
 
@@ -164,6 +175,7 @@ impl JsonRpcHandlers {
 
         let mut tx = self.substate_store.create_write_tx().unwrap();
         if tx.clear_substates().is_ok() {
+            tx.commit().unwrap();
             return Ok(JsonRpcResponse::success(answer_id, ()));
         }
 
