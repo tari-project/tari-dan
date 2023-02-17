@@ -28,31 +28,57 @@ use tari_dan_app_grpc::proto::rpc::VnStateSyncResponse;
 use tari_dan_app_utilities::epoch_manager::EpochManagerHandle;
 use tari_dan_common_types::{Epoch, ShardId};
 use tari_dan_core::services::{epoch_manager::EpochManager, ValidatorNodeClientFactory};
-use tari_engine_types::substate::{Substate, SubstateAddress};
+use tari_engine_types::substate::{Substate, SubstateAddress, SubstateValue};
 
-use crate::p2p::services::rpc_client::TariCommsValidatorNodeClientFactory;
+use crate::{
+    p2p::services::rpc_client::TariCommsValidatorNodeClientFactory,
+    substate_storage_sqlite::sqlite_substate_store_factory::{
+        SqliteSubstateStore,
+        SubstateStore,
+        SubstateStoreReadTransaction,
+    },
+};
 
 const LOG_TARGET: &str = "tari::indexer::dan_layer_scanner";
 
 pub struct DanLayerScanner {
     epoch_manager: EpochManagerHandle,
     validator_node_client_factory: TariCommsValidatorNodeClientFactory,
+    substate_store: SqliteSubstateStore,
 }
 
 impl DanLayerScanner {
     pub fn new(
         epoch_manager: EpochManagerHandle,
         validator_node_client_factory: TariCommsValidatorNodeClientFactory,
+        substate_store: SqliteSubstateStore,
     ) -> Self {
         Self {
             epoch_manager,
             validator_node_client_factory,
+            substate_store,
         }
     }
 
     pub async fn get_substate(&self, substate_address: SubstateAddress, version: Option<u32>) -> Option<Substate> {
         let epoch = self.epoch_manager.current_epoch().await.unwrap();
 
+        // we store the latest version of the substates in the watchlist,
+        // so we will return the substate directly from database if it's there
+        if let Some(substate) = self.get_substate_from_db(&substate_address).await {
+            match version {
+                // the user has not specified an specific version, so we return the substate
+                None => return Some(substate),
+                // the user has specified a version, so only return the substate if the version matches
+                Some(v) => {
+                    if v == substate.version() {
+                        return Some(substate);
+                    }
+                },
+            }
+        }
+
+        // the substate is not in db (or is not the requested version) so we fetch it from the dan layer commitee
         let result = match version {
             Some(version) => {
                 self.get_specific_substate_from_commitee(&substate_address, version, epoch)
@@ -65,6 +91,20 @@ impl DanLayerScanner {
             SubstateResult::Up(substate) => Some(substate),
             SubstateResult::Down(substate) => Some(substate),
             SubstateResult::DoesNotExist => None,
+        }
+    }
+
+    async fn get_substate_from_db(&self, substate_address: &SubstateAddress) -> Option<Substate> {
+        let address_str = substate_address.to_address_string();
+
+        let tx = self.substate_store.create_read_tx().unwrap();
+        match tx.get_substate(address_str).unwrap() {
+            Some(row) => {
+                let data: SubstateValue = serde_json::from_str(&row.data).unwrap();
+                let version = row.version as u32;
+                Some(Substate::new(version, data))
+            },
+            None => None,
         }
     }
 

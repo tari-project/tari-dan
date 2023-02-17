@@ -92,6 +92,7 @@ pub async fn run_indexer(config: ApplicationConfig, mut shutdown_signal: Shutdow
     let dan_layer_scanner = DanLayerScanner::new(
         services.epoch_manager.clone(),
         services.validator_node_client_factory.clone(),
+        services.substate_store.clone(),
     );
 
     // Run the JSON-RPC API
