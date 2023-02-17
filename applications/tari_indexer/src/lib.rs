@@ -54,7 +54,7 @@ use tari_dan_app_utilities::base_node_client::GrpcBaseNodeClient;
 use tari_dan_core::{consensus_constants::ConsensusConstants, services::BaseNodeClient, storage::DbFactory};
 use tari_dan_storage_sqlite::SqliteDbFactory;
 use tari_shutdown::ShutdownSignal;
-use tokio::task;
+use tokio::{task, time};
 
 use crate::{
     bootstrap::{spawn_services, Services},
@@ -97,14 +97,25 @@ pub async fn run_indexer(config: ApplicationConfig, mut shutdown_signal: Shutdow
         services.substate_store.clone(),
     );
 
-    let substate_manager = SubstateManager::new(Arc::new(dan_layer_scanner), services.substate_store.clone());
+    let substate_manager = Arc::new(SubstateManager::new(
+        Arc::new(dan_layer_scanner),
+        services.substate_store.clone(),
+    ));
 
     // Run the JSON-RPC API
     if let Some(json_rpc_address) = config.indexer.json_rpc_address {
         info!(target: LOG_TARGET, "🌐 Started JSON-RPC server on {}", json_rpc_address);
-        let handlers = JsonRpcHandlers::new(&services, base_node_client, Arc::new(substate_manager));
+        let handlers = JsonRpcHandlers::new(&services, base_node_client, substate_manager.clone());
         task::spawn(run_json_rpc(json_rpc_address, handlers));
     }
+
+    let polling_shutdown = shutdown_signal.clone();
+    tokio::spawn(async move {
+        let result = run_substate_polling(&config, substate_manager, polling_shutdown).await;
+        if let Err(err) = result {
+            error!(target: LOG_TARGET, "run_substate_polling failed with error: {}", err);
+        }
+    });
 
     shutdown_signal.wait().await;
 
@@ -122,4 +133,28 @@ async fn create_base_layer_clients(config: &ApplicationConfig) -> Result<GrpcBas
         .map_err(|error| ExitError::new(ExitCode::ConfigError, error))?;
 
     Ok(base_node_client)
+}
+
+async fn run_substate_polling(
+    config: &ApplicationConfig,
+    substate_manager: Arc<SubstateManager>,
+    mut shutdown: ShutdownSignal,
+) -> Result<(), anyhow::Error> {
+    loop {
+        tokio::select! {
+            _ = time::sleep(config.indexer.dan_layer_scanning_internal) => {
+                info!(target: LOG_TARGET, "Substate auto-scan initiated");
+                match substate_manager.scan_and_update_substates().await {
+                    Ok(_) => info!(target: LOG_TARGET, "Substate auto-scan succeded"),
+                    Err(e) =>  error!(target: LOG_TARGET, "Substate auto-scan failed: {}", e),
+                }
+            },
+            _ = shutdown.wait() => {
+                dbg!("Shutting down run_substate_polling");
+                break;
+            },
+        }
+    }
+
+    Ok(())
 }

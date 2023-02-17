@@ -153,11 +153,9 @@ impl SubstateManager {
         self.dan_layer_scanner.get_substate(substate_address, version).await
     }
 
-    #[allow(dead_code)]
     pub async fn scan_and_update_substates(&self) -> Result<(), anyhow::Error> {
         // fetch all substates from db
-        let mut tx = self.substate_store.create_write_tx().unwrap();
-        let db_rows: Vec<SubstateRow> = tx.get_all_substates()?;
+        let db_rows = self.substate_store.with_read_tx(|tx| tx.get_all_substates())?;
 
         // try to get the newest version of each substate in the dan layer, and update the row in the db
         for row in db_rows {
@@ -165,11 +163,9 @@ impl SubstateManager {
             let res = self.dan_layer_scanner.get_substate(&address, None).await;
             if let Some(substate) = res {
                 let updated_row = map_substate_to_db_row(&address, &substate)?;
-                tx.set_substate(updated_row)?;
+                self.substate_store.with_write_tx(|tx| tx.set_substate(updated_row))?;
             }
         }
-
-        tx.commit()?;
 
         Ok(())
     }

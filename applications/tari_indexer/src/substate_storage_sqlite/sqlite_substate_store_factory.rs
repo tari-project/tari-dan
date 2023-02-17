@@ -35,7 +35,7 @@ use thiserror::Error;
 
 use crate::substate_storage_sqlite::models::substate::{NewSubstate, Substate};
 
-const LOG_TARGET: &str = "tari::indexer::storage::sqlite::substate_store";
+const LOG_TARGET: &str = "tari::indexer::substate_storage_sqlite";
 
 #[derive(Clone)]
 pub struct SqliteSubstateStore {
@@ -267,6 +267,12 @@ impl SubstateStoreWriteTransaction for SqliteSubstateStoreWriteTransaction<'_> {
                     .map_err(|e| StorageError::QueryError {
                         reason: format!("Update leaf node: {}", e),
                     })?;
+                log::info!(
+                    target: LOG_TARGET,
+                    "Updated substate {} version to {}",
+                    address,
+                    new_substate.version
+                );
             },
             None => {
                 diesel::insert_into(substates::table)
@@ -275,6 +281,12 @@ impl SubstateStoreWriteTransaction for SqliteSubstateStoreWriteTransaction<'_> {
                     .map_err(|e| StorageError::QueryError {
                         reason: format!("Update substate error: {}", e),
                     })?;
+                log::info!(
+                    target: LOG_TARGET,
+                    "Added new substate {} with version {}",
+                    address,
+                    new_substate.version
+                );
             },
         };
 
