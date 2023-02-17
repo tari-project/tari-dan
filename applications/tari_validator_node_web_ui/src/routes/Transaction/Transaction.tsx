@@ -23,7 +23,11 @@
 import { useEffect } from 'react';
 import { Form, useLoaderData } from 'react-router-dom';
 import { getSubstates, getTransaction } from '../../utils/json_rpc';
-import { fromHexString, toHexString } from '../VN/Components/helpers';
+import {
+  fromHexString,
+  toHexString,
+  shortenString,
+} from '../VN/Components/helpers';
 import Output from './Components/Output';
 import Substates from './Components/Substates';
 import './Transaction.css';
@@ -33,6 +37,13 @@ import PageHeading from '../../Components/PageHeading';
 import Typography from '@mui/material/Typography';
 import Grid from '@mui/material/Grid';
 import SecondaryHeading from '../../Components/SecondaryHeading';
+import Table from '@mui/material/Table';
+import TableBody from '@mui/material/TableBody';
+import TableCell from '@mui/material/TableCell';
+import TableContainer from '@mui/material/TableContainer';
+import TableHead from '@mui/material/TableHead';
+import TableRow from '@mui/material/TableRow';
+import TablePagination from '@mui/material/TablePagination';
 
 type loaderData = [string, Map<string, any[]>, Map<string, any[]>];
 
@@ -87,10 +98,11 @@ function mapHeight(height: number) {
       return 'Unknown';
   }
 }
+
 export default function Transaction() {
   const [payloadId, substates, outputs] = useLoaderData() as loaderData;
-  console.log(substates);
-  console.log(outputs);
+  console.log('Substates: ', substates);
+  console.log('Outputs: ', outputs);
   let mermaid = 'gantt\ndateFormat YYYY-MM-DDTHH:mm:ss\naxisFormat  %Hh%M:%S';
   let shardNo = 0;
   for (let [shard, output] of Array.from(outputs.entries())) {
@@ -118,7 +130,7 @@ export default function Transaction() {
       <Grid container spacing={5}>
         <Grid item xs={12} md={12} lg={12}>
           <PageHeading>Payload ID</PageHeading>
-          <Typography variant="h6" sx={{ mt: 4, mb: 4, textAlign: 'center' }}>
+          <Typography variant="h5" sx={{ mt: 4, mb: 4, textAlign: 'center' }}>
             {payloadId}
           </Typography>
         </Grid>
@@ -130,20 +142,41 @@ export default function Transaction() {
             <Mermaid chart={mermaid} />
           </StyledPaper>
         </Grid>
-
+        <SecondaryHeading>Substates</SecondaryHeading>
+        <Grid item xs={12} md={12} lg={12}>
+          <StyledPaper>
+            <TableContainer>
+              <Table>
+                <TableHead>
+                  <TableRow>
+                    <TableCell>Shard</TableCell>
+                    <TableCell>Address</TableCell>
+                    <TableCell style={{ textAlign: 'center', width: '120px' }}>
+                      Data
+                    </TableCell>
+                    <TableCell style={{ textAlign: 'center', width: '120px' }}>
+                      Created
+                    </TableCell>
+                    <TableCell style={{ textAlign: 'center', width: '120px' }}>
+                      Destroyed
+                    </TableCell>
+                  </TableRow>
+                </TableHead>
+                <TableBody>
+                  {Array.from(outputs.entries()).map(([shard]) => (
+                    <Substates substates={substates.get(shard)} />
+                  ))}
+                </TableBody>
+              </Table>
+            </TableContainer>
+          </StyledPaper>
+        </Grid>
+        <SecondaryHeading>Shards</SecondaryHeading>
         {Array.from(outputs.entries()).map(([shard, output]) => (
           <>
             <Grid item xs={12} md={12} lg={12}>
               <StyledPaper>
                 <Output key={shard} shard={shard} output={output} />
-              </StyledPaper>
-            </Grid>
-            <Grid item xs={12} md={12} lg={12}>
-              <SecondaryHeading>Substates</SecondaryHeading>
-            </Grid>
-            <Grid item xs={12} md={12} lg={12}>
-              <StyledPaper>
-                <Substates substates={substates.get(shard)} />
               </StyledPaper>
             </Grid>
           </>

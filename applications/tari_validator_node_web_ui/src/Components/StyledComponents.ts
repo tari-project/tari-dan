@@ -57,3 +57,12 @@ export const CodeBlock = styled(Box)(({ theme }) => ({
   maxHeight: '400px',
   overflowY: 'scroll',
 }));
+
+export const BoxHeading = styled(Box)(({ theme }) => ({
+  backgroundColor: '#fafafa',
+  borderRadius: theme.shape.borderRadius,
+  padding: theme.spacing(3),
+  fontFamily: "'Courier New', Courier, monospace",
+  boxShadow: '0px 5px 5px rgba(35, 11, 73, 0.10)',
+  margin: '10px 5px',
+}));

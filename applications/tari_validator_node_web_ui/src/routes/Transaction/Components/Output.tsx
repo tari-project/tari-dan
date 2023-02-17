@@ -21,7 +21,7 @@
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 import { useState } from 'react';
-import { toHexString } from '../../VN/Components/helpers';
+import { toHexString, shortenString } from '../../VN/Components/helpers';
 import { renderJson } from '../../../utils/helpers';
 import Table from '@mui/material/Table';
 import TableBody from '@mui/material/TableBody';
@@ -33,10 +33,13 @@ import {
   DataTableCell,
   CodeBlock,
   AccordionIconButton,
+  BoxHeading,
 } from '../../../Components/StyledComponents';
 import KeyboardArrowDownIcon from '@mui/icons-material/KeyboardArrowDown';
 import KeyboardArrowUpIcon from '@mui/icons-material/KeyboardArrowUp';
 import Collapse from '@mui/material/Collapse';
+import CopyToClipboard from '../../../Components/CopyToClipboard';
+import CommitOutlinedIcon from '@mui/icons-material/CommitOutlined';
 
 function RowData({ row, justify }: any) {
   const [open, setOpen] = useState(false);
@@ -51,7 +54,8 @@ function RowData({ row, justify }: any) {
           {row.height}
         </DataTableCell>
         <DataTableCell style={{ borderBottom: 'none' }} className="key">
-          {toHexString(row.node_hash)}
+          {shortenString(toHexString(row.node_hash))}
+          <CopyToClipboard copy={toHexString(row.node_hash)} />
         </DataTableCell>
         <TableCell style={{ borderBottom: 'none', padding: 0 }}>
           <TableContainer>
@@ -73,14 +77,20 @@ function RowData({ row, justify }: any) {
                         key={pledge.shard_id}
                         sx={{ borderBottom: 'none' }}
                       >
-                        <DataTableCell>{pledge.shard_id}</DataTableCell>
+                        <DataTableCell>
+                          {shortenString(pledge.shard_id)}
+                          <CopyToClipboard copy={pledge.shard_id} />
+                        </DataTableCell>
                         <DataTableCell>
                           {currentState[0] !== '0'
                             ? currentState[0]
                             : pledge.pledge.current_state}
                         </DataTableCell>
                         <DataTableCell>
-                          {pledge.pledge.pledged_to_payload.id}
+                          {shortenString(pledge.pledge.pledged_to_payload.id)}
+                          <CopyToClipboard
+                            copy={pledge.pledge.pledged_to_payload.id}
+                          />
                         </DataTableCell>
                       </TableRow>
                     );
@@ -138,8 +148,18 @@ export default function Output({
   return (
     <div id={shard} className="output">
       <TableContainer>
-        <b>Shard : </b>
-        <span className="key">{shard}</span>
+        <BoxHeading
+          style={{
+            marginBottom: '20px',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'flex-start',
+            gap: '10px',
+          }}
+        >
+          <CommitOutlinedIcon style={{ color: 'rgba(35, 11, 73, 0.20)' }} />
+          Shard: {shard}
+        </BoxHeading>
         <Table>
           <TableHead>
             <TableRow>
