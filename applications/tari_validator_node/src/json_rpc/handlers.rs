@@ -31,7 +31,13 @@ use axum_jrpc::{
 use log::*;
 use serde::Serialize;
 use serde_json::{self as json, json};
-use tari_comms::{multiaddr::Multiaddr, peer_manager::NodeId, types::CommsPublicKey, CommsNode, NodeIdentity};
+use tari_comms::{
+    multiaddr::Multiaddr,
+    peer_manager::{NodeId, PeerFeatures},
+    types::CommsPublicKey,
+    CommsNode,
+    NodeIdentity,
+};
 use tari_comms_logging::SqliteMessageLog;
 use tari_crypto::tari_utilities::hex::Hex;
 use tari_dan_common_types::{optional::Optional, PayloadId, QuorumCertificate, QuorumDecision, ShardId};
@@ -43,6 +49,8 @@ use tari_dan_core::{
 use tari_dan_storage_sqlite::sqlite_shard_store_factory::SqliteShardStore;
 use tari_template_lib::Hash;
 use tari_validator_node_client::types::{
+    AddPeerRequest,
+    AddPeerResponse,
     GetCommitteeRequest,
     GetIdentityResponse,
     GetRecentTransactionsResponse,
@@ -495,6 +503,44 @@ impl JsonRpcHandlers {
                 ),
             )),
         }
+    }
+
+    pub async fn add_peer(&self, value: JsonRpcExtractor) -> JrpcResult {
+        let answer_id = value.get_answer_id();
+        let AddPeerRequest {
+            public_key,
+            addresses,
+            wait_for_dial,
+        } = value.parse_params()?;
+
+        let connectivity = self.comms.connectivity();
+        let peer_manager = self.comms.peer_manager();
+
+        let node_id = NodeId::from_public_key(&public_key);
+
+        peer_manager
+            .add_or_update_online_peer(
+                &public_key,
+                node_id.clone(),
+                addresses,
+                PeerFeatures::COMMUNICATION_NODE,
+            )
+            .await
+            .map_err(internal_error(answer_id))?;
+        if wait_for_dial {
+            let _conn = connectivity
+                .dial_peer(node_id)
+                .await
+                .map_err(internal_error(answer_id))?;
+        } else {
+            // Dial without waiting
+            connectivity
+                .request_many_dials(Some(node_id))
+                .await
+                .map_err(internal_error(answer_id))?;
+        }
+
+        Ok(JsonRpcResponse::success(answer_id, AddPeerResponse {}))
     }
 
     pub async fn get_comms_stats(&self, value: JsonRpcExtractor) -> JrpcResult {
