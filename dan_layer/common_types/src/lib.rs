@@ -7,13 +7,15 @@ use std::{
 };
 
 use ::serde::{Deserialize, Serialize};
+use chrono::NaiveDateTime;
 use tari_bor::{borsh, Decode, Encode};
 use tari_common_types::types::{FixedHash, FixedHashSizeError};
 use tari_engine_types::substate::{Substate, SubstateAddress};
 use tari_utilities::hex::Hex;
-
 pub mod crypto;
 pub mod proto;
+
+pub mod types;
 
 mod epoch;
 pub use epoch::Epoch;
@@ -114,4 +116,12 @@ impl TryFrom<&[u8]> for PayloadId {
     fn try_from(value: &[u8]) -> Result<Self, Self::Error> {
         Ok(PayloadId::new(FixedHash::try_from(value)?))
     }
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct RecentTransaction {
+    pub payload_id: Vec<u8>,
+    pub timestamp: NaiveDateTime,
+    pub meta: String,
+    pub instructions: String,
 }

@@ -45,16 +45,16 @@ impl DebugSubcommand {
 }
 
 async fn handle_list_messages(mut client: ValidatorNodeClient, args: ShowMessagesArgs) -> Result<(), anyhow::Error> {
-    let logs = client.get_message_logs(&args.message_tag).await?;
-    if logs.is_empty() {
-        println!("No messages found for tag '{}'", args.message_tag);
-        return Ok(());
-    }
-
-    println!("Messages for tag '{}':", args.message_tag);
-    for log in logs {
-        println!("{}", log);
-        println!();
-    }
+    // let logs = client.get_message_logs(&args.message_tag).await?;
+    // if logs.is_empty() {
+    //     println!("No messages found for tag '{}'", args.message_tag);
+    //     return Ok(());
+    // }
+    //
+    // println!("Messages for tag '{}':", args.message_tag);
+    // for log in logs {
+    //     println!("{}", log);
+    //     println!();
+    // }
     Ok(())
 }

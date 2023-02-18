@@ -6160,6 +6160,7 @@ dependencies = [
  "base64 0.20.0",
  "bincode",
  "borsh",
+ "chrono",
  "digest 0.9.0",
  "newtype-ops",
  "prost",
@@ -6778,13 +6779,12 @@ name = "tari_validator_node_client"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "chrono",
  "reqwest",
  "serde",
  "serde_json",
  "tari_common_types",
- "tari_comms_logging",
  "tari_dan_common_types",
- "tari_dan_core",
  "tari_engine_types",
  "tari_transaction",
 ]

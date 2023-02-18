@@ -69,6 +69,16 @@ impl TransactionBuilder {
         self
     }
 
+    pub fn sign_with_nonce(&mut self, secret_key: &PrivateKey, nonce: PrivateKey) -> &mut Self {
+        self.signature = Some(InstructionSignature::sign_with_nonce(
+            secret_key,
+            nonce,
+            &self.instructions,
+        ));
+        self.sender_public_key = Some(PublicKey::from_secret_key(secret_key));
+        self
+    }
+
     pub fn sign(&mut self, secret_key: &PrivateKey) -> &mut Self {
         self.signature = Some(InstructionSignature::sign(secret_key, &self.instructions));
         self.sender_public_key = Some(PublicKey::from_secret_key(secret_key));

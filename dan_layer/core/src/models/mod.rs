@@ -165,14 +165,6 @@ impl From<u64> for ChainHeight {
     }
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct RecentTransaction {
-    pub payload_id: Vec<u8>,
-    pub timestamp: NaiveDateTime,
-    pub meta: String,
-    pub instructions: String,
-}
-
 // TODO: These should be well-formed structs, no SQL in core
 #[derive(Debug, Serialize)]
 pub struct SQLTransaction {

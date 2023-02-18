@@ -19,12 +19,17 @@ anyhow = "1.0"
 bincode = "1.0"
 base64 = "0.20.0-alpha.1"
 borsh = "0.9"
+chrono = { version = "0.4.19", default-features = false }
 digest = "0.9"
 newtype-ops = "0.1.4"
-rand = "0.7"
+rand = {  version="0.7", optional = true }
 prost = "0.9"
 prost-types = "0.9"
 serde = "1.0.126"
+
+[features]
+default= []
+rand = ["dep:rand"]
 
 [build-dependencies]
 tari_common = { git = "https://github.com/tari-project/tari.git", branch = "development", package = "tari_common", features = ["build"] }
