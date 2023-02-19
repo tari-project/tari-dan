@@ -94,7 +94,6 @@ pub async fn run_indexer(config: ApplicationConfig, mut shutdown_signal: Shutdow
     let dan_layer_scanner = DanLayerScanner::new(
         services.epoch_manager.clone(),
         services.validator_node_client_factory.clone(),
-        services.substate_store.clone(),
     );
 
     let substate_manager = Arc::new(SubstateManager::new(
@@ -109,13 +108,21 @@ pub async fn run_indexer(config: ApplicationConfig, mut shutdown_signal: Shutdow
         task::spawn(run_json_rpc(json_rpc_address, handlers));
     }
 
-    let polling_shutdown = shutdown_signal.clone();
-    tokio::spawn(async move {
-        let result = run_substate_polling(&config, substate_manager, polling_shutdown).await;
-        if let Err(err) = result {
-            error!(target: LOG_TARGET, "run_substate_polling failed with error: {}", err);
+    // keep scanning the dan layer for new versions of the stored substates
+    loop {
+        tokio::select! {
+            _ = time::sleep(config.indexer.dan_layer_scanning_internal) => {
+                match substate_manager.scan_and_update_substates().await {
+                    Ok(_) => info!(target: LOG_TARGET, "Substate auto-scan succeded"),
+                    Err(e) =>  error!(target: LOG_TARGET, "Substate auto-scan failed: {}", e),
+                }
+            },
+            _ = shutdown_signal.wait() => {
+                dbg!("Shutting down run_substate_polling");
+                break;
+            },
         }
-    });
+    }
 
     shutdown_signal.wait().await;
 
@@ -133,28 +140,4 @@ async fn create_base_layer_clients(config: &ApplicationConfig) -> Result<GrpcBas
         .map_err(|error| ExitError::new(ExitCode::ConfigError, error))?;
 
     Ok(base_node_client)
-}
-
-async fn run_substate_polling(
-    config: &ApplicationConfig,
-    substate_manager: Arc<SubstateManager>,
-    mut shutdown: ShutdownSignal,
-) -> Result<(), anyhow::Error> {
-    loop {
-        tokio::select! {
-            _ = time::sleep(config.indexer.dan_layer_scanning_internal) => {
-                info!(target: LOG_TARGET, "Substate auto-scan initiated");
-                match substate_manager.scan_and_update_substates().await {
-                    Ok(_) => info!(target: LOG_TARGET, "Substate auto-scan succeded"),
-                    Err(e) =>  error!(target: LOG_TARGET, "Substate auto-scan failed: {}", e),
-                }
-            },
-            _ = shutdown.wait() => {
-                dbg!("Shutting down run_substate_polling");
-                break;
-            },
-        }
-    }
-
-    Ok(())
 }
