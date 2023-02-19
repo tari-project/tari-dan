@@ -24,7 +24,7 @@ use std::{str::FromStr, sync::Arc};
 
 use anyhow::anyhow;
 use log::info;
-use tari_engine_types::substate::{Substate, SubstateAddress, SubstateValue};
+use tari_engine_types::substate::{Substate, SubstateAddress};
 
 use crate::{
     dan_layer_scanner::DanLayerScanner,
@@ -56,7 +56,7 @@ impl SubstateManager {
 
     pub async fn fetch_and_add_substate_to_db(&self, substate_address: &SubstateAddress) -> Result<(), anyhow::Error> {
         // get the last version of the substate from the dan layer
-        let substate_scan_result = self.dan_layer_scanner.get_substate(substate_address, None).await;
+        let substate_scan_result = self.get_substate_from_dan_layer(substate_address, None).await;
 
         // store the substate into the database
         match substate_scan_result {
@@ -64,7 +64,7 @@ impl SubstateManager {
                 // if the substate is already stored it will be updated with the new version and data,
                 // otherwise it will be inserted as a new row
                 let substate_row = map_substate_to_db_row(substate_address, &substate)?;
-                let mut tx = self.substate_store.create_write_tx().unwrap();
+                let mut tx = self.substate_store.create_write_tx()?;
                 tx.set_substate(substate_row)?;
                 tx.commit()?;
 
@@ -82,7 +82,7 @@ impl SubstateManager {
     }
 
     pub async fn delete_substate_from_db(&self, substate_address: &SubstateAddress) -> Result<(), anyhow::Error> {
-        let mut tx = self.substate_store.create_write_tx().unwrap();
+        let mut tx = self.substate_store.create_write_tx()?;
         tx.delete_substate(substate_address.to_address_string())?;
         tx.commit()?;
 
@@ -90,7 +90,7 @@ impl SubstateManager {
     }
 
     pub async fn delete_all_substates_from_db(&self) -> Result<(), anyhow::Error> {
-        let mut tx = self.substate_store.create_write_tx().unwrap();
+        let mut tx = self.substate_store.create_write_tx()?;
         tx.clear_substates()?;
         tx.commit()?;
 
@@ -98,7 +98,7 @@ impl SubstateManager {
     }
 
     pub async fn get_all_addresses_from_db(&self) -> Result<Vec<String>, anyhow::Error> {
-        let tx = self.substate_store.create_read_tx().unwrap();
+        let tx = self.substate_store.create_read_tx()?;
         let addresses = tx.get_all_addresses()?;
 
         Ok(addresses)
@@ -127,7 +127,7 @@ impl SubstateManager {
     ) -> Result<Option<Substate>, anyhow::Error> {
         let address_str = substate_address.to_address_string();
 
-        let tx = self.substate_store.create_read_tx().unwrap();
+        let tx = self.substate_store.create_read_tx()?;
         if let Some(row) = tx.get_substate(address_str)? {
             // if a version is requested, we must check that it matches the one in db
             if let Some(version) = version {
@@ -154,17 +154,11 @@ impl SubstateManager {
     }
 
     pub async fn scan_and_update_substates(&self) -> Result<(), anyhow::Error> {
-        // fetch all substates from db
-        let db_rows = self.substate_store.with_read_tx(|tx| tx.get_all_substates())?;
+        let addresses = self.get_all_addresses_from_db().await?;
 
-        // try to get the newest version of each substate in the dan layer, and update the row in the db
-        for row in db_rows {
-            let address = SubstateAddress::from_str(&row.address)?;
-            let res = self.dan_layer_scanner.get_substate(&address, None).await;
-            if let Some(substate) = res {
-                let updated_row = map_substate_to_db_row(&address, &substate)?;
-                self.substate_store.with_write_tx(|tx| tx.set_substate(updated_row))?;
-            }
+        for address in addresses {
+            let address = SubstateAddress::from_str(&address)?;
+            self.fetch_and_add_substate_to_db(&address).await?;
         }
 
         Ok(())
@@ -172,9 +166,7 @@ impl SubstateManager {
 }
 
 fn map_db_row_to_substate(row: &SubstateRow) -> Result<Substate, anyhow::Error> {
-    let data: SubstateValue = serde_json::from_str(&row.data).unwrap();
-    let version = row.version as u32;
-    let substate = Substate::new(version, data);
+    let substate: Substate = serde_json::from_str(&row.data)?;
     Ok(substate)
 }
 
