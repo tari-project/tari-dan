@@ -21,48 +21,35 @@
 //   USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 use clap::Subcommand;
+use multiaddr::Multiaddr;
+use tari_common_types::types::PublicKey;
+use tari_utilities::hex::Hex;
+use tari_validator_node_client::{types::AddPeerRequest, ValidatorNodeClient};
 
-mod key;
-pub use key::KeysSubcommand;
-
-mod template;
-pub use template::TemplateSubcommand;
-
-mod vn;
-pub use vn::VnSubcommand;
-
-use crate::command::{
-    account::AccountsSubcommand,
-    debug::DebugSubcommand,
-    manifest::ManifestSubcommand,
-    peer::PeersSubcommand,
-    transaction::TransactionSubcommand,
-};
-
-mod debug;
-mod manifest;
-
-mod account;
-mod peer;
-pub mod transaction;
-
-#[allow(clippy::large_enum_variant)]
 #[derive(Debug, Subcommand, Clone)]
-pub enum Command {
-    #[clap(subcommand)]
-    Vn(VnSubcommand),
-    #[clap(subcommand, alias = "template")]
-    Templates(TemplateSubcommand),
-    #[clap(subcommand, alias = "key")]
-    Keys(KeysSubcommand),
-    #[clap(subcommand, alias = "transaction")]
-    Transactions(TransactionSubcommand),
-    #[clap(subcommand, alias = "accounts")]
-    Accounts(AccountsSubcommand),
-    #[clap(subcommand, alias = "manifest")]
-    Manifests(ManifestSubcommand),
-    #[clap(subcommand, alias = "peer")]
-    Peers(PeersSubcommand),
-    #[clap(subcommand)]
-    Debug(DebugSubcommand),
+pub enum PeersSubcommand {
+    Connect {
+        public_key: String,
+        addresses: Vec<Multiaddr>,
+    },
+}
+
+impl PeersSubcommand {
+    pub async fn handle(self, mut client: ValidatorNodeClient) -> anyhow::Result<()> {
+        #[allow(clippy::enum_glob_use)]
+        use PeersSubcommand::*;
+        match self {
+            Connect { public_key, addresses } => {
+                client
+                    .add_peer(AddPeerRequest {
+                        public_key: PublicKey::from_hex(&public_key)?,
+                        addresses,
+                        wait_for_dial: true,
+                    })
+                    .await?;
+                println!("🫂 Peer connected");
+            },
+        }
+        Ok(())
+    }
 }

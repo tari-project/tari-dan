@@ -6778,6 +6778,7 @@ name = "tari_validator_node_client"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "multiaddr 0.14.0",
  "reqwest",
  "serde",
  "serde_json",

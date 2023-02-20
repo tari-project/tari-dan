@@ -38,6 +38,8 @@ use types::{
 };
 
 use crate::types::{
+    AddPeerRequest,
+    AddPeerResponse,
     GetIdentityResponse,
     GetTemplateRequest,
     GetTemplateResponse,
@@ -137,6 +139,10 @@ impl ValidatorNodeClient {
         request: SubmitTransactionRequest,
     ) -> Result<SubmitTransactionResponse, anyhow::Error> {
         self.send_request("submit_transaction", request).await
+    }
+
+    pub async fn add_peer(&mut self, request: AddPeerRequest) -> Result<AddPeerResponse, anyhow::Error> {
+        self.send_request("add_peer", request).await
     }
 
     pub async fn get_message_logs(&mut self, message_tag: &str) -> Result<Vec<LoggedMessage>, anyhow::Error> {

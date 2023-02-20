@@ -20,8 +20,8 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-import { useEffect, useState } from 'react';
-import { getConnections } from '../../../utils/json_rpc';
+import React, {useCallback, useEffect, useRef, useState} from 'react';
+import {addPeer, getConnections} from '../../../utils/json_rpc';
 import { toHexString } from './helpers';
 import Table from '@mui/material/Table';
 import TableBody from '@mui/material/TableBody';
@@ -30,6 +30,12 @@ import TableContainer from '@mui/material/TableContainer';
 import TableHead from '@mui/material/TableHead';
 import TableRow from '@mui/material/TableRow';
 import { DataTableCell } from '../../../Components/StyledComponents';
+import IconButton from "@mui/material/IconButton";
+import AddIcon from '@mui/icons-material/Add';
+import Button from "@mui/material/Button";
+import {TextField} from "@mui/material";
+import Container from "@mui/material/Container";
+import {Form} from "react-router-dom";
 
 interface IConnection {
   address: string;
@@ -39,16 +45,64 @@ interface IConnection {
   public_key: string;
 }
 
+const useInterval = (fn: () => Promise<unknown>, ms: number) => {
+  const timeout = useRef<number>();
+  const mountedRef = useRef(false);
+  const run = useCallback(async () => {
+    await fn();
+    if (mountedRef.current) {
+      timeout.current = window.setTimeout(run, ms);
+    }
+  }, [fn, ms]);
+  useEffect(() => {
+    mountedRef.current = true;
+    run();
+    return () => {
+      mountedRef.current = false;
+      window.clearTimeout(timeout.current);
+    };
+  }, [run]);
+};
+
 function Connections() {
   const [connections, setConnections] = useState<IConnection[]>([]);
-  useEffect(() => {
-    getConnections().then((response) => {
-      setConnections(response.connections);
-    });
+  const [showPeerDialog, setShowAddPeerDialog] = useState(false);
+  const [formState, setFormState] = useState({publicKey: "", address: ""});
+
+  const showAddPeerDialog = (setElseToggle: boolean  = !showPeerDialog) => {
+        setShowAddPeerDialog(setElseToggle);
+  };
+
+  const onSubmitAddPeer = () => {
+    addPeer(formState.publicKey, [formState.address]);
+    setFormState({publicKey: "", address: ""});
+    setShowAddPeerDialog(false);
+  };
+  const onChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setFormState({...formState, [e.target.name]: e.target.value});
+  };
+
+
+  let fetchConnections = useCallback(async () => {
+    const resp = await getConnections();
+    setConnections(resp.connections);
   }, []);
+  useInterval(fetchConnections, 5000);
 
   return (
     <TableContainer>
+      <Button startIcon={<AddIcon />} onClick={() => showAddPeerDialog()}>
+          Add Peer
+      </Button>
+        {showPeerDialog ? (
+              <Form onSubmit={onSubmitAddPeer}>
+                <TextField name="publicKey" label="Public Key" value={formState.publicKey} onChange={onChange} />
+                <TextField name="address" label="Address" value={formState.address} onChange={onChange} />
+                <Button type ="submit">Add Peer</Button>
+                <Button onClick={() => showAddPeerDialog(false)}>Cancel</Button>
+              </Form>
+        ): null
+        }
       <Table>
         <TableHead>
           <TableRow>
