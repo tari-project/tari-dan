@@ -55,6 +55,7 @@ use tari_dan_common_types::{
 use tari_dan_core::{
     models::{
         vote_message::VoteMessage,
+        CurrentLeaderStates,
         HotStuffTreeNode,
         LeafNode,
         Payload,
@@ -80,6 +81,7 @@ use tari_utilities::{
 use crate::{
     error::SqliteStorageError,
     models::{
+        current_state::{CurrentLeaderState, NewCurrentLeaderState},
         high_qc::{HighQc, NewHighQc},
         last_executed_height::{LastExecutedHeight, NewLastExecutedHeight},
         last_voted_height::{LastVotedHeight, NewLastVotedHeight},
@@ -140,6 +142,10 @@ pub struct QueryableTransaction {
     pub timestamp: NaiveDateTime,
     #[diesel(sql_type = Text)]
     pub justify: String,
+    #[diesel(sql_type = Binary)]
+    pub proposed_by: Vec<u8>,
+    #[diesel(sql_type = BigInt)]
+    pub leader_round: i64,
 }
 
 impl From<QueryableTransaction> for SQLTransaction {
@@ -154,6 +160,8 @@ impl From<QueryableTransaction> for SQLTransaction {
             total_leader_proposals: transaction.total_leader_proposals,
             timestamp: transaction.timestamp,
             justify: transaction.justify,
+            proposed_by: transaction.proposed_by,
+            leader_round: transaction.leader_round,
         }
     }
 }
@@ -338,6 +346,29 @@ impl ShardStoreReadTransaction<PublicKey, TariDanPayload> for SqliteShardStoreRe
                 key: format!("shard_id={},payload_id={}", shard, payload_id),
             }),
         }
+    }
+
+    fn get_current_leaders_states(&mut self, payload_id: &PayloadId) -> Result<Vec<CurrentLeaderStates>, StorageError> {
+        use crate::schema::current_leader_states;
+
+        let states: Vec<CurrentLeaderState> = current_leader_states::table
+            .filter(current_leader_states::payload_id.eq(payload_id.as_bytes()))
+            .get_results(self.transaction.connection())
+            .map_err(|e| StorageError::QueryError {
+                reason: format!("Get current state error: {}", e),
+            })?;
+
+        let states = states
+            .into_iter()
+            .map(|state| CurrentLeaderStates {
+                payload_id: state.payload_id,
+                shard_id: state.shard_id,
+                leader_round: state.leader_round,
+                leader: state.leader,
+                timestamp: state.timestamp,
+            })
+            .collect::<Vec<_>>();
+        Ok(states)
     }
 
     fn get_payload(&mut self, id: &PayloadId) -> Result<TariDanPayload, StorageError> {
@@ -748,7 +779,8 @@ impl ShardStoreReadTransaction<PublicKey, TariDanPayload> for SqliteShardStoreRe
             "select node_hash, parent_node_hash, shard, height, payload_height, (select count(*) from received_votes \
              v where v.tree_node_hash = node_hash) as total_votes, (select count(*) from leader_proposals lp where \
              lp.payload_id  = n.payload_id and lp.payload_height = n.payload_height and lp.node_hash = n.node_hash) \
-             as total_leader_proposals, n.timestamp, n.justify from nodes as n where payload_id = ? order by shard",
+             as total_leader_proposals, n.timestamp, n.justify, n.proposed_by, n.leader_round from nodes as n where \
+             payload_id = ? order by shard",
         )
         .bind::<Binary, _>(payload_id)
         .load::<QueryableTransaction>(self.transaction.connection())
@@ -967,6 +999,54 @@ impl ShardStoreWriteTransaction<PublicKey, TariDanPayload> for SqliteShardStoreW
                         })
                     },
                 }
+            },
+        }
+        Ok(())
+    }
+
+    fn save_current_leader_state(
+        &mut self,
+        payload: PayloadId,
+        shard_id: ShardId,
+        leader_round: u32,
+        leader: PublicKey,
+    ) -> Result<(), StorageError> {
+        use crate::schema::current_leader_states;
+
+        let payload_id = payload.as_bytes().to_vec();
+
+        let new_row = NewCurrentLeaderState {
+            payload_id: payload_id.clone(),
+            shard_id: shard_id.as_bytes().to_vec(),
+            leader_round: i64::from(leader_round),
+            leader: leader.as_bytes().to_vec(),
+        };
+
+        match diesel::insert_into(current_leader_states::table)
+            .values(&new_row)
+            .execute(self.connection())
+        {
+            Ok(_) => {},
+            Err(err) => match err {
+                Error::DatabaseError(DatabaseErrorKind::UniqueViolation, _) => {
+                    match diesel::update(current_leader_states::table)
+                        .set(current_leader_states::leader_round.eq(i64::from(leader_round)))
+                        .filter(current_leader_states::payload_id.eq(payload_id))
+                        .execute(self.connection())
+                    {
+                        Ok(_) => {},
+                        Err(err) => {
+                            return Err(StorageError::QueryError {
+                                reason: format!("Set current state error: {}", err),
+                            })
+                        },
+                    }
+                },
+                _ => {
+                    return Err(StorageError::QueryError {
+                        reason: format!("Set current state error: {}", err),
+                    })
+                },
             },
         }
         Ok(())

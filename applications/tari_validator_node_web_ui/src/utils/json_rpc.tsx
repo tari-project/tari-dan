@@ -86,6 +86,9 @@ async function getRecentTransactions() {
 async function getTransaction(payload_id: string) {
   return await jsonRpc('get_transaction', [fromHexString(payload_id)]);
 }
+async function getCurrentLeaderState(payload_id: string) {
+  return await jsonRpc('get_current_leader_state', [fromHexString(payload_id)]);
+}
 async function getSubstates(payload_id: string, shard_id: string) {
   return await jsonRpc('get_substates', [
     fromHexString(payload_id),
@@ -106,6 +109,7 @@ export {
   getCommsStats,
   getConnections,
   addPeer,
+  getCurrentLeaderState,
   getEpochManagerStats,
   getIdentity,
   getMempoolStats,

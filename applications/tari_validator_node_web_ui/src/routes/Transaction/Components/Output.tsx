@@ -65,6 +65,8 @@ function RowData({ row, justify }: any) {
                   <TableCell>Shard</TableCell>
                   <TableCell>Current state</TableCell>
                   <TableCell>Pledged to</TableCell>
+                  <TableCell>Proposed by</TableCell>
+                  <TableCell>Leader round</TableCell>
                 </TableRow>
               </TableHead>
               <TableBody>
@@ -87,10 +89,16 @@ function RowData({ row, justify }: any) {
                             : pledge.pledge.current_state}
                         </DataTableCell>
                         <DataTableCell>
-                          {shortenString(pledge.pledge.pledged_to_payload.id)}
+                          {shortenString(pledge.pledge.pledged_to_payload)}
                           <CopyToClipboard
-                            copy={pledge.pledge.pledged_to_payload.id}
+                            copy={pledge.pledge.pledged_to_payload}
                           />
+                        </DataTableCell>
+                        <DataTableCell>
+                          {row.proposed_by}
+                        </DataTableCell>
+                        <DataTableCell>
+                          {row.leader_round}
                         </DataTableCell>
                       </TableRow>
                     );
@@ -141,9 +149,11 @@ function RowData({ row, justify }: any) {
 export default function Output({
   shard,
   output,
+  current_state,
 }: {
   shard: string;
   output: any[];
+  current_state: [string,number,string] | undefined;
 }) {
   return (
     <div id={shard} className="output">
@@ -159,6 +169,12 @@ export default function Output({
         >
           <CommitOutlinedIcon style={{ color: 'rgba(35, 11, 73, 0.20)' }} />
           Shard: {shard}
+          <br/>
+          Current leader : {current_state?current_state[0]:"Unknown"}
+          <br/>
+          Leader round : {current_state?current_state[1]:"Unknown"}
+          <br/>
+          Leader timestamp : {current_state?new Date(current_state[2]).toLocaleString():"Unknown"}
         </BoxHeading>
         <Table>
           <TableHead>

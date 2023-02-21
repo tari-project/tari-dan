@@ -22,7 +22,7 @@
 
 import { useEffect } from 'react';
 import { Form, useLoaderData } from 'react-router-dom';
-import { getSubstates, getTransaction } from '../../utils/json_rpc';
+import { getSubstates, getTransaction, getCurrentLeaderState } from '../../utils/json_rpc';
 import {
   fromHexString,
   toHexString,
@@ -45,7 +45,7 @@ import TableHead from '@mui/material/TableHead';
 import TableRow from '@mui/material/TableRow';
 import TablePagination from '@mui/material/TablePagination';
 
-type loaderData = [string, Map<string, any[]>, Map<string, any[]>];
+type loaderData = [string, Map<string, any[]>, Map<string, any[]>, Map<string, [string, number, string]>];
 
 mermaid.initialize({
   startOnLoad: true,
@@ -72,8 +72,18 @@ function splitToOutputs(transactions: any[]) {
   return shard_transactions;
 }
 
+function splitToShards(current_leader_states: any[]) {
+  let states = new Map<string, [string, number, string]>();
+  for (let current_leader_state of current_leader_states) {
+    let shard = toHexString(current_leader_state.shard_id);
+    states.set(shard, [toHexString(current_leader_state.leader), current_leader_state.leader_round,current_leader_state.timestamp]);
+  }
+  return states;
+}
+
 export async function transactionLoader({ params }: { params: any }) {
   const outputs = splitToOutputs(await getTransaction(params.payloadId));
+  const current_leader_states = splitToShards(await getCurrentLeaderState(params.payloadId));
   let substates = new Map<string, any[]>();
 
   await Promise.all(
@@ -81,7 +91,7 @@ export async function transactionLoader({ params }: { params: any }) {
       substates.set(shard, await getSubstates(params.payloadId, shard));
     })
   );
-  return [params.payloadId, substates, outputs];
+  return [params.payloadId, substates, outputs, current_leader_states];
 }
 
 function mapHeight(height: number) {
@@ -100,9 +110,10 @@ function mapHeight(height: number) {
 }
 
 export default function Transaction() {
-  const [payloadId, substates, outputs] = useLoaderData() as loaderData;
+const [payloadId, substates, outputs, current_leader_states] = useLoaderData() as loaderData;
   console.log('Substates: ', substates);
   console.log('Outputs: ', outputs);
+  console.log('Current states: ', current_leader_states);
   let mermaid = 'gantt\ndateFormat YYYY-MM-DDTHH:mm:ss\naxisFormat  %Hh%M:%S';
   let shardNo = 0;
   for (let [shard, output] of Array.from(outputs.entries())) {
@@ -176,7 +187,7 @@ export default function Transaction() {
           <>
             <Grid item xs={12} md={12} lg={12}>
               <StyledPaper>
-                <Output key={shard} shard={shard} output={output} />
+                <Output key={shard} shard={shard} output={output} current_state={current_leader_states.get(shard)}/>
               </StyledPaper>
             </Grid>
           </>
