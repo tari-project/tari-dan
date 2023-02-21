@@ -22,12 +22,7 @@
 
 import { useState } from 'react';
 import { renderJson } from '../../../utils/helpers';
-import { toHexString } from '../../VN/Components/helpers';
-import Table from '@mui/material/Table';
-import TableBody from '@mui/material/TableBody';
-import TableCell from '@mui/material/TableCell';
-import TableContainer from '@mui/material/TableContainer';
-import TableHead from '@mui/material/TableHead';
+import { toHexString, shortenString } from '../../VN/Components/helpers';
 import TableRow from '@mui/material/TableRow';
 import {
   DataTableCell,
@@ -37,7 +32,7 @@ import {
 import KeyboardArrowDownIcon from '@mui/icons-material/KeyboardArrowDown';
 import KeyboardArrowUpIcon from '@mui/icons-material/KeyboardArrowUp';
 import Collapse from '@mui/material/Collapse';
-import SecondaryHeading from '../../../Components/SecondaryHeading';
+import CopyToClipboard from '../../../Components/CopyToClipboard';
 
 function RowData({ substate }: any) {
   const [open1, setOpen1] = useState(false);
@@ -48,11 +43,13 @@ function RowData({ substate }: any) {
     <>
       <TableRow key={substate.shard_id}>
         <DataTableCell sx={{ borderBottom: 'none' }}>
-          {toHexString(substate.shard_id)}
+          {shortenString(toHexString(substate.shard_id))}
+          <CopyToClipboard copy={toHexString(substate.shard_id)} />
         </DataTableCell>
-          <DataTableCell sx={{ borderBottom: 'none' }}>
-              {substate.address}:{substate.version}
-          </DataTableCell>
+        <DataTableCell sx={{ borderBottom: 'none' }}>
+          {shortenString(`${substate.address}:${substate.version}`, 15, 12)}
+          <CopyToClipboard copy={`${substate.address}:${substate.version}`} />
+        </DataTableCell>
         <DataTableCell sx={{ borderBottom: 'none', textAlign: 'center' }}>
           <AccordionIconButton
             open={open1}
@@ -103,7 +100,7 @@ function RowData({ substate }: any) {
             paddingTop: 0,
             borderBottom: 'none',
           }}
-          colSpan={4}
+          colSpan={5}
         >
           <Collapse in={open1} timeout="auto" unmountOnExit>
             <CodeBlock style={{ marginBottom: '10px' }}>
@@ -119,7 +116,7 @@ function RowData({ substate }: any) {
             paddingTop: 0,
             borderBottom: 'none',
           }}
-          colSpan={4}
+          colSpan={5}
         >
           <Collapse in={open2} timeout="auto" unmountOnExit>
             <CodeBlock style={{ marginBottom: '10px' }}>
@@ -138,7 +135,7 @@ function RowData({ substate }: any) {
             paddingBottom: 0,
             paddingTop: 0,
           }}
-          colSpan={4}
+          colSpan={5}
         >
           <Collapse in={open3} timeout="auto" unmountOnExit>
             <CodeBlock style={{ marginBottom: '10px' }}>
@@ -164,29 +161,10 @@ export default function Substates({ substates }: any) {
     // console.log("parsing json", substate.justify, JSON.parse(substate.justify));
   });
   return (
-    <TableContainer>
-      <Table>
-        <TableHead>
-          <TableRow>
-            <TableCell>Shard</TableCell>
-              <TableCell>Address</TableCell>
-            <TableCell sx={{ textAlign: 'center', width: '120px' }}>
-              Data
-            </TableCell>
-            <TableCell sx={{ textAlign: 'center', width: '120px' }}>
-              Created
-            </TableCell>
-            <TableCell sx={{ textAlign: 'center', width: '120px' }}>
-              Destroyed
-            </TableCell>
-          </TableRow>
-        </TableHead>
-        <TableBody>
-          {substates.map((substate: any) => (
-            <RowData substate={substate} />
-          ))}
-        </TableBody>
-      </Table>
-    </TableContainer>
+    <>
+      {substates.map((substate: any) => (
+        <RowData substate={substate} />
+      ))}
+    </>
   );
 }

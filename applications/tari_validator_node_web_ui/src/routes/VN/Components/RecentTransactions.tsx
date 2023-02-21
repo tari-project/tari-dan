@@ -40,7 +40,7 @@ import KeyboardArrowDownIcon from '@mui/icons-material/KeyboardArrowDown';
 import KeyboardArrowUpIcon from '@mui/icons-material/KeyboardArrowUp';
 import Collapse from '@mui/material/Collapse';
 import TablePagination from '@mui/material/TablePagination';
-import { Typography } from '@mui/material';
+import Typography from '@mui/material/Typography';
 
 interface IRecentTransaction {
   payload_id: number[];
@@ -175,10 +175,12 @@ function RecentTransactions() {
 
   useEffect(() => {
     getRecentTransactions().then((resp) => {
+      console.log('Response: ', resp);
       setRecentTransactions(
         // Display from newest to oldest by reversing
         resp
-          .transactions
+          // .transactions
+          // commented out as it was causing an undefined error
           .slice()
           .reverse()
           .map(

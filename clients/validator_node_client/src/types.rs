@@ -20,6 +20,7 @@
 //   WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //   USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+use multiaddr::Multiaddr;
 use serde::{Deserialize, Serialize};
 use tari_common_types::types::{FixedHash, PublicKey};
 use tari_dan_common_types::{
@@ -227,3 +228,13 @@ pub struct GetStateRequest {
 pub struct GetStateResponse {
     pub data: Vec<u8>,
 }
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AddPeerRequest {
+    pub public_key: PublicKey,
+    pub addresses: Vec<Multiaddr>,
+    pub wait_for_dial: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AddPeerResponse {}
