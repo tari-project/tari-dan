@@ -41,7 +41,7 @@ use tari_dan_app_utilities::{
 };
 use tari_dan_core::consensus_constants::ConsensusConstants;
 use tari_dan_storage::global::GlobalDb;
-use tari_dan_storage_sqlite::global::SqliteGlobalDbAdapter;
+use tari_dan_storage_sqlite::{global::SqliteGlobalDbAdapter, sqlite_shard_store_factory::SqliteShardStore};
 use tari_shutdown::ShutdownSignal;
 use tokio::sync::mpsc;
 
@@ -104,6 +104,8 @@ pub async fn spawn_services(
         get_mock_template_manager_handle(),
         shutdown.clone(),
         consensus_constants,
+        // TODO: Remove coupling between scanner and shard store
+        SqliteShardStore::try_create(config.indexer.data_dir.join("unused-shard-store.sqlite"))?,
         true,
         config.indexer.base_layer_scanning_interval,
     );

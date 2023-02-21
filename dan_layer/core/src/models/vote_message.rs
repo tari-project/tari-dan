@@ -20,6 +20,7 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+use log::*;
 use serde::{Deserialize, Serialize};
 use tari_common_types::types::FixedHash;
 use tari_core::ValidatorNodeMmr;
@@ -36,6 +37,8 @@ use tari_dan_common_types::{
 use tari_mmr::{common::LeafIndex, MerkleProof};
 
 use crate::{services::SigningService, workers::hotstuff_error::HotStuffError, TariDanCoreHashDomain};
+
+const LOG_TARGET: &str = "tari::validator_node::models::vote_message";
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct VoteMessage {
@@ -93,6 +96,14 @@ impl VoteMessage {
         let signature = signing_service.sign(&*challenge).ok_or(HotStuffError::FailedToSignQc)?;
         // construct the merkle proof for the inclusion of the VN's public key in the epoch
         let node_hash = vn_mmr_node_hash(signing_service.public_key(), &shard_id);
+        debug!(
+            target: LOG_TARGET,
+            "[sign_vote] mmr_node_hash={}, public_key={}, shard_id={}, mmr_len={}",
+            node_hash,
+            signing_service.public_key(),
+            shard_id,
+            vn_mmr.len().unwrap()
+        );
         let leaf_index = vn_mmr
             .find_leaf_index(&*node_hash)
             .expect("Unexpected Merkle Mountain Range error")

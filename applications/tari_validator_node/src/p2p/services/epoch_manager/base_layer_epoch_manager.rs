@@ -22,7 +22,7 @@
 
 use std::{convert::TryInto, ops::RangeInclusive, sync::Arc};
 
-use log::info;
+use log::*;
 use tari_common_types::types::{FixedHash, PublicKey};
 use tari_comms::{types::CommsPublicKey, NodeIdentity};
 use tari_core::{
@@ -401,6 +401,15 @@ impl BaseLayerEpochManager {
 
     pub fn get_validator_node_mmr(&self, epoch: Epoch) -> Result<ValidatorNodeMmr, EpochManagerError> {
         let vns = self.get_validator_nodes_per_epoch(epoch)?;
+        debug!(
+            target: LOG_TARGET,
+            "[get_validator_node_mmr] Epoch {} VNs: {}",
+            epoch,
+            vns.iter()
+                .map(|v| format!("pk={}, shard={}", v.public_key, v.shard_key))
+                .collect::<Vec<_>>()
+                .join(", ")
+        );
 
         // TODO: the MMR struct should be serializable to store it only once and avoid recalculating it every time per
         // epoch

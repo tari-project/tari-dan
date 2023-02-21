@@ -23,7 +23,7 @@ Feature: Committee scenarios
     # VN registration
     When validator node VAL_1 sends a registration transaction
     When validator node VAL_2 sends a registration transaction
-    When miner MINER mines 13 new blocks
+    When miner MINER mines 15 new blocks
     Then the validator node VAL_1 is listed as registered
     Then the validator node VAL_2 is listed as registered
 
@@ -52,7 +52,7 @@ Feature: Committee scenarios
 
     # Uncomment the following lines to stop execution for manual inspection of the nodes
     # When I print the cucumber world
-    # When I wait 5000 seconds
+    # When I wait 5000 seconds
 
   Scenario: Template registration and invocation in a 4-VN committee
     # Initialize a base node, wallet and miner

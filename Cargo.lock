@@ -6191,6 +6191,7 @@ dependencies = [
  "tari_dan_engine",
  "tari_dan_storage",
  "tari_dan_storage_sqlite",
+ "tari_engine_types",
  "tari_shutdown",
  "tari_template_lib",
  "tari_validator_node_client",

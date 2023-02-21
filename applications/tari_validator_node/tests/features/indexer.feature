@@ -14,7 +14,7 @@ Feature: Indexer node
     Given a validator node VN connected to base node BASE and wallet WALLET
 
     # The wallet must have some funds before the VN sends transactions
-    When miner MINER mines 12 new blocks
+    When miner MINER mines 4 new blocks
     When wallet WALLET has at least 1000000000 uT
 
     # VN registration
@@ -25,7 +25,7 @@ Feature: Indexer node
     # Register some templates
     When validator node VN registers the template "counter"
     When validator node VN registers the template "basic_nft"
-    When miner MINER mines 20 new blocks
+    When miner MINER mines 5 new blocks
     Then the template "counter" is listed as registered by the validator node VN
     Then the template "basic_nft" is listed as registered by the validator node VN
 
@@ -58,11 +58,11 @@ Feature: Indexer node
     # Get substate of a component (the counter has been increased, so the version is 1)
     Then the indexer IDX returns version 1 for substate COUNTER_1/components/Counter
 
-    # Get substate of a resource (the nft resource has been mutated by the minting, so the version is 1)
+    # Get substate of a resource (the nft resource has been mutated by the minting, so the version is 1)
     Then the indexer IDX returns version 1 for substate NFT/resources/0
 
-    # Get substate of a nft (newly minted and not mutated, so version is 0)
+    #Get substate of a nft (newly minted and not mutated, so version is 0)
     Then the indexer IDX returns version 0 for substate TX2/nfts/0
     
     # When I print the cucumber world
-    # When I wait 5000 seconds
+    # When I wait 5000 seconds
