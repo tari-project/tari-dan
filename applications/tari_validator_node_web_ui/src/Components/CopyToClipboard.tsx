@@ -20,37 +20,52 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use tari_dan_storage::global::DbEpoch;
+import { useState } from 'react';
+import Snackbar from '@mui/material/Snackbar';
+import IconButton from '@mui/material/IconButton';
+import ContentCopyIcon from '@mui/icons-material/ContentCopy';
+import Tooltip from '@mui/material/Tooltip';
 
-use crate::global::schema::*;
-
-#[derive(Queryable)]
-pub struct Epoch {
-    pub epoch: i64,
-    pub validator_node_mr: Vec<u8>,
+interface CopyProps {
+  copy: string;
 }
 
-impl From<Epoch> for DbEpoch {
-    fn from(e: Epoch) -> Self {
-        Self {
-            epoch: e.epoch as u64,
-            validator_node_mr: e.validator_node_mr,
-        }
-    }
-}
+const CopyToClipboard = ({ copy }: CopyProps) => {
+  const [open, setOpen] = useState(false);
+  const handleClick = (copyThis: string) => {
+    setOpen(true);
+    navigator.clipboard.writeText(copyThis);
+  };
 
-#[derive(Insertable)]
-#[diesel(table_name = epochs)]
-pub struct NewEpoch {
-    pub epoch: i64,
-    pub validator_node_mr: Vec<u8>,
-}
+  return (
+    <>
+      <IconButton
+        onClick={() => handleClick(copy)}
+        size="small"
+        aria-label="copy to clipboard"
+        style={{
+          // float: 'right',
+          marginLeft: '10px',
+        }}
+      >
+        <Tooltip title={copy} arrow>
+          <ContentCopyIcon
+            color="primary"
+            style={{
+              width: '16px',
+              height: '16px',
+            }}
+          />
+        </Tooltip>
+      </IconButton>
+      <Snackbar
+        open={open}
+        onClose={() => setOpen(false)}
+        autoHideDuration={2000}
+        message="Copied to clipboard"
+      />
+    </>
+  );
+};
 
-impl From<DbEpoch> for NewEpoch {
-    fn from(e: DbEpoch) -> Self {
-        Self {
-            epoch: e.epoch as i64,
-            validator_node_mr: e.validator_node_mr,
-        }
-    }
-}
+export default CopyToClipboard;

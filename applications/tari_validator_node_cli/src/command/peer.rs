@@ -19,24 +19,37 @@
 //   SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY,
 //   WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //   USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-//
-use chrono::NaiveDateTime;
 
-use crate::schema::*;
+use clap::Subcommand;
+use multiaddr::Multiaddr;
+use tari_common_types::types::PublicKey;
+use tari_utilities::hex::Hex;
+use tari_validator_node_client::{types::AddPeerRequest, ValidatorNodeClient};
 
-#[derive(Debug, Identifiable, Queryable)]
-pub struct ReceivedVote {
-    pub id: i32,
-    pub tree_node_hash: Vec<u8>,
-    pub address: Vec<u8>,
-    pub vote_message: String,
-    pub timestamp: NaiveDateTime,
+#[derive(Debug, Subcommand, Clone)]
+pub enum PeersSubcommand {
+    Connect {
+        public_key: String,
+        addresses: Vec<Multiaddr>,
+    },
 }
 
-#[derive(Debug, Insertable)]
-#[diesel(table_name = received_votes)]
-pub struct NewReceivedVote {
-    pub tree_node_hash: Vec<u8>,
-    pub address: Vec<u8>,
-    pub vote_message: String,
+impl PeersSubcommand {
+    pub async fn handle(self, mut client: ValidatorNodeClient) -> anyhow::Result<()> {
+        #[allow(clippy::enum_glob_use)]
+        use PeersSubcommand::*;
+        match self {
+            Connect { public_key, addresses } => {
+                client
+                    .add_peer(AddPeerRequest {
+                        public_key: PublicKey::from_hex(&public_key)?,
+                        addresses,
+                        wait_for_dial: true,
+                    })
+                    .await?;
+                println!("🫂 Peer connected");
+            },
+        }
+        Ok(())
+    }
 }

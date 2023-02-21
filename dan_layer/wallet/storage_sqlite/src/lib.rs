@@ -2,8 +2,6 @@
 // SPDX-License-Identifier: BSD-3-Clause
 #[macro_use]
 extern crate diesel;
-#[macro_use]
-extern crate diesel_migrations;
 
 mod models;
 mod reader;
@@ -17,8 +15,8 @@ use std::{
     sync::{Arc, Mutex},
 };
 
-use diesel::{Connection, SqliteConnection};
-use diesel_migrations::embed_migrations;
+use diesel::{sql_query, Connection, RunQueryDsl, SqliteConnection};
+use diesel_migrations::{embed_migrations, EmbeddedMigrations, MigrationHarness};
 use tari_dan_wallet_sdk::storage::{WalletStorageError, WalletStore};
 
 use crate::{reader::ReadTransaction, writer::WriteTransaction};
@@ -34,11 +32,11 @@ impl SqliteWalletStore {
         create_dir_all(path.as_ref().parent().unwrap()).expect("Failed to create DB path");
 
         let database_url = path.as_ref().to_str().expect("database_url utf-8 error").to_string();
-        let connection =
+        let mut connection =
             SqliteConnection::establish(&database_url).map_err(|e| WalletStorageError::general("connect", e))?;
 
-        connection
-            .execute("PRAGMA foreign_keys = ON;")
+        sql_query("PRAGMA foreign_keys = ON;")
+            .execute(&mut connection)
             .map_err(|source| WalletStorageError::general("set pragma", source))?;
 
         Ok(Self {
@@ -47,13 +45,10 @@ impl SqliteWalletStore {
     }
 
     pub fn run_migrations(&self) -> Result<(), WalletStorageError> {
-        self.run_migrations_with_output(&mut std::io::sink())
-    }
-
-    pub fn run_migrations_with_output<W: std::io::Write>(&self, output: &mut W) -> Result<(), WalletStorageError> {
-        let conn = self.connection.lock().unwrap();
-        embed_migrations!("./migrations");
-        embedded_migrations::run_with_output(&*conn, output).map_err(|e| WalletStorageError::general("migrate", e))?;
+        let mut conn = self.connection.lock().unwrap();
+        const MIGRATIONS: EmbeddedMigrations = embed_migrations!("./migrations");
+        conn.run_pending_migrations(MIGRATIONS)
+            .map_err(|source| WalletStorageError::general("migrate", source))?;
         Ok(())
     }
 }
@@ -63,15 +58,17 @@ impl WalletStore for SqliteWalletStore {
     type WriteTransaction<'a> = WriteTransaction<'a>;
 
     fn create_read_tx(&self) -> Result<Self::ReadTransaction<'_>, WalletStorageError> {
-        let lock = self.connection.lock().unwrap();
-        lock.execute("BEGIN")
+        let mut lock = self.connection.lock().unwrap();
+        sql_query("BEGIN")
+            .execute(&mut *lock)
             .map_err(|e| WalletStorageError::general("BEGIN transaction", e))?;
         Ok(ReadTransaction::new(lock))
     }
 
     fn create_write_tx(&self) -> Result<Self::WriteTransaction<'_>, WalletStorageError> {
-        let lock = self.connection.lock().unwrap();
-        lock.execute("BEGIN")
+        let mut lock = self.connection.lock().unwrap();
+        sql_query("BEGIN")
+            .execute(&mut *lock)
             .map_err(|e| WalletStorageError::general("BEGIN transaction", e))?;
         Ok(WriteTransaction::new(lock))
     }

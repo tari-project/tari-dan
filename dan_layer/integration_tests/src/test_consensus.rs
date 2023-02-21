@@ -1152,6 +1152,27 @@ impl Test {
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn test_local_leader_failure_multiple() {
+    // This test that we have pacemaker in the local_leader_failure_trigger.
+    let mut test = Test::init(vec![(13, *ONE_SEC)]);
+    let mut committee = test.remove_committee(0);
+    committee.send_tx_new(test.get_payload()).await;
+    // We send original new_view. There is a check in the receive_rx_leader that the messages are indeed for the
+    // current_leader.
+    let _new_view_messages = committee.receive_rx_leader().await;
+    committee.remove_leader().await;
+    // That failed, so pacemaker triggered and we send new new_view.
+    let _new_view_messages = committee.receive_rx_leader().await;
+    committee.remove_leader().await;
+    // Also that failed so we send new new_view again.
+    let new_view_messages = committee.receive_rx_leader().await;
+    // Let's send the messages to the leader
+    committee.leader_receive_messages(new_view_messages).await;
+    // Just to be on the safe side the newest leader should send the proposal.
+    committee.get_proposal().await;
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn test_local_leader_failure_whole_tx() {
     // We need 13 members, on every step one will go offline, so f=4
     let mut test = Test::init(vec![(13, *ONE_SEC)]);

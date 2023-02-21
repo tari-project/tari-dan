@@ -20,7 +20,7 @@ fn get_and_insert_substates() {
 
     let db = SqliteWalletStore::try_open(":memory:").unwrap();
     db.run_migrations().unwrap();
-    let tx = db.create_write_tx().unwrap();
+    let mut tx = db.create_write_tx().unwrap();
     let substate = tx.substates_get(&example_addr).optional().unwrap();
     assert!(substate.is_none());
     let hash = FixedHash::zero();
@@ -49,7 +49,7 @@ fn get_and_insert_substates() {
 
     tx.commit().unwrap();
 
-    let tx = db.create_read_tx().unwrap();
+    let mut tx = db.create_read_tx().unwrap();
     let returned = tx.substates_get(&address).unwrap();
     assert!(returned.parent_address.is_none());
     assert_eq!(returned.address.address, address);

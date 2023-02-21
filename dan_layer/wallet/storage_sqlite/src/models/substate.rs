@@ -13,7 +13,7 @@ use tari_utilities::hex::Hex;
 use crate::schema::substates;
 
 #[derive(Debug, Clone, Queryable, Identifiable)]
-#[table_name = "substates"]
+#[diesel(table_name = substates)]
 pub struct Substate {
     pub id: i32,
     pub module_name: Option<String>,

@@ -154,8 +154,8 @@ impl BaseLayerScanner {
     }
 
     fn load_initial_state(&mut self) -> Result<(), BaseLayerScannerError> {
-        let tx = self.global_db.create_transaction()?;
-        let metadata = self.global_db.metadata(&tx);
+        let mut tx = self.global_db.create_transaction()?;
+        let mut metadata = self.global_db.metadata(&mut tx);
 
         self.last_scanned_tip = metadata.get_metadata(MetadataKey::BaseLayerScannerLastScannedTip)?;
         self.last_scanned_hash = metadata.get_metadata(MetadataKey::BaseLayerScannerLastScannedBlockHash)?;
@@ -366,8 +366,8 @@ impl BaseLayerScanner {
     }
 
     fn set_last_scanned_block(&mut self, tip: FixedHash, block_info: &BlockInfo) -> Result<(), BaseLayerScannerError> {
-        let tx = self.global_db.create_transaction()?;
-        let metadata = self.global_db.metadata(&tx);
+        let mut tx = self.global_db.create_transaction()?;
+        let mut metadata = self.global_db.metadata(&mut tx);
         metadata.set_metadata(MetadataKey::BaseLayerScannerLastScannedTip, &tip)?;
         metadata.set_metadata(MetadataKey::BaseLayerScannerLastScannedBlockHash, &block_info.hash)?;
         metadata.set_metadata(MetadataKey::BaseLayerScannerNextBlockHash, &block_info.next_block_hash)?;

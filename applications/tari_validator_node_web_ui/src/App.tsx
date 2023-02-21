@@ -32,7 +32,6 @@ import IconButton from '@mui/material/IconButton';
 import MenuOpenOutlinedIcon from '@mui/icons-material/MenuOpenOutlined';
 import MenuOutlinedIcon from '@mui/icons-material/MenuOutlined';
 import { mainListItems } from './Components/MenuItems';
-import TariLogo from './assets/images/TariLogoBlack.svg';
 import { ThemeProvider } from '@mui/material';
 import theme from './theme';
 import { Routes, Route, Outlet, Link } from 'react-router-dom';
@@ -46,6 +45,7 @@ import ValidatorNodes from './routes/ValidatorNodes/ValidatorNodes';
 import ErrorPage from './routes/ErrorPage';
 import Transaction from './routes/Transaction/Transaction';
 import Logo from './Components/Logo';
+import Container from '@mui/material/Container';
 
 const drawerWidth = 300;
 
@@ -169,9 +169,15 @@ function Layout() {
           }}
         >
           <Toolbar />
-          <div style={{ padding: theme.spacing(10) }}>
+          <Container
+            maxWidth="xl"
+            style={{
+              paddingTop: theme.spacing(5),
+              paddingBottom: theme.spacing(5),
+            }}
+          >
             <Outlet />
-          </div>
+          </Container>
         </Box>
       </Box>
     </ThemeProvider>

@@ -36,7 +36,7 @@ pub struct HighQc {
 }
 
 #[derive(Debug, Insertable)]
-#[table_name = "high_qcs"]
+#[diesel(table_name = high_qcs)]
 pub struct NewHighQc {
     pub shard_id: Vec<u8>,
     pub payload_id: Vec<u8>,

@@ -60,7 +60,7 @@ impl<TShardStore: ShardStore> PeerSyncManagerService<TShardStore> {
         vn_shard_key: ShardId,
     ) -> Result<(), EpochManagerError> {
         let inventory = {
-            let shard_db = self.shard_store.create_read_tx()?;
+            let mut shard_db = self.shard_store.create_read_tx()?;
             shard_db
                 .get_state_inventory()
                 .map_err(EpochManagerError::StorageError)?

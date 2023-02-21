@@ -15,8 +15,8 @@ tari_engine_types = { path = "../engine_types" }
 tari_transaction = { path = "../transaction" }
 
 borsh = "0.9.3"
-diesel = { version = "1.4.8", default-features = false, features = ["sqlite", "chrono"] }
-diesel_migrations = "1.4.0"
+diesel = { version = "2", default-features = false, features = ["sqlite", "chrono"] }
+diesel_migrations = "2"
 thiserror = "1.0.30"
 chrono = "0.4.19"
 log = { version = "0.4.8", features = ["std"] }

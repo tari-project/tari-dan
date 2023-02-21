@@ -23,8 +23,8 @@
 use crate::global::schema::*;
 
 #[derive(Queryable, Insertable, Identifiable, Debug)]
-#[table_name = "metadata"]
-#[primary_key(key_name)]
+#[diesel(table_name = metadata)]
+#[diesel(primary_key(key_name))]
 pub struct MetadataModel {
     pub key_name: Vec<u8>,
     pub value: Vec<u8>,
