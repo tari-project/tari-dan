@@ -28,7 +28,16 @@ use std::{
 use serde::{Deserialize, Serialize};
 use tari_bor::{borsh, decode, decode_exact, encode, Decode, Encode};
 use tari_template_lib::{
-    models::{ComponentAddress, ComponentHeader, NonFungibleAddress, NonFungibleId, ResourceAddress, VaultId},
+    models::{
+        AddressListAddress,
+        AddressListItemAddress,
+        ComponentAddress,
+        ComponentHeader,
+        NonFungibleAddress,
+        NonFungibleId,
+        ResourceAddress,
+        VaultId,
+    },
     Hash,
 };
 
@@ -76,6 +85,8 @@ pub enum SubstateAddress {
     Resource(ResourceAddress),
     Vault(VaultId),
     NonFungible(NonFungibleAddress),
+    AddressList(AddressListAddress),
+    AddressListItem(AddressListItemAddress),
 }
 
 impl SubstateAddress {
@@ -100,34 +111,23 @@ impl SubstateAddress {
         }
     }
 
-    pub fn to_canonical_hash(&self) -> Hash {
-        match self {
-            SubstateAddress::Component(address) => *address.hash(),
-            SubstateAddress::Resource(address) => *address.hash(),
-            SubstateAddress::Vault(id) => *id.hash(),
-            SubstateAddress::NonFungible(address) => hasher("non_fungible_id")
-                .chain(address.resource_address().hash())
-                .chain(address.id())
-                .result(),
-        }
-    }
-
-    pub fn to_bytes(&self) -> Vec<u8> {
-        encode(self).unwrap()
-    }
-
-    pub fn from_bytes(bytes: &[u8]) -> std::io::Result<Self> {
-        decode_exact(bytes)
-    }
-
-    // TODO: look at using BECH32 standard
-    pub fn to_address_string(&self) -> String {
-        self.to_string()
-    }
-
     pub fn as_non_fungible_address(&self) -> Option<&NonFungibleAddress> {
         match self {
             SubstateAddress::NonFungible(addr) => Some(addr),
+            _ => None,
+        }
+    }
+
+    pub fn as_address_list_address(&self) -> Option<&AddressListAddress> {
+        match self {
+            SubstateAddress::AddressList(addr) => Some(addr),
+            _ => None,
+        }
+    }
+
+    pub fn as_address_list_item_address(&self) -> Option<&AddressListItemAddress> {
+        match self {
+            SubstateAddress::AddressListItem(addr) => Some(addr),
             _ => None,
         }
     }
@@ -146,6 +146,44 @@ impl SubstateAddress {
 
     pub fn is_non_fungible(&self) -> bool {
         matches!(self, Self::NonFungible(_))
+    }
+
+    pub fn is_address_list(&self) -> bool {
+        matches!(self, Self::AddressList(_))
+    }
+
+    pub fn is_address_list_item(&self) -> bool {
+        matches!(self, Self::AddressListItem(_))
+    }
+
+    pub fn to_bytes(&self) -> Vec<u8> {
+        encode(self).unwrap()
+    }
+
+    pub fn from_bytes(bytes: &[u8]) -> std::io::Result<Self> {
+        decode_exact(bytes)
+    }
+
+    // TODO: look at using BECH32 standard
+    pub fn to_address_string(&self) -> String {
+        self.to_string()
+    }
+
+    pub fn to_canonical_hash(&self) -> Hash {
+        match self {
+            SubstateAddress::Component(address) => *address.hash(),
+            SubstateAddress::Resource(address) => *address.hash(),
+            SubstateAddress::Vault(id) => *id.hash(),
+            SubstateAddress::NonFungible(address) => hasher("non_fungible_id")
+                .chain(address.resource_address().hash())
+                .chain(address.id())
+                .result(),
+            SubstateAddress::AddressList(address) => *address.hash(),
+            SubstateAddress::AddressListItem(address) => hasher("address_list_item")
+                .chain(address.list_address().hash())
+                .chain(&address.index())
+                .result(),
+        }
     }
 }
 
@@ -180,6 +218,8 @@ impl Display for SubstateAddress {
             SubstateAddress::Resource(addr) => write!(f, "{}", addr),
             SubstateAddress::Vault(addr) => write!(f, "{}", addr),
             SubstateAddress::NonFungible(addr) => write!(f, "{}", addr),
+            SubstateAddress::AddressList(addr) => write!(f, "{}", addr),
+            SubstateAddress::AddressListItem(addr) => write!(f, "{}", addr),
         }
     }
 }
