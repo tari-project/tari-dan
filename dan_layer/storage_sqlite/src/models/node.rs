@@ -42,7 +42,7 @@ pub struct Node {
 }
 
 #[derive(Debug, Insertable)]
-#[table_name = "nodes"]
+#[diesel(table_name = nodes)]
 pub struct NewNode {
     pub node_hash: Vec<u8>,
     pub parent_node_hash: Vec<u8>,

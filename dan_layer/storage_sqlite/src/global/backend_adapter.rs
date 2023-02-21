@@ -59,7 +59,7 @@ impl SqliteGlobalDbAdapter {
         }
     }
 
-    fn exists(&self, tx: &SqliteTransaction<'_>, key: MetadataKey) -> Result<bool, SqliteStorageError> {
+    fn exists(&self, tx: &mut SqliteTransaction<'_>, key: MetadataKey) -> Result<bool, SqliteStorageError> {
         use crate::global::schema::metadata;
         let result = metadata::table
             .filter(metadata::key_name.eq(key.as_key_bytes()))
@@ -83,7 +83,7 @@ impl AtomicDb for SqliteGlobalDbAdapter {
         Ok(tx)
     }
 
-    fn commit(&self, mut transaction: Self::DbTransaction<'_>) -> Result<(), Self::Error> {
+    fn commit(&self, transaction: Self::DbTransaction<'_>) -> Result<(), Self::Error> {
         transaction.commit()
     }
 }
@@ -91,7 +91,7 @@ impl AtomicDb for SqliteGlobalDbAdapter {
 impl GlobalDbAdapter for SqliteGlobalDbAdapter {
     fn set_metadata<T: Serialize>(
         &self,
-        tx: &Self::DbTransaction<'_>,
+        tx: &mut Self::DbTransaction<'_>,
         key: MetadataKey,
         value: &T,
     ) -> Result<(), Self::Error> {
@@ -121,7 +121,7 @@ impl GlobalDbAdapter for SqliteGlobalDbAdapter {
 
     fn get_metadata<T: DeserializeOwned>(
         &self,
-        tx: &Self::DbTransaction<'_>,
+        tx: &mut Self::DbTransaction<'_>,
         key: &MetadataKey,
     ) -> Result<Option<T>, Self::Error> {
         use crate::global::schema::metadata::dsl;
@@ -139,7 +139,7 @@ impl GlobalDbAdapter for SqliteGlobalDbAdapter {
         Ok(v)
     }
 
-    fn get_template(&self, tx: &Self::DbTransaction<'_>, key: &[u8]) -> Result<Option<DbTemplate>, Self::Error> {
+    fn get_template(&self, tx: &mut Self::DbTransaction<'_>, key: &[u8]) -> Result<Option<DbTemplate>, Self::Error> {
         use crate::global::schema::templates::dsl;
         let template: Option<TemplateModel> = dsl::templates
             .filter(templates::template_address.eq(key))
@@ -164,7 +164,7 @@ impl GlobalDbAdapter for SqliteGlobalDbAdapter {
         }
     }
 
-    fn get_templates(&self, tx: &Self::DbTransaction<'_>, limit: usize) -> Result<Vec<DbTemplate>, Self::Error> {
+    fn get_templates(&self, tx: &mut Self::DbTransaction<'_>, limit: usize) -> Result<Vec<DbTemplate>, Self::Error> {
         use crate::global::schema::templates::dsl;
         let templates = dsl::templates
             .filter(templates::status.eq(TemplateStatus::Active.as_str()))
@@ -192,7 +192,7 @@ impl GlobalDbAdapter for SqliteGlobalDbAdapter {
             .collect()
     }
 
-    fn insert_template(&self, tx: &Self::DbTransaction<'_>, item: DbTemplate) -> Result<(), Self::Error> {
+    fn insert_template(&self, tx: &mut Self::DbTransaction<'_>, item: DbTemplate) -> Result<(), Self::Error> {
         let new_template = NewTemplateModel {
             template_name: item.template_name,
             template_address: item.template_address.to_vec(),
@@ -217,7 +217,7 @@ impl GlobalDbAdapter for SqliteGlobalDbAdapter {
 
     fn update_template(
         &self,
-        tx: &Self::DbTransaction<'_>,
+        tx: &mut Self::DbTransaction<'_>,
         key: &[u8],
         template: DbTemplateUpdate,
     ) -> Result<(), Self::Error> {
@@ -238,7 +238,7 @@ impl GlobalDbAdapter for SqliteGlobalDbAdapter {
         Ok(())
     }
 
-    fn template_exists(&self, tx: &Self::DbTransaction<'_>, key: &[u8]) -> Result<bool, Self::Error> {
+    fn template_exists(&self, tx: &mut Self::DbTransaction<'_>, key: &[u8]) -> Result<bool, Self::Error> {
         use crate::global::schema::templates::dsl;
         let result = dsl::templates
             .filter(templates::template_address.eq(key))
@@ -254,7 +254,7 @@ impl GlobalDbAdapter for SqliteGlobalDbAdapter {
 
     fn insert_validator_nodes(
         &self,
-        tx: &Self::DbTransaction<'_>,
+        tx: &mut Self::DbTransaction<'_>,
         validator_nodes: Vec<DbValidatorNode>,
     ) -> Result<(), Self::Error> {
         use crate::global::schema::validator_nodes;
@@ -277,7 +277,7 @@ impl GlobalDbAdapter for SqliteGlobalDbAdapter {
 
     fn get_validator_node(
         &self,
-        tx: &Self::DbTransaction<'_>,
+        tx: &mut Self::DbTransaction<'_>,
         start_epoch: u64,
         end_epoch: u64,
         public_key: &[u8],
@@ -299,7 +299,7 @@ impl GlobalDbAdapter for SqliteGlobalDbAdapter {
 
     fn get_validator_nodes_within_epochs(
         &self,
-        tx: &Self::DbTransaction<'_>,
+        tx: &mut Self::DbTransaction<'_>,
         start_epoch: u64,
         end_epoch: u64,
     ) -> Result<Vec<DbValidatorNode>, Self::Error> {
@@ -331,11 +331,7 @@ impl GlobalDbAdapter for SqliteGlobalDbAdapter {
         Ok(db_vns)
     }
 
-    fn insert_epoch(
-        &self,
-        tx: &Self::DbTransaction<'_>,
-        epoch: tari_dan_storage::global::DbEpoch,
-    ) -> Result<(), Self::Error> {
+    fn insert_epoch(&self, tx: &mut Self::DbTransaction<'_>, epoch: DbEpoch) -> Result<(), Self::Error> {
         use crate::global::schema::epochs;
 
         let sqlite_epoch: NewEpoch = epoch.into();
@@ -351,7 +347,7 @@ impl GlobalDbAdapter for SqliteGlobalDbAdapter {
         Ok(())
     }
 
-    fn get_epoch(&self, tx: &Self::DbTransaction<'_>, epoch: u64) -> Result<Option<DbEpoch>, Self::Error> {
+    fn get_epoch(&self, tx: &mut Self::DbTransaction<'_>, epoch: u64) -> Result<Option<DbEpoch>, Self::Error> {
         use crate::global::schema::epochs::dsl;
 
         let query_res: Option<Epoch> = dsl::epochs

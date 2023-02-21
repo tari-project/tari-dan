@@ -231,7 +231,7 @@ impl JsonRpcHandlers {
 
     pub async fn get_recent_transactions(&self, value: JsonRpcExtractor) -> JrpcResult {
         let answer_id = value.get_answer_id();
-        let tx = self.shard_store.create_read_tx().unwrap();
+        let mut tx = self.shard_store.create_read_tx().unwrap();
         if let Ok(recent_transactions) = tx.get_recent_transactions() {
             let res = GetRecentTransactionsResponse {
                 transactions: recent_transactions,
@@ -254,7 +254,7 @@ impl JsonRpcHandlers {
         let request: GetTransactionResultRequest = value.parse_params()?;
         let payload_id = PayloadId::new(request.hash);
 
-        let tx = self.shard_store.create_read_tx().unwrap();
+        let mut tx = self.shard_store.create_read_tx().unwrap();
         let payload = tx
             .get_payload(&payload_id)
             .optional()
@@ -293,7 +293,7 @@ impl JsonRpcHandlers {
     pub async fn get_transaction(&self, value: JsonRpcExtractor) -> JrpcResult {
         let answer_id = value.get_answer_id();
         let data: TransactionRequest = value.parse_params()?;
-        let tx = self.shard_store.create_read_tx().unwrap();
+        let mut tx = self.shard_store.create_read_tx().unwrap();
         match tx.get_transaction(data.payload_id) {
             // TODO: return the transaction with the Response struct, and probably rename this jrpc method to
             // get_transaction_status
@@ -315,7 +315,7 @@ impl JsonRpcHandlers {
     pub async fn get_substates(&self, value: JsonRpcExtractor) -> JrpcResult {
         let answer_id = value.get_answer_id();
         let data: SubstatesRequest = value.parse_params()?;
-        let tx = self.shard_store.create_read_tx().unwrap();
+        let mut tx = self.shard_store.create_read_tx().unwrap();
         match tx.get_substates_for_payload(data.payload_id, data.shard_id) {
             Ok(substates) => Ok(JsonRpcResponse::success(answer_id, json!(substates))),
             Err(err) => {

@@ -1,7 +1,10 @@
 //   Copyright 2023 The Tari Project
 //   SPDX-License-Identifier: BSD-3-Clause
 
-use std::{ops::Deref, sync::MutexGuard};
+use std::{
+    ops::{Deref, DerefMut},
+    sync::MutexGuard,
+};
 
 use diesel::{
     sql_query,
@@ -52,7 +55,7 @@ impl WalletStoreWriter for WriteTransaction<'_> {
         Ok(())
     }
 
-    fn key_manager_set_active_index(&self, branch: &str, index: u64) -> Result<(), WalletStorageError> {
+    fn key_manager_set_active_index(&mut self, branch: &str, index: u64) -> Result<(), WalletStorageError> {
         use crate::schema::key_manager_states;
         let index = i64::try_from(index)
             .map_err(|_| WalletStorageError::general("key_manager_set_index", "index is negative"))?;
@@ -89,7 +92,7 @@ impl WalletStoreWriter for WriteTransaction<'_> {
         Ok(())
     }
 
-    fn config_set<T: Serialize>(&self, key: &str, value: &T, is_encrypted: bool) -> Result<(), WalletStorageError> {
+    fn config_set<T: Serialize>(&mut self, key: &str, value: &T, is_encrypted: bool) -> Result<(), WalletStorageError> {
         use crate::schema::config;
 
         let exists = config::table
@@ -118,7 +121,7 @@ impl WalletStoreWriter for WriteTransaction<'_> {
         Ok(())
     }
 
-    fn transactions_insert(&self, transaction: &Transaction, is_dry_run: bool) -> Result<(), WalletStorageError> {
+    fn transactions_insert(&mut self, transaction: &Transaction, is_dry_run: bool) -> Result<(), WalletStorageError> {
         let status = if is_dry_run {
             TransactionStatus::DryRun
         } else {
@@ -144,7 +147,7 @@ impl WalletStoreWriter for WriteTransaction<'_> {
     }
 
     fn transactions_set_result_and_status(
-        &self,
+        &mut self,
         hash: FixedHash,
         result: Option<&FinalizeResult>,
         qcs: Option<&[QuorumCertificate]>,
@@ -172,7 +175,7 @@ impl WalletStoreWriter for WriteTransaction<'_> {
     }
 
     fn substates_insert_parent(
-        &self,
+        &mut self,
         tx_hash: FixedHash,
         substate: VersionedSubstateAddress,
         module_name: String,
@@ -195,7 +198,7 @@ impl WalletStoreWriter for WriteTransaction<'_> {
     }
 
     fn substates_insert_child(
-        &self,
+        &mut self,
         tx_hash: FixedHash,
         parent: SubstateAddress,
         child: VersionedSubstateAddress,
@@ -210,7 +213,10 @@ impl WalletStoreWriter for WriteTransaction<'_> {
         Ok(())
     }
 
-    fn substates_remove(&self, substate_addr: &VersionedSubstateAddress) -> Result<SubstateRecord, WalletStorageError> {
+    fn substates_remove(
+        &mut self,
+        substate_addr: &VersionedSubstateAddress,
+    ) -> Result<SubstateRecord, WalletStorageError> {
         let substate = self.transaction.substates_get(&substate_addr.address)?;
         let num_rows = sql_query("DELETE FROM substates WHERE address = ? AND version = ?")
             .bind::<Text, _>(substate_addr.address.to_string())
@@ -230,7 +236,7 @@ impl WalletStoreWriter for WriteTransaction<'_> {
     }
 
     fn accounts_insert(
-        &self,
+        &mut self,
         account_name: &str,
         address: &SubstateAddress,
         owner_key_index: u64,
@@ -262,5 +268,11 @@ impl<'a> Deref for WriteTransaction<'a> {
 
     fn deref(&self) -> &Self::Target {
         &self.transaction
+    }
+}
+
+impl<'a> DerefMut for WriteTransaction<'a> {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.transaction
     }
 }

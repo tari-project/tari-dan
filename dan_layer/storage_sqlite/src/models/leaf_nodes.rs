@@ -36,7 +36,7 @@ pub struct LeafNode {
 }
 
 #[derive(Debug, Insertable)]
-#[table_name = "leaf_nodes"]
+#[diesel(table_name = leaf_nodes)]
 pub struct NewLeafNode {
     pub shard_id: Vec<u8>,
     pub payload_id: Vec<u8>,

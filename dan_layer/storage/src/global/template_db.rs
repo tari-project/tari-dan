@@ -26,33 +26,33 @@ use tari_common_types::types::FixedHash;
 
 use crate::global::GlobalDbAdapter;
 
-pub struct TemplateDb<'a, TGlobalDbAdapter: GlobalDbAdapter> {
+pub struct TemplateDb<'a, 'tx, TGlobalDbAdapter: GlobalDbAdapter> {
     backend: &'a TGlobalDbAdapter,
-    tx: &'a TGlobalDbAdapter::DbTransaction<'a>,
+    tx: &'tx mut TGlobalDbAdapter::DbTransaction<'a>,
 }
 
-impl<'a, TGlobalDbAdapter: GlobalDbAdapter> TemplateDb<'a, TGlobalDbAdapter> {
-    pub fn new(backend: &'a TGlobalDbAdapter, tx: &'a TGlobalDbAdapter::DbTransaction<'a>) -> Self {
+impl<'a, 'tx, TGlobalDbAdapter: GlobalDbAdapter> TemplateDb<'a, 'tx, TGlobalDbAdapter> {
+    pub fn new(backend: &'a TGlobalDbAdapter, tx: &'tx mut TGlobalDbAdapter::DbTransaction<'a>) -> Self {
         Self { backend, tx }
     }
 
-    pub fn get_template(&self, key: &[u8]) -> Result<Option<DbTemplate>, TGlobalDbAdapter::Error> {
+    pub fn get_template(&mut self, key: &[u8]) -> Result<Option<DbTemplate>, TGlobalDbAdapter::Error> {
         self.backend.get_template(self.tx, key)
     }
 
-    pub fn get_templates(&self, limit: usize) -> Result<Vec<DbTemplate>, TGlobalDbAdapter::Error> {
+    pub fn get_templates(&mut self, limit: usize) -> Result<Vec<DbTemplate>, TGlobalDbAdapter::Error> {
         self.backend.get_templates(self.tx, limit)
     }
 
-    pub fn insert_template(&self, template: DbTemplate) -> Result<(), TGlobalDbAdapter::Error> {
+    pub fn insert_template(&mut self, template: DbTemplate) -> Result<(), TGlobalDbAdapter::Error> {
         self.backend.insert_template(self.tx, template)
     }
 
-    pub fn update_template(&self, key: &[u8], update: DbTemplateUpdate) -> Result<(), TGlobalDbAdapter::Error> {
+    pub fn update_template(&mut self, key: &[u8], update: DbTemplateUpdate) -> Result<(), TGlobalDbAdapter::Error> {
         self.backend.update_template(self.tx, key, update)
     }
 
-    pub fn template_exists(&self, key: &[u8]) -> Result<bool, TGlobalDbAdapter::Error> {
+    pub fn template_exists(&mut self, key: &[u8]) -> Result<bool, TGlobalDbAdapter::Error> {
         self.backend.template_exists(self.tx, key)
     }
 }

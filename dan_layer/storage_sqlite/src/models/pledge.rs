@@ -22,7 +22,7 @@ pub struct ShardPledge {
 }
 
 #[derive(Debug, Insertable)]
-#[table_name = "shard_pledges"]
+#[diesel(table_name = shard_pledges)]
 pub struct NewShardPledge {
     pub shard_id: Vec<u8>,
     pub created_height: i64,

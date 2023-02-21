@@ -44,7 +44,7 @@ config = "0.13.0"
 futures = { version = "^0.3.1" }
 include_dir = "0.7.2"
 json5 = "0.2.2"
-libsqlite3-sys = { version = "0.22.2", features = ["bundled"] }
+libsqlite3-sys = { version = "0.25", features = ["bundled"] }
 lmdb-zero = "0.4.4"
 log = { version = "0.4.8", features = ["std"] }
 log4rs = { version = "1.1.1", features = ["rolling_file_appender", "compound_policy", "size_trigger", "fixed_window_roller"] }

@@ -24,7 +24,7 @@ impl<'a, TStore: WalletStore> AccountsApi<'a, TStore> {
         account_address: &SubstateAddress,
         owner_key_index: u64,
     ) -> Result<(), AccountsApiError> {
-        let tx = self.store.create_write_tx()?;
+        let mut tx = self.store.create_write_tx()?;
         let account_name = account_name
             .map(|s| s.to_string())
             .unwrap_or_else(|| account_address.to_string());
@@ -38,19 +38,19 @@ impl<'a, TStore: WalletStore> AccountsApi<'a, TStore> {
     }
 
     pub fn get_many(&self, limit: u64) -> Result<Vec<Account>, AccountsApiError> {
-        let tx = self.store.create_read_tx()?;
+        let mut tx = self.store.create_read_tx()?;
         let accounts = tx.accounts_get_many(limit)?;
         Ok(accounts)
     }
 
     pub fn count(&self) -> Result<u64, AccountsApiError> {
-        let tx = self.store.create_read_tx()?;
+        let mut tx = self.store.create_read_tx()?;
         let count = tx.accounts_count()?;
         Ok(count)
     }
 
     pub fn get_account_address_by_name(&self, name: &str) -> Result<SubstateAddress, AccountsApiError> {
-        let tx = self.store.create_read_tx()?;
+        let mut tx = self.store.create_read_tx()?;
         let account = tx.accounts_get_by_name(name)?;
         Ok(account.address)
     }

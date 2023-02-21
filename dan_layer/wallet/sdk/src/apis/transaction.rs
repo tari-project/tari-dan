@@ -37,7 +37,7 @@ impl<'a, TStore: WalletStore> TransactionApi<'a, TStore> {
     }
 
     pub fn get(&self, hash: FixedHash) -> Result<WalletTransaction, TransactionApiError> {
-        let tx = self.store.create_read_tx()?;
+        let mut tx = self.store.create_read_tx()?;
         let transaction = tx.transaction_get(hash)?;
         Ok(transaction)
     }
@@ -90,7 +90,7 @@ impl<'a, TStore: WalletStore> TransactionApi<'a, TStore> {
         &self,
         status: TransactionStatus,
     ) -> Result<Vec<WalletTransaction>, TransactionApiError> {
-        let tx = self.store.create_read_tx()?;
+        let mut tx = self.store.create_read_tx()?;
         let transactions = tx.transactions_fetch_all_by_status(status)?;
         Ok(transactions)
     }

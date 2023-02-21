@@ -34,7 +34,7 @@ pub struct LastExecutedHeight {
 }
 
 #[derive(Debug, Insertable)]
-#[table_name = "last_executed_heights"]
+#[diesel(table_name = last_executed_heights)]
 pub struct NewLastExecutedHeight {
     pub shard_id: Vec<u8>,
     pub payload_id: Vec<u8>,

@@ -24,22 +24,25 @@ use serde::{de::DeserializeOwned, Serialize};
 
 use crate::global::GlobalDbAdapter;
 
-pub struct MetadataDb<'a, TGlobalDbAdapter: GlobalDbAdapter> {
+pub struct MetadataDb<'a, 'tx, TGlobalDbAdapter: GlobalDbAdapter> {
     backend: &'a TGlobalDbAdapter,
-    tx: &'a TGlobalDbAdapter::DbTransaction<'a>,
+    tx: &'tx mut TGlobalDbAdapter::DbTransaction<'a>,
 }
 
-impl<'a, TGlobalDbAdapter: GlobalDbAdapter> MetadataDb<'a, TGlobalDbAdapter> {
-    pub fn new(backend: &'a TGlobalDbAdapter, tx: &'a TGlobalDbAdapter::DbTransaction<'a>) -> Self {
+impl<'a, 'tx, TGlobalDbAdapter: GlobalDbAdapter> MetadataDb<'a, 'tx, TGlobalDbAdapter> {
+    pub fn new(backend: &'a TGlobalDbAdapter, tx: &'tx mut TGlobalDbAdapter::DbTransaction<'a>) -> Self {
         Self { backend, tx }
     }
 
-    pub fn set_metadata<T: Serialize>(&self, key: MetadataKey, value: &T) -> Result<(), TGlobalDbAdapter::Error> {
+    pub fn set_metadata<T: Serialize>(&mut self, key: MetadataKey, value: &T) -> Result<(), TGlobalDbAdapter::Error> {
         self.backend.set_metadata(self.tx, key, value)?;
         Ok(())
     }
 
-    pub fn get_metadata<T: DeserializeOwned>(&self, key: MetadataKey) -> Result<Option<T>, TGlobalDbAdapter::Error> {
+    pub fn get_metadata<T: DeserializeOwned>(
+        &mut self,
+        key: MetadataKey,
+    ) -> Result<Option<T>, TGlobalDbAdapter::Error> {
         let data = self.backend.get_metadata(self.tx, &key)?;
         Ok(data)
     }
