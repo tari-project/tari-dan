@@ -22,14 +22,14 @@
 
 use std::{fs::create_dir_all, path::PathBuf};
 
-use diesel::{Connection, SqliteConnection};
-use diesel_migrations::embed_migrations;
+use diesel::{sql_query, Connection, RunQueryDsl, SqliteConnection};
+use diesel_migrations::{embed_migrations, EmbeddedMigrations, MigrationHarness};
 use tari_dan_core::storage::{DbFactory, StorageError};
 use tari_dan_storage::global::GlobalDb;
 
 use crate::{error::SqliteStorageError, global::SqliteGlobalDbAdapter};
 
-const LOG_TARGET: &str = "tari::dan::sqlite_storage";
+const _LOG_TARGET: &str = "tari::dan::sqlite_storage";
 
 #[derive(Debug, Clone)]
 pub struct SqliteDbFactory {
@@ -54,9 +54,9 @@ impl DbFactory for SqliteDbFactory {
     type GlobalDbAdapter = SqliteGlobalDbAdapter;
 
     fn get_or_create_global_db(&self) -> Result<GlobalDb<Self::GlobalDbAdapter>, StorageError> {
-        let connection = self.connect()?;
-        connection
-            .execute("PRAGMA foreign_keys = ON;")
+        let mut connection = self.connect()?;
+        sql_query("PRAGMA foreign_keys = ON;")
+            .execute(&mut connection)
             .map_err(|source| SqliteStorageError::DieselError {
                 source,
                 operation: "set pragma".to_string(),
@@ -65,12 +65,11 @@ impl DbFactory for SqliteDbFactory {
     }
 
     fn migrate(&self) -> Result<(), StorageError> {
-        let connection = self.connect()?;
-        embed_migrations!("./global_db_migrations");
-        // embedded_migrations::run(&connection).map_err(SqliteStorageError::from)?;
-        if let Err(err) = embedded_migrations::run_with_output(&connection, &mut std::io::stdout()) {
-            log::error!(target: LOG_TARGET, "Error running migrations: {}", err);
-        }
+        let mut connection = self.connect()?;
+        const MIGRATIONS: EmbeddedMigrations = embed_migrations!("./global_db_migrations");
+        connection
+            .run_pending_migrations(MIGRATIONS)
+            .map_err(|source| SqliteStorageError::MigrationError { source })?;
 
         Ok(())
     }

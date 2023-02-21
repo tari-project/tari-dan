@@ -388,7 +388,7 @@ where
         let payload;
         let current_leaf_node;
         {
-            let tx = self.shard_store.create_read_tx()?;
+            let mut tx = self.shard_store.create_read_tx()?;
             current_leaf_node = tx.get_leaf_node(&payload_id, &shard)?;
             high_qc = tx.get_high_qc_for(payload_id, shard)?;
             // The high QC could be from a previous payload, we want to propose for this payload
@@ -1321,7 +1321,7 @@ where
         let mut on_propose = None;
         let node;
         {
-            let tx = self.shard_store.create_read_tx()?;
+            let mut tx = self.shard_store.create_read_tx()?;
             // Avoid duplicates
             if tx.has_vote_for(&from, msg.local_node_hash())? {
                 println!("🔥 Vote with node hash {} already received", msg.local_node_hash());

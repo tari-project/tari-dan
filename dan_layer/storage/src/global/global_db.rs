@@ -42,22 +42,31 @@ impl<TGlobalDbAdapter: GlobalDbAdapter> GlobalDb<TGlobalDbAdapter> {
         Ok(tx)
     }
 
-    pub fn templates<'a>(&'a self, tx: &'a TGlobalDbAdapter::DbTransaction<'a>) -> TemplateDb<'a, TGlobalDbAdapter> {
+    pub fn templates<'a, 'tx>(
+        &'a self,
+        tx: &'tx mut TGlobalDbAdapter::DbTransaction<'a>,
+    ) -> TemplateDb<'a, 'tx, TGlobalDbAdapter> {
         TemplateDb::new(&self.adapter, tx)
     }
 
-    pub fn metadata<'a>(&'a self, tx: &'a TGlobalDbAdapter::DbTransaction<'a>) -> MetadataDb<'a, TGlobalDbAdapter> {
+    pub fn metadata<'a, 'tx>(
+        &'a self,
+        tx: &'tx mut TGlobalDbAdapter::DbTransaction<'a>,
+    ) -> MetadataDb<'a, 'tx, TGlobalDbAdapter> {
         MetadataDb::new(&self.adapter, tx)
     }
 
-    pub fn validator_nodes<'a>(
+    pub fn validator_nodes<'a, 'tx>(
         &'a self,
-        tx: &'a TGlobalDbAdapter::DbTransaction<'a>,
-    ) -> ValidatorNodeDb<'a, TGlobalDbAdapter> {
+        tx: &'tx mut TGlobalDbAdapter::DbTransaction<'a>,
+    ) -> ValidatorNodeDb<'a, 'tx, TGlobalDbAdapter> {
         ValidatorNodeDb::new(&self.adapter, tx)
     }
 
-    pub fn epochs<'a>(&'a self, tx: &'a TGlobalDbAdapter::DbTransaction<'a>) -> EpochDb<'a, TGlobalDbAdapter> {
+    pub fn epochs<'a, 'tx>(
+        &'a self,
+        tx: &'tx mut TGlobalDbAdapter::DbTransaction<'a>,
+    ) -> EpochDb<'a, 'tx, TGlobalDbAdapter> {
         EpochDb::new(&self.adapter, tx)
     }
 

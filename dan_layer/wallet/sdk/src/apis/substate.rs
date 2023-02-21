@@ -23,7 +23,7 @@ impl<'a, TStore: WalletStore> SubstatesApi<'a, TStore> {
         parents: &[SubstateAddress],
     ) -> Result<Vec<VersionedSubstateAddress>, SubstateApiError> {
         let mut substate_addresses = Vec::with_capacity(parents.len());
-        let tx = self.store.create_read_tx()?;
+        let mut tx = self.store.create_read_tx()?;
         // TODO: Could be optimised, also perhaps we need to traverse all ancestors
         for parent_addr in parents {
             let parent = tx.substates_get(parent_addr)?;

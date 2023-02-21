@@ -18,13 +18,13 @@ impl<'a, TStore: WalletStore> ConfigApi<'a, TStore> {
 
     pub fn get<T>(&self, key: ConfigKey) -> Result<T, ConfigApiError>
     where T: DeserializeOwned {
-        let tx = self.store.create_read_tx()?;
+        let mut tx = self.store.create_read_tx()?;
         let record = tx.config_get(key.as_key_str())?;
         Ok(record.value)
     }
 
     pub fn set<T: Serialize>(&self, key: ConfigKey, value: &T, is_encrypted: bool) -> Result<(), ConfigApiError> {
-        let tx = self.store.create_write_tx()?;
+        let mut tx = self.store.create_write_tx()?;
         // TODO: Actually encrypt if is_encrypted is true
         tx.config_set(key.as_key_str(), value, is_encrypted)?;
         tx.commit()?;

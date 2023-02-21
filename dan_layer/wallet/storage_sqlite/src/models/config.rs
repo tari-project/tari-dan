@@ -7,7 +7,7 @@ use diesel::{Identifiable, Queryable};
 use crate::schema::config;
 
 #[derive(Debug, Clone, Identifiable, Queryable)]
-#[table_name = "config"]
+#[diesel(table_name = config)]
 pub struct Config {
     pub id: i32,
     pub key: String,

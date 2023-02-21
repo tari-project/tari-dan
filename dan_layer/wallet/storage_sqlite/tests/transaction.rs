@@ -20,7 +20,7 @@ fn build_transaction() -> Transaction {
 fn get_and_insert_transaction() {
     let db = SqliteWalletStore::try_open(":memory:").unwrap();
     db.run_migrations().unwrap();
-    let tx = db.create_write_tx().unwrap();
+    let mut tx = db.create_write_tx().unwrap();
     let transaction = tx.transaction_get(FixedHash::zero()).optional().unwrap();
     assert!(transaction.is_none());
     let transaction = build_transaction();
@@ -28,7 +28,7 @@ fn get_and_insert_transaction() {
     tx.transactions_insert(&transaction, false).unwrap();
     tx.commit().unwrap();
 
-    let tx = db.create_read_tx().unwrap();
+    let mut tx = db.create_read_tx().unwrap();
     let returned = tx.transaction_get(hash.into_array().into()).unwrap();
     assert_eq!(transaction, returned.transaction);
     assert_eq!(returned.status, TransactionStatus::default());

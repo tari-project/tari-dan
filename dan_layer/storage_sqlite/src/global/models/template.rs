@@ -23,7 +23,7 @@
 use crate::global::schema::*;
 
 #[derive(Debug, Identifiable, Queryable)]
-#[table_name = "templates"]
+#[diesel(table_name = templates)]
 pub struct TemplateModel {
     pub id: i32,
     pub template_name: String,
@@ -37,7 +37,7 @@ pub struct TemplateModel {
 }
 
 #[derive(Debug, Insertable)]
-#[table_name = "templates"]
+#[diesel(table_name = templates)]
 pub struct NewTemplateModel {
     pub template_name: String,
     pub template_address: Vec<u8>,
@@ -50,7 +50,7 @@ pub struct NewTemplateModel {
 }
 
 #[derive(Debug, AsChangeset)]
-#[table_name = "templates"]
+#[diesel(table_name = templates)]
 pub struct TemplateUpdateModel {
     pub compiled_code: Option<Vec<u8>>,
     pub status: Option<String>,
