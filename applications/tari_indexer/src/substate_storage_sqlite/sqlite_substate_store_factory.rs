@@ -22,18 +22,22 @@
 
 use std::{
     fs::create_dir_all,
-    ops::Deref,
+    ops::{Deref, DerefMut},
     path::PathBuf,
     sync::{Arc, Mutex},
 };
 
-use diesel::{prelude::*, SqliteConnection};
+use diesel::{prelude::*, sql_query, SqliteConnection};
+use diesel_migrations::EmbeddedMigrations;
 use log::warn;
 use tari_dan_core::storage::StorageError;
 use tari_dan_storage_sqlite::{error::SqliteStorageError, SqliteTransaction};
 use thiserror::Error;
 
-use crate::substate_storage_sqlite::models::substate::{NewSubstate, Substate};
+use crate::{
+    diesel_migrations::MigrationHarness,
+    substate_storage_sqlite::models::substate::{NewSubstate, Substate},
+};
 
 const LOG_TARGET: &str = "tari::indexer::substate_storage_sqlite";
 
@@ -47,14 +51,14 @@ impl SqliteSubstateStore {
         create_dir_all(path.parent().unwrap()).map_err(|_| StorageError::FileSystemPathDoesNotExist)?;
 
         let database_url = path.to_str().expect("database_url utf-8 error").to_string();
-        let connection = SqliteConnection::establish(&database_url).map_err(SqliteStorageError::from)?;
+        let mut connection = SqliteConnection::establish(&database_url).map_err(SqliteStorageError::from)?;
 
-        embed_migrations!("./src/substate_storage_sqlite/migrations");
-        if let Err(err) = embedded_migrations::run_with_output(&connection, &mut std::io::stdout()) {
+        pub const MIGRATIONS: EmbeddedMigrations = embed_migrations!("./src/substate_storage_sqlite/migrations");
+        if let Err(err) = connection.run_pending_migrations(MIGRATIONS) {
             log::error!(target: LOG_TARGET, "Error running migrations: {}", err);
         }
-        connection
-            .execute("PRAGMA foreign_keys = ON;")
+        sql_query("PRAGMA foreign_keys = ON;")
+            .execute(&mut connection)
             .map_err(|source| SqliteStorageError::DieselError {
                 source,
                 operation: "set pragma".to_string(),
@@ -65,12 +69,12 @@ impl SqliteSubstateStore {
         })
     }
 
-    pub fn find_by_address(address: String, conn: &SqliteConnection) -> Result<Option<Substate>, StorageError> {
+    pub fn find_by_address(address: String, conn: &mut SqliteConnection) -> Result<Option<Substate>, StorageError> {
         use crate::substate_storage_sqlite::schema::substates;
 
         let substate_option = substates::table
             .filter(substates::address.eq(address))
-            .first(conn)
+            .first(&mut *conn)
             .optional()
             .map_err(|e| StorageError::QueryError {
                 reason: format!("find_by_address: {}", e),
@@ -151,19 +155,19 @@ impl<'a> SqliteSubstateStoreReadTransaction<'a> {
         Self { transaction }
     }
 
-    fn connection(&self) -> &SqliteConnection {
+    fn connection(&mut self) -> &mut SqliteConnection {
         self.transaction.connection()
     }
 }
 
 pub trait SubstateStoreReadTransaction {
-    fn get_substate(&self, address: String) -> Result<Option<Substate>, StorageError>;
-    fn get_all_addresses(&self) -> Result<Vec<String>, StorageError>;
-    fn get_all_substates(&self) -> Result<Vec<Substate>, StorageError>;
+    fn get_substate(&mut self, address: String) -> Result<Option<Substate>, StorageError>;
+    fn get_all_addresses(&mut self) -> Result<Vec<String>, StorageError>;
+    fn get_all_substates(&mut self) -> Result<Vec<Substate>, StorageError>;
 }
 
 impl SubstateStoreReadTransaction for SqliteSubstateStoreReadTransaction<'_> {
-    fn get_substate(&self, address: String) -> Result<Option<Substate>, StorageError> {
+    fn get_substate(&mut self, address: String) -> Result<Option<Substate>, StorageError> {
         use crate::substate_storage_sqlite::schema::substates;
 
         let substate = substates::table
@@ -177,7 +181,7 @@ impl SubstateStoreReadTransaction for SqliteSubstateStoreReadTransaction<'_> {
         Ok(substate)
     }
 
-    fn get_all_addresses(&self) -> Result<Vec<String>, StorageError> {
+    fn get_all_addresses(&mut self) -> Result<Vec<String>, StorageError> {
         use crate::substate_storage_sqlite::schema::substates;
 
         let addresses = substates::table
@@ -194,7 +198,7 @@ impl SubstateStoreReadTransaction for SqliteSubstateStoreReadTransaction<'_> {
         }
     }
 
-    fn get_all_substates(&self) -> Result<Vec<Substate>, StorageError> {
+    fn get_all_substates(&mut self) -> Result<Vec<Substate>, StorageError> {
         use crate::substate_storage_sqlite::schema::substates;
 
         let substates = substates::table
@@ -212,21 +216,19 @@ impl SubstateStoreReadTransaction for SqliteSubstateStoreReadTransaction<'_> {
 }
 
 pub struct SqliteSubstateStoreWriteTransaction<'a> {
-    transaction: SqliteSubstateStoreReadTransaction<'a>,
-    /// Indicates if the transaction has been explicitly committed/rolled back
-    is_complete: bool,
+    /// None indicates if the transaction has been explicitly committed/rolled back
+    transaction: Option<SqliteSubstateStoreReadTransaction<'a>>,
 }
 
 impl<'a> SqliteSubstateStoreWriteTransaction<'a> {
     pub fn new(transaction: SqliteTransaction<'a>) -> Self {
         Self {
-            transaction: SqliteSubstateStoreReadTransaction::new(transaction),
-            is_complete: false,
+            transaction: Some(SqliteSubstateStoreReadTransaction::new(transaction)),
         }
     }
 
-    pub fn connection(&self) -> &SqliteConnection {
-        self.transaction.connection()
+    pub fn connection(&mut self) -> &mut SqliteConnection {
+        self.transaction.as_mut().unwrap().connection()
     }
 }
 
@@ -240,14 +242,12 @@ pub trait SubstateStoreWriteTransaction {
 
 impl SubstateStoreWriteTransaction for SqliteSubstateStoreWriteTransaction<'_> {
     fn commit(mut self) -> Result<(), StorageError> {
-        self.transaction.transaction.commit()?;
-        self.is_complete = true;
+        self.transaction.take().unwrap().transaction.commit()?;
         Ok(())
     }
 
     fn rollback(mut self) -> Result<(), StorageError> {
-        self.transaction.transaction.rollback()?;
-        self.is_complete = true;
+        self.transaction.take().unwrap().transaction.rollback()?;
         Ok(())
     }
 
@@ -263,7 +263,7 @@ impl SubstateStoreWriteTransaction for SqliteSubstateStoreWriteTransaction<'_> {
                 diesel::update(substates::table)
                     .set(&new_substate)
                     .filter(substates::address.eq(address))
-                    .execute(conn)
+                    .execute(&mut *conn)
                     .map_err(|e| StorageError::QueryError {
                         reason: format!("Update leaf node: {}", e),
                     })?;
@@ -277,7 +277,7 @@ impl SubstateStoreWriteTransaction for SqliteSubstateStoreWriteTransaction<'_> {
             None => {
                 diesel::insert_into(substates::table)
                     .values(&new_substate)
-                    .execute(conn)
+                    .execute(&mut *conn)
                     .map_err(|e| StorageError::QueryError {
                         reason: format!("Update substate error: {}", e),
                     })?;
@@ -298,7 +298,7 @@ impl SubstateStoreWriteTransaction for SqliteSubstateStoreWriteTransaction<'_> {
 
         diesel::delete(substates::table)
             .filter(substates::address.eq(address))
-            .execute(self.connection())
+            .execute(&mut *self.connection())
             .map_err(|e| StorageError::QueryError {
                 reason: format!("delete substate error: {}", e),
             })?;
@@ -310,7 +310,7 @@ impl SubstateStoreWriteTransaction for SqliteSubstateStoreWriteTransaction<'_> {
         use crate::substate_storage_sqlite::schema::substates;
 
         diesel::delete(substates::table)
-            .execute(self.connection())
+            .execute(&mut *self.connection())
             .map_err(|e| StorageError::QueryError {
                 reason: format!("clear_substates error: {}", e),
             })?;
@@ -323,13 +323,19 @@ impl<'a> Deref for SqliteSubstateStoreWriteTransaction<'a> {
     type Target = SqliteSubstateStoreReadTransaction<'a>;
 
     fn deref(&self) -> &Self::Target {
-        &self.transaction
+        self.transaction.as_ref().unwrap()
+    }
+}
+
+impl<'a> DerefMut for SqliteSubstateStoreWriteTransaction<'a> {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        self.transaction.as_mut().unwrap()
     }
 }
 
 impl Drop for SqliteSubstateStoreWriteTransaction<'_> {
     fn drop(&mut self) {
-        if !self.is_complete {
+        if self.transaction.is_some() {
             warn!(
                 target: LOG_TARGET,
                 "Substate store write transaction was not committed/rolled back"

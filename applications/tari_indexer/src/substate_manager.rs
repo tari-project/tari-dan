@@ -98,7 +98,7 @@ impl SubstateManager {
     }
 
     pub async fn get_all_addresses_from_db(&self) -> Result<Vec<String>, anyhow::Error> {
-        let tx = self.substate_store.create_read_tx()?;
+        let mut tx = self.substate_store.create_read_tx()?;
         let addresses = tx.get_all_addresses()?;
 
         Ok(addresses)
@@ -127,7 +127,7 @@ impl SubstateManager {
     ) -> Result<Option<Substate>, anyhow::Error> {
         let address_str = substate_address.to_address_string();
 
-        let tx = self.substate_store.create_read_tx()?;
+        let mut tx = self.substate_store.create_read_tx()?;
         if let Some(row) = tx.get_substate(address_str)? {
             // if a version is requested, we must check that it matches the one in db
             if let Some(version) = version {

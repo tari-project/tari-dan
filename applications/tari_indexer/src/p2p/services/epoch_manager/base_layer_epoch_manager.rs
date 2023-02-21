@@ -72,8 +72,8 @@ impl BaseLayerEpochManager {
     }
 
     pub async fn load_initial_state(&mut self) -> Result<(), EpochManagerError> {
-        let tx = self.global_db.create_transaction()?;
-        let metadata = self.global_db.metadata(&tx);
+        let mut tx = self.global_db.create_transaction()?;
+        let mut metadata = self.global_db.metadata(&mut tx);
         self.current_epoch = metadata.get_metadata(MetadataKey::CurrentEpoch)?.unwrap_or(Epoch(0));
         self.base_layer_consensus_constants = metadata.get_metadata(MetadataKey::BaseLayerConsensusConstants)?;
 
@@ -147,7 +147,9 @@ impl BaseLayerEpochManager {
         }];
 
         let mut tx = self.global_db.create_transaction()?;
-        self.global_db.validator_nodes(&tx).insert_validator_nodes(new_vns)?;
+        self.global_db
+            .validator_nodes(&mut tx)
+            .insert_validator_nodes(new_vns)?;
 
         tx.commit()?;
 
@@ -163,9 +165,9 @@ impl BaseLayerEpochManager {
 
         let mut tx = self.global_db.create_transaction()?;
 
-        self.global_db.epochs(&tx).insert_epoch(db_epoch)?;
+        self.global_db.epochs(&mut tx).insert_epoch(db_epoch)?;
         self.global_db
-            .metadata(&tx)
+            .metadata(&mut tx)
             .set_metadata(MetadataKey::CurrentEpoch, &epoch)?;
 
         tx.commit()?;
@@ -179,7 +181,7 @@ impl BaseLayerEpochManager {
     ) -> Result<(), EpochManagerError> {
         let mut tx = self.global_db.create_transaction()?;
         self.global_db
-            .metadata(&tx)
+            .metadata(&mut tx)
             .set_metadata(MetadataKey::BaseLayerConsensusConstants, &base_layer_constants)?;
         tx.commit()?;
         self.base_layer_consensus_constants = Some(base_layer_constants);
@@ -191,8 +193,8 @@ impl BaseLayerEpochManager {
     }
 
     pub fn last_registration_epoch(&self) -> Result<Option<Epoch>, EpochManagerError> {
-        let tx = self.global_db.create_transaction()?;
-        let metadata = self.global_db.metadata(&tx);
+        let mut tx = self.global_db.create_transaction()?;
+        let mut metadata = self.global_db.metadata(&mut tx);
         let last_registration_epoch = metadata.get_metadata(MetadataKey::LastEpochRegistration)?;
         Ok(last_registration_epoch)
     }
@@ -200,7 +202,7 @@ impl BaseLayerEpochManager {
     pub fn update_last_registration_epoch(&self, epoch: Epoch) -> Result<(), EpochManagerError> {
         let mut tx = self.global_db.create_transaction()?;
         self.global_db
-            .metadata(&tx)
+            .metadata(&mut tx)
             .set_metadata(MetadataKey::LastEpochRegistration, &epoch)?;
         tx.commit()?;
         Ok(())
@@ -291,10 +293,10 @@ impl BaseLayerEpochManager {
     ) -> Result<Vec<ValidatorNode<CommsPublicKey>>, EpochManagerError> {
         let (start_epoch, end_epoch) = self.get_epoch_range(epoch)?;
 
-        let tx = self.global_db.create_transaction()?;
+        let mut tx = self.global_db.create_transaction()?;
         let db_vns = self
             .global_db
-            .validator_nodes(&tx)
+            .validator_nodes(&mut tx)
             .get_all_within_epochs(start_epoch.as_u64(), end_epoch.as_u64())?;
         let vns = db_vns
             .into_iter()
@@ -306,10 +308,10 @@ impl BaseLayerEpochManager {
 
     pub async fn on_scanning_complete(&mut self) -> Result<(), EpochManagerError> {
         {
-            let tx = self.global_db.create_transaction()?;
+            let mut tx = self.global_db.create_transaction()?;
             let last_sync_epoch = self
                 .global_db
-                .metadata(&tx)
+                .metadata(&mut tx)
                 .get_metadata::<Epoch>(MetadataKey::LastSyncedEpoch)?;
             if last_sync_epoch.map(|e| e == self.current_epoch).unwrap_or(false) {
                 info!(target: LOG_TARGET, "🌍️ Already synced for epoch {}", self.current_epoch);
@@ -321,7 +323,7 @@ impl BaseLayerEpochManager {
 
         let mut tx = self.global_db.create_transaction()?;
         self.global_db
-            .metadata(&tx)
+            .metadata(&mut tx)
             .set_metadata(MetadataKey::LastSyncedEpoch, &self.current_epoch)?;
         tx.commit()?;
 

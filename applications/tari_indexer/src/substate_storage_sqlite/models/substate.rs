@@ -31,7 +31,7 @@ pub struct Substate {
 }
 
 #[derive(Debug, Insertable, AsChangeset)]
-#[table_name = "substates"]
+#[diesel(table_name = substates)]
 pub struct NewSubstate {
     pub address: String,
     pub version: i64,
