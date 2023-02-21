@@ -221,7 +221,7 @@ mod tests {
         assert_eq!(msg, 0_u32);
     }
 
-    #[tokio::test]
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
     async fn test_shutdown_pacemaker() {
         let shutdown = Shutdown::new();
         let mut handle = Pacemaker::spawn(shutdown.to_signal());
@@ -240,7 +240,7 @@ mod tests {
             .is_err());
     }
 
-    #[tokio::test]
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
     async fn test_wait_timeout_one_out_of_three_pacemaker() {
         let shutdown = Shutdown::new();
         let mut handle = Pacemaker::spawn(shutdown.to_signal());
