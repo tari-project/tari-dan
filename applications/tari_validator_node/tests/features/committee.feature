@@ -23,13 +23,12 @@ Feature: Committee scenarios
     # VN registration
     When validator node VAL_1 sends a registration transaction
     When validator node VAL_2 sends a registration transaction
-    When miner MINER mines 15 new blocks
-    Then the validator node VAL_1 is listed as registered
-    Then the validator node VAL_2 is listed as registered
 
     # Register the "counter" template
     When validator node VAL_1 registers the template "counter"
-    When miner MINER mines 8 new blocks
+    When miner MINER mines 15 new blocks
+    Then the validator node VAL_1 is listed as registered
+    Then the validator node VAL_2 is listed as registered
     Then the template "counter" is listed as registered by the validator node VAL_1
     Then the template "counter" is listed as registered by the validator node VAL_2
 
@@ -75,12 +74,11 @@ Feature: Committee scenarios
 
     # VN registration
     When all validator nodes send registration transactions
-    When miner MINER mines 13 new blocks
-    Then all validator nodes are listed as registered
 
     # Register the "counter" template
     When validator node VAL_1 registers the template "counter"
-    When miner MINER mines 5 new blocks
+    When miner MINER mines 13 new blocks
+    Then all validator nodes are listed as registered
     Then the template "counter" is listed as registered by all validator nodes
 
     # A file-base CLI account must be created to sign future calls

@@ -14,18 +14,17 @@ Feature: Indexer node
     Given a validator node VN connected to base node BASE and wallet WALLET
 
     # The wallet must have some funds before the VN sends transactions
-    When miner MINER mines 4 new blocks
-    When wallet WALLET has at least 1000000000 uT
+    When miner MINER mines 6 new blocks
+    When wallet WALLET has at least 2000000000 uT
 
     # VN registration
     When validator node VN sends a registration transaction
-    When miner MINER mines 20 new blocks
-    Then the validator node VN is listed as registered
 
     # Register some templates
     When validator node VN registers the template "counter"
     When validator node VN registers the template "basic_nft"
-    When miner MINER mines 5 new blocks
+    When miner MINER mines 10 new blocks
+    Then the validator node VN is listed as registered
     Then the template "counter" is listed as registered by the validator node VN
     Then the template "basic_nft" is listed as registered by the validator node VN
 

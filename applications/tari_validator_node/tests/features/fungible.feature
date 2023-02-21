@@ -14,17 +14,17 @@ Feature: Fungible tokens
     Given a validator node VN connected to base node BASE and wallet WALLET
 
     # The wallet must have some funds before the VN sends transactions
-    When miner MINER mines 4 new blocks
-    When wallet WALLET has at least 1 uT
+    When miner MINER mines 6 new blocks
+    When wallet WALLET has at least 20000000 uT
 
     # VN registration
     When validator node VN sends a registration transaction
-    When miner MINER mines 13 new blocks
-    Then the validator node VN is listed as registered
 
     # Register the "faucet" template
     When validator node VN registers the template "faucet"
-    When miner MINER mines 5 new blocks
+    # Mine some blocks until the UTXOs are scanned
+    When miner MINER mines 15 new blocks
+    Then the validator node VN is listed as registered
     Then the template "faucet" is listed as registered by the validator node VN
 
     # A file-base CLI account must be created to sign future calls
