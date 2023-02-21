@@ -43,7 +43,7 @@ pub struct Substate {
 }
 
 #[derive(Debug, Insertable)]
-#[table_name = "substates"]
+#[diesel(table_name = substates)]
 pub struct NewSubstate {
     pub shard_id: Vec<u8>,
     pub address: String,
@@ -56,7 +56,7 @@ pub struct NewSubstate {
 }
 
 #[derive(Debug, Insertable)]
-#[table_name = "substates"]
+#[diesel(table_name = substates)]
 pub struct ImportedSubstate {
     pub shard_id: Vec<u8>,
     pub address: String,

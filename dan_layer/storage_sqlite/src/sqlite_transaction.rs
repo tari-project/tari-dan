@@ -22,7 +22,7 @@
 
 use std::sync::MutexGuard;
 
-use diesel::{Connection, SqliteConnection};
+use diesel::{sql_query, RunQueryDsl, SqliteConnection};
 
 use crate::error::SqliteStorageError;
 
@@ -35,46 +35,41 @@ pub struct SqliteTransaction<'a> {
 
 impl<'a> SqliteTransaction<'a> {
     pub fn begin(connection: MutexGuard<'a, SqliteConnection>) -> Result<Self, SqliteStorageError> {
-        connection
-            .execute("BEGIN TRANSACTION;")
-            .map_err(|err| SqliteStorageError::DieselError {
-                source: err,
-                operation: "begin transaction".to_string(),
-            })?;
-        Ok(Self {
+        let mut this = Self {
             connection,
             is_done: false,
-        })
+        };
+        this.execute_sql("BEGIN TRANSACTION")?;
+        Ok(this)
     }
 
-    pub fn connection(&self) -> &SqliteConnection {
-        &self.connection
+    pub fn connection(&mut self) -> &mut SqliteConnection {
+        &mut self.connection
     }
 
-    pub fn commit(&mut self) -> Result<(), SqliteStorageError> {
-        self.connection()
-            .execute("COMMIT")
-            .map_err(|source| SqliteStorageError::DieselError {
-                source,
-                operation: "commit".to_string(),
-            })?;
-
+    pub fn commit(mut self) -> Result<(), SqliteStorageError> {
+        self.execute_sql("COMMIT")?;
         self.is_done = true;
         Ok(())
     }
 
-    pub fn rollback(&mut self) -> Result<(), SqliteStorageError> {
+    pub fn rollback(mut self) -> Result<(), SqliteStorageError> {
         self.rollback_inner()
     }
 
-    fn rollback_inner(&mut self) -> Result<(), SqliteStorageError> {
-        self.connection()
-            .execute("ROLLBACK")
+    pub fn execute_sql(&mut self, sql: &str) -> Result<(), SqliteStorageError> {
+        sql_query(sql)
+            .execute(self.connection())
             .map_err(|source| SqliteStorageError::DieselError {
                 source,
-                operation: "commit".to_string(),
+                operation: "execute sql".to_string(),
             })?;
 
+        Ok(())
+    }
+
+    fn rollback_inner(&mut self) -> Result<(), SqliteStorageError> {
+        self.execute_sql("ROLLBACK")?;
         self.is_done = true;
         Ok(())
     }
@@ -83,12 +78,6 @@ impl<'a> SqliteTransaction<'a> {
 impl Drop for SqliteTransaction<'_> {
     fn drop(&mut self) {
         if !self.is_done {
-            // TODO: Read transactions dont need to be explicitly committed/rolled back. I think we should differentiate
-            //       between a read and write transaction, LMDB needs this in any case.
-            // log::warn!(
-            //     target: LOG_TARGET,
-            //     "SqliteTransaction was dropped without being committed or rolled back"
-            // );
             let _ignore = self.rollback_inner();
         }
     }

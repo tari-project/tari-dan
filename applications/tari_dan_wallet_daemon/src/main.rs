@@ -26,7 +26,7 @@ mod jrpc_server;
 mod notify;
 mod services;
 
-use std::{error::Error, io::BufWriter, panic, process};
+use std::{error::Error, panic, process};
 
 use tari_common::initialize_logging;
 use tari_dan_wallet_sdk::{DanWalletSdk, WalletSdkConfig};
@@ -40,7 +40,7 @@ use crate::{
     services::spawn_services,
 };
 
-const LOG_TARGET: &str = "tari::dan::wallet_daemon::main";
+const _LOG_TARGET: &str = "tari::dan::wallet_daemon::main";
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
@@ -67,12 +67,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let shutdown_signal = shutdown.to_signal();
 
     let store = SqliteWalletStore::try_open(cli.base_dir().join("data/wallet.sqlite"))?;
-    let mut migration_output = BufWriter::new(Vec::new());
-    store.run_migrations_with_output(&mut migration_output)?;
-    let migration_output = migration_output.into_inner()?;
-    if !migration_output.is_empty() {
-        log::info!(target: LOG_TARGET, "{}", String::from_utf8_lossy(&migration_output));
-    }
+    store.run_migrations()?;
 
     let params = WalletSdkConfig {
         // TODO: Configure

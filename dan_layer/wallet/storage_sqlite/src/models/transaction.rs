@@ -13,7 +13,7 @@ use tari_utilities::hex::Hex;
 use crate::{schema::transactions, serialization::deserialize_json};
 
 #[derive(Debug, Clone, Queryable, Identifiable)]
-#[table_name = "transactions"]
+#[diesel(table_name = transactions)]
 pub struct Transaction {
     pub id: i32,
     pub hash: String,

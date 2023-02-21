@@ -3,7 +3,7 @@
 
 use std::sync::MutexGuard;
 
-use diesel::{OptionalExtension, QueryDsl, RunQueryDsl, SqliteConnection};
+use diesel::{sql_query, OptionalExtension, QueryDsl, RunQueryDsl, SqliteConnection};
 use log::error;
 use serde::de::DeserializeOwned;
 use tari_common_types::types::FixedHash;
@@ -13,11 +13,7 @@ use tari_dan_wallet_sdk::{
 };
 use tari_engine_types::substate::SubstateAddress;
 
-use crate::{
-    diesel::{Connection, ExpressionMethods},
-    models,
-    serialization::deserialize_json,
-};
+use crate::{diesel::ExpressionMethods, models, serialization::deserialize_json};
 
 const LOG_TARGET: &str = "tari::dan::wallet_sdk::storage_sqlite::reader";
 
@@ -38,14 +34,14 @@ impl<'a> ReadTransaction<'a> {
         self.is_done
     }
 
-    pub(super) fn connection(&self) -> &SqliteConnection {
-        &self.connection
+    pub(super) fn connection(&mut self) -> &mut SqliteConnection {
+        &mut self.connection
     }
 
     /// Internal commit
     pub(super) fn commit(&mut self) -> Result<(), WalletStorageError> {
-        self.connection()
-            .execute("COMMIT")
+        sql_query("COMMIT")
+            .execute(self.connection())
             .map_err(|e| WalletStorageError::general("commit", e))?;
         self.is_done = true;
         Ok(())
@@ -53,8 +49,8 @@ impl<'a> ReadTransaction<'a> {
 
     /// Internal rollback
     pub(super) fn rollback(&mut self) -> Result<(), WalletStorageError> {
-        self.connection()
-            .execute("ROLLBACK")
+        sql_query("ROLLBACK")
+            .execute(self.connection())
             .map_err(|e| WalletStorageError::general("rollback", e))?;
         self.is_done = true;
         Ok(())
@@ -62,7 +58,7 @@ impl<'a> ReadTransaction<'a> {
 }
 
 impl WalletStoreReader for ReadTransaction<'_> {
-    fn key_manager_get_all(&self, branch: &str) -> Result<Vec<(u64, bool)>, WalletStorageError> {
+    fn key_manager_get_all(&mut self, branch: &str) -> Result<Vec<(u64, bool)>, WalletStorageError> {
         use crate::schema::key_manager_states;
 
         let results = key_manager_states::table
@@ -77,7 +73,7 @@ impl WalletStoreReader for ReadTransaction<'_> {
             .collect())
     }
 
-    fn key_manager_get_active_index(&self, branch: &str) -> Result<u64, WalletStorageError> {
+    fn key_manager_get_active_index(&mut self, branch: &str) -> Result<u64, WalletStorageError> {
         use crate::schema::key_manager_states;
 
         key_manager_states::table
@@ -96,7 +92,7 @@ impl WalletStoreReader for ReadTransaction<'_> {
     }
 
     // Config
-    fn config_get<T: DeserializeOwned>(&self, key: &str) -> Result<Config<T>, WalletStorageError> {
+    fn config_get<T: DeserializeOwned>(&mut self, key: &str) -> Result<Config<T>, WalletStorageError> {
         use crate::schema::config;
 
         let config = config::table
@@ -120,7 +116,7 @@ impl WalletStoreReader for ReadTransaction<'_> {
     }
 
     // Transactions
-    fn transaction_get(&self, hash: FixedHash) -> Result<WalletTransaction, WalletStorageError> {
+    fn transaction_get(&mut self, hash: FixedHash) -> Result<WalletTransaction, WalletStorageError> {
         use crate::schema::transactions;
         let row = transactions::table
             .filter(transactions::hash.eq(hash.to_string()))
@@ -138,7 +134,7 @@ impl WalletStoreReader for ReadTransaction<'_> {
     }
 
     fn transactions_fetch_all_by_status(
-        &self,
+        &mut self,
         status: TransactionStatus,
     ) -> Result<Vec<WalletTransaction>, WalletStorageError> {
         use crate::schema::transactions;
@@ -152,7 +148,7 @@ impl WalletStoreReader for ReadTransaction<'_> {
         rows.into_iter().map(|row| row.try_into_wallet_transaction()).collect()
     }
 
-    fn substates_get(&self, address: &SubstateAddress) -> Result<SubstateRecord, WalletStorageError> {
+    fn substates_get(&mut self, address: &SubstateAddress) -> Result<SubstateRecord, WalletStorageError> {
         use crate::schema::substates;
 
         let rec = substates::table
@@ -170,7 +166,7 @@ impl WalletStoreReader for ReadTransaction<'_> {
         Ok(rec)
     }
 
-    fn substates_get_children(&self, parent: &SubstateAddress) -> Result<Vec<SubstateRecord>, WalletStorageError> {
+    fn substates_get_children(&mut self, parent: &SubstateAddress) -> Result<Vec<SubstateRecord>, WalletStorageError> {
         use crate::schema::substates;
 
         let rows = substates::table
@@ -181,7 +177,7 @@ impl WalletStoreReader for ReadTransaction<'_> {
         rows.into_iter().map(|rec| rec.try_to_record()).collect()
     }
 
-    fn accounts_get_many(&self, limit: u64) -> Result<Vec<Account>, WalletStorageError> {
+    fn accounts_get_many(&mut self, limit: u64) -> Result<Vec<Account>, WalletStorageError> {
         use crate::schema::accounts;
 
         let rows = accounts::table
@@ -199,7 +195,7 @@ impl WalletStoreReader for ReadTransaction<'_> {
             .collect())
     }
 
-    fn accounts_count(&self) -> Result<u64, WalletStorageError> {
+    fn accounts_count(&mut self) -> Result<u64, WalletStorageError> {
         use crate::schema::accounts;
 
         let count = accounts::table
@@ -210,7 +206,7 @@ impl WalletStoreReader for ReadTransaction<'_> {
         Ok(count as u64)
     }
 
-    fn accounts_get_by_name(&self, name: &str) -> Result<Account, WalletStorageError> {
+    fn accounts_get_by_name(&mut self, name: &str) -> Result<Account, WalletStorageError> {
         use crate::schema::accounts;
 
         let row = accounts::table

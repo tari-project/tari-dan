@@ -39,7 +39,7 @@ pub struct Payload {
 }
 
 #[derive(Debug, Insertable)]
-#[table_name = "payloads"]
+#[diesel(table_name = payloads)]
 pub struct NewPayload {
     pub payload_id: Vec<u8>,
     pub instructions: String,

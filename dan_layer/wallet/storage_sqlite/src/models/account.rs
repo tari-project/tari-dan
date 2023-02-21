@@ -7,7 +7,7 @@ use diesel::{Identifiable, Queryable};
 use crate::schema::accounts;
 
 #[derive(Debug, Clone, Queryable, Identifiable)]
-#[table_name = "accounts"]
+#[diesel(table_name = accounts)]
 pub struct Account {
     pub id: i32,
     pub name: String,

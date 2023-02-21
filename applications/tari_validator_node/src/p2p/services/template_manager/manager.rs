@@ -162,9 +162,9 @@ impl TemplateManager {
         if self.builtin_templates.contains_key(address) {
             return Ok(true);
         }
-        let tx = self.global_db.create_transaction()?;
+        let mut tx = self.global_db.create_transaction()?;
         self.global_db
-            .templates(&tx)
+            .templates(&mut tx)
             .template_exists(address)
             .map_err(|_| TemplateManagerError::TemplateNotFound { address: *address })
     }
@@ -175,10 +175,10 @@ impl TemplateManager {
             return Ok(template.to_owned());
         }
 
-        let tx = self.global_db.create_transaction()?;
+        let mut tx = self.global_db.create_transaction()?;
         let template = self
             .global_db
-            .templates(&tx)
+            .templates(&mut tx)
             .get_template(address)?
             .ok_or(TemplateManagerError::TemplateNotFound { address: *address })?;
 
@@ -198,9 +198,9 @@ impl TemplateManager {
     }
 
     pub fn fetch_template_metadata(&self, limit: usize) -> Result<Vec<TemplateMetadata>, TemplateManagerError> {
-        let tx = self.global_db.create_transaction()?;
+        let mut tx = self.global_db.create_transaction()?;
         // TODO: we should be able to fetch just the metadata and not the compiled code
-        let templates = self.global_db.templates(&tx).get_templates(limit)?;
+        let templates = self.global_db.templates(&mut tx).get_templates(limit)?;
         let mut templates: Vec<TemplateMetadata> = templates.into_iter().map(Into::into).collect();
         let mut builtin_metadata: Vec<TemplateMetadata> =
             self.builtin_templates.values().map(|t| t.metadata.to_owned()).collect();
@@ -221,7 +221,7 @@ impl TemplateManager {
         };
 
         let mut tx = self.global_db.create_transaction()?;
-        let templates_db = self.global_db.templates(&tx);
+        let mut templates_db = self.global_db.templates(&mut tx);
         if templates_db.get_template(&*template.template_address)?.is_some() {
             return Ok(());
         }
@@ -237,7 +237,7 @@ impl TemplateManager {
         update: DbTemplateUpdate,
     ) -> Result<(), TemplateManagerError> {
         let mut tx = self.global_db.create_transaction()?;
-        let template_db = self.global_db.templates(&tx);
+        let mut template_db = self.global_db.templates(&mut tx);
         template_db.update_template(&address, update)?;
         tx.commit()?;
 
