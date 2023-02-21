@@ -22,11 +22,11 @@
 
 mod steps;
 mod utils;
-
 use std::{
     convert::{Infallible, TryFrom},
     future,
     io,
+    str::FromStr,
     time::Duration,
 };
 
@@ -43,7 +43,11 @@ use cucumber::{
 use indexmap::IndexMap;
 use tari_common::initialize_logging;
 use tari_common_types::types::{FixedHash, PublicKey};
-use tari_crypto::{ristretto::RistrettoSecretKey, tari_utilities::hex::Hex};
+use tari_comms::multiaddr::Multiaddr;
+use tari_crypto::{
+    ristretto::{RistrettoPublicKey, RistrettoSecretKey},
+    tari_utilities::hex::Hex,
+};
 use tari_dan_common_types::QuorumDecision;
 use tari_dan_core::services::BaseNodeClient;
 use tari_engine_types::execution_result::Type;
@@ -51,6 +55,7 @@ use tari_template_lib::Hash;
 use tari_validator_node::GrpcBaseNodeClient;
 use tari_validator_node_cli::versioned_substate_address::VersionedSubstateAddress;
 use tari_validator_node_client::types::{
+    AddPeerRequest,
     GetIdentityResponse,
     GetRecentTransactionsRequest,
     GetTemplateRequest,
@@ -184,7 +189,7 @@ async fn start_base_node(world: &mut TariWorld, bn_name: String) {
 
 #[given(expr = "a seed validator node {word} connected to base node {word} and wallet {word}")]
 async fn start_seed_validator_node(world: &mut TariWorld, seed_vn_name: String, bn_name: String, wallet_name: String) {
-    spawn_validator_node(world, seed_vn_name, bn_name, wallet_name, true).await;
+    spawn_validator_node(world, seed_vn_name.clone(), bn_name, wallet_name, true).await;
 }
 
 #[given(expr = "{int} validator nodes connected to base node {word} and wallet {word}")]
@@ -192,6 +197,36 @@ async fn start_multiple_validator_nodes(world: &mut TariWorld, num_nodes: u64, b
     for i in 1..=num_nodes {
         let vn_name = format!("VAL_{i}");
         spawn_validator_node(world, vn_name, bn_name.clone(), wallet_name.clone(), false).await;
+    }
+}
+
+#[given(expr = "validator {word} nodes connect to all other validators")]
+async fn given_validator_connects_to_other_vns(world: &mut TariWorld, vn: String) {
+    let details = world
+        .validator_nodes
+        .values()
+        .map(|vn| {
+            (
+                PublicKey::from_hex(&vn.public_key).unwrap(),
+                Multiaddr::from_str(&format!("/ip4/127.0.0.1/tcp/{}", vn.port)).unwrap(),
+            )
+        })
+        .collect::<Vec<_>>();
+
+    let vn = world.validator_nodes.get_mut(&vn).unwrap();
+    let mut cli = vn.create_client().await;
+    let this_pk = RistrettoPublicKey::from_hex(&vn.public_key).unwrap();
+    for (pk, addr) in details.iter().cloned() {
+        if pk == this_pk {
+            continue;
+        }
+        cli.add_peer(AddPeerRequest {
+            public_key: pk,
+            addresses: vec![addr],
+            wait_for_dial: true,
+        })
+        .await
+        .unwrap();
     }
 }
 

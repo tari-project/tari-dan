@@ -14,17 +14,17 @@ Feature: Counter template
     Given a validator node VAL_1 connected to base node BASE and wallet WALLET
 
     # The wallet must have some funds before the VN sends transactions
-    When miner MINER mines 12 new blocks
-    When wallet WALLET has at least 1000000000 uT
+    When miner MINER mines 4 new blocks
+    When wallet WALLET has at least 1 uT
 
     # VN registration
     When validator node VAL_1 sends a registration transaction
-    When miner MINER mines 20 new blocks
+    When miner MINER mines 13 new blocks
     Then the validator node VAL_1 is listed as registered
 
     # Register the "counter" template
     When validator node VAL_1 registers the template "counter"
-    When miner MINER mines 20 new blocks
+    When miner MINER mines 8 new blocks
     Then the template "counter" is listed as registered by the validator node VAL_1
 
     # A file-base CLI account must be created to sign future calls

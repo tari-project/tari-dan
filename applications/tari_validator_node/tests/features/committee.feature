@@ -3,7 +3,6 @@
 
 Feature: Committee scenarios
 
-  # FIXME: when spawning VN2 the test is flaky
   @serial
   Scenario: Template registration and invocation in a 2-VN committee
     # Initialize a base node, wallet and miner
@@ -15,21 +14,22 @@ Feature: Committee scenarios
     Given a seed validator node SEED_VN connected to base node BASE and wallet WALLET
     Given a validator node VAL_1 connected to base node BASE and wallet WALLET
     Given a validator node VAL_2 connected to base node BASE and wallet WALLET
+    Given validator VAL_1 nodes connect to all other validators
 
     # The wallet must have some funds before the VN sends transactions
-    When miner MINER mines 12 new blocks
-    When wallet WALLET has at least 1000000000 uT
+    When miner MINER mines 5 new blocks
+    When wallet WALLET has at least 10000000 uT
 
     # VN registration
     When validator node VAL_1 sends a registration transaction
     When validator node VAL_2 sends a registration transaction
-    When miner MINER mines 20 new blocks
+    When miner MINER mines 13 new blocks
     Then the validator node VAL_1 is listed as registered
     Then the validator node VAL_2 is listed as registered
 
     # Register the "counter" template
     When validator node VAL_1 registers the template "counter"
-    When miner MINER mines 20 new blocks
+    When miner MINER mines 8 new blocks
     Then the template "counter" is listed as registered by the validator node VAL_1
     Then the template "counter" is listed as registered by the validator node VAL_2
 
@@ -53,7 +53,8 @@ Feature: Committee scenarios
     # Uncomment the following lines to stop execution for manual inspection of the nodes
     # When I print the cucumber world
     # When I wait 5000 seconds
-Scenario: Template registration and invocation in a 4-VN committee
+
+  Scenario: Template registration and invocation in a 4-VN committee
     # Initialize a base node, wallet and miner
     Given a base node BASE
     Given a wallet WALLET connected to base node BASE
@@ -62,6 +63,11 @@ Scenario: Template registration and invocation in a 4-VN committee
     # Initialize two validator nodes
     Given a seed validator node SEED_VN connected to base node BASE and wallet WALLET
     Given 4 validator nodes connected to base node BASE and wallet WALLET
+    # Ensure all peers know each other immediately, TODO: we probably need to wait for peer sync to complete / there is a bug.
+    Given validator VAL_1 nodes connect to all other validators
+    Given validator VAL_2 nodes connect to all other validators
+    Given validator VAL_3 nodes connect to all other validators
+    Given validator VAL_4 nodes connect to all other validators
 
     # The wallet must have some funds before the VN sends transactions
     When miner MINER mines 12 new blocks
@@ -69,12 +75,12 @@ Scenario: Template registration and invocation in a 4-VN committee
 
     # VN registration
     When all validator nodes send registration transactions
-    When miner MINER mines 20 new blocks
+    When miner MINER mines 13 new blocks
     Then all validator nodes are listed as registered
 
     # Register the "counter" template
     When validator node VAL_1 registers the template "counter"
-    When miner MINER mines 20 new blocks
+    When miner MINER mines 5 new blocks
     Then the template "counter" is listed as registered by all validator nodes
 
     # A file-base CLI account must be created to sign future calls

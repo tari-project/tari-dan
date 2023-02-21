@@ -14,7 +14,7 @@ Feature: Claim Burn
     Given a validator node VN connected to base node BASE and wallet WALLET
     When miner MINER mines 4 new blocks
     When validator node VN sends a registration transaction
-    When miner MINER mines 20 new blocks
+    When miner MINER mines 13 new blocks
     Then the validator node VN is listed as registered
 
           # A file-base CLI account must be created to sign future calls
@@ -26,8 +26,8 @@ Feature: Claim Burn
 
     # unfortunately have to wait for this to get into the mempool....
     Then there is 1 transaction in the mempool of BASE within 10 seconds
-    When miner MINER mines 10 new blocks
-    Then VN is on epoch 3 within 10 seconds
+    When miner MINER mines 6 new blocks
+    Then VN is on epoch 2 within 10 seconds
 
     When I convert commitment COMMITMENT into COMM_ADDRESS address
     Then validator node VN has state at COMM_ADDRESS

@@ -84,13 +84,15 @@ async fn when_i_claim_burn(
     ];
 
     let account_shard = ShardId::from_address(&SubstateAddress::from_str(&account_address).unwrap(), 0);
+    let account_v1_shard = ShardId::from_address(&SubstateAddress::from_str(&account_address).unwrap(), 1);
 
     let mut builder = Transaction::builder();
     builder
         .with_instructions(instructions.to_vec())
+        .with_outputs(vec![account_v1_shard])
         .with_inputs(vec![commitment_shard, account_shard])
         .with_fee(1)
-        .with_new_outputs(0)
+        .with_new_outputs(1)
         .sign(&account.0);
     let transaction = builder.build();
 
