@@ -178,9 +178,7 @@ function RecentTransactions() {
       console.log('Response: ', resp);
       setRecentTransactions(
         // Display from newest to oldest by reversing
-        resp
-          // .transactions
-          // commented out as it was causing an undefined error
+        resp.transactions
           .slice()
           .reverse()
           .map(

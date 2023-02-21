@@ -27,9 +27,9 @@ use tari_base_node::{run_base_node, BaseNodeConfig, MetricsConfig};
 use tari_common::configuration::CommonConfig;
 use tari_comms::{multiaddr::Multiaddr, peer_manager::PeerFeatures, NodeIdentity};
 use tari_comms_dht::{DbConnectionUrl, DhtConfig};
+use tari_dan_app_utilities::base_node_client::GrpcBaseNodeClient;
 use tari_p2p::{auto_update::AutoUpdateConfig, Network, PeerSeedsConfig, TransportType};
 use tari_shutdown::Shutdown;
-use tari_validator_node::GrpcBaseNodeClient;
 use tempfile::tempdir;
 use tokio::task;
 

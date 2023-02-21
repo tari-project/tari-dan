@@ -20,12 +20,12 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+use tari_dan_app_utilities::template_manager::TemplateManagerHandle;
 use tari_shutdown::ShutdownSignal;
 use tokio::{sync::mpsc, task::JoinHandle};
 
 use crate::p2p::services::template_manager::{
     downloader::TemplateDownloadWorker,
-    handle::TemplateManagerHandle,
     service::TemplateManagerService,
     TemplateManager,
 };

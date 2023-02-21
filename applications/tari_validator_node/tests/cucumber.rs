@@ -48,11 +48,11 @@ use tari_crypto::{
     ristretto::{RistrettoPublicKey, RistrettoSecretKey},
     tari_utilities::hex::Hex,
 };
+use tari_dan_app_utilities::base_node_client::GrpcBaseNodeClient;
 use tari_dan_common_types::QuorumDecision;
 use tari_dan_core::services::BaseNodeClient;
 use tari_engine_types::execution_result::Type;
 use tari_template_lib::Hash;
-use tari_validator_node::GrpcBaseNodeClient;
 use tari_validator_node_cli::versioned_substate_address::VersionedSubstateAddress;
 use tari_validator_node_client::types::{
     AddPeerRequest,
@@ -63,6 +63,7 @@ use tari_validator_node_client::types::{
     TemplateRegistrationResponse,
 };
 use utils::{
+    indexer::spawn_indexer,
     miner::{mine_blocks, register_miner_process},
     validator_node::spawn_validator_node,
     validator_node_cli,
@@ -72,6 +73,7 @@ use utils::{
 use crate::utils::{
     base_node::{get_base_node_client, spawn_base_node, BaseNodeProcess},
     http_server::MockHttpServer,
+    indexer::IndexerProcess,
     logging::{create_log_config_file, get_base_dir},
     miner::MinerProcess,
     template::{send_template_registration, RegisteredTemplate},
@@ -84,6 +86,7 @@ pub struct TariWorld {
     base_nodes: IndexMap<String, BaseNodeProcess>,
     wallets: IndexMap<String, WalletProcess>,
     validator_nodes: IndexMap<String, ValidatorNodeProcess>,
+    indexers: IndexMap<String, IndexerProcess>,
     vn_seeds: IndexMap<String, ValidatorNodeProcess>,
     miners: IndexMap<String, MinerProcess>,
     templates: IndexMap<String, RegisteredTemplate>,
@@ -127,6 +130,11 @@ impl TariWorld {
     }
 
     pub fn after(&mut self, _scenario: &Scenario) {
+        for (name, mut p) in self.indexers.drain(..) {
+            println!("Shutting down indexer {}", name);
+            p.shutdown.trigger();
+        }
+
         for (name, mut p) in self.validator_nodes.drain(..) {
             println!("Shutting down validator node {}", name);
             p.shutdown.trigger();
@@ -600,6 +608,24 @@ fn wrap_manifest_in_main(world: &TariWorld, contents: &str) -> String {
     format!("{} fn main() {{ {} }}", template_defs, contents)
 }
 
+#[given(expr = "an indexer {word} connected to base node {word}")]
+async fn start_indexer(world: &mut TariWorld, indexer_name: String, bn_name: String) {
+    spawn_indexer(world, indexer_name, bn_name).await;
+}
+
+#[then(expr = "the indexer {word} returns version {int} for substate {word}")]
+async fn assert_indexer_substate_version(
+    world: &mut TariWorld,
+    indexer_name: String,
+    version: u32,
+    output_ref: String,
+) {
+    let indexer = world.indexers.get(&indexer_name).unwrap();
+    let substate = indexer.get_substate(world, output_ref, version).await;
+    eprintln!("indexer.get_substate result: {:?}", substate);
+    assert_eq!(substate.version(), version);
+}
+
 #[when(expr = "I wait {int} seconds")]
 async fn wait_seconds(_world: &mut TariWorld, seconds: u64) {
     tokio::time::sleep(Duration::from_secs(seconds)).await;
@@ -661,6 +687,14 @@ async fn print_world(world: &mut TariWorld) {
         eprintln!(
             "Validator node \"{}\": json rpc port \"{}\", http ui port \"{}\", temp dir path \"{:?}\"",
             name, node.json_rpc_port, node.http_ui_port, node.temp_dir_path
+        );
+    }
+
+    // indexes
+    for (name, node) in world.indexers.iter() {
+        eprintln!(
+            "Indexer \"{}\": json rpc port \"{}\", temp dir path \"{}\"",
+            name, node.json_rpc_port, node.temp_dir_path
         );
     }
 

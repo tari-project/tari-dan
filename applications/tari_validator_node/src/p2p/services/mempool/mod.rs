@@ -27,11 +27,12 @@ pub use initializer::spawn;
 mod handle;
 use async_trait::async_trait;
 pub use handle::{MempoolHandle, MempoolRequest};
+use tari_dan_app_utilities::template_manager::TemplateManagerError;
 use tari_dan_core::services::epoch_manager::EpochManagerError;
 use thiserror::Error;
 use tokio::sync::{mpsc::error::SendError, oneshot};
 
-use crate::p2p::services::{messaging::MessagingError, template_manager::TemplateManagerError};
+use crate::p2p::services::messaging::MessagingError;
 
 mod service;
 mod validator;
