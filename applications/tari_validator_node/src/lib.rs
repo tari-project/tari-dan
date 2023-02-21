@@ -20,7 +20,6 @@
 // WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 // USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-mod base_layer_scanner;
 mod bootstrap;
 pub mod cli;
 mod comms;
@@ -48,6 +47,7 @@ use tari_common::{
     configuration::bootstrap::{grpc_default_port, ApplicationType},
     exit_codes::{ExitCode, ExitError},
 };
+use tari_dan_app_utilities::base_node_client::GrpcBaseNodeClient;
 use tari_dan_common_types::ShardId;
 use tari_dan_core::{
     consensus_constants::ConsensusConstants,
@@ -68,7 +68,7 @@ use crate::{
 };
 pub use crate::{
     config::{ApplicationConfig, ValidatorNodeConfig},
-    grpc::services::{base_node_client::GrpcBaseNodeClient, wallet_client::GrpcWalletClient},
+    grpc::services::wallet_client::GrpcWalletClient,
 };
 
 const LOG_TARGET: &str = "tari::validator_node::app";

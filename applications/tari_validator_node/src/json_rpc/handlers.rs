@@ -40,6 +40,11 @@ use tari_comms::{
 };
 use tari_comms_logging::SqliteMessageLog;
 use tari_crypto::tari_utilities::hex::Hex;
+use tari_dan_app_utilities::{
+    base_node_client::GrpcBaseNodeClient,
+    epoch_manager::EpochManagerHandle,
+    template_manager::TemplateManagerHandle,
+};
 use tari_dan_common_types::{optional::Optional, PayloadId, QuorumCertificate, QuorumDecision, ShardId};
 use tari_dan_core::{
     services::{epoch_manager::EpochManager, BaseNodeClient},
@@ -76,13 +81,9 @@ use tokio::sync::{broadcast, broadcast::error::RecvError};
 
 use crate::{
     dry_run_transaction_processor::DryRunTransactionProcessor,
-    grpc::services::{base_node_client::GrpcBaseNodeClient, wallet_client::GrpcWalletClient},
+    grpc::services::wallet_client::GrpcWalletClient,
     json_rpc::jrpc_errors::internal_error,
-    p2p::services::{
-        epoch_manager::handle::EpochManagerHandle,
-        mempool::MempoolHandle,
-        template_manager::TemplateManagerHandle,
-    },
+    p2p::services::mempool::MempoolHandle,
     registration,
     Services,
     ValidatorNodeConfig,

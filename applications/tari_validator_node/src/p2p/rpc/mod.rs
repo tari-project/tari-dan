@@ -25,10 +25,11 @@ mod service_impl;
 pub use service_impl::ValidatorNodeRpcServiceImpl;
 use tari_comms::protocol::rpc::{Request, Response, RpcStatus, Streaming};
 use tari_comms_rpc_macros::tari_rpc;
+use tari_dan_app_grpc::proto;
 use tari_dan_core::services::PeerProvider;
 use tari_dan_storage_sqlite::sqlite_shard_store_factory::SqliteShardStore;
 
-use crate::p2p::{proto, services::mempool::MempoolHandle};
+use crate::p2p::services::mempool::MempoolHandle;
 
 #[tari_rpc(protocol_name = b"t/vn/1", server_struct = ValidatorNodeRpcServer, client_struct = ValidatorNodeRpcClient)]
 pub trait ValidatorNodeRpcService: Send + Sync + 'static {
