@@ -1529,7 +1529,7 @@ impl ShardStoreWriteTransaction<PublicKey, TariDanPayload> for SqliteShardStoreW
         use crate::schema::substates;
         diesel::insert_into(substates::table)
             .values(new_row)
-            .execute(self.transaction.connection())
+            .execute(self.connection())
             .map_err(|e| StorageError::QueryError {
                 reason: format!("Burnt commitment insert error: {}", e),
             })?;

@@ -33,7 +33,7 @@ use tari_dan_common_types::{
     TreeNodeHash,
     ValidatorMetadata,
 };
-use tari_mmr::{leaf_index::LeafIndex, MerkleProof};
+use tari_mmr::{common::LeafIndex, MerkleProof};
 
 use crate::{services::SigningService, workers::hotstuff_error::HotStuffError, TariDanCoreHashDomain};
 

@@ -6,9 +6,9 @@ use std::str::FromStr;
 use cucumber::{then, when};
 use tari_crypto::tari_utilities::{hex::Hex, ByteArray};
 use tari_dan_common_types::ShardId;
-use tari_engine_types::{instruction::Instruction, signature::InstructionSignature, substate::SubstateAddress};
+use tari_engine_types::{instruction::Instruction, substate::SubstateAddress};
 use tari_template_lib::{args::Arg, prelude::ComponentAddress};
-use tari_transaction::SubstateChange;
+use tari_transaction::Transaction;
 use tari_validator_node_client::types::{GetStateRequest, SubmitTransactionRequest};
 
 use crate::TariWorld;
@@ -56,7 +56,7 @@ async fn when_i_claim_burn(
         .validator_nodes
         .get(&vn_name)
         .unwrap_or_else(|| panic!("Validator node {} not found", vn_name));
-    let shard_id = ShardId::from_address(
+    let commitment_shard = ShardId::from_address(
         &SubstateAddress::from_str(&format!("commitment_{}", commitment.to_hex())).expect("Invalid state address"),
         0,
     );
@@ -84,20 +84,18 @@ async fn when_i_claim_burn(
     ];
 
     let account_shard = ShardId::from_address(&SubstateAddress::from_str(&account_address).unwrap(), 0);
-    let next_account_shard = ShardId::from_address(&SubstateAddress::from_str(&account_address).unwrap(), 1);
 
-    let signature = InstructionSignature::sign(&account.0, &instructions);
+    let mut builder = Transaction::builder();
+    builder
+        .with_instructions(instructions.to_vec())
+        .with_inputs(vec![commitment_shard, account_shard])
+        .with_fee(1)
+        .with_new_outputs(0)
+        .sign(&account.0);
+    let transaction = builder.build();
+
     let request = SubmitTransactionRequest {
-        instructions: instructions.to_vec(),
-        signature,
-        fee: 0,
-        sender_public_key: account.1.clone(),
-        inputs: vec![
-            (shard_id, SubstateChange::Destroy),
-            (account_shard, SubstateChange::Destroy),
-            (next_account_shard, SubstateChange::Create),
-        ],
-        num_outputs: 5,
+        transaction,
         wait_for_result: true,
         wait_for_result_timeout: None,
         is_dry_run: false,

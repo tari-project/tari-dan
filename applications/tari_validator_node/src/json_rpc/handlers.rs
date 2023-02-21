@@ -235,7 +235,7 @@ impl JsonRpcHandlers {
         let answer_id = value.get_answer_id();
         let request: GetStateRequest = value.parse_params()?;
 
-        let tx = self.shard_store.create_read_tx().unwrap();
+        let mut tx = self.shard_store.create_read_tx().unwrap();
         let state = match tx.get_substate_states(&[request.shard_id]) {
             Ok(state) => state,
             Err(e) => {

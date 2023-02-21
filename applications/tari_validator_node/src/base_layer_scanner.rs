@@ -343,7 +343,10 @@ impl BaseLayerScanner {
         let substate = Substate::new(0, SubstateValue::LayerOneCommitment(commitment.as_bytes().to_vec()));
         self.shard_store
             .with_write_tx(|tx| tx.save_burnt_utxo(&substate, address.to_string(), ShardId::from_address(&address, 0)))
-            .map_err(|source| BaseLayerScannerError::CouldNotRegisterBurntUtxo { commitment, source })?;
+            .map_err(|source| BaseLayerScannerError::CouldNotRegisterBurntUtxo {
+                commitment: Box::new(commitment),
+                source,
+            })?;
         Ok(())
     }
 
@@ -423,7 +426,7 @@ pub enum BaseLayerScannerError {
     InvalidSideChainUtxoResponse(String),
     #[error("Could not register burnt UTXO because {source}")]
     CouldNotRegisterBurntUtxo {
-        commitment: Commitment,
+        commitment: Box<Commitment>,
         source: StorageError,
     },
 }
