@@ -52,6 +52,7 @@ use std::{fmt::Debug, sync::Arc};
 use tari_engine_types::commit_result::FinalizeResult;
 use tari_template_lib::{
     args::{
+        AddressListAction,
         Arg,
         BucketAction,
         BucketRef,
@@ -116,6 +117,8 @@ pub trait RuntimeInterface: Send + Sync {
     ) -> Result<InvokeResult, RuntimeError>;
 
     fn consensus_invoke(&self, action: ConsensusAction) -> Result<InvokeResult, RuntimeError>;
+
+    fn address_list_invoke(&self, action: AddressListAction) -> Result<InvokeResult, RuntimeError>;
 
     fn generate_uuid(&self) -> Result<[u8; 32], RuntimeError>;
 

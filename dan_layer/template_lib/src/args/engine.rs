@@ -318,3 +318,19 @@ pub struct ConsensusInvokeArg {
 pub enum ConsensusAction {
     GetCurrentEpoch,
 }
+
+// -------------------------------- AddressList -------------------------------- //
+#[derive(Clone, Debug, Decode, Encode)]
+pub struct AddressListInvokeArg {
+    pub action: AddressListAction,
+    pub args: Vec<Vec<u8>>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord, Decode, Encode)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+pub enum AddressListAction {
+    Create,
+    // TODO: push item
+    // TODO: len
+    // TODO: get item at position
+}

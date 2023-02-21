@@ -5,6 +5,7 @@ use std::collections::HashMap;
 
 use tari_dan_common_types::optional::Optional;
 use tari_engine_types::{
+    address_list::AddressList,
     bucket::Bucket,
     logs::LogEntry,
     non_fungible::NonFungibleContainer,
@@ -13,6 +14,7 @@ use tari_engine_types::{
     vault::Vault,
 };
 use tari_template_lib::models::{
+    AddressListId,
     BucketId,
     ComponentAddress,
     ComponentHeader,
@@ -35,6 +37,7 @@ pub(super) struct WorkingState {
     pub new_components: HashMap<ComponentAddress, ComponentHeader>,
     pub new_vaults: HashMap<VaultId, Vault>,
     pub new_non_fungibles: HashMap<NonFungibleAddress, NonFungibleContainer>,
+    pub new_address_lists: HashMap<AddressListId, AddressList>,
 
     pub runtime_state: Option<RuntimeState>,
     pub last_instruction_output: Option<Vec<u8>>,
@@ -51,6 +54,7 @@ impl WorkingState {
             new_components: HashMap::new(),
             new_vaults: HashMap::new(),
             new_non_fungibles: HashMap::new(),
+            new_address_lists: HashMap::new(),
             runtime_state: None,
             last_instruction_output: None,
             workspace: HashMap::new(),

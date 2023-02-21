@@ -22,14 +22,21 @@
 
 use serde::{Deserialize, Serialize};
 use tari_bor::{borsh, Decode, Encode};
+use tari_template_lib::models::AddressListId;
 
 use crate::substate::SubstateAddress;
 
 /// Placeholder for empty address lists, so they can have an address in the network
-#[derive(Debug, Clone, Default, Encode, Decode, Serialize, Deserialize, PartialEq)]
-pub struct AddressList {}
+#[derive(Debug, Clone, Encode, Decode, Serialize, Deserialize, PartialEq)]
+pub struct AddressList {
+    id: AddressListId,
+}
 
-impl AddressList {}
+impl AddressList {
+    pub fn new(id: AddressListId) -> Self {
+        Self { id }
+    }
+}
 
 /// Holds a reference to another substate
 #[derive(Debug, Clone, Encode, Decode, Serialize, Deserialize, PartialEq)]

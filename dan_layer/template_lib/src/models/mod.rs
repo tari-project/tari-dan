@@ -21,7 +21,7 @@
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 mod address_list;
-pub use address_list::{AddressListAddress, AddressListItemAddress};
+pub use address_list::{AddressList, AddressListAddress, AddressListId, AddressListItemAddress};
 
 mod amount;
 pub use amount::Amount;

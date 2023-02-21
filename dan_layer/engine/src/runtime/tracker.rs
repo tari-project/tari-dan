@@ -29,6 +29,7 @@ use std::{
 use log::debug;
 use tari_dan_common_types::optional::Optional;
 use tari_engine_types::{
+    address_list::AddressList,
     bucket::Bucket,
     logs::LogEntry,
     non_fungible::NonFungibleContainer,
@@ -43,6 +44,7 @@ use tari_template_lib::{
     args::MintArg,
     auth::AccessRules,
     models::{
+        AddressListId,
         Amount,
         BucketId,
         ComponentAddress,
@@ -375,6 +377,18 @@ impl StateTracker {
 
     pub fn borrow_vault_mut<R, F: FnOnce(&mut Vault) -> R>(&self, vault_id: &VaultId, f: F) -> Result<R, RuntimeError> {
         self.write_with(|state| state.borrow_vault_mut(vault_id, f))
+    }
+
+    pub fn new_address_list(&self) -> Result<AddressListId, RuntimeError> {
+        let address_list_id = self.id_provider.new_address_list_id()?;
+        debug!(target: LOG_TARGET, "New address list id: {}", address_list_id);
+        let address_list = AddressList::new(address_list_id);
+
+        self.write_with(|state| {
+            state.new_address_lists.insert(address_list_id, address_list);
+        });
+
+        Ok(address_list_id)
     }
 
     fn runtime_state(&self) -> Result<RuntimeState, RuntimeError> {

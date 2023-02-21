@@ -21,12 +21,20 @@
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 use tari_bor::{borsh, Decode, Encode};
-use tari_template_abi::rust::{
-    fmt,
-    fmt::{Display, Formatter},
+use tari_template_abi::{
+    call_engine,
+    rust::{
+        fmt,
+        fmt::{Display, Formatter},
+    },
+    EngineOp,
 };
 
-use crate::{hash::HashParseError, Hash};
+use crate::{
+    args::{AddressListAction, AddressListInvokeArg, InvokeResult},
+    hash::HashParseError,
+    Hash,
+};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Encode, Decode)]
 #[cfg_attr(feature = "serde", derive(serde::Deserialize, serde::Serialize))]
@@ -84,4 +92,57 @@ impl Display for AddressListItemAddress {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{} index_{}", self.list_address, self.index)
     }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Encode, Decode)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+pub struct AddressListId(Hash);
+
+impl AddressListId {
+    pub fn new(address: Hash) -> Self {
+        Self(address)
+    }
+
+    pub fn hash(&self) -> &Hash {
+        &self.0
+    }
+
+    pub fn from_hex(hex: &str) -> Result<Self, HashParseError> {
+        let hash = Hash::from_hex(hex)?;
+        Ok(Self::new(hash))
+    }
+}
+
+impl From<Hash> for AddressListId {
+    fn from(address: Hash) -> Self {
+        Self::new(address)
+    }
+}
+
+impl Display for AddressListId {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        write!(f, "vault_{}", self.0)
+    }
+}
+
+#[derive(Clone, Debug, Decode, Encode)]
+pub struct AddressList {
+    id: AddressListId,
+}
+
+impl AddressList {
+    pub fn new() -> Self {
+        let resp: InvokeResult = call_engine(EngineOp::AddressListInvoke, &AddressListInvokeArg {
+            action: AddressListAction::Create,
+            args: args![],
+        });
+
+        Self {
+            id: resp.decode().unwrap(),
+        }
+    }
+
+    // TODO: push item
+    // TODO: len
+    // TODO: get item at position
 }
