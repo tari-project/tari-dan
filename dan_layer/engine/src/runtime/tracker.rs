@@ -31,7 +31,6 @@ use tari_common_types::types::Commitment;
 use tari_dan_common_types::optional::Optional;
 use tari_engine_types::{
     bucket::Bucket,
-    confidential_bucket::ConfidentialBucket,
     logs::LogEntry,
     non_fungible::NonFungibleContainer,
     resource::Resource,
@@ -50,7 +49,6 @@ use tari_template_lib::{
         ComponentAddress,
         ComponentBody,
         ComponentHeader,
-        ConfidentialBucketId,
         LayerOneCommitmentAddress,
         Metadata,
         NonFungibleAddress,
@@ -248,13 +246,6 @@ impl StateTracker {
         self.write_with(|state| state.take_bucket(bucket_id))
     }
 
-    pub fn take_confidential_bucket(
-        &self,
-        bucket_id: ConfidentialBucketId,
-    ) -> Result<ConfidentialBucket, RuntimeError> {
-        self.write_with(|state| state.take_confidential_bucket(bucket_id))
-    }
-
     pub fn list_buckets(&self) -> Vec<BucketId> {
         self.read_with(|state| state.buckets.keys().copied().collect())
     }
@@ -266,16 +257,6 @@ impl StateTracker {
                 .get(&bucket_id)
                 .cloned()
                 .ok_or(RuntimeError::BucketNotFound { bucket_id })
-        })
-    }
-
-    pub fn get_confidential_bucket(&self, bucket_id: ConfidentialBucketId) -> Result<ConfidentialBucket, RuntimeError> {
-        self.read_with(|state| {
-            state
-                .confidential_buckets
-                .get(&bucket_id)
-                .cloned()
-                .ok_or(RuntimeError::ConfidentialBucketNotFound { bucket_id })
         })
     }
 
@@ -333,15 +314,6 @@ impl StateTracker {
 
             state.claim_layer_one_commitment(&commitment_address)?;
             Ok(commitment)
-        })
-    }
-
-    pub fn new_confidential_bucket(&self, bucket: ConfidentialBucket) -> Result<ConfidentialBucketId, RuntimeError> {
-        self.write_with(|state| {
-            let bucket_id = self.id_provider.new_confidential_bucket_id();
-            debug!(target: LOG_TARGET, "New conf bucket: {}", bucket_id);
-            state.confidential_buckets.insert(bucket_id, bucket);
-            Ok(bucket_id)
         })
     }
 

@@ -34,7 +34,6 @@ use crate::{
         Amount,
         BucketId,
         ComponentAddress,
-        ConfidentialBucketId,
         Metadata,
         NonFungibleAddress,
         NonFungibleId,
@@ -222,7 +221,6 @@ pub struct VaultInvokeArg {
 pub enum VaultAction {
     Create,
     Deposit,
-    DepositConfidential,
     Withdraw,
     WithdrawAll,
     GetBalance,
@@ -279,32 +277,6 @@ pub enum BucketAction {
 #[derive(Clone, Debug, Decode, Encode)]
 pub struct BucketBurnArg {
     pub bucket_id: BucketId,
-}
-
-// ----------------------------- Confidential Bucket ----------------------------- //
-#[derive(Clone, Debug, Decode, Encode)]
-pub struct ConfidentialBucketInvokeArg {
-    pub bucket_ref: ConfidentialBucketRef,
-    pub action: ConfidentialBucketAction,
-    pub args: Vec<Vec<u8>>,
-}
-
-#[derive(Clone, Copy, Debug, Decode, Encode)]
-pub enum ConfidentialBucketRef {
-    Ref(ConfidentialBucketId),
-}
-
-impl ConfidentialBucketRef {
-    pub fn bucket_id(&self) -> Option<ConfidentialBucketId> {
-        match self {
-            ConfidentialBucketRef::Ref(id) => Some(*id),
-        }
-    }
-}
-
-#[derive(Clone, Copy, Debug, Decode, Encode)]
-pub enum ConfidentialBucketAction {
-    GetResourceAddress,
 }
 
 // -------------------------------- Workspace -------------------------------- //

@@ -15,7 +15,6 @@ pub struct IdProvider {
     max_ids: u32,
     current_id: Arc<AtomicU32>,
     bucket_id: Arc<AtomicU32>,
-    confidential_bucket_id: Arc<AtomicU32>,
     uuid: Arc<AtomicU32>,
 }
 
@@ -33,7 +32,6 @@ impl IdProvider {
             // TODO: these should be ranges
             current_id: Arc::new(AtomicU32::new(0)),
             bucket_id: Arc::new(AtomicU32::new(1000)),
-            confidential_bucket_id: Arc::new(AtomicU32::new(2000)),
             uuid: Arc::new(AtomicU32::new(0)),
         }
     }
@@ -76,12 +74,6 @@ impl IdProvider {
     pub fn new_bucket_id(&self) -> BucketId {
         // Buckets are not saved to shards, so should not increment the hashes
         self.bucket_id.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
-    }
-
-    pub fn new_confidential_bucket_id(&self) -> BucketId {
-        // Buckets are not saved to shards, so should not increment the hashes
-        self.confidential_bucket_id
-            .fetch_add(1, std::sync::atomic::Ordering::Relaxed)
     }
 
     pub fn new_uuid(&self) -> Result<[u8; 32], MaxIdsExceeded> {

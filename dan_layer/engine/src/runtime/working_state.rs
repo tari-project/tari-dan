@@ -7,7 +7,6 @@ use tari_common_types::types::Commitment;
 use tari_dan_common_types::optional::Optional;
 use tari_engine_types::{
     bucket::Bucket,
-    confidential_bucket::ConfidentialBucket,
     logs::LogEntry,
     non_fungible::NonFungibleContainer,
     resource::Resource,
@@ -18,7 +17,6 @@ use tari_template_lib::models::{
     BucketId,
     ComponentAddress,
     ComponentHeader,
-    ConfidentialBucketId,
     LayerOneCommitmentAddress,
     NonFungibleAddress,
     ResourceAddress,
@@ -34,7 +32,6 @@ use crate::{
 pub(super) struct WorkingState {
     pub logs: Vec<LogEntry>,
     pub buckets: HashMap<BucketId, Bucket>,
-    pub confidential_buckets: HashMap<ConfidentialBucketId, ConfidentialBucket>,
     // These could be "new_substates"
     pub new_resources: HashMap<ResourceAddress, Resource>,
     pub new_components: HashMap<ComponentAddress, ComponentHeader>,
@@ -53,7 +50,6 @@ impl WorkingState {
         Self {
             logs: Vec::new(),
             buckets: HashMap::new(),
-            confidential_buckets: HashMap::new(),
             new_resources: HashMap::new(),
             new_components: HashMap::new(),
             new_vaults: HashMap::new(),
@@ -260,15 +256,6 @@ impl WorkingState {
         self.buckets
             .remove(&bucket_id)
             .ok_or(RuntimeError::BucketNotFound { bucket_id })
-    }
-
-    pub fn take_confidential_bucket(
-        &mut self,
-        bucket_id: ConfidentialBucketId,
-    ) -> Result<ConfidentialBucket, RuntimeError> {
-        self.confidential_buckets
-            .remove(&bucket_id)
-            .ok_or(RuntimeError::ConfidentialBucketNotFound { bucket_id })
     }
 
     pub(super) fn validate_finalized(&self) -> Result<(), TransactionCommitError> {

@@ -28,7 +28,6 @@ use tari_template_lib::{
         Arg,
         BucketInvokeArg,
         ComponentInvokeArg,
-        ConfidentialBucketInvokeArg,
         ConsensusInvokeArg,
         EmitLogArg,
         LogLevel,
@@ -124,11 +123,6 @@ impl WasmProcess {
                 env.state()
                     .interface()
                     .bucket_invoke(arg.bucket_ref, arg.action, arg.args.into())
-            }),
-            EngineOp::ConfidentialBucketInvoke => Self::handle(env, arg, |env, arg: ConfidentialBucketInvokeArg| {
-                env.state()
-                    .interface()
-                    .confidential_bucket_invoke(arg.bucket_ref, arg.action, arg.args.into())
             }),
             EngineOp::WorkspaceInvoke => Self::handle(env, arg, |env, arg: WorkspaceInvokeArg| {
                 env.state().interface().workspace_invoke(arg.action, arg.args.into())

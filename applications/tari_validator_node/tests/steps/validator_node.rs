@@ -78,7 +78,7 @@ async fn when_i_claim_burn(
         Instruction::PutLastInstructionOutputOnWorkspace { key: b"burn".to_vec() },
         Instruction::CallMethod {
             component_address,
-            method: "deposit_confidential".to_string(),
+            method: "deposit".to_string(),
             args: vec![Arg::Variable(b"burn".to_vec())],
         },
     ];
