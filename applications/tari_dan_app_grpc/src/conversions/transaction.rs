@@ -161,6 +161,16 @@ impl From<tari_engine_types::instruction::Instruction> for proto::transaction::I
                 result.log_level = level.to_string();
                 result.log_message = message;
             },
+            Instruction::ClaimBurn {
+                commitment_address,
+                range_proof,
+                proof_of_knowledge,
+            } => {
+                result.instruction_type = 4;
+                result.claim_burn_commitment_address = commitment_address.to_vec();
+                result.claim_burn_range_proof = range_proof.to_vec();
+                result.claim_burn_proof_of_knowledge = proof_of_knowledge.to_vec();
+            },
         }
         result
     }

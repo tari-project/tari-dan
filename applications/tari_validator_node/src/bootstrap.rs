@@ -169,6 +169,7 @@ pub async fn spawn_services(
         template_manager_service.clone(),
         shutdown.clone(),
         consensus_constants,
+        shard_store.clone(),
         config.validator_node.scan_base_layer,
         config.validator_node.base_layer_scanning_interval,
     );

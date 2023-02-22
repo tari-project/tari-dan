@@ -28,6 +28,7 @@ use tari_template_lib::models::{Amount, NonFungibleId, ResourceAddress, VaultId}
 
 use crate::{
     bucket::Bucket,
+    confidential_bucket::ConfidentialBucket,
     resource_container::{ResourceContainer, ResourceError},
 };
 
@@ -46,6 +47,11 @@ impl Vault {
     }
 
     pub fn deposit(&mut self, bucket: Bucket) -> Result<(), ResourceError> {
+        self.resource_container.deposit(bucket.into_resource())?;
+        Ok(())
+    }
+
+    pub fn deposit_confidential(&mut self, bucket: ConfidentialBucket) -> Result<(), ResourceError> {
         self.resource_container.deposit(bucket.into_resource())?;
         Ok(())
     }

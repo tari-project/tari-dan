@@ -47,6 +47,9 @@ pub async fn create_account(world: &mut TariWorld, account_name: String, validat
     let data_dir = get_cli_data_dir(world);
     let key = get_key_manager(world).get_active_key().expect("No active keypair");
     let owner_token = key.to_owner_token();
+    world
+        .account_public_keys
+        .insert(account_name.clone(), (key.secret_key.clone(), key.public_key.clone()));
     // create an account component
     let instruction = Instruction::CallFunction {
         // The "account" template is builtin in the validator nodes with a constant address
@@ -136,7 +139,7 @@ pub async fn create_component(
 
 fn add_substate_addresses(world: &mut TariWorld, outputs_name: String, diff: &SubstateDiff) {
     let outputs = world.outputs.entry(outputs_name).or_default();
-    let mut counters = [0usize, 0, 0, 0];
+    let mut counters = [0usize, 0, 0, 0, 0];
     for (addr, data) in diff.up_iter() {
         match addr {
             SubstateAddress::Component(_) => {
@@ -170,6 +173,16 @@ fn add_substate_addresses(world: &mut TariWorld, outputs_name: String, diff: &Su
                     version: data.version(),
                 });
                 counters[3] += 1;
+            },
+            SubstateAddress::LayerOneCommitment(_) => {
+                outputs.insert(
+                    format!("layer_one_commitments/{}", counters[4]),
+                    VersionedSubstateAddress {
+                        address: addr.clone(),
+                        version: data.version(),
+                    },
+                );
+                counters[4] += 1;
             },
         }
     }

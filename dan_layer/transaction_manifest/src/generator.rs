@@ -142,6 +142,7 @@ impl ManifestInstructionGenerator {
                                 SubstateAddress::Resource(addr) => Ok(arg!(*addr)),
                                 SubstateAddress::Vault(addr) => Ok(arg!(*addr)),
                                 SubstateAddress::NonFungible(addr) => Ok(arg!(addr)),
+                                SubstateAddress::LayerOneCommitment(addr) => Ok(arg!(*addr)),
                             },
                             ManifestValue::Literal(lit) => lit_to_arg(lit),
                             ManifestValue::NonFungibleId(id) => Ok(arg!(id.clone())),

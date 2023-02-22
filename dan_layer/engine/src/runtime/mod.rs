@@ -49,6 +49,8 @@ mod tests;
 
 use std::{fmt::Debug, sync::Arc};
 
+use tari_common_types::types::BulletRangeProof;
+use tari_crypto::ristretto::RistrettoComSig;
 use tari_engine_types::commit_result::FinalizeResult;
 use tari_template_lib::{
     args::{
@@ -57,6 +59,8 @@ use tari_template_lib::{
         BucketRef,
         ComponentAction,
         ComponentRef,
+        ConfidentialBucketAction,
+        ConfidentialBucketRef,
         ConsensusAction,
         InvokeResult,
         LogLevel,
@@ -67,7 +71,7 @@ use tari_template_lib::{
         WorkspaceAction,
     },
     invoke_args,
-    models::{ComponentAddress, ComponentHeader, NonFungibleAddress, VaultRef},
+    models::{ComponentAddress, ComponentHeader, LayerOneCommitmentAddress, NonFungibleAddress, VaultRef},
 };
 pub use tracker::{RuntimeState, StateTracker};
 
@@ -106,6 +110,13 @@ pub trait RuntimeInterface: Send + Sync {
         args: EngineArgs,
     ) -> Result<InvokeResult, RuntimeError>;
 
+    fn confidential_bucket_invoke(
+        &self,
+        bucket_ref: ConfidentialBucketRef,
+        action: ConfidentialBucketAction,
+        args: EngineArgs,
+    ) -> Result<InvokeResult, RuntimeError>;
+
     fn workspace_invoke(&self, action: WorkspaceAction, args: EngineArgs) -> Result<InvokeResult, RuntimeError>;
 
     fn non_fungible_invoke(
@@ -120,6 +131,13 @@ pub trait RuntimeInterface: Send + Sync {
     fn generate_uuid(&self) -> Result<[u8; 32], RuntimeError>;
 
     fn set_last_instruction_output(&self, value: Option<Vec<u8>>) -> Result<(), RuntimeError>;
+
+    fn claim_burn(
+        &self,
+        commitment_address: LayerOneCommitmentAddress,
+        range_proof: BulletRangeProof,
+        owner_sig: RistrettoComSig,
+    ) -> Result<(), RuntimeError>;
 
     fn finalize(&self) -> Result<FinalizeResult, RuntimeError>;
 }

@@ -360,6 +360,9 @@ fn summarize_finalize_result(finalize: &FinalizeResult) {
                     SubstateValue::NonFungible(_) => {
                         println!("      ▶ NFT: {}", address);
                     },
+                    SubstateValue::LayerOneCommitment(_) => {
+                        println!("      ▶ Layer 1 commitment: {}", address);
+                    },
                 }
                 println!();
             }

@@ -22,7 +22,7 @@
 
 use std::{convert::TryInto, ops::RangeInclusive, sync::Arc};
 
-use log::info;
+use log::*;
 use tari_common_types::types::{FixedHash, PublicKey};
 use tari_comms::{types::CommsPublicKey, NodeIdentity};
 use tari_core::{

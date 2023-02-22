@@ -93,6 +93,9 @@ impl ComponentManager {
                         version: substate.version(),
                     });
                 },
+                _addr @ SubstateAddress::LayerOneCommitment(_hash) => {
+                    todo!("Not expected");
+                },
             }
         }
 

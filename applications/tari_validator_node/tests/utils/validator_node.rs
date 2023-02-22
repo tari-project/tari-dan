@@ -20,7 +20,12 @@
 //   WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //   USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use std::{str::FromStr, time::Duration};
+use std::{
+    fs,
+    path::{Path, PathBuf},
+    str::FromStr,
+    time::Duration,
+};
 
 use reqwest::Url;
 use tari_common::configuration::{CommonConfig, StringList};
@@ -30,10 +35,12 @@ use tari_p2p::{Network, PeerSeedsConfig, TransportType};
 use tari_shutdown::Shutdown;
 use tari_validator_node::{run_validator_node, ApplicationConfig, ValidatorNodeConfig};
 use tari_validator_node_client::ValidatorNodeClient;
-use tempfile::tempdir;
 use tokio::task;
 
-use crate::{utils::helpers::get_os_assigned_ports, TariWorld};
+use crate::{
+    utils::{helpers::get_os_assigned_ports, logging::get_base_dir},
+    TariWorld,
+};
 
 #[derive(Debug)]
 pub struct ValidatorNodeProcess {
@@ -44,8 +51,22 @@ pub struct ValidatorNodeProcess {
     pub http_ui_port: u16,
     pub base_node_grpc_port: u16,
     pub handle: task::JoinHandle<()>,
-    pub temp_dir_path: String,
+    pub temp_dir_path: PathBuf,
     pub shutdown: Shutdown,
+}
+
+impl ValidatorNodeProcess {
+    pub async fn create_client(&self) -> ValidatorNodeClient {
+        get_vn_client(self.json_rpc_port).await
+    }
+
+    pub async fn save_database(&self, database_name: String, to: &Path) {
+        dbg!(to);
+        fs::create_dir_all(to).expect("Could not create directory");
+        let from = &self.temp_dir_path.join(format!("{}.db", database_name));
+        dbg!(&from);
+        fs::copy(from, to.join(format!("{}.sqlite", database_name))).expect("Could not copy file");
+    }
 }
 
 pub async fn spawn_validator_node(
@@ -66,8 +87,6 @@ pub async fn spawn_validator_node(
     let wallet_grpc_port = world.wallets.get(&wallet_name).unwrap().grpc_port;
     let name = validator_node_name.clone();
 
-    let temp_dir = tempdir().unwrap().path().join(validator_node_name.clone());
-    let temp_dir_path = temp_dir.display().to_string();
     let peer_seeds: Vec<String> = world
         .vn_seeds
         .values()
@@ -76,7 +95,8 @@ pub async fn spawn_validator_node(
 
     let shutdown = Shutdown::new();
     let shutdown_signal = shutdown.to_signal();
-
+    let temp_dir = get_base_dir().join("validator_nodes").join(validator_node_name.clone());
+    let temp_dir_path = temp_dir.clone();
     let handle = task::spawn(async move {
         let mut config = ApplicationConfig {
             common: CommonConfig::default(),
@@ -86,7 +106,6 @@ pub async fn spawn_validator_node(
         };
 
         // temporal folder for the VN files (e.g. sqlite file, json files, etc.)
-        let temp_dir = tempdir().unwrap().path().join(validator_node_name.clone());
         println!("Using validator_node temp_dir: {}", temp_dir.display());
         config.validator_node.data_dir = temp_dir.to_path_buf();
         config.validator_node.shard_key_file = temp_dir.join("shard_key.json");

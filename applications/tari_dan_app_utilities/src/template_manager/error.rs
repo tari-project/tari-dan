@@ -31,8 +31,8 @@ use thiserror::Error;
 pub enum TemplateManagerError {
     #[error("The template in the base layer is invalid")]
     InvalidBaseLayerTemplate,
-    #[error("There was an error sending to a channel")]
-    SendError,
+    #[error("Internal service channel closed unexpectedly")]
+    ChannelClosed,
     #[error("Storage error: {0}")]
     StorageError(#[from] StorageError),
     #[error("Storage error: {0}")]

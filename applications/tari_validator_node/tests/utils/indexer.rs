@@ -142,8 +142,12 @@ pub async fn spawn_indexer(world: &mut TariWorld, indexer_name: String, base_nod
     });
 
     // We need to give it time for the indexer to startup
-    // TODO: it would be better to scan the VN to detect when it has started
+    // TODO: it would be better to check the indexer ports to detect when it has started
     tokio::time::sleep(Duration::from_secs(5)).await;
+    if handle.is_finished() {
+        handle.await.unwrap();
+        return;
+    }
 
     // make the new vn able to be referenced by other processes
     let indexer_process = IndexerProcess {

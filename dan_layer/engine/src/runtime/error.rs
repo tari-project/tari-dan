@@ -25,7 +25,16 @@ use std::{fmt::Display, io};
 use anyhow::anyhow;
 use tari_dan_common_types::optional::IsNotFoundError;
 use tari_engine_types::{resource_container::ResourceError, substate::SubstateAddress};
-use tari_template_lib::models::{Amount, BucketId, ComponentAddress, NonFungibleId, ResourceAddress, VaultId};
+use tari_template_lib::models::{
+    Amount,
+    BucketId,
+    ComponentAddress,
+    ConfidentialBucketId,
+    LayerOneCommitmentAddress,
+    NonFungibleId,
+    ResourceAddress,
+    VaultId,
+};
 use tari_transaction::id_provider::MaxIdsExceeded;
 
 use crate::{
@@ -45,6 +54,8 @@ pub enum RuntimeError {
     SubstateNotFound { address: SubstateAddress },
     #[error("Component not found with address '{address}'")]
     ComponentNotFound { address: ComponentAddress },
+    #[error("Layer one commitment not found with address '{address}'")]
+    LayerOneCommitmentNotFound { address: LayerOneCommitmentAddress },
     #[error("Invalid argument {argument}: {reason}")]
     InvalidArgument { argument: &'static str, reason: String },
     #[error("Invalid amount '{amount}': {reason}")]
@@ -66,6 +77,8 @@ pub enum RuntimeError {
     },
     #[error("Bucket not found with id {bucket_id}")]
     BucketNotFound { bucket_id: BucketId },
+    #[error("Confidential bucket not found with id {bucket_id}")]
+    ConfidentialBucketNotFound { bucket_id: ConfidentialBucketId },
     #[error("Resource not found with address {resource_address}")]
     ResourceNotFound { resource_address: ResourceAddress },
     #[error(transparent)]
@@ -90,6 +103,14 @@ pub enum RuntimeError {
     InvalidMethodAccessRule { template_name: String, details: String },
     #[error("Runtime module error: {0}")]
     ModuleError(#[from] RuntimeModuleError),
+    #[error("Invalid claiming signature")]
+    InvalidClaimingSignature,
+    #[error("Invalid range proof")]
+    InvalidRangeProof,
+    #[error("Invalid substate type")]
+    InvalidSubstateType,
+    #[error("Layer one commitment already claimed with address '{address}'")]
+    LayerOneCommitmentAlreadyClaimed { address: LayerOneCommitmentAddress },
 }
 
 impl RuntimeError {

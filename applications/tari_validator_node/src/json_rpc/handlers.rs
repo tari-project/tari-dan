@@ -60,6 +60,8 @@ use tari_validator_node_client::types::{
     GetIdentityResponse,
     GetRecentTransactionsResponse,
     GetShardKey,
+    GetStateRequest,
+    GetStateResponse,
     GetTemplateRequest,
     GetTemplateResponse,
     GetTemplatesRequest,
@@ -228,6 +230,29 @@ impl JsonRpcHandlers {
                 result: None,
             }))
         }
+    }
+
+    pub async fn get_state(&self, value: JsonRpcExtractor) -> JrpcResult {
+        let answer_id = value.get_answer_id();
+        let request: GetStateRequest = value.parse_params()?;
+
+        let mut tx = self.shard_store.create_read_tx().unwrap();
+        let state = match tx.get_substate_states(&[request.shard_id]) {
+            Ok(state) => state,
+            Err(e) => {
+                return Err(JsonRpcResponse::error(
+                    answer_id,
+                    JsonRpcError::new(
+                        JsonRpcErrorReason::InvalidParams,
+                        format!("Something went wrong: {}", e),
+                        json::Value::Null,
+                    ),
+                ))
+            },
+        };
+        Ok(JsonRpcResponse::success(answer_id, GetStateResponse {
+            data: state[0].substate().to_bytes(),
+        }))
     }
 
     pub async fn get_recent_transactions(&self, value: JsonRpcExtractor) -> JrpcResult {

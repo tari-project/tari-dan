@@ -33,6 +33,11 @@ pub enum Instruction {
         level: LogLevel,
         message: String,
     },
+    ClaimBurn {
+        commitment_address: Vec<u8>,
+        range_proof: Vec<u8>,
+        proof_of_knowledge: Vec<u8>,
+    },
 }
 
 impl Instruction {
@@ -67,6 +72,17 @@ impl Display for Instruction {
             },
             Self::EmitLog { level, message } => {
                 write!(f, "EmitLog {{ level: {:?}, message: {:?} }}", level, message)
+            },
+            Self::ClaimBurn {
+                commitment_address,
+                proof_of_knowledge,
+                ..
+            } => {
+                write!(
+                    f,
+                    "ClaimBurn {{ commitment_address: {:?}, proof_of_knowledge: {:?} }}",
+                    commitment_address, proof_of_knowledge
+                )
             },
         }
     }

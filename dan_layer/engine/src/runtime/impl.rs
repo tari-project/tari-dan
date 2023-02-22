@@ -22,9 +22,26 @@
 
 use std::collections::BTreeSet;
 
+use log::warn;
+use tari_common_types::types::{BulletRangeProof, FixedHash};
+use tari_crypto::{
+    range_proof::RangeProofService,
+    ristretto::{
+        bulletproofs_plus::BulletproofsPlusService,
+        pedersen::{
+            commitment_factory::PedersenCommitmentFactory,
+            extended_commitment_factory::ExtendedPedersenCommitmentFactory,
+        },
+        RistrettoComSig,
+        RistrettoPublicKey,
+        RistrettoSecretKey,
+    },
+};
 use tari_engine_types::{
     commit_result::{FinalizeResult, RejectReason, TransactionResult},
+    confidential_bucket::ConfidentialBucket,
     logs::LogEntry,
+    LAYER_TWO_TARI_RESOURCE_ADDRESS,
 };
 use tari_template_abi::TemplateDef;
 use tari_template_lib::{
@@ -33,6 +50,8 @@ use tari_template_lib::{
         BucketRef,
         ComponentAction,
         ComponentRef,
+        ConfidentialBucketAction,
+        ConfidentialBucketRef,
         ConsensusAction,
         CreateComponentArg,
         CreateResourceArg,
@@ -49,24 +68,40 @@ use tari_template_lib::{
         WorkspaceAction,
     },
     auth::AccessRules,
-    models::{BucketId, ComponentAddress, ComponentHeader, NonFungibleAddress, VaultRef},
+    models::{
+        BucketId,
+        ComponentAddress,
+        ComponentHeader,
+        ConfidentialBucketId,
+        LayerOneCommitmentAddress,
+        NonFungibleAddress,
+        ResourceAddress,
+        VaultRef,
+    },
+};
+use tari_utilities::ByteArray;
+
+use crate::{
+    base_layer_hashers::BurntOutputDomainHasher,
+    runtime::{
+        engine_args::EngineArgs,
+        tracker::StateTracker,
+        AuthParams,
+        ConsensusContext,
+        RuntimeError,
+        RuntimeInterface,
+        RuntimeModule,
+        RuntimeState,
+    },
 };
 
-use crate::runtime::{
-    engine_args::EngineArgs,
-    tracker::StateTracker,
-    AuthParams,
-    ConsensusContext,
-    RuntimeError,
-    RuntimeInterface,
-    RuntimeModule,
-    RuntimeState,
-};
+const LOG_TARGET: &str = "tari::dan::engine::runtime::impl";
 
 pub struct RuntimeInterfaceImpl {
     tracker: StateTracker,
     _auth_params: AuthParams,
     consensus: ConsensusContext,
+    sender_public_key: RistrettoPublicKey,
     modules: Vec<Box<dyn RuntimeModule>>,
 }
 
@@ -75,12 +110,14 @@ impl RuntimeInterfaceImpl {
         tracker: StateTracker,
         auth_params: AuthParams,
         consensus: ConsensusContext,
+        sender_public_key: RistrettoPublicKey,
         modules: Vec<Box<dyn RuntimeModule>>,
     ) -> Self {
         Self {
             tracker,
             _auth_params: auth_params,
             consensus,
+            sender_public_key,
             modules,
         }
     }
@@ -333,6 +370,19 @@ impl RuntimeInterface for RuntimeInterfaceImpl {
                     .borrow_vault_mut(&vault_id, |vault| vault.deposit(bucket))??;
                 Ok(InvokeResult::unit())
             },
+            VaultAction::DepositConfidential => {
+                let vault_id = vault_ref.vault_id().ok_or_else(|| RuntimeError::InvalidArgument {
+                    argument: "vault_ref",
+                    reason: "Put vault action requires a vault id".to_string(),
+                })?;
+                let bucket_id: ConfidentialBucketId = args.get(0)?;
+                // TODO: access check
+
+                let bucket = self.tracker.take_confidential_bucket(bucket_id)?;
+                self.tracker
+                    .borrow_vault_mut(&vault_id, |vault| vault.deposit_confidential(bucket))??;
+                Ok(InvokeResult::unit())
+            },
             VaultAction::Withdraw => {
                 let vault_id = vault_ref.vault_id().ok_or_else(|| RuntimeError::InvalidArgument {
                     argument: "vault_ref",
@@ -471,6 +521,26 @@ impl RuntimeInterface for RuntimeInterfaceImpl {
         }
     }
 
+    fn confidential_bucket_invoke(
+        &self,
+        bucket_ref: ConfidentialBucketRef,
+        action: ConfidentialBucketAction,
+        _args: EngineArgs,
+    ) -> Result<InvokeResult, RuntimeError> {
+        self.invoke_on_runtime_call_modules("confidential_bucket_invoke")?;
+
+        match action {
+            ConfidentialBucketAction::GetResourceAddress => {
+                let bucket_id = bucket_ref.bucket_id().ok_or_else(|| RuntimeError::InvalidArgument {
+                    argument: "bucket_ref",
+                    reason: "GetResourceAddress action requires a bucket id".to_string(),
+                })?;
+                let bucket = self.tracker.get_confidential_bucket(bucket_id)?;
+                Ok(InvokeResult::encode(bucket.resource_address())?)
+            },
+        }
+    }
+
     fn workspace_invoke(&self, action: WorkspaceAction, args: EngineArgs) -> Result<InvokeResult, RuntimeError> {
         self.invoke_on_runtime_call_modules("workspace_invoke")?;
         match action {
@@ -549,6 +619,55 @@ impl RuntimeInterface for RuntimeInterfaceImpl {
     fn set_last_instruction_output(&self, value: Option<Vec<u8>>) -> Result<(), RuntimeError> {
         self.invoke_on_runtime_call_modules("set_last_instruction_output")?;
         self.tracker.set_last_instruction_output(value);
+        Ok(())
+    }
+
+    fn claim_burn(
+        &self,
+        commitment_address: LayerOneCommitmentAddress,
+        range_proof: BulletRangeProof,
+        owner_sig: RistrettoComSig,
+    ) -> Result<(), RuntimeError> {
+        // 1. Must exist
+        let commitment = self.tracker.take_layer_one_commitment(commitment_address)?;
+        // 2. owner_sig must be valid
+        // TODO: Probably want a better challenge
+        let factory = PedersenCommitmentFactory::default();
+        let hasher = BurntOutputDomainHasher::new_with_label("commitment_signature")
+            .chain(owner_sig.public_nonce().as_bytes())
+            .chain(commitment.as_bytes())
+            .chain(self.sender_public_key.as_bytes());
+
+        let challenge: FixedHash = digest::Digest::finalize(hasher).into();
+        if !owner_sig.verify(
+            &commitment,
+            &RistrettoSecretKey::from_bytes(challenge.as_bytes())
+                .map_err(|_e| RuntimeError::InvalidClaimingSignature)?,
+            &factory,
+        ) {
+            warn!(target: LOG_TARGET, "Claim burn failed - Invalid signature");
+            return Err(RuntimeError::InvalidClaimingSignature);
+        }
+
+        // 3. range_proof must be valid
+        let range_proof_service = BulletproofsPlusService::init(64, 1, ExtendedPedersenCommitmentFactory::default())
+            .expect("Failed to init range proof service");
+
+        if !range_proof_service.verify(&range_proof.0, &commitment) {
+            warn!(target: LOG_TARGET, "Claim burn failed - Invalid range proof");
+            return Err(RuntimeError::InvalidRangeProof);
+        }
+
+        let confidential_bucket = ConfidentialBucket::new(
+            ResourceAddress::new(LAYER_TWO_TARI_RESOURCE_ADDRESS),
+            commitment,
+            range_proof,
+        );
+
+        let bucket_id = self.tracker.new_confidential_bucket(confidential_bucket)?;
+
+        self.tracker
+            .set_last_instruction_output(Some(bucket_id.to_le_bytes().to_vec()));
         Ok(())
     }
 

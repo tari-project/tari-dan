@@ -14,3 +14,9 @@ pub mod transaction;
 pub mod wasm;
 pub use bootstrap::bootstrap_state;
 pub use tari_template_abi as abi;
+
+pub mod base_layer_hashers {
+    use tari_crypto::{hash::blake2::Blake256, hash_domain, hashing::DomainSeparatedHasher};
+    hash_domain!(BurntOutputDomain, "burnt_output", 1);
+    pub type BurntOutputDomainHasher = DomainSeparatedHasher<Blake256, BurntOutputDomain>;
+}

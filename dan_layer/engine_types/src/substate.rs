@@ -27,10 +27,20 @@ use std::{
 
 use serde::{Deserialize, Serialize};
 use tari_bor::{borsh, decode, decode_exact, encode, Decode, Encode};
+use tari_common_types::types::Commitment;
 use tari_template_lib::{
-    models::{ComponentAddress, ComponentHeader, NonFungibleAddress, NonFungibleId, ResourceAddress, VaultId},
+    models::{
+        ComponentAddress,
+        ComponentHeader,
+        LayerOneCommitmentAddress,
+        NonFungibleAddress,
+        NonFungibleId,
+        ResourceAddress,
+        VaultId,
+    },
     Hash,
 };
+use tari_utilities::ByteArray;
 
 use crate::{hashing::hasher, non_fungible::NonFungibleContainer, resource::Resource, vault::Vault};
 
@@ -75,6 +85,7 @@ pub enum SubstateAddress {
     Component(ComponentAddress),
     Resource(ResourceAddress),
     Vault(VaultId),
+    LayerOneCommitment(LayerOneCommitmentAddress),
     NonFungible(NonFungibleAddress),
 }
 
@@ -105,6 +116,7 @@ impl SubstateAddress {
             SubstateAddress::Component(address) => *address.hash(),
             SubstateAddress::Resource(address) => *address.hash(),
             SubstateAddress::Vault(id) => *id.hash(),
+            SubstateAddress::LayerOneCommitment(address) => *address.hash(),
             SubstateAddress::NonFungible(address) => hasher("non_fungible_id")
                 .chain(address.resource_address().hash())
                 .chain(address.id())
@@ -180,6 +192,7 @@ impl Display for SubstateAddress {
             SubstateAddress::Resource(addr) => write!(f, "{}", addr),
             SubstateAddress::Vault(addr) => write!(f, "{}", addr),
             SubstateAddress::NonFungible(addr) => write!(f, "{}", addr),
+            SubstateAddress::LayerOneCommitment(commitment_address) => write!(f, "{}", commitment_address),
         }
     }
 }
@@ -222,6 +235,11 @@ impl FromStr for SubstateAddress {
                 let id = VaultId::from_hex(addr).map_err(|_| InvalidSubstateAddressFormat(s.to_string()))?;
                 Ok(SubstateAddress::Vault(id))
             },
+            Some(("commitment", addr)) => {
+                let commitment_address = LayerOneCommitmentAddress::from_hex(addr)
+                    .map_err(|_| InvalidSubstateAddressFormat(s.to_string()))?;
+                Ok(SubstateAddress::LayerOneCommitment(commitment_address))
+            },
             Some(_) | None => Err(InvalidSubstateAddressFormat(s.to_string())),
         }
     }
@@ -233,6 +251,7 @@ pub enum SubstateValue {
     Resource(Resource),
     Vault(Vault),
     NonFungible(NonFungibleContainer),
+    LayerOneCommitment(Vec<u8>),
 }
 
 impl SubstateValue {
@@ -281,6 +300,16 @@ impl SubstateValue {
     pub fn into_non_fungible(self) -> Option<NonFungibleContainer> {
         match self {
             SubstateValue::NonFungible(nft) => Some(nft),
+            _ => None,
+        }
+    }
+
+    pub fn into_layer_one_commitment(self) -> Option<Commitment> {
+        match self {
+            SubstateValue::LayerOneCommitment(commitment) => Some(
+                Commitment::from_bytes(&commitment)
+                    .expect("Should never fail to parse commitment, because it's saved from the db"),
+            ),
             _ => None,
         }
     }

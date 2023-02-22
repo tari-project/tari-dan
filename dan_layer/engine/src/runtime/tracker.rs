@@ -27,9 +27,11 @@ use std::{
 };
 
 use log::debug;
+use tari_common_types::types::Commitment;
 use tari_dan_common_types::optional::Optional;
 use tari_engine_types::{
     bucket::Bucket,
+    confidential_bucket::ConfidentialBucket,
     logs::LogEntry,
     non_fungible::NonFungibleContainer,
     resource::Resource,
@@ -48,6 +50,8 @@ use tari_template_lib::{
         ComponentAddress,
         ComponentBody,
         ComponentHeader,
+        ConfidentialBucketId,
+        LayerOneCommitmentAddress,
         Metadata,
         NonFungibleAddress,
         ResourceAddress,
@@ -244,6 +248,13 @@ impl StateTracker {
         self.write_with(|state| state.take_bucket(bucket_id))
     }
 
+    pub fn take_confidential_bucket(
+        &self,
+        bucket_id: ConfidentialBucketId,
+    ) -> Result<ConfidentialBucket, RuntimeError> {
+        self.write_with(|state| state.take_confidential_bucket(bucket_id))
+    }
+
     pub fn list_buckets(&self) -> Vec<BucketId> {
         self.read_with(|state| state.buckets.keys().copied().collect())
     }
@@ -255,6 +266,16 @@ impl StateTracker {
                 .get(&bucket_id)
                 .cloned()
                 .ok_or(RuntimeError::BucketNotFound { bucket_id })
+        })
+    }
+
+    pub fn get_confidential_bucket(&self, bucket_id: ConfidentialBucketId) -> Result<ConfidentialBucket, RuntimeError> {
+        self.read_with(|state| {
+            state
+                .confidential_buckets
+                .get(&bucket_id)
+                .cloned()
+                .ok_or(RuntimeError::ConfidentialBucketNotFound { bucket_id })
         })
     }
 
@@ -300,6 +321,27 @@ impl StateTracker {
             state.new_resources.insert(resource_address, resource);
 
             Ok(())
+        })
+    }
+
+    pub fn take_layer_one_commitment(
+        &self,
+        commitment_address: LayerOneCommitmentAddress,
+    ) -> Result<Commitment, RuntimeError> {
+        self.write_with(|state| {
+            let commitment = state.get_layer_one_commitment(&commitment_address)?;
+
+            state.claim_layer_one_commitment(&commitment_address)?;
+            Ok(commitment)
+        })
+    }
+
+    pub fn new_confidential_bucket(&self, bucket: ConfidentialBucket) -> Result<ConfidentialBucketId, RuntimeError> {
+        self.write_with(|state| {
+            let bucket_id = self.id_provider.new_confidential_bucket_id();
+            debug!(target: LOG_TARGET, "New conf bucket: {}", bucket_id);
+            state.confidential_buckets.insert(bucket_id, bucket);
+            Ok(bucket_id)
         })
     }
 
@@ -358,7 +400,7 @@ impl StateTracker {
         let resource = match resource_type {
             ResourceType::Fungible => ResourceContainer::fungible(resource_address, 0.into()),
             ResourceType::NonFungible => ResourceContainer::non_fungible(resource_address, BTreeSet::new()),
-            ResourceType::Confidential => todo!("new_vault: thaum resource"),
+            ResourceType::Confidential => ResourceContainer::confidential(resource_address, vec![]),
         };
         let vault = Vault::new(vault_id, resource);
 
@@ -468,6 +510,10 @@ impl StateTracker {
                     None => Substate::new(0, substate),
                 };
                 substate_diff.up(addr, new_substate);
+            }
+
+            for claimed in state.claimed_layer_one_commitments {
+                substate_diff.down(SubstateAddress::LayerOneCommitment(claimed), 0);
             }
 
             Result::<_, TransactionCommitError>::Ok(substate_diff)

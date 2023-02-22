@@ -244,4 +244,11 @@ pub trait ShardStoreWriteTransaction<TAddr: NodeAddressable, TPayload: Payload> 
         payload_id: PayloadId,
         node_hash: &TreeNodeHash,
     ) -> Result<(), StorageError>;
+
+    fn save_burnt_utxo(
+        &mut self,
+        substate: &tari_engine_types::substate::Substate,
+        commitment_address: String,
+        shard_id: ShardId,
+    ) -> Result<(), StorageError>;
 }
