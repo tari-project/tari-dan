@@ -25,7 +25,15 @@ use std::{fmt::Display, io};
 use anyhow::anyhow;
 use tari_dan_common_types::optional::IsNotFoundError;
 use tari_engine_types::{resource_container::ResourceError, substate::SubstateAddress};
-use tari_template_lib::models::{Amount, BucketId, ComponentAddress, NonFungibleId, ResourceAddress, VaultId};
+use tari_template_lib::models::{
+    AddressListId,
+    Amount,
+    BucketId,
+    ComponentAddress,
+    NonFungibleId,
+    ResourceAddress,
+    VaultId,
+};
 use tari_transaction::id_provider::MaxIdsExceeded;
 
 use crate::{
@@ -123,4 +131,8 @@ pub enum TransactionCommitError {
     StateStoreTransactionError(anyhow::Error),
     #[error(transparent)]
     MaxIdsExceeded(#[from] MaxIdsExceeded),
+    #[error("trying to mutate list {list_id}")]
+    AddressListMutation { list_id: AddressListId },
+    #[error("trying to mutate list {list_id} at index {index}")]
+    AddressListItemMutation { list_id: AddressListId, index: u64 },
 }

@@ -1,4 +1,4 @@
-//  Copyright 2022. The Tari Project
+//  Copyright 2023. The Tari Project
 //
 //  Redistribution and use in source and binary forms, with or without modification, are permitted provided that the
 //  following conditions are met:
@@ -20,35 +20,47 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-mod address;
-pub use address::Address;
+use tari_bor::{borsh, Decode, Encode};
 
-mod address_list;
-pub use address_list::{AddressList, AddressListId, AddressListItemAddress};
+use super::{AddressListId, ComponentAddress, NonFungibleAddress, ResourceAddress, VaultId};
 
-mod amount;
-pub use amount::Amount;
+#[derive(Debug, Clone, Encode, Decode, PartialEq, Eq, Hash)]
+#[cfg_attr(feature = "serde", derive(serde::Deserialize, serde::Serialize))]
+pub enum Address {
+    Component(ComponentAddress),
+    Resource(ResourceAddress),
+    Vault(VaultId),
+    NonFungible(NonFungibleAddress),
+    AddressList(AddressListId),
+    // There is no variant for AddressListItem as the concept of items is not exposed in templates
+}
 
-mod bucket;
-pub use bucket::{Bucket, BucketId};
+impl From<ComponentAddress> for Address {
+    fn from(address: ComponentAddress) -> Self {
+        Self::Component(address)
+    }
+}
 
-mod component;
-pub use component::*;
+impl From<ResourceAddress> for Address {
+    fn from(address: ResourceAddress) -> Self {
+        Self::Resource(address)
+    }
+}
 
-mod metadata;
-pub use metadata::Metadata;
+impl From<VaultId> for Address {
+    fn from(address: VaultId) -> Self {
+        Self::Vault(address)
+    }
+}
 
-mod non_fungible;
-pub use non_fungible::{NonFungible, NonFungibleAddress, NonFungibleId};
+impl From<NonFungibleAddress> for Address {
+    fn from(address: NonFungibleAddress) -> Self {
+        Self::NonFungible(address)
+    }
+}
 
-mod resource;
-pub use resource::ResourceAddress;
-
-mod system;
-pub use system::SystemAddress;
-
-mod template;
-pub use template::TemplateAddress;
-
-mod vault;
-pub use vault::{Vault, VaultId, VaultRef};
+impl From<AddressListId> for Address {
+    fn from(address: AddressListId) -> Self {
+        Self::AddressList(address)
+    }
+}

@@ -31,6 +31,7 @@ use tari_template_abi::rust::{
 
 use crate::{
     models::{
+        AddressListId,
         Amount,
         BucketId,
         ComponentAddress,
@@ -322,6 +323,7 @@ pub enum ConsensusAction {
 // -------------------------------- AddressList -------------------------------- //
 #[derive(Clone, Debug, Decode, Encode)]
 pub struct AddressListInvokeArg {
+    pub list_id: Option<AddressListId>,
     pub action: AddressListAction,
     pub args: Vec<Vec<u8>>,
 }
@@ -330,7 +332,5 @@ pub struct AddressListInvokeArg {
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub enum AddressListAction {
     Create,
-    // TODO: push item
-    // TODO: len
-    // TODO: get item at position
+    Push,
 }

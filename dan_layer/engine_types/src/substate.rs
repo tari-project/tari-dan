@@ -29,7 +29,8 @@ use serde::{Deserialize, Serialize};
 use tari_bor::{borsh, decode, decode_exact, encode, Decode, Encode};
 use tari_template_lib::{
     models::{
-        AddressListAddress,
+        Address,
+        AddressListId,
         AddressListItemAddress,
         ComponentAddress,
         ComponentHeader,
@@ -41,7 +42,13 @@ use tari_template_lib::{
     Hash,
 };
 
-use crate::{hashing::hasher, non_fungible::NonFungibleContainer, resource::Resource, vault::Vault};
+use crate::{
+    address_list::{AddressList, AddressListItem},
+    hashing::hasher,
+    non_fungible::NonFungibleContainer,
+    resource::Resource,
+    vault::Vault,
+};
 
 #[derive(Debug, Clone, Encode, Decode, Serialize, Deserialize)]
 pub struct Substate {
@@ -85,7 +92,7 @@ pub enum SubstateAddress {
     Resource(ResourceAddress),
     Vault(VaultId),
     NonFungible(NonFungibleAddress),
-    AddressList(AddressListAddress),
+    AddressList(AddressListId),
     AddressListItem(AddressListItemAddress),
 }
 
@@ -118,9 +125,9 @@ impl SubstateAddress {
         }
     }
 
-    pub fn as_address_list_address(&self) -> Option<&AddressListAddress> {
+    pub fn as_address_list_id(&self) -> Option<&AddressListId> {
         match self {
-            SubstateAddress::AddressList(addr) => Some(addr),
+            SubstateAddress::AddressList(id) => Some(id),
             _ => None,
         }
     }
@@ -178,9 +185,9 @@ impl SubstateAddress {
                 .chain(address.resource_address().hash())
                 .chain(address.id())
                 .result(),
-            SubstateAddress::AddressList(address) => *address.hash(),
+            SubstateAddress::AddressList(id) => *id.hash(),
             SubstateAddress::AddressListItem(address) => hasher("address_list_item")
-                .chain(address.list_address().hash())
+                .chain(address.list_id().hash())
                 .chain(&address.index())
                 .result(),
         }
@@ -208,6 +215,30 @@ impl From<VaultId> for SubstateAddress {
 impl From<NonFungibleAddress> for SubstateAddress {
     fn from(address: NonFungibleAddress) -> Self {
         Self::NonFungible(address)
+    }
+}
+
+impl From<AddressListId> for SubstateAddress {
+    fn from(address: AddressListId) -> Self {
+        Self::AddressList(address)
+    }
+}
+
+impl From<AddressListItemAddress> for SubstateAddress {
+    fn from(address: AddressListItemAddress) -> Self {
+        Self::AddressListItem(address)
+    }
+}
+
+impl From<Address> for SubstateAddress {
+    fn from(address: Address) -> Self {
+        match address {
+            Address::Component(addr) => Self::from(addr),
+            Address::Resource(addr) => Self::from(addr),
+            Address::Vault(id) => Self::from(id),
+            Address::NonFungible(addr) => Self::from(addr),
+            Address::AddressList(id) => Self::from(id),
+        }
     }
 }
 
@@ -273,6 +304,8 @@ pub enum SubstateValue {
     Resource(Resource),
     Vault(Vault),
     NonFungible(NonFungibleContainer),
+    AddressList(AddressList),
+    AddressListItem(AddressListItem),
 }
 
 impl SubstateValue {
@@ -324,6 +357,34 @@ impl SubstateValue {
             _ => None,
         }
     }
+
+    pub fn address_list(&self) -> Option<&AddressList> {
+        match self {
+            SubstateValue::AddressList(list) => Some(list),
+            _ => None,
+        }
+    }
+
+    pub fn into_address_list(self) -> Option<AddressList> {
+        match self {
+            SubstateValue::AddressList(list) => Some(list),
+            _ => None,
+        }
+    }
+
+    pub fn address_list_item(&self) -> Option<&AddressListItem> {
+        match self {
+            SubstateValue::AddressListItem(item) => Some(item),
+            _ => None,
+        }
+    }
+
+    pub fn into_address_list_item(self) -> Option<AddressListItem> {
+        match self {
+            SubstateValue::AddressListItem(item) => Some(item),
+            _ => None,
+        }
+    }
 }
 
 impl From<ComponentHeader> for SubstateValue {
@@ -347,6 +408,18 @@ impl From<Vault> for SubstateValue {
 impl From<NonFungibleContainer> for SubstateValue {
     fn from(token: NonFungibleContainer) -> Self {
         Self::NonFungible(token)
+    }
+}
+
+impl From<AddressList> for SubstateValue {
+    fn from(list: AddressList) -> Self {
+        Self::AddressList(list)
+    }
+}
+
+impl From<AddressListItem> for SubstateValue {
+    fn from(item: AddressListItem) -> Self {
+        Self::AddressListItem(item)
     }
 }
 

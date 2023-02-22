@@ -40,14 +40,30 @@ impl AddressList {
 
 /// Holds a reference to another substate
 #[derive(Debug, Clone, Encode, Decode, Serialize, Deserialize, PartialEq)]
-pub struct AddressListItem(SubstateAddress);
+pub struct AddressListItem {
+    list_id: AddressListId,
+    index: u64,
+    referenced_address: SubstateAddress,
+}
 
 impl AddressListItem {
-    pub fn new(referenced_address: SubstateAddress) -> Self {
-        Self(referenced_address)
+    pub fn new(list_id: AddressListId, index: u64, referenced_address: SubstateAddress) -> Self {
+        Self {
+            list_id,
+            index,
+            referenced_address,
+        }
+    }
+
+    pub fn list_id(&self) -> &AddressListId {
+        &self.list_id
+    }
+
+    pub fn index(&self) -> u64 {
+        self.index
     }
 
     pub fn referenced_address(&self) -> &SubstateAddress {
-        &self.0
+        &self.referenced_address
     }
 }

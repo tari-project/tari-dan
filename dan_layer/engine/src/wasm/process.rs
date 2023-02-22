@@ -140,7 +140,9 @@ impl WasmProcess {
                 env.state().interface().consensus_invoke(arg.action)
             }),
             EngineOp::AddressListInvoke => Self::handle(env, arg, |env, arg: AddressListInvokeArg| {
-                env.state().interface().address_list_invoke(arg.action)
+                env.state()
+                    .interface()
+                    .address_list_invoke(arg.list_id, arg.action, arg.args.into())
             }),
         };
 

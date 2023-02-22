@@ -68,7 +68,7 @@ use tari_template_lib::{
         WorkspaceAction,
     },
     invoke_args,
-    models::{ComponentAddress, ComponentHeader, NonFungibleAddress, VaultRef},
+    models::{AddressListId, ComponentAddress, ComponentHeader, NonFungibleAddress, VaultRef},
 };
 pub use tracker::{RuntimeState, StateTracker};
 
@@ -118,7 +118,12 @@ pub trait RuntimeInterface: Send + Sync {
 
     fn consensus_invoke(&self, action: ConsensusAction) -> Result<InvokeResult, RuntimeError>;
 
-    fn address_list_invoke(&self, action: AddressListAction) -> Result<InvokeResult, RuntimeError>;
+    fn address_list_invoke(
+        &self,
+        list_id: Option<AddressListId>,
+        action: AddressListAction,
+        args: EngineArgs,
+    ) -> Result<InvokeResult, RuntimeError>;
 
     fn generate_uuid(&self) -> Result<[u8; 32], RuntimeError>;
 

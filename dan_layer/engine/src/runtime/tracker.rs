@@ -29,7 +29,7 @@ use std::{
 use log::debug;
 use tari_dan_common_types::optional::Optional;
 use tari_engine_types::{
-    address_list::AddressList,
+    address_list::{AddressList, AddressListItem},
     bucket::Bucket,
     logs::LogEntry,
     non_fungible::NonFungibleContainer,
@@ -44,7 +44,9 @@ use tari_template_lib::{
     args::MintArg,
     auth::AccessRules,
     models::{
+        Address,
         AddressListId,
+        AddressListItemAddress,
         Amount,
         BucketId,
         ComponentAddress,
@@ -391,6 +393,22 @@ impl StateTracker {
         Ok(address_list_id)
     }
 
+    pub fn address_list_push(
+        &self,
+        list_id: AddressListId,
+        index: u64,
+        referenced_address: Address,
+    ) -> Result<(), RuntimeError> {
+        let substate_address = referenced_address.into();
+        let list_item = AddressListItem::new(list_id, index, substate_address);
+
+        self.write_with(|state| {
+            state.new_address_list_items.push(list_item);
+        });
+
+        Ok(())
+    }
+
     fn runtime_state(&self) -> Result<RuntimeState, RuntimeError> {
         self.read_with(|state| state.runtime_state.clone().ok_or(RuntimeError::IllegalRuntimeState))
     }
@@ -480,6 +498,32 @@ impl StateTracker {
                         Substate::new(existing_state.version() + 1, substate)
                     },
                     None => Substate::new(0, substate),
+                };
+                substate_diff.up(addr, new_substate);
+            }
+
+            for (list_id, substate) in state.new_address_lists {
+                let addr = SubstateAddress::AddressList(list_id);
+                let new_substate = match tx.get_state::<_, Substate>(&addr).optional()? {
+                    Some(_) => {
+                        // Addess list roots are immutable
+                        return Err(TransactionCommitError::AddressListMutation { list_id });
+                    },
+                    None => Substate::new(0, substate),
+                };
+                substate_diff.up(addr, new_substate);
+            }
+
+            for item in state.new_address_list_items {
+                let addr = SubstateAddress::AddressListItem(AddressListItemAddress::new(*item.list_id(), item.index()));
+                let new_substate = match tx.get_state::<_, Substate>(&addr).optional()? {
+                    Some(_) => {
+                        // Addess list items are immutable
+                        return Err(TransactionCommitError::AddressListMutation {
+                            list_id: *item.list_id(),
+                        });
+                    },
+                    None => Substate::new(0, item),
                 };
                 substate_diff.up(addr, new_substate);
             }

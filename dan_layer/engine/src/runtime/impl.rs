@@ -50,7 +50,7 @@ use tari_template_lib::{
         WorkspaceAction,
     },
     auth::AccessRules,
-    models::{BucketId, ComponentAddress, ComponentHeader, NonFungibleAddress, VaultRef},
+    models::{Address, AddressListId, BucketId, ComponentAddress, ComponentHeader, NonFungibleAddress, VaultRef},
 };
 
 use crate::runtime::{
@@ -541,12 +541,30 @@ impl RuntimeInterface for RuntimeInterfaceImpl {
         }
     }
 
-    fn address_list_invoke(&self, action: AddressListAction) -> Result<InvokeResult, RuntimeError> {
+    fn address_list_invoke(
+        &self,
+        list_id: Option<AddressListId>,
+        action: AddressListAction,
+        args: EngineArgs,
+    ) -> Result<InvokeResult, RuntimeError> {
         self.invoke_on_runtime_call_modules("address_list_invoke")?;
         match action {
             AddressListAction::Create => {
                 let address_list_id = self.tracker.new_address_list()?;
                 Ok(InvokeResult::encode(&address_list_id)?)
+            },
+            AddressListAction::Push => {
+                let list_id = list_id.ok_or(RuntimeError::InvalidArgument {
+                    argument: "list_id",
+                    reason: "AddressList push action requires a list id".to_string(),
+                })?;
+                let index: u64 = args.get(0)?;
+                let referenced_address: Address = args.get(1)?;
+
+                // TODO: access check
+
+                self.tracker.address_list_push(list_id, index, referenced_address)?;
+                Ok(InvokeResult::unit())
             },
         }
     }

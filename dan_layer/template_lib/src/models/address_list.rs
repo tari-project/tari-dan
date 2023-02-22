@@ -30,57 +30,27 @@ use tari_template_abi::{
     EngineOp,
 };
 
+use super::Address;
 use crate::{
     args::{AddressListAction, AddressListInvokeArg, InvokeResult},
     hash::HashParseError,
     Hash,
 };
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Encode, Decode)]
-#[cfg_attr(feature = "serde", derive(serde::Deserialize, serde::Serialize))]
-pub struct AddressListAddress(Hash);
-
-impl AddressListAddress {
-    pub const fn new(address: Hash) -> Self {
-        Self(address)
-    }
-
-    pub fn hash(&self) -> &Hash {
-        &self.0
-    }
-
-    pub fn from_hex(hex: &str) -> Result<Self, HashParseError> {
-        let hash = Hash::from_hex(hex)?;
-        Ok(Self::new(hash))
-    }
-}
-
-impl<T: Into<Hash>> From<T> for AddressListAddress {
-    fn from(address: T) -> Self {
-        Self::new(address.into())
-    }
-}
-
-impl Display for AddressListAddress {
-    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        write!(f, "addresslist_{}", self.0)
-    }
-}
-
 #[derive(Debug, Clone, Encode, Decode, PartialEq, Eq, Hash)]
 #[cfg_attr(feature = "serde", derive(serde::Deserialize, serde::Serialize))]
 pub struct AddressListItemAddress {
-    list_address: AddressListAddress,
+    list_id: AddressListId,
     index: u64,
 }
 
 impl AddressListItemAddress {
-    pub fn new(list_address: AddressListAddress, index: u64) -> Self {
-        Self { list_address, index }
+    pub fn new(list_id: AddressListId, index: u64) -> Self {
+        Self { list_id, index }
     }
 
-    pub fn list_address(&self) -> &AddressListAddress {
-        &self.list_address
+    pub fn list_id(&self) -> &AddressListId {
+        &self.list_id
     }
 
     pub fn index(&self) -> u64 {
@@ -90,7 +60,7 @@ impl AddressListItemAddress {
 
 impl Display for AddressListItemAddress {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{} index_{}", self.list_address, self.index)
+        write!(f, "{} index_{}", self.list_id, self.index)
     }
 }
 
@@ -133,6 +103,7 @@ pub struct AddressList {
 impl AddressList {
     pub fn new() -> Self {
         let resp: InvokeResult = call_engine(EngineOp::AddressListInvoke, &AddressListInvokeArg {
+            list_id: None,
             action: AddressListAction::Create,
             args: args![],
         });
@@ -142,7 +113,21 @@ impl AddressList {
         }
     }
 
-    // TODO: push item
-    // TODO: len
-    // TODO: get item at position
+    // TODO: ideally the caller should not need to pass the "index" parameter, it should be automatically calculated by
+    // the network       but we don't have that functionality yet implemented
+    pub fn push(&mut self, index: u64, address: Address) {
+        let result: InvokeResult = call_engine(EngineOp::AddressListInvoke, &AddressListInvokeArg {
+            list_id: Some(self.id),
+            action: AddressListAction::Push,
+            args: invoke_args![index, address],
+        });
+
+        result.decode::<()>().expect("push failed");
+    }
+}
+
+impl Default for AddressList {
+    fn default() -> Self {
+        Self::new()
+    }
 }

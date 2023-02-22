@@ -360,6 +360,17 @@ fn summarize_finalize_result(finalize: &FinalizeResult) {
                     SubstateValue::NonFungible(_) => {
                         println!("      ▶ NFT: {}", address);
                     },
+                    SubstateValue::AddressList(_) => {
+                        println!("      ▶ address list: {}", address);
+                    },
+                    SubstateValue::AddressListItem(item) => {
+                        println!(
+                            "      ▶ address list item {} {} referencing {}",
+                            item.list_id(),
+                            item.index(),
+                            item.referenced_address()
+                        );
+                    },
                 }
                 println!();
             }
