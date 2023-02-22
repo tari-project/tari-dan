@@ -21,7 +21,9 @@ anyhow = "1.0.53"
 cargo_toml = "0.11.5"
 digest = "0.9.0"
 #d3ne = { git = "https://github.com/stringhandler/d3ne-rs.git", branch = "st-fixes2" }
+lazy_static = "1.4.0"
 log = { version = "0.4.8", features = ["std"] }
+rand = "0.7"
 serde = "1.0.126"
 serde_json = "1.0.81"
 thiserror = "^1.0.20"

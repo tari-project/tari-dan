@@ -108,6 +108,8 @@ pub enum RuntimeError {
     InvalidSubstateType,
     #[error("Layer one commitment already claimed with address '{address}'")]
     LayerOneCommitmentAlreadyClaimed { address: LayerOneCommitmentAddress },
+    #[error("Invalid confidential proof: {details}")]
+    InvalidConfidentialProof { details: String },
 }
 
 impl RuntimeError {

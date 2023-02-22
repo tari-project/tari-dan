@@ -3,7 +3,6 @@
 
 pub mod bucket;
 pub mod commit_result;
-// pub mod confidential_bucket;
 pub mod execution_result;
 pub mod hashing;
 pub mod instruction;

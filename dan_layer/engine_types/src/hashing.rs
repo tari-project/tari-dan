@@ -29,6 +29,7 @@ use tari_template_lib::Hash;
 
 hash_domain!(TariEngineHashDomain, "tari.dan.engine", 0);
 
+// TODO: use an enum for labels
 pub fn hasher(label: &'static str) -> TariEngineHasher {
     TariEngineHasher::new_with_label(label)
 }
