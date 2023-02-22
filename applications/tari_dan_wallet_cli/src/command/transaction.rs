@@ -124,7 +124,7 @@ pub struct SubmitManifestArgs {
 
 #[derive(Debug, Args, Clone)]
 pub struct ClaimBurnArgs {
-    account_address: String,
+    account_address: ComponentAddress,
     commitment_address: String,
     range_proof: String,
     proof_of_knowledge: String,
@@ -145,12 +145,6 @@ pub enum CliInstruction {
         method_name: String,
         #[clap(long, short = 'a')]
         args: Vec<CliArg>,
-    },
-    ClaimBurn {
-        account_address: ComponentAddress,
-        commitment_address: Vec<u8>,
-        range_proof: Vec<u8>,
-        proof_of_knowledge: Vec<u8>,
     },
 }
 
@@ -195,48 +189,30 @@ pub async fn handle_submit(
     client: &mut WalletDaemonClient,
 ) -> Result<TransactionSubmitResponse, anyhow::Error> {
     let SubmitArgs { instruction, common } = args;
-    let instructions = match instruction {
+    let instruction = match instruction {
         CliInstruction::CallFunction {
             template_address,
             function_name,
             args,
-        } => vec![Instruction::CallFunction {
+        } => Instruction::CallFunction {
             template_address: template_address.into_inner(),
             function: function_name,
             args: args.into_iter().map(|s| s.into_arg()).collect(),
-        }],
+        },
         CliInstruction::CallMethod {
             component_address,
             method_name,
             args,
-        } => vec![Instruction::CallMethod {
+        } => Instruction::CallMethod {
             component_address: component_address
                 .as_component_address()
                 .ok_or_else(|| anyhow!("Invalid component address: {}", component_address))?,
             method: method_name,
             args: args.into_iter().map(|s| s.into_arg()).collect(),
-        }],
-        CliInstruction::ClaimBurn {
-            account_address,
-            commitment_address,
-            range_proof,
-            proof_of_knowledge,
-        } => vec![
-            Instruction::ClaimBurn {
-                commitment_address,
-                range_proof,
-                proof_of_knowledge,
-            },
-            Instruction::PutLastInstructionOutputOnWorkspace { key: b"burn".to_vec() },
-            Instruction::CallMethod {
-                component_address: account_address,
-                method: String::from("deposit_confidential"),
-                args: vec![arg![Variable("burn")]],
-            },
-        ],
+        },
     };
 
-    submit_transaction(instructions, common, client).await
+    submit_transaction(vec![instruction], common, client).await
 }
 
 async fn handle_submit_manifest(
@@ -328,20 +304,26 @@ pub async fn handle_claim_burn(
         common,
     } = args;
 
-    let account_address = ComponentAddress::from_str(account_address.as_str())?;
+    // TODO: refactor this
     let commitment_address = PublicKey::from_hex(commitment_address.as_str())?.to_vec();
     let range_proof = BulletRangeProof::from_hex(&range_proof.as_str())?.to_vec();
     let proof_of_knowledge = Vec::<u8>::from_hex(proof_of_knowledge.as_str())?;
 
-    let instruction = CliInstruction::ClaimBurn {
-        account_address,
-        commitment_address,
-        range_proof,
-        proof_of_knowledge,
-    };
+    let instructions = vec![
+        Instruction::ClaimBurn {
+            commitment_address,
+            range_proof,
+            proof_of_knowledge,
+        },
+        Instruction::PutLastInstructionOutputOnWorkspace { key: b"burn".to_vec() },
+        Instruction::CallMethod {
+            component_address: account_address,
+            method: String::from("deposit_confidential"),
+            args: vec![arg![Variable("burn")]],
+        },
+    ];
 
-    let submit_args = SubmitArgs { instruction, common };
-    handle_submit(submit_args, client).await
+    submit_transaction(instructions, common, client).await
 }
 
 fn summarize_request(request: &TransactionSubmitRequest, inputs: &[ShardId], outputs: &[ShardId]) {
