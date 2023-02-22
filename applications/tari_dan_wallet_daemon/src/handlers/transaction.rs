@@ -134,6 +134,13 @@ pub async fn handle_get_result(
     })
 }
 
+pub async fn handle_claim_burn(
+    context: &HandlerContext,
+    req: TransactionWaitResultRequest,
+) -> Result<TransactionClaimBurnResponse, anyhow::Error> {
+    handle_submit(context, req).await
+}
+
 pub async fn handle_wait_result(
     context: &HandlerContext,
     req: TransactionWaitResultRequest,

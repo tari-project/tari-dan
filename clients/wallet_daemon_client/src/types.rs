@@ -106,6 +106,14 @@ pub struct TransactionWaitResultResponse {
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct TransactionClaimBurnResponse {
+    #[serde(with = "serde_with::hex")]
+    pub hash: FixedHash,
+    pub inputs: Vec<ShardId>,
+    pub outputs: Vec<ShardId>,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct KeysListRequest {}
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
