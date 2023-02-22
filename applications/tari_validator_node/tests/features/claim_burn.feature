@@ -14,20 +14,20 @@ Feature: Claim Burn
     Given a validator node VN connected to base node BASE and wallet WALLET
     When miner MINER mines 4 new blocks
     When validator node VN sends a registration transaction
-    When miner MINER mines 20 new blocks
+    When miner MINER mines 16 new blocks
     Then the validator node VN is listed as registered
 
-          # A file-base CLI account must be created to sign future calls
+    # A file-base CLI account must be created to sign future calls
     When I create a DAN wallet
-#    When I create a component SECOND_LAYER_TARI of template "fees" on VN using "new"
+    # When I create a component SECOND_LAYER_TARI of template "fees" on VN using "new"
     When I create an account ACC_1 on VN
 
     When I burn 10T on wallet WALLET into commitment COMMITMENT with proof PROOF for ACC_1 and range proof RANGEPROOF
 
     # unfortunately have to wait for this to get into the mempool....
     Then there is 1 transaction in the mempool of BASE within 10 seconds
-    When miner MINER mines 10 new blocks
-    Then VN is on epoch 3 within 10 seconds
+    When miner MINER mines 6 new blocks
+    Then VN is on epoch 2 within 10 seconds
 
     When I convert commitment COMMITMENT into COMM_ADDRESS address
     Then validator node VN has state at COMM_ADDRESS

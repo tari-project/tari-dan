@@ -92,6 +92,13 @@ loggers:
       - stdout
       - dan_layer
     additive: false
+  
+  tari::indexer:
+    level: debug
+    appenders:
+      - stdout
+      - dan_layer
+    additive: false
 
   tari::dan:
     level: debug

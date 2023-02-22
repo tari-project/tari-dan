@@ -36,11 +36,12 @@ use tari_comms::{
 };
 use tari_comms_logging::SqliteMessageLog;
 use tari_crypto::tari_utilities::ByteArray;
+use tari_dan_app_grpc::proto;
 use tari_dan_core::{message::DanMessage, models::TariDanPayload};
 use tonic::codegen::futures_core::future::BoxFuture;
 use tower::{Service, ServiceExt};
 
-use crate::{comms::destination::Destination, p2p::proto};
+use crate::comms::destination::Destination;
 
 const LOG_TARGET: &str = "tari::validator_node::comms::messaging";
 

@@ -512,6 +512,10 @@ impl StateTracker {
                 substate_diff.up(addr, new_substate);
             }
 
+            for claimed in state.claimed_layer_one_commitments {
+                substate_diff.down(SubstateAddress::LayerOneCommitment(claimed), 0);
+            }
+
             Result::<_, TransactionCommitError>::Ok(substate_diff)
         })?;
 

@@ -20,6 +20,7 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+use log::*;
 use serde::{Deserialize, Serialize};
 use tari_common_types::types::FixedHash;
 use tari_core::ValidatorNodeMmr;
@@ -36,6 +37,8 @@ use tari_dan_common_types::{
 use tari_mmr::{common::LeafIndex, MerkleProof};
 
 use crate::{services::SigningService, workers::hotstuff_error::HotStuffError, TariDanCoreHashDomain};
+
+const LOG_TARGET: &str = "tari::validator_node::models::vote_message";
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct VoteMessage {
@@ -92,26 +95,34 @@ impl VoteMessage {
         let challenge = self.construct_challenge();
         let signature = signing_service.sign(&*challenge).ok_or(HotStuffError::FailedToSignQc)?;
         // construct the merkle proof for the inclusion of the VN's public key in the epoch
+        let node_hash = vn_mmr_node_hash(signing_service.public_key(), &shard_id);
+        debug!(
+            target: LOG_TARGET,
+            "[sign_vote] mmr_node_hash={}, public_key={}, shard_id={}, mmr_len={}",
+            node_hash,
+            signing_service.public_key(),
+            shard_id,
+            vn_mmr.len().unwrap()
+        );
         let leaf_index = vn_mmr
-            .find_leaf_index(&*vn_mmr_node_hash(signing_service.public_key(), &shard_id))
+            .find_leaf_index(&*node_hash)
             .expect("Unexpected Merkle Mountain Range error")
             .ok_or(HotStuffError::ValidatorNodeNotIncludedInMmr)?;
         let merkle_proof =
             MerkleProof::for_leaf_node(vn_mmr, LeafIndex(leaf_index as usize)).expect("Merkle proof generation failed");
 
-        let hash = vn_mmr_node_hash(signing_service.public_key(), &shard_id);
         let root = vn_mmr.get_merkle_root().unwrap();
-        let idx = vn_mmr.find_leaf_index(&*hash).unwrap();
+        let idx = vn_mmr.find_leaf_index(&*node_hash).unwrap();
         // TODO: remove
         if let Err(err) = merkle_proof.verify_leaf::<tari_core::ValidatorNodeMmrHasherBlake256>(
             &root,
-            &*hash,
+            &*node_hash,
             LeafIndex(leaf_index as usize),
         ) {
             log::warn!(
                 target: "tari::dan_layer::votemessage",
                 "Merkle proof verification failed for validator node {:?} at index {:?} with error: {}",
-                hash,
+                node_hash,
                 idx,
                 err
             );

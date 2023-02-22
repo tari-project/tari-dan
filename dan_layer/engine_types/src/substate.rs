@@ -409,6 +409,14 @@ mod tests {
             .unwrap()
             .as_non_fungible_address()
             .unwrap();
+
+            SubstateAddress::from_str(
+                "resource_a7cf4fd18ada7f367b1c102a9c158abc3754491665033231c5eb907fa14dfe2b \
+                 nft_uuid:7f19c3fe5fa13ff66a0d379fe5f9e3508acbd338db6bedd7350d8d565b2c5d32",
+            )
+            .unwrap()
+            .as_non_fungible_address()
+            .unwrap();
         }
     }
 }
