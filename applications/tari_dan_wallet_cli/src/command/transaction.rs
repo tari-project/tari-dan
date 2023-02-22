@@ -364,11 +364,10 @@ fn summarize_finalize_result(finalize: &FinalizeResult) {
                         println!("      ▶ address list: {}", address);
                     },
                     SubstateValue::AddressListItem(item) => {
+                        let referenced_address = SubstateAddress::from(item.referenced_address().clone());
                         println!(
-                            "      ▶ address list item {} {} referencing {}",
-                            item.list_id(),
-                            item.index(),
-                            item.referenced_address()
+                            "      ▶ address list item {} referencing {}",
+                            address, referenced_address
                         );
                     },
                 }

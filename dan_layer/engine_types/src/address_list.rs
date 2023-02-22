@@ -22,9 +22,7 @@
 
 use serde::{Deserialize, Serialize};
 use tari_bor::{borsh, Decode, Encode};
-use tari_template_lib::models::AddressListId;
-
-use crate::substate::SubstateAddress;
+use tari_template_lib::models::{Address, AddressListId};
 
 /// Placeholder for empty address lists, so they can have an address in the network
 #[derive(Debug, Clone, Encode, Decode, Serialize, Deserialize, PartialEq)]
@@ -41,29 +39,15 @@ impl AddressList {
 /// Holds a reference to another substate
 #[derive(Debug, Clone, Encode, Decode, Serialize, Deserialize, PartialEq)]
 pub struct AddressListItem {
-    list_id: AddressListId,
-    index: u64,
-    referenced_address: SubstateAddress,
+    referenced_address: Address,
 }
 
 impl AddressListItem {
-    pub fn new(list_id: AddressListId, index: u64, referenced_address: SubstateAddress) -> Self {
-        Self {
-            list_id,
-            index,
-            referenced_address,
-        }
+    pub fn new(referenced_address: Address) -> Self {
+        Self { referenced_address }
     }
 
-    pub fn list_id(&self) -> &AddressListId {
-        &self.list_id
-    }
-
-    pub fn index(&self) -> u64 {
-        self.index
-    }
-
-    pub fn referenced_address(&self) -> &SubstateAddress {
+    pub fn referenced_address(&self) -> &Address {
         &self.referenced_address
     }
 }

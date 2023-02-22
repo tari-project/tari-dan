@@ -15,6 +15,7 @@ use tari_engine_types::{
 };
 use tari_template_lib::models::{
     AddressListId,
+    AddressListItemAddress,
     BucketId,
     ComponentAddress,
     ComponentHeader,
@@ -38,7 +39,7 @@ pub(super) struct WorkingState {
     pub new_vaults: HashMap<VaultId, Vault>,
     pub new_non_fungibles: HashMap<NonFungibleAddress, NonFungibleContainer>,
     pub new_address_lists: HashMap<AddressListId, AddressList>,
-    pub new_address_list_items: Vec<AddressListItem>,
+    pub new_address_list_items: HashMap<AddressListItemAddress, AddressListItem>,
 
     pub runtime_state: Option<RuntimeState>,
     pub last_instruction_output: Option<Vec<u8>>,
@@ -56,7 +57,7 @@ impl WorkingState {
             new_vaults: HashMap::new(),
             new_non_fungibles: HashMap::new(),
             new_address_lists: HashMap::new(),
-            new_address_list_items: Vec::new(),
+            new_address_list_items: HashMap::new(),
             runtime_state: None,
             last_instruction_output: None,
             workspace: HashMap::new(),

@@ -399,11 +399,11 @@ impl StateTracker {
         index: u64,
         referenced_address: Address,
     ) -> Result<(), RuntimeError> {
-        let substate_address = referenced_address.into();
-        let list_item = AddressListItem::new(list_id, index, substate_address);
+        let item_address = AddressListItemAddress::new(list_id, index);
+        let item = AddressListItem::new(referenced_address);
 
         self.write_with(|state| {
-            state.new_address_list_items.push(list_item);
+            state.new_address_list_items.insert(item_address, item);
         });
 
         Ok(())
@@ -514,16 +514,17 @@ impl StateTracker {
                 substate_diff.up(addr, new_substate);
             }
 
-            for item in state.new_address_list_items {
-                let addr = SubstateAddress::AddressListItem(AddressListItemAddress::new(*item.list_id(), item.index()));
+            for (address, substate) in state.new_address_list_items {
+                let addr = SubstateAddress::AddressListItem(address.clone());
                 let new_substate = match tx.get_state::<_, Substate>(&addr).optional()? {
                     Some(_) => {
                         // Addess list items are immutable
-                        return Err(TransactionCommitError::AddressListMutation {
-                            list_id: *item.list_id(),
+                        return Err(TransactionCommitError::AddressListItemMutation {
+                            list_id: *address.list_id(),
+                            index: address.index(),
                         });
                     },
-                    None => Substate::new(0, item),
+                    None => Substate::new(0, substate),
                 };
                 substate_diff.up(addr, new_substate);
             }
