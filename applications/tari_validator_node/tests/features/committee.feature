@@ -17,8 +17,8 @@ Feature: Committee scenarios
     Given validator VAL_1 nodes connect to all other validators
 
     # The wallet must have some funds before the VN sends transactions
-    When miner MINER mines 5 new blocks
-    When wallet WALLET has at least 10000000 uT
+    When miner MINER mines 6 new blocks
+    When wallet WALLET has at least 15000 T
 
     # VN registration
     When validator node VAL_1 sends a registration transaction
@@ -69,8 +69,8 @@ Feature: Committee scenarios
     Given validator VAL_4 nodes connect to all other validators
 
     # The wallet must have some funds before the VN sends transactions
-    When miner MINER mines 12 new blocks
-    When wallet WALLET has at least 1000000000 uT
+    When miner MINER mines 8 new blocks
+    When wallet WALLET has at least 20000 T
 
     # VN registration
     When all validator nodes send registration transactions

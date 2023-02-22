@@ -16,14 +16,15 @@ Feature: Leader failure scenarios
     Given validator VAL_1 nodes connect to all other validators
     Given validator VAL_2 nodes connect to all other validators
     Given validator VAL_3 nodes connect to all other validators
+    Given validator VAL_4 nodes connect to all other validators
 
     # The wallet must have some funds before the VNs send transactions
-    When miner MINER mines 10 new blocks
-    When wallet WALLET has at least 2000000000 uT
+    When miner MINER mines 8 new blocks
+    When wallet WALLET has at least 40000 T
 
     # VNs registration
     When all validator nodes send registration transactions
-    When miner MINER mines 15 new blocks
+    When miner MINER mines 13 new blocks
     Then all validator nodes are listed as registered
 
     When I wait 1 seconds 

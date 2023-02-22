@@ -621,6 +621,7 @@ async fn assert_indexer_substate_version(
     output_ref: String,
 ) {
     let indexer = world.indexers.get(&indexer_name).unwrap();
+    assert!(!indexer.handle.is_finished(), "Indexer {} is not running", indexer_name);
     let substate = indexer.get_substate(world, output_ref, version).await;
     eprintln!("indexer.get_substate result: {:?}", substate);
     assert_eq!(substate.version(), version);

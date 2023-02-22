@@ -14,12 +14,12 @@ Feature: Claim Burn
     Given a validator node VN connected to base node BASE and wallet WALLET
     When miner MINER mines 4 new blocks
     When validator node VN sends a registration transaction
-    When miner MINER mines 13 new blocks
+    When miner MINER mines 16 new blocks
     Then the validator node VN is listed as registered
 
-          # A file-base CLI account must be created to sign future calls
+    # A file-base CLI account must be created to sign future calls
     When I create a DAN wallet
-#    When I create a component SECOND_LAYER_TARI of template "fees" on VN using "new"
+    # When I create a component SECOND_LAYER_TARI of template "fees" on VN using "new"
     When I create an account ACC_1 on VN
 
     When I burn 10T on wallet WALLET into commitment COMMITMENT with proof PROOF for ACC_1 and range proof RANGEPROOF

@@ -46,8 +46,8 @@ impl TemplateManagerHandle {
                 reply: tx,
             })
             .await
-            .map_err(|_| TemplateManagerError::SendError)?;
-        rx.await.map_err(|_| TemplateManagerError::SendError)?
+            .map_err(|_| TemplateManagerError::ChannelClosed)?;
+        rx.await.map_err(|_| TemplateManagerError::ChannelClosed)?
     }
 
     pub async fn get_template(&self, address: TemplateAddress) -> Result<Template, TemplateManagerError> {
@@ -55,8 +55,8 @@ impl TemplateManagerHandle {
         self.request_tx
             .send(TemplateManagerRequest::GetTemplate { address, reply: tx })
             .await
-            .map_err(|_| TemplateManagerError::SendError)?;
-        rx.await.map_err(|_| TemplateManagerError::SendError)?
+            .map_err(|_| TemplateManagerError::ChannelClosed)?;
+        rx.await.map_err(|_| TemplateManagerError::ChannelClosed)?
     }
 
     pub async fn load_template_abi(&self, address: TemplateAddress) -> Result<TemplateAbi, TemplateManagerError> {
@@ -64,8 +64,8 @@ impl TemplateManagerHandle {
         self.request_tx
             .send(TemplateManagerRequest::LoadTemplateAbi { address, reply: tx })
             .await
-            .map_err(|_| TemplateManagerError::SendError)?;
-        rx.await.map_err(|_| TemplateManagerError::SendError)?
+            .map_err(|_| TemplateManagerError::ChannelClosed)?;
+        rx.await.map_err(|_| TemplateManagerError::ChannelClosed)?
     }
 
     pub async fn get_templates(&self, limit: usize) -> Result<Vec<TemplateMetadata>, TemplateManagerError> {
@@ -73,8 +73,8 @@ impl TemplateManagerHandle {
         self.request_tx
             .send(TemplateManagerRequest::GetTemplates { limit, reply: tx })
             .await
-            .map_err(|_| TemplateManagerError::SendError)?;
-        rx.await.map_err(|_| TemplateManagerError::SendError)?
+            .map_err(|_| TemplateManagerError::ChannelClosed)?;
+        rx.await.map_err(|_| TemplateManagerError::ChannelClosed)?
     }
 }
 

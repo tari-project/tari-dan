@@ -15,7 +15,7 @@ Feature: Fungible tokens
 
     # The wallet must have some funds before the VN sends transactions
     When miner MINER mines 6 new blocks
-    When wallet WALLET has at least 20000000 uT
+    When wallet WALLET has at least 15000 T
 
     # VN registration
     When validator node VN sends a registration transaction
