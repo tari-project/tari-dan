@@ -40,11 +40,12 @@ pub async fn handle_submit(
     let (_, key) = key_api.get_key_or_active(TRANSACTION_KEYMANAGER_BRANCH, req.signing_key_index)?;
 
     // let transaction_api = sdk.transaction_api();
-    let inputs = if req.inputs.is_empty() {
+    let inputs = if !req.override_inputs {
         // If no inputs are specified, we will use the default inputs
         // sdk.transaction_api().default_inputs().await?
         let substates = get_referenced_component_addresses(&req.instructions);
-        sdk.substate_api().load_dependent_substates(&substates)?
+        let loaded_dependent_substates = sdk.substate_api().load_dependent_substates(&substates)?;
+        vec![req.inputs, loaded_dependent_substates].concat()
     } else {
         req.inputs
     };
@@ -132,13 +133,6 @@ pub async fn handle_get_result(
         qc: None,
         status: transaction.status,
     })
-}
-
-pub async fn handle_claim_burn(
-    context: &HandlerContext,
-    req: TransactionSubmitRequest,
-) -> Result<TransactionSubmitResponse, anyhow::Error> {
-    handle_submit(context, req).await
 }
 
 pub async fn handle_wait_result(

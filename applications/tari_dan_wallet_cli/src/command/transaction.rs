@@ -94,6 +94,8 @@ pub struct CommonSubmitArgs {
     pub num_outputs: Option<u8>,
     #[clap(long, short = 'i')]
     pub inputs: Vec<VersionedSubstateAddress>,
+    #[clap(long, short = 'o')]
+    pub override_inputs: Option<bool>,
     #[clap(long, short = 'v')]
     pub version: Option<u8>,
     #[clap(long, short = 'd')]
@@ -236,6 +238,7 @@ pub async fn submit_transaction(
         instructions,
         fee: common.fee.unwrap_or(1),
         inputs: common.inputs,
+        override_inputs: common.override_inputs.unwrap_or_default(),
         new_outputs: common.num_outputs.unwrap_or(0),
         specific_non_fungible_outputs: common
             .non_fungible_mint_outputs
@@ -315,10 +318,10 @@ pub async fn handle_claim_burn(
         address: SubstateAddress::from_str(&format!("commitment_{}", to_hex(commitment_address.as_ref())))?,
         version: 0,
     };
-    let account_substate_address = VersionedSubstateAddress {
-        address: account_address.into(),
-        version: 0,
-    };
+    // let account_substate_address = VersionedSubstateAddress {
+    //     address: account_address.into(),
+    //     version: 0,
+    // };
 
     let instructions = vec![
         Instruction::ClaimBurn {
@@ -334,7 +337,8 @@ pub async fn handle_claim_burn(
         },
     ];
 
-    common.inputs = vec![component_substate_address, account_substate_address];
+    common.inputs = vec![component_substate_address];
+    common.override_inputs = Some(false);
     // transaction should have one output, corresponding to the same shard
     // as the account substate address
     common.num_outputs = Some(1);

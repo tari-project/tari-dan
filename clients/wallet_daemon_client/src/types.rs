@@ -43,6 +43,7 @@ pub struct TransactionSubmitRequest {
     pub instructions: Vec<Instruction>,
     pub fee: u64,
     pub inputs: Vec<VersionedSubstateAddress>,
+    pub override_inputs: bool,
     pub new_outputs: u8,
     pub specific_non_fungible_outputs: Vec<(ResourceAddress, NonFungibleId)>,
     pub new_non_fungible_outputs: Vec<(ResourceAddress, u8)>,
