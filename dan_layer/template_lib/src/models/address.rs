@@ -20,6 +20,8 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+use std::fmt::{Display, Formatter};
+
 use tari_bor::{borsh, Decode, Encode};
 
 use super::{AddressListId, ComponentAddress, NonFungibleAddress, ResourceAddress, VaultId};
@@ -62,5 +64,17 @@ impl From<NonFungibleAddress> for Address {
 impl From<AddressListId> for Address {
     fn from(address: AddressListId) -> Self {
         Self::AddressList(address)
+    }
+}
+
+impl Display for Address {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Address::Component(addr) => write!(f, "{}", addr),
+            Address::Resource(addr) => write!(f, "{}", addr),
+            Address::Vault(addr) => write!(f, "{}", addr),
+            Address::NonFungible(addr) => write!(f, "{}", addr),
+            Address::AddressList(addr) => write!(f, "{}", addr),
+        }
     }
 }

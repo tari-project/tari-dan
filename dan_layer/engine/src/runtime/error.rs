@@ -26,6 +26,7 @@ use anyhow::anyhow;
 use tari_dan_common_types::optional::IsNotFoundError;
 use tari_engine_types::{resource_container::ResourceError, substate::SubstateAddress};
 use tari_template_lib::models::{
+    Address,
     AddressListId,
     Amount,
     BucketId,
@@ -98,6 +99,15 @@ pub enum RuntimeError {
     InvalidMethodAccessRule { template_name: String, details: String },
     #[error("Runtime module error: {0}")]
     ModuleError(#[from] RuntimeModuleError),
+    #[error(
+        "The address list {list_id} item at index {index} was trying to reference an invalid address \
+         {referenced_address}"
+    )]
+    InvalidAddressListItemReference {
+        list_id: AddressListId,
+        index: u64,
+        referenced_address: Address,
+    },
 }
 
 impl RuntimeError {

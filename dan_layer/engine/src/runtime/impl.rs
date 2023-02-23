@@ -561,6 +561,16 @@ impl RuntimeInterface for RuntimeInterfaceImpl {
                 let index: u64 = args.get(0)?;
                 let referenced_address: Address = args.get(1)?;
 
+                // Explicitly disallow references to other lists to avoid cycles
+                // We don't need to check for list items as they are not addreseable from templates
+                if let Address::AddressList(_) = referenced_address {
+                    return Err(RuntimeError::InvalidAddressListItemReference {
+                        list_id,
+                        index,
+                        referenced_address,
+                    });
+                }
+
                 // TODO: access check
 
                 self.tracker.address_list_push(list_id, index, referenced_address)?;
