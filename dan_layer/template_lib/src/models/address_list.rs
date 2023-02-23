@@ -60,7 +60,7 @@ impl AddressListItemAddress {
 
 impl Display for AddressListItemAddress {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{} index_{}", self.list_id, self.index)
+        write!(f, "{} item:{}", self.list_id, self.index)
     }
 }
 

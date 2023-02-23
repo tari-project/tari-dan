@@ -293,6 +293,29 @@ impl FromStr for SubstateAddress {
                 let id = VaultId::from_hex(addr).map_err(|_| InvalidSubstateAddressFormat(s.to_string()))?;
                 Ok(SubstateAddress::Vault(id))
             },
+            Some(("addresslist", addr)) => {
+                match addr.split_once(' ') {
+                    // addresslist_xxxx item:xxxxx
+                    Some((list_str, item)) => match item.split_once(':') {
+                        Some(("item", index_str)) => {
+                            let list_id = AddressListId::from_hex(list_str)
+                                .map_err(|_| InvalidSubstateAddressFormat(s.to_string()))?;
+                            let index =
+                                u64::from_str(index_str).map_err(|_| InvalidSubstateAddressFormat(s.to_string()))?;
+                            Ok(SubstateAddress::AddressListItem(AddressListItemAddress::new(
+                                list_id, index,
+                            )))
+                        },
+                        _ => Err(InvalidSubstateAddressFormat(s.to_string())),
+                    },
+                    // addresslist_xxxx
+                    None => {
+                        let list_id =
+                            AddressListId::from_hex(addr).map_err(|_| InvalidSubstateAddressFormat(s.to_string()))?;
+                        Ok(SubstateAddress::AddressList(list_id))
+                    },
+                }
+            },
             Some(_) | None => Err(InvalidSubstateAddressFormat(s.to_string())),
         }
     }
@@ -492,6 +515,16 @@ mod tests {
             )
             .unwrap()
             .as_non_fungible_address()
+            .unwrap();
+            SubstateAddress::from_str("addresslist_7cbfe29101c24924b1b6ccefbfff98986d648622272ae24f7585dab55ff1ff64")
+                .unwrap()
+                .as_address_list_id()
+                .unwrap();
+            SubstateAddress::from_str(
+                "addresslist_7cbfe29101c24924b1b6ccefbfff98986d648622272ae24f7585dab55ff1ff64 item:0",
+            )
+            .unwrap()
+            .as_address_list_item_address()
             .unwrap();
         }
     }
