@@ -32,6 +32,8 @@ pub use crate::{
     },
     consensus::Consensus,
     models::{
+        Address,
+        AddressList,
         Amount,
         Bucket,
         BucketId,

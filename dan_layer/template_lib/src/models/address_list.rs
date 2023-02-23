@@ -91,7 +91,7 @@ impl From<Hash> for AddressListId {
 
 impl Display for AddressListId {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        write!(f, "vault_{}", self.0)
+        write!(f, "addresslist_{}", self.0)
     }
 }
 

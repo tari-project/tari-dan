@@ -1042,3 +1042,106 @@ mod tickets {
         );
     }
 }
+
+mod nft_list {
+    use super::*;
+
+    fn setup() -> (
+        TemplateTest,
+        (ComponentAddress, NonFungibleAddress),
+        ComponentAddress,
+        SubstateAddress,
+        SubstateAddress,
+    ) {
+        let mut template_test = TemplateTest::new(vec!["tests/templates/nft/nft_list"]);
+
+        let (account_address, owner_token, _) = template_test.create_owned_account();
+        let nft_component: ComponentAddress = template_test.call_function("SparkleNft", "new", args![], vec![]);
+
+        let nft_resx = template_test.get_previous_output_address(SubstateType::Resource);
+        let address_list = template_test.get_previous_output_address(SubstateType::AddressList);
+
+        // TODO: cleanup
+        (
+            template_test,
+            (account_address, owner_token),
+            nft_component,
+            nft_resx,
+            address_list,
+        )
+    }
+
+    #[test]
+    fn push_item() {
+        let (mut template_test, (account_address, _), nft_component, nft_resx, address_list) = setup();
+
+        let vars = vec![
+            ("account", account_address.into()),
+            ("nft", nft_component.into()),
+            ("nft_resx", nft_resx.into()),
+        ];
+
+        let total_supply: Amount = template_test.call_method(nft_component, "total_supply", args![], vec![]);
+        assert_eq!(total_supply, Amount(0));
+
+        let result = template_test
+            .execute_and_commit_manifest(
+                r#"
+            let account = var!["account"];
+            let sparkle_nft = var!["nft"];
+        
+            let nft_bucket = sparkle_nft.mint();
+            account.deposit(nft_bucket);
+        "#,
+                vars.clone(),
+                vec![],
+            )
+            .unwrap();
+
+        let diff = result.result.expect("execution failed");
+
+        // Resource is changed
+        assert_eq!(diff.down_iter().filter(|(addr, _)| addr.is_resource()).count(), 1);
+        assert_eq!(diff.up_iter().filter(|(addr, _)| addr.is_resource()).count(), 1);
+
+        // NFT and account components changed
+        assert_eq!(diff.down_iter().filter(|(addr, _)| addr.is_component()).count(), 2);
+        assert_eq!(diff.up_iter().filter(|(addr, _)| addr.is_component()).count(), 2);
+
+        // One new vault created
+        assert_eq!(diff.down_iter().filter(|(addr, _)| addr.is_vault()).count(), 0);
+        assert_eq!(diff.up_iter().filter(|(addr, _)| addr.is_vault()).count(), 1);
+
+        // One new NFT minted
+        assert_eq!(diff.down_iter().filter(|(addr, _)| addr.is_non_fungible()).count(), 0);
+        assert_eq!(diff.up_iter().filter(|(addr, _)| addr.is_non_fungible()).count(), 1);
+
+        // One new NFT minted
+        assert_eq!(diff.down_iter().filter(|(addr, _)| addr.is_non_fungible()).count(), 0);
+        assert_eq!(diff.up_iter().filter(|(addr, _)| addr.is_non_fungible()).count(), 1);
+        let (nft_addr, _) = diff.up_iter().find(|(addr, _)| addr.is_non_fungible()).unwrap();
+
+        // One new list item
+        assert_eq!(
+            diff.down_iter().filter(|(addr, _)| addr.is_address_list_item()).count(),
+            0
+        );
+        assert_eq!(
+            diff.up_iter().filter(|(addr, _)| addr.is_address_list_item()).count(),
+            1
+        );
+        let (item_addr, item) = diff.up_iter().find(|(addr, _)| addr.is_address_list_item()).unwrap();
+        // The list item address is composed of the list address
+        assert_eq!(
+            address_list.as_address_list_id().unwrap(),
+            item_addr.as_address_list_item_address().unwrap().list_id()
+        );
+        // The list item references the newly minted nft
+        let referenced_address = item.substate_value().address_list_item().unwrap().referenced_address();
+        assert_eq!(nft_addr.to_address_string(), referenced_address.to_string());
+
+        // The total supply of the resource is increased
+        let total_supply: Amount = template_test.call_method(nft_component, "total_supply", args![], vec![]);
+        assert_eq!(total_supply, Amount(1));
+    }
+}
