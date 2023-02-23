@@ -31,7 +31,7 @@ use std::{
 
 use anyhow::anyhow;
 use clap::{Args, Subcommand};
-use tari_common_types::types::{BulletRangeProof, FixedHash, PublicKey};
+use tari_common_types::types::FixedHash;
 use tari_dan_common_types::ShardId;
 use tari_dan_wallet_sdk::models::VersionedSubstateAddress;
 use tari_engine_types::{
@@ -48,10 +48,7 @@ use tari_template_lib::{
     prelude::{ComponentAddress, ResourceAddress},
 };
 use tari_transaction_manifest::{parse_manifest, ManifestValue};
-use tari_utilities::{
-    hex::{to_hex, Hex},
-    ByteArray,
-};
+use tari_utilities::{hex::to_hex, ByteArray};
 use tari_wallet_daemon_client::{
     types::{
         TransactionGetResultRequest,
@@ -63,7 +60,7 @@ use tari_wallet_daemon_client::{
     WalletDaemonClient,
 };
 
-use crate::from_hex::FromHex;
+use crate::{from_base64::FromBase64, from_hex::FromHex};
 
 #[derive(Debug, Subcommand, Clone)]
 pub enum TransactionSubcommand {
@@ -124,10 +121,14 @@ pub struct SubmitManifestArgs {
 
 #[derive(Debug, Args, Clone)]
 pub struct ClaimBurnArgs {
+    #[clap(long, short = 'z')]
     account_address: ComponentAddress,
-    commitment_address: String,
-    range_proof: String,
-    proof_of_knowledge: String,
+    #[clap(long, short = 'c')]
+    commitment_address: FromBase64<Vec<u8>>,
+    #[clap(long, short = 'r')]
+    range_proof: FromBase64<Vec<u8>>,
+    #[clap(long, short = 'k')]
+    proof_of_knowledge: FromBase64<Vec<u8>>,
     #[clap(flatten)]
     common: CommonSubmitArgs,
 }
@@ -301,13 +302,23 @@ pub async fn handle_claim_burn(
         commitment_address,
         range_proof,
         proof_of_knowledge,
-        common,
+        mut common,
     } = args;
 
-    // TODO: refactor this
-    let commitment_address = PublicKey::from_hex(commitment_address.as_str())?.to_vec();
-    let range_proof = BulletRangeProof::from_hex(&range_proof.as_str())?.to_vec();
-    let proof_of_knowledge = Vec::<u8>::from_hex(proof_of_knowledge.as_str())?;
+    let commitment_address = commitment_address.into_inner();
+    let range_proof = range_proof.into_inner();
+    let proof_of_knowledge = proof_of_knowledge.into_inner();
+
+    // specify the input and output set, which is deterministic
+    // at this point
+    let component_substate_address = VersionedSubstateAddress {
+        address: SubstateAddress::from_str(&format!("commitment_{}", to_hex(commitment_address.as_ref())))?,
+        version: 0,
+    };
+    let account_substate_address = VersionedSubstateAddress {
+        address: account_address.into(),
+        version: 0,
+    };
 
     let instructions = vec![
         Instruction::ClaimBurn {
@@ -322,6 +333,11 @@ pub async fn handle_claim_burn(
             args: vec![arg![Variable("burn")]],
         },
     ];
+
+    common.inputs = vec![component_substate_address, account_substate_address];
+    // transaction should have one output, corresponding to the same shard
+    // as the account substate address
+    common.num_outputs = Some(1);
 
     submit_transaction(instructions, common, client).await
 }

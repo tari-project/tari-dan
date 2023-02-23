@@ -23,6 +23,7 @@ tari_template_builtin = { path = "../../dan_layer/template_builtin" }
 tari_dan_wallet_sdk = { path = "../../dan_layer/wallet/sdk" }
 
 anyhow = "1.0.65"
+base64 = "0.20.0-alpha.1"
 clap = { version = "3.2.22", features = ["derive", "env"] }
 dirs = "4.0.0"
 log = "0.4.17"

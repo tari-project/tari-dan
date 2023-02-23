@@ -22,6 +22,7 @@
 
 pub mod cli;
 pub mod command;
+pub mod from_base64;
 pub mod from_hex;
 pub mod prompt;
 #[macro_use]

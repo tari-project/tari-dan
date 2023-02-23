@@ -64,6 +64,12 @@ pub struct TransactionGetRequest {
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct TransactionClaimBurnRequest {
+    #[serde(with = "serde_with::hex")]
+    pub hash: FixedHash,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct TransactionGetResponse {
     #[serde(with = "serde_with::hex")]
     pub hash: FixedHash,
