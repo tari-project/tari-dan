@@ -341,6 +341,7 @@ pub async fn handle_claim_burn(
     common.override_inputs = Some(false);
     // transaction should have one output, corresponding to the same shard
     // as the account substate address
+    // TODO: on a second claim burn, we shoulnd't have any new outputs being created
     common.num_outputs = Some(1);
 
     submit_transaction(instructions, common, client).await
