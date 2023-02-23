@@ -31,11 +31,8 @@ pub fn validate_confidential_proof(proof: ConfidentialProof) -> Result<(PublicKe
     // tag, asset instance)
     let factory = PedersenCommitmentFactory::default();
     let challenge = crypto::challenges::confidential_commitment_proof(&commitment);
-    let challenge = crypto::challenges::commitment_signature_fiat_shamir(
-        &public_mask,
-        signature.public_nonce().as_public_key(),
-        &challenge,
-    );
+    let challenge =
+        crypto::challenges::strong_fiat_shamir(&public_mask, signature.public_nonce().as_public_key(), &challenge);
 
     let challenge = PrivateKey::from_bytes(&challenge).expect("Hash to 32-byte scalar failed");
 
@@ -113,6 +110,8 @@ mod tests {
         #[test]
         fn it_is_invalid_if_minimum_value_changed() {
             let mut proof = create_valid_proof(100, 100);
+            proof.minimum_value_promise = 99;
+            validate_confidential_proof(proof.clone()).unwrap_err();
             proof.minimum_value_promise = 1000;
             validate_confidential_proof(proof).unwrap_err();
         }
