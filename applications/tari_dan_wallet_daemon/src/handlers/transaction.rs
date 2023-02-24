@@ -72,6 +72,7 @@ pub async fn handle_submit(
         .with_outputs(outputs.clone())
         .with_new_outputs(req.new_outputs)
         .with_new_non_fungible_outputs(req.new_non_fungible_outputs)
+        .with_new_address_list_item_outputs(req.new_address_list_item_outputs)
         .with_instructions(req.instructions)
         .sign(&key.k);
 
