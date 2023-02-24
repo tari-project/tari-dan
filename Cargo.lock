@@ -6365,6 +6365,7 @@ name = "tari_dan_wallet_cli"
 version = "0.35.1"
 dependencies = [
  "anyhow",
+ "base64 0.20.0",
  "clap 3.2.23",
  "dirs",
  "log",

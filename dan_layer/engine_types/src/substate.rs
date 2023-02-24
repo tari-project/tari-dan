@@ -159,6 +159,10 @@ impl SubstateAddress {
     pub fn is_non_fungible(&self) -> bool {
         matches!(self, Self::NonFungible(_))
     }
+
+    pub fn is_layer1_commitment(&self) -> bool {
+        matches!(self, Self::LayerOneCommitment(_))
+    }
 }
 
 impl From<ComponentAddress> for SubstateAddress {

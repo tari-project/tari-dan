@@ -43,6 +43,7 @@ pub struct TransactionSubmitRequest {
     pub instructions: Vec<Instruction>,
     pub fee: u64,
     pub inputs: Vec<VersionedSubstateAddress>,
+    pub override_inputs: bool,
     pub new_outputs: u8,
     pub specific_non_fungible_outputs: Vec<(ResourceAddress, NonFungibleId)>,
     pub new_non_fungible_outputs: Vec<(ResourceAddress, u8)>,
@@ -59,6 +60,12 @@ pub struct TransactionSubmitResponse {
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct TransactionGetRequest {
+    #[serde(with = "serde_with::hex")]
+    pub hash: FixedHash,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct TransactionClaimBurnRequest {
     #[serde(with = "serde_with::hex")]
     pub hash: FixedHash,
 }
@@ -103,6 +110,14 @@ pub struct TransactionWaitResultResponse {
     pub qcs: Vec<QuorumCertificate>,
     pub status: TransactionStatus,
     pub timed_out: bool,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct TransactionClaimBurnResponse {
+    #[serde(with = "serde_with::hex")]
+    pub hash: FixedHash,
+    pub inputs: Vec<ShardId>,
+    pub outputs: Vec<ShardId>,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]

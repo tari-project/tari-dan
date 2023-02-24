@@ -120,6 +120,11 @@ impl TryFrom<proto::transaction::Instruction> for tari_engine_types::instruction
                 level: request.log_level.parse()?,
                 message: request.log_message,
             },
+            4 => Instruction::ClaimBurn {
+                commitment_address: request.claim_burn_commitment_address,
+                range_proof: request.claim_burn_range_proof,
+                proof_of_knowledge: request.claim_burn_proof_of_knowledge,
+            },
             _ => return Err(anyhow!("invalid instruction_type")),
         };
 
