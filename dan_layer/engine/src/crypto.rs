@@ -60,8 +60,8 @@ fn generate_commitment_knowledge_proof(mask: &PrivateKey, value: u64) -> (Ristre
     let factory = CommitmentFactory::default();
     let public_nonce_agg = factory.commit(&nonce_x, &nonce_a);
     let commitment = factory.commit_value(mask, value);
-    let challenge = challenges::confidential_commitment_proof(&commitment);
-    let challenge = challenges::strong_fiat_shamir(&public_mask, public_nonce_agg.as_public_key(), &challenge);
+    let challenge =
+        challenges::confidential_commitment_proof(&public_mask, public_nonce_agg.as_public_key(), &commitment);
 
     let signature = RistrettoComSig::sign(&value_mask, mask, &nonce_a, &nonce_x, &challenge, &factory).unwrap();
 
@@ -84,15 +84,15 @@ pub mod challenges {
     use tari_engine_types::hashing::hasher;
     use tari_template_lib::Hash;
 
-    pub fn strong_fiat_shamir(public_key: &PublicKey, public_nonce: &PublicKey, challenge: &Hash) -> Hash {
-        hasher("CommitmentSignature")
+    pub fn confidential_commitment_proof(
+        public_key: &PublicKey,
+        public_nonce: &PublicKey,
+        commitment: &Commitment,
+    ) -> Hash {
+        hasher("ConfidentialProof")
             .chain(&public_key)
             .chain(&public_nonce)
-            .chain(challenge)
+            .chain(commitment.as_public_key())
             .result()
-    }
-
-    pub fn confidential_commitment_proof(commitment: &Commitment) -> Hash {
-        hasher("ConfidentialProof").chain(commitment.as_public_key()).result()
     }
 }

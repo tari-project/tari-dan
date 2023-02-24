@@ -30,13 +30,13 @@ pub fn validate_confidential_proof(proof: ConfidentialProof) -> Result<(PublicKe
     // TODO: use extended commitments, what's missing is a way to sign for a 4-degree commitment (mask, value, asset
     // tag, asset instance)
     let factory = PedersenCommitmentFactory::default();
-    let challenge = crypto::challenges::confidential_commitment_proof(&commitment);
-    let challenge =
-        crypto::challenges::strong_fiat_shamir(&public_mask, signature.public_nonce().as_public_key(), &challenge);
+    let challenge = crypto::challenges::confidential_commitment_proof(
+        &public_mask,
+        signature.public_nonce().as_public_key(),
+        &commitment,
+    );
 
-    let challenge = PrivateKey::from_bytes(&challenge).expect("Hash to 32-byte scalar failed");
-
-    if !signature.verify(&commitment, &challenge, &factory) {
+    if !signature.verify_challenge(&commitment, &challenge, &factory) {
         return Err(RuntimeError::InvalidConfidentialProof {
             details: "Invalid proof of knowledge signature".to_string(),
         });
