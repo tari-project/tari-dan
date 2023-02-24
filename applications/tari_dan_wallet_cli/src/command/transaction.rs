@@ -85,8 +85,6 @@ pub struct SubmitArgs {
 
 #[derive(Debug, Args, Clone)]
 pub struct CommonSubmitArgs {
-    #[clap(long, short = 'w')]
-    pub wait_for_result: bool,
     /// Timeout in seconds
     #[clap(long, short = 't', alias = "wait-timeout")]
     pub wait_for_result_timeout_secs: Option<u64>,
@@ -272,25 +270,23 @@ pub async fn submit_transaction(
     // TODO: Would be great if we could display the Substate addresses as well as shard ids
     summarize_request(&request, &resp.inputs, &resp.outputs);
 
-    if common.wait_for_result {
+    println!();
+    println!("⏳️ Waiting for transaction result...");
+    println!();
+    let wait_resp = client
+        .wait_transaction_result(TransactionWaitResultRequest {
+            hash: resp.hash,
+            timeout_secs: common.wait_for_result_timeout_secs,
+        })
+        .await?;
+    if wait_resp.timed_out {
+        println!(
+            "⏳️ Transaction result not available after {} seconds.",
+            common.wait_for_result_timeout_secs.unwrap_or(0)
+        );
         println!();
-        println!("⏳️ Waiting for transaction result...");
-        println!();
-        let resp = client
-            .wait_transaction_result(TransactionWaitResultRequest {
-                hash: resp.hash,
-                timeout_secs: common.wait_for_result_timeout_secs,
-            })
-            .await?;
-        if resp.timed_out {
-            println!(
-                "⏳️ Transaction result not available after {} seconds.",
-                common.wait_for_result_timeout_secs.unwrap_or(0)
-            );
-            println!();
-        } else {
-            summarize(&resp, timer.elapsed());
-        }
+    } else {
+        summarize(&wait_resp, timer.elapsed());
     }
 
     Ok(resp)
@@ -341,7 +337,7 @@ pub async fn handle_claim_burn(
     common.override_inputs = Some(false);
     // transaction should have one output, corresponding to the same shard
     // as the account substate address
-    // TODO: on a second claim burn, we shoulnd't have any new outputs being created
+    // TODO: on a second claim burn, we shoulnd't have any new outputs being created.
     common.num_outputs = Some(1);
 
     submit_transaction(instructions, common, client).await
