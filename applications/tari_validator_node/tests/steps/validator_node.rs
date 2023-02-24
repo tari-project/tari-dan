@@ -39,7 +39,7 @@ async fn when_i_claim_burn(
     rangeproof_name: String,
     account_name: String,
     vn_name: String,
-) {
+) -> Result<(), anyhow::Error> {
     let commitment = world
         .commitments
         .get(&commitment_name)
@@ -104,7 +104,33 @@ async fn when_i_claim_burn(
     };
 
     let mut client = vn.create_client().await;
-    client.submit_transaction(request).await.unwrap();
+    client.submit_transaction(request).await?;
+
+    Ok(())
+}
+
+#[when(
+    expr = "I claim burn {word} with {word} and {word} and spend it into account {word} on {word} a second time, it \
+            fails"
+)]
+async fn when_i_claim_burn_second_time_fails(
+    world: &mut TariWorld,
+    commitment_name: String,
+    proof_name: String,
+    rangeproof_name: String,
+    account_name: String,
+    vn_name: String,
+) {
+    assert!(when_i_claim_burn(
+        world,
+        commitment_name,
+        proof_name,
+        rangeproof_name,
+        account_name,
+        vn_name,
+    )
+    .await
+    .is_err());
 }
 
 #[then(expr = "{word} is on epoch {int} within {int} seconds")]
