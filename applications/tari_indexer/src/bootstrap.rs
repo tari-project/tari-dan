@@ -37,13 +37,11 @@ use tari_dan_app_utilities::{
     base_layer_scanner,
     base_node_client::GrpcBaseNodeClient,
     epoch_manager::EpochManagerHandle,
-    template_manager::TemplateManagerHandle,
 };
 use tari_dan_core::consensus_constants::ConsensusConstants;
 use tari_dan_storage::global::GlobalDb;
 use tari_dan_storage_sqlite::{global::SqliteGlobalDbAdapter, sqlite_shard_store_factory::SqliteShardStore};
 use tari_shutdown::ShutdownSignal;
-use tokio::sync::mpsc;
 
 use crate::{
     comms,
@@ -53,6 +51,7 @@ use crate::{
             comms_peer_provider::CommsPeerProvider,
             epoch_manager,
             rpc_client::TariCommsValidatorNodeClientFactory,
+            template_manager,
         },
     },
     substate_storage_sqlite::sqlite_substate_store_factory::SqliteSubstateStore,
@@ -96,12 +95,15 @@ pub async fn spawn_services(
         validator_node_client_factory.clone(),
     );
 
+    // Mock template manager
+    let (template_manager_service, _) = template_manager::spawn(shutdown.clone());
+
     // Base Node scanner
     base_layer_scanner::spawn(
         global_db,
         base_node_client.clone(),
         epoch_manager.clone(),
-        get_mock_template_manager_handle(),
+        template_manager_service.clone(),
         shutdown.clone(),
         consensus_constants,
         // TODO: Remove coupling between scanner and shard store
@@ -161,11 +163,4 @@ fn save_identities(config: &ApplicationConfig, comms: &CommsNode) -> Result<(), 
             .map_err(|e| ExitError::new(ExitCode::ConfigError, format!("Failed to save tor identity: {}", e)))?;
     }
     Ok(())
-}
-
-// The indexer application does not need to handle templates
-// so we just create a mock handle that ignores messages
-fn get_mock_template_manager_handle() -> TemplateManagerHandle {
-    let (tx_request, _) = mpsc::channel(10);
-    TemplateManagerHandle::new(tx_request)
 }
