@@ -38,7 +38,7 @@ Feature: NFTs
     When I create an account ACC2 on VN
 
     # Submit a transaction with NFT operations
-    When I submit a transaction manifest on VN with inputs "NFT, ACC1, ACC2" and 3 outputs named "TX1"
+    When I submit a transaction manifest on VN with inputs "NFT, ACC1, ACC2" and 6 outputs named "TX1"
         ```
             // $mint NFT/resources/0 1
             // $mint_specific NFT/resources/0 str:SpecialNft
