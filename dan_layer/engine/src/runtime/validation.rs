@@ -1,16 +1,10 @@
 //   Copyright 2023 The Tari Project
 //   SPDX-License-Identifier: BSD-3-Clause
 
-use tari_common_types::types::{BulletRangeProof, Commitment, PrivateKey, PublicKey};
+use tari_common_types::types::{BulletRangeProof, Commitment, PublicKey};
 use tari_crypto::{
-    commitment::HomomorphicCommitment,
     extended_range_proof::{ExtendedRangeProofService, Statement},
-    keys::{PublicKey as _, SecretKey},
-    ristretto::{
-        bulletproofs_plus::RistrettoAggregatedPublicStatement,
-        pedersen::commitment_factory::PedersenCommitmentFactory,
-    },
-    signatures::CommitmentSignature,
+    ristretto::bulletproofs_plus::RistrettoAggregatedPublicStatement,
 };
 use tari_template_lib::models::ConfidentialProof;
 use tari_utilities::ByteArray;
@@ -21,26 +15,26 @@ pub fn validate_confidential_proof(proof: ConfidentialProof) -> Result<(PublicKe
     let commitment = Commitment::from_bytes(&proof.commitment).map_err(|_| RuntimeError::InvalidConfidentialProof {
         details: "Invalid commitment".to_string(),
     })?;
-    let public_mask =
-        PublicKey::from_bytes(proof.public_mask.as_bytes()).map_err(|_| RuntimeError::InvalidConfidentialProof {
-            details: "Invalid public mask".to_string(),
-        })?;
+    // let public_mask =
+    //     PublicKey::from_bytes(proof.public_mask.as_bytes()).map_err(|_| RuntimeError::InvalidConfidentialProof {
+    //         details: "Invalid public mask".to_string(),
+    //     })?;
 
-    let signature = extract_commitment_signature(&proof.knowledge_proof)?;
+    // let signature = decode(&proof.knowledge_proof)?;
     // TODO: use extended commitments, what's missing is a way to sign for a 4-degree commitment (mask, value, asset
     // tag, asset instance)
-    let factory = PedersenCommitmentFactory::default();
-    let challenge = crypto::challenges::confidential_commitment_proof(
-        &public_mask,
-        signature.public_nonce().as_public_key(),
-        &commitment,
-    );
+    // let factory = PedersenCommitmentFactory::default();
+    // let challenge = crypto::challenges::confidential_commitment_proof(
+    //     &public_mask,
+    //     signature.public_nonce().as_public_key(),
+    //     &commitment,
+    // );
 
-    if !signature.verify_challenge(&commitment, &challenge, &factory) {
-        return Err(RuntimeError::InvalidConfidentialProof {
-            details: "Invalid proof of knowledge signature".to_string(),
-        });
-    }
+    // if !signature.verify_challenge(&commitment, &challenge, &factory) {
+    //     return Err(RuntimeError::InvalidConfidentialProof {
+    //         details: "Invalid proof of knowledge signature".to_string(),
+    //     });
+    // }
 
     validate_bullet_proof(&proof, &commitment)?;
 
@@ -64,37 +58,17 @@ fn validate_bullet_proof(proof: &ConfidentialProof, commitment: &Commitment) -> 
     Ok(())
 }
 
-fn extract_commitment_signature(sig_bytes: &[u8]) -> Result<CommitmentSignature<PublicKey, PrivateKey>, RuntimeError> {
-    if sig_bytes.len() != PublicKey::key_length() + PrivateKey::key_length() * 2 {
-        return Err(RuntimeError::InvalidConfidentialProof {
-            details: format!("Knowledge proof invalid length: {}", sig_bytes.len()),
-        });
-    }
-    let public_nonce =
-        HomomorphicCommitment::from_bytes(&sig_bytes[..32]).map_err(|_| RuntimeError::InvalidConfidentialProof {
-            details: "Invalid public nonce in knowledge proof".to_string(),
-        })?;
-
-    let u = PrivateKey::from_bytes(&sig_bytes[32..64]).map_err(|_| RuntimeError::InvalidConfidentialProof {
-        details: "Invalid u in knowledge proof".to_string(),
-    })?;
-
-    let v = PrivateKey::from_bytes(&sig_bytes[64..96]).map_err(|_| RuntimeError::InvalidConfidentialProof {
-        details: "Invalid v in knowledge proof".to_string(),
-    })?;
-
-    Ok(CommitmentSignature::new(public_nonce, u, v))
-}
-
 #[cfg(test)]
 mod tests {
+    use rand::rngs::OsRng;
+    use tari_common_types::types::PrivateKey;
+    use tari_crypto::keys::SecretKey;
+
     use super::*;
+    use crate::crypto::generate_confidential_proof;
 
     mod validate_confidential_proof {
-        use rand::rngs::OsRng;
-
         use super::*;
-        use crate::crypto::generate_confidential_proof;
 
         fn create_valid_proof(value: u64, minimum_value_promise: u64) -> ConfidentialProof {
             let mask = PrivateKey::random(&mut OsRng);
