@@ -33,8 +33,7 @@ use tari_template_abi::{
 use crate::{
     args::{InvokeResult, VaultAction, VaultInvokeArg, VaultWithdrawArg},
     hash::HashParseError,
-    models::{Amount, Bucket, NonFungibleId, ResourceAddress},
-    prelude::ConfidentialProof,
+    models::{Amount, Bucket, ConfidentialWithdrawProof, NonFungibleId, ResourceAddress},
     Hash,
 };
 
@@ -150,13 +149,11 @@ impl Vault {
         resp.decode().expect("failed to decode Bucket")
     }
 
-    pub fn withdraw_confidential<I: IntoIterator<Item = ConfidentialProof>>(&mut self, proofs: I) -> Bucket {
+    pub fn withdraw_confidential(&mut self, proof: ConfidentialWithdrawProof) -> Bucket {
         let resp: InvokeResult = call_engine(EngineOp::VaultInvoke, &VaultInvokeArg {
             vault_ref: self.vault_ref(),
             action: VaultAction::Withdraw,
-            args: invoke_args![VaultWithdrawArg::Confidential {
-                proofs: proofs.into_iter().collect()
-            }],
+            args: invoke_args![VaultWithdrawArg::Confidential { proof }],
         });
 
         resp.decode().expect("failed to decode Bucket")

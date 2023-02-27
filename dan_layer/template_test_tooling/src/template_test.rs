@@ -260,6 +260,8 @@ impl TemplateTest {
         let template_imports = self
             .name_to_template
             .iter()
+            // Account is implicitly imported.
+            .filter(|(name, _)|* name != "Account")
             .map(|(name, addr)| format!("use template_{} as {};", addr, name))
             .collect::<Vec<_>>()
             .join("\n");

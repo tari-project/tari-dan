@@ -78,15 +78,12 @@ mod account_template {
         pub fn withdraw_confidential(
             &mut self,
             resource: ResourceAddress,
-            dest_bucket_proof: ConfidentialProof,
+            withdraw_proof: ConfidentialWithdrawProof,
         ) -> Bucket {
             let v = self
                 .get_vault_mut(resource)
                 .expect("This account does not have any of that resource");
-            let mut proofs = Vec::with_capacity(2);
-            proofs.push(dest_bucket_proof);
-
-            v.withdraw_confidential(proofs)
+            v.withdraw_confidential(withdraw_proof)
         }
 
         // #[access_rules(allow_all)]
