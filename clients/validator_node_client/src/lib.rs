@@ -161,7 +161,6 @@ impl ValidatorNodeClient {
         self.send_request("add_peer", request).await
     }
 
-
     // pub async fn get_message_logs(&mut self, message_tag: &str) -> Result<Vec<LoggedMessage>, anyhow::Error> {
     //     let resp = self
     //         .send_request::<_, json::Value>("get_logged_messages", json!({ "message_tag": message_tag }))
