@@ -379,6 +379,7 @@ impl RuntimeInterface for RuntimeInterfaceImpl {
                 let resource = self.tracker.borrow_vault_mut(&vault_id, |vault| match arg {
                     VaultWithdrawArg::Fungible { amount } => vault.withdraw(amount),
                     VaultWithdrawArg::NonFungible { ids } => vault.withdraw_non_fungibles(&ids),
+                    VaultWithdrawArg::Confidential { proofs } => vault.withdraw_confidential(&proofs),
                 })??;
                 let bucket = self.tracker.new_bucket(resource)?;
                 Ok(InvokeResult::encode(&bucket)?)

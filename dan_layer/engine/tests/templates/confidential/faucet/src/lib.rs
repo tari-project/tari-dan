@@ -20,29 +20,41 @@
 //   WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //   USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-pub use tari_bor::encode;
-#[cfg(feature = "macro")]
-pub use tari_template_macros::template;
+use tari_template_lib::prelude::*;
 
-pub use crate::{
-    auth::{AccessRule, AccessRules, RestrictedAccessRule::*},
-    component::{
-        interface::{ComponentInstanceInterface, ComponentInterface},
-        ComponentManager,
-    },
-    consensus::Consensus,
-    models::{
-        Amount,
-        Bucket,
-        BucketId,
-        ComponentAddress,
-        ConfidentialProof,
-        Metadata,
-        NonFungible,
-        NonFungibleAddress,
-        NonFungibleId,
-        ResourceAddress,
-        Vault,
-    },
-    resource::{ResourceBuilder, ResourceManager, ResourceType},
-};
+#[template]
+mod faucet_template {
+    use super::*;
+
+    pub struct ConfidentialFaucet {
+        vault: Vault,
+    }
+
+    impl ConfidentialFaucet {
+        pub fn mint(confidential_proof: ConfidentialProof) -> Self {
+            let coins = ResourceBuilder::confidential()
+                .with_token_symbol("🪙")
+                .initial_supply(confidential_proof)
+                .build_bucket();
+
+            Self {
+                vault: Vault::from_bucket(coins),
+            }
+        }
+
+        pub fn take_free_coins(&mut self) -> Bucket {
+            debug("Withdrawing 1000 coins from faucet");
+            self.vault.withdraw(Amount(1000))
+        }
+
+        // TODO: we can make a fungible utility template with these common operations
+        pub fn burn_coins(&mut self, amount: Amount) {
+            let mut bucket = self.vault.withdraw(amount);
+            bucket.burn();
+        }
+
+        pub fn total_supply(&self) -> Amount {
+            ResourceManager::get(self.vault.resource_address()).total_supply()
+        }
+    }
+}

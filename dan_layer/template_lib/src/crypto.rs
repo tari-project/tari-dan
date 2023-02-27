@@ -1,10 +1,12 @@
 //   Copyright 2023 The Tari Project
 //   SPDX-License-Identifier: BSD-3-Clause
 
+use tari_bor::{borsh, Decode, Encode};
+
 const KEY_LEN: usize = 32;
 
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Encode, Decode)]
 pub struct RistrettoPublicKeyBytes(#[cfg_attr(feature = "serde", serde(with = "hex::serde"))] [u8; KEY_LEN]);
 
 impl RistrettoPublicKeyBytes {

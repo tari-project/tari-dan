@@ -20,29 +20,30 @@
 //   WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //   USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-pub use tari_bor::encode;
-#[cfg(feature = "macro")]
-pub use tari_template_macros::template;
+mod confidential;
+mod fungible;
+mod non_fungible;
 
-pub use crate::{
-    auth::{AccessRule, AccessRules, RestrictedAccessRule::*},
-    component::{
-        interface::{ComponentInstanceInterface, ComponentInterface},
-        ComponentManager,
-    },
-    consensus::Consensus,
-    models::{
-        Amount,
-        Bucket,
-        BucketId,
-        ComponentAddress,
-        ConfidentialProof,
-        Metadata,
-        NonFungible,
-        NonFungibleAddress,
-        NonFungibleId,
-        ResourceAddress,
-        Vault,
-    },
-    resource::{ResourceBuilder, ResourceManager, ResourceType},
+use crate::resource::builder::{
+    confidential::ConfidentialResourceBuilder,
+    fungible::FungibleResourceBuilder,
+    non_fungible::NonFungibleResourceBuilder,
 };
+
+const TOKEN_SYMBOL: &str = "SYMBOL";
+
+pub struct ResourceBuilder;
+
+impl ResourceBuilder {
+    pub fn fungible() -> FungibleResourceBuilder {
+        FungibleResourceBuilder::new()
+    }
+
+    pub fn non_fungible() -> NonFungibleResourceBuilder {
+        NonFungibleResourceBuilder::new()
+    }
+
+    pub fn confidential() -> ConfidentialResourceBuilder {
+        ConfidentialResourceBuilder::new()
+    }
+}

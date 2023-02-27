@@ -71,7 +71,22 @@ mod account_template {
                 .get_vault_mut(resource)
                 .expect("This account does not have any of that resource");
 
-            v.withdraw_non_fungibles(Some(nf_id))
+            v.withdraw_non_fungibles([nf_id])
+        }
+
+        // #[access_rules(requires(owner_badge))]
+        pub fn withdraw_confidential(
+            &mut self,
+            resource: ResourceAddress,
+            dest_bucket_proof: ConfidentialProof,
+        ) -> Bucket {
+            let v = self
+                .get_vault_mut(resource)
+                .expect("This account does not have any of that resource");
+            let mut proofs = Vec::with_capacity(2);
+            proofs.push(dest_bucket_proof);
+
+            v.withdraw_confidential(proofs)
         }
 
         // #[access_rules(allow_all)]
@@ -83,6 +98,17 @@ mod account_template {
                 .or_insert_with(|| Vault::new_empty(resource_address));
             vault_mut.deposit(bucket);
         }
+
+        // #[access_rules(allow_all)]
+        // pub fn deposit_confidential(&mut self, bucket: Bucket, proof: ConfidentialProof) {
+        //     let resource_address = bucket.resource_address();
+        //     let vault_mut = self
+        //         .vaults
+        //         .entry(resource_address)
+        //         .or_insert_with(|| Vault::new_empty(resource_address));
+        //
+        //     vault_mut.deposit_confidential(bucket, proof);
+        // }
 
         pub fn deposit_all(&mut self, buckets: Vec<Bucket>) {
             for bucket in buckets {

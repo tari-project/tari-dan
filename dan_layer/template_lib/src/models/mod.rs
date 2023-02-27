@@ -29,6 +29,9 @@ pub use bucket::{Bucket, BucketId};
 mod component;
 pub use component::*;
 
+mod confidential_proof;
+pub use confidential_proof::ConfidentialProof;
+
 mod layer_one_commitment;
 pub use layer_one_commitment::LayerOneCommitmentAddress;
 
