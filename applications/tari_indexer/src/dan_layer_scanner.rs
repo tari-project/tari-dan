@@ -51,7 +51,16 @@ impl DanLayerScanner {
     }
 
     pub async fn get_substate(&self, substate_address: &SubstateAddress, version: Option<u32>) -> Option<Substate> {
-        let epoch = self.epoch_manager.current_epoch().await.unwrap();
+        info!(target: LOG_TARGET, "get_substate: {} ", substate_address);
+
+        let epoch = match self.epoch_manager.current_epoch().await {
+            Ok(epoch) => epoch,
+            Err(e) => {
+                error!(target: LOG_TARGET, "Could not retrieve the current epoch: {} ", e);
+                return None;
+            },
+        };
+
         let result = match version {
             Some(version) => {
                 self.get_specific_substate_from_commitee(substate_address, version, epoch)
@@ -95,15 +104,47 @@ impl DanLayerScanner {
         epoch: Epoch,
     ) -> SubstateResult {
         let shard_id = ShardId::from_address(substate_address, version);
-        let committee = self.epoch_manager.get_committee(epoch, shard_id).await.unwrap();
+        let committee = match self.epoch_manager.get_committee(epoch, shard_id).await {
+            Ok(committee) => committee,
+            Err(e) => {
+                error!(
+                    target: LOG_TARGET,
+                    "Could not get commitee for substate {}:{} on epoch {}: {}", substate_address, version, epoch, e
+                );
+                return SubstateResult::DoesNotExist;
+            },
+        };
 
         for vn_public_key in &committee.members {
+            match self.get_substate_from_vn(vn_public_key, shard_id).await {
+                Ok(substate_result) => return substate_result,
+                Err(e) => {
+                    // We ignore a single VN error and keep querying the rest of the committee
+                    error!(
+                        target: LOG_TARGET,
+                        "Could not get substate {}:{} from vn {} on epoch {}: {}",
+                        substate_address,
+                        version,
+                        vn_public_key,
+                        epoch,
+                        e
+                    );
+                },
+            };
             let res = self.get_substate_from_vn(vn_public_key, shard_id).await;
 
             if let Ok(substate_result) = res {
                 return substate_result;
             }
         }
+
+        error!(
+            target: LOG_TARGET,
+            "Could not get substate {}:{} from any of the validator nodes on epoch {}",
+            substate_address,
+            version,
+            epoch
+        );
 
         SubstateResult::DoesNotExist
     }

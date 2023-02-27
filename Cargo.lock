@@ -6523,6 +6523,7 @@ dependencies = [
  "tari_template_lib",
  "tari_transaction",
  "tari_validator_node",
+ "tari_validator_node_client",
  "thiserror",
  "tokio",
  "tokio-stream",
