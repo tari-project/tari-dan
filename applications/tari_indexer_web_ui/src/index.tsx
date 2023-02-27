@@ -20,43 +20,53 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-import { toHexString } from "../routes/VN/Components/helpers";
+import React from 'react';
+import ReactDOM from 'react-dom/client';
+import './index.css';
+import reportWebVitals from './reportWebVitals';
+import { createBrowserRouter, RouterProvider } from 'react-router-dom';
+import App from './App';
+import Connections from './routes/Connections/Connections';
+import RecentTransactions from './routes/RecentTransactions/RecentTransactions';
+import ErrorPage from './routes/ErrorPage';
+import MonitoredSubstates from './routes/VN/Components/MonitoredSubstates';
 
-const renderJson = (json: any) => {
-  if (Array.isArray(json)) {
-    if (json.length == 32) {
-      return <span className="string">"{toHexString(json)}"</span>;
-    }
-    return (
-      <>
-        [
-        <ol>
-          {json.map((val) => (
-            <li>{renderJson(val)},</li>
-          ))}
-        </ol>
-        ],
-      </>
-    );
-  } else if (typeof json === 'object') {
-    return (
-      <>
-        {'{'}
-        <ul>
-          {Object.keys(json).map((key) => (
-            <li>
-              <b>"{key}"</b>:{renderJson(json[key])}
-            </li>
-          ))}
-        </ul>
-        {'}'}
-      </>
-    );
-  } else {
-    if (typeof json === 'string')
-      return <span className="string">"{json}"</span>;
-    return <span className="other">{json}</span>;
-  }
-};
+const router = createBrowserRouter([
+  {
+    path: '*',
+    element: <App />,
+    errorElement: <ErrorPage />,
+    children: [
+      {
+        path: 'connections',
+        element: <Connections />,
+      },
+      {
+        path: 'monitored_substates',
+        element: <MonitoredSubstates />,
+      },
+      {
+        path: 'transactions',
+        element: <RecentTransactions />,
+      },
+      {
+        path: 'app',
+        element: <App />,
+      },
+    ],
+  },
+]);
 
-export { renderJson };
+const root = ReactDOM.createRoot(
+  document.getElementById('root') as HTMLElement
+);
+root.render(
+  <React.StrictMode>
+    <RouterProvider router={router} />
+  </React.StrictMode>
+);
+
+// If you want to start measuring performance in your app, pass a function
+// to log results (for example: reportWebVitals(console.log))
+// or send to an analytics endpoint. Learn more: https://bit.ly/CRA-vitals
+reportWebVitals();

@@ -97,7 +97,7 @@ impl SubstateManager {
         Ok(())
     }
 
-    pub async fn get_all_addresses_from_db(&self) -> Result<Vec<String>, anyhow::Error> {
+    pub async fn get_all_addresses_from_db(&self) -> Result<Vec<(String, i64)>, anyhow::Error> {
         let mut tx = self.substate_store.create_read_tx()?;
         let addresses = tx.get_all_addresses()?;
 
@@ -156,7 +156,7 @@ impl SubstateManager {
     pub async fn scan_and_update_substates(&self) -> Result<(), anyhow::Error> {
         let addresses = self.get_all_addresses_from_db().await?;
 
-        for address in addresses {
+        for (address, _version) in addresses {
             let address = SubstateAddress::from_str(&address)?;
             self.fetch_and_add_substate_to_db(&address).await?;
         }

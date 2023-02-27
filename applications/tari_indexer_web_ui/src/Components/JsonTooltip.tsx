@@ -20,43 +20,17 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-import { toHexString } from "../routes/VN/Components/helpers";
+import React from "react";
+import { renderJson } from "../utils/helpers";
 
-const renderJson = (json: any) => {
-  if (Array.isArray(json)) {
-    if (json.length == 32) {
-      return <span className="string">"{toHexString(json)}"</span>;
-    }
-    return (
-      <>
-        [
-        <ol>
-          {json.map((val) => (
-            <li>{renderJson(val)},</li>
-          ))}
-        </ol>
-        ],
-      </>
-    );
-  } else if (typeof json === 'object') {
-    return (
-      <>
-        {'{'}
-        <ul>
-          {Object.keys(json).map((key) => (
-            <li>
-              <b>"{key}"</b>:{renderJson(json[key])}
-            </li>
-          ))}
-        </ul>
-        {'}'}
-      </>
-    );
-  } else {
-    if (typeof json === 'string')
-      return <span className="string">"{json}"</span>;
-    return <span className="other">{json}</span>;
+export default function JsonTooltip({ jsonText, children }: { jsonText: string; children: string }) {
+  if (jsonText === null) {
+    return <>No data</>;
   }
-};
-
-export { renderJson };
+  return (
+    <div className="tooltip">
+      {children}
+      <span className="tooltiptext json">{renderJson(JSON.parse(jsonText))}</span>
+    </div>
+  );
+}

@@ -115,6 +115,7 @@ impl DanLayerScanner {
             },
         };
 
+        // TODO: Randomize order of members, otherwise the first one will have much higher traffic.
         for vn_public_key in &committee.members {
             match self.get_substate_from_vn(vn_public_key, shard_id).await {
                 Ok(substate_result) => return substate_result,

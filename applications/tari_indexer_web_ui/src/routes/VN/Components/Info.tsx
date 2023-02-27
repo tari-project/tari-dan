@@ -20,43 +20,42 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-import { toHexString } from "../routes/VN/Components/helpers";
+import { IIdentity } from '../../../utils/interfaces';
+import './Info.css';
+import Table from '@mui/material/Table';
+import TableBody from '@mui/material/TableBody';
+import TableCell from '@mui/material/TableCell';
+import TableContainer from '@mui/material/TableContainer';
+import TableRow from '@mui/material/TableRow';
+import { DataTableCell } from '../../../Components/StyledComponents';
 
-const renderJson = (json: any) => {
-  if (Array.isArray(json)) {
-    if (json.length == 32) {
-      return <span className="string">"{toHexString(json)}"</span>;
-    }
-    return (
-      <>
-        [
-        <ol>
-          {json.map((val) => (
-            <li>{renderJson(val)},</li>
-          ))}
-        </ol>
-        ],
-      </>
-    );
-  } else if (typeof json === 'object') {
-    return (
-      <>
-        {'{'}
-        <ul>
-          {Object.keys(json).map((key) => (
-            <li>
-              <b>"{key}"</b>:{renderJson(json[key])}
-            </li>
-          ))}
-        </ul>
-        {'}'}
-      </>
-    );
-  } else {
-    if (typeof json === 'string')
-      return <span className="string">"{json}"</span>;
-    return <span className="other">{json}</span>;
-  }
-};
+function Info({
+  identity,
+}: {
+  identity: IIdentity;
+}) {
+  return (
+    <div>
+      <TableContainer>
+        <Table>
+          <TableBody>
+            <TableRow>
+              <TableCell>Node id</TableCell>
+              <DataTableCell>{identity.node_id}</DataTableCell>
+            </TableRow>
+            <TableRow>
+              <TableCell>Public address</TableCell>
+              <DataTableCell>{identity.public_address}</DataTableCell>
+            </TableRow>
+            <TableRow>
+              <TableCell>Public key</TableCell>
+              <DataTableCell>{identity.public_key}</DataTableCell>
+            </TableRow>
+          </TableBody>
+        </Table>
+      </TableContainer>
+    </div>
+  );
+}
 
-export { renderJson };
+export default Info;

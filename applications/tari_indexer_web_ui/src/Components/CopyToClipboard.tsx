@@ -20,43 +20,52 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-import { toHexString } from "../routes/VN/Components/helpers";
+import { useState } from 'react';
+import Snackbar from '@mui/material/Snackbar';
+import IconButton from '@mui/material/IconButton';
+import ContentCopyIcon from '@mui/icons-material/ContentCopy';
+import Tooltip from '@mui/material/Tooltip';
 
-const renderJson = (json: any) => {
-  if (Array.isArray(json)) {
-    if (json.length == 32) {
-      return <span className="string">"{toHexString(json)}"</span>;
-    }
-    return (
-      <>
-        [
-        <ol>
-          {json.map((val) => (
-            <li>{renderJson(val)},</li>
-          ))}
-        </ol>
-        ],
-      </>
-    );
-  } else if (typeof json === 'object') {
-    return (
-      <>
-        {'{'}
-        <ul>
-          {Object.keys(json).map((key) => (
-            <li>
-              <b>"{key}"</b>:{renderJson(json[key])}
-            </li>
-          ))}
-        </ul>
-        {'}'}
-      </>
-    );
-  } else {
-    if (typeof json === 'string')
-      return <span className="string">"{json}"</span>;
-    return <span className="other">{json}</span>;
-  }
+interface CopyProps {
+  copy: string;
+}
+
+const CopyToClipboard = ({ copy }: CopyProps) => {
+  const [open, setOpen] = useState(false);
+  const handleClick = (copyThis: string) => {
+    setOpen(true);
+    navigator.clipboard.writeText(copyThis);
+  };
+
+  return (
+    <>
+      <IconButton
+        onClick={() => handleClick(copy)}
+        size="small"
+        aria-label="copy to clipboard"
+        style={{
+          // float: 'right',
+          marginLeft: '10px',
+        }}
+      >
+        <Tooltip title={copy} arrow>
+          <ContentCopyIcon
+            color="primary"
+            style={{
+              width: '16px',
+              height: '16px',
+            }}
+          />
+        </Tooltip>
+      </IconButton>
+      <Snackbar
+        open={open}
+        onClose={() => setOpen(false)}
+        autoHideDuration={2000}
+        message="Copied to clipboard"
+      />
+    </>
+  );
 };
 
-export { renderJson };
+export default CopyToClipboard;
