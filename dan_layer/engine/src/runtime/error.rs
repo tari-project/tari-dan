@@ -31,6 +31,7 @@ use tari_template_lib::models::{
     Amount,
     BucketId,
     ComponentAddress,
+    LayerOneCommitmentAddress,
     NonFungibleId,
     ResourceAddress,
     VaultId,
@@ -54,6 +55,8 @@ pub enum RuntimeError {
     SubstateNotFound { address: SubstateAddress },
     #[error("Component not found with address '{address}'")]
     ComponentNotFound { address: ComponentAddress },
+    #[error("Layer one commitment not found with address '{address}'")]
+    LayerOneCommitmentNotFound { address: LayerOneCommitmentAddress },
     #[error("Invalid argument {argument}: {reason}")]
     InvalidArgument { argument: &'static str, reason: String },
     #[error("Invalid amount '{amount}': {reason}")]
@@ -99,6 +102,14 @@ pub enum RuntimeError {
     InvalidMethodAccessRule { template_name: String, details: String },
     #[error("Runtime module error: {0}")]
     ModuleError(#[from] RuntimeModuleError),
+    #[error("Invalid claiming signature")]
+    InvalidClaimingSignature,
+    #[error("Invalid range proof")]
+    InvalidRangeProof,
+    #[error("Invalid substate type")]
+    InvalidSubstateType,
+    #[error("Layer one commitment already claimed with address '{address}'")]
+    LayerOneCommitmentAlreadyClaimed { address: LayerOneCommitmentAddress },
     #[error(
         "The address list {list_id} item at index {index} was trying to reference an invalid address \
          {referenced_address}"

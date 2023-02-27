@@ -14,17 +14,16 @@ Feature: NFTs
     Given a validator node VN connected to base node BASE and wallet WALLET
 
     # The wallet must have some funds before the VN sends transactions
-    When miner MINER mines 12 new blocks
-    When wallet WALLET has at least 1000000000 uT
+    When miner MINER mines 6 new blocks
+    When wallet WALLET has at least 2000000000 uT
 
     # VN registration
     When validator node VN sends a registration transaction
-    When miner MINER mines 20 new blocks
-    Then the validator node VN is listed as registered
 
     # Register the "basic_nft" template
     When validator node VN registers the template "basic_nft"
-    When miner MINER mines 20 new blocks
+    When miner MINER mines 13 new blocks
+    Then the validator node VN is listed as registered
     Then the template "basic_nft" is listed as registered by the validator node VN
 
     # A file-base CLI account must be created to sign future calls

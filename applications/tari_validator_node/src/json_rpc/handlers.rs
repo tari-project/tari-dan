@@ -40,6 +40,11 @@ use tari_comms::{
 };
 use tari_comms_logging::SqliteMessageLog;
 use tari_crypto::tari_utilities::hex::Hex;
+use tari_dan_app_utilities::{
+    base_node_client::GrpcBaseNodeClient,
+    epoch_manager::EpochManagerHandle,
+    template_manager::TemplateManagerHandle,
+};
 use tari_dan_common_types::{optional::Optional, PayloadId, QuorumCertificate, QuorumDecision, ShardId};
 use tari_dan_core::{
     services::{epoch_manager::EpochManager, BaseNodeClient},
@@ -55,6 +60,8 @@ use tari_validator_node_client::types::{
     GetIdentityResponse,
     GetRecentTransactionsResponse,
     GetShardKey,
+    GetStateRequest,
+    GetStateResponse,
     GetTemplateRequest,
     GetTemplateResponse,
     GetTemplatesRequest,
@@ -76,13 +83,9 @@ use tokio::sync::{broadcast, broadcast::error::RecvError};
 
 use crate::{
     dry_run_transaction_processor::DryRunTransactionProcessor,
-    grpc::services::{base_node_client::GrpcBaseNodeClient, wallet_client::GrpcWalletClient},
+    grpc::services::wallet_client::GrpcWalletClient,
     json_rpc::jrpc_errors::internal_error,
-    p2p::services::{
-        epoch_manager::handle::EpochManagerHandle,
-        mempool::MempoolHandle,
-        template_manager::TemplateManagerHandle,
-    },
+    p2p::services::mempool::MempoolHandle,
     registration,
     Services,
     ValidatorNodeConfig,
@@ -227,6 +230,29 @@ impl JsonRpcHandlers {
                 result: None,
             }))
         }
+    }
+
+    pub async fn get_state(&self, value: JsonRpcExtractor) -> JrpcResult {
+        let answer_id = value.get_answer_id();
+        let request: GetStateRequest = value.parse_params()?;
+
+        let mut tx = self.shard_store.create_read_tx().unwrap();
+        let state = match tx.get_substate_states(&[request.shard_id]) {
+            Ok(state) => state,
+            Err(e) => {
+                return Err(JsonRpcResponse::error(
+                    answer_id,
+                    JsonRpcError::new(
+                        JsonRpcErrorReason::InvalidParams,
+                        format!("Something went wrong: {}", e),
+                        json::Value::Null,
+                    ),
+                ))
+            },
+        };
+        Ok(JsonRpcResponse::success(answer_id, GetStateResponse {
+            data: state[0].substate().to_bytes(),
+        }))
     }
 
     pub async fn get_recent_transactions(&self, value: JsonRpcExtractor) -> JrpcResult {

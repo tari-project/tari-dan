@@ -3,9 +3,9 @@
 
 use std::collections::HashMap;
 
-use log::warn;
+use log::*;
 use tari_common_types::types::FixedHash;
-use tari_dan_common_types::optional::IsNotFoundError;
+use tari_dan_common_types::optional::{IsNotFoundError, Optional};
 use tari_engine_types::{
     substate::{SubstateAddress, SubstateDiff},
     TemplateAddress,
@@ -165,13 +165,25 @@ impl<'a, TStore: WalletStore> TransactionApi<'a, TStore> {
         let mut downed_children = HashMap::<_, _>::new();
 
         for (addr, version) in diff.down_iter() {
-            let substate = tx.substates_remove(&VersionedSubstateAddress {
-                address: addr.clone(),
-                version: *version,
-            })?;
-
-            if let Some(parent) = substate.parent_address {
-                downed_children.insert(substate.address.address, parent);
+            if addr.is_layer1_commitment() {
+                info!(target: LOG_TARGET, "Layer 1 commitment {} downed", addr);
+                continue;
+            }
+            let maybe_substate = tx
+                .substates_remove(&VersionedSubstateAddress {
+                    address: addr.clone(),
+                    version: *version,
+                })
+                .optional()?;
+            match maybe_substate {
+                Some(substate) => {
+                    if let Some(parent) = substate.parent_address {
+                        downed_children.insert(substate.address.address, parent);
+                    }
+                },
+                None => {
+                    warn!(target: LOG_TARGET, "Downed substate {} not found", addr);
+                },
             }
         }
 
@@ -199,6 +211,9 @@ impl<'a, TStore: WalletStore> TransactionApi<'a, TStore> {
                         address: addr.clone(),
                         version: substate.version(),
                     });
+                },
+                addr @ SubstateAddress::LayerOneCommitment(_) => {
+                    todo!("Not supported {}", addr);
                 },
             }
         }

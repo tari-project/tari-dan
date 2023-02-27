@@ -31,10 +31,9 @@ use prost::Message;
 use tari_comms::{message::InboundMessage, types::CommsPublicKey, PeerManager};
 use tari_comms_logging::SqliteMessageLog;
 use tari_crypto::tari_utilities::ByteArray;
+use tari_dan_app_grpc::proto;
 use tari_dan_core::{message::DanMessage, models::TariDanPayload};
 use tower::{Service, ServiceExt};
-
-use crate::p2p::proto;
 const LOG_TARGET: &str = "tari::validator_node::comms::messaging";
 
 #[derive(Debug, Clone)]

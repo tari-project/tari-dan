@@ -40,13 +40,15 @@ pub async fn handle_submit(
     let (_, key) = key_api.get_key_or_active(TRANSACTION_KEYMANAGER_BRANCH, req.signing_key_index)?;
 
     // let transaction_api = sdk.transaction_api();
-    let inputs = if req.inputs.is_empty() {
-        // If no inputs are specified, we will use the default inputs
+    let inputs = if req.override_inputs {
+        req.inputs
+    } else {
+        // If we are not overring inputs, we will use the our own
+        // inputs, together with default inputs
         // sdk.transaction_api().default_inputs().await?
         let substates = get_referenced_component_addresses(&req.instructions);
-        sdk.substate_api().load_dependent_substates(&substates)?
-    } else {
-        req.inputs
+        let loaded_dependent_substates = sdk.substate_api().load_dependent_substates(&substates)?;
+        vec![req.inputs, loaded_dependent_substates].concat()
     };
 
     // TODO: we assume that all inputs will be consumed and produce a new output however this is only the case when the

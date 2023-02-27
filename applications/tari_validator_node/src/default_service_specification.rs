@@ -21,6 +21,7 @@
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 use tari_common_types::types::PublicKey;
+use tari_dan_app_utilities::base_node_client::GrpcBaseNodeClient;
 use tari_dan_core::{
     models::{domain_events::ConsensusWorkerDomainEvent, TariDanPayload},
     services::{LoggingEventsPublisher, NodeIdentitySigningService, ServiceSpecification},
@@ -28,7 +29,7 @@ use tari_dan_core::{
 use tari_dan_storage_sqlite::{global::SqliteGlobalDbAdapter, SqliteDbFactory};
 
 use crate::{
-    grpc::services::{base_node_client::GrpcBaseNodeClient, wallet_client::GrpcWalletClient},
+    grpc::services::wallet_client::GrpcWalletClient,
     p2p::services::{
         comms_peer_provider::CommsPeerProvider,
         messaging::OutboundMessaging,

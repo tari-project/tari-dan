@@ -27,6 +27,7 @@ use std::{
 };
 
 use log::debug;
+use tari_common_types::types::Commitment;
 use tari_dan_common_types::optional::Optional;
 use tari_engine_types::{
     address_list::{AddressList, AddressListItem},
@@ -52,6 +53,7 @@ use tari_template_lib::{
         ComponentAddress,
         ComponentBody,
         ComponentHeader,
+        LayerOneCommitmentAddress,
         Metadata,
         NonFungibleAddress,
         ResourceAddress,
@@ -307,6 +309,18 @@ impl StateTracker {
         })
     }
 
+    pub fn take_layer_one_commitment(
+        &self,
+        commitment_address: LayerOneCommitmentAddress,
+    ) -> Result<Commitment, RuntimeError> {
+        self.write_with(|state| {
+            let commitment = state.get_layer_one_commitment(&commitment_address)?;
+
+            state.claim_layer_one_commitment(&commitment_address)?;
+            Ok(commitment)
+        })
+    }
+
     pub fn new_component(
         &self,
         module_name: String,
@@ -362,7 +376,7 @@ impl StateTracker {
         let resource = match resource_type {
             ResourceType::Fungible => ResourceContainer::fungible(resource_address, 0.into()),
             ResourceType::NonFungible => ResourceContainer::non_fungible(resource_address, BTreeSet::new()),
-            ResourceType::Confidential => todo!("new_vault: thaum resource"),
+            ResourceType::Confidential => ResourceContainer::confidential(resource_address, vec![]),
         };
         let vault = Vault::new(vault_id, resource);
 
@@ -527,6 +541,10 @@ impl StateTracker {
                     None => Substate::new(0, substate),
                 };
                 substate_diff.up(addr, new_substate);
+            }
+
+            for claimed in state.claimed_layer_one_commitments {
+                substate_diff.down(SubstateAddress::LayerOneCommitment(claimed), 0);
             }
 
             Result::<_, TransactionCommitError>::Ok(substate_diff)

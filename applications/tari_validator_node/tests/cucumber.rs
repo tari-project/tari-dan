@@ -22,11 +22,11 @@
 
 mod steps;
 mod utils;
-
 use std::{
     convert::{Infallible, TryFrom},
     future,
     io,
+    str::FromStr,
     time::Duration,
 };
 
@@ -43,14 +43,19 @@ use cucumber::{
 use indexmap::IndexMap;
 use tari_common::initialize_logging;
 use tari_common_types::types::{FixedHash, PublicKey};
-use tari_crypto::tari_utilities::hex::Hex;
+use tari_comms::multiaddr::Multiaddr;
+use tari_crypto::{
+    ristretto::{RistrettoPublicKey, RistrettoSecretKey},
+    tari_utilities::hex::Hex,
+};
+use tari_dan_app_utilities::base_node_client::GrpcBaseNodeClient;
 use tari_dan_common_types::QuorumDecision;
 use tari_dan_core::services::BaseNodeClient;
 use tari_engine_types::execution_result::Type;
 use tari_template_lib::Hash;
-use tari_validator_node::GrpcBaseNodeClient;
 use tari_validator_node_cli::versioned_substate_address::VersionedSubstateAddress;
 use tari_validator_node_client::types::{
+    AddPeerRequest,
     GetIdentityResponse,
     GetRecentTransactionsRequest,
     GetTemplateRequest,
@@ -58,6 +63,7 @@ use tari_validator_node_client::types::{
     TemplateRegistrationResponse,
 };
 use utils::{
+    indexer::spawn_indexer,
     miner::{mine_blocks, register_miner_process},
     validator_node::spawn_validator_node,
     validator_node_cli,
@@ -67,7 +73,8 @@ use utils::{
 use crate::utils::{
     base_node::{get_base_node_client, spawn_base_node, BaseNodeProcess},
     http_server::MockHttpServer,
-    logging::create_log_config_file,
+    indexer::IndexerProcess,
+    logging::{create_log_config_file, get_base_dir},
     miner::MinerProcess,
     template::{send_template_registration, RegisteredTemplate},
     validator_node::{get_vn_client, ValidatorNodeProcess},
@@ -79,6 +86,7 @@ pub struct TariWorld {
     base_nodes: IndexMap<String, BaseNodeProcess>,
     wallets: IndexMap<String, WalletProcess>,
     validator_nodes: IndexMap<String, ValidatorNodeProcess>,
+    indexers: IndexMap<String, IndexerProcess>,
     vn_seeds: IndexMap<String, ValidatorNodeProcess>,
     miners: IndexMap<String, MinerProcess>,
     templates: IndexMap<String, RegisteredTemplate>,
@@ -86,6 +94,12 @@ pub struct TariWorld {
     http_server: Option<MockHttpServer>,
     cli_data_dir: Option<String>,
     current_scenario_name: Option<String>,
+    commitments: IndexMap<String, Vec<u8>>,
+    commitment_ownership_proofs: IndexMap<String, Vec<u8>>,
+    rangeproofs: IndexMap<String, Vec<u8>>,
+    addresses: IndexMap<String, String>,
+    num_databases_saved: usize,
+    account_public_keys: IndexMap<String, (RistrettoSecretKey, PublicKey)>,
 }
 
 impl TariWorld {
@@ -107,7 +121,20 @@ impl TariWorld {
             .unwrap_or_else(|| panic!("Base node {} not found", name))
     }
 
+    pub fn get_account_component_address(&self, name: &str) -> Option<String> {
+        let all_components = self
+            .outputs
+            .get(name)
+            .unwrap_or_else(|| panic!("Account component address {} not found", name));
+        all_components.get("components/Account").map(|a| a.address.to_string())
+    }
+
     pub fn after(&mut self, _scenario: &Scenario) {
+        for (name, mut p) in self.indexers.drain(..) {
+            println!("Shutting down indexer {}", name);
+            p.shutdown.trigger();
+        }
+
         for (name, mut p) in self.validator_nodes.drain(..) {
             println!("Shutting down validator node {}", name);
             p.shutdown.trigger();
@@ -158,6 +185,7 @@ async fn main() {
             }
             Box::pin(future::ready(()))
         })
+        .fail_on_skipped()
         .run_and_exit("tests/features/")
         .await;
 }
@@ -169,7 +197,7 @@ async fn start_base_node(world: &mut TariWorld, bn_name: String) {
 
 #[given(expr = "a seed validator node {word} connected to base node {word} and wallet {word}")]
 async fn start_seed_validator_node(world: &mut TariWorld, seed_vn_name: String, bn_name: String, wallet_name: String) {
-    spawn_validator_node(world, seed_vn_name, bn_name, wallet_name, true).await;
+    spawn_validator_node(world, seed_vn_name.clone(), bn_name, wallet_name, true).await;
 }
 
 #[given(expr = "{int} validator nodes connected to base node {word} and wallet {word}")]
@@ -177,6 +205,36 @@ async fn start_multiple_validator_nodes(world: &mut TariWorld, num_nodes: u64, b
     for i in 1..=num_nodes {
         let vn_name = format!("VAL_{i}");
         spawn_validator_node(world, vn_name, bn_name.clone(), wallet_name.clone(), false).await;
+    }
+}
+
+#[given(expr = "validator {word} nodes connect to all other validators")]
+async fn given_validator_connects_to_other_vns(world: &mut TariWorld, vn: String) {
+    let details = world
+        .validator_nodes
+        .values()
+        .map(|vn| {
+            (
+                PublicKey::from_hex(&vn.public_key).unwrap(),
+                Multiaddr::from_str(&format!("/ip4/127.0.0.1/tcp/{}", vn.port)).unwrap(),
+            )
+        })
+        .collect::<Vec<_>>();
+
+    let vn = world.validator_nodes.get_mut(&vn).unwrap();
+    let mut cli = vn.create_client().await;
+    let this_pk = RistrettoPublicKey::from_hex(&vn.public_key).unwrap();
+    for (pk, addr) in details.iter().cloned() {
+        if pk == this_pk {
+            continue;
+        }
+        cli.add_peer(AddPeerRequest {
+            public_key: pk,
+            addresses: vec![addr],
+            wait_for_dial: true,
+        })
+        .await
+        .unwrap();
     }
 }
 
@@ -550,6 +608,25 @@ fn wrap_manifest_in_main(world: &TariWorld, contents: &str) -> String {
     format!("{} fn main() {{ {} }}", template_defs, contents)
 }
 
+#[given(expr = "an indexer {word} connected to base node {word}")]
+async fn start_indexer(world: &mut TariWorld, indexer_name: String, bn_name: String) {
+    spawn_indexer(world, indexer_name, bn_name).await;
+}
+
+#[then(expr = "the indexer {word} returns version {int} for substate {word}")]
+async fn assert_indexer_substate_version(
+    world: &mut TariWorld,
+    indexer_name: String,
+    version: u32,
+    output_ref: String,
+) {
+    let indexer = world.indexers.get(&indexer_name).unwrap();
+    assert!(!indexer.handle.is_finished(), "Indexer {} is not running", indexer_name);
+    let substate = indexer.get_substate(world, output_ref, version).await;
+    eprintln!("indexer.get_substate result: {:?}", substate);
+    assert_eq!(substate.version(), version);
+}
+
 #[when(expr = "I wait {int} seconds")]
 async fn wait_seconds(_world: &mut TariWorld, seconds: u64) {
     tokio::time::sleep(Duration::from_secs(seconds)).await;
@@ -609,8 +686,16 @@ async fn print_world(world: &mut TariWorld) {
     // vns
     for (name, node) in world.validator_nodes.iter() {
         eprintln!(
-            "Validator node \"{}\": json rpc port \"{}\", http ui port \"{}\", temp dir path \"{}\"",
+            "Validator node \"{}\": json rpc port \"{}\", http ui port \"{}\", temp dir path \"{:?}\"",
             name, node.json_rpc_port, node.http_ui_port, node.temp_dir_path
+        );
+    }
+
+    // indexes
+    for (name, node) in world.indexers.iter() {
+        eprintln!(
+            "Indexer \"{}\": json rpc port \"{}\", temp dir path \"{}\"",
+            name, node.json_rpc_port, node.temp_dir_path
         );
     }
 
@@ -630,4 +715,27 @@ async fn print_world(world: &mut TariWorld) {
     eprintln!();
     eprintln!("======================================");
     eprintln!();
+}
+
+#[when(expr = "I save the {word} database of {word}")]
+async fn when_i_save_the_database(world: &mut TariWorld, database_name: String, validator_name: String) {
+    let validator = world
+        .validator_nodes
+        .get(&validator_name)
+        .expect("validator node not found");
+    validator
+        .save_database(
+            database_name,
+            get_base_dir()
+                .join(
+                    world
+                        .current_scenario_name
+                        .as_ref()
+                        .unwrap_or(&"unknown_step".to_string()),
+                )
+                .join(format!("save_no_{}", world.num_databases_saved))
+                .as_path(),
+        )
+        .await;
+    world.num_databases_saved += 1;
 }

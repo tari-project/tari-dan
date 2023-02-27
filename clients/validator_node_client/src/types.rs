@@ -220,6 +220,16 @@ pub struct GetShardKey {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct GetStateRequest {
+    pub shard_id: ShardId,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct GetStateResponse {
+    pub data: Vec<u8>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AddPeerRequest {
     pub public_key: PublicKey,
     pub addresses: Vec<Multiaddr>,

@@ -24,6 +24,7 @@ use std::convert::TryFrom;
 
 use log::*;
 use tari_common_types::types::FixedHash;
+use tari_dan_app_utilities::template_manager::{TemplateManagerError, TemplateManagerRequest, TemplateRegistration};
 use tari_dan_core::services::TemplateProvider;
 use tari_dan_storage::global::{DbTemplateUpdate, TemplateStatus};
 use tari_engine_types::calculate_template_binary_hash;
@@ -37,9 +38,7 @@ use tokio::{
 
 use crate::p2p::services::template_manager::{
     downloader::{DownloadRequest, DownloadResult},
-    handle::TemplateRegistration,
-    manager::{Template, TemplateManager, TemplateMetadata},
-    TemplateManagerError,
+    manager::TemplateManager,
 };
 
 const LOG_TARGET: &str = "tari::validator_node::template_manager";
@@ -49,26 +48,6 @@ pub struct TemplateManagerService {
     manager: TemplateManager,
     completed_downloads: mpsc::Receiver<DownloadResult>,
     download_queue: mpsc::Sender<DownloadRequest>,
-}
-
-#[derive(Debug)]
-pub enum TemplateManagerRequest {
-    AddTemplate {
-        template: Box<TemplateRegistration>,
-        reply: oneshot::Sender<Result<(), TemplateManagerError>>,
-    },
-    GetTemplate {
-        address: TemplateAddress,
-        reply: oneshot::Sender<Result<Template, TemplateManagerError>>,
-    },
-    GetTemplates {
-        limit: usize,
-        reply: oneshot::Sender<Result<Vec<TemplateMetadata>, TemplateManagerError>>,
-    },
-    LoadTemplateAbi {
-        address: TemplateAddress,
-        reply: oneshot::Sender<Result<TemplateAbi, TemplateManagerError>>,
-    },
 }
 
 impl TemplateManagerService {

@@ -23,6 +23,12 @@
 use std::{collections::HashMap, convert::TryFrom, fs};
 
 use log::*;
+use tari_dan_app_utilities::template_manager::{
+    Template,
+    TemplateManagerError,
+    TemplateMetadata,
+    TemplateRegistration,
+};
 use tari_dan_core::services::TemplateProvider;
 use tari_dan_engine::{
     packager::{LoadedTemplate, TemplateModuleLoader},
@@ -34,72 +40,11 @@ use tari_engine_types::calculate_template_binary_hash;
 use tari_template_builtin::get_template_builtin;
 use tari_template_lib::models::TemplateAddress;
 
-use crate::p2p::services::template_manager::{handle::TemplateRegistration, TemplateConfig, TemplateManagerError};
+use crate::p2p::services::template_manager::TemplateConfig;
 
 const LOG_TARGET: &str = "tari::validator_node::template_manager";
 
 pub const ACCOUNT_TEMPLATE_ADDRESS: TemplateAddress = TemplateAddress::from_array([0; 32]);
-
-#[derive(Debug, Clone)]
-pub struct TemplateMetadata {
-    pub name: String,
-    pub address: TemplateAddress,
-    // this must be in the form of "https://example.com/my_template.wasm"
-    pub url: String,
-    /// SHA hash of binary
-    pub binary_sha: Vec<u8>,
-    /// Block height in which the template was published
-    pub height: u64,
-}
-
-impl From<TemplateRegistration> for TemplateMetadata {
-    fn from(reg: TemplateRegistration) -> Self {
-        TemplateMetadata {
-            name: reg.template_name,
-            address: reg.template_address,
-            url: reg.registration.binary_url.into_string(),
-            binary_sha: reg.registration.binary_sha.into_vec(),
-            height: reg.mined_height,
-        }
-    }
-}
-
-// TODO: Allow fetching of just the template metadata without the compiled code
-impl From<DbTemplate> for TemplateMetadata {
-    fn from(record: DbTemplate) -> Self {
-        TemplateMetadata {
-            name: record.template_name,
-            address: (*record.template_address).into(),
-            url: record.url,
-            binary_sha: vec![],
-            height: record.height,
-        }
-    }
-}
-
-#[derive(Debug, Clone)]
-pub struct Template {
-    pub metadata: TemplateMetadata,
-    pub compiled_code: Vec<u8>,
-}
-
-// we encapsulate the db row format to not expose it to the caller
-impl From<DbTemplate> for Template {
-    fn from(record: DbTemplate) -> Self {
-        Template {
-            metadata: TemplateMetadata {
-                name: record.template_name,
-                // TODO: this will change when common engine types are moved around
-                address: (*record.template_address).into(),
-                url: record.url,
-                // TODO: add field to db
-                binary_sha: vec![],
-                height: record.height,
-            },
-            compiled_code: record.compiled_code,
-        }
-    }
-}
 
 #[derive(Debug, Clone)]
 pub struct TemplateManager {

@@ -99,7 +99,9 @@
           ],
           "result": {
             "name": "example1",
-            "value": [
+            "value": 
+           { 
+            "transactions": [
               {
                 "instructions": "[{\"args\":[],\"function\":\"new\",\"template_address\":[12,19,228,241,232,135,19,15,1,8,15,149,220,6,138,72,176,149,10,197,33,237,250,209,49,138,206,127,245,184,96,61],\"type\":\"CallFunction\"}]",
                 "meta": "{\"involved_objects\":{\"66d874bba4f54913add65eb6044ffa7645c42abef041fc30ae0c62948c705f02\":[\"Create\",{}]},\"max_outputs\":1}",
@@ -646,7 +648,8 @@
                 ],
                 "timestamp": "2023-01-11T18:35:05"
               }
-            ]
+            ]}
+
           }
         }
       ]
@@ -1214,6 +1217,107 @@
               "shard_id": [98, 163, 223, 243, 150, 220, 31, 146, 241, 206, 201, 244, 28, 112, 177, 116, 254, 84, 132, 150, 137, 47, 55, 34, 122, 237, 238, 254, 25, 171, 159, 69],
               "version": 0
             }]
+          }
+        }
+      ]
+    },
+    {
+      "name": "get_committee",
+      "summary": "Get Committees",
+      "tags": [],
+      "params": [],
+      "result": {
+        "name": "epoch_stats",
+        "description": "",
+        "schema": {
+          "$ref": "#/components/schemas/EpochStats"
+        }
+      },
+      "errors": [
+      ],
+      "examples": [
+        {
+          "name": "default",
+          "description": "",
+          "params": [
+          ],
+          "result": {
+            "name": "example1",
+            "value": {
+              "committee":{
+                "members": ["e678adf21fec202abbff783e3ca6b80ec1c638d529ac57d7c2cf430e0fb09129", "b4a0b93ccd3a50ab8f7fb766cc9fea59e574283d69a53fe60d6aa842f42ecd38", "e476f6b9f76e0dcc25e14c784a415799e0337cbe5ab1818c175c576988b90f3a", "a820158e918a09503bb653423f7d9dc98d8adcaf262607485786f767b95d112d"]
+              }
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "get_shard_key",
+      "summary": "Get Committees",
+      "tags": [],
+      "params": [],
+      "result": {
+        "name": "epoch_stats",
+        "description": "",
+        "schema": {
+          "$ref": "#/components/schemas/EpochStats"
+        }
+      },
+      "errors": [
+      ],
+      "examples": [
+        {
+          "name": "default",
+          "description": "",
+          "params": [
+          ],
+          "result": {
+            "name": "example1",
+            "value": {
+              "shard_key": "684b39002e6612ec1ec0c45f21080437093fcc281214405ca083ff4c9aa09b65"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "get_all_vns",
+      "summary": "Get All VNs",
+      "tags": [],
+      "params": [],
+      "result": {
+        "name": "epoch_stats",
+        "description": "",
+        "schema": {
+          "$ref": "#/components/schemas/EpochStats"
+        }
+      },
+      "errors": [
+      ],
+      "examples": [
+        {
+          "name": "default",
+          "description": "",
+          "params": [
+          ],
+          "result": {
+            "name": "example1",
+            "value": {
+              "vns": [{
+                "public_key": "e678adf21fec202abbff783e3ca6b80ec1c638d529ac57d7c2cf430e0fb09129",
+                "shard_key": "287d30aedf1a4de78c36c6e9c44b2f05cf3dd8ca81e7c40951140d9c5aff53c9"
+              }, {
+                "public_key": "b4a0b93ccd3a50ab8f7fb766cc9fea59e574283d69a53fe60d6aa842f42ecd38",
+                "shard_key": "684b39002e6612ec1ec0c45f21080437093fcc281214405ca083ff4c9aa09b65"
+              }, {
+                "public_key": "e476f6b9f76e0dcc25e14c784a415799e0337cbe5ab1818c175c576988b90f3a",
+                "shard_key": "98bd932342cbe0a393899a10d10d137335da85df2b95f43889fa788b7eb30c03"
+              }, {
+                "public_key": "a820158e918a09503bb653423f7d9dc98d8adcaf262607485786f767b95d112d",
+                "shard_key": "a51d3a5928cd6954e04852fab45c7011099aff9b30658ff149b2b7549c516230"
+              }]
+            }
           }
         }
       ]

@@ -1,10 +1,13 @@
 [workspace]
 
 members = [
+    "applications/tari_dan_app_grpc",
+    "applications/tari_dan_app_utilities",
     "applications/tari_dan_wallet_cli",
     "applications/tari_dan_wallet_daemon",
     "applications/tari_validator_node",
     "applications/tari_validator_node_cli",
+    "applications/tari_indexer",
     "clients/validator_node_client",
     "clients/wallet_daemon_client",
     "dan_layer/core",

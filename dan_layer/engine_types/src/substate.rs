@@ -27,6 +27,7 @@ use std::{
 
 use serde::{Deserialize, Serialize};
 use tari_bor::{borsh, decode, decode_exact, encode, Decode, Encode};
+use tari_common_types::types::Commitment;
 use tari_template_lib::{
     models::{
         Address,
@@ -34,6 +35,7 @@ use tari_template_lib::{
         AddressListItemAddress,
         ComponentAddress,
         ComponentHeader,
+        LayerOneCommitmentAddress,
         NonFungibleAddress,
         NonFungibleId,
         ResourceAddress,
@@ -41,6 +43,7 @@ use tari_template_lib::{
     },
     Hash,
 };
+use tari_utilities::ByteArray;
 
 use crate::{
     address_list::{AddressList, AddressListItem},
@@ -91,6 +94,7 @@ pub enum SubstateAddress {
     Component(ComponentAddress),
     Resource(ResourceAddress),
     Vault(VaultId),
+    LayerOneCommitment(LayerOneCommitmentAddress),
     NonFungible(NonFungibleAddress),
     AddressList(AddressListId),
     AddressListItem(AddressListItemAddress),
@@ -116,6 +120,37 @@ impl SubstateAddress {
             Self::Resource(address) => Some(*address),
             _ => None,
         }
+    }
+
+    pub fn to_canonical_hash(&self) -> Hash {
+        match self {
+            SubstateAddress::Component(address) => *address.hash(),
+            SubstateAddress::Resource(address) => *address.hash(),
+            SubstateAddress::Vault(id) => *id.hash(),
+            SubstateAddress::LayerOneCommitment(address) => *address.hash(),
+            SubstateAddress::NonFungible(address) => hasher("non_fungible_id")
+                .chain(address.resource_address().hash())
+                .chain(address.id())
+                .result(),
+            SubstateAddress::AddressList(id) => *id.hash(),
+            SubstateAddress::AddressListItem(address) => hasher("address_list_item")
+                .chain(address.list_id().hash())
+                .chain(&address.index())
+                .result(),
+        }
+    }
+
+    pub fn to_bytes(&self) -> Vec<u8> {
+        encode(self).unwrap()
+    }
+
+    pub fn from_bytes(bytes: &[u8]) -> std::io::Result<Self> {
+        decode_exact(bytes)
+    }
+
+    // TODO: look at using BECH32 standard
+    pub fn to_address_string(&self) -> String {
+        self.to_string()
     }
 
     pub fn as_non_fungible_address(&self) -> Option<&NonFungibleAddress> {
@@ -163,34 +198,8 @@ impl SubstateAddress {
         matches!(self, Self::AddressListItem(_))
     }
 
-    pub fn to_bytes(&self) -> Vec<u8> {
-        encode(self).unwrap()
-    }
-
-    pub fn from_bytes(bytes: &[u8]) -> std::io::Result<Self> {
-        decode_exact(bytes)
-    }
-
-    // TODO: look at using BECH32 standard
-    pub fn to_address_string(&self) -> String {
-        self.to_string()
-    }
-
-    pub fn to_canonical_hash(&self) -> Hash {
-        match self {
-            SubstateAddress::Component(address) => *address.hash(),
-            SubstateAddress::Resource(address) => *address.hash(),
-            SubstateAddress::Vault(id) => *id.hash(),
-            SubstateAddress::NonFungible(address) => hasher("non_fungible_id")
-                .chain(address.resource_address().hash())
-                .chain(address.id())
-                .result(),
-            SubstateAddress::AddressList(id) => *id.hash(),
-            SubstateAddress::AddressListItem(address) => hasher("address_list_item")
-                .chain(address.list_id().hash())
-                .chain(&address.index())
-                .result(),
-        }
+    pub fn is_layer1_commitment(&self) -> bool {
+        matches!(self, Self::LayerOneCommitment(_))
     }
 }
 
@@ -251,6 +260,7 @@ impl Display for SubstateAddress {
             SubstateAddress::NonFungible(addr) => write!(f, "{}", addr),
             SubstateAddress::AddressList(addr) => write!(f, "{}", addr),
             SubstateAddress::AddressListItem(addr) => write!(f, "{}", addr),
+            SubstateAddress::LayerOneCommitment(commitment_address) => write!(f, "{}", commitment_address),
         }
     }
 }
@@ -316,6 +326,11 @@ impl FromStr for SubstateAddress {
                     },
                 }
             },
+            Some(("commitment", addr)) => {
+                let commitment_address = LayerOneCommitmentAddress::from_hex(addr)
+                    .map_err(|_| InvalidSubstateAddressFormat(s.to_string()))?;
+                Ok(SubstateAddress::LayerOneCommitment(commitment_address))
+            },
             Some(_) | None => Err(InvalidSubstateAddressFormat(s.to_string())),
         }
     }
@@ -329,6 +344,7 @@ pub enum SubstateValue {
     NonFungible(NonFungibleContainer),
     AddressList(AddressList),
     AddressListItem(AddressListItem),
+    LayerOneCommitment(Vec<u8>),
 }
 
 impl SubstateValue {
@@ -405,6 +421,16 @@ impl SubstateValue {
     pub fn into_address_list_item(self) -> Option<AddressListItem> {
         match self {
             SubstateValue::AddressListItem(item) => Some(item),
+            _ => None,
+        }
+    }
+
+    pub fn into_layer_one_commitment(self) -> Option<Commitment> {
+        match self {
+            SubstateValue::LayerOneCommitment(commitment) => Some(
+                Commitment::from_bytes(&commitment)
+                    .expect("Should never fail to parse commitment, because it's saved from the db"),
+            ),
             _ => None,
         }
     }
@@ -525,6 +551,14 @@ mod tests {
             )
             .unwrap()
             .as_address_list_item_address()
+            .unwrap();
+
+            SubstateAddress::from_str(
+                "resource_a7cf4fd18ada7f367b1c102a9c158abc3754491665033231c5eb907fa14dfe2b \
+                 nft_uuid:7f19c3fe5fa13ff66a0d379fe5f9e3508acbd338db6bedd7350d8d565b2c5d32",
+            )
+            .unwrap()
+            .as_non_fungible_address()
             .unwrap();
         }
     }

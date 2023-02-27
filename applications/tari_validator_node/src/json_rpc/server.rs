@@ -64,6 +64,7 @@ async fn handler(Extension(handlers): Extension<Arc<JsonRpcHandlers>>, value: Js
         "get_transaction" => handlers.get_transaction(value).await,
         "get_transaction_result" => handlers.get_transaction_result(value).await,
         "get_transaction_qcs" => handlers.get_transaction_qcs(value).await,
+        "get_state" => handlers.get_state(value).await,
         "get_substates" => handlers.get_substates(value).await,
         // Template
         "get_template" => handlers.get_template(value).await,
