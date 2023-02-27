@@ -88,6 +88,7 @@ pub async fn handle_create(
         dry_run: args.is_dry_run,
         non_fungible_mint_outputs: vec![],
         new_non_fungible_outputs: vec![],
+        new_address_list_item_outputs: vec![],
     };
 
     submit_transaction(vec![instruction], common, base_dir, client).await

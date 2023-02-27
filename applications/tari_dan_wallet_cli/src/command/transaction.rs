@@ -44,7 +44,7 @@ use tari_engine_types::{
 use tari_template_lib::{
     arg,
     args::Arg,
-    models::{Amount, NonFungibleAddress, NonFungibleId},
+    models::{AddressListId, Amount, NonFungibleAddress, NonFungibleId},
     prelude::{ComponentAddress, ResourceAddress},
 };
 use tari_transaction_manifest::{parse_manifest, ManifestValue};
@@ -106,6 +106,8 @@ pub struct CommonSubmitArgs {
     pub non_fungible_mint_outputs: Vec<SpecificNonFungibleMintOutput>,
     #[clap(long, alias = "mint-new")]
     pub new_non_fungible_outputs: Vec<NewNonFungibleMintOutput>,
+    #[clap(long, alias = "new-list-item")]
+    pub new_address_list_item_outputs: Vec<NewAddressListItemOutput>,
     #[clap(long)]
     pub fee: Option<u64>,
 }
@@ -248,13 +250,19 @@ pub async fn submit_transaction(
             .into_iter()
             .map(|m| (m.resource_address, m.count))
             .collect(),
+        new_address_list_item_outputs: common
+            .new_address_list_item_outputs
+            .into_iter()
+            .map(|i| (i.list_id, i.index))
+            .collect(),
         is_dry_run: common.dry_run,
     };
 
     if request.inputs.is_empty() &&
         request.new_outputs == 0 &&
         request.specific_non_fungible_outputs.is_empty() &&
-        request.new_non_fungible_outputs.is_empty()
+        request.new_non_fungible_outputs.is_empty() &&
+        request.new_address_list_item_outputs.is_empty()
     {
         return Err(anyhow::anyhow!(
             "No inputs or outputs, transaction will not be processed by the network"
@@ -430,6 +438,16 @@ fn summarize_finalize_result(finalize: &FinalizeResult) {
                     },
                     SubstateValue::LayerOneCommitment(_) => {
                         println!("      ▶ Layer 1 commitment: {}", address);
+                    },
+                    SubstateValue::AddressList(_) => {
+                        println!("      ▶ address list: {}", address);
+                    },
+                    SubstateValue::AddressListItem(item) => {
+                        let referenced_address = SubstateAddress::from(item.referenced_address().clone());
+                        println!(
+                            "      ▶ address list item {} referencing {}",
+                            address, referenced_address
+                        );
                     },
                 }
                 println!();
@@ -734,6 +752,28 @@ impl FromStr for NewNonFungibleMintOutput {
         Ok(NewNonFungibleMintOutput {
             resource_address,
             count: count_str.parse()?,
+        })
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct NewAddressListItemOutput {
+    pub list_id: AddressListId,
+    pub index: u64,
+}
+
+impl FromStr for NewAddressListItemOutput {
+    type Err = anyhow::Error;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let (list_id, index_str) = s.split_once(',').unwrap_or((s, "0"));
+        let list_id = SubstateAddress::from_str(list_id)?;
+        let list_id = list_id
+            .as_address_list_id()
+            .ok_or_else(|| anyhow!("Expected address list id but got {}", list_id))?;
+        Ok(NewAddressListItemOutput {
+            list_id: *list_id,
+            index: index_str.parse()?,
         })
     }
 }

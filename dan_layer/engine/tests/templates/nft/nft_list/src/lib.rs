@@ -49,27 +49,16 @@ mod sparkle_nft_template {
         pub fn mint(&mut self) -> Bucket {
             // Mint a new token with a random ID
             let id = NonFungibleId::random();
-            self.mint_specific(id)
-        }
-
-        pub fn mint_specific(&mut self, id: NonFungibleId) -> Bucket {
-            debug(format!("Minting {}", id));
-            // These are characteristic of the NFT and are immutable
-            let mut immutable_data = Metadata::new();
-            immutable_data
-                .insert("name", format!("Sparkle{}", id))
-                .insert("image_url", format!("https://nft.storage/sparkle{}.png", id));
 
             // Mint the NFT, this will fail if the token ID already exists
             let mut res_manager = ResourceManager::get(self.resource_address);
-            let initial_supply = res_manager.total_supply().value() as u64;
-            let nft_bucket = res_manager.mint_non_fungible(id.clone(), &immutable_data, &Sparkle { brightness: 0 });
+            let nft_bucket = res_manager.mint_non_fungible(id.clone(), &{}, &Sparkle { brightness: 0 });
 
             // Add a NFT reference in the list, to keep track of it
-            let index = initial_supply;
+            let index = res_manager.total_supply().value() as u64;
             let nft_address: Address = NonFungibleAddress::new(self.resource_address, id).into();
             // TODO: the DAN layer should resolve the index of the list transparently to he user
-            self.minted_nft_list.push(index, nft_address);
+            self.minted_nft_list.push(index + 1, nft_address);
             
             // return a bucket with the newly minted nft
             nft_bucket
@@ -77,37 +66,6 @@ mod sparkle_nft_template {
 
         pub fn total_supply(&self) -> Amount {
             ResourceManager::get(self.resource_address).total_supply()
-        }
-
-        pub fn inc_brightness(&mut self, id: NonFungibleId, brightness: u32) {
-            debug(format!("Increase brightness on {} by {}", id, brightness));
-            self.with_sparkle_mut(id, |data| {
-                data.brightness = data.brightness.checked_add(brightness).expect("Brightness overflow");
-            });
-        }
-
-        fn with_sparkle_mut<F: FnOnce(&mut Sparkle)>(&self, id: NonFungibleId, f: F) {
-            let resource_manager = ResourceManager::get(self.resource_address);
-            let mut nft = resource_manager.get_non_fungible(&id);
-            let mut data = nft.get_mutable_data::<Sparkle>();
-            f(&mut data);
-            nft.set_mutable_data(&data);
-        }
-
-        pub fn burn(&mut self, mut bucket: Bucket) {
-            // this check is actually not needed, but with it we cover the "bucket.resource_type" method
-            assert!(
-                bucket.resource_type() == ResourceType::NonFungible,
-                "The resource is not a NFT"
-            );
-            assert!(
-                bucket.resource_address() == self.resource_address,
-                "Cannot burn bucket not from this collection"
-            );
-            debug(format!("Burning bucket {} containing {}", bucket.id(), bucket.amount()));
-            // This is all that's required, typically the template would not need to include a burn function because a
-            // native instruction can be used instead
-            bucket.burn();
         }
     }
 }

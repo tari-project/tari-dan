@@ -30,6 +30,7 @@ use log::debug;
 use tari_common_types::types::Commitment;
 use tari_dan_common_types::optional::Optional;
 use tari_engine_types::{
+    address_list::{AddressList, AddressListItem},
     bucket::Bucket,
     logs::LogEntry,
     non_fungible::NonFungibleContainer,
@@ -44,6 +45,9 @@ use tari_template_lib::{
     args::MintArg,
     auth::AccessRules,
     models::{
+        Address,
+        AddressListId,
+        AddressListItemAddress,
         Amount,
         BucketId,
         ComponentAddress,
@@ -404,6 +408,34 @@ impl StateTracker {
         self.write_with(|state| state.borrow_vault_mut(vault_id, f))
     }
 
+    pub fn new_address_list(&self) -> Result<AddressListId, RuntimeError> {
+        let address_list_id = self.id_provider.new_address_list_id()?;
+        debug!(target: LOG_TARGET, "New address list id: {}", address_list_id);
+        let address_list = AddressList::new(address_list_id);
+
+        self.write_with(|state| {
+            state.new_address_lists.insert(address_list_id, address_list);
+        });
+
+        Ok(address_list_id)
+    }
+
+    pub fn address_list_push(
+        &self,
+        list_id: AddressListId,
+        index: u64,
+        referenced_address: Address,
+    ) -> Result<(), RuntimeError> {
+        let item_address = AddressListItemAddress::new(list_id, index);
+        let item = AddressListItem::new(referenced_address);
+
+        self.write_with(|state| {
+            state.new_address_list_items.insert(item_address, item);
+        });
+
+        Ok(())
+    }
+
     fn runtime_state(&self) -> Result<RuntimeState, RuntimeError> {
         self.read_with(|state| state.runtime_state.clone().ok_or(RuntimeError::IllegalRuntimeState))
     }
@@ -491,6 +523,33 @@ impl StateTracker {
                     Some(existing_state) => {
                         substate_diff.down(addr.clone(), existing_state.version());
                         Substate::new(existing_state.version() + 1, substate)
+                    },
+                    None => Substate::new(0, substate),
+                };
+                substate_diff.up(addr, new_substate);
+            }
+
+            for (list_id, substate) in state.new_address_lists {
+                let addr = SubstateAddress::AddressList(list_id);
+                let new_substate = match tx.get_state::<_, Substate>(&addr).optional()? {
+                    Some(_) => {
+                        // Addess list roots are immutable
+                        return Err(TransactionCommitError::AddressListMutation { list_id });
+                    },
+                    None => Substate::new(0, substate),
+                };
+                substate_diff.up(addr, new_substate);
+            }
+
+            for (address, substate) in state.new_address_list_items {
+                let addr = SubstateAddress::AddressListItem(address.clone());
+                let new_substate = match tx.get_state::<_, Substate>(&addr).optional()? {
+                    Some(_) => {
+                        // Addess list items are immutable
+                        return Err(TransactionCommitError::AddressListItemMutation {
+                            list_id: *address.list_id(),
+                            index: address.index(),
+                        });
                     },
                     None => Substate::new(0, substate),
                 };

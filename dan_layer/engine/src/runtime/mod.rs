@@ -55,6 +55,7 @@ use tari_crypto::ristretto::RistrettoComSig;
 use tari_engine_types::commit_result::FinalizeResult;
 use tari_template_lib::{
     args::{
+        AddressListAction,
         Arg,
         BucketAction,
         BucketRef,
@@ -70,7 +71,14 @@ use tari_template_lib::{
         WorkspaceAction,
     },
     invoke_args,
-    models::{ComponentAddress, ComponentHeader, LayerOneCommitmentAddress, NonFungibleAddress, VaultRef},
+    models::{
+        AddressListId,
+        ComponentAddress,
+        ComponentHeader,
+        LayerOneCommitmentAddress,
+        NonFungibleAddress,
+        VaultRef,
+    },
 };
 pub use tracker::{RuntimeState, StateTracker};
 
@@ -119,6 +127,13 @@ pub trait RuntimeInterface: Send + Sync {
     ) -> Result<InvokeResult, RuntimeError>;
 
     fn consensus_invoke(&self, action: ConsensusAction) -> Result<InvokeResult, RuntimeError>;
+
+    fn address_list_invoke(
+        &self,
+        list_id: Option<AddressListId>,
+        action: AddressListAction,
+        args: EngineArgs,
+    ) -> Result<InvokeResult, RuntimeError>;
 
     fn generate_uuid(&self) -> Result<[u8; 32], RuntimeError>;
 

@@ -17,6 +17,7 @@ use tari_validator_node_cli::{
         CliArg,
         CliInstruction,
         CommonSubmitArgs,
+        NewAddressListItemOutput,
         NewNonFungibleMintOutput,
         SpecificNonFungibleMintOutput,
         SubmitArgs,
@@ -68,6 +69,7 @@ pub async fn create_account(world: &mut TariWorld, account_name: String, validat
         dry_run: false,
         non_fungible_mint_outputs: vec![],
         new_non_fungible_outputs: vec![],
+        new_address_list_item_outputs: vec![],
     };
     let mut client = get_validator_node_client(world, validator_node_name).await;
     let resp = submit_transaction(vec![instruction], common, data_dir, &mut client)
@@ -124,6 +126,7 @@ pub async fn create_component(
             dry_run: false,
             non_fungible_mint_outputs: vec![],
             new_non_fungible_outputs: vec![],
+            new_address_list_item_outputs: vec![],
         },
     };
     let mut client = get_validator_node_client(world, vn_name).await;
@@ -139,7 +142,7 @@ pub async fn create_component(
 
 fn add_substate_addresses(world: &mut TariWorld, outputs_name: String, diff: &SubstateDiff) {
     let outputs = world.outputs.entry(outputs_name).or_default();
-    let mut counters = [0usize, 0, 0, 0, 0];
+    let mut counters = [0usize, 0, 0, 0, 0, 0, 0];
     for (addr, data) in diff.up_iter() {
         match addr {
             SubstateAddress::Component(_) => {
@@ -183,6 +186,20 @@ fn add_substate_addresses(world: &mut TariWorld, outputs_name: String, diff: &Su
                     },
                 );
                 counters[4] += 1;
+            },
+            SubstateAddress::AddressList(_) => {
+                outputs.insert(format!("addresslists/{}", counters[4]), VersionedSubstateAddress {
+                    address: addr.clone(),
+                    version: data.version(),
+                });
+                counters[4] += 1;
+            },
+            SubstateAddress::AddressListItem(_) => {
+                outputs.insert(format!("addresslistitems/{}", counters[5]), VersionedSubstateAddress {
+                    address: addr.clone(),
+                    version: data.version(),
+                });
+                counters[5] += 1;
             },
         }
     }
@@ -238,6 +255,7 @@ pub async fn call_method(
             dry_run: false,
             non_fungible_mint_outputs: vec![],
             new_non_fungible_outputs: vec![],
+            new_address_list_item_outputs: vec![],
         },
     };
     let mut client = get_validator_node_client(world, vn_name).await;
@@ -304,6 +322,19 @@ pub async fn submit_manifest(
         })
         .collect();
 
+    // parse the address list items (if any) specified in the manifest as comments
+    let new_address_list_item_outputs: Vec<NewAddressListItemOutput> = manifest_content
+        .lines()
+        .filter(|l| l.starts_with("// $list_item "))
+        .map(|l| l.split_whitespace().skip(2).collect::<Vec<&str>>())
+        .map(|l| {
+            let manifest_value = globals.get(l[0]).unwrap();
+            let list_id = *manifest_value.address().unwrap().as_address_list_id().unwrap();
+            let index = u64::from_str(l[1]).unwrap();
+            NewAddressListItemOutput { list_id, index }
+        })
+        .collect();
+
     // parse the manifest
     let instructions = parse_manifest(&manifest_content, globals).unwrap();
 
@@ -340,6 +371,7 @@ pub async fn submit_manifest(
         dry_run: false,
         non_fungible_mint_outputs,
         new_non_fungible_outputs,
+        new_address_list_item_outputs,
     };
     let resp = submit_transaction(instructions, args, data_dir, &mut client)
         .await

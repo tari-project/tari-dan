@@ -6,6 +6,7 @@ use std::collections::HashMap;
 use tari_common_types::types::Commitment;
 use tari_dan_common_types::optional::Optional;
 use tari_engine_types::{
+    address_list::{AddressList, AddressListItem},
     bucket::Bucket,
     logs::LogEntry,
     non_fungible::NonFungibleContainer,
@@ -14,6 +15,8 @@ use tari_engine_types::{
     vault::Vault,
 };
 use tari_template_lib::models::{
+    AddressListId,
+    AddressListItemAddress,
     BucketId,
     ComponentAddress,
     ComponentHeader,
@@ -37,6 +40,8 @@ pub(super) struct WorkingState {
     pub new_components: HashMap<ComponentAddress, ComponentHeader>,
     pub new_vaults: HashMap<VaultId, Vault>,
     pub new_non_fungibles: HashMap<NonFungibleAddress, NonFungibleContainer>,
+    pub new_address_lists: HashMap<AddressListId, AddressList>,
+    pub new_address_list_items: HashMap<AddressListItemAddress, AddressListItem>,
     pub claimed_layer_one_commitments: Vec<LayerOneCommitmentAddress>,
 
     pub runtime_state: Option<RuntimeState>,
@@ -55,6 +60,8 @@ impl WorkingState {
             new_vaults: HashMap::new(),
             new_non_fungibles: HashMap::new(),
             claimed_layer_one_commitments: Vec::new(),
+            new_address_lists: HashMap::new(),
+            new_address_list_items: HashMap::new(),
             runtime_state: None,
             last_instruction_output: None,
             workspace: HashMap::new(),

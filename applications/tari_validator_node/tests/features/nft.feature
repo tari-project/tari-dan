@@ -37,11 +37,14 @@ Feature: NFTs
     When I create an account ACC2 on VN
 
     # Submit a transaction with NFT operations
-    When I submit a transaction manifest on VN with inputs "NFT, ACC1, ACC2" and 3 outputs named "TX1"
+    When I submit a transaction manifest on VN with inputs "NFT, ACC1, ACC2" and 6 outputs named "TX1"
         ```
             // $mint NFT/resources/0 1
             // $mint_specific NFT/resources/0 str:SpecialNft
             // $mint_specific NFT/resources/0 str:Burn!
+            // $list_item NFT/addresslists/0 0
+            // $list_item NFT/addresslists/0 1
+            // $list_item NFT/addresslists/0 2
             let sparkle_nft = global!["NFT/components/SparkleNft"];
             let sparkle_res = global!["NFT/resources/0"];
             let mut acc1 = global!["ACC1/components/Account"];

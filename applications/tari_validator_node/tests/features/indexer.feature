@@ -40,9 +40,10 @@ Feature: Indexer node
 
     # Create a new SparkleNft component and mint an NFT
     When I call function "new" on template "basic_nft" on VN with 3 outputs named "NFT"
-    When I submit a transaction manifest on VN with inputs "NFT, ACC1" and 3 outputs named "TX2"
+    When I submit a transaction manifest on VN with inputs "NFT, ACC1" and 4 outputs named "TX2"
         ```
             // $mint NFT/resources/0 1
+            // $list_item NFT/addresslists/0 0
             let sparkle_nft = global!["NFT/components/SparkleNft"];
             let mut acc1 = global!["ACC1/components/Account"];
 

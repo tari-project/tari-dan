@@ -1,4 +1,4 @@
-//   Copyright 2022. The Tari Project
+//   Copyright 2023. The Tari Project
 //
 //   Redistribution and use in source and binary forms, with or without modification, are permitted provided that the
 //   following conditions are met:
@@ -20,31 +20,34 @@
 //   WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //   USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-pub use tari_bor::encode;
-#[cfg(feature = "macro")]
-pub use tari_template_macros::template;
+use serde::{Deserialize, Serialize};
+use tari_bor::{borsh, Decode, Encode};
+use tari_template_lib::models::{Address, AddressListId};
 
-pub use crate::{
-    auth::{AccessRule, AccessRules, RestrictedAccessRule::*},
-    component::{
-        interface::{ComponentInstanceInterface, ComponentInterface},
-        ComponentManager,
-    },
-    consensus::Consensus,
-    models::{
-        Address,
-        AddressList,
-        Amount,
-        Bucket,
-        BucketId,
-        ComponentAddress,
-        ConfidentialProof,
-        Metadata,
-        NonFungible,
-        NonFungibleAddress,
-        NonFungibleId,
-        ResourceAddress,
-        Vault,
-    },
-    resource::{ResourceBuilder, ResourceManager, ResourceType},
-};
+/// Placeholder for empty address lists, so they can have an address in the network
+#[derive(Debug, Clone, Encode, Decode, Serialize, Deserialize, PartialEq)]
+pub struct AddressList {
+    id: AddressListId,
+}
+
+impl AddressList {
+    pub fn new(id: AddressListId) -> Self {
+        Self { id }
+    }
+}
+
+/// Holds a reference to another substate
+#[derive(Debug, Clone, Encode, Decode, Serialize, Deserialize, PartialEq)]
+pub struct AddressListItem {
+    referenced_address: Address,
+}
+
+impl AddressListItem {
+    pub fn new(referenced_address: Address) -> Self {
+        Self { referenced_address }
+    }
+
+    pub fn referenced_address(&self) -> &Address {
+        &self.referenced_address
+    }
+}

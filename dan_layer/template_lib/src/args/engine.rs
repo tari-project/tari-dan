@@ -31,6 +31,7 @@ use tari_template_abi::rust::{
 
 use crate::{
     models::{
+        AddressListId,
         Amount,
         BucketId,
         ComponentAddress,
@@ -321,4 +322,19 @@ pub struct ConsensusInvokeArg {
 #[derive(Clone, Debug, Decode, Encode)]
 pub enum ConsensusAction {
     GetCurrentEpoch,
+}
+
+// -------------------------------- AddressList -------------------------------- //
+#[derive(Clone, Debug, Decode, Encode)]
+pub struct AddressListInvokeArg {
+    pub list_id: Option<AddressListId>,
+    pub action: AddressListAction,
+    pub args: Vec<Vec<u8>>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord, Decode, Encode)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+pub enum AddressListAction {
+    Create,
+    Push,
 }
