@@ -52,7 +52,7 @@ impl Bucket {
         self.resource.resource_type()
     }
 
-    pub fn into_resource(self) -> ResourceContainer {
+    pub(crate) fn into_resource(self) -> ResourceContainer {
         self.resource
     }
 

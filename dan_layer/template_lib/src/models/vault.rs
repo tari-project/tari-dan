@@ -33,7 +33,7 @@ use tari_template_abi::{
 use crate::{
     args::{InvokeResult, VaultAction, VaultInvokeArg, VaultWithdrawArg},
     hash::HashParseError,
-    models::{Amount, Bucket, ConfidentialBucket, NonFungibleId, ResourceAddress},
+    models::{Amount, Bucket, NonFungibleId, ResourceAddress},
     Hash,
 };
 
@@ -125,16 +125,6 @@ impl Vault {
         });
 
         result.decode::<()>().expect("deposit failed");
-    }
-
-    pub fn deposit_confidential(&mut self, bucket: ConfidentialBucket) {
-        let result: InvokeResult = call_engine(EngineOp::VaultInvoke, &VaultInvokeArg {
-            vault_ref: self.vault_ref(),
-            action: VaultAction::DepositConfidential,
-            args: invoke_args![bucket.id()],
-        });
-
-        result.decode::<()>().expect("deposit confidential failed");
     }
 
     pub fn withdraw(&mut self, amount: Amount) -> Bucket {
