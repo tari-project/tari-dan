@@ -178,7 +178,9 @@ function RecentTransactions() {
       console.log('Response: ', resp);
       setRecentTransactions(
         // Display from newest to oldest by reversing
-        resp.transactions
+
+        resp
+          .transactions
           .slice()
           .reverse()
           .map(

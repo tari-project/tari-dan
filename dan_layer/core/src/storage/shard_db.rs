@@ -50,6 +50,7 @@ type PayloadVotes<TAddr, TPayload> =
 // TODO: Clone is pretty bad here, this class should only be used for testing
 #[derive(Debug, Default, Clone)]
 pub struct MemoryShardDbInner<TAddr, TPayload> {
+    current_state: HashMap<PayloadId, CurrentLeaderState>,
     // replica data
     shard_high_qcs: HashMap<ShardId, QuorumCertificate>,
     // pace maker data
@@ -67,6 +68,7 @@ pub struct MemoryShardDbInner<TAddr, TPayload> {
 impl<TAddr: NodeAddressable, TPayload: Payload> MemoryShardDbInner<TAddr, TPayload> {
     pub fn new() -> Self {
         Self {
+            current_state: HashMap::new(),
             shard_high_qcs: HashMap::new(),
             shard_leaf_nodes: HashMap::new(),
             last_voted_heights: HashMap::new(),

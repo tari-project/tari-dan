@@ -358,6 +358,27 @@ impl JsonRpcHandlers {
         }
     }
 
+    pub async fn get_current_leader_state(&self, value: JsonRpcExtractor) -> JrpcResult {
+        let answer_id = value.get_answer_id();
+        let data: TransactionRequest = value.parse_params()?;
+        let mut tx = self.shard_store.create_read_tx().unwrap();
+        let payload_id = PayloadId::new(data.payload_id);
+        match tx.get_current_leaders_states(&payload_id) {
+            Ok(states) => Ok(JsonRpcResponse::success(answer_id, json!(states))),
+            Err(err) => {
+                println!("error {:?}", err);
+                Err(JsonRpcResponse::error(
+                    answer_id,
+                    JsonRpcError::new(
+                        JsonRpcErrorReason::InvalidParams,
+                        "Something went wrong".to_string(),
+                        json::Value::Null,
+                    ),
+                ))
+            },
+        }
+    }
+
     pub async fn register_validator_node(&self, value: JsonRpcExtractor) -> JrpcResult {
         let answer_id = value.get_answer_id();
 

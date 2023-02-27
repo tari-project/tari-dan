@@ -38,6 +38,7 @@ use thiserror::Error;
 use crate::{
     models::{
         vote_message::VoteMessage,
+        CurrentLeaderStates,
         HotStuffTreeNode,
         LeafNode,
         Payload,
@@ -116,6 +117,7 @@ pub trait ShardStoreReadTransaction<TAddr: NodeAddressable, TPayload: Payload> {
     fn get_high_qcs(&mut self, payload_id: PayloadId) -> Result<Vec<QuorumCertificate>, StorageError>;
     /// Returns the current leaf node for the shard
     fn get_leaf_node(&mut self, payload_id: &PayloadId, shard: &ShardId) -> Result<LeafNode, StorageError>;
+    fn get_current_leaders_states(&mut self, payload: &PayloadId) -> Result<Vec<CurrentLeaderStates>, StorageError>;
     fn get_payload(&mut self, payload_id: &PayloadId) -> Result<TPayload, StorageError>;
     fn get_node(&mut self, node_hash: &TreeNodeHash) -> Result<HotStuffTreeNode<TAddr, TPayload>, StorageError>;
     fn get_locked_node_hash_and_height(
@@ -168,6 +170,13 @@ pub trait ShardStoreWriteTransaction<TAddr: NodeAddressable, TPayload: Payload> 
     fn rollback(self) -> Result<(), StorageError>;
     fn insert_high_qc(&mut self, from: TAddr, shard: ShardId, qc: QuorumCertificate) -> Result<(), StorageError>;
     fn save_payload(&mut self, payload: TPayload) -> Result<(), StorageError>;
+    fn save_current_leader_state(
+        &mut self,
+        payload: PayloadId,
+        shard_id: ShardId,
+        leader_round: u32,
+        leader: TAddr,
+    ) -> Result<(), StorageError>;
     /// Inserts or updates the leaf node for the shard
     fn set_leaf_node(
         &mut self,
