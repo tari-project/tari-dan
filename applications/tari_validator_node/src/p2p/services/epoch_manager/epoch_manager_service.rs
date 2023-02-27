@@ -23,15 +23,12 @@
 use std::sync::Arc;
 
 use log::error;
-use tari_common_types::types::FixedHash;
-use tari_comms::{types::CommsPublicKey, NodeIdentity};
-use tari_core::{transactions::transaction_components::ValidatorNodeRegistration, ValidatorNodeMmr};
-use tari_dan_common_types::{Epoch, ShardId};
-use tari_dan_core::{
-    consensus_constants::{BaseLayerConsensusConstants, ConsensusConstants},
-    models::{Committee, ValidatorNode},
-    services::epoch_manager::{EpochManagerError, ShardCommitteeAllocation},
+use tari_comms::NodeIdentity;
+use tari_dan_app_utilities::{
+    base_node_client::GrpcBaseNodeClient,
+    epoch_manager::{EpochManagerEvent, EpochManagerRequest},
 };
+use tari_dan_core::{consensus_constants::ConsensusConstants, services::epoch_manager::EpochManagerError};
 use tari_dan_storage::global::GlobalDb;
 use tari_dan_storage_sqlite::{global::SqliteGlobalDbAdapter, sqlite_shard_store_factory::SqliteShardStore};
 use tari_shutdown::ShutdownSignal;
@@ -40,12 +37,9 @@ use tokio::{
     task::JoinHandle,
 };
 
-use crate::{
-    grpc::services::base_node_client::GrpcBaseNodeClient,
-    p2p::services::{
-        epoch_manager::base_layer_epoch_manager::BaseLayerEpochManager,
-        rpc_client::TariCommsValidatorNodeClientFactory,
-    },
+use crate::p2p::services::{
+    epoch_manager::base_layer_epoch_manager::BaseLayerEpochManager,
+    rpc_client::TariCommsValidatorNodeClientFactory,
 };
 
 const LOG_TARGET: &str = "tari::validator_node::epoch_manager";
@@ -57,91 +51,6 @@ pub struct EpochManagerService {
         broadcast::Sender<EpochManagerEvent>,
         broadcast::Receiver<EpochManagerEvent>,
     ),
-}
-
-type Reply<T> = oneshot::Sender<Result<T, EpochManagerError>>;
-
-#[derive(Debug)]
-pub enum EpochManagerRequest {
-    CurrentEpoch {
-        reply: Reply<Epoch>,
-    },
-    GetValidatorShardKey {
-        epoch: Epoch,
-        addr: CommsPublicKey,
-        reply: Reply<ShardId>,
-    },
-    AddValidatorNodeRegistration {
-        block_height: u64,
-        registration: ValidatorNodeRegistration,
-        reply: Reply<()>,
-    },
-    UpdateEpoch {
-        block_height: u64,
-        block_hash: FixedHash,
-        reply: Reply<()>,
-    },
-    LastRegistrationEpoch {
-        reply: Reply<Option<Epoch>>,
-    },
-    UpdateLastRegistrationEpoch {
-        epoch: Epoch,
-        reply: Reply<()>,
-    },
-    IsEpochValid {
-        epoch: Epoch,
-        reply: Reply<bool>,
-    },
-    GetCommittees {
-        epoch: Epoch,
-        shards: Vec<ShardId>,
-        reply: Reply<Vec<ShardCommitteeAllocation<CommsPublicKey>>>,
-    },
-    GetCommittee {
-        epoch: Epoch,
-        shard: ShardId,
-        reply: Reply<Committee<CommsPublicKey>>,
-    },
-    GetValidatorNodesPerEpoch {
-        epoch: Epoch,
-        reply: Reply<Vec<ValidatorNode<CommsPublicKey>>>,
-    },
-    GetValidatorNodeMmr {
-        epoch: Epoch,
-        reply: Reply<ValidatorNodeMmr>,
-    },
-    GetValidatorNodeMerkleRoot {
-        epoch: Epoch,
-        reply: Reply<Vec<u8>>,
-    },
-    IsValidatorInCommitteeForCurrentEpoch {
-        shard: ShardId,
-        identity: CommsPublicKey,
-        reply: Reply<bool>,
-    },
-    FilterToLocalShards {
-        epoch: Epoch,
-        for_addr: CommsPublicKey,
-        available_shards: Vec<ShardId>,
-        reply: Reply<Vec<ShardId>>,
-    },
-    Subscribe {
-        reply: Reply<broadcast::Receiver<EpochManagerEvent>>,
-    },
-    NotifyScanningComplete {
-        reply: Reply<()>,
-    },
-    RemainingRegistrationEpochs {
-        reply: Reply<Option<Epoch>>,
-    },
-    GetBaseLayerConsensusConstants {
-        reply: Reply<BaseLayerConsensusConstants>,
-    },
-}
-
-#[derive(Debug, Clone)]
-pub enum EpochManagerEvent {
-    EpochChanged(Epoch),
 }
 
 impl EpochManagerService {

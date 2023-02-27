@@ -35,6 +35,7 @@ use crate::command::{
     account::AccountsSubcommand,
     debug::DebugSubcommand,
     manifest::ManifestSubcommand,
+    peer::PeersSubcommand,
     transaction::TransactionSubcommand,
 };
 
@@ -42,6 +43,7 @@ mod debug;
 mod manifest;
 
 mod account;
+mod peer;
 pub mod transaction;
 
 #[allow(clippy::large_enum_variant)]
@@ -59,6 +61,8 @@ pub enum Command {
     Accounts(AccountsSubcommand),
     #[clap(subcommand, alias = "manifest")]
     Manifests(ManifestSubcommand),
+    #[clap(subcommand, alias = "peer")]
+    Peers(PeersSubcommand),
     #[clap(subcommand)]
     Debug(DebugSubcommand),
 }

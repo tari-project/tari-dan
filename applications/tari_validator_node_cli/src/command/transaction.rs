@@ -41,7 +41,7 @@ use tari_engine_types::{
 use tari_template_lib::{
     arg,
     args::Arg,
-    models::{Amount, NonFungibleAddress, NonFungibleId},
+    models::{AddressListId, Amount, NonFungibleAddress, NonFungibleId},
     prelude::ResourceAddress,
 };
 use tari_transaction::Transaction;
@@ -108,6 +108,8 @@ pub struct CommonSubmitArgs {
     pub non_fungible_mint_outputs: Vec<SpecificNonFungibleMintOutput>,
     #[clap(long, alias = "mint-new")]
     pub new_non_fungible_outputs: Vec<NewNonFungibleMintOutput>,
+    #[clap(long, alias = "new-list-item")]
+    pub new_address_list_item_outputs: Vec<NewAddressListItemOutput>,
 }
 
 #[derive(Debug, Args, Clone)]
@@ -269,6 +271,13 @@ pub async fn submit_transaction(
                 .map(|m| (m.resource_address, m.count))
                 .collect(),
         )
+        .with_new_address_list_item_outputs(
+            common
+                .new_address_list_item_outputs
+                .into_iter()
+                .map(|i| (i.list_id, i.index))
+                .collect(),
+        )
         .with_fee(1)
         .sign(&key.secret_key);
 
@@ -367,6 +376,7 @@ fn summarize(result: &TransactionFinalizeResult, time_taken: Duration) {
     println!("OVERALL DECISION: {:?}", result.decision);
 }
 
+#[allow(clippy::too_many_lines)]
 fn summarize_finalize_result(finalize: &FinalizeResult) {
     println!("========= Substates =========");
     match finalize.result {
@@ -386,6 +396,19 @@ fn summarize_finalize_result(finalize: &FinalizeResult) {
                     },
                     SubstateValue::NonFungible(_) => {
                         println!("      ▶ NFT: {}", address);
+                    },
+                    SubstateValue::LayerOneCommitment(_hash) => {
+                        println!("     ! layer one commitment: Should never happen");
+                    },
+                    SubstateValue::AddressList(_) => {
+                        println!("      ▶ address list: {}", address);
+                    },
+                    SubstateValue::AddressListItem(item) => {
+                        let referenced_address = SubstateAddress::from(item.referenced_address().clone());
+                        println!(
+                            "      ▶ address list item {} referencing {}",
+                            address, referenced_address
+                        );
                     },
                 }
                 println!();
@@ -715,6 +738,28 @@ impl FromStr for NewNonFungibleMintOutput {
         Ok(NewNonFungibleMintOutput {
             resource_address,
             count: count_str.parse()?,
+        })
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct NewAddressListItemOutput {
+    pub list_id: AddressListId,
+    pub index: u64,
+}
+
+impl FromStr for NewAddressListItemOutput {
+    type Err = anyhow::Error;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let (list_id, index_str) = s.split_once(',').unwrap_or((s, "0"));
+        let list_id = SubstateAddress::from_str(list_id)?;
+        let list_id = list_id
+            .as_address_list_id()
+            .ok_or_else(|| anyhow!("Expected address list id but got {}", list_id))?;
+        Ok(NewAddressListItemOutput {
+            list_id: *list_id,
+            index: index_str.parse()?,
         })
     }
 }

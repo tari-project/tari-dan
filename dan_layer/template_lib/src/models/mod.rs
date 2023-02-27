@@ -20,6 +20,12 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+mod address;
+pub use address::Address;
+
+mod address_list;
+pub use address_list::{AddressList, AddressListId, AddressListItemAddress};
+
 mod amount;
 pub use amount::Amount;
 
@@ -28,6 +34,12 @@ pub use bucket::{Bucket, BucketId};
 
 mod component;
 pub use component::*;
+
+mod confidential_proof;
+pub use confidential_proof::ConfidentialProof;
+
+mod layer_one_commitment;
+pub use layer_one_commitment::LayerOneCommitmentAddress;
 
 mod metadata;
 pub use metadata::Metadata;

@@ -27,6 +27,7 @@ use std::{
 
 use log::*;
 use tari_comms::NodeIdentity;
+use tari_dan_app_utilities::epoch_manager::EpochManagerHandle;
 use tari_dan_common_types::{ShardId, TreeNodeHash};
 use tari_dan_core::{
     message::DanMessage,
@@ -38,7 +39,6 @@ use tokio::sync::{broadcast, mpsc};
 
 use super::MempoolError;
 use crate::p2p::services::{
-    epoch_manager::handle::EpochManagerHandle,
     mempool::{handle::MempoolRequest, Validator},
     messaging::OutboundMessaging,
 };

@@ -36,7 +36,7 @@ pub struct LeaderProposal {
 }
 
 #[derive(Debug, Insertable)]
-#[table_name = "leader_proposals"]
+#[diesel(table_name = leader_proposals)]
 pub struct NewLeaderProposal {
     pub payload_id: Vec<u8>,
     pub shard_id: Vec<u8>,

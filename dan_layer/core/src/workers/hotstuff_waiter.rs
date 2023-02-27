@@ -277,10 +277,10 @@ where
 
         let committee = self.epoch_manager.get_committee(epoch, shard).await?;
         // Here the current_leader is always zero.
-        let current_leader = self.current_leader_round.entry((shard, payload_id)).or_default();
+        let current_leader = *self.current_leader_round.entry((shard, payload_id)).or_default();
         let leader = self
             .leader_strategy
-            .get_leader(&committee, payload_id, shard, *current_leader);
+            .get_leader(&committee, payload_id, shard, current_leader);
 
         let new_view = self.shard_store.with_write_tx(|tx| {
             let high_qc = tx
@@ -290,6 +290,7 @@ where
 
             //  Save the payload, because we will need it when the proposal comes back
             tx.save_payload(payload.clone())?;
+            tx.save_current_leader_state(payload_id, shard, current_leader, leader.clone())?;
 
             Ok::<_, HotStuffError>(HotStuffMessage::new_view(high_qc, shard, payload))
         })?;
@@ -388,7 +389,7 @@ where
         let payload;
         let current_leaf_node;
         {
-            let tx = self.shard_store.create_read_tx()?;
+            let mut tx = self.shard_store.create_read_tx()?;
             current_leaf_node = tx.get_leaf_node(&payload_id, &shard)?;
             high_qc = tx.get_high_qc_for(payload_id, shard)?;
             // The high QC could be from a previous payload, we want to propose for this payload
@@ -619,7 +620,7 @@ where
 
         // We leave the payload empty, this is just new round, so the nodes should have it.
         let new_view = HotStuffMessage::new_view(high_qc, shard_id, payload);
-        let current_leader = self
+        let current_leader = *self
             .current_leader_round
             .entry((shard_id, payload_id))
             .and_modify(|round| *round += 1)
@@ -627,7 +628,9 @@ where
         let committee = self.epoch_manager.get_committee(epoch, shard_id).await?;
         let leader = self
             .leader_strategy
-            .get_leader(&committee, payload_id, shard_id, *current_leader);
+            .get_leader(&committee, payload_id, shard_id, current_leader);
+        self.shard_store
+            .with_write_tx(|tx| tx.save_current_leader_state(payload_id, shard_id, current_leader, leader.clone()))?;
         self.tx_leader
             .send((leader.clone(), new_view))
             .await
@@ -635,7 +638,7 @@ where
         self.pacemaker
             .start_timer(
                 PacemakerEvents::LocalCommittee(epoch, shard_id, payload_id),
-                self.network_latency * (2 << *current_leader),
+                self.network_latency * (2 << current_leader),
             )
             .await
             .unwrap();
@@ -1321,7 +1324,7 @@ where
         let mut on_propose = None;
         let node;
         {
-            let tx = self.shard_store.create_read_tx()?;
+            let mut tx = self.shard_store.create_read_tx()?;
             // Avoid duplicates
             if tx.has_vote_for(&from, msg.local_node_hash())? {
                 println!("🔥 Vote with node hash {} already received", msg.local_node_hash());

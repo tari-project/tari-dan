@@ -44,11 +44,11 @@ use tari_engine_types::{
 use tari_template_lib::{
     arg,
     args::Arg,
-    models::{Amount, NonFungibleAddress, NonFungibleId},
-    prelude::ResourceAddress,
+    models::{AddressListId, Amount, NonFungibleAddress, NonFungibleId},
+    prelude::{ComponentAddress, ResourceAddress},
 };
 use tari_transaction_manifest::{parse_manifest, ManifestValue};
-use tari_utilities::hex::to_hex;
+use tari_utilities::{hex::to_hex, ByteArray};
 use tari_wallet_daemon_client::{
     types::{
         TransactionGetResultRequest,
@@ -60,13 +60,14 @@ use tari_wallet_daemon_client::{
     WalletDaemonClient,
 };
 
-use crate::from_hex::FromHex;
+use crate::{from_base64::FromBase64, from_hex::FromHex};
 
 #[derive(Debug, Subcommand, Clone)]
 pub enum TransactionSubcommand {
     Get(GetArgs),
     Submit(SubmitArgs),
     SubmitManifest(SubmitManifestArgs),
+    ClaimBurn(ClaimBurnArgs),
 }
 
 #[derive(Debug, Args, Clone)]
@@ -84,8 +85,6 @@ pub struct SubmitArgs {
 
 #[derive(Debug, Args, Clone)]
 pub struct CommonSubmitArgs {
-    #[clap(long, short = 'w')]
-    pub wait_for_result: bool,
     /// Timeout in seconds
     #[clap(long, short = 't', alias = "wait-timeout")]
     pub wait_for_result_timeout_secs: Option<u64>,
@@ -93,6 +92,8 @@ pub struct CommonSubmitArgs {
     pub num_outputs: Option<u8>,
     #[clap(long, short = 'i')]
     pub inputs: Vec<VersionedSubstateAddress>,
+    #[clap(long, short = 'o')]
+    pub override_inputs: Option<bool>,
     #[clap(long, short = 'v')]
     pub version: Option<u8>,
     #[clap(long, short = 'd')]
@@ -105,6 +106,8 @@ pub struct CommonSubmitArgs {
     pub non_fungible_mint_outputs: Vec<SpecificNonFungibleMintOutput>,
     #[clap(long, alias = "mint-new")]
     pub new_non_fungible_outputs: Vec<NewNonFungibleMintOutput>,
+    #[clap(long, alias = "new-list-item")]
+    pub new_address_list_item_outputs: Vec<NewAddressListItemOutput>,
     #[clap(long)]
     pub fee: Option<u64>,
 }
@@ -114,6 +117,20 @@ pub struct SubmitManifestArgs {
     manifest: PathBuf,
     #[clap(long, short = 'g')]
     input_variables: Vec<String>,
+    #[clap(flatten)]
+    common: CommonSubmitArgs,
+}
+
+#[derive(Debug, Args, Clone)]
+pub struct ClaimBurnArgs {
+    #[clap(long, short = 'z')]
+    account_address: ComponentAddress,
+    #[clap(long, short = 'c')]
+    commitment_address: FromBase64<Vec<u8>>,
+    #[clap(long, short = 'r')]
+    range_proof: FromBase64<Vec<u8>>,
+    #[clap(long, short = 'k')]
+    proof_of_knowledge: FromBase64<Vec<u8>>,
     #[clap(flatten)]
     common: CommonSubmitArgs,
 }
@@ -144,6 +161,9 @@ impl TransactionSubcommand {
                 handle_submit_manifest(args, &mut client).await?;
             },
             TransactionSubcommand::Get(args) => handle_get(args, &mut client).await?,
+            TransactionSubcommand::ClaimBurn(args) => {
+                handle_claim_burn(args, &mut client).await?;
+            },
         }
         Ok(())
     }
@@ -218,6 +238,7 @@ pub async fn submit_transaction(
         instructions,
         fee: common.fee.unwrap_or(1),
         inputs: common.inputs,
+        override_inputs: common.override_inputs.unwrap_or_default(),
         new_outputs: common.num_outputs.unwrap_or(0),
         specific_non_fungible_outputs: common
             .non_fungible_mint_outputs
@@ -229,13 +250,19 @@ pub async fn submit_transaction(
             .into_iter()
             .map(|m| (m.resource_address, m.count))
             .collect(),
+        new_address_list_item_outputs: common
+            .new_address_list_item_outputs
+            .into_iter()
+            .map(|i| (i.list_id, i.index))
+            .collect(),
         is_dry_run: common.dry_run,
     };
 
     if request.inputs.is_empty() &&
         request.new_outputs == 0 &&
         request.specific_non_fungible_outputs.is_empty() &&
-        request.new_non_fungible_outputs.is_empty()
+        request.new_non_fungible_outputs.is_empty() &&
+        request.new_address_list_item_outputs.is_empty()
     {
         return Err(anyhow::anyhow!(
             "No inputs or outputs, transaction will not be processed by the network"
@@ -251,28 +278,77 @@ pub async fn submit_transaction(
     // TODO: Would be great if we could display the Substate addresses as well as shard ids
     summarize_request(&request, &resp.inputs, &resp.outputs);
 
-    if common.wait_for_result {
+    println!();
+    println!("⏳️ Waiting for transaction result...");
+    println!();
+    let wait_resp = client
+        .wait_transaction_result(TransactionWaitResultRequest {
+            hash: resp.hash,
+            timeout_secs: common.wait_for_result_timeout_secs,
+        })
+        .await?;
+    if wait_resp.timed_out {
+        println!(
+            "⏳️ Transaction result not available after {} seconds.",
+            common.wait_for_result_timeout_secs.unwrap_or(0)
+        );
         println!();
-        println!("⏳️ Waiting for transaction result...");
-        println!();
-        let resp = client
-            .wait_transaction_result(TransactionWaitResultRequest {
-                hash: resp.hash,
-                timeout_secs: common.wait_for_result_timeout_secs,
-            })
-            .await?;
-        if resp.timed_out {
-            println!(
-                "⏳️ Transaction result not available after {} seconds.",
-                common.wait_for_result_timeout_secs.unwrap_or(0)
-            );
-            println!();
-        } else {
-            summarize(&resp, timer.elapsed());
-        }
+    } else {
+        summarize(&wait_resp, timer.elapsed());
     }
 
     Ok(resp)
+}
+
+pub async fn handle_claim_burn(
+    args: ClaimBurnArgs,
+    client: &mut WalletDaemonClient,
+) -> Result<TransactionSubmitResponse, anyhow::Error> {
+    let ClaimBurnArgs {
+        account_address,
+        commitment_address,
+        range_proof,
+        proof_of_knowledge,
+        mut common,
+    } = args;
+
+    let commitment_address = commitment_address.into_inner();
+    let range_proof = range_proof.into_inner();
+    let proof_of_knowledge = proof_of_knowledge.into_inner();
+
+    // specify the input and output set, which is deterministic
+    // at this point
+    let component_substate_address = VersionedSubstateAddress {
+        address: SubstateAddress::from_str(&format!("commitment_{}", to_hex(commitment_address.as_ref())))?,
+        version: 0,
+    };
+    // let account_substate_address = VersionedSubstateAddress {
+    //     address: account_address.into(),
+    //     version: 0,
+    // };
+
+    let instructions = vec![
+        Instruction::ClaimBurn {
+            commitment_address,
+            range_proof,
+            proof_of_knowledge,
+        },
+        Instruction::PutLastInstructionOutputOnWorkspace { key: b"burn".to_vec() },
+        Instruction::CallMethod {
+            component_address: account_address,
+            method: String::from("deposit_confidential"),
+            args: vec![arg![Variable("burn")]],
+        },
+    ];
+
+    common.inputs = vec![component_substate_address];
+    common.override_inputs = Some(false);
+    // transaction should have one output, corresponding to the same shard
+    // as the account substate address
+    // TODO: on a second claim burn, we shoulnd't have any new outputs being created.
+    common.num_outputs = Some(1);
+
+    submit_transaction(instructions, common, client).await
 }
 
 fn summarize_request(request: &TransactionSubmitRequest, inputs: &[ShardId], outputs: &[ShardId]) {
@@ -359,6 +435,19 @@ fn summarize_finalize_result(finalize: &FinalizeResult) {
                     },
                     SubstateValue::NonFungible(_) => {
                         println!("      ▶ NFT: {}", address);
+                    },
+                    SubstateValue::LayerOneCommitment(_) => {
+                        println!("      ▶ Layer 1 commitment: {}", address);
+                    },
+                    SubstateValue::AddressList(_) => {
+                        println!("      ▶ address list: {}", address);
+                    },
+                    SubstateValue::AddressListItem(item) => {
+                        let referenced_address = SubstateAddress::from(item.referenced_address().clone());
+                        println!(
+                            "      ▶ address list item {} referencing {}",
+                            address, referenced_address
+                        );
                     },
                 }
                 println!();
@@ -663,6 +752,28 @@ impl FromStr for NewNonFungibleMintOutput {
         Ok(NewNonFungibleMintOutput {
             resource_address,
             count: count_str.parse()?,
+        })
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct NewAddressListItemOutput {
+    pub list_id: AddressListId,
+    pub index: u64,
+}
+
+impl FromStr for NewAddressListItemOutput {
+    type Err = anyhow::Error;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let (list_id, index_str) = s.split_once(',').unwrap_or((s, "0"));
+        let list_id = SubstateAddress::from_str(list_id)?;
+        let list_id = list_id
+            .as_address_list_id()
+            .ok_or_else(|| anyhow!("Expected address list id but got {}", list_id))?;
+        Ok(NewAddressListItemOutput {
+            list_id: *list_id,
+            index: index_str.parse()?,
         })
     }
 }

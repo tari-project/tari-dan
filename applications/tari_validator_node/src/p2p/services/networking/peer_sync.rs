@@ -25,10 +25,11 @@ use std::convert::TryInto;
 use log::*;
 use tari_comms::{types::CommsPublicKey, PeerConnection};
 use tari_crypto::tari_utilities::ByteArray;
+use tari_dan_app_grpc::proto;
 use tari_dan_core::services::{DanPeer, PeerProvider};
 use tokio_stream::StreamExt;
 
-use crate::p2p::{proto, rpc};
+use crate::p2p::rpc;
 
 const LOG_TARGET: &str = "tari::validator_node::networking::peer_sync";
 

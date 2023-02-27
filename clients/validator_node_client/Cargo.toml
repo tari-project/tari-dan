@@ -16,5 +16,6 @@ tari_transaction = { path = "../../dan_layer/transaction" }
 anyhow = "1.0.65"
 chrono = { version = "0.4.19", default-features = false, features = ["serde"] }
 reqwest = { version = "0.11.11", features = ["json"] }
+multiaddr = "0.14"
 serde = "1.0.144"
 serde_json = "1.0.85"

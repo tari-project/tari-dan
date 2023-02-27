@@ -64,6 +64,7 @@ async fn handle_command(command: Command, base_dir: PathBuf, client: ValidatorNo
         Command::Transactions(cmd) => cmd.handle(base_dir, client).await?,
         Command::Accounts(cmd) => cmd.handle(base_dir, client).await?,
         Command::Manifests(cmd) => cmd.handle()?,
+        Command::Peers(cmd) => cmd.handle(client).await?,
         Command::Debug(cmd) => cmd.handle(client).await?,
     }
 

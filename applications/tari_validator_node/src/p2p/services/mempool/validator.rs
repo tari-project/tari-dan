@@ -2,12 +2,13 @@
 //   SPDX-License-Identifier: BSD-3-Clause
 
 use async_trait::async_trait;
+use tari_dan_app_utilities::template_manager::TemplateManagerError;
 use tari_engine_types::instruction::Instruction;
 use tari_transaction::Transaction;
 
 use crate::p2p::services::{
     mempool::{MempoolError, Validator},
-    template_manager::{TemplateManager, TemplateManagerError},
+    template_manager::TemplateManager,
 };
 
 #[derive(Debug)]

@@ -46,12 +46,16 @@ mod working_state;
 
 #[cfg(test)]
 mod tests;
+mod validation;
 
 use std::{fmt::Debug, sync::Arc};
 
+use tari_common_types::types::BulletRangeProof;
+use tari_crypto::ristretto::RistrettoComSig;
 use tari_engine_types::commit_result::FinalizeResult;
 use tari_template_lib::{
     args::{
+        AddressListAction,
         Arg,
         BucketAction,
         BucketRef,
@@ -67,7 +71,14 @@ use tari_template_lib::{
         WorkspaceAction,
     },
     invoke_args,
-    models::{ComponentAddress, ComponentHeader, NonFungibleAddress, VaultRef},
+    models::{
+        AddressListId,
+        ComponentAddress,
+        ComponentHeader,
+        LayerOneCommitmentAddress,
+        NonFungibleAddress,
+        VaultRef,
+    },
 };
 pub use tracker::{RuntimeState, StateTracker};
 
@@ -117,9 +128,23 @@ pub trait RuntimeInterface: Send + Sync {
 
     fn consensus_invoke(&self, action: ConsensusAction) -> Result<InvokeResult, RuntimeError>;
 
+    fn address_list_invoke(
+        &self,
+        list_id: Option<AddressListId>,
+        action: AddressListAction,
+        args: EngineArgs,
+    ) -> Result<InvokeResult, RuntimeError>;
+
     fn generate_uuid(&self) -> Result<[u8; 32], RuntimeError>;
 
     fn set_last_instruction_output(&self, value: Option<Vec<u8>>) -> Result<(), RuntimeError>;
+
+    fn claim_burn(
+        &self,
+        commitment_address: LayerOneCommitmentAddress,
+        range_proof: BulletRangeProof,
+        owner_sig: RistrettoComSig,
+    ) -> Result<(), RuntimeError>;
 
     fn finalize(&self) -> Result<FinalizeResult, RuntimeError>;
 }

@@ -31,6 +31,7 @@ use tari_template_abi::rust::{
 
 use crate::{
     models::{
+        AddressListId,
         Amount,
         BucketId,
         ComponentAddress,
@@ -40,7 +41,7 @@ use crate::{
         ResourceAddress,
         VaultRef,
     },
-    prelude::AccessRules,
+    prelude::{AccessRules, ConfidentialProof},
     resource::ResourceType,
 };
 
@@ -183,6 +184,9 @@ pub enum MintArg {
     NonFungible {
         tokens: HashMap<NonFungibleId, (Vec<u8>, Vec<u8>)>,
     },
+    Confidential {
+        proof: ConfidentialProof,
+    },
 }
 
 #[derive(Clone, Debug, Decode, Encode)]
@@ -232,6 +236,7 @@ pub enum VaultAction {
 pub enum VaultWithdrawArg {
     Fungible { amount: Amount },
     NonFungible { ids: BTreeSet<NonFungibleId> },
+    Confidential { proofs: Vec<ConfidentialProof> },
 }
 
 // -------------------------------- Bucket -------------------------------- //
@@ -317,4 +322,19 @@ pub struct ConsensusInvokeArg {
 #[derive(Clone, Debug, Decode, Encode)]
 pub enum ConsensusAction {
     GetCurrentEpoch,
+}
+
+// -------------------------------- AddressList -------------------------------- //
+#[derive(Clone, Debug, Decode, Encode)]
+pub struct AddressListInvokeArg {
+    pub list_id: Option<AddressListId>,
+    pub action: AddressListAction,
+    pub args: Vec<Vec<u8>>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord, Decode, Encode)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+pub enum AddressListAction {
+    Create,
+    Push,
 }

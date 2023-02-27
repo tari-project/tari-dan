@@ -36,7 +36,7 @@ pub struct LastVotedHeight {
 }
 
 #[derive(Debug, Insertable)]
-#[table_name = "last_voted_heights"]
+#[diesel(table_name = last_voted_heights)]
 pub struct NewLastVotedHeight {
     pub shard_id: Vec<u8>,
     pub payload_id: Vec<u8>,

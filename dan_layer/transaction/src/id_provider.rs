@@ -5,7 +5,7 @@ use std::sync::{atomic::AtomicU32, Arc};
 
 use tari_engine_types::hashing::hasher;
 use tari_template_lib::{
-    models::{BucketId, ComponentAddress, ResourceAddress, VaultId},
+    models::{AddressListId, BucketId, ComponentAddress, ResourceAddress, VaultId},
     Hash,
 };
 
@@ -68,6 +68,10 @@ impl IdProvider {
     }
 
     pub fn new_vault_id(&self) -> Result<VaultId, MaxIdsExceeded> {
+        Ok(self.new_id()?.into())
+    }
+
+    pub fn new_address_list_id(&self) -> Result<AddressListId, MaxIdsExceeded> {
         Ok(self.new_id()?.into())
     }
 

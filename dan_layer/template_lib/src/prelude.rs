@@ -32,10 +32,13 @@ pub use crate::{
     },
     consensus::Consensus,
     models::{
+        Address,
+        AddressList,
         Amount,
         Bucket,
         BucketId,
         ComponentAddress,
+        ConfidentialProof,
         Metadata,
         NonFungible,
         NonFungibleAddress,

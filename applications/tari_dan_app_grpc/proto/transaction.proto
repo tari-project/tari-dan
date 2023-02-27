@@ -1,0 +1,135 @@
+// Copyright 2022 The Tari Project
+// SPDX-License-Identifier: BSD-3-Clause
+
+syntax = "proto3";
+
+package tari.dan.transaction;
+
+import "common.proto";
+
+message Node {
+  bytes hash = 1;
+  bytes parent = 2;
+  uint32 height = 3;
+  bool is_committed = 4;
+}
+
+message SignerSignature {
+  bytes signer = 1;
+  tari.dan.common.Signature signature = 2;
+}
+
+message ThaumInput {
+  enum InputType {
+    STANDARD = 0;
+    PEG_IN = 1;
+  }
+  InputType input_type = 1;
+  // For standard
+  bytes object_id = 2; // Synonymous with Output.hash on base layer
+  // peg
+  PegInInput peg_in = 3;
+}
+
+message PegInInput {
+  bytes commitment = 1;
+  uint64 burn_height = 2;
+  MerkleProof burn_proof = 3;
+  // A new spending key to prevent observers from stealing this peg in
+  StealthAddress spending_key = 4;
+  // Proof that the owner knows the commitment
+  CommitmentSignature owner_proof = 5;
+}
+
+message ThaumOutput {
+  bytes commitment = 1;
+  StealthAddress owner = 2;
+  bytes rangeproof = 3;
+}
+
+message StealthAddress {
+  bytes nonce = 1;
+  bytes address = 2;
+}
+
+message CommitmentSignature {
+  bytes public_nonce_commitment = 1;
+  bytes signature_u = 2;
+  bytes signature_v = 3;
+}
+
+message MerkleProof {
+  repeated bytes branch = 1;
+  uint32 depth = 2;
+  uint32 path_bitmap = 3;
+}
+
+message Transaction {
+  repeated ThaumInput inputs = 1;
+  repeated ThaumOutput outputs = 2;
+  repeated Instruction instructions = 3;
+  bytes balance_proof = 4;
+  tari.dan.common.Signature signature = 5;
+  uint64 fee = 6;
+  bytes sender_public_key = 7;
+  TransactionMeta meta = 8;
+}
+
+message Instruction {
+  enum InstructionType {
+    FUNCTION = 0;
+    METHOD = 1;
+    PUT_OUTPUT_IN_WORKSPACE = 2;
+    EMIT_LOG = 3;
+    CLAIM_BURN = 4;
+  }
+  InstructionType instruction_type = 1;
+
+  // common fields
+  bytes template_address = 2;
+  repeated Arg args = 3;
+
+  // function only
+  string function = 4;
+
+  // method only
+  bytes component_address = 5;
+  string method = 6;
+
+  // PutLastInstructionOutputOnWorkspace
+  bytes key = 7;
+
+  string log_level = 8;
+  string log_message = 9;
+
+  bytes claim_burn_commitment_address = 10;
+  bytes claim_burn_range_proof = 11;
+  bytes claim_burn_proof_of_knowledge = 12;
+}
+
+message Arg {
+  enum ArgType {
+    LITERAL = 0;
+    FROM_WORKSPACE = 1;
+  }
+  ArgType arg_type = 1;
+  bytes data = 2;
+}
+
+message TransactionMeta {
+  repeated bytes involved_shard_ids = 1;
+  // TODO: no idea what to call this ;)
+  repeated SubstateRef involved_substates = 2;
+  uint32 max_outputs = 3;
+}
+
+message SubstateRef {
+  SubstateChange change = 1;
+  // claim = 2
+}
+
+enum SubstateChange {
+  Create = 0;
+  Destroy = 1;
+  Exists = 2;
+}

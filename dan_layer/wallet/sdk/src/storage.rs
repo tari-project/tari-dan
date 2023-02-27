@@ -1,7 +1,7 @@
 //   Copyright 2023 The Tari Project
 //   SPDX-License-Identifier: BSD-3-Clause
 
-use std::ops::Deref;
+use std::ops::{Deref, DerefMut};
 
 use tari_common_types::types::FixedHash;
 use tari_dan_common_types::{optional::IsNotFoundError, QuorumCertificate};
@@ -13,7 +13,7 @@ use crate::models::{Account, Config, SubstateRecord, TransactionStatus, Versione
 pub trait WalletStore {
     type ReadTransaction<'a>: WalletStoreReader
     where Self: 'a;
-    type WriteTransaction<'a>: WalletStoreWriter + Deref<Target = Self::ReadTransaction<'a>>
+    type WriteTransaction<'a>: WalletStoreWriter + Deref<Target = Self::ReadTransaction<'a>> + DerefMut
     where Self: 'a;
 
     fn create_read_tx(&self) -> Result<Self::ReadTransaction<'_>, WalletStorageError>;
@@ -36,10 +36,10 @@ pub trait WalletStore {
         }
     }
 
-    fn with_read_tx<F: FnOnce(&Self::ReadTransaction<'_>) -> Result<R, E>, R, E>(&self, f: F) -> Result<R, E>
+    fn with_read_tx<F: FnOnce(&mut Self::ReadTransaction<'_>) -> Result<R, E>, R, E>(&self, f: F) -> Result<R, E>
     where E: From<WalletStorageError> {
-        let tx = self.create_read_tx()?;
-        let ret = f(&tx)?;
+        let mut tx = self.create_read_tx()?;
+        let ret = f(&mut tx)?;
         Ok(ret)
     }
 }
@@ -89,23 +89,23 @@ impl WalletStorageError {
 
 pub trait WalletStoreReader {
     // Key manager
-    fn key_manager_get_all(&self, branch: &str) -> Result<Vec<(u64, bool)>, WalletStorageError>;
-    fn key_manager_get_active_index(&self, branch: &str) -> Result<u64, WalletStorageError>;
+    fn key_manager_get_all(&mut self, branch: &str) -> Result<Vec<(u64, bool)>, WalletStorageError>;
+    fn key_manager_get_active_index(&mut self, branch: &str) -> Result<u64, WalletStorageError>;
     // Config
-    fn config_get<T: serde::de::DeserializeOwned>(&self, key: &str) -> Result<Config<T>, WalletStorageError>;
+    fn config_get<T: serde::de::DeserializeOwned>(&mut self, key: &str) -> Result<Config<T>, WalletStorageError>;
     // Transactions
-    fn transaction_get(&self, hash: FixedHash) -> Result<WalletTransaction, WalletStorageError>;
+    fn transaction_get(&mut self, hash: FixedHash) -> Result<WalletTransaction, WalletStorageError>;
     fn transactions_fetch_all_by_status(
-        &self,
+        &mut self,
         status: TransactionStatus,
     ) -> Result<Vec<WalletTransaction>, WalletStorageError>;
     // Substates
-    fn substates_get(&self, address: &SubstateAddress) -> Result<SubstateRecord, WalletStorageError>;
-    fn substates_get_children(&self, parent: &SubstateAddress) -> Result<Vec<SubstateRecord>, WalletStorageError>;
+    fn substates_get(&mut self, address: &SubstateAddress) -> Result<SubstateRecord, WalletStorageError>;
+    fn substates_get_children(&mut self, parent: &SubstateAddress) -> Result<Vec<SubstateRecord>, WalletStorageError>;
     // Accounts
-    fn accounts_get_many(&self, limit: u64) -> Result<Vec<Account>, WalletStorageError>;
-    fn accounts_count(&self) -> Result<u64, WalletStorageError>;
-    fn accounts_get_by_name(&self, name: &str) -> Result<Account, WalletStorageError>;
+    fn accounts_get_many(&mut self, limit: u64) -> Result<Vec<Account>, WalletStorageError>;
+    fn accounts_count(&mut self) -> Result<u64, WalletStorageError>;
+    fn accounts_get_by_name(&mut self, name: &str) -> Result<Account, WalletStorageError>;
 }
 
 pub trait WalletStoreWriter {
@@ -113,20 +113,20 @@ pub trait WalletStoreWriter {
     fn rollback(self) -> Result<(), WalletStorageError>;
 
     // Key manager
-    fn key_manager_set_active_index(&self, branch: &str, index: u64) -> Result<(), WalletStorageError>;
+    fn key_manager_set_active_index(&mut self, branch: &str, index: u64) -> Result<(), WalletStorageError>;
 
     // Config
     fn config_set<T: serde::Serialize>(
-        &self,
+        &mut self,
         key: &str,
         value: &T,
         is_encrypted: bool,
     ) -> Result<(), WalletStorageError>;
 
     // Transactions
-    fn transactions_insert(&self, transaction: &Transaction, is_dry_run: bool) -> Result<(), WalletStorageError>;
+    fn transactions_insert(&mut self, transaction: &Transaction, is_dry_run: bool) -> Result<(), WalletStorageError>;
     fn transactions_set_result_and_status(
-        &self,
+        &mut self,
         hash: FixedHash,
         result: Option<&FinalizeResult>,
         qcs: Option<&[QuorumCertificate]>,
@@ -135,24 +135,24 @@ pub trait WalletStoreWriter {
 
     // Substates
     fn substates_insert_parent(
-        &self,
+        &mut self,
         tx_hash: FixedHash,
         address: VersionedSubstateAddress,
         module_name: String,
         template_addr: TemplateAddress,
     ) -> Result<(), WalletStorageError>;
     fn substates_insert_child(
-        &self,
+        &mut self,
         tx_hash: FixedHash,
         parent: SubstateAddress,
         address: VersionedSubstateAddress,
     ) -> Result<(), WalletStorageError>;
 
-    fn substates_remove(&self, substate: &VersionedSubstateAddress) -> Result<SubstateRecord, WalletStorageError>;
+    fn substates_remove(&mut self, substate: &VersionedSubstateAddress) -> Result<SubstateRecord, WalletStorageError>;
 
     // Accounts
     fn accounts_insert(
-        &self,
+        &mut self,
         account_name: &str,
         address: &SubstateAddress,
         owner_key_index: u64,

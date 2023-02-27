@@ -18,6 +18,8 @@ tari_p2p = { git = "https://github.com/tari-project/tari.git", branch = "develop
 tari_shutdown = { git = "https://github.com/tari-project/tari.git", branch = "development", package = "tari_shutdown" }
 tari_storage = { git = "https://github.com/tari-project/tari.git", branch = "development", package = "tari_storage" }
 tari_core = { git = "https://github.com/tari-project/tari.git", branch = "development", package = "tari_core", default-features = false, features = ["transactions"] }
+tari_dan_app_grpc = { path = "../tari_dan_app_grpc" }
+tari_dan_app_utilities = { path = "../tari_dan_app_utilities" }
 tari_dan_core = { path = "../../dan_layer/core" }
 tari_dan_storage = { path = "../../dan_layer/storage" }
 tari_dan_storage_sqlite = { path = "../../dan_layer/storage_sqlite" }
@@ -44,7 +46,7 @@ config = "0.13.0"
 futures = { version = "^0.3.1" }
 include_dir = "0.7.2"
 json5 = "0.2.2"
-libsqlite3-sys = { version = "0.22.2", features = ["bundled"] }
+libsqlite3-sys = { version = "0.25", features = ["bundled"] }
 lmdb-zero = "0.4.4"
 log = { version = "0.4.8", features = ["std"] }
 log4rs = { version = "1.1.1", features = ["rolling_file_appender", "compound_policy", "size_trigger", "fixed_window_roller"] }
@@ -77,6 +79,8 @@ tari_comms_dht = { git = "https://github.com/tari-project/tari.git", branch = "d
 tari_wallet = { git = "https://github.com/tari-project/tari.git", branch = "development", package = "tari_wallet" }
 tari_validator_node_cli = { path = "../tari_validator_node_cli" }
 tari_transaction_manifest = { path = "../../dan_layer/transaction_manifest" }
+tari_indexer = { path = "../tari_indexer" }
+tari_indexer_client = { path = "../../clients/tari_indexer_client" }
 #env_logger = "0.9.0"
 httpmock = "0.6.7"
 indexmap = "1.9.1"

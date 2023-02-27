@@ -29,6 +29,8 @@ use std::{
 use futures::StreamExt;
 use log::info;
 use tari_comms::{protocol::rpc::RpcStatus, NodeIdentity};
+use tari_dan_app_grpc::proto::rpc::VnStateSyncResponse;
+use tari_dan_app_utilities::epoch_manager::EpochManagerHandle;
 use tari_dan_common_types::{Epoch, ObjectPledge, PayloadId, ShardId, SubstateState};
 use tari_dan_core::{
     models::{Payload, TariDanPayload},
@@ -54,14 +56,7 @@ use tari_transaction::Transaction;
 use thiserror::Error;
 
 use crate::{
-    p2p::{
-        proto::rpc::VnStateSyncResponse,
-        services::{
-            epoch_manager::handle::EpochManagerHandle,
-            rpc_client::TariCommsValidatorNodeClientFactory,
-            template_manager::TemplateManager,
-        },
-    },
+    p2p::services::{rpc_client::TariCommsValidatorNodeClientFactory, template_manager::TemplateManager},
     payload_processor::TariDanPayloadProcessor,
 };
 
@@ -186,8 +181,8 @@ impl DryRunTransactionProcessor {
             let mut sync_vn_rpc_client = sync_vn_client.create_connection().await?;
 
             // request the shard substate to the VN
-            let shard_id_proto: crate::p2p::proto::common::ShardId = shard_id.into();
-            let request = crate::p2p::proto::rpc::VnStateSyncRequest {
+            let shard_id_proto: tari_dan_app_grpc::proto::common::ShardId = shard_id.into();
+            let request = tari_dan_app_grpc::proto::rpc::VnStateSyncRequest {
                 start_shard_id: Some(shard_id_proto.clone()),
                 end_shard_id: Some(shard_id_proto),
                 inventory: vec![],

@@ -24,6 +24,10 @@ use std::convert::{TryFrom, TryInto};
 
 use log::*;
 use tari_comms::protocol::rpc::{Request, Response, RpcStatus, Streaming};
+use tari_dan_app_grpc::{
+    proto,
+    proto::rpc::{VnStateSyncRequest, VnStateSyncResponse},
+};
 use tari_dan_common_types::{NodeAddressable, ShardId};
 use tari_dan_core::{
     services::PeerProvider,
@@ -33,11 +37,9 @@ use tari_dan_storage_sqlite::sqlite_shard_store_factory::SqliteShardStore;
 use tari_transaction::Transaction;
 use tokio::{sync::mpsc, task};
 
-use crate::p2p::proto::rpc::{VnStateSyncRequest, VnStateSyncResponse};
-
 const LOG_TARGET: &str = "vn::p2p::rpc";
 
-use crate::p2p::{proto, rpc::ValidatorNodeRpcService, services::mempool::MempoolHandle};
+use crate::p2p::{rpc::ValidatorNodeRpcService, services::mempool::MempoolHandle};
 
 pub struct ValidatorNodeRpcServiceImpl<TPeerProvider> {
     peer_provider: TPeerProvider,

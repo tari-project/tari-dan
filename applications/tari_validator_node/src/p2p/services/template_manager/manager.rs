@@ -23,6 +23,12 @@
 use std::{collections::HashMap, convert::TryFrom, fs};
 
 use log::*;
+use tari_dan_app_utilities::template_manager::{
+    Template,
+    TemplateManagerError,
+    TemplateMetadata,
+    TemplateRegistration,
+};
 use tari_dan_core::services::TemplateProvider;
 use tari_dan_engine::{
     packager::{LoadedTemplate, TemplateModuleLoader},
@@ -34,72 +40,11 @@ use tari_engine_types::calculate_template_binary_hash;
 use tari_template_builtin::get_template_builtin;
 use tari_template_lib::models::TemplateAddress;
 
-use crate::p2p::services::template_manager::{handle::TemplateRegistration, TemplateConfig, TemplateManagerError};
+use crate::p2p::services::template_manager::TemplateConfig;
 
 const LOG_TARGET: &str = "tari::validator_node::template_manager";
 
 pub const ACCOUNT_TEMPLATE_ADDRESS: TemplateAddress = TemplateAddress::from_array([0; 32]);
-
-#[derive(Debug, Clone)]
-pub struct TemplateMetadata {
-    pub name: String,
-    pub address: TemplateAddress,
-    // this must be in the form of "https://example.com/my_template.wasm"
-    pub url: String,
-    /// SHA hash of binary
-    pub binary_sha: Vec<u8>,
-    /// Block height in which the template was published
-    pub height: u64,
-}
-
-impl From<TemplateRegistration> for TemplateMetadata {
-    fn from(reg: TemplateRegistration) -> Self {
-        TemplateMetadata {
-            name: reg.template_name,
-            address: reg.template_address,
-            url: reg.registration.binary_url.into_string(),
-            binary_sha: reg.registration.binary_sha.into_vec(),
-            height: reg.mined_height,
-        }
-    }
-}
-
-// TODO: Allow fetching of just the template metadata without the compiled code
-impl From<DbTemplate> for TemplateMetadata {
-    fn from(record: DbTemplate) -> Self {
-        TemplateMetadata {
-            name: record.template_name,
-            address: (*record.template_address).into(),
-            url: record.url,
-            binary_sha: vec![],
-            height: record.height,
-        }
-    }
-}
-
-#[derive(Debug, Clone)]
-pub struct Template {
-    pub metadata: TemplateMetadata,
-    pub compiled_code: Vec<u8>,
-}
-
-// we encapsulate the db row format to not expose it to the caller
-impl From<DbTemplate> for Template {
-    fn from(record: DbTemplate) -> Self {
-        Template {
-            metadata: TemplateMetadata {
-                name: record.template_name,
-                // TODO: this will change when common engine types are moved around
-                address: (*record.template_address).into(),
-                url: record.url,
-                // TODO: add field to db
-                binary_sha: vec![],
-                height: record.height,
-            },
-            compiled_code: record.compiled_code,
-        }
-    }
-}
 
 #[derive(Debug, Clone)]
 pub struct TemplateManager {
@@ -162,9 +107,9 @@ impl TemplateManager {
         if self.builtin_templates.contains_key(address) {
             return Ok(true);
         }
-        let tx = self.global_db.create_transaction()?;
+        let mut tx = self.global_db.create_transaction()?;
         self.global_db
-            .templates(&tx)
+            .templates(&mut tx)
             .template_exists(address)
             .map_err(|_| TemplateManagerError::TemplateNotFound { address: *address })
     }
@@ -175,10 +120,10 @@ impl TemplateManager {
             return Ok(template.to_owned());
         }
 
-        let tx = self.global_db.create_transaction()?;
+        let mut tx = self.global_db.create_transaction()?;
         let template = self
             .global_db
-            .templates(&tx)
+            .templates(&mut tx)
             .get_template(address)?
             .ok_or(TemplateManagerError::TemplateNotFound { address: *address })?;
 
@@ -198,9 +143,9 @@ impl TemplateManager {
     }
 
     pub fn fetch_template_metadata(&self, limit: usize) -> Result<Vec<TemplateMetadata>, TemplateManagerError> {
-        let tx = self.global_db.create_transaction()?;
+        let mut tx = self.global_db.create_transaction()?;
         // TODO: we should be able to fetch just the metadata and not the compiled code
-        let templates = self.global_db.templates(&tx).get_templates(limit)?;
+        let templates = self.global_db.templates(&mut tx).get_templates(limit)?;
         let mut templates: Vec<TemplateMetadata> = templates.into_iter().map(Into::into).collect();
         let mut builtin_metadata: Vec<TemplateMetadata> =
             self.builtin_templates.values().map(|t| t.metadata.to_owned()).collect();
@@ -221,7 +166,7 @@ impl TemplateManager {
         };
 
         let mut tx = self.global_db.create_transaction()?;
-        let templates_db = self.global_db.templates(&tx);
+        let mut templates_db = self.global_db.templates(&mut tx);
         if templates_db.get_template(&*template.template_address)?.is_some() {
             return Ok(());
         }
@@ -237,7 +182,7 @@ impl TemplateManager {
         update: DbTemplateUpdate,
     ) -> Result<(), TemplateManagerError> {
         let mut tx = self.global_db.create_transaction()?;
-        let template_db = self.global_db.templates(&tx);
+        let mut template_db = self.global_db.templates(&mut tx);
         template_db.update_template(&address, update)?;
         tx.commit()?;
 

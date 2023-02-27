@@ -3,9 +3,9 @@
 
 use std::collections::HashMap;
 
-use log::warn;
+use log::*;
 use tari_common_types::types::FixedHash;
-use tari_dan_common_types::optional::IsNotFoundError;
+use tari_dan_common_types::optional::{IsNotFoundError, Optional};
 use tari_engine_types::{
     substate::{SubstateAddress, SubstateDiff},
     TemplateAddress,
@@ -37,7 +37,7 @@ impl<'a, TStore: WalletStore> TransactionApi<'a, TStore> {
     }
 
     pub fn get(&self, hash: FixedHash) -> Result<WalletTransaction, TransactionApiError> {
-        let tx = self.store.create_read_tx()?;
+        let mut tx = self.store.create_read_tx()?;
         let transaction = tx.transaction_get(hash)?;
         Ok(transaction)
     }
@@ -90,7 +90,7 @@ impl<'a, TStore: WalletStore> TransactionApi<'a, TStore> {
         &self,
         status: TransactionStatus,
     ) -> Result<Vec<WalletTransaction>, TransactionApiError> {
-        let tx = self.store.create_read_tx()?;
+        let mut tx = self.store.create_read_tx()?;
         let transactions = tx.transactions_fetch_all_by_status(status)?;
         Ok(transactions)
     }
@@ -165,13 +165,25 @@ impl<'a, TStore: WalletStore> TransactionApi<'a, TStore> {
         let mut downed_children = HashMap::<_, _>::new();
 
         for (addr, version) in diff.down_iter() {
-            let substate = tx.substates_remove(&VersionedSubstateAddress {
-                address: addr.clone(),
-                version: *version,
-            })?;
-
-            if let Some(parent) = substate.parent_address {
-                downed_children.insert(substate.address.address, parent);
+            if addr.is_layer1_commitment() {
+                info!(target: LOG_TARGET, "Layer 1 commitment {} downed", addr);
+                continue;
+            }
+            let maybe_substate = tx
+                .substates_remove(&VersionedSubstateAddress {
+                    address: addr.clone(),
+                    version: *version,
+                })
+                .optional()?;
+            match maybe_substate {
+                Some(substate) => {
+                    if let Some(parent) = substate.parent_address {
+                        downed_children.insert(substate.address.address, parent);
+                    }
+                },
+                None => {
+                    warn!(target: LOG_TARGET, "Downed substate {} not found", addr);
+                },
             }
         }
 
@@ -192,11 +204,16 @@ impl<'a, TStore: WalletStore> TransactionApi<'a, TStore> {
                 },
                 addr @ SubstateAddress::Resource(_) |
                 addr @ SubstateAddress::Vault(_) |
-                addr @ SubstateAddress::NonFungible(_) => {
+                addr @ SubstateAddress::NonFungible(_) |
+                addr @ SubstateAddress::AddressList(_) |
+                addr @ SubstateAddress::AddressListItem(_) => {
                     children.push(VersionedSubstateAddress {
                         address: addr.clone(),
                         version: substate.version(),
                     });
+                },
+                addr @ SubstateAddress::LayerOneCommitment(_) => {
+                    todo!("Not supported {}", addr);
                 },
             }
         }

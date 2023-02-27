@@ -26,7 +26,7 @@ impl<'a, TStore: WalletStore> KeyManagerApi<'a, TStore> {
     }
 
     pub fn get_or_create_initial(&self, branch: &str) -> Result<(), KeyManagerApiError> {
-        let tx = self.store.create_write_tx()?;
+        let mut tx = self.store.create_write_tx()?;
         if tx.key_manager_get_active_index(branch).optional()?.is_none() {
             tx.key_manager_set_active_index(branch, 0)?;
             tx.commit()?;
@@ -37,7 +37,7 @@ impl<'a, TStore: WalletStore> KeyManagerApi<'a, TStore> {
     }
 
     pub fn get_all_keys(&self, branch: &str) -> Result<Vec<(u64, PublicKey, bool)>, KeyManagerApiError> {
-        let tx = self.store.create_read_tx()?;
+        let mut tx = self.store.create_read_tx()?;
         let all_keys = tx.key_manager_get_all(branch)?;
         let mut keys = Vec::with_capacity(all_keys.len());
         for (index, active) in all_keys {
@@ -71,7 +71,7 @@ impl<'a, TStore: WalletStore> KeyManagerApi<'a, TStore> {
     }
 
     pub fn set_active_key(&self, branch: &str, index: u64) -> Result<(), KeyManagerApiError> {
-        let tx = self.store.create_write_tx()?;
+        let mut tx = self.store.create_write_tx()?;
         tx.key_manager_set_active_index(branch, index)?;
         tx.commit()?;
         Ok(())
@@ -103,7 +103,7 @@ impl<'a, TStore: WalletStore> KeyManagerApi<'a, TStore> {
     }
 
     fn get_or_create_key_manager(&self, branch: &str) -> Result<WalletKeyManager, KeyManagerApiError> {
-        let tx = self.store.create_write_tx()?;
+        let mut tx = self.store.create_write_tx()?;
         let index = match tx.key_manager_get_active_index(branch).optional()? {
             Some(index) => {
                 tx.rollback()?;
@@ -127,7 +127,7 @@ impl<'a, TStore: WalletStore> KeyManagerApi<'a, TStore> {
         branch: &str,
         f: F,
     ) -> Result<R, KeyManagerApiError> {
-        let tx = self.store.create_write_tx()?;
+        let mut tx = self.store.create_write_tx()?;
         let index = tx.key_manager_get_active_index(branch).optional()?.unwrap_or(0);
         let mut key_manager = KeyManager::from(self.cipher_seed.clone(), branch.to_string(), index);
         let ret = f(&mut key_manager)?;

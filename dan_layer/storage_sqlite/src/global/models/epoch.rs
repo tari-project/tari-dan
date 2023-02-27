@@ -40,7 +40,7 @@ impl From<Epoch> for DbEpoch {
 }
 
 #[derive(Insertable)]
-#[table_name = "epochs"]
+#[diesel(table_name = epochs)]
 pub struct NewEpoch {
     pub epoch: i64,
     pub validator_node_mr: Vec<u8>,

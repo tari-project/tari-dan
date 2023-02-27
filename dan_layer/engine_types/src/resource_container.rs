@@ -3,9 +3,10 @@
 
 use serde::{Deserialize, Serialize};
 use tari_bor::{borsh, Decode, Encode};
+use tari_common_types::types::{BulletRangeProof, PublicKey};
 use tari_template_abi::rust::collections::BTreeSet;
 use tari_template_lib::{
-    models::{Amount, NonFungibleId, ResourceAddress},
+    models::{Amount, ConfidentialProof, NonFungibleId, ResourceAddress},
     prelude::ResourceType,
 };
 
@@ -20,11 +21,11 @@ pub enum ResourceContainer {
         address: ResourceAddress,
         token_ids: BTreeSet<NonFungibleId>,
     },
-    // Confidential {
-    //     inputs: Vec<Commitment>,
-    //     outputs: Vec<Commitment>,
-    //     kernels: Vec<Kernel>,
-    // },
+    Confidential {
+        address: ResourceAddress,
+        // TODO: Look into aggregating commitments
+        commitments: Vec<(PublicKey, BulletRangeProof)>,
+    },
 }
 
 impl ResourceContainer {
@@ -36,10 +37,21 @@ impl ResourceContainer {
         ResourceContainer::NonFungible { address, token_ids }
     }
 
+    pub fn confidential(
+        address: ResourceAddress,
+        commitments: Vec<(PublicKey, BulletRangeProof)>,
+    ) -> ResourceContainer {
+        ResourceContainer::Confidential { address, commitments }
+    }
+
     pub fn amount(&self) -> Amount {
         match self {
             ResourceContainer::Fungible { amount, .. } => *amount,
             ResourceContainer::NonFungible { token_ids, .. } => token_ids.len().into(),
+            ResourceContainer::Confidential { commitments, .. } => {
+                // TODO: maybe rather return an option
+                commitments.len().into()
+            },
         }
     }
 
@@ -47,6 +59,7 @@ impl ResourceContainer {
         match self {
             ResourceContainer::Fungible { address, .. } => address,
             ResourceContainer::NonFungible { address, .. } => address,
+            ResourceContainer::Confidential { address, .. } => address,
         }
     }
 
@@ -54,6 +67,7 @@ impl ResourceContainer {
         match self {
             ResourceContainer::Fungible { .. } => ResourceType::Fungible,
             ResourceContainer::NonFungible { .. } => ResourceType::NonFungible,
+            ResourceContainer::Confidential { .. } => ResourceType::Confidential,
         }
     }
 
@@ -99,6 +113,15 @@ impl ResourceContainer {
             ) => {
                 token_ids.extend(other_token_ids);
             },
+            (
+                Confidential { commitments, .. },
+                Confidential {
+                    commitments: other_commitments,
+                    ..
+                },
+            ) => {
+                commitments.extend(other_commitments);
+            },
             _ => return Err(ResourceError::FungibilityMismatch),
         }
         Ok(())
@@ -138,6 +161,9 @@ impl ResourceContainer {
 
                 Ok(ResourceContainer::non_fungible(*self.resource_address(), taken_tokens))
             },
+            ResourceContainer::Confidential { .. } => Err(ResourceError::OperationNotAllowed(
+                "Cannot withdraw from a confidential resource by amount".to_string(),
+            )),
         }
     }
 
@@ -156,6 +182,23 @@ impl ResourceContainer {
                     })
                     .collect::<Result<_, _>>()?;
                 Ok(ResourceContainer::non_fungible(*self.resource_address(), taken_tokens))
+            },
+            ResourceContainer::Confidential { .. } => Err(ResourceError::OperationNotAllowed(
+                "Cannot withdraw by NFT token id from a confidential resource".to_string(),
+            )),
+        }
+    }
+
+    pub fn withdraw_confidential(&mut self, _proofs: &[ConfidentialProof]) -> Result<ResourceContainer, ResourceError> {
+        match self {
+            ResourceContainer::Fungible { .. } => Err(ResourceError::OperationNotAllowed(
+                "Cannot withdraw confidential assets from a fungible resource".to_string(),
+            )),
+            ResourceContainer::NonFungible { .. } => Err(ResourceError::OperationNotAllowed(
+                "Cannot withdraw confidential assets from a non-fungible resource".to_string(),
+            )),
+            ResourceContainer::Confidential { .. } => {
+                todo!("withdraw_confidential")
             },
         }
     }

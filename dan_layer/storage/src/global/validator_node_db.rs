@@ -24,24 +24,27 @@ use tari_dan_common_types::Epoch;
 
 use crate::global::GlobalDbAdapter;
 
-pub struct ValidatorNodeDb<'a, TGlobalDbAdapter: GlobalDbAdapter> {
+pub struct ValidatorNodeDb<'a, 'tx, TGlobalDbAdapter: GlobalDbAdapter> {
     backend: &'a TGlobalDbAdapter,
-    tx: &'a TGlobalDbAdapter::DbTransaction<'a>,
+    tx: &'tx mut TGlobalDbAdapter::DbTransaction<'a>,
 }
 
-impl<'a, TGlobalDbAdapter: GlobalDbAdapter> ValidatorNodeDb<'a, TGlobalDbAdapter> {
-    pub fn new(backend: &'a TGlobalDbAdapter, tx: &'a TGlobalDbAdapter::DbTransaction<'a>) -> Self {
+impl<'a, 'tx, TGlobalDbAdapter: GlobalDbAdapter> ValidatorNodeDb<'a, 'tx, TGlobalDbAdapter> {
+    pub fn new(backend: &'a TGlobalDbAdapter, tx: &'tx mut TGlobalDbAdapter::DbTransaction<'a>) -> Self {
         Self { backend, tx }
     }
 
-    pub fn insert_validator_nodes(&self, validator_nodes: Vec<DbValidatorNode>) -> Result<(), TGlobalDbAdapter::Error> {
+    pub fn insert_validator_nodes(
+        &mut self,
+        validator_nodes: Vec<DbValidatorNode>,
+    ) -> Result<(), TGlobalDbAdapter::Error> {
         self.backend
             .insert_validator_nodes(self.tx, validator_nodes)
             .map_err(TGlobalDbAdapter::Error::into)
     }
 
     pub fn get(
-        &self,
+        &mut self,
         start_epoch: u64,
         end_epoch: u64,
         public_key: &[u8],
@@ -52,7 +55,7 @@ impl<'a, TGlobalDbAdapter: GlobalDbAdapter> ValidatorNodeDb<'a, TGlobalDbAdapter
     }
 
     pub fn get_all_within_epochs(
-        &self,
+        &mut self,
         start_epoch: u64,
         end_epoch: u64,
     ) -> Result<Vec<DbValidatorNode>, TGlobalDbAdapter::Error> {

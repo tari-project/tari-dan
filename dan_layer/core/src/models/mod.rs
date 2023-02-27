@@ -177,6 +177,8 @@ pub struct SQLTransaction {
     pub total_leader_proposals: i64,
     pub timestamp: NaiveDateTime,
     pub justify: String,
+    pub proposed_by: Vec<u8>,
+    pub leader_round: i64,
 }
 
 #[derive(Debug, Serialize)]
@@ -187,4 +189,13 @@ pub struct SQLSubstate {
     pub data: String,
     pub created_justify: String,
     pub destroyed_justify: Option<String>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct CurrentLeaderStates {
+    pub payload_id: Vec<u8>,
+    pub shard_id: Vec<u8>,
+    pub leader_round: i64,
+    pub leader: Vec<u8>,
+    pub timestamp: NaiveDateTime,
 }

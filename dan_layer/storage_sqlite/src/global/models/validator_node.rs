@@ -44,7 +44,7 @@ impl From<ValidatorNode> for DbValidatorNode {
 }
 
 #[derive(Insertable)]
-#[table_name = "validator_nodes"]
+#[diesel(table_name = validator_nodes)]
 pub struct NewValidatorNode {
     pub public_key: Vec<u8>,
     pub shard_key: Vec<u8>,

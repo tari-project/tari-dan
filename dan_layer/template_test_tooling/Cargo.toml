@@ -7,6 +7,8 @@ edition = "2021"
 [dependencies]
 tari_dan_engine = { path = "../engine" }
 tari_crypto = { git = "https://github.com/tari-project/tari-crypto.git", tag = "v0.16.6" }
+tari_common_types = {git = "https://github.com/tari-project/tari.git", branch="development", package="tari_common_types" }
+tari_template_abi = { path = "../template_abi", features = ["std"] }
 tari_template_lib = { path = "../template_lib", default-features = false, features = ["serde"] }
 tari_engine_types = { path = "../engine_types" }
 tari_transaction_manifest = { path = "../transaction_manifest" }
