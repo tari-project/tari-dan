@@ -6,7 +6,7 @@ use tari_bor::{borsh, Decode, Encode};
 use tari_common_types::types::{BulletRangeProof, PublicKey};
 use tari_template_abi::rust::collections::BTreeSet;
 use tari_template_lib::{
-    models::{Amount, NonFungibleId, ResourceAddress},
+    models::{Amount, ConfidentialProof, NonFungibleId, ResourceAddress},
     prelude::ResourceType,
 };
 
@@ -23,6 +23,7 @@ pub enum ResourceContainer {
     },
     Confidential {
         address: ResourceAddress,
+        // TODO: Look into aggregating commitments
         commitments: Vec<(PublicKey, BulletRangeProof)>,
     },
 }
@@ -161,7 +162,7 @@ impl ResourceContainer {
                 Ok(ResourceContainer::non_fungible(*self.resource_address(), taken_tokens))
             },
             ResourceContainer::Confidential { .. } => Err(ResourceError::OperationNotAllowed(
-                "Cannot withdraw from a confidential resource".to_string(),
+                "Cannot withdraw from a confidential resource by amount".to_string(),
             )),
         }
     }
@@ -185,6 +186,20 @@ impl ResourceContainer {
             ResourceContainer::Confidential { .. } => Err(ResourceError::OperationNotAllowed(
                 "Cannot withdraw by NFT token id from a confidential resource".to_string(),
             )),
+        }
+    }
+
+    pub fn withdraw_confidential(&mut self, _proofs: &[ConfidentialProof]) -> Result<ResourceContainer, ResourceError> {
+        match self {
+            ResourceContainer::Fungible { .. } => Err(ResourceError::OperationNotAllowed(
+                "Cannot withdraw confidential assets from a fungible resource".to_string(),
+            )),
+            ResourceContainer::NonFungible { .. } => Err(ResourceError::OperationNotAllowed(
+                "Cannot withdraw confidential assets from a non-fungible resource".to_string(),
+            )),
+            ResourceContainer::Confidential { .. } => {
+                todo!("withdraw_confidential")
+            },
         }
     }
 }

@@ -41,7 +41,7 @@ use crate::{
         ResourceAddress,
         VaultRef,
     },
-    prelude::AccessRules,
+    prelude::{AccessRules, ConfidentialProof},
     resource::ResourceType,
 };
 
@@ -184,6 +184,9 @@ pub enum MintArg {
     NonFungible {
         tokens: HashMap<NonFungibleId, (Vec<u8>, Vec<u8>)>,
     },
+    Confidential {
+        proof: ConfidentialProof,
+    },
 }
 
 #[derive(Clone, Debug, Decode, Encode)]
@@ -233,6 +236,7 @@ pub enum VaultAction {
 pub enum VaultWithdrawArg {
     Fungible { amount: Amount },
     NonFungible { ids: BTreeSet<NonFungibleId> },
+    Confidential { proofs: Vec<ConfidentialProof> },
 }
 
 // -------------------------------- Bucket -------------------------------- //

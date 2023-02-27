@@ -119,6 +119,8 @@ pub enum RuntimeError {
         index: u64,
         referenced_address: Address,
     },
+    #[error("Invalid confidential proof: {details}")]
+    InvalidConfidentialProof { details: String },
 }
 
 impl RuntimeError {

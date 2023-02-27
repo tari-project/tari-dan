@@ -65,7 +65,12 @@ use tari_template_lib::{
 use tari_transaction::id_provider::IdProvider;
 
 use crate::{
-    runtime::{working_state::WorkingState, RuntimeError, TransactionCommitError},
+    runtime::{
+        validation::validate_confidential_proof,
+        working_state::WorkingState,
+        RuntimeError,
+        TransactionCommitError,
+    },
     state_store::{memory::MemoryStateStore, AtomicDb, StateReader},
 };
 
@@ -177,6 +182,14 @@ impl StateTracker {
                     }
 
                     ResourceContainer::non_fungible(resource_address, token_ids)
+                },
+                MintArg::Confidential { proof } => {
+                    debug!(
+                        target: LOG_TARGET,
+                        "Minting confidential tokens on resource: {}", resource_address
+                    );
+                    let validated_proof = validate_confidential_proof(proof)?;
+                    ResourceContainer::confidential(resource_address, vec![validated_proof])
                 },
             };
 

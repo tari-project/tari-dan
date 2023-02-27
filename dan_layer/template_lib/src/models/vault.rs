@@ -34,6 +34,7 @@ use crate::{
     args::{InvokeResult, VaultAction, VaultInvokeArg, VaultWithdrawArg},
     hash::HashParseError,
     models::{Amount, Bucket, NonFungibleId, ResourceAddress},
+    prelude::ConfidentialProof,
     Hash,
 };
 
@@ -143,6 +144,18 @@ impl Vault {
             action: VaultAction::Withdraw,
             args: invoke_args![VaultWithdrawArg::NonFungible {
                 ids: ids.into_iter().collect()
+            }],
+        });
+
+        resp.decode().expect("failed to decode Bucket")
+    }
+
+    pub fn withdraw_confidential<I: IntoIterator<Item = ConfidentialProof>>(&mut self, proofs: I) -> Bucket {
+        let resp: InvokeResult = call_engine(EngineOp::VaultInvoke, &VaultInvokeArg {
+            vault_ref: self.vault_ref(),
+            action: VaultAction::Withdraw,
+            args: invoke_args![VaultWithdrawArg::Confidential {
+                proofs: proofs.into_iter().collect()
             }],
         });
 
