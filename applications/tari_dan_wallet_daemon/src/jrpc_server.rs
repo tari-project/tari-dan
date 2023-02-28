@@ -46,7 +46,7 @@ pub async fn listen(
 
 async fn handler(Extension(context): Extension<Arc<HandlerContext>>, value: JsonRpcExtractor) -> JrpcResult {
     info!(target: LOG_TARGET, "🌐 JSON-RPC request: {}", value.method);
-    match value.method.as_str().split_once('/') {
+    match value.method.as_str().split_once('.') {
         Some(("keys", method)) => match method {
             "create" => call_handler(context, value, keys::handle_create).await,
             "list" => call_handler(context, value, keys::handle_list).await,
