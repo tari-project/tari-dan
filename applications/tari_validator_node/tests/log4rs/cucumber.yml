@@ -18,6 +18,15 @@ appenders:
       pattern: "{d(%H:%M)} {h({l}):5} {m} [{f}:{L}]{n}"
     filters:
       - kind: threshold
+        level: info
+
+  # An appender named "stdout" that writes to stdout
+  stdout_warn:
+    kind: console
+    encoder:
+      pattern: "{d(%H:%M)} {h({l}):5} {m} [{f}:{L}]{n}"
+    filters:
+      - kind: threshold
         level: warn
 
   # An appender named "dan_layer" that writes to a file with a custom pattern encoder
@@ -72,11 +81,28 @@ appenders:
     encoder:
       pattern: "{d(%Y-%m-%d %H:%M:%S.%f)} [{t}] [{X(node-public-key)},{X(node-id)}] {l:5} {m} // {f}:{L}{n}"
 
+  # An appender named "other" that writes to a file with a custom pattern encoder
+  other:
+    kind: rolling_file
+    path: "log/validator-node/other.log"
+    policy:
+      kind: compound
+      trigger:
+        kind: size
+        limit: 10mb
+      roller:
+        kind: fixed_window
+        base: 1
+        count: 5
+        pattern: "log/validator-node/other.{}.log"
+    encoder:
+      pattern: "{d(%Y-%m-%d %H:%M:%S.%f)} [{t}] [{X(node-public-key)},{X(node-id)}] {l:5} {m} // {f}:{L}{n}"
 
 root:
-  level: error
+  level: warn
   appenders:
     - stdout
+    - other
 
 loggers:
   tari::application:
@@ -100,43 +126,37 @@ loggers:
       - dan_layer
     additive: false
 
-  tari::base_layer_scanner:
-    level: debug
+  tari::dan::base_layer_scanner:
+    level: info
     appenders:
       - stdout
       - dan_layer
     additive: false
 
-  tari::dan:
-    level: debug
+  tari::dan::hotstuff_waiter:
+    level: info
     appenders:
-      - stdout
+      # Hotstuff waiter is a little noisy, only show warn, errors
+      - stdout_warn
       - dan_layer
     additive: false
 
-  tari::dan_layer:
-    level: debug
-    appenders:
-      - stdout
-      - dan_layer
-    additive: false
+  tari::dan::template_manager:
+      level: info
+      appenders:
+        - stdout
+        - dan_layer
+      additive: false
 
-  dan:
-    level: debug
-    appenders:
-      - stdout
-      - dan_layer
-    additive: false
+  tari::dan::epoch_manager:
+      level: info
+      appenders:
+        - stdout
+        - dan_layer
+      additive: false
 
-  vn:
-    level: debug
-    appenders:
-      - stdout
-      - dan_layer
-    additive: false
-
-  tari_validator_node:
-    level: debug
+  tari::dan::storage:
+    level: info
     appenders:
       - stdout
       - dan_layer
@@ -144,21 +164,21 @@ loggers:
 
   # Route log events sent to the "core" logger to the "base_layer" appender
   c:
-    level: debug
+    level: info
     appenders:
       - base_layer
   # Route log events sent to the "wallet" logger to the "base_layer" appender
   wallet:
-    level: debug
+    level: info
     appenders:
       - base_layer
   # Route log events sent to the "comms" logger to the "network" appender
   comms:
-    level: debug
+    level: info
     appenders:
       - network
   # Route log events sent to the "p2p" logger to the "network" appender
   p2p:
-    level: debug
+    level: info
     appenders:
       - network

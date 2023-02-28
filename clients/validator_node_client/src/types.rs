@@ -238,3 +238,10 @@ pub struct AddPeerRequest {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AddPeerResponse {}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct GetEpochManagerStatsResponse {
+    pub current_epoch: Epoch,
+    pub current_block_height: u64,
+    pub is_valid: bool,
+}

@@ -31,7 +31,7 @@ use tari_dan_common_types::NodeAddressable;
 use tari_dan_core::services::PeerProvider;
 use tokio::{sync::mpsc, task};
 
-const LOG_TARGET: &str = "vn::p2p::rpc";
+const LOG_TARGET: &str = "tari::dan::p2p::rpc";
 
 use crate::p2p::rpc::ValidatorNodeRpcService;
 

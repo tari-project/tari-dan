@@ -89,6 +89,7 @@ impl<T: Into<StorageError>> From<T> for EpochManagerError {
 // TODO: Rename to reflect that it's a read only interface (e.g. EpochReader, EpochQuery)
 pub trait EpochManager<TAddr: NodeAddressable>: Clone {
     async fn current_epoch(&self) -> Result<Epoch, EpochManagerError>;
+    async fn current_block_height(&self) -> Result<u64, EpochManagerError>;
     async fn get_validator_shard_key(&self, epoch: Epoch, addr: TAddr) -> Result<ShardId, EpochManagerError>;
     async fn is_epoch_valid(&self, epoch: Epoch) -> Result<bool, EpochManagerError>;
     async fn get_committees(
@@ -182,6 +183,11 @@ impl<TAddr: NodeAddressable> RangeEpochManager<TAddr> {
 impl<TAddr: NodeAddressable> EpochManager<TAddr> for RangeEpochManager<TAddr> {
     async fn current_epoch(&self) -> Result<Epoch, EpochManagerError> {
         Ok(self.current_epoch)
+    }
+
+    async fn current_block_height(&self) -> Result<u64, EpochManagerError> {
+        // We never change this or the epoch anyway
+        Ok(0)
     }
 
     async fn get_validator_shard_key(&self, epoch: Epoch, addr: TAddr) -> Result<ShardId, EpochManagerError> {

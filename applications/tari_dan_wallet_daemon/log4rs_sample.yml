@@ -44,14 +44,14 @@ root:
 
 loggers:
   # Route log events common to every application to all appenders
-  tari::dan::wallet_daemon:
+  tari::dan_wallet_daemon:
     level: info
     appenders:
       - dan_layer
       - stdout
     additive: false
 
-  tari::dan::wallet_sdk:
+  tari::dan:
     level: info
     appenders:
       - dan_layer

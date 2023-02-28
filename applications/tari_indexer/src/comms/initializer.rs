@@ -65,7 +65,7 @@ use tower::ServiceBuilder;
 
 use crate::ApplicationConfig;
 
-const LOG_TARGET: &str = "dan::comms::initializer";
+const LOG_TARGET: &str = "tari::dan::comms::initializer";
 
 use crate::comms::{broadcast::DanBroadcast, deserialize::DanDeserialize, destination::Destination};
 
