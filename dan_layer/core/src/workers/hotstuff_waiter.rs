@@ -153,6 +153,7 @@ pub struct HotStuffWaiter<
     /// We have to store if we are in the middle of an election, so that when we receive a recovery message
     /// from another VN, we can answer that we are electing and it should wait.
     election_in_progress: HashSet<(ShardId, PayloadId)>,
+    asked_foreign_members: HashMap<(ShardId, PayloadId), HashMap<TAddr, u16>>,
 }
 
 impl<TPayload, TAddr, TLeaderStrategy, TEpochManager, TPayloadProcessor, TShardStore, TSigningService>
@@ -259,6 +260,7 @@ where
             network_latency,
             current_leader_round: HashMap::new(),
             election_in_progress: HashSet::new(),
+            asked_foreign_members: HashMap::new(),
         }
     }
 
@@ -496,9 +498,6 @@ where
             ))
             .await?;
 
-        // We did receive something from the leader, so he was elected.
-        self.election_in_progress.remove(&(node.shard(), payload_id));
-
         let shard = node.shard();
         let payload;
         let last_vote_height;
@@ -530,6 +529,10 @@ where
             (node.height() == last_vote_height && node.leader_round() > last_leader_round)) &&
             (*node.parent() == locked_node || node.height() > locked_height)
         {
+            // We did receive something from the leader, so he was elected.
+            self.election_in_progress.remove(&(node.shard(), payload_id));
+            // If this proposal was a result of foreign leader failure, we need to delete the data we no longer need.
+            self.asked_foreign_members.remove(&(node.shard(), node.payload_id()));
             let proposed_nodes = self.shard_store.with_write_tx(|tx| {
                 tx.save_node(node.clone())?;
                 tx.save_leader_proposals(
@@ -607,7 +610,6 @@ where
         payload_id: PayloadId,
         shard_id: ShardId,
     ) -> Result<(), HotStuffError> {
-        // get current leader round
         let current_leader = *self
             .current_leader_round
             .entry((shard_id, payload_id))
@@ -650,7 +652,7 @@ where
     }
 
     async fn pacemaker_trigger_foreign_leader_fail(
-        &self,
+        &mut self,
         epoch: Epoch,
         payload_id: PayloadId,
         shard_id: ShardId,
@@ -672,11 +674,18 @@ where
         let how_many_to_ask = foreign_committee.len() / 3 + 1; // f+1
 
         // We select the subset of the committee by random.
-        let selected_foreing_committee_members: Vec<_> = foreign_committee
+        let selected_foreign_committee_members: Vec<_> = foreign_committee
             .members
             .choose_multiple(&mut rand::thread_rng(), how_many_to_ask)
             .cloned()
             .collect();
+        self.asked_foreign_members.insert(
+            (shard_id, payload_id),
+            selected_foreign_committee_members
+                .iter()
+                .map(|member| (member.clone(), 0))
+                .collect(),
+        );
         let last_height = self
             .shard_store
             .create_read_tx()?
@@ -684,7 +693,7 @@ where
         self.tx_recovery_broadcast
             .send((
                 RecoveryMessage::MissingProposal(epoch, shard_id, payload_id, last_height),
-                selected_foreing_committee_members,
+                selected_foreign_committee_members,
             ))
             .await
             .unwrap();
@@ -780,28 +789,33 @@ where
     // We are running a pacemaker for the proposal. But the other committee is still having an election. Let's postpone
     // the pacemaker.
     async fn on_receive_election_in_progress(
-        &self,
-        _from: TAddr,
+        &mut self,
+        from: TAddr,
         epoch: Epoch,
         shard_id: ShardId,
         payload_id: PayloadId,
     ) -> Result<(), HotStuffError> {
-        // TODO: if there is a byzantine replica, he can always send election in progress. We should count the election
-        // rounds. Be aware that the election rounds are based on delta time, and this trigger is 2*delta.
-        // We restart the timer.
-        self.pacemaker
-            .stop_timer(PacemakerEvents::ForeignCommittee(epoch, shard_id, payload_id))
-            .await?;
-        self.pacemaker
-            .start_timer(
-                PacemakerEvents::ForeignCommittee(epoch, shard_id, payload_id),
-                self.network_latency * 2,
-            )
-            .await?;
+        if let Some(members) = self.asked_foreign_members.get_mut(&(shard_id, payload_id)) {
+            if let Some(answered) = members.get_mut(&from) {
+                if u64::from(*answered) < self.consensus_constants.committee_size / 3 + 1 {
+                    // We prevent one malicious member to send the election in progress again and again.
+                    *answered += 1;
+                    self.pacemaker
+                        .stop_timer(PacemakerEvents::ForeignCommittee(epoch, shard_id, payload_id))
+                        .await?;
+                    self.pacemaker
+                        .start_timer(
+                            PacemakerEvents::ForeignCommittee(epoch, shard_id, payload_id),
+                            self.network_latency * 2,
+                        )
+                        .await?;
+                }
+            }
+        }
         Ok(())
     }
 
-    async fn on_receive_recovery_message(&self, from: TAddr, msg: RecoveryMessage) -> Result<(), HotStuffError> {
+    async fn on_receive_recovery_message(&mut self, from: TAddr, msg: RecoveryMessage) -> Result<(), HotStuffError> {
         match msg {
             RecoveryMessage::MissingProposal(epoch, shard_id, payload_id, last_height) => {
                 self.on_receive_missing_proposal(from, epoch, shard_id, payload_id, last_height)
@@ -1390,12 +1404,23 @@ where
             tx.save_received_vote_for(from, msg.local_node_hash(), msg.clone())?;
 
             let votes = tx.get_received_votes_for(msg.local_node_hash())?;
-
-            if votes.len() == valid_committee.consensus_threshold() {
+            // Count votes (reject, accept)
+            let votes_decisions = votes.iter().fold((0, 0), |acc, vote| {
+                if vote.decision().is_reject() {
+                    (acc.0 + 1, acc.1)
+                } else {
+                    (acc.0, acc.1 + 1)
+                }
+            });
+            let main_vote = if valid_committee.consensus_threshold() == votes_decisions.1 {
+                Some(votes.iter().find(|vote| !vote.decision().is_reject()).unwrap())
+            } else if valid_committee.consensus_threshold() == votes_decisions.0 {
+                Some(votes.iter().find(|vote| vote.decision().is_reject()).unwrap())
+            } else {
+                None
+            };
+            if let Some(main_vote) = main_vote {
                 let validator_metadata = votes.iter().map(|v| v.validator_metadata().clone()).collect();
-
-                // TODO: Check all votes
-                let main_vote = votes.get(0).unwrap();
 
                 let qc = QuorumCertificate::new(
                     node.payload_id(),

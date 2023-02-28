@@ -634,22 +634,97 @@ async fn test_leader_fails_only_foreignly() {
     instance1.assert_shuts_down_safely().await;
 }
 
+// TODO: This test should not panic!
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[should_panic]
+async fn test_if_hostuff_accepts_the_same_transacation_twice_locking_the_substate_forever() {
+    // If this test passes the hotstuff is broken. Our goal is to break this test. But I'm not yet sure how to do the
+    // fix, that's why I created this test.
+    let mut test = Test::init(vec![(4, *TEN_SECONDS), (4, *NEVER)]);
+    test.send_tx_new_to_all(0).await;
+    let new_views = test.receive_all_rx_leader(0).await;
+    test.leaders_receive_messages(new_views, 0).await;
+    for phase in [
+        HotstuffPhase::Prepare,
+        HotstuffPhase::PreCommit,
+        HotstuffPhase::Commit,
+        HotstuffPhase::Decide,
+    ] {
+        let proposals = test.get_proposals(0).await;
+        test.send_all_proposals_to_all_committees(proposals, 0).await;
+        if phase != HotstuffPhase::Decide {
+            let votes = test.get_all_votes(0).await;
+            test.all_leaders_receive_votes(votes, 0).await;
+        }
+    }
+    test.send_tx_new_to_committee(0, 0).await;
+    // When the VNs receive the same transaction, which is already done. The leader gets the last proposal (decide
+    // phase) and sends it. The nodes happily accept and store that the last voted height is 4. So they never vote again
+    // on it, because it would have to be for phase 5 (there is no such phase). Leader rotation will solve this. But I
+    // don't think this should ever happen.
+    test.committees[0].receive_rx_leader_should_be_empty().await;
+}
+
+// TODO: This test should not panic!
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[should_panic]
+async fn test_if_malicious_node_can_lock_any_substate_forever() {
+    // If this test passes the hotstuff is broken. Our goal is to break this test. But I'm not yet sure how to do the
+    // fix, that's why I created this test.
+    let mut test = Test::init(vec![(1, *ONE_SEC), (1, *ONE_SEC), (1, *ONE_SEC)]);
+    // Payload01 is a fake transacation that locks up shard0.
+    let payload01 = test.create_payload(&[0, 1]);
+    // This is real transacation that users wants to do.
+    let payload02 = test.create_payload(&[0, 2]);
+    // We send the fake transacation only to shard0.
+    test.send_tx_new_to_committee(0, payload01).await;
+    // Committee0 starts to vote on this message.
+    let new_views0 = test.committees[0].receive_rx_leader().await;
+    test.committees[0].leader_receive_messages(new_views0).await;
+    let proposal0 = test.committees[0].get_proposal().await;
+    test.committees[0].send_proposal(proposal0.0).await;
+    // At this point in time the committee0 is awaiting proposal for shard1. But committee in shard1 doesn't know about
+    // this transacation. So the pacemaker in committee0 will trigger forever.
+
+    // Now the user wants to do a real transaction.
+    test.send_tx_new_to_all(payload02).await;
+    let new_views02 = test.receive_all_rx_leader(payload02).await;
+    test.leaders_receive_messages(new_views02, payload02).await;
+    for phase in [
+        HotstuffPhase::Prepare,
+        HotstuffPhase::PreCommit,
+        HotstuffPhase::Commit,
+        HotstuffPhase::Decide,
+    ] {
+        let proposals02 = test.get_proposals(payload02).await;
+        // Here is the problem, proposal from committee0 is pledged for the fake transacation.
+        test.send_all_proposals_to_all_committees(proposals02, payload02).await;
+        // The leader0 will never send a good proposal, because it's pledged for the fake transacation. So the leader
+        // rotate will trigger. But this should not happen! Otherwise any malicious party will just send
+        // `committe.len()` fake transacation. And it will lock everyone.
+        if phase != HotstuffPhase::Decide {
+            let votes02 = test.get_all_votes(payload02).await;
+            test.all_leaders_receive_votes(votes02, payload02).await;
+        }
+    }
+}
+
 #[allow(clippy::too_many_lines)]
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn test_leader_fails_only_locally() {
     // We create 2 committees. Committee0 will fail only locally. Committee1 will work fine.
     let mut test = Test::init(vec![(4, *ONE_SEC), (1, *NEVER)]);
-    test.send_tx_new_to_all().await;
-    let new_views = test.receive_all_rx_leader().await;
-    test.leaders_receive_messages(new_views).await;
-    let proposals = test.get_proposals().await;
+    test.send_tx_new_to_all(0).await;
+    let new_views = test.receive_all_rx_leader(0).await;
+    test.leaders_receive_messages(new_views, 0).await;
+    let proposals = test.get_proposals(0).await;
     assert!(
         proposals
             .iter()
             .all(|proposal| proposal.0.node().unwrap().payload_phase() == HotstuffPhase::Prepare),
         "All proposals should be for 'Prepare' phase"
     );
-    test.send_proposal_to_all_committees(proposals[1].clone()).await;
+    test.send_proposal_to_all_committees(proposals[1].clone(), 0).await;
     // Leader in committee0 fails only locally.
     test.send_proposal_to_committee(1, proposals[0].clone()).await;
     test.remove_leader_from_committee(0).await;
@@ -662,7 +737,7 @@ async fn test_leader_fails_only_locally() {
         pre_commit_proposal1.0.node().unwrap().payload_phase(),
         HotstuffPhase::PreCommit
     );
-    test.send_proposal_to_all_committees(pre_commit_proposal1).await;
+    test.send_proposal_to_all_committees(pre_commit_proposal1, 0).await;
 
     // Now the trigger of local leader failure will happen in committe0.
     // Committee 0 start election;
@@ -674,7 +749,7 @@ async fn test_leader_fails_only_locally() {
         prepare_proposal0.0.node().unwrap().payload_phase(),
         HotstuffPhase::Prepare
     );
-    test.send_proposal_to_all_committees(prepare_proposal0).await;
+    test.send_proposal_to_all_committees(prepare_proposal0, 0).await;
 
     // Committee1 received a valid proposal, so they vote again.
     let votes1 = test.committees[1].get_votes().await;
@@ -689,14 +764,13 @@ async fn test_leader_fails_only_locally() {
         pre_commit_proposal0.0.node().unwrap().payload_phase(),
         HotstuffPhase::PreCommit
     );
-    test.send_proposal_to_all_committees(pre_commit_proposal0).await;
+    test.send_proposal_to_all_committees(pre_commit_proposal0, 0).await;
 
     // Now both should be on the same height. Let's finish this transaction.
     for phase in [HotstuffPhase::Commit, HotstuffPhase::Decide] {
-        println!("Phase: {:?}", phase);
-        let votes = test.get_all_votes().await;
-        test.all_leaders_receive_votes(votes).await;
-        let proposals = test.get_proposals().await;
+        let votes = test.get_all_votes(0).await;
+        test.all_leaders_receive_votes(votes, 0).await;
+        let proposals = test.get_proposals(0).await;
         assert!(
             proposals
                 .iter()
@@ -704,7 +778,7 @@ async fn test_leader_fails_only_locally() {
             "All proposals should be for '{:?}' phase",
             phase
         );
-        test.send_all_proposals_to_all_committees(proposals).await;
+        test.send_all_proposals_to_all_committees(proposals, 0).await;
     }
 }
 
@@ -715,6 +789,7 @@ pub struct Committee {
     previous_leader: Option<RistrettoPublicKey>,
     shard_range: Range<ShardId>,
     timeout: Duration,
+    current_leader_index: usize,
 }
 
 impl Committee {
@@ -726,7 +801,6 @@ impl Committee {
             .iter()
             .map(|(_, public_key)| public_key.clone())
             .collect::<Vec<_>>();
-        println!("Committe : {:?}", shard_committee);
         Self {
             keys,
             shard_committee,
@@ -734,6 +808,7 @@ impl Committee {
             previous_leader: None,
             shard_range,
             timeout,
+            current_leader_index: 0,
         }
     }
 
@@ -761,13 +836,25 @@ impl Committee {
         self.shard_range.start
     }
 
+    #[allow(dead_code)]
+    pub fn rotate_leader(&mut self) {
+        self.current_leader_index = (self.current_leader_index + 1) % self.instances.len();
+    }
+
     pub async fn remove_leader(&mut self) {
-        self.previous_leader = Some(self.shard_committee.remove(0));
-        let shutdown = timeout(*TEN_SECONDS, self.instances.remove(0).assert_shuts_down_safely()).await;
+        self.previous_leader = Some(self.shard_committee.remove(self.current_leader_index));
+        let shutdown = timeout(
+            *TEN_SECONDS,
+            self.instances
+                .remove(self.current_leader_index)
+                .assert_shuts_down_safely(),
+        )
+        .await;
         if shutdown.is_err() {
             println!("SHUTDOWN PROBLEM : Instance can't be shutdown properly");
         }
         // assert!(shutdown.is_ok(), "Instance can't be shutdown properly");
+        self.current_leader_index %= self.instances.len();
     }
 
     pub async fn send_tx_new(&self, payload: &TariDanPayload) {
@@ -784,6 +871,21 @@ impl Committee {
         assert!(sends.is_ok(), "Send should not fail");
         let sends = sends.unwrap();
         assert!(sends.iter().all(Result::is_ok), "Send should not fail");
+    }
+
+    pub async fn receive_rx_leader_should_be_empty(&mut self) {
+        let hs_message = join_all(
+            self.instances
+                .iter_mut()
+                .map(|instance| timeout(*TEN_SECONDS, instance.rx_leader.recv()))
+                .collect::<Vec<_>>(),
+        )
+        .await;
+        assert!(
+            hs_message.iter().all(Result::is_err),
+            "No leader messages should have been sent!\n{:?}",
+            hs_message
+        );
     }
 
     pub async fn receive_rx_leader(&mut self) -> Vec<HotStuffMessage<TariDanPayload, RistrettoPublicKey>> {
@@ -807,7 +909,7 @@ impl Committee {
         assert!(
             hs_message
                 .iter()
-                .all(|(dest_key, _)| dest_key == &self.shard_committee[0]),
+                .all(|(dest_key, _)| dest_key == &self.shard_committee[self.current_leader_index]),
             "{:?} {:?}",
             hs_message,
             self.shard_committee
@@ -822,7 +924,11 @@ impl Committee {
                 messages
                     .into_iter()
                     .zip(self.shard_committee.iter())
-                    .map(|(message, from)| self.instances[0].tx_hs_messages.send((from.clone(), message)))
+                    .map(|(message, from)| {
+                        self.instances[self.current_leader_index]
+                            .tx_hs_messages
+                            .send((from.clone(), message))
+                    })
                     .collect::<Vec<_>>(),
             ),
         )
@@ -841,7 +947,11 @@ impl Committee {
         HotStuffMessage<TariDanPayload, RistrettoPublicKey>,
         Vec<RistrettoPublicKey>,
     ) {
-        let proposal = timeout(*TEN_SECONDS, self.instances[0].rx_broadcast.recv()).await;
+        let proposal = timeout(
+            *TEN_SECONDS,
+            self.instances[self.current_leader_index].rx_broadcast.recv(),
+        )
+        .await;
         assert!(proposal.is_ok(), "Proposal should be send");
         let proposal = proposal.unwrap();
         assert!(proposal.is_some(), "Proposal should not be empty");
@@ -880,7 +990,9 @@ impl Committee {
         assert!(votes.iter().all(Option::is_some), "Vote should't be empty");
         let votes = votes.into_iter().map(|vote| vote.unwrap()).collect::<Vec<_>>();
         assert!(
-            votes.iter().all(|(_, dest_key)| dest_key == &self.shard_committee[0]),
+            votes
+                .iter()
+                .all(|(_, dest_key)| dest_key == &self.shard_committee[self.current_leader_index]),
             "Committee should send votes to the current leader"
         );
         votes.into_iter().map(|(vote, _)| vote).collect::<Vec<_>>()
@@ -893,7 +1005,11 @@ impl Committee {
                 votes
                     .into_iter()
                     .zip(self.shard_committee.iter())
-                    .map(|(vote, from)| self.instances[0].tx_votes.send((from.clone(), vote)))
+                    .map(|(vote, from)| {
+                        self.instances[self.current_leader_index]
+                            .tx_votes
+                            .send((from.clone(), vote))
+                    })
                     .collect::<Vec<_>>(),
             ),
         )
@@ -922,7 +1038,8 @@ impl Committee {
 }
 
 pub struct Test {
-    payload: TariDanPayload,
+    payloads: Vec<TariDanPayload>,
+    payload_committees: Vec<Vec<usize>>,
     committees: Vec<Committee>,
 }
 
@@ -958,8 +1075,6 @@ impl Test {
         for committee in &mut committees {
             committee.init_instances(epoch_manager.clone());
         }
-
-        // Create payload
         let payload = TariDanPayload::new(
             Transaction::builder()
                 .with_inputs(
@@ -971,21 +1086,43 @@ impl Test {
                 .sign(&committees[0].keys[0].0)
                 .build(),
         );
+        Self {
+            payloads: vec![payload],
+            payload_committees: vec![(0..committees.len()).collect()],
+            committees,
+        }
+    }
 
-        Self { payload, committees }
+    pub fn create_payload(&mut self, committee_indices: &[usize]) -> usize {
+        let payload = TariDanPayload::new(
+            Transaction::builder()
+                .with_inputs(
+                    committee_indices
+                        .iter()
+                        .map(|committee_index| self.committees[*committee_index].get_shard_id())
+                        .collect::<Vec<_>>(),
+                )
+                .sign(&self.committees[committee_indices[0]].keys[0].0)
+                .clone()
+                .build(),
+        );
+        self.payloads.push(payload);
+        self.payload_committees.push(committee_indices.to_vec());
+        // Returns the index of the payload
+        self.payloads.len() - 1
     }
 
     // pub async fn remove_leader(&mut self, committee_id: usize) {
     //     self.committees[committee_id].remove_leader();
     // }
 
-    pub async fn send_tx_new_to_all(&mut self) {
+    pub async fn send_tx_new_to_all(&mut self, payload_index: usize) {
         let sent_payloads = timeout(
             *TEN_SECONDS,
             join_all(
-                self.committees
+                self.payload_committees[payload_index]
                     .iter()
-                    .map(|committee| committee.send_tx_new(&self.payload))
+                    .map(|committee_index| self.committees[*committee_index].send_tx_new(&self.payloads[payload_index]))
                     .collect::<Vec<_>>(),
             ),
         )
@@ -993,13 +1130,34 @@ impl Test {
         assert!(sent_payloads.is_ok(), "The payload should be send");
     }
 
-    pub async fn receive_all_rx_leader(&mut self) -> Vec<Vec<HotStuffMessage<TariDanPayload, RistrettoPublicKey>>> {
+    pub async fn send_tx_new_to_committee(&mut self, committee_index: usize, payload_index: usize) {
+        let sent_payloads = timeout(
+            *TEN_SECONDS,
+            self.committees[committee_index].send_tx_new(&self.payloads[payload_index]),
+        )
+        .await;
+        assert!(sent_payloads.is_ok(), "The payload should be send");
+    }
+
+    pub async fn receive_all_rx_leader(
+        &mut self,
+        payload_index: usize,
+    ) -> Vec<Vec<HotStuffMessage<TariDanPayload, RistrettoPublicKey>>> {
+        let committee_indices = self.payload_committees[payload_index].clone();
+
         timeout(
             *TEN_SECONDS,
             join_all(
                 self.committees
                     .iter_mut()
-                    .map(|committee| committee.receive_rx_leader())
+                    .enumerate()
+                    .filter_map(|(index, committee)| {
+                        if committee_indices.contains(&index) {
+                            Some(committee.receive_rx_leader())
+                        } else {
+                            None
+                        }
+                    })
                     .collect::<Vec<_>>(),
             ),
         )
@@ -1009,16 +1167,25 @@ impl Test {
 
     pub async fn get_proposals(
         &mut self,
+        payload_index: usize,
     ) -> Vec<(
         HotStuffMessage<TariDanPayload, RistrettoPublicKey>,
         Vec<RistrettoPublicKey>,
     )> {
+        let committee_indices = self.payload_committees[payload_index].clone();
         timeout(
             *TEN_SECONDS,
             join_all(
                 self.committees
                     .iter_mut()
-                    .map(|committee| committee.get_proposal())
+                    .enumerate()
+                    .filter_map(|(index, committee)| {
+                        if committee_indices.contains(&index) {
+                            Some(committee.get_proposal())
+                        } else {
+                            None
+                        }
+                    })
                     .collect::<Vec<_>>(),
             ),
         )
@@ -1026,13 +1193,21 @@ impl Test {
         .unwrap()
     }
 
-    pub async fn get_all_votes(&mut self) -> Vec<Vec<VoteMessage>> {
+    pub async fn get_all_votes(&mut self, payload_index: usize) -> Vec<Vec<VoteMessage>> {
+        let committee_indices = self.payload_committees[payload_index].clone();
         timeout(
             *TEN_SECONDS,
             join_all(
                 self.committees
                     .iter_mut()
-                    .map(|committee| committee.get_votes())
+                    .enumerate()
+                    .filter_map(|(index, committee)| {
+                        if committee_indices.contains(&index) {
+                            Some(committee.get_votes())
+                        } else {
+                            None
+                        }
+                    })
                     .collect::<Vec<_>>(),
             ),
         )
@@ -1040,14 +1215,14 @@ impl Test {
         .unwrap()
     }
 
-    pub async fn all_leaders_receive_votes(&self, all_votes: Vec<Vec<VoteMessage>>) {
+    pub async fn all_leaders_receive_votes(&self, all_votes: Vec<Vec<VoteMessage>>, payload_index: usize) {
         timeout(
             *TEN_SECONDS,
             join_all(
-                self.committees
+                self.payload_committees[payload_index]
                     .iter()
                     .zip(all_votes.into_iter())
-                    .map(|(committee, votes)| committee.leader_receive_votes(votes))
+                    .map(|(committee_index, votes)| self.committees[*committee_index].leader_receive_votes(votes))
                     .collect::<Vec<_>>(),
             ),
         )
@@ -1061,13 +1236,14 @@ impl Test {
             HotStuffMessage<TariDanPayload, RistrettoPublicKey>,
             Vec<RistrettoPublicKey>,
         )>,
+        payload_index: usize,
     ) {
         timeout(
             *TEN_SECONDS,
             join_all(
                 proposals
                     .into_iter()
-                    .map(|proposal| self.send_proposal_to_all_committees(proposal))
+                    .map(|proposal| self.send_proposal_to_all_committees(proposal, payload_index))
                     .collect::<Vec<_>>(),
             ),
         )
@@ -1081,13 +1257,14 @@ impl Test {
             HotStuffMessage<TariDanPayload, RistrettoPublicKey>,
             Vec<RistrettoPublicKey>,
         ),
+        payload_index: usize,
     ) {
         timeout(
             *TEN_SECONDS,
             join_all(
-                self.committees
+                self.payload_committees[payload_index]
                     .iter()
-                    .map(|committee| committee.send_proposal(proposal.0.clone()))
+                    .map(|committee_index| self.committees[*committee_index].send_proposal(proposal.0.clone()))
                     .collect::<Vec<_>>(),
             ),
         )
@@ -1111,14 +1288,17 @@ impl Test {
     pub async fn leaders_receive_messages(
         &self,
         messages: Vec<Vec<HotStuffMessage<TariDanPayload, RistrettoPublicKey>>>,
+        payload_index: usize,
     ) {
         timeout(
             *TEN_SECONDS,
             join_all(
-                self.committees
+                self.payload_committees[payload_index]
                     .iter()
                     .zip(messages.into_iter())
-                    .map(|(committee, messages)| committee.leader_receive_messages(messages))
+                    .map(|(committee_index, messages)| {
+                        self.committees[*committee_index].leader_receive_messages(messages)
+                    })
                     .collect::<Vec<_>>(),
             ),
         )
@@ -1135,8 +1315,8 @@ impl Test {
         self.committees[index].remove_leader().await;
     }
 
-    pub fn get_payload(&self) -> &TariDanPayload {
-        &self.payload
+    pub fn get_payload(&self, payload_index: usize) -> &TariDanPayload {
+        &self.payloads[payload_index]
     }
 }
 
@@ -1145,7 +1325,7 @@ async fn test_local_leader_failure_multiple() {
     // This test that we have pacemaker in the local_leader_failure_trigger.
     let mut test = Test::init(vec![(13, *ONE_SEC)]);
     let mut committee = test.remove_committee(0);
-    committee.send_tx_new(test.get_payload()).await;
+    committee.send_tx_new(test.get_payload(0)).await;
     // We send original new_view. There is a check in the receive_rx_leader that the messages are indeed for the
     // current_leader.
     let _new_view_messages = committee.receive_rx_leader().await;
@@ -1169,7 +1349,7 @@ async fn test_local_leader_failure_whole_tx() {
     // Remove the leader
     // Send the new TX to replicas
 
-    committee.send_tx_new(test.get_payload()).await;
+    committee.send_tx_new(test.get_payload(0)).await;
     // Replicas try to select the leader (which is offline)
     let _new_view_messages = committee.receive_rx_leader().await;
     committee.remove_leader().await;
