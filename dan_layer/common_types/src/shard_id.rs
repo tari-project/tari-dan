@@ -11,7 +11,10 @@ use std::{
 use serde::{Deserialize, Serialize};
 use tari_bor::Encode;
 use tari_common_types::types::{FixedHash, FixedHashSizeError};
-use tari_engine_types::{hashing::hasher, substate::SubstateAddress};
+use tari_engine_types::{
+    hashing::{hasher, EngineHashDomainLabel},
+    substate::SubstateAddress,
+};
 use tari_utilities::hex::{from_hex, Hex};
 
 use crate::serde_with;
@@ -26,7 +29,10 @@ impl ShardId {
     }
 
     pub fn from_hash(hash: &[u8], version: u32) -> Self {
-        let new_addr = hasher("shard_id").chain(&hash).chain(&version).result();
+        let new_addr = hasher(EngineHashDomainLabel::ShardId)
+            .chain(&hash)
+            .chain(&version)
+            .result();
         Self(new_addr.into_array())
     }
 

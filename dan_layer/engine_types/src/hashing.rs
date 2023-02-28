@@ -29,9 +29,8 @@ use tari_template_lib::Hash;
 
 hash_domain!(TariEngineHashDomain, "tari.dan.engine", 0);
 
-// TODO: use an enum for labels
-pub fn hasher(label: &'static str) -> TariEngineHasher {
-    TariEngineHasher::new_with_label(label)
+pub fn hasher(label: EngineHashDomainLabel) -> TariEngineHasher {
+    TariEngineHasher::new_with_label(label.as_label())
 }
 
 #[derive(Debug, Clone)]
@@ -81,5 +80,40 @@ impl TariEngineHasher {
             }
         }
         HashWriter(&mut self.hasher)
+    }
+}
+
+#[derive(Debug)]
+pub enum EngineHashDomainLabel {
+    Template,
+    ShardId,
+    ConfidentialProof,
+    ConfidentialTransfer,
+    ShardPledgeCollection,
+    HotStuffTreeNode,
+    Transaction,
+    NonFungibleId,
+    AddressListItemAddress,
+    UuidOutput,
+    Output,
+    InstructionSignature,
+}
+
+impl EngineHashDomainLabel {
+    pub fn as_label(&self) -> &'static str {
+        match self {
+            Self::Template => "Template",
+            Self::ShardId => "ShardId",
+            Self::ConfidentialProof => "ConfidentialProof",
+            Self::ConfidentialTransfer => "ConfidentialTransfer",
+            Self::ShardPledgeCollection => "ShardPledgeCollection",
+            Self::HotStuffTreeNode => "HotStuffTreeNode",
+            Self::Transaction => "Transaction",
+            Self::NonFungibleId => "NonFungibleId",
+            Self::AddressListItemAddress => "AddressListItemAddress",
+            Self::UuidOutput => "UuidOutput",
+            Self::Output => "Output",
+            Self::InstructionSignature => "InstructionSignature",
+        }
     }
 }

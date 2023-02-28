@@ -231,6 +231,7 @@ pub enum VaultAction {
     GetBalance,
     GetResourceAddress,
     GetNonFungibleIds,
+    GetCommitmentCount,
     ConfidentialReveal,
 }
 

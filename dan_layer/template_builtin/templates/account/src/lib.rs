@@ -57,6 +57,10 @@ mod account_template {
                 .unwrap_or_else(Amount::zero)
         }
 
+        pub fn confidential_commitment_count(&self, resource: ResourceAddress) -> u32 {
+            self.get_vault(resource).commitment_count()
+        }
+
         // #[access_rule(requires(owner_badge))]
         pub fn withdraw(&mut self, resource: ResourceAddress, amount: Amount) -> Bucket {
             let v = self.get_vault_mut(resource);
@@ -131,6 +135,11 @@ mod account_template {
         pub fn reveal_confidential(&mut self, resource: ResourceAddress, proof: ConfidentialWithdrawProof) -> Bucket {
             let v = self.get_vault_mut(resource);
             v.reveal_amount(proof)
+        }
+
+        pub fn join_confidential(&mut self, resource: ResourceAddress, proof: ConfidentialWithdrawProof) {
+            let v = self.get_vault_mut(resource);
+            v.join_confidential(proof);
         }
     }
 }

@@ -129,14 +129,14 @@ pub mod challenges {
     use tari_common_types::types::{Commitment, PublicKey};
     use tari_template_lib::Hash;
 
-    use crate::hashing::hasher;
+    use crate::hashing::{hasher, EngineHashDomainLabel};
 
     pub fn confidential_commitment_proof(
         public_key: &PublicKey,
         public_nonce: &PublicKey,
         commitment: &Commitment,
     ) -> Hash {
-        hasher("ConfidentialProof")
+        hasher(EngineHashDomainLabel::ConfidentialProof)
             .chain(&public_key)
             .chain(&public_nonce)
             .chain(commitment.as_public_key())
@@ -144,7 +144,7 @@ pub mod challenges {
     }
 
     pub fn confidential_withdraw(excess: &PublicKey, public_nonce: &PublicKey) -> Hash {
-        hasher("ConfidentialTransfer")
+        hasher(EngineHashDomainLabel::ConfidentialTransfer)
             .chain(excess)
             .chain(public_nonce)
             .result()

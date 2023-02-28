@@ -9,7 +9,10 @@ use tari_crypto::{
     keys::PublicKey as PublicKeyT,
     ristretto::{RistrettoPublicKey, RistrettoSchnorr, RistrettoSecretKey},
 };
-use tari_engine_types::{hashing::hasher, instruction::Instruction};
+use tari_engine_types::{
+    hashing::{hasher, EngineHashDomainLabel},
+    instruction::Instruction,
+};
 
 #[derive(Debug, Clone, Serialize, Deserialize, Eq, PartialEq)]
 pub struct InstructionSignature(RistrettoSchnorr);
@@ -20,7 +23,7 @@ impl InstructionSignature {
         let public_key = RistrettoPublicKey::from_secret_key(secret_key);
         let nonce_pk = RistrettoPublicKey::from_secret_key(&secret_nonce);
         // TODO: implement dan encoding for (a wrapper of) PublicKey
-        let challenge = hasher("instruction-signature")
+        let challenge = hasher(EngineHashDomainLabel::InstructionSignature)
             .chain(&nonce_pk)
             .chain(&public_key)
             .chain(instructions)
