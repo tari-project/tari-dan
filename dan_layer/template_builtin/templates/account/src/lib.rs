@@ -51,26 +51,21 @@ mod account_template {
 
         // #[access_rule(allow_all)]
         pub fn balance(&self, resource: ResourceAddress) -> Amount {
-            self.get_vault(resource)
+            self.vaults
+                .get(&resource)
                 .map(|v| v.balance())
                 .unwrap_or_else(Amount::zero)
         }
 
         // #[access_rule(requires(owner_badge))]
         pub fn withdraw(&mut self, resource: ResourceAddress, amount: Amount) -> Bucket {
-            let v = self
-                .get_vault_mut(resource)
-                .expect("This account does not have any of that resource");
-
+            let v = self.get_vault_mut(resource);
             v.withdraw(amount)
         }
 
         // #[access_rules(requires(owner_badge))]
         pub fn withdraw_non_fungible(&mut self, resource: ResourceAddress, nf_id: NonFungibleId) -> Bucket {
-            let v = self
-                .get_vault_mut(resource)
-                .expect("This account does not have any of that resource");
-
+            let v = self.get_vault_mut(resource);
             v.withdraw_non_fungibles([nf_id])
         }
 
@@ -80,9 +75,7 @@ mod account_template {
             resource: ResourceAddress,
             withdraw_proof: ConfidentialWithdrawProof,
         ) -> Bucket {
-            let v = self
-                .get_vault_mut(resource)
-                .expect("This account does not have any of that resource");
+            let v = self.get_vault_mut(resource);
             v.withdraw_confidential(withdraw_proof)
         }
 
@@ -115,22 +108,29 @@ mod account_template {
 
         // #[access_rules(require(owner_badge))]
         pub fn get_non_fungible_ids(&self, resource: ResourceAddress) -> Vec<NonFungibleId> {
-            let v = self
-                .get_vault(resource)
-                .unwrap_or_else(|| panic!("No vault for resource {}", resource));
+            let v = self.get_vault(resource);
             v.get_non_fungible_ids()
         }
 
-        fn get_vault(&self, resource: ResourceAddress) -> Option<&Vault> {
-            self.vaults.get(&resource)
+        fn get_vault(&self, resource: ResourceAddress) -> &Vault {
+            self.vaults
+                .get(&resource)
+                .unwrap_or_else(|| panic!("No vault for resource {}", resource))
         }
 
-        fn get_vault_mut(&mut self, resource: ResourceAddress) -> Option<&mut Vault> {
-            self.vaults.get_mut(&resource)
+        fn get_vault_mut(&mut self, resource: ResourceAddress) -> &mut Vault {
+            self.vaults
+                .get_mut(&resource)
+                .unwrap_or_else(|| panic!("No vault for resource {}", resource))
         }
 
         pub fn get_balances(&self) -> Vec<(ResourceAddress, Amount)> {
             self.vaults.iter().map(|(k, v)| (*k, v.balance())).collect()
+        }
+
+        pub fn reveal_confidential(&mut self, resource: ResourceAddress, proof: ConfidentialWithdrawProof) -> Bucket {
+            let v = self.get_vault_mut(resource);
+            v.reveal_amount(proof)
         }
     }
 }

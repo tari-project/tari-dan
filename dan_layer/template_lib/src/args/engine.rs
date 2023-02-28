@@ -231,6 +231,7 @@ pub enum VaultAction {
     GetBalance,
     GetResourceAddress,
     GetNonFungibleIds,
+    ConfidentialReveal,
 }
 
 #[derive(Clone, Debug, Decode, Encode)]
@@ -238,6 +239,12 @@ pub enum VaultWithdrawArg {
     Fungible { amount: Amount },
     NonFungible { ids: BTreeSet<NonFungibleId> },
     Confidential { proof: ConfidentialWithdrawProof },
+}
+
+// -------------------------------- Confidential -------------------------------- //
+#[derive(Clone, Debug, Decode, Encode)]
+pub struct ConfidentialRevealArg {
+    pub proof: ConfidentialWithdrawProof,
 }
 
 // -------------------------------- Bucket -------------------------------- //
@@ -278,6 +285,7 @@ pub enum BucketAction {
     GetAmount,
     Take,
     TakeConfidential,
+    RevealConfidential,
     Burn,
 }
 
@@ -291,7 +299,7 @@ pub struct BucketBurnArg {
 pub enum WorkspaceAction {
     Put,
     PutLastInstructionOutput,
-    Take,
+    Get,
     ListBuckets,
 }
 

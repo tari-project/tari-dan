@@ -161,7 +161,7 @@ impl Runtime {
                 Arg::Variable(key) => {
                     let value = self
                         .interface
-                        .workspace_invoke(WorkspaceAction::Take, invoke_args![key].into())?;
+                        .workspace_invoke(WorkspaceAction::Get, invoke_args![key].into())?;
                     resolved.push(value.decode()?);
                 },
                 Arg::Literal(v) => resolved.push(v),

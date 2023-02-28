@@ -3,13 +3,14 @@
 
 use tari_bor::{borsh, Decode, Encode};
 
-use crate::crypto::BalanceProofSignature;
+use crate::{crypto::BalanceProofSignature, models::Amount};
 
 #[derive(Debug, Clone, Encode, Decode)]
 pub struct ConfidentialProof {
     pub output_statement: ConfidentialStatement,
     pub change_statement: Option<ConfidentialStatement>,
     pub range_proof: Vec<u8>,
+    pub revealed_amount: Amount,
 }
 
 #[derive(Debug, Clone, Default, Encode, Decode)]

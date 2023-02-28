@@ -34,5 +34,11 @@ mod faucet_template {
         pub fn split(mut bucket: Bucket, proof: ConfidentialWithdrawProof) -> Bucket {
             bucket.take_confidential(proof)
         }
+
+        /// Split a bucket into two buckets, one containing the output commitment and one containing the change
+        /// commitment
+        pub fn reveal(mut bucket: Bucket, proof: ConfidentialWithdrawProof) -> Bucket {
+            bucket.reveal_confidential(proof)
+        }
     }
 }
