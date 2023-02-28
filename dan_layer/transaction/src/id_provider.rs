@@ -3,7 +3,7 @@
 
 use std::sync::{atomic::AtomicU32, Arc};
 
-use tari_engine_types::hashing::hasher;
+use tari_engine_types::hashing::{hasher, EngineHashDomainLabel};
 use tari_template_lib::{
     models::{AddressListId, BucketId, ComponentAddress, ResourceAddress, VaultId},
     Hash,
@@ -82,13 +82,16 @@ impl IdProvider {
 
     pub fn new_uuid(&self) -> Result<[u8; 32], MaxIdsExceeded> {
         let n = self.uuid.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-        let id = hasher("uuid_output").chain(&self.transaction_hash).chain(&n).result();
+        let id = hasher(EngineHashDomainLabel::UuidOutput)
+            .chain(&self.transaction_hash)
+            .chain(&n)
+            .result();
         Ok(id.into_array())
     }
 }
 
 fn generate_output_id(hash: &Hash, n: u32) -> Hash {
-    hasher("output").chain(hash).chain(&n).result()
+    hasher(EngineHashDomainLabel::Output).chain(hash).chain(&n).result()
 }
 
 #[cfg(test)]

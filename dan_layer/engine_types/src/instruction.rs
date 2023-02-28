@@ -8,10 +8,7 @@ use tari_bor::{borsh, Encode};
 use tari_template_lib::{
     args::{Arg, LogLevel},
     models::{ComponentAddress, TemplateAddress},
-    Hash,
 };
-
-use crate::hashing::hasher;
 
 #[derive(Debug, Clone, Encode, Deserialize, Serialize, Eq, PartialEq)]
 #[serde(tag = "type")]
@@ -38,12 +35,6 @@ pub enum Instruction {
         range_proof: Vec<u8>,
         proof_of_knowledge: Vec<u8>,
     },
-}
-
-impl Instruction {
-    pub fn hash(&self) -> Hash {
-        hasher("instruction").chain(self).result()
-    }
 }
 
 impl Display for Instruction {
