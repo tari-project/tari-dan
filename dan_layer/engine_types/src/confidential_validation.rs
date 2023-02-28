@@ -8,7 +8,7 @@ use tari_crypto::{
     extended_range_proof::{ExtendedRangeProofService, Statement},
     ristretto::bulletproofs_plus::RistrettoAggregatedPublicStatement,
 };
-use tari_template_lib::models::ConfidentialProof;
+use tari_template_lib::models::{Amount, ConfidentialProof};
 use tari_utilities::ByteArray;
 
 use crate::{crypto, resource_container::ResourceError};
@@ -19,11 +19,19 @@ pub struct ValidatedConfidentialProof {
     pub output_minimum_value_promise: u64,
     pub change_commitment: Option<Commitment>,
     pub change_minimum_value_promise: Option<u64>,
-    pub output_range_proof: BulletRangeProof,
+    pub range_proof: BulletRangeProof,
+    pub revealed_amount: Amount,
 }
 
-pub fn validate_confidential_proof(proof: ConfidentialProof) -> Result<ValidatedConfidentialProof, ResourceError> {
-    validate_bullet_proof(&proof)?;
+pub fn validate_confidential_proof(
+    proof: &ConfidentialProof,
+) -> Result<(Commitment, Option<Commitment>), ResourceError> {
+    if proof.revealed_amount.is_negative() {
+        return Err(ResourceError::InvalidConfidentialProof {
+            details: "Revealed amount must be positive".to_string(),
+        });
+    }
+    validate_bullet_proof(proof)?;
 
     let output_commitment = Commitment::from_bytes(&proof.output_statement.commitment).map_err(|_| {
         ResourceError::InvalidConfidentialProof {
@@ -41,13 +49,7 @@ pub fn validate_confidential_proof(proof: ConfidentialProof) -> Result<Validated
         })
         .transpose()?;
 
-    Ok(ValidatedConfidentialProof {
-        output_commitment,
-        output_minimum_value_promise: proof.output_statement.minimum_value_promise,
-        change_commitment,
-        change_minimum_value_promise: proof.change_statement.map(|stmt| stmt.minimum_value_promise),
-        output_range_proof: BulletRangeProof(proof.range_proof),
-    })
+    Ok((output_commitment, change_commitment))
 }
 
 fn validate_bullet_proof(proof: &ConfidentialProof) -> Result<(), ResourceError> {
@@ -108,16 +110,16 @@ mod tests {
         #[test]
         fn it_is_valid_if_proof_is_valid() {
             let proof = create_valid_proof(100.into(), 0);
-            validate_confidential_proof(proof).unwrap();
+            validate_confidential_proof(&proof).unwrap();
         }
 
         #[test]
         fn it_is_invalid_if_minimum_value_changed() {
             let mut proof = create_valid_proof(100.into(), 100);
             proof.output_statement.minimum_value_promise = 99;
-            validate_confidential_proof(proof.clone()).unwrap_err();
+            validate_confidential_proof(&proof).unwrap_err();
             proof.output_statement.minimum_value_promise = 1000;
-            validate_confidential_proof(proof).unwrap_err();
+            validate_confidential_proof(&proof).unwrap_err();
         }
     }
 }

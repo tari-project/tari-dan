@@ -117,4 +117,15 @@ impl Bucket {
 
         resp.decode().expect("Bucket GetAmount returned invalid amount")
     }
+
+    pub fn reveal_confidential(&mut self, proof: ConfidentialWithdrawProof) -> Bucket {
+        let resp: InvokeResult = call_engine(EngineOp::BucketInvoke, &BucketInvokeArg {
+            bucket_ref: BucketRef::Ref(self.id),
+            action: BucketAction::RevealConfidential,
+            args: invoke_args![proof],
+        });
+
+        resp.decode()
+            .expect("Bucket RevealConfidential returned invalid result")
+    }
 }

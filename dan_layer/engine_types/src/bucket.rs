@@ -67,4 +67,11 @@ impl Bucket {
     pub fn take_confidential(&mut self, proof: ConfidentialWithdrawProof) -> Result<ResourceContainer, ResourceError> {
         self.resource.withdraw_confidential(proof)
     }
+
+    pub fn reveal_confidential(
+        &mut self,
+        proof: ConfidentialWithdrawProof,
+    ) -> Result<ResourceContainer, ResourceError> {
+        self.resource.reveal_confidential(proof)
+    }
 }

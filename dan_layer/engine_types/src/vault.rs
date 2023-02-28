@@ -83,4 +83,11 @@ impl Vault {
     pub fn get_non_fungible_ids(&self) -> Option<&BTreeSet<NonFungibleId>> {
         self.resource_container.non_fungible_token_ids()
     }
+
+    pub fn reveal_confidential(
+        &mut self,
+        proof: ConfidentialWithdrawProof,
+    ) -> Result<ResourceContainer, ResourceError> {
+        self.resource_container.reveal_confidential(proof)
+    }
 }

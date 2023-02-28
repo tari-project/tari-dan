@@ -34,7 +34,7 @@ fn mint_initial_commitment() {
 
     let total_supply: Amount = template_test.call_method(faucet, "total_supply", args![], vec![]);
     // The number of commitments
-    assert_eq!(total_supply, Amount(1));
+    assert_eq!(total_supply, Amount(0));
 }
 
 #[test]
@@ -48,7 +48,7 @@ fn transfer_confidential_amounts_between_accounts() {
 
     // Create proof for transfer
 
-    let proof = generate_withdraw_proof(&faucet_mask, Amount(1000), Amount(99_000));
+    let proof = generate_withdraw_proof(&faucet_mask, Amount(1000), Amount(99_000), Amount(0));
 
     // Transfer faucet funds into account 1
     let vars = [
@@ -77,8 +77,8 @@ fn transfer_confidential_amounts_between_accounts() {
     assert_eq!(diff.up_iter().count(), 4);
     assert_eq!(diff.down_iter().count(), 3);
 
-    let withdraw_proof = generate_withdraw_proof(&proof.output_mask, Amount(100), Amount(900));
-    let split_proof = generate_withdraw_proof(&withdraw_proof.output_mask, Amount(20), Amount(80));
+    let withdraw_proof = generate_withdraw_proof(&proof.output_mask, Amount(100), Amount(900), Amount(0));
+    let split_proof = generate_withdraw_proof(&withdraw_proof.output_mask, Amount(20), Amount(80), Amount(0));
 
     let vars = [
         ("faucet_resx", faucet_resx.into()),
@@ -131,8 +131,7 @@ fn transfer_confidential_fails_with_invalid_balance() {
     let (account1, _owner1, _k) = template_test.create_owned_account();
 
     // Create proof for transfer
-
-    let proof = generate_withdraw_proof(&faucet_mask, Amount(1001), Amount(99_000));
+    let proof = generate_withdraw_proof(&faucet_mask, Amount(1001), Amount(99_000), Amount(0));
 
     // Transfer faucet funds into account 1
     let vars = [
@@ -151,6 +150,132 @@ fn transfer_confidential_fails_with_invalid_balance() {
     "#,
             vars,
             vec![],
+        )
+        .unwrap_err();
+}
+
+#[test]
+fn reveal_confidential_and_transfer() {
+    let (confidential_proof, faucet_mask, _change) = generate_confidential_proof(Amount(100_000), None);
+    let (mut template_test, faucet, faucet_resx) = setup(confidential_proof);
+
+    // Create an account
+    let (account1, owner1, _k) = template_test.create_owned_account();
+    let (account2, owner2, _k) = template_test.create_owned_account();
+
+    // Create proof for transfer
+
+    let proof = generate_withdraw_proof(&faucet_mask, Amount(1000), Amount(99_000), Amount(0));
+    // Reveal 90 tokens and 10 confidentially
+    let reveal_proof = generate_withdraw_proof(&proof.output_mask, Amount(10), Amount(900), Amount(90));
+    // Then reveal the rest
+    let reveal_bucket_proof = generate_withdraw_proof(&reveal_proof.output_mask, Amount(0), Amount(0), Amount(10));
+
+    // Transfer faucet funds into account 1
+    let vars = [
+        ("faucet", faucet.into()),
+        ("resource", faucet_resx.into()),
+        ("account1", account1.into()),
+        ("account2", account2.into()),
+        ("proof", ManifestValue::Value(encode(&proof.withdraw_proof).unwrap())),
+        (
+            "reveal_proof",
+            ManifestValue::Value(encode(&reveal_proof.withdraw_proof).unwrap()),
+        ),
+        (
+            "reveal_bucket_proof",
+            ManifestValue::Value(encode(&reveal_bucket_proof.withdraw_proof).unwrap()),
+        ),
+    ];
+    let result = template_test
+        .execute_and_commit_manifest(
+            r#"
+        let faucet = var!["faucet"];
+        let account1 = var!["account1"];
+        let account2 = var!["account2"];
+        let proof = var!["proof"];
+        let reveal_proof = var!["reveal_proof"];
+        let reveal_bucket_proof = var!["reveal_bucket_proof"];
+        let resource = var!["resource"];
+        
+        // Take confidential coins from faucet and deposit into account 1
+        let coins = faucet.take_free_coins(proof);
+        account1.deposit(coins);
+        
+        // Reveal 90 tokens and 10 confidentially and deposit both funds into account 2
+        let revealed_funds = account1.reveal_confidential(resource, reveal_proof);
+        let revealed_rest_funds = ConfidentialUtilities::reveal(revealed_funds, reveal_bucket_proof);
+        account2.deposit(revealed_funds);
+        account2.deposit(revealed_rest_funds);
+        
+        // Account2 can withdraw revealed funds by amount
+        let small_amt = account2.withdraw(resource, Amount(10));
+        account1.deposit(small_amt);
+        
+        account1.balance(resource);
+        account2.balance(resource);
+    "#,
+            vars,
+            vec![owner1, owner2],
+        )
+        .unwrap();
+
+    assert_eq!(result.execution_results[12].decode::<Amount>().unwrap(), Amount(10));
+    assert_eq!(result.execution_results[13].decode::<Amount>().unwrap(), Amount(90));
+}
+
+#[test]
+fn attempt_to_reveal_with_unbalanced_proof() {
+    let (confidential_proof, faucet_mask, _change) = generate_confidential_proof(Amount(100_000), None);
+    let (mut template_test, faucet, faucet_resx) = setup(confidential_proof);
+
+    // Create an account
+    let (account1, owner1, _k) = template_test.create_owned_account();
+    let (account2, _owner2, _k) = template_test.create_owned_account();
+
+    // Create proof for transfer
+
+    let proof = generate_withdraw_proof(&faucet_mask, Amount(1000), Amount(99_000), Amount(0));
+    // Attempt to reveal more than input - change
+    let reveal_proof = generate_withdraw_proof(&proof.output_mask, Amount(0), Amount(900), Amount(110));
+
+    // Transfer faucet funds into account 1
+    let vars = [
+        ("faucet", faucet.into()),
+        ("resource", faucet_resx.into()),
+        ("account1", account1.into()),
+        ("account2", account2.into()),
+        ("proof", ManifestValue::Value(encode(&proof.withdraw_proof).unwrap())),
+        (
+            "reveal_proof",
+            ManifestValue::Value(encode(&reveal_proof.withdraw_proof).unwrap()),
+        ),
+    ];
+
+    // TODO: Propagate error messages from runtime
+    let _err = template_test
+        .execute_and_commit_manifest(
+            r#"
+        let faucet = var!["faucet"];
+        let account1 = var!["account1"];
+        let account2 = var!["account2"];
+        let proof = var!["proof"];
+        let reveal_proof = var!["reveal_proof"];
+        let resource = var!["resource"];
+        
+        // Take confidential coins from faucet and deposit into account 1
+        let coins = faucet.take_free_coins(proof);
+        account1.deposit(coins);
+        
+        // Reveal 100 tokens and deposit revealed funds into account 2
+        let revealed_funds = account1.reveal_confidential(resource, reveal_proof);
+        account2.deposit(revealed_funds);
+        
+        account1.balance(resource);
+        account2.balance(resource);
+    "#,
+            vars,
+            vec![owner1],
         )
         .unwrap_err();
 }
@@ -217,6 +342,7 @@ mod utilities {
         input_mask: &PrivateKey,
         output_amount: Amount,
         change_amount: Amount,
+        revealed_amount: Amount,
     ) -> WithdrawProofOutput {
         let (output_proof, output_mask, change_mask) = generate_confidential_proof(output_amount, Some(change_amount));
         let change_mask = change_mask.unwrap();
@@ -239,6 +365,7 @@ mod utilities {
                         minimum_value_promise: change_statement.minimum_value_promise,
                     }),
                     range_proof: output_proof.range_proof,
+                    revealed_amount,
                 },
                 balance_proof,
             },

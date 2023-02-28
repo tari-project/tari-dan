@@ -85,6 +85,7 @@ pub fn generate_confidential_proof(
             minimum_value_promise: change_minimum_value_promise,
         }),
         range_proof: output_range_proof.0,
+        revealed_amount: Amount::zero(),
     })
 }
 
