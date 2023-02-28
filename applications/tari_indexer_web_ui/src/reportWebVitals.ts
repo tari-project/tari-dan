@@ -20,43 +20,18 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-import { toHexString } from "../routes/VN/Components/helpers";
+import { ReportHandler } from 'web-vitals';
 
-const renderJson = (json: any) => {
-  if (Array.isArray(json)) {
-    if (json.length == 32) {
-      return <span className="string">"{toHexString(json)}"</span>;
-    }
-    return (
-      <>
-        [
-        <ol>
-          {json.map((val) => (
-            <li>{renderJson(val)},</li>
-          ))}
-        </ol>
-        ],
-      </>
-    );
-  } else if (typeof json === 'object') {
-    return (
-      <>
-        {'{'}
-        <ul>
-          {Object.keys(json).map((key) => (
-            <li>
-              <b>"{key}"</b>:{renderJson(json[key])}
-            </li>
-          ))}
-        </ul>
-        {'}'}
-      </>
-    );
-  } else {
-    if (typeof json === 'string')
-      return <span className="string">"{json}"</span>;
-    return <span className="other">{json}</span>;
+const reportWebVitals = (onPerfEntry?: ReportHandler) => {
+  if (onPerfEntry && onPerfEntry instanceof Function) {
+    import('web-vitals').then(({ getCLS, getFID, getFCP, getLCP, getTTFB }) => {
+      getCLS(onPerfEntry);
+      getFID(onPerfEntry);
+      getFCP(onPerfEntry);
+      getLCP(onPerfEntry);
+      getTTFB(onPerfEntry);
+    });
   }
 };
 
-export { renderJson };
+export default reportWebVitals;

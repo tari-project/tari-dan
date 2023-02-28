@@ -162,7 +162,7 @@ impl<'a> SqliteSubstateStoreReadTransaction<'a> {
 
 pub trait SubstateStoreReadTransaction {
     fn get_substate(&mut self, address: String) -> Result<Option<Substate>, StorageError>;
-    fn get_all_addresses(&mut self) -> Result<Vec<String>, StorageError>;
+    fn get_all_addresses(&mut self) -> Result<Vec<(String, i64)>, StorageError>;
     fn get_all_substates(&mut self) -> Result<Vec<Substate>, StorageError>;
 }
 
@@ -181,11 +181,11 @@ impl SubstateStoreReadTransaction for SqliteSubstateStoreReadTransaction<'_> {
         Ok(substate)
     }
 
-    fn get_all_addresses(&mut self) -> Result<Vec<String>, StorageError> {
+    fn get_all_addresses(&mut self) -> Result<Vec<(String, i64)>, StorageError> {
         use crate::substate_storage_sqlite::schema::substates;
 
         let addresses = substates::table
-            .select(substates::address)
+            .select((substates::address, substates::version))
             .get_results(self.connection())
             .optional()
             .map_err(|e| StorageError::QueryError {

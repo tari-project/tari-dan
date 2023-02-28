@@ -20,43 +20,49 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-import { toHexString } from "../routes/VN/Components/helpers";
+import Paper from '@mui/material/Paper';
+import TableCell from '@mui/material/TableCell';
+import { styled } from '@mui/material/styles';
+import Box from '@mui/material/Box';
+import IconButton from '@mui/material/IconButton';
+import theme from '../theme';
 
-const renderJson = (json: any) => {
-  if (Array.isArray(json)) {
-    if (json.length == 32) {
-      return <span className="string">"{toHexString(json)}"</span>;
-    }
-    return (
-      <>
-        [
-        <ol>
-          {json.map((val) => (
-            <li>{renderJson(val)},</li>
-          ))}
-        </ol>
-        ],
-      </>
-    );
-  } else if (typeof json === 'object') {
-    return (
-      <>
-        {'{'}
-        <ul>
-          {Object.keys(json).map((key) => (
-            <li>
-              <b>"{key}"</b>:{renderJson(json[key])}
-            </li>
-          ))}
-        </ul>
-        {'}'}
-      </>
-    );
-  } else {
-    if (typeof json === 'string')
-      return <span className="string">"{json}"</span>;
-    return <span className="other">{json}</span>;
+interface IAccordionIconButton {
+  open: boolean;
+}
+
+export const AccordionIconButton = styled(IconButton) <IAccordionIconButton>`
+  background-color: ${({ open }) =>
+    open ? theme.palette.primary.main : '#fff'};
+  color: ${({ open }) => (open ? '#fff' : theme.palette.primary.main)};
+  &:hover {
+    background-color: ${theme.palette.primary.main};
+    color: #fff;
   }
-};
+`;
 
-export { renderJson };
+export const StyledPaper = styled(Paper)(({ theme }) => ({
+  padding: theme.spacing(3),
+  boxShadow: '10px 14px 28px rgba(35, 11, 73, 0.05)',
+}));
+
+export const DataTableCell = styled(TableCell)(({ theme }) => ({
+  fontFamily: "'Courier New', Courier, monospace",
+}));
+
+export const CodeBlock = styled(Box)(({ theme }) => ({
+  backgroundColor: '#F5F5F7',
+  borderRadius: theme.shape.borderRadius,
+  padding: theme.spacing(3),
+  maxHeight: '400px',
+  overflowY: 'scroll',
+}));
+
+export const BoxHeading = styled(Box)(({ theme }) => ({
+  backgroundColor: '#fafafa',
+  borderRadius: theme.shape.borderRadius,
+  padding: theme.spacing(3),
+  fontFamily: "'Courier New', Courier, monospace",
+  boxShadow: '0px 5px 5px rgba(35, 11, 73, 0.10)',
+  margin: '10px 5px',
+}));

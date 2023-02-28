@@ -56,13 +56,16 @@ pub async fn run_json_rpc(preferred_address: SocketAddr, handlers: JsonRpcHandle
 async fn handler(Extension(handlers): Extension<Arc<JsonRpcHandlers>>, value: JsonRpcExtractor) -> JrpcResult {
     debug!(target: LOG_TARGET, "🌐 JSON-RPC request: {}", value.method);
     match value.method.as_str() {
+        "get_identity" => handlers.get_identity(value),
         "get_all_vns" => handlers.get_all_vns(value).await,
+        "add_peer" => handlers.add_peer(value).await,
         "get_comms_stats" => handlers.get_comms_stats(value).await,
         "get_substate" => handlers.get_substate(value).await,
         "get_addresses" => handlers.get_addresses(value).await,
         "add_address" => handlers.add_address(value).await,
         "delete_address" => handlers.delete_address(value).await,
         "clear_addresses" => handlers.clear_addresses(value).await,
+        "get_connections" => handlers.get_connections(value).await,
         method => Ok(value.method_not_found(method)),
     }
 }

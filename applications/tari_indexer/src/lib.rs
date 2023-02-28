@@ -30,6 +30,7 @@ pub mod cli;
 mod comms;
 pub mod config;
 mod dan_layer_scanner;
+mod http_ui;
 mod json_rpc;
 mod p2p;
 mod substate_manager;
@@ -41,6 +42,7 @@ use std::{
 };
 
 use dan_layer_scanner::DanLayerScanner;
+use http_ui::server::run_http_ui_server;
 pub use json_rpc::GetSubstateRequest;
 use log::*;
 use substate_manager::SubstateManager;
@@ -102,12 +104,16 @@ pub async fn run_indexer(config: ApplicationConfig, mut shutdown_signal: Shutdow
     ));
 
     // Run the JSON-RPC API
-    if let Some(json_rpc_address) = config.indexer.json_rpc_address {
-        info!(target: LOG_TARGET, "🌐 Started JSON-RPC server on {}", json_rpc_address);
+    let jrpc_address = config.indexer.json_rpc_address;
+    if let Some(address) = jrpc_address {
+        info!(target: LOG_TARGET, "🌐 Started JSON-RPC server on {}", address);
         let handlers = JsonRpcHandlers::new(&services, base_node_client, substate_manager.clone());
-        task::spawn(run_json_rpc(json_rpc_address, handlers));
+        task::spawn(run_json_rpc(address, handlers));
     }
-
+    // Run the http ui
+    if let Some(address) = config.indexer.http_ui_address {
+        task::spawn(run_http_ui_server(address, jrpc_address));
+    }
     // keep scanning the dan layer for new versions of the stored substates
     loop {
         tokio::select! {
