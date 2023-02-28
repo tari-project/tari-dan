@@ -3,12 +3,14 @@
 
 use serde::{Deserialize, Serialize};
 use tari_bor::{borsh, Decode, Encode};
-use tari_common_types::types::{BulletRangeProof, PublicKey};
+use tari_common_types::types::{BulletRangeProof, Commitment, PublicKey};
 use tari_template_abi::rust::collections::BTreeSet;
 use tari_template_lib::{
-    models::{Amount, ConfidentialProof, NonFungibleId, ResourceAddress},
+    models::{Amount, ConfidentialProof, ConfidentialWithdrawProof, NonFungibleId, ResourceAddress},
     prelude::ResourceType,
 };
+
+use crate::{confidential_validation::validate_confidential_proof, confidential_withdraw::check_confidential_withdraw};
 
 /// Instances of a single resource kept in Buckets and Vaults
 #[derive(Debug, Clone, Encode, Decode, Serialize, Deserialize, PartialEq)]
@@ -23,8 +25,10 @@ pub enum ResourceContainer {
     },
     Confidential {
         address: ResourceAddress,
-        // TODO: Look into aggregating commitments
-        commitments: Vec<(PublicKey, BulletRangeProof)>,
+        commitment: PublicKey,
+        // TODO: Work out if we need to keep this after VNs have validated it. Bullet proofs can be replayed in
+        // transactions.
+        range_proof: Option<BulletRangeProof>,
     },
 }
 
@@ -39,18 +43,43 @@ impl ResourceContainer {
 
     pub fn confidential(
         address: ResourceAddress,
-        commitments: Vec<(PublicKey, BulletRangeProof)>,
+        commitment: PublicKey,
+        range_proof: Option<BulletRangeProof>,
     ) -> ResourceContainer {
-        ResourceContainer::Confidential { address, commitments }
+        ResourceContainer::Confidential {
+            address,
+            commitment,
+            range_proof,
+        }
+    }
+
+    pub fn validate_confidential(
+        address: ResourceAddress,
+        proof: ConfidentialProof,
+    ) -> Result<ResourceContainer, ResourceError> {
+        if proof.change_statement.is_some() {
+            return Err(ResourceError::InvalidConfidentialMintWithChange);
+        }
+        let validated_proof = validate_confidential_proof(proof)?;
+        Ok(ResourceContainer::Confidential {
+            address,
+            commitment: validated_proof.output_commitment.as_public_key().clone(),
+            range_proof: Some(validated_proof.output_range_proof),
+        })
     }
 
     pub fn amount(&self) -> Amount {
         match self {
             ResourceContainer::Fungible { amount, .. } => *amount,
             ResourceContainer::NonFungible { token_ids, .. } => token_ids.len().into(),
-            ResourceContainer::Confidential { commitments, .. } => {
+            ResourceContainer::Confidential { commitment, .. } => {
                 // TODO: maybe rather return an option
-                commitments.len().into()
+                // TODO: I think we could have a revealed pool of funds in the resource
+                if *commitment == PublicKey::default() {
+                    Amount::zero()
+                } else {
+                    Amount(1)
+                }
             },
         }
     }
@@ -114,15 +143,21 @@ impl ResourceContainer {
                 token_ids.extend(other_token_ids);
             },
             (
-                Confidential { commitments, .. },
                 Confidential {
-                    commitments: other_commitments,
+                    commitment,
+                    range_proof,
+                    ..
+                },
+                Confidential {
+                    commitment: other_commitment,
+                    range_proof: other_range_proof,
                     ..
                 },
             ) => {
-                commitments.extend(other_commitments);
+                *commitment = &*commitment + other_commitment;
+                *range_proof = other_range_proof;
             },
-            _ => return Err(ResourceError::FungibilityMismatch),
+            _ => return Err(ResourceError::ResourceTypeMismatch),
         }
         Ok(())
     }
@@ -189,7 +224,10 @@ impl ResourceContainer {
         }
     }
 
-    pub fn withdraw_confidential(&mut self, _proofs: &[ConfidentialProof]) -> Result<ResourceContainer, ResourceError> {
+    pub fn withdraw_confidential(
+        &mut self,
+        proof: ConfidentialWithdrawProof,
+    ) -> Result<ResourceContainer, ResourceError> {
         match self {
             ResourceContainer::Fungible { .. } => Err(ResourceError::OperationNotAllowed(
                 "Cannot withdraw confidential assets from a fungible resource".to_string(),
@@ -197,8 +235,19 @@ impl ResourceContainer {
             ResourceContainer::NonFungible { .. } => Err(ResourceError::OperationNotAllowed(
                 "Cannot withdraw confidential assets from a non-fungible resource".to_string(),
             )),
-            ResourceContainer::Confidential { .. } => {
-                todo!("withdraw_confidential")
+            ResourceContainer::Confidential { commitment, .. } => {
+                let input = Commitment::from_public_key(commitment);
+                let validated_proof = check_confidential_withdraw(&input, proof)?;
+                *commitment = validated_proof
+                    .change_commitment
+                    .map(|ch| ch.as_public_key().clone())
+                    .unwrap_or_default();
+
+                Ok(ResourceContainer::confidential(
+                    *self.resource_address(),
+                    validated_proof.output_commitment.as_public_key().clone(),
+                    Some(validated_proof.output_range_proof),
+                ))
             },
         }
     }
@@ -206,8 +255,8 @@ impl ResourceContainer {
 
 #[derive(Debug, thiserror::Error)]
 pub enum ResourceError {
-    #[error("Resource fungibility does not match")]
-    FungibilityMismatch,
+    #[error("Resource types do not match")]
+    ResourceTypeMismatch,
     #[error("Resource addresses do not match: expected:{expected}, actual:{actual}")]
     ResourceAddressMismatch {
         expected: ResourceAddress,
@@ -221,4 +270,10 @@ pub enum ResourceError {
     OperationNotAllowed(String),
     #[error("Non fungible token not found: {token}")]
     NonFungibleTokenIdNotFound { token: NonFungibleId },
+    #[error("Invalid balance proof: {details}")]
+    InvalidBalanceProof { details: String },
+    #[error("Invalid confidential proof: {details}")]
+    InvalidConfidentialProof { details: String },
+    #[error("Invalid confidential mint, no change should be specified")]
+    InvalidConfidentialMintWithChange,
 }

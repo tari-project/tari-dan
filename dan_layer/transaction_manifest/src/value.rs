@@ -12,10 +12,11 @@ pub enum ManifestValue {
     SubstateAddress(SubstateAddress),
     Literal(Lit),
     NonFungibleId(NonFungibleId),
+    Value(Vec<u8>),
 }
 
 impl ManifestValue {
-    pub fn address(&self) -> Option<&SubstateAddress> {
+    pub fn as_address(&self) -> Option<&SubstateAddress> {
         match self {
             Self::SubstateAddress(addr) => Some(addr),
             _ => None,
@@ -72,7 +73,7 @@ mod tests {
             .parse::<ManifestValue>()
             .unwrap();
         assert_eq!(
-            *addr.address().unwrap(),
+            *addr.as_address().unwrap(),
             SubstateAddress::Component(
                 ComponentAddress::from_hex("0000000000000000000000000000000000000000000000000000000000000000").unwrap()
             )
@@ -82,7 +83,7 @@ mod tests {
             .parse::<ManifestValue>()
             .unwrap();
         assert_eq!(
-            *addr.address().unwrap(),
+            *addr.as_address().unwrap(),
             SubstateAddress::Resource(
                 ResourceAddress::from_hex("0000000000000000000000000000000000000000000000000000000000000000").unwrap()
             )
@@ -92,7 +93,7 @@ mod tests {
             .parse::<ManifestValue>()
             .unwrap();
         assert_eq!(
-            *addr.address().unwrap(),
+            *addr.as_address().unwrap(),
             SubstateAddress::Vault(
                 VaultId::from_hex("0000000000000000000000000000000000000000000000000000000000000000").unwrap()
             )

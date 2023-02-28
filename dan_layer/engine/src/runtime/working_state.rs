@@ -272,11 +272,12 @@ impl WorkingState {
             });
         }
 
-        if !self.workspace.is_empty() {
-            return Err(TransactionCommitError::WorkspaceNotEmpty {
-                count: self.workspace.len(),
-            });
-        }
+        // We actually only care that there are no buckets - this can be removed but keeping it here for this PR
+        // if !self.workspace.is_empty() {
+        //     return Err(TransactionCommitError::WorkspaceNotEmpty {
+        //         count: self.workspace.len(),
+        //     });
+        // }
 
         Ok(())
     }

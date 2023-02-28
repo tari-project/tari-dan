@@ -297,7 +297,7 @@ pub async fn submit_manifest(
         .map(|l| l.split_whitespace().skip(2).collect::<Vec<&str>>())
         .map(|l| {
             let manifest_value = globals.get(l[0]).unwrap();
-            let resource_address = manifest_value.address().unwrap().as_resource_address().unwrap();
+            let resource_address = manifest_value.as_address().unwrap().as_resource_address().unwrap();
             let count = l[1].parse().unwrap();
             NewNonFungibleMintOutput {
                 resource_address,
@@ -313,7 +313,7 @@ pub async fn submit_manifest(
         .map(|l| l.split_whitespace().skip(2).collect::<Vec<&str>>())
         .map(|l| {
             let manifest_value = globals.get(l[0]).unwrap();
-            let resource_address = manifest_value.address().unwrap().as_resource_address().unwrap();
+            let resource_address = manifest_value.as_address().unwrap().as_resource_address().unwrap();
             let non_fungible_id = NonFungibleId::try_from_canonical_string(l[1]).unwrap();
             SpecificNonFungibleMintOutput {
                 resource_address,
@@ -329,7 +329,7 @@ pub async fn submit_manifest(
         .map(|l| l.split_whitespace().skip(2).collect::<Vec<&str>>())
         .map(|l| {
             let manifest_value = globals.get(l[0]).unwrap();
-            let list_id = *manifest_value.address().unwrap().as_address_list_id().unwrap();
+            let list_id = *manifest_value.as_address().unwrap().as_address_list_id().unwrap();
             let index = u64::from_str(l[1]).unwrap();
             NewAddressListItemOutput { list_id, index }
         })

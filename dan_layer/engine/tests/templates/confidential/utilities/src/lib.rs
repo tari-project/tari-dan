@@ -20,32 +20,19 @@
 //   WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //   USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-pub use tari_bor::encode;
-#[cfg(feature = "macro")]
-pub use tari_template_macros::template;
+use tari_template_lib::prelude::*;
 
-pub use crate::{
-    auth::{AccessRule, AccessRules, RestrictedAccessRule::*},
-    component::{
-        interface::{ComponentInstanceInterface, ComponentInterface},
-        ComponentManager,
-    },
-    consensus::Consensus,
-    models::{
-        Address,
-        AddressList,
-        Amount,
-        Bucket,
-        BucketId,
-        ComponentAddress,
-        ConfidentialProof,
-        ConfidentialWithdrawProof,
-        Metadata,
-        NonFungible,
-        NonFungibleAddress,
-        NonFungibleId,
-        ResourceAddress,
-        Vault,
-    },
-    resource::{ResourceBuilder, ResourceManager, ResourceType},
-};
+#[template]
+mod faucet_template {
+    use super::*;
+
+    pub struct ConfidentialUtilities;
+
+    impl ConfidentialUtilities {
+        /// Split a bucket into two buckets, one containing the output commitment and one containing the change
+        /// commitment
+        pub fn split(mut bucket: Bucket, proof: ConfidentialWithdrawProof) -> Bucket {
+            bucket.take_confidential(proof)
+        }
+    }
+}

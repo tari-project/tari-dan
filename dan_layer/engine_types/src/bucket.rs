@@ -24,7 +24,7 @@ use std::collections::BTreeSet;
 
 use tari_bor::{borsh, Decode, Encode};
 use tari_template_lib::{
-    models::{Amount, NonFungibleId, ResourceAddress},
+    models::{Amount, ConfidentialWithdrawProof, NonFungibleId, ResourceAddress},
     prelude::ResourceType,
 };
 
@@ -62,5 +62,9 @@ impl Bucket {
 
     pub fn take(&mut self, amount: Amount) -> Result<ResourceContainer, ResourceError> {
         self.resource.withdraw(amount)
+    }
+
+    pub fn take_confidential(&mut self, proof: ConfidentialWithdrawProof) -> Result<ResourceContainer, ResourceError> {
+        self.resource.withdraw_confidential(proof)
     }
 }

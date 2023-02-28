@@ -24,7 +24,7 @@ use std::collections::BTreeSet;
 
 use serde::{Deserialize, Serialize};
 use tari_bor::{borsh, Decode, Encode};
-use tari_template_lib::models::{Amount, ConfidentialProof, NonFungibleId, ResourceAddress, VaultId};
+use tari_template_lib::models::{Amount, ConfidentialWithdrawProof, NonFungibleId, ResourceAddress, VaultId};
 
 use crate::{
     bucket::Bucket,
@@ -61,8 +61,11 @@ impl Vault {
         self.resource_container.withdraw_by_ids(ids)
     }
 
-    pub fn withdraw_confidential(&mut self, proofs: &[ConfidentialProof]) -> Result<ResourceContainer, ResourceError> {
-        self.resource_container.withdraw_confidential(proofs)
+    pub fn withdraw_confidential(
+        &mut self,
+        proof: ConfidentialWithdrawProof,
+    ) -> Result<ResourceContainer, ResourceError> {
+        self.resource_container.withdraw_confidential(proof)
     }
 
     pub fn withdraw_all(&mut self) -> Result<ResourceContainer, ResourceError> {

@@ -35,6 +35,7 @@ use crate::{
         Amount,
         BucketId,
         ComponentAddress,
+        ConfidentialWithdrawProof,
         Metadata,
         NonFungibleAddress,
         NonFungibleId,
@@ -236,7 +237,7 @@ pub enum VaultAction {
 pub enum VaultWithdrawArg {
     Fungible { amount: Amount },
     NonFungible { ids: BTreeSet<NonFungibleId> },
-    Confidential { proofs: Vec<ConfidentialProof> },
+    Confidential { proof: ConfidentialWithdrawProof },
 }
 
 // -------------------------------- Bucket -------------------------------- //
@@ -276,6 +277,7 @@ pub enum BucketAction {
     GetResourceType,
     GetAmount,
     Take,
+    TakeConfidential,
     Burn,
 }
 
