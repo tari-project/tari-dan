@@ -126,7 +126,7 @@ impl Default for IndexerConfig {
             data_dir: PathBuf::from("data/indexer"),
             p2p,
             json_rpc_address: Some("127.0.0.1:18200".parse().unwrap()),
-            http_ui_address: Some("127.0.0.1:15000".parse().unwrap()),
+            http_ui_address: Some("127.0.0.1:5000".parse().unwrap()),
             address_watchlist: vec![],
             dan_layer_scanning_internal: Duration::from_secs(10),
         }
