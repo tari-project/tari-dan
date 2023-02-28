@@ -31,7 +31,7 @@ use tari_dan_common_types::{
     ShardId,
     TreeNodeHash,
 };
-use tari_engine_types::hashing::hasher;
+use tari_engine_types::hashing::{hasher, EngineHashDomainLabel};
 
 use super::Payload;
 
@@ -116,7 +116,7 @@ impl<TAddr: NodeAddressable, TPayload: Payload> HotStuffTreeNode<TAddr, TPayload
     }
 
     pub fn calculate_hash(&self) -> TreeNodeHash {
-        hasher("HotStuffTreeNode")
+        hasher(EngineHashDomainLabel::HotStuffTreeNode)
             .chain(&self.parent)
             .chain(&self.epoch)
             .chain(&self.height)

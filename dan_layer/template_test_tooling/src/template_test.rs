@@ -21,7 +21,7 @@ use tari_dan_engine::{
 };
 use tari_engine_types::{
     commit_result::FinalizeResult,
-    hashing::hasher,
+    hashing::{hasher, EngineHashDomainLabel},
     instruction::Instruction,
     substate::{Substate, SubstateAddress, SubstateDiff},
 };
@@ -65,7 +65,7 @@ impl TemplateTest {
         name_to_template.insert("Account".to_string(), ACCOUNT_TEMPLATE_ADDRESS);
 
         for wasm in wasms {
-            let template_addr = hasher("test_template").chain(wasm.code()).result();
+            let template_addr = hasher(EngineHashDomainLabel::Template).chain(wasm.code()).result();
             let wasm = wasm.load_template().unwrap();
             let name = wasm.template_name().to_string();
             name_to_template.insert(name, template_addr);
