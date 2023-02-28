@@ -76,6 +76,10 @@ impl Vault {
         self.resource_container.amount()
     }
 
+    pub fn get_commitment_count(&self) -> u32 {
+        self.resource_container.get_commitment_count()
+    }
+
     pub fn resource_address(&self) -> &ResourceAddress {
         self.resource_container.resource_address()
     }

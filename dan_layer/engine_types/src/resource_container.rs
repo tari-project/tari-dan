@@ -1,14 +1,21 @@
 //   Copyright 2023 The Tari Project
 //   SPDX-License-Identifier: BSD-3-Clause
 
+// Clippy complains about mutable key types in the serde::Deserialize implementation. PublicKey is a safe key type as
+// there is no way to actually mutate the compressed value once it is lazily initialized.
+#![allow(clippy::mutable_key_type)]
+
+use std::{collections::BTreeMap, iter};
+
 use serde::{Deserialize, Serialize};
 use tari_bor::{borsh, Decode, Encode};
-use tari_common_types::types::{BulletRangeProof, Commitment, PublicKey};
+use tari_common_types::types::{BulletRangeProof, PublicKey};
 use tari_template_abi::rust::collections::BTreeSet;
 use tari_template_lib::{
     models::{Amount, ConfidentialProof, ConfidentialWithdrawProof, NonFungibleId, ResourceAddress},
     prelude::ResourceType,
 };
+use tari_utilities::ByteArray;
 
 use crate::{confidential_validation::validate_confidential_proof, confidential_withdraw::check_confidential_withdraw};
 
@@ -25,10 +32,9 @@ pub enum ResourceContainer {
     },
     Confidential {
         address: ResourceAddress,
-        commitment: Box<PublicKey>,
-        // TODO: Work out if we need to keep this after VNs have validated it. Bullet proofs can be replayed in
-        // transactions.
-        range_proof: Option<BulletRangeProof>,
+        // TODO: Work out if we need to keep bullet proofs after VNs have validated it. Bullet proofs can be replayed
+        //       in transactions.
+        commitments: BTreeMap<PublicKey, Option<BulletRangeProof>>,
         revealed_amount: Amount,
     },
 }
@@ -44,14 +50,12 @@ impl ResourceContainer {
 
     pub fn confidential(
         address: ResourceAddress,
-        commitment: PublicKey,
-        range_proof: Option<BulletRangeProof>,
+        commitment: Option<(PublicKey, Option<BulletRangeProof>)>,
         revealed_amount: Amount,
     ) -> ResourceContainer {
         ResourceContainer::Confidential {
             address,
-            commitment: Box::new(commitment),
-            range_proof,
+            commitments: commitment.into_iter().collect(),
             revealed_amount,
         }
     }
@@ -70,8 +74,11 @@ impl ResourceContainer {
         );
         Ok(ResourceContainer::Confidential {
             address,
-            commitment: Box::new(output_commitment.as_public_key().clone()),
-            range_proof: Some(BulletRangeProof(proof.range_proof)),
+            commitments: iter::once((
+                output_commitment.as_public_key().clone(),
+                Some(BulletRangeProof(proof.range_proof)),
+            ))
+            .collect(),
             revealed_amount: Amount::zero(),
         })
     }
@@ -81,6 +88,14 @@ impl ResourceContainer {
             ResourceContainer::Fungible { amount, .. } => *amount,
             ResourceContainer::NonFungible { token_ids, .. } => token_ids.len().into(),
             ResourceContainer::Confidential { revealed_amount, .. } => *revealed_amount,
+        }
+    }
+
+    pub fn get_commitment_count(&self) -> u32 {
+        match self {
+            ResourceContainer::Fungible { .. } => 0,
+            ResourceContainer::NonFungible { .. } => 0,
+            ResourceContainer::Confidential { commitments, .. } => commitments.len() as u32,
         }
     }
 
@@ -144,20 +159,23 @@ impl ResourceContainer {
             },
             (
                 Confidential {
-                    commitment,
-                    range_proof,
+                    commitments,
                     revealed_amount,
                     ..
                 },
                 Confidential {
-                    commitment: other_commitment,
-                    range_proof: other_range_proof,
+                    commitments: other_commitments,
                     revealed_amount: other_amount,
                     ..
                 },
             ) => {
-                **commitment = &**commitment + *other_commitment;
-                *range_proof = other_range_proof;
+                for (commit, bp) in other_commitments {
+                    if commitments.insert(commit, bp).is_some() {
+                        return Err(ResourceError::InvariantError(
+                            "Confidential deposit contained duplicate commitment".to_string(),
+                        ));
+                    }
+                }
                 *revealed_amount += other_amount;
             },
             _ => return Err(ResourceError::ResourceTypeMismatch),
@@ -206,12 +224,7 @@ impl ResourceContainer {
                     });
                 }
                 *revealed_amount -= amt;
-                Ok(ResourceContainer::confidential(
-                    *self.resource_address(),
-                    PublicKey::default(),
-                    None,
-                    amt,
-                ))
+                Ok(ResourceContainer::confidential(*self.resource_address(), None, amt))
             },
         }
     }
@@ -249,20 +262,36 @@ impl ResourceContainer {
             ResourceContainer::NonFungible { .. } => Err(ResourceError::OperationNotAllowed(
                 "Cannot withdraw confidential assets from a non-fungible resource".to_string(),
             )),
-            ResourceContainer::Confidential { commitment, .. } => {
-                let input = Commitment::from_public_key(commitment);
-                let validated_proof = check_confidential_withdraw(&input, proof)?;
-                *commitment = Box::new(
-                    validated_proof
-                        .change_commitment
-                        .map(|ch| ch.as_public_key().clone())
-                        .unwrap_or_default(),
-                );
+            ResourceContainer::Confidential { commitments, .. } => {
+                let inputs = proof
+                    .inputs
+                    .iter()
+                    .map(|input| {
+                        let commitment =
+                            PublicKey::from_bytes(input).map_err(|_| ResourceError::InvalidConfidentialProof {
+                                details: "Invalid input commitment".to_string(),
+                            })?;
+                        match commitments.remove(&commitment) {
+                            Some(_) => Ok(commitment),
+                            None => Err(ResourceError::InvalidConfidentialProof {
+                                details: format!("Input commitment {} found in resource", commitment),
+                            }),
+                        }
+                    })
+                    .collect::<Result<Vec<_>, ResourceError>>()?;
+
+                let validated_proof = check_confidential_withdraw(&inputs, proof)?;
+                if let Some(change) = validated_proof.change_commitment.map(|ch| ch.as_public_key().clone()) {
+                    if commitments.insert(change, Some(validated_proof.range_proof)).is_some() {
+                        return Err(ResourceError::InvariantError(
+                            "Confidential deposit contained duplicate commitment in change commitment".to_string(),
+                        ));
+                    }
+                }
 
                 Ok(ResourceContainer::confidential(
                     *self.resource_address(),
-                    validated_proof.output_commitment.as_public_key().clone(),
-                    Some(validated_proof.range_proof),
+                    Some((validated_proof.output_commitment.as_public_key().clone(), None)),
                     Amount::zero(),
                 ))
             },
@@ -280,26 +309,37 @@ impl ResourceContainer {
             ResourceContainer::NonFungible { .. } => Err(ResourceError::OperationNotAllowed(
                 "Cannot reveal confidential assets from a non-fungible resource".to_string(),
             )),
-            ResourceContainer::Confidential {
-                commitment,
-                range_proof,
-                ..
-            } => {
-                let input = Commitment::from_public_key(commitment);
-                let validated_proof = check_confidential_withdraw(&input, proof)?;
-                *commitment = Box::new(
-                    validated_proof
-                        .change_commitment
-                        .map(|ch| ch.as_public_key().clone())
-                        .unwrap_or_default(),
-                );
-                *range_proof = Some(validated_proof.range_proof);
+            ResourceContainer::Confidential { commitments, .. } => {
+                let inputs = proof
+                    .inputs
+                    .iter()
+                    .map(|input| {
+                        let commitment =
+                            PublicKey::from_bytes(input).map_err(|_| ResourceError::InvalidConfidentialProof {
+                                details: "Invalid input commitment".to_string(),
+                            })?;
+                        match commitments.remove(&commitment) {
+                            Some(_) => Ok(commitment),
+                            None => Err(ResourceError::InvalidConfidentialProof {
+                                details: format!("Input commitment {} found in resource", commitment),
+                            }),
+                        }
+                    })
+                    .collect::<Result<Vec<_>, ResourceError>>()?;
+
+                let validated_proof = check_confidential_withdraw(&inputs, proof)?;
+                if let Some(change) = validated_proof.change_commitment.map(|ch| ch.as_public_key().clone()) {
+                    if commitments.insert(change, Some(validated_proof.range_proof)).is_some() {
+                        return Err(ResourceError::InvariantError(
+                            "Confidential reveal contained duplicate commitment in change commitment".to_string(),
+                        ));
+                    }
+                }
                 Ok(ResourceContainer::confidential(
                     *self.resource_address(),
-                    validated_proof.output_commitment.as_public_key().clone(),
                     // TODO: I think, either we need to separate rangeproofs for output and change commitments or not
                     //       include rangeproofs in confidential resources at all.
-                    None,
+                    Some((validated_proof.output_commitment.as_public_key().clone(), None)),
                     validated_proof.revealed_amount,
                 ))
             },
