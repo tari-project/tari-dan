@@ -1,14 +1,23 @@
 //   Copyright 2023 The Tari Project
 //   SPDX-License-Identifier: BSD-3-Clause
 
+// Clippy complains about mutable key types in the serde::Deserialize implementation. PublicKey is a safe key type as
+// there is no way to actually mutate the compressed value once it is lazily initialized.
+#![allow(clippy::mutable_key_type)]
+
+use std::{collections::BTreeMap, iter};
+
 use serde::{Deserialize, Serialize};
 use tari_bor::{borsh, Decode, Encode};
 use tari_common_types::types::{BulletRangeProof, PublicKey};
 use tari_template_abi::rust::collections::BTreeSet;
 use tari_template_lib::{
-    models::{Amount, ConfidentialProof, NonFungibleId, ResourceAddress},
+    models::{Amount, ConfidentialProof, ConfidentialWithdrawProof, NonFungibleId, ResourceAddress},
     prelude::ResourceType,
 };
+use tari_utilities::ByteArray;
+
+use crate::{confidential_validation::validate_confidential_proof, confidential_withdraw::check_confidential_withdraw};
 
 /// Instances of a single resource kept in Buckets and Vaults
 #[derive(Debug, Clone, Encode, Decode, Serialize, Deserialize, PartialEq)]
@@ -23,8 +32,10 @@ pub enum ResourceContainer {
     },
     Confidential {
         address: ResourceAddress,
-        // TODO: Look into aggregating commitments
-        commitments: Vec<(PublicKey, BulletRangeProof)>,
+        // TODO: Work out if we need to keep bullet proofs after VNs have validated it. Bullet proofs can be replayed
+        //       in transactions.
+        commitments: BTreeMap<PublicKey, Option<BulletRangeProof>>,
+        revealed_amount: Amount,
     },
 }
 
@@ -39,19 +50,52 @@ impl ResourceContainer {
 
     pub fn confidential(
         address: ResourceAddress,
-        commitments: Vec<(PublicKey, BulletRangeProof)>,
+        commitment: Option<(PublicKey, Option<BulletRangeProof>)>,
+        revealed_amount: Amount,
     ) -> ResourceContainer {
-        ResourceContainer::Confidential { address, commitments }
+        ResourceContainer::Confidential {
+            address,
+            commitments: commitment.into_iter().collect(),
+            revealed_amount,
+        }
+    }
+
+    pub fn validate_confidential(
+        address: ResourceAddress,
+        proof: ConfidentialProof,
+    ) -> Result<ResourceContainer, ResourceError> {
+        if proof.change_statement.is_some() {
+            return Err(ResourceError::InvalidConfidentialMintWithChange);
+        }
+        let (output_commitment, no_change) = validate_confidential_proof(&proof)?;
+        assert!(
+            no_change.is_none(),
+            "invariant failed: validate_confidential_proof returned change with no change in input proof"
+        );
+        Ok(ResourceContainer::Confidential {
+            address,
+            commitments: iter::once((
+                output_commitment.as_public_key().clone(),
+                Some(BulletRangeProof(proof.range_proof)),
+            ))
+            .collect(),
+            revealed_amount: Amount::zero(),
+        })
     }
 
     pub fn amount(&self) -> Amount {
         match self {
             ResourceContainer::Fungible { amount, .. } => *amount,
             ResourceContainer::NonFungible { token_ids, .. } => token_ids.len().into(),
-            ResourceContainer::Confidential { commitments, .. } => {
-                // TODO: maybe rather return an option
-                commitments.len().into()
-            },
+            ResourceContainer::Confidential { revealed_amount, .. } => *revealed_amount,
+        }
+    }
+
+    pub fn get_commitment_count(&self) -> u32 {
+        match self {
+            ResourceContainer::Fungible { .. } => 0,
+            ResourceContainer::NonFungible { .. } => 0,
+            ResourceContainer::Confidential { commitments, .. } => commitments.len() as u32,
         }
     }
 
@@ -114,15 +158,27 @@ impl ResourceContainer {
                 token_ids.extend(other_token_ids);
             },
             (
-                Confidential { commitments, .. },
+                Confidential {
+                    commitments,
+                    revealed_amount,
+                    ..
+                },
                 Confidential {
                     commitments: other_commitments,
+                    revealed_amount: other_amount,
                     ..
                 },
             ) => {
-                commitments.extend(other_commitments);
+                for (commit, bp) in other_commitments {
+                    if commitments.insert(commit, bp).is_some() {
+                        return Err(ResourceError::InvariantError(
+                            "Confidential deposit contained duplicate commitment".to_string(),
+                        ));
+                    }
+                }
+                *revealed_amount += other_amount;
             },
-            _ => return Err(ResourceError::FungibilityMismatch),
+            _ => return Err(ResourceError::ResourceTypeMismatch),
         }
         Ok(())
     }
@@ -161,9 +217,15 @@ impl ResourceContainer {
 
                 Ok(ResourceContainer::non_fungible(*self.resource_address(), taken_tokens))
             },
-            ResourceContainer::Confidential { .. } => Err(ResourceError::OperationNotAllowed(
-                "Cannot withdraw from a confidential resource by amount".to_string(),
-            )),
+            ResourceContainer::Confidential { revealed_amount, .. } => {
+                if amt > *revealed_amount {
+                    return Err(ResourceError::InsufficientBalance {
+                        details: "Bucket contained insufficient revealed amount".to_string(),
+                    });
+                }
+                *revealed_amount -= amt;
+                Ok(ResourceContainer::confidential(*self.resource_address(), None, amt))
+            },
         }
     }
 
@@ -189,7 +251,10 @@ impl ResourceContainer {
         }
     }
 
-    pub fn withdraw_confidential(&mut self, _proofs: &[ConfidentialProof]) -> Result<ResourceContainer, ResourceError> {
+    pub fn withdraw_confidential(
+        &mut self,
+        proof: ConfidentialWithdrawProof,
+    ) -> Result<ResourceContainer, ResourceError> {
         match self {
             ResourceContainer::Fungible { .. } => Err(ResourceError::OperationNotAllowed(
                 "Cannot withdraw confidential assets from a fungible resource".to_string(),
@@ -197,8 +262,86 @@ impl ResourceContainer {
             ResourceContainer::NonFungible { .. } => Err(ResourceError::OperationNotAllowed(
                 "Cannot withdraw confidential assets from a non-fungible resource".to_string(),
             )),
-            ResourceContainer::Confidential { .. } => {
-                todo!("withdraw_confidential")
+            ResourceContainer::Confidential { commitments, .. } => {
+                let inputs = proof
+                    .inputs
+                    .iter()
+                    .map(|input| {
+                        let commitment =
+                            PublicKey::from_bytes(input).map_err(|_| ResourceError::InvalidConfidentialProof {
+                                details: "Invalid input commitment".to_string(),
+                            })?;
+                        match commitments.remove(&commitment) {
+                            Some(_) => Ok(commitment),
+                            None => Err(ResourceError::InvalidConfidentialProof {
+                                details: format!("Input commitment {} found in resource", commitment),
+                            }),
+                        }
+                    })
+                    .collect::<Result<Vec<_>, ResourceError>>()?;
+
+                let validated_proof = check_confidential_withdraw(&inputs, proof)?;
+                if let Some(change) = validated_proof.change_commitment.map(|ch| ch.as_public_key().clone()) {
+                    if commitments.insert(change, Some(validated_proof.range_proof)).is_some() {
+                        return Err(ResourceError::InvariantError(
+                            "Confidential deposit contained duplicate commitment in change commitment".to_string(),
+                        ));
+                    }
+                }
+
+                Ok(ResourceContainer::confidential(
+                    *self.resource_address(),
+                    Some((validated_proof.output_commitment.as_public_key().clone(), None)),
+                    Amount::zero(),
+                ))
+            },
+        }
+    }
+
+    pub fn reveal_confidential(
+        &mut self,
+        proof: ConfidentialWithdrawProof,
+    ) -> Result<ResourceContainer, ResourceError> {
+        match self {
+            ResourceContainer::Fungible { .. } => Err(ResourceError::OperationNotAllowed(
+                "Cannot reveal confidential assets from a fungible resource".to_string(),
+            )),
+            ResourceContainer::NonFungible { .. } => Err(ResourceError::OperationNotAllowed(
+                "Cannot reveal confidential assets from a non-fungible resource".to_string(),
+            )),
+            ResourceContainer::Confidential { commitments, .. } => {
+                let inputs = proof
+                    .inputs
+                    .iter()
+                    .map(|input| {
+                        let commitment =
+                            PublicKey::from_bytes(input).map_err(|_| ResourceError::InvalidConfidentialProof {
+                                details: "Invalid input commitment".to_string(),
+                            })?;
+                        match commitments.remove(&commitment) {
+                            Some(_) => Ok(commitment),
+                            None => Err(ResourceError::InvalidConfidentialProof {
+                                details: format!("Input commitment {} found in resource", commitment),
+                            }),
+                        }
+                    })
+                    .collect::<Result<Vec<_>, ResourceError>>()?;
+
+                let validated_proof = check_confidential_withdraw(&inputs, proof)?;
+                if let Some(change) = validated_proof.change_commitment.map(|ch| ch.as_public_key().clone()) {
+                    if commitments.insert(change, Some(validated_proof.range_proof)).is_some() {
+                        return Err(ResourceError::InvariantError(
+                            "Confidential reveal contained duplicate commitment in change commitment".to_string(),
+                        ));
+                    }
+                }
+                Ok(ResourceContainer::confidential(
+                    *self.resource_address(),
+                    // TODO: I think, either we need to separate rangeproofs for output and change commitments or not
+                    //       include rangeproofs in confidential resources at all.
+                    Some((validated_proof.output_commitment.as_public_key().clone(), None)),
+                    validated_proof.revealed_amount,
+                ))
             },
         }
     }
@@ -206,8 +349,8 @@ impl ResourceContainer {
 
 #[derive(Debug, thiserror::Error)]
 pub enum ResourceError {
-    #[error("Resource fungibility does not match")]
-    FungibilityMismatch,
+    #[error("Resource types do not match")]
+    ResourceTypeMismatch,
     #[error("Resource addresses do not match: expected:{expected}, actual:{actual}")]
     ResourceAddressMismatch {
         expected: ResourceAddress,
@@ -221,4 +364,10 @@ pub enum ResourceError {
     OperationNotAllowed(String),
     #[error("Non fungible token not found: {token}")]
     NonFungibleTokenIdNotFound { token: NonFungibleId },
+    #[error("Invalid balance proof: {details}")]
+    InvalidBalanceProof { details: String },
+    #[error("Invalid confidential proof: {details}")]
+    InvalidConfidentialProof { details: String },
+    #[error("Invalid confidential mint, no change should be specified")]
+    InvalidConfidentialMintWithChange,
 }

@@ -6266,7 +6266,6 @@ dependencies = [
  "anyhow",
  "cargo_toml",
  "digest 0.9.0",
- "lazy_static",
  "log",
  "rand 0.7.3",
  "serde",
@@ -6469,6 +6468,7 @@ name = "tari_engine_types"
 version = "0.1.0"
 dependencies = [
  "digest 0.9.0",
+ "lazy_static",
  "rand 0.7.3",
  "serde",
  "tari_bor",

@@ -88,8 +88,6 @@ pub enum RuntimeError {
     ItemNotOnWorkspace { key: String },
     #[error("Attempted to take the last output but there was no previous instruction output")]
     NoLastInstructionOutput,
-    #[error("Workspace already has an item with key '{key}'")]
-    WorkspaceItemKeyExists { key: String },
     #[error(transparent)]
     TransactionCommitError(#[from] TransactionCommitError),
     #[error("Transaction generated too many outputs: {0}")]
@@ -119,8 +117,6 @@ pub enum RuntimeError {
         index: u64,
         referenced_address: Address,
     },
-    #[error("Invalid confidential proof: {details}")]
-    InvalidConfidentialProof { details: String },
 }
 
 impl RuntimeError {

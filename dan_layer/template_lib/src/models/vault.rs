@@ -31,10 +31,9 @@ use tari_template_abi::{
 };
 
 use crate::{
-    args::{InvokeResult, VaultAction, VaultInvokeArg, VaultWithdrawArg},
+    args::{ConfidentialRevealArg, InvokeResult, VaultAction, VaultInvokeArg, VaultWithdrawArg},
     hash::HashParseError,
-    models::{Amount, Bucket, NonFungibleId, ResourceAddress},
-    prelude::ConfidentialProof,
+    models::{Amount, Bucket, ConfidentialWithdrawProof, NonFungibleId, ResourceAddress},
     Hash,
 };
 
@@ -150,13 +149,11 @@ impl Vault {
         resp.decode().expect("failed to decode Bucket")
     }
 
-    pub fn withdraw_confidential<I: IntoIterator<Item = ConfidentialProof>>(&mut self, proofs: I) -> Bucket {
+    pub fn withdraw_confidential(&mut self, proof: ConfidentialWithdrawProof) -> Bucket {
         let resp: InvokeResult = call_engine(EngineOp::VaultInvoke, &VaultInvokeArg {
             vault_ref: self.vault_ref(),
             action: VaultAction::Withdraw,
-            args: invoke_args![VaultWithdrawArg::Confidential {
-                proofs: proofs.into_iter().collect()
-            }],
+            args: invoke_args![VaultWithdrawArg::Confidential { proof }],
         });
 
         resp.decode().expect("failed to decode Bucket")
@@ -176,10 +173,20 @@ impl Vault {
         let resp: InvokeResult = call_engine(EngineOp::VaultInvoke, &VaultInvokeArg {
             vault_ref: self.vault_ref(),
             action: VaultAction::GetBalance,
-            args: args![],
+            args: invoke_args![],
         });
 
         resp.decode().expect("failed to decode Amount")
+    }
+
+    pub fn commitment_count(&self) -> u32 {
+        let resp: InvokeResult = call_engine(EngineOp::VaultInvoke, &VaultInvokeArg {
+            vault_ref: self.vault_ref(),
+            action: VaultAction::GetCommitmentCount,
+            args: invoke_args![],
+        });
+
+        resp.decode().expect("failed to decode commitment count")
     }
 
     pub fn get_non_fungible_ids(&self) -> Vec<NonFungibleId> {
@@ -202,6 +209,22 @@ impl Vault {
 
         resp.decode()
             .expect("GetResourceAddress returned invalid resource address")
+    }
+
+    pub fn reveal_amount(&mut self, proof: ConfidentialWithdrawProof) -> Bucket {
+        let resp: InvokeResult = call_engine(EngineOp::VaultInvoke, &VaultInvokeArg {
+            vault_ref: self.vault_ref(),
+            action: VaultAction::ConfidentialReveal,
+            args: invoke_args![ConfidentialRevealArg { proof }],
+        });
+
+        resp.decode()
+            .expect("get_non_fungible_ids returned invalid non fungible ids")
+    }
+
+    pub fn join_confidential(&mut self, proof: ConfidentialWithdrawProof) {
+        let bucket = self.withdraw_confidential(proof);
+        self.deposit(bucket);
     }
 
     pub fn vault_ref(&self) -> VaultRef {

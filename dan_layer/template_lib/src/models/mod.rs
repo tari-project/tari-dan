@@ -36,7 +36,7 @@ mod component;
 pub use component::*;
 
 mod confidential_proof;
-pub use confidential_proof::ConfidentialProof;
+pub use confidential_proof::*;
 
 mod layer_one_commitment;
 pub use layer_one_commitment::LayerOneCommitmentAddress;
