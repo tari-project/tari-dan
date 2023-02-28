@@ -20,22 +20,25 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-import React, {useCallback, useEffect, useRef, useState} from 'react';
-import {addPeer, getConnections} from '../../../utils/json_rpc';
-import { toHexString } from './helpers';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { addPeer, getConnections } from '../../../utils/json_rpc';
+import { toHexString, shortenString } from './helpers';
 import Table from '@mui/material/Table';
 import TableBody from '@mui/material/TableBody';
 import TableCell from '@mui/material/TableCell';
 import TableContainer from '@mui/material/TableContainer';
 import TableHead from '@mui/material/TableHead';
 import TableRow from '@mui/material/TableRow';
-import { DataTableCell } from '../../../Components/StyledComponents';
-import IconButton from "@mui/material/IconButton";
+import {
+  DataTableCell,
+  BoxHeading2,
+} from '../../../Components/StyledComponents';
 import AddIcon from '@mui/icons-material/Add';
-import Button from "@mui/material/Button";
-import {TextField} from "@mui/material";
-import Container from "@mui/material/Container";
-import {Form} from "react-router-dom";
+import CloseIcon from '@mui/icons-material/Close';
+import Button from '@mui/material/Button';
+import { TextField } from '@mui/material';
+import { Form } from 'react-router-dom';
+import CopyToClipboard from '../../../Components/CopyToClipboard';
 
 interface IConnection {
   address: string;
@@ -67,21 +70,20 @@ const useInterval = (fn: () => Promise<unknown>, ms: number) => {
 function Connections() {
   const [connections, setConnections] = useState<IConnection[]>([]);
   const [showPeerDialog, setShowAddPeerDialog] = useState(false);
-  const [formState, setFormState] = useState({publicKey: "", address: ""});
+  const [formState, setFormState] = useState({ publicKey: '', address: '' });
 
-  const showAddPeerDialog = (setElseToggle: boolean  = !showPeerDialog) => {
-        setShowAddPeerDialog(setElseToggle);
+  const showAddPeerDialog = (setElseToggle: boolean = !showPeerDialog) => {
+    setShowAddPeerDialog(setElseToggle);
   };
 
   const onSubmitAddPeer = () => {
     addPeer(formState.publicKey, [formState.address]);
-    setFormState({publicKey: "", address: ""});
+    setFormState({ publicKey: '', address: '' });
     setShowAddPeerDialog(false);
   };
   const onChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setFormState({...formState, [e.target.name]: e.target.value});
+    setFormState({ ...formState, [e.target.name]: e.target.value });
   };
-
 
   let fetchConnections = useCallback(async () => {
     const resp = await getConnections();
@@ -91,18 +93,51 @@ function Connections() {
 
   return (
     <TableContainer>
-      <Button startIcon={<AddIcon />} onClick={() => showAddPeerDialog()}>
-          Add Peer
-      </Button>
+      <BoxHeading2 style={{ minHeight: '75px' }}>
         {showPeerDialog ? (
-              <Form onSubmit={onSubmitAddPeer}>
-                <TextField name="publicKey" label="Public Key" value={formState.publicKey} onChange={onChange} />
-                <TextField name="address" label="Address" value={formState.address} onChange={onChange} />
-                <Button type ="submit">Add Peer</Button>
-                <Button onClick={() => showAddPeerDialog(false)}>Cancel</Button>
-              </Form>
-        ): null
-        }
+          <Form
+            onSubmit={onSubmitAddPeer}
+            style={{
+              display: 'flex',
+              alignContent: 'center',
+              gap: '10px',
+            }}
+          >
+            <TextField
+              size="small"
+              name="publicKey"
+              label="Public Key"
+              value={formState.publicKey}
+              onChange={onChange}
+            />
+            <TextField
+              size="small"
+              name="address"
+              label="Address"
+              value={formState.address}
+              onChange={onChange}
+            />
+            <Button startIcon={<AddIcon />} variant="contained" type="submit">
+              Add Peer
+            </Button>
+            <Button
+              startIcon={<CloseIcon />}
+              variant="outlined"
+              onClick={() => showAddPeerDialog(false)}
+            >
+              Cancel
+            </Button>
+          </Form>
+        ) : (
+          <Button
+            variant="outlined"
+            startIcon={<AddIcon />}
+            onClick={() => showAddPeerDialog()}
+          >
+            Add Peer
+          </Button>
+        )}
+      </BoxHeading2>
       <Table>
         <TableHead>
           <TableRow>
@@ -123,7 +158,10 @@ function Connections() {
                   {direction ? 'Inbound' : 'Outbound'}
                 </DataTableCell>
                 <DataTableCell>{toHexString(node_id)}</DataTableCell>
-                <DataTableCell>{public_key}</DataTableCell>
+                <DataTableCell>
+                  {shortenString(public_key)}
+                  <CopyToClipboard copy={public_key} />
+                </DataTableCell>
               </TableRow>
             )
           )}

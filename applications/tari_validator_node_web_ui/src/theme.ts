@@ -37,10 +37,10 @@ const theme = createTheme({
   typography: {
     fontFamily: '"AvenirMedium", sans-serif',
     body1: {
-      color: '#000000',
+      color: '#444444',
     },
     body2: {
-      color: '#000000',
+      color: '#444444',
       lineHeight: '1.5rem',
     },
     h1: {

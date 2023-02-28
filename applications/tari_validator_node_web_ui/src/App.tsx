@@ -46,6 +46,7 @@ import ErrorPage from './routes/ErrorPage';
 import Transaction from './routes/Transaction/Transaction';
 import Logo from './Components/Logo';
 import Container from '@mui/material/Container';
+import TemplateFunctions from './routes/VN/Components/TemplateFunctions';
 
 const drawerWidth = 300;
 
@@ -196,6 +197,7 @@ export default function App() {
           <Route path="templates" element={<Templates />} />
           <Route path="vns" element={<ValidatorNodes />} />
           <Route path="mempool" element={<Mempool />} />
+          <Route path="template/:address" element={<TemplateFunctions />} />
           <Route path="transaction/:payloadId" element={<Transaction />} />
           <Route path="*" element={<ErrorPage />} />
         </Route>
