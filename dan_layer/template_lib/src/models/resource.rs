@@ -20,12 +20,11 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use std::str::FromStr;
-
 use tari_bor::{borsh, Decode, Encode};
 use tari_template_abi::rust::{
     fmt,
     fmt::{Display, Formatter},
+    str::FromStr,
 };
 
 use crate::{hash::HashParseError, Hash};

@@ -138,13 +138,9 @@ pub struct ClaimBurnArgs {
 
 #[derive(Debug, Args, Clone)]
 pub struct SendArgs {
-    #[clap(long, short = 's')]
-    source_address: String,
-    #[clap(long, short = 'w')]
+    source_account_name: String,
     amount: u128,
-    #[clap(long, short = 'a')]
     resource_address: ResourceAddress,
-    #[clap(long, short = 'd')]
     dest_address: ComponentAddress,
     #[clap(flatten)]
     common: CommonSubmitArgs,
@@ -374,14 +370,14 @@ pub async fn handle_send(
     client: &mut WalletDaemonClient,
 ) -> Result<TransactionSubmitResponse, anyhow::Error> {
     let SendArgs {
-        source_address,
+        source_account_name,
         amount,
         resource_address,
         dest_address,
         common,
     } = args;
 
-    let source_address = client.get_by_name(source_address).await?;
+    let source_address = client.get_by_name(source_account_name).await?;
     let source_component_address = if let SubstateAddress::Component(ca) = source_address.account_address {
         ca
     } else {
