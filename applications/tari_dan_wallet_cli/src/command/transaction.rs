@@ -68,6 +68,7 @@ pub enum TransactionSubcommand {
     Submit(SubmitArgs),
     SubmitManifest(SubmitManifestArgs),
     ClaimBurn(ClaimBurnArgs),
+    Send(SendArgs),
 }
 
 #[derive(Debug, Args, Clone)]
@@ -135,6 +136,18 @@ pub struct ClaimBurnArgs {
     common: CommonSubmitArgs,
 }
 
+#[derive(Debug, Args, Clone)]
+pub struct SendArgs {
+    #[clap(long, short = 's')]
+    source_address: String,
+    #[clap(long, short = 'w')]
+    amount: u128,
+    #[clap(long, short = 'a')]
+    resource_address: ComponentAddress,
+    #[clap(long, short = 'd')]
+    dest_address: String,
+}
+
 #[derive(Debug, Subcommand, Clone)]
 pub enum CliInstruction {
     CallFunction {
@@ -163,6 +176,9 @@ impl TransactionSubcommand {
             TransactionSubcommand::Get(args) => handle_get(args, &mut client).await?,
             TransactionSubcommand::ClaimBurn(args) => {
                 handle_claim_burn(args, &mut client).await?;
+            },
+            TransactionSubcommand::Send(args) => {
+                handle_send(args, &mut client).await?;
             },
         }
         Ok(())
@@ -349,6 +365,21 @@ pub async fn handle_claim_burn(
     common.num_outputs = Some(1);
 
     submit_transaction(instructions, common, client).await
+}
+
+fn handle_send(args: SendArgs, client: &mut WalletDaemonClient) -> Result<TransacationSubmitResponse, anyhow::Error> {
+    let SendArgs {
+        source_address,
+        amount,
+        resource_address,
+        dest_address,
+    } = args;
+
+    let instructions = vec![Instruction::CallMethod {
+        component_address: source_address,
+        method: String::from("withdraw"),
+        args: args![resource_address, amount],
+    }];
 }
 
 fn summarize_request(request: &TransactionSubmitRequest, inputs: &[ShardId], outputs: &[ShardId]) {
