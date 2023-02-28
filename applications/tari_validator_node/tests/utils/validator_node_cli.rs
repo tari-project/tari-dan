@@ -214,9 +214,9 @@ pub async fn call_method(
     num_outputs: u64,
 ) -> SubmitTransactionResponse {
     let data_dir = get_cli_data_dir(world);
-    let (input_group, component_name) = fq_component_name.split_once('/').unwrap_or_else(|| {
+    let (input_group, component_name) = fq_component_name.split_once('.').unwrap_or_else(|| {
         panic!(
-            "Component name must be in the format '{{group}}/components/{{template_name}}', got {}",
+            "Component name must be in the format '{{group}}.components.{{template_name}}', got {}",
             fq_component_name
         )
     });
