@@ -27,7 +27,7 @@ use std::{
 };
 
 use log::debug;
-use tari_common_types::types::Commitment;
+use tari_common_types::types::{Commitment, PublicKey};
 use tari_dan_common_types::optional::Optional;
 use tari_engine_types::{
     address_list::{AddressList, AddressListItem},
@@ -65,12 +65,7 @@ use tari_template_lib::{
 use tari_transaction::id_provider::IdProvider;
 
 use crate::{
-    runtime::{
-        validation::validate_confidential_proof,
-        working_state::WorkingState,
-        RuntimeError,
-        TransactionCommitError,
-    },
+    runtime::{working_state::WorkingState, RuntimeError, TransactionCommitError},
     state_store::{memory::MemoryStateStore, AtomicDb, StateReader},
 };
 
@@ -188,8 +183,7 @@ impl StateTracker {
                         target: LOG_TARGET,
                         "Minting confidential tokens on resource: {}", resource_address
                     );
-                    let validated_proof = validate_confidential_proof(proof)?;
-                    ResourceContainer::confidential(resource_address, vec![validated_proof])
+                    ResourceContainer::validate_confidential(resource_address, proof)?
                 },
             };
 
@@ -389,7 +383,9 @@ impl StateTracker {
         let resource = match resource_type {
             ResourceType::Fungible => ResourceContainer::fungible(resource_address, 0.into()),
             ResourceType::NonFungible => ResourceContainer::non_fungible(resource_address, BTreeSet::new()),
-            ResourceType::Confidential => ResourceContainer::confidential(resource_address, vec![]),
+            ResourceType::Confidential => {
+                ResourceContainer::confidential(resource_address, PublicKey::default(), None, Amount::zero())
+            },
         };
         let vault = Vault::new(vault_id, resource);
 
@@ -450,21 +446,21 @@ impl StateTracker {
         self.write_with(|state| state.last_instruction_output.take())
     }
 
-    pub fn take_from_workspace(&self, key: &[u8]) -> Result<Vec<u8>, RuntimeError> {
-        self.write_with(|state| {
-            state.workspace.remove(key).ok_or(RuntimeError::ItemNotOnWorkspace {
-                key: String::from_utf8_lossy(key).to_string(),
-            })
+    pub fn get_from_workspace(&self, key: &[u8]) -> Result<Vec<u8>, RuntimeError> {
+        self.read_with(|state| {
+            state
+                .workspace
+                .get(key)
+                .cloned()
+                .ok_or(RuntimeError::ItemNotOnWorkspace {
+                    key: String::from_utf8_lossy(key).to_string(),
+                })
         })
     }
 
     pub fn put_in_workspace(&self, key: Vec<u8>, value: Vec<u8>) -> Result<(), RuntimeError> {
         self.write_with(|state| {
-            if state.workspace.insert(key.clone(), value).is_some() {
-                return Err(RuntimeError::WorkspaceItemKeyExists {
-                    key: String::from_utf8_lossy(&key).to_string(),
-                });
-            }
+            state.workspace.insert(key.clone(), value);
             Ok(())
         })
     }

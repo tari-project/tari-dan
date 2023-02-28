@@ -108,19 +108,23 @@ impl TemplateAst {
                 _ => None,
             })
             .flatten()
-            .map(Self::get_function_from_item)
-            .filter(|f| f.is_public)
+            .filter_map(Self::get_function_from_item)
     }
 
-    fn get_function_from_item(item: &ImplItem) -> FunctionAst {
+    fn get_function_from_item(item: &ImplItem) -> Option<FunctionAst> {
         match item {
-            ImplItem::Method(m) => FunctionAst {
-                name: m.sig.ident.to_string(),
-                input_types: Self::get_input_types(&m.sig.inputs),
-                output_type: Self::get_output_type_token(&m.sig.output),
-                statements: Self::get_statements(m),
-                is_constructor: Self::is_constructor(&m.sig),
-                is_public: Self::is_public_function(m),
+            ImplItem::Method(m) => {
+                if !Self::is_public_function(m) {
+                    return None;
+                }
+                Some(FunctionAst {
+                    name: m.sig.ident.to_string(),
+                    input_types: Self::get_input_types(&m.sig.inputs),
+                    output_type: Self::get_output_type_token(&m.sig.output),
+                    statements: Self::get_statements(m),
+                    is_constructor: Self::is_constructor(&m.sig),
+                    is_public: true,
+                })
             },
             _ => todo!("get_function_from_item does not support anything other than methods"),
         }

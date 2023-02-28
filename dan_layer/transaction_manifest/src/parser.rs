@@ -157,6 +157,7 @@ impl ManifestParser {
     }
 
     fn handle_local(&self, local: Local) -> Result<ManifestIntent, syn::Error> {
+        // Parse let variable ident
         let var_ident = match local.pat {
             Pat::Ident(PatIdent { ref ident, .. }) => ident,
             // Pat::Tuple(pat) => return Ok(ManifestStmt::Todo),

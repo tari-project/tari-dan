@@ -336,6 +336,29 @@ impl FromStr for SubstateAddress {
     }
 }
 
+macro_rules! impl_partial_eq {
+    ($typ:ty, $variant:ident) => {
+        impl PartialEq<$typ> for SubstateAddress {
+            fn eq(&self, other: &$typ) -> bool {
+                match self {
+                    SubstateAddress::$variant(addr) => addr == other,
+                    _ => false,
+                }
+            }
+        }
+        impl PartialEq<SubstateAddress> for $typ {
+            fn eq(&self, other: &SubstateAddress) -> bool {
+                other == self
+            }
+        }
+    };
+}
+impl_partial_eq!(ComponentAddress, Component);
+impl_partial_eq!(ResourceAddress, Resource);
+impl_partial_eq!(VaultId, Vault);
+impl_partial_eq!(LayerOneCommitmentAddress, LayerOneCommitment);
+impl_partial_eq!(NonFungibleAddress, NonFungible);
+
 #[derive(Debug, Clone, Encode, Decode, Serialize, Deserialize)]
 pub enum SubstateValue {
     Component(ComponentHeader),

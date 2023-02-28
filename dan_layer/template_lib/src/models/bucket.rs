@@ -25,7 +25,7 @@ use tari_template_abi::{call_engine, EngineOp};
 
 use crate::{
     args::{BucketAction, BucketInvokeArg, BucketRef, InvokeResult},
-    models::{Amount, ResourceAddress},
+    models::{Amount, ConfidentialWithdrawProof, ResourceAddress},
     prelude::ResourceType,
 };
 
@@ -78,6 +78,16 @@ impl Bucket {
         resp.decode().expect("Bucket Take returned invalid bucket")
     }
 
+    pub fn take_confidential(&mut self, proof: ConfidentialWithdrawProof) -> Self {
+        let resp: InvokeResult = call_engine(EngineOp::BucketInvoke, &BucketInvokeArg {
+            bucket_ref: BucketRef::Ref(self.id),
+            action: BucketAction::TakeConfidential,
+            args: invoke_args![proof],
+        });
+
+        resp.decode().expect("Bucket Take returned invalid bucket")
+    }
+
     pub fn burn(&mut self) {
         let resp: InvokeResult = call_engine(EngineOp::BucketInvoke, &BucketInvokeArg {
             bucket_ref: BucketRef::Ref(self.id),
@@ -93,6 +103,11 @@ impl Bucket {
         (new_bucket, self)
     }
 
+    pub fn split_confidential(mut self, proof: ConfidentialWithdrawProof) -> (Self, Self) {
+        let new_bucket = self.take_confidential(proof);
+        (new_bucket, self)
+    }
+
     pub fn amount(&self) -> Amount {
         let resp: InvokeResult = call_engine(EngineOp::BucketInvoke, &BucketInvokeArg {
             bucket_ref: BucketRef::Ref(self.id),
@@ -101,5 +116,16 @@ impl Bucket {
         });
 
         resp.decode().expect("Bucket GetAmount returned invalid amount")
+    }
+
+    pub fn reveal_confidential(&mut self, proof: ConfidentialWithdrawProof) -> Bucket {
+        let resp: InvokeResult = call_engine(EngineOp::BucketInvoke, &BucketInvokeArg {
+            bucket_ref: BucketRef::Ref(self.id),
+            action: BucketAction::RevealConfidential,
+            args: invoke_args![proof],
+        });
+
+        resp.decode()
+            .expect("Bucket RevealConfidential returned invalid result")
     }
 }

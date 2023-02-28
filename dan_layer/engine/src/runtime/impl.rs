@@ -42,7 +42,6 @@ use tari_engine_types::{
     commit_result::{FinalizeResult, RejectReason, TransactionResult},
     logs::LogEntry,
     resource_container::ResourceContainer,
-    LAYER_TWO_TARI_RESOURCE_ADDRESS,
 };
 use tari_template_abi::TemplateDef;
 use tari_template_lib::{
@@ -52,6 +51,7 @@ use tari_template_lib::{
         BucketRef,
         ComponentAction,
         ComponentRef,
+        ConfidentialRevealArg,
         ConsensusAction,
         CreateComponentArg,
         CreateResourceArg,
@@ -68,15 +68,16 @@ use tari_template_lib::{
         WorkspaceAction,
     },
     auth::AccessRules,
+    constants::CONFIDENTIAL_TARI_RESOURCE_ADDRESS,
     models::{
         Address,
         AddressListId,
+        Amount,
         BucketId,
         ComponentAddress,
         ComponentHeader,
         LayerOneCommitmentAddress,
         NonFungibleAddress,
-        ResourceAddress,
         VaultRef,
     },
 };
@@ -382,7 +383,7 @@ impl RuntimeInterface for RuntimeInterfaceImpl {
                 let resource = self.tracker.borrow_vault_mut(&vault_id, |vault| match arg {
                     VaultWithdrawArg::Fungible { amount } => vault.withdraw(amount),
                     VaultWithdrawArg::NonFungible { ids } => vault.withdraw_non_fungibles(&ids),
-                    VaultWithdrawArg::Confidential { proofs } => vault.withdraw_confidential(&proofs),
+                    VaultWithdrawArg::Confidential { proof } => vault.withdraw_confidential(proof),
                 })??;
                 let bucket = self.tracker.new_bucket(resource)?;
                 Ok(InvokeResult::encode(&bucket)?)
@@ -437,6 +438,22 @@ impl RuntimeInterface for RuntimeInterfaceImpl {
                 })??;
 
                 Ok(resp)
+            },
+            VaultAction::ConfidentialReveal => {
+                let vault_id = vault_ref.vault_id().ok_or_else(|| RuntimeError::InvalidArgument {
+                    argument: "vault_ref",
+                    reason: "vault action requires a vault id".to_string(),
+                })?;
+
+                let arg: ConfidentialRevealArg = args.get(0)?;
+
+                // TODO: access check
+                let resource = self
+                    .tracker
+                    .borrow_vault_mut(&vault_id, |vault| vault.reveal_confidential(arg.proof))??;
+
+                let bucket_id = self.tracker.new_bucket(resource)?;
+                Ok(InvokeResult::encode(&bucket_id)?)
             },
         }
     }
@@ -499,6 +516,30 @@ impl RuntimeInterface for RuntimeInterfaceImpl {
                 let bucket_id = self.tracker.new_bucket(resource)?;
                 Ok(InvokeResult::encode(&bucket_id)?)
             },
+            BucketAction::TakeConfidential => {
+                let bucket_id = bucket_ref.bucket_id().ok_or_else(|| RuntimeError::InvalidArgument {
+                    argument: "bucket_ref",
+                    reason: "Take bucket action requires a bucket id".to_string(),
+                })?;
+                let proof = args.get(0)?;
+                let resource = self
+                    .tracker
+                    .with_bucket_mut(bucket_id, |bucket| bucket.take_confidential(proof))??;
+                let bucket_id = self.tracker.new_bucket(resource)?;
+                Ok(InvokeResult::encode(&bucket_id)?)
+            },
+            BucketAction::RevealConfidential => {
+                let bucket_id = bucket_ref.bucket_id().ok_or_else(|| RuntimeError::InvalidArgument {
+                    argument: "bucket_ref",
+                    reason: "RevealConfidential bucket action requires a bucket id".to_string(),
+                })?;
+                let proof = args.get(0)?;
+                let resource = self
+                    .tracker
+                    .with_bucket_mut(bucket_id, |bucket| bucket.reveal_confidential(proof))??;
+                let bucket_id = self.tracker.new_bucket(resource)?;
+                Ok(InvokeResult::encode(&bucket_id)?)
+            },
             BucketAction::Burn => {
                 let bucket_id = bucket_ref.bucket_id().ok_or_else(|| RuntimeError::InvalidArgument {
                     argument: "bucket_ref",
@@ -527,9 +568,9 @@ impl RuntimeInterface for RuntimeInterfaceImpl {
                 self.tracker.put_in_workspace(key, last_output)?;
                 Ok(InvokeResult::unit())
             },
-            WorkspaceAction::Take => {
+            WorkspaceAction::Get => {
                 let key: Vec<u8> = args.get(0)?;
-                let value = self.tracker.take_from_workspace(&key)?;
+                let value = self.tracker.get_from_workspace(&key)?;
                 Ok(InvokeResult::encode(&value)?)
             },
         }
@@ -665,10 +706,12 @@ impl RuntimeInterface for RuntimeInterfaceImpl {
             return Err(RuntimeError::InvalidRangeProof);
         }
 
-        let resource = ResourceContainer::confidential(ResourceAddress::new(LAYER_TWO_TARI_RESOURCE_ADDRESS), vec![(
+        let resource = ResourceContainer::confidential(
+            CONFIDENTIAL_TARI_RESOURCE_ADDRESS,
             commitment.as_public_key().clone(),
-            range_proof,
-        )]);
+            Some(range_proof),
+            Amount::zero(),
+        );
 
         let bucket_id = self.tracker.new_bucket(resource)?;
 
