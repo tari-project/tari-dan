@@ -143,9 +143,11 @@ pub struct SendArgs {
     #[clap(long, short = 'w')]
     amount: u128,
     #[clap(long, short = 'a')]
-    resource_address: ComponentAddress,
+    resource_address: ResourceAddress,
     #[clap(long, short = 'd')]
-    dest_address: String,
+    dest_address: ComponentAddress,
+    #[clap(flatten)]
+    common: CommonSubmitArgs,
 }
 
 #[derive(Debug, Subcommand, Clone)]
@@ -367,19 +369,42 @@ pub async fn handle_claim_burn(
     submit_transaction(instructions, common, client).await
 }
 
-fn handle_send(args: SendArgs, client: &mut WalletDaemonClient) -> Result<TransacationSubmitResponse, anyhow::Error> {
+pub async fn handle_send(
+    args: SendArgs,
+    client: &mut WalletDaemonClient,
+) -> Result<TransactionSubmitResponse, anyhow::Error> {
     let SendArgs {
         source_address,
         amount,
         resource_address,
         dest_address,
+        common,
     } = args;
 
-    let instructions = vec![Instruction::CallMethod {
-        component_address: source_address,
-        method: String::from("withdraw"),
-        args: args![resource_address, amount],
-    }];
+    let source_address = client.get_by_name(source_address).await?;
+    let source_component_address = if let SubstateAddress::Component(ca) = source_address.account_address {
+        ca
+    } else {
+        return Err(anyhow!("Invalid component address for source address"));
+    };
+
+    let instructions = vec![
+        Instruction::CallMethod {
+            component_address: source_component_address,
+            method: String::from("withdraw"),
+            args: vec![arg![resource_address], arg![amount]],
+        },
+        Instruction::PutLastInstructionOutputOnWorkspace {
+            key: b"bucket".to_vec(),
+        },
+        Instruction::CallMethod {
+            component_address: dest_address,
+            method: String::from("deposit"),
+            args: vec![arg![Variable("bucket")]],
+        },
+    ];
+
+    submit_transaction(instructions, common, client).await
 }
 
 fn summarize_request(request: &TransactionSubmitRequest, inputs: &[ShardId], outputs: &[ShardId]) {

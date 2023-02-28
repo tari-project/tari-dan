@@ -20,6 +20,8 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+use std::str::FromStr;
+
 use tari_bor::{borsh, Decode, Encode};
 use tari_template_abi::rust::{
     fmt,
@@ -43,6 +45,20 @@ impl ResourceAddress {
 
     pub fn from_hex(hex: &str) -> Result<Self, HashParseError> {
         let hash = Hash::from_hex(hex)?;
+        Ok(Self::new(hash))
+    }
+}
+
+impl FromStr for ResourceAddress {
+    type Err = HashParseError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let s = if let Some(stripped) = s.strip_prefix("resource_") {
+            stripped
+        } else {
+            s
+        };
+        let hash = Hash::from_hex(s)?;
         Ok(Self::new(hash))
     }
 }

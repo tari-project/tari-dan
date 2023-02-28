@@ -32,6 +32,8 @@ use serde_json::json;
 use crate::{
     error::WalletDaemonClientError,
     types::{
+        AccountByNameRequest,
+        AccountByNameResponse,
         AccountsCreateRequest,
         AccountsCreateResponse,
         AccountsGetBalancesRequest,
@@ -100,69 +102,74 @@ impl WalletDaemonClient {
     // }
 
     pub async fn create_key(&mut self) -> Result<KeysCreateResponse, WalletDaemonClientError> {
-        self.send_request("keys/create", &KeysCreateRequest {}).await
+        self.send_request("keys.create", &KeysCreateRequest {}).await
     }
 
     pub async fn set_active_key(&mut self, index: u64) -> Result<KeysSetActiveResponse, WalletDaemonClientError> {
-        self.send_request("keys/set_active", &KeysSetActiveRequest { index })
+        self.send_request("keys.set_active", &KeysSetActiveRequest { index })
             .await
     }
 
     pub async fn list_keys(&mut self) -> Result<KeysListResponse, WalletDaemonClientError> {
-        self.send_request("keys/list", &KeysListRequest {}).await
+        self.send_request("keys.list", &KeysListRequest {}).await
     }
 
     pub async fn get_transaction<T: Borrow<TransactionGetRequest>>(
         &mut self,
         request: T,
     ) -> Result<TransactionGetResponse, WalletDaemonClientError> {
-        self.send_request("transactions/get", request.borrow()).await
+        self.send_request("transactions.get", request.borrow()).await
     }
 
     pub async fn get_transaction_result<T: Borrow<TransactionGetResultRequest>>(
         &mut self,
         request: T,
     ) -> Result<TransactionGetResultResponse, WalletDaemonClientError> {
-        self.send_request("transactions/get_result", request.borrow()).await
+        self.send_request("transactions.get_result", request.borrow()).await
     }
 
     pub async fn wait_transaction_result<T: Borrow<TransactionWaitResultRequest>>(
         &mut self,
         request: T,
     ) -> Result<TransactionWaitResultResponse, WalletDaemonClientError> {
-        self.send_request("transactions/wait_result", request.borrow()).await
+        self.send_request("transactions.wait_result", request.borrow()).await
     }
 
     pub async fn submit_transaction<T: Borrow<TransactionSubmitRequest>>(
         &mut self,
         request: T,
     ) -> Result<TransactionSubmitResponse, WalletDaemonClientError> {
-        self.send_request("transactions/submit", request.borrow()).await
+        self.send_request("transactions.submit", request.borrow()).await
     }
 
     pub async fn create_account<T: Borrow<AccountsCreateRequest>>(
         &mut self,
         request: T,
     ) -> Result<AccountsCreateResponse, WalletDaemonClientError> {
-        self.send_request("accounts/create", request.borrow()).await
+        self.send_request("accounts.create", request.borrow()).await
     }
 
     pub async fn invoke_account_method<T: Borrow<AccountsInvokeRequest>>(
         &mut self,
         req: T,
     ) -> Result<AccountsInvokeResponse, WalletDaemonClientError> {
-        self.send_request("accounts/invoke", req.borrow()).await
+        self.send_request("accounts.invoke", req.borrow()).await
     }
 
     pub async fn get_account_balances<T: Borrow<AccountsGetBalancesRequest>>(
         &mut self,
         request: T,
     ) -> Result<AccountsGetBalancesResponse, WalletDaemonClientError> {
-        self.send_request("accounts/get_balances", request.borrow()).await
+        self.send_request("accounts.get_balances", request.borrow()).await
     }
 
     pub async fn list_accounts(&mut self, limit: u64) -> Result<AccountsListResponse, WalletDaemonClientError> {
-        self.send_request("accounts/list", &AccountsListRequest { limit }).await
+        self.send_request("accounts.list", &AccountsListRequest { limit }).await
+    }
+
+    pub async fn get_by_name(&mut self, name: String) -> Result<AccountByNameResponse, WalletDaemonClientError> {
+        self.send_request("accounts.get_by_name", &AccountByNameRequest { name })
+            .await
     }
 
     fn next_request_id(&mut self) -> i64 {
