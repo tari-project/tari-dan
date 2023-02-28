@@ -47,14 +47,13 @@ fn transfer_confidential_amounts_between_accounts() {
     let (account2, _owner2, _k) = template_test.create_owned_account();
 
     // Create proof for transfer
-
-    let proof = generate_withdraw_proof(&faucet_mask, Amount(1000), Amount(99_000), Amount(0));
+    let proof = generate_withdraw_proof(&faucet_mask, Amount(1000), Some(Amount(99_000)), Amount(0));
 
     // Transfer faucet funds into account 1
     let vars = [
         ("faucet", faucet.into()),
         ("account1", account1.into()),
-        ("proof", ManifestValue::Value(encode(&proof.withdraw_proof).unwrap())),
+        ("proof", ManifestValue::Value(encode(&proof.proof).unwrap())),
     ];
     let result = template_test
         .execute_and_commit_manifest(
@@ -77,8 +76,8 @@ fn transfer_confidential_amounts_between_accounts() {
     assert_eq!(diff.up_iter().count(), 4);
     assert_eq!(diff.down_iter().count(), 3);
 
-    let withdraw_proof = generate_withdraw_proof(&proof.output_mask, Amount(100), Amount(900), Amount(0));
-    let split_proof = generate_withdraw_proof(&withdraw_proof.output_mask, Amount(20), Amount(80), Amount(0));
+    let withdraw_proof = generate_withdraw_proof(&proof.output_mask, Amount(100), Some(Amount(900)), Amount(0));
+    let split_proof = generate_withdraw_proof(&withdraw_proof.output_mask, Amount(20), Some(Amount(80)), Amount(0));
 
     let vars = [
         ("faucet_resx", faucet_resx.into()),
@@ -86,12 +85,9 @@ fn transfer_confidential_amounts_between_accounts() {
         ("account2", account2.into()),
         (
             "withdraw_proof",
-            ManifestValue::Value(encode(&withdraw_proof.withdraw_proof).unwrap()),
+            ManifestValue::Value(encode(&withdraw_proof.proof).unwrap()),
         ),
-        (
-            "split_proof",
-            ManifestValue::Value(encode(&split_proof.withdraw_proof).unwrap()),
-        ),
+        ("split_proof", ManifestValue::Value(encode(&split_proof.proof).unwrap())),
     ];
     let result = template_test
         .execute_and_commit_manifest(
@@ -131,13 +127,13 @@ fn transfer_confidential_fails_with_invalid_balance() {
     let (account1, _owner1, _k) = template_test.create_owned_account();
 
     // Create proof for transfer
-    let proof = generate_withdraw_proof(&faucet_mask, Amount(1001), Amount(99_000), Amount(0));
+    let proof = generate_withdraw_proof(&faucet_mask, Amount(1001), Some(Amount(99_000)), Amount(0));
 
     // Transfer faucet funds into account 1
     let vars = [
         ("faucet", faucet.into()),
         ("account1", account1.into()),
-        ("proof", ManifestValue::Value(encode(&proof.withdraw_proof).unwrap())),
+        ("proof", ManifestValue::Value(encode(&proof.proof).unwrap())),
     ];
     let _err = template_test
         .execute_and_commit_manifest(
@@ -165,11 +161,12 @@ fn reveal_confidential_and_transfer() {
 
     // Create proof for transfer
 
-    let proof = generate_withdraw_proof(&faucet_mask, Amount(1000), Amount(99_000), Amount(0));
+    let proof = generate_withdraw_proof(&faucet_mask, Amount(1000), Some(Amount(99_000)), Amount(0));
     // Reveal 90 tokens and 10 confidentially
-    let reveal_proof = generate_withdraw_proof(&proof.output_mask, Amount(10), Amount(900), Amount(90));
+    let reveal_proof = generate_withdraw_proof(&proof.output_mask, Amount(10), Some(Amount(900)), Amount(90));
     // Then reveal the rest
-    let reveal_bucket_proof = generate_withdraw_proof(&reveal_proof.output_mask, Amount(0), Amount(0), Amount(10));
+    let reveal_bucket_proof =
+        generate_withdraw_proof(&reveal_proof.output_mask, Amount(0), Some(Amount(0)), Amount(10));
 
     // Transfer faucet funds into account 1
     let vars = [
@@ -177,14 +174,14 @@ fn reveal_confidential_and_transfer() {
         ("resource", faucet_resx.into()),
         ("account1", account1.into()),
         ("account2", account2.into()),
-        ("proof", ManifestValue::Value(encode(&proof.withdraw_proof).unwrap())),
+        ("proof", ManifestValue::Value(encode(&proof.proof).unwrap())),
         (
             "reveal_proof",
-            ManifestValue::Value(encode(&reveal_proof.withdraw_proof).unwrap()),
+            ManifestValue::Value(encode(&reveal_proof.proof).unwrap()),
         ),
         (
             "reveal_bucket_proof",
-            ManifestValue::Value(encode(&reveal_bucket_proof.withdraw_proof).unwrap()),
+            ManifestValue::Value(encode(&reveal_bucket_proof.proof).unwrap()),
         ),
     ];
     let result = template_test
@@ -235,9 +232,9 @@ fn attempt_to_reveal_with_unbalanced_proof() {
 
     // Create proof for transfer
 
-    let proof = generate_withdraw_proof(&faucet_mask, Amount(1000), Amount(99_000), Amount(0));
+    let proof = generate_withdraw_proof(&faucet_mask, Amount(1000), Some(Amount(99_000)), Amount(0));
     // Attempt to reveal more than input - change
-    let reveal_proof = generate_withdraw_proof(&proof.output_mask, Amount(0), Amount(900), Amount(110));
+    let reveal_proof = generate_withdraw_proof(&proof.output_mask, Amount(0), Some(Amount(900)), Amount(110));
 
     // Transfer faucet funds into account 1
     let vars = [
@@ -245,10 +242,10 @@ fn attempt_to_reveal_with_unbalanced_proof() {
         ("resource", faucet_resx.into()),
         ("account1", account1.into()),
         ("account2", account2.into()),
-        ("proof", ManifestValue::Value(encode(&proof.withdraw_proof).unwrap())),
+        ("proof", ManifestValue::Value(encode(&proof.proof).unwrap())),
         (
             "reveal_proof",
-            ManifestValue::Value(encode(&reveal_proof.withdraw_proof).unwrap()),
+            ManifestValue::Value(encode(&reveal_proof.proof).unwrap()),
         ),
     ];
 
@@ -280,14 +277,96 @@ fn attempt_to_reveal_with_unbalanced_proof() {
         .unwrap_err();
 }
 
+#[test]
+fn multi_commitment_join() {
+    let (confidential_proof, faucet_mask, _change) = generate_confidential_proof(Amount(100_000), None);
+    let (mut template_test, faucet, faucet_resx) = setup(confidential_proof);
+
+    // Create an account
+    let (account1, owner1, _k) = template_test.create_owned_account();
+
+    // Create proof for transfer
+
+    let withdraw_proof1 = generate_withdraw_proof(&faucet_mask, Amount(1000), Some(Amount(99_000)), Amount(0));
+    let withdraw_proof2 = generate_withdraw_proof(
+        withdraw_proof1.change_mask.as_ref().unwrap(),
+        Amount(1000),
+        Some(Amount(98_000)),
+        Amount(0),
+    );
+    let join_proof = generate_withdraw_proof_with_inputs(
+        &[
+            (withdraw_proof1.output_mask, Amount(1000)),
+            (withdraw_proof2.output_mask, Amount(1000)),
+        ],
+        Amount(2000),
+        None,
+        Amount(0),
+    );
+
+    // Transfer faucet funds into account 1
+    let vars = [
+        ("faucet", faucet.into()),
+        ("resource", faucet_resx.into()),
+        ("account1", account1.into()),
+        (
+            "withdraw_proof1",
+            ManifestValue::Value(encode(&withdraw_proof1.proof).unwrap()),
+        ),
+        (
+            "withdraw_proof2",
+            ManifestValue::Value(encode(&withdraw_proof2.proof).unwrap()),
+        ),
+        ("join_proof", ManifestValue::Value(encode(&join_proof.proof).unwrap())),
+    ];
+    let result = template_test
+        .execute_and_commit_manifest(
+            r#"
+        let faucet = var!["faucet"];
+        let account1 = var!["account1"];
+        let withdraw_proof1 = var!["withdraw_proof1"];
+        let withdraw_proof2 = var!["withdraw_proof2"];
+        let join_proof = var!["join_proof"];
+        let resource = var!["resource"];
+        
+        // Take confidential coins from faucet and deposit into account 
+        let coins = faucet.take_free_coins(withdraw_proof1);
+        account1.deposit(coins);
+        account1.confidential_commitment_count(resource);
+        
+        let coins = faucet.take_free_coins(withdraw_proof2);
+        account1.deposit(coins);
+        
+        // Should contain 2 commitments
+        account1.confidential_commitment_count(resource);
+        
+        /// Join the two commitments valued at 1000 each
+        account1.join_confidential(resource, join_proof);
+        
+        // Now we have one commitment valued at 2000
+        account1.confidential_commitment_count(resource);
+    "#,
+            vars,
+            vec![owner1],
+        )
+        .unwrap();
+
+    assert_eq!(result.execution_results[3].decode::<u32>().unwrap(), 1);
+    assert_eq!(result.execution_results[7].decode::<u32>().unwrap(), 2);
+    assert_eq!(result.execution_results[9].decode::<u32>().unwrap(), 1);
+}
+
 /// These would live in the wallet
 mod utilities {
     use rand::rngs::OsRng;
     use tari_common_types::types::{PrivateKey, PublicKey, Signature};
-    use tari_crypto::keys::{PublicKey as _, SecretKey};
+    use tari_crypto::{
+        commitment::HomomorphicCommitmentFactory,
+        keys::{PublicKey as _, SecretKey},
+    };
     use tari_engine_types::{
         crypto,
-        crypto::{challenges, ConfidentialProofStatement},
+        crypto::{challenges, commitment_factory, ConfidentialProofStatement},
     };
     use tari_template_lib::{
         crypto::BalanceProofSignature,
@@ -300,7 +379,6 @@ mod utilities {
         change: Option<Amount>,
     ) -> (ConfidentialProof, PrivateKey, Option<PrivateKey>) {
         let mask = PrivateKey::random(&mut OsRng);
-
         let output_statement = ConfidentialProofStatement {
             amount: output_amount,
             mask: mask.clone(),
@@ -321,12 +399,13 @@ mod utilities {
     pub fn generate_balance_proof(
         input_mask: &PrivateKey,
         output_mask: &PrivateKey,
-        change_mask: &PrivateKey,
+        change_mask: Option<&PrivateKey>,
     ) -> BalanceProofSignature {
-        let secret_excess = input_mask - output_mask - change_mask;
+        let secret_excess = input_mask - output_mask - change_mask.unwrap_or(&PrivateKey::default());
         let excess = PublicKey::from_secret_key(&secret_excess);
         let (nonce, public_nonce) = PublicKey::random_keypair(&mut OsRng);
         let challenge = challenges::confidential_withdraw(&excess, &public_nonce);
+
         let sig = Signature::sign_raw(&secret_excess, nonce, &challenge).unwrap();
         BalanceProofSignature::try_from_parts(sig.get_public_nonce().as_bytes(), sig.get_signature().as_bytes())
             .unwrap()
@@ -334,19 +413,21 @@ mod utilities {
 
     pub struct WithdrawProofOutput {
         pub output_mask: PrivateKey,
-        pub change_mask: PrivateKey,
-        pub withdraw_proof: ConfidentialWithdrawProof,
+        pub change_mask: Option<PrivateKey>,
+        pub proof: ConfidentialWithdrawProof,
     }
 
     pub fn generate_withdraw_proof(
         input_mask: &PrivateKey,
         output_amount: Amount,
-        change_amount: Amount,
+        change_amount: Option<Amount>,
         revealed_amount: Amount,
     ) -> WithdrawProofOutput {
-        let (output_proof, output_mask, change_mask) = generate_confidential_proof(output_amount, Some(change_amount));
-        let change_mask = change_mask.unwrap();
-        let balance_proof = generate_balance_proof(input_mask, &output_mask, &change_mask);
+        let (output_proof, output_mask, change_mask) = generate_confidential_proof(output_amount, change_amount);
+        let total_amount = output_amount + change_amount.unwrap_or_else(Amount::zero) + revealed_amount;
+        let input_commitment = commitment_factory().commit_value(input_mask, total_amount.value() as u64);
+        let input_commitment = copy_fixed(input_commitment.as_bytes());
+        let balance_proof = generate_balance_proof(input_mask, &output_mask, change_mask.as_ref());
 
         let output_statement = output_proof.output_statement;
         let change_statement = output_proof.change_statement.unwrap();
@@ -354,7 +435,8 @@ mod utilities {
         WithdrawProofOutput {
             output_mask,
             change_mask,
-            withdraw_proof: ConfidentialWithdrawProof {
+            proof: ConfidentialWithdrawProof {
+                inputs: vec![input_commitment],
                 output_proof: ConfidentialProof {
                     output_statement: ConfidentialStatement {
                         commitment: output_statement.commitment,
@@ -370,5 +452,55 @@ mod utilities {
                 balance_proof,
             },
         }
+    }
+
+    pub fn generate_withdraw_proof_with_inputs(
+        input: &[(PrivateKey, Amount)],
+        output_amount: Amount,
+        change_amount: Option<Amount>,
+        revealed_amount: Amount,
+    ) -> WithdrawProofOutput {
+        let (output_proof, output_mask, change_mask) = generate_confidential_proof(output_amount, change_amount);
+        let input_commitments = input
+            .iter()
+            .map(|(input_mask, amount)| {
+                let input_commitment = commitment_factory().commit_value(input_mask, amount.value() as u64);
+                copy_fixed(input_commitment.as_bytes())
+            })
+            .collect();
+        let input_private_excess = input
+            .iter()
+            .fold(PrivateKey::default(), |acc, (input_mask, _)| acc + input_mask);
+        let balance_proof = generate_balance_proof(&input_private_excess, &output_mask, change_mask.as_ref());
+
+        let output_statement = output_proof.output_statement;
+        let change_statement = output_proof.change_statement;
+
+        WithdrawProofOutput {
+            output_mask,
+            change_mask,
+            proof: ConfidentialWithdrawProof {
+                inputs: input_commitments,
+                output_proof: ConfidentialProof {
+                    output_statement: ConfidentialStatement {
+                        commitment: output_statement.commitment,
+                        minimum_value_promise: output_statement.minimum_value_promise,
+                    },
+                    change_statement: change_statement.map(|change| ConfidentialStatement {
+                        commitment: change.commitment,
+                        minimum_value_promise: change.minimum_value_promise,
+                    }),
+                    range_proof: output_proof.range_proof,
+                    revealed_amount,
+                },
+                balance_proof,
+            },
+        }
+    }
+
+    fn copy_fixed<const SZ: usize>(bytes: &[u8]) -> [u8; SZ] {
+        let mut array = [0u8; SZ];
+        array.copy_from_slice(&bytes[..SZ]);
+        array
     }
 }

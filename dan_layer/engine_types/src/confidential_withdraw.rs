@@ -1,21 +1,21 @@
 //   Copyright 2023 The Tari Project
 //   SPDX-License-Identifier: BSD-3-Clause
 
-use tari_common_types::types::{BulletRangeProof, Commitment, PrivateKey, PublicKey, Signature};
+use tari_common_types::types::{BulletRangeProof, PrivateKey, PublicKey, Signature};
 use tari_crypto::commitment::HomomorphicCommitmentFactory;
 use tari_template_lib::{crypto::BalanceProofSignature, models::ConfidentialWithdrawProof};
 use tari_utilities::ByteArray;
 
 use crate::{
-    confidential_validation::{validate_confidential_proof, ValidatedConfidentialProof},
+    confidential_validation::{validate_confidential_proof, ValidatedConfidentialWithdrawProof},
     crypto::{challenges, commitment_factory},
     resource_container::ResourceError,
 };
 
-pub fn check_confidential_withdraw(
-    input: &Commitment,
+pub fn check_confidential_withdraw<'a, I: IntoIterator<Item = &'a PublicKey>>(
+    inputs: I,
     withdraw_proof: ConfidentialWithdrawProof,
-) -> Result<ValidatedConfidentialProof, ResourceError> {
+) -> Result<ValidatedConfidentialWithdrawProof, ResourceError> {
     let (output_commitment, change_commitment) = validate_confidential_proof(&withdraw_proof.output_proof)?;
 
     // We expect the revealed amount to be excluded from the output commitment.
@@ -32,7 +32,7 @@ pub fn check_confidential_withdraw(
             details: "Malformed balance proof".to_string(),
         })?;
 
-    let public_excess = input.as_public_key() -
+    let public_excess = inputs.into_iter().fold(PublicKey::default(), |sum, pk| sum + pk) -
         output_commitment_with_revealed -
         change_commitment
             .as_ref()
@@ -47,7 +47,7 @@ pub fn check_confidential_withdraw(
         });
     }
 
-    Ok(ValidatedConfidentialProof {
+    Ok(ValidatedConfidentialWithdrawProof {
         output_commitment,
         output_minimum_value_promise: withdraw_proof.output_proof.output_statement.minimum_value_promise,
         change_commitment,
