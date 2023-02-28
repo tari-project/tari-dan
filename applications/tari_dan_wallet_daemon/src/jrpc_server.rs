@@ -1,7 +1,7 @@
 //   Copyright 2023 The Tari Project
 //   SPDX-License-Identifier: BSD-3-Clause
 
-use std::{net::SocketAddr, sync::Arc};
+use std::{collections::HashMap, net::SocketAddr, sync::Arc};
 
 use axum::{extract::Extension, routing::post, Router};
 use axum_jrpc::{
@@ -12,7 +12,7 @@ use axum_jrpc::{
 };
 use log::*;
 use serde::{de::DeserializeOwned, Serialize};
-use serde_json::json;
+use serde_json::{json, Value};
 use tari_shutdown::ShutdownSignal;
 use tower_http::{cors::CorsLayer, trace::TraceLayer};
 
@@ -46,6 +46,17 @@ pub async fn listen(
 
 async fn handler(Extension(context): Extension<Arc<HandlerContext>>, value: JsonRpcExtractor) -> JrpcResult {
     info!(target: LOG_TARGET, "🌐 JSON-RPC request: {}", value.method);
+    if value.method == "rpc.discover" {
+        return Ok(JsonRpcResponse::success(
+            value.id,
+            serde_json::from_str::<HashMap<String, Value>>(include_str!("../openrpc.json")).map_err(|e| {
+                JsonRpcResponse::error(
+                    value.id,
+                    JsonRpcError::new(JsonRpcErrorReason::InternalError, e.to_string(), json!({})),
+                )
+            })?,
+        ));
+    }
     match value.method.as_str().split_once('/') {
         Some(("keys", method)) => match method {
             "create" => call_handler(context, value, keys::handle_create).await,

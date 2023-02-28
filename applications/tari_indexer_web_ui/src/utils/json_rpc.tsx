@@ -49,6 +49,11 @@ async function jsonRpc(method: string, params: any = null) {
   }
   return json.result;
 }
+
+async function getOpenRpcSchema() {
+  return await jsonRpc('rpc.discover');
+}
+
 async function getIdentity() {
   return await jsonRpc('get_identity');
 }
@@ -93,6 +98,7 @@ export {
   getCommsStats,
   getConnections,
   getIdentity,
+    getOpenRpcSchema,
   getRecentTransactions,
   getSubstate,
 };

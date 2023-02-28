@@ -56,6 +56,7 @@ pub async fn run_json_rpc(preferred_address: SocketAddr, handlers: JsonRpcHandle
 async fn handler(Extension(handlers): Extension<Arc<JsonRpcHandlers>>, value: JsonRpcExtractor) -> JrpcResult {
     debug!(target: LOG_TARGET, "🌐 JSON-RPC request: {}", value.method);
     match value.method.as_str() {
+        "rpc.discover" => handlers.rpc_discover(value),
         "get_identity" => handlers.get_identity(value),
         "get_all_vns" => handlers.get_all_vns(value).await,
         "add_peer" => handlers.add_peer(value).await,

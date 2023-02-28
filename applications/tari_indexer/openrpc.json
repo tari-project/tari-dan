@@ -1,0 +1,23 @@
+{
+  "openrpc": "1.0.0-rc1",
+  "info": {
+    "version": "1.0.0",
+    "title": "Tari DAN Indexer",
+    "license": {
+      "name": "MIT"
+    }
+  },
+  "servers": [
+    {
+      "url": "http://localhost:183000"
+    }
+  ],
+  "methods": [
+  ],
+  "components": {
+    "contentDescriptors": {
+    },
+    "schemas": {
+    }
+  }
+}
