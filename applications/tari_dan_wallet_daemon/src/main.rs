@@ -40,7 +40,7 @@ use crate::{
     services::spawn_services,
 };
 
-const _LOG_TARGET: &str = "tari::dan::wallet_daemon::main";
+const _LOG_TARGET: &str = "tari::dan_wallet_daemon::main";
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {

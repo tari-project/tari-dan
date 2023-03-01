@@ -37,7 +37,7 @@ use tari_dan_storage_sqlite::sqlite_shard_store_factory::SqliteShardStore;
 use tari_transaction::Transaction;
 use tokio::{sync::mpsc, task};
 
-const LOG_TARGET: &str = "vn::p2p::rpc";
+const LOG_TARGET: &str = "tari::dan::p2p::rpc";
 
 use crate::p2p::{rpc::ValidatorNodeRpcService, services::mempool::MempoolHandle};
 

@@ -51,7 +51,7 @@ use crate::{
     storage::StorageError,
 };
 
-const LOG_TARGET: &str = "tari::dan_layer::storage";
+const LOG_TARGET: &str = "tari::dan::storage";
 
 pub trait ShardStore {
     type Addr: NodeAddressable;

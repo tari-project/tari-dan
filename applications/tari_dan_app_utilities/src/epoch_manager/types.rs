@@ -38,6 +38,9 @@ pub enum EpochManagerRequest {
     CurrentEpoch {
         reply: Reply<Epoch>,
     },
+    CurrentBlockHeight {
+        reply: Reply<u64>,
+    },
     GetValidatorShardKey {
         epoch: Epoch,
         addr: CommsPublicKey,
