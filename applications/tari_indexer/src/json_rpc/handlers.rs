@@ -20,7 +20,7 @@
 //   WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //   USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use std::{str::FromStr, sync::Arc};
+use std::{collections::HashMap, str::FromStr, sync::Arc};
 
 use axum_jrpc::{
     error::{JsonRpcError, JsonRpcErrorReason},
@@ -29,7 +29,7 @@ use axum_jrpc::{
     JsonRpcResponse,
 };
 use serde::{Deserialize, Serialize};
-use serde_json::{self as json, json};
+use serde_json::{self as json, json, Value};
 use tari_comms::{
     multiaddr::Multiaddr,
     peer_manager::{NodeId, PeerFeatures},
@@ -82,6 +82,18 @@ impl JsonRpcHandlers {
 }
 
 impl JsonRpcHandlers {
+    pub fn rpc_discover(&self, value: JsonRpcExtractor) -> JrpcResult {
+        Ok(JsonRpcResponse::success(
+            value.id,
+            serde_json::from_str::<HashMap<String, Value>>(include_str!("../../openrpc.json")).map_err(|e| {
+                JsonRpcResponse::error(
+                    value.id,
+                    JsonRpcError::new(JsonRpcErrorReason::InternalError, e.to_string(), json!({})),
+                )
+            })?,
+        ))
+    }
+
     pub fn get_identity(&self, value: JsonRpcExtractor) -> JrpcResult {
         let answer_id = value.get_answer_id();
         let response = GetIdentityResponse {

@@ -1,0 +1,64 @@
+{
+  "openrpc": "1.0.0-rc1",
+  "info": {
+    "version": "1.0.0",
+    "title": "Tari DAN Wallet Daemon",
+    "license": {
+      "name": "MIT"
+    }
+  },
+  "servers": [
+    {
+      "url": "http://localhost:9000"
+    }
+  ],
+  "methods": [
+    {
+      "name": "keys/create",
+      "summary": "",
+      "tags": [
+      ],
+      "params": [],
+      "result": {
+        "name": "KeysCreateResponse",
+        "schema": {
+          "$ref": "#/components/schemas/KeysCreateResponse"
+        }
+      },
+      "errors": [
+      ],
+      "examples": [
+        {
+          "name": "default",
+          "description": "",
+          "params": [
+          ],
+          "result": {
+            "name": "example1",
+            "value": {
+              "current_epoch": 2,
+              "is_valid": true
+            }
+          }
+        }
+      ]
+    }
+  ],
+  "components": {
+    "contentDescriptors": {
+    },
+    "schemas": {
+      "KeysCreateResponse": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer"
+          },
+          "public_key": {
+            "type": "string"
+          }
+        }
+      }
+    }
+  }
+}
