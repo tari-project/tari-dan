@@ -43,6 +43,7 @@ use tari_engine_types::{
 };
 use tari_template_lib::{
     arg,
+    args,
     args::Arg,
     models::{AddressListId, Amount, NonFungibleAddress, NonFungibleId},
     prelude::{ComponentAddress, ResourceAddress},
@@ -388,7 +389,7 @@ pub async fn handle_send(
         Instruction::CallMethod {
             component_address: source_component_address,
             method: String::from("withdraw"),
-            args: vec![arg![resource_address], arg![amount]],
+            args: args![resource_address, amount],
         },
         Instruction::PutLastInstructionOutputOnWorkspace {
             key: b"bucket".to_vec(),
@@ -396,7 +397,7 @@ pub async fn handle_send(
         Instruction::CallMethod {
             component_address: dest_address,
             method: String::from("deposit"),
-            args: vec![arg![Variable("bucket")]],
+            args: args![Variable("bucket")],
         },
     ];
 
