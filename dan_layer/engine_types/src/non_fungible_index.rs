@@ -26,11 +26,11 @@ use tari_template_lib::prelude::NonFungibleAddress;
 
 /// Holds a reference to another substate
 #[derive(Debug, Clone, Encode, Decode, Serialize, Deserialize, PartialEq)]
-pub struct AddressListItem {
+pub struct NonFungibleIndex {
     referenced_address: NonFungibleAddress,
 }
 
-impl AddressListItem {
+impl NonFungibleIndex {
     pub fn new(referenced_address: NonFungibleAddress) -> Self {
         Self { referenced_address }
     }

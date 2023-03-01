@@ -30,10 +30,10 @@ use log::debug;
 use tari_common_types::types::{Commitment, PublicKey};
 use tari_dan_common_types::optional::Optional;
 use tari_engine_types::{
-    address_list::AddressListItem,
     bucket::Bucket,
     logs::LogEntry,
     non_fungible::NonFungibleContainer,
+    non_fungible_index::NonFungibleIndex,
     resource::Resource,
     resource_container::ResourceContainer,
     substate::{Substate, SubstateAddress, SubstateDiff},
@@ -45,7 +45,6 @@ use tari_template_lib::{
     args::MintArg,
     auth::AccessRules,
     models::{
-        AddressListItemAddress,
         Amount,
         BucketId,
         ComponentAddress,
@@ -54,6 +53,7 @@ use tari_template_lib::{
         LayerOneCommitmentAddress,
         Metadata,
         NonFungibleAddress,
+        NonFungibleIndexAddress,
         ResourceAddress,
         VaultId,
     },
@@ -175,11 +175,11 @@ impl StateTracker {
                             return Err(RuntimeError::DuplicateNonFungibleId { token_id: id });
                         }
 
-                        // for each new nft we also create an list item to be allow resource scanning
-                        let item_address = AddressListItemAddress::new(resource_address, index);
+                        // for each new nft we also create an index to be allow resource scanning
+                        let index_address = NonFungibleIndexAddress::new(resource_address, index);
                         index += 1;
-                        let item = AddressListItem::new(nft_address);
-                        state.new_address_list_items.insert(item_address, item);
+                        let nft_index = NonFungibleIndex::new(nft_address);
+                        state.new_non_fungible_indexes.insert(index_address, nft_index);
                     }
 
                     ResourceContainer::non_fungible(resource_address, token_ids)
@@ -503,13 +503,13 @@ impl StateTracker {
                 substate_diff.up(addr, new_substate);
             }
 
-            for (address, substate) in state.new_address_list_items {
-                let addr = SubstateAddress::AddressListItem(address.clone());
+            for (address, substate) in state.new_non_fungible_indexes {
+                let addr = SubstateAddress::NonFungibleIndex(address.clone());
                 let new_substate = match tx.get_state::<_, Substate>(&addr).optional()? {
                     Some(_) => {
-                        // Addess list items are immutable
-                        return Err(TransactionCommitError::AddressListItemMutation {
-                            parent_address: *address.parent_address(),
+                        // nft indexes are immutable
+                        return Err(TransactionCommitError::NonFungibleIndexMutation {
+                            resource_address: *address.resource_address(),
                             index: address.index(),
                         });
                     },

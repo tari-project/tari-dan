@@ -27,18 +27,21 @@ use super::ResourceAddress;
 
 #[derive(Debug, Clone, Encode, Decode, PartialEq, Eq, Hash)]
 #[cfg_attr(feature = "serde", derive(serde::Deserialize, serde::Serialize))]
-pub struct AddressListItemAddress {
-    parent_address: ResourceAddress,
+pub struct NonFungibleIndexAddress {
+    resource_address: ResourceAddress,
     index: u64,
 }
 
-impl AddressListItemAddress {
-    pub fn new(parent_address: ResourceAddress, index: u64) -> Self {
-        Self { parent_address, index }
+impl NonFungibleIndexAddress {
+    pub fn new(resource_address: ResourceAddress, index: u64) -> Self {
+        Self {
+            resource_address,
+            index,
+        }
     }
 
-    pub fn parent_address(&self) -> &ResourceAddress {
-        &self.parent_address
+    pub fn resource_address(&self) -> &ResourceAddress {
+        &self.resource_address
     }
 
     pub fn index(&self) -> u64 {
@@ -46,8 +49,8 @@ impl AddressListItemAddress {
     }
 }
 
-impl Display for AddressListItemAddress {
+impl Display for NonFungibleIndexAddress {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{} index_{}", self.parent_address, self.index)
+        write!(f, "{} index_{}", self.resource_address, self.index)
     }
 }

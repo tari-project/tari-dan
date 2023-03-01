@@ -1043,7 +1043,7 @@ mod tickets {
     }
 }
 
-mod nft_list {
+mod nft_indexes {
     use super::*;
 
     fn setup() -> (
@@ -1064,7 +1064,7 @@ mod nft_list {
     }
 
     #[test]
-    fn new_item() {
+    fn new_nft_index() {
         let (mut template_test, (account_address, _), nft_component, nft_resx) = setup();
 
         let vars = vec![
@@ -1113,27 +1113,33 @@ mod nft_list {
         assert_eq!(diff.up_iter().filter(|(addr, _)| addr.is_non_fungible()).count(), 1);
         let (nft_addr, _) = diff.up_iter().find(|(addr, _)| addr.is_non_fungible()).unwrap();
 
-        // One new list item
+        // One new NFT index
         assert_eq!(
-            diff.down_iter().filter(|(addr, _)| addr.is_address_list_item()).count(),
+            diff.down_iter()
+                .filter(|(addr, _)| addr.is_non_fungible_index())
+                .count(),
             0
         );
         assert_eq!(
-            diff.up_iter().filter(|(addr, _)| addr.is_address_list_item()).count(),
+            diff.up_iter().filter(|(addr, _)| addr.is_non_fungible_index()).count(),
             1
         );
-        let (item_addr, item) = diff.up_iter().find(|(addr, _)| addr.is_address_list_item()).unwrap();
-        // The list item address is composed of the list address
+        let (index_addr, index) = diff.up_iter().find(|(addr, _)| addr.is_non_fungible_index()).unwrap();
+        // The nft index address is composed of the resource address
         assert_eq!(
             nft_resx.as_resource_address().unwrap(),
-            item_addr
-                .as_address_list_item_address()
+            index_addr
+                .as_non_fungible_index_address()
                 .unwrap()
-                .parent_address()
+                .resource_address()
                 .to_owned(),
         );
-        // The list item references the newly minted nft
-        let referenced_address = item.substate_value().address_list_item().unwrap().referenced_address();
+        // The index references the newly minted nft
+        let referenced_address = index
+            .substate_value()
+            .non_fungible_index()
+            .unwrap()
+            .referenced_address();
         assert_eq!(nft_addr.to_address_string(), referenced_address.to_string());
 
         // The total supply of the resource is increased

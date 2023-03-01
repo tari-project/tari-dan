@@ -30,12 +30,12 @@ use tari_bor::{borsh, decode, decode_exact, encode, Decode, Encode};
 use tari_common_types::types::Commitment;
 use tari_template_lib::{
     models::{
-        AddressListItemAddress,
         ComponentAddress,
         ComponentHeader,
         LayerOneCommitmentAddress,
         NonFungibleAddress,
         NonFungibleId,
+        NonFungibleIndexAddress,
         ResourceAddress,
         VaultId,
     },
@@ -44,9 +44,9 @@ use tari_template_lib::{
 use tari_utilities::ByteArray;
 
 use crate::{
-    address_list::AddressListItem,
     hashing::hasher,
     non_fungible::NonFungibleContainer,
+    non_fungible_index::NonFungibleIndex,
     resource::Resource,
     vault::Vault,
 };
@@ -94,7 +94,7 @@ pub enum SubstateAddress {
     Vault(VaultId),
     LayerOneCommitment(LayerOneCommitmentAddress),
     NonFungible(NonFungibleAddress),
-    AddressListItem(AddressListItemAddress),
+    NonFungibleIndex(NonFungibleIndexAddress),
 }
 
 impl SubstateAddress {
@@ -129,8 +129,8 @@ impl SubstateAddress {
                 .chain(address.resource_address().hash())
                 .chain(address.id())
                 .result(),
-            SubstateAddress::AddressListItem(address) => hasher("address_list_item")
-                .chain(address.parent_address().hash())
+            SubstateAddress::NonFungibleIndex(address) => hasher("non_fungible_index")
+                .chain(address.resource_address().hash())
                 .chain(&address.index())
                 .result(),
         }
@@ -156,9 +156,9 @@ impl SubstateAddress {
         }
     }
 
-    pub fn as_address_list_item_address(&self) -> Option<&AddressListItemAddress> {
+    pub fn as_non_fungible_index_address(&self) -> Option<&NonFungibleIndexAddress> {
         match self {
-            SubstateAddress::AddressListItem(addr) => Some(addr),
+            SubstateAddress::NonFungibleIndex(addr) => Some(addr),
             _ => None,
         }
     }
@@ -179,8 +179,8 @@ impl SubstateAddress {
         matches!(self, Self::NonFungible(_))
     }
 
-    pub fn is_address_list_item(&self) -> bool {
-        matches!(self, Self::AddressListItem(_))
+    pub fn is_non_fungible_index(&self) -> bool {
+        matches!(self, Self::NonFungibleIndex(_))
     }
 
     pub fn is_layer1_commitment(&self) -> bool {
@@ -212,9 +212,9 @@ impl From<NonFungibleAddress> for SubstateAddress {
     }
 }
 
-impl From<AddressListItemAddress> for SubstateAddress {
-    fn from(address: AddressListItemAddress) -> Self {
-        Self::AddressListItem(address)
+impl From<NonFungibleIndexAddress> for SubstateAddress {
+    fn from(address: NonFungibleIndexAddress) -> Self {
+        Self::NonFungibleIndex(address)
     }
 }
 
@@ -225,7 +225,7 @@ impl Display for SubstateAddress {
             SubstateAddress::Resource(addr) => write!(f, "{}", addr),
             SubstateAddress::Vault(addr) => write!(f, "{}", addr),
             SubstateAddress::NonFungible(addr) => write!(f, "{}", addr),
-            SubstateAddress::AddressListItem(addr) => write!(f, "{}", addr),
+            SubstateAddress::NonFungibleIndex(addr) => write!(f, "{}", addr),
             SubstateAddress::LayerOneCommitment(commitment_address) => write!(f, "{}", commitment_address),
         }
     }
@@ -261,7 +261,7 @@ impl FromStr for SubstateAddress {
                                 .map_err(|_| InvalidSubstateAddressFormat(s.to_string()))?;
                             let index =
                                 u64::from_str(index_str).map_err(|_| InvalidSubstateAddressFormat(s.to_string()))?;
-                            Ok(SubstateAddress::AddressListItem(AddressListItemAddress::new(
+                            Ok(SubstateAddress::NonFungibleIndex(NonFungibleIndexAddress::new(
                                 resource_addr,
                                 index,
                             )))
@@ -319,7 +319,7 @@ pub enum SubstateValue {
     Resource(Resource),
     Vault(Vault),
     NonFungible(NonFungibleContainer),
-    AddressListItem(AddressListItem),
+    NonFungibleIndex(NonFungibleIndex),
     LayerOneCommitment(Vec<u8>),
 }
 
@@ -373,16 +373,16 @@ impl SubstateValue {
         }
     }
 
-    pub fn address_list_item(&self) -> Option<&AddressListItem> {
+    pub fn non_fungible_index(&self) -> Option<&NonFungibleIndex> {
         match self {
-            SubstateValue::AddressListItem(item) => Some(item),
+            SubstateValue::NonFungibleIndex(index) => Some(index),
             _ => None,
         }
     }
 
-    pub fn into_address_list_item(self) -> Option<AddressListItem> {
+    pub fn into_non_fungible_index(self) -> Option<NonFungibleIndex> {
         match self {
-            SubstateValue::AddressListItem(item) => Some(item),
+            SubstateValue::NonFungibleIndex(index) => Some(index),
             _ => None,
         }
     }
@@ -422,9 +422,9 @@ impl From<NonFungibleContainer> for SubstateValue {
     }
 }
 
-impl From<AddressListItem> for SubstateValue {
-    fn from(item: AddressListItem) -> Self {
-        Self::AddressListItem(item)
+impl From<NonFungibleIndex> for SubstateValue {
+    fn from(index: NonFungibleIndex) -> Self {
+        Self::NonFungibleIndex(index)
     }
 }
 
@@ -509,7 +509,7 @@ mod tests {
                 "resource_7cbfe29101c24924b1b6ccefbfff98986d648622272ae24f7585dab55ff1ff64 index_0",
             )
             .unwrap()
-            .as_address_list_item_address()
+            .as_non_fungible_index_address()
             .unwrap();
         }
     }

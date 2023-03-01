@@ -205,7 +205,7 @@ impl<'a, TStore: WalletStore> TransactionApi<'a, TStore> {
                 addr @ SubstateAddress::Resource(_) |
                 addr @ SubstateAddress::Vault(_) |
                 addr @ SubstateAddress::NonFungible(_) |
-                addr @ SubstateAddress::AddressListItem(_) => {
+                addr @ SubstateAddress::NonFungibleIndex(_) => {
                     children.push(VersionedSubstateAddress {
                         address: addr.clone(),
                         version: substate.version(),

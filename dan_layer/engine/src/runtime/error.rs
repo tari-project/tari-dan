@@ -139,9 +139,9 @@ pub enum TransactionCommitError {
     StateStoreTransactionError(anyhow::Error),
     #[error(transparent)]
     MaxIdsExceeded(#[from] MaxIdsExceeded),
-    #[error("trying to mutate list {parent_address} at index {index}")]
-    AddressListItemMutation {
-        parent_address: ResourceAddress,
+    #[error("trying to mutate non fungible index of resource {resource_address} at index {index}")]
+    NonFungibleIndexMutation {
+        resource_address: ResourceAddress,
         index: u64,
     },
 }

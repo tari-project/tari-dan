@@ -108,8 +108,8 @@ pub struct CommonSubmitArgs {
     pub non_fungible_mint_outputs: Vec<SpecificNonFungibleMintOutput>,
     #[clap(long, alias = "mint-new")]
     pub new_non_fungible_outputs: Vec<NewNonFungibleMintOutput>,
-    #[clap(long, alias = "new-list-item")]
-    pub new_address_list_item_outputs: Vec<NewAddressListItemOutput>,
+    #[clap(long, alias = "new-nft-index")]
+    pub new_non_fungible_index_outputs: Vec<NewNonFungibleIndexOutput>,
 }
 
 #[derive(Debug, Args, Clone)]
@@ -271,9 +271,9 @@ pub async fn submit_transaction(
                 .map(|m| (m.resource_address, m.count))
                 .collect(),
         )
-        .with_new_address_list_item_outputs(
+        .with_new_non_fungible_index_outputs(
             common
-                .new_address_list_item_outputs
+                .new_non_fungible_index_outputs
                 .into_iter()
                 .map(|i| (i.parent_address, i.index))
                 .collect(),
@@ -400,12 +400,9 @@ fn summarize_finalize_result(finalize: &FinalizeResult) {
                     SubstateValue::LayerOneCommitment(_hash) => {
                         println!("     ! layer one commitment: Should never happen");
                     },
-                    SubstateValue::AddressListItem(item) => {
-                        let referenced_address = SubstateAddress::from(item.referenced_address().clone());
-                        println!(
-                            "      ▶ address list item {} referencing {}",
-                            address, referenced_address
-                        );
+                    SubstateValue::NonFungibleIndex(index) => {
+                        let referenced_address = SubstateAddress::from(index.referenced_address().clone());
+                        println!("      ▶ NFT index {} referencing {}", address, referenced_address);
                     },
                 }
                 println!();
@@ -740,12 +737,12 @@ impl FromStr for NewNonFungibleMintOutput {
 }
 
 #[derive(Debug, Clone)]
-pub struct NewAddressListItemOutput {
+pub struct NewNonFungibleIndexOutput {
     pub parent_address: ResourceAddress,
     pub index: u64,
 }
 
-impl FromStr for NewAddressListItemOutput {
+impl FromStr for NewNonFungibleIndexOutput {
     type Err = anyhow::Error;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
@@ -754,7 +751,7 @@ impl FromStr for NewAddressListItemOutput {
         let parent_address = parent_address
             .as_resource_address()
             .ok_or_else(|| anyhow!("Expected resource address but got {}", parent_address))?;
-        Ok(NewAddressListItemOutput {
+        Ok(NewNonFungibleIndexOutput {
             parent_address,
             index: index_str.parse()?,
         })

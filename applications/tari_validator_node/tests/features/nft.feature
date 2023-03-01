@@ -42,9 +42,9 @@ Feature: NFTs
             // $mint NFT/resources/0 1
             // $mint_specific NFT/resources/0 str:SpecialNft
             // $mint_specific NFT/resources/0 str:Burn!
-            // $list_item NFT/resources/0 0
-            // $list_item NFT/resources/0 1
-            // $list_item NFT/resources/0 2
+            // $nft_index NFT/resources/0 0
+            // $nft_index NFT/resources/0 1
+            // $nft_index NFT/resources/0 2
             let sparkle_nft = global!["NFT/components/SparkleNft"];
             let sparkle_res = global!["NFT/resources/0"];
             let mut acc1 = global!["ACC1/components/Account"];

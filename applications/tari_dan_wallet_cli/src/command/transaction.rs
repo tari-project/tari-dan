@@ -106,8 +106,8 @@ pub struct CommonSubmitArgs {
     pub non_fungible_mint_outputs: Vec<SpecificNonFungibleMintOutput>,
     #[clap(long, alias = "mint-new")]
     pub new_non_fungible_outputs: Vec<NewNonFungibleMintOutput>,
-    #[clap(long, alias = "new-list-item")]
-    pub new_address_list_item_outputs: Vec<NewAddressListItemOutput>,
+    #[clap(long, alias = "new-nft-index")]
+    pub new_non_fungible_index_outputs: Vec<NewNonFungibleIndexOutput>,
     #[clap(long)]
     pub fee: Option<u64>,
 }
@@ -250,8 +250,8 @@ pub async fn submit_transaction(
             .into_iter()
             .map(|m| (m.resource_address, m.count))
             .collect(),
-        new_address_list_item_outputs: common
-            .new_address_list_item_outputs
+        new_non_fungible_index_outputs: common
+            .new_non_fungible_index_outputs
             .into_iter()
             .map(|i| (i.parent_address, i.index))
             .collect(),
@@ -262,7 +262,7 @@ pub async fn submit_transaction(
         request.new_outputs == 0 &&
         request.specific_non_fungible_outputs.is_empty() &&
         request.new_non_fungible_outputs.is_empty() &&
-        request.new_address_list_item_outputs.is_empty()
+        request.new_non_fungible_index_outputs.is_empty()
     {
         return Err(anyhow::anyhow!(
             "No inputs or outputs, transaction will not be processed by the network"
@@ -439,12 +439,9 @@ fn summarize_finalize_result(finalize: &FinalizeResult) {
                     SubstateValue::LayerOneCommitment(_) => {
                         println!("      ▶ Layer 1 commitment: {}", address);
                     },
-                    SubstateValue::AddressListItem(item) => {
-                        let referenced_address = SubstateAddress::from(item.referenced_address().clone());
-                        println!(
-                            "      ▶ address list item {} referencing {}",
-                            address, referenced_address
-                        );
+                    SubstateValue::NonFungibleIndex(index) => {
+                        let referenced_address = SubstateAddress::from(index.referenced_address().clone());
+                        println!("      ▶ NFT index {} referencing {}", address, referenced_address);
                     },
                 }
                 println!();
@@ -754,12 +751,12 @@ impl FromStr for NewNonFungibleMintOutput {
 }
 
 #[derive(Debug, Clone)]
-pub struct NewAddressListItemOutput {
+pub struct NewNonFungibleIndexOutput {
     pub parent_address: ResourceAddress,
     pub index: u64,
 }
 
-impl FromStr for NewAddressListItemOutput {
+impl FromStr for NewNonFungibleIndexOutput {
     type Err = anyhow::Error;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
@@ -768,7 +765,7 @@ impl FromStr for NewAddressListItemOutput {
         let parent_address = parent_address
             .as_resource_address()
             .ok_or_else(|| anyhow!("Expected resource address but got {}", parent_address))?;
-        Ok(NewAddressListItemOutput {
+        Ok(NewNonFungibleIndexOutput {
             parent_address,
             index: index_str.parse()?,
         })
