@@ -1051,7 +1051,6 @@ mod nft_list {
         (ComponentAddress, NonFungibleAddress),
         ComponentAddress,
         SubstateAddress,
-        SubstateAddress,
     ) {
         let mut template_test = TemplateTest::new(vec!["tests/templates/nft/nft_list"]);
 
@@ -1059,26 +1058,19 @@ mod nft_list {
         let nft_component: ComponentAddress = template_test.call_function("SparkleNft", "new", args![], vec![]);
 
         let nft_resx = template_test.get_previous_output_address(SubstateType::Resource);
-        let address_list = template_test.get_previous_output_address(SubstateType::AddressList);
 
         // TODO: cleanup
-        (
-            template_test,
-            (account_address, owner_token),
-            nft_component,
-            nft_resx,
-            address_list,
-        )
+        (template_test, (account_address, owner_token), nft_component, nft_resx)
     }
 
     #[test]
     fn push_item() {
-        let (mut template_test, (account_address, _), nft_component, nft_resx, address_list) = setup();
+        let (mut template_test, (account_address, _), nft_component, nft_resx) = setup();
 
         let vars = vec![
             ("account", account_address.into()),
             ("nft", nft_component.into()),
-            ("nft_resx", nft_resx.into()),
+            ("nft_resx", nft_resx.clone().into()),
         ];
 
         let total_supply: Amount = template_test.call_method(nft_component, "total_supply", args![], vec![]);
@@ -1133,8 +1125,12 @@ mod nft_list {
         let (item_addr, item) = diff.up_iter().find(|(addr, _)| addr.is_address_list_item()).unwrap();
         // The list item address is composed of the list address
         assert_eq!(
-            address_list.as_address_list_id().unwrap(),
-            item_addr.as_address_list_item_address().unwrap().list_id()
+            nft_resx.as_resource_address().unwrap(),
+            item_addr
+                .as_address_list_item_address()
+                .unwrap()
+                .parent_address()
+                .to_owned(),
         );
         // The list item references the newly minted nft
         let referenced_address = item.substate_value().address_list_item().unwrap().referenced_address();

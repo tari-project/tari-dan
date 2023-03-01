@@ -301,7 +301,6 @@ pub enum SubstateType {
     Resource,
     Vault,
     NonFungible,
-    AddressList,
     AddressListItem,
 }
 
@@ -313,7 +312,6 @@ impl SubstateType {
             (SubstateType::Resource, SubstateAddress::Resource(_)) => true,
             (SubstateType::Vault, SubstateAddress::Vault(_)) => true,
             (SubstateType::NonFungible, SubstateAddress::NonFungible(_)) => true,
-            (SubstateType::AddressList, SubstateAddress::AddressList(_)) => true,
             (SubstateType::AddressListItem, SubstateAddress::AddressListItem(_)) => true,
             _ => false,
         }

@@ -22,32 +22,20 @@
 
 use serde::{Deserialize, Serialize};
 use tari_bor::{borsh, Decode, Encode};
-use tari_template_lib::models::{Address, AddressListId};
-
-/// Placeholder for empty address lists, so they can have an address in the network
-#[derive(Debug, Clone, Encode, Decode, Serialize, Deserialize, PartialEq)]
-pub struct AddressList {
-    id: AddressListId,
-}
-
-impl AddressList {
-    pub fn new(id: AddressListId) -> Self {
-        Self { id }
-    }
-}
+use tari_template_lib::prelude::NonFungibleAddress;
 
 /// Holds a reference to another substate
 #[derive(Debug, Clone, Encode, Decode, Serialize, Deserialize, PartialEq)]
 pub struct AddressListItem {
-    referenced_address: Address,
+    referenced_address: NonFungibleAddress,
 }
 
 impl AddressListItem {
-    pub fn new(referenced_address: Address) -> Self {
+    pub fn new(referenced_address: NonFungibleAddress) -> Self {
         Self { referenced_address }
     }
 
-    pub fn referenced_address(&self) -> &Address {
+    pub fn referenced_address(&self) -> &NonFungibleAddress {
         &self.referenced_address
     }
 }

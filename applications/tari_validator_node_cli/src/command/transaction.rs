@@ -41,7 +41,7 @@ use tari_engine_types::{
 use tari_template_lib::{
     arg,
     args::Arg,
-    models::{AddressListId, Amount, NonFungibleAddress, NonFungibleId},
+    models::{Amount, NonFungibleAddress, NonFungibleId},
     prelude::ResourceAddress,
 };
 use tari_transaction::Transaction;
@@ -275,7 +275,7 @@ pub async fn submit_transaction(
             common
                 .new_address_list_item_outputs
                 .into_iter()
-                .map(|i| (i.list_id, i.index))
+                .map(|i| (i.parent_address, i.index))
                 .collect(),
         )
         .with_fee(1)
@@ -399,9 +399,6 @@ fn summarize_finalize_result(finalize: &FinalizeResult) {
                     },
                     SubstateValue::LayerOneCommitment(_hash) => {
                         println!("     ! layer one commitment: Should never happen");
-                    },
-                    SubstateValue::AddressList(_) => {
-                        println!("      ▶ address list: {}", address);
                     },
                     SubstateValue::AddressListItem(item) => {
                         let referenced_address = SubstateAddress::from(item.referenced_address().clone());
@@ -744,7 +741,7 @@ impl FromStr for NewNonFungibleMintOutput {
 
 #[derive(Debug, Clone)]
 pub struct NewAddressListItemOutput {
-    pub list_id: AddressListId,
+    pub parent_address: ResourceAddress,
     pub index: u64,
 }
 
@@ -752,13 +749,13 @@ impl FromStr for NewAddressListItemOutput {
     type Err = anyhow::Error;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let (list_id, index_str) = s.split_once(',').unwrap_or((s, "0"));
-        let list_id = SubstateAddress::from_str(list_id)?;
-        let list_id = list_id
-            .as_address_list_id()
-            .ok_or_else(|| anyhow!("Expected address list id but got {}", list_id))?;
+        let (parent_address, index_str) = s.split_once(',').unwrap_or((s, "0"));
+        let parent_address = SubstateAddress::from_str(parent_address)?;
+        let parent_address = parent_address
+            .as_resource_address()
+            .ok_or_else(|| anyhow!("Expected resource address but got {}", parent_address))?;
         Ok(NewAddressListItemOutput {
-            list_id: *list_id,
+            parent_address,
             index: index_str.parse()?,
         })
     }

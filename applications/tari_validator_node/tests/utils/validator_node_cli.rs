@@ -187,13 +187,6 @@ fn add_substate_addresses(world: &mut TariWorld, outputs_name: String, diff: &Su
                 );
                 counters[4] += 1;
             },
-            SubstateAddress::AddressList(_) => {
-                outputs.insert(format!("addresslists/{}", counters[4]), VersionedSubstateAddress {
-                    address: addr.clone(),
-                    version: data.version(),
-                });
-                counters[4] += 1;
-            },
             SubstateAddress::AddressListItem(_) => {
                 outputs.insert(format!("addresslistitems/{}", counters[5]), VersionedSubstateAddress {
                     address: addr.clone(),
@@ -329,9 +322,9 @@ pub async fn submit_manifest(
         .map(|l| l.split_whitespace().skip(2).collect::<Vec<&str>>())
         .map(|l| {
             let manifest_value = globals.get(l[0]).unwrap();
-            let list_id = *manifest_value.as_address().unwrap().as_address_list_id().unwrap();
+            let parent_address = manifest_value.as_address().unwrap().as_resource_address().unwrap();
             let index = u64::from_str(l[1]).unwrap();
-            NewAddressListItemOutput { list_id, index }
+            NewAddressListItemOutput { parent_address, index }
         })
         .collect();
 

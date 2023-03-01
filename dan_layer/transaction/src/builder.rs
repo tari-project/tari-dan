@@ -7,13 +7,7 @@ use tari_common_types::types::{PrivateKey, PublicKey};
 use tari_crypto::{keys::PublicKey as PublicKeyTrait, ristretto::RistrettoPublicKey};
 use tari_dan_common_types::ShardId;
 use tari_engine_types::{instruction::Instruction, substate::SubstateAddress};
-use tari_template_lib::models::{
-    AddressListId,
-    AddressListItemAddress,
-    NonFungibleAddress,
-    NonFungibleId,
-    ResourceAddress,
-};
+use tari_template_lib::models::{AddressListItemAddress, NonFungibleAddress, NonFungibleId, ResourceAddress};
 
 use super::Transaction;
 use crate::{
@@ -32,7 +26,7 @@ pub struct TransactionBuilder {
     signature: Option<InstructionSignature>,
     sender_public_key: Option<RistrettoPublicKey>,
     new_non_fungible_outputs: Vec<(ResourceAddress, u8)>,
-    new_address_list_item_outputs: Vec<(AddressListId, u64)>,
+    new_address_list_item_outputs: Vec<(ResourceAddress, u64)>,
 }
 
 impl TransactionBuilder {
@@ -124,7 +118,7 @@ impl TransactionBuilder {
 
     pub fn with_new_address_list_item_outputs(
         &mut self,
-        new_address_list_item_outputs: Vec<(AddressListId, u64)>,
+        new_address_list_item_outputs: Vec<(ResourceAddress, u64)>,
     ) -> &mut Self {
         self.new_address_list_item_outputs = new_address_list_item_outputs;
         self
