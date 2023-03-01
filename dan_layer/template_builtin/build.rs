@@ -51,6 +51,13 @@ fn main() -> Result<(), Box<dyn Error>> {
 
         // copy the wasm binary to the root folder of the template, to be included in source control
         let wasm_dest = template_path.join(wasm_name).with_extension("wasm");
+        if wasm_dest.exists() {
+            let existing_contents = fs::read(&wasm_dest)?;
+            let dest_contents = fs::read(&wasm_path)?;
+            if existing_contents == dest_contents {
+                continue;
+            }
+        }
         fs::copy(wasm_path, wasm_dest)?;
     }
 
