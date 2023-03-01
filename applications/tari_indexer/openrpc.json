@@ -47,7 +47,7 @@
             }
           }
         ]
-      }, 
+      },
       {
         "name": "get_identity",
         "summary": "",
@@ -78,7 +78,7 @@
             }
           }
         ]
-      }, 
+      },
       {
         "name": "get_addresses",
         "summary": "",
@@ -109,7 +109,7 @@
             }
           }
         ]
-      }, 
+      },
       {
         "name": "get_substate",
         "summary": "",
