@@ -140,7 +140,7 @@ pub struct ClaimBurnArgs {
 #[derive(Debug, Args, Clone)]
 pub struct SendArgs {
     source_account_name: String,
-    amount: u128,
+    amount: u32,
     resource_address: ResourceAddress,
     dest_address: ComponentAddress,
     #[clap(flatten)]
@@ -389,7 +389,7 @@ pub async fn handle_send(
         Instruction::CallMethod {
             component_address: source_component_address,
             method: String::from("withdraw"),
-            args: args![resource_address, amount],
+            args: args![resource_address, Amount::from(amount)], // amount is u32
         },
         Instruction::PutLastInstructionOutputOnWorkspace {
             key: b"bucket".to_vec(),
