@@ -193,3 +193,13 @@ pub struct AccountsGetBalancesResponse {
     pub address: SubstateAddress,
     pub balances: Vec<(ResourceAddress, Amount)>,
 }
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct AccountByNameRequest {
+    pub name: String,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct AccountByNameResponse {
+    pub account_address: SubstateAddress,
+}

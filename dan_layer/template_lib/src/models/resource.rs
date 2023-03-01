@@ -24,6 +24,7 @@ use tari_bor::{borsh, Decode, Encode};
 use tari_template_abi::rust::{
     fmt,
     fmt::{Display, Formatter},
+    str::FromStr,
 };
 
 use crate::{hash::HashParseError, Hash};
@@ -43,6 +44,20 @@ impl ResourceAddress {
 
     pub fn from_hex(hex: &str) -> Result<Self, HashParseError> {
         let hash = Hash::from_hex(hex)?;
+        Ok(Self::new(hash))
+    }
+}
+
+impl FromStr for ResourceAddress {
+    type Err = HashParseError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let s = if let Some(stripped) = s.strip_prefix("resource_") {
+            stripped
+        } else {
+            s
+        };
+        let hash = Hash::from_hex(s)?;
         Ok(Self::new(hash))
     }
 }

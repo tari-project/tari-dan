@@ -12,6 +12,8 @@ use tari_template_builtin::ACCOUNT_TEMPLATE_ADDRESS;
 use tari_template_lib::{args, crypto::RistrettoPublicKeyBytes, models::NonFungibleAddress};
 use tari_transaction::Transaction;
 use tari_wallet_daemon_client::types::{
+    AccountByNameRequest,
+    AccountByNameResponse,
     AccountsCreateRequest,
     AccountsCreateResponse,
     AccountsGetBalancesRequest,
@@ -201,6 +203,15 @@ pub async fn handle_get_balances(
         address: account_address,
         balances: finalized.execution_results[0].decode()?,
     })
+}
+
+pub async fn handle_get_by_name(
+    context: &HandlerContext,
+    req: AccountByNameRequest,
+) -> Result<AccountByNameResponse, anyhow::Error> {
+    let sdk = context.wallet_sdk();
+    let account_address = sdk.accounts_api().get_account_address_by_name(&req.name)?;
+    Ok(AccountByNameResponse { account_address })
 }
 
 async fn wait_for_result(

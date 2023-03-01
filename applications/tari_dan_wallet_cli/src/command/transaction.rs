@@ -43,6 +43,7 @@ use tari_engine_types::{
 };
 use tari_template_lib::{
     arg,
+    args,
     args::Arg,
     models::{AddressListId, Amount, NonFungibleAddress, NonFungibleId},
     prelude::{ComponentAddress, ResourceAddress},
@@ -68,6 +69,7 @@ pub enum TransactionSubcommand {
     Submit(SubmitArgs),
     SubmitManifest(SubmitManifestArgs),
     ClaimBurn(ClaimBurnArgs),
+    Send(SendArgs),
 }
 
 #[derive(Debug, Args, Clone)]
@@ -135,6 +137,16 @@ pub struct ClaimBurnArgs {
     common: CommonSubmitArgs,
 }
 
+#[derive(Debug, Args, Clone)]
+pub struct SendArgs {
+    source_account_name: String,
+    amount: u32,
+    resource_address: ResourceAddress,
+    dest_address: ComponentAddress,
+    #[clap(flatten)]
+    common: CommonSubmitArgs,
+}
+
 #[derive(Debug, Subcommand, Clone)]
 pub enum CliInstruction {
     CallFunction {
@@ -163,6 +175,9 @@ impl TransactionSubcommand {
             TransactionSubcommand::Get(args) => handle_get(args, &mut client).await?,
             TransactionSubcommand::ClaimBurn(args) => {
                 handle_claim_burn(args, &mut client).await?;
+            },
+            TransactionSubcommand::Send(args) => {
+                handle_send(args, &mut client).await?;
             },
         }
         Ok(())
@@ -347,6 +362,44 @@ pub async fn handle_claim_burn(
     // as the account substate address
     // TODO: on a second claim burn, we shoulnd't have any new outputs being created.
     common.num_outputs = Some(1);
+
+    submit_transaction(instructions, common, client).await
+}
+
+pub async fn handle_send(
+    args: SendArgs,
+    client: &mut WalletDaemonClient,
+) -> Result<TransactionSubmitResponse, anyhow::Error> {
+    let SendArgs {
+        source_account_name,
+        amount,
+        resource_address,
+        dest_address,
+        common,
+    } = args;
+
+    let source_address = client.get_by_name(source_account_name).await?;
+    let source_component_address = if let SubstateAddress::Component(ca) = source_address.account_address {
+        ca
+    } else {
+        return Err(anyhow!("Invalid component address for source address"));
+    };
+
+    let instructions = vec![
+        Instruction::CallMethod {
+            component_address: source_component_address,
+            method: String::from("withdraw"),
+            args: args![resource_address, Amount::from(amount)], // amount is u32
+        },
+        Instruction::PutLastInstructionOutputOnWorkspace {
+            key: b"bucket".to_vec(),
+        },
+        Instruction::CallMethod {
+            component_address: dest_address,
+            method: String::from("deposit"),
+            args: args![Variable("bucket")],
+        },
+    ];
 
     submit_transaction(instructions, common, client).await
 }

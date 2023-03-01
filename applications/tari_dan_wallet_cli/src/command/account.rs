@@ -46,6 +46,8 @@ pub enum AccountsSubcommand {
         #[clap(long, short = 'a')]
         args: Vec<CliArg>,
     },
+    #[clap(alias = "get")]
+    GetByName(GetByNameArgs),
 }
 
 #[derive(Debug, Args, Clone)]
@@ -60,6 +62,12 @@ pub struct CreateArgs {
 pub struct GetBalancesArgs {
     #[clap(long, alias = "name")]
     pub account_name: String,
+}
+
+#[derive(Debug, Args, Clone)]
+pub struct GetByNameArgs {
+    #[clap(long, alias = "name")]
+    pub name: String,
 }
 
 impl AccountsSubcommand {
@@ -77,6 +85,7 @@ impl AccountsSubcommand {
             AccountsSubcommand::Invoke { account, method, args } => {
                 hande_invoke(account, method, args, &mut client).await?
             },
+            AccountsSubcommand::GetByName(args) => handle_get_by_name(args, &mut client).await?,
         }
         Ok(())
     }
@@ -168,5 +177,15 @@ async fn handle_list(client: &mut WalletDaemonClient) -> Result<(), anyhow::Erro
         table.add_row(table_row!(account.name, account.address, account.key_index));
     }
     table.print_stdout();
+    Ok(())
+}
+
+async fn handle_get_by_name(args: GetByNameArgs, client: &mut WalletDaemonClient) -> Result<(), anyhow::Error> {
+    println!("Get account component address by its name...");
+    let resp = client.get_by_name(args.name.clone()).await?;
+
+    println!("Account {} substate_address: {}", args.name, resp.account_address);
+    println!();
+
     Ok(())
 }
