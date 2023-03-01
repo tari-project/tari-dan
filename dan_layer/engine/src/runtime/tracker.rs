@@ -30,6 +30,7 @@ use log::debug;
 use tari_common_types::types::{Commitment, PublicKey};
 use tari_dan_common_types::optional::Optional;
 use tari_engine_types::{
+    address_list::AddressListItem,
     bucket::Bucket,
     logs::LogEntry,
     non_fungible::NonFungibleContainer,
@@ -44,6 +45,7 @@ use tari_template_lib::{
     args::MintArg,
     auth::AccessRules,
     models::{
+        AddressListItemAddress,
         Amount,
         BucketId,
         ComponentAddress,
@@ -157,19 +159,27 @@ impl StateTracker {
                         resource_address
                     );
                     let mut token_ids = BTreeSet::new();
+                    let resource = state.get_resource(&resource_address)?;
+                    let mut index = resource.total_supply().0 as u64;
                     for (id, (data, mut_data)) in tokens {
-                        let address = NonFungibleAddress::new(resource_address, id.clone());
-                        if state.get_non_fungible(&address).optional()?.is_some() {
+                        let nft_address = NonFungibleAddress::new(resource_address, id.clone());
+                        if state.get_non_fungible(&nft_address).optional()?.is_some() {
                             return Err(RuntimeError::DuplicateNonFungibleId {
-                                token_id: address.id().clone(),
+                                token_id: nft_address.id().clone(),
                             });
                         }
                         state
                             .new_non_fungibles
-                            .insert(address, NonFungibleContainer::new(data, mut_data));
+                            .insert(nft_address.clone(), NonFungibleContainer::new(data, mut_data));
                         if !token_ids.insert(id.clone()) {
                             return Err(RuntimeError::DuplicateNonFungibleId { token_id: id });
                         }
+
+                        // for each new nft we also create an list item to be allow resource scanning
+                        let item_address = AddressListItemAddress::new(resource_address, index);
+                        index += 1;
+                        let item = AddressListItem::new(nft_address);
+                        state.new_address_list_items.insert(item_address, item);
                     }
 
                     ResourceContainer::non_fungible(resource_address, token_ids)

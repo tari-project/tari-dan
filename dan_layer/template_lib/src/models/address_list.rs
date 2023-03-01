@@ -48,6 +48,6 @@ impl AddressListItemAddress {
 
 impl Display for AddressListItemAddress {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{} item:{}", self.parent_address, self.index)
+        write!(f, "{} index_{}", self.parent_address, self.index)
     }
 }

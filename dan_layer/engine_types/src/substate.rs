@@ -246,14 +246,25 @@ impl FromStr for SubstateAddress {
             },
             Some(("resource", addr)) => {
                 match addr.split_once(' ') {
-                    // resource_xxxx nft_xxxxx
                     Some((resource_str, addr)) => match addr.split_once('_') {
+                        // resource_xxxx nft_xxxxx
                         Some(("nft", addr)) => {
                             let resource_addr = ResourceAddress::from_hex(resource_str)
                                 .map_err(|_| InvalidSubstateAddressFormat(s.to_string()))?;
                             let id = NonFungibleId::try_from_canonical_string(addr)
                                 .map_err(|_| InvalidSubstateAddressFormat(s.to_string()))?;
                             Ok(SubstateAddress::NonFungible(NonFungibleAddress::new(resource_addr, id)))
+                        },
+                        // resource_xxxx index_
+                        Some(("index", index_str)) => {
+                            let resource_addr = ResourceAddress::from_hex(resource_str)
+                                .map_err(|_| InvalidSubstateAddressFormat(s.to_string()))?;
+                            let index =
+                                u64::from_str(index_str).map_err(|_| InvalidSubstateAddressFormat(s.to_string()))?;
+                            Ok(SubstateAddress::AddressListItem(AddressListItemAddress::new(
+                                resource_addr,
+                                index,
+                            )))
                         },
                         _ => Err(InvalidSubstateAddressFormat(s.to_string())),
                     },
@@ -268,25 +279,6 @@ impl FromStr for SubstateAddress {
             Some(("vault", addr)) => {
                 let id = VaultId::from_hex(addr).map_err(|_| InvalidSubstateAddressFormat(s.to_string()))?;
                 Ok(SubstateAddress::Vault(id))
-            },
-            Some(("addresslist", addr)) => {
-                match addr.split_once(' ') {
-                    // addresslist_xxxx item:xxxxx
-                    Some((resource_str, item)) => match item.split_once(':') {
-                        Some(("item", index_str)) => {
-                            let resource_addr = ResourceAddress::from_hex(resource_str)
-                                .map_err(|_| InvalidSubstateAddressFormat(s.to_string()))?;
-                            let index =
-                                u64::from_str(index_str).map_err(|_| InvalidSubstateAddressFormat(s.to_string()))?;
-                            Ok(SubstateAddress::AddressListItem(AddressListItemAddress::new(
-                                resource_addr,
-                                index,
-                            )))
-                        },
-                        _ => Err(InvalidSubstateAddressFormat(s.to_string())),
-                    },
-                    None => Err(InvalidSubstateAddressFormat(s.to_string())),
-                }
             },
             Some(("commitment", addr)) => {
                 let commitment_address = LayerOneCommitmentAddress::from_hex(addr)
@@ -514,7 +506,7 @@ mod tests {
             .as_non_fungible_address()
             .unwrap();
             SubstateAddress::from_str(
-                "addresslist_7cbfe29101c24924b1b6ccefbfff98986d648622272ae24f7585dab55ff1ff64 item:0",
+                "resource_7cbfe29101c24924b1b6ccefbfff98986d648622272ae24f7585dab55ff1ff64 index_0",
             )
             .unwrap()
             .as_address_list_item_address()

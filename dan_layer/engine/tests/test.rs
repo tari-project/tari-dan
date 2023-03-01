@@ -1064,7 +1064,7 @@ mod nft_list {
     }
 
     #[test]
-    fn push_item() {
+    fn new_item() {
         let (mut template_test, (account_address, _), nft_component, nft_resx) = setup();
 
         let vars = vec![
