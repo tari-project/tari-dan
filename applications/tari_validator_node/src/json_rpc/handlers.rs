@@ -31,10 +31,21 @@ use axum_jrpc::{
 use log::*;
 use serde::Serialize;
 use serde_json::{self as json, json};
-use tari_comms::{multiaddr::Multiaddr, peer_manager::NodeId, types::CommsPublicKey, CommsNode, NodeIdentity};
+use tari_comms::{
+    multiaddr::Multiaddr,
+    peer_manager::{NodeId, PeerFeatures},
+    types::CommsPublicKey,
+    CommsNode,
+    NodeIdentity,
+};
 use tari_comms_logging::SqliteMessageLog;
 use tari_crypto::tari_utilities::hex::Hex;
-use tari_dan_common_types::{PayloadId, QuorumCertificate, QuorumDecision, ShardId};
+use tari_dan_app_utilities::{
+    base_node_client::GrpcBaseNodeClient,
+    epoch_manager::EpochManagerHandle,
+    template_manager::TemplateManagerHandle,
+};
+use tari_dan_common_types::{optional::Optional, PayloadId, QuorumCertificate, QuorumDecision, ShardId};
 use tari_dan_core::{
     services::{epoch_manager::EpochManager, BaseNodeClient},
     storage::shard_store::{ShardStore, ShardStoreReadTransaction},
@@ -42,18 +53,24 @@ use tari_dan_core::{
 };
 use tari_dan_storage_sqlite::sqlite_shard_store_factory::SqliteShardStore;
 use tari_template_lib::Hash;
-use tari_transaction::{SubstateChange, TransactionBuilder};
 use tari_validator_node_client::types::{
+    AddPeerRequest,
+    AddPeerResponse,
     GetCommitteeRequest,
+    GetEpochManagerStatsResponse,
     GetIdentityResponse,
     GetRecentTransactionsResponse,
     GetShardKey,
+    GetStateRequest,
+    GetStateResponse,
     GetTemplateRequest,
     GetTemplateResponse,
     GetTemplatesRequest,
     GetTemplatesResponse,
-    GetTransactionRequest,
-    GetTransactionResponse,
+    GetTransactionQcsRequest,
+    GetTransactionQcsResponse,
+    GetTransactionResultRequest,
+    GetTransactionResultResponse,
     SubmitTransactionRequest,
     SubmitTransactionResponse,
     SubstatesRequest,
@@ -67,13 +84,9 @@ use tokio::sync::{broadcast, broadcast::error::RecvError};
 
 use crate::{
     dry_run_transaction_processor::DryRunTransactionProcessor,
-    grpc::services::{base_node_client::GrpcBaseNodeClient, wallet_client::GrpcWalletClient},
+    grpc::services::wallet_client::GrpcWalletClient,
     json_rpc::jrpc_errors::internal_error,
-    p2p::services::{
-        epoch_manager::handle::EpochManagerHandle,
-        mempool::MempoolHandle,
-        template_manager::TemplateManagerHandle,
-    },
+    p2p::services::mempool::MempoolHandle,
     registration,
     Services,
     ValidatorNodeConfig,
@@ -140,42 +153,12 @@ impl JsonRpcHandlers {
 
     pub async fn submit_transaction(&self, value: JsonRpcExtractor) -> JrpcResult {
         let answer_id = value.get_answer_id();
-        let request: SubmitTransactionRequest = value.parse_params()?;
-
-        let mut builder = TransactionBuilder::new();
-        builder
-            .with_inputs(
-                request
-                    .inputs
-                    .iter()
-                    .filter_map(|(shard, change)| {
-                        if *change == SubstateChange::Destroy {
-                            Some(*shard)
-                        } else {
-                            None
-                        }
-                    })
-                    .collect(),
-            )
-            .with_outputs(
-                request
-                    .inputs
-                    .iter()
-                    .filter_map(|(shard, change)| {
-                        if *change == SubstateChange::Create {
-                            Some(*shard)
-                        } else {
-                            None
-                        }
-                    })
-                    .collect(),
-            )
-            .with_instructions(request.instructions)
-            .with_new_outputs(request.num_outputs)
-            .with_signature(request.signature)
-            .with_sender_public_key(request.sender_public_key);
-
-        let transaction = builder.build();
+        let SubmitTransactionRequest {
+            transaction,
+            is_dry_run,
+            wait_for_result,
+            wait_for_result_timeout,
+        } = value.parse_params()?;
         info!(
             target: LOG_TARGET,
             "Transaction {} has involved shards {:?}",
@@ -191,7 +174,7 @@ impl JsonRpcHandlers {
         // TODO: submit the transaction to the wasm engine and return the result data
         let hash = *transaction.hash();
 
-        if request.is_dry_run {
+        if is_dry_run {
             let result = self
                 .dry_run_transaction_processor
                 .process_transaction(transaction)
@@ -233,12 +216,12 @@ impl JsonRpcHandlers {
                 .await
                 .map_err(internal_error(answer_id))?;
 
-            if request.wait_for_result {
+            if wait_for_result {
                 return wait_for_transaction_result(
                     answer_id,
                     hash,
                     subscription,
-                    Duration::from_secs(request.wait_for_result_timeout.unwrap_or(30)),
+                    Duration::from_secs(wait_for_result_timeout.unwrap_or(30)),
                 )
                 .await;
             }
@@ -250,9 +233,32 @@ impl JsonRpcHandlers {
         }
     }
 
+    pub async fn get_state(&self, value: JsonRpcExtractor) -> JrpcResult {
+        let answer_id = value.get_answer_id();
+        let request: GetStateRequest = value.parse_params()?;
+
+        let mut tx = self.shard_store.create_read_tx().unwrap();
+        let state = match tx.get_substate_states(&[request.shard_id]) {
+            Ok(state) => state,
+            Err(e) => {
+                return Err(JsonRpcResponse::error(
+                    answer_id,
+                    JsonRpcError::new(
+                        JsonRpcErrorReason::InvalidParams,
+                        format!("Something went wrong: {}", e),
+                        json::Value::Null,
+                    ),
+                ))
+            },
+        };
+        Ok(JsonRpcResponse::success(answer_id, GetStateResponse {
+            data: state[0].substate().to_bytes(),
+        }))
+    }
+
     pub async fn get_recent_transactions(&self, value: JsonRpcExtractor) -> JrpcResult {
         let answer_id = value.get_answer_id();
-        let tx = self.shard_store.create_read_tx().unwrap();
+        let mut tx = self.shard_store.create_read_tx().unwrap();
         if let Ok(recent_transactions) = tx.get_recent_transactions() {
             let res = GetRecentTransactionsResponse {
                 transactions: recent_transactions,
@@ -272,32 +278,52 @@ impl JsonRpcHandlers {
 
     pub async fn get_transaction_result(&self, value: JsonRpcExtractor) -> JrpcResult {
         let answer_id = value.get_answer_id();
-        let request: GetTransactionRequest = value.parse_params()?;
+        let request: GetTransactionResultRequest = value.parse_params()?;
         let payload_id = PayloadId::new(request.hash);
 
-        let tx = self.shard_store.create_read_tx().unwrap();
-        if let Ok(payload) = tx.get_payload(&payload_id) {
-            let response = GetTransactionResponse {
-                result: payload.result().clone(),
-            };
-            Ok(JsonRpcResponse::success(answer_id, response))
-        } else {
-            Err(JsonRpcResponse::error(
-                answer_id,
-                JsonRpcError::new(
-                    JsonRpcErrorReason::InvalidParams,
-                    "Something went wrong".to_string(),
-                    json::Value::Null,
-                ),
-            ))
-        }
+        let mut tx = self.shard_store.create_read_tx().unwrap();
+        let payload = tx
+            .get_payload(&payload_id)
+            .optional()
+            .map_err(internal_error(answer_id))?
+            .ok_or_else(|| {
+                JsonRpcResponse::error(
+                    answer_id,
+                    JsonRpcError::new(
+                        JsonRpcErrorReason::ApplicationError(404),
+                        format!("Transaction with hash {} not found", payload_id),
+                        json::Value::Null,
+                    ),
+                )
+            })?;
+
+        let response = GetTransactionResultResponse {
+            result: payload.result().cloned(),
+        };
+        Ok(JsonRpcResponse::success(answer_id, response))
+    }
+
+    pub async fn get_transaction_qcs(&self, value: JsonRpcExtractor) -> JrpcResult {
+        let answer_id = value.get_answer_id();
+        let request: GetTransactionQcsRequest = value.parse_params()?;
+        let payload_id = PayloadId::new(request.hash);
+
+        let qcs = self
+            .shard_store
+            .with_read_tx(|tx| tx.get_high_qcs(payload_id))
+            .map_err(internal_error(answer_id))?;
+
+        let response = GetTransactionQcsResponse { qcs };
+        Ok(JsonRpcResponse::success(answer_id, response))
     }
 
     pub async fn get_transaction(&self, value: JsonRpcExtractor) -> JrpcResult {
         let answer_id = value.get_answer_id();
         let data: TransactionRequest = value.parse_params()?;
-        let tx = self.shard_store.create_read_tx().unwrap();
+        let mut tx = self.shard_store.create_read_tx().unwrap();
         match tx.get_transaction(data.payload_id) {
+            // TODO: return the transaction with the Response struct, and probably rename this jrpc method to
+            // get_transaction_status
             Ok(transaction) => Ok(JsonRpcResponse::success(answer_id, transaction)),
             Err(err) => {
                 println!("error {:?}", err);
@@ -316,9 +342,30 @@ impl JsonRpcHandlers {
     pub async fn get_substates(&self, value: JsonRpcExtractor) -> JrpcResult {
         let answer_id = value.get_answer_id();
         let data: SubstatesRequest = value.parse_params()?;
-        let tx = self.shard_store.create_read_tx().unwrap();
+        let mut tx = self.shard_store.create_read_tx().unwrap();
         match tx.get_substates_for_payload(data.payload_id, data.shard_id) {
             Ok(substates) => Ok(JsonRpcResponse::success(answer_id, json!(substates))),
+            Err(err) => {
+                println!("error {:?}", err);
+                Err(JsonRpcResponse::error(
+                    answer_id,
+                    JsonRpcError::new(
+                        JsonRpcErrorReason::InvalidParams,
+                        "Something went wrong".to_string(),
+                        json::Value::Null,
+                    ),
+                ))
+            },
+        }
+    }
+
+    pub async fn get_current_leader_state(&self, value: JsonRpcExtractor) -> JrpcResult {
+        let answer_id = value.get_answer_id();
+        let data: TransactionRequest = value.parse_params()?;
+        let mut tx = self.shard_store.create_read_tx().unwrap();
+        let payload_id = PayloadId::new(data.payload_id);
+        match tx.get_current_leaders_states(&payload_id) {
+            Ok(states) => Ok(JsonRpcResponse::success(answer_id, json!(states))),
             Err(err) => {
                 println!("error {:?}", err);
                 Err(JsonRpcResponse::error(
@@ -480,30 +527,81 @@ impl JsonRpcHandlers {
 
     pub async fn get_epoch_manager_stats(&self, value: JsonRpcExtractor) -> JrpcResult {
         let answer_id = value.get_answer_id();
-        match self.epoch_manager.current_epoch().await {
-            Ok(current_epoch) => {
-                let is_valid = self.epoch_manager.is_epoch_valid(current_epoch).await.map_err(|err| {
-                    JsonRpcResponse::error(
-                        answer_id,
-                        JsonRpcError::new(
-                            JsonRpcErrorReason::InvalidParams,
-                            format!("Epoch is not valid:{}", err),
-                            json::Value::Null,
-                        ),
-                    )
-                })?;
-                let response = json!({ "current_epoch": current_epoch.0,"is_valid":is_valid });
-                Ok(JsonRpcResponse::success(answer_id, response))
-            },
-            Err(e) => Err(JsonRpcResponse::error(
+        let current_epoch = self.epoch_manager.current_epoch().await.map_err(|e| {
+            JsonRpcResponse::error(
                 answer_id,
                 JsonRpcError::new(
                     JsonRpcErrorReason::InvalidParams,
                     format!("Could not get current epoch: {}", e),
                     json::Value::Null,
                 ),
-            )),
+            )
+        })?;
+        let current_block_height = self.epoch_manager.current_block_height().await.map_err(|e| {
+            JsonRpcResponse::error(
+                answer_id,
+                JsonRpcError::new(
+                    JsonRpcErrorReason::InvalidParams,
+                    format!("Could not get current block height: {}", e),
+                    json::Value::Null,
+                ),
+            )
+        })?;
+
+        let is_valid = self.epoch_manager.is_epoch_valid(current_epoch).await.map_err(|err| {
+            JsonRpcResponse::error(
+                answer_id,
+                JsonRpcError::new(
+                    JsonRpcErrorReason::InvalidParams,
+                    format!("Epoch is not valid:{}", err),
+                    json::Value::Null,
+                ),
+            )
+        })?;
+        let response = GetEpochManagerStatsResponse {
+            current_epoch,
+            current_block_height,
+            is_valid,
+        };
+        Ok(JsonRpcResponse::success(answer_id, response))
+    }
+
+    pub async fn add_peer(&self, value: JsonRpcExtractor) -> JrpcResult {
+        let answer_id = value.get_answer_id();
+        let AddPeerRequest {
+            public_key,
+            addresses,
+            wait_for_dial,
+        } = value.parse_params()?;
+
+        let connectivity = self.comms.connectivity();
+        let peer_manager = self.comms.peer_manager();
+
+        let node_id = NodeId::from_public_key(&public_key);
+
+        peer_manager
+            .add_or_update_online_peer(
+                &public_key,
+                node_id.clone(),
+                addresses,
+                PeerFeatures::COMMUNICATION_NODE,
+            )
+            .await
+            .map_err(internal_error(answer_id))?;
+        if wait_for_dial {
+            let _conn = connectivity
+                .dial_peer(node_id)
+                .await
+                .map_err(internal_error(answer_id))?;
+        } else {
+            // Dial without waiting
+            connectivity
+                .request_many_dials(Some(node_id))
+                .await
+                .map_err(internal_error(answer_id))?;
         }
+
+        Ok(JsonRpcResponse::success(answer_id, AddPeerResponse {}))
     }
 
     pub async fn get_comms_stats(&self, value: JsonRpcExtractor) -> JrpcResult {

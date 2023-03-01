@@ -22,17 +22,36 @@
 
 use std::collections::BTreeSet;
 
+use log::warn;
+use tari_bor::encode;
+use tari_common_types::types::{BulletRangeProof, FixedHash};
+use tari_crypto::{
+    range_proof::RangeProofService,
+    ristretto::{
+        bulletproofs_plus::BulletproofsPlusService,
+        pedersen::{
+            commitment_factory::PedersenCommitmentFactory,
+            extended_commitment_factory::ExtendedPedersenCommitmentFactory,
+        },
+        RistrettoComSig,
+        RistrettoPublicKey,
+        RistrettoSecretKey,
+    },
+};
 use tari_engine_types::{
     commit_result::{FinalizeResult, RejectReason, TransactionResult},
     logs::LogEntry,
+    resource_container::ResourceContainer,
 };
 use tari_template_abi::TemplateDef;
 use tari_template_lib::{
     args::{
+        AddressListAction,
         BucketAction,
         BucketRef,
         ComponentAction,
         ComponentRef,
+        ConfidentialRevealArg,
         ConsensusAction,
         CreateComponentArg,
         CreateResourceArg,
@@ -49,24 +68,42 @@ use tari_template_lib::{
         WorkspaceAction,
     },
     auth::AccessRules,
-    models::{BucketId, ComponentAddress, ComponentHeader, NonFungibleAddress, VaultRef},
+    constants::CONFIDENTIAL_TARI_RESOURCE_ADDRESS,
+    models::{
+        Address,
+        AddressListId,
+        Amount,
+        BucketId,
+        ComponentAddress,
+        ComponentHeader,
+        LayerOneCommitmentAddress,
+        NonFungibleAddress,
+        VaultRef,
+    },
+};
+use tari_utilities::ByteArray;
+
+use crate::{
+    base_layer_hashers::BurntOutputDomainHasher,
+    runtime::{
+        engine_args::EngineArgs,
+        tracker::StateTracker,
+        AuthParams,
+        ConsensusContext,
+        RuntimeError,
+        RuntimeInterface,
+        RuntimeModule,
+        RuntimeState,
+    },
 };
 
-use crate::runtime::{
-    engine_args::EngineArgs,
-    tracker::StateTracker,
-    AuthParams,
-    ConsensusContext,
-    RuntimeError,
-    RuntimeInterface,
-    RuntimeModule,
-    RuntimeState,
-};
+const LOG_TARGET: &str = "tari::dan::engine::runtime::impl";
 
 pub struct RuntimeInterfaceImpl {
     tracker: StateTracker,
     _auth_params: AuthParams,
     consensus: ConsensusContext,
+    sender_public_key: RistrettoPublicKey,
     modules: Vec<Box<dyn RuntimeModule>>,
 }
 
@@ -75,12 +112,14 @@ impl RuntimeInterfaceImpl {
         tracker: StateTracker,
         auth_params: AuthParams,
         consensus: ConsensusContext,
+        sender_public_key: RistrettoPublicKey,
         modules: Vec<Box<dyn RuntimeModule>>,
     ) -> Self {
         Self {
             tracker,
             _auth_params: auth_params,
             consensus,
+            sender_public_key,
             modules,
         }
     }
@@ -299,6 +338,7 @@ impl RuntimeInterface for RuntimeInterfaceImpl {
         }
     }
 
+    #[allow(clippy::too_many_lines)]
     fn vault_invoke(
         &self,
         vault_ref: VaultRef,
@@ -344,6 +384,7 @@ impl RuntimeInterface for RuntimeInterfaceImpl {
                 let resource = self.tracker.borrow_vault_mut(&vault_id, |vault| match arg {
                     VaultWithdrawArg::Fungible { amount } => vault.withdraw(amount),
                     VaultWithdrawArg::NonFungible { ids } => vault.withdraw_non_fungibles(&ids),
+                    VaultWithdrawArg::Confidential { proof } => vault.withdraw_confidential(proof),
                 })??;
                 let bucket = self.tracker.new_bucket(resource)?;
                 Ok(InvokeResult::encode(&bucket)?)
@@ -398,6 +439,33 @@ impl RuntimeInterface for RuntimeInterfaceImpl {
                 })??;
 
                 Ok(resp)
+            },
+            VaultAction::GetCommitmentCount => {
+                let vault_id = vault_ref.vault_id().ok_or_else(|| RuntimeError::InvalidArgument {
+                    argument: "vault_ref",
+                    reason: "vault action requires a vault id".to_string(),
+                })?;
+
+                self.tracker.borrow_vault(&vault_id, |vault| {
+                    let count = vault.get_commitment_count();
+                    Ok(InvokeResult::encode(&count)?)
+                })?
+            },
+            VaultAction::ConfidentialReveal => {
+                let vault_id = vault_ref.vault_id().ok_or_else(|| RuntimeError::InvalidArgument {
+                    argument: "vault_ref",
+                    reason: "vault action requires a vault id".to_string(),
+                })?;
+
+                let arg: ConfidentialRevealArg = args.get(0)?;
+
+                // TODO: access check
+                let resource = self
+                    .tracker
+                    .borrow_vault_mut(&vault_id, |vault| vault.reveal_confidential(arg.proof))??;
+
+                let bucket_id = self.tracker.new_bucket(resource)?;
+                Ok(InvokeResult::encode(&bucket_id)?)
             },
         }
     }
@@ -460,6 +528,30 @@ impl RuntimeInterface for RuntimeInterfaceImpl {
                 let bucket_id = self.tracker.new_bucket(resource)?;
                 Ok(InvokeResult::encode(&bucket_id)?)
             },
+            BucketAction::TakeConfidential => {
+                let bucket_id = bucket_ref.bucket_id().ok_or_else(|| RuntimeError::InvalidArgument {
+                    argument: "bucket_ref",
+                    reason: "Take bucket action requires a bucket id".to_string(),
+                })?;
+                let proof = args.get(0)?;
+                let resource = self
+                    .tracker
+                    .with_bucket_mut(bucket_id, |bucket| bucket.take_confidential(proof))??;
+                let bucket_id = self.tracker.new_bucket(resource)?;
+                Ok(InvokeResult::encode(&bucket_id)?)
+            },
+            BucketAction::RevealConfidential => {
+                let bucket_id = bucket_ref.bucket_id().ok_or_else(|| RuntimeError::InvalidArgument {
+                    argument: "bucket_ref",
+                    reason: "RevealConfidential bucket action requires a bucket id".to_string(),
+                })?;
+                let proof = args.get(0)?;
+                let resource = self
+                    .tracker
+                    .with_bucket_mut(bucket_id, |bucket| bucket.reveal_confidential(proof))??;
+                let bucket_id = self.tracker.new_bucket(resource)?;
+                Ok(InvokeResult::encode(&bucket_id)?)
+            },
             BucketAction::Burn => {
                 let bucket_id = bucket_ref.bucket_id().ok_or_else(|| RuntimeError::InvalidArgument {
                     argument: "bucket_ref",
@@ -488,9 +580,9 @@ impl RuntimeInterface for RuntimeInterfaceImpl {
                 self.tracker.put_in_workspace(key, last_output)?;
                 Ok(InvokeResult::unit())
             },
-            WorkspaceAction::Take => {
+            WorkspaceAction::Get => {
                 let key: Vec<u8> = args.get(0)?;
-                let value = self.tracker.take_from_workspace(&key)?;
+                let value = self.tracker.get_from_workspace(&key)?;
                 Ok(InvokeResult::encode(&value)?)
             },
         }
@@ -540,6 +632,44 @@ impl RuntimeInterface for RuntimeInterfaceImpl {
         }
     }
 
+    fn address_list_invoke(
+        &self,
+        list_id: Option<AddressListId>,
+        action: AddressListAction,
+        args: EngineArgs,
+    ) -> Result<InvokeResult, RuntimeError> {
+        self.invoke_on_runtime_call_modules("address_list_invoke")?;
+        match action {
+            AddressListAction::Create => {
+                let address_list_id = self.tracker.new_address_list()?;
+                Ok(InvokeResult::encode(&address_list_id)?)
+            },
+            AddressListAction::Push => {
+                let list_id = list_id.ok_or(RuntimeError::InvalidArgument {
+                    argument: "list_id",
+                    reason: "AddressList push action requires a list id".to_string(),
+                })?;
+                let index: u64 = args.get(0)?;
+                let referenced_address: Address = args.get(1)?;
+
+                // Explicitly disallow references to other lists to avoid cycles
+                // We don't need to check for list items as they are not addreseable from templates
+                if let Address::AddressList(_) = referenced_address {
+                    return Err(RuntimeError::InvalidAddressListItemReference {
+                        list_id,
+                        index,
+                        referenced_address,
+                    });
+                }
+
+                // TODO: access check
+
+                self.tracker.address_list_push(list_id, index, referenced_address)?;
+                Ok(InvokeResult::unit())
+            },
+        }
+    }
+
     fn generate_uuid(&self) -> Result<[u8; 32], RuntimeError> {
         self.invoke_on_runtime_call_modules("generate_uuid")?;
         let uuid = self.tracker.id_provider().new_uuid()?;
@@ -549,6 +679,54 @@ impl RuntimeInterface for RuntimeInterfaceImpl {
     fn set_last_instruction_output(&self, value: Option<Vec<u8>>) -> Result<(), RuntimeError> {
         self.invoke_on_runtime_call_modules("set_last_instruction_output")?;
         self.tracker.set_last_instruction_output(value);
+        Ok(())
+    }
+
+    fn claim_burn(
+        &self,
+        commitment_address: LayerOneCommitmentAddress,
+        range_proof: BulletRangeProof,
+        owner_sig: RistrettoComSig,
+    ) -> Result<(), RuntimeError> {
+        // 1. Must exist
+        let commitment = self.tracker.take_layer_one_commitment(commitment_address)?;
+        // 2. owner_sig must be valid
+        // TODO: Probably want a better challenge
+        let factory = PedersenCommitmentFactory::default();
+        let hasher = BurntOutputDomainHasher::new_with_label("commitment_signature")
+            .chain(owner_sig.public_nonce().as_bytes())
+            .chain(commitment.as_bytes())
+            .chain(self.sender_public_key.as_bytes());
+
+        let challenge: FixedHash = digest::Digest::finalize(hasher).into();
+        if !owner_sig.verify(
+            &commitment,
+            &RistrettoSecretKey::from_bytes(challenge.as_bytes())
+                .map_err(|_e| RuntimeError::InvalidClaimingSignature)?,
+            &factory,
+        ) {
+            warn!(target: LOG_TARGET, "Claim burn failed - Invalid signature");
+            return Err(RuntimeError::InvalidClaimingSignature);
+        }
+
+        // 3. range_proof must be valid
+        let range_proof_service = BulletproofsPlusService::init(64, 1, ExtendedPedersenCommitmentFactory::default())
+            .expect("Failed to init range proof service");
+
+        if !range_proof_service.verify(&range_proof.0, &commitment) {
+            warn!(target: LOG_TARGET, "Claim burn failed - Invalid range proof");
+            return Err(RuntimeError::InvalidRangeProof);
+        }
+
+        let resource = ResourceContainer::confidential(
+            CONFIDENTIAL_TARI_RESOURCE_ADDRESS,
+            Some((commitment.as_public_key().clone(), Some(range_proof))),
+            Amount::zero(),
+        );
+
+        let bucket_id = self.tracker.new_bucket(resource)?;
+
+        self.tracker.set_last_instruction_output(Some(encode(&bucket_id)?));
         Ok(())
     }
 

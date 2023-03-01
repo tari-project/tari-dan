@@ -23,13 +23,18 @@
 use std::sync::Arc;
 
 use log::*;
+use tari_common_types::types::{BulletRangeProof, Commitment};
+use tari_crypto::ristretto::{RistrettoComSig, RistrettoPublicKey, RistrettoSecretKey};
 use tari_engine_types::{commit_result::FinalizeResult, execution_result::ExecutionResult, instruction::Instruction};
 use tari_template_lib::{
     arg,
     args::{Arg, WorkspaceAction},
     invoke_args,
+    models::LayerOneCommitmentAddress,
+    Hash,
 };
 use tari_transaction::{id_provider::IdProvider, Transaction};
+use tari_utilities::ByteArray;
 
 use crate::{
     packager::{LoadedTemplate, Package},
@@ -50,7 +55,7 @@ use crate::{
     wasm::WasmProcess,
 };
 
-const LOG_TARGET: &str = "dan::engine::instruction_processor";
+const LOG_TARGET: &str = "tari::dan::engine::instruction_processor";
 
 pub struct TransactionProcessor {
     package: Package,
@@ -83,7 +88,13 @@ impl TransactionProcessor {
         let template_defs = self.package.get_template_defs();
         let tracker = StateTracker::new(self.state_db.clone(), id_provider, template_defs);
         let initial_proofs = self.auth_params.initial_ownership_proofs.clone();
-        let runtime_interface = RuntimeInterfaceImpl::new(tracker, self.auth_params, self.consensus, self.modules);
+        let runtime_interface = RuntimeInterfaceImpl::new(
+            tracker,
+            self.auth_params,
+            self.consensus,
+            transaction.sender_public_key().clone(),
+            self.modules,
+        );
         let package = self.package;
 
         let auth_scope = AuthorizationScope::new(&initial_proofs);
@@ -167,6 +178,25 @@ impl TransactionProcessor {
             },
             Instruction::EmitLog { level, message } => {
                 runtime.interface().emit_log(level, message)?;
+                Ok(ExecutionResult::empty())
+            },
+            Instruction::ClaimBurn {
+                commitment_address,
+                range_proof,
+                proof_of_knowledge,
+            } => {
+                // Need to call it on the runtime so that a bucket is created.
+                runtime.interface().claim_burn(
+                    LayerOneCommitmentAddress::new(Hash::try_from_vec(commitment_address).unwrap()),
+                    BulletRangeProof(range_proof),
+                    RistrettoComSig::new(
+                        Commitment::from_public_key(
+                            &RistrettoPublicKey::from_bytes(&proof_of_knowledge[0..32]).unwrap(),
+                        ),
+                        RistrettoSecretKey::from_bytes(&proof_of_knowledge[32..64]).unwrap(),
+                        RistrettoSecretKey::from_bytes(&proof_of_knowledge[64..96]).unwrap(),
+                    ),
+                )?;
                 Ok(ExecutionResult::empty())
             },
         }

@@ -8,12 +8,9 @@ use tari_bor::{borsh, Encode};
 use tari_template_lib::{
     args::{Arg, LogLevel},
     models::{ComponentAddress, TemplateAddress},
-    Hash,
 };
 
-use crate::hashing::hasher;
-
-#[derive(Debug, Clone, Encode, Deserialize, Serialize, PartialEq)]
+#[derive(Debug, Clone, Encode, Deserialize, Serialize, Eq, PartialEq)]
 #[serde(tag = "type")]
 pub enum Instruction {
     CallFunction {
@@ -33,12 +30,11 @@ pub enum Instruction {
         level: LogLevel,
         message: String,
     },
-}
-
-impl Instruction {
-    pub fn hash(&self) -> Hash {
-        hasher("instruction").chain(self).result()
-    }
+    ClaimBurn {
+        commitment_address: Vec<u8>,
+        range_proof: Vec<u8>,
+        proof_of_knowledge: Vec<u8>,
+    },
 }
 
 impl Display for Instruction {
@@ -67,6 +63,17 @@ impl Display for Instruction {
             },
             Self::EmitLog { level, message } => {
                 write!(f, "EmitLog {{ level: {:?}, message: {:?} }}", level, message)
+            },
+            Self::ClaimBurn {
+                commitment_address,
+                proof_of_knowledge,
+                ..
+            } => {
+                write!(
+                    f,
+                    "ClaimBurn {{ commitment_address: {:?}, proof_of_knowledge: {:?} }}",
+                    commitment_address, proof_of_knowledge
+                )
             },
         }
     }

@@ -27,7 +27,7 @@ use tokio::task;
 
 use crate::p2p::services::messaging::{DanMessageSenders, InboundMessaging};
 
-const LOG_TARGET: &str = "tari_validator_node::p2p::services::message_dispatcher";
+const LOG_TARGET: &str = "tari::validator_node::p2p::services::message_dispatcher";
 
 pub struct MessageDispatcher {
     inbound: InboundMessaging<CommsPublicKey, TariDanPayload>,

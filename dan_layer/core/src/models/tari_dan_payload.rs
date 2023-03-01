@@ -59,8 +59,8 @@ impl TariDanPayload {
         self.timestamp
     }
 
-    pub fn result(&self) -> &Option<FinalizeResult> {
-        &self.result
+    pub fn result(&self) -> Option<&FinalizeResult> {
+        self.result.as_ref()
     }
 
     pub fn set_result(&mut self, result: FinalizeResult) {

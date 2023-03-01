@@ -23,7 +23,7 @@
 use std::{
     convert::{TryFrom, TryInto},
     fs::create_dir_all,
-    ops::Deref,
+    ops::{Deref, DerefMut},
     path::PathBuf,
     sync::{Arc, Mutex},
 };
@@ -37,6 +37,7 @@ use diesel::{
     sql_types::{BigInt, Binary, Nullable, Text, Timestamp},
     SqliteConnection,
 };
+use diesel_migrations::{EmbeddedMigrations, MigrationHarness};
 use log::{debug, warn};
 use serde_json::json;
 use tari_common_types::types::{PrivateKey, PublicKey, Signature};
@@ -54,6 +55,7 @@ use tari_dan_common_types::{
 use tari_dan_core::{
     models::{
         vote_message::VoteMessage,
+        CurrentLeaderStates,
         HotStuffTreeNode,
         LeafNode,
         Payload,
@@ -69,8 +71,8 @@ use tari_dan_core::{
         StorageError,
     },
 };
-use tari_engine_types::{instruction::Instruction, signature::InstructionSignature};
-use tari_transaction::{Transaction, TransactionMeta};
+use tari_engine_types::instruction::Instruction;
+use tari_transaction::{InstructionSignature, Transaction, TransactionMeta};
 use tari_utilities::{
     hex::{to_hex, Hex},
     ByteArray,
@@ -79,6 +81,7 @@ use tari_utilities::{
 use crate::{
     error::SqliteStorageError,
     models::{
+        current_state::{CurrentLeaderState, NewCurrentLeaderState},
         high_qc::{HighQc, NewHighQc},
         last_executed_height::{LastExecutedHeight, NewLastExecutedHeight},
         last_voted_height::{LastVotedHeight, NewLastVotedHeight},
@@ -98,13 +101,13 @@ const LOG_TARGET: &str = "tari::dan::storage::sqlite::shard_store";
 
 #[derive(Debug, QueryableByName)]
 pub struct QueryableRecentTransaction {
-    #[sql_type = "Binary"]
+    #[diesel(sql_type = Binary)]
     pub payload_id: Vec<u8>,
-    #[sql_type = "Timestamp"]
+    #[diesel(sql_type = Timestamp)]
     pub timestamp: NaiveDateTime,
-    #[sql_type = "Text"]
+    #[diesel(sql_type = Text)]
     pub meta: String,
-    #[sql_type = "Text"]
+    #[diesel(sql_type = Text)]
     pub instructions: String,
 }
 
@@ -121,24 +124,28 @@ impl From<QueryableRecentTransaction> for RecentTransaction {
 
 #[derive(Debug, QueryableByName)]
 pub struct QueryableTransaction {
-    #[sql_type = "Binary"]
+    #[diesel(sql_type = Binary)]
     pub node_hash: Vec<u8>,
-    #[sql_type = "Binary"]
+    #[diesel(sql_type = Binary)]
     pub parent_node_hash: Vec<u8>,
-    #[sql_type = "Binary"]
+    #[diesel(sql_type = Binary)]
     pub shard: Vec<u8>,
-    #[sql_type = "BigInt"]
+    #[diesel(sql_type = BigInt)]
     pub height: i64,
-    #[sql_type = "BigInt"]
+    #[diesel(sql_type = BigInt)]
     pub payload_height: i64,
-    #[sql_type = "BigInt"]
+    #[diesel(sql_type = BigInt)]
     pub total_votes: i64,
-    #[sql_type = "BigInt"]
+    #[diesel(sql_type = BigInt)]
     pub total_leader_proposals: i64,
-    #[sql_type = "Timestamp"]
+    #[diesel(sql_type = Timestamp)]
     pub timestamp: NaiveDateTime,
-    #[sql_type = "Text"]
+    #[diesel(sql_type = Text)]
     pub justify: String,
+    #[diesel(sql_type = Binary)]
+    pub proposed_by: Vec<u8>,
+    #[diesel(sql_type = BigInt)]
+    pub leader_round: i64,
 }
 
 impl From<QueryableTransaction> for SQLTransaction {
@@ -153,27 +160,29 @@ impl From<QueryableTransaction> for SQLTransaction {
             total_leader_proposals: transaction.total_leader_proposals,
             timestamp: transaction.timestamp,
             justify: transaction.justify,
+            proposed_by: transaction.proposed_by,
+            leader_round: transaction.leader_round,
         }
     }
 }
 
 #[derive(Debug, QueryableByName)]
 pub struct QueryableSubstate {
-    #[sql_type = "Binary"]
+    #[diesel(sql_type = Binary)]
     pub shard_id: Vec<u8>,
-    #[sql_type = "Text"]
+    #[diesel(sql_type = Text)]
     pub address: String,
-    #[sql_type = "BigInt"]
+    #[diesel(sql_type = BigInt)]
     pub version: i64,
-    #[sql_type = "Text"]
+    #[diesel(sql_type = Text)]
     pub data: String,
-    #[sql_type = "Text"]
+    #[diesel(sql_type = Text)]
     pub created_justify: String,
-    #[sql_type = "Binary"]
+    #[diesel(sql_type = Binary)]
     pub created_node_hash: Vec<u8>,
-    #[sql_type = "Nullable<Text>"]
+    #[diesel(sql_type = Nullable<Text>)]
     pub destroyed_justify: Option<String>,
-    #[sql_type = "Nullable<Binary>"]
+    #[diesel(sql_type = Nullable<Binary>)]
     pub destroyed_node_hash: Option<Vec<u8>>,
 }
 
@@ -200,14 +209,15 @@ impl SqliteShardStore {
         create_dir_all(path.parent().unwrap()).map_err(|_| StorageError::FileSystemPathDoesNotExist)?;
 
         let database_url = path.to_str().expect("database_url utf-8 error").to_string();
-        let connection = SqliteConnection::establish(&database_url).map_err(SqliteStorageError::from)?;
+        let mut connection = SqliteConnection::establish(&database_url).map_err(SqliteStorageError::from)?;
 
-        embed_migrations!("./migrations");
-        if let Err(err) = embedded_migrations::run_with_output(&connection, &mut std::io::stdout()) {
-            log::error!(target: LOG_TARGET, "Error running migrations: {}", err);
-        }
+        const MIGRATIONS: EmbeddedMigrations = embed_migrations!("./migrations");
         connection
-            .execute("PRAGMA foreign_keys = ON;")
+            .run_pending_migrations(MIGRATIONS)
+            .map_err(|source| SqliteStorageError::MigrationError { source })?;
+
+        sql_query("PRAGMA foreign_keys = ON;")
+            .execute(&mut connection)
             .map_err(|source| SqliteStorageError::DieselError {
                 source,
                 operation: "set pragma".to_string(),
@@ -244,7 +254,7 @@ impl<'a> SqliteShardStoreReadTransaction<'a> {
         Self { transaction }
     }
 
-    fn connection(&self) -> &SqliteConnection {
+    fn connection(&mut self) -> &mut SqliteConnection {
         self.transaction.connection()
     }
 
@@ -273,7 +283,7 @@ impl<'a> SqliteShardStoreReadTransaction<'a> {
 }
 
 impl ShardStoreReadTransaction<PublicKey, TariDanPayload> for SqliteShardStoreReadTransaction<'_> {
-    fn get_high_qc_for(&self, payload_id: PayloadId, shard_id: ShardId) -> Result<QuorumCertificate, StorageError> {
+    fn get_high_qc_for(&mut self, payload_id: PayloadId, shard_id: ShardId) -> Result<QuorumCertificate, StorageError> {
         use crate::schema::high_qcs;
 
         let qc: Option<HighQc> = high_qcs::table
@@ -295,7 +305,25 @@ impl ShardStoreReadTransaction<PublicKey, TariDanPayload> for SqliteShardStoreRe
         Ok(qc)
     }
 
-    fn get_leaf_node(&self, payload_id: &PayloadId, shard: &ShardId) -> Result<LeafNode, StorageError> {
+    fn get_high_qcs(&mut self, payload_id: PayloadId) -> Result<Vec<QuorumCertificate>, StorageError> {
+        use crate::schema::high_qcs;
+
+        let qcs: Vec<HighQc> = high_qcs::table
+            .filter(high_qcs::payload_id.eq(payload_id.as_bytes()))
+            .order_by(high_qcs::height.desc())
+            .get_results(self.transaction.connection())
+            .map_err(|e| StorageError::QueryError {
+                reason: format!("Get high qc error: {}", e),
+            })?;
+
+        let qcs = qcs
+            .into_iter()
+            .map(|qc| serde_json::from_str(&qc.qc_json).unwrap())
+            .collect();
+        Ok(qcs)
+    }
+
+    fn get_leaf_node(&mut self, payload_id: &PayloadId, shard: &ShardId) -> Result<LeafNode, StorageError> {
         use crate::schema::leaf_nodes;
         let leaf_node: Option<DbLeafNode> = leaf_nodes::table
             .filter(leaf_nodes::shard_id.eq(shard.as_bytes()))
@@ -320,7 +348,30 @@ impl ShardStoreReadTransaction<PublicKey, TariDanPayload> for SqliteShardStoreRe
         }
     }
 
-    fn get_payload(&self, id: &PayloadId) -> Result<TariDanPayload, StorageError> {
+    fn get_current_leaders_states(&mut self, payload_id: &PayloadId) -> Result<Vec<CurrentLeaderStates>, StorageError> {
+        use crate::schema::current_leader_states;
+
+        let states: Vec<CurrentLeaderState> = current_leader_states::table
+            .filter(current_leader_states::payload_id.eq(payload_id.as_bytes()))
+            .get_results(self.transaction.connection())
+            .map_err(|e| StorageError::QueryError {
+                reason: format!("Get current state error: {}", e),
+            })?;
+
+        let states = states
+            .into_iter()
+            .map(|state| CurrentLeaderStates {
+                payload_id: state.payload_id,
+                shard_id: state.shard_id,
+                leader_round: state.leader_round,
+                leader: state.leader,
+                timestamp: state.timestamp,
+            })
+            .collect::<Vec<_>>();
+        Ok(states)
+    }
+
+    fn get_payload(&mut self, id: &PayloadId) -> Result<TariDanPayload, StorageError> {
         use crate::schema::payloads;
 
         let payload: Option<SqlPayload> = payloads::table
@@ -345,9 +396,10 @@ impl ShardStoreReadTransaction<PublicKey, TariDanPayload> for SqliteShardStoreRe
         let signature =
             PrivateKey::from_bytes(payload.scalar.as_slice()).map_err(StorageError::InvalidByteArrayConversion)?;
 
-        let signature: InstructionSignature = InstructionSignature::try_from(Signature::new(public_nonce, signature))
-            .map_err(|e| StorageError::InvalidTypeCasting {
-            reason: format!("Get payload error: {}", e),
+        let signature = InstructionSignature::try_from(Signature::new(public_nonce, signature)).map_err(|e| {
+            StorageError::InvalidTypeCasting {
+                reason: format!("Get payload error: {}", e),
+            }
         })?;
 
         let sender_public_key =
@@ -373,7 +425,7 @@ impl ShardStoreReadTransaction<PublicKey, TariDanPayload> for SqliteShardStoreRe
         Ok(tari_dan_payload)
     }
 
-    fn get_node(&self, hash: &TreeNodeHash) -> Result<HotStuffTreeNode<PublicKey, TariDanPayload>, StorageError> {
+    fn get_node(&mut self, hash: &TreeNodeHash) -> Result<HotStuffTreeNode<PublicKey, TariDanPayload>, StorageError> {
         use crate::schema::nodes;
 
         let node: Option<Node> = nodes::dsl::nodes
@@ -424,7 +476,7 @@ impl ShardStoreReadTransaction<PublicKey, TariDanPayload> for SqliteShardStoreRe
     }
 
     fn get_locked_node_hash_and_height(
-        &self,
+        &mut self,
         payload_id: PayloadId,
         shard: ShardId,
     ) -> Result<(TreeNodeHash, NodeHeight), StorageError> {
@@ -450,7 +502,7 @@ impl ShardStoreReadTransaction<PublicKey, TariDanPayload> for SqliteShardStoreRe
         }
     }
 
-    fn get_last_executed_height(&self, shard: ShardId, payload_id: PayloadId) -> Result<NodeHeight, StorageError> {
+    fn get_last_executed_height(&mut self, shard: ShardId, payload_id: PayloadId) -> Result<NodeHeight, StorageError> {
         use crate::schema::last_executed_heights;
 
         let last_executed_height: Option<LastExecutedHeight> = last_executed_heights::table
@@ -471,7 +523,7 @@ impl ShardStoreReadTransaction<PublicKey, TariDanPayload> for SqliteShardStoreRe
         }
     }
 
-    fn get_state_inventory(&self) -> Result<Vec<ShardId>, StorageError> {
+    fn get_state_inventory(&mut self) -> Result<Vec<ShardId>, StorageError> {
         use crate::schema::substates;
 
         let substate_states: Option<Vec<Substate>> = substates::table
@@ -492,7 +544,7 @@ impl ShardStoreReadTransaction<PublicKey, TariDanPayload> for SqliteShardStoreRe
         }
     }
 
-    fn get_substate_states(&self, shard_ids: &[ShardId]) -> Result<Vec<SubstateShardData>, StorageError> {
+    fn get_substate_states(&mut self, shard_ids: &[ShardId]) -> Result<Vec<SubstateShardData>, StorageError> {
         use crate::schema::substates;
 
         let shard_ids = shard_ids
@@ -523,7 +575,7 @@ impl ShardStoreReadTransaction<PublicKey, TariDanPayload> for SqliteShardStoreRe
     }
 
     fn get_substate_states_by_range(
-        &self,
+        &mut self,
         start_shard_id: ShardId,
         end_shard_id: ShardId,
         excluded_shards: &[ShardId],
@@ -561,7 +613,11 @@ impl ShardStoreReadTransaction<PublicKey, TariDanPayload> for SqliteShardStoreRe
         }
     }
 
-    fn get_last_voted_height(&self, shard: ShardId, payload_id: PayloadId) -> Result<(NodeHeight, u32), StorageError> {
+    fn get_last_voted_height(
+        &mut self,
+        shard: ShardId,
+        payload_id: PayloadId,
+    ) -> Result<(NodeHeight, u32), StorageError> {
         use crate::schema::last_voted_heights;
 
         let last_vote: Option<LastVotedHeight> = last_voted_heights::table
@@ -585,7 +641,7 @@ impl ShardStoreReadTransaction<PublicKey, TariDanPayload> for SqliteShardStoreRe
     }
 
     fn get_leader_proposals(
-        &self,
+        &mut self,
         payload: PayloadId,
         payload_height: NodeHeight,
         shards: &[ShardId],
@@ -617,7 +673,7 @@ impl ShardStoreReadTransaction<PublicKey, TariDanPayload> for SqliteShardStoreRe
 
     // Get leader proposal with highest payload height for a particular shard.
     fn get_last_payload_height_for_leader_proposal(
-        &self,
+        &mut self,
         payload: PayloadId,
         shard: ShardId,
     ) -> Result<NodeHeight, StorageError> {
@@ -642,7 +698,7 @@ impl ShardStoreReadTransaction<PublicKey, TariDanPayload> for SqliteShardStoreRe
         }
     }
 
-    fn has_vote_for(&self, from: &PublicKey, node_hash: TreeNodeHash) -> Result<bool, StorageError> {
+    fn has_vote_for(&mut self, from: &PublicKey, node_hash: TreeNodeHash) -> Result<bool, StorageError> {
         use crate::schema::received_votes;
 
         let vote: Option<ReceivedVote> = received_votes::table
@@ -660,7 +716,7 @@ impl ShardStoreReadTransaction<PublicKey, TariDanPayload> for SqliteShardStoreRe
         Ok(vote.is_some())
     }
 
-    fn get_received_votes_for(&self, node_hash: TreeNodeHash) -> Result<Vec<VoteMessage>, StorageError> {
+    fn get_received_votes_for(&mut self, node_hash: TreeNodeHash) -> Result<Vec<VoteMessage>, StorageError> {
         use crate::schema::received_votes;
 
         let filtered_votes: Option<Vec<ReceivedVote>> = received_votes::table
@@ -682,7 +738,7 @@ impl ShardStoreReadTransaction<PublicKey, TariDanPayload> for SqliteShardStoreRe
         }
     }
 
-    fn get_recent_transactions(&self) -> Result<Vec<RecentTransaction>, StorageError> {
+    fn get_recent_transactions(&mut self) -> Result<Vec<RecentTransaction>, StorageError> {
         let res = sql_query("select payload_id,timestamp,meta,instructions from payloads order by timestamp desc")
             .load::<QueryableRecentTransaction>(self.transaction.connection())
             .map_err(|e| StorageError::QueryError {
@@ -694,7 +750,7 @@ impl ShardStoreReadTransaction<PublicKey, TariDanPayload> for SqliteShardStoreRe
             .collect())
     }
 
-    fn get_payload_result(&self, payload_id: &PayloadId) -> Result<PayloadResult, StorageError> {
+    fn get_payload_result(&mut self, payload_id: &PayloadId) -> Result<PayloadResult, StorageError> {
         use crate::schema::{payloads, payloads::dsl};
 
         let maybe_payload: Option<SqlPayload> = dsl::payloads
@@ -718,12 +774,13 @@ impl ShardStoreReadTransaction<PublicKey, TariDanPayload> for SqliteShardStoreRe
         Ok(serde_json::from_str(&payload_result_json).expect("payload result in database corrupt"))
     }
 
-    fn get_transaction(&self, payload_id: Vec<u8>) -> Result<Vec<SQLTransaction>, StorageError> {
+    fn get_transaction(&mut self, payload_id: Vec<u8>) -> Result<Vec<SQLTransaction>, StorageError> {
         let res = sql_query(
             "select node_hash, parent_node_hash, shard, height, payload_height, (select count(*) from received_votes \
              v where v.tree_node_hash = node_hash) as total_votes, (select count(*) from leader_proposals lp where \
              lp.payload_id  = n.payload_id and lp.payload_height = n.payload_height and lp.node_hash = n.node_hash) \
-             as total_leader_proposals, n.timestamp, n.justify from nodes as n where payload_id = ? order by shard",
+             as total_leader_proposals, n.timestamp, n.justify, n.proposed_by, n.leader_round from nodes as n where \
+             payload_id = ? order by shard",
         )
         .bind::<Binary, _>(payload_id)
         .load::<QueryableTransaction>(self.transaction.connection())
@@ -735,7 +792,7 @@ impl ShardStoreReadTransaction<PublicKey, TariDanPayload> for SqliteShardStoreRe
     }
 
     fn get_substates_for_payload(
-        &self,
+        &mut self,
         payload_id: Vec<u8>,
         shard_id: Vec<u8>,
     ) -> Result<Vec<SQLSubstate>, StorageError> {
@@ -754,7 +811,7 @@ impl ShardStoreReadTransaction<PublicKey, TariDanPayload> for SqliteShardStoreRe
     }
 
     // -------------------------------- Pledges -------------------------------- //
-    fn get_resolved_pledges_for_payload(&self, payload: PayloadId) -> Result<Vec<ObjectPledgeInfo>, StorageError> {
+    fn get_resolved_pledges_for_payload(&mut self, payload: PayloadId) -> Result<Vec<ObjectPledgeInfo>, StorageError> {
         use crate::schema::shard_pledges;
 
         let pledges: Vec<DbShardPledge> = shard_pledges::table
@@ -780,21 +837,19 @@ impl ShardStoreReadTransaction<PublicKey, TariDanPayload> for SqliteShardStoreRe
 }
 
 pub struct SqliteShardStoreWriteTransaction<'a> {
-    transaction: SqliteShardStoreReadTransaction<'a>,
-    /// Indicates if the transaction has been explicitly committed/rolled back
-    is_complete: bool,
+    /// None indicates if the transaction has been explicitly committed/rolled back
+    transaction: Option<SqliteShardStoreReadTransaction<'a>>,
 }
 
 impl<'a> SqliteShardStoreWriteTransaction<'a> {
     pub fn new(transaction: SqliteTransaction<'a>) -> Self {
         Self {
-            transaction: SqliteShardStoreReadTransaction::new(transaction),
-            is_complete: false,
+            transaction: Some(SqliteShardStoreReadTransaction::new(transaction)),
         }
     }
 
-    pub fn connection(&self) -> &SqliteConnection {
-        self.transaction.connection()
+    pub fn connection(&mut self) -> &mut SqliteConnection {
+        self.transaction.as_mut().unwrap().connection()
     }
 
     fn create_pledge(&mut self, shard: ShardId, obj: DbShardPledge) -> Result<ObjectPledge, StorageError> {
@@ -836,14 +891,12 @@ impl<'a> SqliteShardStoreWriteTransaction<'a> {
 
 impl ShardStoreWriteTransaction<PublicKey, TariDanPayload> for SqliteShardStoreWriteTransaction<'_> {
     fn commit(mut self) -> Result<(), StorageError> {
-        self.transaction.transaction.commit()?;
-        self.is_complete = true;
+        self.transaction.take().unwrap().transaction.commit()?;
         Ok(())
     }
 
     fn rollback(mut self) -> Result<(), StorageError> {
-        self.transaction.transaction.rollback()?;
-        self.is_complete = true;
+        self.transaction.take().unwrap().transaction.rollback()?;
         Ok(())
     }
 
@@ -946,6 +999,54 @@ impl ShardStoreWriteTransaction<PublicKey, TariDanPayload> for SqliteShardStoreW
                         })
                     },
                 }
+            },
+        }
+        Ok(())
+    }
+
+    fn save_current_leader_state(
+        &mut self,
+        payload: PayloadId,
+        shard_id: ShardId,
+        leader_round: u32,
+        leader: PublicKey,
+    ) -> Result<(), StorageError> {
+        use crate::schema::current_leader_states;
+
+        let payload_id = payload.as_bytes().to_vec();
+
+        let new_row = NewCurrentLeaderState {
+            payload_id: payload_id.clone(),
+            shard_id: shard_id.as_bytes().to_vec(),
+            leader_round: i64::from(leader_round),
+            leader: leader.as_bytes().to_vec(),
+        };
+
+        match diesel::insert_into(current_leader_states::table)
+            .values(&new_row)
+            .execute(self.connection())
+        {
+            Ok(_) => {},
+            Err(err) => match err {
+                Error::DatabaseError(DatabaseErrorKind::UniqueViolation, _) => {
+                    match diesel::update(current_leader_states::table)
+                        .set(current_leader_states::leader_round.eq(i64::from(leader_round)))
+                        .filter(current_leader_states::payload_id.eq(payload_id))
+                        .execute(self.connection())
+                    {
+                        Ok(_) => {},
+                        Err(err) => {
+                            return Err(StorageError::QueryError {
+                                reason: format!("Set current state error: {}", err),
+                            })
+                        },
+                    }
+                },
+                _ => {
+                    return Err(StorageError::QueryError {
+                        reason: format!("Set current state error: {}", err),
+                    })
+                },
             },
         }
         Ok(())
@@ -1483,19 +1584,56 @@ impl ShardStoreWriteTransaction<PublicKey, TariDanPayload> for SqliteShardStoreW
         }
         Ok(())
     }
+
+    fn save_burnt_utxo(
+        &mut self,
+        substate: &tari_engine_types::substate::Substate,
+        commitment_address: String,
+        shard_id: ShardId,
+    ) -> Result<(), StorageError> {
+        let new_row = NewSubstate {
+            shard_id: shard_id.as_bytes().to_vec(),
+            address: commitment_address,
+            version: i64::from(substate.version()),
+            data: serde_json::to_string_pretty(substate).unwrap(),
+            created_by_payload_id: vec![0; 32],
+            created_justify: serde_json::to_string_pretty(&QuorumCertificate::genesis(
+                Epoch(0),
+                PayloadId::new(vec![0; 32]),
+                ShardId::zero(),
+            ))
+            .unwrap(),
+            created_node_hash: TreeNodeHash::zero().as_bytes().to_vec(),
+            created_height: 0,
+        };
+        use crate::schema::substates;
+        diesel::insert_into(substates::table)
+            .values(new_row)
+            .execute(self.connection())
+            .map_err(|e| StorageError::QueryError {
+                reason: format!("Burnt commitment insert error: {}", e),
+            })?;
+        Ok(())
+    }
 }
 
 impl<'a> Deref for SqliteShardStoreWriteTransaction<'a> {
     type Target = SqliteShardStoreReadTransaction<'a>;
 
     fn deref(&self) -> &Self::Target {
-        &self.transaction
+        self.transaction.as_ref().unwrap()
+    }
+}
+
+impl<'a> DerefMut for SqliteShardStoreWriteTransaction<'a> {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        self.transaction.as_mut().unwrap()
     }
 }
 
 impl Drop for SqliteShardStoreWriteTransaction<'_> {
     fn drop(&mut self) {
-        if !self.is_complete {
+        if self.transaction.is_some() {
             warn!(
                 target: LOG_TARGET,
                 "Shard store write transaction was not committed/rolled back"

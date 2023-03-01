@@ -24,22 +24,25 @@ use serde::{de::DeserializeOwned, Serialize};
 
 use crate::global::GlobalDbAdapter;
 
-pub struct MetadataDb<'a, TGlobalDbAdapter: GlobalDbAdapter> {
+pub struct MetadataDb<'a, 'tx, TGlobalDbAdapter: GlobalDbAdapter> {
     backend: &'a TGlobalDbAdapter,
-    tx: &'a TGlobalDbAdapter::DbTransaction<'a>,
+    tx: &'tx mut TGlobalDbAdapter::DbTransaction<'a>,
 }
 
-impl<'a, TGlobalDbAdapter: GlobalDbAdapter> MetadataDb<'a, TGlobalDbAdapter> {
-    pub fn new(backend: &'a TGlobalDbAdapter, tx: &'a TGlobalDbAdapter::DbTransaction<'a>) -> Self {
+impl<'a, 'tx, TGlobalDbAdapter: GlobalDbAdapter> MetadataDb<'a, 'tx, TGlobalDbAdapter> {
+    pub fn new(backend: &'a TGlobalDbAdapter, tx: &'tx mut TGlobalDbAdapter::DbTransaction<'a>) -> Self {
         Self { backend, tx }
     }
 
-    pub fn set_metadata<T: Serialize>(&self, key: MetadataKey, value: &T) -> Result<(), TGlobalDbAdapter::Error> {
+    pub fn set_metadata<T: Serialize>(&mut self, key: MetadataKey, value: &T) -> Result<(), TGlobalDbAdapter::Error> {
         self.backend.set_metadata(self.tx, key, value)?;
         Ok(())
     }
 
-    pub fn get_metadata<T: DeserializeOwned>(&self, key: MetadataKey) -> Result<Option<T>, TGlobalDbAdapter::Error> {
+    pub fn get_metadata<T: DeserializeOwned>(
+        &mut self,
+        key: MetadataKey,
+    ) -> Result<Option<T>, TGlobalDbAdapter::Error> {
         let data = self.backend.get_metadata(self.tx, &key)?;
         Ok(data)
     }
@@ -52,10 +55,11 @@ pub enum MetadataKey {
     BaseLayerScannerLastScannedBlockHash,
     BaseLayerScannerNextBlockHash,
     BaseLayerConsensusConstants,
-    CurrentEpoch,
-    CurrentShardKey,
-    LastEpochRegistration,
-    LastSyncedEpoch,
+    EpochManagerCurrentEpoch,
+    EpochManagerCurrentBlockHeight,
+    EpochManagerCurrentShardKey,
+    EpochManagerLastEpochRegistration,
+    EpochManagerLastSyncedEpoch,
 }
 
 impl MetadataKey {
@@ -66,10 +70,11 @@ impl MetadataKey {
             MetadataKey::BaseLayerScannerLastScannedBlockHeight => b"base_layer_scanner.last_scanned_block_height",
             MetadataKey::BaseLayerScannerNextBlockHash => b"base_layer_scanner.next_block_hash",
             MetadataKey::BaseLayerConsensusConstants => b"base_layer.consensus_constants",
-            MetadataKey::CurrentEpoch => b"current_epoch",
-            MetadataKey::LastEpochRegistration => b"last_registered_epoch",
-            MetadataKey::CurrentShardKey => b"current_shard_key",
-            MetadataKey::LastSyncedEpoch => b"last_synced_epoch",
+            MetadataKey::EpochManagerCurrentEpoch => b"epoch_manager.current_epoch",
+            MetadataKey::EpochManagerCurrentBlockHeight => b"epoch_manager.current_block_height",
+            MetadataKey::EpochManagerLastEpochRegistration => b"epoch_manager.last_registered_epoch",
+            MetadataKey::EpochManagerCurrentShardKey => b"epoch_manager.current_shard_key",
+            MetadataKey::EpochManagerLastSyncedEpoch => b"epoch_manager.last_synced_epoch",
         }
     }
 }

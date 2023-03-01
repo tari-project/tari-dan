@@ -27,23 +27,28 @@ use serde::{de::DeserializeOwned, Serialize};
 use serde_json as json;
 use serde_json::json;
 use tari_comms_logging::LoggedMessage;
-use types::{
-    GetRecentTransactionsRequest,
-    GetRecentTransactionsResponse,
-    GetTransactionRequest,
-    GetTransactionResponse,
-    SubmitTransactionRequest,
-    TemplateRegistrationRequest,
-    TemplateRegistrationResponse,
-};
 
 use crate::types::{
+    AddPeerRequest,
+    AddPeerResponse,
+    GetEpochManagerStatsResponse,
     GetIdentityResponse,
+    GetRecentTransactionsRequest,
+    GetRecentTransactionsResponse,
+    GetStateRequest,
+    GetStateResponse,
     GetTemplateRequest,
     GetTemplateResponse,
     GetTemplatesRequest,
     GetTemplatesResponse,
+    GetTransactionQcsRequest,
+    GetTransactionQcsResponse,
+    GetTransactionResultRequest,
+    GetTransactionResultResponse,
+    SubmitTransactionRequest,
     SubmitTransactionResponse,
+    TemplateRegistrationRequest,
+    TemplateRegistrationResponse,
 };
 
 #[derive(Debug, Clone)]
@@ -53,6 +58,7 @@ pub struct ValidatorNodeClient {
     request_id: i64,
 }
 
+// TODO: the client should return a proper error type
 impl ValidatorNodeClient {
     pub fn connect<T: IntoUrl>(endpoint: T) -> Result<Self, anyhow::Error> {
         let client = reqwest::Client::builder()
@@ -72,6 +78,10 @@ impl ValidatorNodeClient {
 
     pub async fn get_identity(&mut self) -> Result<GetIdentityResponse, anyhow::Error> {
         self.send_request("get_identity", json!({})).await
+    }
+
+    pub async fn get_epoch_manager_stats(&mut self) -> Result<GetEpochManagerStatsResponse, anyhow::Error> {
+        self.send_request("get_epoch_manager_stats", json!({})).await
     }
 
     pub async fn register_validator_node(&mut self) -> Result<u64, anyhow::Error> {
@@ -96,22 +106,34 @@ impl ValidatorNodeClient {
         self.send_request("get_templates", request).await
     }
 
+    pub async fn get_state(&mut self, request: GetStateRequest) -> Result<GetStateResponse, anyhow::Error> {
+        self.send_request("get_state", request).await
+    }
+
     pub async fn get_template(&mut self, request: GetTemplateRequest) -> Result<GetTemplateResponse, anyhow::Error> {
         self.send_request("get_template", request).await
     }
 
-    pub async fn get_transaction(
-        &mut self,
-        request: GetTransactionRequest,
-    ) -> Result<GetTransactionResponse, anyhow::Error> {
-        self.send_request("get_transaction", request).await
-    }
+    // TODO: This call is broken because it returns a Vec<SQLTransaction>. Bring this in-line with other requests
+    // pub async fn get_transaction(
+    //     &mut self,
+    //     request: GetTransactionResponseRequest,
+    // ) -> Result<GetTransactionResponse, anyhow::Error> {
+    //     self.send_request("get_transaction", request).await
+    // }
 
     pub async fn get_transaction_result(
         &mut self,
-        request: GetTransactionRequest,
-    ) -> Result<GetTransactionResponse, anyhow::Error> {
+        request: GetTransactionResultRequest,
+    ) -> Result<GetTransactionResultResponse, anyhow::Error> {
         self.send_request("get_transaction_result", request).await
+    }
+
+    pub async fn get_transaction_quorum_certificates(
+        &mut self,
+        request: GetTransactionQcsRequest,
+    ) -> Result<GetTransactionQcsResponse, anyhow::Error> {
+        self.send_request("get_transaction_qcs", request).await
     }
 
     pub async fn get_recent_transactions(
@@ -126,6 +148,10 @@ impl ValidatorNodeClient {
         request: SubmitTransactionRequest,
     ) -> Result<SubmitTransactionResponse, anyhow::Error> {
         self.send_request("submit_transaction", request).await
+    }
+
+    pub async fn add_peer(&mut self, request: AddPeerRequest) -> Result<AddPeerResponse, anyhow::Error> {
+        self.send_request("add_peer", request).await
     }
 
     pub async fn get_message_logs(&mut self, message_tag: &str) -> Result<Vec<LoggedMessage>, anyhow::Error> {

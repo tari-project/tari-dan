@@ -12,14 +12,23 @@ Feature: Leader failure scenarios
     # Initialize four validator nodes
     Given a seed validator node SEED_VN connected to base node BASE and wallet WALLET
     Given 4 validator nodes connected to base node BASE and wallet WALLET
+    # TODO: Something isn't right here. All VNs should connect to the seed and peer sync.
+    Given validator VAL_1 nodes connect to all other validators
+    Given validator VAL_2 nodes connect to all other validators
+    Given validator VAL_3 nodes connect to all other validators
+    Given validator VAL_4 nodes connect to all other validators
 
     # The wallet must have some funds before the VNs send transactions
-    When miner MINER mines 24 new blocks
-    When wallet WALLET has at least 2000000000 uT
+    When miner MINER mines 8 new blocks
+    When wallet WALLET has at least 40000 T
 
     # VNs registration
     When all validator nodes send registration transactions
-    When miner MINER mines 20 new blocks
+    When miner MINER mines 13 new blocks
+    Then VAL_1 has scanned to height 18 within 10 seconds
+    Then VAL_2 has scanned to height 18 within 10 seconds
+    Then VAL_3 has scanned to height 18 within 10 seconds
+    Then VAL_4 has scanned to height 18 within 10 seconds
     Then all validator nodes are listed as registered
 
     When I wait 1 seconds 

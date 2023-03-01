@@ -6,11 +6,23 @@ use std::convert::TryFrom;
 use tari_common_types::types::{PrivateKey, PublicKey};
 use tari_crypto::{keys::PublicKey as PublicKeyTrait, ristretto::RistrettoPublicKey};
 use tari_dan_common_types::ShardId;
-use tari_engine_types::{instruction::Instruction, signature::InstructionSignature, substate::SubstateAddress};
-use tari_template_lib::models::{NonFungibleAddress, NonFungibleId, ResourceAddress};
+use tari_engine_types::{instruction::Instruction, substate::SubstateAddress};
+use tari_template_lib::models::{
+    AddressListId,
+    AddressListItemAddress,
+    NonFungibleAddress,
+    NonFungibleId,
+    ResourceAddress,
+};
 
 use super::Transaction;
-use crate::{change::SubstateChange, id_provider::IdProvider, transaction::TransactionMeta, ObjectClaim};
+use crate::{
+    change::SubstateChange,
+    id_provider::IdProvider,
+    transaction::TransactionMeta,
+    InstructionSignature,
+    ObjectClaim,
+};
 
 #[derive(Debug, Clone, Default)]
 pub struct TransactionBuilder {
@@ -20,6 +32,7 @@ pub struct TransactionBuilder {
     signature: Option<InstructionSignature>,
     sender_public_key: Option<RistrettoPublicKey>,
     new_non_fungible_outputs: Vec<(ResourceAddress, u8)>,
+    new_address_list_item_outputs: Vec<(AddressListId, u64)>,
 }
 
 impl TransactionBuilder {
@@ -31,6 +44,7 @@ impl TransactionBuilder {
             fee: 0,
             meta: TransactionMeta::default(),
             new_non_fungible_outputs: vec![],
+            new_address_list_item_outputs: vec![],
         }
     }
 
@@ -108,6 +122,14 @@ impl TransactionBuilder {
         self
     }
 
+    pub fn with_new_address_list_item_outputs(
+        &mut self,
+        new_address_list_item_outputs: Vec<(AddressListId, u64)>,
+    ) -> &mut Self {
+        self.new_address_list_item_outputs = new_address_list_item_outputs;
+        self
+    }
+
     pub fn build(mut self) -> Transaction {
         let mut transaction = Transaction::new(
             self.fee,
@@ -155,6 +177,20 @@ impl TransactionBuilder {
         }
 
         transaction.meta_mut().involved_objects_mut().extend(new_nft_outputs);
+
+        // add the involved objects for address list items
+        let new_item_outputs: Vec<(ShardId, (SubstateChange, ObjectClaim))> = self
+            .new_address_list_item_outputs
+            .iter()
+            .map(|(list_id, index)| {
+                let item_addr = AddressListItemAddress::new(*list_id, *index);
+                let substate_addr = SubstateAddress::AddressListItem(item_addr);
+                let shard_id = ShardId::from_hash(&substate_addr.to_canonical_hash(), 0);
+
+                (shard_id, (SubstateChange::Create, ObjectClaim {}))
+            })
+            .collect();
+        transaction.meta_mut().involved_objects_mut().extend(new_item_outputs);
 
         transaction
     }

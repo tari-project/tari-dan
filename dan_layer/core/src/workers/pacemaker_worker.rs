@@ -32,7 +32,7 @@ use tokio::sync::{
 
 use super::hotstuff_error::HotStuffError;
 
-const LOG_TARGET: &str = "tari::dan_layer::pacemaker_worker";
+const LOG_TARGET: &str = "tari::dan::pacemaker_worker";
 
 #[derive(Debug)]
 pub enum PacemakerTimer<T> {

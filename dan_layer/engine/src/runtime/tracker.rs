@@ -27,8 +27,10 @@ use std::{
 };
 
 use log::debug;
+use tari_common_types::types::Commitment;
 use tari_dan_common_types::optional::Optional;
 use tari_engine_types::{
+    address_list::{AddressList, AddressListItem},
     bucket::Bucket,
     logs::LogEntry,
     non_fungible::NonFungibleContainer,
@@ -43,11 +45,15 @@ use tari_template_lib::{
     args::MintArg,
     auth::AccessRules,
     models::{
+        Address,
+        AddressListId,
+        AddressListItemAddress,
         Amount,
         BucketId,
         ComponentAddress,
         ComponentBody,
         ComponentHeader,
+        LayerOneCommitmentAddress,
         Metadata,
         NonFungibleAddress,
         ResourceAddress,
@@ -63,7 +69,7 @@ use crate::{
     state_store::{memory::MemoryStateStore, AtomicDb, StateReader},
 };
 
-const LOG_TARGET: &str = "tari::engine::runtime::state_tracker";
+const LOG_TARGET: &str = "tari::dan::engine::runtime::state_tracker";
 
 #[derive(Debug, Clone)]
 pub struct StateTracker {
@@ -171,6 +177,13 @@ impl StateTracker {
                     }
 
                     ResourceContainer::non_fungible(resource_address, token_ids)
+                },
+                MintArg::Confidential { proof } => {
+                    debug!(
+                        target: LOG_TARGET,
+                        "Minting confidential tokens on resource: {}", resource_address
+                    );
+                    ResourceContainer::validate_confidential(resource_address, proof)?
                 },
             };
 
@@ -303,6 +316,18 @@ impl StateTracker {
         })
     }
 
+    pub fn take_layer_one_commitment(
+        &self,
+        commitment_address: LayerOneCommitmentAddress,
+    ) -> Result<Commitment, RuntimeError> {
+        self.write_with(|state| {
+            let commitment = state.get_layer_one_commitment(&commitment_address)?;
+
+            state.claim_layer_one_commitment(&commitment_address)?;
+            Ok(commitment)
+        })
+    }
+
     pub fn new_component(
         &self,
         module_name: String,
@@ -358,7 +383,7 @@ impl StateTracker {
         let resource = match resource_type {
             ResourceType::Fungible => ResourceContainer::fungible(resource_address, 0.into()),
             ResourceType::NonFungible => ResourceContainer::non_fungible(resource_address, BTreeSet::new()),
-            ResourceType::Confidential => todo!("new_vault: thaum resource"),
+            ResourceType::Confidential => ResourceContainer::confidential(resource_address, None, Amount::zero()),
         };
         let vault = Vault::new(vault_id, resource);
 
@@ -377,6 +402,34 @@ impl StateTracker {
         self.write_with(|state| state.borrow_vault_mut(vault_id, f))
     }
 
+    pub fn new_address_list(&self) -> Result<AddressListId, RuntimeError> {
+        let address_list_id = self.id_provider.new_address_list_id()?;
+        debug!(target: LOG_TARGET, "New address list id: {}", address_list_id);
+        let address_list = AddressList::new(address_list_id);
+
+        self.write_with(|state| {
+            state.new_address_lists.insert(address_list_id, address_list);
+        });
+
+        Ok(address_list_id)
+    }
+
+    pub fn address_list_push(
+        &self,
+        list_id: AddressListId,
+        index: u64,
+        referenced_address: Address,
+    ) -> Result<(), RuntimeError> {
+        let item_address = AddressListItemAddress::new(list_id, index);
+        let item = AddressListItem::new(referenced_address);
+
+        self.write_with(|state| {
+            state.new_address_list_items.insert(item_address, item);
+        });
+
+        Ok(())
+    }
+
     fn runtime_state(&self) -> Result<RuntimeState, RuntimeError> {
         self.read_with(|state| state.runtime_state.clone().ok_or(RuntimeError::IllegalRuntimeState))
     }
@@ -391,21 +444,21 @@ impl StateTracker {
         self.write_with(|state| state.last_instruction_output.take())
     }
 
-    pub fn take_from_workspace(&self, key: &[u8]) -> Result<Vec<u8>, RuntimeError> {
-        self.write_with(|state| {
-            state.workspace.remove(key).ok_or(RuntimeError::ItemNotOnWorkspace {
-                key: String::from_utf8_lossy(key).to_string(),
-            })
+    pub fn get_from_workspace(&self, key: &[u8]) -> Result<Vec<u8>, RuntimeError> {
+        self.read_with(|state| {
+            state
+                .workspace
+                .get(key)
+                .cloned()
+                .ok_or(RuntimeError::ItemNotOnWorkspace {
+                    key: String::from_utf8_lossy(key).to_string(),
+                })
         })
     }
 
     pub fn put_in_workspace(&self, key: Vec<u8>, value: Vec<u8>) -> Result<(), RuntimeError> {
         self.write_with(|state| {
-            if state.workspace.insert(key.clone(), value).is_some() {
-                return Err(RuntimeError::WorkspaceItemKeyExists {
-                    key: String::from_utf8_lossy(&key).to_string(),
-                });
-            }
+            state.workspace.insert(key.clone(), value);
             Ok(())
         })
     }
@@ -468,6 +521,37 @@ impl StateTracker {
                     None => Substate::new(0, substate),
                 };
                 substate_diff.up(addr, new_substate);
+            }
+
+            for (list_id, substate) in state.new_address_lists {
+                let addr = SubstateAddress::AddressList(list_id);
+                let new_substate = match tx.get_state::<_, Substate>(&addr).optional()? {
+                    Some(_) => {
+                        // Addess list roots are immutable
+                        return Err(TransactionCommitError::AddressListMutation { list_id });
+                    },
+                    None => Substate::new(0, substate),
+                };
+                substate_diff.up(addr, new_substate);
+            }
+
+            for (address, substate) in state.new_address_list_items {
+                let addr = SubstateAddress::AddressListItem(address.clone());
+                let new_substate = match tx.get_state::<_, Substate>(&addr).optional()? {
+                    Some(_) => {
+                        // Addess list items are immutable
+                        return Err(TransactionCommitError::AddressListItemMutation {
+                            list_id: *address.list_id(),
+                            index: address.index(),
+                        });
+                    },
+                    None => Substate::new(0, substate),
+                };
+                substate_diff.up(addr, new_substate);
+            }
+
+            for claimed in state.claimed_layer_one_commitments {
+                substate_diff.down(SubstateAddress::LayerOneCommitment(claimed), 0);
             }
 
             Result::<_, TransactionCommitError>::Ok(substate_diff)

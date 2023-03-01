@@ -34,7 +34,7 @@ pub struct ReceivedVote {
 }
 
 #[derive(Debug, Insertable)]
-#[table_name = "received_votes"]
+#[diesel(table_name = received_votes)]
 pub struct NewReceivedVote {
     pub tree_node_hash: Vec<u8>,
     pub address: Vec<u8>,

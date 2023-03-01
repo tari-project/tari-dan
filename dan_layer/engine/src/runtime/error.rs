@@ -25,7 +25,17 @@ use std::{fmt::Display, io};
 use anyhow::anyhow;
 use tari_dan_common_types::optional::IsNotFoundError;
 use tari_engine_types::{resource_container::ResourceError, substate::SubstateAddress};
-use tari_template_lib::models::{Amount, BucketId, ComponentAddress, NonFungibleId, ResourceAddress, VaultId};
+use tari_template_lib::models::{
+    Address,
+    AddressListId,
+    Amount,
+    BucketId,
+    ComponentAddress,
+    LayerOneCommitmentAddress,
+    NonFungibleId,
+    ResourceAddress,
+    VaultId,
+};
 use tari_transaction::id_provider::MaxIdsExceeded;
 
 use crate::{
@@ -45,6 +55,8 @@ pub enum RuntimeError {
     SubstateNotFound { address: SubstateAddress },
     #[error("Component not found with address '{address}'")]
     ComponentNotFound { address: ComponentAddress },
+    #[error("Layer one commitment not found with address '{address}'")]
+    LayerOneCommitmentNotFound { address: LayerOneCommitmentAddress },
     #[error("Invalid argument {argument}: {reason}")]
     InvalidArgument { argument: &'static str, reason: String },
     #[error("Invalid amount '{amount}': {reason}")]
@@ -76,8 +88,6 @@ pub enum RuntimeError {
     ItemNotOnWorkspace { key: String },
     #[error("Attempted to take the last output but there was no previous instruction output")]
     NoLastInstructionOutput,
-    #[error("Workspace already has an item with key '{key}'")]
-    WorkspaceItemKeyExists { key: String },
     #[error(transparent)]
     TransactionCommitError(#[from] TransactionCommitError),
     #[error("Transaction generated too many outputs: {0}")]
@@ -90,6 +100,23 @@ pub enum RuntimeError {
     InvalidMethodAccessRule { template_name: String, details: String },
     #[error("Runtime module error: {0}")]
     ModuleError(#[from] RuntimeModuleError),
+    #[error("Invalid claiming signature")]
+    InvalidClaimingSignature,
+    #[error("Invalid range proof")]
+    InvalidRangeProof,
+    #[error("Invalid substate type")]
+    InvalidSubstateType,
+    #[error("Layer one commitment already claimed with address '{address}'")]
+    LayerOneCommitmentAlreadyClaimed { address: LayerOneCommitmentAddress },
+    #[error(
+        "The address list {list_id} item at index {index} was trying to reference an invalid address \
+         {referenced_address}"
+    )]
+    InvalidAddressListItemReference {
+        list_id: AddressListId,
+        index: u64,
+        referenced_address: Address,
+    },
 }
 
 impl RuntimeError {
@@ -123,4 +150,8 @@ pub enum TransactionCommitError {
     StateStoreTransactionError(anyhow::Error),
     #[error(transparent)]
     MaxIdsExceeded(#[from] MaxIdsExceeded),
+    #[error("trying to mutate list {list_id}")]
+    AddressListMutation { list_id: AddressListId },
+    #[error("trying to mutate list {list_id} at index {index}")]
+    AddressListItemMutation { list_id: AddressListId, index: u64 },
 }

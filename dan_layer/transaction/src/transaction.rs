@@ -6,18 +6,21 @@ use std::collections::HashMap;
 use serde::{Deserialize, Serialize};
 use tari_common_types::types::PublicKey;
 use tari_dan_common_types::ShardId;
-use tari_engine_types::{hashing::hasher, instruction::Instruction, signature::InstructionSignature};
+use tari_engine_types::{
+    hashing::{hasher, EngineHashDomainLabel},
+    instruction::Instruction,
+};
 use tari_template_lib::{
     models::{ComponentAddress, TemplateAddress},
     Hash,
 };
 
-use crate::{change::SubstateChange, ObjectClaim, TransactionBuilder};
+use crate::{change::SubstateChange, InstructionSignature, ObjectClaim, TransactionBuilder};
 
 #[derive(Debug, Clone)]
 pub struct BalanceProof {}
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, Eq, PartialEq)]
 pub struct Transaction {
     hash: Hash,
     instructions: Vec<Instruction>,
@@ -94,14 +97,12 @@ impl Transaction {
     }
 
     fn calculate_hash(&self) -> Hash {
-        let mut res = hasher("transaction")
+        hasher(EngineHashDomainLabel::Transaction)
             .chain(&self.sender_public_key)
             .chain(self.signature.signature().get_public_nonce())
-            .chain(self.signature.signature().get_signature());
-        for instruction in &self.instructions {
-            res.update(&instruction.hash())
-        }
-        res.result()
+            .chain(self.signature.signature().get_signature())
+            .chain(&self.instructions)
+            .result()
     }
 
     pub fn instructions(&self) -> &[Instruction] {
@@ -125,7 +126,7 @@ impl Transaction {
     }
 }
 
-#[derive(Debug, Clone, Default, Deserialize, Serialize, PartialEq)]
+#[derive(Debug, Clone, Default, Deserialize, Serialize, Eq, PartialEq)]
 pub struct TransactionMeta {
     involved_objects: HashMap<ShardId, (SubstateChange, ObjectClaim)>,
     max_outputs: u32,

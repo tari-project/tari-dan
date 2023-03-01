@@ -20,8 +20,13 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+import { toHexString } from "../routes/VN/Components/helpers";
+
 const renderJson = (json: any) => {
   if (Array.isArray(json)) {
+    if (json.length == 32) {
+      return <span className="string">"{toHexString(json)}"</span>;
+    }
     return (
       <>
         [
@@ -33,10 +38,10 @@ const renderJson = (json: any) => {
         ],
       </>
     );
-  } else if (typeof json === "object") {
+  } else if (typeof json === 'object') {
     return (
       <>
-        {"{"}
+        {'{'}
         <ul>
           {Object.keys(json).map((key) => (
             <li>
@@ -44,11 +49,12 @@ const renderJson = (json: any) => {
             </li>
           ))}
         </ul>
-        {"}"}
+        {'}'}
       </>
     );
   } else {
-    if (typeof json === "string") return <span className="string">"{json}"</span>;
+    if (typeof json === 'string')
+      return <span className="string">"{json}"</span>;
     return <span className="other">{json}</span>;
   }
 };

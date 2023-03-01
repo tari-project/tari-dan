@@ -10,6 +10,7 @@ use std::{
 
 use chrono::NaiveDateTime;
 use diesel::{prelude::*, sql_query};
+use diesel_migrations::{EmbeddedMigrations, MigrationHarness};
 use log::error;
 use serde::{Deserialize, Serialize};
 
@@ -20,7 +21,7 @@ const LOG_TARGET: &str = "tari::comms::logging::sqlite_message_log";
 // Note: this struct does not produce errors because it is for logging. Logs will be output on errors
 
 #[derive(Debug, Insertable)]
-#[table_name = "outbound_messages"]
+#[diesel(table_name = outbound_messages)]
 struct NewOutboundMessage {
     destination_type: String,
     destination_pubkey: Vec<u8>,
@@ -30,7 +31,7 @@ struct NewOutboundMessage {
 }
 
 #[derive(Debug, Insertable)]
-#[table_name = "inbound_messages"]
+#[diesel(table_name = inbound_messages)]
 struct NewInboundMessage {
     from_pubkey: Vec<u8>,
     message_type: String,
@@ -40,17 +41,17 @@ struct NewInboundMessage {
 
 #[derive(Debug, Clone, QueryableByName, Serialize, Deserialize)]
 pub struct LoggedMessage {
-    #[sql_type = "diesel::sql_types::Integer"]
+    #[diesel(sql_type = diesel::sql_types::Integer)]
     pub id: i32,
-    #[sql_type = "diesel::sql_types::Text"]
+    #[diesel(sql_type = diesel::sql_types::Text)]
     pub in_out: String,
-    #[sql_type = "diesel::sql_types::Blob"]
+    #[diesel(sql_type = diesel::sql_types::Blob)]
     pub pubkey: Vec<u8>,
-    #[sql_type = "diesel::sql_types::Text"]
+    #[diesel(sql_type = diesel::sql_types::Text)]
     pub message_type: String,
-    #[sql_type = "diesel::sql_types::Text"]
+    #[diesel(sql_type = diesel::sql_types::Text)]
     pub message_json: String,
-    #[sql_type = "diesel::sql_types::Timestamp"]
+    #[diesel(sql_type = diesel::sql_types::Timestamp)]
     pub timestamp: NaiveDateTime,
 }
 
@@ -103,9 +104,9 @@ impl SqliteMessageLog {
 
         let path = path.to_str().expect("path utf-8 error").to_string();
         match SqliteConnection::establish(&path) {
-            Ok(connection) => {
-                embed_migrations!("./migrations");
-                if let Err(err) = embedded_migrations::run_with_output(&connection, &mut std::io::stdout()) {
+            Ok(mut connection) => {
+                pub const MIGRATIONS: EmbeddedMigrations = embed_migrations!("./migrations");
+                if let Err(err) = connection.run_pending_migrations(MIGRATIONS) {
                     log::error!(target: LOG_TARGET, "Error running migrations: {}", err);
                 }
 
@@ -128,7 +129,7 @@ impl SqliteMessageLog {
         message_tag: String,
         message: &T,
     ) {
-        if let Some(conn) = self.connect() {
+        if let Some(mut conn) = self.connect() {
             let _ = diesel::insert_into(outbound_messages::table)
                 .values(NewOutboundMessage {
                     destination_type: destination_type.to_string(),
@@ -137,7 +138,7 @@ impl SqliteMessageLog {
                     message_json: serde_json::to_string_pretty(message).unwrap(),
                     message_tag,
                 })
-                .execute(&*conn)
+                .execute(&mut *conn)
                 .map_err(|e| {
                     error!(target: LOG_TARGET, "Failed to log outbound message: {}", e);
                 });
@@ -153,7 +154,7 @@ impl SqliteMessageLog {
         message_tag: String,
         message: &T,
     ) {
-        if let Some(conn) = self.connect() {
+        if let Some(mut conn) = self.connect() {
             let _ = diesel::insert_into(inbound_messages::table)
                 .values(NewInboundMessage {
                     from_pubkey: from_peer.into(),
@@ -161,7 +162,7 @@ impl SqliteMessageLog {
                     message_json: serde_json::to_string_pretty(message).unwrap(),
                     message_tag,
                 })
-                .execute(&*conn)
+                .execute(&mut *conn)
                 .map_err(|e| {
                     error!(target: LOG_TARGET, "Failed to log inbound message: {}", e);
                 });
@@ -171,7 +172,7 @@ impl SqliteMessageLog {
     }
 
     pub fn get_messages_by_tag(&self, message_tag: String) -> Vec<LoggedMessage> {
-        if let Some(conn) = self.connect() {
+        if let Some(mut conn) = self.connect() {
             sql_query(
                 r#"
                 SELECT
@@ -199,7 +200,7 @@ impl SqliteMessageLog {
             )
             .bind::<diesel::sql_types::Text, _>(message_tag.clone())
             .bind::<diesel::sql_types::Text, _>(message_tag)
-            .load::<LoggedMessage>(&*conn)
+            .load::<LoggedMessage>(&mut *conn)
             .unwrap_or_else(|e| {
                 error!(target: LOG_TARGET, "Failed to get messages by tag: {}", e);
                 Vec::new()

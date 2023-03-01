@@ -31,16 +31,18 @@ use tari_template_abi::rust::{
 
 use crate::{
     models::{
+        AddressListId,
         Amount,
         BucketId,
         ComponentAddress,
+        ConfidentialWithdrawProof,
         Metadata,
         NonFungibleAddress,
         NonFungibleId,
         ResourceAddress,
         VaultRef,
     },
-    prelude::AccessRules,
+    prelude::{AccessRules, ConfidentialProof},
     resource::ResourceType,
 };
 
@@ -51,7 +53,7 @@ pub struct EmitLogArg {
     pub level: LogLevel,
 }
 
-#[derive(Debug, Clone, Copy, Encode, Decode, PartialEq)]
+#[derive(Debug, Clone, Copy, Encode, Decode, Eq, PartialEq)]
 #[cfg_attr(feature = "serde", derive(serde::Deserialize, serde::Serialize))]
 pub enum LogLevel {
     Error,
@@ -183,6 +185,9 @@ pub enum MintArg {
     NonFungible {
         tokens: HashMap<NonFungibleId, (Vec<u8>, Vec<u8>)>,
     },
+    Confidential {
+        proof: ConfidentialProof,
+    },
 }
 
 #[derive(Clone, Debug, Decode, Encode)]
@@ -226,12 +231,21 @@ pub enum VaultAction {
     GetBalance,
     GetResourceAddress,
     GetNonFungibleIds,
+    GetCommitmentCount,
+    ConfidentialReveal,
 }
 
 #[derive(Clone, Debug, Decode, Encode)]
 pub enum VaultWithdrawArg {
     Fungible { amount: Amount },
     NonFungible { ids: BTreeSet<NonFungibleId> },
+    Confidential { proof: ConfidentialWithdrawProof },
+}
+
+// -------------------------------- Confidential -------------------------------- //
+#[derive(Clone, Debug, Decode, Encode)]
+pub struct ConfidentialRevealArg {
+    pub proof: ConfidentialWithdrawProof,
 }
 
 // -------------------------------- Bucket -------------------------------- //
@@ -271,6 +285,8 @@ pub enum BucketAction {
     GetResourceType,
     GetAmount,
     Take,
+    TakeConfidential,
+    RevealConfidential,
     Burn,
 }
 
@@ -284,7 +300,7 @@ pub struct BucketBurnArg {
 pub enum WorkspaceAction {
     Put,
     PutLastInstructionOutput,
-    Take,
+    Get,
     ListBuckets,
 }
 
@@ -317,4 +333,19 @@ pub struct ConsensusInvokeArg {
 #[derive(Clone, Debug, Decode, Encode)]
 pub enum ConsensusAction {
     GetCurrentEpoch,
+}
+
+// -------------------------------- AddressList -------------------------------- //
+#[derive(Clone, Debug, Decode, Encode)]
+pub struct AddressListInvokeArg {
+    pub list_id: Option<AddressListId>,
+    pub action: AddressListAction,
+    pub args: Vec<Vec<u8>>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord, Decode, Encode)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+pub enum AddressListAction {
+    Create,
+    Push,
 }

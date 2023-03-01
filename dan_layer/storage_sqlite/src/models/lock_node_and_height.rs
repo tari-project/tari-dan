@@ -35,7 +35,7 @@ pub struct LockNodeAndHeight {
 }
 
 #[derive(Debug, Insertable)]
-#[table_name = "lock_node_and_heights"]
+#[diesel(table_name = lock_node_and_heights)]
 pub struct NewLockNodeAndHeight {
     pub payload_id: Vec<u8>,
     pub shard_id: Vec<u8>,

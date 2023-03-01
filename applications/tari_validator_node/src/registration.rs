@@ -30,6 +30,7 @@ use log::{error, info, warn};
 use tari_app_grpc::tari_rpc::RegisterValidatorNodeResponse;
 use tari_common::configuration::bootstrap::{grpc_default_port, ApplicationType};
 use tari_comms::NodeIdentity;
+use tari_dan_app_utilities::epoch_manager::{EpochManagerEvent, EpochManagerHandle};
 use tari_dan_common_types::Epoch;
 use tari_dan_core::{
     services::{
@@ -43,11 +44,7 @@ use tari_shutdown::ShutdownSignal;
 use tari_wallet_grpc_client::WalletClientError;
 use tokio::{task, task::JoinHandle, time};
 
-use crate::{
-    p2p::services::epoch_manager::{epoch_manager_service::EpochManagerEvent, handle::EpochManagerHandle},
-    ApplicationConfig,
-    GrpcWalletClient,
-};
+use crate::{ApplicationConfig, GrpcWalletClient};
 
 const LOG_TARGET: &str = "tari::validator_node::app";
 const MAX_REGISTRATION_ATTEMPTS: u8 = 8;

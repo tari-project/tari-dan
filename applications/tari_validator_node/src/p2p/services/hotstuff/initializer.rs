@@ -23,6 +23,7 @@
 use std::sync::Arc;
 
 use tari_comms::{types::CommsPublicKey, NodeIdentity};
+use tari_dan_app_utilities::epoch_manager::EpochManagerHandle;
 use tari_dan_core::{
     models::{vote_message::VoteMessage, HotStuffMessage, TariDanPayload},
     workers::{
@@ -36,7 +37,6 @@ use tokio::{sync::mpsc, task::JoinHandle};
 
 use crate::{
     p2p::services::{
-        epoch_manager::handle::EpochManagerHandle,
         hotstuff::hotstuff_service::HotstuffService,
         mempool::MempoolHandle,
         messaging::OutboundMessaging,

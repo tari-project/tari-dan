@@ -36,6 +36,12 @@ use tari_common::{
     exit_codes::{ExitCode, ExitError},
 };
 use tari_comms::{protocol::rpc::RpcServer, CommsNode, NodeIdentity, UnspawnedCommsNode};
+use tari_dan_app_utilities::{
+    base_layer_scanner,
+    base_node_client::GrpcBaseNodeClient,
+    epoch_manager::EpochManagerHandle,
+    template_manager::TemplateManagerHandle,
+};
 use tari_dan_core::{
     consensus_constants::ConsensusConstants,
     workers::events::{EventSubscription, HotStuffEvent},
@@ -46,16 +52,13 @@ use tari_shutdown::ShutdownSignal;
 use tokio::task::JoinHandle;
 
 use crate::{
-    base_layer_scanner,
     comms,
     dry_run_transaction_processor::DryRunTransactionProcessor,
-    grpc::services::base_node_client::GrpcBaseNodeClient,
     p2p::{
         create_validator_node_rpc_service,
         services::{
             comms_peer_provider::CommsPeerProvider,
             epoch_manager,
-            epoch_manager::handle::EpochManagerHandle,
             hotstuff,
             mempool,
             mempool::MempoolHandle,
@@ -65,7 +68,7 @@ use crate::{
             networking::NetworkingHandle,
             rpc_client::TariCommsValidatorNodeClientFactory,
             template_manager,
-            template_manager::{TemplateManager, TemplateManagerHandle},
+            template_manager::TemplateManager,
         },
     },
     payload_processor::TariDanPayloadProcessor,
@@ -73,7 +76,7 @@ use crate::{
     ApplicationConfig,
 };
 
-const LOG_TARGET: &str = "tari_validator_node::bootstrap";
+const LOG_TARGET: &str = "tari::validator_node::bootstrap";
 
 #[allow(clippy::too_many_lines)]
 pub async fn spawn_services(
@@ -160,13 +163,15 @@ pub async fn spawn_services(
 
     // Base Node scanner
     let join_handle = base_layer_scanner::spawn(
-        config.validator_node.clone(),
         global_db,
         base_node_client.clone(),
         epoch_manager.clone(),
         template_manager_service.clone(),
         shutdown.clone(),
         consensus_constants,
+        shard_store.clone(),
+        config.validator_node.scan_base_layer,
+        config.validator_node.base_layer_scanning_interval,
     );
     handles.push(join_handle);
 

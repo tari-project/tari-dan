@@ -87,11 +87,16 @@ impl ComponentManager {
                 },
                 addr @ SubstateAddress::Resource(_) |
                 addr @ SubstateAddress::Vault(_) |
-                addr @ SubstateAddress::NonFungible(_) => {
+                addr @ SubstateAddress::NonFungible(_) |
+                addr @ SubstateAddress::AddressList(_) |
+                addr @ SubstateAddress::AddressListItem(_) => {
                     children.push(VersionedSubstateAddress {
                         address: addr.clone(),
                         version: substate.version(),
                     });
+                },
+                _addr @ SubstateAddress::LayerOneCommitment(_hash) => {
+                    todo!("Not expected");
                 },
             }
         }

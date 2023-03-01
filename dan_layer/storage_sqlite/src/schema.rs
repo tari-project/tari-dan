@@ -103,6 +103,17 @@ diesel::table! {
 }
 
 diesel::table! {
+    current_leader_states (id) {
+        id -> Integer,
+        payload_id -> Binary,
+        shard_id -> Binary,
+        leader_round -> BigInt,
+        leader -> Binary,
+        timestamp -> Timestamp,
+    }
+}
+
+diesel::table! {
     received_votes (id) {
         id -> Integer,
         tree_node_hash -> Binary,

@@ -20,6 +20,7 @@
 //   WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //   USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+use multiaddr::Multiaddr;
 use serde::{Deserialize, Serialize};
 use tari_common_types::types::{FixedHash, PublicKey};
 use tari_dan_common_types::{
@@ -29,13 +30,8 @@ use tari_dan_common_types::{
     ShardId,
 };
 use tari_dan_core::models::RecentTransaction;
-use tari_engine_types::{
-    commit_result::FinalizeResult,
-    instruction::Instruction,
-    signature::InstructionSignature,
-    TemplateAddress,
-};
-use tari_transaction::SubstateChange;
+use tari_engine_types::{commit_result::FinalizeResult, TemplateAddress};
+use tari_transaction::Transaction;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct GetIdentityResponse {
@@ -131,13 +127,7 @@ pub struct TemplateMetadata {
 /// ```
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SubmitTransactionRequest {
-    // pub transaction: Transaction,
-    pub instructions: Vec<Instruction>,
-    pub signature: InstructionSignature,
-    pub fee: u64,
-    pub sender_public_key: PublicKey,
-    pub inputs: Vec<(ShardId, SubstateChange)>,
-    pub num_outputs: u8,
+    pub transaction: Transaction,
     /// Set to true to wait for the transaction to complete before returning
     #[serde(default)]
     pub wait_for_result: bool,
@@ -173,14 +163,25 @@ pub struct SubstatesRequest {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct GetTransactionRequest {
+pub struct GetTransactionResultRequest {
     #[serde(with = "serde_with::hex")]
     pub hash: FixedHash,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct GetTransactionResponse {
+pub struct GetTransactionResultResponse {
     pub result: Option<FinalizeResult>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct GetTransactionQcsRequest {
+    #[serde(with = "serde_with::hex")]
+    pub hash: FixedHash,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct GetTransactionQcsResponse {
+    pub qcs: Vec<QuorumCertificate>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -216,4 +217,31 @@ pub struct GetCommitteeRequest {
 pub struct GetShardKey {
     pub height: u64,
     pub public_key: PublicKey,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct GetStateRequest {
+    pub shard_id: ShardId,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct GetStateResponse {
+    pub data: Vec<u8>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AddPeerRequest {
+    pub public_key: PublicKey,
+    pub addresses: Vec<Multiaddr>,
+    pub wait_for_dial: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AddPeerResponse {}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct GetEpochManagerStatsResponse {
+    pub current_epoch: Epoch,
+    pub current_block_height: u64,
+    pub is_valid: bool,
 }

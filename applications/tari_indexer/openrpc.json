@@ -1,0 +1,177 @@
+{
+    "openrpc": "1.0.0-rc1",
+    "info": {
+      "version": "1.0.0",
+      "title": "Tari DAN Indexer",
+      "license": {
+        "name": "MIT"
+      }
+    },
+    "servers": [
+      {
+        "url": "http://localhost:183000"
+      }
+    ],
+    "methods": [
+      {
+        "name": "get_connections",
+        "summary": "",
+        "tags": [
+        ],
+        "params": [],
+        "result": {
+          "name": "epoch_stats",
+          "description": "",
+          "schema": {
+          }
+        },
+        "errors": [
+        ],
+        "examples": [
+          {
+            "name": "default",
+            "description": "",
+            "params": [
+            ],
+            "result": {
+              "name": "example1",
+              "value": {
+                "connections": [{
+                  "address": "/onion3/zqydnqgtapphitwdxr4sfg5kuvv7kbs5ye54yjy2mybi7f7qxd5jeiyd:18141",
+                  "age": 9946,
+                  "direction": false,
+                  "node_id": [208, 146, 146, 229, 165, 144, 10, 41, 56, 35, 69, 224, 120],
+                  "public_key": "b4a0b93ccd3a50ab8f7fb766cc9fea59e574283d69a53fe60d6aa842f42ecd38"
+                }]
+              }
+            }
+          }
+        ]
+      },
+      {
+        "name": "get_identity",
+        "summary": "",
+        "tags": [
+        ],
+        "params": [],
+        "result": {
+          "name": "epoch_stats",
+          "description": "",
+          "schema": {
+          }
+        },
+        "errors": [
+        ],
+        "examples": [
+          {
+            "name": "default",
+            "description": "",
+            "params": [
+            ],
+            "result": {
+              "name": "example1",
+              "value": {
+                "node_id": "9c8d9ee038b16a424a30b4fad8",
+                "public_address": "/onion3/5m3262svmddswg5q7apa5eciwxwgip5jghzv4xc2jknrh26bysfzwsyd:18141",
+                "public_key": "7a149364bb8beb7f0cc6a100350391b4debd7dbaf7880bab421f024feca02b1f"
+              }
+            }
+          }
+        ]
+      },
+      {
+        "name": "get_addresses",
+        "summary": "",
+        "tags": [
+        ],
+        "params": [],
+        "result": {
+          "name": "epoch_stats",
+          "description": "",
+          "schema": {
+          }
+        },
+        "errors": [
+        ],
+        "examples": [
+          {
+            "name": "default",
+            "description": "",
+            "params": [
+            ],
+            "result": {
+              "name": "example1",
+              "value": [
+                ["component_e4773b971b876238475c904927435d625d892132e7d7b80c3cc81698fcc4a2dd", 0],
+                ["component_7c45d28ffa167b10d2fa700ce29343de692b97422a65485d0a00e8e7578d692e", 0],
+                ["component_3bca9b603e196b60f261aad0db85e7b55d52c46d687cdbb54194b706423fb1aa", 0]
+              ]
+            }
+          }
+        ]
+      },
+      {
+        "name": "get_substate",
+        "summary": "",
+        "tags": [
+        ],
+        "params": [],
+        "result": {
+          "name": "epoch_stats",
+          "description": "",
+          "schema": {
+          }
+        },
+        "errors": [
+        ],
+        "examples": [
+          {
+            "name": "default",
+            "description": "",
+            "params": [
+            ],
+            "result": {
+              "name": "example1",
+              "value": {
+                "substate": {
+                  "Component": {
+                    "access_rules": {
+                      "default": {
+                        "Restricted": {
+                          "Require": {
+                            "id": {
+                              "U256": [242, 92, 64, 223, 207, 57, 225, 163, 175, 11, 109, 189, 230, 209, 24, 78, 225, 250, 171, 247, 14, 102, 246, 15, 193, 145, 233, 156, 24, 197, 147, 116]
+                            },
+                            "resource_address": [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+                          }
+                        }
+                      },
+                      "method_access": {
+                        "balance": "AllowAll",
+                        "deposit": "AllowAll",
+                        "deposit_all": "AllowAll",
+                        "get_balances": "AllowAll",
+                        "get_non_fungible_ids": "AllowAll"
+                      },
+                      "native_method_access": {}
+                    },
+                    "module_name": "Account",
+                    "state": {
+                      "state": [0, 0, 0, 0]
+                    },
+                    "template_address": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+                  }
+                }
+              }
+            }
+          }
+        ]
+      }
+    ],
+    "components": {
+      "contentDescriptors": {
+      },
+      "schemas": {
+      }
+    }
+  }

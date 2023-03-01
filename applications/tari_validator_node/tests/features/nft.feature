@@ -14,17 +14,17 @@ Feature: NFTs
     Given a validator node VN connected to base node BASE and wallet WALLET
 
     # The wallet must have some funds before the VN sends transactions
-    When miner MINER mines 12 new blocks
-    When wallet WALLET has at least 1000000000 uT
+    When miner MINER mines 6 new blocks
+    When wallet WALLET has at least 2000000000 uT
 
     # VN registration
     When validator node VN sends a registration transaction
-    When miner MINER mines 20 new blocks
-    Then the validator node VN is listed as registered
 
     # Register the "basic_nft" template
     When validator node VN registers the template "basic_nft"
-    When miner MINER mines 20 new blocks
+    When miner MINER mines 13 new blocks
+    Then VN has scanned to height 16 within 10 seconds
+    Then the validator node VN is listed as registered
     Then the template "basic_nft" is listed as registered by the validator node VN
 
     # A file-base CLI account must be created to sign future calls
@@ -38,11 +38,14 @@ Feature: NFTs
     When I create an account ACC2 on VN
 
     # Submit a transaction with NFT operations
-    When I submit a transaction manifest on VN with inputs "NFT, ACC1, ACC2" and 3 outputs named "TX1"
+    When I submit a transaction manifest on VN with inputs "NFT, ACC1, ACC2" and 6 outputs named "TX1"
         ```
             // $mint NFT/resources/0 1
             // $mint_specific NFT/resources/0 str:SpecialNft
             // $mint_specific NFT/resources/0 str:Burn!
+            // $list_item NFT/addresslists/0 0
+            // $list_item NFT/addresslists/0 1
+            // $list_item NFT/addresslists/0 2
             let sparkle_nft = global!["NFT/components/SparkleNft"];
             let sparkle_res = global!["NFT/resources/0"];
             let mut acc1 = global!["ACC1/components/Account"];

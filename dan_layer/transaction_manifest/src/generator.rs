@@ -69,8 +69,7 @@ impl ManifestInstructionGenerator {
                     args: self.process_args(arguments)?,
                 }];
                 if let Some(var_name) = output_variable {
-                    // TODO: Replace this instruction with workspace assignments built into the CallFunction/CallMethod
-                    // instructions
+                    self.variables.insert(var_name.to_string());
                     instructions.push(Instruction::PutLastInstructionOutputOnWorkspace {
                         key: var_name.to_string().into_bytes(),
                     });
@@ -90,7 +89,7 @@ impl ManifestInstructionGenerator {
                     .to_string();
                 let component_address = self
                     .get_variable(&component_ident)?
-                    .address()
+                    .as_address()
                     .and_then(|addr| addr.as_component_address())
                     .ok_or_else(|| {
                         ManifestError::InvalidVariableType(format!(
@@ -104,8 +103,6 @@ impl ManifestInstructionGenerator {
                     args: self.process_args(arguments)?,
                 }];
                 if let Some(var_name) = output_variable {
-                    // TODO: Replace this instruction with workspace assignments built into the CallFunction/CallMethod
-                    // instructions
                     self.variables.insert(var_name.to_string());
                     instructions.push(Instruction::PutLastInstructionOutputOnWorkspace {
                         key: var_name.to_string().into_bytes(),
@@ -142,9 +139,13 @@ impl ManifestInstructionGenerator {
                                 SubstateAddress::Resource(addr) => Ok(arg!(*addr)),
                                 SubstateAddress::Vault(addr) => Ok(arg!(*addr)),
                                 SubstateAddress::NonFungible(addr) => Ok(arg!(addr)),
+                                SubstateAddress::LayerOneCommitment(addr) => Ok(arg!(*addr)),
+                                SubstateAddress::AddressList(addr) => Ok(arg!(addr)),
+                                SubstateAddress::AddressListItem(addr) => Ok(arg!(addr)),
                             },
                             ManifestValue::Literal(lit) => lit_to_arg(lit),
                             ManifestValue::NonFungibleId(id) => Ok(arg!(id.clone())),
+                            ManifestValue::Value(blob) => Ok(Arg::Literal(blob.clone())),
                         })
                         .or_else(|| {
                             // Or is it a variable on the worktop?

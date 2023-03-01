@@ -24,6 +24,7 @@ use std::{fmt::Display, sync::Arc};
 
 use log::*;
 use tari_comms::{types::CommsPublicKey, NodeIdentity};
+use tari_dan_app_utilities::epoch_manager::EpochManagerHandle;
 use tari_dan_common_types::ShardId;
 use tari_dan_core::{
     consensus_constants::ConsensusConstants,
@@ -52,12 +53,7 @@ use tokio::{
 };
 
 use crate::{
-    p2p::services::{
-        epoch_manager::handle::EpochManagerHandle,
-        mempool::MempoolHandle,
-        messaging::OutboundMessaging,
-        template_manager::TemplateManager,
-    },
+    p2p::services::{mempool::MempoolHandle, messaging::OutboundMessaging, template_manager::TemplateManager},
     payload_processor::TariDanPayloadProcessor,
 };
 

@@ -21,7 +21,7 @@ use tari_dan_engine::{
 };
 use tari_engine_types::{
     commit_result::FinalizeResult,
-    hashing::hasher,
+    hashing::{hasher, EngineHashDomainLabel},
     instruction::Instruction,
     substate::{Substate, SubstateAddress, SubstateDiff},
 };
@@ -65,7 +65,7 @@ impl TemplateTest {
         name_to_template.insert("Account".to_string(), ACCOUNT_TEMPLATE_ADDRESS);
 
         for wasm in wasms {
-            let template_addr = hasher("test_template").chain(wasm.code()).result();
+            let template_addr = hasher(EngineHashDomainLabel::Template).chain(wasm.code()).result();
             let wasm = wasm.load_template().unwrap();
             let name = wasm.template_name().to_string();
             name_to_template.insert(name, template_addr);
@@ -260,6 +260,8 @@ impl TemplateTest {
         let template_imports = self
             .name_to_template
             .iter()
+            // Account is implicitly imported.
+            .filter(|(name, _)|* name != "Account")
             .map(|(name, addr)| format!("use template_{} as {};", addr, name))
             .collect::<Vec<_>>()
             .join("\n");
@@ -299,6 +301,8 @@ pub enum SubstateType {
     Resource,
     Vault,
     NonFungible,
+    AddressList,
+    AddressListItem,
 }
 
 impl SubstateType {
@@ -309,6 +313,8 @@ impl SubstateType {
             (SubstateType::Resource, SubstateAddress::Resource(_)) => true,
             (SubstateType::Vault, SubstateAddress::Vault(_)) => true,
             (SubstateType::NonFungible, SubstateAddress::NonFungible(_)) => true,
+            (SubstateType::AddressList, SubstateAddress::AddressList(_)) => true,
+            (SubstateType::AddressListItem, SubstateAddress::AddressListItem(_)) => true,
             _ => false,
         }
     }

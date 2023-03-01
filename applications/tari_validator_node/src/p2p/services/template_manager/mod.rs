@@ -21,18 +21,13 @@
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 mod downloader;
-mod handle;
-pub use handle::{TemplateManagerHandle, TemplateRegistration};
 
 mod initializer;
 pub use initializer::spawn;
 
 mod manager;
-pub use manager::{Template, TemplateManager};
+pub use manager::TemplateManager;
 mod service;
-
-mod error;
-pub use error::TemplateManagerError;
 
 mod template_config;
 pub use template_config::TemplateConfig;

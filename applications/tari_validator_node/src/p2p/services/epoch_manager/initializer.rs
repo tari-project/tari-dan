@@ -23,18 +23,16 @@
 use std::sync::Arc;
 
 use tari_comms::NodeIdentity;
+use tari_dan_app_utilities::{base_node_client::GrpcBaseNodeClient, epoch_manager::EpochManagerHandle};
 use tari_dan_core::consensus_constants::ConsensusConstants;
 use tari_dan_storage::global::GlobalDb;
 use tari_dan_storage_sqlite::{global::SqliteGlobalDbAdapter, sqlite_shard_store_factory::SqliteShardStore};
 use tari_shutdown::ShutdownSignal;
 use tokio::{sync::mpsc, task::JoinHandle};
 
-use crate::{
-    grpc::services::base_node_client::GrpcBaseNodeClient,
-    p2p::services::{
-        epoch_manager::{epoch_manager_service::EpochManagerService, handle::EpochManagerHandle},
-        rpc_client::TariCommsValidatorNodeClientFactory,
-    },
+use crate::p2p::services::{
+    epoch_manager::epoch_manager_service::EpochManagerService,
+    rpc_client::TariCommsValidatorNodeClientFactory,
 };
 
 pub fn spawn(
