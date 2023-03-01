@@ -76,7 +76,7 @@ use crate::{
     ApplicationConfig,
 };
 
-const LOG_TARGET: &str = "tari_validator_node::bootstrap";
+const LOG_TARGET: &str = "tari::validator_node::bootstrap";
 
 #[allow(clippy::too_many_lines)]
 pub async fn spawn_services(

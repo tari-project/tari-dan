@@ -21,6 +21,7 @@ pub struct ConfidentialStatement {
 
 #[derive(Debug, Clone, Encode, Decode)]
 pub struct ConfidentialWithdrawProof {
+    pub inputs: Vec<[u8; 32]>,
     pub output_proof: ConfidentialProof,
     /// Balance proof
     pub balance_proof: BalanceProofSignature,

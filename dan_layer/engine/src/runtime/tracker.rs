@@ -27,7 +27,7 @@ use std::{
 };
 
 use log::debug;
-use tari_common_types::types::{Commitment, PublicKey};
+use tari_common_types::types::Commitment;
 use tari_dan_common_types::optional::Optional;
 use tari_engine_types::{
     bucket::Bucket,
@@ -67,7 +67,7 @@ use crate::{
     state_store::{memory::MemoryStateStore, AtomicDb, StateReader},
 };
 
-const LOG_TARGET: &str = "tari::engine::runtime::state_tracker";
+const LOG_TARGET: &str = "tari::dan::engine::runtime::state_tracker";
 
 #[derive(Debug, Clone)]
 pub struct StateTracker {
@@ -389,9 +389,7 @@ impl StateTracker {
         let resource = match resource_type {
             ResourceType::Fungible => ResourceContainer::fungible(resource_address, 0.into()),
             ResourceType::NonFungible => ResourceContainer::non_fungible(resource_address, BTreeSet::new()),
-            ResourceType::Confidential => {
-                ResourceContainer::confidential(resource_address, PublicKey::default(), None, Amount::zero())
-            },
+            ResourceType::Confidential => ResourceContainer::confidential(resource_address, None, Amount::zero()),
         };
         let vault = Vault::new(vault_id, resource);
 

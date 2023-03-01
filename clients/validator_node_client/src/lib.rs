@@ -23,24 +23,18 @@ pub mod types;
 
 use anyhow::anyhow;
 use reqwest::{header, header::HeaderMap, IntoUrl, Url};
-use serde::{de::DeserializeOwned, Deserialize, Serialize};
+use serde::{de::DeserializeOwned, Serialize};
 use serde_json as json;
 use serde_json::json;
 use tari_comms_logging::LoggedMessage;
-use types::{
-    GetRecentTransactionsRequest,
-    GetRecentTransactionsResponse,
-    GetTransactionResultRequest,
-    GetTransactionResultResponse,
-    SubmitTransactionRequest,
-    TemplateRegistrationRequest,
-    TemplateRegistrationResponse,
-};
 
 use crate::types::{
     AddPeerRequest,
     AddPeerResponse,
+    GetEpochManagerStatsResponse,
     GetIdentityResponse,
+    GetRecentTransactionsRequest,
+    GetRecentTransactionsResponse,
     GetStateRequest,
     GetStateResponse,
     GetTemplateRequest,
@@ -49,7 +43,12 @@ use crate::types::{
     GetTemplatesResponse,
     GetTransactionQcsRequest,
     GetTransactionQcsResponse,
+    GetTransactionResultRequest,
+    GetTransactionResultResponse,
+    SubmitTransactionRequest,
     SubmitTransactionResponse,
+    TemplateRegistrationRequest,
+    TemplateRegistrationResponse,
 };
 
 #[derive(Debug, Clone)]
@@ -57,12 +56,6 @@ pub struct ValidatorNodeClient {
     client: reqwest::Client,
     endpoint: Url,
     request_id: i64,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct EpochManagerStats {
-    pub current_epoch: usize,
-    pub is_valid: bool,
 }
 
 // TODO: the client should return a proper error type
@@ -87,7 +80,7 @@ impl ValidatorNodeClient {
         self.send_request("get_identity", json!({})).await
     }
 
-    pub async fn get_epoch_manager_stats(&mut self) -> Result<EpochManagerStats, anyhow::Error> {
+    pub async fn get_epoch_manager_stats(&mut self) -> Result<GetEpochManagerStatsResponse, anyhow::Error> {
         self.send_request("get_epoch_manager_stats", json!({})).await
     }
 

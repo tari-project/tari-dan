@@ -5,7 +5,7 @@ use std::str::FromStr;
 
 use cucumber::{then, when};
 use tari_crypto::tari_utilities::{hex::Hex, ByteArray};
-use tari_dan_common_types::ShardId;
+use tari_dan_common_types::{Epoch, ShardId};
 use tari_engine_types::{instruction::Instruction, substate::SubstateAddress};
 use tari_template_lib::{args::Arg, prelude::ComponentAddress};
 use tari_transaction::Transaction;
@@ -134,7 +134,8 @@ async fn when_i_claim_burn_second_time_fails(
 }
 
 #[then(expr = "{word} is on epoch {int} within {int} seconds")]
-async fn vn_has_scanned_to_height(world: &mut TariWorld, vn_name: String, epoch: usize, seconds: usize) {
+async fn vn_has_scanned_to_epoch(world: &mut TariWorld, vn_name: String, epoch: u64, seconds: usize) {
+    let epoch = Epoch(epoch);
     let vn = world
         .validator_nodes
         .get(&vn_name)
@@ -150,4 +151,23 @@ async fn vn_has_scanned_to_height(world: &mut TariWorld, vn_name: String, epoch:
 
     let stats = client.get_epoch_manager_stats().await.expect("Failed to get stats");
     assert_eq!(stats.current_epoch, epoch);
+}
+
+#[then(expr = "{word} has scanned to height {int} within {int} seconds")]
+async fn vn_has_scanned_to_height(world: &mut TariWorld, vn_name: String, block_height: u64, seconds: usize) {
+    let vn = world
+        .validator_nodes
+        .get(&vn_name)
+        .unwrap_or_else(|| panic!("Validator node {} not found", vn_name));
+    let mut client = vn.create_client().await;
+    for _ in 0..seconds {
+        let stats = client.get_epoch_manager_stats().await.expect("Failed to get stats");
+        if stats.current_block_height == block_height {
+            return;
+        }
+        tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+    }
+
+    let stats = client.get_epoch_manager_stats().await.expect("Failed to get stats");
+    assert_eq!(stats.current_block_height, block_height);
 }

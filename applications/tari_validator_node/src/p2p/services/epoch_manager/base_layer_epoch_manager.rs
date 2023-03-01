@@ -56,6 +56,7 @@ pub struct BaseLayerEpochManager {
     pub base_node_client: GrpcBaseNodeClient,
     consensus_constants: ConsensusConstants,
     current_epoch: Epoch,
+    current_block_height: u64,
     tx_events: broadcast::Sender<EpochManagerEvent>,
     node_identity: Arc<NodeIdentity>,
     validator_node_client_factory: TariCommsValidatorNodeClientFactory,
@@ -79,6 +80,7 @@ impl BaseLayerEpochManager {
             base_node_client,
             consensus_constants,
             current_epoch: Epoch(0),
+            current_block_height: 0,
             tx_events,
             node_identity,
             validator_node_client_factory,
@@ -90,9 +92,14 @@ impl BaseLayerEpochManager {
     pub fn load_initial_state(&mut self) -> Result<(), EpochManagerError> {
         let mut tx = self.global_db.create_transaction()?;
         let mut metadata = self.global_db.metadata(&mut tx);
-        self.current_epoch = metadata.get_metadata(MetadataKey::CurrentEpoch)?.unwrap_or(Epoch(0));
-        self.current_shard_key = metadata.get_metadata(MetadataKey::CurrentShardKey)?;
+        self.current_epoch = metadata
+            .get_metadata(MetadataKey::EpochManagerCurrentEpoch)?
+            .unwrap_or(Epoch(0));
+        self.current_shard_key = metadata.get_metadata(MetadataKey::EpochManagerCurrentShardKey)?;
         self.base_layer_consensus_constants = metadata.get_metadata(MetadataKey::BaseLayerConsensusConstants)?;
+        self.current_block_height = metadata
+            .get_metadata(MetadataKey::EpochManagerCurrentBlockHeight)?
+            .unwrap_or(0);
 
         Ok(())
     }
@@ -100,6 +107,7 @@ impl BaseLayerEpochManager {
     pub async fn update_epoch(&mut self, block_height: u64, block_hash: FixedHash) -> Result<(), EpochManagerError> {
         let base_layer_constants = self.base_node_client.get_consensus_constants(block_height).await?;
         let epoch = base_layer_constants.height_to_epoch(block_height);
+        self.update_current_block_height(block_height)?;
         if self.current_epoch >= epoch {
             // no need to update the epoch
             return Ok(());
@@ -176,12 +184,12 @@ impl BaseLayerEpochManager {
 
         if registration.public_key() == self.node_identity.public_key() {
             let mut metadata = self.global_db.metadata(&mut tx);
-            metadata.set_metadata(MetadataKey::CurrentShardKey, &shard_key)?;
+            metadata.set_metadata(MetadataKey::EpochManagerCurrentShardKey, &shard_key)?;
             let last_registration_epoch = metadata
-                .get_metadata::<Epoch>(MetadataKey::LastEpochRegistration)?
+                .get_metadata::<Epoch>(MetadataKey::EpochManagerLastEpochRegistration)?
                 .unwrap_or(Epoch(0));
             if last_registration_epoch < next_epoch {
-                metadata.set_metadata(MetadataKey::LastEpochRegistration, &next_epoch)?;
+                metadata.set_metadata(MetadataKey::EpochManagerLastEpochRegistration, &next_epoch)?;
             }
             self.current_shard_key = Some(shard_key);
             info!(
@@ -207,7 +215,7 @@ impl BaseLayerEpochManager {
         self.global_db.epochs(&mut tx).insert_epoch(db_epoch)?;
         self.global_db
             .metadata(&mut tx)
-            .set_metadata(MetadataKey::CurrentEpoch, &epoch)?;
+            .set_metadata(MetadataKey::EpochManagerCurrentEpoch, &epoch)?;
 
         tx.commit()?;
         self.current_epoch = epoch;
@@ -227,8 +235,22 @@ impl BaseLayerEpochManager {
         Ok(())
     }
 
+    fn update_current_block_height(&mut self, block_height: u64) -> Result<(), EpochManagerError> {
+        let mut tx = self.global_db.create_transaction()?;
+        self.global_db
+            .metadata(&mut tx)
+            .set_metadata(MetadataKey::EpochManagerCurrentBlockHeight, &block_height)?;
+        tx.commit()?;
+        self.current_block_height = block_height;
+        Ok(())
+    }
+
     pub fn current_epoch(&self) -> Epoch {
         self.current_epoch
+    }
+
+    pub fn current_block_height(&self) -> u64 {
+        self.current_block_height
     }
 
     pub fn get_validator_shard_key(
@@ -250,7 +272,7 @@ impl BaseLayerEpochManager {
     pub fn last_registration_epoch(&self) -> Result<Option<Epoch>, EpochManagerError> {
         let mut tx = self.global_db.create_transaction()?;
         let mut metadata = self.global_db.metadata(&mut tx);
-        let last_registration_epoch = metadata.get_metadata(MetadataKey::LastEpochRegistration)?;
+        let last_registration_epoch = metadata.get_metadata(MetadataKey::EpochManagerLastEpochRegistration)?;
         Ok(last_registration_epoch)
     }
 
@@ -258,7 +280,7 @@ impl BaseLayerEpochManager {
         let mut tx = self.global_db.create_transaction()?;
         self.global_db
             .metadata(&mut tx)
-            .set_metadata(MetadataKey::LastEpochRegistration, &epoch)?;
+            .set_metadata(MetadataKey::EpochManagerLastEpochRegistration, &epoch)?;
         tx.commit()?;
         Ok(())
     }
@@ -420,7 +442,7 @@ impl BaseLayerEpochManager {
             let last_sync_epoch = self
                 .global_db
                 .metadata(&mut tx)
-                .get_metadata::<Epoch>(MetadataKey::LastSyncedEpoch)?;
+                .get_metadata::<Epoch>(MetadataKey::EpochManagerLastSyncedEpoch)?;
             if last_sync_epoch.map(|e| e == self.current_epoch).unwrap_or(false) {
                 info!(target: LOG_TARGET, "🌍️ Already synced for epoch {}", self.current_epoch);
                 return Ok(());
@@ -463,7 +485,7 @@ impl BaseLayerEpochManager {
         let mut tx = self.global_db.create_transaction()?;
         self.global_db
             .metadata(&mut tx)
-            .set_metadata(MetadataKey::LastSyncedEpoch, &self.current_epoch)?;
+            .set_metadata(MetadataKey::EpochManagerLastSyncedEpoch, &self.current_epoch)?;
         tx.commit()?;
 
         Ok(())

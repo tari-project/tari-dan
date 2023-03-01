@@ -335,6 +335,7 @@ impl RuntimeInterface for RuntimeInterfaceImpl {
         }
     }
 
+    #[allow(clippy::too_many_lines)]
     fn vault_invoke(
         &self,
         vault_ref: VaultRef,
@@ -435,6 +436,17 @@ impl RuntimeInterface for RuntimeInterfaceImpl {
                 })??;
 
                 Ok(resp)
+            },
+            VaultAction::GetCommitmentCount => {
+                let vault_id = vault_ref.vault_id().ok_or_else(|| RuntimeError::InvalidArgument {
+                    argument: "vault_ref",
+                    reason: "vault action requires a vault id".to_string(),
+                })?;
+
+                self.tracker.borrow_vault(&vault_id, |vault| {
+                    let count = vault.get_commitment_count();
+                    Ok(InvokeResult::encode(&count)?)
+                })?
             },
             VaultAction::ConfidentialReveal => {
                 let vault_id = vault_ref.vault_id().ok_or_else(|| RuntimeError::InvalidArgument {
@@ -667,8 +679,7 @@ impl RuntimeInterface for RuntimeInterfaceImpl {
 
         let resource = ResourceContainer::confidential(
             CONFIDENTIAL_TARI_RESOURCE_ADDRESS,
-            commitment.as_public_key().clone(),
-            Some(range_proof),
+            Some((commitment.as_public_key().clone(), Some(range_proof))),
             Amount::zero(),
         );
 

@@ -14,7 +14,7 @@ use tari_utilities::ByteArray;
 use crate::{crypto, resource_container::ResourceError};
 
 #[derive(Debug, Clone)]
-pub struct ValidatedConfidentialProof {
+pub struct ValidatedConfidentialWithdrawProof {
     pub output_commitment: Commitment,
     pub output_minimum_value_promise: u64,
     pub change_commitment: Option<Commitment>,

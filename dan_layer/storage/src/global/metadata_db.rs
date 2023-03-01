@@ -55,10 +55,11 @@ pub enum MetadataKey {
     BaseLayerScannerLastScannedBlockHash,
     BaseLayerScannerNextBlockHash,
     BaseLayerConsensusConstants,
-    CurrentEpoch,
-    CurrentShardKey,
-    LastEpochRegistration,
-    LastSyncedEpoch,
+    EpochManagerCurrentEpoch,
+    EpochManagerCurrentBlockHeight,
+    EpochManagerCurrentShardKey,
+    EpochManagerLastEpochRegistration,
+    EpochManagerLastSyncedEpoch,
 }
 
 impl MetadataKey {
@@ -69,10 +70,11 @@ impl MetadataKey {
             MetadataKey::BaseLayerScannerLastScannedBlockHeight => b"base_layer_scanner.last_scanned_block_height",
             MetadataKey::BaseLayerScannerNextBlockHash => b"base_layer_scanner.next_block_hash",
             MetadataKey::BaseLayerConsensusConstants => b"base_layer.consensus_constants",
-            MetadataKey::CurrentEpoch => b"current_epoch",
-            MetadataKey::LastEpochRegistration => b"last_registered_epoch",
-            MetadataKey::CurrentShardKey => b"current_shard_key",
-            MetadataKey::LastSyncedEpoch => b"last_synced_epoch",
+            MetadataKey::EpochManagerCurrentEpoch => b"epoch_manager.current_epoch",
+            MetadataKey::EpochManagerCurrentBlockHeight => b"epoch_manager.current_block_height",
+            MetadataKey::EpochManagerLastEpochRegistration => b"epoch_manager.last_registered_epoch",
+            MetadataKey::EpochManagerCurrentShardKey => b"epoch_manager.current_shard_key",
+            MetadataKey::EpochManagerLastSyncedEpoch => b"epoch_manager.last_synced_epoch",
         }
     }
 }

@@ -63,7 +63,7 @@ use tari_storage::{
 use tokio::sync::{broadcast, mpsc};
 use tower::ServiceBuilder;
 
-const LOG_TARGET: &str = "dan::comms::initializer";
+const LOG_TARGET: &str = "tari::dan::comms::initializer";
 
 use crate::{
     comms::{broadcast::DanBroadcast, deserialize::DanDeserialize, destination::Destination},

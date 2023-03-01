@@ -31,6 +31,8 @@ Feature: Committee scenarios
     Then the validator node VAL_2 is listed as registered
     Then the template "counter" is listed as registered by the validator node VAL_1
     Then the template "counter" is listed as registered by the validator node VAL_2
+    Then VAL_1 has scanned to height 18 within 10 seconds
+    Then VAL_2 has scanned to height 18 within 10 seconds
 
     # A file-base CLI account must be created to sign future calls
     When I create a DAN wallet
@@ -78,6 +80,7 @@ Feature: Committee scenarios
     # Register the "counter" template
     When validator node VAL_1 registers the template "counter"
     When miner MINER mines 13 new blocks
+    Then VAL_1 has scanned to height 18 within 10 seconds
     Then all validator nodes are listed as registered
     Then the template "counter" is listed as registered by all validator nodes
 

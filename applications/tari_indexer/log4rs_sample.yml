@@ -120,21 +120,6 @@ loggers:
       - stdout
     additive: false
 
-  tari::dan_layer:
-    level: debug
-    appenders:
-      - dan_layer
-      - stdout
-    additive: false
-
-  tari::engine:
-    level: debug
-    appenders:
-      - engine
-      - stdout
-    additive: false
-
-
   # Route log events sent to the "comms" logger to the "network" appender
   comms:
     level: debug

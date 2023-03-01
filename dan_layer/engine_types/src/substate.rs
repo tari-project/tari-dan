@@ -44,7 +44,7 @@ use tari_template_lib::{
 use tari_utilities::ByteArray;
 
 use crate::{
-    hashing::hasher,
+    hashing::{hasher, EngineHashDomainLabel},
     non_fungible::NonFungibleContainer,
     non_fungible_index::NonFungibleIndex,
     resource::Resource,
@@ -125,11 +125,11 @@ impl SubstateAddress {
             SubstateAddress::Resource(address) => *address.hash(),
             SubstateAddress::Vault(id) => *id.hash(),
             SubstateAddress::LayerOneCommitment(address) => *address.hash(),
-            SubstateAddress::NonFungible(address) => hasher("non_fungible_id")
+            SubstateAddress::NonFungible(address) => hasher(EngineHashDomainLabel::NonFungibleId)
                 .chain(address.resource_address().hash())
                 .chain(address.id())
                 .result(),
-            SubstateAddress::NonFungibleIndex(address) => hasher("non_fungible_index")
+            SubstateAddress::NonFungibleIndex(address) => hasher(EngineHashDomainLabel::NonFungibleIndex)
                 .chain(address.resource_address().hash())
                 .chain(&address.index())
                 .result(),
