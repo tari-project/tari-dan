@@ -105,6 +105,13 @@ root:
     - other
 
 loggers:
+  tari::cucumber:
+    level: debug
+    appenders:
+      - stdout
+      - other
+    additive: false
+
   tari::application:
     level: debug
     appenders:
@@ -176,6 +183,7 @@ loggers:
   comms:
     level: info
     appenders:
+      - stdout
       - network
   # Route log events sent to the "p2p" logger to the "network" appender
   p2p:

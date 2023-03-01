@@ -26,7 +26,6 @@ use std::{
     convert::{Infallible, TryFrom},
     future,
     io,
-    str::FromStr,
     time::Duration,
 };
 
@@ -43,11 +42,7 @@ use cucumber::{
 use indexmap::IndexMap;
 use tari_common::initialize_logging;
 use tari_common_types::types::{FixedHash, PublicKey};
-use tari_comms::multiaddr::Multiaddr;
-use tari_crypto::{
-    ristretto::{RistrettoPublicKey, RistrettoSecretKey},
-    tari_utilities::hex::Hex,
-};
+use tari_crypto::{ristretto::RistrettoSecretKey, tari_utilities::hex::Hex};
 use tari_dan_app_utilities::base_node_client::GrpcBaseNodeClient;
 use tari_dan_common_types::QuorumDecision;
 use tari_dan_core::services::BaseNodeClient;
@@ -55,7 +50,6 @@ use tari_engine_types::execution_result::Type;
 use tari_template_lib::Hash;
 use tari_validator_node_cli::versioned_substate_address::VersionedSubstateAddress;
 use tari_validator_node_client::types::{
-    AddPeerRequest,
     GetIdentityResponse,
     GetRecentTransactionsRequest,
     GetTemplateRequest,
@@ -80,6 +74,8 @@ use crate::utils::{
     validator_node::{get_vn_client, ValidatorNodeProcess},
     wallet::WalletProcess,
 };
+
+pub const LOG_TARGET: &str = "tari::cucumber";
 
 #[derive(Debug, Default, WorldInit)]
 pub struct TariWorld {
@@ -208,36 +204,6 @@ async fn start_multiple_validator_nodes(world: &mut TariWorld, num_nodes: u64, b
     }
 }
 
-#[given(expr = "validator {word} nodes connect to all other validators")]
-async fn given_validator_connects_to_other_vns(world: &mut TariWorld, vn: String) {
-    let details = world
-        .validator_nodes
-        .values()
-        .map(|vn| {
-            (
-                PublicKey::from_hex(&vn.public_key).unwrap(),
-                Multiaddr::from_str(&format!("/ip4/127.0.0.1/tcp/{}", vn.port)).unwrap(),
-            )
-        })
-        .collect::<Vec<_>>();
-
-    let vn = world.validator_nodes.get_mut(&vn).unwrap();
-    let mut cli = vn.create_client().await;
-    let this_pk = RistrettoPublicKey::from_hex(&vn.public_key).unwrap();
-    for (pk, addr) in details.iter().cloned() {
-        if pk == this_pk {
-            continue;
-        }
-        cli.add_peer(AddPeerRequest {
-            public_key: pk,
-            addresses: vec![addr],
-            wait_for_dial: true,
-        })
-        .await
-        .unwrap();
-    }
-}
-
 #[given(expr = "a validator node {word} connected to base node {word} and wallet {word}")]
 async fn start_validator_node(world: &mut TariWorld, vn_name: String, bn_name: String, wallet_name: String) {
     spawn_validator_node(world, vn_name, bn_name, wallet_name, false).await;
@@ -267,10 +233,9 @@ async fn all_vns_send_registration(world: &mut TariWorld) {
         let mut client = get_vn_client(jrpc_port).await;
 
         let _resp = client.register_validator_node().await.unwrap();
-
-        // give it some time for the registration tx to be processed by the wallet and the base node
-        tokio::time::sleep(Duration::from_secs(4)).await;
     }
+    // give it some time for the registration tx to be processed by the wallet and the base node
+    tokio::time::sleep(Duration::from_secs(5)).await;
 }
 
 #[when(expr = "validator node {word} registers the template \"{word}\"")]
@@ -577,7 +542,6 @@ async fn create_multiple_accounts(world: &mut TariWorld, num_accounts: u64, vn_n
     for i in 1..=num_accounts {
         let account_name = format!("ACC_{i}");
         validator_node_cli::create_account(world, account_name, vn_name.clone()).await;
-        tokio::time::sleep(Duration::from_millis(100)).await;
     }
 }
 

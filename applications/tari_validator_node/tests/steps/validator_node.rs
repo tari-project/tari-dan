@@ -3,15 +3,20 @@
 
 use std::str::FromStr;
 
-use cucumber::{then, when};
-use tari_crypto::tari_utilities::{hex::Hex, ByteArray};
+use cucumber::{given, then, when};
+use tari_common_types::types::PublicKey;
+use tari_comms::multiaddr::Multiaddr;
+use tari_crypto::{
+    ristretto::RistrettoPublicKey,
+    tari_utilities::{hex::Hex, ByteArray},
+};
 use tari_dan_common_types::{Epoch, ShardId};
 use tari_engine_types::{instruction::Instruction, substate::SubstateAddress};
 use tari_template_lib::{args::Arg, prelude::ComponentAddress};
 use tari_transaction::Transaction;
-use tari_validator_node_client::types::{GetStateRequest, SubmitTransactionRequest};
+use tari_validator_node_client::types::{AddPeerRequest, GetStateRequest, SubmitTransactionRequest};
 
-use crate::TariWorld;
+use crate::{TariWorld, LOG_TARGET};
 
 #[then(expr = "validator node {word} has state at {word}")]
 async fn then_validator_node_has_state_at(world: &mut TariWorld, vn_name: String, state_address_name: String) {
@@ -170,4 +175,73 @@ async fn vn_has_scanned_to_height(world: &mut TariWorld, vn_name: String, block_
 
     let stats = client.get_epoch_manager_stats().await.expect("Failed to get stats");
     assert_eq!(stats.current_block_height, block_height);
+}
+
+#[given(expr = "validator {word} nodes connect to all other validators")]
+async fn given_validator_connects_to_other_vns(world: &mut TariWorld, vn: String) {
+    let details = world
+        .validator_nodes
+        .values()
+        .map(|vn| {
+            (
+                PublicKey::from_hex(&vn.public_key).unwrap(),
+                Multiaddr::from_str(&format!("/ip4/127.0.0.1/tcp/{}", vn.port)).unwrap(),
+            )
+        })
+        .collect::<Vec<_>>();
+
+    let vn = world.validator_nodes.get(&vn).unwrap();
+    let mut cli = vn.create_client().await;
+    let this_pk = RistrettoPublicKey::from_hex(&vn.public_key).unwrap();
+    for (pk, addr) in details.iter().cloned() {
+        if pk == this_pk {
+            continue;
+        }
+        cli.add_peer(AddPeerRequest {
+            public_key: pk,
+            addresses: vec![addr],
+            wait_for_dial: true,
+        })
+        .await
+        .unwrap();
+    }
+}
+
+#[given(expr = "all validator nodes are connected to each other")]
+async fn given_all_validator_connects_to_other_vns(world: &mut TariWorld) {
+    let details = world
+        .validator_nodes
+        .values()
+        .map(|vn| {
+            (
+                PublicKey::from_hex(&vn.public_key).unwrap(),
+                Multiaddr::from_str(&format!("/ip4/127.0.0.1/tcp/{}", vn.port)).unwrap(),
+            )
+        })
+        .collect::<Vec<_>>();
+
+    for vn in world.validator_nodes.values() {
+        if vn.handle.is_finished() {
+            log::warn!(
+                target: LOG_TARGET,
+                "Skipping validator node {} that is not running",
+                vn.name
+            );
+            continue;
+        }
+        let mut cli = vn.create_client().await;
+        let this_pk = RistrettoPublicKey::from_hex(&vn.public_key).unwrap();
+        for (pk, addr) in details.iter().cloned() {
+            if pk == this_pk {
+                continue;
+            }
+            cli.add_peer(AddPeerRequest {
+                public_key: pk,
+                addresses: vec![addr],
+                wait_for_dial: true,
+            })
+            .await
+            .unwrap();
+        }
+    }
 }

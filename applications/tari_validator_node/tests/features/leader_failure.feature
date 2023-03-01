@@ -55,6 +55,7 @@ Feature: Leader failure scenarios
     # When I print the cucumber world
     # When I wait 5000 seconds
 
+  @serial
   Scenario: Leader failure with two committees
     # Initialize a base node, wallet and miner
     Given a base node BASE
@@ -65,14 +66,16 @@ Feature: Leader failure scenarios
     Given a seed validator node SEED_1 connected to base node BASE and wallet WALLET
     Given a seed validator node SEED_2 connected to base node BASE and wallet WALLET
     Given 8 validator nodes connected to base node BASE and wallet WALLET
+    Given all validator nodes are connected to each other
 
     # The wallet must have some funds before the VNs send transactions
-    When miner MINER mines 24 new blocks
-    When wallet WALLET has at least 2000000000 uT
+    When miner MINER mines 13 new blocks
+    When wallet WALLET has at least 45000 T
 
     # VNs registration
     When all validator nodes send registration transactions
-    When miner MINER mines 20 new blocks
+    When miner MINER mines 13 new blocks
+    Then VAL_1 has scanned to height 23 within 10 seconds
     Then all validator nodes are listed as registered
 
     # Stop VN 4
@@ -83,14 +86,14 @@ Feature: Leader failure scenarios
 
     # Need to wait a few seconds, so that all VNs get properly
     # registered
-    When I wait 5 seconds
+#    When I wait 5 seconds
 
     # Send transactions, VAL_4 is offline, but should be the leader in 1 of 4
     # transactions, so we send 10 transactions. All should succeed
     When I create 15 accounts on VAL_1
 
     # Wait a few seconds and then verify that all transactions have succeeded
-    When I wait 3 seconds
+#    When I wait 3 seconds
     Then all transactions succeed on all validator nodes
 
     # Uncomment the following lines to stop execution for manual inspection of the nodes
