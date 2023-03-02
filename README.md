@@ -5,7 +5,10 @@ Network, or DAN.
 
 You can read about the technical specifications of the DAN in the [RFCs](https://rfc.tari.com).
 
-If you're looking for the core Tari base layer code, it's an [this repository](https://github.com/tari-project/tari)
+If you're looking for the core Tari base layer code, it's an [this repository](https://github.com/tari-project/tari).
+
+If this is the first time you are executing `cargo build`, you should first run `npm run build` in the `tari_indexer_web_ui` repo,
+as explainedin `./applications/tari_indexer_web_ui.README.md`.
 
 ## Tari DAN Validator node
 
