@@ -34,6 +34,21 @@ diesel::table! {
 }
 
 diesel::table! {
+    outputs (id) {
+        id -> Integer,
+        account_id -> Integer,
+        commitment -> Text,
+        value -> BigInt,
+        sender_public_nonce -> Text,
+        secret_key_index -> BigInt,
+        public_asset_tag -> Nullable<Text>,
+        status -> Text,
+        created_at -> Timestamp,
+        updated_at -> Timestamp,
+    }
+}
+
+diesel::table! {
     substates (id) {
         id -> Integer,
         module_name -> Nullable<Text>,
@@ -64,4 +79,6 @@ diesel::table! {
     }
 }
 
-diesel::allow_tables_to_appear_in_same_query!(accounts, config, key_manager_states, substates, transactions,);
+diesel::joinable!(outputs -> accounts (account_id));
+
+diesel::allow_tables_to_appear_in_same_query!(accounts, config, key_manager_states, outputs, substates, transactions,);
