@@ -1031,7 +1031,7 @@ where
                 continue;
             }
 
-            let finalize_result = self.decide(&node, payload.clone(), &shard_pledges)?;
+            let finalize_result = self.decide_what_to_vote(&node, payload.clone(), &shard_pledges)?;
 
             let vote_msg = self.create_vote(
                 *node.hash(),
@@ -1117,7 +1117,7 @@ where
     }
 
     #[allow(clippy::too_many_lines)]
-    fn decide(
+    fn decide_what_to_vote(
         &self,
         node: &HotStuffTreeNode<TAddr, TPayload>,
         payload: TPayload,
