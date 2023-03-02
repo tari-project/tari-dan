@@ -21,8 +21,8 @@
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 import { useEffect, useState } from 'react';
-import { ITemplate } from '../../../utils/interfaces';
-import { getTemplate, getTemplates } from '../../../utils/json_rpc';
+import { getTemplates } from '../../../utils/json_rpc';
+import { shortenString } from './helpers';
 import './Templates.css';
 import Table from '@mui/material/Table';
 import TableBody from '@mui/material/TableBody';
@@ -31,25 +31,19 @@ import TableContainer from '@mui/material/TableContainer';
 import TableHead from '@mui/material/TableHead';
 import TableRow from '@mui/material/TableRow';
 import { DataTableCell } from '../../../Components/StyledComponents';
+import { Link } from 'react-router-dom';
+import CopyToClipboard from '../../../Components/CopyToClipboard';
+import IconButton from '@mui/material/IconButton';
+import KeyboardArrowRightIcon from '@mui/icons-material/KeyboardArrowRight';
 
 function Templates() {
   const [templates, setTemplates] = useState([]);
-  const [info, setInfo] = useState<{ [id: string]: ITemplate }>();
-  const [loading, setLoading] = useState<{ [id: string]: Boolean }>();
   useEffect(() => {
     getTemplates(10).then((response) => {
       setTemplates(response.templates);
     });
   }, []);
-  const load = (address: string) => {
-    if (info?.[address] || loading?.[address]) {
-      return;
-    }
-    setLoading({ ...loading, [address]: true });
-    getTemplate(address).then((response) => {
-      setInfo({ ...info, [address]: response });
-    });
-  };
+
   const toHex = (str: Uint8Array) => {
     return (
       '0x' +
@@ -58,31 +52,7 @@ function Templates() {
         .join('')
     );
   };
-  const renderFunctions = (template: ITemplate) => {
-    return (
-      <TableContainer>
-        <div className="caption">{template.abi.template_name}</div>
-        <Table>
-          <TableHead>
-            <TableCell>Function</TableCell>
-            <TableCell>Args</TableCell>
-            <TableCell>Returns</TableCell>
-          </TableHead>
-          <TableBody>
-            {template.abi.functions.map((fn) => (
-              <TableRow>
-                <DataTableCell style={{ textAlign: 'left' }}>
-                  {fn.name}
-                </DataTableCell>
-                <DataTableCell>{fn.arguments.join(', ')}</DataTableCell>
-                <DataTableCell>{fn.output}</DataTableCell>
-              </TableRow>
-            ))}
-          </TableBody>
-        </Table>
-      </TableContainer>
-    );
-  };
+
   return (
     <TableContainer>
       <Table>
@@ -90,31 +60,40 @@ function Templates() {
           <TableRow>
             <TableCell>Address</TableCell>
             <TableCell>Download URL</TableCell>
-            <TableCell>Mined Height</TableCell>
-            <TableCell>Status</TableCell>
+            <TableCell style={{ textAlign: 'center' }}>Mined Height</TableCell>
+            <TableCell style={{ textAlign: 'center' }}>Status</TableCell>
+            <TableCell style={{ textAlign: 'center' }}>Functions</TableCell>
           </TableRow>
         </TableHead>
         <TableBody>
           {templates.map(({ address, binary_sha, height, url }) => (
             <TableRow key={address}>
-              <DataTableCell
-                onMouseOver={() => load(address)}
-                className="tooltip"
-              >
-                <span>{toHex(address)}</span>
-                {info?.[address] !== undefined ? (
-                  <span className="tooltiptext">
-                    {renderFunctions(info[address])}
-                  </span>
-                ) : (
-                  <></>
-                )}
+              <DataTableCell>
+                <Link
+                  to={`/template/${toHex(address)}`}
+                  state={[address]}
+                  style={{ textDecoration: 'none' }}
+                >
+                  {shortenString(toHex(address))}
+                </Link>
+                <CopyToClipboard copy={toHex(address)} />
               </DataTableCell>
               <DataTableCell>
                 <a href={url}>{url}</a>
               </DataTableCell>
-              <DataTableCell>{height}</DataTableCell>
-              <DataTableCell>Active</DataTableCell>
+              <DataTableCell style={{ textAlign: 'center' }}>
+                {height}
+              </DataTableCell>
+              <DataTableCell style={{ textAlign: 'center' }}>
+                Active
+              </DataTableCell>
+              <DataTableCell style={{ textAlign: 'center' }}>
+                <Link to={`/template/${toHex(address)}`} state={[address]}>
+                  <IconButton>
+                    <KeyboardArrowRightIcon color="primary" />
+                  </IconButton>
+                </Link>
+              </DataTableCell>
             </TableRow>
           ))}
         </TableBody>

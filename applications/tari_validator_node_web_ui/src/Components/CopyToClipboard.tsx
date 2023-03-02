@@ -21,20 +21,23 @@
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 import { useState } from 'react';
-import Snackbar from '@mui/material/Snackbar';
 import IconButton from '@mui/material/IconButton';
 import ContentCopyIcon from '@mui/icons-material/ContentCopy';
 import Tooltip from '@mui/material/Tooltip';
 
 interface CopyProps {
   copy: string;
+  floatright?: boolean;
 }
 
-const CopyToClipboard = ({ copy }: CopyProps) => {
+const CopyToClipboard = ({ copy, floatright }: CopyProps) => {
   const [open, setOpen] = useState(false);
   const handleClick = (copyThis: string) => {
     setOpen(true);
     navigator.clipboard.writeText(copyThis);
+    setTimeout(() => {
+      setOpen(false);
+    }, 2000);
   };
 
   return (
@@ -43,12 +46,13 @@ const CopyToClipboard = ({ copy }: CopyProps) => {
         onClick={() => handleClick(copy)}
         size="small"
         aria-label="copy to clipboard"
-        style={{
-          // float: 'right',
-          marginLeft: '10px',
-        }}
+        style={
+          floatright
+            ? { float: 'right', marginLeft: '10px', marginRight: '10px' }
+            : { marginLeft: '10px', marginRight: '10px' }
+        }
       >
-        <Tooltip title={copy} arrow>
+        <Tooltip title={!open ? copy : 'Copied to clipboard'} arrow>
           <ContentCopyIcon
             color="primary"
             style={{
@@ -58,12 +62,6 @@ const CopyToClipboard = ({ copy }: CopyProps) => {
           />
         </Tooltip>
       </IconButton>
-      <Snackbar
-        open={open}
-        onClose={() => setOpen(false)}
-        autoHideDuration={2000}
-        message="Copied to clipboard"
-      />
     </>
   );
 };

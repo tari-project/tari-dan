@@ -26,6 +26,7 @@ import { styled } from '@mui/material/styles';
 import Box from '@mui/material/Box';
 import IconButton from '@mui/material/IconButton';
 import theme from '../theme';
+import Typography from '@mui/material/Typography';
 
 interface IAccordionIconButton {
   open: boolean;
@@ -65,4 +66,15 @@ export const BoxHeading = styled(Box)(({ theme }) => ({
   fontFamily: "'Courier New', Courier, monospace",
   boxShadow: '0px 5px 5px rgba(35, 11, 73, 0.10)',
   margin: '10px 5px',
+}));
+
+export const BoxHeading2 = styled(Box)(({ theme }) => ({
+  padding: theme.spacing(2),
+  borderBottom: '1px solid #f5f5f5',
+}));
+
+export const SubHeading = styled(Typography)(() => ({
+  marginTop: '20px',
+  marginBottom: '20px',
+  textAlign: 'center',
 }));
