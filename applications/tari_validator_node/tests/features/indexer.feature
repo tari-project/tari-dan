@@ -24,6 +24,7 @@ Feature: Indexer node
     When validator node VN registers the template "counter"
     When validator node VN registers the template "basic_nft"
     When miner MINER mines 10 new blocks
+    Then VN has scanned to height 13 within 10 seconds
     Then the validator node VN is listed as registered
     Then the template "counter" is listed as registered by the validator node VN
     Then the template "basic_nft" is listed as registered by the validator node VN

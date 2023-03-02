@@ -55,7 +55,7 @@ use crate::{
     wasm::WasmProcess,
 };
 
-const LOG_TARGET: &str = "dan::engine::instruction_processor";
+const LOG_TARGET: &str = "tari::dan::engine::instruction_processor";
 
 pub struct TransactionProcessor {
     package: Package,

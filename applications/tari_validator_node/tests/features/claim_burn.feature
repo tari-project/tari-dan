@@ -26,8 +26,8 @@ Feature: Claim Burn
 
     # unfortunately have to wait for this to get into the mempool....
     Then there is 1 transaction in the mempool of BASE within 10 seconds
-    When miner MINER mines 6 new blocks
-    Then VN is on epoch 2 within 10 seconds
+    When miner MINER mines 13 new blocks
+    Then VN has scanned to height 30 within 10 seconds
 
     When I convert commitment COMMITMENT into COMM_ADDRESS address
     Then validator node VN has state at COMM_ADDRESS
@@ -62,9 +62,8 @@ Feature: Claim Burn
 
     # unfortunately have to wait for this to get into the mempool....
     Then there is 1 transaction in the mempool of BASE within 10 seconds
-    # TODO: reduce the number of blocks mined by checking the VN's scanned height instead of epochs
     When miner MINER mines 13 new blocks
-    Then VN is on epoch 3 within 10 seconds
+    Then VN has scanned to height 30 within 10 seconds
 
     When I convert commitment COMMITMENT into COMM_ADDRESS address
     Then validator node VN has state at COMM_ADDRESS

@@ -24,6 +24,7 @@ Feature: Fungible tokens
     When validator node VN registers the template "faucet"
     # Mine some blocks until the UTXOs are scanned
     When miner MINER mines 15 new blocks
+    Then VN has scanned to height 18 within 10 seconds
     Then the validator node VN is listed as registered
     Then the template "faucet" is listed as registered by the validator node VN
 

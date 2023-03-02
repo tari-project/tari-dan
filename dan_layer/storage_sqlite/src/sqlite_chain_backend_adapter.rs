@@ -33,7 +33,7 @@ use crate::{
     SqliteTransaction,
 };
 
-const LOG_TARGET: &str = "tari::dan_layer::storage_sqlite::sqlite_chain_backend_adapter";
+const LOG_TARGET: &str = "tari::dan::storage_sqlite::sqlite_chain_backend_adapter";
 
 #[derive(Clone)]
 pub struct SqliteChainBackendAdapter {

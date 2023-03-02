@@ -104,6 +104,7 @@ impl EpochManagerService {
     async fn handle_request(&mut self, req: EpochManagerRequest) {
         match req {
             EpochManagerRequest::CurrentEpoch { reply } => handle(reply, Ok(self.inner.current_epoch())),
+            EpochManagerRequest::CurrentBlockHeight { reply } => handle(reply, Ok(self.inner.current_block_height())),
             EpochManagerRequest::GetValidatorShardKey { epoch, addr, reply } => handle(
                 reply,
                 self.inner

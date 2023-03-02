@@ -63,7 +63,7 @@ use crate::{
     template_manager::{TemplateManagerError, TemplateManagerHandle, TemplateRegistration},
 };
 
-const LOG_TARGET: &str = "tari::base_layer_scanner";
+const LOG_TARGET: &str = "tari::dan::base_layer_scanner";
 
 pub fn spawn(
     global_db: GlobalDb<SqliteGlobalDbAdapter>,

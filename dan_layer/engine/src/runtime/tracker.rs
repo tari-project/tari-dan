@@ -69,7 +69,7 @@ use crate::{
     state_store::{memory::MemoryStateStore, AtomicDb, StateReader},
 };
 
-const LOG_TARGET: &str = "tari::engine::runtime::state_tracker";
+const LOG_TARGET: &str = "tari::dan::engine::runtime::state_tracker";
 
 #[derive(Debug, Clone)]
 pub struct StateTracker {

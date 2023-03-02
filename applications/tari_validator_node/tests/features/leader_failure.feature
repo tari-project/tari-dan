@@ -25,6 +25,10 @@ Feature: Leader failure scenarios
     # VNs registration
     When all validator nodes send registration transactions
     When miner MINER mines 13 new blocks
+    Then VAL_1 has scanned to height 18 within 10 seconds
+    Then VAL_2 has scanned to height 18 within 10 seconds
+    Then VAL_3 has scanned to height 18 within 10 seconds
+    Then VAL_4 has scanned to height 18 within 10 seconds
     Then all validator nodes are listed as registered
 
     When I wait 1 seconds 
