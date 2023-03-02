@@ -71,7 +71,7 @@ use tari_dan_core::{
         StorageError,
     },
 };
-use tari_engine_types::instruction::Instruction;
+use tari_engine_types::{instruction::Instruction, substate::SubstateAddress};
 use tari_transaction::{InstructionSignature, Transaction, TransactionMeta};
 use tari_utilities::{
     hex::{to_hex, Hex},
@@ -1588,12 +1588,12 @@ impl ShardStoreWriteTransaction<PublicKey, TariDanPayload> for SqliteShardStoreW
     fn save_burnt_utxo(
         &mut self,
         substate: &tari_engine_types::substate::Substate,
-        commitment_address: String,
+        commitment_address: SubstateAddress,
         shard_id: ShardId,
     ) -> Result<(), StorageError> {
         let new_row = NewSubstate {
             shard_id: shard_id.as_bytes().to_vec(),
-            address: commitment_address,
+            address: commitment_address.to_string(),
             version: i64::from(substate.version()),
             data: serde_json::to_string_pretty(substate).unwrap(),
             created_by_payload_id: vec![0; 32],

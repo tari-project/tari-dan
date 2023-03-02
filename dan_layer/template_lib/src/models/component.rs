@@ -96,6 +96,7 @@ pub struct ComponentHeader {
     pub access_rules: AccessRules,
     // TODO: Split the state from the header
     pub state: ComponentBody,
+    // pub associated_public_key: Option<RistrettoPublicKeyBytes>,
 }
 
 impl ComponentHeader {
@@ -106,6 +107,10 @@ impl ComponentHeader {
     pub fn state(&self) -> &[u8] {
         &self.state.state
     }
+
+    // pub fn associated_public_key(&self) -> Option<&RistrettoPublicKeyBytes> {
+    //     self.associated_public_key.as_ref()
+    // }
 }
 
 #[derive(Debug, Clone, Encode, Decode)]

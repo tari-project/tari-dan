@@ -3,9 +3,7 @@
 
 pub mod bucket;
 pub mod commit_result;
-mod confidential_validation;
-mod confidential_withdraw;
-pub mod crypto;
+pub mod confidential;
 pub mod execution_result;
 pub mod hashing;
 pub mod instruction;
