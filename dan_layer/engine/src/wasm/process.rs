@@ -25,7 +25,6 @@ use tari_engine_types::execution_result::ExecutionResult;
 use tari_template_abi::{CallInfo, EngineOp};
 use tari_template_lib::{
     args::{
-        AddressListInvokeArg,
         Arg,
         BucketInvokeArg,
         ComponentInvokeArg,
@@ -138,11 +137,6 @@ impl WasmProcess {
             },
             EngineOp::ConsensusInvoke => Self::handle(env, arg, |env, arg: ConsensusInvokeArg| {
                 env.state().interface().consensus_invoke(arg.action)
-            }),
-            EngineOp::AddressListInvoke => Self::handle(env, arg, |env, arg: AddressListInvokeArg| {
-                env.state()
-                    .interface()
-                    .address_list_invoke(arg.list_id, arg.action, arg.args.into())
             }),
         };
 
