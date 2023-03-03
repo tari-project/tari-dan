@@ -85,14 +85,25 @@ CREATE TABLE outputs
     account_id          INTEGER  NOT NULL REFERENCES accounts (id),
     commitment          TEXT     NOT NULL,
     value               BIGINT   NOT NULL,
-    sender_public_nonce TEXT     NOT NULL,
+    sender_public_nonce TEXT     NULL,
     secret_key_index    BIGINT   NOT NULL,
     public_asset_tag    TEXT     NULL,
-    -- Status can be "Unspent", "Spent", "Locked"
+    -- Status can be "Unspent", "Spent", "Locked", "LockedUnconfirmed"
     status              TEXT     NOT NULL,
+    locked_at           DATETIME NULL,
+    locked_by_proof     INTEGER  NULL,
     created_at          DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at          DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
 CREATE UNIQUE INDEX outputs_uniq_commitment ON outputs (commitment);
 CREATE INDEX outputs_idx_account_status ON outputs (account_id, status);
+
+-- Proofs
+CREATE TABLE proofs
+(
+    id           INTEGER  NOT NULL PRIMARY KEY AUTOINCREMENT,
+    account_name TEXT     NOT NULL REFERENCES accounts (name),
+    created_at   DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+

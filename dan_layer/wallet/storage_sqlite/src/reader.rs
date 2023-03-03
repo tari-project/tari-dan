@@ -8,10 +8,18 @@ use log::error;
 use serde::de::DeserializeOwned;
 use tari_common_types::types::FixedHash;
 use tari_dan_wallet_sdk::{
-    models::{Account, Config, SubstateRecord, TransactionStatus, WalletTransaction},
+    models::{
+        Account,
+        ConfidentialOutput,
+        ConfidentialProofId,
+        Config,
+        SubstateRecord,
+        TransactionStatus,
+        WalletTransaction,
+    },
     storage::{WalletStorageError, WalletStoreReader},
 };
-use tari_engine_types::substate::SubstateAddress;
+use tari_engine_types::substate::{InvalidSubstateAddressFormat, SubstateAddress};
 
 use crate::{diesel::ExpressionMethods, models, serialization::deserialize_json};
 
@@ -220,11 +228,33 @@ impl WalletStoreReader for ReadTransaction<'_> {
                 key: name.to_string(),
             })?;
 
-        Ok(Account {
-            name: row.name,
-            address: row.address.parse().unwrap(),
-            key_index: row.owner_key_index as u64,
-        })
+        let account = row
+            .try_into()
+            .map_err(|e: InvalidSubstateAddressFormat| WalletStorageError::DecodingError {
+                operation: "accounts_get_by_name",
+                item: "account",
+                details: e.to_string(),
+            })?;
+        Ok(account)
+    }
+
+    // Outputs
+    fn outputs_get_locked_by_proof(
+        &mut self,
+        proof_id: ConfidentialProofId,
+    ) -> Result<Vec<ConfidentialOutput>, WalletStorageError> {
+        use crate::schema::outputs;
+
+        let rows = outputs::table
+            .filter(outputs::locked_by_proof.eq(proof_id as i32))
+            .load::<models::ConfidentialOutputModel>(self.connection())
+            .map_err(|e| WalletStorageError::general("outputs_get_locked_by_proof", e))?;
+
+        let outputs = rows
+            .into_iter()
+            .map(|row| row.try_into_output("".to_string()))
+            .collect::<Result<_, _>>()?;
+        Ok(outputs)
     }
 }
 
