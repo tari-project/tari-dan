@@ -46,7 +46,6 @@ use tari_engine_types::{
 use tari_template_abi::TemplateDef;
 use tari_template_lib::{
     args::{
-        AddressListAction,
         BucketAction,
         BucketRef,
         ComponentAction,
@@ -70,8 +69,6 @@ use tari_template_lib::{
     auth::AccessRules,
     constants::CONFIDENTIAL_TARI_RESOURCE_ADDRESS,
     models::{
-        Address,
-        AddressListId,
         Amount,
         BucketId,
         ComponentAddress,
@@ -629,44 +626,6 @@ impl RuntimeInterface for RuntimeInterfaceImpl {
         self.invoke_on_runtime_call_modules("consensus_invoke")?;
         match action {
             ConsensusAction::GetCurrentEpoch => Ok(InvokeResult::encode(&self.consensus.current_epoch)?),
-        }
-    }
-
-    fn address_list_invoke(
-        &self,
-        list_id: Option<AddressListId>,
-        action: AddressListAction,
-        args: EngineArgs,
-    ) -> Result<InvokeResult, RuntimeError> {
-        self.invoke_on_runtime_call_modules("address_list_invoke")?;
-        match action {
-            AddressListAction::Create => {
-                let address_list_id = self.tracker.new_address_list()?;
-                Ok(InvokeResult::encode(&address_list_id)?)
-            },
-            AddressListAction::Push => {
-                let list_id = list_id.ok_or(RuntimeError::InvalidArgument {
-                    argument: "list_id",
-                    reason: "AddressList push action requires a list id".to_string(),
-                })?;
-                let index: u64 = args.get(0)?;
-                let referenced_address: Address = args.get(1)?;
-
-                // Explicitly disallow references to other lists to avoid cycles
-                // We don't need to check for list items as they are not addreseable from templates
-                if let Address::AddressList(_) = referenced_address {
-                    return Err(RuntimeError::InvalidAddressListItemReference {
-                        list_id,
-                        index,
-                        referenced_address,
-                    });
-                }
-
-                // TODO: access check
-
-                self.tracker.address_list_push(list_id, index, referenced_address)?;
-                Ok(InvokeResult::unit())
-            },
         }
     }
 

@@ -20,61 +20,37 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use std::fmt::{Display, Formatter};
-
 use tari_bor::{borsh, Decode, Encode};
+use tari_template_abi::rust::{fmt, fmt::Display};
 
-use super::{AddressListId, ComponentAddress, NonFungibleAddress, ResourceAddress, VaultId};
+use super::ResourceAddress;
 
 #[derive(Debug, Clone, Encode, Decode, PartialEq, Eq, Hash)]
 #[cfg_attr(feature = "serde", derive(serde::Deserialize, serde::Serialize))]
-pub enum Address {
-    Component(ComponentAddress),
-    Resource(ResourceAddress),
-    Vault(VaultId),
-    NonFungible(NonFungibleAddress),
-    AddressList(AddressListId),
-    // There is no variant for AddressListItem as the concept of items is not exposed in templates
+pub struct NonFungibleIndexAddress {
+    resource_address: ResourceAddress,
+    index: u64,
 }
 
-impl From<ComponentAddress> for Address {
-    fn from(address: ComponentAddress) -> Self {
-        Self::Component(address)
-    }
-}
-
-impl From<ResourceAddress> for Address {
-    fn from(address: ResourceAddress) -> Self {
-        Self::Resource(address)
-    }
-}
-
-impl From<VaultId> for Address {
-    fn from(address: VaultId) -> Self {
-        Self::Vault(address)
-    }
-}
-
-impl From<NonFungibleAddress> for Address {
-    fn from(address: NonFungibleAddress) -> Self {
-        Self::NonFungible(address)
-    }
-}
-
-impl From<AddressListId> for Address {
-    fn from(address: AddressListId) -> Self {
-        Self::AddressList(address)
-    }
-}
-
-impl Display for Address {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Address::Component(addr) => write!(f, "{}", addr),
-            Address::Resource(addr) => write!(f, "{}", addr),
-            Address::Vault(addr) => write!(f, "{}", addr),
-            Address::NonFungible(addr) => write!(f, "{}", addr),
-            Address::AddressList(addr) => write!(f, "{}", addr),
+impl NonFungibleIndexAddress {
+    pub fn new(resource_address: ResourceAddress, index: u64) -> Self {
+        Self {
+            resource_address,
+            index,
         }
+    }
+
+    pub fn resource_address(&self) -> &ResourceAddress {
+        &self.resource_address
+    }
+
+    pub fn index(&self) -> u64 {
+        self.index
+    }
+}
+
+impl Display for NonFungibleIndexAddress {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{} index_{}", self.resource_address, self.index)
     }
 }

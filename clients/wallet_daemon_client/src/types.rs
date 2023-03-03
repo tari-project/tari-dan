@@ -33,7 +33,7 @@ use tari_engine_types::{
 use tari_template_lib::{
     args::Arg,
     auth::AccessRules,
-    models::{AddressListId, Amount, NonFungibleId, ResourceAddress},
+    models::{Amount, NonFungibleId, ResourceAddress},
 };
 use tari_transaction::Transaction;
 
@@ -47,7 +47,7 @@ pub struct TransactionSubmitRequest {
     pub new_outputs: u8,
     pub specific_non_fungible_outputs: Vec<(ResourceAddress, NonFungibleId)>,
     pub new_non_fungible_outputs: Vec<(ResourceAddress, u8)>,
-    pub new_address_list_item_outputs: Vec<(AddressListId, u64)>,
+    pub new_non_fungible_index_outputs: Vec<(ResourceAddress, u64)>,
     pub is_dry_run: bool,
 }
 
