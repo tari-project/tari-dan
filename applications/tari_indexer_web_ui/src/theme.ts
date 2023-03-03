@@ -80,6 +80,7 @@ const theme = createTheme({
         disableRipple: true,
         style: {
           borderRadius: '5px',
+          boxShadow: 'none',
         },
       },
     },
@@ -88,6 +89,16 @@ const theme = createTheme({
         sx: {
           borderBottom: '1px solid #f5f5f5',
         },
+      },
+    },
+    MuiDialogTitle: {
+      defaultProps: {
+        fontSize: '1rem',
+      },
+    },
+    MuiTextField: {
+      defaultProps: {
+        size: 'small',
       },
     },
   },
