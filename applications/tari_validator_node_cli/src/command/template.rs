@@ -20,8 +20,12 @@
 //   WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //   USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use std::{convert::TryFrom, path::PathBuf};
+use std::{
+    convert::{TryFrom, TryInto},
+    path::{Path, PathBuf},
+};
 
+use cargo_metadata::MetadataCommand;
 use clap::{Args, Subcommand};
 use tari_dan_engine::wasm::compile::compile_template;
 use tari_engine_types::{calculate_template_binary_hash, TemplateAddress};
@@ -136,14 +140,16 @@ async fn handle_publish(args: PublishTemplateArgs, mut client: ValidatorNodeClie
     let mut wasm_path = root_folder.clone();
     wasm_path.push(format!("target/wasm32-unknown-unknown/release/{}.wasm", file_name));
 
+    let (version, name, default_binary_url) = parse_cargo_file(root_folder.as_path())?;
     // ask the template name (skip if already passed as a CLI argument)
     let template_name = Prompt::new("Choose an user-friendly name for the template (max 32 characters):")
+        .with_default(name)
         .with_value(args.template_name)
         .ask()?;
 
     // ask the template version (skip if already passed as a CLI argument)
     let template_version: u16 = Prompt::new("Template version:")
-        .with_default(0)
+        .with_default(version)
         .with_value(args.template_version)
         .ask_parsed()?;
 
@@ -157,7 +163,9 @@ async fn handle_publish(args: PublishTemplateArgs, mut client: ValidatorNodeClie
         None => {
             println!("Compiled template WASM file location: {}", wasm_path.display());
             println!("Please upload the file to a public web location and then paste the URL");
-            Prompt::new("WASM public URL (max 255 characters):").ask()?
+            Prompt::new("WASM public URL (max 255 characters):")
+                .with_default(default_binary_url)
+                .ask()?
         },
     };
 
@@ -179,4 +187,27 @@ async fn handle_publish(args: PublishTemplateArgs, mut client: ValidatorNodeClie
     );
 
     Ok(())
+}
+
+fn parse_cargo_file(root_path: &Path) -> anyhow::Result<(u16, String, String)> {
+    let metadata = MetadataCommand::new()
+        .manifest_path(root_path.join("Cargo.toml"))
+        .exec()?;
+
+    if let Some(root) = metadata.root_package() {
+        let mut version = root.version.major.try_into()?;
+        if version == 0 {
+            version = root.version.minor.try_into()?;
+        }
+        Ok((
+            version,
+            root.name.to_string(),
+            root.metadata["tari"]["binary_url"]
+                .as_str()
+                .unwrap_or_default()
+                .to_string(),
+        ))
+    } else {
+        Ok((0, "".to_string(), "".to_string()))
+    }
 }

@@ -22,6 +22,7 @@ tari_validator_node_client = { path = "../../clients/validator_node_client" }
 
 anyhow = "1.0.65"
 clap = { version = "3.2.22", features = ["derive", "env"] }
+cargo_metadata = "0.15.3"
 dirs = "4.0.0"
 jfs = "0.7.1"
 log = "0.4.17"
