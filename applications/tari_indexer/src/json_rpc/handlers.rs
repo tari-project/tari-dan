@@ -260,6 +260,37 @@ impl JsonRpcHandlers {
         }
     }
 
+    pub async fn get_non_fungible_count(&self, value: JsonRpcExtractor) -> JrpcResult {
+        let answer_id = value.get_answer_id();
+        let request: GetNonFungibleCountRequest = value.parse_params()?;
+        let substate_address = Self::parse_substate_address(&request.address, answer_id)?;
+
+        let res = self.substate_manager.get_non_fungible_count(&substate_address).await;
+
+        match res {
+            Ok(count) => Ok(JsonRpcResponse::success(answer_id, count)),
+            Err(_) => Err(Self::generic_error_response(answer_id)),
+        }
+    }
+
+    pub async fn get_non_fungibles(&self, value: JsonRpcExtractor) -> JrpcResult {
+        let answer_id = value.get_answer_id();
+        let request: GetNonFungiblesRequest = value.parse_params()?;
+        let substate_address = Self::parse_substate_address(&request.address, answer_id)?;
+        let start_index = request.start_index;
+        let end_index = request.start_index;
+
+        let res = self
+            .substate_manager
+            .get_non_fungibles(&substate_address, start_index, end_index)
+            .await;
+
+        match res {
+            Ok(nfts) => Ok(JsonRpcResponse::success(answer_id, nfts)),
+            Err(_) => Err(Self::generic_error_response(answer_id)),
+        }
+    }
+
     fn parse_substate_address(address_str: &str, answer_id: i64) -> Result<SubstateAddress, JsonRpcResponse> {
         let address = SubstateAddress::from_str(address_str).map_err(|_| Self::generic_error_response(answer_id))?;
         Ok(address)
@@ -291,4 +322,16 @@ pub struct AddAddressRequest {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DeleteAddressRequest {
     pub address: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct GetNonFungibleCountRequest {
+    pub address: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct GetNonFungiblesRequest {
+    pub address: String,
+    pub start_index: u64,
+    pub end_index: u64,
 }
