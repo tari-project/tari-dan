@@ -9,14 +9,17 @@
 //       engine. This refactor would need some co-ordination.
 
 use lazy_static::lazy_static;
-use tari_common_types::types::{BulletRangeProof, CommitmentFactory, PrivateKey};
+use tari_common_types::types::{BulletRangeProof, CommitmentFactory, PrivateKey, PublicKey};
 use tari_crypto::{
     commitment::{ExtensionDegree, HomomorphicCommitmentFactory},
     errors::RangeProofError,
     extended_range_proof::ExtendedRangeProofService,
     ristretto::bulletproofs_plus::{BulletproofsPlusService, RistrettoExtendedMask, RistrettoExtendedWitness},
 };
-use tari_template_lib::models::{Amount, ConfidentialProof, ConfidentialStatement};
+use tari_template_lib::{
+    crypto::RistrettoPublicKeyBytes,
+    models::{Amount, ConfidentialOutputProof, ConfidentialStatement},
+};
 use tari_utilities::ByteArray;
 
 lazy_static! {
@@ -29,7 +32,7 @@ lazy_static! {
         BulletproofsPlusService::init(64, 2, CommitmentFactory::default()).unwrap();
 }
 
-pub fn range_proof_service(aggregation_factor: usize) -> &'static BulletproofsPlusService {
+pub fn get_range_proof_service(aggregation_factor: usize) -> &'static BulletproofsPlusService {
     match aggregation_factor {
         1 => &RANGE_PROOF_AGG_1_SERVICE,
         2 => &RANGE_PROOF_AGG_2_SERVICE,
@@ -40,13 +43,14 @@ pub fn range_proof_service(aggregation_factor: usize) -> &'static BulletproofsPl
     }
 }
 
-pub fn commitment_factory() -> &'static CommitmentFactory {
+pub fn get_commitment_factory() -> &'static CommitmentFactory {
     &COMMITMENT_FACTORY
 }
 
 pub struct ConfidentialProofStatement {
     pub amount: Amount,
     pub mask: PrivateKey,
+    pub sender_public_nonce: PublicKey,
     pub minimum_value_promise: u64,
 }
 
@@ -55,6 +59,7 @@ impl ConfidentialProofStatement {
         Self {
             amount: Amount::zero(),
             mask: PrivateKey::default(),
+            sender_public_nonce: PublicKey::default(),
             minimum_value_promise: 0,
         }
     }
@@ -63,40 +68,39 @@ impl ConfidentialProofStatement {
 pub fn generate_confidential_proof(
     output_statement: ConfidentialProofStatement,
     change_statement: Option<ConfidentialProofStatement>,
-) -> Result<ConfidentialProof, RangeProofError> {
-    let output_commitment = commitment_to_bytes(&output_statement.mask, output_statement.amount);
-    let change_commitment = change_statement
-        .as_ref()
-        .map(|stmt| commitment_to_bytes(&stmt.mask, stmt.amount));
-    let minimum_value_promise = output_statement.minimum_value_promise;
-    let change_minimum_value_promise = change_statement
-        .as_ref()
-        .map(|stmt| stmt.minimum_value_promise)
-        .unwrap_or(0);
-    let output_range_proof = generate_extended_bullet_proof(output_statement, change_statement)?;
+) -> Result<ConfidentialOutputProof, RangeProofError> {
+    let proof_change_statement = change_statement.as_ref().map(|statement| ConfidentialStatement {
+        commitment: commitment_to_bytes(&statement.mask, statement.amount),
+        sender_public_nonce: RistrettoPublicKeyBytes::from_bytes(statement.sender_public_nonce.as_bytes())
+            .expect("[generate_confidential_proof] change nonce"),
+        encrypted_value: Default::default(),
+        minimum_value_promise: statement.minimum_value_promise,
+    });
 
-    Ok(ConfidentialProof {
+    let output_range_proof = generate_extended_bullet_proof(&output_statement, change_statement.as_ref())?;
+
+    Ok(ConfidentialOutputProof {
         output_statement: ConfidentialStatement {
-            commitment: output_commitment,
-            minimum_value_promise,
+            commitment: commitment_to_bytes(&output_statement.mask, output_statement.amount),
+            sender_public_nonce: RistrettoPublicKeyBytes::from_bytes(output_statement.sender_public_nonce.as_bytes())
+                .expect("[generate_confidential_proof] output nonce"),
+            encrypted_value: Default::default(),
+            minimum_value_promise: output_statement.minimum_value_promise,
         },
-        change_statement: change_commitment.map(|commitment| ConfidentialStatement {
-            commitment,
-            minimum_value_promise: change_minimum_value_promise,
-        }),
+        change_statement: proof_change_statement,
         range_proof: output_range_proof.0,
         revealed_amount: Amount::zero(),
     })
 }
 
 fn generate_extended_bullet_proof(
-    output_statement: ConfidentialProofStatement,
-    change_statement: Option<ConfidentialProofStatement>,
+    output_statement: &ConfidentialProofStatement,
+    change_statement: Option<&ConfidentialProofStatement>,
 ) -> Result<BulletRangeProof, RangeProofError> {
     let mut extended_witnesses = vec![];
 
     let extended_mask =
-        RistrettoExtendedMask::assign(ExtensionDegree::DefaultPedersen, vec![output_statement.mask]).unwrap();
+        RistrettoExtendedMask::assign(ExtensionDegree::DefaultPedersen, vec![output_statement.mask.clone()]).unwrap();
 
     let mut agg_factor = 1;
     extended_witnesses.push(RistrettoExtendedWitness {
@@ -105,7 +109,8 @@ fn generate_extended_bullet_proof(
         minimum_value_promise: output_statement.minimum_value_promise,
     });
     if let Some(stmt) = change_statement {
-        let extended_mask = RistrettoExtendedMask::assign(ExtensionDegree::DefaultPedersen, vec![stmt.mask]).unwrap();
+        let extended_mask =
+            RistrettoExtendedMask::assign(ExtensionDegree::DefaultPedersen, vec![stmt.mask.clone()]).unwrap();
         extended_witnesses.push(RistrettoExtendedWitness {
             mask: extended_mask,
             value: stmt.amount.value() as u64,
@@ -114,7 +119,7 @@ fn generate_extended_bullet_proof(
         agg_factor = 2;
     }
 
-    let output_range_proof = range_proof_service(agg_factor).construct_extended_proof(extended_witnesses, None)?;
+    let output_range_proof = get_range_proof_service(agg_factor).construct_extended_proof(extended_witnesses, None)?;
     Ok(BulletRangeProof(output_range_proof))
 }
 

@@ -7,6 +7,9 @@ pub use account::Account;
 mod config;
 pub use config::Config;
 
+mod output;
+pub use output::Output;
+
 mod substate;
 pub use substate::Substate;
 

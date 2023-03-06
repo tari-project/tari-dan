@@ -189,7 +189,7 @@ impl StateTracker {
                         target: LOG_TARGET,
                         "Minting confidential tokens on resource: {}", resource_address
                     );
-                    ResourceContainer::validate_confidential(resource_address, proof)?
+                    ResourceContainer::validate_confidential_mint(resource_address, proof)?
                 },
             };
 

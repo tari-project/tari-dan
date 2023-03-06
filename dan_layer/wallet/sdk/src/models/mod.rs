@@ -10,5 +10,7 @@ pub use config::Config;
 mod wallet_transaction;
 pub use wallet_transaction::{TransactionStatus, WalletTransaction};
 
+mod output;
 mod substate;
+
 pub use substate::{SubstateRecord, VersionedSubstateAddress};
