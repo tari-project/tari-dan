@@ -9,7 +9,7 @@ use crate::{
     apis::key_manager::{KeyManagerApi, KeyManagerApiError},
     confidential::{kdfs, ConfidentialProofError},
     models::{ConfidentialOutput, ConfidentialOutputWithMask, ConfidentialProofId},
-    storage::{WalletStorageError, WalletStore, WalletStoreWriter},
+    storage::{WalletStorageError, WalletStore, WalletStoreReader, WalletStoreWriter},
 };
 
 pub struct ConfidentialOutputsApi<'a, TStore> {
@@ -115,6 +115,12 @@ impl<'a, TStore: WalletStore> ConfidentialOutputsApi<'a, TStore> {
             });
         }
         Ok(output_masks)
+    }
+
+    pub fn get_unspent_balance(&self, account_name: &str) -> Result<u64, ConfidentialOutputsApiError> {
+        let mut tx = self.store.create_read_tx()?;
+        let balance = tx.outputs_get_unspent_balance(account_name)?;
+        Ok(balance)
     }
 }
 
