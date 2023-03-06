@@ -28,11 +28,7 @@ use tari_common_types::types::{BulletRangeProof, FixedHash};
 use tari_crypto::{
     range_proof::RangeProofService,
     ristretto::{
-        bulletproofs_plus::BulletproofsPlusService,
-        pedersen::{
-            commitment_factory::PedersenCommitmentFactory,
-            extended_commitment_factory::ExtendedPedersenCommitmentFactory,
-        },
+        pedersen::commitment_factory::PedersenCommitmentFactory,
         RistrettoComSig,
         RistrettoPublicKey,
         RistrettoSecretKey,
@@ -40,6 +36,7 @@ use tari_crypto::{
 };
 use tari_engine_types::{
     commit_result::{FinalizeResult, RejectReason, TransactionResult},
+    confidential::{get_range_proof_service, ConfidentialOutput},
     logs::LogEntry,
     resource_container::ResourceContainer,
 };
@@ -381,7 +378,7 @@ impl RuntimeInterface for RuntimeInterfaceImpl {
                 let resource = self.tracker.borrow_vault_mut(&vault_id, |vault| match arg {
                     VaultWithdrawArg::Fungible { amount } => vault.withdraw(amount),
                     VaultWithdrawArg::NonFungible { ids } => vault.withdraw_non_fungibles(&ids),
-                    VaultWithdrawArg::Confidential { proof } => vault.withdraw_confidential(proof),
+                    VaultWithdrawArg::Confidential { proof } => vault.withdraw_confidential(*proof),
                 })??;
                 let bucket = self.tracker.new_bucket(resource)?;
                 Ok(InvokeResult::encode(&bucket)?)
@@ -669,17 +666,19 @@ impl RuntimeInterface for RuntimeInterfaceImpl {
         }
 
         // 3. range_proof must be valid
-        let range_proof_service = BulletproofsPlusService::init(64, 1, ExtendedPedersenCommitmentFactory::default())
-            .expect("Failed to init range proof service");
-
-        if !range_proof_service.verify(&range_proof.0, &commitment) {
+        if !get_range_proof_service(1).verify(&range_proof.0, &commitment) {
             warn!(target: LOG_TARGET, "Claim burn failed - Invalid range proof");
             return Err(RuntimeError::InvalidRangeProof);
         }
 
         let resource = ResourceContainer::confidential(
             CONFIDENTIAL_TARI_RESOURCE_ADDRESS,
-            Some((commitment.as_public_key().clone(), Some(range_proof))),
+            Some((commitment.as_public_key().clone(), ConfidentialOutput {
+                commitment,
+                stealth_public_nonce: None,
+                encrypted_value: None,
+                minimum_value_promise: 0,
+            })),
             Amount::zero(),
         );
 

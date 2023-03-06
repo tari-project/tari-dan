@@ -4,7 +4,7 @@
 use tari_bor::{borsh, Decode, Encode};
 
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Encode, Decode)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Encode, Decode, Default)]
 pub struct RistrettoPublicKeyBytes(
     #[cfg_attr(feature = "serde", serde(with = "hex::serde"))] [u8; RistrettoPublicKeyBytes::length()],
 );

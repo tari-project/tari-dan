@@ -153,7 +153,7 @@ impl Vault {
         let resp: InvokeResult = call_engine(EngineOp::VaultInvoke, &VaultInvokeArg {
             vault_ref: self.vault_ref(),
             action: VaultAction::Withdraw,
-            args: invoke_args![VaultWithdrawArg::Confidential { proof }],
+            args: invoke_args![VaultWithdrawArg::Confidential { proof: Box::new(proof) }],
         });
 
         resp.decode().expect("failed to decode Bucket")
