@@ -53,7 +53,7 @@ diesel::table! {
 diesel::table! {
     proofs (id) {
         id -> Integer,
-        account_name -> Text,
+        account_id -> Integer,
         created_at -> Timestamp,
     }
 }
@@ -90,6 +90,7 @@ diesel::table! {
 }
 
 diesel::joinable!(outputs -> accounts (account_id));
+diesel::joinable!(proofs -> accounts (account_id));
 
 diesel::allow_tables_to_appear_in_same_query!(
     accounts,

@@ -395,10 +395,16 @@ impl WalletStoreWriter for WriteTransaction<'_> {
 
     // Proofs
     fn proofs_insert(&mut self, account_name: String) -> Result<ConfidentialProofId, WalletStorageError> {
-        use crate::schema::proofs;
+        use crate::schema::{accounts, proofs};
+
+        let account_id = accounts::table
+            .select(accounts::id)
+            .filter(accounts::name.eq(&account_name))
+            .first::<i32>(self.connection())
+            .map_err(|e| WalletStorageError::general("proof_insert", e))?;
 
         diesel::insert_into(proofs::table)
-            .values(proofs::account_name.eq(account_name))
+            .values(proofs::account_id.eq(account_id))
             .execute(self.connection())
             .map_err(|e| WalletStorageError::general("proof_insert", e))?;
 

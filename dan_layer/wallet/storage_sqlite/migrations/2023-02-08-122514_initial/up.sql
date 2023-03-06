@@ -102,8 +102,8 @@ CREATE INDEX outputs_idx_account_status ON outputs (account_id, status);
 -- Proofs
 CREATE TABLE proofs
 (
-    id           INTEGER  NOT NULL PRIMARY KEY AUTOINCREMENT,
-    account_name TEXT     NOT NULL REFERENCES accounts (name),
-    created_at   DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+    id         INTEGER  NOT NULL PRIMARY KEY AUTOINCREMENT,
+    account_id INTEGER  NOT NULL REFERENCES accounts (id),
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 

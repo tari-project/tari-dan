@@ -13,6 +13,7 @@ use crate::models::{
     ConfidentialOutput,
     ConfidentialProofId,
     Config,
+    OutputStatus,
     SubstateRecord,
     TransactionStatus,
     VersionedSubstateAddress,
@@ -117,9 +118,15 @@ pub trait WalletStoreReader {
     fn accounts_get_by_name(&mut self, name: &str) -> Result<Account, WalletStorageError>;
 
     // Outputs
+    fn outputs_get_unspent_balance(&mut self, account_name: &str) -> Result<u64, WalletStorageError>;
     fn outputs_get_locked_by_proof(
         &mut self,
         proof_id: ConfidentialProofId,
+    ) -> Result<Vec<ConfidentialOutput>, WalletStorageError>;
+    fn outputs_get_by_account_and_status(
+        &mut self,
+        account_name: &str,
+        status: OutputStatus,
     ) -> Result<Vec<ConfidentialOutput>, WalletStorageError>;
 }
 

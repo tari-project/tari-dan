@@ -6472,6 +6472,7 @@ name = "tari_dan_wallet_storage_sqlite"
 version = "0.35.1"
 dependencies = [
  "anyhow",
+ "bigdecimal",
  "chrono",
  "diesel",
  "diesel_migrations",

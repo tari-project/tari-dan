@@ -28,7 +28,6 @@ pub struct ConfidentialOutputModel {
 impl ConfidentialOutputModel {
     pub fn try_into_output(self, account_name: String) -> Result<ConfidentialOutput, WalletStorageError> {
         Ok(ConfidentialOutput {
-            // TODO: Maybe we should add an account id to the public storage trait
             account_name,
             commitment: Commitment::from_hex(&self.commitment).map_err(|_| WalletStorageError::DecodingError {
                 operation: "outputs_lock_smallest_amount",
