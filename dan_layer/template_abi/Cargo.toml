@@ -1,6 +1,6 @@
 [package]
 name = "tari_template_abi"
-version = "0.35.1"
+version = "0.50.0-pre.0"
 edition = "2021"
 
 [dependencies]
