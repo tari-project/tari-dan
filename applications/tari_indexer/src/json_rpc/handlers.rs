@@ -277,12 +277,10 @@ impl JsonRpcHandlers {
         let answer_id = value.get_answer_id();
         let request: GetNonFungiblesRequest = value.parse_params()?;
         let substate_address = Self::parse_substate_address(&request.address, answer_id)?;
-        let start_index = request.start_index;
-        let end_index = request.start_index;
 
         let res = self
             .substate_manager
-            .get_non_fungibles(&substate_address, start_index, end_index)
+            .get_non_fungibles(&substate_address, request.start_index, request.end_index)
             .await;
 
         match res {

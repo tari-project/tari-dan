@@ -76,10 +76,7 @@ impl DanLayerScanner {
                 .get_specific_substate_from_commitee(&index_substate_address, 0, epoch)
                 .await;
             let index_substate = match index_substate_result {
-                SubstateResult::Up(substate) => {
-                    index += 1;
-                    substate.into_substate_value()
-                },
+                SubstateResult::Up(substate) => substate.into_substate_value(),
                 _ => break,
             };
 
@@ -109,6 +106,8 @@ impl DanLayerScanner {
                     break;
                 }
             }
+
+            index += 1;
         }
 
         Ok(nft_substates)
