@@ -21,6 +21,8 @@ pub struct ConfidentialStatement {
     pub commitment: [u8; 32],
     /// Public nonce (R) that was used to generate the commitment mask
     pub sender_public_nonce: RistrettoPublicKeyBytes,
+    /// Commitment value encrypted for the receiver. Without this it would be difficult (not impossible) for the
+    /// receiver to determine the value component of the commitment.
     pub encrypted_value: EncryptedValue,
     pub minimum_value_promise: u64,
 }
