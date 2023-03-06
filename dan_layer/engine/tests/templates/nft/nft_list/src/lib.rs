@@ -32,17 +32,14 @@ mod sparkle_nft_template {
 
     pub struct SparkleNft {
         resource_address: ResourceAddress,
-        minted_nft_list: AddressList,
     }
 
     impl SparkleNft {
         pub fn new() -> Self {
             let resource_address = ResourceBuilder::non_fungible().build();
-            let minted_nft_list = AddressList::new();
 
             Self {
                 resource_address,
-                minted_nft_list,
             }
         }
 
@@ -50,18 +47,11 @@ mod sparkle_nft_template {
             // Mint a new token with a random ID
             let id = NonFungibleId::random();
 
-            // Mint the NFT, this will fail if the token ID already exists
+            // Get the resource manager
             let mut res_manager = ResourceManager::get(self.resource_address);
-            let nft_bucket = res_manager.mint_non_fungible(id.clone(), &{}, &Sparkle { brightness: 0 });
 
-            // Add a NFT reference in the list, to keep track of it
-            let index = res_manager.total_supply().value() as u64;
-            let nft_address: Address = NonFungibleAddress::new(self.resource_address, id).into();
-            // TODO: the DAN layer should resolve the index of the list transparently to he user
-            self.minted_nft_list.push(index + 1, nft_address);
-            
-            // return a bucket with the newly minted nft
-            nft_bucket
+            // Mint the NFT
+            res_manager.mint_non_fungible(id.clone(), &{}, &Sparkle { brightness: 0 })
         }
 
         pub fn total_supply(&self) -> Amount {

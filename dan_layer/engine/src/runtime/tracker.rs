@@ -30,10 +30,10 @@ use log::debug;
 use tari_common_types::types::Commitment;
 use tari_dan_common_types::optional::Optional;
 use tari_engine_types::{
-    address_list::{AddressList, AddressListItem},
     bucket::Bucket,
     logs::LogEntry,
     non_fungible::NonFungibleContainer,
+    non_fungible_index::NonFungibleIndex,
     resource::Resource,
     resource_container::ResourceContainer,
     substate::{Substate, SubstateAddress, SubstateDiff},
@@ -45,9 +45,6 @@ use tari_template_lib::{
     args::MintArg,
     auth::AccessRules,
     models::{
-        Address,
-        AddressListId,
-        AddressListItemAddress,
         Amount,
         BucketId,
         ComponentAddress,
@@ -56,6 +53,7 @@ use tari_template_lib::{
         LayerOneCommitmentAddress,
         Metadata,
         NonFungibleAddress,
+        NonFungibleIndexAddress,
         ResourceAddress,
         VaultId,
     },
@@ -161,19 +159,27 @@ impl StateTracker {
                         resource_address
                     );
                     let mut token_ids = BTreeSet::new();
+                    let resource = state.get_resource(&resource_address)?;
+                    let mut index = resource.total_supply().0 as u64;
                     for (id, (data, mut_data)) in tokens {
-                        let address = NonFungibleAddress::new(resource_address, id.clone());
-                        if state.get_non_fungible(&address).optional()?.is_some() {
+                        let nft_address = NonFungibleAddress::new(resource_address, id.clone());
+                        if state.get_non_fungible(&nft_address).optional()?.is_some() {
                             return Err(RuntimeError::DuplicateNonFungibleId {
-                                token_id: address.id().clone(),
+                                token_id: nft_address.id().clone(),
                             });
                         }
                         state
                             .new_non_fungibles
-                            .insert(address, NonFungibleContainer::new(data, mut_data));
+                            .insert(nft_address.clone(), NonFungibleContainer::new(data, mut_data));
                         if !token_ids.insert(id.clone()) {
                             return Err(RuntimeError::DuplicateNonFungibleId { token_id: id });
                         }
+
+                        // for each new nft we also create an index to be allow resource scanning
+                        let index_address = NonFungibleIndexAddress::new(resource_address, index);
+                        index += 1;
+                        let nft_index = NonFungibleIndex::new(nft_address);
+                        state.new_non_fungible_indexes.insert(index_address, nft_index);
                     }
 
                     ResourceContainer::non_fungible(resource_address, token_ids)
@@ -402,34 +408,6 @@ impl StateTracker {
         self.write_with(|state| state.borrow_vault_mut(vault_id, f))
     }
 
-    pub fn new_address_list(&self) -> Result<AddressListId, RuntimeError> {
-        let address_list_id = self.id_provider.new_address_list_id()?;
-        debug!(target: LOG_TARGET, "New address list id: {}", address_list_id);
-        let address_list = AddressList::new(address_list_id);
-
-        self.write_with(|state| {
-            state.new_address_lists.insert(address_list_id, address_list);
-        });
-
-        Ok(address_list_id)
-    }
-
-    pub fn address_list_push(
-        &self,
-        list_id: AddressListId,
-        index: u64,
-        referenced_address: Address,
-    ) -> Result<(), RuntimeError> {
-        let item_address = AddressListItemAddress::new(list_id, index);
-        let item = AddressListItem::new(referenced_address);
-
-        self.write_with(|state| {
-            state.new_address_list_items.insert(item_address, item);
-        });
-
-        Ok(())
-    }
-
     fn runtime_state(&self) -> Result<RuntimeState, RuntimeError> {
         self.read_with(|state| state.runtime_state.clone().ok_or(RuntimeError::IllegalRuntimeState))
     }
@@ -523,25 +501,13 @@ impl StateTracker {
                 substate_diff.up(addr, new_substate);
             }
 
-            for (list_id, substate) in state.new_address_lists {
-                let addr = SubstateAddress::AddressList(list_id);
+            for (address, substate) in state.new_non_fungible_indexes {
+                let addr = SubstateAddress::NonFungibleIndex(address.clone());
                 let new_substate = match tx.get_state::<_, Substate>(&addr).optional()? {
                     Some(_) => {
-                        // Addess list roots are immutable
-                        return Err(TransactionCommitError::AddressListMutation { list_id });
-                    },
-                    None => Substate::new(0, substate),
-                };
-                substate_diff.up(addr, new_substate);
-            }
-
-            for (address, substate) in state.new_address_list_items {
-                let addr = SubstateAddress::AddressListItem(address.clone());
-                let new_substate = match tx.get_state::<_, Substate>(&addr).optional()? {
-                    Some(_) => {
-                        // Addess list items are immutable
-                        return Err(TransactionCommitError::AddressListItemMutation {
-                            list_id: *address.list_id(),
+                        // nft indexes are immutable
+                        return Err(TransactionCommitError::NonFungibleIndexMutation {
+                            resource_address: *address.resource_address(),
                             index: address.index(),
                         });
                     },
