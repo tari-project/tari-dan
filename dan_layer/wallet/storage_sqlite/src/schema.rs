@@ -54,6 +54,7 @@ diesel::table! {
     proofs (id) {
         id -> Integer,
         account_id -> Integer,
+        transaction_hash -> Nullable<Text>,
         created_at -> Timestamp,
     }
 }
