@@ -5,6 +5,7 @@ use std::time::Duration;
 use anyhow::anyhow;
 use futures::{future, future::Either};
 use log::*;
+use tari_common_types::types::FixedHash;
 use tari_dan_common_types::{optional::Optional, ShardId};
 use tari_engine_types::{instruction::Instruction, substate::SubstateAddress};
 use tari_template_lib::prelude::NonFungibleAddress;
@@ -79,6 +80,11 @@ pub async fn handle_submit(
         .sign(&key.k);
 
     let transaction = builder.build();
+    if let Some(proof_id) = req.proof_id {
+        // update the proofs table with the corresponding transaction hash
+        sdk.confidential_outputs_api()
+            .proofs_set_transaction_hash(proof_id, FixedHash::from(transaction.hash().into_array()))?;
+    }
 
     info!(
         target: LOG_TARGET,
