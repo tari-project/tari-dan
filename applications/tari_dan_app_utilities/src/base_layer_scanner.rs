@@ -345,8 +345,9 @@ impl BaseLayerScanner {
                 BaseLayerScannerError::InvalidSideChainUtxoResponse(format!("Invalid commitment: {}", e)))?,
         );
         let substate = Substate::new(0, SubstateValue::LayerOneCommitment(commitment.as_bytes().to_vec()));
+        let shard_id = ShardId::from_address(&address, 0);
         self.shard_store
-            .with_write_tx(|tx| tx.save_burnt_utxo(&substate, address.to_string(), ShardId::from_address(&address, 0)))
+            .with_write_tx(|tx| tx.save_burnt_utxo(&substate, address, shard_id))
             .map_err(|source| BaseLayerScannerError::CouldNotRegisterBurntUtxo {
                 commitment: Box::new(commitment),
                 source,

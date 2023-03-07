@@ -3,35 +3,31 @@
 
 use std::iter;
 
-use tari_common_types::types::{BulletRangeProof, Commitment};
+use tari_common_types::types::{Commitment, PublicKey};
 use tari_crypto::{
     extended_range_proof::{ExtendedRangeProofService, Statement},
     ristretto::bulletproofs_plus::RistrettoAggregatedPublicStatement,
 };
-use tari_template_lib::models::{Amount, ConfidentialProof};
+use tari_template_lib::models::ConfidentialOutputProof;
 use tari_utilities::ByteArray;
 
-use crate::{crypto, resource_container::ResourceError};
+use super::get_range_proof_service;
+use crate::{confidential::ConfidentialOutput, resource_container::ResourceError};
 
-#[derive(Debug, Clone)]
-pub struct ValidatedConfidentialWithdrawProof {
-    pub output_commitment: Commitment,
-    pub output_minimum_value_promise: u64,
-    pub change_commitment: Option<Commitment>,
-    pub change_minimum_value_promise: Option<u64>,
-    pub range_proof: BulletRangeProof,
-    pub revealed_amount: Amount,
+#[derive(Debug)]
+pub struct ValidatedConfidentialProof {
+    pub output: ConfidentialOutput,
+    pub change_output: Option<ConfidentialOutput>,
 }
 
 pub fn validate_confidential_proof(
-    proof: &ConfidentialProof,
-) -> Result<(Commitment, Option<Commitment>), ResourceError> {
+    proof: &ConfidentialOutputProof,
+) -> Result<ValidatedConfidentialProof, ResourceError> {
     if proof.revealed_amount.is_negative() {
         return Err(ResourceError::InvalidConfidentialProof {
             details: "Revealed amount must be positive".to_string(),
         });
     }
-    validate_bullet_proof(proof)?;
 
     let output_commitment = Commitment::from_bytes(&proof.output_statement.commitment).map_err(|_| {
         ResourceError::InvalidConfidentialProof {
@@ -39,20 +35,50 @@ pub fn validate_confidential_proof(
         }
     })?;
 
-    let change_commitment = proof
+    let output_public_nonce =
+        PublicKey::from_bytes(proof.output_statement.sender_public_nonce.as_bytes()).map_err(|_| {
+            ResourceError::InvalidConfidentialProof {
+                details: "Invalid sender public nonce".to_string(),
+            }
+        })?;
+
+    let change = proof
         .change_statement
         .as_ref()
         .map(|stmt| {
-            Commitment::from_bytes(&stmt.commitment).map_err(|_| ResourceError::InvalidConfidentialProof {
-                details: "Invalid commitment".to_string(),
+            let commitment =
+                Commitment::from_bytes(&stmt.commitment).map_err(|_| ResourceError::InvalidConfidentialProof {
+                    details: "Invalid commitment".to_string(),
+                })?;
+            let stealth_public_nonce = PublicKey::from_bytes(stmt.sender_public_nonce.as_bytes()).map_err(|_| {
+                ResourceError::InvalidConfidentialProof {
+                    details: "Invalid sender public nonce".to_string(),
+                }
+            })?;
+
+            Ok(ConfidentialOutput {
+                commitment,
+                stealth_public_nonce: Some(stealth_public_nonce),
+                encrypted_value: Some(stmt.encrypted_value),
+                minimum_value_promise: stmt.minimum_value_promise,
             })
         })
         .transpose()?;
 
-    Ok((output_commitment, change_commitment))
+    validate_bullet_proof(proof)?;
+
+    Ok(ValidatedConfidentialProof {
+        output: ConfidentialOutput {
+            commitment: output_commitment,
+            stealth_public_nonce: Some(output_public_nonce),
+            encrypted_value: Some(proof.output_statement.encrypted_value),
+            minimum_value_promise: proof.output_statement.minimum_value_promise,
+        },
+        change_output: change,
+    })
 }
 
-fn validate_bullet_proof(proof: &ConfidentialProof) -> Result<(), ResourceError> {
+fn validate_bullet_proof(proof: &ConfidentialOutputProof) -> Result<(), ResourceError> {
     let statements = iter::once(&proof.output_statement)
         .chain(proof.change_statement.as_ref())
         .cloned()
@@ -72,7 +98,7 @@ fn validate_bullet_proof(proof: &ConfidentialProof) -> Result<(), ResourceError>
     let public_statement = RistrettoAggregatedPublicStatement::init(statements).unwrap();
 
     let proofs = vec![&proof.range_proof];
-    crypto::range_proof_service(agg_factor)
+    get_range_proof_service(agg_factor)
         .verify_batch(proofs, vec![&public_statement])
         .map_err(|e| ResourceError::InvalidConfidentialProof {
             details: format!("Invalid range proof: {}", e),
@@ -89,18 +115,19 @@ mod tests {
     use tari_template_lib::models::Amount;
 
     use super::*;
-    use crate::crypto::{generate_confidential_proof, ConfidentialProofStatement};
+    use crate::confidential::{generate_confidential_proof, proof::ConfidentialProofStatement};
 
     mod validate_confidential_proof {
         use super::*;
 
-        fn create_valid_proof(amount: Amount, minimum_value_promise: u64) -> ConfidentialProof {
+        fn create_valid_proof(amount: Amount, minimum_value_promise: u64) -> ConfidentialOutputProof {
             let mask = PrivateKey::random(&mut OsRng);
             generate_confidential_proof(
                 ConfidentialProofStatement {
                     amount,
                     minimum_value_promise,
                     mask,
+                    sender_public_nonce: Default::default(),
                 },
                 None,
             )
