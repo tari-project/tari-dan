@@ -73,7 +73,7 @@ impl DanLayerScanner {
             // get the nft index substate from the network
             // nft index substates are immutable, so they are always on version 0
             let index_substate_result = self
-                .get_specific_substate_from_commitee(&index_substate_address, 0, epoch)
+                .get_specific_substate_from_committee(&index_substate_address, 0, epoch)
                 .await;
             let index_substate = match index_substate_result {
                 SubstateResult::Up(substate) => substate.into_substate_value(),
@@ -88,7 +88,7 @@ impl DanLayerScanner {
             };
             let nft_substate_address = SubstateAddress::NonFungible(nft_address);
             match self
-                .get_latest_substate_from_commitee(&nft_substate_address, epoch)
+                .get_latest_substate_from_committee(&nft_substate_address, epoch)
                 .await
             {
                 SubstateResult::Up(substate) => {
@@ -116,17 +116,14 @@ impl DanLayerScanner {
     pub async fn get_substate(&self, substate_address: &SubstateAddress, version: Option<u32>) -> Option<Substate> {
         info!(target: LOG_TARGET, "get_substate: {} ", substate_address);
 
-        let epoch = match self.get_current_epoch().await {
-            Some(epoch) => epoch,
-            None => return None,
-        };
+        let epoch = self.get_current_epoch().await?;
 
         let result = match version {
             Some(version) => {
-                self.get_specific_substate_from_commitee(substate_address, version, epoch)
+                self.get_specific_substate_from_committee(substate_address, version, epoch)
                     .await
             },
-            None => self.get_latest_substate_from_commitee(substate_address, epoch).await,
+            None => self.get_latest_substate_from_committee(substate_address, epoch).await,
         };
 
         match result {
@@ -146,7 +143,7 @@ impl DanLayerScanner {
         }
     }
 
-    async fn get_latest_substate_from_commitee(
+    async fn get_latest_substate_from_committee(
         &self,
         substate_address: &SubstateAddress,
         epoch: Epoch,
@@ -155,7 +152,7 @@ impl DanLayerScanner {
         let mut version = 0;
         loop {
             let substate_result = self
-                .get_specific_substate_from_commitee(substate_address, version, epoch)
+                .get_specific_substate_from_committee(substate_address, version, epoch)
                 .await;
             match substate_result {
                 // when it's a "Down" state, we need to ask a higher version until we find an "Up" or "DoesNotExist"
@@ -167,7 +164,7 @@ impl DanLayerScanner {
         }
     }
 
-    async fn get_specific_substate_from_commitee(
+    async fn get_specific_substate_from_committee(
         &self,
         substate_address: &SubstateAddress,
         version: u32,
