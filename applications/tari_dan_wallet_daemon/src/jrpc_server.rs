@@ -1,7 +1,7 @@
 //   Copyright 2023 The Tari Project
 //   SPDX-License-Identifier: BSD-3-Clause
 
-use std::{collections::HashMap, net::SocketAddr, sync::Arc};
+use std::{net::SocketAddr, sync::Arc};
 
 use axum::{extract::Extension, routing::post, Router};
 use axum_jrpc::{
@@ -12,12 +12,12 @@ use axum_jrpc::{
 };
 use log::*;
 use serde::{de::DeserializeOwned, Serialize};
-use serde_json::{json, Value};
+use serde_json::json;
 use tari_shutdown::ShutdownSignal;
 use tower_http::{cors::CorsLayer, trace::TraceLayer};
 
 use super::handlers::HandlerContext;
-use crate::handlers::{accounts, error::HandlerError, keys, transaction, Handler};
+use crate::handlers::{accounts, confidential, error::HandlerError, keys, rpc, transaction, Handler};
 
 const LOG_TARGET: &str = "tari::dan_wallet_daemon::json_rpc";
 
@@ -29,7 +29,7 @@ pub async fn listen(
     let router = Router::new()
         .route("/", post(handler))
         .route("/json_rpc", post(handler))
-        // TODO: Get these traces to work, probably just need to update log4rs.yml
+        // TODO: Get these traces to work
         .layer(TraceLayer::new_for_http())
         .layer(Extension(Arc::new(context)))
         .layer(CorsLayer::permissive());
@@ -46,18 +46,9 @@ pub async fn listen(
 
 async fn handler(Extension(context): Extension<Arc<HandlerContext>>, value: JsonRpcExtractor) -> JrpcResult {
     info!(target: LOG_TARGET, "🌐 JSON-RPC request: {}", value.method);
-    if value.method == "rpc.discover" {
-        return Ok(JsonRpcResponse::success(
-            value.id,
-            serde_json::from_str::<HashMap<String, Value>>(include_str!("../openrpc.json")).map_err(|e| {
-                JsonRpcResponse::error(
-                    value.id,
-                    JsonRpcError::new(JsonRpcErrorReason::InternalError, e.to_string(), json!({})),
-                )
-            })?,
-        ));
-    }
+
     match value.method.as_str().split_once('.') {
+        Some(("rpc", "discover")) => call_handler(context, value, rpc::handle_discover).await,
         Some(("keys", method)) => match method {
             "create" => call_handler(context, value, keys::handle_create).await,
             "list" => call_handler(context, value, keys::handle_list).await,
@@ -65,7 +56,7 @@ async fn handler(Extension(context): Extension<Arc<HandlerContext>>, value: Json
             _ => Ok(value.method_not_found(&value.method)),
         },
         Some(("transactions", method)) => match method {
-            "submit" | "claim_burn" => call_handler(context, value, transaction::handle_submit).await,
+            "submit" => call_handler(context, value, transaction::handle_submit).await,
             "get" => call_handler(context, value, transaction::handle_get).await,
             "get_result" => call_handler(context, value, transaction::handle_get_result).await,
             "wait_result" => call_handler(context, value, transaction::handle_wait_result).await,
@@ -77,6 +68,12 @@ async fn handler(Extension(context): Extension<Arc<HandlerContext>>, value: Json
             "get_balances" => call_handler(context, value, accounts::handle_get_balances).await,
             "invoke" => call_handler(context, value, accounts::handle_invoke).await,
             "get_by_name" => call_handler(context, value, accounts::handle_get_by_name).await,
+            _ => Ok(value.method_not_found(&value.method)),
+        },
+        Some(("confidential", method)) => match method {
+            "create" => call_handler(context, value, confidential::handle_create_transfer_proof).await,
+            "finalize" => call_handler(context, value, confidential::handle_finalize_transfer).await,
+            "cancel" => call_handler(context, value, confidential::handle_cancel_transfer).await,
             _ => Ok(value.method_not_found(&value.method)),
         },
         _ => Ok(value.method_not_found(&value.method)),

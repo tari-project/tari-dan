@@ -20,7 +20,10 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use std::fmt::{Display, Formatter};
+use std::{
+    fmt::{Display, Formatter},
+    num::TryFromIntError,
+};
 
 use newtype_ops::newtype_ops;
 use tari_bor::{borsh, Decode, Encode};
@@ -87,6 +90,15 @@ impl Amount {
     }
 }
 
+impl TryFrom<u64> for Amount {
+    type Error = TryFromIntError;
+
+    fn try_from(value: u64) -> Result<Self, Self::Error> {
+        Ok(Amount(i64::try_from(value)?))
+    }
+}
+
+// TODO: This is fallible since changing from i128 to i64
 impl From<usize> for Amount {
     fn from(value: usize) -> Self {
         Amount::new(value as i64)
