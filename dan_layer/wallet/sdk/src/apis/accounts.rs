@@ -49,10 +49,10 @@ impl<'a, TStore: WalletStore> AccountsApi<'a, TStore> {
         Ok(count)
     }
 
-    pub fn get_account_address_by_name(&self, name: &str) -> Result<SubstateAddress, AccountsApiError> {
+    pub fn get_account_by_name(&self, name: &str) -> Result<Account, AccountsApiError> {
         let mut tx = self.store.create_read_tx()?;
         let account = tx.accounts_get_by_name(name)?;
-        Ok(account.address)
+        Ok(account)
     }
 }
 

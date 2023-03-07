@@ -1,26 +1,9 @@
 //   Copyright 2023 The Tari Project
 //   SPDX-License-Identifier: BSD-3-Clause
 
-// TODO: I think we should move the engine implementations out of this crate.
-//       The only reason we put vaults into engine types is because we return a substate value to the client.
-//       Buckets are only in engine types because of the vault.
-//       I think vaults/buckets should live in the engine since a lot of engine-related code lives in them (and then we
-//       can reuse this function). We could use an interface to keep the type in engine types and implementation in the
-//       engine. This refactor would need some co-ordination.
-
 use lazy_static::lazy_static;
-use tari_common_types::types::{BulletRangeProof, CommitmentFactory, PrivateKey, PublicKey};
-use tari_crypto::{
-    commitment::{ExtensionDegree, HomomorphicCommitmentFactory},
-    errors::RangeProofError,
-    extended_range_proof::ExtendedRangeProofService,
-    ristretto::bulletproofs_plus::{BulletproofsPlusService, RistrettoExtendedMask, RistrettoExtendedWitness},
-};
-use tari_template_lib::{
-    crypto::RistrettoPublicKeyBytes,
-    models::{Amount, ConfidentialOutputProof, ConfidentialStatement},
-};
-use tari_utilities::ByteArray;
+use tari_common_types::types::CommitmentFactory;
+use tari_crypto::ristretto::bulletproofs_plus::BulletproofsPlusService;
 
 lazy_static! {
     /// Static reference to the default commitment factory. Each instance of CommitmentFactory requires a number of heap allocations.
@@ -45,89 +28,6 @@ pub fn get_range_proof_service(aggregation_factor: usize) -> &'static Bulletproo
 
 pub fn get_commitment_factory() -> &'static CommitmentFactory {
     &COMMITMENT_FACTORY
-}
-
-pub struct ConfidentialProofStatement {
-    pub amount: Amount,
-    pub mask: PrivateKey,
-    pub sender_public_nonce: PublicKey,
-    pub minimum_value_promise: u64,
-}
-
-impl ConfidentialProofStatement {
-    pub fn zero() -> Self {
-        Self {
-            amount: Amount::zero(),
-            mask: PrivateKey::default(),
-            sender_public_nonce: PublicKey::default(),
-            minimum_value_promise: 0,
-        }
-    }
-}
-
-pub fn generate_confidential_proof(
-    output_statement: ConfidentialProofStatement,
-    change_statement: Option<ConfidentialProofStatement>,
-) -> Result<ConfidentialOutputProof, RangeProofError> {
-    let proof_change_statement = change_statement.as_ref().map(|statement| ConfidentialStatement {
-        commitment: commitment_to_bytes(&statement.mask, statement.amount),
-        sender_public_nonce: RistrettoPublicKeyBytes::from_bytes(statement.sender_public_nonce.as_bytes())
-            .expect("[generate_confidential_proof] change nonce"),
-        encrypted_value: Default::default(),
-        minimum_value_promise: statement.minimum_value_promise,
-    });
-
-    let output_range_proof = generate_extended_bullet_proof(&output_statement, change_statement.as_ref())?;
-
-    Ok(ConfidentialOutputProof {
-        output_statement: ConfidentialStatement {
-            commitment: commitment_to_bytes(&output_statement.mask, output_statement.amount),
-            sender_public_nonce: RistrettoPublicKeyBytes::from_bytes(output_statement.sender_public_nonce.as_bytes())
-                .expect("[generate_confidential_proof] output nonce"),
-            encrypted_value: Default::default(),
-            minimum_value_promise: output_statement.minimum_value_promise,
-        },
-        change_statement: proof_change_statement,
-        range_proof: output_range_proof.0,
-        revealed_amount: Amount::zero(),
-    })
-}
-
-fn generate_extended_bullet_proof(
-    output_statement: &ConfidentialProofStatement,
-    change_statement: Option<&ConfidentialProofStatement>,
-) -> Result<BulletRangeProof, RangeProofError> {
-    let mut extended_witnesses = vec![];
-
-    let extended_mask =
-        RistrettoExtendedMask::assign(ExtensionDegree::DefaultPedersen, vec![output_statement.mask.clone()]).unwrap();
-
-    let mut agg_factor = 1;
-    extended_witnesses.push(RistrettoExtendedWitness {
-        mask: extended_mask,
-        value: output_statement.amount.value() as u64,
-        minimum_value_promise: output_statement.minimum_value_promise,
-    });
-    if let Some(stmt) = change_statement {
-        let extended_mask =
-            RistrettoExtendedMask::assign(ExtensionDegree::DefaultPedersen, vec![stmt.mask.clone()]).unwrap();
-        extended_witnesses.push(RistrettoExtendedWitness {
-            mask: extended_mask,
-            value: stmt.amount.value() as u64,
-            minimum_value_promise: stmt.minimum_value_promise,
-        });
-        agg_factor = 2;
-    }
-
-    let output_range_proof = get_range_proof_service(agg_factor).construct_extended_proof(extended_witnesses, None)?;
-    Ok(BulletRangeProof(output_range_proof))
-}
-
-fn commitment_to_bytes(mask: &PrivateKey, amount: Amount) -> [u8; 32] {
-    let commitment = COMMITMENT_FACTORY.commit_value(mask, amount.value() as u64);
-    let mut bytes = [0u8; 32];
-    bytes.copy_from_slice(commitment.as_bytes());
-    bytes
 }
 
 pub mod challenges {

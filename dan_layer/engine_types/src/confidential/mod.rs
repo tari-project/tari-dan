@@ -5,12 +5,6 @@ mod proof;
 mod validation;
 mod withdraw;
 
-pub use proof::{
-    challenges,
-    generate_confidential_proof,
-    get_commitment_factory,
-    get_range_proof_service,
-    ConfidentialProofStatement,
-};
+pub use proof::{challenges, get_commitment_factory, get_range_proof_service};
 pub use validation::validate_confidential_proof;
 pub use withdraw::{validate_confidential_withdraw, ConfidentialOutput, ValidatedConfidentialWithdrawProof};

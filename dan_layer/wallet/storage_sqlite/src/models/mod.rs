@@ -8,7 +8,7 @@ mod config;
 pub use config::Config;
 
 mod output;
-pub use output::Output;
+pub use output::ConfidentialOutputModel;
 
 mod substate;
 pub use substate::Substate;

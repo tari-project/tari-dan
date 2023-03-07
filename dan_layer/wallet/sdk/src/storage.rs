@@ -8,7 +8,17 @@ use tari_dan_common_types::{optional::IsNotFoundError, QuorumCertificate};
 use tari_engine_types::{commit_result::FinalizeResult, substate::SubstateAddress, TemplateAddress};
 use tari_transaction::Transaction;
 
-use crate::models::{Account, Config, SubstateRecord, TransactionStatus, VersionedSubstateAddress, WalletTransaction};
+use crate::models::{
+    Account,
+    ConfidentialOutput,
+    ConfidentialProofId,
+    Config,
+    OutputStatus,
+    SubstateRecord,
+    TransactionStatus,
+    VersionedSubstateAddress,
+    WalletTransaction,
+};
 
 pub trait WalletStore {
     type ReadTransaction<'a>: WalletStoreReader
@@ -106,6 +116,18 @@ pub trait WalletStoreReader {
     fn accounts_get_many(&mut self, limit: u64) -> Result<Vec<Account>, WalletStorageError>;
     fn accounts_count(&mut self) -> Result<u64, WalletStorageError>;
     fn accounts_get_by_name(&mut self, name: &str) -> Result<Account, WalletStorageError>;
+
+    // Outputs
+    fn outputs_get_unspent_balance(&mut self, account_name: &str) -> Result<u64, WalletStorageError>;
+    fn outputs_get_locked_by_proof(
+        &mut self,
+        proof_id: ConfidentialProofId,
+    ) -> Result<Vec<ConfidentialOutput>, WalletStorageError>;
+    fn outputs_get_by_account_and_status(
+        &mut self,
+        account_name: &str,
+        status: OutputStatus,
+    ) -> Result<Vec<ConfidentialOutput>, WalletStorageError>;
 }
 
 pub trait WalletStoreWriter {
@@ -157,4 +179,20 @@ pub trait WalletStoreWriter {
         address: &SubstateAddress,
         owner_key_index: u64,
     ) -> Result<(), WalletStorageError>;
+
+    // Confidential Outputs
+    fn outputs_lock_smallest_amount(
+        &mut self,
+        account_name: &str,
+        locked_by_proof: ConfidentialProofId,
+    ) -> Result<ConfidentialOutput, WalletStorageError>;
+    fn outputs_insert(&mut self, output: ConfidentialOutput) -> Result<(), WalletStorageError>;
+    /// Mark outputs as finalized
+    fn outputs_finalize_by_proof_id(&mut self, proof_id: ConfidentialProofId) -> Result<(), WalletStorageError>;
+    /// Release outputs that were locked and remove pending unconfirmed outputs for this proof
+    fn outputs_release_by_proof_id(&mut self, proof_id: ConfidentialProofId) -> Result<(), WalletStorageError>;
+
+    // Proofs
+    fn proofs_insert(&mut self, account_name: String) -> Result<ConfidentialProofId, WalletStorageError>;
+    fn proofs_delete(&mut self, proof_id: ConfidentialProofId) -> Result<(), WalletStorageError>;
 }

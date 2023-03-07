@@ -9,18 +9,22 @@ use crate::{
 };
 
 #[derive(Debug, Clone, Encode, Decode)]
+#[cfg_attr(feature = "serde", derive(serde::Deserialize, serde::Serialize))]
 pub struct ConfidentialOutputProof {
     pub output_statement: ConfidentialStatement,
     pub change_statement: Option<ConfidentialStatement>,
+    #[cfg_attr(features = "serde", serde(with = "hex::serde"))]
     pub range_proof: Vec<u8>,
     pub revealed_amount: Amount,
 }
 
 #[derive(Debug, Clone, Encode, Decode)]
+#[cfg_attr(feature = "serde", derive(serde::Deserialize, serde::Serialize))]
 pub struct ConfidentialStatement {
+    #[cfg_attr(features = "serde", serde(with = "hex::serde"))]
     pub commitment: [u8; 32],
     /// Public nonce (R) that was used to generate the commitment mask
-    pub sender_public_nonce: RistrettoPublicKeyBytes,
+    pub sender_public_nonce: Option<RistrettoPublicKeyBytes>,
     /// Commitment value encrypted for the receiver. Without this it would be difficult (not impossible) for the
     /// receiver to determine the value component of the commitment.
     pub encrypted_value: EncryptedValue,
@@ -28,7 +32,9 @@ pub struct ConfidentialStatement {
 }
 
 #[derive(Debug, Clone, Encode, Decode)]
+#[cfg_attr(feature = "serde", derive(serde::Deserialize, serde::Serialize))]
 pub struct ConfidentialWithdrawProof {
+    #[cfg_attr(features = "serde", serde(with = "hex::serde"))]
     pub inputs: Vec<[u8; 32]>,
     pub output_proof: ConfidentialOutputProof,
     /// Balance proof
@@ -37,4 +43,10 @@ pub struct ConfidentialWithdrawProof {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Encode, Decode, Default)]
 #[cfg_attr(feature = "serde", derive(serde::Deserialize, serde::Serialize))]
-pub struct EncryptedValue(pub [u8; 24]);
+pub struct EncryptedValue(#[cfg_attr(features = "serde", serde(with = "hex::serde"))] pub [u8; EncryptedValue::size()]);
+
+impl EncryptedValue {
+    pub const fn size() -> usize {
+        24
+    }
+}

@@ -40,12 +40,7 @@ pub async fn handle_create(
     let sdk = context.wallet_sdk();
 
     if let Some(name) = req.account_name.as_ref() {
-        if sdk
-            .accounts_api()
-            .get_account_address_by_name(name)
-            .optional()?
-            .is_some()
-        {
+        if sdk.accounts_api().get_account_by_name(name).optional()?.is_some() {
             return Err(anyhow!("Account name '{}' already exists", name));
         }
     }
@@ -55,6 +50,7 @@ pub async fn handle_create(
         .get_key_or_active(TRANSACTION_KEYMANAGER_BRANCH, req.signing_key_index)?;
     let owner_pk = sdk
         .key_manager_api()
+        // TODO: Different branch?
         .get_public_key(TRANSACTION_KEYMANAGER_BRANCH, req.signing_key_index)?;
     let owner_token =
         NonFungibleAddress::from_public_key(RistrettoPublicKeyBytes::from_bytes(owner_pk.as_bytes()).unwrap());
@@ -112,10 +108,10 @@ pub async fn handle_invoke(
         .key_manager_api()
         .get_key_or_active(TRANSACTION_KEYMANAGER_BRANCH, None)?;
 
-    let account_address = sdk.accounts_api().get_account_address_by_name(&req.account_name)?;
+    let account = sdk.accounts_api().get_account_by_name(&req.account_name)?;
     let inputs = sdk
         .substate_api()
-        .load_dependent_substates(&[account_address.clone()])?;
+        .load_dependent_substates(&[account.address.clone()])?;
 
     let inputs = inputs
         .into_iter()
@@ -125,7 +121,7 @@ pub async fn handle_invoke(
     let mut builder = Transaction::builder();
     builder
         .add_instruction(Instruction::CallMethod {
-            component_address: account_address.as_component_address().unwrap(),
+            component_address: account.address.as_component_address().unwrap(),
             method: req.method,
             args: req.args,
         })
@@ -159,16 +155,16 @@ pub async fn handle_get_balances(
         .key_manager_api()
         .get_key_or_active(TRANSACTION_KEYMANAGER_BRANCH, None)?;
 
-    let account_address = sdk.accounts_api().get_account_address_by_name(&req.account_name)?;
+    let account = sdk.accounts_api().get_account_by_name(&req.account_name)?;
     let inputs = sdk
         .substate_api()
-        .load_dependent_substates(&[account_address.clone()])?;
+        .load_dependent_substates(&[account.address.clone()])?;
 
     info!(
         target: LOG_TARGET,
         "Loaded {} inputs for account: {}",
         inputs.len(),
-        account_address
+        account.address
     );
     for input in &inputs {
         info!(target: LOG_TARGET, "input: {}", input);
@@ -182,7 +178,7 @@ pub async fn handle_get_balances(
     let mut builder = Transaction::builder();
     builder
         .add_instruction(Instruction::CallMethod {
-            component_address: account_address.as_component_address().unwrap(),
+            component_address: account.address.as_component_address().unwrap(),
             method: "get_balances".to_string(),
             args: args![],
         })
@@ -200,7 +196,7 @@ pub async fn handle_get_balances(
 
     let finalized = wait_for_result(&mut events, tx_hash).await?;
     Ok(AccountsGetBalancesResponse {
-        address: account_address,
+        address: account.address,
         balances: finalized.execution_results[0].decode()?,
     })
 }
@@ -210,8 +206,10 @@ pub async fn handle_get_by_name(
     req: AccountByNameRequest,
 ) -> Result<AccountByNameResponse, anyhow::Error> {
     let sdk = context.wallet_sdk();
-    let account_address = sdk.accounts_api().get_account_address_by_name(&req.name)?;
-    Ok(AccountByNameResponse { account_address })
+    let account = sdk.accounts_api().get_account_by_name(&req.name)?;
+    Ok(AccountByNameResponse {
+        account_address: account.address,
+    })
 }
 
 async fn wait_for_result(
