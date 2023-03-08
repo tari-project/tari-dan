@@ -315,6 +315,27 @@ impl WalletStoreReader for ReadTransaction<'_> {
             .collect::<Result<_, _>>()?;
         Ok(outputs)
     }
+
+    fn proofs_get_by_transaction_hash(
+        &mut self,
+        transaction_hash: FixedHash,
+    ) -> Result<ConfidentialProofId, WalletStorageError> {
+        use crate::schema::proofs;
+
+        let proof_id = proofs::table
+            .filter(proofs::transaction_hash.eq(transaction_hash.to_string()))
+            .select(proofs::id)
+            .first::<i32>(self.connection())
+            .optional()
+            .map_err(|e| WalletStorageError::general("proofs_get_by_transaction_hash", e))?;
+        let proof_id = proof_id.ok_or_else(|| WalletStorageError::NotFound {
+            operation: "proofs_get_by_transaction_hash",
+            entity: "proofs".to_string(),
+            key: transaction_hash.to_string(),
+        })?;
+
+        Ok(proof_id as u64)
+    }
 }
 
 impl Drop for ReadTransaction<'_> {

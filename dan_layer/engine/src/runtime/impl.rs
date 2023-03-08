@@ -24,19 +24,14 @@ use std::collections::BTreeSet;
 
 use log::warn;
 use tari_bor::encode;
-use tari_common_types::types::{BulletRangeProof, FixedHash};
+use tari_common_types::types::FixedHash;
 use tari_crypto::{
     range_proof::RangeProofService,
-    ristretto::{
-        pedersen::commitment_factory::PedersenCommitmentFactory,
-        RistrettoComSig,
-        RistrettoPublicKey,
-        RistrettoSecretKey,
-    },
+    ristretto::{pedersen::commitment_factory::PedersenCommitmentFactory, RistrettoPublicKey, RistrettoSecretKey},
 };
 use tari_engine_types::{
     commit_result::{FinalizeResult, RejectReason, TransactionResult},
-    confidential::{get_range_proof_service, ConfidentialOutput},
+    confidential::{get_range_proof_service, ConfidentialClaim, ConfidentialOutput},
     logs::LogEntry,
     resource_container::ResourceContainer,
 };
@@ -65,15 +60,7 @@ use tari_template_lib::{
     },
     auth::AccessRules,
     constants::CONFIDENTIAL_TARI_RESOURCE_ADDRESS,
-    models::{
-        Amount,
-        BucketId,
-        ComponentAddress,
-        ComponentHeader,
-        LayerOneCommitmentAddress,
-        NonFungibleAddress,
-        VaultRef,
-    },
+    models::{Amount, BucketId, ComponentAddress, ComponentHeader, NonFungibleAddress, VaultRef},
 };
 use tari_utilities::ByteArray;
 
@@ -638,24 +625,24 @@ impl RuntimeInterface for RuntimeInterfaceImpl {
         Ok(())
     }
 
-    fn claim_burn(
-        &self,
-        commitment_address: LayerOneCommitmentAddress,
-        range_proof: BulletRangeProof,
-        owner_sig: RistrettoComSig,
-    ) -> Result<(), RuntimeError> {
+    fn claim_burn(&self, claim: ConfidentialClaim) -> Result<(), RuntimeError> {
+        let ConfidentialClaim {
+            commitment_address,
+            range_proof,
+            proof_of_knowledge,
+        } = claim;
         // 1. Must exist
         let commitment = self.tracker.take_layer_one_commitment(commitment_address)?;
         // 2. owner_sig must be valid
         // TODO: Probably want a better challenge
         let factory = PedersenCommitmentFactory::default();
         let hasher = BurntOutputDomainHasher::new_with_label("commitment_signature")
-            .chain(owner_sig.public_nonce().as_bytes())
+            .chain(proof_of_knowledge.public_nonce().as_bytes())
             .chain(commitment.as_bytes())
             .chain(self.sender_public_key.as_bytes());
 
         let challenge: FixedHash = digest::Digest::finalize(hasher).into();
-        if !owner_sig.verify(
+        if !proof_of_knowledge.verify(
             &commitment,
             &RistrettoSecretKey::from_bytes(challenge.as_bytes())
                 .map_err(|_e| RuntimeError::InvalidClaimingSignature)?,
@@ -666,7 +653,7 @@ impl RuntimeInterface for RuntimeInterfaceImpl {
         }
 
         // 3. range_proof must be valid
-        if !get_range_proof_service(1).verify(&range_proof.0, &commitment) {
+        if !get_range_proof_service(1).verify(&range_proof, &commitment) {
             warn!(target: LOG_TARGET, "Claim burn failed - Invalid range proof");
             return Err(RuntimeError::InvalidRangeProof);
         }

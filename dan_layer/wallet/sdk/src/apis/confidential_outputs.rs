@@ -1,7 +1,7 @@
 //   Copyright 2023 The Tari Project
 //   SPDX-License-Identifier: BSD-3-Clause
 
-use tari_common_types::types::PublicKey;
+use tari_common_types::types::{FixedHash, PublicKey};
 use tari_crypto::dhke::DiffieHellmanSharedSecret;
 use tari_dan_common_types::optional::{IsNotFoundError, Optional};
 
@@ -121,6 +121,17 @@ impl<'a, TStore: WalletStore> ConfidentialOutputsApi<'a, TStore> {
         let mut tx = self.store.create_read_tx()?;
         let balance = tx.outputs_get_unspent_balance(account_name)?;
         Ok(balance)
+    }
+
+    pub fn proofs_set_transaction_hash(
+        &self,
+        proof_id: ConfidentialProofId,
+        transaction_hash: FixedHash,
+    ) -> Result<(), ConfidentialOutputsApiError> {
+        let mut tx = self.store.create_write_tx()?;
+        tx.proofs_set_transaction_hash(proof_id, transaction_hash)?;
+        tx.commit()?;
+        Ok(())
     }
 }
 

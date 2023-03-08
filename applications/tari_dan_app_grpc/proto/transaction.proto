@@ -104,7 +104,7 @@ message Instruction {
 
   bytes claim_burn_commitment_address = 10;
   bytes claim_burn_range_proof = 11;
-  bytes claim_burn_proof_of_knowledge = 12;
+  CommitmentSignature claim_burn_proof_of_knowledge = 12;
 }
 
 message Arg {

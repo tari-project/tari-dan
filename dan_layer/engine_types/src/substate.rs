@@ -218,6 +218,12 @@ impl From<NonFungibleIndexAddress> for SubstateAddress {
     }
 }
 
+impl From<LayerOneCommitmentAddress> for SubstateAddress {
+    fn from(address: LayerOneCommitmentAddress) -> Self {
+        Self::LayerOneCommitment(address)
+    }
+}
+
 impl Display for SubstateAddress {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {

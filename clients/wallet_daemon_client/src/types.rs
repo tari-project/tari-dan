@@ -50,6 +50,7 @@ pub struct TransactionSubmitRequest {
     pub new_non_fungible_outputs: Vec<(ResourceAddress, u8)>,
     pub new_non_fungible_index_outputs: Vec<(ResourceAddress, u64)>,
     pub is_dry_run: bool,
+    pub proof_id: Option<ConfidentialProofId>,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]

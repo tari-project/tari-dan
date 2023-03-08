@@ -44,17 +44,27 @@ Feature: Indexer node
     When I submit a transaction manifest on VN with inputs "NFT, ACC1" and 4 outputs named "TX2"
         ```
             // $mint NFT/resources/0 1
+            // $mint NFT/resources/0 2
             // $nft_index NFT/resources/0 0
+            // $nft_index NFT/resources/0 1
             let sparkle_nft = global!["NFT/components/SparkleNft"];
             let mut acc1 = global!["ACC1/components/Account"];
 
-            // mint a new nft with random id
-            let nft_bucket = sparkle_nft.mint();
-            acc1.deposit(nft_bucket);
+            // mint a couple of nfts with random ids
+            let nft_bucket_1 = sparkle_nft.mint();
+            acc1.deposit(nft_bucket_1);
+            let nft_bucket_2 = sparkle_nft.mint();
+            acc1.deposit(nft_bucket_2);
         ```
 
     # Initialize an indexer
     Given an indexer IDX connected to base node BASE
+
+    # Explicitly track the NFT resource so the indexer tries to get all individual NFTs
+    When the indexer IDX tracks the address NFT/resources/0
+
+    # The indexer needs a bit of time to track and store all NFTs of a resource
+    When I wait 5 seconds
 
     # Get substate of a component (the counter has been increased, so the version is 1)
     Then the indexer IDX returns version 1 for substate COUNTER_1/components/Counter
@@ -62,8 +72,11 @@ Feature: Indexer node
     # Get substate of a resource (the nft resource has been mutated by the minting, so the version is 1)
     Then the indexer IDX returns version 1 for substate NFT/resources/0
 
-    # Get substate of a nft (newly minted and not mutated, so version is 0)
+    # Get substate of an nft (newly minted and not mutated, so version is 0)
     Then the indexer IDX returns version 0 for substate TX2/nfts/0
+
+    # List the nfts of a resource
+    Then the indexer IDX returns 2 non fungibles for resource NFT/resources/0
     
     # When I print the cucumber world
     # When I wait 5000 seconds

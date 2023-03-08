@@ -5,18 +5,18 @@ edition = "2018"
 license = "BSD-3-Clause"
 
 [dependencies]
-tari_common_types = { git = "https://github.com/tari-project/tari.git", branch = "development", package = "tari_common_types" }
-tari_comms = { git = "https://github.com/tari-project/tari.git", branch = "development", package = "tari_comms" }
+tari_common_types = { git = "https://github.com/tari-project/tari.git", tag = "v0.47.0-pre.0", package = "tari_common_types" }
+tari_comms = { git = "https://github.com/tari-project/tari.git", tag = "v0.47.0-pre.0", package = "tari_comms" }
 tari_crypto = { git = "https://github.com/tari-project/tari-crypto.git", tag = "v0.16.6" }
 tari_dan_common_types = { path = "../common_types" }
 tari_dan_core = { path = "../core" }
 tari_dan_engine = { path = "../engine" }
 tari_dan_storage_sqlite = { path = "../storage_sqlite" }
 tari_engine_types = { path = "../engine_types" }
-tari_shutdown = { git = "https://github.com/tari-project/tari.git", branch = "development", package = "tari_shutdown" }
+tari_shutdown = { git = "https://github.com/tari-project/tari.git", tag = "v0.47.0-pre.0", package = "tari_shutdown" }
 tari_template_lib = { path = "../template_lib" }
 tari_utilities = { git = "https://github.com/tari-project/tari_utilities.git", tag = "v0.4.10" }
-tari_core = { git = "https://github.com/tari-project/tari.git", branch = "development", package = "tari_core" }
+tari_core = { git = "https://github.com/tari-project/tari.git", tag = "v0.47.0-pre.0", package = "tari_core" }
 tari_transaction = { path = "../transaction" }
 
 anyhow = "1.0"

@@ -27,11 +27,15 @@ use log::info;
 use tari_engine_types::substate::{Substate, SubstateAddress};
 
 use crate::{
-    dan_layer_scanner::DanLayerScanner,
+    dan_layer_scanner::{DanLayerScanner, NonFungible},
     substate_storage_sqlite::{
-        models::substate::{NewSubstate, Substate as SubstateRow},
+        models::{
+            non_fungible_index::{IndexedNftSubstate, NewNonFungibleIndex},
+            substate::{NewSubstate, Substate as SubstateRow},
+        },
         sqlite_substate_store_factory::{
             SqliteSubstateStore,
+            SqliteSubstateStoreWriteTransaction,
             SubstateStore,
             SubstateStoreReadTransaction,
             SubstateStoreWriteTransaction,
@@ -56,29 +60,46 @@ impl SubstateManager {
 
     pub async fn fetch_and_add_substate_to_db(&self, substate_address: &SubstateAddress) -> Result<(), anyhow::Error> {
         // get the last version of the substate from the dan layer
-        let substate_scan_result = self.get_substate_from_dan_layer(substate_address, None).await;
+        // TODO: fetch the last version from database to avoid scaning always from the beginning
+        let substate = match self.get_substate_from_dan_layer(substate_address, None).await {
+            Some(substate) => substate,
+            None => return Err(anyhow!("Substate not found in the network")),
+        };
 
-        // store the substate into the database
-        match substate_scan_result {
-            Some(substate) => {
-                // if the substate is already stored it will be updated with the new version and data,
-                // otherwise it will be inserted as a new row
-                let substate_row = map_substate_to_db_row(substate_address, &substate)?;
-                let mut tx = self.substate_store.create_write_tx()?;
-                tx.set_substate(substate_row)?;
-                tx.commit()?;
+        // if it's a resource, we need also to retrieve all the individual nfts
+        let non_fungibles = if let SubstateAddress::Resource(addr) = substate_address {
+            // TODO: fetch the last index from database to avoid scaning always from the beginning
+            self.dan_layer_scanner.get_non_fungibles(addr, 0, None).await?
+        } else {
+            vec![]
+        };
 
-                info!(
-                    target: LOG_TARGET,
-                    "Added substate {} with version {} to the database",
-                    substate_address.to_address_string(),
-                    substate.version()
-                );
+        // store the substate in the database
+        let mut tx = self.substate_store.create_write_tx()?;
+        store_substate_in_db(&mut tx, substate_address, &substate)?;
+        info!(
+            target: LOG_TARGET,
+            "Added substate {} with version {} to the database",
+            substate_address.to_address_string(),
+            substate.version()
+        );
 
-                Ok(())
-            },
-            None => Err(anyhow!("Substate not found in the network")),
+        // store the associated non fungibles in the database
+        for nft in non_fungibles {
+            // store the substate of the nft in the databas
+            store_substate_in_db(&mut tx, &nft.address, &nft.substate)?;
+
+            // store the index of the nft
+            let nft_index_db_row = map_nft_index_to_db_row(substate_address, &nft)?;
+            tx.add_non_fungible_index(nft_index_db_row)?;
+            info!(
+                target: LOG_TARGET,
+                "Added non fungible {} at index {} to the database", nft.address, nft.index,
+            );
         }
+        tx.commit()?;
+
+        Ok(())
     }
 
     pub async fn delete_substate_from_db(&self, substate_address: &SubstateAddress) -> Result<(), anyhow::Error> {
@@ -153,16 +174,50 @@ impl SubstateManager {
         self.dan_layer_scanner.get_substate(substate_address, version).await
     }
 
+    pub async fn get_non_fungible_count(&self, substate_address: &SubstateAddress) -> Result<i64, anyhow::Error> {
+        let address_str = substate_address.to_address_string();
+        let mut tx = self.substate_store.create_read_tx()?;
+        tx.get_non_fungible_count(address_str).map_err(|e| e.into())
+    }
+
+    pub async fn get_non_fungibles(
+        &self,
+        substate_address: &SubstateAddress,
+        start_index: u64,
+        end_index: u64,
+    ) -> Result<Vec<NonFungible>, anyhow::Error> {
+        let address_str = substate_address.to_address_string();
+        let mut tx = self.substate_store.create_read_tx()?;
+        let db_rows = tx.get_non_fungibles(address_str, start_index as i32, end_index as i32)?;
+
+        let mut nfts = vec![];
+        for row in db_rows {
+            nfts.push(map_db_row_to_nft_index(&row)?);
+        }
+        Ok(nfts)
+    }
+
     pub async fn scan_and_update_substates(&self) -> Result<(), anyhow::Error> {
         let addresses = self.get_all_addresses_from_db().await?;
 
-        for (address, _version) in addresses {
+        for (address, _) in addresses {
             let address = SubstateAddress::from_str(&address)?;
             self.fetch_and_add_substate_to_db(&address).await?;
         }
 
         Ok(())
     }
+}
+
+fn store_substate_in_db(
+    tx: &mut SqliteSubstateStoreWriteTransaction,
+    address: &SubstateAddress,
+    substate: &Substate,
+) -> Result<(), anyhow::Error> {
+    let substate_row = map_substate_to_db_row(address, substate)?;
+    tx.set_substate(substate_row)?;
+
+    Ok(())
 }
 
 fn map_db_row_to_substate(row: &SubstateRow) -> Result<Substate, anyhow::Error> {
@@ -178,4 +233,25 @@ fn map_substate_to_db_row(address: &SubstateAddress, substate: &Substate) -> Res
         data: pretty_data,
     };
     Ok(row)
+}
+
+fn map_db_row_to_nft_index(row: &IndexedNftSubstate) -> Result<NonFungible, anyhow::Error> {
+    let substate: Substate = serde_json::from_str(&row.data)?;
+    let address = SubstateAddress::from_str(&row.address)?;
+    Ok(NonFungible {
+        index: row.idx as u64,
+        address,
+        substate,
+    })
+}
+
+fn map_nft_index_to_db_row(
+    resource_address: &SubstateAddress,
+    nft: &NonFungible,
+) -> Result<NewNonFungibleIndex, anyhow::Error> {
+    Ok(NewNonFungibleIndex {
+        resource_address: resource_address.to_address_string(),
+        idx: nft.index as i32,
+        non_fungible_address: nft.address.to_address_string(),
+    })
 }
