@@ -33,7 +33,7 @@ pub enum Instruction {
         message: String,
     },
     ClaimBurn {
-        claim: ConfidentialClaim,
+        claim: Box<ConfidentialClaim>,
     },
 }
 

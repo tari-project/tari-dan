@@ -177,7 +177,7 @@ impl TransactionProcessor {
             },
             Instruction::ClaimBurn { claim } => {
                 // Need to call it on the runtime so that a bucket is created.
-                runtime.interface().claim_burn(claim)?;
+                runtime.interface().claim_burn(*claim)?;
                 Ok(ExecutionResult::empty())
             },
         }

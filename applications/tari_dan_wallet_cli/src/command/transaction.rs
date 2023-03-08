@@ -68,7 +68,7 @@ use tari_wallet_daemon_client::{
     WalletDaemonClient,
 };
 
-use crate::from_hex::FromHex;
+use crate::{from_base64::FromBase64, from_hex::FromHex};
 
 #[derive(Debug, Subcommand, Clone)]
 pub enum TransactionSubcommand {
@@ -401,11 +401,11 @@ pub async fn handle_claim_burn(
 
     let instructions = vec![
         Instruction::ClaimBurn {
-            claim: ConfidentialClaim {
+            claim: Box::new(ConfidentialClaim {
                 commitment_address,
                 range_proof,
                 proof_of_knowledge,
-            },
+            }),
         },
         Instruction::PutLastInstructionOutputOnWorkspace { key: b"burn".to_vec() },
         Instruction::CallMethod {

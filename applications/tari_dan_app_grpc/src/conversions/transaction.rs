@@ -121,14 +121,14 @@ impl TryFrom<proto::transaction::Instruction> for tari_engine_types::instruction
                 message: request.log_message,
             },
             4 => Instruction::ClaimBurn {
-                claim: ConfidentialClaim {
+                claim: Box::new(ConfidentialClaim {
                     commitment_address: request.claim_burn_commitment_address.try_into()?,
                     range_proof: request.claim_burn_range_proof,
                     proof_of_knowledge: request
                         .claim_burn_proof_of_knowledge
                         .ok_or_else(|| anyhow!("claim_burn_proof_of_knowledge not provided"))?
                         .try_into()?,
-                },
+                }),
             },
             _ => return Err(anyhow!("invalid instruction_type")),
         };

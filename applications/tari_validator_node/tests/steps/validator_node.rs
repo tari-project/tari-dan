@@ -71,11 +71,11 @@ async fn when_i_claim_burn(
 
     let instructions = [
         Instruction::ClaimBurn {
-            claim: ConfidentialClaim {
+            claim: Box::new(ConfidentialClaim {
                 commitment_address: commitment.to_vec().try_into()?,
                 range_proof: rangeproof.clone(),
-                proof_of_knowledge: proof.clone().try_into()?,
-            },
+                proof_of_knowledge: proof.clone(),
+            }),
         },
         Instruction::PutLastInstructionOutputOnWorkspace { key: b"burn".to_vec() },
         Instruction::CallMethod {
