@@ -7,6 +7,7 @@ use futures::{future, future::Either};
 use log::*;
 use tari_common_types::types::FixedHash;
 use tari_dan_common_types::{optional::Optional, ShardId};
+use tari_dan_wallet_sdk::apis::key_manager;
 use tari_engine_types::{instruction::Instruction, substate::SubstateAddress};
 use tari_template_lib::prelude::NonFungibleAddress;
 use tari_transaction::Transaction;
@@ -24,7 +25,7 @@ use tokio::time;
 
 use super::context::HandlerContext;
 use crate::{
-    handlers::{HandlerError, TRANSACTION_KEYMANAGER_BRANCH},
+    handlers::HandlerError,
     services::{TransactionSubmittedEvent, WalletEvent},
 };
 
@@ -38,7 +39,7 @@ pub async fn handle_submit(
     let key_api = sdk.key_manager_api();
     // Fetch the key to sign the transaction
     // TODO: Ideally the SDK should take care of signing the transaction internally
-    let (_, key) = key_api.get_key_or_active(TRANSACTION_KEYMANAGER_BRANCH, req.signing_key_index)?;
+    let (_, key) = key_api.get_key_or_active(key_manager::TRANSACTION_BRANCH, req.signing_key_index)?;
 
     // let transaction_api = sdk.transaction_api();
     let inputs = if req.override_inputs {

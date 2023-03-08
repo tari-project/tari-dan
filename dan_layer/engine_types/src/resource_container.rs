@@ -353,6 +353,14 @@ impl ResourceContainer {
             },
         }
     }
+
+    /// Returns all confidential outputs. If the resource is not confidential, None is returned.
+    pub fn get_confidential_outputs(&self) -> Option<Vec<&ConfidentialOutput>> {
+        match self {
+            ResourceContainer::Fungible { .. } | ResourceContainer::NonFungible { .. } => None,
+            ResourceContainer::Confidential { commitments, .. } => Some(commitments.values().collect()),
+        }
+    }
 }
 
 #[derive(Debug, thiserror::Error)]

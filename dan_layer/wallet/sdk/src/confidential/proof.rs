@@ -73,7 +73,7 @@ pub fn generate_confidential_proof(
         .as_ref()
         .map(|stmt| -> Result<_, ConfidentialProofError> {
             let change_commitment = stmt.to_commitment();
-            let encrypted_value = encrypt_value(&stmt.mask, &change_commitment, stmt.amount)?;
+            let encrypted_value = encrypt_value(&stmt.mask, &change_commitment, stmt.amount.value() as u64)?;
             Ok(ConfidentialStatement {
                 commitment: copy_fixed(change_commitment.as_bytes()),
                 sender_public_nonce: stmt.sender_public_nonce.as_ref().map(|nonce| {
@@ -87,7 +87,11 @@ pub fn generate_confidential_proof(
         .transpose()?;
 
     let commitment = output_statement.to_commitment();
-    let encrypted_value = encrypt_value(&output_statement.mask, &commitment, output_statement.amount)?;
+    let encrypted_value = encrypt_value(
+        &output_statement.mask,
+        &commitment,
+        output_statement.amount.value() as u64,
+    )?;
     let output_range_proof = generate_extended_bullet_proof(output_statement, change_statement)?;
 
     Ok(ConfidentialOutputProof {
@@ -106,23 +110,41 @@ pub fn generate_confidential_proof(
     })
 }
 
-pub fn encrypt_value(
+const ENCRYPTED_VALUE_TAG: &[u8] = b"TARI_AAD_VALUE";
+fn encrypt_value(
     encryption_key: &PrivateKey,
     commitment: &Commitment,
-    amount: Amount,
+    amount: u64,
 ) -> Result<EncryptedValue, aead::Error> {
-    const TAG: &[u8] = b"TARI_AAD_VALUE";
     let aead_key = encrypted_value_kdf_aead(encryption_key, commitment);
     let chacha_poly = ChaCha20Poly1305::new(GenericArray::from_slice(aead_key.reveal()));
     let payload = Payload {
-        msg: &amount.value().to_le_bytes(),
-        aad: TAG,
+        msg: &amount.to_le_bytes(),
+        aad: ENCRYPTED_VALUE_TAG,
     };
     // Encrypt the value (with fixed length) using ChaCha20-Poly1305 with a fixed zero nonce
     let buffer = chacha_poly.encrypt(&Nonce::default(), payload)?;
     let mut data: [u8; EncryptedValue::size()] = [0; EncryptedValue::size()];
     data[..].copy_from_slice(&buffer);
     Ok(EncryptedValue(data))
+}
+
+pub fn decrypt_value(
+    encryption_key: &PrivateKey,
+    commitment: &Commitment,
+    encrypted_value: &EncryptedValue,
+) -> Result<u64, aead::Error> {
+    let aead_key = encrypted_value_kdf_aead(encryption_key, commitment);
+    // Authenticate and decrypt the value
+    let aead_payload = Payload {
+        msg: encrypted_value.as_ref(),
+        aad: ENCRYPTED_VALUE_TAG,
+    };
+    let mut value_bytes = [0u8; 8];
+    let decrypted_bytes =
+        ChaCha20Poly1305::new(GenericArray::from_slice(aead_key.reveal())).decrypt(&Nonce::default(), aead_payload)?;
+    value_bytes.clone_from_slice(&decrypted_bytes[..8]);
+    Ok(u64::from_le_bytes(value_bytes))
 }
 
 fn generate_extended_bullet_proof(

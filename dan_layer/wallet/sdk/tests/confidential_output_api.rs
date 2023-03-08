@@ -5,12 +5,13 @@ use tari_common_types::types::Commitment;
 use tari_crypto::commitment::HomomorphicCommitmentFactory;
 use tari_dan_wallet_sdk::{
     confidential::get_commitment_factory,
-    models::{ConfidentialOutput, ConfidentialProofId, OutputStatus},
+    models::{ConfidentialOutputModel, ConfidentialProofId, OutputStatus},
     storage::{WalletStore, WalletStoreReader},
     DanWalletSdk,
     WalletSdkConfig,
 };
 use tari_dan_wallet_storage_sqlite::SqliteWalletStore;
+use tari_engine_types::substate::SubstateAddress;
 
 #[test]
 fn outputs_locked_and_released() {
@@ -24,7 +25,7 @@ fn outputs_locked_and_released() {
     let (inputs, total_value) = test
         .sdk()
         .confidential_outputs_api()
-        .lock_outputs_by_amount("test", 50, proof_id)
+        .lock_outputs_by_amount(&Test::test_account_address(), 50, proof_id)
         .unwrap();
     assert_eq!(total_value, 74);
     assert_eq!(inputs.len(), 2);
@@ -61,7 +62,9 @@ fn outputs_locked_and_finalized() {
     let outputs_api = test.sdk().confidential_outputs_api();
     let proof_id = test.new_proof();
 
-    let (inputs, total_value) = outputs_api.lock_outputs_by_amount("test", 50, proof_id).unwrap();
+    let (inputs, total_value) = outputs_api
+        .lock_outputs_by_amount(&Test::test_account_address(), 50, proof_id)
+        .unwrap();
     assert_eq!(total_value, 74);
     assert_eq!(inputs.len(), 2);
 
@@ -77,8 +80,9 @@ fn outputs_locked_and_finalized() {
     // Add a change output belonging to this proof
     let commitment_change = get_commitment_factory().commit_value(&Default::default(), 24);
     outputs_api
-        .add_output(ConfidentialOutput {
-            account_name: "test".to_string(),
+        .add_output(ConfidentialOutputModel {
+            account_address: Test::test_account_address(),
+            vault_address: Test::test_vault_address(),
             commitment: commitment_change.clone(),
             value: 24,
             sender_public_nonce: None,
@@ -100,12 +104,12 @@ fn outputs_locked_and_finalized() {
         assert_eq!(locked.len(), 0);
 
         let unspent = tx
-            .outputs_get_by_account_and_status("test", OutputStatus::Unspent)
+            .outputs_get_by_account_and_status(&Test::test_account_address(), OutputStatus::Unspent)
             .unwrap();
         assert!(unspent.iter().any(|l| l.commitment == commitment_change));
         assert!(unspent.iter().any(|l| l.commitment == commitment_100));
         assert_eq!(unspent.len(), 2);
-        let balance = tx.outputs_get_unspent_balance("test").unwrap();
+        let balance = tx.outputs_get_unspent_balance(&Test::test_account_address()).unwrap();
         assert_eq!(balance, 124);
     }
 }
@@ -131,13 +135,7 @@ impl Test {
         .unwrap();
         let accounts_api = sdk.accounts_api();
         accounts_api
-            .add_account(
-                Some("test"),
-                &"component_0dc41b5cc74b36d696c7b140323a40a2f98b71df5d60e5a6bf4c1a071d15f562"
-                    .parse()
-                    .unwrap(),
-                0,
-            )
+            .add_account(Some("test"), &Test::test_account_address(), 0)
             .unwrap();
 
         Self {
@@ -147,12 +145,25 @@ impl Test {
         }
     }
 
+    pub fn test_account_address() -> SubstateAddress {
+        "component_0dc41b5cc74b36d696c7b140323a40a2f98b71df5d60e5a6bf4c1a071d15f562"
+            .parse()
+            .unwrap()
+    }
+
+    pub fn test_vault_address() -> SubstateAddress {
+        "vault_0dc41b5cc74b36d696c7b140323a40a2f98b71df5d60e5a6bf4c1a071d15f562"
+            .parse()
+            .unwrap()
+    }
+
     pub fn add_unspent_output(&self, amount: u64) -> Commitment {
         let outputs_api = self.sdk.confidential_outputs_api();
         let commitment = get_commitment_factory().commit_value(&Default::default(), amount);
         outputs_api
-            .add_output(ConfidentialOutput {
-                account_name: "test".to_string(),
+            .add_output(ConfidentialOutputModel {
+                account_address: Self::test_account_address(),
+                vault_address: Self::test_vault_address(),
                 commitment: commitment.clone(),
                 value: amount,
                 sender_public_nonce: None,
@@ -167,12 +178,12 @@ impl Test {
 
     pub fn new_proof(&self) -> ConfidentialProofId {
         let outputs_api = self.sdk.confidential_outputs_api();
-        outputs_api.add_proof("test".to_string()).unwrap()
+        outputs_api.add_proof(&Self::test_account_address()).unwrap()
     }
 
     pub fn get_unspent_balance(&self) -> u64 {
         let outputs_api = self.sdk.confidential_outputs_api();
-        outputs_api.get_unspent_balance("test").unwrap()
+        outputs_api.get_unspent_balance(&Test::test_account_address()).unwrap()
     }
 
     pub fn sdk(&self) -> &DanWalletSdk<SqliteWalletStore> {

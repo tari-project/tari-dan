@@ -217,7 +217,7 @@ pub async fn handle_claim_burn(args: ClaimBurnArgs, client: &mut WalletDaemonCli
 
 async fn handle_list(client: &mut WalletDaemonClient) -> Result<(), anyhow::Error> {
     println!("Submitted account list transaction...");
-    let resp = client.list_accounts(100).await?;
+    let resp = client.list_accounts(0, 100).await?;
 
     if resp.accounts.is_empty() {
         println!("No accounts found");

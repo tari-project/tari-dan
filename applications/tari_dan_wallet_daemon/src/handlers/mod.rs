@@ -9,9 +9,6 @@ pub mod keys;
 pub mod rpc;
 pub mod transaction;
 
-pub(crate) const TRANSACTION_KEYMANAGER_BRANCH: &str = "transactions";
-pub(crate) const OUTPUT_KEYMANAGER_BRANCH: &str = "outputs";
-
 use std::future::Future;
 
 use axum::async_trait;

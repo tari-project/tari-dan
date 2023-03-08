@@ -30,7 +30,11 @@ use tari_dan_common_types::{
     ShardId,
 };
 use tari_dan_core::models::RecentTransaction;
-use tari_engine_types::{commit_result::FinalizeResult, TemplateAddress};
+use tari_engine_types::{
+    commit_result::FinalizeResult,
+    substate::{SubstateAddress, SubstateValue},
+    TemplateAddress,
+};
 use tari_transaction::Transaction;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -227,6 +231,25 @@ pub struct GetStateRequest {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct GetStateResponse {
     pub data: Vec<u8>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct GetSubstateRequest {
+    pub address: SubstateAddress,
+    pub version: u32,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct GetSubstateResponse {
+    pub value: Option<SubstateValue>,
+    pub status: SubstateStatus,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+pub enum SubstateStatus {
+    Up,
+    Down,
+    DoesNotExist,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
