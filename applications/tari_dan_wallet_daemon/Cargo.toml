@@ -9,7 +9,7 @@ edition = "2018"
 
 [dependencies]
 tari_common = { git = "https://github.com/tari-project/tari.git", tag = "v0.48.0-rc.0" }
-tari_crypto = { git = "https://github.com/tari-project/tari-crypto.git", tag = "v0.16.7" }
+tari_crypto = { git = "https://github.com/tari-project/tari-crypto.git", tag = "v0.16.6" }
 tari_common_types = { git = "https://github.com/tari-project/tari.git", tag = "v0.48.0-rc.0" }
 tari_shutdown = { git = "https://github.com/tari-project/tari.git", tag = "v0.48.0-rc.0" }
 tari_dan_wallet_sdk = { path = "../../dan_layer/wallet/sdk" }

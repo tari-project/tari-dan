@@ -58,6 +58,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     if let Err(e) = initialize_logging(
         cli.base_dir().join("config/logs.yml").as_path(),
+        &cli.base_dir(),
         include_str!("../log4rs_sample.yml"),
     ) {
         eprintln!("{}", e);

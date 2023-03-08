@@ -23,6 +23,6 @@ crate-type = ["cdylib", "lib"]
 
 [dev-dependencies]
 tari_dan_engine = { git = "https://github.com/tari-project/tari-dan.git", branch = "development", package = "tari_dan_engine" }
-tari_crypto = { git = "https://github.com/tari-project/tari-crypto.git", tag = "v0.16.7" }
+tari_crypto = { git = "https://github.com/tari-project/tari-crypto.git", tag = "v0.16.6" }
 tari_dan_common_types = { git = "https://github.com/tari-project/tari-dan.git", branch = "development", package = "tari_dan_common_types" }
 tari_common_types = { git = "https://github.com/tari-project/tari.git", tag = "v0.47.0-pre.0", package = "tari_common_types" }
