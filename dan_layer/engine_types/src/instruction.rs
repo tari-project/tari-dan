@@ -10,6 +10,8 @@ use tari_template_lib::{
     models::{ComponentAddress, TemplateAddress},
 };
 
+use crate::confidential::ConfidentialClaim;
+
 #[derive(Debug, Clone, Encode, Deserialize, Serialize, Eq, PartialEq)]
 #[serde(tag = "type")]
 pub enum Instruction {
@@ -31,9 +33,7 @@ pub enum Instruction {
         message: String,
     },
     ClaimBurn {
-        commitment_address: Vec<u8>,
-        range_proof: Vec<u8>,
-        proof_of_knowledge: Vec<u8>,
+        claim: ConfidentialClaim,
     },
 }
 
@@ -64,15 +64,11 @@ impl Display for Instruction {
             Self::EmitLog { level, message } => {
                 write!(f, "EmitLog {{ level: {:?}, message: {:?} }}", level, message)
             },
-            Self::ClaimBurn {
-                commitment_address,
-                proof_of_knowledge,
-                ..
-            } => {
+            Self::ClaimBurn { claim } => {
                 write!(
                     f,
-                    "ClaimBurn {{ commitment_address: {:?}, proof_of_knowledge: {:?} }}",
-                    commitment_address, proof_of_knowledge
+                    "ClaimBurn {{ commitment_address: {}, proof_of_knowledge: {:?} }}",
+                    claim.commitment_address, claim.proof_of_knowledge
                 )
             },
         }

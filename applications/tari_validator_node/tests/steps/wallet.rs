@@ -51,7 +51,9 @@ async fn when_i_burn_on_wallet(
 
     assert!(resp.is_success);
     world.commitments.insert(commitment, resp.commitment);
-    world.commitment_ownership_proofs.insert(proof, resp.ownership_proof);
+    world
+        .commitment_ownership_proofs
+        .insert(proof, resp.ownership_proof.unwrap());
     world.rangeproofs.insert(range_proof, resp.rangeproof);
 }
 

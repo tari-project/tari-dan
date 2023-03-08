@@ -22,8 +22,11 @@
 
 use std::{
     collections::HashMap,
+    convert::TryFrom,
     fmt,
     fs,
+    io,
+    io::Read,
     path::PathBuf,
     str::FromStr,
     time::{Duration, Instant},
@@ -31,12 +34,14 @@ use std::{
 
 use anyhow::anyhow;
 use clap::{Args, Subcommand};
-use tari_common_types::types::FixedHash;
-use tari_crypto::ristretto::RistrettoPublicKey;
+use serde_json as json;
+use tari_common_types::types::{Commitment, FixedHash, PrivateKey, PublicKey};
+use tari_crypto::ristretto::{RistrettoComSig, RistrettoPublicKey};
 use tari_dan_common_types::ShardId;
 use tari_dan_wallet_sdk::models::{ConfidentialProofId, VersionedSubstateAddress};
 use tari_engine_types::{
     commit_result::{FinalizeResult, TransactionResult},
+    confidential::ConfidentialClaim,
     execution_result::{ExecutionResult, Type},
     instruction::Instruction,
     substate::{SubstateAddress, SubstateValue},
@@ -46,7 +51,7 @@ use tari_template_lib::{
     arg,
     args,
     args::Arg,
-    models::{Amount, NonFungibleAddress, NonFungibleId},
+    models::{Amount, LayerOneCommitmentAddress, NonFungibleAddress, NonFungibleId},
     prelude::{ComponentAddress, ResourceAddress},
 };
 use tari_transaction_manifest::{parse_manifest, ManifestValue};
@@ -63,7 +68,7 @@ use tari_wallet_daemon_client::{
     WalletDaemonClient,
 };
 
-use crate::{from_base64::FromBase64, from_hex::FromHex};
+use crate::from_hex::FromHex;
 
 #[derive(Debug, Subcommand, Clone)]
 pub enum TransactionSubcommand {
@@ -103,8 +108,6 @@ pub struct CommonSubmitArgs {
     pub version: Option<u8>,
     #[clap(long, short = 'd')]
     pub dump_outputs_into: Option<String>,
-    #[clap(long, short = 'a')]
-    pub account_template_address: Option<String>,
     #[clap(long)]
     pub dry_run: bool,
     #[clap(long, short = 'm', alias = "mint-specific")]
@@ -128,14 +131,10 @@ pub struct SubmitManifestArgs {
 
 #[derive(Debug, Args, Clone)]
 pub struct ClaimBurnArgs {
-    #[clap(long, short = 'z')]
+    #[clap(long, short = 'a')]
     account_address: ComponentAddress,
-    #[clap(long, short = 'c')]
-    commitment_address: FromBase64<Vec<u8>>,
-    #[clap(long, short = 'r')]
-    range_proof: FromBase64<Vec<u8>>,
-    #[clap(long, short = 'k')]
-    proof_of_knowledge: FromBase64<Vec<u8>>,
+    #[clap(long, short = 'j', alias = "json")]
+    proof_json: Option<String>,
     #[clap(flatten)]
     common: CommonSubmitArgs,
 }
@@ -339,37 +338,79 @@ pub async fn handle_claim_burn(
 ) -> Result<TransactionSubmitResponse, anyhow::Error> {
     let ClaimBurnArgs {
         account_address,
-        commitment_address,
-        range_proof,
-        proof_of_knowledge,
+        proof_json,
         mut common,
     } = args;
 
-    let commitment_address = commitment_address.into_inner();
-    let range_proof = range_proof.into_inner();
-    let proof_of_knowledge = proof_of_knowledge.into_inner();
+    let proof_json = if let Some(proof_json) = proof_json {
+        proof_json
+    } else {
+        println!(
+            "Please paste console wallet JSON output from claim_burn call in the terminal: Press <Ctrl/Cmd + d> once \
+             done"
+        );
+
+        let mut proof_json = String::new();
+        io::stdin().read_to_string(&mut proof_json)?;
+        println!("{}", proof_json);
+        proof_json.trim().to_string()
+    };
+
+    let claim = json::from_str::<json::Value>(&proof_json).map_err(|e| anyhow!("Failed to parse proof JSON: {}", e))?;
+    println!("JSON OK");
+    let commitment_address = LayerOneCommitmentAddress::try_from(base64::decode(
+        claim["commitment"]
+            .as_str()
+            .ok_or_else(|| anyhow!("Missing commitment"))?,
+    )?)?;
+    println!("ADDR OK");
+    let range_proof = base64::decode(
+        claim["rangeproof"]
+            .as_str()
+            .ok_or_else(|| anyhow!("Missing rangeproof"))?,
+    )?;
+    println!("RP OK");
+    let u = PrivateKey::from_bytes(&base64::decode(
+        claim["ownership_proof"]["u"]
+            .as_str()
+            .ok_or_else(|| anyhow!("Missing ownership_proof u"))?,
+    )?)?;
+    println!("u OK");
+    let v = PrivateKey::from_bytes(&base64::decode(
+        claim["ownership_proof"]["v"]
+            .as_str()
+            .ok_or_else(|| anyhow!("Missing ownership_proof v"))?,
+    )?)?;
+    println!("v OK");
+    let public_nonce = PublicKey::from_bytes(&base64::decode(
+        claim["ownership_proof"]["public_nonce"]
+            .as_str()
+            .ok_or_else(|| anyhow!("Missing ownership_proof public_nonce"))?,
+    )?)?;
+    println!("nonce OK");
+
+    let proof_of_knowledge = RistrettoComSig::new(Commitment::from_public_key(&public_nonce), u, v);
+    println!("✅ Proof JSON is valid.");
 
     // specify the input and output set, which is deterministic
     // at this point
     let component_substate_address = VersionedSubstateAddress {
-        address: SubstateAddress::from_str(&format!("commitment_{}", to_hex(commitment_address.as_ref())))?,
+        address: commitment_address.into(),
         version: 0,
     };
-    // let account_substate_address = VersionedSubstateAddress {
-    //     address: account_address.into(),
-    //     version: 0,
-    // };
 
     let instructions = vec![
         Instruction::ClaimBurn {
-            commitment_address,
-            range_proof,
-            proof_of_knowledge,
+            claim: ConfidentialClaim {
+                commitment_address,
+                range_proof,
+                proof_of_knowledge,
+            },
         },
         Instruction::PutLastInstructionOutputOnWorkspace { key: b"burn".to_vec() },
         Instruction::CallMethod {
             component_address: account_address,
-            method: String::from("deposit_confidential"),
+            method: String::from("deposit"),
             args: vec![arg![Variable("burn")]],
         },
     ];

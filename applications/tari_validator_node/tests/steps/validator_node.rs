@@ -1,12 +1,12 @@
 //  Copyright 2022 The Tari Project
 //  SPDX-License-Identifier: BSD-3-Clause
 
-use std::str::FromStr;
+use std::{convert::TryInto, str::FromStr};
 
 use cucumber::{then, when};
 use tari_crypto::tari_utilities::{hex::Hex, ByteArray};
 use tari_dan_common_types::{Epoch, ShardId};
-use tari_engine_types::{instruction::Instruction, substate::SubstateAddress};
+use tari_engine_types::{confidential::ConfidentialClaim, instruction::Instruction, substate::SubstateAddress};
 use tari_template_lib::{args::Arg, prelude::ComponentAddress};
 use tari_transaction::Transaction;
 use tari_validator_node_client::types::{GetStateRequest, SubmitTransactionRequest};
@@ -71,9 +71,11 @@ async fn when_i_claim_burn(
 
     let instructions = [
         Instruction::ClaimBurn {
-            commitment_address: commitment.to_vec(),
-            range_proof: rangeproof.clone(),
-            proof_of_knowledge: proof.clone(),
+            claim: ConfidentialClaim {
+                commitment_address: commitment.to_vec().try_into()?,
+                range_proof: rangeproof.clone(),
+                proof_of_knowledge: proof.clone().try_into()?,
+            },
         },
         Instruction::PutLastInstructionOutputOnWorkspace { key: b"burn".to_vec() },
         Instruction::CallMethod {

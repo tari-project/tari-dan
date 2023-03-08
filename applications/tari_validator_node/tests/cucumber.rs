@@ -48,6 +48,7 @@ use tari_crypto::{
     ristretto::{RistrettoPublicKey, RistrettoSecretKey},
     tari_utilities::hex::Hex,
 };
+use tari_dan_app_grpc::proto;
 use tari_dan_app_utilities::base_node_client::GrpcBaseNodeClient;
 use tari_dan_common_types::QuorumDecision;
 use tari_dan_core::services::BaseNodeClient;
@@ -95,7 +96,7 @@ pub struct TariWorld {
     cli_data_dir: Option<String>,
     current_scenario_name: Option<String>,
     commitments: IndexMap<String, Vec<u8>>,
-    commitment_ownership_proofs: IndexMap<String, Vec<u8>>,
+    commitment_ownership_proofs: IndexMap<String, proto::transaction::CommitmentSignature>,
     rangeproofs: IndexMap<String, Vec<u8>>,
     addresses: IndexMap<String, String>,
     num_databases_saved: usize,
