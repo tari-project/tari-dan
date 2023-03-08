@@ -30,6 +30,8 @@ use tari_engine_types::substate::{Substate, SubstateAddress};
 use tari_indexer::{
     config::{ApplicationConfig, IndexerConfig},
     run_indexer,
+    AddAddressRequest,
+    GetNonFungiblesRequest,
     GetSubstateRequest,
 };
 use tari_indexer_client::IndexerClient;
@@ -52,17 +54,17 @@ pub struct IndexerProcess {
 }
 
 impl IndexerProcess {
+    pub async fn add_address(&self, world: &TariWorld, output_ref: String) {
+        let address = get_adddress_from_output(world, output_ref);
+
+        let params = AddAddressRequest { address };
+
+        let mut client = self.get_indexer_client().await;
+        let _: () = client.send_request("add_address", params).await.unwrap();
+    }
+
     pub async fn get_substate(&self, world: &TariWorld, output_ref: String, version: u32) -> Substate {
-        let substate_address_map: HashMap<String, SubstateAddress> = world
-            .outputs
-            .iter()
-            .flat_map(|(name, outputs)| {
-                outputs
-                    .iter()
-                    .map(move |(child_name, addr)| (format!("{}/{}", name, child_name), addr.address.clone()))
-            })
-            .collect();
-        let address = substate_address_map.get(&output_ref).unwrap().to_string();
+        let address = get_adddress_from_output(world, output_ref);
 
         let params = GetSubstateRequest {
             address,
@@ -72,15 +74,47 @@ impl IndexerProcess {
         let mut client = self.get_indexer_client().await;
         let resp: Substate = client.send_request("get_substate", params).await.unwrap();
         resp
+    }
 
-        // let substate: Substate = serde_json::from_str(resp).unwrap();
-        // substate
+    pub async fn get_non_fungibles(
+        &self,
+        world: &TariWorld,
+        output_ref: String,
+        start_index: u64,
+        end_index: u64,
+    ) -> Vec<tari_indexer::NonFungible> {
+        let address = get_adddress_from_output(world, output_ref);
+
+        let params = GetNonFungiblesRequest {
+            address,
+            start_index,
+            end_index,
+        };
+
+        let mut client = self.get_indexer_client().await;
+        let resp: Vec<tari_indexer::NonFungible> = client.send_request("get_non_fungibles", params).await.unwrap();
+        resp
     }
 
     pub async fn get_indexer_client(&self) -> IndexerClient {
         let endpoint: Url = Url::parse(&format!("http://localhost:{}", self.json_rpc_port)).unwrap();
         IndexerClient::connect(endpoint).unwrap()
     }
+}
+
+fn get_adddress_from_output(world: &TariWorld, output_ref: String) -> String {
+    let substate_address_map: HashMap<String, SubstateAddress> = world
+        .outputs
+        .iter()
+        .flat_map(|(name, outputs)| {
+            outputs
+                .iter()
+                .map(move |(child_name, addr)| (format!("{}/{}", name, child_name), addr.address.clone()))
+        })
+        .collect();
+
+    let address = substate_address_map.get(&output_ref).unwrap().to_string();
+    address
 }
 
 pub async fn spawn_indexer(world: &mut TariWorld, indexer_name: String, base_node_name: String) {
@@ -118,6 +152,7 @@ pub async fn spawn_indexer(world: &mut TariWorld, indexer_name: String, base_nod
         config.indexer.identity_file = temp_dir.join("indexer_id.json");
         config.indexer.tor_identity_file = temp_dir.join("indexer_tor_id.json");
         config.indexer.base_node_grpc_address = Some(format!("127.0.0.1:{}", base_node_grpc_port).parse().unwrap());
+        config.indexer.dan_layer_scanning_internal = Duration::from_secs(2);
 
         config.indexer.p2p.transport.transport_type = TransportType::Tcp;
         config.indexer.p2p.transport.tcp.listener_address =

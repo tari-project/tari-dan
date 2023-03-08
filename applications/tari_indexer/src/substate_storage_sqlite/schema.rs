@@ -29,4 +29,13 @@ diesel::table! {
     }
 }
 
-diesel::allow_tables_to_appear_in_same_query!(substates,);
+diesel::table! {
+    non_fungible_indexes (id) {
+        id -> Integer,
+        resource_address -> Text,
+        idx -> Integer,
+        non_fungible_address -> Text,
+    }
+}
+
+diesel::allow_tables_to_appear_in_same_query!(substates, non_fungible_indexes);

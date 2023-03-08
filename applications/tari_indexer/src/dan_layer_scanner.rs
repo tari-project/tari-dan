@@ -29,6 +29,7 @@ use tari_dan_app_utilities::epoch_manager::EpochManagerHandle;
 use tari_dan_common_types::{Epoch, ShardId};
 use tari_dan_core::services::{epoch_manager::EpochManager, ValidatorNodeClientFactory};
 use tari_engine_types::substate::{Substate, SubstateAddress};
+use tari_template_lib::{models::NonFungibleIndexAddress, prelude::ResourceAddress};
 
 use crate::p2p::services::rpc_client::TariCommsValidatorNodeClientFactory;
 
@@ -50,23 +51,79 @@ impl DanLayerScanner {
         }
     }
 
+    pub async fn get_non_fungibles(
+        &self,
+        resource_address: &ResourceAddress,
+        start_index: u64,
+        end_index: Option<u64>,
+    ) -> Result<Vec<NonFungible>, anyhow::Error> {
+        let epoch = match self.get_current_epoch().await {
+            Some(epoch) => epoch,
+            None => return Ok(vec![]),
+        };
+
+        let mut nft_substates = vec![];
+        let mut index = start_index;
+
+        loop {
+            // build the address of the nft index substate
+            let index_address = NonFungibleIndexAddress::new(*resource_address, index);
+            let index_substate_address = SubstateAddress::NonFungibleIndex(index_address);
+
+            // get the nft index substate from the network
+            // nft index substates are immutable, so they are always on version 0
+            let index_substate_result = self
+                .get_specific_substate_from_committee(&index_substate_address, 0, epoch)
+                .await;
+            let index_substate = match index_substate_result {
+                SubstateResult::Up(substate) => substate.into_substate_value(),
+                _ => break,
+            };
+
+            // now that we have the index substate, we need the latest substate of the referenced nft
+            let nft_address = match index_substate.into_non_fungible_index() {
+                Some(idx) => idx.referenced_address().clone(),
+                // the protocol should never produce this scenario, we stop querying for more indexes if it happens
+                None => break,
+            };
+            let nft_substate_address = SubstateAddress::NonFungible(nft_address);
+            match self
+                .get_latest_substate_from_committee(&nft_substate_address, epoch)
+                .await
+            {
+                SubstateResult::Up(substate) => {
+                    nft_substates.push(NonFungible {
+                        index,
+                        address: nft_substate_address,
+                        substate,
+                    });
+                },
+                _ => break,
+            }
+
+            if let Some(end_index) = end_index {
+                if index >= end_index {
+                    break;
+                }
+            }
+
+            index += 1;
+        }
+
+        Ok(nft_substates)
+    }
+
     pub async fn get_substate(&self, substate_address: &SubstateAddress, version: Option<u32>) -> Option<Substate> {
         info!(target: LOG_TARGET, "get_substate: {} ", substate_address);
 
-        let epoch = match self.epoch_manager.current_epoch().await {
-            Ok(epoch) => epoch,
-            Err(e) => {
-                error!(target: LOG_TARGET, "Could not retrieve the current epoch: {} ", e);
-                return None;
-            },
-        };
+        let epoch = self.get_current_epoch().await?;
 
         let result = match version {
             Some(version) => {
-                self.get_specific_substate_from_commitee(substate_address, version, epoch)
+                self.get_specific_substate_from_committee(substate_address, version, epoch)
                     .await
             },
-            None => self.get_latest_substate_from_commitee(substate_address, epoch).await,
+            None => self.get_latest_substate_from_committee(substate_address, epoch).await,
         };
 
         match result {
@@ -76,7 +133,17 @@ impl DanLayerScanner {
         }
     }
 
-    async fn get_latest_substate_from_commitee(
+    async fn get_current_epoch(&self) -> Option<Epoch> {
+        match self.epoch_manager.current_epoch().await {
+            Ok(epoch) => Some(epoch),
+            Err(e) => {
+                error!(target: LOG_TARGET, "Could not retrieve the current epoch: {} ", e);
+                None
+            },
+        }
+    }
+
+    async fn get_latest_substate_from_committee(
         &self,
         substate_address: &SubstateAddress,
         epoch: Epoch,
@@ -85,7 +152,7 @@ impl DanLayerScanner {
         let mut version = 0;
         loop {
             let substate_result = self
-                .get_specific_substate_from_commitee(substate_address, version, epoch)
+                .get_specific_substate_from_committee(substate_address, version, epoch)
                 .await;
             match substate_result {
                 // when it's a "Down" state, we need to ask a higher version until we find an "Up" or "DoesNotExist"
@@ -97,7 +164,7 @@ impl DanLayerScanner {
         }
     }
 
-    async fn get_specific_substate_from_commitee(
+    async fn get_specific_substate_from_committee(
         &self,
         substate_address: &SubstateAddress,
         version: u32,
@@ -204,4 +271,11 @@ pub enum SubstateResult {
     DoesNotExist,
     Up(Substate),
     Down(Substate),
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct NonFungible {
+    pub index: u64,
+    pub address: SubstateAddress,
+    pub substate: Substate,
 }

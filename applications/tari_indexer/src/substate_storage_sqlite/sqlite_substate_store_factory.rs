@@ -27,13 +27,19 @@ use std::{
     sync::{Arc, Mutex},
 };
 
-use diesel::{prelude::*, sql_query, SqliteConnection};
+use diesel::{
+    prelude::*,
+    sql_query,
+    sql_types::{Integer, Text},
+    SqliteConnection,
+};
 use diesel_migrations::EmbeddedMigrations;
 use log::warn;
 use tari_dan_core::storage::StorageError;
 use tari_dan_storage_sqlite::{error::SqliteStorageError, SqliteTransaction};
 use thiserror::Error;
 
+use super::models::non_fungible_index::{IndexedNftSubstate, NewNonFungibleIndex};
 use crate::{
     diesel_migrations::MigrationHarness,
     substate_storage_sqlite::models::substate::{NewSubstate, Substate},
@@ -164,6 +170,13 @@ pub trait SubstateStoreReadTransaction {
     fn get_substate(&mut self, address: String) -> Result<Option<Substate>, StorageError>;
     fn get_all_addresses(&mut self) -> Result<Vec<(String, i64)>, StorageError>;
     fn get_all_substates(&mut self) -> Result<Vec<Substate>, StorageError>;
+    fn get_non_fungible_count(&mut self, resource_address: String) -> Result<i64, StorageError>;
+    fn get_non_fungibles(
+        &mut self,
+        resource_address: String,
+        start_idx: i32,
+        end_idx: i32,
+    ) -> Result<Vec<IndexedNftSubstate>, StorageError>;
 }
 
 impl SubstateStoreReadTransaction for SqliteSubstateStoreReadTransaction<'_> {
@@ -213,6 +226,42 @@ impl SubstateStoreReadTransaction for SqliteSubstateStoreReadTransaction<'_> {
             None => Ok(vec![]),
         }
     }
+
+    fn get_non_fungible_count(&mut self, resource_address: String) -> Result<i64, StorageError> {
+        use crate::substate_storage_sqlite::schema::non_fungible_indexes;
+
+        let count = non_fungible_indexes::table
+            .filter(non_fungible_indexes::resource_address.eq(resource_address))
+            .count()
+            .get_result::<i64>(self.connection())
+            .map_err(|e| StorageError::QueryError {
+                reason: format!("get_non_fungible_count: {}", e),
+            })?;
+
+        Ok(count)
+    }
+
+    fn get_non_fungibles(
+        &mut self,
+        resource_address: String,
+        start_idx: i32,
+        end_idx: i32,
+    ) -> Result<Vec<IndexedNftSubstate>, StorageError> {
+        let res = sql_query(
+            "SELECT s.address, s.version, s.data, n.idx FROM substates s INNER JOIN non_fungible_indexes n ON \
+             s.address = n.non_fungible_address WHERE n.resource_address = ? AND n.idx BETWEEN ? AND ? ORDER BY n.idx \
+             ASC",
+        )
+        .bind::<Text, _>(resource_address)
+        .bind::<Integer, _>(start_idx)
+        .bind::<Integer, _>(end_idx)
+        .get_results::<IndexedNftSubstate>(self.connection())
+        .map_err(|e| StorageError::QueryError {
+            reason: format!("get_non_fungibles: {}", e),
+        })?;
+
+        Ok(res)
+    }
 }
 
 pub struct SqliteSubstateStoreWriteTransaction<'a> {
@@ -238,6 +287,7 @@ pub trait SubstateStoreWriteTransaction {
     fn set_substate(&mut self, new_substate: NewSubstate) -> Result<(), StorageError>;
     fn delete_substate(&mut self, address: String) -> Result<(), StorageError>;
     fn clear_substates(&mut self) -> Result<(), StorageError>;
+    fn add_non_fungible_index(&mut self, new_nft_index: NewNonFungibleIndex) -> Result<(), StorageError>;
 }
 
 impl SubstateStoreWriteTransaction for SqliteSubstateStoreWriteTransaction<'_> {
@@ -314,6 +364,26 @@ impl SubstateStoreWriteTransaction for SqliteSubstateStoreWriteTransaction<'_> {
             .map_err(|e| StorageError::QueryError {
                 reason: format!("clear_substates error: {}", e),
             })?;
+
+        Ok(())
+    }
+
+    fn add_non_fungible_index(&mut self, new_nft_index: NewNonFungibleIndex) -> Result<(), StorageError> {
+        use crate::substate_storage_sqlite::schema::non_fungible_indexes;
+
+        diesel::insert_into(non_fungible_indexes::table)
+            .values(&new_nft_index)
+            .execute(&mut *self.connection())
+            .map_err(|e| StorageError::QueryError {
+                reason: format!("add_non_fungible_index error: {}", e),
+            })?;
+
+        log::info!(
+            target: LOG_TARGET,
+            "Added new NFT index for resource {} with index {}",
+            new_nft_index.resource_address,
+            new_nft_index.idx
+        );
 
         Ok(())
     }
