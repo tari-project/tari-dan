@@ -6,8 +6,11 @@ use anyhow::anyhow;
 use base64;
 use log::*;
 use tari_common_types::types::FixedHash;
-use tari_crypto::ristretto::RistrettoComSig;
-use tari_dan_common_types::{optional::Optional, NodeAddressable, ShardId};
+use tari_crypto::{
+    commitment::HomomorphicCommitment as Commitment,
+    ristretto::{RistrettoComSig, RistrettoPublicKey, RistrettoSecretKey},
+};
+use tari_dan_common_types::{optional::Optional, ShardId};
 use tari_dan_wallet_sdk::models::VersionedSubstateAddress;
 use tari_engine_types::{
     commit_result::{FinalizeResult, TransactionResult},
@@ -22,7 +25,7 @@ use tari_template_lib::{
     models::{LayerOneCommitmentAddress, NonFungibleAddress},
 };
 use tari_transaction::Transaction;
-use tari_utilities::hex::to_hex;
+use tari_utilities::{hex::to_hex, ByteArray};
 use tari_wallet_daemon_client::types::{
     AccountByNameRequest,
     AccountByNameResponse,
@@ -236,16 +239,26 @@ pub async fn handle_claim_burn(
             .as_str()
             .ok_or_else(|| anyhow!("Missing commitment"))?,
     )?;
-    let ownership_proof = base64::decode(
-        claim["ownership_proof"]
-            .as_str()
-            .ok_or_else(|| anyhow!("Missing ownership_proof"))?,
-    )?;
     let range_proof = base64::decode(
         claim["range_proof"]
             .as_str()
             .ok_or_else(|| anyhow!("Missing range_proof"))?,
     )?;
+    let public_nonce = RistrettoPublicKey::from_bytes(&base64::decode(
+        claim["ownership_proof"]["public_nonce"]
+            .as_str()
+            .ok_or_else(|| anyhow!("Missing public nonce from ownership_proof"))?,
+    )?)?;
+    let u = RistrettoSecretKey::from_bytes(&base64::decode(
+        claim["ownership_proof"]["u"]
+            .as_str()
+            .ok_or_else(|| anyhow!("Missing u from ownership_proof"))?,
+    )?)?;
+    let v = RistrettoSecretKey::from_bytes(&base64::decode(
+        claim["ownership_proof"]["v"]
+            .as_str()
+            .ok_or_else(|| anyhow!("Missing v from ownership_proof"))?,
+    )?)?;
 
     let sdk = context.wallet_sdk();
     let (_, signing_key) = sdk
@@ -282,7 +295,7 @@ pub async fn handle_claim_burn(
             claim: Box::new(ConfidentialClaim {
                 commitment_address: LayerOneCommitmentAddress::try_from(commitment)?,
                 range_proof,
-                proof_of_knowledge: RistrettoComSig::from_vec(ownership_proof),
+                proof_of_knowledge: RistrettoComSig::new(Commitment::from_public_key(&public_nonce), u, v),
             }),
         },
         Instruction::PutLastInstructionOutputOnWorkspace { key: b"burn".to_vec() },
