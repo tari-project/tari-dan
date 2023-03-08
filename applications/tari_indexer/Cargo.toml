@@ -17,7 +17,7 @@ tari_comms = { git = "https://github.com/tari-project/tari.git", tag = "v0.47.0-
 tari_comms_logging = { path = "../../comms/tari_comms_logging" }
 tari_comms_rpc_macros = { git = "https://github.com/tari-project/tari.git", tag = "v0.47.0-pre.0", package = "tari_comms_rpc_macros" }
 tari_core = { git = "https://github.com/tari-project/tari.git", tag = "v0.47.0-pre.0", package = "tari_core", default-features = false, features = ["transactions"] }
-tari_crypto = { git = "https://github.com/tari-project/tari-crypto.git", tag = "v0.16.6" }
+tari_crypto = { git = "https://github.com/tari-project/tari-crypto.git", tag = "v0.16.7" }
 tari_p2p = { git = "https://github.com/tari-project/tari.git", tag = "v0.47.0-pre.0", package = "tari_p2p" }
 tari_shutdown = { git = "https://github.com/tari-project/tari.git", tag = "v0.47.0-pre.0", package = "tari_shutdown" }
 tari_storage = { git = "https://github.com/tari-project/tari.git", tag = "v0.47.0-pre.0", package = "tari_storage" }
