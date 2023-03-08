@@ -428,6 +428,21 @@ impl WalletStoreWriter for WriteTransaction<'_> {
 
         Ok(())
     }
+
+    fn proofs_set_transaction_hash(
+        &mut self,
+        proof_id: ConfidentialProofId,
+        transaction_hash: FixedHash,
+    ) -> Result<(), WalletStorageError> {
+        use crate::schema::proofs;
+
+        diesel::update(proofs::table.filter(proofs::id.eq(proof_id as i32)))
+            .set(proofs::transaction_hash.eq(transaction_hash.to_string()))
+            .execute(self.connection())
+            .map_err(|e| WalletStorageError::general("proofs_set_transaction_hash", e))?;
+
+        Ok(())
+    }
 }
 
 impl Drop for WriteTransaction<'_> {

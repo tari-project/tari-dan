@@ -128,6 +128,10 @@ pub trait WalletStoreReader {
         account_name: &str,
         status: OutputStatus,
     ) -> Result<Vec<ConfidentialOutput>, WalletStorageError>;
+    fn proofs_get_by_transaction_hash(
+        &mut self,
+        transaction_hash: FixedHash,
+    ) -> Result<ConfidentialProofId, WalletStorageError>;
 }
 
 pub trait WalletStoreWriter {
@@ -195,4 +199,9 @@ pub trait WalletStoreWriter {
     // Proofs
     fn proofs_insert(&mut self, account_name: String) -> Result<ConfidentialProofId, WalletStorageError>;
     fn proofs_delete(&mut self, proof_id: ConfidentialProofId) -> Result<(), WalletStorageError>;
+    fn proofs_set_transaction_hash(
+        &mut self,
+        proof_id: ConfidentialProofId,
+        transaction_hash: FixedHash,
+    ) -> Result<(), WalletStorageError>;
 }
