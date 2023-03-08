@@ -24,6 +24,7 @@ tari_template_builtin = { path = "../../dan_layer/template_builtin" }
 tari_template_lib = { path = "../../dan_layer/template_lib" }
 
 anyhow = "1.0.69"
+base64 = "0.20.0-alpha.1"
 axum = "0.6"
 axum-jrpc = { version = "0.3.2", features = ["anyhow_error"] }
 clap = { version = "4.1.4", features = ["derive", "env"] }

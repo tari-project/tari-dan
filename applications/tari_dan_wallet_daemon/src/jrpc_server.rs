@@ -63,6 +63,7 @@ async fn handler(Extension(context): Extension<Arc<HandlerContext>>, value: Json
             _ => Ok(value.method_not_found(&value.method)),
         },
         Some(("accounts", method)) => match method {
+            "claim_burn" => call_handler(context, value, accounts::handle_claim_burn).await,
             "create" => call_handler(context, value, accounts::handle_create).await,
             "list" => call_handler(context, value, accounts::handle_list).await,
             "get_balances" => call_handler(context, value, accounts::handle_get_balances).await,

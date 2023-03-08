@@ -1,16 +1,22 @@
 //   Copyright 2023 The Tari Project
 //   SPDX-License-Identifier: BSD-3-Clause
+use std::str::FromStr;
+
 use anyhow::anyhow;
+use base64;
 use log::*;
 use tari_common_types::types::FixedHash;
 use tari_dan_common_types::{optional::Optional, NodeAddressable, ShardId};
+use tari_dan_wallet_sdk::models::VersionedSubstateAddress;
 use tari_engine_types::{
     commit_result::{FinalizeResult, TransactionResult},
     instruction::Instruction,
+    substate::SubstateAddress,
 };
 use tari_template_builtin::ACCOUNT_TEMPLATE_ADDRESS;
 use tari_template_lib::{args, crypto::RistrettoPublicKeyBytes, models::NonFungibleAddress};
 use tari_transaction::Transaction;
+use tari_utilities::hex::to_hex;
 use tari_wallet_daemon_client::types::{
     AccountByNameRequest,
     AccountByNameResponse,
@@ -22,6 +28,8 @@ use tari_wallet_daemon_client::types::{
     AccountsInvokeResponse,
     AccountsListRequest,
     AccountsListResponse,
+    ClaimBurnRequest,
+    ClaimBurnResponse,
 };
 use tokio::sync::broadcast;
 
@@ -209,6 +217,100 @@ pub async fn handle_get_by_name(
     let account = sdk.accounts_api().get_account_by_name(&req.name)?;
     Ok(AccountByNameResponse {
         account_address: account.address,
+    })
+}
+
+pub async fn handle_claim_burn(
+    context: &HandlerContext,
+    req: ClaimBurnRequest,
+) -> Result<ClaimBurnResponse, anyhow::Error> {
+    let ClaimBurnRequest { account, claim, fee } = req;
+    let commitment = base64::decode(
+        claim["commitment"]
+            .as_str()
+            .ok_or_else(|| anyhow!("Missing commitment"))?,
+    )?;
+    let ownership_proof = base64::decode(
+        claim["ownership_proof"]
+            .as_str()
+            .ok_or_else(|| anyhow!("Missing ownership_proof"))?,
+    )?;
+    let range_proof = base64::decode(
+        claim["range_proof"]
+            .as_str()
+            .ok_or_else(|| anyhow!("Missing range_proof"))?,
+    )?;
+
+    let sdk = context.wallet_sdk();
+    let (_, signing_key) = sdk
+        .key_manager_api()
+        .get_key_or_active(TRANSACTION_KEYMANAGER_BRANCH, None)?;
+
+    let mut inputs = sdk.substate_api().load_dependent_substates(&[account.clone().into()])?;
+
+    // add the commitment substate address as input to the claim burn transaction
+    let commitment_substate_address = VersionedSubstateAddress {
+        address: SubstateAddress::from_str(&format!("commitment_{}", to_hex(commitment.as_ref())))?,
+        version: 0,
+    };
+
+    inputs.push(commitment_substate_address.clone());
+
+    info!(
+        target: LOG_TARGET,
+        "Loaded {} inputs for claim burn transaction on account: {}",
+        inputs.len(),
+        account
+    );
+    for input in &inputs {
+        info!(target: LOG_TARGET, "input: {}", input);
+    }
+
+    let inputs = inputs
+        .into_iter()
+        .map(|s| ShardId::from_address(&s.address, s.version))
+        .collect();
+
+    let instructions = vec![
+        Instruction::ClaimBurn {
+            commitment_address: commitment,
+            range_proof,
+            proof_of_knowledge: ownership_proof,
+        },
+        Instruction::PutLastInstructionOutputOnWorkspace { key: b"burn".to_vec() },
+        Instruction::CallMethod {
+            component_address: account,
+            method: String::from("deposit"),
+            args: args![Variable("burn")],
+        },
+    ];
+
+    let outputs = vec![ShardId::from_address(&commitment_substate_address.address, 1)];
+
+    let mut transaction_builder = Transaction::builder();
+    transaction_builder
+        .with_instructions(instructions)
+        .with_fee(fee)
+        .with_inputs(inputs)
+        // transaction should have one output, corresponding to the same shard
+        // as the account substate address
+        // TODO: on a second claim burn, we shoulnd't have any new outputs being created.
+        .with_new_outputs(1)
+        .with_outputs(outputs)
+        .sign(&signing_key.k);
+
+    let transaction = transaction_builder.build();
+
+    let tx_hash = sdk.transaction_api().submit_to_vn(transaction).await?;
+
+    let mut events = context.notifier().subscribe();
+    context.notifier().notify(TransactionSubmittedEvent { hash: tx_hash });
+
+    let finalized = wait_for_result(&mut events, tx_hash).await?;
+
+    Ok(ClaimBurnResponse {
+        hash: tx_hash,
+        result: finalized.result,
     })
 }
 
