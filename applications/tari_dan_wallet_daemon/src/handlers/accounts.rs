@@ -1,20 +1,26 @@
 //   Copyright 2023 The Tari Project
 //   SPDX-License-Identifier: BSD-3-Clause
-use std::str::FromStr;
+use std::{convert::TryFrom, str::FromStr};
 
 use anyhow::anyhow;
 use base64;
 use log::*;
 use tari_common_types::types::FixedHash;
+use tari_crypto::ristretto::RistrettoComSig;
 use tari_dan_common_types::{optional::Optional, NodeAddressable, ShardId};
 use tari_dan_wallet_sdk::models::VersionedSubstateAddress;
 use tari_engine_types::{
     commit_result::{FinalizeResult, TransactionResult},
+    confidential::ConfidentialClaim,
     instruction::Instruction,
     substate::SubstateAddress,
 };
 use tari_template_builtin::ACCOUNT_TEMPLATE_ADDRESS;
-use tari_template_lib::{args, crypto::RistrettoPublicKeyBytes, models::NonFungibleAddress};
+use tari_template_lib::{
+    args,
+    crypto::RistrettoPublicKeyBytes,
+    models::{LayerOneCommitmentAddress, NonFungibleAddress},
+};
 use tari_transaction::Transaction;
 use tari_utilities::hex::to_hex;
 use tari_wallet_daemon_client::types::{
@@ -273,9 +279,11 @@ pub async fn handle_claim_burn(
 
     let instructions = vec![
         Instruction::ClaimBurn {
-            commitment_address: commitment,
-            range_proof,
-            proof_of_knowledge: ownership_proof,
+            claim: Box::new(ConfidentialClaim {
+                commitment_address: LayerOneCommitmentAddress::try_from(commitment)?,
+                range_proof,
+                proof_of_knowledge: RistrettoComSig::from_vec(ownership_proof),
+            }),
         },
         Instruction::PutLastInstructionOutputOnWorkspace { key: b"burn".to_vec() },
         Instruction::CallMethod {
@@ -284,8 +292,6 @@ pub async fn handle_claim_burn(
             args: args![Variable("burn")],
         },
     ];
-
-    let outputs = vec![ShardId::from_address(&commitment_substate_address.address, 1)];
 
     let mut transaction_builder = Transaction::builder();
     transaction_builder
@@ -296,7 +302,6 @@ pub async fn handle_claim_burn(
         // as the account substate address
         // TODO: on a second claim burn, we shoulnd't have any new outputs being created.
         .with_new_outputs(1)
-        .with_outputs(outputs)
         .sign(&signing_key.k);
 
     let transaction = transaction_builder.build();
