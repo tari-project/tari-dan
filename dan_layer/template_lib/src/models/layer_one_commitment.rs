@@ -32,6 +32,14 @@ impl LayerOneCommitmentAddress {
     }
 }
 
+impl TryFrom<Vec<u8>> for LayerOneCommitmentAddress {
+    type Error = HashParseError;
+
+    fn try_from(value: Vec<u8>) -> Result<Self, Self::Error> {
+        Hash::try_from(value).map(Self)
+    }
+}
+
 impl Display for LayerOneCommitmentAddress {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         write!(f, "commitment_{}", self.0)

@@ -4,14 +4,14 @@ authors = ["The Tari Development Community"]
 description = "The Tari DAN wallet daemon"
 repository = "https://github.com/tari-project/tari"
 license = "BSD-3-Clause"
-version = "0.35.1"
+version = "0.50.0-pre.0"
 edition = "2018"
 
 [dependencies]
-tari_common = { git = "https://github.com/tari-project/tari.git", branch = "development" }
+tari_common = { git = "https://github.com/tari-project/tari.git", tag = "v0.47.0-pre.0" }
 tari_crypto = { git = "https://github.com/tari-project/tari-crypto.git", tag = "v0.16.6" }
-tari_common_types = { git = "https://github.com/tari-project/tari.git", branch = "development" }
-tari_shutdown = { git = "https://github.com/tari-project/tari.git", branch = "development" }
+tari_common_types = { git = "https://github.com/tari-project/tari.git", tag = "v0.47.0-pre.0" }
+tari_shutdown = { git = "https://github.com/tari-project/tari.git", tag = "v0.47.0-pre.0" }
 tari_dan_wallet_sdk = { path = "../../dan_layer/wallet/sdk" }
 tari_dan_wallet_storage_sqlite = { path = "../../dan_layer/wallet/storage_sqlite" }
 tari_transaction = { path = "../../dan_layer/transaction" }

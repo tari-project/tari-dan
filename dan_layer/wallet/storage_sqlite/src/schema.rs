@@ -34,6 +34,32 @@ diesel::table! {
 }
 
 diesel::table! {
+    outputs (id) {
+        id -> Integer,
+        account_id -> Integer,
+        commitment -> Text,
+        value -> BigInt,
+        sender_public_nonce -> Nullable<Text>,
+        secret_key_index -> BigInt,
+        public_asset_tag -> Nullable<Text>,
+        status -> Text,
+        locked_at -> Nullable<Timestamp>,
+        locked_by_proof -> Nullable<Integer>,
+        created_at -> Timestamp,
+        updated_at -> Timestamp,
+    }
+}
+
+diesel::table! {
+    proofs (id) {
+        id -> Integer,
+        account_id -> Integer,
+        transaction_hash -> Nullable<Text>,
+        created_at -> Timestamp,
+    }
+}
+
+diesel::table! {
     substates (id) {
         id -> Integer,
         module_name -> Nullable<Text>,
@@ -64,4 +90,15 @@ diesel::table! {
     }
 }
 
-diesel::allow_tables_to_appear_in_same_query!(accounts, config, key_manager_states, substates, transactions,);
+diesel::joinable!(outputs -> accounts (account_id));
+diesel::joinable!(proofs -> accounts (account_id));
+
+diesel::allow_tables_to_appear_in_same_query!(
+    accounts,
+    config,
+    key_manager_states,
+    outputs,
+    proofs,
+    substates,
+    transactions,
+);

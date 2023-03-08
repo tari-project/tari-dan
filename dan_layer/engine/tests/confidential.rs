@@ -6,14 +6,14 @@ use tari_engine_types::substate::SubstateAddress;
 use tari_template_lib::{
     args,
     models::{Amount, ComponentAddress},
-    prelude::ConfidentialProof,
+    prelude::ConfidentialOutputProof,
 };
 use tari_template_test_tooling::{SubstateType, TemplateTest};
 use tari_transaction_manifest::ManifestValue;
 
 use self::utilities::*;
 
-fn setup(initial_supply: ConfidentialProof) -> (TemplateTest, ComponentAddress, SubstateAddress) {
+fn setup(initial_supply: ConfidentialOutputProof) -> (TemplateTest, ComponentAddress, SubstateAddress) {
     let mut template_test = TemplateTest::new(vec![
         "tests/templates/confidential/faucet",
         "tests/templates/confidential/utilities",
@@ -359,29 +359,37 @@ fn multi_commitment_join() {
 /// These would live in the wallet
 mod utilities {
     use rand::rngs::OsRng;
-    use tari_common_types::types::{PrivateKey, PublicKey, Signature};
+    use tari_common_types::types::{BulletRangeProof, PrivateKey, PublicKey, Signature};
     use tari_crypto::{
-        commitment::HomomorphicCommitmentFactory,
+        commitment::{ExtensionDegree, HomomorphicCommitmentFactory},
+        errors::RangeProofError,
+        extended_range_proof::ExtendedRangeProofService,
         keys::{PublicKey as _, SecretKey},
+        ristretto::bulletproofs_plus::{RistrettoExtendedMask, RistrettoExtendedWitness},
     };
-    use tari_engine_types::{
-        crypto,
-        crypto::{challenges, commitment_factory, ConfidentialProofStatement},
-    };
+    use tari_engine_types::confidential::{challenges, get_commitment_factory, get_range_proof_service};
     use tari_template_lib::{
-        crypto::BalanceProofSignature,
-        models::{Amount, ConfidentialProof, ConfidentialStatement, ConfidentialWithdrawProof},
+        crypto::{BalanceProofSignature, RistrettoPublicKeyBytes},
+        models::{Amount, ConfidentialOutputProof, ConfidentialStatement, ConfidentialWithdrawProof, EncryptedValue},
     };
     use tari_utilities::ByteArray;
+
+    pub struct ConfidentialProofStatement {
+        pub amount: Amount,
+        pub mask: PrivateKey,
+        pub sender_public_nonce: PublicKey,
+        pub minimum_value_promise: u64,
+    }
 
     pub fn generate_confidential_proof(
         output_amount: Amount,
         change: Option<Amount>,
-    ) -> (ConfidentialProof, PrivateKey, Option<PrivateKey>) {
+    ) -> (ConfidentialOutputProof, PrivateKey, Option<PrivateKey>) {
         let mask = PrivateKey::random(&mut OsRng);
         let output_statement = ConfidentialProofStatement {
             amount: output_amount,
             mask: mask.clone(),
+            sender_public_nonce: Default::default(),
             minimum_value_promise: 0,
         };
 
@@ -389,10 +397,11 @@ mod utilities {
         let change_statement = change.map(|amount| ConfidentialProofStatement {
             amount,
             mask: change_mask.clone(),
+            sender_public_nonce: Default::default(),
             minimum_value_promise: 0,
         });
 
-        let proof = crypto::generate_confidential_proof(output_statement, change_statement).unwrap();
+        let proof = generate_confidential_proof_from_statements(output_statement, change_statement).unwrap();
         (proof, mask, change.map(|_| change_mask))
     }
 
@@ -425,7 +434,7 @@ mod utilities {
     ) -> WithdrawProofOutput {
         let (output_proof, output_mask, change_mask) = generate_confidential_proof(output_amount, change_amount);
         let total_amount = output_amount + change_amount.unwrap_or_else(Amount::zero) + revealed_amount;
-        let input_commitment = commitment_factory().commit_value(input_mask, total_amount.value() as u64);
+        let input_commitment = get_commitment_factory().commit_value(input_mask, total_amount.value() as u64);
         let input_commitment = copy_fixed(input_commitment.as_bytes());
         let balance_proof = generate_balance_proof(input_mask, &output_mask, change_mask.as_ref());
 
@@ -437,13 +446,17 @@ mod utilities {
             change_mask,
             proof: ConfidentialWithdrawProof {
                 inputs: vec![input_commitment],
-                output_proof: ConfidentialProof {
+                output_proof: ConfidentialOutputProof {
                     output_statement: ConfidentialStatement {
                         commitment: output_statement.commitment,
+                        sender_public_nonce: None,
+                        encrypted_value: EncryptedValue::default(),
                         minimum_value_promise: output_statement.minimum_value_promise,
                     },
                     change_statement: Some(ConfidentialStatement {
                         commitment: change_statement.commitment,
+                        sender_public_nonce: None,
+                        encrypted_value: EncryptedValue::default(),
                         minimum_value_promise: change_statement.minimum_value_promise,
                     }),
                     range_proof: output_proof.range_proof,
@@ -464,7 +477,7 @@ mod utilities {
         let input_commitments = input
             .iter()
             .map(|(input_mask, amount)| {
-                let input_commitment = commitment_factory().commit_value(input_mask, amount.value() as u64);
+                let input_commitment = get_commitment_factory().commit_value(input_mask, amount.value() as u64);
                 copy_fixed(input_commitment.as_bytes())
             })
             .collect();
@@ -481,13 +494,18 @@ mod utilities {
             change_mask,
             proof: ConfidentialWithdrawProof {
                 inputs: input_commitments,
-                output_proof: ConfidentialProof {
+                output_proof: ConfidentialOutputProof {
                     output_statement: ConfidentialStatement {
                         commitment: output_statement.commitment,
+                        // R and encrypted value are informational and can be left out as far as the VN is concerned
+                        sender_public_nonce: None,
+                        encrypted_value: Default::default(),
                         minimum_value_promise: output_statement.minimum_value_promise,
                     },
                     change_statement: change_statement.map(|change| ConfidentialStatement {
                         commitment: change.commitment,
+                        sender_public_nonce: None,
+                        encrypted_value: Default::default(),
                         minimum_value_promise: change.minimum_value_promise,
                     }),
                     range_proof: output_proof.range_proof,
@@ -502,5 +520,76 @@ mod utilities {
         let mut array = [0u8; SZ];
         array.copy_from_slice(&bytes[..SZ]);
         array
+    }
+
+    fn generate_confidential_proof_from_statements(
+        output_statement: ConfidentialProofStatement,
+        change_statement: Option<ConfidentialProofStatement>,
+    ) -> Result<ConfidentialOutputProof, RangeProofError> {
+        let proof_change_statement = change_statement.as_ref().map(|statement| ConfidentialStatement {
+            commitment: commitment_to_bytes(&statement.mask, statement.amount),
+            sender_public_nonce: Some(
+                RistrettoPublicKeyBytes::from_bytes(statement.sender_public_nonce.as_bytes())
+                    .expect("[generate_confidential_proof] change nonce"),
+            ),
+            encrypted_value: Default::default(),
+            minimum_value_promise: statement.minimum_value_promise,
+        });
+
+        let output_range_proof = generate_extended_bullet_proof(&output_statement, change_statement.as_ref())?;
+
+        Ok(ConfidentialOutputProof {
+            output_statement: ConfidentialStatement {
+                commitment: commitment_to_bytes(&output_statement.mask, output_statement.amount),
+                sender_public_nonce: Some(
+                    RistrettoPublicKeyBytes::from_bytes(output_statement.sender_public_nonce.as_bytes())
+                        .expect("[generate_confidential_proof] output nonce"),
+                ),
+                encrypted_value: Default::default(),
+                minimum_value_promise: output_statement.minimum_value_promise,
+            },
+            change_statement: proof_change_statement,
+            range_proof: output_range_proof.0,
+            revealed_amount: Amount::zero(),
+        })
+    }
+
+    fn generate_extended_bullet_proof(
+        output_statement: &ConfidentialProofStatement,
+        change_statement: Option<&ConfidentialProofStatement>,
+    ) -> Result<BulletRangeProof, RangeProofError> {
+        let mut extended_witnesses = vec![];
+
+        let extended_mask =
+            RistrettoExtendedMask::assign(ExtensionDegree::DefaultPedersen, vec![output_statement.mask.clone()])
+                .unwrap();
+
+        let mut agg_factor = 1;
+        extended_witnesses.push(RistrettoExtendedWitness {
+            mask: extended_mask,
+            value: output_statement.amount.value() as u64,
+            minimum_value_promise: output_statement.minimum_value_promise,
+        });
+        if let Some(stmt) = change_statement {
+            let extended_mask =
+                RistrettoExtendedMask::assign(ExtensionDegree::DefaultPedersen, vec![stmt.mask.clone()]).unwrap();
+            extended_witnesses.push(RistrettoExtendedWitness {
+                mask: extended_mask,
+                value: stmt.amount.value() as u64,
+                minimum_value_promise: stmt.minimum_value_promise,
+            });
+            agg_factor = 2;
+        }
+
+        let output_range_proof =
+            get_range_proof_service(agg_factor).construct_extended_proof(extended_witnesses, None)?;
+        Ok(BulletRangeProof(output_range_proof))
+    }
+
+    fn commitment_to_bytes(mask: &PrivateKey, amount: Amount) -> [u8; 32] {
+        let commitment = get_commitment_factory().commit_value(mask, amount.value() as u64);
+        let mut bytes = [0u8; 32];
+        bytes.copy_from_slice(commitment.as_bytes());
+        bytes
     }
 }

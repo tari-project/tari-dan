@@ -3,15 +3,25 @@
 
 use std::sync::MutexGuard;
 
-use diesel::{sql_query, OptionalExtension, QueryDsl, RunQueryDsl, SqliteConnection};
+use bigdecimal::{BigDecimal, ToPrimitive};
+use diesel::{dsl::sum, sql_query, OptionalExtension, QueryDsl, RunQueryDsl, SqliteConnection};
 use log::error;
 use serde::de::DeserializeOwned;
 use tari_common_types::types::FixedHash;
 use tari_dan_wallet_sdk::{
-    models::{Account, Config, SubstateRecord, TransactionStatus, WalletTransaction},
+    models::{
+        Account,
+        ConfidentialOutput,
+        ConfidentialProofId,
+        Config,
+        OutputStatus,
+        SubstateRecord,
+        TransactionStatus,
+        WalletTransaction,
+    },
     storage::{WalletStorageError, WalletStoreReader},
 };
-use tari_engine_types::substate::SubstateAddress;
+use tari_engine_types::substate::{InvalidSubstateAddressFormat, SubstateAddress};
 
 use crate::{diesel::ExpressionMethods, models, serialization::deserialize_json};
 
@@ -220,11 +230,111 @@ impl WalletStoreReader for ReadTransaction<'_> {
                 key: name.to_string(),
             })?;
 
-        Ok(Account {
-            name: row.name,
-            address: row.address.parse().unwrap(),
-            key_index: row.owner_key_index as u64,
-        })
+        let account = row
+            .try_into()
+            .map_err(|e: InvalidSubstateAddressFormat| WalletStorageError::DecodingError {
+                operation: "accounts_get_by_name",
+                item: "account",
+                details: e.to_string(),
+            })?;
+        Ok(account)
+    }
+
+    // Outputs
+    fn outputs_get_unspent_balance(&mut self, account_name: &str) -> Result<u64, WalletStorageError> {
+        use crate::schema::{accounts, outputs};
+
+        let account_id = accounts::table
+            .filter(accounts::name.eq(account_name))
+            .select(accounts::id)
+            .first::<i32>(self.connection())
+            .map_err(|e| WalletStorageError::general("outputs_get_unspent_balance", e))?;
+
+        let balance = outputs::table
+            .select(sum(outputs::value))
+            .filter(outputs::account_id.eq(account_id))
+            .filter(outputs::status.eq(OutputStatus::Unspent.as_key_str()))
+            .first::<Option<BigDecimal>>(self.connection())
+            .map_err(|e| WalletStorageError::general("outputs_get_unspent_balance", e))?;
+
+        Ok(balance.map(|v| v.to_u64().unwrap()).unwrap_or(0))
+    }
+
+    fn outputs_get_locked_by_proof(
+        &mut self,
+        proof_id: ConfidentialProofId,
+    ) -> Result<Vec<ConfidentialOutput>, WalletStorageError> {
+        use crate::schema::{accounts, outputs};
+
+        let rows = outputs::table
+            .filter(outputs::locked_by_proof.eq(proof_id as i32))
+            .load::<models::ConfidentialOutputModel>(self.connection())
+            .map_err(|e| WalletStorageError::general("outputs_get_locked_by_proof", e))?;
+
+        let account_name = rows
+            .first()
+            .map(|row| {
+                accounts::table
+                    .filter(accounts::id.eq(row.account_id))
+                    .select(accounts::name)
+                    .first::<String>(self.connection())
+                    .map_err(|e| WalletStorageError::general("outputs_get_locked_by_proof", e))
+            })
+            .transpose()?;
+
+        let outputs = rows
+            .into_iter()
+            // TODO: we should add account id to the public interface (an account name is optional)
+            .map(|row| row.try_into_output(account_name.clone().unwrap()))
+            .collect::<Result<_, _>>()?;
+        Ok(outputs)
+    }
+
+    fn outputs_get_by_account_and_status(
+        &mut self,
+        account_name: &str,
+        status: OutputStatus,
+    ) -> Result<Vec<ConfidentialOutput>, WalletStorageError> {
+        use crate::schema::{accounts, outputs};
+
+        let account_id = accounts::table
+            .filter(accounts::name.eq(account_name))
+            .select(accounts::id)
+            .first::<i32>(self.connection())
+            .map_err(|e| WalletStorageError::general("outputs_get_by_account_and_status", e))?;
+
+        let rows = outputs::table
+            .filter(outputs::account_id.eq(account_id))
+            .filter(outputs::status.eq(status.as_key_str()))
+            .load::<models::ConfidentialOutputModel>(self.connection())
+            .map_err(|e| WalletStorageError::general("outputs_get_by_account_and_status", e))?;
+
+        let outputs = rows
+            .into_iter()
+            .map(|row| row.try_into_output("".to_string()))
+            .collect::<Result<_, _>>()?;
+        Ok(outputs)
+    }
+
+    fn proofs_get_by_transaction_hash(
+        &mut self,
+        transaction_hash: FixedHash,
+    ) -> Result<ConfidentialProofId, WalletStorageError> {
+        use crate::schema::proofs;
+
+        let proof_id = proofs::table
+            .filter(proofs::transaction_hash.eq(transaction_hash.to_string()))
+            .select(proofs::id)
+            .first::<i32>(self.connection())
+            .optional()
+            .map_err(|e| WalletStorageError::general("proofs_get_by_transaction_hash", e))?;
+        let proof_id = proof_id.ok_or_else(|| WalletStorageError::NotFound {
+            operation: "proofs_get_by_transaction_hash",
+            entity: "proofs".to_string(),
+            key: transaction_hash.to_string(),
+        })?;
+
+        Ok(proof_id as u64)
     }
 }
 

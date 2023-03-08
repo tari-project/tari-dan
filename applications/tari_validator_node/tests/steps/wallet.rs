@@ -5,7 +5,8 @@ use std::time::Duration;
 
 use cucumber::{given, when};
 use tari_app_grpc::tari_rpc::GetBalanceRequest;
-use tari_crypto::tari_utilities::ByteArray;
+use tari_common_types::types::{Commitment, PrivateKey, PublicKey};
+use tari_crypto::{ristretto::RistrettoComSig, tari_utilities::ByteArray};
 use tokio::time::sleep;
 
 use crate::{spawn_wallet, TariWorld};
@@ -51,7 +52,15 @@ async fn when_i_burn_on_wallet(
 
     assert!(resp.is_success);
     world.commitments.insert(commitment, resp.commitment);
-    world.commitment_ownership_proofs.insert(proof, resp.ownership_proof);
+    // TODO: use proto::transaction::CommitmentSignature to deserialize once we update tari to include https://github.com/tari-project/tari/pull/5200
+    world.commitment_ownership_proofs.insert(
+        proof,
+        RistrettoComSig::new(
+            Commitment::from_public_key(&PublicKey::from_bytes(&resp.ownership_proof[0..32]).unwrap()),
+            PrivateKey::from_bytes(&resp.ownership_proof[32..64]).unwrap(),
+            PrivateKey::from_bytes(&resp.ownership_proof[64..]).unwrap(),
+        ),
+    );
     world.rangeproofs.insert(range_proof, resp.rangeproof);
 }
 

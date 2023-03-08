@@ -93,17 +93,6 @@ mod account_template {
             vault_mut.deposit(bucket);
         }
 
-        // #[access_rules(allow_all)]
-        // pub fn deposit_confidential(&mut self, bucket: Bucket, proof: ConfidentialProof) {
-        //     let resource_address = bucket.resource_address();
-        //     let vault_mut = self
-        //         .vaults
-        //         .entry(resource_address)
-        //         .or_insert_with(|| Vault::new_empty(resource_address));
-        //
-        //     vault_mut.deposit_confidential(bucket, proof);
-        // }
-
         pub fn deposit_all(&mut self, buckets: Vec<Bucket>) {
             for bucket in buckets {
                 self.deposit(bucket);

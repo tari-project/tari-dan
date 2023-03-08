@@ -10,6 +10,8 @@ use tari_key_manager::cipher_seed::CipherSeed;
 use crate::{
     apis::{
         accounts::AccountsApi,
+        confidential_crypto::ConfidentialCryptoApi,
+        confidential_outputs::ConfidentialOutputsApi,
         config::{ConfigApi, ConfigApiError, ConfigKey},
         key_manager::KeyManagerApi,
         substate::SubstatesApi,
@@ -18,7 +20,7 @@ use crate::{
     storage::{WalletStorageError, WalletStore},
 };
 
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone)]
 pub struct WalletSdkConfig {
     /// Encryption password for the wallet database. NOTE: Not yet implemented, this field is ignored
     pub password: Option<SafePassword>,
@@ -63,6 +65,14 @@ impl<TStore: WalletStore> DanWalletSdk<TStore> {
 
     pub fn accounts_api(&self) -> AccountsApi<'_, TStore> {
         AccountsApi::new(&self.store)
+    }
+
+    pub fn confidential_crypto_api(&self) -> ConfidentialCryptoApi {
+        ConfidentialCryptoApi::new()
+    }
+
+    pub fn confidential_outputs_api(&self) -> ConfidentialOutputsApi<'_, TStore> {
+        ConfidentialOutputsApi::new(&self.store, self.key_manager_api())
     }
 
     fn get_or_create_cipher_seed(store: &TStore) -> Result<CipherSeed, WalletSdkError> {

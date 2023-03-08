@@ -3,20 +3,33 @@ name = "tari_dan_wallet_sdk"
 authors = ["The Tari Development Community"]
 description = "The Tari DAN wallet library"
 repository = "https://github.com/tari-project/tari-dan"
-version = "0.35.1"
+version = "0.50.0-pre.0"
 edition = "2021"
 license = "BSD-3-Clause"
 
 [dependencies]
-tari_common_types = { git = "https://github.com/tari-project/tari.git", branch = "development" }
+tari_common_types = { git = "https://github.com/tari-project/tari.git", tag = "v0.47.0-pre.0" }
 tari_crypto = { git = "https://github.com/tari-project/tari-crypto.git", tag = "v0.16.6", features = ["borsh"] }
-tari_engine_types = { path = "../../engine_types"}
+tari_engine_types = { path = "../../engine_types" }
 tari_dan_common_types = { path = "../../common_types" }
-tari_key_manager = { git = "https://github.com/tari-project/tari.git", branch = "development" }
+tari_key_manager = { git = "https://github.com/tari-project/tari.git", tag = "v0.47.0-pre.0" }
 tari_transaction = { path = "../../transaction" }
 tari_validator_node_client = { path = "../../../clients/validator_node_client" }
+tari_template_lib = { path = "../../template_lib", features = ["serde"] }
+tari_utilities = { git = "https://github.com/tari-project/tari_utilities.git", tag = "v0.4.10" }
+tari_bor = { path = "../../tari_bor" }
 
 anyhow = "1.0"
-serde = "1.0.126"
+chacha20poly1305 = "0.10.1"
+digest = "0.9"
+lazy_static = "1.4.0"
 log = "0.4.14"
+rand = "0.7"
+serde = "1.0.126"
 thiserror = "1.0.38"
+zeroize = "1"
+
+[dev-dependencies]
+tari_dan_wallet_storage_sqlite = { path = "../storage_sqlite" }
+
+tempfile = "3.4.0"

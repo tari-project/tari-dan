@@ -23,7 +23,7 @@
 use serde::{Deserialize, Serialize};
 use tari_common_types::types::{FixedHash, PublicKey};
 use tari_dan_common_types::{serde_with, QuorumCertificate, ShardId};
-use tari_dan_wallet_sdk::models::{Account, TransactionStatus, VersionedSubstateAddress};
+use tari_dan_wallet_sdk::models::{Account, ConfidentialProofId, TransactionStatus, VersionedSubstateAddress};
 use tari_engine_types::{
     commit_result::FinalizeResult,
     execution_result::ExecutionResult,
@@ -33,7 +33,8 @@ use tari_engine_types::{
 use tari_template_lib::{
     args::Arg,
     auth::AccessRules,
-    models::{Amount, NonFungibleId, ResourceAddress},
+    models::{Amount, ComponentAddress, NonFungibleId, ResourceAddress},
+    prelude::ConfidentialWithdrawProof,
 };
 use tari_transaction::Transaction;
 
@@ -49,6 +50,7 @@ pub struct TransactionSubmitRequest {
     pub new_non_fungible_outputs: Vec<(ResourceAddress, u8)>,
     pub new_non_fungible_index_outputs: Vec<(ResourceAddress, u64)>,
     pub is_dry_run: bool,
+    pub proof_id: Option<ConfidentialProofId>,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -203,3 +205,34 @@ pub struct AccountByNameRequest {
 pub struct AccountByNameResponse {
     pub account_address: SubstateAddress,
 }
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct ProofsGenerateRequest {
+    pub amount: Amount,
+    pub source_account_name: String,
+    pub destination_account: ComponentAddress,
+    // TODO: For now, we assume that this is obtained "somehow" from the destination account
+    pub destination_stealth_public_key: PublicKey,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct ProofsGenerateResponse {
+    pub proof_id: ConfidentialProofId,
+    pub proof: ConfidentialWithdrawProof,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct ProofsFinalizeRequest {
+    pub proof_id: ConfidentialProofId,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct ProofsFinalizeResponse {}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct ProofsCancelRequest {
+    pub proof_id: ConfidentialProofId,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct ProofsCancelResponse {}

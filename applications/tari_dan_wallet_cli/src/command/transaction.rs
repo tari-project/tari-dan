@@ -22,8 +22,11 @@
 
 use std::{
     collections::HashMap,
+    convert::TryFrom,
     fmt,
     fs,
+    io,
+    io::Read,
     path::PathBuf,
     str::FromStr,
     time::{Duration, Instant},
@@ -31,11 +34,14 @@ use std::{
 
 use anyhow::anyhow;
 use clap::{Args, Subcommand};
-use tari_common_types::types::FixedHash;
+use serde_json as json;
+use tari_common_types::types::{Commitment, FixedHash, PrivateKey, PublicKey};
+use tari_crypto::ristretto::{RistrettoComSig, RistrettoPublicKey};
 use tari_dan_common_types::ShardId;
-use tari_dan_wallet_sdk::models::VersionedSubstateAddress;
+use tari_dan_wallet_sdk::models::{ConfidentialProofId, VersionedSubstateAddress};
 use tari_engine_types::{
     commit_result::{FinalizeResult, TransactionResult},
+    confidential::ConfidentialClaim,
     execution_result::{ExecutionResult, Type},
     instruction::Instruction,
     substate::{SubstateAddress, SubstateValue},
@@ -45,13 +51,14 @@ use tari_template_lib::{
     arg,
     args,
     args::Arg,
-    models::{Amount, NonFungibleAddress, NonFungibleId},
+    models::{Amount, LayerOneCommitmentAddress, NonFungibleAddress, NonFungibleId},
     prelude::{ComponentAddress, ResourceAddress},
 };
 use tari_transaction_manifest::{parse_manifest, ManifestValue};
 use tari_utilities::{hex::to_hex, ByteArray};
 use tari_wallet_daemon_client::{
     types::{
+        ProofsGenerateRequest,
         TransactionGetResultRequest,
         TransactionSubmitRequest,
         TransactionSubmitResponse,
@@ -70,6 +77,7 @@ pub enum TransactionSubcommand {
     SubmitManifest(SubmitManifestArgs),
     ClaimBurn(ClaimBurnArgs),
     Send(SendArgs),
+    ConfidentialTransfer(ConfidentialTransferArgs),
 }
 
 #[derive(Debug, Args, Clone)]
@@ -100,8 +108,6 @@ pub struct CommonSubmitArgs {
     pub version: Option<u8>,
     #[clap(long, short = 'd')]
     pub dump_outputs_into: Option<String>,
-    #[clap(long, short = 'a')]
-    pub account_template_address: Option<String>,
     #[clap(long)]
     pub dry_run: bool,
     #[clap(long, short = 'm', alias = "mint-specific")]
@@ -125,14 +131,10 @@ pub struct SubmitManifestArgs {
 
 #[derive(Debug, Args, Clone)]
 pub struct ClaimBurnArgs {
-    #[clap(long, short = 'z')]
+    #[clap(long, short = 'a')]
     account_address: ComponentAddress,
-    #[clap(long, short = 'c')]
-    commitment_address: FromBase64<Vec<u8>>,
-    #[clap(long, short = 'r')]
-    range_proof: FromBase64<Vec<u8>>,
-    #[clap(long, short = 'k')]
-    proof_of_knowledge: FromBase64<Vec<u8>>,
+    #[clap(long, short = 'j', alias = "json")]
+    proof_json: Option<String>,
     #[clap(flatten)]
     common: CommonSubmitArgs,
 }
@@ -143,6 +145,16 @@ pub struct SendArgs {
     amount: u32,
     resource_address: ResourceAddress,
     dest_address: ComponentAddress,
+    #[clap(flatten)]
+    common: CommonSubmitArgs,
+}
+
+#[derive(Debug, Args, Clone)]
+pub struct ConfidentialTransferArgs {
+    source_account_name: String,
+    amount: u32,
+    destination_account: ComponentAddress,
+    destination_stealth_public_key: FromBase64<Vec<u8>>,
     #[clap(flatten)]
     common: CommonSubmitArgs,
 }
@@ -178,6 +190,9 @@ impl TransactionSubcommand {
             },
             TransactionSubcommand::Send(args) => {
                 handle_send(args, &mut client).await?;
+            },
+            TransactionSubcommand::ConfidentialTransfer(args) => {
+                handle_confidential_transfer(args, &mut client).await?;
             },
         }
         Ok(())
@@ -230,7 +245,7 @@ pub async fn handle_submit(
         },
     };
 
-    submit_transaction(vec![instruction], common, client).await
+    submit_transaction(vec![instruction], common, None, client).await
 }
 
 async fn handle_submit_manifest(
@@ -239,12 +254,13 @@ async fn handle_submit_manifest(
 ) -> Result<TransactionSubmitResponse, anyhow::Error> {
     let contents = fs::read_to_string(&args.manifest).map_err(|e| anyhow!("Failed to read manifest: {}", e))?;
     let instructions = parse_manifest(&contents, parse_globals(args.input_variables)?)?;
-    submit_transaction(instructions, args.common, client).await
+    submit_transaction(instructions, args.common, None, client).await
 }
 
 pub async fn submit_transaction(
     instructions: Vec<Instruction>,
     common: CommonSubmitArgs,
+    proof_id: Option<ConfidentialProofId>,
     client: &mut WalletDaemonClient,
 ) -> Result<TransactionSubmitResponse, anyhow::Error> {
     let request = TransactionSubmitRequest {
@@ -271,6 +287,7 @@ pub async fn submit_transaction(
             .map(|i| (i.parent_address, i.index))
             .collect(),
         is_dry_run: common.dry_run,
+        proof_id,
     };
 
     if request.inputs.is_empty() &&
@@ -321,37 +338,79 @@ pub async fn handle_claim_burn(
 ) -> Result<TransactionSubmitResponse, anyhow::Error> {
     let ClaimBurnArgs {
         account_address,
-        commitment_address,
-        range_proof,
-        proof_of_knowledge,
+        proof_json,
         mut common,
     } = args;
 
-    let commitment_address = commitment_address.into_inner();
-    let range_proof = range_proof.into_inner();
-    let proof_of_knowledge = proof_of_knowledge.into_inner();
+    let proof_json = if let Some(proof_json) = proof_json {
+        proof_json
+    } else {
+        println!(
+            "Please paste console wallet JSON output from claim_burn call in the terminal: Press <Ctrl/Cmd + d> once \
+             done"
+        );
+
+        let mut proof_json = String::new();
+        io::stdin().read_to_string(&mut proof_json)?;
+        println!("{}", proof_json);
+        proof_json.trim().to_string()
+    };
+
+    let claim = json::from_str::<json::Value>(&proof_json).map_err(|e| anyhow!("Failed to parse proof JSON: {}", e))?;
+    println!("JSON OK");
+    let commitment_address = LayerOneCommitmentAddress::try_from(base64::decode(
+        claim["commitment"]
+            .as_str()
+            .ok_or_else(|| anyhow!("Missing commitment"))?,
+    )?)?;
+    println!("ADDR OK");
+    let range_proof = base64::decode(
+        claim["rangeproof"]
+            .as_str()
+            .ok_or_else(|| anyhow!("Missing rangeproof"))?,
+    )?;
+    println!("RP OK");
+    let u = PrivateKey::from_bytes(&base64::decode(
+        claim["ownership_proof"]["u"]
+            .as_str()
+            .ok_or_else(|| anyhow!("Missing ownership_proof u"))?,
+    )?)?;
+    println!("u OK");
+    let v = PrivateKey::from_bytes(&base64::decode(
+        claim["ownership_proof"]["v"]
+            .as_str()
+            .ok_or_else(|| anyhow!("Missing ownership_proof v"))?,
+    )?)?;
+    println!("v OK");
+    let public_nonce = PublicKey::from_bytes(&base64::decode(
+        claim["ownership_proof"]["public_nonce"]
+            .as_str()
+            .ok_or_else(|| anyhow!("Missing ownership_proof public_nonce"))?,
+    )?)?;
+    println!("nonce OK");
+
+    let proof_of_knowledge = RistrettoComSig::new(Commitment::from_public_key(&public_nonce), u, v);
+    println!("✅ Proof JSON is valid.");
 
     // specify the input and output set, which is deterministic
     // at this point
     let component_substate_address = VersionedSubstateAddress {
-        address: SubstateAddress::from_str(&format!("commitment_{}", to_hex(commitment_address.as_ref())))?,
+        address: commitment_address.into(),
         version: 0,
     };
-    // let account_substate_address = VersionedSubstateAddress {
-    //     address: account_address.into(),
-    //     version: 0,
-    // };
 
     let instructions = vec![
         Instruction::ClaimBurn {
-            commitment_address,
-            range_proof,
-            proof_of_knowledge,
+            claim: Box::new(ConfidentialClaim {
+                commitment_address,
+                range_proof,
+                proof_of_knowledge,
+            }),
         },
         Instruction::PutLastInstructionOutputOnWorkspace { key: b"burn".to_vec() },
         Instruction::CallMethod {
             component_address: account_address,
-            method: String::from("deposit_confidential"),
+            method: String::from("deposit"),
             args: vec![arg![Variable("burn")]],
         },
     ];
@@ -363,7 +422,7 @@ pub async fn handle_claim_burn(
     // TODO: on a second claim burn, we shoulnd't have any new outputs being created.
     common.num_outputs = Some(1);
 
-    submit_transaction(instructions, common, client).await
+    submit_transaction(instructions, common, None, client).await
 }
 
 pub async fn handle_send(
@@ -379,11 +438,10 @@ pub async fn handle_send(
     } = args;
 
     let source_address = client.get_by_name(source_account_name).await?;
-    let source_component_address = if let SubstateAddress::Component(ca) = source_address.account_address {
-        ca
-    } else {
-        return Err(anyhow!("Invalid component address for source address"));
-    };
+    let source_component_address = source_address
+        .account_address
+        .as_component_address()
+        .ok_or_else(|| anyhow!("Invalid component address for source address"))?;
 
     let instructions = vec![
         Instruction::CallMethod {
@@ -401,7 +459,55 @@ pub async fn handle_send(
         },
     ];
 
-    submit_transaction(instructions, common, client).await
+    submit_transaction(instructions, common, None, client).await
+}
+
+pub async fn handle_confidential_transfer(
+    args: ConfidentialTransferArgs,
+    client: &mut WalletDaemonClient,
+) -> Result<TransactionSubmitResponse, anyhow::Error> {
+    let ConfidentialTransferArgs {
+        source_account_name,
+        amount,
+        destination_account,
+        destination_stealth_public_key,
+        common,
+    } = args;
+
+    let source_address = client.get_by_name(source_account_name.clone()).await?;
+    let source_component_address = source_address
+        .account_address
+        .as_component_address()
+        .ok_or_else(|| anyhow!("Invalid component address for source address"))?;
+    let destination_stealth_public_key = RistrettoPublicKey::from_bytes(&destination_stealth_public_key.into_inner())?;
+
+    let proof_generate_req = ProofsGenerateRequest {
+        amount: Amount::from(amount),
+        source_account_name,
+        destination_account,
+        destination_stealth_public_key,
+    };
+    let proof_generate_resp = client.create_transfer_proof(proof_generate_req).await?;
+    let withdraw_proof = proof_generate_resp.proof;
+    let proof_id = proof_generate_resp.proof_id;
+
+    let instructions = vec![
+        Instruction::CallMethod {
+            component_address: source_component_address,
+            method: String::from("withdraw_confidential"),
+            args: args![withdraw_proof],
+        },
+        Instruction::PutLastInstructionOutputOnWorkspace {
+            key: b"bucket".to_vec(),
+        },
+        Instruction::CallMethod {
+            component_address: destination_account,
+            method: String::from("deposit"),
+            args: args![Variable("bucket")],
+        },
+    ];
+
+    submit_transaction(instructions, common, Some(proof_id), client).await
 }
 
 fn summarize_request(request: &TransactionSubmitRequest, inputs: &[ShardId], outputs: &[ShardId]) {

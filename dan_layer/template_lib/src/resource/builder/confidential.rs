@@ -4,12 +4,12 @@
 use crate::{
     args::MintArg,
     models::{Bucket, Metadata, ResourceAddress},
-    prelude::ConfidentialProof,
+    prelude::ConfidentialOutputProof,
     resource::{builder::TOKEN_SYMBOL, ResourceManager, ResourceType},
 };
 
 pub struct ConfidentialResourceBuilder {
-    initial_supply_proof: Option<ConfidentialProof>,
+    initial_supply_proof: Option<ConfidentialOutputProof>,
     metadata: Metadata,
 }
 
@@ -31,7 +31,7 @@ impl ConfidentialResourceBuilder {
         self
     }
 
-    pub fn initial_supply(mut self, initial_supply: ConfidentialProof) -> Self {
+    pub fn initial_supply(mut self, initial_supply: ConfidentialOutputProof) -> Self {
         self.initial_supply_proof = Some(initial_supply);
         self
     }
