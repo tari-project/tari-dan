@@ -45,7 +45,7 @@ use tari_common::initialize_logging;
 use tari_common_types::types::{FixedHash, PublicKey};
 use tari_comms::multiaddr::Multiaddr;
 use tari_crypto::{
-    ristretto::{RistrettoPublicKey, RistrettoSecretKey},
+    ristretto::{RistrettoComSig, RistrettoPublicKey, RistrettoSecretKey},
     tari_utilities::hex::Hex,
 };
 use tari_dan_app_utilities::base_node_client::GrpcBaseNodeClient;
@@ -95,7 +95,7 @@ pub struct TariWorld {
     cli_data_dir: Option<String>,
     current_scenario_name: Option<String>,
     commitments: IndexMap<String, Vec<u8>>,
-    commitment_ownership_proofs: IndexMap<String, Vec<u8>>,
+    commitment_ownership_proofs: IndexMap<String, RistrettoComSig>,
     rangeproofs: IndexMap<String, Vec<u8>>,
     addresses: IndexMap<String, String>,
     num_databases_saved: usize,

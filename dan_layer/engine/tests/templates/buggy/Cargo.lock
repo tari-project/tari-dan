@@ -183,14 +183,14 @@ dependencies = [
 
 [[package]]
 name = "tari_bor"
-version = "0.1.0"
+version = "0.50.0-pre.0"
 dependencies = [
  "borsh",
 ]
 
 [[package]]
 name = "tari_template_abi"
-version = "0.35.1"
+version = "0.50.0-pre.0"
 dependencies = [
  "hashbrown 0.13.2",
  "tari_bor",

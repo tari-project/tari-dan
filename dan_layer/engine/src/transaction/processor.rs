@@ -23,18 +23,13 @@
 use std::sync::Arc;
 
 use log::*;
-use tari_common_types::types::{BulletRangeProof, Commitment};
-use tari_crypto::ristretto::{RistrettoComSig, RistrettoPublicKey, RistrettoSecretKey};
 use tari_engine_types::{commit_result::FinalizeResult, execution_result::ExecutionResult, instruction::Instruction};
 use tari_template_lib::{
     arg,
     args::{Arg, WorkspaceAction},
     invoke_args,
-    models::LayerOneCommitmentAddress,
-    Hash,
 };
 use tari_transaction::{id_provider::IdProvider, Transaction};
-use tari_utilities::ByteArray;
 
 use crate::{
     packager::{LoadedTemplate, Package},
@@ -180,23 +175,9 @@ impl TransactionProcessor {
                 runtime.interface().emit_log(level, message)?;
                 Ok(ExecutionResult::empty())
             },
-            Instruction::ClaimBurn {
-                commitment_address,
-                range_proof,
-                proof_of_knowledge,
-            } => {
+            Instruction::ClaimBurn { claim } => {
                 // Need to call it on the runtime so that a bucket is created.
-                runtime.interface().claim_burn(
-                    LayerOneCommitmentAddress::new(Hash::try_from_vec(commitment_address).unwrap()),
-                    BulletRangeProof(range_proof),
-                    RistrettoComSig::new(
-                        Commitment::from_public_key(
-                            &RistrettoPublicKey::from_bytes(&proof_of_knowledge[0..32]).unwrap(),
-                        ),
-                        RistrettoSecretKey::from_bytes(&proof_of_knowledge[32..64]).unwrap(),
-                        RistrettoSecretKey::from_bytes(&proof_of_knowledge[64..96]).unwrap(),
-                    ),
-                )?;
+                runtime.interface().claim_burn(*claim)?;
                 Ok(ExecutionResult::empty())
             },
         }

@@ -26,10 +26,10 @@ use std::{
 };
 
 use anyhow::anyhow;
-use tari_common_types::types::{PublicKey, Signature};
-use tari_crypto::tari_utilities::ByteArray;
+use tari_common_types::types::{Commitment, PrivateKey, PublicKey, Signature};
+use tari_crypto::{ristretto::RistrettoComSig, tari_utilities::ByteArray};
 use tari_dan_common_types::ShardId;
-use tari_engine_types::instruction::Instruction;
+use tari_engine_types::{confidential::ConfidentialClaim, instruction::Instruction};
 use tari_template_lib::{args::Arg, Hash};
 use tari_transaction::{ObjectClaim, SubstateChange, Transaction, TransactionMeta};
 
@@ -121,9 +121,14 @@ impl TryFrom<proto::transaction::Instruction> for tari_engine_types::instruction
                 message: request.log_message,
             },
             4 => Instruction::ClaimBurn {
-                commitment_address: request.claim_burn_commitment_address,
-                range_proof: request.claim_burn_range_proof,
-                proof_of_knowledge: request.claim_burn_proof_of_knowledge,
+                claim: Box::new(ConfidentialClaim {
+                    commitment_address: request.claim_burn_commitment_address.try_into()?,
+                    range_proof: request.claim_burn_range_proof,
+                    proof_of_knowledge: request
+                        .claim_burn_proof_of_knowledge
+                        .ok_or_else(|| anyhow!("claim_burn_proof_of_knowledge not provided"))?
+                        .try_into()?,
+                }),
             },
             _ => return Err(anyhow!("invalid instruction_type")),
         };
@@ -166,15 +171,11 @@ impl From<tari_engine_types::instruction::Instruction> for proto::transaction::I
                 result.log_level = level.to_string();
                 result.log_message = message;
             },
-            Instruction::ClaimBurn {
-                commitment_address,
-                range_proof,
-                proof_of_knowledge,
-            } => {
+            Instruction::ClaimBurn { claim } => {
                 result.instruction_type = 4;
-                result.claim_burn_commitment_address = commitment_address.to_vec();
-                result.claim_burn_range_proof = range_proof.to_vec();
-                result.claim_burn_proof_of_knowledge = proof_of_knowledge.to_vec();
+                result.claim_burn_commitment_address = claim.commitment_address.to_vec();
+                result.claim_burn_range_proof = claim.range_proof.to_vec();
+                result.claim_burn_proof_of_knowledge = Some(claim.proof_of_knowledge.into());
             },
         }
         result
@@ -283,6 +284,30 @@ impl From<SubstateChange> for proto::transaction::SubstateChange {
             SubstateChange::Create => proto::transaction::SubstateChange::Create,
             SubstateChange::Exists => proto::transaction::SubstateChange::Exists,
             SubstateChange::Destroy => proto::transaction::SubstateChange::Destroy,
+        }
+    }
+}
+
+// -------------------------------- CommitmentSignature -------------------------------- //
+
+impl TryFrom<proto::transaction::CommitmentSignature> for RistrettoComSig {
+    type Error = anyhow::Error;
+
+    fn try_from(val: proto::transaction::CommitmentSignature) -> Result<Self, Self::Error> {
+        let u = PrivateKey::from_bytes(&val.signature_u)?;
+        let v = PrivateKey::from_bytes(&val.signature_v)?;
+        let public_nonce = PublicKey::from_bytes(&val.public_nonce_commitment)?;
+
+        Ok(RistrettoComSig::new(Commitment::from_public_key(&public_nonce), u, v))
+    }
+}
+
+impl From<RistrettoComSig> for proto::transaction::CommitmentSignature {
+    fn from(val: RistrettoComSig) -> Self {
+        Self {
+            public_nonce_commitment: val.public_nonce().to_vec(),
+            signature_u: val.u().to_vec(),
+            signature_v: val.v().to_vec(),
         }
     }
 }
