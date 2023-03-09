@@ -50,6 +50,8 @@ use crate::{
         AccountsInvokeResponse,
         AccountsListRequest,
         AccountsListResponse,
+        ClaimBurnRequest,
+        ClaimBurnResponse,
         KeysCreateRequest,
         KeysCreateResponse,
         KeysListRequest,
