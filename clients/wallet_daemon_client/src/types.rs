@@ -25,7 +25,7 @@ use tari_common_types::types::{FixedHash, PublicKey};
 use tari_dan_common_types::{serde_with, QuorumCertificate, ShardId};
 use tari_dan_wallet_sdk::models::{Account, ConfidentialProofId, TransactionStatus, VersionedSubstateAddress};
 use tari_engine_types::{
-    commit_result::FinalizeResult,
+    commit_result::{FinalizeResult, TransactionResult},
     execution_result::ExecutionResult,
     instruction::Instruction,
     substate::SubstateAddress,
@@ -232,6 +232,20 @@ pub struct ProofsFinalizeResponse {}
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct ProofsCancelRequest {
     pub proof_id: ConfidentialProofId,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct ClaimBurnRequest {
+    pub account: ComponentAddress,
+    pub claim: serde_json::Value,
+    pub fee: u64,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct ClaimBurnResponse {
+    #[serde(with = "serde_with::hex")]
+    pub hash: FixedHash,
+    pub result: TransactionResult,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]

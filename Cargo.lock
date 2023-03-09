@@ -6452,6 +6452,7 @@ dependencies = [
  "anyhow",
  "axum",
  "axum-jrpc",
+ "base64 0.20.0",
  "clap 4.1.6",
  "dirs",
  "futures 0.3.26",
