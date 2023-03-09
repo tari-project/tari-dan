@@ -180,6 +180,13 @@ impl WalletDaemonClient {
             .await
     }
 
+    pub async fn claim_burn<T: Borrow<ClaimBurnRequest>>(
+        &mut self,
+        req: T,
+    ) -> Result<ClaimBurnResponse, WalletDaemonClientError> {
+        self.send_request("accounts.claim_burn", req.borrow()).await
+    }
+
     pub async fn create_transfer_proof<T: Borrow<ProofsGenerateRequest>>(
         &mut self,
         req: T,
