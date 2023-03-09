@@ -688,12 +688,12 @@ dependencies = [
 name = "fees"
 version = "0.1.0"
 dependencies = [
- "tari_common_types",
+ "tari_common_types 0.47.0-pre.0",
  "tari_crypto",
  "tari_dan_common_types",
  "tari_dan_engine",
- "tari_template_abi 0.35.1",
- "tari_template_lib 0.35.1",
+ "tari_template_abi 0.50.0-pre.0",
+ "tari_template_lib 0.50.0-pre.0",
  "tari_template_macros",
 ]
 
@@ -1770,14 +1770,14 @@ checksum = "9410d0f6853b1d94f0e519fb95df60f29d2c1eff2d921ffdf01a4c8a3b54f12d"
 [[package]]
 name = "tari_bor"
 version = "0.1.0"
+source = "git+https://github.com/tari-project/tari-dan.git?branch=development#14c5502f0e9030859b827bb67053d76ecb202faa"
 dependencies = [
  "borsh",
 ]
 
 [[package]]
 name = "tari_bor"
-version = "0.1.0"
-source = "git+https://github.com/tari-project/tari-dan.git?branch=development#14c5502f0e9030859b827bb67053d76ecb202faa"
+version = "0.50.0-pre.0"
 dependencies = [
  "borsh",
 ]
@@ -1850,6 +1850,28 @@ dependencies = [
 ]
 
 [[package]]
+name = "tari_common"
+version = "0.47.0-pre.0"
+source = "git+https://github.com/tari-project/tari.git?tag=v0.47.0-pre.0#61ea74723b96c797be8737142437c2fe947069e3"
+dependencies = [
+ "anyhow",
+ "blake2",
+ "config",
+ "dirs-next",
+ "log",
+ "log4rs",
+ "multiaddr",
+ "path-clean",
+ "serde",
+ "serde_json",
+ "sha2",
+ "structopt",
+ "tari_crypto",
+ "tempfile",
+ "thiserror",
+]
+
+[[package]]
 name = "tari_common_types"
 version = "0.43.3"
 source = "git+https://github.com/tari-project/tari.git?branch=development#3b21199dcf4639a7ca5cff727bcb49927b624842"
@@ -1861,12 +1883,30 @@ dependencies = [
  "newtype-ops",
  "rand",
  "serde",
- "tari_common",
+ "tari_common 0.43.3",
  "tari_crypto",
  "tari_utilities",
  "thiserror",
  "tokio",
  "zeroize",
+]
+
+[[package]]
+name = "tari_common_types"
+version = "0.47.0-pre.0"
+source = "git+https://github.com/tari-project/tari.git?tag=v0.47.0-pre.0#61ea74723b96c797be8737142437c2fe947069e3"
+dependencies = [
+ "borsh",
+ "digest",
+ "lazy_static",
+ "newtype-ops",
+ "rand",
+ "serde",
+ "tari_common 0.47.0-pre.0",
+ "tari_crypto",
+ "tari_utilities",
+ "thiserror",
+ "tokio",
 ]
 
 [[package]]
@@ -1911,9 +1951,9 @@ dependencies = [
  "prost",
  "prost-types",
  "serde",
- "tari_bor 0.1.0 (git+https://github.com/tari-project/tari-dan.git?branch=development)",
- "tari_common",
- "tari_common_types",
+ "tari_bor 0.1.0",
+ "tari_common 0.43.3",
+ "tari_common_types 0.43.3",
  "tari_crypto",
  "tari_engine_types",
  "tari_mmr",
@@ -1933,15 +1973,15 @@ dependencies = [
  "rand",
  "serde",
  "serde_json",
- "tari_bor 0.1.0 (git+https://github.com/tari-project/tari-dan.git?branch=development)",
- "tari_common",
- "tari_common_types",
+ "tari_bor 0.1.0",
+ "tari_common 0.43.3",
+ "tari_common_types 0.43.3",
  "tari_crypto",
  "tari_dan_common_types",
  "tari_engine_types",
  "tari_mmr",
- "tari_template_abi 0.35.1 (git+https://github.com/tari-project/tari-dan.git?branch=development)",
- "tari_template_lib 0.35.1 (git+https://github.com/tari-project/tari-dan.git?branch=development)",
+ "tari_template_abi 0.35.1",
+ "tari_template_lib 0.35.1",
  "tari_utilities",
  "tempfile",
  "thiserror",
@@ -1956,11 +1996,11 @@ source = "git+https://github.com/tari-project/tari-dan.git?branch=development#14
 dependencies = [
  "digest",
  "serde",
- "tari_bor 0.1.0 (git+https://github.com/tari-project/tari-dan.git?branch=development)",
- "tari_common_types",
+ "tari_bor 0.1.0",
+ "tari_common_types 0.43.3",
  "tari_crypto",
- "tari_template_abi 0.35.1 (git+https://github.com/tari-project/tari-dan.git?branch=development)",
- "tari_template_lib 0.35.1 (git+https://github.com/tari-project/tari-dan.git?branch=development)",
+ "tari_template_abi 0.35.1",
+ "tari_template_lib 0.35.1",
  "tari_utilities",
  "thiserror",
 ]
@@ -1973,7 +2013,7 @@ dependencies = [
  "digest",
  "log",
  "serde",
- "tari_common",
+ "tari_common 0.43.3",
  "tari_crypto",
  "tari_utilities",
  "thiserror",
@@ -1982,26 +2022,16 @@ dependencies = [
 [[package]]
 name = "tari_template_abi"
 version = "0.35.1"
+source = "git+https://github.com/tari-project/tari-dan.git?branch=development#14c5502f0e9030859b827bb67053d76ecb202faa"
 dependencies = [
  "tari_bor 0.1.0",
 ]
 
 [[package]]
 name = "tari_template_abi"
-version = "0.35.1"
-source = "git+https://github.com/tari-project/tari-dan.git?branch=development#14c5502f0e9030859b827bb67053d76ecb202faa"
+version = "0.50.0-pre.0"
 dependencies = [
- "tari_bor 0.1.0 (git+https://github.com/tari-project/tari-dan.git?branch=development)",
-]
-
-[[package]]
-name = "tari_template_lib"
-version = "0.35.1"
-dependencies = [
- "newtype-ops",
- "tari_bor 0.1.0",
- "tari_template_abi 0.35.1",
- "tari_template_macros",
+ "tari_bor 0.50.0-pre.0",
 ]
 
 [[package]]
@@ -2012,13 +2042,23 @@ dependencies = [
  "hex",
  "newtype-ops",
  "serde",
- "tari_bor 0.1.0 (git+https://github.com/tari-project/tari-dan.git?branch=development)",
- "tari_template_abi 0.35.1 (git+https://github.com/tari-project/tari-dan.git?branch=development)",
+ "tari_bor 0.1.0",
+ "tari_template_abi 0.35.1",
+]
+
+[[package]]
+name = "tari_template_lib"
+version = "0.50.0-pre.0"
+dependencies = [
+ "newtype-ops",
+ "tari_bor 0.50.0-pre.0",
+ "tari_template_abi 0.50.0-pre.0",
+ "tari_template_macros",
 ]
 
 [[package]]
 name = "tari_template_macros"
-version = "0.35.1"
+version = "0.50.0-pre.0"
 dependencies = [
  "proc-macro2",
  "quote",

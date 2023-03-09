@@ -20,6 +20,7 @@ tari_storage = { git = "https://github.com/tari-project/tari.git", tag = "v0.47.
 tari_core = { git = "https://github.com/tari-project/tari.git", tag = "v0.47.0-pre.0", package = "tari_core", default-features = false, features = ["transactions"] }
 tari_dan_app_grpc = { path = "../tari_dan_app_grpc" }
 tari_dan_app_utilities = { path = "../tari_dan_app_utilities" }
+tari_dan_wallet_daemon = { path = "../tari_dan_wallet_daemon" }
 tari_dan_core = { path = "../../dan_layer/core" }
 tari_dan_storage = { path = "../../dan_layer/storage" }
 tari_dan_storage_sqlite = { path = "../../dan_layer/storage_sqlite" }
@@ -32,6 +33,7 @@ tari_base_node_grpc_client = { git = "https://github.com/tari-project/tari.git",
 tari_wallet_grpc_client = { git = "https://github.com/tari-project/tari.git", tag = "v0.47.0-pre.0", package = "tari_wallet_grpc_client" }
 tari_engine_types = { path = "../../dan_layer/engine_types" }
 tari_validator_node_client = { path = "../../clients/validator_node_client" }
+tari_wallet_daemon_client = { path = "../../clients/wallet_daemon_client" }
 tari_comms_logging = { path = "../../comms/tari_comms_logging" }
 tari_transaction = { path = "../../dan_layer/transaction" }
 

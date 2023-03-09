@@ -20,14 +20,18 @@
 //   WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //   USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-pub mod base_node;
-mod helpers;
-pub mod http_server;
-pub mod indexer;
-pub mod logging;
-pub mod miner;
-pub mod template;
-pub mod validator_node;
-pub mod validator_node_cli;
-pub mod wallet;
-pub mod wallet_daemon_cli;
+use std::net::Shutdown;
+
+use tari_wallet_daemon_client::WalletDaemonClient;
+
+use crate::{utils::helpers::get_os_assigned_ports, TariWorld};
+
+#[derive(Debug)]
+pub struct WalletDaemonProcess {
+    pub name: String,
+    pub shutdown: Shutdown,
+}
+
+pub fn spawn_wallet_daemon_cli(world: &mut TariWorld) {
+    let (port, json_rpc_port) = get_os_assigned_ports();
+}
