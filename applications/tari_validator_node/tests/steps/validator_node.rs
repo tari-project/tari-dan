@@ -72,7 +72,7 @@ async fn when_i_claim_burn(
     let instructions = [
         Instruction::ClaimBurn {
             claim: Box::new(ConfidentialClaim {
-                commitment_address: commitment.to_vec().try_into()?,
+                output_address: commitment.to_vec().try_into()?,
                 range_proof: rangeproof.clone(),
                 proof_of_knowledge: proof.clone(),
             }),

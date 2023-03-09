@@ -122,12 +122,19 @@ impl TryFrom<proto::transaction::Instruction> for tari_engine_types::instruction
             },
             4 => Instruction::ClaimBurn {
                 claim: Box::new(ConfidentialClaim {
-                    commitment_address: request.claim_burn_commitment_address.try_into()?,
+                    diffie_hellman_public_key: PublicKey::from_bytes(&request.claim_burn_diffie_hellman_public_key)
+                        .map_err(|e| anyhow!("claim_burn_diffie_hellman_public_key: {}", e))?,
+                    output_address: request
+                        .claim_burn_commitment_address
+                        .as_slice()
+                        .try_into()
+                        .map_err(|e| anyhow!("claim_burn_commitment_address: {}", e))?,
                     range_proof: request.claim_burn_range_proof,
                     proof_of_knowledge: request
                         .claim_burn_proof_of_knowledge
                         .ok_or_else(|| anyhow!("claim_burn_proof_of_knowledge not provided"))?
-                        .try_into()?,
+                        .try_into()
+                        .map_err(|e| anyhow!("claim_burn_proof_of_knowledge: {}", e))?,
                 }),
             },
             _ => return Err(anyhow!("invalid instruction_type")),
@@ -173,9 +180,10 @@ impl From<tari_engine_types::instruction::Instruction> for proto::transaction::I
             },
             Instruction::ClaimBurn { claim } => {
                 result.instruction_type = 4;
-                result.claim_burn_commitment_address = claim.commitment_address.to_vec();
+                result.claim_burn_commitment_address = claim.output_address.to_vec();
                 result.claim_burn_range_proof = claim.range_proof.to_vec();
                 result.claim_burn_proof_of_knowledge = Some(claim.proof_of_knowledge.into());
+                result.claim_burn_diffie_hellman_public_key = claim.diffie_hellman_public_key.to_vec();
             },
         }
         result

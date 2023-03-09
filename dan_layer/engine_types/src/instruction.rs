@@ -68,7 +68,7 @@ impl Display for Instruction {
                 write!(
                     f,
                     "ClaimBurn {{ commitment_address: {}, proof_of_knowledge: {:?} }}",
-                    claim.commitment_address, claim.proof_of_knowledge
+                    claim.output_address, claim.proof_of_knowledge
                 )
             },
         }

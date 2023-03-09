@@ -5,7 +5,7 @@ use tari_dan_common_types::optional::IsNotFoundError;
 use tari_engine_types::substate::SubstateAddress;
 
 use crate::{
-    models::VersionedSubstateAddress,
+    models::{SubstateRecord, VersionedSubstateAddress},
     storage::{WalletStorageError, WalletStore, WalletStoreReader},
 };
 
@@ -16,6 +16,12 @@ pub struct SubstatesApi<'a, TStore> {
 impl<'a, TStore: WalletStore> SubstatesApi<'a, TStore> {
     pub fn new(store: &'a TStore) -> Self {
         Self { store }
+    }
+
+    pub fn get_substate(&self, address: &SubstateAddress) -> Result<SubstateRecord, SubstateApiError> {
+        let mut tx = self.store.create_read_tx()?;
+        let substate = tx.substates_get(address)?;
+        Ok(substate)
     }
 
     pub fn load_dependent_substates(

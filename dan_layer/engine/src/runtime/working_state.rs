@@ -3,10 +3,10 @@
 
 use std::collections::HashMap;
 
-use tari_common_types::types::Commitment;
 use tari_dan_common_types::optional::Optional;
 use tari_engine_types::{
     bucket::Bucket,
+    confidential::UnclaimedConfidentialOutput,
     logs::LogEntry,
     non_fungible::NonFungibleContainer,
     non_fungible_index::NonFungibleIndex,
@@ -18,10 +18,10 @@ use tari_template_lib::models::{
     BucketId,
     ComponentAddress,
     ComponentHeader,
-    LayerOneCommitmentAddress,
     NonFungibleAddress,
     NonFungibleIndexAddress,
     ResourceAddress,
+    UnclaimedConfidentialOutputAddress,
     VaultId,
 };
 
@@ -40,7 +40,7 @@ pub(super) struct WorkingState {
     pub new_vaults: HashMap<VaultId, Vault>,
     pub new_non_fungibles: HashMap<NonFungibleAddress, NonFungibleContainer>,
     pub new_non_fungible_indexes: HashMap<NonFungibleIndexAddress, NonFungibleIndex>,
-    pub claimed_layer_one_commitments: Vec<LayerOneCommitmentAddress>,
+    pub claimed_confidential_outputs: Vec<UnclaimedConfidentialOutputAddress>,
 
     pub runtime_state: Option<RuntimeState>,
     pub last_instruction_output: Option<Vec<u8>>,
@@ -57,7 +57,7 @@ impl WorkingState {
             new_components: HashMap::new(),
             new_vaults: HashMap::new(),
             new_non_fungibles: HashMap::new(),
-            claimed_layer_one_commitments: Vec::new(),
+            claimed_confidential_outputs: Vec::new(),
             new_non_fungible_indexes: HashMap::new(),
             runtime_state: None,
             last_instruction_output: None,
@@ -123,23 +123,26 @@ impl WorkingState {
         }
     }
 
-    pub fn get_layer_one_commitment(&self, addr: &LayerOneCommitmentAddress) -> Result<Commitment, RuntimeError> {
+    pub fn get_unclaimed_confidential_commitment(
+        &self,
+        addr: &UnclaimedConfidentialOutputAddress,
+    ) -> Result<UnclaimedConfidentialOutput, RuntimeError> {
         let tx = self.state_store.read_access()?;
         let value = tx
-            .get_state::<_, Substate>(&SubstateAddress::LayerOneCommitment(*addr))
+            .get_state::<_, Substate>(&SubstateAddress::UnclaimedConfidentialOutput(*addr))
             .optional()?
             .ok_or(RuntimeError::LayerOneCommitmentNotFound { address: *addr })?;
         Ok(value
             .into_substate_value()
-            .into_layer_one_commitment()
-            .expect("Substate was not a layer one commitment at layer one commitment address"))
+            .into_unclaimed_confidential_output()
+            .expect("Substate was not an unclaimed commitment at unclaimed commitment address"))
     }
 
-    pub fn claim_layer_one_commitment(&mut self, addr: &LayerOneCommitmentAddress) -> Result<(), RuntimeError> {
-        if self.claimed_layer_one_commitments.contains(addr) {
-            return Err(RuntimeError::LayerOneCommitmentAlreadyClaimed { address: *addr });
+    pub fn claim_confidential_output(&mut self, addr: &UnclaimedConfidentialOutputAddress) -> Result<(), RuntimeError> {
+        if self.claimed_confidential_outputs.contains(addr) {
+            return Err(RuntimeError::ConfidentialOutputAlreadyClaimed { address: *addr });
         }
-        self.claimed_layer_one_commitments.push(*addr);
+        self.claimed_confidential_outputs.push(*addr);
         Ok(())
     }
 
