@@ -9,6 +9,7 @@ use std::{
 use ::serde::{Deserialize, Serialize};
 use tari_bor::{borsh, Decode, Encode};
 use tari_common_types::types::{FixedHash, FixedHashSizeError};
+use tari_crypto::{hash::blake2::Blake256, hash_domain, hashing::DomainSeparatedHasher};
 use tari_engine_types::substate::{Substate, SubstateAddress};
 use tari_utilities::hex::Hex;
 
@@ -35,7 +36,7 @@ mod tree_node_hash;
 pub use tree_node_hash::TreeNodeHash;
 
 mod validator_metadata;
-pub use validator_metadata::{vn_mmr_node_hash, ValidatorMetadata};
+pub use validator_metadata::{vn_bmt_node_hash, ValidatorMetadata};
 
 mod object_pledge;
 pub use object_pledge::{ObjectPledge, ObjectPledgeInfo};
@@ -46,6 +47,9 @@ pub use node_addressable::NodeAddressable;
 mod shard_id;
 
 pub use shard_id::ShardId;
+
+hash_domain!(TariDanCommonTypes, "tari.dan.common_types", 1);
+pub type ValidatorNodeBmtHasherBlake256 = DomainSeparatedHasher<Blake256, TariDanCommonTypes>;
 
 #[derive(Debug, Clone, Encode, Decode, Deserialize, Serialize)]
 pub enum SubstateState {

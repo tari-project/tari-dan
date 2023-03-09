@@ -61,8 +61,8 @@ pub enum HotStuffError {
     InvalidQuorumCertificate(String),
     #[error("Failed to sign QC")]
     FailedToSignQc,
-    #[error("This validator node is not included in the MMR")]
-    ValidatorNodeNotIncludedInMmr,
+    #[error("This validator node is not included in the BMT")]
+    ValidatorNodeNotIncludedInBMT,
     #[error("No committee for shard {shard} and epoch {epoch}")]
     NoCommitteeForShard { shard: ShardId, epoch: Epoch },
     #[error("Cannot vote on a proposal that has been rejected")]

@@ -25,7 +25,7 @@ use std::{collections::HashMap, ops::Range};
 use async_trait::async_trait;
 use tari_common_types::types::PublicKey;
 use tari_comms::protocol::rpc::{RpcError, RpcStatus};
-use tari_core::ValidatorNodeMmr;
+use tari_core::ValidatorNodeBMT;
 use tari_dan_common_types::{Epoch, NodeAddressable, ShardId};
 use thiserror::Error;
 
@@ -115,7 +115,7 @@ pub trait EpochManager<TAddr: NodeAddressable>: Clone {
 
     async fn get_validator_nodes_per_epoch(&self, epoch: Epoch)
         -> Result<Vec<ValidatorNode<TAddr>>, EpochManagerError>;
-    async fn get_validator_node_mmr(&self, epoch: Epoch) -> Result<ValidatorNodeMmr, EpochManagerError>;
+    async fn get_validator_node_mmr(&self, epoch: Epoch) -> Result<ValidatorNodeBMT, EpochManagerError>;
     async fn get_validator_node_merkle_root(&self, epoch: Epoch) -> Result<Vec<u8>, EpochManagerError>;
 
     // TODO: Should be part of VN state machine
@@ -291,19 +291,19 @@ impl<TAddr: NodeAddressable> EpochManager<TAddr> for RangeEpochManager<TAddr> {
         Ok(vns.clone())
     }
 
-    async fn get_validator_node_mmr(&self, epoch: Epoch) -> Result<ValidatorNodeMmr, EpochManagerError> {
+    async fn get_validator_node_mmr(&self, epoch: Epoch) -> Result<ValidatorNodeBMT, EpochManagerError> {
         let vns = self
             .registered_vns
             .get(&epoch)
             .ok_or(EpochManagerError::NoEpochFound(epoch))?;
-        let mut vn_mmr = ValidatorNodeMmr::new(Vec::with_capacity(vns.len()));
+        let mut vn_bmt = Vec::with_capacity(vns.len());
         for vn in vns {
-            vn_mmr
+            vn_bmt
                 .push(vn.node_hash().to_vec())
                 .expect("Could not build the merkle mountain range of the VN set");
         }
-
-        Ok(vn_mmr)
+        let vn_bmt = ValidatorNodeBMT::create(vn_bmt);
+        Ok(vn_bmt)
     }
 
     async fn get_validator_node_merkle_root(&self, epoch: Epoch) -> Result<Vec<u8>, EpochManagerError> {

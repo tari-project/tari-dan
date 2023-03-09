@@ -32,7 +32,7 @@ use tari_core::{
 };
 use tari_crypto::tari_utilities::ByteArray;
 use tari_dan_app_utilities::{base_node_client::GrpcBaseNodeClient, epoch_manager::EpochManagerEvent};
-use tari_dan_common_types::{optional::Optional, vn_mmr_node_hash, Epoch, ShardId};
+use tari_dan_common_types::{optional::Optional, vn_bmt_node_hash, Epoch, ShardId};
 use tari_dan_core::{
     consensus_constants::{BaseLayerConsensusConstants, ConsensusConstants},
     models::{Committee, ValidatorNode},
@@ -429,7 +429,7 @@ impl BaseLayerEpochManager {
         let mut vn_mmr = ValidatorNodeMmr::new(Vec::new());
         for vn in vns {
             vn_mmr
-                .push(vn_mmr_node_hash(&vn.public_key, &vn.shard_key).to_vec())
+                .push(vn_bmt_node_hash(&vn.public_key, &vn.shard_key).to_vec())
                 .expect("Could not build the merkle mountain range of the VN set");
         }
 

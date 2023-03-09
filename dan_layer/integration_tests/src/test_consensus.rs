@@ -36,7 +36,7 @@ use tari_crypto::{
     keys::PublicKey as PublicKeyT,
     ristretto::{RistrettoPublicKey, RistrettoSecretKey},
 };
-use tari_dan_common_types::{vn_mmr_node_hash, Epoch, QuorumCertificate, QuorumDecision, ShardId};
+use tari_dan_common_types::{vn_bmt_node_hash, Epoch, QuorumCertificate, QuorumDecision, ShardId};
 use tari_dan_core::{
     models::{vote_message::VoteMessage, HotStuffMessage, HotstuffPhase, Payload, TariDanPayload},
     services::{
@@ -75,7 +75,7 @@ fn create_test_qc(
     let mut vn_mmr = ValidatorNodeMmr::new(Vec::new());
     for pk in &all_vn_keys {
         vn_mmr
-            .push(vn_mmr_node_hash(pk, &ShardId::zero()).to_vec())
+            .push(vn_bmt_node_hash(pk, &ShardId::zero()).to_vec())
             .expect("Could not build the merkle mountain range of the VN set");
     }
 
@@ -261,10 +261,10 @@ async fn test_hs_waiter_leader_sends_new_proposal_when_enough_votes_are_received
     // create the VN set mmr
     let mut vn_mmr = ValidatorNodeMmr::new(Vec::new());
     vn_mmr
-        .push(vn_mmr_node_hash(&node1, &ShardId::zero()).to_vec())
+        .push(vn_bmt_node_hash(&node1, &ShardId::zero()).to_vec())
         .unwrap();
     vn_mmr
-        .push(vn_mmr_node_hash(&node2, &ShardId::zero()).to_vec())
+        .push(vn_bmt_node_hash(&node2, &ShardId::zero()).to_vec())
         .unwrap();
 
     let epoch_manager =

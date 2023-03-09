@@ -23,10 +23,10 @@
 use log::*;
 use serde::{Deserialize, Serialize};
 use tari_common_types::types::FixedHash;
-use tari_core::ValidatorNodeMmr;
+use tari_core::ValidatorNodeBMT;
 use tari_dan_common_types::{
     hashing::tari_hasher,
-    vn_mmr_node_hash,
+    vn_bmt_node_hash,
     QuorumDecision,
     QuorumRejectReason,
     ShardId,
@@ -34,7 +34,7 @@ use tari_dan_common_types::{
     TreeNodeHash,
     ValidatorMetadata,
 };
-use tari_mmr::{common::LeafIndex, MerkleProof};
+use tari_mmr::{common::LeafIndex, BalancedBinaryMerkleProof};
 
 use crate::{services::SigningService, workers::hotstuff_error::HotStuffError, TariDanCoreHashDomain};
 
@@ -89,42 +89,36 @@ impl VoteMessage {
         &mut self,
         signing_service: &TSigningService,
         shard_id: ShardId,
-        vn_mmr: &ValidatorNodeMmr,
+        vn_bmt: &ValidatorNodeBMT,
     ) -> Result<(), HotStuffError> {
         // calculate the signature
         let challenge = self.construct_challenge();
         let signature = signing_service.sign(&*challenge).ok_or(HotStuffError::FailedToSignQc)?;
         // construct the merkle proof for the inclusion of the VN's public key in the epoch
-        let node_hash = vn_mmr_node_hash(signing_service.public_key(), &shard_id);
+        let node_hash = vn_bmt_node_hash(signing_service.public_key(), &shard_id).to_vec();
         debug!(
             target: LOG_TARGET,
-            "[sign_vote] mmr_node_hash={}, public_key={}, shard_id={}, mmr_len={}",
+            "[sign_vote] bmt_node_hash={}, public_key={}, shard_id={}",
             node_hash,
             signing_service.public_key(),
             shard_id,
-            vn_mmr.len().unwrap()
         );
-        let leaf_index = vn_mmr
-            .find_leaf_index(&*node_hash)
-            .expect("Unexpected Merkle Mountain Range error")
-            .ok_or(HotStuffError::ValidatorNodeNotIncludedInMmr)?;
-        let merkle_proof =
-            MerkleProof::for_leaf_node(vn_mmr, LeafIndex(leaf_index as usize)).expect("Merkle proof generation failed");
+        let leaf_index = vn_bmt
+            .find_leaf_index_for_hash(&node_hash)
+            .map_err(|_| HotStuffError::ValidatorNodeNotIncludedInMmr)?;
+        let merkle_proof = BalancedBinaryMerkleProof::generate_proof(vn_bmt, leaf_index as usize);
 
-        let root = vn_mmr.get_merkle_root().unwrap();
-        let idx = vn_mmr.find_leaf_index(&*node_hash).unwrap();
+        let root = vn_bmt.get_merkle_root();
+        let idx = vn_bmt
+            .find_leaf_index_for_hash(&node_hash)
+            .map_err(|_| HotStuffError::ValidatorNodeNotIncludedInBMT)?;
         // TODO: remove
-        if let Err(err) = merkle_proof.verify_leaf::<tari_core::ValidatorNodeMmrHasherBlake256>(
-            &root,
-            &*node_hash,
-            LeafIndex(leaf_index as usize),
-        ) {
+        if !merkle_proof.verify(&root, &node_hash) {
             log::warn!(
                 target: "tari::dan_layer::votemessage",
-                "Merkle proof verification failed for validator node {:?} at index {:?} with error: {}",
+                "Merkle proof verification failed for validator node {:?} at index {:?}",
                 node_hash,
                 idx,
-                err
             );
         }
 
