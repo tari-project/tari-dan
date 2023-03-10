@@ -20,15 +20,13 @@
 //   WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //   USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use tari_bor::{borsh, decode, encode, Decode, Encode};
-use tari_template_abi::rust::io;
+use serde::{Serialize, Deserialize};
+use tari_bor::{decode, encode, BorError};
 
-#[derive(Debug, Clone, PartialEq, Eq, Decode, Encode)]
-#[cfg_attr(
-    feature = "serde",
-    derive(serde::Deserialize, serde::Serialize),
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[
     serde(tag = "type", content = "value")
-)]
+]
 pub enum Arg {
     Variable(Vec<u8>),
     // TODO: this should be a `Value` instead of a `Vec<u8>`, but that is a larger refactor
@@ -44,7 +42,7 @@ impl Arg {
         Arg::Variable(key.into())
     }
 
-    pub fn from_bytes(bytes: &[u8]) -> io::Result<Self> {
+    pub fn from_bytes(bytes: &[u8]) -> Result<Self, BorError> {
         decode(bytes)
     }
 

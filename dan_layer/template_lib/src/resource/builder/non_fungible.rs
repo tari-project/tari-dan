@@ -1,7 +1,8 @@
 //   Copyright 2023 The Tari Project
 //   SPDX-License-Identifier: BSD-3-Clause
 
-use tari_bor::{encode, Encode};
+use serde::Serialize;
+use tari_bor::{encode};
 use tari_template_abi::rust::{collections::HashMap, fmt, ops::RangeInclusive};
 
 use crate::{
@@ -36,8 +37,8 @@ impl NonFungibleResourceBuilder {
     pub fn with_non_fungibles<'a, I, T, U>(mut self, tokens: I) -> Self
     where
         I: IntoIterator<Item = (NonFungibleId, (&'a T, &'a U))>,
-        T: Encode + 'a,
-        U: Encode + 'a,
+        T: Serialize + 'a,
+        U: Serialize + 'a,
     {
         self.tokens_ids.extend(
             tokens

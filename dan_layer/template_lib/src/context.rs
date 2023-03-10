@@ -20,7 +20,8 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use tari_bor::{borsh, decode, Decode, Encode};
+use serde::Deserialize;
+use tari_bor::{decode};
 use tari_template_abi::CallInfo;
 
 #[cfg(target_arch = "wasm32")]
@@ -46,7 +47,7 @@ fn with_context<R, F: FnOnce(&mut Option<SystemContext>) -> R>(_f: F) -> R {
     panic!("System context is not available on non-WASM targets");
 }
 
-#[derive(Debug, Decode, Encode)]
+#[derive(Debug, Deserialize)]
 pub struct AbiContext {
     // TODO: YAGNI currently, but will leave this in as it may come into play for cross-template requests.
 }

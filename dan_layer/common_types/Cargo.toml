@@ -9,7 +9,7 @@ license = "BSD-3-Clause"
 [dependencies]
 tari_common_types = { git = "https://github.com/tari-project/tari.git", branch = "development", package = "tari_common_types" }
 tari_utilities = { git = "https://github.com/tari-project/tari_utilities.git", tag = "v0.4.10" }
-tari_crypto = { git = "https://github.com/tari-project/tari-crypto.git", tag = "v0.16.6", features = ["borsh"] }
+tari_crypto = { git = "https://github.com/tari-project/tari-crypto.git", tag = "v0.16.6"}
 tari_engine_types = { path = "../engine_types"}
 tari_bor = { path = "../tari_bor" }
 tari_mmr = { git = "https://github.com/tari-project/tari.git", branch = "development", package = "tari_mmr" }
@@ -18,7 +18,6 @@ anyhow = "1.0"
 # TODO: remove once we use borsh for all serialization
 bincode = "1.0"
 base64 = "0.20.0-alpha.1"
-borsh = "0.9"
 digest = "0.9"
 newtype-ops = "0.1.4"
 rand = "0.7"

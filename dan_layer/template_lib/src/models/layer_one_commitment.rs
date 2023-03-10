@@ -2,12 +2,12 @@ use std::fmt::{Display, Formatter};
 
 //  Copyright 2022 The Tari Project
 //  SPDX-License-Identifier: BSD-3-Clause
-use tari_bor::{borsh, Decode, Encode};
+
+use serde::{Serialize, Deserialize};
 
 use crate::{hash::HashParseError, Hash};
 
-#[derive(Debug, Clone, Copy, Hash, PartialEq, Eq, Encode, Decode)]
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[derive(Debug, Clone, Copy, Hash, PartialEq, Eq, Serialize, Deserialize)]
 pub struct LayerOneCommitmentAddress(Hash);
 
 impl LayerOneCommitmentAddress {

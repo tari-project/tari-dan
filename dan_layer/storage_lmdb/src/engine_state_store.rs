@@ -119,13 +119,11 @@ impl<'a> StateWriter for LmdbTransaction<WriteTransaction<'a>> {
 
 #[cfg(test)]
 mod tests {
-
-    use borsh::{BorshDeserialize, BorshSerialize};
     use tempfile::tempdir;
 
     use super::*;
 
-    #[derive(Debug, BorshSerialize, BorshDeserialize, PartialEq, Eq, Clone)]
+    #[derive(Debug, Serialize, Deserialize, PartialEq, Eq, Clone)]
     struct UserData {
         name: String,
         age: u8,

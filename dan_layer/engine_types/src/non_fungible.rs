@@ -3,9 +3,9 @@
 
 use std::io;
 
-use tari_bor::{borsh, decode_exact, Decode, Encode};
+use tari_bor::{decode_exact};
 
-#[derive(Debug, Clone, Encode, Decode, serde::Deserialize, serde::Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct NonFungibleContainer(Option<NonFungible>);
 
 impl NonFungibleContainer {
@@ -34,7 +34,7 @@ impl NonFungibleContainer {
     }
 }
 
-#[derive(Debug, Clone, Encode, Decode, serde::Deserialize, serde::Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct NonFungible {
     data: Vec<u8>,
     mutable_data: Vec<u8>,

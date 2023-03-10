@@ -998,6 +998,33 @@ dependencies = [
 ]
 
 [[package]]
+name = "ciborium"
+version = "0.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b0c137568cc60b904a7724001b35ce2630fd00d5d84805fbb608ab89509d788f"
+dependencies = [
+ "ciborium-io",
+ "ciborium-ll",
+ "serde",
+]
+
+[[package]]
+name = "ciborium-io"
+version = "0.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "346de753af073cc87b52b2083a506b38ac176a44cfb05497b622e27be899b369"
+
+[[package]]
+name = "ciborium-ll"
+version = "0.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "213030a2b5a4e0c0892b6652260cf6ccac84827b83a85a534e178e3906c4cf1b"
+dependencies = [
+ "ciborium-io",
+ "half",
+]
+
+[[package]]
 name = "cidr"
 version = "0.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2628,6 +2655,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "half"
+version = "1.8.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "eabb4a44450da02c90444cf74558da904edde8fb4e9035a9a6a4e15445af0bd7"
+
+[[package]]
 name = "hashbrown"
 version = "0.11.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3617,7 +3650,7 @@ dependencies = [
  "hex-literal",
  "sealed 0.4.0",
  "serde",
- "serde-big-array",
+ "serde-big-array 0.4.1",
  "thiserror",
  "tiny-keccak",
 ]
@@ -5257,6 +5290,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "serde-big-array"
+version = "0.5.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "11fc7cc2c76d73e0f27ee52abbd64eec84d46f370c88371120433196934e4b7f"
+dependencies = [
+ "serde",
+]
+
+[[package]]
 name = "serde-value"
 version = "0.7.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5318,9 +5360,9 @@ dependencies = [
 
 [[package]]
 name = "serde_repr"
-version = "0.1.10"
+version = "0.1.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9a5ec9fa74a20ebbe5d9ac23dac1fc96ba0ecfe9f50f2843b52e537b10fbcb4e"
+checksum = "395627de918015623b32e7669714206363a7fc00382bf477e72c1f7533e8eafc"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -5834,7 +5876,9 @@ dependencies = [
 name = "tari_bor"
 version = "0.50.0-pre.0"
 dependencies = [
- "borsh",
+ "ciborium",
+ "ciborium-io",
+ "serde",
 ]
 
 [[package]]
@@ -6221,7 +6265,6 @@ dependencies = [
  "anyhow",
  "base64 0.20.0",
  "bincode",
- "borsh",
  "digest 0.9.0",
  "newtype-ops",
  "prost",
@@ -6317,7 +6360,6 @@ dependencies = [
 name = "tari_dan_storage_lmdb"
 version = "0.50.0-pre.0"
 dependencies = [
- "borsh",
  "hex",
  "lmdb-zero",
  "tari_dan_common_types",
@@ -6330,7 +6372,6 @@ dependencies = [
 name = "tari_dan_storage_sqlite"
 version = "0.50.0-pre.0"
 dependencies = [
- "borsh",
  "chrono",
  "diesel",
  "diesel_migrations",
@@ -6717,6 +6758,7 @@ name = "tari_template_abi"
 version = "0.50.0-pre.0"
 dependencies = [
  "hashbrown 0.13.2",
+ "serde",
  "tari_bor",
 ]
 
@@ -6734,6 +6776,7 @@ dependencies = [
  "hex",
  "newtype-ops",
  "serde",
+ "serde-big-array 0.5.1",
  "serde_json",
  "tari_bor",
  "tari_template_abi",

@@ -3,7 +3,6 @@
 
 use std::borrow::Borrow;
 
-use borsh::BorshSerialize;
 use digest::Digest;
 use serde::{Deserialize, Serialize};
 use tari_common_types::types::FixedHash;
@@ -12,7 +11,7 @@ use tari_engine_types::commit_result::RejectReason;
 
 use crate::{Epoch, NodeHeight, PayloadId, ShardId, ShardPledgeCollection, TreeNodeHash, ValidatorMetadata};
 
-#[derive(Debug, Clone, Copy, Deserialize, Serialize, PartialEq, Eq, BorshSerialize)]
+#[derive(Debug, Clone, Copy, Deserialize, Serialize, PartialEq, Eq)]
 pub enum QuorumDecision {
     Accept,
     Reject(QuorumRejectReason),
@@ -24,7 +23,7 @@ impl QuorumDecision {
     }
 }
 
-#[derive(Debug, Clone, Copy, Deserialize, Serialize, PartialEq, Eq, BorshSerialize)]
+#[derive(Debug, Clone, Copy, Deserialize, Serialize, PartialEq, Eq)]
 pub enum QuorumRejectReason {
     ShardNotPledged,
     ExecutionFailure,
@@ -79,7 +78,7 @@ impl<T: Borrow<RejectReason>> From<T> for QuorumRejectReason {
     }
 }
 
-#[derive(Debug, Clone, Deserialize, Serialize, BorshSerialize)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct QuorumCertificate {
     payload_id: PayloadId,
     payload_height: NodeHeight,

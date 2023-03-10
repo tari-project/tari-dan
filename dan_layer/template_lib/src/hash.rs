@@ -24,16 +24,13 @@ use std::{
     error::Error,
     fmt,
     fmt::{Display, Formatter},
-    io,
-    io::Write,
     ops::{Deref, DerefMut},
 };
 
-use tari_bor::{Decode, Encode};
+use serde::{Serialize, Deserialize};
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Ord, PartialOrd, Hash, Default)]
-#[cfg_attr(feature = "serde", derive(serde::Deserialize, serde::Serialize))]
-pub struct Hash(#[cfg_attr(feature = "json", serde(with = "hex"))] [u8; 32]);
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Ord, PartialOrd, Hash, Default, Serialize, Deserialize)]
+pub struct Hash(#[cfg_attr(feature = "hex", serde(with = "hex"))] [u8; 32]);
 
 impl Hash {
     pub const fn from_array(bytes: [u8; 32]) -> Self {
@@ -113,19 +110,6 @@ impl DerefMut for Hash {
     }
 }
 
-impl Encode for Hash {
-    fn serialize<W: Write>(&self, writer: &mut W) -> io::Result<()> {
-        self.0.serialize(writer)
-    }
-}
-
-impl Decode for Hash {
-    fn deserialize(buf: &mut &[u8]) -> io::Result<Self> {
-        let hash = <[u8; 32] as Decode>::deserialize(buf)?;
-        Ok(Hash(hash))
-    }
-}
-
 impl Display for Hash {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         for x in self.0 {
@@ -154,8 +138,8 @@ mod tests {
     fn serialize_deserialize() {
         let hash = Hash::default();
         let mut buf = Vec::new();
-        hash.serialize(&mut buf).unwrap();
-        let hash2 = Hash::deserialize(&mut &buf[..]).unwrap();
+        tari_bor::encode_into(&hash, &mut buf).unwrap();
+        let hash2 = tari_bor::decode(&buf).unwrap();
         assert_eq!(hash, hash2);
     }
 }

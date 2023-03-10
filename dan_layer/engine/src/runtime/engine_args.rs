@@ -3,11 +3,11 @@
 
 use std::any::type_name;
 
-use tari_bor::{borsh, decode_exact, Decode, Encode};
+use tari_bor::{decode_exact};
 
 use crate::runtime::RuntimeError;
 
-#[derive(Debug, Clone, Encode, Decode, Default)]
+#[derive(Debug, Clone, Default)]
 pub struct EngineArgs {
     args: Vec<Vec<u8>>,
 }

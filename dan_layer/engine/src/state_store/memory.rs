@@ -159,7 +159,6 @@ impl<'a> StateWriter for MemoryTransaction<RwLockWriteGuard<'a, InnerKvMap>> {
 
 #[cfg(test)]
 mod tests {
-    use tari_bor::{borsh, Decode, Encode};
     use tari_dan_common_types::optional::Optional;
 
     use super::*;

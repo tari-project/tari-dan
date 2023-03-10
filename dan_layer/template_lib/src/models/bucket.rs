@@ -20,7 +20,7 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use tari_bor::{borsh, Decode, Encode};
+use serde::{Serialize, Deserialize};
 use tari_template_abi::{call_engine, EngineOp};
 
 use crate::{
@@ -31,7 +31,7 @@ use crate::{
 
 pub type BucketId = u32;
 
-#[derive(Debug, Clone, Decode, Encode)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Bucket {
     id: BucketId,
 }

@@ -26,10 +26,9 @@ use std::{
 };
 
 use newtype_ops::newtype_ops;
-use tari_bor::{borsh, Decode, Encode};
+use serde::{Serialize, Deserialize};
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Decode, Encode)]
-#[cfg_attr(feature = "serde", derive(serde::Deserialize, serde::Serialize))]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 pub struct Amount(pub i64);
 
 impl Amount {
@@ -161,7 +160,6 @@ mod tests {
     }
 
     #[test]
-    #[cfg(feature = "serde")]
     fn can_serialize() {
         let a = Amount::new(4);
         let b = serde_json::to_string(&a).unwrap();

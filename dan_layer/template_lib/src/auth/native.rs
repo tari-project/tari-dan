@@ -1,13 +1,12 @@
 //   Copyright 2023 The Tari Project
 //   SPDX-License-Identifier: BSD-3-Clause
 
-use tari_bor::{borsh, Decode, Encode};
+use serde::{Serialize, Deserialize};
 use tari_template_abi::rust::fmt::{Display, Formatter};
 
 use crate::args::{ComponentAction, ResourceAction, VaultAction};
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord, Decode, Encode)]
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
 pub enum NativeFunctionCall {
     Component(ComponentAction),
     Resource(ResourceAction),

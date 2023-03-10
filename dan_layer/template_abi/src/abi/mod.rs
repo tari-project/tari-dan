@@ -22,13 +22,14 @@
 
 #[cfg(target_arch = "wasm32")]
 mod wasm;
+use serde::{de::DeserializeOwned, Serialize};
 #[cfg(target_arch = "wasm32")]
 pub use wasm::*;
 #[cfg(not(target_arch = "wasm32"))]
 mod non_wasm;
 #[cfg(not(target_arch = "wasm32"))]
 pub use non_wasm::*;
-use tari_bor::{decode_exact, decode_len, encode_into, Decode, Encode};
+use tari_bor::{decode_exact, decode_len, encode_into};
 
 use crate::{
     ops::EngineOp,
@@ -41,7 +42,7 @@ pub fn wrap_ptr(mut v: Vec<u8>) -> *mut u8 {
     ptr
 }
 
-pub fn call_engine<T: Encode + fmt::Debug, U: Decode>(op: EngineOp, input: &T) -> U {
+pub fn call_engine<T: Serialize + fmt::Debug, U: DeserializeOwned>(op: EngineOp, input: &T) -> U {
     let mut encoded = Vec::with_capacity(512);
     encode_into(input, &mut encoded).unwrap();
     let len = encoded.len();
@@ -56,7 +57,7 @@ pub fn call_engine<T: Encode + fmt::Debug, U: Decode>(op: EngineOp, input: &T) -
     let slice = unsafe { slice::from_raw_parts(ptr.offset(4), len) };
     decode_exact(slice).unwrap_or_else(|e| {
         panic!(
-            "Failed to decode response from engine for op {:?} with input: {:?}: {}",
+            "Failed to decode response from engine for op {:?} with input: {:?}: {:?}",
             op, input, e,
         )
     })

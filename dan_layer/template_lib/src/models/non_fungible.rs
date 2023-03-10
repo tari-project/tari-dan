@@ -1,7 +1,7 @@
 //   Copyright 2023 The Tari Project
 //   SPDX-License-Identifier: BSD-3-Clause
 
-use tari_bor::{borsh, Decode, Encode};
+use serde::{Serialize, Deserialize, de::DeserializeOwned};
 use tari_template_abi::{
     call_engine,
     rust::{fmt, fmt::Display, write},
@@ -19,8 +19,7 @@ use crate::{
 
 const DELIM: char = ':';
 
-#[derive(Debug, Clone, Ord, PartialOrd, PartialEq, Eq, Encode, Decode, Hash)]
-#[cfg_attr(feature = "serde", derive(serde::Deserialize, serde::Serialize))]
+#[derive(Debug, Clone, Ord, PartialOrd, PartialEq, Eq, Serialize, Deserialize, Hash)]
 pub enum NonFungibleId {
     U256([u8; 32]),
     String(String),
@@ -164,8 +163,7 @@ impl Display for NonFungibleId {
     }
 }
 
-#[derive(Debug, Clone, Encode, Decode, PartialEq, Eq, Hash)]
-#[cfg_attr(feature = "serde", derive(serde::Deserialize, serde::Serialize))]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
 pub struct NonFungibleAddress {
     resource_address: ResourceAddress,
     id: NonFungibleId,
@@ -198,8 +196,7 @@ impl Display for NonFungibleAddress {
     }
 }
 
-#[derive(Debug, Clone, Encode, Decode)]
-#[cfg_attr(feature = "serde", derive(serde::Deserialize, serde::Serialize))]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct NonFungible {
     address: NonFungibleAddress,
 }
@@ -209,7 +206,7 @@ impl NonFungible {
         Self { address }
     }
 
-    pub fn get_data<T: Decode>(&self) -> T {
+    pub fn get_data<T: DeserializeOwned>(&self) -> T {
         let resp: InvokeResult = call_engine(EngineOp::NonFungibleInvoke, &NonFungibleInvokeArg {
             address: self.address.clone(),
             action: NonFungibleAction::GetData,
@@ -219,7 +216,7 @@ impl NonFungible {
         resp.decode().expect("[get_data] Failed to decode NonFungible data")
     }
 
-    pub fn get_mutable_data<T: Decode>(&self) -> T {
+    pub fn get_mutable_data<T: DeserializeOwned>(&self) -> T {
         let resp: InvokeResult = call_engine(EngineOp::NonFungibleInvoke, &NonFungibleInvokeArg {
             address: self.address.clone(),
             action: NonFungibleAction::GetMutableData,
@@ -230,7 +227,7 @@ impl NonFungible {
             .expect("[get_mutable_data] Failed to decode raw NonFungible mutable data")
     }
 
-    pub fn set_mutable_data<T: Encode + ?Sized>(&mut self, data: &T) {
+    pub fn set_mutable_data<T: Serialize + ?Sized>(&mut self, data: &T) {
         ResourceManager::get(*self.address.resource_address())
             .update_non_fungible_data(self.address.id().clone(), data);
     }

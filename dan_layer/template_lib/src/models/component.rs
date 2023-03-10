@@ -25,12 +25,11 @@ use std::{
     str::FromStr,
 };
 
-use tari_bor::{borsh, Decode, Encode};
+use serde::{Serialize, Deserialize};
 
 use crate::{hash::HashParseError, models::TemplateAddress, prelude::AccessRules, Hash};
 
-#[derive(Debug, Clone, Copy, Hash, PartialEq, Eq, PartialOrd, Ord, Encode, Decode)]
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[derive(Debug, Clone, Copy, Hash, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 pub struct ComponentAddress(Hash);
 
 impl ComponentAddress {
@@ -87,8 +86,7 @@ impl Display for ComponentAddress {
     }
 }
 
-#[derive(Debug, Clone, Encode, Decode)]
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ComponentHeader {
     pub template_address: TemplateAddress,
     pub module_name: String,
@@ -108,8 +106,7 @@ impl ComponentHeader {
     }
 }
 
-#[derive(Debug, Clone, Encode, Decode)]
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ComponentBody {
     pub state: Vec<u8>,
 }

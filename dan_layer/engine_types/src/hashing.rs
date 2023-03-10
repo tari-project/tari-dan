@@ -23,7 +23,8 @@
 use std::{io, io::Write};
 
 use digest::Digest;
-use tari_bor::{encode_into, Encode};
+use serde::Serialize;
+use tari_bor::{encode_into};
 use tari_crypto::{hash::blake2::Blake256, hash_domain, hashing::DomainSeparation};
 use tari_template_lib::Hash;
 
@@ -45,7 +46,7 @@ impl TariEngineHasher {
         Self { hasher }
     }
 
-    pub fn update<T: Encode + ?Sized>(&mut self, data: &T) {
+    pub fn update<T: Serialize + ?Sized>(&mut self, data: &T) {
         // Borsh encoding does not make any contract to say that if the writer is infallible (as it is here) then
         // encoding in infallible. However this should be the case. Since it is very unergonomic to return an
         // error in hash chain functions, and therefore all usages of the hasher, we assume all types implement
@@ -53,12 +54,12 @@ impl TariEngineHasher {
         encode_into(data, &mut self.hash_writer()).expect("encoding failed")
     }
 
-    pub fn chain<T: Encode + ?Sized>(mut self, data: &T) -> Self {
+    pub fn chain<T: Serialize + ?Sized>(mut self, data: &T) -> Self {
         self.update(data);
         self
     }
 
-    pub fn digest<T: Encode + ?Sized>(self, data: &T) -> Hash {
+    pub fn digest<T: Serialize + ?Sized>(self, data: &T) -> Hash {
         self.chain(data).result()
     }
 

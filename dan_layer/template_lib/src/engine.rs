@@ -20,7 +20,8 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use tari_bor::{encode, Encode};
+use serde::Serialize;
+use tari_bor::{encode};
 use tari_template_abi::{call_engine, EngineOp};
 
 use crate::{
@@ -47,7 +48,7 @@ impl TariEngine {
         Self { _context: context }
     }
 
-    pub fn create_component<T: Encode>(
+    pub fn create_component<T: Serialize>(
         &self,
         module_name: String,
         initial_state: T,

@@ -22,10 +22,9 @@
 
 use std::collections::HashMap;
 
-use tari_bor::{borsh, Decode, Encode};
+use serde::{Serialize, Deserialize};
 
-#[derive(Clone, Debug, Decode, Encode, Default, PartialEq)]
-#[cfg_attr(feature = "serde", derive(serde::Deserialize, serde::Serialize))]
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 pub struct Metadata {
     metadata: HashMap<String, String>,
 }

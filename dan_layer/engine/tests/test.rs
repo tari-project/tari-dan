@@ -21,7 +21,6 @@
 //   USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 use std::{iter, mem::size_of};
 
-use tari_bor::{borsh, Decode, Encode};
 use tari_dan_engine::{
     packager::{PackageError, TemplateModuleLoader},
     transaction::TransactionError,

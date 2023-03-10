@@ -1,18 +1,17 @@
 //   Copyright 2022 The Tari Project
 //   SPDX-License-Identifier: BSD-3-Clause
 
-use std::{io, io::Write};
+use std::{io};
 
-use borsh::BorshSerialize;
 use digest::Digest;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use tari_common_types::types::{FixedHash, PublicKey, Signature};
 use tari_crypto::hash::blake2::Blake256;
 use tari_mmr::MerkleProof;
 
 use crate::{serde_with, NodeAddressable, ShardId};
 
-#[derive(Clone, Debug, PartialEq, Eq, Deserialize, serde::Serialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Deserialize, Serialize)]
 pub struct ValidatorMetadata {
     pub public_key: PublicKey,
     #[serde(with = "serde_with::hex")]
@@ -62,16 +61,4 @@ pub fn vn_mmr_node_hash<TAddr: NodeAddressable>(public_key: &TAddr, shard_id: &S
         .chain(shard_id.as_bytes())
         .finalize()
         .into()
-}
-
-impl BorshSerialize for ValidatorMetadata {
-    fn serialize<W: Write>(&self, writer: &mut W) -> io::Result<()> {
-        self.public_key.serialize(writer)?;
-        self.vn_shard_key.serialize(writer)?;
-        self.signature.serialize(writer)?;
-        // TODO: MerkleProof should implement borsh
-        // self.merkle_proof.serialize(writer)
-        self.merkle_leaf_index.serialize(writer)?;
-        Ok(())
-    }
 }
