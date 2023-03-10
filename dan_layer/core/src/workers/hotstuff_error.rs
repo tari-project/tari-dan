@@ -63,6 +63,8 @@ pub enum HotStuffError {
     FailedToSignQc,
     #[error("This validator node is not included in the BMT")]
     ValidatorNodeNotIncludedInBMT,
+    #[error("Failed to generate Merkle proof for validator node")]
+    FailedToGenerateMerkleProof,
     #[error("No committee for shard {shard} and epoch {epoch}")]
     NoCommitteeForShard { shard: ShardId, epoch: Epoch },
     #[error("Cannot vote on a proposal that has been rejected")]

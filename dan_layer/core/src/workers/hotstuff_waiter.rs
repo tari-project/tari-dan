@@ -29,7 +29,7 @@ use log::*;
 use rand::seq::SliceRandom;
 use serde::Serialize;
 use tari_common_types::types::{FixedHash, PublicKey, Signature};
-use tari_core::{ValidatorNodeBMT, ValidatorNodeBmtHasherBlake256};
+use tari_core::ValidatorNodeBMT;
 use tari_dan_common_types::{
     optional::Optional,
     Epoch,
@@ -1456,12 +1456,13 @@ where
         // TODO: Combine all validator merkle proofs before sending them
         let mut verify_all = true;
         for md in qc.validators_metadata() {
-            verify_all &= md.merkle_proof.verify(&validator_node_root, &md.get_node_hash());
+            verify_all &= md
+                .merkle_proof
+                .verify(&validator_node_root, md.get_node_hash().to_vec());
             if !verify_all {
-                return Err(HotStuffError::InvalidQuorumCertificate(format!(
-                    "invalid merkle proof: {}",
-                    e
-                )));
+                return Err(HotStuffError::InvalidQuorumCertificate(
+                    format!("invalid merkle proof",),
+                ));
             }
         }
 

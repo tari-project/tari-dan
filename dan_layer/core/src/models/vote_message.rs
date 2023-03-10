@@ -34,7 +34,7 @@ use tari_dan_common_types::{
     TreeNodeHash,
     ValidatorMetadata,
 };
-use tari_mmr::{common::LeafIndex, BalancedBinaryMerkleProof};
+use tari_mmr::BalancedBinaryMerkleProof;
 
 use crate::{services::SigningService, workers::hotstuff_error::HotStuffError, TariDanCoreHashDomain};
 
@@ -105,15 +105,16 @@ impl VoteMessage {
         );
         let leaf_index = vn_bmt
             .find_leaf_index_for_hash(&node_hash)
-            .map_err(|_| HotStuffError::ValidatorNodeNotIncludedInMmr)?;
-        let merkle_proof = BalancedBinaryMerkleProof::generate_proof(vn_bmt, leaf_index as usize);
+            .map_err(|_| HotStuffError::ValidatorNodeNotIncludedInBMT)?;
+        let merkle_proof = BalancedBinaryMerkleProof::generate_proof(vn_bmt, leaf_index as usize)
+            .map_err(|_| HotStuffError::FailedToGenerateMerkleProof)?;
 
         let root = vn_bmt.get_merkle_root();
         let idx = vn_bmt
             .find_leaf_index_for_hash(&node_hash)
             .map_err(|_| HotStuffError::ValidatorNodeNotIncludedInBMT)?;
         // TODO: remove
-        if !merkle_proof.verify(&root, &node_hash) {
+        if !merkle_proof.verify(&root, node_hash) {
             log::warn!(
                 target: "tari::dan_layer::votemessage",
                 "Merkle proof verification failed for validator node {:?} at index {:?}",

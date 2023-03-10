@@ -789,9 +789,9 @@ dependencies = [
 
 [[package]]
 name = "camino"
-version = "1.1.3"
+version = "1.1.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6031a462f977dd38968b6f23378356512feeace69cef817e1a4475108093cec3"
+checksum = "c530edf18f37068ac2d977409ed5cd50d53d73bc653c7647b48eb78976ac9ae2"
 dependencies = [
  "serde",
 ]
@@ -1752,12 +1752,12 @@ dependencies = [
 
 [[package]]
 name = "darling"
-version = "0.14.3"
+version = "0.14.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c0808e1bd8671fb44a113a14e13497557533369847788fa2ae912b6ebfce9fa8"
+checksum = "7b750cb3417fd1b327431a470f388520309479ab0bf5e323505daf0290cd3850"
 dependencies = [
- "darling_core 0.14.3",
- "darling_macro 0.14.3",
+ "darling_core 0.14.4",
+ "darling_macro 0.14.4",
 ]
 
 [[package]]
@@ -1776,9 +1776,9 @@ dependencies = [
 
 [[package]]
 name = "darling_core"
-version = "0.14.3"
+version = "0.14.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "001d80444f28e193f30c2f293455da62dcf9a6b29918a4253152ae2b1de592cb"
+checksum = "109c1ca6e6b7f82cc233a97004ea8ed7ca123a9af07a8230878fcfda9b158bf0"
 dependencies = [
  "fnv",
  "ident_case",
@@ -1801,11 +1801,11 @@ dependencies = [
 
 [[package]]
 name = "darling_macro"
-version = "0.14.3"
+version = "0.14.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b36230598a2d5de7ec1c6f51f72d8a99a9208daff41de2084d06e3fd3ea56685"
+checksum = "a4aab4dbc9f7611d8b55048a3a16d2d010c2c8334e46304b40ac1cc14bf3b48e"
 dependencies = [
- "darling_core 0.14.3",
+ "darling_core 0.14.4",
  "quote",
  "syn",
 ]
@@ -1921,7 +1921,7 @@ version = "0.11.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1f91d4cfa921f1c05904dc3c57b4a32c38aed3340cce209f3a6fd1478babafc4"
 dependencies = [
- "darling 0.14.3",
+ "darling 0.14.4",
  "proc-macro2",
  "quote",
  "syn",
@@ -2196,7 +2196,7 @@ version = "0.6.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "03e7b551eba279bf0fa88b83a46330168c1560a52a94f5126f892f0b364ab3e0"
 dependencies = [
- "darling 0.14.3",
+ "darling 0.14.4",
  "proc-macro2",
  "quote",
  "syn",
@@ -3259,9 +3259,9 @@ checksum = "db13adb97ab515a3691f56e4dbab09283d0b86cb45abd991d8634a9d6f501760"
 
 [[package]]
 name = "libc"
-version = "0.2.139"
+version = "0.2.140"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "201de327520df007757c1f0adce6e827fe8562fbc28bfd9c15571c66ca1f5f79"
+checksum = "99227334921fae1a979cf0bfdfcc6b3e5ce376ef57e16fb6fb3ea2ed6095f80c"
 
 [[package]]
 name = "libgit2-sys"
@@ -5849,7 +5849,7 @@ checksum = "8ae9980cab1db3fceee2f6c6f643d5d8de2997c58ee8d25fb0cc8a9e9e7348e5"
 [[package]]
 name = "tari_app_grpc"
 version = "0.48.0-pre.1"
-source = "git+https://github.com/tari-project/tari.git?tag=v0.48.0-pre.1#877398491b54d282c2da384cfdfa5b1704d62344"
+source = "git+https://github.com/tari-project/tari.git?branch=development#3b971a3b0e39be774a1a21c477222d95a0e1b242"
 dependencies = [
  "argon2",
  "base64 0.13.1",
@@ -5859,10 +5859,10 @@ dependencies = [
  "prost 0.9.0",
  "prost-types 0.9.0",
  "rand 0.8.5",
- "tari_common_types 0.48.0-pre.1 (git+https://github.com/tari-project/tari.git?tag=v0.48.0-pre.1)",
+ "tari_common_types 0.48.0-pre.1 (git+https://github.com/tari-project/tari.git?branch=development)",
  "tari_comms",
  "tari_core",
- "tari_crypto 0.16.6",
+ "tari_crypto",
  "tari_script",
  "tari_utilities",
  "thiserror",
@@ -5874,7 +5874,7 @@ dependencies = [
 [[package]]
 name = "tari_app_utilities"
 version = "0.48.0-pre.1"
-source = "git+https://github.com/tari-project/tari.git?tag=v0.48.0-pre.1#877398491b54d282c2da384cfdfa5b1704d62344"
+source = "git+https://github.com/tari-project/tari.git?branch=development#3b971a3b0e39be774a1a21c477222d95a0e1b242"
 dependencies = [
  "clap 3.2.23",
  "futures 0.3.26",
@@ -5882,8 +5882,8 @@ dependencies = [
  "log",
  "rand 0.7.3",
  "serde",
- "tari_common 0.48.0-pre.1 (git+https://github.com/tari-project/tari.git?tag=v0.48.0-pre.1)",
- "tari_common_types 0.48.0-pre.1 (git+https://github.com/tari-project/tari.git?tag=v0.48.0-pre.1)",
+ "tari_common 0.48.0-pre.1 (git+https://github.com/tari-project/tari.git?branch=development)",
+ "tari_common_types 0.48.0-pre.1 (git+https://github.com/tari-project/tari.git?branch=development)",
  "tari_comms",
  "tari_utilities",
  "thiserror",
@@ -5893,7 +5893,7 @@ dependencies = [
 [[package]]
 name = "tari_base_node"
 version = "0.48.0-pre.1"
-source = "git+https://github.com/tari-project/tari.git?tag=v0.48.0-pre.1#877398491b54d282c2da384cfdfa5b1704d62344"
+source = "git+https://github.com/tari-project/tari.git?branch=development#3b971a3b0e39be774a1a21c477222d95a0e1b242"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -5917,12 +5917,12 @@ dependencies = [
  "strum",
  "tari_app_grpc",
  "tari_app_utilities",
- "tari_common 0.48.0-pre.1 (git+https://github.com/tari-project/tari.git?tag=v0.48.0-pre.1)",
- "tari_common_types 0.48.0-pre.1 (git+https://github.com/tari-project/tari.git?tag=v0.48.0-pre.1)",
+ "tari_common 0.48.0-pre.1 (git+https://github.com/tari-project/tari.git?branch=development)",
+ "tari_common_types 0.48.0-pre.1 (git+https://github.com/tari-project/tari.git?branch=development)",
  "tari_comms",
  "tari_comms_dht",
  "tari_core",
- "tari_crypto 0.16.6",
+ "tari_crypto",
  "tari_metrics",
  "tari_p2p",
  "tari_service_framework",
@@ -5937,7 +5937,7 @@ dependencies = [
 [[package]]
 name = "tari_base_node_grpc_client"
 version = "0.1.0"
-source = "git+https://github.com/tari-project/tari.git?tag=v0.48.0-pre.1#877398491b54d282c2da384cfdfa5b1704d62344"
+source = "git+https://github.com/tari-project/tari.git?branch=development#3b971a3b0e39be774a1a21c477222d95a0e1b242"
 dependencies = [
  "tari_app_grpc",
 ]
@@ -5993,7 +5993,7 @@ dependencies = [
 [[package]]
 name = "tari_common"
 version = "0.48.0-pre.1"
-source = "git+https://github.com/tari-project/tari.git?tag=v0.48.0-pre.1#877398491b54d282c2da384cfdfa5b1704d62344"
+source = "git+https://github.com/tari-project/tari.git?branch=development#3b971a3b0e39be774a1a21c477222d95a0e1b242"
 dependencies = [
  "anyhow",
  "blake2 0.9.2",
@@ -6010,7 +6010,7 @@ dependencies = [
  "serde_yaml 0.9.19",
  "sha2 0.9.9",
  "structopt",
- "tari_crypto 0.16.6",
+ "tari_crypto",
  "tempfile",
  "thiserror",
  "toml",
@@ -6019,7 +6019,7 @@ dependencies = [
 [[package]]
 name = "tari_common"
 version = "0.48.0-pre.1"
-source = "git+https://github.com/tari-project/tari.git?branch=development#ba66597b625055e507a9433e915e9950b796024f"
+source = "git+https://github.com/jorgeantonio21/tari?branch=ja-derive-trait-bounds-for-bmt#90d14dffc91cc159e04eeb4affe2c86b4a98fdda"
 dependencies = [
  "anyhow",
  "blake2 0.9.2",
@@ -6034,30 +6034,7 @@ dependencies = [
  "serde_yaml 0.9.19",
  "sha2 0.9.9",
  "structopt",
- "tari_crypto 0.16.7",
- "tempfile",
- "thiserror",
-]
-
-[[package]]
-name = "tari_common"
-version = "0.48.0-pre.1"
-source = "git+https://github.com/jorgeantonio21/tari?branch=ja-derive-trait-bounds-for-bmt#7f68268e87cdd410fa142db2140e913e8cbcb91d"
-dependencies = [
- "anyhow",
- "blake2 0.9.2",
- "config",
- "dirs-next 1.0.2",
- "log",
- "log4rs",
- "multiaddr 0.14.0",
- "path-clean",
- "serde",
- "serde_json",
- "serde_yaml 0.9.19",
- "sha2 0.9.9",
- "structopt",
- "tari_crypto 0.16.7",
+ "tari_crypto",
  "tempfile",
  "thiserror",
 ]
@@ -6065,7 +6042,7 @@ dependencies = [
 [[package]]
 name = "tari_common_sqlite"
 version = "0.48.0-pre.1"
-source = "git+https://github.com/tari-project/tari.git?tag=v0.48.0-pre.1#877398491b54d282c2da384cfdfa5b1704d62344"
+source = "git+https://github.com/tari-project/tari.git?branch=development#3b971a3b0e39be774a1a21c477222d95a0e1b242"
 dependencies = [
  "diesel",
  "log",
@@ -6075,25 +6052,7 @@ dependencies = [
 [[package]]
 name = "tari_common_types"
 version = "0.48.0-pre.1"
-source = "git+https://github.com/tari-project/tari.git?tag=v0.48.0-pre.1#877398491b54d282c2da384cfdfa5b1704d62344"
-dependencies = [
- "borsh",
- "digest 0.9.0",
- "lazy_static",
- "newtype-ops",
- "rand 0.7.3",
- "serde",
- "tari_common 0.48.0-pre.1 (git+https://github.com/tari-project/tari.git?tag=v0.48.0-pre.1)",
- "tari_crypto 0.16.6",
- "tari_utilities",
- "thiserror",
- "tokio",
-]
-
-[[package]]
-name = "tari_common_types"
-version = "0.48.0-pre.1"
-source = "git+https://github.com/tari-project/tari.git?branch=development#ba66597b625055e507a9433e915e9950b796024f"
+source = "git+https://github.com/tari-project/tari.git?branch=development#3b971a3b0e39be774a1a21c477222d95a0e1b242"
 dependencies = [
  "borsh",
  "digest 0.9.0",
@@ -6102,7 +6061,7 @@ dependencies = [
  "rand 0.7.3",
  "serde",
  "tari_common 0.48.0-pre.1 (git+https://github.com/tari-project/tari.git?branch=development)",
- "tari_crypto 0.16.7",
+ "tari_crypto",
  "tari_utilities",
  "thiserror",
  "tokio",
@@ -6111,7 +6070,7 @@ dependencies = [
 [[package]]
 name = "tari_common_types"
 version = "0.48.0-pre.1"
-source = "git+https://github.com/jorgeantonio21/tari?branch=ja-derive-trait-bounds-for-bmt#7f68268e87cdd410fa142db2140e913e8cbcb91d"
+source = "git+https://github.com/jorgeantonio21/tari?branch=ja-derive-trait-bounds-for-bmt#90d14dffc91cc159e04eeb4affe2c86b4a98fdda"
 dependencies = [
  "borsh",
  "digest 0.9.0",
@@ -6120,7 +6079,7 @@ dependencies = [
  "rand 0.7.3",
  "serde",
  "tari_common 0.48.0-pre.1 (git+https://github.com/jorgeantonio21/tari?branch=ja-derive-trait-bounds-for-bmt)",
- "tari_crypto 0.16.7",
+ "tari_crypto",
  "tari_utilities",
  "thiserror",
  "tokio",
@@ -6129,7 +6088,7 @@ dependencies = [
 [[package]]
 name = "tari_comms"
 version = "0.48.0-pre.1"
-source = "git+https://github.com/tari-project/tari.git?tag=v0.48.0-pre.1#877398491b54d282c2da384cfdfa5b1704d62344"
+source = "git+https://github.com/tari-project/tari.git?branch=development#3b971a3b0e39be774a1a21c477222d95a0e1b242"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -6155,8 +6114,8 @@ dependencies = [
  "serde",
  "serde_derive",
  "snow",
- "tari_common 0.48.0-pre.1 (git+https://github.com/tari-project/tari.git?tag=v0.48.0-pre.1)",
- "tari_crypto 0.16.6",
+ "tari_common 0.48.0-pre.1 (git+https://github.com/tari-project/tari.git?branch=development)",
+ "tari_crypto",
  "tari_metrics",
  "tari_shutdown",
  "tari_storage",
@@ -6174,7 +6133,7 @@ dependencies = [
 [[package]]
 name = "tari_comms_dht"
 version = "0.48.0-pre.1"
-source = "git+https://github.com/tari-project/tari.git?tag=v0.48.0-pre.1#877398491b54d282c2da384cfdfa5b1704d62344"
+source = "git+https://github.com/tari-project/tari.git?branch=development#3b971a3b0e39be774a1a21c477222d95a0e1b242"
 dependencies = [
  "anyhow",
  "bitflags 1.3.2",
@@ -6192,11 +6151,11 @@ dependencies = [
  "prost-types 0.9.0",
  "rand 0.7.3",
  "serde",
- "tari_common 0.48.0-pre.1 (git+https://github.com/tari-project/tari.git?tag=v0.48.0-pre.1)",
+ "tari_common 0.48.0-pre.1 (git+https://github.com/tari-project/tari.git?branch=development)",
  "tari_common_sqlite",
  "tari_comms",
  "tari_comms_rpc_macros",
- "tari_crypto 0.16.6",
+ "tari_crypto",
  "tari_shutdown",
  "tari_storage",
  "tari_utilities",
@@ -6221,7 +6180,7 @@ dependencies = [
 [[package]]
 name = "tari_comms_rpc_macros"
 version = "0.48.0-pre.1"
-source = "git+https://github.com/tari-project/tari.git?tag=v0.48.0-pre.1#877398491b54d282c2da384cfdfa5b1704d62344"
+source = "git+https://github.com/tari-project/tari.git?branch=development#3b971a3b0e39be774a1a21c477222d95a0e1b242"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -6231,7 +6190,7 @@ dependencies = [
 [[package]]
 name = "tari_console_wallet"
 version = "0.48.0-pre.1"
-source = "git+https://github.com/tari-project/tari.git?tag=v0.48.0-pre.1#877398491b54d282c2da384cfdfa5b1704d62344"
+source = "git+https://github.com/tari-project/tari.git?branch=development#3b971a3b0e39be774a1a21c477222d95a0e1b242"
 dependencies = [
  "bitflags 1.3.2",
  "chrono",
@@ -6253,12 +6212,12 @@ dependencies = [
  "strum_macros",
  "tari_app_grpc",
  "tari_app_utilities",
- "tari_common 0.48.0-pre.1 (git+https://github.com/tari-project/tari.git?tag=v0.48.0-pre.1)",
- "tari_common_types 0.48.0-pre.1 (git+https://github.com/tari-project/tari.git?tag=v0.48.0-pre.1)",
+ "tari_common 0.48.0-pre.1 (git+https://github.com/tari-project/tari.git?branch=development)",
+ "tari_common_types 0.48.0-pre.1 (git+https://github.com/tari-project/tari.git?branch=development)",
  "tari_comms",
  "tari_comms_dht",
  "tari_core",
- "tari_crypto 0.16.6",
+ "tari_crypto",
  "tari_key_manager",
  "tari_p2p",
  "tari_script",
@@ -6278,7 +6237,7 @@ dependencies = [
 [[package]]
 name = "tari_core"
 version = "0.48.0-pre.1"
-source = "git+https://github.com/tari-project/tari.git?tag=v0.48.0-pre.1#877398491b54d282c2da384cfdfa5b1704d62344"
+source = "git+https://github.com/tari-project/tari.git?branch=development#3b971a3b0e39be774a1a21c477222d95a0e1b242"
 dependencies = [
  "bincode",
  "bitflags 1.3.2",
@@ -6313,14 +6272,14 @@ dependencies = [
  "serde_repr",
  "sha3",
  "strum_macros",
- "tari_common 0.48.0-pre.1 (git+https://github.com/tari-project/tari.git?tag=v0.48.0-pre.1)",
- "tari_common_types 0.48.0-pre.1 (git+https://github.com/tari-project/tari.git?tag=v0.48.0-pre.1)",
+ "tari_common 0.48.0-pre.1 (git+https://github.com/tari-project/tari.git?branch=development)",
+ "tari_common_types 0.48.0-pre.1 (git+https://github.com/tari-project/tari.git?branch=development)",
  "tari_comms",
  "tari_comms_dht",
  "tari_comms_rpc_macros",
- "tari_crypto 0.16.6",
+ "tari_crypto",
  "tari_metrics",
- "tari_mmr 0.48.0-pre.1 (git+https://github.com/tari-project/tari.git?tag=v0.48.0-pre.1)",
+ "tari_mmr 0.48.0-pre.1 (git+https://github.com/tari-project/tari.git?branch=development)",
  "tari_p2p",
  "tari_script",
  "tari_service_framework",
@@ -6337,36 +6296,8 @@ dependencies = [
 
 [[package]]
 name = "tari_crypto"
-version = "0.16.6"
-source = "git+https://github.com/tari-project/tari-crypto.git?tag=v0.16.6#66cd1d141d10042fc3e97f60afa1587126a6207e"
-dependencies = [
- "base64 0.10.1",
- "blake2 0.9.2",
- "borsh",
- "cbindgen",
- "curve25519-dalek 4.0.1",
- "digest 0.9.0",
- "lazy_static",
- "log",
- "merlin 2.0.1",
- "once_cell",
- "rand 0.7.3",
- "rand_chacha 0.3.1",
- "rand_core 0.6.4",
- "serde",
- "serde_json",
- "sha3",
- "tari_bulletproofs",
- "tari_bulletproofs_plus",
- "tari_utilities",
- "thiserror",
- "zeroize",
-]
-
-[[package]]
-name = "tari_crypto"
-version = "0.16.7"
-source = "git+https://github.com/tari-project/tari-crypto.git?tag=v0.16.7#b09f2f507062653e5a9ea6b4e40f080dc0afbce8"
+version = "0.16.8"
+source = "git+https://github.com/tari-project/tari-crypto.git?tag=v0.16.8#abbd7208a4fef9664d233aff50a34a9637825dbe"
 dependencies = [
  "base64 0.10.1",
  "blake2 0.9.2",
@@ -6398,10 +6329,10 @@ dependencies = [
  "anyhow",
  "chrono",
  "prost 0.9.0",
- "tari_common 0.48.0-pre.1 (git+https://github.com/tari-project/tari.git?tag=v0.48.0-pre.1)",
- "tari_common_types 0.48.0-pre.1 (git+https://github.com/tari-project/tari.git?tag=v0.48.0-pre.1)",
+ "tari_common 0.48.0-pre.1 (git+https://github.com/tari-project/tari.git?branch=development)",
+ "tari_common_types 0.48.0-pre.1 (git+https://github.com/tari-project/tari.git?branch=development)",
  "tari_comms",
- "tari_crypto 0.16.7",
+ "tari_crypto",
  "tari_dan_common_types",
  "tari_dan_core",
  "tari_engine_types",
@@ -6419,10 +6350,10 @@ dependencies = [
  "log",
  "tari_app_grpc",
  "tari_base_node_grpc_client",
- "tari_common_types 0.48.0-pre.1 (git+https://github.com/tari-project/tari.git?tag=v0.48.0-pre.1)",
+ "tari_common_types 0.48.0-pre.1 (git+https://github.com/tari-project/tari.git?branch=development)",
  "tari_comms",
  "tari_core",
- "tari_crypto 0.16.7",
+ "tari_crypto",
  "tari_dan_common_types",
  "tari_dan_core",
  "tari_dan_engine",
@@ -6452,9 +6383,9 @@ dependencies = [
  "rand 0.7.3",
  "serde",
  "tari_bor",
- "tari_common 0.48.0-pre.1 (git+https://github.com/tari-project/tari.git?tag=v0.48.0-pre.1)",
+ "tari_common 0.48.0-pre.1 (git+https://github.com/tari-project/tari.git?branch=development)",
  "tari_common_types 0.48.0-pre.1 (git+https://github.com/jorgeantonio21/tari?branch=ja-derive-trait-bounds-for-bmt)",
- "tari_crypto 0.16.7",
+ "tari_crypto",
  "tari_engine_types",
  "tari_mmr 0.48.0-pre.1 (git+https://github.com/jorgeantonio21/tari?branch=ja-derive-trait-bounds-for-bmt)",
  "tari_utilities",
@@ -6475,17 +6406,17 @@ dependencies = [
  "prost 0.9.0",
  "rand 0.8.5",
  "serde",
- "tari_common 0.48.0-pre.1 (git+https://github.com/tari-project/tari.git?tag=v0.48.0-pre.1)",
- "tari_common_types 0.48.0-pre.1 (git+https://github.com/tari-project/tari.git?tag=v0.48.0-pre.1)",
+ "tari_common 0.48.0-pre.1 (git+https://github.com/tari-project/tari.git?branch=development)",
+ "tari_common_types 0.48.0-pre.1 (git+https://github.com/tari-project/tari.git?branch=development)",
  "tari_comms",
  "tari_comms_dht",
  "tari_core",
- "tari_crypto 0.16.7",
+ "tari_crypto",
  "tari_dan_common_types",
  "tari_dan_engine",
  "tari_dan_storage",
  "tari_engine_types",
- "tari_mmr 0.48.0-pre.1 (git+https://github.com/tari-project/tari.git?tag=v0.48.0-pre.1)",
+ "tari_mmr 0.48.0-pre.1 (git+https://github.com/tari-project/tari.git?branch=development)",
  "tari_shutdown",
  "tari_storage",
  "tari_test_utils",
@@ -6508,11 +6439,11 @@ dependencies = [
  "serde",
  "serde_json",
  "tari_bor",
- "tari_common_types 0.48.0-pre.1 (git+https://github.com/tari-project/tari.git?tag=v0.48.0-pre.1)",
- "tari_crypto 0.16.7",
+ "tari_common_types 0.48.0-pre.1 (git+https://github.com/tari-project/tari.git?branch=development)",
+ "tari_crypto",
  "tari_dan_common_types",
  "tari_engine_types",
- "tari_mmr 0.48.0-pre.1 (git+https://github.com/tari-project/tari.git?tag=v0.48.0-pre.1)",
+ "tari_mmr 0.48.0-pre.1 (git+https://github.com/tari-project/tari.git?branch=development)",
  "tari_template_abi",
  "tari_template_lib",
  "tari_template_test_tooling",
@@ -6530,7 +6461,7 @@ name = "tari_dan_storage"
 version = "0.50.0-pre.0"
 dependencies = [
  "serde",
- "tari_common_types 0.48.0-pre.1 (git+https://github.com/tari-project/tari.git?tag=v0.48.0-pre.1)",
+ "tari_common_types 0.48.0-pre.1 (git+https://github.com/tari-project/tari.git?branch=development)",
  "tari_dan_common_types",
  "thiserror",
  "time 0.3.20",
@@ -6560,7 +6491,7 @@ dependencies = [
  "log",
  "serde",
  "serde_json",
- "tari_common_types 0.48.0-pre.1 (git+https://github.com/tari-project/tari.git?tag=v0.48.0-pre.1)",
+ "tari_common_types 0.48.0-pre.1 (git+https://github.com/tari-project/tari.git?branch=development)",
  "tari_dan_common_types",
  "tari_dan_core",
  "tari_dan_engine",
@@ -6581,10 +6512,10 @@ dependencies = [
  "lazy_static",
  "log",
  "rand 0.7.3",
- "tari_common_types 0.48.0-pre.1 (git+https://github.com/tari-project/tari.git?tag=v0.48.0-pre.1)",
+ "tari_common_types 0.48.0-pre.1 (git+https://github.com/tari-project/tari.git?branch=development)",
  "tari_comms",
  "tari_core",
- "tari_crypto 0.16.7",
+ "tari_crypto",
  "tari_dan_common_types",
  "tari_dan_core",
  "tari_dan_engine",
@@ -6611,8 +6542,8 @@ dependencies = [
  "reqwest",
  "serde",
  "serde_json",
- "tari_common_types 0.48.0-pre.1 (git+https://github.com/tari-project/tari.git?tag=v0.48.0-pre.1)",
- "tari_crypto 0.16.7",
+ "tari_common_types 0.48.0-pre.1 (git+https://github.com/tari-project/tari.git?branch=development)",
+ "tari_crypto",
  "tari_dan_common_types",
  "tari_dan_engine",
  "tari_dan_wallet_sdk",
@@ -6644,9 +6575,9 @@ dependencies = [
  "multiaddr 0.17.0",
  "serde",
  "serde_json",
- "tari_common 0.48.0-pre.1 (git+https://github.com/tari-project/tari.git?tag=v0.48.0-pre.1)",
- "tari_common_types 0.48.0-pre.1 (git+https://github.com/tari-project/tari.git?tag=v0.48.0-pre.1)",
- "tari_crypto 0.16.7",
+ "tari_common 0.48.0-pre.1 (git+https://github.com/tari-project/tari.git?branch=development)",
+ "tari_common_types 0.48.0-pre.1 (git+https://github.com/tari-project/tari.git?branch=development)",
+ "tari_crypto",
  "tari_dan_common_types",
  "tari_dan_wallet_sdk",
  "tari_dan_wallet_storage_sqlite",
@@ -6675,8 +6606,8 @@ dependencies = [
  "rand 0.7.3",
  "serde",
  "tari_bor",
- "tari_common_types 0.48.0-pre.1 (git+https://github.com/tari-project/tari.git?tag=v0.48.0-pre.1)",
- "tari_crypto 0.16.7",
+ "tari_common_types 0.48.0-pre.1 (git+https://github.com/tari-project/tari.git?branch=development)",
+ "tari_crypto",
  "tari_dan_common_types",
  "tari_dan_wallet_storage_sqlite",
  "tari_engine_types",
@@ -6703,7 +6634,7 @@ dependencies = [
  "log",
  "serde",
  "serde_json",
- "tari_common_types 0.48.0-pre.1 (git+https://github.com/tari-project/tari.git?tag=v0.48.0-pre.1)",
+ "tari_common_types 0.48.0-pre.1 (git+https://github.com/tari-project/tari.git?branch=development)",
  "tari_dan_common_types",
  "tari_dan_wallet_sdk",
  "tari_engine_types",
@@ -6721,7 +6652,7 @@ dependencies = [
  "serde",
  "tari_bor",
  "tari_common_types 0.48.0-pre.1 (git+https://github.com/jorgeantonio21/tari?branch=ja-derive-trait-bounds-for-bmt)",
- "tari_crypto 0.16.7",
+ "tari_crypto",
  "tari_template_abi",
  "tari_template_lib",
  "tari_utilities",
@@ -6752,13 +6683,13 @@ dependencies = [
  "tari_app_grpc",
  "tari_app_utilities",
  "tari_base_node_grpc_client",
- "tari_common 0.48.0-pre.1 (git+https://github.com/tari-project/tari.git?tag=v0.48.0-pre.1)",
- "tari_common_types 0.48.0-pre.1 (git+https://github.com/tari-project/tari.git?tag=v0.48.0-pre.1)",
+ "tari_common 0.48.0-pre.1 (git+https://github.com/tari-project/tari.git?branch=development)",
+ "tari_common_types 0.48.0-pre.1 (git+https://github.com/tari-project/tari.git?branch=development)",
  "tari_comms",
  "tari_comms_logging",
  "tari_comms_rpc_macros",
  "tari_core",
- "tari_crypto 0.16.7",
+ "tari_crypto",
  "tari_dan_app_grpc",
  "tari_dan_app_utilities",
  "tari_dan_common_types",
@@ -6791,7 +6722,7 @@ dependencies = [
  "reqwest",
  "serde",
  "serde_json",
- "tari_common_types 0.48.0-pre.1 (git+https://github.com/tari-project/tari.git?tag=v0.48.0-pre.1)",
+ "tari_common_types 0.48.0-pre.1 (git+https://github.com/tari-project/tari.git?branch=development)",
  "tari_comms_logging",
  "tari_dan_common_types",
  "tari_engine_types",
@@ -6800,7 +6731,7 @@ dependencies = [
 [[package]]
 name = "tari_key_manager"
 version = "0.48.0-pre.1"
-source = "git+https://github.com/tari-project/tari.git?tag=v0.48.0-pre.1#877398491b54d282c2da384cfdfa5b1704d62344"
+source = "git+https://github.com/tari-project/tari.git?branch=development#3b971a3b0e39be774a1a21c477222d95a0e1b242"
 dependencies = [
  "argon2",
  "blake2 0.9.2",
@@ -6813,7 +6744,7 @@ dependencies = [
  "strum",
  "strum_macros",
  "subtle",
- "tari_crypto 0.16.6",
+ "tari_crypto",
  "tari_utilities",
  "thiserror",
  "zeroize",
@@ -6822,7 +6753,7 @@ dependencies = [
 [[package]]
 name = "tari_metrics"
 version = "0.1.0"
-source = "git+https://github.com/tari-project/tari.git?tag=v0.48.0-pre.1#877398491b54d282c2da384cfdfa5b1704d62344"
+source = "git+https://github.com/tari-project/tari.git?branch=development#3b971a3b0e39be774a1a21c477222d95a0e1b242"
 dependencies = [
  "anyhow",
  "futures 0.3.26",
@@ -6838,14 +6769,15 @@ dependencies = [
 [[package]]
 name = "tari_mmr"
 version = "0.48.0-pre.1"
-source = "git+https://github.com/tari-project/tari.git?tag=v0.48.0-pre.1#877398491b54d282c2da384cfdfa5b1704d62344"
+source = "git+https://github.com/tari-project/tari.git?branch=development#3b971a3b0e39be774a1a21c477222d95a0e1b242"
 dependencies = [
+ "borsh",
  "croaring",
  "digest 0.9.0",
  "log",
  "serde",
- "tari_common 0.48.0-pre.1 (git+https://github.com/tari-project/tari.git?tag=v0.48.0-pre.1)",
- "tari_crypto 0.16.6",
+ "tari_common 0.48.0-pre.1 (git+https://github.com/tari-project/tari.git?branch=development)",
+ "tari_crypto",
  "tari_utilities",
  "thiserror",
 ]
@@ -6853,14 +6785,14 @@ dependencies = [
 [[package]]
 name = "tari_mmr"
 version = "0.48.0-pre.1"
-source = "git+https://github.com/jorgeantonio21/tari?branch=ja-derive-trait-bounds-for-bmt#7f68268e87cdd410fa142db2140e913e8cbcb91d"
+source = "git+https://github.com/jorgeantonio21/tari?branch=ja-derive-trait-bounds-for-bmt#90d14dffc91cc159e04eeb4affe2c86b4a98fdda"
 dependencies = [
  "borsh",
  "digest 0.9.0",
  "log",
  "serde",
  "tari_common 0.48.0-pre.1 (git+https://github.com/jorgeantonio21/tari?branch=ja-derive-trait-bounds-for-bmt)",
- "tari_crypto 0.16.7",
+ "tari_crypto",
  "tari_utilities",
  "thiserror",
 ]
@@ -6868,7 +6800,7 @@ dependencies = [
 [[package]]
 name = "tari_p2p"
 version = "0.48.0-pre.1"
-source = "git+https://github.com/tari-project/tari.git?tag=v0.48.0-pre.1#877398491b54d282c2da384cfdfa5b1704d62344"
+source = "git+https://github.com/tari-project/tari.git?branch=development#3b971a3b0e39be774a1a21c477222d95a0e1b242"
 dependencies = [
  "anyhow",
  "fs2",
@@ -6882,10 +6814,10 @@ dependencies = [
  "rustls",
  "semver",
  "serde",
- "tari_common 0.48.0-pre.1 (git+https://github.com/tari-project/tari.git?tag=v0.48.0-pre.1)",
+ "tari_common 0.48.0-pre.1 (git+https://github.com/tari-project/tari.git?branch=development)",
  "tari_comms",
  "tari_comms_dht",
- "tari_crypto 0.16.6",
+ "tari_crypto",
  "tari_service_framework",
  "tari_shutdown",
  "tari_storage",
@@ -6901,7 +6833,7 @@ dependencies = [
 [[package]]
 name = "tari_script"
 version = "0.12.0"
-source = "git+https://github.com/tari-project/tari.git?tag=v0.48.0-pre.1#877398491b54d282c2da384cfdfa5b1704d62344"
+source = "git+https://github.com/tari-project/tari.git?branch=development#3b971a3b0e39be774a1a21c477222d95a0e1b242"
 dependencies = [
  "blake2 0.9.2",
  "borsh",
@@ -6910,7 +6842,7 @@ dependencies = [
  "serde",
  "sha2 0.9.9",
  "sha3",
- "tari_crypto 0.16.6",
+ "tari_crypto",
  "tari_utilities",
  "thiserror",
 ]
@@ -6918,7 +6850,7 @@ dependencies = [
 [[package]]
 name = "tari_service_framework"
 version = "0.48.0-pre.1"
-source = "git+https://github.com/tari-project/tari.git?tag=v0.48.0-pre.1#877398491b54d282c2da384cfdfa5b1704d62344"
+source = "git+https://github.com/tari-project/tari.git?branch=development#3b971a3b0e39be774a1a21c477222d95a0e1b242"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -6933,7 +6865,7 @@ dependencies = [
 [[package]]
 name = "tari_shutdown"
 version = "0.48.0-pre.1"
-source = "git+https://github.com/tari-project/tari.git?tag=v0.48.0-pre.1#877398491b54d282c2da384cfdfa5b1704d62344"
+source = "git+https://github.com/tari-project/tari.git?branch=development#3b971a3b0e39be774a1a21c477222d95a0e1b242"
 dependencies = [
  "futures 0.3.26",
 ]
@@ -6941,7 +6873,7 @@ dependencies = [
 [[package]]
 name = "tari_storage"
 version = "0.48.0-pre.1"
-source = "git+https://github.com/tari-project/tari.git?tag=v0.48.0-pre.1#877398491b54d282c2da384cfdfa5b1704d62344"
+source = "git+https://github.com/tari-project/tari.git?branch=development#3b971a3b0e39be774a1a21c477222d95a0e1b242"
 dependencies = [
  "bincode",
  "lmdb-zero",
@@ -6995,7 +6927,7 @@ dependencies = [
  "anyhow",
  "borsh",
  "tari_common_types 0.48.0-pre.1 (git+https://github.com/tari-project/tari.git?branch=development)",
- "tari_crypto 0.16.7",
+ "tari_crypto",
  "tari_dan_common_types",
  "tari_dan_engine",
  "tari_engine_types",
@@ -7009,7 +6941,7 @@ dependencies = [
 [[package]]
 name = "tari_test_utils"
 version = "0.48.0-pre.1"
-source = "git+https://github.com/tari-project/tari.git?tag=v0.48.0-pre.1#877398491b54d282c2da384cfdfa5b1704d62344"
+source = "git+https://github.com/tari-project/tari.git?branch=development#3b971a3b0e39be774a1a21c477222d95a0e1b242"
 dependencies = [
  "futures 0.3.26",
  "rand 0.7.3",
@@ -7024,8 +6956,8 @@ version = "0.50.0-pre.0"
 dependencies = [
  "rand 0.7.3",
  "serde",
- "tari_common_types 0.48.0-pre.1 (git+https://github.com/tari-project/tari.git?tag=v0.48.0-pre.1)",
- "tari_crypto 0.16.7",
+ "tari_common_types 0.48.0-pre.1 (git+https://github.com/tari-project/tari.git?branch=development)",
+ "tari_crypto",
  "tari_dan_common_types",
  "tari_engine_types",
  "tari_template_lib",
@@ -7094,15 +7026,15 @@ dependencies = [
  "tari_app_utilities",
  "tari_base_node",
  "tari_base_node_grpc_client",
- "tari_common 0.48.0-pre.1 (git+https://github.com/tari-project/tari.git?tag=v0.48.0-pre.1)",
- "tari_common_types 0.48.0-pre.1 (git+https://github.com/tari-project/tari.git?tag=v0.48.0-pre.1)",
+ "tari_common 0.48.0-pre.1 (git+https://github.com/tari-project/tari.git?branch=development)",
+ "tari_common_types 0.48.0-pre.1 (git+https://github.com/tari-project/tari.git?branch=development)",
  "tari_comms",
  "tari_comms_dht",
  "tari_comms_logging",
  "tari_comms_rpc_macros",
  "tari_console_wallet",
  "tari_core",
- "tari_crypto 0.16.7",
+ "tari_crypto",
  "tari_dan_app_grpc",
  "tari_dan_app_utilities",
  "tari_dan_common_types",
@@ -7150,8 +7082,8 @@ dependencies = [
  "reqwest",
  "serde",
  "serde_json",
- "tari_common_types 0.48.0-pre.1 (git+https://github.com/tari-project/tari.git?tag=v0.48.0-pre.1)",
- "tari_crypto 0.16.7",
+ "tari_common_types 0.48.0-pre.1 (git+https://github.com/tari-project/tari.git?branch=development)",
+ "tari_crypto",
  "tari_dan_common_types",
  "tari_dan_engine",
  "tari_engine_types",
@@ -7175,7 +7107,7 @@ dependencies = [
  "reqwest",
  "serde",
  "serde_json",
- "tari_common_types 0.48.0-pre.1 (git+https://github.com/tari-project/tari.git?tag=v0.48.0-pre.1)",
+ "tari_common_types 0.48.0-pre.1 (git+https://github.com/tari-project/tari.git?branch=development)",
  "tari_comms_logging",
  "tari_dan_common_types",
  "tari_dan_core",
@@ -7186,7 +7118,7 @@ dependencies = [
 [[package]]
 name = "tari_wallet"
 version = "0.48.0-pre.1"
-source = "git+https://github.com/tari-project/tari.git?tag=v0.48.0-pre.1#877398491b54d282c2da384cfdfa5b1704d62344"
+source = "git+https://github.com/tari-project/tari.git?branch=development#3b971a3b0e39be774a1a21c477222d95a0e1b242"
 dependencies = [
  "argon2",
  "async-trait",
@@ -7211,13 +7143,13 @@ dependencies = [
  "sha2 0.9.9",
  "strum",
  "strum_macros",
- "tari_common 0.48.0-pre.1 (git+https://github.com/tari-project/tari.git?tag=v0.48.0-pre.1)",
+ "tari_common 0.48.0-pre.1 (git+https://github.com/tari-project/tari.git?branch=development)",
  "tari_common_sqlite",
- "tari_common_types 0.48.0-pre.1 (git+https://github.com/tari-project/tari.git?tag=v0.48.0-pre.1)",
+ "tari_common_types 0.48.0-pre.1 (git+https://github.com/tari-project/tari.git?branch=development)",
  "tari_comms",
  "tari_comms_dht",
  "tari_core",
- "tari_crypto 0.16.6",
+ "tari_crypto",
  "tari_key_manager",
  "tari_p2p",
  "tari_script",
@@ -7238,7 +7170,7 @@ dependencies = [
  "reqwest",
  "serde",
  "serde_json",
- "tari_common_types 0.48.0-pre.1 (git+https://github.com/tari-project/tari.git?tag=v0.48.0-pre.1)",
+ "tari_common_types 0.48.0-pre.1 (git+https://github.com/tari-project/tari.git?branch=development)",
  "tari_comms_logging",
  "tari_dan_common_types",
  "tari_dan_wallet_sdk",
@@ -7251,10 +7183,10 @@ dependencies = [
 [[package]]
 name = "tari_wallet_grpc_client"
 version = "0.1.0"
-source = "git+https://github.com/tari-project/tari.git?tag=v0.48.0-pre.1#877398491b54d282c2da384cfdfa5b1704d62344"
+source = "git+https://github.com/tari-project/tari.git?branch=development#3b971a3b0e39be774a1a21c477222d95a0e1b242"
 dependencies = [
  "tari_app_grpc",
- "tari_common_types 0.48.0-pre.1 (git+https://github.com/tari-project/tari.git?tag=v0.48.0-pre.1)",
+ "tari_common_types 0.48.0-pre.1 (git+https://github.com/tari-project/tari.git?branch=development)",
  "thiserror",
  "tonic 0.6.2",
 ]
@@ -7969,9 +7901,9 @@ dependencies = [
 
 [[package]]
 name = "utf8parse"
-version = "0.2.0"
+version = "0.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "936e4b492acfd135421d8dca4b1aa80a7bfc26e702ef3af710e0752684df5372"
+checksum = "711b9620af191e0cdc7468a8d14e709c3dcdb115b36f838e601583af800a370a"
 
 [[package]]
 name = "uuid"

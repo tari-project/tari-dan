@@ -8,9 +8,9 @@ version = "0.50.0-pre.0"
 edition = "2018"
 
 [dependencies]
-tari_common_types = { git = "https://github.com/tari-project/tari.git", tag = "v0.48.0-pre.1", package = "tari_common_types" }
-tari_comms = { git = "https://github.com/tari-project/tari.git", tag = "v0.48.0-pre.1", package = "tari_comms" }
-tari_crypto = { git = "https://github.com/tari-project/tari-crypto.git", tag = "v0.16.7" }
+tari_common_types = { git = "https://github.com/tari-project/tari.git", branch = "development", package = "tari_common_types" }
+tari_comms = { git = "https://github.com/tari-project/tari.git", branch = "development", package = "tari_comms" }
+tari_crypto = { git = "https://github.com/tari-project/tari-crypto.git", tag = "v0.16.8" }
 
 tari_dan_common_types = { path = "../../dan_layer/common_types" }
 tari_dan_core = { path = "../../dan_layer/core" }
@@ -24,4 +24,4 @@ prost = "0.9"
 tonic = "0.6.2"
 
 [build-dependencies]
-tari_common = { git = "https://github.com/tari-project/tari.git", tag = "v0.48.0-pre.1", package = "tari_common", features = ["build"] }
+tari_common = { git = "https://github.com/tari-project/tari.git", branch = "development", package = "tari_common", features = ["build"] }
