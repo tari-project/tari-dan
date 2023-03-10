@@ -7,12 +7,12 @@ license = "BSD-3-Clause"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-tari_common_types = { git = "https://github.com/jorgeantonio21/tari", branch = "ja-derive-trait-bounds-for-bmt" }
+tari_common_types = { git = "https://github.com/tari-project/tari.git", branch = "development" }
 tari_utilities = { git = "https://github.com/tari-project/tari_utilities.git", tag = "v0.4.10" }
 tari_crypto = { git = "https://github.com/tari-project/tari-crypto.git", tag = "v0.16.8", features = ["borsh"] }
 tari_engine_types = { path = "../engine_types"}
 tari_bor = { path = "../tari_bor" }
-tari_mmr = { git = "https://github.com/jorgeantonio21/tari", branch = "ja-derive-trait-bounds-for-bmt" }
+tari_mmr = { git = "https://github.com/tari-project/tari.git", branch = "development" }
 
 anyhow = "1.0"
 # TODO: remove once we use borsh for all serialization
