@@ -150,7 +150,7 @@ impl HsTestHarness {
         let shard_store = TempShardStoreFactory::new();
 
         let public_address = Multiaddr::from_str("/ip4/127.0.0.1/tcp/48000").unwrap();
-        let node_identity = NodeIdentity::new(private_key, public_address, PeerFeatures::COMMUNICATION_NODE);
+        let node_identity = NodeIdentity::new(private_key, vec![public_address], PeerFeatures::COMMUNICATION_NODE);
 
         let pacemaker = Pacemaker::spawn(shutdown.to_signal());
         let signing_service = NodeIdentitySigningService::new(Arc::new(node_identity));

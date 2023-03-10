@@ -115,7 +115,7 @@ pub trait EpochManager<TAddr: NodeAddressable>: Clone {
 
     async fn get_validator_nodes_per_epoch(&self, epoch: Epoch)
         -> Result<Vec<ValidatorNode<TAddr>>, EpochManagerError>;
-    async fn get_validator_node_mmr(&self, epoch: Epoch) -> Result<ValidatorNodeBMT, EpochManagerError>;
+    async fn get_validator_node_bmt(&self, epoch: Epoch) -> Result<ValidatorNodeBMT, EpochManagerError>;
     async fn get_validator_node_merkle_root(&self, epoch: Epoch) -> Result<Vec<u8>, EpochManagerError>;
 
     // TODO: Should be part of VN state machine
@@ -291,24 +291,22 @@ impl<TAddr: NodeAddressable> EpochManager<TAddr> for RangeEpochManager<TAddr> {
         Ok(vns.clone())
     }
 
-    async fn get_validator_node_mmr(&self, epoch: Epoch) -> Result<ValidatorNodeBMT, EpochManagerError> {
+    async fn get_validator_node_bmt(&self, epoch: Epoch) -> Result<ValidatorNodeBMT, EpochManagerError> {
         let vns = self
             .registered_vns
             .get(&epoch)
             .ok_or(EpochManagerError::NoEpochFound(epoch))?;
         let mut vn_bmt = Vec::with_capacity(vns.len());
         for vn in vns {
-            vn_bmt
-                .push(vn.node_hash().to_vec())
-                .expect("Could not build the merkle mountain range of the VN set");
+            vn_bmt.push(vn.node_hash().to_vec());
         }
         let vn_bmt = ValidatorNodeBMT::create(vn_bmt);
         Ok(vn_bmt)
     }
 
     async fn get_validator_node_merkle_root(&self, epoch: Epoch) -> Result<Vec<u8>, EpochManagerError> {
-        let vn_mmr = self.get_validator_node_mmr(epoch).await?;
-        Ok(vn_mmr.get_merkle_root().unwrap())
+        let vn_mmr = self.get_validator_node_bmt(epoch).await?;
+        Ok(vn_mmr.get_merkle_root())
     }
 
     async fn notify_scanning_complete(&self) -> Result<(), EpochManagerError> {

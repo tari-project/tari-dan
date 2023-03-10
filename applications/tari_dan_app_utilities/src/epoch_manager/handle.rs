@@ -23,7 +23,7 @@
 use async_trait::async_trait;
 use tari_common_types::types::FixedHash;
 use tari_comms::types::CommsPublicKey;
-use tari_core::{transactions::transaction_components::ValidatorNodeRegistration, ValidatorNodeMmr};
+use tari_core::{transactions::transaction_components::ValidatorNodeRegistration, ValidatorNodeBMT};
 use tari_dan_common_types::{Epoch, ShardId};
 use tari_dan_core::{
     consensus_constants::BaseLayerConsensusConstants,
@@ -252,10 +252,10 @@ impl EpochManager<CommsPublicKey> for EpochManagerHandle {
         rx.await.map_err(|_| EpochManagerError::ReceiveError)?
     }
 
-    async fn get_validator_node_mmr(&self, epoch: Epoch) -> Result<ValidatorNodeMmr, EpochManagerError> {
+    async fn get_validator_node_bmt(&self, epoch: Epoch) -> Result<ValidatorNodeBMT, EpochManagerError> {
         let (tx, rx) = oneshot::channel();
         self.tx_request
-            .send(EpochManagerRequest::GetValidatorNodeMmr { epoch, reply: tx })
+            .send(EpochManagerRequest::GetValidatorNodeBMT { epoch, reply: tx })
             .await
             .map_err(|_| EpochManagerError::SendError)?;
 

@@ -963,7 +963,7 @@ where
             .epoch_manager
             .get_validator_shard_key(epoch, self.public_key.clone())
             .await?;
-        let vn_bmt = self.epoch_manager.get_validator_node_mmr(epoch).await?;
+        let vn_bmt = self.epoch_manager.get_validator_node_bmt(epoch).await?;
 
         let shard_pledges = proposed_nodes
             .iter()

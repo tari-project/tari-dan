@@ -48,9 +48,6 @@ mod shard_id;
 
 pub use shard_id::ShardId;
 
-hash_domain!(TariDanCommonTypes, "tari.dan.common_types", 1);
-pub type ValidatorNodeBmtHasherBlake256 = DomainSeparatedHasher<Blake256, TariDanCommonTypes>;
-
 #[derive(Debug, Clone, Encode, Decode, Deserialize, Serialize)]
 pub enum SubstateState {
     DoesNotExist,

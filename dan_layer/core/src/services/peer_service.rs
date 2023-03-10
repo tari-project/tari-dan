@@ -47,17 +47,19 @@ pub trait PeerProvider {
 pub struct DanPeer<TAddr> {
     pub identity: TAddr,
     pub addresses: Vec<Multiaddr>,
-    pub identity_signature: Option<IdentitySignature>,
+    // pub identity_signature: Option<IdentitySignature>,
 }
 
 impl DanPeer<CommsPublicKey> {
     pub fn is_valid(&self) -> bool {
-        match self.identity_signature {
-            Some(ref identity_signature) => {
-                identity_signature.is_valid(&self.identity, PeerFeatures::COMMUNICATION_NODE, &self.addresses)
-            },
-            None => false,
-        }
+        // TODO: refactor this code
+        // match self.identity_signature {
+        //     Some(ref identity_signature) => {
+        //         identity_signature.is_valid(&self.identity, PeerFeatures::COMMUNICATION_NODE, &self.addresses)
+        //     },
+        //     None => false,
+        // }
+        true
     }
 }
 
@@ -66,7 +68,7 @@ impl From<Peer> for DanPeer<CommsPublicKey> {
         Self {
             identity: peer.public_key,
             addresses: peer.addresses.into_vec(),
-            identity_signature: peer.identity_signature,
+            // identity_signature: peer.identity_signature,
         }
     }
 }

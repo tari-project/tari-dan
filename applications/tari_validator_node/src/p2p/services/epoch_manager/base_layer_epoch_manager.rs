@@ -28,7 +28,7 @@ use tari_comms::{types::CommsPublicKey, NodeIdentity};
 use tari_core::{
     blocks::BlockHeader,
     transactions::transaction_components::ValidatorNodeRegistration,
-    ValidatorNodeMmr,
+    ValidatorNodeBMT,
 };
 use tari_crypto::tari_utilities::ByteArray;
 use tari_dan_app_utilities::{base_node_client::GrpcBaseNodeClient, epoch_manager::EpochManagerEvent};
@@ -421,19 +421,18 @@ impl BaseLayerEpochManager {
         }
     }
 
-    pub fn get_validator_node_mmr(&self, epoch: Epoch) -> Result<ValidatorNodeMmr, EpochManagerError> {
+    pub fn get_validator_node_bmt(&self, epoch: Epoch) -> Result<ValidatorNodeBMT, EpochManagerError> {
         let vns = self.get_validator_nodes_per_epoch(epoch)?;
 
         // TODO: the MMR struct should be serializable to store it only once and avoid recalculating it every time per
         // epoch
-        let mut vn_mmr = ValidatorNodeMmr::new(Vec::new());
+        let mut vn_bmt_vec = Vec::new();
         for vn in vns {
-            vn_mmr
-                .push(vn_bmt_node_hash(&vn.public_key, &vn.shard_key).to_vec())
-                .expect("Could not build the merkle mountain range of the VN set");
+            vn_bmt_vec.push(vn_bmt_node_hash(&vn.public_key, &vn.shard_key).to_vec())
         }
 
-        Ok(vn_mmr)
+        let vn_bmt = ValidatorNodeBMT::create(vn_bmt_vec);
+        Ok(vn_bmt)
     }
 
     pub async fn on_scanning_complete(&mut self) -> Result<(), EpochManagerError> {

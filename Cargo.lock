@@ -6344,6 +6344,7 @@ dependencies = [
  "tari_bor",
  "tari_common",
  "tari_common_types",
+ "tari_core",
  "tari_crypto",
  "tari_engine_types",
  "tari_mmr",

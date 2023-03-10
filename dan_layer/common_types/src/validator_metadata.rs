@@ -7,10 +7,11 @@ use borsh::BorshSerialize;
 use digest::Digest;
 use serde::Deserialize;
 use tari_common_types::types::{FixedHash, PublicKey, Signature};
+use tari_core::ValidatorNodeBmtHasherBlake256;
 use tari_crypto::hash::blake2::Blake256;
 use tari_mmr::BalancedBinaryMerkleProof;
 
-use crate::{serde_with, NodeAddressable, ShardId, ValidatorNodeBmtHasherBlake256};
+use crate::{serde_with, NodeAddressable, ShardId};
 
 #[derive(Clone, Debug, Deserialize, serde::Serialize)]
 pub struct ValidatorMetadata {

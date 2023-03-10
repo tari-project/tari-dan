@@ -23,7 +23,7 @@
 use log::*;
 use serde::{Deserialize, Serialize};
 use tari_common_types::types::FixedHash;
-use tari_core::ValidatorNodeBMT;
+use tari_core::{ValidatorNodeBMT, ValidatorNodeBmtHasherBlake256};
 use tari_dan_common_types::{
     hashing::tari_hasher,
     vn_bmt_node_hash,
@@ -35,6 +35,7 @@ use tari_dan_common_types::{
     ValidatorMetadata,
 };
 use tari_mmr::BalancedBinaryMerkleProof;
+use tari_utilities::hex::Hex;
 
 use crate::{services::SigningService, workers::hotstuff_error::HotStuffError, TariDanCoreHashDomain};
 
@@ -99,7 +100,7 @@ impl VoteMessage {
         debug!(
             target: LOG_TARGET,
             "[sign_vote] bmt_node_hash={}, public_key={}, shard_id={}",
-            node_hash,
+            node_hash.to_hex(),
             signing_service.public_key(),
             shard_id,
         );
@@ -114,11 +115,11 @@ impl VoteMessage {
             .find_leaf_index_for_hash(&node_hash)
             .map_err(|_| HotStuffError::ValidatorNodeNotIncludedInBMT)?;
         // TODO: remove
-        if !merkle_proof.verify(&root, node_hash) {
+        if !merkle_proof.verify(&root, node_hash.clone()) {
             log::warn!(
                 target: "tari::dan_layer::votemessage",
-                "Merkle proof verification failed for validator node {:?} at index {:?}",
-                node_hash,
+                "Merkle proof verification failed for validator node {} at index {:?}",
+                node_hash.to_hex(),
                 idx,
             );
         }

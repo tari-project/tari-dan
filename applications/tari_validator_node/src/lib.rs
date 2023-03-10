@@ -102,7 +102,12 @@ pub struct ShardKey {
 pub async fn run_validator_node(config: &ApplicationConfig, shutdown_signal: ShutdownSignal) -> Result<(), ExitError> {
     let node_identity = setup_node_identity(
         &config.validator_node.identity_file,
-        config.validator_node.public_address.as_ref(),
+        config
+            .validator_node
+            .public_address
+            .iter()
+            .map(|pa| pa.clone())
+            .collect::<Vec<_>>(),
         true,
         DAN_PEER_FEATURES,
     )?;
