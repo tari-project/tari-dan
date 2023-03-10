@@ -20,9 +20,14 @@
 //   WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //   USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+use std::{io, io::Read};
+
+use anyhow::anyhow;
 use clap::{Args, Subcommand};
+use serde_json as json;
+use tari_template_lib::prelude::ComponentAddress;
 use tari_wallet_daemon_client::{
-    types::{AccountsCreateRequest, AccountsGetBalancesRequest, AccountsInvokeRequest},
+    types::{AccountsCreateRequest, AccountsGetBalancesRequest, AccountsInvokeRequest, ClaimBurnRequest},
     WalletDaemonClient,
 };
 
@@ -48,6 +53,8 @@ pub enum AccountsSubcommand {
     },
     #[clap(alias = "get")]
     GetByName(GetByNameArgs),
+    #[clap(alias = "claim-burn")]
+    ClaimBurn(ClaimBurnArgs),
 }
 
 #[derive(Debug, Args, Clone)]
@@ -70,6 +77,16 @@ pub struct GetByNameArgs {
     pub name: String,
 }
 
+#[derive(Debug, Args, Clone)]
+pub struct ClaimBurnArgs {
+    #[clap(long, short = 'a')]
+    account_address: ComponentAddress,
+    #[clap(long, short = 'j', alias = "json")]
+    proof_json: Option<String>,
+    #[clap(long, short = 'f')]
+    fee: Option<u64>,
+}
+
 impl AccountsSubcommand {
     pub async fn handle(self, mut client: WalletDaemonClient) -> Result<(), anyhow::Error> {
         match self {
@@ -86,6 +103,7 @@ impl AccountsSubcommand {
                 hande_invoke(account, method, args, &mut client).await?
             },
             AccountsSubcommand::GetByName(args) => handle_get_by_name(args, &mut client).await?,
+            AccountsSubcommand::ClaimBurn(args) => handle_claim_burn(args, &mut client).await?,
         }
         Ok(())
     }
@@ -157,6 +175,43 @@ async fn handle_get_balances(args: GetBalancesArgs, client: &mut WalletDaemonCli
         table.add_row(table_row!(resx, amt));
     }
     table.print_stdout();
+    Ok(())
+}
+
+pub async fn handle_claim_burn(args: ClaimBurnArgs, client: &mut WalletDaemonClient) -> Result<(), anyhow::Error> {
+    let ClaimBurnArgs {
+        account_address,
+        proof_json,
+        fee,
+    } = args;
+
+    let proof_json = if let Some(proof_json) = proof_json {
+        proof_json
+    } else {
+        println!(
+            "Please paste console wallet JSON output from claim_burn call in the terminal: Press <Ctrl/Cmd + d> once \
+             done"
+        );
+
+        let mut proof_json = String::new();
+        io::stdin().read_to_string(&mut proof_json)?;
+        println!("{}", proof_json);
+        proof_json.trim().to_string()
+    };
+
+    let claim = json::from_str::<json::Value>(&proof_json).map_err(|e| anyhow!("Failed to parse proof JSON: {}", e))?;
+    println!("JSON OK");
+
+    let req = ClaimBurnRequest {
+        account: account_address,
+        claim,
+        fee: fee.unwrap_or(1),
+    };
+
+    client
+        .claim_burn(req)
+        .await
+        .map_err(|e| anyhow!("Failed to claim burn with error = {}", e.to_string()))?;
     Ok(())
 }
 

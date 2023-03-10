@@ -50,6 +50,8 @@ use crate::{
         AccountsInvokeResponse,
         AccountsListRequest,
         AccountsListResponse,
+        ClaimBurnRequest,
+        ClaimBurnResponse,
         KeysCreateRequest,
         KeysCreateResponse,
         KeysListRequest,
@@ -178,6 +180,13 @@ impl WalletDaemonClient {
     pub async fn get_by_name(&mut self, name: String) -> Result<AccountByNameResponse, WalletDaemonClientError> {
         self.send_request("accounts.get_by_name", &AccountByNameRequest { name })
             .await
+    }
+
+    pub async fn claim_burn<T: Borrow<ClaimBurnRequest>>(
+        &mut self,
+        req: T,
+    ) -> Result<ClaimBurnResponse, WalletDaemonClientError> {
+        self.send_request("accounts.claim_burn", req.borrow()).await
     }
 
     pub async fn create_transfer_proof<T: Borrow<ProofsGenerateRequest>>(
