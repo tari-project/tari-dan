@@ -99,7 +99,7 @@ impl JsonRpcHandlers {
         let response = GetIdentityResponse {
             node_id: self.node_identity.node_id().to_hex(),
             public_key: self.node_identity.public_key().to_hex(),
-            public_address: self.node_identity.public_address().to_string(),
+            public_address: self.node_identity.public_addresses().first().unwrap().to_string(),
         };
 
         Ok(JsonRpcResponse::success(answer_id, response))
@@ -135,6 +135,7 @@ impl JsonRpcHandlers {
                 node_id.clone(),
                 addresses,
                 PeerFeatures::COMMUNICATION_NODE,
+                &tari_comms::net_address::PeerAddressSource::Config,
             )
             .await
             .map_err(|_| Self::generic_error_response(answer_id))?;

@@ -81,7 +81,7 @@ impl PeerProvider for CommsPeerProvider {
                 MultiaddressesWithStats::new(
                     peer.addresses
                         .iter()
-                        .map(|a| MultiaddrWithStats::new(a.clone()))
+                        .map(|a| MultiaddrWithStats::new(a.clone(), tari_comms::net_address::PeerAddressSource::Config))
                         .collect(),
                 ),
                 PeerFlags::NONE,
@@ -105,7 +105,7 @@ impl PeerProvider for CommsPeerProvider {
             MultiaddressesWithStats::new(
                 peer.addresses
                     .iter()
-                    .map(|a| MultiaddrWithStats::new(a.clone()))
+                    .map(|a| MultiaddrWithStats::new(a.clone(), tari_comms::net_address::PeerAddressSource::Config))
                     .collect(),
             ),
             PeerFlags::NONE,

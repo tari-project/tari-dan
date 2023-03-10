@@ -124,7 +124,7 @@ impl Networking {
         match event {
             ConnectivityEvent::PeerConnected(conn) => {
                 info!(target: LOG_TARGET, "📡 Peer connected: {}", conn);
-                self.initiate_sync_protocol(conn);
+                self.initiate_sync_protocol(conn.as_ref().clone());
             },
             evt => {
                 info!(target: LOG_TARGET, "ℹ️  Network event: {}", evt);
@@ -146,7 +146,7 @@ impl Networking {
                         Default::default(),
                         DanMessage::NetworkAnnounce(Box::new(NetworkAnnounce {
                             identity: self.node_identity.public_key().clone(),
-                            addresses: vec![self.node_identity.public_address().clone()],
+                            addresses: self.node_identity.public_addresses(),
                             identity_signature,
                         })),
                     )
@@ -182,23 +182,23 @@ impl Networking {
 
         match self.peer_provider.get_peer(&announce.identity).await.optional()? {
             Some(existing_peer) => {
-                let candidate = peer
-                    .identity_signature
-                    .as_ref()
-                    .ok_or_else(|| anyhow!("Identity signature for announce message is empty"))?;
-                if existing_peer
-                    .identity_signature
-                    .as_ref()
-                    .map(|id| candidate.updated_at() > id.updated_at())
-                    .unwrap_or(true)
-                {
-                    self.peer_provider.update_peer(peer).await?;
+                // let candidate = peer
+                //     .identity_signature
+                //     .as_ref()
+                //     .ok_or_else(|| anyhow!("Identity signature for announce message is empty"))?;
+                // if existing_peer
+                //     .identity_signature
+                //     .as_ref()
+                //     .map(|id| candidate.updated_at() > id.updated_at())
+                //     .unwrap_or(true)
+                // {
+                //     self.peer_provider.update_peer(peer).await?;
 
-                    // TODO: should not forward announce to sending peer
-                    self.outbound
-                        .flood(Default::default(), DanMessage::NetworkAnnounce(Box::new(announce)))
-                        .await?;
-                }
+                //     // TODO: should not forward announce to sending peer
+                //     self.outbound
+                //         .flood(Default::default(), DanMessage::NetworkAnnounce(Box::new(announce)))
+                //         .await?;
+                // }
             },
             None => {
                 self.peer_provider.add_peer(peer).await?;

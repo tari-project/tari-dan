@@ -82,7 +82,7 @@ impl ValidatorNodeRpcClient for TariCommsValidatorNodeRpcClient {
             .await?
             .map(|result| {
                 let p = result?;
-                let identity_sig = p.identity_signature.unwrap_or_default();
+                // let identity_sig = p.identity_signature.unwrap_or_default();
                 Result::<_, ValidatorNodeClientError>::Ok(DanPeer {
                     identity: CommsPublicKey::from_bytes(&p.identity)
                         .map_err(|_| ValidatorNodeClientError::InvalidResponse(anyhow!("Invalid identity")))?,

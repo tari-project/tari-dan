@@ -120,11 +120,7 @@ impl<T: ByteArray> TryFrom<proto::network::NetworkAnnounce> for NetworkAnnounce<
                 .into_iter()
                 .map(|a| a.try_into())
                 .collect::<Result<Vec<_>, _>>()?,
-            identity_signature: IdentitySignature::new(
-                identity_signature.version,
-                identity_signature.signature,
-                identity_signature.updated_at,
-            ),
+            identity_signature: IdentitySignature::try_from(identity_signature)?,
         })
     }
 }

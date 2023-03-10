@@ -123,7 +123,10 @@ pub async fn run_validator_node(config: &ApplicationConfig, shutdown_signal: Shu
         target: LOG_TARGET,
         "🚀 Node starting with pub key: {}, address: {}",
         node_identity.public_key(),
-        node_identity.public_address()
+        node_identity.public_addresses().first().ok_or(ExitError::new(
+            ExitCode::UnknownError,
+            "public address not found for validator node"
+        ))?
     );
 
     let (base_node_client, wallet_client) = create_base_layer_clients(config).await?;

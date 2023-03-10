@@ -24,6 +24,7 @@ use std::sync::Arc;
 
 use async_trait::async_trait;
 use tari_comms::{
+    net_address::{MultiaddrWithStats, MultiaddressesWithStats},
     peer_manager::{NodeId, Peer, PeerFeatures, PeerFlags, PeerManagerError, PeerQuery},
     types::CommsPublicKey,
     PeerManager,
@@ -52,7 +53,7 @@ impl PeerProvider for CommsPeerProvider {
             Some(peer) => Ok(DanPeer {
                 identity: peer.public_key,
                 addresses: peer.addresses.into_vec(),
-                identity_signature: peer.identity_signature,
+                // identity_signature: peer.identity_signature,
             }),
             None => Err(CommsPeerProviderError::PeerNotFound),
         }
@@ -66,7 +67,7 @@ impl PeerProvider for CommsPeerProvider {
             Ok(DanPeer {
                 identity: p.public_key,
                 addresses: p.addresses.into_vec(),
-                identity_signature: p.identity_signature,
+                // identity_signature: p.identity_signature,
             })
         }))
     }
@@ -77,7 +78,12 @@ impl PeerProvider for CommsPeerProvider {
             .add_peer(Peer::new(
                 peer.identity,
                 node_id,
-                peer.addresses.into(),
+                MultiaddressesWithStats::new(
+                    peer.addresses
+                        .iter()
+                        .map(|a| MultiaddrWithStats::new(a.clone(), tari_comms::net_address::PeerAddressSource::Config))
+                        .collect(),
+                ),
                 PeerFlags::NONE,
                 PeerFeatures::NONE,
                 vec![],
@@ -94,7 +100,13 @@ impl PeerProvider for CommsPeerProvider {
         }
 
         self.peer_manager
-            .add_or_update_online_peer(&peer.identity, node_id, peer.addresses, PeerFeatures::NONE)
+            .add_or_update_online_peer(
+                &peer.identity,
+                node_id,
+                peer.addresses,
+                PeerFeatures::NONE,
+                &tari_comms::net_address::PeerAddressSource::Config,
+            )
             .await?;
 
         Ok(())
