@@ -4,10 +4,11 @@
 use std::{convert::TryInto, str::FromStr};
 
 use cucumber::{then, when};
+use tari_common_types::types::PublicKey;
 use tari_crypto::tari_utilities::{hex::Hex, ByteArray};
 use tari_dan_common_types::{Epoch, ShardId};
 use tari_engine_types::{confidential::ConfidentialClaim, instruction::Instruction, substate::SubstateAddress};
-use tari_template_lib::{args::Arg, prelude::ComponentAddress};
+use tari_template_lib::{args, prelude::ComponentAddress};
 use tari_transaction::Transaction;
 use tari_validator_node_client::types::{GetStateRequest, SubmitTransactionRequest};
 
@@ -72,7 +73,8 @@ async fn when_i_claim_burn(
     let instructions = [
         Instruction::ClaimBurn {
             claim: Box::new(ConfidentialClaim {
-                output_address: commitment.to_vec().try_into()?,
+                diffie_hellman_public_key: PublicKey::default(),
+                output_address: commitment.as_slice().try_into()?,
                 range_proof: rangeproof.clone(),
                 proof_of_knowledge: proof.clone(),
             }),
@@ -81,7 +83,7 @@ async fn when_i_claim_burn(
         Instruction::CallMethod {
             component_address,
             method: "deposit".to_string(),
-            args: vec![Arg::Variable(b"burn".to_vec())],
+            args: args![Variable("burn")],
         },
     ];
 
