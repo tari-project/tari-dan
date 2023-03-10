@@ -22,7 +22,8 @@ strip = "debuginfo" # Strip debug info.
 crate-type = ["cdylib", "lib"]
 
 [dev-dependencies]
-tari_dan_engine = {git = "https://github.com/tari-project/tari-dan.git", branch="development", package="tari_dan_engine" }
+tari_dan_engine = { path = "../../../../../dan_layer/engine" }
+tari_dan_common_types = { path = "../../../../../dan_layer/common_types" }
+
 tari_crypto = {git = "https://github.com/tari-project/tari-crypto.git", tag="v0.16.8" }
-tari_dan_common_types = {git = "https://github.com/tari-project/tari-dan.git", branch="development", package="tari_dan_common_types" }
-tari_common_types = {git = "https://github.com/tari-project/tari.git", branch="development", package="tari_common_types" }
+tari_common_types = {git = "https://github.com/tari-project/tari.git", branch="development", version="0.49.0-pre.0", package="tari_common_types" }

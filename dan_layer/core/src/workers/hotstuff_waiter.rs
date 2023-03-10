@@ -49,7 +49,6 @@ use tari_engine_types::{
     commit_result::{FinalizeResult, RejectReason, TransactionResult},
     substate::SubstateDiff,
 };
-use tari_mmr::common::LeafIndex;
 use tari_shutdown::ShutdownSignal;
 use tari_transaction::SubstateChange;
 use tokio::{
@@ -1461,7 +1460,7 @@ where
                 .verify(&validator_node_root, md.get_node_hash().to_vec());
             if !verify_all {
                 return Err(HotStuffError::InvalidQuorumCertificate(
-                    format!("invalid merkle proof",),
+                    "invalid merkle proof".to_string(),
                 ));
             }
         }

@@ -9,7 +9,6 @@ use std::{
 use ::serde::{Deserialize, Serialize};
 use tari_bor::{borsh, Decode, Encode};
 use tari_common_types::types::{FixedHash, FixedHashSizeError};
-use tari_crypto::{hash::blake2::Blake256, hash_domain, hashing::DomainSeparatedHasher};
 use tari_engine_types::substate::{Substate, SubstateAddress};
 use tari_utilities::hex::Hex;
 

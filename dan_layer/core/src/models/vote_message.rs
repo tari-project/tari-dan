@@ -23,7 +23,7 @@
 use log::*;
 use serde::{Deserialize, Serialize};
 use tari_common_types::types::FixedHash;
-use tari_core::{ValidatorNodeBMT, ValidatorNodeBmtHasherBlake256};
+use tari_core::{ValidatorNodeBMT};
 use tari_dan_common_types::{
     hashing::tari_hasher,
     vn_bmt_node_hash,

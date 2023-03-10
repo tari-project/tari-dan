@@ -25,7 +25,7 @@ use std::fmt::{Display, Formatter};
 use async_trait::async_trait;
 use tari_comms::{
     multiaddr::Multiaddr,
-    peer_manager::{IdentitySignature, Peer, PeerFeatures},
+    peer_manager::{Peer},
     types::CommsPublicKey,
 };
 use tari_dan_common_types::NodeAddressable;

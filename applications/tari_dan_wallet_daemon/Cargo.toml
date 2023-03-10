@@ -8,10 +8,10 @@ version = "0.50.0-pre.0"
 edition = "2018"
 
 [dependencies]
-tari_common = { git = "https://github.com/tari-project/tari.git", tag = "v0.49.0-pre.0" }
+tari_common = { git = "https://github.com/tari-project/tari.git", branch = "development", version = "0.49.0-pre.0" }
 tari_crypto = { git = "https://github.com/tari-project/tari-crypto.git", tag = "v0.16.8" }
-tari_common_types = { git = "https://github.com/tari-project/tari.git", tag = "v0.49.0-pre.0" }
-tari_shutdown = { git = "https://github.com/tari-project/tari.git", tag = "v0.49.0-pre.0" }
+tari_common_types = { git = "https://github.com/tari-project/tari.git", branch = "development", version = "0.49.0-pre.0" }
+tari_shutdown = { git = "https://github.com/tari-project/tari.git", branch = "development", version = "0.49.0-pre.0" }
 tari_dan_wallet_sdk = { path = "../../dan_layer/wallet/sdk" }
 tari_dan_wallet_storage_sqlite = { path = "../../dan_layer/wallet/storage_sqlite" }
 tari_transaction = { path = "../../dan_layer/transaction" }
