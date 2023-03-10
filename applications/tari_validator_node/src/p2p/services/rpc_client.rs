@@ -94,11 +94,11 @@ impl ValidatorNodeRpcClient for TariCommsValidatorNodeRpcClient {
                                 .map_err(|_| ValidatorNodeClientError::InvalidResponse(anyhow!("Invalid address")))
                         })
                         .collect::<Result<_, _>>()?,
-                    identity_signature: Some(
-                        identity_sig
-                            .try_into()
-                            .map_err(ValidatorNodeClientError::InvalidResponse)?,
-                    ),
+                    // identity_signature: Some(
+                    //     identity_sig
+                    //         .try_into()
+                    //         .map_err(ValidatorNodeClientError::InvalidResponse)?,
+                    // ),
                 })
             })
             .collect::<Result<Vec<_>, _>>()

@@ -22,11 +22,8 @@
 
 use std::{
     collections::HashMap,
-    convert::TryFrom,
     fmt,
     fs,
-    io,
-    io::Read,
     path::PathBuf,
     str::FromStr,
     time::{Duration, Instant},
@@ -34,14 +31,12 @@ use std::{
 
 use anyhow::anyhow;
 use clap::{Args, Subcommand};
-use serde_json as json;
-use tari_common_types::types::{Commitment, FixedHash, PrivateKey, PublicKey};
-use tari_crypto::ristretto::{RistrettoComSig, RistrettoPublicKey};
+use tari_common_types::types::FixedHash;
+use tari_crypto::ristretto::RistrettoPublicKey;
 use tari_dan_common_types::ShardId;
 use tari_dan_wallet_sdk::models::{ConfidentialProofId, VersionedSubstateAddress};
 use tari_engine_types::{
     commit_result::{FinalizeResult, TransactionResult},
-    confidential::ConfidentialClaim,
     execution_result::{ExecutionResult, Type},
     instruction::Instruction,
     substate::{SubstateAddress, SubstateValue},
@@ -51,7 +46,7 @@ use tari_template_lib::{
     arg,
     args,
     args::Arg,
-    models::{Amount, LayerOneCommitmentAddress, NonFungibleAddress, NonFungibleId},
+    models::{Amount, NonFungibleAddress, NonFungibleId},
     prelude::{ComponentAddress, ResourceAddress},
 };
 use tari_transaction_manifest::{parse_manifest, ManifestValue};
@@ -75,7 +70,6 @@ pub enum TransactionSubcommand {
     Get(GetArgs),
     Submit(SubmitArgs),
     SubmitManifest(SubmitManifestArgs),
-    ClaimBurn(ClaimBurnArgs),
     Send(SendArgs),
     ConfidentialTransfer(ConfidentialTransferArgs),
 }
@@ -130,16 +124,6 @@ pub struct SubmitManifestArgs {
 }
 
 #[derive(Debug, Args, Clone)]
-pub struct ClaimBurnArgs {
-    #[clap(long, short = 'a')]
-    account_address: ComponentAddress,
-    #[clap(long, short = 'j', alias = "json")]
-    proof_json: Option<String>,
-    #[clap(flatten)]
-    common: CommonSubmitArgs,
-}
-
-#[derive(Debug, Args, Clone)]
 pub struct SendArgs {
     source_account_name: String,
     amount: u32,
@@ -185,9 +169,6 @@ impl TransactionSubcommand {
                 handle_submit_manifest(args, &mut client).await?;
             },
             TransactionSubcommand::Get(args) => handle_get(args, &mut client).await?,
-            TransactionSubcommand::ClaimBurn(args) => {
-                handle_claim_burn(args, &mut client).await?;
-            },
             TransactionSubcommand::Send(args) => {
                 handle_send(args, &mut client).await?;
             },
@@ -330,99 +311,6 @@ pub async fn submit_transaction(
     }
 
     Ok(resp)
-}
-
-pub async fn handle_claim_burn(
-    args: ClaimBurnArgs,
-    client: &mut WalletDaemonClient,
-) -> Result<TransactionSubmitResponse, anyhow::Error> {
-    let ClaimBurnArgs {
-        account_address,
-        proof_json,
-        mut common,
-    } = args;
-
-    let proof_json = if let Some(proof_json) = proof_json {
-        proof_json
-    } else {
-        println!(
-            "Please paste console wallet JSON output from claim_burn call in the terminal: Press <Ctrl/Cmd + d> once \
-             done"
-        );
-
-        let mut proof_json = String::new();
-        io::stdin().read_to_string(&mut proof_json)?;
-        println!("{}", proof_json);
-        proof_json.trim().to_string()
-    };
-
-    let claim = json::from_str::<json::Value>(&proof_json).map_err(|e| anyhow!("Failed to parse proof JSON: {}", e))?;
-    println!("JSON OK");
-    let commitment_address = LayerOneCommitmentAddress::try_from(base64::decode(
-        claim["commitment"]
-            .as_str()
-            .ok_or_else(|| anyhow!("Missing commitment"))?,
-    )?)?;
-    println!("ADDR OK");
-    let range_proof = base64::decode(
-        claim["rangeproof"]
-            .as_str()
-            .ok_or_else(|| anyhow!("Missing rangeproof"))?,
-    )?;
-    println!("RP OK");
-    let u = PrivateKey::from_bytes(&base64::decode(
-        claim["ownership_proof"]["u"]
-            .as_str()
-            .ok_or_else(|| anyhow!("Missing ownership_proof u"))?,
-    )?)?;
-    println!("u OK");
-    let v = PrivateKey::from_bytes(&base64::decode(
-        claim["ownership_proof"]["v"]
-            .as_str()
-            .ok_or_else(|| anyhow!("Missing ownership_proof v"))?,
-    )?)?;
-    println!("v OK");
-    let public_nonce = PublicKey::from_bytes(&base64::decode(
-        claim["ownership_proof"]["public_nonce"]
-            .as_str()
-            .ok_or_else(|| anyhow!("Missing ownership_proof public_nonce"))?,
-    )?)?;
-    println!("nonce OK");
-
-    let proof_of_knowledge = RistrettoComSig::new(Commitment::from_public_key(&public_nonce), u, v);
-    println!("✅ Proof JSON is valid.");
-
-    // specify the input and output set, which is deterministic
-    // at this point
-    let component_substate_address = VersionedSubstateAddress {
-        address: commitment_address.into(),
-        version: 0,
-    };
-
-    let instructions = vec![
-        Instruction::ClaimBurn {
-            claim: Box::new(ConfidentialClaim {
-                commitment_address,
-                range_proof,
-                proof_of_knowledge,
-            }),
-        },
-        Instruction::PutLastInstructionOutputOnWorkspace { key: b"burn".to_vec() },
-        Instruction::CallMethod {
-            component_address: account_address,
-            method: String::from("deposit"),
-            args: vec![arg![Variable("burn")]],
-        },
-    ];
-
-    common.inputs = vec![component_substate_address];
-    common.override_inputs = Some(false);
-    // transaction should have one output, corresponding to the same shard
-    // as the account substate address
-    // TODO: on a second claim burn, we shoulnd't have any new outputs being created.
-    common.num_outputs = Some(1);
-
-    submit_transaction(instructions, common, None, client).await
 }
 
 pub async fn handle_send(

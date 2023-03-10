@@ -110,6 +110,9 @@ impl<T: ByteArray> TryFrom<proto::network::NetworkAnnounce> for NetworkAnnounce<
     type Error = anyhow::Error;
 
     fn try_from(value: proto::network::NetworkAnnounce) -> Result<Self, Self::Error> {
+        let identity_signature = value
+            .identity_signature
+            .ok_or_else(|| anyhow!("Identity signature not provided"))?;
         Ok(NetworkAnnounce {
             identity: T::from_bytes(&value.identity)?,
             addresses: value
@@ -117,10 +120,11 @@ impl<T: ByteArray> TryFrom<proto::network::NetworkAnnounce> for NetworkAnnounce<
                 .into_iter()
                 .map(|a| a.try_into())
                 .collect::<Result<Vec<_>, _>>()?,
-            identity_signature: value
-                .identity_signature
-                .ok_or_else(|| anyhow!("Identity signature not provided"))?
-                .try_into()?,
+            identity_signature: IdentitySignature::new(
+                identity_signature.version,
+                identity_signature.signature,
+                identity_signature.updated_at,
+            ),
         })
     }
 }

@@ -170,7 +170,7 @@ impl Networking {
         let peer = DanPeer {
             identity: announce.identity.clone(),
             addresses: announce.addresses.clone(),
-            identity_signature: Some(announce.identity_signature.clone()),
+            // identity_signature: Some(announce.identity_signature.clone()),
         };
 
         if !peer.is_valid() {
