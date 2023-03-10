@@ -22,16 +22,23 @@
 
 use std::net::Shutdown;
 
+use tari_dan_wallet_daemon::Cli;
 use tari_wallet_daemon_client::WalletDaemonClient;
+use tempfile::tempdir;
 
 use crate::{utils::helpers::get_os_assigned_ports, TariWorld};
 
 #[derive(Debug)]
 pub struct WalletDaemonProcess {
     pub name: String,
+    pub port: u16,
+    pub json_rpc_port: u16,
+    pub validator_node_grpc_port: u16,
+    pub temp_path_dir: String,
     pub shutdown: Shutdown,
 }
 
-pub fn spawn_wallet_daemon_cli(world: &mut TariWorld) {
+pub fn spawn_wallet_daemon(world: &mut TariWorld, wallet_daemon_name: String, validator_node_name: String) {
     let (port, json_rpc_port) = get_os_assigned_ports();
+    let temp_dir = tempdir().unwrap().path().join(wallet_daemon_name.clone());
 }
