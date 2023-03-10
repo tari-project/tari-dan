@@ -66,6 +66,7 @@ async fn main_inner() -> Result<(), ExitError> {
     let mut shutdown = Shutdown::new();
     if let Err(e) = initialize_logging(
         &cli.common.log_config_path("validator"),
+        &cli.common.get_base_path(),
         include_str!("../log4rs_sample.yml"),
     ) {
         eprintln!("{}", e);
