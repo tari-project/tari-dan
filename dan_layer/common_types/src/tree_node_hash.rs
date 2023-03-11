@@ -4,7 +4,6 @@
 use std::{
     convert::TryFrom,
     fmt::{Display, Formatter},
-    io::{self, Write},
 };
 
 use digest::{consts::U32, generic_array};

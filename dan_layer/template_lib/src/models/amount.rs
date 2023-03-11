@@ -26,7 +26,7 @@ use std::{
 };
 
 use newtype_ops::newtype_ops;
-use serde::{Serialize, Deserialize};
+use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 pub struct Amount(pub i64);

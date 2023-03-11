@@ -119,6 +119,7 @@ impl<'a> StateWriter for LmdbTransaction<WriteTransaction<'a>> {
 
 #[cfg(test)]
 mod tests {
+    use serde::{Deserialize, Serialize};
     use tempfile::tempdir;
 
     use super::*;

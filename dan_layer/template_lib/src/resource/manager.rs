@@ -21,7 +21,7 @@
 //   USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 use serde::Serialize;
-use tari_bor::{encode};
+use tari_bor::encode;
 use tari_template_abi::{call_engine, rust::collections::HashMap, EngineOp};
 
 use crate::{

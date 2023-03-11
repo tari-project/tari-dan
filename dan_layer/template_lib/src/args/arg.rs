@@ -20,13 +20,11 @@
 //   WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //   USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use serde::{Serialize, Deserialize};
+use serde::{Deserialize, Serialize};
 use tari_bor::{decode, encode, BorError};
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[
-    serde(tag = "type", content = "value")
-]
+#[serde(tag = "type", content = "value")]
 pub enum Arg {
     Variable(Vec<u8>),
     // TODO: this should be a `Value` instead of a `Vec<u8>`, but that is a larger refactor

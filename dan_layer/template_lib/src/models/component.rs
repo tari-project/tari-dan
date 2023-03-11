@@ -25,7 +25,7 @@ use std::{
     str::FromStr,
 };
 
-use serde::{Serialize, Deserialize};
+use serde::{Deserialize, Serialize};
 
 use crate::{hash::HashParseError, models::TemplateAddress, prelude::AccessRules, Hash};
 

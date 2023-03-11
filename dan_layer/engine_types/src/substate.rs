@@ -26,7 +26,7 @@ use std::{
 };
 
 use serde::{Deserialize, Serialize};
-use tari_bor::{decode, decode_exact, encode};
+use tari_bor::{decode, decode_exact, encode, BorError};
 use tari_common_types::types::Commitment;
 use tari_template_lib::{
     models::{
@@ -81,7 +81,7 @@ impl Substate {
         encode(self).unwrap()
     }
 
-    pub fn from_bytes(bytes: &[u8]) -> std::io::Result<Self> {
+    pub fn from_bytes(bytes: &[u8]) -> Result<Self, BorError> {
         decode(bytes)
     }
 }
@@ -140,7 +140,7 @@ impl SubstateAddress {
         encode(self).unwrap()
     }
 
-    pub fn from_bytes(bytes: &[u8]) -> std::io::Result<Self> {
+    pub fn from_bytes(bytes: &[u8]) -> Result<Self, BorError> {
         decode_exact(bytes)
     }
 

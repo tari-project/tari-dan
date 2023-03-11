@@ -26,7 +26,8 @@
 use std::{io, io::Write};
 
 use digest::Digest;
-use tari_bor::{encode_into};
+use serde::Serialize;
+use tari_bor::encode_into;
 use tari_common_types::types::FixedHash;
 use tari_crypto::{hash::blake2::Blake256, hashing::DomainSeparation};
 

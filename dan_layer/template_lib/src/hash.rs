@@ -27,7 +27,7 @@ use std::{
     ops::{Deref, DerefMut},
 };
 
-use serde::{Serialize, Deserialize};
+use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Ord, PartialOrd, Hash, Default, Serialize, Deserialize)]
 pub struct Hash(#[cfg_attr(feature = "hex", serde(with = "hex"))] [u8; 32]);

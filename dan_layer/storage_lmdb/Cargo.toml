@@ -13,6 +13,6 @@ tari_storage = {  git = "https://github.com/tari-project/tari.git", branch = "de
 lmdb-zero = "0.4.4"
 hex = "0.4.3"
 
-
 [dev-dependencies]
 tempfile = "3.3.0"
+serde = "1.0.126"

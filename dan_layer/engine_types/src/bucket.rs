@@ -22,7 +22,7 @@
 
 use std::collections::BTreeSet;
 
-use serde::{Serialize, Deserialize};
+use serde::{Deserialize, Serialize};
 use tari_template_lib::{
     models::{Amount, ConfidentialWithdrawProof, NonFungibleId, ResourceAddress},
     prelude::ResourceType,

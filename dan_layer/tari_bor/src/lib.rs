@@ -3,8 +3,8 @@
 
 #![cfg_attr(not(feature = "std"), no_std)]
 
-use ciborium::{ser::{into_writer}, value::Value, de::from_reader};
-use serde::{Serialize, de::DeserializeOwned};
+use ciborium::{de::from_reader, ser::into_writer, value::Value};
+use serde::{de::DeserializeOwned, Serialize};
 
 #[derive(Debug, Clone)]
 pub struct BorError(String);
@@ -12,6 +12,20 @@ pub struct BorError(String);
 impl BorError {
     pub fn new(str: String) -> Self {
         Self(str)
+    }
+}
+
+#[cfg(feature = "std")]
+impl std::fmt::Display for BorError {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
+
+#[cfg(feature = "std")]
+impl std::error::Error for BorError {
+    fn description(&self) -> &str {
+        &self.0
     }
 }
 
@@ -57,18 +71,17 @@ fn decode_inner<T: DeserializeOwned>(input: &mut &[u8]) -> Result<T, BorError> {
 pub fn decode_exact<T: DeserializeOwned>(mut input: &[u8]) -> Result<T, BorError> {
     let val = decode_inner(&mut input)?;
     if !input.is_empty() {
-        return Err(BorError(
-            format!("decode_exact: {} bytes remaining on input", input.len()),
-        ));
+        return Err(BorError(format!(
+            "decode_exact: {} bytes remaining on input",
+            input.len()
+        )));
     }
     Ok(val)
 }
 
 pub fn decode_len(input: &[u8]) -> Result<usize, BorError> {
     if input.len() < 4 {
-        return Err(BorError(
-            "Not enough bytes to decode length".to_owned()
-        ));
+        return Err(BorError("Not enough bytes to decode length".to_owned()));
     }
 
     let mut buf = [0u8; 4];
@@ -77,8 +90,7 @@ pub fn decode_len(input: &[u8]) -> Result<usize, BorError> {
     Ok(len as usize)
 }
 
-fn to_bor_error<E>(e: E) -> BorError 
-where E: core::fmt::Display
-{
+fn to_bor_error<E>(e: E) -> BorError
+where E: core::fmt::Display {
     BorError(e.to_string())
 }

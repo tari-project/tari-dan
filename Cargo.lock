@@ -6362,6 +6362,7 @@ version = "0.50.0-pre.0"
 dependencies = [
  "hex",
  "lmdb-zero",
+ "serde",
  "tari_dan_common_types",
  "tari_dan_engine",
  "tari_storage",

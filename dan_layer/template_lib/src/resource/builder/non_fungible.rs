@@ -2,7 +2,7 @@
 //   SPDX-License-Identifier: BSD-3-Clause
 
 use serde::Serialize;
-use tari_bor::{encode};
+use tari_bor::encode;
 use tari_template_abi::rust::{collections::HashMap, fmt, ops::RangeInclusive};
 
 use crate::{

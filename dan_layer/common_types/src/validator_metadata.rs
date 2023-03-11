@@ -1,7 +1,7 @@
 //   Copyright 2022 The Tari Project
 //   SPDX-License-Identifier: BSD-3-Clause
 
-use std::{io};
+use std::io;
 
 use digest::Digest;
 use serde::{Deserialize, Serialize};

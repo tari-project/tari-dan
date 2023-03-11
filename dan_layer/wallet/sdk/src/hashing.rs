@@ -4,7 +4,8 @@
 use std::{io, io::Write};
 
 use digest::{Digest, FixedOutput};
-use tari_bor::{encode_into, Encode};
+use serde::Serialize;
+use tari_bor::encode_into;
 use tari_crypto::{hash::blake2::Blake256, hash_domain, hashing::DomainSeparation};
 use tari_template_lib::Hash;
 
@@ -34,17 +35,17 @@ impl TariWalletHasher {
         Self { hasher }
     }
 
-    pub fn update<T: Encode + ?Sized>(&mut self, data: &T) {
+    pub fn update<T: Serialize + ?Sized>(&mut self, data: &T) {
         encode_into(data, &mut self.hash_writer()).expect("encoding failed")
     }
 
-    pub fn chain<T: Encode + ?Sized>(mut self, data: &T) -> Self {
+    pub fn chain<T: Serialize + ?Sized>(mut self, data: &T) -> Self {
         self.update(data);
         self
     }
 
     #[allow(dead_code)]
-    pub fn digest<T: Encode + ?Sized>(self, data: &T) -> Hash {
+    pub fn digest<T: Serialize + ?Sized>(self, data: &T) -> Hash {
         self.chain(data).result()
     }
 

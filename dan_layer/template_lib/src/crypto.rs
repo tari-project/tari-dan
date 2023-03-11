@@ -1,7 +1,8 @@
 //   Copyright 2023 The Tari Project
 //   SPDX-License-Identifier: BSD-3-Clause
 
-use serde::{Serialize, Deserialize};
+use serde::{Deserialize, Serialize};
+#[cfg(not(feature = "hex"))]
 use serde_big_array::BigArray;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default, Serialize, Deserialize)]
@@ -48,7 +49,9 @@ pub struct InvalidByteLengthError {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct BalanceProofSignature(
-    #[cfg_attr(feature = "hex", serde(with = "hex::serde"))] #[cfg_attr(not(feature = "hex"), serde(with = "BigArray"))][u8; BalanceProofSignature::length()],
+    #[cfg_attr(feature = "hex", serde(with = "hex::serde"))]
+    #[cfg_attr(not(feature = "hex"), serde(with = "BigArray"))]
+    [u8; BalanceProofSignature::length()],
 );
 
 impl BalanceProofSignature {

@@ -25,7 +25,7 @@ pub use builder::ResourceBuilder;
 
 mod manager;
 pub use manager::ResourceManager;
-use serde::{Serialize, Deserialize};
+use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
 pub enum ResourceType {

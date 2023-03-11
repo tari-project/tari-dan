@@ -20,9 +20,9 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use serde::{Serialize, Deserialize};
+use serde::{Deserialize, Serialize};
 
-use crate::{rust::{boxed::Box, string::String, vec::Vec}};
+use crate::rust::{boxed::Box, string::String, vec::Vec};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TemplateDef {
@@ -45,9 +45,7 @@ pub struct FunctionDef {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[
-    serde(tag = "type", content = "subtype")
-]
+#[serde(tag = "type", content = "subtype")]
 pub enum Type {
     Unit,
     Bool,
