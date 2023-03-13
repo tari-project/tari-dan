@@ -30,7 +30,8 @@ use std::{
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Ord, PartialOrd, Hash, Default, Serialize, Deserialize)]
-pub struct Hash(#[cfg_attr(feature = "hex", serde(with = "hex"))] [u8; 32]);
+#[serde(transparent)]
+pub struct Hash(/* #[cfg_attr(feature = "hex", serde(with = "hex"))] */ [u8; 32]);
 
 impl Hash {
     pub const fn from_array(bytes: [u8; 32]) -> Self {

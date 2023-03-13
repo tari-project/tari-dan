@@ -45,7 +45,7 @@ pub struct FunctionDef {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(tag = "type", content = "subtype")]
+//#[serde(tag = "type", content = "subtype")]
 pub enum Type {
     Unit,
     Bool,

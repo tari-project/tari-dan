@@ -24,7 +24,7 @@ use serde::{Deserialize, Serialize};
 use tari_bor::{decode, encode, BorError};
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(tag = "type", content = "value")]
+//#[serde(tag = "type", content = "value")]
 pub enum Arg {
     Variable(Vec<u8>),
     // TODO: this should be a `Value` instead of a `Vec<u8>`, but that is a larger refactor

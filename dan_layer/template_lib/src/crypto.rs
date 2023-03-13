@@ -2,12 +2,13 @@
 //   SPDX-License-Identifier: BSD-3-Clause
 
 use serde::{Deserialize, Serialize};
-#[cfg(not(feature = "hex"))]
+// #[cfg(not(feature = "hex"))]
 use serde_big_array::BigArray;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default, Serialize, Deserialize)]
 pub struct RistrettoPublicKeyBytes(
-    #[cfg_attr(feature = "hex", serde(with = "hex::serde"))] [u8; RistrettoPublicKeyBytes::length()],
+    // #[cfg_attr(feature = "hex", serde(with = "hex::serde"))]
+    [u8; RistrettoPublicKeyBytes::length()],
 );
 
 impl RistrettoPublicKeyBytes {
@@ -49,9 +50,9 @@ pub struct InvalidByteLengthError {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct BalanceProofSignature(
-    #[cfg_attr(feature = "hex", serde(with = "hex::serde"))]
-    #[cfg_attr(not(feature = "hex"), serde(with = "BigArray"))]
-    [u8; BalanceProofSignature::length()],
+    // #[cfg_attr(feature = "hex", serde(with = "hex::serde"))]
+    //#[cfg_attr(not(feature = "hex"), serde(with = "BigArray"))]
+    #[serde(with = "BigArray")] [u8; BalanceProofSignature::length()],
 );
 
 impl BalanceProofSignature {

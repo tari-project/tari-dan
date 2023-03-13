@@ -32,6 +32,7 @@ use crate::{
 pub type BucketId = u32;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(transparent)]
 pub struct Bucket {
     id: BucketId,
 }

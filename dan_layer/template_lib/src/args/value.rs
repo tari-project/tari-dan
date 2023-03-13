@@ -8,9 +8,7 @@ use tari_template_abi::{
 use crate::models::{Amount, ComponentAddress};
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[
-    serde(tag = "type", content = "value")
-]
+//#[serde(tag = "type", content = "value")]
 pub enum Value {
     // Basic values
     Unit,

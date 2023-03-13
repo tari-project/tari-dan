@@ -197,6 +197,7 @@ impl Display for NonFungibleAddress {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(transparent)]
 pub struct NonFungible {
     address: NonFungibleAddress,
 }

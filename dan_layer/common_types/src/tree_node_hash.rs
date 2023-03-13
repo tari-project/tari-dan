@@ -11,10 +11,8 @@ use serde::{Deserialize, Serialize};
 use tari_common_types::types::{FixedHash, FixedHashSizeError};
 use tari_utilities::hex::{Hex, HexError};
 
-use crate::serde_with;
-
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Deserialize, Serialize)]
-pub struct TreeNodeHash(#[serde(with = "serde_with::hex")] FixedHash);
+pub struct TreeNodeHash(/* #[serde(with = "serde_with::hex")] */ FixedHash);
 
 impl TreeNodeHash {
     pub fn zero() -> Self {

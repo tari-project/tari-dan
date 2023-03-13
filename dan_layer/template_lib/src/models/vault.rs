@@ -38,6 +38,7 @@ use crate::{
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(transparent)]
 pub struct VaultId(Hash);
 
 impl VaultId {

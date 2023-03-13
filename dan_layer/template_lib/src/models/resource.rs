@@ -30,6 +30,7 @@ use tari_template_abi::rust::{
 use crate::{hash::HashParseError, Hash};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+#[serde(transparent)]
 pub struct ResourceAddress(Hash);
 
 impl ResourceAddress {

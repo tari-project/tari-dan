@@ -16,10 +16,8 @@ use tari_engine_types::{
 };
 use tari_utilities::hex::{from_hex, Hex};
 
-use crate::serde_with;
-
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Hash, Serialize, Deserialize)]
-pub struct ShardId(#[serde(with = "serde_with::hex")] pub [u8; 32]);
+pub struct ShardId(/* #[serde(with = "serde_with::hex")] */ pub [u8; 32]);
 
 impl ShardId {
     /// Defines the mapping of SubstateAddress to ShardId

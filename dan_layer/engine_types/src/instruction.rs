@@ -10,7 +10,7 @@ use tari_template_lib::{
 };
 
 #[derive(Debug, Clone, Deserialize, Serialize, Eq, PartialEq)]
-#[serde(tag = "type")]
+//#[serde(tag = "type")]
 pub enum Instruction {
     CallFunction {
         template_address: TemplateAddress,
