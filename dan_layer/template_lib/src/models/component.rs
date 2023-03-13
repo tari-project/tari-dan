@@ -30,6 +30,7 @@ use serde::{Deserialize, Serialize};
 use crate::{hash::HashParseError, models::TemplateAddress, prelude::AccessRules, Hash};
 
 #[derive(Debug, Clone, Copy, Hash, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+#[serde(transparent)]
 pub struct ComponentAddress(Hash);
 
 impl ComponentAddress {

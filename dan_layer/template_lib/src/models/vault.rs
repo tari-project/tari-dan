@@ -91,6 +91,7 @@ impl VaultRef {
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(transparent)]
 pub struct Vault {
     vault_id: VaultId,
 }

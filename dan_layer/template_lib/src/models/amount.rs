@@ -29,6 +29,7 @@ use newtype_ops::newtype_ops;
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+#[serde(transparent)]
 pub struct Amount(pub i64);
 
 impl Amount {

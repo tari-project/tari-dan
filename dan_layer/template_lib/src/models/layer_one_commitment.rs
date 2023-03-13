@@ -7,6 +7,7 @@ use serde::{Deserialize, Serialize};
 use crate::{hash::HashParseError, Hash};
 
 #[derive(Debug, Clone, Copy, Hash, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(transparent)]
 pub struct LayerOneCommitmentAddress(Hash);
 
 impl LayerOneCommitmentAddress {

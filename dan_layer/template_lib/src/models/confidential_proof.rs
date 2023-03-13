@@ -39,6 +39,7 @@ pub struct ConfidentialWithdrawProof {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default, Serialize, Deserialize)]
+#[serde(transparent)]
 pub struct EncryptedValue(
     // #[cfg_attr(feature = "hex", serde(with = "hex::serde"))]
     pub [u8; EncryptedValue::size()],
