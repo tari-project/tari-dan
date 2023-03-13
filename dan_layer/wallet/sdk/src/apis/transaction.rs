@@ -223,7 +223,7 @@ impl<'a, TStore: WalletStore> TransactionApi<'a, TStore> {
                         version: substate.version(),
                     });
                 },
-                addr @ SubstateAddress::LayerOneCommitment(_) => {
+                addr @ SubstateAddress::UnclaimedConfidentialOutput(_) => {
                     todo!("Not supported {}", addr);
                 },
             }

@@ -7,7 +7,7 @@ use cucumber::{then, when};
 use tari_crypto::tari_utilities::{hex::Hex, ByteArray};
 use tari_dan_common_types::{Epoch, ShardId};
 use tari_engine_types::{confidential::ConfidentialClaim, instruction::Instruction, substate::SubstateAddress};
-use tari_template_lib::{args::Arg, prelude::ComponentAddress};
+use tari_template_lib::{args, prelude::ComponentAddress};
 use tari_transaction::Transaction;
 use tari_validator_node_client::types::{GetStateRequest, SubmitTransactionRequest};
 
@@ -31,12 +31,13 @@ async fn then_validator_node_has_state_at(world: &mut TariWorld, vn_name: String
     client.get_state(GetStateRequest { shard_id }).await.unwrap();
 }
 
-#[when(expr = "I claim burn {word} with {word} and {word} and spend it into account {word} on {word}")]
+#[when(expr = "I claim burn {word} with {word}, {word} and {word} and spend it into account {word} on {word}")]
 async fn when_i_claim_burn(
     world: &mut TariWorld,
     commitment_name: String,
     proof_name: String,
     rangeproof_name: String,
+    claim_public_key_name: String,
     account_name: String,
     vn_name: String,
 ) -> Result<(), anyhow::Error> {
@@ -61,7 +62,7 @@ async fn when_i_claim_burn(
         0,
     );
 
-    let account = world
+    let (account_secret, _) = world
         .account_public_keys
         .get(&account_name)
         .unwrap_or_else(|| panic!("Account {} not found", account_name));
@@ -69,10 +70,16 @@ async fn when_i_claim_burn(
     let account_address = world.get_account_component_address(&account_name).unwrap();
     let component_address = ComponentAddress::from_str(&account_address).expect("Invalid account address");
 
+    let reciprocal_public_key = world
+        .claim_public_keys
+        .get(&claim_public_key_name)
+        .unwrap_or_else(|| panic!("Claim public key {} not found", claim_public_key_name));
+
     let instructions = [
         Instruction::ClaimBurn {
             claim: Box::new(ConfidentialClaim {
-                commitment_address: commitment.to_vec().try_into()?,
+                public_key: reciprocal_public_key.clone(),
+                output_address: commitment.as_slice().try_into()?,
                 range_proof: rangeproof.clone(),
                 proof_of_knowledge: proof.clone(),
             }),
@@ -81,7 +88,7 @@ async fn when_i_claim_burn(
         Instruction::CallMethod {
             component_address,
             method: "deposit".to_string(),
-            args: vec![Arg::Variable(b"burn".to_vec())],
+            args: args![Variable("burn")],
         },
     ];
 
@@ -95,7 +102,7 @@ async fn when_i_claim_burn(
         .with_inputs(vec![commitment_shard, account_shard])
         .with_fee(1)
         .with_new_outputs(1)
-        .sign(&account.0);
+        .sign(account_secret);
     let transaction = builder.build();
 
     let request = SubmitTransactionRequest {
@@ -112,27 +119,29 @@ async fn when_i_claim_burn(
 }
 
 #[when(
-    expr = "I claim burn {word} with {word} and {word} and spend it into account {word} on {word} a second time, it \
-            fails"
+    expr = "I claim burn {word} with {word}, {word} and {word} and spend it into account {word} on {word} a second \
+            time, it fails"
 )]
 async fn when_i_claim_burn_second_time_fails(
     world: &mut TariWorld,
     commitment_name: String,
     proof_name: String,
     rangeproof_name: String,
+    claim_pk_name: String,
     account_name: String,
     vn_name: String,
 ) {
-    assert!(when_i_claim_burn(
+    when_i_claim_burn(
         world,
         commitment_name,
         proof_name,
         rangeproof_name,
+        claim_pk_name,
         account_name,
         vn_name,
     )
     .await
-    .is_err());
+    .unwrap_err();
 }
 
 #[then(expr = "{word} is on epoch {int} within {int} seconds")]
