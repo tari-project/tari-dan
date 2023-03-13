@@ -407,11 +407,7 @@ impl WalletStoreReader for ReadTransaction<'_> {
             .map_err(|e| WalletStorageError::general("outputs_get_locked_by_proof", e))?;
 
         if rows.is_empty() {
-            return Err(WalletStorageError::NotFound {
-                operation: "outputs_get_locked_by_proof",
-                entity: "output".to_string(),
-                key: proof_id.to_string(),
-            });
+            return Ok(vec![]);
         }
 
         let vault_addresses = if rows.is_empty() {

@@ -421,7 +421,7 @@ impl WalletStoreWriter for WriteTransaction<'_> {
     }
 
     fn outputs_insert(&mut self, output: ConfidentialOutputModel) -> Result<(), WalletStorageError> {
-        use crate::schema::{accounts, outputs};
+        use crate::schema::{accounts, outputs, vaults};
 
         let account_id = accounts::table
             .select(accounts::id)
@@ -429,9 +429,16 @@ impl WalletStoreWriter for WriteTransaction<'_> {
             .first::<i32>(self.connection())
             .map_err(|e| WalletStorageError::general("outputs_insert", e))?;
 
+        let vault_id = vaults::table
+            .select(vaults::id)
+            .filter(vaults::address.eq(&output.vault_address.to_string()))
+            .first::<i32>(self.connection())
+            .map_err(|e| WalletStorageError::general("outputs_insert", e))?;
+
         diesel::insert_into(outputs::table)
             .values((
                 outputs::account_id.eq(account_id),
+                outputs::vault_id.eq(vault_id),
                 outputs::commitment.eq(output.commitment.to_hex()),
                 outputs::value.eq(output.value as i64),
                 outputs::sender_public_nonce.eq(output.sender_public_nonce.map(|pk| pk.to_hex())),

@@ -12,6 +12,7 @@ use tari_dan_wallet_sdk::{
 };
 use tari_dan_wallet_storage_sqlite::SqliteWalletStore;
 use tari_engine_types::substate::SubstateAddress;
+use tari_template_lib::constants::CONFIDENTIAL_TARI_RESOURCE_ADDRESS;
 
 #[test]
 fn outputs_locked_and_released() {
@@ -25,7 +26,7 @@ fn outputs_locked_and_released() {
     let (inputs, total_value) = test
         .sdk()
         .confidential_outputs_api()
-        .lock_outputs_by_amount(&Test::test_account_address(), 50, proof_id)
+        .lock_outputs_by_amount(&Test::test_vault_address(), 50, proof_id)
         .unwrap();
     assert_eq!(total_value, 74);
     assert_eq!(inputs.len(), 2);
@@ -63,7 +64,7 @@ fn outputs_locked_and_finalized() {
     let proof_id = test.new_proof();
 
     let (inputs, total_value) = outputs_api
-        .lock_outputs_by_amount(&Test::test_account_address(), 50, proof_id)
+        .lock_outputs_by_amount(&Test::test_vault_address(), 50, proof_id)
         .unwrap();
     assert_eq!(total_value, 74);
     assert_eq!(inputs.len(), 2);
@@ -137,6 +138,13 @@ impl Test {
         accounts_api
             .add_account(Some("test"), &Test::test_account_address(), 0)
             .unwrap();
+        accounts_api
+            .add_vault(
+                Test::test_account_address(),
+                Test::test_vault_address(),
+                CONFIDENTIAL_TARI_RESOURCE_ADDRESS,
+            )
+            .unwrap();
 
         Self {
             store,
@@ -178,7 +186,7 @@ impl Test {
 
     pub fn new_proof(&self) -> ConfidentialProofId {
         let outputs_api = self.sdk.confidential_outputs_api();
-        outputs_api.add_proof(&Self::test_account_address()).unwrap()
+        outputs_api.add_proof(&Self::test_vault_address()).unwrap()
     }
 
     pub fn get_unspent_balance(&self) -> u64 {
