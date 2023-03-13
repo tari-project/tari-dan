@@ -52,6 +52,8 @@ use crate::{
         AccountsListResponse,
         ClaimBurnRequest,
         ClaimBurnResponse,
+        ConfidentialCreateOutputProofRequest,
+        ConfidentialCreateOutputProofResponse,
         KeysCreateRequest,
         KeysCreateResponse,
         KeysListRequest,
@@ -177,7 +179,10 @@ impl WalletDaemonClient {
         self.send_request("accounts.list", &AccountsListRequest { limit }).await
     }
 
-    pub async fn get_by_name(&mut self, name: String) -> Result<AccountByNameResponse, WalletDaemonClientError> {
+    pub async fn accounts_get_by_name(
+        &mut self,
+        name: String,
+    ) -> Result<AccountByNameResponse, WalletDaemonClientError> {
         self.send_request("accounts.get_by_name", &AccountByNameRequest { name })
             .await
     }
@@ -208,6 +213,14 @@ impl WalletDaemonClient {
         req: T,
     ) -> Result<ProofsFinalizeResponse, WalletDaemonClientError> {
         self.send_request("confidential.finalize", req.borrow()).await
+    }
+
+    pub async fn create_confidential_output_proof<T: Borrow<ConfidentialCreateOutputProofRequest>>(
+        &mut self,
+        req: T,
+    ) -> Result<ConfidentialCreateOutputProofResponse, WalletDaemonClientError> {
+        self.send_request("confidential.create_output_proof", req.borrow())
+            .await
     }
 
     fn next_request_id(&mut self) -> i64 {

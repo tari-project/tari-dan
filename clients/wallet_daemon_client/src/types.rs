@@ -33,7 +33,7 @@ use tari_engine_types::{
 use tari_template_lib::{
     args::Arg,
     auth::AccessRules,
-    models::{Amount, ComponentAddress, NonFungibleId, ResourceAddress},
+    models::{Amount, ComponentAddress, ConfidentialOutputProof, NonFungibleId, ResourceAddress},
     prelude::ConfidentialWithdrawProof,
 };
 use tari_transaction::Transaction;
@@ -185,6 +185,7 @@ pub struct AccountsListResponse {
     pub accounts: Vec<Account>,
     pub total: u64,
 }
+
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct AccountsGetBalancesRequest {
     pub account_name: String,
@@ -232,6 +233,16 @@ pub struct ProofsFinalizeResponse {}
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct ProofsCancelRequest {
     pub proof_id: ConfidentialProofId,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct ConfidentialCreateOutputProofRequest {
+    pub amount: Amount,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct ConfidentialCreateOutputProofResponse {
+    pub proof: ConfidentialOutputProof,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]

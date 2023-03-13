@@ -237,7 +237,7 @@ async fn handle_list(client: &mut WalletDaemonClient) -> Result<(), anyhow::Erro
 
 async fn handle_get_by_name(args: GetByNameArgs, client: &mut WalletDaemonClient) -> Result<(), anyhow::Error> {
     println!("Get account component address by its name...");
-    let resp = client.get_by_name(args.name.clone()).await?;
+    let resp = client.accounts_get_by_name(args.name.clone()).await?;
 
     println!("Account {} substate_address: {}", args.name, resp.account_address);
     println!();

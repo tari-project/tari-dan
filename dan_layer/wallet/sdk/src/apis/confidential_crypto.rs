@@ -74,6 +74,14 @@ impl ConfidentialCryptoApi {
             balance_proof,
         })
     }
+
+    pub fn generate_output_proof(
+        &self,
+        statement: &ConfidentialProofStatement,
+    ) -> Result<ConfidentialOutputProof, ConfidentialCryptoApiError> {
+        let proof = generate_confidential_proof(statement, None)?;
+        Ok(proof)
+    }
 }
 
 fn generate_balance_proof(

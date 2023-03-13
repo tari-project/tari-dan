@@ -325,7 +325,7 @@ pub async fn handle_send(
         common,
     } = args;
 
-    let source_address = client.get_by_name(source_account_name).await?;
+    let source_address = client.accounts_get_by_name(source_account_name).await?;
     let source_component_address = source_address
         .account_address
         .as_component_address()
@@ -362,7 +362,7 @@ pub async fn handle_confidential_transfer(
         common,
     } = args;
 
-    let source_address = client.get_by_name(source_account_name.clone()).await?;
+    let source_address = client.accounts_get_by_name(source_account_name.clone()).await?;
     let source_component_address = source_address
         .account_address
         .as_component_address()
@@ -660,14 +660,20 @@ pub enum CliArg {
     I16(i16),
     I8(i8),
     Bool(bool),
+    Blob(Vec<u8>),
     NonFungibleId(NonFungibleId),
     SubstateAddress(SubstateAddress),
 }
 
 impl FromStr for CliArg {
-    type Err = String;
+    type Err = anyhow::Error;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
+        if let Some(file) = s.strip_prefix('@') {
+            let base64_data = fs::read_to_string(file).map_err(|e| anyhow!("Failed to read file {}: {}", file, e))?;
+            return Ok(CliArg::Blob(base64::decode(base64_data)?));
+        }
+
         if let Ok(v) = s.parse::<u64>() {
             return Ok(CliArg::U64(v));
         }
@@ -730,6 +736,7 @@ impl CliArg {
             CliArg::I16(v) => arg!(v),
             CliArg::I8(v) => arg!(v),
             CliArg::Bool(v) => arg!(v),
+            CliArg::Blob(v) => Arg::Literal(v),
             CliArg::SubstateAddress(v) => arg!(v.to_canonical_hash()),
             CliArg::NonFungibleId(v) => arg!(v),
         }
@@ -825,10 +832,18 @@ fn parse_globals(globals: Vec<String>) -> Result<HashMap<String, ManifestValue>,
         let (name, value) = global
             .split_once('=')
             .ok_or_else(|| anyhow!("Invalid global: {}", global))?;
-        let value = value
-            .parse()
-            .map_err(|err| anyhow!("Failed to parse global '{}': {}", name, err))?;
-        result.insert(name.to_string(), value);
+        if let Some(file) = value.strip_prefix('@') {
+            let contents =
+                fs::read_to_string(file).map_err(|err| anyhow!("Failed to read file '{}': {}", &file, err))?;
+            let blob = base64::decode(contents.trim())
+                .map_err(|err| anyhow!("Failed to decode base64 file '{}': {}", file, err))?;
+            result.insert(name.to_string(), ManifestValue::Value(blob));
+        } else {
+            let value = value
+                .parse()
+                .map_err(|err| anyhow!("Failed to parse global '{}': {}", name, err))?;
+            result.insert(name.to_string(), value);
+        }
     }
     Ok(result)
 }

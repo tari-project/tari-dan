@@ -16,7 +16,7 @@ tari_engine_types = { path = "../../dan_layer/engine_types" }
 tari_utilities = { git = "https://github.com/tari-project/tari_utilities.git", tag = "v0.4.10" }
 tari_dan_wallet_daemon = { path = "../tari_dan_wallet_daemon" }
 tari_wallet_daemon_client = { path = "../../clients/wallet_daemon_client" }
-tari_template_lib = { path = "../../dan_layer/template_lib" }
+tari_template_lib = { path = "../../dan_layer/template_lib", features = ["serde"] }
 tari_transaction_manifest = { path = "../../dan_layer/transaction_manifest" }
 tari_transaction = { path = "../../dan_layer/transaction" }
 tari_template_builtin = { path = "../../dan_layer/template_builtin" }
