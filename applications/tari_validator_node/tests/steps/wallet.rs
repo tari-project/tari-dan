@@ -17,7 +17,8 @@ async fn start_wallet(world: &mut TariWorld, wallet_name: String, bn_name: Strin
 }
 
 #[when(
-    expr = "I burn {int}T on wallet {word} into commitment {word} with proof {word} for {word} and range proof {word}"
+    expr = "I burn {int}T on wallet {word} into commitment {word} with proof {word} for {word}, range proof {word} \
+            and claim public key {word}"
 )]
 async fn when_i_burn_on_wallet(
     world: &mut TariWorld,
@@ -27,13 +28,14 @@ async fn when_i_burn_on_wallet(
     proof: String,
     account_name: String,
     range_proof: String,
+    claim_public_key_name: String,
 ) {
     let wallet = world
         .wallets
         .get(&wallet_name)
         .unwrap_or_else(|| panic!("Wallet {} not found", wallet_name));
 
-    let public_key = world
+    let (_, public_key) = world
         .account_public_keys
         .get(&account_name)
         .unwrap_or_else(|| panic!("Account {} not found", account_name));
@@ -44,7 +46,7 @@ async fn when_i_burn_on_wallet(
             amount: amount * 1_000_000,
             fee_per_gram: 1,
             message: "Burn".to_string(),
-            claim_public_key: public_key.1.to_vec(),
+            claim_public_key: public_key.to_vec(),
         })
         .await
         .unwrap()
@@ -63,6 +65,10 @@ async fn when_i_burn_on_wallet(
         ),
     );
     world.rangeproofs.insert(range_proof, resp.range_proof);
+    world.claim_public_keys.insert(
+        claim_public_key_name,
+        PublicKey::from_bytes(&resp.reciprocal_claim_public_key).unwrap(),
+    );
 }
 
 #[when(expr = "wallet {word} has at least {int} {word}")]

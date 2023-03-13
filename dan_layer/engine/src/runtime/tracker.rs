@@ -27,10 +27,10 @@ use std::{
 };
 
 use log::debug;
-use tari_common_types::types::Commitment;
 use tari_dan_common_types::optional::Optional;
 use tari_engine_types::{
     bucket::Bucket,
+    confidential::UnclaimedConfidentialOutput,
     logs::LogEntry,
     non_fungible::NonFungibleContainer,
     non_fungible_index::NonFungibleIndex,
@@ -50,11 +50,11 @@ use tari_template_lib::{
         ComponentAddress,
         ComponentBody,
         ComponentHeader,
-        LayerOneCommitmentAddress,
         Metadata,
         NonFungibleAddress,
         NonFungibleIndexAddress,
         ResourceAddress,
+        UnclaimedConfidentialOutputAddress,
         VaultId,
     },
     resource::ResourceType,
@@ -322,15 +322,14 @@ impl StateTracker {
         })
     }
 
-    pub fn take_layer_one_commitment(
+    pub fn take_unclaimed_confidential_output(
         &self,
-        commitment_address: LayerOneCommitmentAddress,
-    ) -> Result<Commitment, RuntimeError> {
+        address: UnclaimedConfidentialOutputAddress,
+    ) -> Result<UnclaimedConfidentialOutput, RuntimeError> {
         self.write_with(|state| {
-            let commitment = state.get_layer_one_commitment(&commitment_address)?;
-
-            state.claim_layer_one_commitment(&commitment_address)?;
-            Ok(commitment)
+            let output = state.get_unclaimed_confidential_commitment(&address)?;
+            state.claim_confidential_output(&address)?;
+            Ok(output)
         })
     }
 
@@ -516,8 +515,8 @@ impl StateTracker {
                 substate_diff.up(addr, new_substate);
             }
 
-            for claimed in state.claimed_layer_one_commitments {
-                substate_diff.down(SubstateAddress::LayerOneCommitment(claimed), 0);
+            for claimed in state.claimed_confidential_outputs {
+                substate_diff.down(SubstateAddress::UnclaimedConfidentialOutput(claimed), 0);
             }
 
             Result::<_, TransactionCommitError>::Ok(substate_diff)

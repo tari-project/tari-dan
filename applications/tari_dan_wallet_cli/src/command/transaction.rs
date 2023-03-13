@@ -470,7 +470,7 @@ fn summarize(result: &TransactionWaitResultResponse, time_taken: Duration) {
     }
 }
 
-fn summarize_finalize_result(finalize: &FinalizeResult) {
+pub fn summarize_finalize_result(finalize: &FinalizeResult) {
     println!("========= Substates =========");
     match finalize.result {
         TransactionResult::Accept(ref diff) => {
@@ -490,7 +490,7 @@ fn summarize_finalize_result(finalize: &FinalizeResult) {
                     SubstateValue::NonFungible(_) => {
                         println!("      ▶ NFT: {}", address);
                     },
-                    SubstateValue::LayerOneCommitment(_) => {
+                    SubstateValue::UnclaimedConfidentialOutput(_) => {
                         println!("      ▶ Layer 1 commitment: {}", address);
                     },
                     SubstateValue::NonFungibleIndex(index) => {

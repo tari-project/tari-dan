@@ -65,7 +65,7 @@ use tari_template_lib::{
 use tari_utilities::ByteArray;
 
 use crate::{
-    base_layer_hashers::BurntOutputDomainHasher,
+    base_layer_hashers::ConfidentialOutputHasher,
     runtime::{
         engine_args::EngineArgs,
         tracker::StateTracker,
@@ -627,23 +627,24 @@ impl RuntimeInterface for RuntimeInterfaceImpl {
 
     fn claim_burn(&self, claim: ConfidentialClaim) -> Result<(), RuntimeError> {
         let ConfidentialClaim {
-            commitment_address,
+            public_key: diffie_hellman_public_key,
+            output_address,
             range_proof,
             proof_of_knowledge,
         } = claim;
         // 1. Must exist
-        let commitment = self.tracker.take_layer_one_commitment(commitment_address)?;
+        let unclaimed_output = self.tracker.take_unclaimed_confidential_output(output_address)?;
         // 2. owner_sig must be valid
         // TODO: Probably want a better challenge
         let factory = PedersenCommitmentFactory::default();
-        let hasher = BurntOutputDomainHasher::new_with_label("commitment_signature")
+        let hasher = ConfidentialOutputHasher::new_with_label("commitment_signature")
             .chain(proof_of_knowledge.public_nonce().as_bytes())
-            .chain(commitment.as_bytes())
+            .chain(unclaimed_output.commitment.as_bytes())
             .chain(self.sender_public_key.as_bytes());
 
         let challenge: FixedHash = digest::Digest::finalize(hasher).into();
         if !proof_of_knowledge.verify(
-            &commitment,
+            &unclaimed_output.commitment,
             &RistrettoSecretKey::from_bytes(challenge.as_bytes())
                 .map_err(|_e| RuntimeError::InvalidClaimingSignature)?,
             &factory,
@@ -653,19 +654,22 @@ impl RuntimeInterface for RuntimeInterfaceImpl {
         }
 
         // 3. range_proof must be valid
-        if !get_range_proof_service(1).verify(&range_proof, &commitment) {
+        if !get_range_proof_service(1).verify(&range_proof, &unclaimed_output.commitment) {
             warn!(target: LOG_TARGET, "Claim burn failed - Invalid range proof");
             return Err(RuntimeError::InvalidRangeProof);
         }
 
         let resource = ResourceContainer::confidential(
             CONFIDENTIAL_TARI_RESOURCE_ADDRESS,
-            Some((commitment.as_public_key().clone(), ConfidentialOutput {
-                commitment,
-                stealth_public_nonce: None,
-                encrypted_value: None,
-                minimum_value_promise: 0,
-            })),
+            Some((
+                unclaimed_output.commitment.as_public_key().clone(),
+                ConfidentialOutput {
+                    commitment: unclaimed_output.commitment,
+                    stealth_public_nonce: Some(diffie_hellman_public_key),
+                    encrypted_value: Some(unclaimed_output.encrypted_value),
+                    minimum_value_promise: 0,
+                },
+            )),
             Amount::zero(),
         );
 
