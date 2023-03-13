@@ -21,5 +21,5 @@ fn update_account() {
 
     let mut tx = db.create_read_tx().unwrap();
     let account = tx.accounts_get_by_name("foo").unwrap();
-    assert_eq!(account.name, "test");
+    assert_eq!(account.name, "foo");
 }

@@ -78,8 +78,10 @@ const theme = createTheme({
     MuiButton: {
       defaultProps: {
         disableRipple: true,
-        style: {
-          borderRadius: '5px',
+        sx: {
+          // borderRadius: '5px',
+          minHeight: '55px',
+          boxShadow: 'none',
         },
       },
     },
