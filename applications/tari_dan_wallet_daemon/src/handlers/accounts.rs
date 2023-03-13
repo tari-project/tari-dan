@@ -8,7 +8,7 @@ use log::*;
 use tari_common_types::types::{FixedHash, PrivateKey, PublicKey};
 use tari_crypto::{commitment::HomomorphicCommitment as Commitment, ristretto::RistrettoComSig};
 use tari_dan_common_types::{optional::Optional, ShardId};
-use tari_dan_wallet_sdk::models::VersionedSubstateAddress;
+use tari_dan_wallet_sdk::{apis::key_manager, models::VersionedSubstateAddress};
 use tari_engine_types::{
     commit_result::{FinalizeResult, TransactionResult},
     confidential::ConfidentialClaim,
@@ -40,10 +40,7 @@ use tari_wallet_daemon_client::types::{
 use tokio::sync::broadcast;
 
 use super::context::HandlerContext;
-use crate::{
-    handlers::TRANSACTION_KEYMANAGER_BRANCH,
-    services::{TransactionSubmittedEvent, WalletEvent},
-};
+use crate::services::{TransactionSubmittedEvent, WalletEvent};
 
 const LOG_TARGET: &str = "tari::dan_wallet_daemon::handlers::transaction";
 
@@ -61,11 +58,10 @@ pub async fn handle_create(
 
     let (key_index, signing_key) = sdk
         .key_manager_api()
-        .get_key_or_active(TRANSACTION_KEYMANAGER_BRANCH, req.signing_key_index)?;
+        .get_key_or_active(key_manager::TRANSACTION_BRANCH, req.signing_key_index)?;
     let owner_pk = sdk
         .key_manager_api()
-        // TODO: Different branch?
-        .get_public_key(TRANSACTION_KEYMANAGER_BRANCH, req.signing_key_index)?;
+        .get_public_key(key_manager::TRANSACTION_BRANCH, req.signing_key_index)?;
     let owner_token =
         NonFungibleAddress::from_public_key(RistrettoPublicKeyBytes::from_bytes(owner_pk.as_bytes()).unwrap());
 
@@ -107,7 +103,7 @@ pub async fn handle_list(
     req: AccountsListRequest,
 ) -> Result<AccountsListResponse, anyhow::Error> {
     let sdk = context.wallet_sdk();
-    let accounts = sdk.accounts_api().get_many(req.limit)?;
+    let accounts = sdk.accounts_api().get_many(req.offset, req.limit)?;
     let total = sdk.accounts_api().count()?;
 
     Ok(AccountsListResponse { accounts, total })
@@ -120,7 +116,7 @@ pub async fn handle_invoke(
     let sdk = context.wallet_sdk();
     let (_, signing_key) = sdk
         .key_manager_api()
-        .get_key_or_active(TRANSACTION_KEYMANAGER_BRANCH, None)?;
+        .get_key_or_active(key_manager::TRANSACTION_BRANCH, None)?;
 
     let account = sdk.accounts_api().get_account_by_name(&req.account_name)?;
     let inputs = sdk
@@ -167,7 +163,7 @@ pub async fn handle_get_balances(
     let sdk = context.wallet_sdk();
     let (_, signing_key) = sdk
         .key_manager_api()
-        .get_key_or_active(TRANSACTION_KEYMANAGER_BRANCH, None)?;
+        .get_key_or_active(key_manager::TRANSACTION_BRANCH, None)?;
 
     let account = sdk.accounts_api().get_account_by_name(&req.account_name)?;
     let inputs = sdk
@@ -269,7 +265,7 @@ pub async fn handle_claim_burn(
     let sdk = context.wallet_sdk();
     let (_, signing_key) = sdk
         .key_manager_api()
-        .get_key_or_active(TRANSACTION_KEYMANAGER_BRANCH, None)?;
+        .get_key_or_active(key_manager::TRANSACTION_BRANCH, None)?;
 
     let mut inputs = vec![];
 

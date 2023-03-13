@@ -173,8 +173,13 @@ impl WalletDaemonClient {
         self.send_request("accounts.get_balances", request.borrow()).await
     }
 
-    pub async fn list_accounts(&mut self, limit: u64) -> Result<AccountsListResponse, WalletDaemonClientError> {
-        self.send_request("accounts.list", &AccountsListRequest { limit }).await
+    pub async fn list_accounts(
+        &mut self,
+        offset: u64,
+        limit: u64,
+    ) -> Result<AccountsListResponse, WalletDaemonClientError> {
+        self.send_request("accounts.list", &AccountsListRequest { offset, limit })
+            .await
     }
 
     pub async fn get_by_name(&mut self, name: String) -> Result<AccountByNameResponse, WalletDaemonClientError> {

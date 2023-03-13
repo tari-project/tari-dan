@@ -552,26 +552,17 @@ impl ShardStoreReadTransaction<PublicKey, TariDanPayload> for SqliteShardStoreRe
             .map(|sh| Vec::from(sh.as_bytes()))
             .collect::<Vec<Vec<u8>>>();
 
-        let substate_states: Option<Vec<crate::models::substate::Substate>> = substates::table
+        let substate_states: Vec<crate::models::substate::Substate> = substates::table
             .filter(substates::shard_id.eq_any(shard_ids))
             .get_results(self.transaction.connection())
-            .optional()
             .map_err(|e| StorageError::QueryError {
                 reason: format!("Get substate change error: {}", e),
-            })
-            .unwrap();
+            })?;
 
-        if let Some(substate_states) = substate_states {
-            substate_states
-                .iter()
-                .map(Self::map_substate_to_shard_data)
-                .collect::<Result<_, _>>()
-        } else {
-            Err(StorageError::NotFound {
-                item: "substate".to_string(),
-                key: "No data found for available shards".to_string(),
-            })
-        }
+        substate_states
+            .iter()
+            .map(Self::map_substate_to_shard_data)
+            .collect::<Result<_, _>>()
     }
 
     fn get_substate_states_by_range(

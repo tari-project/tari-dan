@@ -63,6 +63,8 @@ use tari_validator_node_client::types::{
     GetShardKey,
     GetStateRequest,
     GetStateResponse,
+    GetSubstateRequest,
+    GetSubstateResponse,
     GetTemplateRequest,
     GetTemplateResponse,
     GetTemplatesRequest,
@@ -73,6 +75,7 @@ use tari_validator_node_client::types::{
     GetTransactionResultResponse,
     SubmitTransactionRequest,
     SubmitTransactionResponse,
+    SubstateStatus,
     SubstatesRequest,
     TemplateMetadata,
     TemplateRegistrationRequest,
@@ -251,6 +254,17 @@ impl JsonRpcHandlers {
                 ))
             },
         };
+        if state.is_empty() {
+            return Err(JsonRpcResponse::error(
+                answer_id,
+                JsonRpcError::new(
+                    JsonRpcErrorReason::ApplicationError(404),
+                    "state not found".to_string(),
+                    json::Value::Null,
+                ),
+            ));
+        }
+
         Ok(JsonRpcResponse::success(answer_id, GetStateResponse {
             data: state[0].substate().to_bytes(),
         }))
@@ -327,6 +341,42 @@ impl JsonRpcHandlers {
             Ok(transaction) => Ok(JsonRpcResponse::success(answer_id, transaction)),
             Err(err) => {
                 println!("error {:?}", err);
+                Err(JsonRpcResponse::error(
+                    answer_id,
+                    JsonRpcError::new(
+                        JsonRpcErrorReason::InvalidParams,
+                        "Something went wrong".to_string(),
+                        json::Value::Null,
+                    ),
+                ))
+            },
+        }
+    }
+
+    pub async fn get_substate(&self, value: JsonRpcExtractor) -> JrpcResult {
+        let answer_id = value.get_answer_id();
+        let data: GetSubstateRequest = value.parse_params()?;
+        let mut tx = self.shard_store.create_read_tx().unwrap();
+        let shard_id = ShardId::from_address(&data.address, data.version);
+        match tx.get_substate_states(&[shard_id]) {
+            Ok(substates) => {
+                let (value, status) = if substates.is_empty() {
+                    (None, SubstateStatus::DoesNotExist)
+                } else if substates[0].destroyed_height().is_some() {
+                    (None, SubstateStatus::Down)
+                } else {
+                    (
+                        Some(substates[0].substate().substate_value().clone()),
+                        SubstateStatus::Up,
+                    )
+                };
+                Ok(JsonRpcResponse::success(answer_id, GetSubstateResponse {
+                    status,
+                    value,
+                }))
+            },
+            Err(err) => {
+                error!(target: LOG_TARGET, "[get_substate] error {}", err);
                 Err(JsonRpcResponse::error(
                     answer_id,
                     JsonRpcError::new(

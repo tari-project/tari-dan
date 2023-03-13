@@ -46,6 +46,7 @@ use tari_template_lib::{
     arg,
     args,
     args::Arg,
+    constants::CONFIDENTIAL_TARI_RESOURCE_ADDRESS,
     models::{Amount, NonFungibleAddress, NonFungibleId},
     prelude::{ComponentAddress, ResourceAddress},
 };
@@ -139,6 +140,9 @@ pub struct ConfidentialTransferArgs {
     amount: u32,
     destination_account: ComponentAddress,
     destination_stealth_public_key: FromBase64<Vec<u8>>,
+    /// The address of the resource to send. If not provided, use the default Tari confidential resource
+    #[clap(long, short = 'r')]
+    resource_address: Option<ResourceAddress>,
     #[clap(flatten)]
     common: CommonSubmitArgs,
 }
@@ -356,6 +360,7 @@ pub async fn handle_confidential_transfer(
 ) -> Result<TransactionSubmitResponse, anyhow::Error> {
     let ConfidentialTransferArgs {
         source_account_name,
+        resource_address,
         amount,
         destination_account,
         destination_stealth_public_key,
@@ -369,9 +374,11 @@ pub async fn handle_confidential_transfer(
         .ok_or_else(|| anyhow!("Invalid component address for source address"))?;
     let destination_stealth_public_key = RistrettoPublicKey::from_bytes(&destination_stealth_public_key.into_inner())?;
 
+    let resource_address = resource_address.unwrap_or(CONFIDENTIAL_TARI_RESOURCE_ADDRESS);
     let proof_generate_req = ProofsGenerateRequest {
         amount: Amount::from(amount),
         source_account_name,
+        resource_address,
         destination_account,
         destination_stealth_public_key,
     };

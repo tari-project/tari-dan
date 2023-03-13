@@ -18,3 +18,6 @@ pub use confidential_output::*;
 
 mod substate;
 pub use substate::*;
+
+mod vault;
+pub use vault::*;

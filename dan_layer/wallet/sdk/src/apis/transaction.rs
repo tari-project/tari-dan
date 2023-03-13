@@ -14,6 +14,7 @@ use tari_transaction::Transaction;
 use tari_validator_node_client::{
     types::{GetTransactionQcsRequest, GetTransactionResultRequest, SubmitTransactionRequest},
     ValidatorNodeClient,
+    ValidatorNodeClientError,
 };
 
 use crate::{
@@ -67,8 +68,7 @@ impl<'a, TStore: WalletStore> TransactionApi<'a, TStore> {
                 wait_for_result_timeout: None,
                 is_dry_run,
             })
-            .await
-            .map_err(TransactionApiError::ValidatorNodeClientError)?;
+            .await?;
 
         self.store.with_write_tx(|tx| {
             tx.transactions_set_result_and_status(
@@ -278,7 +278,7 @@ pub enum TransactionApiError {
     #[error("Store error: {0}")]
     StoreError(#[from] WalletStorageError),
     #[error("Validator node client error: {0}")]
-    ValidatorNodeClientError(anyhow::Error),
+    ValidatorNodeClientError(#[from] ValidatorNodeClientError),
 }
 
 impl IsNotFoundError for TransactionApiError {

@@ -177,6 +177,7 @@ pub struct AccountsInvokeResponse {
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct AccountsListRequest {
+    pub offset: u64,
     pub limit: u64,
 }
 
@@ -210,6 +211,7 @@ pub struct AccountByNameResponse {
 pub struct ProofsGenerateRequest {
     pub amount: Amount,
     pub source_account_name: String,
+    pub resource_address: ResourceAddress,
     pub destination_account: ComponentAddress,
     // TODO: For now, we assume that this is obtained "somehow" from the destination account
     pub destination_stealth_public_key: PublicKey,
