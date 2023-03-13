@@ -20,14 +20,20 @@
 //   WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //   USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use tari_dan_wallet_daemon::cli::Cli;
+use std::net::{IpAddr, Ipv4Addr, SocketAddr, SocketAddrV4};
+
+use tari_comms::multiaddr::Multiaddr;
+use tari_dan_wallet_daemon::{cli::Cli, run_tari_dan_wallet_daemon};
 use tari_dan_wallet_sdk::{DanWalletSdk, WalletSdkConfig};
 use tari_dan_wallet_storage_sqlite::SqliteWalletStore;
 use tari_shutdown::Shutdown;
 use tari_wallet_daemon_client::WalletDaemonClient;
 use tempfile::tempdir;
 
-use crate::{utils::helpers::get_os_assigned_ports, TariWorld};
+use crate::{
+    utils::{helpers::get_os_assigned_ports, logging::get_base_dir},
+    TariWorld,
+};
 
 #[derive(Debug)]
 pub struct DanWalletDaemonProcess {
@@ -41,9 +47,18 @@ pub struct DanWalletDaemonProcess {
 
 pub fn spawn_wallet_daemon(world: &mut TariWorld, wallet_daemon_name: String, validator_node_name: String) {
     let (port, json_rpc_port) = get_os_assigned_ports();
-    let temp_dir = tempdir().unwrap().path().join(wallet_daemon_name.clone());
+    let base_dir = get_base_dir();
 
     let validator_node_grpc_port = world.validator_nodes.get(&validator_node_name).unwrap().port;
     let shutdown = Shutdown::new();
     let shutdown_signal = shutdown.to_signal();
+
+    let listen_addr = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), validator_node_grpc_port);
+    let validator_node_endpoint = Multiaddr::new();
+
+    let cli = Cli {
+        listen_addr: Some(listen_addr),
+        base_dir: Some(base_dir),
+        validator_node_endpoint,
+    };
 }

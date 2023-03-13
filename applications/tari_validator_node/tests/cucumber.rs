@@ -79,7 +79,7 @@ use crate::utils::{
     template::{send_template_registration, RegisteredTemplate},
     validator_node::{get_vn_client, ValidatorNodeProcess},
     wallet::WalletProcess,
-    wallet_daemon_cli::WalletDaemonProcess,
+    wallet_daemon_cli::DanWalletDaemonProcess,
 };
 
 #[derive(Debug, Default, WorldInit)]
@@ -167,7 +167,8 @@ impl cucumber::World for TariWorld {
 #[tokio::main]
 async fn main() {
     let log_path = create_log_config_file();
-    initialize_logging(log_path.as_path(), include_str!("./log4rs/cucumber.yml")).unwrap();
+    let base_path = get_base_dir();
+    initialize_logging(log_path.as_path(), &base_path, include_str!("./log4rs/cucumber.yml")).unwrap();
 
     TariWorld::cucumber()
         .max_concurrent_scenarios(1)

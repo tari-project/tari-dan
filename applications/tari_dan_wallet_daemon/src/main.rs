@@ -26,75 +26,17 @@ mod jrpc_server;
 mod notify;
 mod services;
 
-use std::{error::Error, panic, process};
+use std::error::Error;
 
-use tari_common::initialize_logging;
-use tari_dan_wallet_sdk::{DanWalletSdk, WalletSdkConfig};
-use tari_dan_wallet_storage_sqlite::SqliteWalletStore;
+use tari_dan_wallet_daemon::{cli::Cli, run_tari_dan_wallet_daemon};
 use tari_shutdown::Shutdown;
-
-use crate::{
-    cli::Cli,
-    handlers::{HandlerContext, TRANSACTION_KEYMANAGER_BRANCH},
-    notify::Notify,
-    services::spawn_services,
-};
-
-const _LOG_TARGET: &str = "tari::dan_wallet_daemon::main";
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
     let cli = Cli::init();
-    // Uncomment to enable tokio tracing via tokio-console
-    // console_subscriber::init();
-
-    // Setup a panic hook which prints the default rust panic message but also exits the process. This makes a panic in
-    // any thread "crash" the system instead of silently continuing.
-    let default_hook = panic::take_hook();
-    panic::set_hook(Box::new(move |info| {
-        default_hook(info);
-        process::exit(1);
-    }));
-
-    if let Err(e) = initialize_logging(
-        cli.base_dir().join("config/logs.yml").as_path(),
-        &cli.base_dir(),
-        include_str!("../log4rs_sample.yml"),
-    ) {
-        eprintln!("{}", e);
-    }
 
     let shutdown = Shutdown::new();
     let shutdown_signal = shutdown.to_signal();
 
-    let store = SqliteWalletStore::try_open(cli.base_dir().join("data/wallet.sqlite"))?;
-    store.run_migrations()?;
-
-    let params = WalletSdkConfig {
-        // TODO: Configure
-        password: None,
-        validator_node_jrpc_endpoint: cli.validator_node_endpoint(),
-    };
-    let wallet_sdk = DanWalletSdk::initialize(store, params)?;
-    wallet_sdk
-        .key_manager_api()
-        .get_or_create_initial(TRANSACTION_KEYMANAGER_BRANCH)?;
-    let notify = Notify::new(100);
-
-    let service_handles = spawn_services(shutdown_signal.clone(), notify.clone(), wallet_sdk.clone());
-
-    let address = cli.listen_address();
-    let handlers = HandlerContext::new(wallet_sdk.clone(), notify);
-    let listen_fut = jrpc_server::listen(address, handlers, shutdown_signal);
-
-    // Wait for shutdown, or for any service to error
-    tokio::select! {
-        res = listen_fut => {
-            res?;
-        },
-        res = service_handles => {
-            res?;
-        },
-    }
-    Ok(())
+    run_tari_dan_wallet_daemon(cli, shutdown_signal).await
 }
