@@ -9,7 +9,7 @@ use tari_template_lib::models::UnclaimedConfidentialOutputAddress;
 
 #[derive(Debug, Clone, Encode, Deserialize, Serialize, Eq, PartialEq)]
 pub struct ConfidentialClaim {
-    pub diffie_hellman_public_key: PublicKey,
+    pub public_key: PublicKey,
     pub output_address: UnclaimedConfidentialOutputAddress,
     pub range_proof: Vec<u8>,
     pub proof_of_knowledge: RistrettoComSig,

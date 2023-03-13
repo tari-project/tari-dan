@@ -627,7 +627,7 @@ impl RuntimeInterface for RuntimeInterfaceImpl {
 
     fn claim_burn(&self, claim: ConfidentialClaim) -> Result<(), RuntimeError> {
         let ConfidentialClaim {
-            diffie_hellman_public_key,
+            public_key: diffie_hellman_public_key,
             output_address,
             range_proof,
             proof_of_knowledge,

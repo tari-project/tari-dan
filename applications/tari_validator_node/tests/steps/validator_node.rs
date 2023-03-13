@@ -73,7 +73,7 @@ async fn when_i_claim_burn(
     let instructions = [
         Instruction::ClaimBurn {
             claim: Box::new(ConfidentialClaim {
-                diffie_hellman_public_key: PublicKey::default(),
+                public_key: PublicKey::default(),
                 output_address: commitment.as_slice().try_into()?,
                 range_proof: rangeproof.clone(),
                 proof_of_knowledge: proof.clone(),

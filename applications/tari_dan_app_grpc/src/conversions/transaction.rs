@@ -122,8 +122,8 @@ impl TryFrom<proto::transaction::Instruction> for tari_engine_types::instruction
             },
             4 => Instruction::ClaimBurn {
                 claim: Box::new(ConfidentialClaim {
-                    diffie_hellman_public_key: PublicKey::from_bytes(&request.claim_burn_diffie_hellman_public_key)
-                        .map_err(|e| anyhow!("claim_burn_diffie_hellman_public_key: {}", e))?,
+                    public_key: PublicKey::from_bytes(&request.claim_burn_public_key)
+                        .map_err(|e| anyhow!("claim_burn_public_key: {}", e))?,
                     output_address: request
                         .claim_burn_commitment_address
                         .as_slice()
@@ -183,7 +183,7 @@ impl From<tari_engine_types::instruction::Instruction> for proto::transaction::I
                 result.claim_burn_commitment_address = claim.output_address.to_vec();
                 result.claim_burn_range_proof = claim.range_proof.to_vec();
                 result.claim_burn_proof_of_knowledge = Some(claim.proof_of_knowledge.into());
-                result.claim_burn_diffie_hellman_public_key = claim.diffie_hellman_public_key.to_vec();
+                result.claim_burn_public_key = claim.public_key.to_vec();
             },
         }
         result

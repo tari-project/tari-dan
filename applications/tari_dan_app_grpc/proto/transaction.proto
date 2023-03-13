@@ -105,7 +105,7 @@ message Instruction {
   bytes claim_burn_commitment_address = 10;
   bytes claim_burn_range_proof = 11;
   CommitmentSignature claim_burn_proof_of_knowledge = 12;
-  bytes claim_burn_diffie_hellman_public_key = 13;
+  bytes claim_burn_public_key = 13;
 }
 
 message Arg {

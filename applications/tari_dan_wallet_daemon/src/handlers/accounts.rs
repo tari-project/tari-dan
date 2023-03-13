@@ -312,7 +312,7 @@ pub async fn handle_claim_burn(
     let instructions = vec![
         Instruction::ClaimBurn {
             claim: Box::new(ConfidentialClaim {
-                diffie_hellman_public_key: reciprocal_claim_public_key,
+                public_key: reciprocal_claim_public_key,
                 output_address: UnclaimedConfidentialOutputAddress::try_from(commitment.as_slice())?,
                 range_proof,
                 proof_of_knowledge: RistrettoComSig::new(Commitment::from_public_key(&public_nonce), u, v),
