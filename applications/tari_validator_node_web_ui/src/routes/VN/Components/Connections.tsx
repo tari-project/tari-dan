@@ -22,7 +22,7 @@
 
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { addPeer, getConnections } from '../../../utils/json_rpc';
-import { toHexString } from './helpers';
+import { toHexString, shortenString } from './helpers';
 import Table from '@mui/material/Table';
 import TableBody from '@mui/material/TableBody';
 import TableCell from '@mui/material/TableCell';
@@ -34,10 +34,11 @@ import {
   BoxHeading2,
 } from '../../../Components/StyledComponents';
 import AddIcon from '@mui/icons-material/Add';
-import CloseIcon from '@mui/icons-material/Close';
 import Button from '@mui/material/Button';
 import { TextField } from '@mui/material';
 import { Form } from 'react-router-dom';
+import Fade from '@mui/material/Fade';
+import CopyToClipboard from '../../../Components/CopyToClipboard';
 
 interface IConnection {
   address: string;
@@ -91,79 +92,83 @@ function Connections() {
   useInterval(fetchConnections, 5000);
 
   return (
-    <TableContainer>
-      <BoxHeading2 style={{ minHeight: '75px' }}>
-        {showPeerDialog ? (
-          <Form
-            onSubmit={onSubmitAddPeer}
-            style={{
-              display: 'flex',
-              alignContent: 'center',
-              gap: '10px',
-            }}
-          >
-            <TextField
-              size="small"
-              name="publicKey"
-              label="Public Key"
-              value={formState.publicKey}
-              onChange={onChange}
-            />
-            <TextField
-              size="small"
-              name="address"
-              label="Address"
-              value={formState.address}
-              onChange={onChange}
-            />
-            <Button startIcon={<AddIcon />} variant="contained" type="submit">
-              Add Peer
-            </Button>
-            <Button
-              startIcon={<CloseIcon />}
-              variant="outlined"
-              onClick={() => showAddPeerDialog(false)}
-            >
-              Cancel
-            </Button>
-          </Form>
-        ) : (
-          <Button
-            variant="outlined"
-            startIcon={<AddIcon />}
-            onClick={() => showAddPeerDialog()}
-          >
-            Add Peer
-          </Button>
+    <>
+      <BoxHeading2>
+        {showPeerDialog && (
+          <Fade in={showPeerDialog}>
+            <Form onSubmit={onSubmitAddPeer} className="flex-container">
+              <TextField
+                name="publicKey"
+                label="Public Key"
+                value={formState.publicKey}
+                onChange={onChange}
+                style={{ flexGrow: 1 }}
+              />
+              <TextField
+                name="address"
+                label="Address"
+                value={formState.address}
+                onChange={onChange}
+                style={{ flexGrow: 1 }}
+              />
+              <Button variant="contained" type="submit">
+                Add Peer
+              </Button>
+              <Button
+                variant="outlined"
+                onClick={() => showAddPeerDialog(false)}
+              >
+                Cancel
+              </Button>
+            </Form>
+          </Fade>
+        )}
+        {!showPeerDialog && (
+          <Fade in={!showPeerDialog}>
+            <div className="flex-container">
+              <Button
+                variant="outlined"
+                startIcon={<AddIcon />}
+                onClick={() => showAddPeerDialog()}
+              >
+                Add Peer
+              </Button>
+            </div>
+          </Fade>
         )}
       </BoxHeading2>
-      <Table>
-        <TableHead>
-          <TableRow>
-            <TableCell>Address</TableCell>
-            <TableCell>Age</TableCell>
-            <TableCell>Direction</TableCell>
-            <TableCell>Node id</TableCell>
-            <TableCell>Public key</TableCell>
-          </TableRow>
-        </TableHead>
-        <TableBody>
-          {connections.map(
-            ({ address, age, direction, node_id, public_key }) => (
-              <TableRow key={public_key}>
-                <DataTableCell>{address}</DataTableCell>
-                <DataTableCell>{age}</DataTableCell>
-                <DataTableCell>
-                  {direction ? 'Inbound' : 'Outbound'}
-                </DataTableCell>
-                <DataTableCell>{toHexString(node_id)}</DataTableCell>
-                <DataTableCell>{public_key}</DataTableCell>
-              </TableRow>
-            )
-          )}
-        </TableBody>
-      </Table>
-    </TableContainer>
+      <TableContainer>
+        <Table>
+          <TableHead>
+            <TableRow>
+              <TableCell>Address</TableCell>
+              <TableCell>Age</TableCell>
+              <TableCell>Direction</TableCell>
+              <TableCell>Node id</TableCell>
+              <TableCell>Public key</TableCell>
+            </TableRow>
+          </TableHead>
+          <TableBody>
+            {connections.map(
+              ({ address, age, direction, node_id, public_key }) => (
+                <TableRow key={public_key}>
+                  <DataTableCell>{address}</DataTableCell>
+                  <DataTableCell>{age}</DataTableCell>
+                  <DataTableCell>
+                    {direction ? 'Inbound' : 'Outbound'}
+                  </DataTableCell>
+                  <DataTableCell>{toHexString(node_id)}</DataTableCell>
+                  <DataTableCell>
+                    {shortenString(public_key)}
+                    <CopyToClipboard copy={public_key} />
+                  </DataTableCell>
+                </TableRow>
+              )
+            )}
+          </TableBody>
+        </Table>
+      </TableContainer>
+    </>
   );
 }
 
