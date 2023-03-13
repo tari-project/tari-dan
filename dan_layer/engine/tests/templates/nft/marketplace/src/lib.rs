@@ -27,7 +27,7 @@ use tari_template_lib::models::ComponentAddress;
 /// There exist a lot more approaches to auctions, we can highlight:
 ///     - Price descending, dutch-like auctions. The first bidder gets the nft right away, no need to wait or claim afterwards
 ///     - Blind auctions, were bids are not known until the end. This requires cryptography support, and implies that all bidder's funds will be locked until the end of the auction
-#[derive(Debug, Clone, Encode, Decode)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Auction {
     // The NFT will be locked, so the user gives away control to the marketplace
     // There are other approaches to this, like just allowing the seller to complete and confirm the bid at the end
@@ -57,7 +57,7 @@ pub struct Auction {
     ending_epoch: u64,
 }
 
-#[derive(Debug, Clone, Encode, Decode)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Bid {
     address: ComponentAddress,
     bid: Vault

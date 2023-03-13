@@ -21,7 +21,7 @@
 //   USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 use tari_template_lib::prelude::*;
 
-#[derive(Debug, Clone, Encode, Decode, Default)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct Ticket {
     pub is_redeemed: bool,
 }

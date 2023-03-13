@@ -24,7 +24,7 @@ use std::{fmt, vec::Vec};
 
 use tari_template_lib::prelude::*;
 
-#[derive(Debug, Clone, Encode, Decode, Hash)]
+#[derive(Debug, Clone, Serialize, Deserialize, Hash)]
 #[repr(i32)]
 pub enum Emoji {
     Smile = 0x00,
@@ -45,7 +45,7 @@ impl fmt::Display for Emoji {
     }
 }
 
-#[derive(Debug, Clone, Encode, Decode, Hash)]
+#[derive(Debug, Clone, Serialize, Deserialize, Hash)]
 pub struct EmojiId(Vec<Emoji>);
 
 impl fmt::Display for EmojiId {

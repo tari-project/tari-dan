@@ -159,6 +159,7 @@ impl<'a> StateWriter for MemoryTransaction<RwLockWriteGuard<'a, InnerKvMap>> {
 
 #[cfg(test)]
 mod tests {
+    use serde::{Deserialize, Serialize};
     use tari_dan_common_types::optional::Optional;
 
     use super::*;
@@ -176,7 +177,7 @@ mod tests {
 
     #[test]
     fn read_write_rollback_commit() {
-        #[derive(Debug, Encode, Decode, PartialEq, Eq, Clone)]
+        #[derive(Debug, Serialize, Deserialize, PartialEq, Eq, Clone)]
         struct UserData {
             name: String,
             age: u8,

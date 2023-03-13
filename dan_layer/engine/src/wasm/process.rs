@@ -235,7 +235,7 @@ impl Invokable for WasmProcess {
 
         Ok(ExecutionResult {
             raw,
-            return_type: func_def.output.clone().into(),
+            return_type: func_def.output.clone(),
         })
     }
 }

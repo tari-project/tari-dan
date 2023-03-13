@@ -312,6 +312,33 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "baf1de4339761588bc0619e3cbc0120ee582ebb74b53b4efbf79117bd2da40fd"
 
 [[package]]
+name = "ciborium"
+version = "0.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b0c137568cc60b904a7724001b35ce2630fd00d5d84805fbb608ab89509d788f"
+dependencies = [
+ "ciborium-io",
+ "ciborium-ll",
+ "serde",
+]
+
+[[package]]
+name = "ciborium-io"
+version = "0.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "346de753af073cc87b52b2083a506b38ac176a44cfb05497b622e27be899b369"
+
+[[package]]
+name = "ciborium-ll"
+version = "0.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "213030a2b5a4e0c0892b6652260cf6ccac84827b83a85a534e178e3906c4cf1b"
+dependencies = [
+ "ciborium-io",
+ "half",
+]
+
+[[package]]
 name = "clap"
 version = "2.34.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -372,12 +399,13 @@ dependencies = [
 name = "counter"
 version = "0.1.0"
 dependencies = [
+ "serde",
  "tari_common_types",
  "tari_crypto",
  "tari_dan_common_types",
  "tari_dan_engine",
- "tari_template_abi 0.35.1",
- "tari_template_lib 0.35.1",
+ "tari_template_abi 0.50.0-pre.0",
+ "tari_template_lib 0.50.0-pre.0",
  "tari_template_macros",
 ]
 
@@ -755,6 +783,12 @@ name = "gimli"
 version = "0.27.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "221996f774192f0f718773def8201c4ae31f02616a54ccfc2d358bb0e5cefdec"
+
+[[package]]
+name = "half"
+version = "1.8.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "eabb4a44450da02c90444cf74558da904edde8fb4e9035a9a6a4e15445af0bd7"
 
 [[package]]
 name = "hashbrown"
@@ -1596,6 +1630,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "serde-big-array"
+version = "0.5.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "11fc7cc2c76d73e0f27ee52abbd64eec84d46f370c88371120433196934e4b7f"
+dependencies = [
+ "serde",
+]
+
+[[package]]
 name = "serde-value"
 version = "0.7.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1759,16 +1802,18 @@ checksum = "9410d0f6853b1d94f0e519fb95df60f29d2c1eff2d921ffdf01a4c8a3b54f12d"
 [[package]]
 name = "tari_bor"
 version = "0.1.0"
+source = "git+https://github.com/tari-project/tari-dan.git?branch=development#31935241f10abfdc312e11447ee3a37240a65766"
 dependencies = [
  "borsh",
 ]
 
 [[package]]
 name = "tari_bor"
-version = "0.1.0"
-source = "git+https://github.com/tari-project/tari-dan.git?branch=development#31935241f10abfdc312e11447ee3a37240a65766"
+version = "0.50.0-pre.0"
 dependencies = [
- "borsh",
+ "ciborium",
+ "ciborium-io",
+ "serde",
 ]
 
 [[package]]
@@ -1896,7 +1941,7 @@ dependencies = [
  "prost",
  "prost-types",
  "serde",
- "tari_bor 0.1.0 (git+https://github.com/tari-project/tari-dan.git?branch=development)",
+ "tari_bor 0.1.0",
  "tari_common",
  "tari_common_types",
  "tari_crypto",
@@ -1917,15 +1962,15 @@ dependencies = [
  "rand",
  "serde",
  "serde_json",
- "tari_bor 0.1.0 (git+https://github.com/tari-project/tari-dan.git?branch=development)",
+ "tari_bor 0.1.0",
  "tari_common",
  "tari_common_types",
  "tari_crypto",
  "tari_dan_common_types",
  "tari_engine_types",
  "tari_mmr",
- "tari_template_abi 0.35.1 (git+https://github.com/tari-project/tari-dan.git?branch=development)",
- "tari_template_lib 0.35.1 (git+https://github.com/tari-project/tari-dan.git?branch=development)",
+ "tari_template_abi 0.35.1",
+ "tari_template_lib 0.35.1",
  "tari_utilities",
  "tempfile",
  "thiserror",
@@ -1940,11 +1985,11 @@ source = "git+https://github.com/tari-project/tari-dan.git?branch=development#31
 dependencies = [
  "digest",
  "serde",
- "tari_bor 0.1.0 (git+https://github.com/tari-project/tari-dan.git?branch=development)",
+ "tari_bor 0.1.0",
  "tari_common_types",
  "tari_crypto",
- "tari_template_abi 0.35.1 (git+https://github.com/tari-project/tari-dan.git?branch=development)",
- "tari_template_lib 0.35.1 (git+https://github.com/tari-project/tari-dan.git?branch=development)",
+ "tari_template_abi 0.35.1",
+ "tari_template_lib 0.35.1",
  "tari_utilities",
  "thiserror",
 ]
@@ -1966,26 +2011,17 @@ dependencies = [
 [[package]]
 name = "tari_template_abi"
 version = "0.35.1"
+source = "git+https://github.com/tari-project/tari-dan.git?branch=development#31935241f10abfdc312e11447ee3a37240a65766"
 dependencies = [
  "tari_bor 0.1.0",
 ]
 
 [[package]]
 name = "tari_template_abi"
-version = "0.35.1"
-source = "git+https://github.com/tari-project/tari-dan.git?branch=development#31935241f10abfdc312e11447ee3a37240a65766"
+version = "0.50.0-pre.0"
 dependencies = [
- "tari_bor 0.1.0 (git+https://github.com/tari-project/tari-dan.git?branch=development)",
-]
-
-[[package]]
-name = "tari_template_lib"
-version = "0.35.1"
-dependencies = [
- "newtype-ops",
- "tari_bor 0.1.0",
- "tari_template_abi 0.35.1",
- "tari_template_macros",
+ "serde",
+ "tari_bor 0.50.0-pre.0",
 ]
 
 [[package]]
@@ -1996,13 +2032,25 @@ dependencies = [
  "hex",
  "newtype-ops",
  "serde",
- "tari_bor 0.1.0 (git+https://github.com/tari-project/tari-dan.git?branch=development)",
- "tari_template_abi 0.35.1 (git+https://github.com/tari-project/tari-dan.git?branch=development)",
+ "tari_bor 0.1.0",
+ "tari_template_abi 0.35.1",
+]
+
+[[package]]
+name = "tari_template_lib"
+version = "0.50.0-pre.0"
+dependencies = [
+ "newtype-ops",
+ "serde",
+ "serde-big-array",
+ "tari_bor 0.50.0-pre.0",
+ "tari_template_abi 0.50.0-pre.0",
+ "tari_template_macros",
 ]
 
 [[package]]
 name = "tari_template_macros"
-version = "0.35.1"
+version = "0.50.0-pre.0"
 dependencies = [
  "proc-macro2",
  "quote",

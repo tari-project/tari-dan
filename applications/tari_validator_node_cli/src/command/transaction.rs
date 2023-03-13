@@ -31,9 +31,10 @@ use anyhow::anyhow;
 use clap::{Args, Subcommand};
 use tari_common_types::types::FixedHash;
 use tari_dan_common_types::ShardId;
+use tari_dan_engine::abi::Type;
 use tari_engine_types::{
     commit_result::{FinalizeResult, TransactionResult},
-    execution_result::{ExecutionResult, Type},
+    execution_result::ExecutionResult,
     instruction::Instruction,
     substate::{SubstateAddress, SubstateValue},
     TemplateAddress,

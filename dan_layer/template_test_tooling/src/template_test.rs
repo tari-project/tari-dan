@@ -8,7 +8,7 @@ use std::{
 };
 
 use anyhow::anyhow;
-use borsh::BorshDeserialize;
+use serde::de::DeserializeOwned;
 use tari_crypto::{ristretto::RistrettoSecretKey, tari_utilities::ByteArray};
 use tari_dan_common_types::crypto::create_key_pair;
 use tari_dan_engine::{
@@ -152,7 +152,7 @@ impl TemplateTest {
         proofs: Vec<NonFungibleAddress>,
     ) -> T
     where
-        T: BorshDeserialize,
+        T: DeserializeOwned,
     {
         let result = self
             .execute_and_commit(
@@ -175,7 +175,7 @@ impl TemplateTest {
         proofs: Vec<NonFungibleAddress>,
     ) -> T
     where
-        T: BorshDeserialize,
+        T: DeserializeOwned,
     {
         let result = self
             .execute_and_commit(

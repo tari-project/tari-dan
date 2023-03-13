@@ -181,13 +181,11 @@ impl Drop for SqliteTransaction<'_> {
 
 #[cfg(test)]
 mod tests {
-    use borsh::{BorshDeserialize, BorshSerialize};
-
     use super::*;
 
     #[test]
     fn read_write_rollback_commit() {
-        #[derive(Debug, BorshSerialize, BorshDeserialize, PartialEq, Eq, Clone)]
+        #[derive(Debug, Serialize, Deserialize, PartialEq, Eq, Clone)]
         struct UserData {
             name: String,
             age: u8,

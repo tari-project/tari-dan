@@ -6,6 +6,7 @@ version = 3
 name = "account"
 version = "0.1.0"
 dependencies = [
+ "serde",
  "tari_template_abi",
  "tari_template_lib",
  "tari_template_macros",

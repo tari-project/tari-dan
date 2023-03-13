@@ -350,6 +350,8 @@ mod fungible {
 }
 
 mod basic_nft {
+    use serde::{Deserialize, Serialize};
+
     use super::*;
 
     fn setup() -> (
@@ -470,7 +472,7 @@ mod basic_nft {
         let diff = result.result.expect("execution failed");
         let (_, state) = diff.up_iter().find(|(addr, _)| addr.is_non_fungible()).unwrap();
 
-        #[derive(Debug, Clone, Encode, Decode)]
+        #[derive(Debug, Clone, Serialize, Deserialize)]
         pub struct Sparkle {
             pub brightness: u32,
         }
@@ -699,9 +701,11 @@ mod basic_nft {
 
 mod emoji_id {
 
+    use serde::{Deserialize, Serialize};
+
     use super::*;
 
-    #[derive(Debug, Clone, Encode, Decode, Hash)]
+    #[derive(Debug, Clone, Serialize, Deserialize, Hash)]
     #[repr(i32)]
     pub enum Emoji {
         Smile = 0x00,
@@ -710,7 +714,7 @@ mod emoji_id {
         Wink = 0x03,
     }
 
-    #[derive(Debug, Clone, Encode, Decode, Hash)]
+    #[derive(Debug, Clone, Serialize, Deserialize, Hash)]
     pub struct EmojiId(Vec<Emoji>);
 
     fn mint_emoji_id(
@@ -887,9 +891,11 @@ mod emoji_id {
 
 mod tickets {
 
+    use serde::{Deserialize, Serialize};
+
     use super::*;
 
-    #[derive(Debug, Clone, Encode, Decode, Default)]
+    #[derive(Debug, Clone, Serialize, Deserialize, Default)]
     pub struct Ticket {
         pub is_redeemed: bool,
     }
@@ -1017,7 +1023,7 @@ mod tickets {
             )
             .unwrap();
 
-        #[derive(Debug, Clone, Encode, Decode, Default)]
+        #[derive(Debug, Clone, Serialize, Deserialize, Default)]
         pub struct Ticket {
             pub is_redeemed: bool,
         }

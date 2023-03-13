@@ -21,7 +21,6 @@
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 //! Public types that are available to all template authors.
-
 pub use tari_bor::{decode, decode_exact, encode_with_len};
 pub use tari_template_abi::call_debug as debug;
 
