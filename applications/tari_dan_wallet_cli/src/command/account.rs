@@ -176,9 +176,9 @@ async fn handle_get_balances(args: GetBalancesArgs, client: &mut WalletDaemonCli
     println!();
     let mut table = Table::new();
     table.enable_row_count();
-    table.set_titles(vec!["Resource", "Balance"]);
-    for (resx, amt) in resp.balances {
-        table.add_row(table_row!(resx, amt));
+    table.set_titles(vec!["VaultId", "Resource", "Balance"]);
+    for (vault_id, resx, amt) in resp.balances {
+        table.add_row(table_row!(vault_id, resx, amt));
     }
     table.print_stdout();
     Ok(())

@@ -3,6 +3,7 @@
 use std::convert::TryFrom;
 
 use anyhow::anyhow;
+use axum_jrpc::error::{JsonRpcError, JsonRpcErrorReason};
 use base64;
 use log::*;
 use tari_common_types::types::{FixedHash, PrivateKey, PublicKey};
@@ -161,53 +162,17 @@ pub async fn handle_get_balances(
     req: AccountsGetBalancesRequest,
 ) -> Result<AccountsGetBalancesResponse, anyhow::Error> {
     let sdk = context.wallet_sdk();
-    let (_, signing_key) = sdk
-        .key_manager_api()
-        .get_key_or_active(key_manager::TRANSACTION_BRANCH, None)?;
-
     let account = sdk.accounts_api().get_account_by_name(&req.account_name)?;
-    let inputs = sdk
-        .substate_api()
-        .load_dependent_substates(&[account.address.clone()])?;
+    let vaults = sdk.accounts_api().get_vaults_by_account(&account.address)?;
 
-    info!(
-        target: LOG_TARGET,
-        "Loaded {} inputs for account: {}",
-        inputs.len(),
-        account.address
-    );
-    for input in &inputs {
-        info!(target: LOG_TARGET, "input: {}", input);
-    }
-
-    let inputs = inputs
+    let balances = vaults
         .into_iter()
-        .map(|s| ShardId::from_address(&s.address, s.version))
+        .map(|v| (v.address, v.resource_address, v.balance))
         .collect();
 
-    let mut builder = Transaction::builder();
-    builder
-        .add_instruction(Instruction::CallMethod {
-            component_address: account.address.as_component_address().unwrap(),
-            method: "get_balances".to_string(),
-            args: args![],
-        })
-        .with_fee(1)
-        .with_inputs(inputs)
-        .with_new_outputs(0)
-        .sign(&signing_key.k);
-
-    let transaction = builder.build();
-
-    let tx_hash = sdk.transaction_api().submit_to_vn(transaction).await?;
-
-    let mut events = context.notifier().subscribe();
-    context.notifier().notify(TransactionSubmittedEvent { hash: tx_hash });
-
-    let finalized = wait_for_result(&mut events, tx_hash).await?;
     Ok(AccountsGetBalancesResponse {
         address: account.address,
-        balances: finalized.execution_results[0].decode()?,
+        balances,
     })
 }
 
@@ -231,36 +196,52 @@ pub async fn handle_claim_burn(
         claim_proof,
         fee,
     } = req;
-    let reciprocal_claim_public_key = PublicKey::from_bytes(&base64::decode(
-        claim_proof["reciprocal_claim_public_key"]
-            .as_str()
-            .ok_or_else(|| anyhow!("Missing commitment"))?,
-    )?)?;
+
+    let reciprocal_claim_public_key = PublicKey::from_bytes(
+        &base64::decode(
+            claim_proof["reciprocal_claim_public_key"]
+                .as_str()
+                .ok_or_else(|| invalid_params("reciprocal_claim_public_key", None))?,
+        )
+        .map_err(|e| invalid_params("reciprocal_claim_public_key", Some(e.to_string())))?,
+    )?;
     let commitment = base64::decode(
         claim_proof["commitment"]
             .as_str()
-            .ok_or_else(|| anyhow!("Missing commitment"))?,
-    )?;
+            .ok_or_else(|| invalid_params("commitment", None))?,
+    )
+    .map_err(|e| invalid_params("commitment", Some(e.to_string())))?;
     let range_proof = base64::decode(
         claim_proof["range_proof"]
             .as_str()
-            .ok_or_else(|| anyhow!("Missing range_proof"))?,
+            .or_else(|| claim_proof["rangeproof"].as_str())
+            .ok_or_else(|| invalid_params("range_proof", None))?,
+    )
+    .map_err(|e| invalid_params("range_proof", Some(e.to_string())))?;
+    let public_nonce = PublicKey::from_bytes(
+        &base64::decode(
+            claim_proof["ownership_proof"]["public_nonce"]
+                .as_str()
+                .ok_or_else(|| invalid_params("ownership_proof.public_nonce", None))?,
+        )
+        .map_err(|e| invalid_params("ownership_proof.public_nonce", Some(e.to_string())))?,
     )?;
-    let public_nonce = PublicKey::from_bytes(&base64::decode(
-        claim_proof["ownership_proof"]["public_nonce"]
-            .as_str()
-            .ok_or_else(|| anyhow!("Missing public nonce from ownership_proof"))?,
-    )?)?;
-    let u = PrivateKey::from_bytes(&base64::decode(
-        claim_proof["ownership_proof"]["u"]
-            .as_str()
-            .ok_or_else(|| anyhow!("Missing u from ownership_proof"))?,
-    )?)?;
-    let v = PrivateKey::from_bytes(&base64::decode(
-        claim_proof["ownership_proof"]["v"]
-            .as_str()
-            .ok_or_else(|| anyhow!("Missing v from ownership_proof"))?,
-    )?)?;
+    let u = PrivateKey::from_bytes(
+        &base64::decode(
+            claim_proof["ownership_proof"]["u"]
+                .as_str()
+                .ok_or_else(|| invalid_params("ownership_proof.u", None))?,
+        )
+        .map_err(|e| invalid_params("ownership_proof.u", Some(e.to_string())))?,
+    )?;
+    let v = PrivateKey::from_bytes(
+        &base64::decode(
+            claim_proof["ownership_proof"]["v"]
+                .as_str()
+                .ok_or_else(|| invalid_params("ownership_proof.v", None))?,
+        )
+        .map_err(|e| invalid_params("ownership_proof.v", Some(e.to_string())))?,
+    )?;
 
     let sdk = context.wallet_sdk();
     let (_, signing_key) = sdk
@@ -369,4 +350,16 @@ async fn wait_for_result(
             _ => {},
         }
     }
+}
+
+fn invalid_params(field: &str, details: Option<String>) -> JsonRpcError {
+    JsonRpcError::new(
+        JsonRpcErrorReason::InvalidParams,
+        format!(
+            "Invalid param '{}'{}",
+            field,
+            details.map(|d| format!(": {}", d)).unwrap_or_default()
+        ),
+        serde_json::Value::Null,
+    )
 }

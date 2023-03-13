@@ -375,6 +375,34 @@ impl WalletStoreReader for ReadTransaction<'_> {
         Ok(vault)
     }
 
+    fn vaults_get_by_account(&mut self, account_addr: &SubstateAddress) -> Result<Vec<VaultModel>, WalletStorageError> {
+        use crate::schema::{accounts, vaults};
+
+        let account_id = accounts::table
+            .filter(accounts::address.eq(account_addr.to_string()))
+            .select(accounts::id)
+            .first::<i32>(self.connection())
+            .optional()
+            .map_err(|e| WalletStorageError::general("vaults_get_by_account", e))?
+            .ok_or_else(|| WalletStorageError::NotFound {
+                operation: "vaults_get_by_account",
+                entity: "account".to_string(),
+                key: account_addr.to_string(),
+            })?;
+
+        let rows = vaults::table
+            .filter(vaults::account_id.eq(account_id))
+            .load::<models::Vault>(self.connection())
+            .map_err(|e| WalletStorageError::general("vaults_get_by_account", e))?;
+
+        let vaults = rows
+            .into_iter()
+            .map(|row| row.try_into_vault(account_addr.clone()))
+            .collect::<Result<_, _>>()?;
+
+        Ok(vaults)
+    }
+
     // -------------------------------- Outputs -------------------------------- //
     fn outputs_get_unspent_balance(&mut self, account_address: &SubstateAddress) -> Result<u64, WalletStorageError> {
         use crate::schema::{accounts, outputs};

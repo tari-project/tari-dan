@@ -128,6 +128,7 @@ pub trait WalletStoreReader {
         account_addr: &SubstateAddress,
         resource_address: &ResourceAddress,
     ) -> Result<VaultModel, WalletStorageError>;
+    fn vaults_get_by_account(&mut self, account_addr: &SubstateAddress) -> Result<Vec<VaultModel>, WalletStorageError>;
 
     // Outputs
     fn outputs_get_unspent_balance(&mut self, account_address: &SubstateAddress) -> Result<u64, WalletStorageError>;

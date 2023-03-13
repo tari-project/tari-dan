@@ -124,6 +124,12 @@ impl<'a, TStore: WalletStore> AccountsApi<'a, TStore> {
         let account = tx.accounts_get_by_vault(vault_addr)?;
         Ok(account)
     }
+
+    pub fn get_vaults_by_account(&self, account: &SubstateAddress) -> Result<Vec<VaultModel>, AccountsApiError> {
+        let mut tx = self.store.create_read_tx()?;
+        let vaults = tx.vaults_get_by_account(account)?;
+        Ok(vaults)
+    }
 }
 
 #[derive(Debug, thiserror::Error)]

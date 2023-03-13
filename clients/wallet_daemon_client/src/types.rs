@@ -195,7 +195,7 @@ pub struct AccountsGetBalancesRequest {
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct AccountsGetBalancesResponse {
     pub address: SubstateAddress,
-    pub balances: Vec<(ResourceAddress, Amount)>,
+    pub balances: Vec<(SubstateAddress, ResourceAddress, Amount)>,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
