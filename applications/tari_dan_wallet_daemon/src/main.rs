@@ -20,7 +20,7 @@
 // WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 // USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-pub mod cli;
+mod cli;
 mod handlers;
 mod jrpc_server;
 mod notify;
@@ -36,7 +36,6 @@ use tari_shutdown::Shutdown;
 use crate::{
     cli::Cli,
     handlers::{HandlerContext, TRANSACTION_KEYMANAGER_BRANCH},
-    jrpc_server::listen,
     notify::Notify,
     services::spawn_services,
 };
@@ -59,6 +58,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     if let Err(e) = initialize_logging(
         cli.base_dir().join("config/logs.yml").as_path(),
+        &cli.base_dir(),
         include_str!("../log4rs_sample.yml"),
     ) {
         eprintln!("{}", e);

@@ -20,16 +20,17 @@
 //   WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //   USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use std::net::Shutdown;
-
-use tari_dan_wallet_daemon::Cli;
+use tari_dan_wallet_daemon::cli::Cli;
+use tari_dan_wallet_sdk::{DanWalletSdk, WalletSdkConfig};
+use tari_dan_wallet_storage_sqlite::SqliteWalletStore;
+use tari_shutdown::Shutdown;
 use tari_wallet_daemon_client::WalletDaemonClient;
 use tempfile::tempdir;
 
 use crate::{utils::helpers::get_os_assigned_ports, TariWorld};
 
 #[derive(Debug)]
-pub struct WalletDaemonProcess {
+pub struct DanWalletDaemonProcess {
     pub name: String,
     pub port: u16,
     pub json_rpc_port: u16,
@@ -41,4 +42,8 @@ pub struct WalletDaemonProcess {
 pub fn spawn_wallet_daemon(world: &mut TariWorld, wallet_daemon_name: String, validator_node_name: String) {
     let (port, json_rpc_port) = get_os_assigned_ports();
     let temp_dir = tempdir().unwrap().path().join(wallet_daemon_name.clone());
+
+    let validator_node_grpc_port = world.validator_nodes.get(&validator_node_name).unwrap().port;
+    let shutdown = Shutdown::new();
+    let shutdown_signal = shutdown.to_signal();
 }

@@ -79,6 +79,7 @@ use crate::utils::{
     template::{send_template_registration, RegisteredTemplate},
     validator_node::{get_vn_client, ValidatorNodeProcess},
     wallet::WalletProcess,
+    wallet_daemon_cli::WalletDaemonProcess,
 };
 
 #[derive(Debug, Default, WorldInit)]
@@ -100,7 +101,7 @@ pub struct TariWorld {
     addresses: IndexMap<String, String>,
     num_databases_saved: usize,
     account_public_keys: IndexMap<String, (RistrettoSecretKey, PublicKey)>,
-    wallet_daemon: IndexMap<String, WalletDaemonProcess>,
+    wallet_daemon: IndexMap<String, DanWalletDaemonProcess>,
 }
 
 impl TariWorld {
