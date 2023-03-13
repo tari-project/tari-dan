@@ -8,8 +8,8 @@ version = "0.50.0-pre.0"
 edition = "2018"
 
 [dependencies]
-tari_common_types = { git = "https://github.com/tari-project/tari.git", tag = "v0.47.0-pre.0" }
-tari_crypto = { git = "https://github.com/tari-project/tari-crypto.git", tag = "v0.16.6" }
+tari_common_types = { git = "https://github.com/tari-project/tari.git", tag = "v0.49.0-pre.0" }
+tari_crypto = { git = "https://github.com/tari-project/tari-crypto.git", tag = "v0.16.8" }
 tari_dan_common_types = { path = "../../dan_layer/common_types" }
 tari_dan_engine = { path = "../../dan_layer/engine" }
 tari_engine_types = { path = "../../dan_layer/engine_types" }

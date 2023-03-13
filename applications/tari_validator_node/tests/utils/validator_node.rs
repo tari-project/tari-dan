@@ -118,8 +118,8 @@ pub async fn spawn_validator_node(
         config.validator_node.p2p.transport.transport_type = TransportType::Tcp;
         config.validator_node.p2p.transport.tcp.listener_address =
             Multiaddr::from_str(&format!("/ip4/127.0.0.1/tcp/{}", port)).unwrap();
-        config.validator_node.p2p.public_address =
-            Some(config.validator_node.p2p.transport.tcp.listener_address.clone());
+        config.validator_node.p2p.public_addresses =
+            vec![config.validator_node.p2p.transport.tcp.listener_address.clone()];
         config.validator_node.public_address = Some(config.validator_node.p2p.transport.tcp.listener_address.clone());
         config.validator_node.p2p.datastore_path = temp_dir.to_path_buf().join("peer_db/vn");
         config.validator_node.p2p.dht = DhtConfig {

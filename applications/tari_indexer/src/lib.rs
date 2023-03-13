@@ -71,7 +71,7 @@ pub const DAN_PEER_FEATURES: PeerFeatures = PeerFeatures::COMMUNICATION_NODE;
 pub async fn run_indexer(config: ApplicationConfig, mut shutdown_signal: ShutdownSignal) -> Result<(), ExitError> {
     let node_identity = setup_node_identity(
         &config.indexer.identity_file,
-        config.indexer.public_address.as_ref(),
+        vec![config.indexer.public_address.clone().unwrap()],
         true,
         DAN_PEER_FEATURES,
     )?;

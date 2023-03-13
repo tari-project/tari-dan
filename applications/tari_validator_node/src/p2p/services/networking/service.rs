@@ -22,7 +22,6 @@
 
 use std::sync::Arc;
 
-use anyhow::anyhow;
 use log::*;
 use tari_comms::{
     connectivity::{ConnectivityEvent, ConnectivityRequester},
@@ -124,7 +123,7 @@ impl Networking {
         match event {
             ConnectivityEvent::PeerConnected(conn) => {
                 info!(target: LOG_TARGET, "📡 Peer connected: {}", conn);
-                self.initiate_sync_protocol(conn);
+                self.initiate_sync_protocol(conn.as_ref().clone());
             },
             evt => {
                 info!(target: LOG_TARGET, "ℹ️  Network event: {}", evt);
@@ -146,7 +145,7 @@ impl Networking {
                         Default::default(),
                         DanMessage::NetworkAnnounce(Box::new(NetworkAnnounce {
                             identity: self.node_identity.public_key().clone(),
-                            addresses: vec![self.node_identity.public_address().clone()],
+                            addresses: self.node_identity.public_addresses(),
                             identity_signature,
                         })),
                     )
@@ -170,7 +169,7 @@ impl Networking {
         let peer = DanPeer {
             identity: announce.identity.clone(),
             addresses: announce.addresses.clone(),
-            identity_signature: Some(announce.identity_signature.clone()),
+            // identity_signature: Some(announce.identity_signature.clone()),
         };
 
         if !peer.is_valid() {
@@ -182,16 +181,20 @@ impl Networking {
 
         match self.peer_provider.get_peer(&announce.identity).await.optional()? {
             Some(existing_peer) => {
-                let candidate = peer
-                    .identity_signature
-                    .as_ref()
-                    .ok_or_else(|| anyhow!("Identity signature for announce message is empty"))?;
-                if existing_peer
-                    .identity_signature
-                    .as_ref()
-                    .map(|id| candidate.updated_at() > id.updated_at())
-                    .unwrap_or(true)
-                {
+                // TODO: Verify identity signatures
+                // let candidate = peer
+                //     .identity_signature
+                //     .as_ref()
+                //     .ok_or_else(|| anyhow!("Identity signature for announce message is empty"))?;
+                // if existing_peer
+                //     .identity_signature
+                //     .as_ref()
+                //     .map(|id| candidate.updated_at() > id.updated_at())
+                //     .unwrap_or(true)
+                // {
+
+                // If there was an update, we forward the announce to other peers
+                if existing_peer.addresses != peer.addresses {
                     self.peer_provider.update_peer(peer).await?;
 
                     // TODO: should not forward announce to sending peer

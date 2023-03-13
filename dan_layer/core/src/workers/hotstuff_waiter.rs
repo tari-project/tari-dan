@@ -29,7 +29,7 @@ use log::*;
 use rand::seq::SliceRandom;
 use serde::Serialize;
 use tari_common_types::types::{FixedHash, PublicKey, Signature};
-use tari_core::{ValidatorNodeMmr, ValidatorNodeMmrHasherBlake256};
+use tari_core::ValidatorNodeBMT;
 use tari_dan_common_types::{
     optional::Optional,
     Epoch,
@@ -49,7 +49,6 @@ use tari_engine_types::{
     commit_result::{FinalizeResult, RejectReason, TransactionResult},
     substate::SubstateDiff,
 };
-use tari_mmr::common::LeafIndex;
 use tari_shutdown::ShutdownSignal;
 use tari_transaction::SubstateChange;
 use tokio::{
@@ -963,7 +962,7 @@ where
             .epoch_manager
             .get_validator_shard_key(epoch, self.public_key.clone())
             .await?;
-        let vn_mmr = self.epoch_manager.get_validator_node_mmr(epoch).await?;
+        let vn_bmt = self.epoch_manager.get_validator_node_bmt(epoch).await?;
 
         let shard_pledges = proposed_nodes
             .iter()
@@ -1038,7 +1037,7 @@ where
                 shard_pledges.clone(),
                 &finalize_result.result,
                 vn_shard_key,
-                &vn_mmr,
+                &vn_bmt,
             )?;
 
             let leader = self.get_leader(&node).await?;
@@ -1454,14 +1453,16 @@ where
         // all merkle proofs for the signers must be valid
         let validator_node_root = self.epoch_manager.get_validator_node_merkle_root(qc.epoch()).await?;
         // TODO: Combine all validator merkle proofs before sending them
+        let mut verify_all = true;
         for md in qc.validators_metadata() {
-            md.merkle_proof
-                .verify_leaf::<ValidatorNodeMmrHasherBlake256>(
-                    &validator_node_root,
-                    &*md.get_node_hash(),
-                    LeafIndex(md.merkle_leaf_index as usize),
-                )
-                .map_err(|e| HotStuffError::InvalidQuorumCertificate(format!("invalid merkle proof: {}", e)))?;
+            verify_all &= md
+                .merkle_proof
+                .verify(&validator_node_root, md.get_node_hash().to_vec());
+            if !verify_all {
+                return Err(HotStuffError::InvalidQuorumCertificate(
+                    "invalid merkle proof".to_string(),
+                ));
+            }
         }
 
         // all signers must be included in the epoch committee for the shard
@@ -1717,7 +1718,7 @@ where
         shard_pledges: ShardPledgeCollection,
         payload_result: &TransactionResult,
         vn_shard_key: ShardId,
-        vn_mmr: &ValidatorNodeMmr,
+        vn_bmt: &ValidatorNodeBMT,
     ) -> Result<VoteMessage, HotStuffError> {
         let mut vote_msg = match payload_result {
             TransactionResult::Accept(ref accept) => {
@@ -1736,7 +1737,7 @@ where
             },
         };
 
-        vote_msg.sign_vote(&self.signing_service, vn_shard_key, vn_mmr)?;
+        vote_msg.sign_vote(&self.signing_service, vn_shard_key, vn_bmt)?;
 
         Ok(vote_msg)
     }

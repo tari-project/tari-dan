@@ -137,7 +137,7 @@ impl EpochManagerService {
                 handle(reply, self.inner.on_scanning_complete().await)
             },
             EpochManagerRequest::GetValidatorShardKey { .. } => todo!(),
-            EpochManagerRequest::GetValidatorNodeMmr { .. } => todo!(),
+            EpochManagerRequest::GetValidatorNodeBMT { .. } => todo!(),
             EpochManagerRequest::GetValidatorNodeMerkleRoot { .. } => todo!(),
             EpochManagerRequest::IsValidatorInCommitteeForCurrentEpoch { .. } => todo!(),
             EpochManagerRequest::FilterToLocalShards { .. } => todo!(),

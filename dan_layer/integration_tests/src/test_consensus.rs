@@ -31,12 +31,12 @@ use tari_comms::{
     protocol::rpc::__macro_reexports::future::join_all,
     NodeIdentity,
 };
-use tari_core::ValidatorNodeMmr;
+use tari_core::ValidatorNodeBMT;
 use tari_crypto::{
     keys::PublicKey as PublicKeyT,
     ristretto::{RistrettoPublicKey, RistrettoSecretKey},
 };
-use tari_dan_common_types::{vn_mmr_node_hash, Epoch, QuorumCertificate, QuorumDecision, ShardId};
+use tari_dan_common_types::{vn_bmt_node_hash, Epoch, QuorumCertificate, QuorumDecision, ShardId};
 use tari_dan_core::{
     models::{vote_message::VoteMessage, HotStuffMessage, HotstuffPhase, Payload, TariDanPayload},
     services::{
@@ -72,12 +72,11 @@ fn create_test_qc(
     let qc = QuorumCertificate::genesis(Epoch(0), payload.to_id(), shard_id);
     let vote = VoteMessage::new(qc.node_hash(), *qc.decision(), qc.all_shard_pledges().clone());
 
-    let mut vn_mmr = ValidatorNodeMmr::new(Vec::new());
+    let mut vn_bmt_vec = Vec::new();
     for pk in &all_vn_keys {
-        vn_mmr
-            .push(vn_mmr_node_hash(pk, &ShardId::zero()).to_vec())
-            .expect("Could not build the merkle mountain range of the VN set");
+        vn_bmt_vec.push(vn_bmt_node_hash(pk, &ShardId::zero()).to_vec())
     }
+    let vn_bmt = ValidatorNodeBMT::create(vn_bmt_vec);
 
     let validators_metadata: Vec<_> = committee_keys
         .into_iter()
@@ -85,14 +84,14 @@ fn create_test_qc(
             let mut node_vote = vote.clone();
             let node_identity = Arc::new(NodeIdentity::new(
                 secret,
-                Multiaddr::empty(),
+                vec![Multiaddr::empty()],
                 PeerFeatures::COMMUNICATION_NODE,
             ));
             node_vote
                 .sign_vote(
                     &NodeIdentitySigningService::new(node_identity),
                     ShardId::zero(),
-                    &vn_mmr,
+                    &vn_bmt,
                 )
                 .unwrap();
             node_vote.validator_metadata().clone()
@@ -259,13 +258,12 @@ async fn test_hs_waiter_leader_sends_new_proposal_when_enough_votes_are_received
     let registered_vn_keys = vec![node1.clone(), node2.clone()];
 
     // create the VN set mmr
-    let mut vn_mmr = ValidatorNodeMmr::new(Vec::new());
-    vn_mmr
-        .push(vn_mmr_node_hash(&node1, &ShardId::zero()).to_vec())
-        .unwrap();
-    vn_mmr
-        .push(vn_mmr_node_hash(&node2, &ShardId::zero()).to_vec())
-        .unwrap();
+    let vn_bmt_vec = vec![
+        vn_bmt_node_hash(&node1, &ShardId::zero()).to_vec(),
+        vn_bmt_node_hash(&node2, &ShardId::zero()).to_vec(),
+    ];
+
+    let vn_bmt = ValidatorNodeBMT::create(vn_bmt_vec);
 
     let epoch_manager =
         RangeEpochManager::new(registered_vn_keys, *SHARD0..*SHARD1, vec![node1.clone(), node2.clone()]);
@@ -318,7 +316,7 @@ async fn test_hs_waiter_leader_sends_new_proposal_when_enough_votes_are_received
         QuorumDecision::Accept,
         new_view_message.high_qc().unwrap().all_shard_pledges().clone(),
     );
-    vote.sign_vote(instance.signing_service(), *SHARD0, &vn_mmr).unwrap();
+    vote.sign_vote(instance.signing_service(), *SHARD0, &vn_bmt).unwrap();
     instance.tx_votes.send((node1, vote.clone())).await.unwrap();
 
     // Should get no proposal
@@ -331,7 +329,7 @@ async fn test_hs_waiter_leader_sends_new_proposal_when_enough_votes_are_received
 
     // Send another vote
     let mut vote = VoteMessage::new(*vote_hash, QuorumDecision::Accept, Default::default());
-    vote.sign_vote(instance.signing_service(), ShardId::zero(), &vn_mmr)
+    vote.sign_vote(instance.signing_service(), ShardId::zero(), &vn_bmt)
         .unwrap();
     instance.tx_votes.send((node2, vote)).await.unwrap();
 

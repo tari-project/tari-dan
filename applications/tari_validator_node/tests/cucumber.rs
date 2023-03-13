@@ -165,7 +165,8 @@ impl cucumber::World for TariWorld {
 #[tokio::main]
 async fn main() {
     let log_path = create_log_config_file();
-    initialize_logging(log_path.as_path(), include_str!("./log4rs/cucumber.yml")).unwrap();
+    let base_path = get_base_dir();
+    initialize_logging(log_path.as_path(), &base_path, include_str!("./log4rs/cucumber.yml")).unwrap();
 
     TariWorld::cucumber()
         .max_concurrent_scenarios(1)

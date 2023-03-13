@@ -73,7 +73,7 @@ impl<TPeerProvider: PeerProvider<Addr = CommsPublicKey>> PeerSyncProtocol<TPeerP
                     .into_iter()
                     .map(TryInto::try_into)
                     .collect::<Result<_, _>>()?,
-                identity_signature: resp.identity_signature.map(TryInto::try_into).transpose()?,
+                // identity_signature: resp.identity_signature.map(TryInto::try_into).transpose()?,
             };
             debug!(target: LOG_TARGET, "Received peer: {}", peer);
             if !peer.is_valid() {

@@ -8,19 +8,19 @@ version = "0.50.0-pre.0"
 edition = "2018"
 
 [dependencies]
-tari_app_grpc = { git = "https://github.com/tari-project/tari.git", tag = "v0.47.0-pre.0", package = "tari_app_grpc" }
-tari_app_utilities = { git = "https://github.com/tari-project/tari.git", tag = "v0.47.0-pre.0", package = "tari_app_utilities" }
-tari_base_node_grpc_client = { git = "https://github.com/tari-project/tari.git", tag = "v0.47.0-pre.0", package = "tari_base_node_grpc_client" }
-tari_common = { git = "https://github.com/tari-project/tari.git", tag = "v0.47.0-pre.0", package = "tari_common" }
-tari_common_types = { git = "https://github.com/tari-project/tari.git", tag = "v0.47.0-pre.0", package = "tari_common_types" }
-tari_comms = { git = "https://github.com/tari-project/tari.git", tag = "v0.47.0-pre.0", package = "tari_comms" }
+tari_app_grpc = { git = "https://github.com/tari-project/tari.git", tag = "v0.49.0-pre.0", package = "tari_app_grpc" }
+tari_app_utilities = { git = "https://github.com/tari-project/tari.git", tag = "v0.49.0-pre.0", package = "tari_app_utilities" }
+tari_base_node_grpc_client = { git = "https://github.com/tari-project/tari.git", tag = "v0.49.0-pre.0", version = "0.1.0", package = "tari_base_node_grpc_client" }
+tari_common = { git = "https://github.com/tari-project/tari.git", tag = "v0.49.0-pre.0", package = "tari_common" }
+tari_common_types = { git = "https://github.com/tari-project/tari.git", tag = "v0.49.0-pre.0", package = "tari_common_types" }
+tari_comms = { git = "https://github.com/tari-project/tari.git", tag = "v0.49.0-pre.0", package = "tari_comms" }
 tari_comms_logging = { path = "../../comms/tari_comms_logging" }
-tari_comms_rpc_macros = { git = "https://github.com/tari-project/tari.git", tag = "v0.47.0-pre.0", package = "tari_comms_rpc_macros" }
-tari_core = { git = "https://github.com/tari-project/tari.git", tag = "v0.47.0-pre.0", package = "tari_core", default-features = false, features = ["transactions"] }
-tari_crypto = { git = "https://github.com/tari-project/tari-crypto.git", tag = "v0.16.6" }
-tari_p2p = { git = "https://github.com/tari-project/tari.git", tag = "v0.47.0-pre.0", package = "tari_p2p" }
-tari_shutdown = { git = "https://github.com/tari-project/tari.git", tag = "v0.47.0-pre.0", package = "tari_shutdown" }
-tari_storage = { git = "https://github.com/tari-project/tari.git", tag = "v0.47.0-pre.0", package = "tari_storage" }
+tari_comms_rpc_macros = { git = "https://github.com/tari-project/tari.git", tag = "v0.49.0-pre.0", package = "tari_comms_rpc_macros" }
+tari_core = { git = "https://github.com/tari-project/tari.git", tag = "v0.49.0-pre.0", package = "tari_core", default-features = false, features = ["transactions"] }
+tari_crypto = { git = "https://github.com/tari-project/tari-crypto.git", tag = "v0.16.8" }
+tari_p2p = { git = "https://github.com/tari-project/tari.git", tag = "v0.49.0-pre.0", package = "tari_p2p" }
+tari_shutdown = { git = "https://github.com/tari-project/tari.git", tag = "v0.49.0-pre.0", package = "tari_shutdown" }
+tari_storage = { git = "https://github.com/tari-project/tari.git", tag = "v0.49.0-pre.0", package = "tari_storage" }
 
 tari_dan_app_grpc = { path = "../tari_dan_app_grpc" }
 tari_dan_app_utilities = { path = "../tari_dan_app_utilities" }

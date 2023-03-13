@@ -53,15 +53,16 @@ async fn when_i_burn_on_wallet(
     assert!(resp.is_success);
     world.commitments.insert(commitment, resp.commitment);
     // TODO: use proto::transaction::CommitmentSignature to deserialize once we update tari to include https://github.com/tari-project/tari/pull/5200
+    let ownership_proof = resp.ownership_proof.unwrap();
     world.commitment_ownership_proofs.insert(
         proof,
         RistrettoComSig::new(
-            Commitment::from_public_key(&PublicKey::from_bytes(&resp.ownership_proof[0..32]).unwrap()),
-            PrivateKey::from_bytes(&resp.ownership_proof[32..64]).unwrap(),
-            PrivateKey::from_bytes(&resp.ownership_proof[64..]).unwrap(),
+            Commitment::from_public_key(&PublicKey::from_bytes(&ownership_proof.public_nonce).unwrap()),
+            PrivateKey::from_bytes(&ownership_proof.u).unwrap(),
+            PrivateKey::from_bytes(&ownership_proof.v).unwrap(),
         ),
     );
-    world.rangeproofs.insert(range_proof, resp.rangeproof);
+    world.rangeproofs.insert(range_proof, resp.range_proof);
 }
 
 #[when(expr = "wallet {word} has at least {int} {word}")]

@@ -102,7 +102,7 @@ pub struct ShardKey {
 pub async fn run_validator_node(config: &ApplicationConfig, shutdown_signal: ShutdownSignal) -> Result<(), ExitError> {
     let node_identity = setup_node_identity(
         &config.validator_node.identity_file,
-        config.validator_node.public_address.as_ref(),
+        config.validator_node.public_address.iter().cloned().collect::<Vec<_>>(),
         true,
         DAN_PEER_FEATURES,
     )?;
@@ -118,7 +118,10 @@ pub async fn run_validator_node(config: &ApplicationConfig, shutdown_signal: Shu
         target: LOG_TARGET,
         "🚀 Node starting with pub key: {}, address: {}",
         node_identity.public_key(),
-        node_identity.public_address()
+        node_identity
+            .public_addresses()
+            .first()
+            .ok_or_else(|| ExitError::new(ExitCode::UnknownError, "public address not found for validator node"))?
     );
 
     let (base_node_client, wallet_client) = create_base_layer_clients(config).await?;

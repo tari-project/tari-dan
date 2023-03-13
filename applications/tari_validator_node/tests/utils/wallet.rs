@@ -133,8 +133,8 @@ pub async fn spawn_wallet(world: &mut TariWorld, wallet_name: String, base_node_
             wallet_config.wallet.p2p.transport.transport_type = TransportType::Tcp;
             wallet_config.wallet.p2p.transport.tcp.listener_address =
                 Multiaddr::from_str(&format!("/ip4/127.0.0.1/tcp/{}", port)).unwrap();
-            wallet_config.wallet.p2p.public_address =
-                Some(wallet_config.wallet.p2p.transport.tcp.listener_address.clone());
+            wallet_config.wallet.p2p.public_addresses =
+                vec![wallet_config.wallet.p2p.transport.tcp.listener_address.clone()];
             wallet_config.wallet.p2p.datastore_path = temp_dir.path().join("peer_db/wallet");
             wallet_config.wallet.p2p.dht = DhtConfig {
                 // Not all platforms support sqlite memory connection urls
