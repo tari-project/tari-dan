@@ -187,6 +187,7 @@ pub async fn handle_get_by_name(
     })
 }
 
+#[allow(clippy::too_many_lines)]
 pub async fn handle_claim_burn(
     context: &HandlerContext,
     req: ClaimBurnRequest,
