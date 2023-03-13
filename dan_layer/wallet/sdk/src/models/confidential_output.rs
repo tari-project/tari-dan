@@ -4,12 +4,14 @@
 use std::str::FromStr;
 
 use tari_common_types::types::{Commitment, PrivateKey, PublicKey};
+use tari_engine_types::substate::SubstateAddress;
 
 use crate::models::ConfidentialProofId;
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
-pub struct ConfidentialOutput {
-    pub account_name: String,
+pub struct ConfidentialOutputModel {
+    pub account_address: SubstateAddress,
+    pub vault_address: SubstateAddress,
     pub commitment: Commitment,
     pub value: u64,
     pub sender_public_nonce: Option<PublicKey>,
@@ -22,7 +24,6 @@ pub struct ConfidentialOutput {
 // TODO: Better name?
 #[derive(Debug, Clone)]
 pub struct ConfidentialOutputWithMask {
-    pub account_name: String,
     pub commitment: Commitment,
     pub value: u64,
     pub mask: PrivateKey,
@@ -31,10 +32,19 @@ pub struct ConfidentialOutputWithMask {
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub enum OutputStatus {
+    /// The output is available for spending
     Unspent,
+    /// The output has been spent.
     Spent,
+    /// The output is locked for spending. Once the transaction has been accepted, this output becomes Spent.
     Locked,
+    /// The output is locked as an unconfirmed output. Once the transaction has been accepted, this output becomes
+    /// Unspent.
     LockedUnconfirmed,
+    /// This output existing in the vault but could not be validated successfully, meaning the encrypted value and/or
+    /// mask were not constructed correctly by the sender. This output will not "be counted" in the confidential
+    /// balance.
+    Invalid,
 }
 
 impl OutputStatus {
@@ -44,6 +54,7 @@ impl OutputStatus {
             Self::Spent => "Spent",
             Self::Locked => "Locked",
             Self::LockedUnconfirmed => "LockedUnconfirmed",
+            Self::Invalid => "Invalid",
         }
     }
 }

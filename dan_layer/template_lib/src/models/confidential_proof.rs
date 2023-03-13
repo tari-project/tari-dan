@@ -52,3 +52,9 @@ impl EncryptedValue {
         24
     }
 }
+
+impl AsRef<[u8]> for EncryptedValue {
+    fn as_ref(&self) -> &[u8] {
+        &self.0
+    }
+}

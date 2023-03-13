@@ -7,8 +7,9 @@ use axum_jrpc::error::{JsonRpcError, JsonRpcErrorReason};
 use serde_json::json;
 use tari_crypto::commitment::HomomorphicCommitmentFactory;
 use tari_dan_wallet_sdk::{
+    apis::key_manager,
     confidential::{get_commitment_factory, ConfidentialProofStatement},
-    models::{ConfidentialOutput, OutputStatus},
+    models::{ConfidentialOutputModel, OutputStatus},
 };
 use tari_wallet_daemon_client::types::{
     ConfidentialCreateOutputProofRequest,
@@ -19,7 +20,7 @@ use tari_wallet_daemon_client::types::{
     ProofsGenerateResponse,
 };
 
-use crate::handlers::{HandlerContext, OUTPUT_KEYMANAGER_BRANCH, TRANSACTION_KEYMANAGER_BRANCH};
+use crate::handlers::HandlerContext;
 
 pub async fn handle_create_transfer_proof(
     context: &HandlerContext,
@@ -37,21 +38,20 @@ pub async fn handle_create_transfer_proof(
     }
 
     let account = sdk.accounts_api().get_account_by_name(&req.source_account_name)?;
-    let proof_id = sdk
-        .confidential_outputs_api()
-        .add_proof(req.source_account_name.clone())?;
+    let vault = sdk
+        .accounts_api()
+        .get_vault_by_resource(&account.address, &req.resource_address)?;
+    let proof_id = sdk.confidential_outputs_api().add_proof(&vault.address)?;
     // Lock inputs we're going to spend
-    let (inputs, total_input_value) = sdk.confidential_outputs_api().lock_outputs_by_amount(
-        &req.source_account_name,
-        req.amount.value() as u64,
-        proof_id,
-    )?;
+    let (inputs, total_input_value) =
+        sdk.confidential_outputs_api()
+            .lock_outputs_by_amount(&vault.address, req.amount.value() as u64, proof_id)?;
 
     // TODO: Any errors from here need to unlock the outputs, ideally just roll back (refactor required but doable).
 
     let (output_mask, public_nonce) = sdk
         .confidential_crypto_api()
-        .derive_output_mask(&req.destination_stealth_public_key);
+        .derive_output_mask_for_destination(&req.destination_stealth_public_key);
 
     let output_statement = ConfidentialProofStatement {
         amount: req.amount,
@@ -61,9 +61,10 @@ pub async fn handle_create_transfer_proof(
     };
 
     let change_amount = total_input_value - req.amount.value() as u64;
-    let change_key = sdk.key_manager_api().next_key(OUTPUT_KEYMANAGER_BRANCH)?;
-    sdk.confidential_outputs_api().add_output(ConfidentialOutput {
-        account_name: account.name,
+    let change_key = sdk.key_manager_api().next_key(key_manager::OUTPUT_BRANCH)?;
+    sdk.confidential_outputs_api().add_output(ConfidentialOutputModel {
+        account_address: account.address,
+        vault_address: vault.address,
         commitment: get_commitment_factory().commit_value(&change_key.k, change_amount),
         value: change_amount,
         sender_public_nonce: None,
@@ -83,7 +84,7 @@ pub async fn handle_create_transfer_proof(
     // TODO: Should use a different key branch for accounts?
     let inputs = sdk
         .confidential_outputs_api()
-        .resolve_output_masks(inputs, TRANSACTION_KEYMANAGER_BRANCH)?;
+        .resolve_output_masks(inputs, key_manager::TRANSACTION_BRANCH)?;
 
     let proof =
         sdk.confidential_crypto_api()
@@ -116,7 +117,7 @@ pub async fn handle_create_output_proof(
     req: ConfidentialCreateOutputProofRequest,
 ) -> Result<ConfidentialCreateOutputProofResponse, anyhow::Error> {
     let sdk = context.wallet_sdk();
-    let key = sdk.key_manager_api().next_key(TRANSACTION_KEYMANAGER_BRANCH)?;
+    let key = sdk.key_manager_api().next_key(key_manager::TRANSACTION_BRANCH)?;
     let statement = ConfidentialProofStatement {
         amount: req.amount,
         mask: key.k,

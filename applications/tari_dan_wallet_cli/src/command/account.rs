@@ -25,14 +25,19 @@ use std::{io, io::Read};
 use anyhow::anyhow;
 use clap::{Args, Subcommand};
 use serde_json as json;
-use tari_template_lib::prelude::ComponentAddress;
 use tari_wallet_daemon_client::{
-    types::{AccountsCreateRequest, AccountsGetBalancesRequest, AccountsInvokeRequest, ClaimBurnRequest},
+    types::{
+        AccountByNameResponse,
+        AccountsCreateRequest,
+        AccountsGetBalancesRequest,
+        AccountsInvokeRequest,
+        ClaimBurnRequest,
+    },
     WalletDaemonClient,
 };
 
 use crate::{
-    command::transaction::{print_execution_results, CliArg},
+    command::transaction::{print_execution_results, summarize_finalize_result, CliArg},
     table::Table,
     table_row,
 };
@@ -79,10 +84,11 @@ pub struct GetByNameArgs {
 
 #[derive(Debug, Args, Clone)]
 pub struct ClaimBurnArgs {
-    #[clap(long, short = 'a')]
-    account_address: ComponentAddress,
+    #[clap(long, short = 'n', alias = "name")]
+    account_name: String,
+    /// Optional proof JSON from the L1 console wallet. If not provided, you will be prompted to enter it.
     #[clap(long, short = 'j', alias = "json")]
-    proof_json: Option<String>,
+    proof_json: Option<serde_json::Value>,
     #[clap(long, short = 'f')]
     fee: Option<u64>,
 }
@@ -180,12 +186,14 @@ async fn handle_get_balances(args: GetBalancesArgs, client: &mut WalletDaemonCli
 
 pub async fn handle_claim_burn(args: ClaimBurnArgs, client: &mut WalletDaemonClient) -> Result<(), anyhow::Error> {
     let ClaimBurnArgs {
-        account_address,
+        account_name,
         proof_json,
         fee,
     } = args;
 
-    let proof_json = if let Some(proof_json) = proof_json {
+    let AccountByNameResponse { account_address } = client.accounts_get_by_name(account_name).await?;
+
+    let claim_proof = if let Some(proof_json) = proof_json {
         proof_json
     } else {
         println!(
@@ -195,29 +203,29 @@ pub async fn handle_claim_burn(args: ClaimBurnArgs, client: &mut WalletDaemonCli
 
         let mut proof_json = String::new();
         io::stdin().read_to_string(&mut proof_json)?;
-        println!("{}", proof_json);
-        proof_json.trim().to_string()
+        json::from_str::<json::Value>(proof_json.trim()).map_err(|e| anyhow!("Failed to parse proof JSON: {}", e))?
     };
 
-    let claim = json::from_str::<json::Value>(&proof_json).map_err(|e| anyhow!("Failed to parse proof JSON: {}", e))?;
-    println!("JSON OK");
+    println!("✅ Claim burn submitted");
 
     let req = ClaimBurnRequest {
-        account: account_address,
-        claim,
+        account: account_address.as_component_address().unwrap(),
+        claim_proof,
         fee: fee.unwrap_or(1),
     };
 
-    client
+    let resp = client
         .claim_burn(req)
         .await
         .map_err(|e| anyhow!("Failed to claim burn with error = {}", e.to_string()))?;
+
+    summarize_finalize_result(&resp.result);
     Ok(())
 }
 
 async fn handle_list(client: &mut WalletDaemonClient) -> Result<(), anyhow::Error> {
     println!("Submitted account list transaction...");
-    let resp = client.list_accounts(100).await?;
+    let resp = client.list_accounts(0, 100).await?;
 
     if resp.accounts.is_empty() {
         println!("No accounts found");

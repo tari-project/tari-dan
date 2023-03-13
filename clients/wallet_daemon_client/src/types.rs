@@ -25,7 +25,7 @@ use tari_common_types::types::{FixedHash, PublicKey};
 use tari_dan_common_types::{serde_with, QuorumCertificate, ShardId};
 use tari_dan_wallet_sdk::models::{Account, ConfidentialProofId, TransactionStatus, VersionedSubstateAddress};
 use tari_engine_types::{
-    commit_result::{FinalizeResult, TransactionResult},
+    commit_result::FinalizeResult,
     execution_result::ExecutionResult,
     instruction::Instruction,
     substate::SubstateAddress,
@@ -177,6 +177,7 @@ pub struct AccountsInvokeResponse {
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct AccountsListRequest {
+    pub offset: u64,
     pub limit: u64,
 }
 
@@ -211,6 +212,7 @@ pub struct AccountByNameResponse {
 pub struct ProofsGenerateRequest {
     pub amount: Amount,
     pub source_account_name: String,
+    pub resource_address: ResourceAddress,
     pub destination_account: ComponentAddress,
     // TODO: For now, we assume that this is obtained "somehow" from the destination account
     pub destination_stealth_public_key: PublicKey,
@@ -248,7 +250,7 @@ pub struct ConfidentialCreateOutputProofResponse {
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct ClaimBurnRequest {
     pub account: ComponentAddress,
-    pub claim: serde_json::Value,
+    pub claim_proof: serde_json::Value,
     pub fee: u64,
 }
 
@@ -256,7 +258,7 @@ pub struct ClaimBurnRequest {
 pub struct ClaimBurnResponse {
     #[serde(with = "serde_with::hex")]
     pub hash: FixedHash,
-    pub result: TransactionResult,
+    pub result: FinalizeResult,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]

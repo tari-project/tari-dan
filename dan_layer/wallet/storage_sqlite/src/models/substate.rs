@@ -5,7 +5,7 @@ use chrono::NaiveDateTime;
 use diesel::{Identifiable, Queryable};
 use tari_common_types::types::FixedHash;
 use tari_dan_wallet_sdk::{
-    models::{SubstateRecord, VersionedSubstateAddress},
+    models::{SubstateModel, VersionedSubstateAddress},
     storage::WalletStorageError,
 };
 use tari_utilities::hex::Hex;
@@ -26,8 +26,8 @@ pub struct Substate {
 }
 
 impl Substate {
-    pub fn try_to_record(&self) -> Result<SubstateRecord, WalletStorageError> {
-        Ok(SubstateRecord {
+    pub fn try_to_record(&self) -> Result<SubstateModel, WalletStorageError> {
+        Ok(SubstateModel {
             module_name: self.module_name.clone(),
             address: VersionedSubstateAddress {
                 address: self.address.parse().unwrap(),

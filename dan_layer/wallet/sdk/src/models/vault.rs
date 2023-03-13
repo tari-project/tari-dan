@@ -2,12 +2,12 @@
 //   SPDX-License-Identifier: BSD-3-Clause
 
 use tari_engine_types::substate::SubstateAddress;
-use tari_template_lib::models::Amount;
+use tari_template_lib::models::{Amount, ResourceAddress};
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
-pub struct Account {
-    pub name: String,
+pub struct VaultModel {
+    pub account_address: SubstateAddress,
     pub address: SubstateAddress,
-    pub key_index: u64,
+    pub resource_address: ResourceAddress,
     pub balance: Amount,
 }

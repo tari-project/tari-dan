@@ -15,6 +15,10 @@ use crate::storage::{WalletStorageError, WalletStore, WalletStoreReader, WalletS
 
 pub type WalletKeyManager = KeyManager<RistrettoSecretKey, Blake256>;
 
+// TODO: Think these branches should be internal to the SDK
+pub const TRANSACTION_BRANCH: &str = "transactions";
+pub const OUTPUT_BRANCH: &str = "outputs";
+
 pub struct KeyManagerApi<'a, TStore> {
     store: &'a TStore,
     cipher_seed: &'a CipherSeed,

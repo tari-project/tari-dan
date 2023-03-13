@@ -36,7 +36,7 @@ mod confidential_proof;
 pub use confidential_proof::*;
 
 mod layer_one_commitment;
-pub use layer_one_commitment::LayerOneCommitmentAddress;
+pub use layer_one_commitment::UnclaimedConfidentialOutputAddress;
 
 mod metadata;
 pub use metadata::Metadata;

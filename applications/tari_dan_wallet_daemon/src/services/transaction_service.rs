@@ -59,7 +59,7 @@ where TStore: WalletStore + Clone + Send + Sync + 'static
                     break Ok(());
                 }
                 Ok(event) = events_subscription.recv() => {
-                    if let Err(e) = self.on_event(event).await{
+                    if let Err(e) = self.on_event(event) {
                         error!(target: LOG_TARGET, "Error handling event: {}", e);
                     }
                 },
@@ -152,12 +152,12 @@ where TStore: WalletStore + Clone + Send + Sync + 'static
         Ok(())
     }
 
-    async fn on_event(&mut self, event: WalletEvent) -> Result<(), TransactionServiceError> {
+    fn on_event(&mut self, event: WalletEvent) -> Result<(), TransactionServiceError> {
         match event {
             WalletEvent::TransactionSubmitted(_) => {
                 let _ = self.trigger_poll.send(());
             },
-            WalletEvent::TransactionFinalized(_) => {},
+            WalletEvent::TransactionFinalized(_) | WalletEvent::AccountChanged(_) => {},
         }
         Ok(())
     }
