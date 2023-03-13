@@ -57,7 +57,7 @@ pub struct Auction {
     ending_epoch: u64,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct Bid {
     address: ComponentAddress,
     bid: Vault

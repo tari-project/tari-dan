@@ -24,7 +24,7 @@ use std::{fmt, vec::Vec};
 
 use tari_template_lib::prelude::*;
 
-#[derive(Debug, Clone, Serialize, Deserialize, Hash)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, Hash)]
 #[repr(i32)]
 pub enum Emoji {
     Smile = 0x00,
