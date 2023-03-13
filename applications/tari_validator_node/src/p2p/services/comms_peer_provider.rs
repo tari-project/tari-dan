@@ -99,7 +99,7 @@ impl PeerProvider for CommsPeerProvider {
             return Err(CommsPeerProviderError::PeerNotFound);
         }
         // let identity_signature = peer.identity_signature;
-        let mut peer = Peer::new(
+        let peer = Peer::new(
             peer.identity,
             node_id,
             MultiaddressesWithStats::new(

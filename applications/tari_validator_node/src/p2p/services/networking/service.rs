@@ -22,7 +22,6 @@
 
 use std::sync::Arc;
 
-use anyhow::anyhow;
 use log::*;
 use tari_comms::{
     connectivity::{ConnectivityEvent, ConnectivityRequester},
@@ -182,6 +181,7 @@ impl Networking {
 
         match self.peer_provider.get_peer(&announce.identity).await.optional()? {
             Some(existing_peer) => {
+                // TODO: Verify identity signatures
                 // let candidate = peer
                 //     .identity_signature
                 //     .as_ref()
@@ -192,13 +192,16 @@ impl Networking {
                 //     .map(|id| candidate.updated_at() > id.updated_at())
                 //     .unwrap_or(true)
                 // {
-                //     self.peer_provider.update_peer(peer).await?;
 
-                //     // TODO: should not forward announce to sending peer
-                //     self.outbound
-                //         .flood(Default::default(), DanMessage::NetworkAnnounce(Box::new(announce)))
-                //         .await?;
-                // }
+                // If there was an update, we forward the announce to other peers
+                if existing_peer.addresses != peer.addresses {
+                    self.peer_provider.update_peer(peer).await?;
+
+                    // TODO: should not forward announce to sending peer
+                    self.outbound
+                        .flood(Default::default(), DanMessage::NetworkAnnounce(Box::new(announce)))
+                        .await?;
+                }
             },
             None => {
                 self.peer_provider.add_peer(peer).await?;

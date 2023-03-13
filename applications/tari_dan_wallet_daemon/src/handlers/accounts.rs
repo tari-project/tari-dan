@@ -265,7 +265,7 @@ pub async fn handle_claim_burn(
         .key_manager_api()
         .get_key_or_active(TRANSACTION_KEYMANAGER_BRANCH, None)?;
 
-    let mut inputs = sdk.substate_api().load_dependent_substates(&[account.clone().into()])?;
+    let mut inputs = sdk.substate_api().load_dependent_substates(&[account.into()])?;
 
     // add the commitment substate address as input to the claim burn transaction
     let commitment_substate_address = VersionedSubstateAddress {

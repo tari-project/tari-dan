@@ -258,9 +258,10 @@ async fn test_hs_waiter_leader_sends_new_proposal_when_enough_votes_are_received
     let registered_vn_keys = vec![node1.clone(), node2.clone()];
 
     // create the VN set mmr
-    let mut vn_bmt_vec = Vec::new();
-    vn_bmt_vec.push(vn_bmt_node_hash(&node1, &ShardId::zero()).to_vec());
-    vn_bmt_vec.push(vn_bmt_node_hash(&node2, &ShardId::zero()).to_vec());
+    let vn_bmt_vec = vec![
+        vn_bmt_node_hash(&node1, &ShardId::zero()).to_vec(),
+        vn_bmt_node_hash(&node2, &ShardId::zero()).to_vec(),
+    ];
 
     let vn_bmt = ValidatorNodeBMT::create(vn_bmt_vec);
 
