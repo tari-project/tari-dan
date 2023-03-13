@@ -67,7 +67,7 @@ impl<'a, TStore: WalletStore> SubstatesApi<'a, TStore> {
 
             let status = resp.status;
             if let Some(value) = resp.value {
-                break Ok((
+                return Ok((
                     VersionedSubstateAddress {
                         address: address.clone(),
                         version,
