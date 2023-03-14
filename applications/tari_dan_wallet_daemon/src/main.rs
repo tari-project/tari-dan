@@ -28,6 +28,7 @@ mod services;
 
 use std::error::Error;
 
+use tari_common::initialize_logging;
 use tari_dan_wallet_daemon::{cli::Cli, run_tari_dan_wallet_daemon};
 use tari_shutdown::Shutdown;
 
@@ -37,6 +38,14 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     let shutdown = Shutdown::new();
     let shutdown_signal = shutdown.to_signal();
+
+    if let Err(e) = initialize_logging(
+        cli.base_dir().join("config/logs.yml").as_path(),
+        &cli.base_dir(),
+        include_str!("../log4rs_sample.yml"),
+    ) {
+        eprintln!("{}", e);
+    }
 
     run_tari_dan_wallet_daemon(cli, shutdown_signal).await
 }

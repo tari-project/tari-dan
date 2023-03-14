@@ -55,6 +55,7 @@ lmdb-zero = "0.4.4"
 log = { version = "0.4.8", features = ["std"] }
 log4rs = { version = "1.1.1", features = ["rolling_file_appender", "compound_policy", "size_trigger", "fixed_window_roller"] }
 mini-moka = "0.10.0"
+multiaddr = "0.17.0"
 prost = "0.9"
 rand = "0.7"
 reqwest = "0.11.11"

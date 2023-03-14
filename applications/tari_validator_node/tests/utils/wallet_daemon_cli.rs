@@ -20,45 +20,66 @@
 //   WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //   USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use std::net::{IpAddr, Ipv4Addr, SocketAddr, SocketAddrV4};
-
-use tari_comms::multiaddr::Multiaddr;
-use tari_dan_wallet_daemon::{cli::Cli, run_tari_dan_wallet_daemon};
-use tari_dan_wallet_sdk::{DanWalletSdk, WalletSdkConfig};
-use tari_dan_wallet_storage_sqlite::SqliteWalletStore;
-use tari_shutdown::Shutdown;
-use tari_wallet_daemon_client::WalletDaemonClient;
-use tempfile::tempdir;
-
-use crate::{
-    utils::{helpers::get_os_assigned_ports, logging::get_base_dir},
-    TariWorld,
+use serde::Serialize;
+use tari_crypto::{
+    ristretto::{RistrettoPublicKey, RistrettoSecretKey},
+    signatures::CommitmentSignature,
+    tari_utilities::message_format::MessageFormat,
+};
+use tari_template_lib::prelude::ComponentAddress;
+use tari_wallet_daemon_client::{
+    types::{ClaimBurnRequest, ClaimBurnResponse},
+    WalletDaemonClient,
 };
 
-#[derive(Debug)]
-pub struct DanWalletDaemonProcess {
-    pub name: String,
-    pub port: u16,
-    pub json_rpc_port: u16,
-    pub validator_node_grpc_port: u16,
-    pub temp_path_dir: String,
-    pub shutdown: Shutdown,
+use super::wallet_daemon::get_walletd_client;
+use crate::TariWorld;
+
+pub async fn claim_burn(
+    world: &mut TariWorld,
+    account_address: ComponentAddress,
+    commitment: Vec<u8>,
+    range_proof: Vec<u8>,
+    ownership_proof: CommitmentSignature<RistrettoPublicKey, RistrettoSecretKey>,
+    wallet_daemon_name: String,
+) -> ClaimBurnResponse {
+    #[derive(Serialize)]
+    struct OwnershipProof {
+        public_nonce: String,
+        u: String,
+        v: String,
+    }
+
+    #[derive(Serialize)]
+    struct ClaimValue {
+        commitment: String,
+        ownership_proof: OwnershipProof,
+        range_proof: String,
+    }
+
+    let value = ClaimValue {
+        commitment: commitment.to_base64().unwrap(),
+        ownership_proof: OwnershipProof {
+            public_nonce: ownership_proof.public_nonce().to_base64().unwrap(),
+            u: ownership_proof.u().clone().to_base64().unwrap(),
+            v: ownership_proof.v().to_base64().unwrap(),
+        },
+        range_proof: range_proof.to_base64().unwrap(),
+    };
+
+    let claim = serde_json::to_value(value).unwrap();
+
+    let claim_burn_request = ClaimBurnRequest {
+        account: account_address,
+        claim,
+        fee: 1,
+    };
+
+    let mut client = get_wallet_daemon_client(world, wallet_daemon_name).await;
+    client.claim_burn(claim_burn_request).await.unwrap()
 }
 
-pub fn spawn_wallet_daemon(world: &mut TariWorld, wallet_daemon_name: String, validator_node_name: String) {
-    let (port, json_rpc_port) = get_os_assigned_ports();
-    let base_dir = get_base_dir();
-
-    let validator_node_grpc_port = world.validator_nodes.get(&validator_node_name).unwrap().port;
-    let shutdown = Shutdown::new();
-    let shutdown_signal = shutdown.to_signal();
-
-    let listen_addr = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), validator_node_grpc_port);
-    let validator_node_endpoint = Multiaddr::new();
-
-    let cli = Cli {
-        listen_addr: Some(listen_addr),
-        base_dir: Some(base_dir),
-        validator_node_endpoint,
-    };
+async fn get_wallet_daemon_client(world: &TariWorld, wallet_daemon_name: String) -> WalletDaemonClient {
+    let port = world.wallet_daemons.get(&wallet_daemon_name).unwrap().json_rpc_port;
+    get_walletd_client(port).await
 }

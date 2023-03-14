@@ -79,7 +79,7 @@ use crate::utils::{
     template::{send_template_registration, RegisteredTemplate},
     validator_node::{get_vn_client, ValidatorNodeProcess},
     wallet::WalletProcess,
-    wallet_daemon_cli::DanWalletDaemonProcess,
+    wallet_daemon::{spawn_wallet_daemon, DanWalletDaemonProcess},
 };
 
 #[derive(Debug, Default, WorldInit)]
@@ -101,7 +101,7 @@ pub struct TariWorld {
     addresses: IndexMap<String, String>,
     num_databases_saved: usize,
     account_public_keys: IndexMap<String, (RistrettoSecretKey, PublicKey)>,
-    wallet_daemon: IndexMap<String, DanWalletDaemonProcess>,
+    wallet_daemons: IndexMap<String, DanWalletDaemonProcess>,
 }
 
 impl TariWorld {
@@ -250,6 +250,17 @@ async fn start_validator_node(world: &mut TariWorld, vn_name: String, bn_name: S
 async fn stop_validator_node(world: &mut TariWorld, vn_name: String) {
     let vn_ps = world.validator_nodes.get_mut(&vn_name).unwrap();
     vn_ps.stop();
+}
+
+#[given(expr = "a wallet daemon {word} connected to validator node {word}")]
+async fn start_wallet_daemon(world: &mut TariWorld, wallet_daemon_name: String, vn_name: String) {
+    spawn_wallet_daemon(world, wallet_daemon_name, vn_name).await;
+}
+
+#[when(expr = "I stop wallet daemon {word}")]
+async fn stop_wallet_daemon(world: &mut TariWorld, wallet_daemon_name: String) {
+    let walletd_ps = world.wallet_daemons.get_mut(&wallet_daemon_name).unwrap();
+    walletd_ps.stop();
 }
 
 #[when(expr = "validator node {word} sends a registration transaction")]

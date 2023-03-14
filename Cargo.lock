@@ -7005,6 +7005,7 @@ dependencies = [
  "log",
  "log4rs",
  "mini-moka",
+ "multiaddr 0.17.0",
  "prost 0.9.0",
  "rand 0.7.3",
  "reqwest",
