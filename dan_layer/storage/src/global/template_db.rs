@@ -22,6 +22,7 @@
 
 use std::str::FromStr;
 
+use chrono::NaiveDateTime;
 use tari_common_types::types::FixedHash;
 
 use crate::global::GlobalDbAdapter;
@@ -64,15 +65,49 @@ pub struct DbTemplate {
     pub template_address: FixedHash,
     pub url: String,
     pub height: u64,
-    pub compiled_code: Vec<u8>,
+    pub template_type: DbTemplateType,
+    pub compiled_code: Option<Vec<u8>>,
+    pub flow_json: Option<String>,
+    pub manifest: Option<String>,
     pub status: TemplateStatus,
-    pub added_at: time::OffsetDateTime,
+    pub added_at: NaiveDateTime,
 }
 
 #[derive(Debug, Clone, Default)]
 pub struct DbTemplateUpdate {
     pub compiled_code: Option<Vec<u8>>,
     pub status: Option<TemplateStatus>,
+}
+
+#[derive(Debug, Clone)]
+pub enum DbTemplateType {
+    Wasm,
+    Flow,
+    Manifest,
+}
+
+impl FromStr for DbTemplateType {
+    type Err = ();
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let normalized = s.trim().to_lowercase();
+        match normalized.as_str() {
+            "wasm" => Ok(DbTemplateType::Wasm),
+            "flow" => Ok(DbTemplateType::Flow),
+            "manifest" => Ok(DbTemplateType::Manifest),
+            _ => Err(()),
+        }
+    }
+}
+
+impl DbTemplateType {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            DbTemplateType::Wasm => "Wasm",
+            DbTemplateType::Flow => "Flow",
+            DbTemplateType::Manifest => "Manifest",
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, Default)]

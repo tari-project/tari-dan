@@ -156,9 +156,12 @@ impl GlobalDbAdapter for SqliteGlobalDbAdapter {
                 template_address: t.template_address.try_into()?,
                 url: t.url,
                 height: t.height as u64,
+                template_type: t.template_type.parse().expect("DB template type corrupted"),
                 compiled_code: t.compiled_code,
+                flow_json: t.flow_json,
+                manifest: t.manifest,
                 status: t.status.parse().expect("DB status corrupted"),
-                added_at: time::OffsetDateTime::from_unix_timestamp(t.added_at).expect("added_at timestamp corrupted"),
+                added_at: t.added_at,
             })),
             None => Ok(None),
         }
@@ -183,10 +186,12 @@ impl GlobalDbAdapter for SqliteGlobalDbAdapter {
                     template_address: t.template_address.try_into()?,
                     url: t.url,
                     height: t.height as u64,
+                    template_type: t.template_type.parse().expect("DB template type corrupted"),
                     compiled_code: t.compiled_code,
+                    flow_json: t.flow_json,
+                    manifest: t.manifest,
                     status: t.status.parse().expect("DB status corrupted"),
-                    added_at: time::OffsetDateTime::from_unix_timestamp(t.added_at)
-                        .expect("added_at timestamp corrupted"),
+                    added_at: t.added_at,
                 })
             })
             .collect()
@@ -197,12 +202,13 @@ impl GlobalDbAdapter for SqliteGlobalDbAdapter {
             template_name: item.template_name,
             template_address: item.template_address.to_vec(),
             url: item.url.to_string(),
-            height: item.height as i32,
-            compiled_code: item.compiled_code.clone(),
+            height: item.height as i64,
+            template_type: item.template_type.as_str().to_string(),
+            compiled_code: item.compiled_code,
+            flow_json: item.flow_json,
             status: item.status.as_str().to_string(),
-            // TODO
             wasm_path: None,
-            added_at: item.added_at.unix_timestamp(),
+            manifest: None,
         };
         diesel::insert_into(templates::table)
             .values(new_template)

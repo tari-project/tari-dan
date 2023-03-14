@@ -54,6 +54,7 @@ pub struct TemplateRegistrationRequest {
     #[serde(with = "serde_with::base64")]
     pub binary_sha: Vec<u8>,
     pub binary_url: String,
+    pub template_type: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

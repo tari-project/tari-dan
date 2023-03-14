@@ -134,6 +134,9 @@ impl TemplateTest {
         let addr = self.name_to_template.get(module_name).unwrap();
         match self.package.get_template_by_address(addr).unwrap() {
             LoadedTemplate::Wasm(wasm) => wasm,
+            LoadedTemplate::Flow(_) => {
+                panic!("Not supported")
+            },
         }
     }
 

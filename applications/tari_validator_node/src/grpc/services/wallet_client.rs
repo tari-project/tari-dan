@@ -27,6 +27,7 @@ use tari_app_grpc::tari_rpc::{
     BuildInfo,
     CreateTemplateRegistrationRequest,
     CreateTemplateRegistrationResponse,
+    FlowInfo,
     GetBalanceRequest,
     GetBalanceResponse,
     RegisterValidatorNodeRequest,
@@ -112,9 +113,13 @@ impl GrpcWalletClient {
                 template_version: data.template_version.into(),
                 // TODO: fill real abi_version
                 template_type: Some(TemplateType {
-                    template_type: Some(tari_app_grpc::tari_rpc::template_type::TemplateType::Wasm(WasmInfo {
-                        abi_version: 1,
-                    })),
+                    template_type: Some(match data.template_type.as_str() {
+                        "wasm" => {
+                            tari_app_grpc::tari_rpc::template_type::TemplateType::Wasm(WasmInfo { abi_version: 1 })
+                        },
+                        "flow" => tari_app_grpc::tari_rpc::template_type::TemplateType::Flow(FlowInfo {}),
+                        _ => return Err(DigitalAssetError::FatalError("Unknown template type".into())),
+                    }),
                 }),
                 build_info: Some(BuildInfo {
                     repo_url: data.repo_url,

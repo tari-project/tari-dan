@@ -22,9 +22,12 @@
 
 use std::{collections::HashMap, convert::TryFrom, fs};
 
+use chrono::Utc;
 use log::*;
+use tari_core::transactions::transaction_components::TemplateType;
 use tari_dan_app_utilities::template_manager::{
     Template,
+    TemplateExecutable,
     TemplateManagerError,
     TemplateMetadata,
     TemplateRegistration,
@@ -34,7 +37,7 @@ use tari_dan_engine::{
     packager::{LoadedTemplate, TemplateModuleLoader},
     wasm::WasmModule,
 };
-use tari_dan_storage::global::{DbTemplate, DbTemplateUpdate, GlobalDb, TemplateStatus};
+use tari_dan_storage::global::{DbTemplate, DbTemplateType, DbTemplateUpdate, GlobalDb, TemplateStatus};
 use tari_dan_storage_sqlite::global::SqliteGlobalDbAdapter;
 use tari_engine_types::calculate_template_binary_hash;
 use tari_template_builtin::get_template_builtin;
@@ -99,7 +102,7 @@ impl TemplateManager {
                 binary_sha: binary_sha.to_vec(),
                 height: 0,
             },
-            compiled_code,
+            executable: TemplateExecutable::CompiledWasm(compiled_code),
         }
     }
 
@@ -134,8 +137,14 @@ impl TemplateManager {
         // first check debug
         if let Some(dbg_replacement) = self.config.debug_replacements().get(address) {
             let mut result: Template = template.into();
-            let binary = fs::read(dbg_replacement).expect("Could not read debug file");
-            result.compiled_code = binary;
+            match &mut result.executable {
+                TemplateExecutable::CompiledWasm(wasm) => {
+                    let binary = fs::read(dbg_replacement).expect("Could not read debug file");
+                    *wasm = binary;
+                },
+                _ => return Err(TemplateManagerError::TemplateUnavailable),
+            }
+
             Ok(result)
         } else {
             Ok(template.into())
@@ -161,8 +170,15 @@ impl TemplateManager {
             url: template.registration.binary_url.into_string(),
             height: template.mined_height,
             status: TemplateStatus::New,
-            compiled_code: vec![],
-            added_at: time::OffsetDateTime::now_utc(),
+            compiled_code: None,
+            added_at: Utc::now().naive_utc(),
+            template_type: match template.registration.template_type {
+                TemplateType::Wasm { .. } => DbTemplateType::Wasm,
+                TemplateType::Flow { .. } => DbTemplateType::Flow,
+                TemplateType::Manifest { .. } => DbTemplateType::Manifest,
+            },
+            flow_json: None,
+            manifest: None,
         };
 
         let mut tx = self.global_db.create_transaction()?;
@@ -202,8 +218,19 @@ impl TemplateProvider for TemplateManager {
 
         let template = self.fetch_template(address)?;
         debug!(target: LOG_TARGET, "CACHE MISS: Template {}", address);
-        let module = WasmModule::from_code(template.compiled_code);
-        let loaded = module.load_template()?;
+        let loaded = match template.executable {
+            TemplateExecutable::CompiledWasm(wasm) => {
+                let module = WasmModule::from_code(wasm);
+                module.load_template()?
+            },
+
+            // _ => return Err(TemplateManagerError::UnsupportedTemplateType),
+            TemplateExecutable::Manifest(_) => return Err(TemplateManagerError::UnsupportedTemplateType),
+            TemplateExecutable::Flow(_) => {
+                todo!()
+            },
+        };
+
         self.cache.insert(*address, loaded.clone());
 
         Ok(loaded)

@@ -194,6 +194,9 @@ impl TransactionProcessor {
                 let process = WasmProcess::start(wasm_module, runtime)?;
                 process.invoke_by_name(function, args)?
             },
+            LoadedTemplate::Flow(_) => {
+                todo!()
+            },
         };
         Ok(result)
     }

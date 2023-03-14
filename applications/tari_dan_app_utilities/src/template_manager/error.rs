@@ -43,6 +43,8 @@ pub enum TemplateManagerError {
     TemplateUnavailable,
     #[error(transparent)]
     PackageError(#[from] PackageError),
+    #[error("Unsupported template type")]
+    UnsupportedTemplateType,
 }
 
 impl IsNotFoundError for TemplateManagerError {

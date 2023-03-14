@@ -311,6 +311,9 @@ impl BaseLayerScanner {
                             )
                             .await?;
                         },
+                        SideChainFeature::ConfidentialOutput(_) => {
+                            todo!();
+                        },
                     }
                 }
             }
