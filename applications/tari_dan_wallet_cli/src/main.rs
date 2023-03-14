@@ -53,6 +53,7 @@ async fn handle_command(command: Command, client: WalletDaemonClient) -> anyhow:
         Command::Keys(cmd) => cmd.handle(client).await?,
         Command::Transactions(cmd) => cmd.handle(client).await?,
         Command::Accounts(cmd) => cmd.handle(client).await?,
+        Command::Proofs(cmd) => cmd.handle(client).await?,
         // Command::Manifests(cmd) => cmd.handle()?,
         // Command::Debug(cmd) => cmd.handle(client).await?,
     }

@@ -91,6 +91,14 @@ impl ConfidentialCryptoApi {
             .map_err(|_| ConfidentialCryptoApiError::FailedDecryptValue)?;
         Ok(value)
     }
+
+    pub fn generate_output_proof(
+        &self,
+        statement: &ConfidentialProofStatement,
+    ) -> Result<ConfidentialOutputProof, ConfidentialCryptoApiError> {
+        let proof = generate_confidential_proof(statement, None)?;
+        Ok(proof)
+    }
 }
 
 fn generate_balance_proof(

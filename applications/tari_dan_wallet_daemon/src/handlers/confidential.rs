@@ -12,6 +12,8 @@ use tari_dan_wallet_sdk::{
     models::{ConfidentialOutputModel, OutputStatus},
 };
 use tari_wallet_daemon_client::types::{
+    ConfidentialCreateOutputProofRequest,
+    ConfidentialCreateOutputProofResponse,
     ProofsCancelRequest,
     ProofsCancelResponse,
     ProofsGenerateRequest,
@@ -108,4 +110,20 @@ pub async fn handle_cancel_transfer(
     let sdk = context.wallet_sdk();
     sdk.confidential_outputs_api().release_proof_outputs(req.proof_id)?;
     Ok(ProofsCancelResponse {})
+}
+
+pub async fn handle_create_output_proof(
+    context: &HandlerContext,
+    req: ConfidentialCreateOutputProofRequest,
+) -> Result<ConfidentialCreateOutputProofResponse, anyhow::Error> {
+    let sdk = context.wallet_sdk();
+    let key = sdk.key_manager_api().next_key(key_manager::TRANSACTION_BRANCH)?;
+    let statement = ConfidentialProofStatement {
+        amount: req.amount,
+        mask: key.k,
+        sender_public_nonce: None,
+        minimum_value_promise: 0,
+    };
+    let proof = sdk.confidential_crypto_api().generate_output_proof(&statement)?;
+    Ok(ConfidentialCreateOutputProofResponse { proof })
 }

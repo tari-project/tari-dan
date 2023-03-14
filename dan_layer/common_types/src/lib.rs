@@ -44,7 +44,6 @@ mod node_addressable;
 pub use node_addressable::NodeAddressable;
 
 mod shard_id;
-
 pub use shard_id::ShardId;
 
 #[derive(Debug, Clone, Encode, Decode, Deserialize, Serialize)]

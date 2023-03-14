@@ -176,9 +176,9 @@ async fn handle_get_balances(args: GetBalancesArgs, client: &mut WalletDaemonCli
     println!();
     let mut table = Table::new();
     table.enable_row_count();
-    table.set_titles(vec!["Resource", "Balance"]);
-    for (resx, amt) in resp.balances {
-        table.add_row(table_row!(resx, amt));
+    table.set_titles(vec!["VaultId", "Resource", "Balance"]);
+    for (vault_id, resx, amt) in resp.balances {
+        table.add_row(table_row!(vault_id, resx, amt));
     }
     table.print_stdout();
     Ok(())
@@ -191,7 +191,7 @@ pub async fn handle_claim_burn(args: ClaimBurnArgs, client: &mut WalletDaemonCli
         fee,
     } = args;
 
-    let AccountByNameResponse { account_address } = client.get_by_name(account_name).await?;
+    let AccountByNameResponse { account_address } = client.accounts_get_by_name(account_name).await?;
 
     let claim_proof = if let Some(proof_json) = proof_json {
         proof_json
@@ -245,7 +245,7 @@ async fn handle_list(client: &mut WalletDaemonClient) -> Result<(), anyhow::Erro
 
 async fn handle_get_by_name(args: GetByNameArgs, client: &mut WalletDaemonClient) -> Result<(), anyhow::Error> {
     println!("Get account component address by its name...");
-    let resp = client.get_by_name(args.name.clone()).await?;
+    let resp = client.accounts_get_by_name(args.name.clone()).await?;
 
     println!("Account {} substate_address: {}", args.name, resp.account_address);
     println!();

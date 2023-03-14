@@ -6559,6 +6559,7 @@ dependencies = [
  "thiserror",
  "time 0.3.20",
  "tokio",
+ "url 2.3.1",
 ]
 
 [[package]]

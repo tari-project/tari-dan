@@ -33,12 +33,6 @@ impl<'a, TStore: WalletStore> SubstatesApi<'a, TStore> {
         Ok(substate)
     }
 
-    pub fn get_substate(&self, address: &SubstateAddress) -> Result<SubstateRecord, SubstateApiError> {
-        let mut tx = self.store.create_read_tx()?;
-        let substate = tx.substates_get(address)?;
-        Ok(substate)
-    }
-
     pub fn load_dependent_substates(
         &self,
         parents: &[SubstateAddress],
