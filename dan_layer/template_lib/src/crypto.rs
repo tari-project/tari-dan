@@ -6,6 +6,7 @@ use serde::{Deserialize, Serialize};
 use serde_big_array::BigArray;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default, Serialize, Deserialize)]
+#[serde(transparent)]
 pub struct RistrettoPublicKeyBytes(
     // #[cfg_attr(feature = "hex", serde(with = "hex::serde"))]
     [u8; RistrettoPublicKeyBytes::length()],
@@ -49,6 +50,7 @@ pub struct InvalidByteLengthError {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(transparent)]
 pub struct BalanceProofSignature(
     // #[cfg_attr(feature = "hex", serde(with = "hex::serde"))]
     //#[cfg_attr(not(feature = "hex"), serde(with = "BigArray"))]

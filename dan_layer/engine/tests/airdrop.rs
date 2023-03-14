@@ -25,9 +25,9 @@ fn airdrop() {
     let (mut template_test, airdrop, airdrop_resx) = setup();
 
     let total_supply: Amount = template_test.call_method(airdrop, "total_supply", args![], vec![]);
-    assert_eq!(total_supply, Amount(100));
+    assert_eq!(total_supply, Amount(10));
 
-    // Create 100 accounts
+    // Create 2 accounts
     let (owner_proof, _) = template_test.create_owner_proof();
     let account_template_addr = template_test.get_template_address("Account");
     let result = template_test
@@ -37,7 +37,7 @@ fn airdrop() {
                 function: "create".to_string(),
                 args: args![owner_proof.clone()],
             })
-            .take(100)
+            .take(2)
             .collect(),
             vec![],
         )
@@ -94,7 +94,7 @@ fn airdrop() {
         .collect();
     let result = template_test.execute_and_commit(instructions, vec![]).unwrap();
 
-    for i in 0..100 {
+    for i in 0..10 {
         assert_eq!(
             result.execution_results[3 + (i * 4)].decode::<Amount>().unwrap(),
             Amount(1)

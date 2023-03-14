@@ -45,7 +45,7 @@ impl fmt::Display for Emoji {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, Hash)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, Hash)]
 pub struct EmojiId(Vec<Emoji>);
 
 impl fmt::Display for EmojiId {
