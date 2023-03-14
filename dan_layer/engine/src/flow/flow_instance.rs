@@ -15,7 +15,7 @@ use tari_utilities::ByteArray;
 use crate::{
     flow,
     flow::{ArgValue, FlowEngineError},
-    function_definitions::{ArgType, FunctionArgDefinition},
+    function_definitions::FunctionArgDefinition,
 };
 
 #[derive(Clone, Debug)]
@@ -30,7 +30,7 @@ pub struct FlowInstance {
 
 impl FlowInstance {
     pub fn try_build(value: JsValue, workers: Workers) -> Result<Self, FlowEngineError> {
-        let engine = Engine::new("tari@0.1.0", workers);
+        let engine = Engine::new("tari_engine@0.1.0", workers);
         // dbg!(&value);
         let nodes = engine.parse_value(value).expect("could not create engine");
         Ok(FlowInstance {

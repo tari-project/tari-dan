@@ -121,4 +121,12 @@ impl GlobalDbAdapter for MockGlobalDbBackupAdapter {
     fn get_epoch(&self, _tx: &mut Self::DbTransaction<'_>, _epoch: u64) -> Result<Option<DbEpoch>, Self::Error> {
         todo!()
     }
+
+    fn get_pending_templates(
+        &self,
+        tx: &mut Self::DbTransaction<'_>,
+        limit: usize,
+    ) -> Result<Vec<DbTemplate>, Self::Error> {
+        todo!()
+    }
 }

@@ -22,6 +22,8 @@
 
 use std::string::FromUtf8Error;
 
+use serde_json;
+use tari_common_types::types::FixedHashSizeError;
 use tari_dan_common_types::optional::IsNotFoundError;
 use tari_dan_core::storage::StorageError;
 use tari_dan_engine::packager::PackageError;
@@ -49,6 +51,12 @@ pub enum TemplateManagerError {
     UnsupportedTemplateType,
     #[error("The template is not valid UTF-8: {0}")]
     FlowJsonNotValidUtf8(#[from] FromUtf8Error),
+    #[error("The flow was not valid JSON: {0}")]
+    InvalidJson(#[from] serde_json::Error),
+    #[error("The flow engine encountered an error: {0}")]
+    FlowEngineError(#[from] tari_dan_engine::flow::FlowEngineError),
+    #[error("FixedHashSizeError: {0}")]
+    FixedHashSizeError(#[from] FixedHashSizeError),
 }
 
 impl IsNotFoundError for TemplateManagerError {

@@ -16,6 +16,7 @@ table! {
     templates (id) {
         id -> Integer,
         template_name -> Text,
+        expected_hash -> Binary,
         template_address -> Binary,
         url -> Text,
         height -> BigInt,

@@ -153,6 +153,8 @@ impl GlobalDbAdapter for SqliteGlobalDbAdapter {
         match template {
             Some(t) => Ok(Some(DbTemplate {
                 template_name: t.template_name,
+
+                expected_hash: t.expected_hash.try_into()?,
                 template_address: t.template_address.try_into()?,
                 url: t.url,
                 height: t.height as u64,
@@ -175,7 +177,7 @@ impl GlobalDbAdapter for SqliteGlobalDbAdapter {
             .get_results::<TemplateModel>(tx.connection())
             .map_err(|source| SqliteStorageError::DieselError {
                 source,
-                operation: "get_template".to_string(),
+                operation: "get_templates".to_string(),
             })?;
 
         templates
@@ -183,6 +185,42 @@ impl GlobalDbAdapter for SqliteGlobalDbAdapter {
             .map(|t| {
                 Ok(DbTemplate {
                     template_name: t.template_name,
+                    expected_hash: t.expected_hash.try_into()?,
+                    template_address: t.template_address.try_into()?,
+                    url: t.url,
+                    height: t.height as u64,
+                    template_type: t.template_type.parse().expect("DB template type corrupted"),
+                    compiled_code: t.compiled_code,
+                    flow_json: t.flow_json,
+                    manifest: t.manifest,
+                    status: t.status.parse().expect("DB status corrupted"),
+                    added_at: t.added_at,
+                })
+            })
+            .collect()
+    }
+
+    fn get_pending_templates(
+        &self,
+        tx: &mut Self::DbTransaction<'_>,
+        limit: usize,
+    ) -> Result<Vec<DbTemplate>, Self::Error> {
+        use crate::global::schema::templates::dsl;
+        let templates = dsl::templates
+            .filter(templates::status.eq(TemplateStatus::Pending.as_str()))
+            .limit(i64::try_from(limit).unwrap_or(i64::MAX))
+            .get_results::<TemplateModel>(tx.connection())
+            .map_err(|source| SqliteStorageError::DieselError {
+                source,
+                operation: "get_pending_template".to_string(),
+            })?;
+
+        templates
+            .into_iter()
+            .map(|t| {
+                Ok(DbTemplate {
+                    template_name: t.template_name,
+                    expected_hash: t.expected_hash.try_into()?,
                     template_address: t.template_address.try_into()?,
                     url: t.url,
                     height: t.height as u64,
@@ -200,6 +238,7 @@ impl GlobalDbAdapter for SqliteGlobalDbAdapter {
     fn insert_template(&self, tx: &mut Self::DbTransaction<'_>, item: DbTemplate) -> Result<(), Self::Error> {
         let new_template = NewTemplateModel {
             template_name: item.template_name,
+            expected_hash: item.expected_hash.to_vec(),
             template_address: item.template_address.to_vec(),
             url: item.url.to_string(),
             height: item.height as i64,

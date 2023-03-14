@@ -9,6 +9,7 @@ create table templates
     id               Integer primary key autoincrement not null,
     -- template name
     template_name    text                              not null,
+    expected_hash    blob                              not null,
     -- the address is the hash of the content
     template_address blob                              not null,
     -- where to find the template code

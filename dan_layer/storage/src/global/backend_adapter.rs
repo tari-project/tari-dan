@@ -48,6 +48,11 @@ pub trait GlobalDbAdapter: AtomicDb + Send + Sync + Clone {
 
     fn get_template(&self, tx: &mut Self::DbTransaction<'_>, key: &[u8]) -> Result<Option<DbTemplate>, Self::Error>;
     fn get_templates(&self, tx: &mut Self::DbTransaction<'_>, limit: usize) -> Result<Vec<DbTemplate>, Self::Error>;
+    fn get_pending_templates(
+        &self,
+        tx: &mut Self::DbTransaction<'_>,
+        limit: usize,
+    ) -> Result<Vec<DbTemplate>, Self::Error>;
 
     fn insert_template(&self, tx: &mut Self::DbTransaction<'_>, template: DbTemplate) -> Result<(), Self::Error>;
     fn update_template(

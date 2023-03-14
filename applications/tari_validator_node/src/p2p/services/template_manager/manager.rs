@@ -20,7 +20,11 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use std::{collections::HashMap, convert::TryFrom, fs};
+use std::{
+    collections::HashMap,
+    convert::{TryFrom, TryInto},
+    fs,
+};
 
 use chrono::Utc;
 use log::*;
@@ -34,6 +38,8 @@ use tari_dan_app_utilities::template_manager::{
 };
 use tari_dan_core::services::TemplateProvider;
 use tari_dan_engine::{
+    flow::{FlowFactory, FlowInstance},
+    function_definitions::FlowFunctionDefinition,
     packager::{LoadedTemplate, TemplateModuleLoader},
     wasm::WasmModule,
 };
@@ -142,6 +148,9 @@ impl TemplateManager {
                     let binary = fs::read(dbg_replacement).expect("Could not read debug file");
                     *wasm = binary;
                 },
+                TemplateExecutable::Flow(_) => {
+                    todo!("debug replacements for flow templates not implemented");
+                },
                 _ => return Err(TemplateManagerError::TemplateUnavailable),
             }
 
@@ -167,6 +176,7 @@ impl TemplateManager {
         let template = DbTemplate {
             template_name: template.template_name,
             template_address: template.template_address.into_array().into(),
+            expected_hash: template.registration.binary_sha.into_vec().try_into()?,
             url: template.registration.binary_url.into_string(),
             height: template.mined_height,
             status: TemplateStatus::New,
@@ -204,6 +214,12 @@ impl TemplateManager {
 
         Ok(())
     }
+
+    pub(super) fn fetch_pending_templates(&self) -> Result<Vec<DbTemplate>, TemplateManagerError> {
+        let mut tx = self.global_db.create_transaction()?;
+        let templates = self.global_db.templates(&mut tx).get_pending_templates(1000)?;
+        Ok(templates)
+    }
 }
 
 impl TemplateProvider for TemplateManager {
@@ -226,8 +242,10 @@ impl TemplateProvider for TemplateManager {
 
             // _ => return Err(TemplateManagerError::UnsupportedTemplateType),
             TemplateExecutable::Manifest(_) => return Err(TemplateManagerError::UnsupportedTemplateType),
-            TemplateExecutable::Flow(_) => {
-                todo!()
+            TemplateExecutable::Flow(flow_json) => {
+                let definition: FlowFunctionDefinition = serde_json::from_str(&flow_json)?;
+                let factory = FlowFactory::try_create(definition)?;
+                LoadedTemplate::Flow(factory)
             },
         };
 

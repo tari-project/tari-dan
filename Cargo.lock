@@ -6350,6 +6350,8 @@ dependencies = [
  "anyhow",
  "async-trait",
  "log",
+ "serde",
+ "serde_json",
  "tari_app_grpc",
  "tari_base_node_grpc_client",
  "tari_common_types",

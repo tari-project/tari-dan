@@ -29,6 +29,7 @@ use crate::global::schema::*;
 pub struct TemplateModel {
     pub id: i32,
     pub template_name: String,
+    pub expected_hash: Vec<u8>,
     pub template_address: Vec<u8>,
     pub url: String,
     pub height: i64,
@@ -45,6 +46,7 @@ pub struct TemplateModel {
 #[diesel(table_name = templates)]
 pub struct NewTemplateModel {
     pub template_name: String,
+    pub expected_hash: Vec<u8>,
     pub template_address: Vec<u8>,
     pub url: String,
     pub height: i64,

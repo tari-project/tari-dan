@@ -5,44 +5,44 @@ use std::collections::HashMap;
 
 use d3ne::WorkersBuilder;
 use tari_engine_types::instruction::Instruction;
+use tari_template_abi::{FunctionDef, TemplateDef, Type};
 
 use crate::{
     flow::{FlowEngineError, FlowInstance},
     function_definitions::{FlowFunctionDefinition, FunctionArgDefinition},
 };
 
-#[derive(Clone, Default)]
+#[derive(Debug, Clone)]
 pub struct FlowFactory {
-    _flows: HashMap<String, (Vec<FunctionArgDefinition>, FlowInstance)>,
+    name: String,
+    args: Vec<FunctionArgDefinition>,
+    flow: FlowInstance,
+    template_def: TemplateDef,
 }
 impl FlowFactory {
-    pub fn new(flow_functions: &[FlowFunctionDefinition]) -> Self {
-        let mut flows = HashMap::new();
-        for func_def in flow_functions {
-            // build_instance(&mut instance, &func_def);
-            flows.insert(
-                func_def.name.clone(),
-                (
-                    func_def.args.clone(),
-                    FlowInstance::try_build(func_def.flow.clone(), WorkersBuilder::new().build())
-                        .expect("Could not build flow"),
-                ),
-            );
-        }
-        Self { _flows: flows }
+    pub fn try_create(flow_definition: FlowFunctionDefinition) -> Result<Self, FlowEngineError> {
+        let template_def = TemplateDef {
+            template_name: flow_definition.name.clone(),
+            functions: vec![FunctionDef {
+                name: "main".to_string(),
+                arguments: flow_definition.args.iter().map(|a| a.arg_type.to_type()).collect(),
+                output: Type::Unit,
+                is_mut: false,
+            }],
+        };
+        Ok(Self {
+            name: flow_definition.name,
+            args: flow_definition.args,
+            flow: FlowInstance::try_build(flow_definition.flow.clone(), WorkersBuilder::new().build())?,
+            template_def,
+        })
     }
 
-    pub fn invoke_write_method<TUnitOfWork>(
-        &self,
-        _name: String,
-        _instruction: &Instruction,
-        _state_db: TUnitOfWork,
-    ) -> Result<TUnitOfWork, FlowEngineError> {
-        todo!()
-        // if let Some((args, engine)) = self.flows.get(&name) {
-        //     engine.process(instruction.args(), args, instruction.sender(), state_db)
-        // } else {
-        //     todo!("could not find engine")
-        // }
+    pub fn name(&self) -> &str {
+        &self.name
+    }
+
+    pub fn template_def(&self) -> &TemplateDef {
+        &self.template_def
     }
 }

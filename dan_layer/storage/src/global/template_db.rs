@@ -45,6 +45,10 @@ impl<'a, 'tx, TGlobalDbAdapter: GlobalDbAdapter> TemplateDb<'a, 'tx, TGlobalDbAd
         self.backend.get_templates(self.tx, limit)
     }
 
+    pub fn get_pending_templates(&mut self, limit: usize) -> Result<Vec<DbTemplate>, TGlobalDbAdapter::Error> {
+        self.backend.get_pending_templates(self.tx, limit)
+    }
+
     pub fn insert_template(&mut self, template: DbTemplate) -> Result<(), TGlobalDbAdapter::Error> {
         self.backend.insert_template(self.tx, template)
     }
@@ -63,6 +67,7 @@ pub struct DbTemplate {
     pub template_name: String,
     // TODO: change to TemplateAddress type
     pub template_address: FixedHash,
+    pub expected_hash: FixedHash,
     pub url: String,
     pub height: u64,
     pub template_type: DbTemplateType,
@@ -112,7 +117,7 @@ impl DbTemplateType {
     }
 }
 
-#[derive(Debug, Clone, Copy, Default)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub enum TemplateStatus {
     /// Template has been registered but has not completed
     #[default]

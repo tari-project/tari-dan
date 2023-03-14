@@ -27,10 +27,11 @@ use tari_common_types::types::FixedHash;
 use tari_core::transactions::transaction_components::TemplateType;
 use tari_dan_app_utilities::template_manager::{TemplateManagerError, TemplateManagerRequest, TemplateRegistration};
 use tari_dan_core::services::TemplateProvider;
-use tari_dan_storage::global::{DbTemplateUpdate, TemplateStatus};
+use tari_dan_engine::function_definitions::FlowFunctionDefinition;
+use tari_dan_storage::global::{DbTemplateType, DbTemplateUpdate, TemplateStatus};
 use tari_engine_types::calculate_template_binary_hash;
 use tari_shutdown::ShutdownSignal;
-use tari_template_lib::models::TemplateAddress;
+use tari_template_lib::{models::TemplateAddress, Hash};
 use tari_validator_node_client::types::{FunctionDef, TemplateAbi};
 use tokio::{
     sync::{mpsc, mpsc::Receiver, oneshot},
@@ -73,6 +74,7 @@ impl TemplateManagerService {
     }
 
     pub async fn run(mut self, mut shutdown: ShutdownSignal) -> Result<(), TemplateManagerError> {
+        self.on_startup().await?;
         loop {
             tokio::select! {
                 Some(req) = self.rx_request.recv() => self.handle_request(req).await,
@@ -86,6 +88,28 @@ impl TemplateManagerService {
                     dbg!("Shutting down epoch manager");
                     break;
                 }
+            }
+        }
+        Ok(())
+    }
+
+    async fn on_startup(&mut self) -> Result<(), TemplateManagerError> {
+        let templates = self.manager.fetch_pending_templates()?;
+        for template in templates {
+            if template.status == TemplateStatus::Pending {
+                let _ignore = self
+                    .download_queue
+                    .send(DownloadRequest {
+                        template_type: template.template_type.into(),
+                        address: Hash::try_from(template.template_address.as_slice()).unwrap(),
+                        url: template.url.clone(),
+                        expected_binary_hash: template.expected_hash.clone(),
+                    })
+                    .await;
+                info!(
+                    target: LOG_TARGET,
+                    "⏳️️ Template {} queued for download", template.template_address
+                );
             }
         }
         Ok(())
@@ -152,17 +176,31 @@ impl TemplateManagerService {
                 };
 
                 let update = match download.template_type {
-                    TemplateType::Wasm { .. } => DbTemplateUpdate {
+                    DbTemplateType::Wasm => DbTemplateUpdate {
                         compiled_code: Some(bytes.to_vec()),
                         status: Some(template_status),
                         ..Default::default()
                     },
-                    TemplateType::Flow => DbTemplateUpdate {
-                        flow_json: Some(String::from_utf8(bytes.to_vec())?),
-                        status: Some(template_status),
-                        ..Default::default()
+                    DbTemplateType::Flow => {
+                        // make sure it deserializes correctly
+                        let mut status = TemplateStatus::Invalid;
+                        match serde_json::from_slice::<FlowFunctionDefinition>(&bytes) {
+                            Ok(_) => status = template_status,
+                            Err(e) => {
+                                warn!(
+                                    target: LOG_TARGET,
+                                    "⚠️ Template {} is not valid json: {}", download.template_address, e
+                                );
+                            },
+                        };
+
+                        DbTemplateUpdate {
+                            flow_json: Some(String::from_utf8(bytes.to_vec())?),
+                            status: Some(status),
+                            ..Default::default()
+                        }
                     },
-                    TemplateType::Manifest => todo!(),
+                    DbTemplateType::Manifest => todo!(),
                 };
                 self.manager.update_template(download.template_address, update)?;
             },
@@ -181,7 +219,11 @@ impl TemplateManagerService {
     async fn handle_add_template(&mut self, template: TemplateRegistration) -> Result<(), TemplateManagerError> {
         let address = template.template_address;
         let url = template.registration.binary_url.to_string();
-        let template_type = template.registration.template_type.clone();
+        let template_type = match template.registration.template_type {
+            TemplateType::Wasm { .. } => DbTemplateType::Wasm,
+            TemplateType::Flow => DbTemplateType::Flow,
+            TemplateType::Manifest => DbTemplateType::Manifest,
+        };
         let expected_binary_hash = FixedHash::try_from(template.registration.binary_sha.clone().into_vec())
             .map_err(|_| TemplateManagerError::InvalidBaseLayerTemplate)?;
         self.manager.add_template(template)?;
