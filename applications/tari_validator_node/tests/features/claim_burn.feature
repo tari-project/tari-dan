@@ -90,6 +90,9 @@ Feature: Claim Burn
     When miner MINER mines 16 new blocks
     Then the validator node VN is listed as registered
 
+    # Initialize the wallet daemon
+    Given a wallet daemon WALLET_D connected to validator node VN
+
     # A file-base CLI account must be created to sign future calls
     When I create a DAN wallet
     # When I create a component SECOND_LAYER_TARI of template "fees" on VN using "new"
@@ -109,5 +112,5 @@ Feature: Claim Burn
     When miner MINER mines 5 new blocks
 
     When I save the state database of VN
-    When I claim burn COMMITMENT with PROOF, RANGEPROOF and CLAIM_PUBKEY and spend it into account ACC_1 on VN
+    When I claim burn COMMITMENT with PROOF, RANGEPROOF and CLAIM_PUBKEY and spend it into account ACC_1 via the wallet daemon WALLET_D
     # Then account ACC_1 has one confidential bucket in it

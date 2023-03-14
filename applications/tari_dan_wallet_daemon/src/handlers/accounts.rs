@@ -192,6 +192,7 @@ pub async fn handle_claim_burn(
     context: &HandlerContext,
     req: ClaimBurnRequest,
 ) -> Result<ClaimBurnResponse, anyhow::Error> {
+    warn!(target: LOG_TARGET, "FLAG: CUCUMBER HANDLE CLAIM BURN");
     let ClaimBurnRequest {
         account,
         claim_proof,

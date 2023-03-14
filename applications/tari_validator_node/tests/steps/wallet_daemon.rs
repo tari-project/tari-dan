@@ -8,17 +8,21 @@ use tari_template_lib::prelude::ComponentAddress;
 
 use crate::{utils::wallet_daemon_cli, TariWorld};
 
-#[when(expr = "I claim burn {word} with {word}, {word} and {word} and spend it into account {word} on {word}")]
+#[when(
+    expr = "I claim burn {word} with {word}, {word} and {word} and spend it into account {word} via the wallet daemon \
+            {word}"
+)]
 async fn when_i_claim_burn_via_wallet_daemon(
     world: &mut TariWorld,
     commitment_name: String,
-    wallet_daemon_name: String,
     proof_name: String,
     rangeproof_name: String,
     claim_pubkey_name: String,
     account_name: String,
-    _vn_name: String,
+    wallet_daemon_name: String,
 ) {
+    panic!("FLAG: CUCUMBERRRRRRRRRR");
+
     let commitment = world
         .commitments
         .get(&commitment_name)
