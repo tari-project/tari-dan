@@ -37,7 +37,7 @@ mod airdrop_template {
         pub fn new() -> Self {
             let bucket = ResourceBuilder::non_fungible()
                 .with_token_symbol("AIR")
-                .mint_many_with(1..=10, |n| (NonFungibleId::from_u32(n), (Vec::new(), Vec::new())))
+                .mint_many_with(1..=100, |n| (NonFungibleId::from_u32(n), (Vec::new(), Vec::new())))
                 .build_bucket();
 
             Self {
@@ -50,7 +50,7 @@ mod airdrop_template {
 
         pub fn add_recipient(&mut self, address: ComponentAddress) {
             assert!(self.is_airdrop_open, "Airdrop already started");
-            assert!(self.allow_list.len() < 10, "Airdrop allow list is full");
+            assert!(self.allow_list.len() < 100, "Airdrop allow list is full");
             assert!(!self.allow_list.contains(&address), "Address already in allow list");
             self.allow_list.insert(address);
         }

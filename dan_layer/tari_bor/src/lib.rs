@@ -3,7 +3,7 @@
 
 #![cfg_attr(not(feature = "std"), no_std)]
 
-use ciborium::{de::from_reader, ser::into_writer, value::Value};
+use ciborium::{de::from_reader, ser::into_writer};
 use serde::{de::DeserializeOwned, Serialize};
 
 #[derive(Debug, Clone)]
@@ -43,16 +43,22 @@ pub fn encode_with_len<T: Serialize>(val: &T) -> Vec<u8> {
 
 #[cfg(not(feature = "std"))]
 pub fn encode_into<T: Serialize + ?Sized, W: ciborium_io::Write>(val: &T, writer: &mut W) -> Result<(), BorError> {
-    let value = Value::serialized(&val).map_err(to_bor_error)?;
-    into_writer(&value, writer).map_err(|e| BorError(format!("{:?}", e)))
+    into_writer(&val, writer).map_err(|_| BorError(String::new()))
 }
 
 #[cfg(feature = "std")]
 pub fn encode_into<T: Serialize + ?Sized, W: std::io::Write>(val: &T, writer: &mut W) -> Result<(), BorError> {
-    let value = Value::serialized(&val).map_err(to_bor_error)?;
-    into_writer(&value, writer).map_err(|e| BorError(format!("{:?}", e)))
+    into_writer(&val, writer).map_err(|e| BorError(format!("{:?}", e)))
 }
 
+#[cfg(not(feature = "std"))]
+pub fn encode<T: Serialize + ?Sized>(val: &T) -> Result<Vec<u8>, BorError> {
+    let mut buf = Vec::with_capacity(512);
+    encode_into(val, &mut buf).map_err(|_| BorError(String::new()))?;
+    Ok(buf)
+}
+
+#[cfg(feature = "std")]
 pub fn encode<T: Serialize + ?Sized>(val: &T) -> Result<Vec<u8>, BorError> {
     let mut buf = Vec::with_capacity(512);
     encode_into(val, &mut buf).map_err(|e| BorError(format!("{:?}", e)))?;
