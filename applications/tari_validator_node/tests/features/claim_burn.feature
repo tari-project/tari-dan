@@ -109,6 +109,7 @@ Feature: Claim Burn
     Then validator node VN has state at COMM_ADDRESS
 
     When validator node VN registers the template "fees"
+    When I wait 5 seconds
     When miner MINER mines 5 new blocks
 
     When I save the state database of VN

@@ -21,8 +21,6 @@ async fn when_i_claim_burn_via_wallet_daemon(
     account_name: String,
     wallet_daemon_name: String,
 ) {
-    panic!("FLAG: CUCUMBERRRRRRRRRR");
-
     let commitment = world
         .commitments
         .get(&commitment_name)
