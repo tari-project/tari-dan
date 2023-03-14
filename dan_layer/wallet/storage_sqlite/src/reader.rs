@@ -80,7 +80,7 @@ impl WalletStoreReader for ReadTransaction<'_> {
             .select((key_manager_states::index, key_manager_states::is_active))
             .filter(key_manager_states::branch_seed.eq(branch))
             .get_results::<(i64, bool)>(self.connection())
-            .map_err(|e| WalletStorageError::general("key_manager_get_index", e))?;
+            .map_err(|e| WalletStorageError::general("key_manager_get_all", e))?;
 
         Ok(results
             .into_iter()
@@ -97,10 +97,28 @@ impl WalletStoreReader for ReadTransaction<'_> {
             .filter(key_manager_states::is_active.eq(true))
             .first(self.connection())
             .optional()
-            .map_err(|e| WalletStorageError::general("key_manager_get_index", e))?
+            .map_err(|e| WalletStorageError::general("key_manager_get_active_index", e))?
             .map(|index: i64| index as u64)
             .ok_or_else(|| WalletStorageError::NotFound {
-                operation: "key_manager_get_index",
+                operation: "key_manager_get_active_index",
+                entity: "key_manager_state".to_string(),
+                key: branch.to_string(),
+            })
+    }
+
+    fn key_manager_get_last_index(&mut self, branch: &str) -> Result<u64, WalletStorageError> {
+        use crate::schema::key_manager_states;
+
+        key_manager_states::table
+            .select(key_manager_states::index)
+            .filter(key_manager_states::branch_seed.eq(branch))
+            .order(key_manager_states::index.desc())
+            .first(self.connection())
+            .optional()
+            .map_err(|e| WalletStorageError::general("key_manager_get_last_index", e))?
+            .map(|index: i64| index as u64)
+            .ok_or_else(|| WalletStorageError::NotFound {
+                operation: "key_manager_get_last_index",
                 entity: "key_manager_state".to_string(),
                 key: branch.to_string(),
             })

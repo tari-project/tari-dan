@@ -6,7 +6,7 @@ use std::ops::Deref;
 use serde::{Deserialize, Serialize};
 use tari_bor::borsh::BorshSerialize;
 use tari_common_types::types::FixedHash;
-use tari_engine_types::hashing::{hasher, EngineHashDomainLabel, TariEngineHasher};
+use tari_engine_types::hashing::{hasher, EngineHashDomainLabel, TariHasher};
 
 use crate::{object_pledge::ObjectPledge, ShardId, TreeNodeHash};
 
@@ -51,10 +51,7 @@ fn hash_pledges(pledges: &[ShardPledge]) -> FixedHash {
     pledges
         .iter()
         .map(|p| &p.pledge)
-        .fold(
-            hasher(EngineHashDomainLabel::ShardPledgeCollection),
-            TariEngineHasher::chain,
-        )
+        .fold(hasher(EngineHashDomainLabel::ShardPledgeCollection), TariHasher::chain)
         .result()
         .into_array()
         .into()

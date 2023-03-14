@@ -184,11 +184,8 @@ impl WalletDaemonClient {
             .await
     }
 
-    pub async fn accounts_get_by_name(
-        &mut self,
-        name: String,
-    ) -> Result<AccountByNameResponse, WalletDaemonClientError> {
-        self.send_request("accounts.get_by_name", &AccountByNameRequest { name })
+    pub async fn accounts_get_by_name(&mut self, name: &str) -> Result<AccountByNameResponse, WalletDaemonClientError> {
+        self.send_request("accounts.get_by_name", &AccountByNameRequest { name: name.to_string() })
             .await
     }
 
@@ -203,7 +200,8 @@ impl WalletDaemonClient {
         &mut self,
         req: T,
     ) -> Result<ProofsGenerateResponse, WalletDaemonClientError> {
-        self.send_request("confidential.create", req.borrow()).await
+        self.send_request("confidential.create_transfer_proof", req.borrow())
+            .await
     }
 
     pub async fn cancel_transfer_proof<T: Borrow<ProofsCancelRequest>>(

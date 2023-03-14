@@ -7,7 +7,7 @@ use axum_jrpc::error::{JsonRpcError, JsonRpcErrorReason};
 use base64;
 use log::*;
 use tari_common_types::types::{FixedHash, PrivateKey, PublicKey};
-use tari_crypto::{commitment::HomomorphicCommitment as Commitment, ristretto::RistrettoComSig};
+use tari_crypto::{commitment::HomomorphicCommitment as Commitment, keys::PublicKey as _, ristretto::RistrettoComSig};
 use tari_dan_common_types::{optional::Optional, ShardId};
 use tari_dan_wallet_sdk::{apis::key_manager, models::VersionedSubstateAddress};
 use tari_engine_types::{
@@ -96,7 +96,10 @@ pub async fn handle_create(
     sdk.accounts_api()
         .add_account(req.account_name.as_deref(), addr, key_index)?;
 
-    Ok(AccountsCreateResponse { address: addr.clone() })
+    Ok(AccountsCreateResponse {
+        address: addr.clone(),
+        public_key: owner_pk,
+    })
 }
 
 pub async fn handle_list(
@@ -106,6 +109,15 @@ pub async fn handle_list(
     let sdk = context.wallet_sdk();
     let accounts = sdk.accounts_api().get_many(req.offset, req.limit)?;
     let total = sdk.accounts_api().count()?;
+    let km = sdk.key_manager_api();
+    let accounts = accounts
+        .into_iter()
+        .map(|a| {
+            let key = km.derive_key(key_manager::TRANSACTION_BRANCH, a.key_index)?;
+            let pk = PublicKey::from_secret_key(&key.k);
+            Ok((a, pk))
+        })
+        .collect::<Result<_, anyhow::Error>>()?;
 
     Ok(AccountsListResponse { accounts, total })
 }
@@ -182,9 +194,7 @@ pub async fn handle_get_by_name(
 ) -> Result<AccountByNameResponse, anyhow::Error> {
     let sdk = context.wallet_sdk();
     let account = sdk.accounts_api().get_account_by_name(&req.name)?;
-    Ok(AccountByNameResponse {
-        account_address: account.address,
-    })
+    Ok(AccountByNameResponse { account })
 }
 
 #[allow(clippy::too_many_lines)]
@@ -245,9 +255,13 @@ pub async fn handle_claim_burn(
     )?;
 
     let sdk = context.wallet_sdk();
-    let (_, signing_key) = sdk
-        .key_manager_api()
-        .get_key_or_active(key_manager::TRANSACTION_BRANCH, None)?;
+    let (_, signing_key) = sdk.key_manager_api().get_active_key(key_manager::TRANSACTION_BRANCH)?;
+
+    info!(
+        target: LOG_TARGET,
+        "Signing claim burn with key {}. This must be the same as the claiming key used in the burn transaction.",
+        PublicKey::from_secret_key(&signing_key.k)
+    );
 
     let mut inputs = vec![];
 

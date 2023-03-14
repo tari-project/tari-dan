@@ -31,8 +31,7 @@ use std::{
 
 use anyhow::anyhow;
 use clap::{Args, Subcommand};
-use tari_common_types::types::FixedHash;
-use tari_crypto::ristretto::RistrettoPublicKey;
+use tari_common_types::types::{FixedHash, PublicKey};
 use tari_dan_common_types::ShardId;
 use tari_dan_wallet_sdk::models::{ConfidentialProofId, VersionedSubstateAddress};
 use tari_engine_types::{
@@ -54,6 +53,7 @@ use tari_transaction_manifest::{parse_manifest, ManifestValue};
 use tari_utilities::{hex::to_hex, ByteArray};
 use tari_wallet_daemon_client::{
     types::{
+        AccountByNameResponse,
         ProofsGenerateRequest,
         TransactionGetResultRequest,
         TransactionSubmitRequest,
@@ -64,7 +64,7 @@ use tari_wallet_daemon_client::{
     WalletDaemonClient,
 };
 
-use crate::{from_base64::FromBase64, from_hex::FromHex};
+use crate::from_hex::FromHex;
 
 #[derive(Debug, Subcommand, Clone)]
 pub enum TransactionSubcommand {
@@ -139,7 +139,7 @@ pub struct ConfidentialTransferArgs {
     source_account_name: String,
     amount: u32,
     destination_account: ComponentAddress,
-    destination_stealth_public_key: FromBase64<Vec<u8>>,
+    destination_stealth_public_key: FromHex<Vec<u8>>,
     /// The address of the resource to send. If not provided, use the default Tari confidential resource
     #[clap(long, short = 'r')]
     resource_address: Option<ResourceAddress>,
@@ -230,7 +230,7 @@ pub async fn handle_submit(
         },
     };
 
-    submit_transaction(vec![instruction], common, None, client).await
+    submit_transaction(vec![instruction], common, None, None, client).await
 }
 
 async fn handle_submit_manifest(
@@ -239,18 +239,21 @@ async fn handle_submit_manifest(
 ) -> Result<TransactionSubmitResponse, anyhow::Error> {
     let contents = fs::read_to_string(&args.manifest).map_err(|e| anyhow!("Failed to read manifest: {}", e))?;
     let instructions = parse_manifest(&contents, parse_globals(args.input_variables)?)?;
-    submit_transaction(instructions, args.common, None, client).await
+    submit_transaction(instructions, args.common, None, None, client).await
 }
 
 pub async fn submit_transaction(
     instructions: Vec<Instruction>,
     common: CommonSubmitArgs,
     proof_id: Option<ConfidentialProofId>,
+    signing_key_index: Option<u64>,
     client: &mut WalletDaemonClient,
 ) -> Result<TransactionSubmitResponse, anyhow::Error> {
+    // If we're calling a component, then this will be used as an input
+    let has_call_method = instructions.iter().any(|i| matches!(i, Instruction::CallMethod { .. }));
+
     let request = TransactionSubmitRequest {
-        // Sign with the active key
-        signing_key_index: None,
+        signing_key_index,
         instructions,
         fee: common.fee.unwrap_or(1),
         inputs: common.inputs,
@@ -275,15 +278,23 @@ pub async fn submit_transaction(
         proof_id,
     };
 
-    if request.inputs.is_empty() &&
-        request.new_outputs == 0 &&
+    let has_no_outputs = request.new_outputs == 0 &&
         request.specific_non_fungible_outputs.is_empty() &&
         request.new_non_fungible_outputs.is_empty() &&
-        request.new_non_fungible_index_outputs.is_empty()
-    {
-        return Err(anyhow::anyhow!(
-            "No inputs or outputs, transaction will not be processed by the network"
-        ));
+        request.new_non_fungible_index_outputs.is_empty();
+
+    if has_no_outputs {
+        if request.override_inputs && request.inputs.is_empty() {
+            return Err(anyhow::anyhow!(
+                "No inputs or outputs, transaction will not be processed by the network"
+            ));
+        }
+
+        if !has_call_method && request.inputs.is_empty() {
+            return Err(anyhow::anyhow!(
+                "No inputs or outputs, transaction will not be processed by the network"
+            ));
+        }
     }
 
     let timer = Instant::now();
@@ -329,9 +340,9 @@ pub async fn handle_send(
         common,
     } = args;
 
-    let source_address = client.accounts_get_by_name(source_account_name).await?;
-    let source_component_address = source_address
-        .account_address
+    let AccountByNameResponse { account } = client.accounts_get_by_name(&source_account_name).await?;
+    let source_component_address = account
+        .address
         .as_component_address()
         .ok_or_else(|| anyhow!("Invalid component address for source address"))?;
 
@@ -351,7 +362,7 @@ pub async fn handle_send(
         },
     ];
 
-    submit_transaction(instructions, common, None, client).await
+    submit_transaction(instructions, common, None, Some(account.key_index), client).await
 }
 
 pub async fn handle_confidential_transfer(
@@ -367,12 +378,12 @@ pub async fn handle_confidential_transfer(
         common,
     } = args;
 
-    let source_address = client.accounts_get_by_name(source_account_name.clone()).await?;
-    let source_component_address = source_address
-        .account_address
+    let AccountByNameResponse { account } = client.accounts_get_by_name(&source_account_name).await?;
+    let source_component_address = account
+        .address
         .as_component_address()
         .ok_or_else(|| anyhow!("Invalid component address for source address"))?;
-    let destination_stealth_public_key = RistrettoPublicKey::from_bytes(&destination_stealth_public_key.into_inner())?;
+    let destination_stealth_public_key = PublicKey::from_bytes(&destination_stealth_public_key.into_inner())?;
 
     let resource_address = resource_address.unwrap_or(CONFIDENTIAL_TARI_RESOURCE_ADDRESS);
     let proof_generate_req = ProofsGenerateRequest {
@@ -390,7 +401,7 @@ pub async fn handle_confidential_transfer(
         Instruction::CallMethod {
             component_address: source_component_address,
             method: String::from("withdraw_confidential"),
-            args: args![withdraw_proof],
+            args: args![resource_address, withdraw_proof],
         },
         Instruction::PutLastInstructionOutputOnWorkspace {
             key: b"bucket".to_vec(),
@@ -402,7 +413,7 @@ pub async fn handle_confidential_transfer(
         },
     ];
 
-    submit_transaction(instructions, common, Some(proof_id), client).await
+    submit_transaction(instructions, common, Some(proof_id), Some(account.key_index), client).await
 }
 
 fn summarize_request(request: &TransactionSubmitRequest, inputs: &[ShardId], outputs: &[ShardId]) {

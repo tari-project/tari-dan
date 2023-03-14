@@ -161,6 +161,7 @@ pub struct AccountsCreateRequest {
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct AccountsCreateResponse {
     pub address: SubstateAddress,
+    pub public_key: PublicKey,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -183,7 +184,7 @@ pub struct AccountsListRequest {
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct AccountsListResponse {
-    pub accounts: Vec<Account>,
+    pub accounts: Vec<(Account, PublicKey)>,
     pub total: u64,
 }
 
@@ -205,7 +206,7 @@ pub struct AccountByNameRequest {
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct AccountByNameResponse {
-    pub account_address: SubstateAddress,
+    pub account: Account,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]

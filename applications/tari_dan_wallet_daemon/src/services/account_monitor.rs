@@ -100,7 +100,6 @@ where TStore: WalletStore + Clone + Send + Sync + 'static
                     warn!(target: LOG_TARGET, "Account {} does not exist according to validator node", account.address);
                     continue;
                 };
-
                 if versioned_addr.version == vault.version {
                     debug!(target: LOG_TARGET, "Vault {} is up to date", versioned_addr.address);
                     continue;
