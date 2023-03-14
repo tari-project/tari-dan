@@ -94,7 +94,7 @@ impl ComponentManager {
                         version: substate.version(),
                     });
                 },
-                _addr @ SubstateAddress::LayerOneCommitment(_hash) => {
+                _addr @ SubstateAddress::UnclaimedConfidentialOutput(_hash) => {
                     todo!("Not expected");
                 },
             }

@@ -60,7 +60,7 @@ impl<TStore: WalletStore> DanWalletSdk<TStore> {
     }
 
     pub fn substate_api(&self) -> SubstatesApi<'_, TStore> {
-        SubstatesApi::new(&self.store)
+        SubstatesApi::new(&self.store, &self.config.validator_node_jrpc_endpoint)
     }
 
     pub fn accounts_api(&self) -> AccountsApi<'_, TStore> {
@@ -72,7 +72,12 @@ impl<TStore: WalletStore> DanWalletSdk<TStore> {
     }
 
     pub fn confidential_outputs_api(&self) -> ConfidentialOutputsApi<'_, TStore> {
-        ConfidentialOutputsApi::new(&self.store, self.key_manager_api())
+        ConfidentialOutputsApi::new(
+            &self.store,
+            self.key_manager_api(),
+            self.accounts_api(),
+            self.confidential_crypto_api(),
+        )
     }
 
     fn get_or_create_cipher_seed(store: &TStore) -> Result<CipherSeed, WalletSdkError> {

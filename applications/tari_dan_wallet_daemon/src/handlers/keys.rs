@@ -3,6 +3,7 @@
 
 use tari_common_types::types::PublicKey;
 use tari_crypto::keys::PublicKey as PublicKeyTrait;
+use tari_dan_wallet_sdk::apis::key_manager;
 use tari_wallet_daemon_client::types::{
     KeysCreateRequest,
     KeysCreateResponse,
@@ -13,7 +14,6 @@ use tari_wallet_daemon_client::types::{
 };
 
 use super::context::HandlerContext;
-use crate::handlers::TRANSACTION_KEYMANAGER_BRANCH;
 
 pub async fn handle_create(
     context: &HandlerContext,
@@ -22,7 +22,7 @@ pub async fn handle_create(
     let key = context
         .wallet_sdk()
         .key_manager_api()
-        .next_key(TRANSACTION_KEYMANAGER_BRANCH)?;
+        .next_key(key_manager::TRANSACTION_BRANCH)?;
     Ok(KeysCreateResponse {
         id: key.key_index,
         public_key: PublicKey::from_secret_key(&key.k),
@@ -33,7 +33,7 @@ pub async fn handle_list(context: &HandlerContext, _value: KeysListRequest) -> R
     let keys = context
         .wallet_sdk()
         .key_manager_api()
-        .get_all_keys(TRANSACTION_KEYMANAGER_BRANCH)?;
+        .get_all_keys(key_manager::TRANSACTION_BRANCH)?;
     Ok(KeysListResponse { keys })
 }
 
@@ -42,8 +42,8 @@ pub async fn handle_set_active(
     req: KeysSetActiveRequest,
 ) -> Result<KeysSetActiveResponse, anyhow::Error> {
     let km = context.wallet_sdk().key_manager_api();
-    km.set_active_key(TRANSACTION_KEYMANAGER_BRANCH, req.index)?;
-    let (_, key) = km.get_active_key(TRANSACTION_KEYMANAGER_BRANCH)?;
+    km.set_active_key(key_manager::TRANSACTION_BRANCH, req.index)?;
+    let (_, key) = km.get_active_key(key_manager::TRANSACTION_BRANCH)?;
 
     Ok(KeysSetActiveResponse {
         public_key: PublicKey::from_secret_key(&key.k),

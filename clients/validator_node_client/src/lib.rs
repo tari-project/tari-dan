@@ -19,9 +19,10 @@
 //   SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY,
 //   WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //   USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+mod error;
+pub use error::ValidatorNodeClientError;
 pub mod types;
 
-use anyhow::anyhow;
 use reqwest::{header, header::HeaderMap, IntoUrl, Url};
 use serde::{de::DeserializeOwned, Serialize};
 use serde_json as json;
@@ -37,6 +38,8 @@ use crate::types::{
     GetRecentTransactionsResponse,
     GetStateRequest,
     GetStateResponse,
+    GetSubstateRequest,
+    GetSubstateResponse,
     GetTemplateRequest,
     GetTemplateResponse,
     GetTemplatesRequest,
@@ -60,7 +63,7 @@ pub struct ValidatorNodeClient {
 
 // TODO: the client should return a proper error type
 impl ValidatorNodeClient {
-    pub fn connect<T: IntoUrl>(endpoint: T) -> Result<Self, anyhow::Error> {
+    pub fn connect<T: IntoUrl>(endpoint: T) -> Result<Self, ValidatorNodeClientError> {
         let client = reqwest::Client::builder()
             .default_headers({
                 let mut headers = HeaderMap::with_capacity(1);
@@ -76,41 +79,53 @@ impl ValidatorNodeClient {
         })
     }
 
-    pub async fn get_identity(&mut self) -> Result<GetIdentityResponse, anyhow::Error> {
+    pub async fn get_identity(&mut self) -> Result<GetIdentityResponse, ValidatorNodeClientError> {
         self.send_request("get_identity", json!({})).await
     }
 
-    pub async fn get_epoch_manager_stats(&mut self) -> Result<GetEpochManagerStatsResponse, anyhow::Error> {
+    pub async fn get_epoch_manager_stats(&mut self) -> Result<GetEpochManagerStatsResponse, ValidatorNodeClientError> {
         self.send_request("get_epoch_manager_stats", json!({})).await
     }
 
-    pub async fn register_validator_node(&mut self) -> Result<u64, anyhow::Error> {
+    pub async fn register_validator_node(&mut self) -> Result<u64, ValidatorNodeClientError> {
         let val: json::Value = self.send_request("register_validator_node", json!({})).await?;
         let tx_id = val["transaction_id"]
             .as_u64()
-            .ok_or_else(|| anyhow!("Wallet did not return tx_id {}", val["message"].clone()))?;
+            .ok_or_else(|| ValidatorNodeClientError::InvalidResponse {
+                message: format!("Wallet did not return tx_id {}", val["message"]),
+            })?;
         Ok(tx_id)
     }
 
     pub async fn register_template(
         &mut self,
         request: TemplateRegistrationRequest,
-    ) -> Result<TemplateRegistrationResponse, anyhow::Error> {
+    ) -> Result<TemplateRegistrationResponse, ValidatorNodeClientError> {
         self.send_request("register_template", request).await
     }
 
     pub async fn get_active_templates(
         &mut self,
         request: GetTemplatesRequest,
-    ) -> Result<GetTemplatesResponse, anyhow::Error> {
+    ) -> Result<GetTemplatesResponse, ValidatorNodeClientError> {
         self.send_request("get_templates", request).await
     }
 
-    pub async fn get_state(&mut self, request: GetStateRequest) -> Result<GetStateResponse, anyhow::Error> {
+    pub async fn get_state(&mut self, request: GetStateRequest) -> Result<GetStateResponse, ValidatorNodeClientError> {
         self.send_request("get_state", request).await
     }
 
-    pub async fn get_template(&mut self, request: GetTemplateRequest) -> Result<GetTemplateResponse, anyhow::Error> {
+    pub async fn get_substate(
+        &mut self,
+        request: GetSubstateRequest,
+    ) -> Result<GetSubstateResponse, ValidatorNodeClientError> {
+        self.send_request("get_substate", request).await
+    }
+
+    pub async fn get_template(
+        &mut self,
+        request: GetTemplateRequest,
+    ) -> Result<GetTemplateResponse, ValidatorNodeClientError> {
         self.send_request("get_template", request).await
     }
 
@@ -125,44 +140,51 @@ impl ValidatorNodeClient {
     pub async fn get_transaction_result(
         &mut self,
         request: GetTransactionResultRequest,
-    ) -> Result<GetTransactionResultResponse, anyhow::Error> {
+    ) -> Result<GetTransactionResultResponse, ValidatorNodeClientError> {
         self.send_request("get_transaction_result", request).await
     }
 
     pub async fn get_transaction_quorum_certificates(
         &mut self,
         request: GetTransactionQcsRequest,
-    ) -> Result<GetTransactionQcsResponse, anyhow::Error> {
+    ) -> Result<GetTransactionQcsResponse, ValidatorNodeClientError> {
         self.send_request("get_transaction_qcs", request).await
     }
 
     pub async fn get_recent_transactions(
         &mut self,
         request: GetRecentTransactionsRequest,
-    ) -> Result<GetRecentTransactionsResponse, anyhow::Error> {
+    ) -> Result<GetRecentTransactionsResponse, ValidatorNodeClientError> {
         self.send_request("get_recent_transactions", request).await
     }
 
     pub async fn submit_transaction(
         &mut self,
         request: SubmitTransactionRequest,
-    ) -> Result<SubmitTransactionResponse, anyhow::Error> {
+    ) -> Result<SubmitTransactionResponse, ValidatorNodeClientError> {
         self.send_request("submit_transaction", request).await
     }
 
-    pub async fn add_peer(&mut self, request: AddPeerRequest) -> Result<AddPeerResponse, anyhow::Error> {
+    pub async fn add_peer(&mut self, request: AddPeerRequest) -> Result<AddPeerResponse, ValidatorNodeClientError> {
         self.send_request("add_peer", request).await
     }
 
-    pub async fn get_message_logs(&mut self, message_tag: &str) -> Result<Vec<LoggedMessage>, anyhow::Error> {
+    pub async fn get_message_logs(
+        &mut self,
+        message_tag: &str,
+    ) -> Result<Vec<LoggedMessage>, ValidatorNodeClientError> {
         let resp = self
             .send_request::<_, json::Value>("get_logged_messages", json!({ "message_tag": message_tag }))
             .await?;
-        let messages = json::from_value(
-            resp.get("messages")
-                .cloned()
-                .ok_or_else(|| anyhow!("Invalid response: messages was not provided"))?,
-        )?;
+        let messages = json::from_value(resp.get("messages").cloned().ok_or_else(|| {
+            ValidatorNodeClientError::InvalidResponse {
+                message: "messages was not provided".to_string(),
+            }
+        })?)
+        .map_err(|e| ValidatorNodeClientError::DeserializeResponse {
+            source: e,
+            method: "get_logged_messages".to_string(),
+        })?;
         Ok(messages)
     }
 
@@ -175,8 +197,11 @@ impl ValidatorNodeClient {
         &mut self,
         method: &str,
         params: T,
-    ) -> Result<R, anyhow::Error> {
-        let params = json::to_value(params)?;
+    ) -> Result<R, ValidatorNodeClientError> {
+        let params = json::to_value(params).map_err(|e| ValidatorNodeClientError::DeserializeResponse {
+            source: e,
+            method: method.to_string(),
+        })?;
         let request_json = json!(
             {
                 "jsonrpc": "2.0",
@@ -196,18 +221,28 @@ impl ValidatorNodeClient {
         // Response might not deserialize to R....
         match serde_json::from_value(resp) {
             Ok(r) => Ok(r),
-            Err(e) => Err(anyhow!("Failed to deserialize response: {}", e)),
+            Err(e) => Err(ValidatorNodeClientError::DeserializeResponse {
+                source: e,
+                method: method.to_string(),
+            }),
         }
     }
 }
 
-fn jsonrpc_result(val: json::Value) -> Result<json::Value, anyhow::Error> {
+fn jsonrpc_result(val: json::Value) -> Result<json::Value, ValidatorNodeClientError> {
     if let Some(err) = val.get("error") {
         let code = err.get("code").and_then(|c| c.as_i64()).unwrap_or(-1);
         let message = err.get("message").and_then(|m| m.as_str()).unwrap_or("Unknown error");
-        return Err(anyhow!("JSON-RPC error {}: {}", code, message));
+        return Err(ValidatorNodeClientError::RequestFailedWithStatus {
+            code,
+            message: message.to_string(),
+        });
     }
 
-    let result = val.get("result").ok_or_else(|| anyhow!("Missing result field"))?;
+    let result = val
+        .get("result")
+        .ok_or_else(|| ValidatorNodeClientError::InvalidResponse {
+            message: "Missing result field".to_string(),
+        })?;
     Ok(result.clone())
 }

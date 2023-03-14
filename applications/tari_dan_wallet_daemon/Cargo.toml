@@ -22,6 +22,7 @@ tari_wallet_daemon_client = { path = "../../clients/wallet_daemon_client" }
 tari_template_builtin = { path = "../../dan_layer/template_builtin" }
 # TODO: Ideally we should not have to include the WASM template lib, we should perhaps extract the address types into a separate crate (e.g. template_types)
 tari_template_lib = { path = "../../dan_layer/template_lib" }
+tari_bor = { path = "../../dan_layer/tari_bor" }
 
 anyhow = "1.0.69"
 base64 = "0.20.0-alpha.1"

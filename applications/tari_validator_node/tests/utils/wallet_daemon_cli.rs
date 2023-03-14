@@ -41,6 +41,7 @@ pub async fn claim_burn(
     commitment: Vec<u8>,
     range_proof: Vec<u8>,
     ownership_proof: CommitmentSignature<RistrettoPublicKey, RistrettoSecretKey>,
+    reciprocal_claim_public_key: RistrettoPublicKey,
     wallet_daemon_name: String,
 ) -> ClaimBurnResponse {
     #[derive(Serialize)]
@@ -54,6 +55,7 @@ pub async fn claim_burn(
     struct ClaimValue {
         commitment: String,
         ownership_proof: OwnershipProof,
+        reciprocal_claim_public_key: String,
         range_proof: String,
     }
 
@@ -64,14 +66,15 @@ pub async fn claim_burn(
             u: ownership_proof.u().clone().to_base64().unwrap(),
             v: ownership_proof.v().to_base64().unwrap(),
         },
+        reciprocal_claim_public_key: reciprocal_claim_public_key.to_base64().unwrap(),
         range_proof: range_proof.to_base64().unwrap(),
     };
 
-    let claim = serde_json::to_value(value).unwrap();
+    let claim_proof = serde_json::to_value(value).unwrap();
 
     let claim_burn_request = ClaimBurnRequest {
         account: account_address,
-        claim,
+        claim_proof,
         fee: 1,
     };
 

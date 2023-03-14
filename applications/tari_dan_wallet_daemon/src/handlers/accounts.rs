@@ -1,17 +1,15 @@
 //   Copyright 2023 The Tari Project
 //   SPDX-License-Identifier: BSD-3-Clause
-use std::{convert::TryFrom, str::FromStr};
+use std::convert::TryFrom;
 
 use anyhow::anyhow;
+use axum_jrpc::error::{JsonRpcError, JsonRpcErrorReason};
 use base64;
 use log::*;
-use tari_common_types::types::FixedHash;
-use tari_crypto::{
-    commitment::HomomorphicCommitment as Commitment,
-    ristretto::{RistrettoComSig, RistrettoPublicKey, RistrettoSecretKey},
-};
+use tari_common_types::types::{FixedHash, PrivateKey, PublicKey};
+use tari_crypto::{commitment::HomomorphicCommitment as Commitment, ristretto::RistrettoComSig};
 use tari_dan_common_types::{optional::Optional, ShardId};
-use tari_dan_wallet_sdk::models::VersionedSubstateAddress;
+use tari_dan_wallet_sdk::{apis::key_manager, models::VersionedSubstateAddress};
 use tari_engine_types::{
     commit_result::{FinalizeResult, TransactionResult},
     confidential::ConfidentialClaim,
@@ -22,10 +20,10 @@ use tari_template_builtin::ACCOUNT_TEMPLATE_ADDRESS;
 use tari_template_lib::{
     args,
     crypto::RistrettoPublicKeyBytes,
-    models::{LayerOneCommitmentAddress, NonFungibleAddress},
+    models::{NonFungibleAddress, UnclaimedConfidentialOutputAddress},
 };
 use tari_transaction::Transaction;
-use tari_utilities::{hex::to_hex, ByteArray};
+use tari_utilities::ByteArray;
 use tari_wallet_daemon_client::types::{
     AccountByNameRequest,
     AccountByNameResponse,
@@ -43,10 +41,7 @@ use tari_wallet_daemon_client::types::{
 use tokio::sync::broadcast;
 
 use super::context::HandlerContext;
-use crate::{
-    handlers::TRANSACTION_KEYMANAGER_BRANCH,
-    services::{TransactionSubmittedEvent, WalletEvent},
-};
+use crate::services::{TransactionSubmittedEvent, WalletEvent};
 
 const LOG_TARGET: &str = "tari::dan_wallet_daemon::handlers::transaction";
 
@@ -64,11 +59,10 @@ pub async fn handle_create(
 
     let (key_index, signing_key) = sdk
         .key_manager_api()
-        .get_key_or_active(TRANSACTION_KEYMANAGER_BRANCH, req.signing_key_index)?;
+        .get_key_or_active(key_manager::TRANSACTION_BRANCH, req.signing_key_index)?;
     let owner_pk = sdk
         .key_manager_api()
-        // TODO: Different branch?
-        .get_public_key(TRANSACTION_KEYMANAGER_BRANCH, req.signing_key_index)?;
+        .get_public_key(key_manager::TRANSACTION_BRANCH, req.signing_key_index)?;
     let owner_token =
         NonFungibleAddress::from_public_key(RistrettoPublicKeyBytes::from_bytes(owner_pk.as_bytes()).unwrap());
 
@@ -110,7 +104,7 @@ pub async fn handle_list(
     req: AccountsListRequest,
 ) -> Result<AccountsListResponse, anyhow::Error> {
     let sdk = context.wallet_sdk();
-    let accounts = sdk.accounts_api().get_many(req.limit)?;
+    let accounts = sdk.accounts_api().get_many(req.offset, req.limit)?;
     let total = sdk.accounts_api().count()?;
 
     Ok(AccountsListResponse { accounts, total })
@@ -123,7 +117,7 @@ pub async fn handle_invoke(
     let sdk = context.wallet_sdk();
     let (_, signing_key) = sdk
         .key_manager_api()
-        .get_key_or_active(TRANSACTION_KEYMANAGER_BRANCH, None)?;
+        .get_key_or_active(key_manager::TRANSACTION_BRANCH, None)?;
 
     let account = sdk.accounts_api().get_account_by_name(&req.account_name)?;
     let inputs = sdk
@@ -168,53 +162,17 @@ pub async fn handle_get_balances(
     req: AccountsGetBalancesRequest,
 ) -> Result<AccountsGetBalancesResponse, anyhow::Error> {
     let sdk = context.wallet_sdk();
-    let (_, signing_key) = sdk
-        .key_manager_api()
-        .get_key_or_active(TRANSACTION_KEYMANAGER_BRANCH, None)?;
-
     let account = sdk.accounts_api().get_account_by_name(&req.account_name)?;
-    let inputs = sdk
-        .substate_api()
-        .load_dependent_substates(&[account.address.clone()])?;
+    let vaults = sdk.accounts_api().get_vaults_by_account(&account.address)?;
 
-    info!(
-        target: LOG_TARGET,
-        "Loaded {} inputs for account: {}",
-        inputs.len(),
-        account.address
-    );
-    for input in &inputs {
-        info!(target: LOG_TARGET, "input: {}", input);
-    }
-
-    let inputs = inputs
+    let balances = vaults
         .into_iter()
-        .map(|s| ShardId::from_address(&s.address, s.version))
+        .map(|v| (v.address, v.resource_address, v.balance))
         .collect();
 
-    let mut builder = Transaction::builder();
-    builder
-        .add_instruction(Instruction::CallMethod {
-            component_address: account.address.as_component_address().unwrap(),
-            method: "get_balances".to_string(),
-            args: args![],
-        })
-        .with_fee(1)
-        .with_inputs(inputs)
-        .with_new_outputs(0)
-        .sign(&signing_key.k);
-
-    let transaction = builder.build();
-
-    let tx_hash = sdk.transaction_api().submit_to_vn(transaction).await?;
-
-    let mut events = context.notifier().subscribe();
-    context.notifier().notify(TransactionSubmittedEvent { hash: tx_hash });
-
-    let finalized = wait_for_result(&mut events, tx_hash).await?;
     Ok(AccountsGetBalancesResponse {
         address: account.address,
-        balances: finalized.execution_results[0].decode()?,
+        balances,
     })
 }
 
@@ -229,50 +187,92 @@ pub async fn handle_get_by_name(
     })
 }
 
+#[allow(clippy::too_many_lines)]
 pub async fn handle_claim_burn(
     context: &HandlerContext,
     req: ClaimBurnRequest,
 ) -> Result<ClaimBurnResponse, anyhow::Error> {
-    let ClaimBurnRequest { account, claim, fee } = req;
+    let ClaimBurnRequest {
+        account,
+        claim_proof,
+        fee,
+    } = req;
+
+    let reciprocal_claim_public_key = PublicKey::from_bytes(
+        &base64::decode(
+            claim_proof["reciprocal_claim_public_key"]
+                .as_str()
+                .ok_or_else(|| invalid_params("reciprocal_claim_public_key", None))?,
+        )
+        .map_err(|e| invalid_params("reciprocal_claim_public_key", Some(e.to_string())))?,
+    )?;
     let commitment = base64::decode(
-        claim["commitment"]
+        claim_proof["commitment"]
             .as_str()
-            .ok_or_else(|| anyhow!("Missing commitment"))?,
-    )?;
+            .ok_or_else(|| invalid_params("commitment", None))?,
+    )
+    .map_err(|e| invalid_params("commitment", Some(e.to_string())))?;
     let range_proof = base64::decode(
-        claim["range_proof"]
+        claim_proof["range_proof"]
             .as_str()
-            .ok_or_else(|| anyhow!("Missing range_proof"))?,
+            .or_else(|| claim_proof["rangeproof"].as_str())
+            .ok_or_else(|| invalid_params("range_proof", None))?,
+    )
+    .map_err(|e| invalid_params("range_proof", Some(e.to_string())))?;
+    let public_nonce = PublicKey::from_bytes(
+        &base64::decode(
+            claim_proof["ownership_proof"]["public_nonce"]
+                .as_str()
+                .ok_or_else(|| invalid_params("ownership_proof.public_nonce", None))?,
+        )
+        .map_err(|e| invalid_params("ownership_proof.public_nonce", Some(e.to_string())))?,
     )?;
-    let public_nonce = RistrettoPublicKey::from_bytes(&base64::decode(
-        claim["ownership_proof"]["public_nonce"]
-            .as_str()
-            .ok_or_else(|| anyhow!("Missing public nonce from ownership_proof"))?,
-    )?)?;
-    let u = RistrettoSecretKey::from_bytes(&base64::decode(
-        claim["ownership_proof"]["u"]
-            .as_str()
-            .ok_or_else(|| anyhow!("Missing u from ownership_proof"))?,
-    )?)?;
-    let v = RistrettoSecretKey::from_bytes(&base64::decode(
-        claim["ownership_proof"]["v"]
-            .as_str()
-            .ok_or_else(|| anyhow!("Missing v from ownership_proof"))?,
-    )?)?;
+    let u = PrivateKey::from_bytes(
+        &base64::decode(
+            claim_proof["ownership_proof"]["u"]
+                .as_str()
+                .ok_or_else(|| invalid_params("ownership_proof.u", None))?,
+        )
+        .map_err(|e| invalid_params("ownership_proof.u", Some(e.to_string())))?,
+    )?;
+    let v = PrivateKey::from_bytes(
+        &base64::decode(
+            claim_proof["ownership_proof"]["v"]
+                .as_str()
+                .ok_or_else(|| invalid_params("ownership_proof.v", None))?,
+        )
+        .map_err(|e| invalid_params("ownership_proof.v", Some(e.to_string())))?,
+    )?;
 
     let sdk = context.wallet_sdk();
     let (_, signing_key) = sdk
         .key_manager_api()
-        .get_key_or_active(TRANSACTION_KEYMANAGER_BRANCH, None)?;
+        .get_key_or_active(key_manager::TRANSACTION_BRANCH, None)?;
 
-    let mut inputs = sdk.substate_api().load_dependent_substates(&[account.into()])?;
+    let mut inputs = vec![];
+
+    // Add the account component
+    let account_substate = sdk.substate_api().get_substate(&account.into())?;
+    inputs.push(account_substate.address);
+
+    // Add all versioned account child addresses as inputs
+    let child_addresses = sdk.substate_api().load_dependent_substates(&[account.into()])?;
+    inputs.extend(child_addresses);
+
+    // TODO: we assume that all inputs will be consumed and produce a new output however this is only the case when the
+    //       object is mutated
+    let outputs = inputs
+        .iter()
+        .map(|versioned_addr| ShardId::from_address(&versioned_addr.address, versioned_addr.version + 1))
+        .collect::<Vec<_>>();
 
     // add the commitment substate address as input to the claim burn transaction
     let commitment_substate_address = VersionedSubstateAddress {
-        address: SubstateAddress::from_str(&format!("commitment_{}", to_hex(commitment.as_ref())))?,
+        address: SubstateAddress::UnclaimedConfidentialOutput(UnclaimedConfidentialOutputAddress::try_from(
+            commitment.as_slice(),
+        )?),
         version: 0,
     };
-
     inputs.push(commitment_substate_address.clone());
 
     info!(
@@ -281,9 +281,6 @@ pub async fn handle_claim_burn(
         inputs.len(),
         account
     );
-    for input in &inputs {
-        info!(target: LOG_TARGET, "input: {}", input);
-    }
 
     let inputs = inputs
         .into_iter()
@@ -293,7 +290,8 @@ pub async fn handle_claim_burn(
     let instructions = vec![
         Instruction::ClaimBurn {
             claim: Box::new(ConfidentialClaim {
-                commitment_address: LayerOneCommitmentAddress::try_from(commitment)?,
+                public_key: reciprocal_claim_public_key,
+                output_address: UnclaimedConfidentialOutputAddress::try_from(commitment.as_slice())?,
                 range_proof,
                 proof_of_knowledge: RistrettoComSig::new(Commitment::from_public_key(&public_nonce), u, v),
             }),
@@ -311,9 +309,10 @@ pub async fn handle_claim_burn(
         .with_instructions(instructions)
         .with_fee(fee)
         .with_inputs(inputs)
+        .with_outputs(outputs)
         // transaction should have one output, corresponding to the same shard
         // as the account substate address
-        // TODO: on a second claim burn, we shoulnd't have any new outputs being created.
+        // TODO: on a second claim burn, we shouldn't have any new outputs being created.
         .with_new_outputs(1)
         .sign(&signing_key.k);
 
@@ -328,7 +327,7 @@ pub async fn handle_claim_burn(
 
     Ok(ClaimBurnResponse {
         hash: tx_hash,
-        result: finalized.result,
+        result: finalized,
     })
 }
 
@@ -352,4 +351,16 @@ async fn wait_for_result(
             _ => {},
         }
     }
+}
+
+fn invalid_params(field: &str, details: Option<String>) -> JsonRpcError {
+    JsonRpcError::new(
+        JsonRpcErrorReason::InvalidParams,
+        format!(
+            "Invalid param '{}'{}",
+            field,
+            details.map(|d| format!(": {}", d)).unwrap_or_default()
+        ),
+        serde_json::Value::Null,
+    )
 }

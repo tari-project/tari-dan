@@ -28,6 +28,7 @@ use tari_template_lib::models::{Amount, ConfidentialWithdrawProof, NonFungibleId
 
 use crate::{
     bucket::Bucket,
+    confidential::ConfidentialOutput,
     resource_container::{ResourceContainer, ResourceError},
 };
 
@@ -80,6 +81,10 @@ impl Vault {
         self.resource_container.get_commitment_count()
     }
 
+    pub fn get_confidential_outputs(&self) -> Option<Vec<&ConfidentialOutput>> {
+        self.resource_container.get_confidential_outputs()
+    }
+
     pub fn resource_address(&self) -> &ResourceAddress {
         self.resource_container.resource_address()
     }
@@ -93,5 +98,9 @@ impl Vault {
         proof: ConfidentialWithdrawProof,
     ) -> Result<ResourceContainer, ResourceError> {
         self.resource_container.reveal_confidential(proof)
+    }
+
+    pub fn vault_id(&self) -> &VaultId {
+        &self.vault_id
     }
 }

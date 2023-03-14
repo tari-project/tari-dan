@@ -1,4 +1,4 @@
-//   Copyright 2022. The Tari Project
+//   Copyright 2023. The Tari Project
 //
 //   Redistribution and use in source and binary forms, with or without modification, are permitted provided that the
 //   following conditions are met:
@@ -19,30 +19,15 @@
 //   SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY,
 //   WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //   USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+//
 
-use clap::Subcommand;
+use serde::{Deserialize, Serialize};
+use tari_bor::{borsh, Decode, Encode};
+use tari_common_types::types::Commitment;
+use tari_template_lib::models::EncryptedValue;
 
-use crate::command::{
-    account::AccountsSubcommand,
-    key::KeysSubcommand,
-    proof::ProofsSubcommand,
-    transaction::TransactionSubcommand,
-};
-
-mod account;
-mod key;
-mod proof;
-pub mod transaction;
-
-#[allow(clippy::large_enum_variant)]
-#[derive(Debug, Subcommand, Clone)]
-pub enum Command {
-    #[clap(subcommand, alias = "keys")]
-    Keys(KeysSubcommand),
-    #[clap(subcommand, alias = "transaction")]
-    Transactions(TransactionSubcommand),
-    #[clap(subcommand, alias = "account")]
-    Accounts(AccountsSubcommand),
-    #[clap(subcommand, alias = "proof")]
-    Proofs(ProofsSubcommand),
+#[derive(Debug, Clone, Encode, Decode, Serialize, Deserialize)]
+pub struct UnclaimedConfidentialOutput {
+    pub commitment: Commitment,
+    pub encrypted_value: EncryptedValue,
 }

@@ -29,16 +29,11 @@ mod services;
 use std::{error::Error, panic, process};
 
 use tari_common::initialize_logging;
-use tari_dan_wallet_sdk::{DanWalletSdk, WalletSdkConfig};
+use tari_dan_wallet_sdk::{apis::key_manager, DanWalletSdk, WalletSdkConfig};
 use tari_dan_wallet_storage_sqlite::SqliteWalletStore;
 use tari_shutdown::{Shutdown, ShutdownSignal};
 
-use crate::{
-    cli::Cli,
-    handlers::{HandlerContext, TRANSACTION_KEYMANAGER_BRANCH},
-    notify::Notify,
-    services::spawn_services,
-};
+use crate::{cli::Cli, handlers::HandlerContext, notify::Notify, services::spawn_services};
 
 const _LOG_TARGET: &str = "tari::dan_wallet_daemon::main";
 
@@ -54,9 +49,6 @@ pub async fn run_tari_dan_wallet_daemon(cli: Cli, shutdown_signal: ShutdownSigna
         process::exit(1);
     }));
 
-    let shutdown = Shutdown::new();
-    let shutdown_signal = shutdown.to_signal();
-
     let store = SqliteWalletStore::try_open(cli.base_dir().join("data/wallet.sqlite"))?;
     store.run_migrations()?;
 
@@ -68,7 +60,7 @@ pub async fn run_tari_dan_wallet_daemon(cli: Cli, shutdown_signal: ShutdownSigna
     let wallet_sdk = DanWalletSdk::initialize(store, params)?;
     wallet_sdk
         .key_manager_api()
-        .get_or_create_initial(TRANSACTION_KEYMANAGER_BRANCH)?;
+        .get_or_create_initial(key_manager::TRANSACTION_BRANCH)?;
     let notify = Notify::new(100);
 
     let service_handles = spawn_services(shutdown_signal.clone(), notify.clone(), wallet_sdk.clone());

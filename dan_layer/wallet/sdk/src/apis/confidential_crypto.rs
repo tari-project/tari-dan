@@ -2,18 +2,19 @@
 //   SPDX-License-Identifier: BSD-3-Clause
 
 use rand::rngs::OsRng;
-use tari_common_types::types::{PrivateKey, PublicKey, Signature};
+use tari_common_types::types::{Commitment, PrivateKey, PublicKey, Signature};
 use tari_crypto::{commitment::HomomorphicCommitmentFactory, dhke::DiffieHellmanSharedSecret, keys::PublicKey as _};
 use tari_engine_types::confidential::challenges;
 use tari_template_lib::{
     crypto::BalanceProofSignature,
-    models::{ConfidentialOutputProof, ConfidentialWithdrawProof},
+    models::{ConfidentialOutputProof, ConfidentialWithdrawProof, EncryptedValue},
 };
 use tari_utilities::ByteArray;
 
 use crate::{
     byte_utils::copy_fixed,
     confidential::{
+        decrypt_value,
         generate_confidential_proof,
         get_commitment_factory,
         kdfs,
@@ -30,11 +31,16 @@ impl ConfidentialCryptoApi {
         Self
     }
 
-    pub fn derive_output_mask(&self, destination_public_key: &PublicKey) -> (PrivateKey, PublicKey) {
+    pub fn derive_output_mask_for_destination(&self, destination_public_key: &PublicKey) -> (PrivateKey, PublicKey) {
         let (nonce, public_nonce) = PublicKey::random_keypair(&mut OsRng);
         let shared_secret = DiffieHellmanSharedSecret::<PublicKey>::new(&nonce, destination_public_key);
         let shared_secret = kdfs::output_mask_kdf(&shared_secret);
         (shared_secret, public_nonce)
+    }
+
+    pub fn derive_output_mask_for_receiver(&self, public_nonce: &PublicKey, secret_key: &PrivateKey) -> PrivateKey {
+        let shared_secret = DiffieHellmanSharedSecret::<PublicKey>::new(secret_key, public_nonce);
+        kdfs::output_mask_kdf(&shared_secret)
     }
 
     pub fn generate_withdraw_proof(
@@ -74,6 +80,25 @@ impl ConfidentialCryptoApi {
             balance_proof,
         })
     }
+
+    pub fn extract_value(
+        &self,
+        mask: &PrivateKey,
+        commitment: &Commitment,
+        encrypted_value: &EncryptedValue,
+    ) -> Result<u64, ConfidentialCryptoApiError> {
+        let value = decrypt_value(mask, commitment, encrypted_value)
+            .map_err(|_| ConfidentialCryptoApiError::FailedDecryptValue)?;
+        Ok(value)
+    }
+
+    pub fn generate_output_proof(
+        &self,
+        statement: &ConfidentialProofStatement,
+    ) -> Result<ConfidentialOutputProof, ConfidentialCryptoApiError> {
+        let proof = generate_confidential_proof(statement, None)?;
+        Ok(proof)
+    }
 }
 
 fn generate_balance_proof(
@@ -94,4 +119,6 @@ fn generate_balance_proof(
 pub enum ConfidentialCryptoApiError {
     #[error("Confidential proof error: {0}")]
     ConfidentialProof(#[from] ConfidentialProofError),
+    #[error("Failed to decrypt value")]
+    FailedDecryptValue,
 }

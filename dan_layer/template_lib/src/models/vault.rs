@@ -227,6 +227,10 @@ impl Vault {
         self.deposit(bucket);
     }
 
+    pub fn vault_id(&self) -> VaultId {
+        self.vault_id
+    }
+
     pub fn vault_ref(&self) -> VaultRef {
         VaultRef::Ref(self.vault_id)
     }
