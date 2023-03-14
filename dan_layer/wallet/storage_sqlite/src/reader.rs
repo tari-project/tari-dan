@@ -422,18 +422,24 @@ impl WalletStoreReader for ReadTransaction<'_> {
     }
 
     // -------------------------------- Outputs -------------------------------- //
-    fn outputs_get_unspent_balance(&mut self, account_address: &SubstateAddress) -> Result<u64, WalletStorageError> {
-        use crate::schema::{accounts, outputs};
+    fn outputs_get_unspent_balance(&mut self, vault_address: &SubstateAddress) -> Result<u64, WalletStorageError> {
+        use crate::schema::{outputs, vaults};
 
-        let account_id = accounts::table
-            .filter(accounts::address.eq(account_address.to_string()))
-            .select(accounts::id)
+        let vault_id = vaults::table
+            .filter(vaults::address.eq(vault_address.to_string()))
+            .select(vaults::id)
             .first::<i32>(self.connection())
-            .map_err(|e| WalletStorageError::general("outputs_get_unspent_balance", e))?;
+            .optional()
+            .map_err(|e| WalletStorageError::general("outputs_get_unspent_balance", e))?
+            .ok_or_else(|| WalletStorageError::NotFound {
+                operation: "outputs_get_unspent_balance",
+                entity: "vault".to_string(),
+                key: vault_address.to_string(),
+            })?;
 
         let balance = outputs::table
             .select(sum(outputs::value))
-            .filter(outputs::account_id.eq(account_id))
+            .filter(outputs::vault_id.eq(vault_id))
             .filter(outputs::status.eq(OutputStatus::Unspent.as_key_str()))
             .first::<Option<BigDecimal>>(self.connection())
             .map_err(|e| WalletStorageError::general("outputs_get_unspent_balance", e))?;

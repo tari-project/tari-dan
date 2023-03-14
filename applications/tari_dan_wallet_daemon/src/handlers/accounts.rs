@@ -20,7 +20,8 @@ use tari_template_builtin::ACCOUNT_TEMPLATE_ADDRESS;
 use tari_template_lib::{
     args,
     crypto::RistrettoPublicKeyBytes,
-    models::{NonFungibleAddress, UnclaimedConfidentialOutputAddress},
+    models::{Amount, NonFungibleAddress, UnclaimedConfidentialOutputAddress},
+    prelude::ResourceType,
 };
 use tari_transaction::Transaction;
 use tari_utilities::ByteArray;
@@ -35,6 +36,7 @@ use tari_wallet_daemon_client::types::{
     AccountsInvokeResponse,
     AccountsListRequest,
     AccountsListResponse,
+    BalanceEntry,
     ClaimBurnRequest,
     ClaimBurnResponse,
 };
@@ -176,11 +178,24 @@ pub async fn handle_get_balances(
     let sdk = context.wallet_sdk();
     let account = sdk.accounts_api().get_account_by_name(&req.account_name)?;
     let vaults = sdk.accounts_api().get_vaults_by_account(&account.address)?;
+    let outputs_api = sdk.confidential_outputs_api();
 
-    let balances = vaults
-        .into_iter()
-        .map(|v| (v.address, v.resource_address, v.balance))
-        .collect();
+    let mut balances = Vec::with_capacity(vaults.len());
+    for vault in vaults {
+        let confidential_balance = if matches!(vault.resource_type, ResourceType::Confidential) {
+            Amount::try_from(outputs_api.get_unspent_balance(&vault.address)?)?
+        } else {
+            Amount::zero()
+        };
+
+        balances.push(BalanceEntry {
+            vault_address: vault.address,
+            resource_address: vault.resource_address,
+            balance: vault.balance,
+            resource_type: vault.resource_type,
+            confidential_balance,
+        })
+    }
 
     Ok(AccountsGetBalancesResponse {
         address: account.address,

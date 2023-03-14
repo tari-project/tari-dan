@@ -34,7 +34,7 @@ use tari_template_lib::{
     args::Arg,
     auth::AccessRules,
     models::{Amount, ComponentAddress, ConfidentialOutputProof, NonFungibleId, ResourceAddress},
-    prelude::ConfidentialWithdrawProof,
+    prelude::{ConfidentialWithdrawProof, ResourceType},
 };
 use tari_transaction::Transaction;
 
@@ -196,7 +196,16 @@ pub struct AccountsGetBalancesRequest {
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct AccountsGetBalancesResponse {
     pub address: SubstateAddress,
-    pub balances: Vec<(SubstateAddress, ResourceAddress, Amount)>,
+    pub balances: Vec<BalanceEntry>,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct BalanceEntry {
+    pub vault_address: SubstateAddress,
+    pub resource_address: ResourceAddress,
+    pub balance: Amount,
+    pub resource_type: ResourceType,
+    pub confidential_balance: Amount,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]

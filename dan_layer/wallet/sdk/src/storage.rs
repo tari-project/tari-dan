@@ -132,7 +132,7 @@ pub trait WalletStoreReader {
     fn vaults_get_by_account(&mut self, account_addr: &SubstateAddress) -> Result<Vec<VaultModel>, WalletStorageError>;
 
     // Outputs
-    fn outputs_get_unspent_balance(&mut self, account_address: &SubstateAddress) -> Result<u64, WalletStorageError>;
+    fn outputs_get_unspent_balance(&mut self, vault_address: &SubstateAddress) -> Result<u64, WalletStorageError>;
     fn outputs_get_locked_by_proof(
         &mut self,
         proof_id: ConfidentialProofId,

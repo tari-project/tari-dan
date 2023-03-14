@@ -341,6 +341,7 @@ impl WalletStoreWriter for WriteTransaction<'_> {
             vaults::address.eq(vault.address.to_string()),
             vaults::balance.eq(vault.balance.value()),
             vaults::resource_address.eq(vault.resource_address.to_string()),
+            vaults::resource_type.eq(format!("{:?}", vault.resource_type)),
         );
         diesel::insert_into(vaults::table)
             .values(values)

@@ -172,7 +172,7 @@ where TStore: WalletStore + Clone + Send + Sync + 'static
                 continue;
             };
 
-            let Some(account_addr) = vault_substate.parent_address  else{
+            let Some(account_addr) = vault_substate.parent_address else {
                 warn!(target: LOG_TARGET, "👁️‍🗨️ Vault {} has no parent component. Assuming", vault_addr);
                 continue;
             };
@@ -205,6 +205,7 @@ where TStore: WalletStore + Clone + Send + Sync + 'static
                     account_addr.clone(),
                     vault_addr.clone(),
                     *vault.resource_address(),
+                    vault.resource_type(),
                 )?;
             }
 

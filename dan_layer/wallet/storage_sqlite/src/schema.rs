@@ -99,6 +99,7 @@ diesel::table! {
         account_id -> Integer,
         address -> Text,
         resource_address -> Text,
+        resource_type -> Text,
         balance -> BigInt,
         created_at -> Timestamp,
         updated_at -> Timestamp,

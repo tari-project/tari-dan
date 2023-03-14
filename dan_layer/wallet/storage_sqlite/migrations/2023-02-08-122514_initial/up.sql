@@ -86,6 +86,7 @@ CREATE TABLE vaults
     account_id       INTEGER  NOT NULL REFERENCES accounts (id),
     address          TEXT     NOT NULL,
     resource_address TEXT     NOT NULL,
+    resource_type    TEXT     NOT NULL,
     balance          BIGINT   NOT NULL DEFAULT 0,
     created_at       DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at       DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP

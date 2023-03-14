@@ -3,6 +3,7 @@
 
 use tari_common_types::types::Commitment;
 use tari_crypto::commitment::HomomorphicCommitmentFactory;
+use tari_dan_common_types::optional::Optional;
 use tari_dan_wallet_sdk::{
     confidential::get_commitment_factory,
     models::{ConfidentialOutputModel, ConfidentialProofId, OutputStatus},
@@ -12,7 +13,7 @@ use tari_dan_wallet_sdk::{
 };
 use tari_dan_wallet_storage_sqlite::SqliteWalletStore;
 use tari_engine_types::substate::SubstateAddress;
-use tari_template_lib::constants::CONFIDENTIAL_TARI_RESOURCE_ADDRESS;
+use tari_template_lib::{constants::CONFIDENTIAL_TARI_RESOURCE_ADDRESS, resource::ResourceType};
 
 #[test]
 fn outputs_locked_and_released() {
@@ -110,7 +111,7 @@ fn outputs_locked_and_finalized() {
         assert!(unspent.iter().any(|l| l.commitment == commitment_change));
         assert!(unspent.iter().any(|l| l.commitment == commitment_100));
         assert_eq!(unspent.len(), 2);
-        let balance = tx.outputs_get_unspent_balance(&Test::test_account_address()).unwrap();
+        let balance = tx.outputs_get_unspent_balance(&Test::test_vault_address()).unwrap();
         assert_eq!(balance, 124);
     }
 }
@@ -143,6 +144,7 @@ impl Test {
                 Test::test_account_address(),
                 Test::test_vault_address(),
                 CONFIDENTIAL_TARI_RESOURCE_ADDRESS,
+                ResourceType::Confidential,
             )
             .unwrap();
 
@@ -191,7 +193,11 @@ impl Test {
 
     pub fn get_unspent_balance(&self) -> u64 {
         let outputs_api = self.sdk.confidential_outputs_api();
-        outputs_api.get_unspent_balance(&Test::test_account_address()).unwrap()
+        outputs_api
+            .get_unspent_balance(&Test::test_vault_address())
+            .optional()
+            .unwrap()
+            .unwrap_or(0)
     }
 
     pub fn sdk(&self) -> &DanWalletSdk<SqliteWalletStore> {

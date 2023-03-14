@@ -3,7 +3,10 @@
 
 use tari_dan_common_types::optional::{IsNotFoundError, Optional};
 use tari_engine_types::substate::SubstateAddress;
-use tari_template_lib::models::{Amount, ResourceAddress};
+use tari_template_lib::{
+    models::{Amount, ResourceAddress},
+    prelude::ResourceType,
+};
 
 use crate::{
     models::{Account, VaultModel},
@@ -107,12 +110,14 @@ impl<'a, TStore: WalletStore> AccountsApi<'a, TStore> {
         account_address: SubstateAddress,
         vault_address: SubstateAddress,
         resource_address: ResourceAddress,
+        resource_type: ResourceType,
     ) -> Result<(), AccountsApiError> {
         let mut tx = self.store.create_write_tx()?;
         tx.vaults_insert(VaultModel {
             account_address,
             address: vault_address,
             resource_address,
+            resource_type,
             balance: Amount::zero(),
         })?;
         tx.commit()?;

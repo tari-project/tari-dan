@@ -139,9 +139,9 @@ impl<'a, TStore: WalletStore> ConfidentialOutputsApi<'a, TStore> {
         Ok(output_masks)
     }
 
-    pub fn get_unspent_balance(&self, account_addr: &SubstateAddress) -> Result<u64, ConfidentialOutputsApiError> {
+    pub fn get_unspent_balance(&self, vault_addr: &SubstateAddress) -> Result<u64, ConfidentialOutputsApiError> {
         let mut tx = self.store.create_read_tx()?;
-        let balance = tx.outputs_get_unspent_balance(account_addr)?;
+        let balance = tx.outputs_get_unspent_balance(vault_addr)?;
         Ok(balance)
     }
 
