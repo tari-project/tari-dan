@@ -76,6 +76,8 @@ pub struct DbTemplate {
 #[derive(Debug, Clone, Default)]
 pub struct DbTemplateUpdate {
     pub compiled_code: Option<Vec<u8>>,
+    pub flow_json: Option<String>,
+    pub manifest: Option<String>,
     pub status: Option<TemplateStatus>,
 }
 

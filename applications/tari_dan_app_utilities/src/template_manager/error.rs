@@ -20,6 +20,8 @@
 //   WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //   USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+use std::string::FromUtf8Error;
+
 use tari_dan_common_types::optional::IsNotFoundError;
 use tari_dan_core::storage::StorageError;
 use tari_dan_engine::packager::PackageError;
@@ -45,6 +47,8 @@ pub enum TemplateManagerError {
     PackageError(#[from] PackageError),
     #[error("Unsupported template type")]
     UnsupportedTemplateType,
+    #[error("The template is not valid UTF-8: {0}")]
+    FlowJsonNotValidUtf8(#[from] FromUtf8Error),
 }
 
 impl IsNotFoundError for TemplateManagerError {

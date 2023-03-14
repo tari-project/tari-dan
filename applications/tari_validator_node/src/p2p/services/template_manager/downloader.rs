@@ -24,12 +24,14 @@ use bytes::Bytes;
 use futures::{future::BoxFuture, stream::FuturesUnordered};
 use prost::bytes;
 use tari_common_types::types::FixedHash;
+use tari_core::transactions::transaction_components::TemplateType;
 use tari_template_lib::models::TemplateAddress;
 use tokio::{sync::mpsc, task};
 use tokio_stream::StreamExt;
 
 pub struct DownloadRequest {
     pub address: TemplateAddress,
+    pub template_type: TemplateType,
     pub url: String,
     pub expected_binary_hash: FixedHash,
 }
@@ -84,6 +86,7 @@ async fn download(req: DownloadRequest) -> DownloadResult {
 
     DownloadResult {
         template_address: req.address,
+        template_type: req.template_type.clone(),
         expected_binary_hash: req.expected_binary_hash,
         result: inner(req).await,
     }
@@ -98,6 +101,7 @@ pub enum TemplateDownloadError {
 #[derive(Debug)]
 pub struct DownloadResult {
     pub template_address: TemplateAddress,
+    pub template_type: TemplateType,
     pub expected_binary_hash: FixedHash,
     pub result: Result<Bytes, TemplateDownloadError>,
 }

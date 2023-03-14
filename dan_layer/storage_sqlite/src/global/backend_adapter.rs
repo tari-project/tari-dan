@@ -229,8 +229,9 @@ impl GlobalDbAdapter for SqliteGlobalDbAdapter {
     ) -> Result<(), Self::Error> {
         let model = TemplateUpdateModel {
             compiled_code: template.compiled_code,
+            flow_json: template.flow_json,
+            manifest: template.manifest,
             status: template.status.map(|s| s.as_str().to_string()),
-            wasm_path: None,
         };
         diesel::update(templates::table)
             .filter(templates::template_address.eq(key))

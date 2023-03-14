@@ -24,6 +24,7 @@ use std::convert::TryFrom;
 
 use log::*;
 use tari_common_types::types::FixedHash;
+use tari_core::transactions::transaction_components::TemplateType;
 use tari_dan_app_utilities::template_manager::{TemplateManagerError, TemplateManagerRequest, TemplateRegistration};
 use tari_dan_core::services::TemplateProvider;
 use tari_dan_storage::global::{DbTemplateUpdate, TemplateStatus};
@@ -150,11 +151,20 @@ impl TemplateManagerService {
                     // TemplateStatus::Invalid
                 };
 
-                self.manager
-                    .update_template(download.template_address, DbTemplateUpdate {
+                let update = match download.template_type {
+                    TemplateType::Wasm { .. } => DbTemplateUpdate {
                         compiled_code: Some(bytes.to_vec()),
                         status: Some(template_status),
-                    })?;
+                        ..Default::default()
+                    },
+                    TemplateType::Flow => DbTemplateUpdate {
+                        flow_json: Some(String::from_utf8(bytes.to_vec())?),
+                        status: Some(template_status),
+                        ..Default::default()
+                    },
+                    TemplateType::Manifest => todo!(),
+                };
+                self.manager.update_template(download.template_address, update)?;
             },
             Err(err) => {
                 warn!(target: LOG_TARGET, "🚨 Failed to download template: {}", err);
@@ -171,6 +181,7 @@ impl TemplateManagerService {
     async fn handle_add_template(&mut self, template: TemplateRegistration) -> Result<(), TemplateManagerError> {
         let address = template.template_address;
         let url = template.registration.binary_url.to_string();
+        let template_type = template.registration.template_type.clone();
         let expected_binary_hash = FixedHash::try_from(template.registration.binary_sha.clone().into_vec())
             .map_err(|_| TemplateManagerError::InvalidBaseLayerTemplate)?;
         self.manager.add_template(template)?;
@@ -183,6 +194,7 @@ impl TemplateManagerService {
         let _ignore = self
             .download_queue
             .send(DownloadRequest {
+                template_type,
                 address,
                 url,
                 expected_binary_hash,

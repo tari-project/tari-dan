@@ -60,6 +60,7 @@ pub struct NewTemplateModel {
 #[diesel(table_name = templates)]
 pub struct TemplateUpdateModel {
     pub compiled_code: Option<Vec<u8>>,
+    pub flow_json: Option<String>,
+    pub manifest: Option<String>,
     pub status: Option<String>,
-    pub wasm_path: Option<String>,
 }
