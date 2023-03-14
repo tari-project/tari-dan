@@ -144,51 +144,6 @@ async fn when_i_claim_burn_second_time_fails(
     .unwrap_err();
 }
 
-#[when(
-    expr = "I claim burn {word} wit {word} and {word} and spend it into account {word} on {word} via the wallet daemon"
-)]
-async fn when_i_claim_burn_on_wallet_daemon(
-    world: &mut TariWorld,
-    commitment_name: String,
-    proof_name: String,
-    rangeproof_name: String,
-    account_name: String,
-    vn_name: String,
-) {
-    let commitment = world
-        .commitments
-        .get(&commitment_name)
-        .unwrap_or_else(|| panic!("Commitment {} not found", commitment_name));
-    let proof = world
-        .commitment_ownership_proofs
-        .get(&proof_name)
-        .unwrap_or_else(|| panic!("Proof {} not found", proof_name));
-    let rangeproof = world
-        .rangeproofs
-        .get(&rangeproof_name)
-        .unwrap_or_else(|| panic!("Rangeproof {} not found", rangeproof_name));
-    let vn = world
-        .validator_nodes
-        .get(&vn_name)
-        .unwrap_or_else(|| panic!("Validator node {} not found", vn_name));
-    let commitment_shard = ShardId::from_address(
-        &SubstateAddress::from_str(&format!("commitment_{}", commitment.to_hex())).expect("Invalid state address"),
-        0,
-    );
-
-    let account = world
-        .account_public_keys
-        .get(&account_name)
-        .unwrap_or_else(|| panic!("Account {} not found", account_name));
-
-    let account_address = world.get_account_component_address(&account_name).unwrap();
-    let component_address = ComponentAddress::from_str(&account_address).expect("Invalid account address");
-
-    // let context = HandlerContext::new();
-    // let req = ClaimBurnRequest {};
-    // handle_claim_burn(context, req).await.unwrap();
-}
-
 #[then(expr = "{word} is on epoch {int} within {int} seconds")]
 async fn vn_has_scanned_to_epoch(world: &mut TariWorld, vn_name: String, epoch: u64, seconds: usize) {
     let epoch = Epoch(epoch);
