@@ -28,10 +28,9 @@ mod services;
 
 use std::{error::Error, panic, process};
 
-use tari_common::initialize_logging;
 use tari_dan_wallet_sdk::{apis::key_manager, DanWalletSdk, WalletSdkConfig};
 use tari_dan_wallet_storage_sqlite::SqliteWalletStore;
-use tari_shutdown::{Shutdown, ShutdownSignal};
+use tari_shutdown::ShutdownSignal;
 
 use crate::{cli::Cli, handlers::HandlerContext, notify::Notify, services::spawn_services};
 
