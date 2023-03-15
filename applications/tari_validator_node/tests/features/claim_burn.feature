@@ -96,7 +96,8 @@ Feature: Claim Burn
     # A file-base CLI account must be created to sign future calls
     When I create a DAN wallet
     # When I create a component SECOND_LAYER_TARI of template "fees" on VN using "new"
-    When I create an account ACC_1 on VN via the wallet daemon WALLET_D
+    When I create an account ACC_1 via the wallet daemon WALLET_D
+    # When I create an account ACC_1 on VN
 
     When I burn 10T on wallet WALLET into commitment COMMITMENT with proof PROOF for ACC_1, range proof RANGEPROOF and claim public key CLAIM_PUBKEY
 

@@ -20,6 +20,8 @@
 //   WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //   USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+use std::time::Duration;
+
 use base64;
 use serde::Serialize;
 use tari_crypto::{
@@ -92,6 +94,8 @@ pub async fn create_account(world: &mut TariWorld, account_name: String, wallet_
         custom_access_rules: None,
         fee: None,
     };
+
+    tokio::time::sleep(Duration::from_secs(5)).await;
 
     let mut client = get_wallet_daemon_client(world, wallet_daemon_name).await;
     let _resp = client.create_account(request).await.unwrap();
