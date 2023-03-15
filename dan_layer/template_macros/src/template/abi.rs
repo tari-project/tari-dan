@@ -29,7 +29,9 @@ use crate::template::ast::{FunctionAst, TemplateAst, TypeAst};
 pub fn generate_abi(ast: &TemplateAst) -> Result<TokenStream> {
     let abi_function_name = format_ident!("{}_abi", ast.template_name);
     let template_name_as_str = ast.template_name.to_string();
-    let function_defs = ast.get_functions().map(|func| generate_function_def(&func));
+    let function_defs = ast
+        .get_functions()
+        .map(|func| generate_function_def(&template_name_as_str, &func));
 
     let output = quote! {
         #[no_mangle]
@@ -50,13 +52,13 @@ pub fn generate_abi(ast: &TemplateAst) -> Result<TokenStream> {
     Ok(output)
 }
 
-fn generate_function_def(f: &FunctionAst) -> Expr {
+fn generate_function_def(template_name: &str, f: &FunctionAst) -> Expr {
     let name = f.name.clone();
     let is_mut = f.input_types.first().map(|a| a.is_mut()).unwrap_or(false);
-    let arguments = f.input_types.iter().map(generate_abi_type);
+    let arguments = f.input_types.iter().map(|t| generate_abi_type(template_name, t));
 
     let output = match &f.output_type {
-        Some(type_ast) => generate_abi_type(type_ast),
+        Some(type_ast) => generate_abi_type(&template_name, type_ast),
         None => parse_quote!(Type::Unit),
     };
 
@@ -70,10 +72,11 @@ fn generate_function_def(f: &FunctionAst) -> Expr {
     )
 }
 
-fn generate_abi_type(rust_type: &TypeAst) -> Expr {
+fn generate_abi_type(template_name: &str, rust_type: &TypeAst) -> Expr {
     match rust_type {
         // on "&self" we want to pass the component id
-        TypeAst::Receiver { .. } => get_component_address_type(),
+        TypeAst::Receiver { mutability: false } => get_component_address_type("&self"),
+        TypeAst::Receiver { mutability: true } => get_component_address_type("&mut self"),
         // basic type
         // TODO: there may be a better way of handling this
         TypeAst::Typed(path) => match path.path.segments[0].ident.to_string().as_str() {
@@ -112,7 +115,7 @@ fn generate_abi_type(rust_type: &TypeAst) -> Expr {
                                     "Vec" => {
                                         panic!("Nested Vecs are not supported")
                                     },
-                                    "Self" => get_component_address_type(),
+                                    "Self" => get_component_address_type(&format!("{}Component", template_name)),
                                     name => parse_quote!(Type::Other { name: #name.to_string() }),
                                 }
                             },
@@ -137,7 +140,7 @@ fn generate_abi_type(rust_type: &TypeAst) -> Expr {
 
                 parse_quote!(Type::Vec(Box::new(#ty)))
             },
-            "Self" => get_component_address_type(),
+            "Self" => get_component_address_type(&format!("{}Component", template_name)),
             name => parse_quote!(Type::Other { name: #name.to_string() }),
         },
 
@@ -150,10 +153,8 @@ fn generate_abi_type(rust_type: &TypeAst) -> Expr {
     }
 }
 
-fn get_component_address_type() -> Expr {
-    parse_quote!(Type::Other {
-        name: "pointer".to_string()
-    })
+fn get_component_address_type(name: &str) -> Expr {
+    parse_quote!(Type::Other { name: #name.to_string() })
 }
 
 #[cfg(test)]
@@ -183,6 +184,7 @@ mod tests {
                     pub fn no_return_function() {}
                     pub fn constructor() -> Self {}
                     pub fn method(&self){}
+                    pub fn method_mut(&mut self){}
                     fn private_function() {}
                 } 
             }
@@ -223,14 +225,20 @@ mod tests {
                         FunctionDef {
                             name: "constructor".to_string(),
                             arguments: vec![],
-                            output: Type::Other { name: "pointer".to_string() },
+                            output: Type::Other { name: "FooComponent".to_string() },
                             is_mut: false,
                         },
                         FunctionDef {
                             name: "method".to_string(),
-                            arguments: vec![Type::Other { name: "pointer".to_string() }],
+                            arguments: vec![Type::Other { name: "&self".to_string() }],
                             output: Type::Unit,
                             is_mut: false,
+                        },
+                         FunctionDef {
+                            name: "method_mut".to_string(),
+                            arguments: vec![Type::Other { name: "&mut self".to_string() }],
+                            output: Type::Unit,
+                            is_mut: true,
                         }
                     ],
                 };
