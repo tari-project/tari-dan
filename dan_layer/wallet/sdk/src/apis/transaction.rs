@@ -140,15 +140,17 @@ impl<'a, TStore: WalletStore> TransactionApi<'a, TStore> {
                     }
 
                     tx.transactions_set_result_and_status(hash, Some(&result), Some(&qc_resp.qcs), new_status)?;
-                    // if the transaction being processed is confidential,
-                    // we should make sure that the account's locked outputs
-                    // are either set to spent or released, depending if the
-                    // transaction was finalized or rejected
-                    if let Some(proof_id) = tx.proofs_get_by_transaction_hash(hash).optional()? {
-                        if new_status == TransactionStatus::Accepted {
-                            tx.outputs_finalize_by_proof_id(proof_id)?;
-                        } else {
-                            tx.outputs_release_by_proof_id(proof_id)?;
+                    if !transaction.is_dry_run {
+                        // if the transaction being processed is confidential,
+                        // we should make sure that the account's locked outputs
+                        // are either set to spent or released, depending if the
+                        // transaction was finalized or rejected
+                        if let Some(proof_id) = tx.proofs_get_by_transaction_hash(hash).optional()? {
+                            if new_status == TransactionStatus::Accepted {
+                                tx.outputs_finalize_by_proof_id(proof_id)?;
+                            } else {
+                                tx.outputs_release_by_proof_id(proof_id)?;
+                            }
                         }
                     }
 

@@ -24,7 +24,10 @@ use std::collections::BTreeSet;
 
 use serde::{Deserialize, Serialize};
 use tari_bor::{borsh, Decode, Encode};
-use tari_template_lib::models::{Amount, ConfidentialWithdrawProof, NonFungibleId, ResourceAddress, VaultId};
+use tari_template_lib::{
+    models::{Amount, ConfidentialWithdrawProof, NonFungibleId, ResourceAddress, VaultId},
+    prelude::ResourceType,
+};
 
 use crate::{
     bucket::Bucket,
@@ -87,6 +90,10 @@ impl Vault {
 
     pub fn resource_address(&self) -> &ResourceAddress {
         self.resource_container.resource_address()
+    }
+
+    pub fn resource_type(&self) -> ResourceType {
+        self.resource_container.resource_type()
     }
 
     pub fn get_non_fungible_ids(&self) -> Option<&BTreeSet<NonFungibleId>> {

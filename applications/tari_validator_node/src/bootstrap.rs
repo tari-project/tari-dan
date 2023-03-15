@@ -24,6 +24,7 @@ use std::{
     fs,
     io,
     net::{IpAddr, Ipv4Addr, SocketAddr},
+    ops::DerefMut,
     sync::Arc,
 };
 
@@ -42,13 +43,29 @@ use tari_dan_app_utilities::{
     epoch_manager::EpochManagerHandle,
     template_manager::TemplateManagerHandle,
 };
+use tari_dan_common_types::{Epoch, NodeAddressable, NodeHeight, PayloadId, QuorumCertificate, ShardId, TreeNodeHash};
 use tari_dan_core::{
     consensus_constants::ConsensusConstants,
+    models::{Payload, SubstateShardData},
+    storage::{
+        shard_store::{ShardStore, ShardStoreReadTransaction, ShardStoreWriteTransaction},
+        StorageError,
+    },
     workers::events::{EventSubscription, HotStuffEvent},
 };
 use tari_dan_storage::global::GlobalDb;
 use tari_dan_storage_sqlite::{global::SqliteGlobalDbAdapter, sqlite_shard_store_factory::SqliteShardStore};
+use tari_engine_types::{
+    resource::Resource,
+    substate::{Substate, SubstateAddress},
+};
 use tari_shutdown::ShutdownSignal;
+use tari_template_lib::{
+    constants::{CONFIDENTIAL_TARI_RESOURCE_ADDRESS, PUBLIC_IDENTITY_RESOURCE_ADDRESS},
+    models::Metadata,
+    prelude::ResourceType,
+    resource::TOKEN_SYMBOL,
+};
 use tokio::task::JoinHandle;
 
 use crate::{
@@ -132,6 +149,7 @@ pub async fn spawn_services(
 
     // Connect to shard db
     let shard_store = SqliteShardStore::try_create(config.validator_node.state_db_path())?;
+    shard_store.with_write_tx(|tx| bootstrap_state(tx))?;
 
     // Epoch manager
     let validator_node_client_factory = TariCommsValidatorNodeClientFactory::new(comms.connectivity());
@@ -290,4 +308,61 @@ fn setup_p2p_rpc(
         ));
 
     comms.add_protocol_extension(rpc_server)
+}
+
+// TODO: Figure out the best way to have the engine shard store mirror these bootstrapped states.
+fn bootstrap_state<T, TAddr, TPayload>(tx: &mut T) -> Result<(), StorageError>
+where
+    T: ShardStoreWriteTransaction<TAddr, TPayload> + DerefMut,
+    T::Target: ShardStoreReadTransaction<TAddr, TPayload>,
+    TAddr: NodeAddressable,
+    TPayload: Payload,
+{
+    let genesis_payload = PayloadId::new([0u8; 32]);
+
+    let address = SubstateAddress::Resource(PUBLIC_IDENTITY_RESOURCE_ADDRESS);
+    let shard_id = ShardId::from_address(&address, 0);
+    if tx.get_substate_states(&[shard_id])?.is_empty() {
+        // Create the resource for public identity
+        tx.insert_substates(SubstateShardData::new(
+            shard_id,
+            address,
+            0,
+            Substate::new(0, Resource::new(ResourceType::NonFungible, Default::default())),
+            NodeHeight(0),
+            None,
+            TreeNodeHash::zero(),
+            None,
+            genesis_payload,
+            None,
+            QuorumCertificate::genesis(Epoch(0), genesis_payload, shard_id),
+            None,
+        ))?;
+    }
+
+    let address = SubstateAddress::Resource(CONFIDENTIAL_TARI_RESOURCE_ADDRESS);
+    let shard_id = ShardId::from_address(&address, 0);
+    if tx.get_substate_states(&[shard_id])?.is_empty() {
+        // Create the second layer tari resource
+        let mut metadata = Metadata::new();
+        // TODO: decide on symbol for L2 tari
+        metadata.insert(TOKEN_SYMBOL, "tXTR".to_string());
+
+        tx.insert_substates(SubstateShardData::new(
+            shard_id,
+            address,
+            0,
+            Substate::new(0, Resource::new(ResourceType::Confidential, metadata)),
+            NodeHeight(0),
+            None,
+            TreeNodeHash::zero(),
+            None,
+            genesis_payload,
+            None,
+            QuorumCertificate::genesis(Epoch(0), genesis_payload, shard_id),
+            None,
+        ))?;
+    }
+
+    Ok(())
 }

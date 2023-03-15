@@ -68,6 +68,7 @@ impl FromStr for OutputStatus {
             "Spent" => Ok(Self::Spent),
             "Locked" => Ok(Self::Locked),
             "LockedUnconfirmed" => Ok(Self::LockedUnconfirmed),
+            "Invalid" => Ok(Self::Invalid),
             _ => Err(()),
         }
     }

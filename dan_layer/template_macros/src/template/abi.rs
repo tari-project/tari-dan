@@ -58,7 +58,7 @@ fn generate_function_def(template_name: &str, f: &FunctionAst) -> Expr {
     let arguments = f.input_types.iter().map(|t| generate_abi_type(template_name, t));
 
     let output = match &f.output_type {
-        Some(type_ast) => generate_abi_type(&template_name, type_ast),
+        Some(type_ast) => generate_abi_type(template_name, type_ast),
         None => parse_quote!(Type::Unit),
     };
 

@@ -34,7 +34,7 @@ use tari_template_lib::{
     args::Arg,
     auth::AccessRules,
     models::{Amount, ComponentAddress, ConfidentialOutputProof, NonFungibleId, ResourceAddress},
-    prelude::ConfidentialWithdrawProof,
+    prelude::{ConfidentialWithdrawProof, ResourceType},
 };
 use tari_transaction::Transaction;
 
@@ -161,6 +161,7 @@ pub struct AccountsCreateRequest {
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct AccountsCreateResponse {
     pub address: SubstateAddress,
+    pub public_key: PublicKey,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -183,7 +184,7 @@ pub struct AccountsListRequest {
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct AccountsListResponse {
-    pub accounts: Vec<Account>,
+    pub accounts: Vec<(Account, PublicKey)>,
     pub total: u64,
 }
 
@@ -195,7 +196,40 @@ pub struct AccountsGetBalancesRequest {
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct AccountsGetBalancesResponse {
     pub address: SubstateAddress,
-    pub balances: Vec<(SubstateAddress, ResourceAddress, Amount)>,
+    pub balances: Vec<BalanceEntry>,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct BalanceEntry {
+    pub vault_address: SubstateAddress,
+    pub resource_address: ResourceAddress,
+    pub balance: Amount,
+    pub resource_type: ResourceType,
+    pub confidential_balance: Amount,
+    pub token_symbol: Option<String>,
+}
+
+impl BalanceEntry {
+    pub fn to_balance_string(&self) -> String {
+        let symbol = self.token_symbol.as_deref().unwrap_or_default();
+        match self.resource_type {
+            ResourceType::Fungible => {
+                format!("{} {}", self.balance, symbol)
+            },
+            ResourceType::NonFungible => {
+                format!("{} {} tokens", self.balance, symbol)
+            },
+            ResourceType::Confidential => {
+                format!(
+                    "{} revealed + {} blinded = {} {}",
+                    self.balance,
+                    self.confidential_balance,
+                    self.balance + self.confidential_balance,
+                    symbol
+                )
+            },
+        }
+    }
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -205,7 +239,7 @@ pub struct AccountByNameRequest {
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct AccountByNameResponse {
-    pub account_address: SubstateAddress,
+    pub account: Account,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]

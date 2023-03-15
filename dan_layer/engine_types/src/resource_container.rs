@@ -272,7 +272,10 @@ impl ResourceContainer {
                         match commitments.remove(&commitment) {
                             Some(_) => Ok(commitment),
                             None => Err(ResourceError::InvalidConfidentialProof {
-                                details: format!("Input commitment {} found in resource", commitment),
+                                details: format!(
+                                    "withdraw_confidential: input commitment {} not found in resource",
+                                    commitment
+                                ),
                             }),
                         }
                     })
@@ -325,7 +328,10 @@ impl ResourceContainer {
                         match commitments.remove(&commitment) {
                             Some(_) => Ok(commitment),
                             None => Err(ResourceError::InvalidConfidentialProof {
-                                details: format!("Input commitment {} found in resource", commitment),
+                                details: format!(
+                                    "reveal_confidential: input commitment {} not found in resource",
+                                    commitment
+                                ),
                             }),
                         }
                     })
