@@ -24,7 +24,7 @@ use std::sync::Arc;
 
 use async_trait::async_trait;
 use tari_comms::{
-    net_address::{MultiaddrWithStats, MultiaddressesWithStats},
+    net_address::{MultiaddrWithStats, MultiaddressesWithStats, PeerAddressSource},
     peer_manager::{NodeId, Peer, PeerFeatures, PeerFlags, PeerManagerError, PeerQuery},
     types::CommsPublicKey,
     PeerManager,
@@ -81,7 +81,13 @@ impl PeerProvider for CommsPeerProvider {
                 MultiaddressesWithStats::new(
                     peer.addresses
                         .iter()
-                        .map(|a| MultiaddrWithStats::new(a.clone(), tari_comms::net_address::PeerAddressSource::Config))
+                        .map(|a| {
+                            let srouce = PeerAddressSource::FromAnotherPeer {
+                                peer_identity_claim: (),
+                                source_peer: (),
+                            };
+                            MultiaddrWithStats::new(a.clone(), tari_comms::net_address::PeerAddressSource::Config)
+                        })
                         .collect(),
                 ),
                 PeerFlags::NONE,
