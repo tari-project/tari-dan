@@ -1,10 +1,13 @@
 //   Copyright 2023 The Tari Project
 //   SPDX-License-Identifier: BSD-3-Clause
 
-use tari_common_types::types::{FixedHash, PublicKey};
-use tari_crypto::dhke::DiffieHellmanSharedSecret;
+use log::*;
+use tari_common_types::types::{FixedHash, PrivateKey, PublicKey};
+use tari_crypto::{commitment::HomomorphicCommitmentFactory, dhke::DiffieHellmanSharedSecret};
 use tari_dan_common_types::optional::{IsNotFoundError, Optional};
 use tari_engine_types::{confidential::ConfidentialOutput, substate::SubstateAddress};
+use tari_key_manager::key_manager::DerivedKey;
+use tari_utilities::ByteArray;
 
 use crate::{
     apis::{
@@ -13,10 +16,12 @@ use crate::{
         key_manager,
         key_manager::{KeyManagerApi, KeyManagerApiError},
     },
-    confidential::{kdfs, ConfidentialProofError},
+    confidential::{get_commitment_factory, kdfs, ConfidentialProofError},
     models::{Account, ConfidentialOutputModel, ConfidentialOutputWithMask, ConfidentialProofId, OutputStatus},
     storage::{WalletStorageError, WalletStore, WalletStoreReader, WalletStoreWriter},
 };
+
+const LOG_TARGET: &str = "tari::dan::wallet_sdk::apis::confidential_outputs";
 
 pub struct ConfidentialOutputsApi<'a, TStore> {
     store: &'a TStore,
@@ -104,25 +109,22 @@ impl<'a, TStore: WalletStore> ConfidentialOutputsApi<'a, TStore> {
     pub fn resolve_output_masks(
         &self,
         outputs: Vec<ConfidentialOutputModel>,
-        account_key_branch: &str,
+        key_branch: &str,
     ) -> Result<Vec<ConfidentialOutputWithMask>, ConfidentialOutputsApiError> {
         let mut output_masks = Vec::with_capacity(outputs.len());
         for output in outputs {
-            let account_key = self
-                .key_manager_api
-                .derive_key(account_key_branch, output.secret_key_index)?;
+            let output_key = self.key_manager_api.derive_key(key_branch, output.secret_key_index)?;
             // Either derive the mask from the sender's public nonce or from the local key manager
             let mask = match output.sender_public_nonce {
                 Some(nonce) => {
                     // Derive shared secret
-                    let shared_secret = DiffieHellmanSharedSecret::<PublicKey>::new(&account_key.k, &nonce);
+                    let shared_secret = DiffieHellmanSharedSecret::<PublicKey>::new(&output_key.k, &nonce);
+                    let shared_secret = PrivateKey::from_bytes(shared_secret.as_bytes()).unwrap();
                     kdfs::output_mask_kdf(&shared_secret)
                 },
                 None => {
                     // Derive local secret
-                    let output_mask = self
-                        .key_manager_api
-                        .derive_key(account_key_branch, output.secret_key_index)?;
+                    let output_mask = self.key_manager_api.derive_key(key_branch, output.secret_key_index)?;
                     output_mask.k
                 },
             };
@@ -137,9 +139,9 @@ impl<'a, TStore: WalletStore> ConfidentialOutputsApi<'a, TStore> {
         Ok(output_masks)
     }
 
-    pub fn get_unspent_balance(&self, account_addr: &SubstateAddress) -> Result<u64, ConfidentialOutputsApiError> {
+    pub fn get_unspent_balance(&self, vault_addr: &SubstateAddress) -> Result<u64, ConfidentialOutputsApiError> {
         let mut tx = self.store.create_read_tx()?;
-        let balance = tx.outputs_get_unspent_balance(account_addr)?;
+        let balance = tx.outputs_get_unspent_balance(vault_addr)?;
         Ok(balance)
     }
 
@@ -150,16 +152,36 @@ impl<'a, TStore: WalletStore> ConfidentialOutputsApi<'a, TStore> {
         outputs: Vec<&ConfidentialOutput>,
     ) -> Result<(), ConfidentialOutputsApiError> {
         let account = self.accounts_api.get_account(account_addr)?;
+        // We do not support changing of account key at this time
+        let key = self
+            .key_manager_api
+            .derive_key(key_manager::TRANSACTION_BRANCH, account.key_index)?;
         let mut tx = self.store.create_write_tx()?;
         for output in outputs {
             match tx.outputs_get_by_commitment(&output.commitment).optional()? {
                 Some(_) => {
+                    info!(
+                        target: LOG_TARGET,
+                        "Output already exists in the wallet. Skipping. (commitment: {})",
+                        output.commitment.as_public_key()
+                    );
                     // Output exists. We should never have the case this is marked as spent. Should we check that?
                 },
                 None => {
                     // Output does not exist. Add it to the store
-                    let output = self.validate_output(&account, vault_addr, output)?;
-                    tx.outputs_insert(output)?;
+                    match self.validate_output(&account, &key, vault_addr, output) {
+                        Ok(output) => {
+                            tx.outputs_insert(output)?;
+                        },
+                        Err(e) => {
+                            warn!(
+                                target: LOG_TARGET,
+                                "Output validation failed. Skipping. (commitment: {}, error: {})",
+                                output.commitment.as_public_key(),
+                                e
+                            );
+                        },
+                    }
                 },
             }
         }
@@ -171,6 +193,7 @@ impl<'a, TStore: WalletStore> ConfidentialOutputsApi<'a, TStore> {
     fn validate_output(
         &self,
         account: &Account,
+        key: &DerivedKey<PrivateKey>,
         vault_address: &SubstateAddress,
         output: &ConfidentialOutput,
     ) -> Result<ConfidentialOutputModel, ConfidentialOutputsApiError> {
@@ -186,18 +209,37 @@ impl<'a, TStore: WalletStore> ConfidentialOutputsApi<'a, TStore> {
             .as_ref()
             .ok_or_else(|| ConfidentialOutputsApiError::FixMe("Missing encrypted value".to_string()))?;
 
-        // We do not support changing of account key at this time
-        let key = self
-            .key_manager_api
-            .derive_key(key_manager::TRANSACTION_BRANCH, account.key_index)?;
         let mask = self.crypto_api.derive_output_mask_for_receiver(public_nonce, &key.k);
+        let encryption_key = self
+            .crypto_api
+            .derive_value_encryption_key_for_receiver(&mask, &output.commitment);
 
         let value_result = self
             .crypto_api
-            .extract_value(&mask, &output.commitment, encrypted_value);
+            .extract_value(&encryption_key, &output.commitment, encrypted_value);
         let (value, status) = match value_result {
-            Ok(value) => (value, OutputStatus::Unspent),
-            Err(_) => (0, OutputStatus::Invalid),
+            Ok(value) => {
+                let commitment = get_commitment_factory().commit_value(&mask, value);
+                if output.commitment == commitment {
+                    (value, OutputStatus::Unspent)
+                } else {
+                    warn!(
+                        target: LOG_TARGET,
+                        "Output invalid: Unable to derive the mask for commitment {}",
+                        output.commitment.as_public_key()
+                    );
+                    (value, OutputStatus::Invalid)
+                }
+            },
+            Err(e) => {
+                warn!(
+                    target: LOG_TARGET,
+                    "Failed to extract value from output. (commitment: {}, error: {})",
+                    output.commitment.as_public_key(),
+                    e
+                );
+                (0, OutputStatus::Invalid)
+            },
         };
 
         Ok(ConfidentialOutputModel {

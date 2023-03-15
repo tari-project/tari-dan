@@ -24,14 +24,14 @@ use std::collections::BTreeSet;
 
 use log::warn;
 use tari_bor::encode;
-use tari_common_types::types::FixedHash;
 use tari_crypto::{
     range_proof::RangeProofService,
-    ristretto::{pedersen::commitment_factory::PedersenCommitmentFactory, RistrettoPublicKey, RistrettoSecretKey},
+    ristretto::{RistrettoPublicKey, RistrettoSecretKey},
 };
 use tari_engine_types::{
     commit_result::{FinalizeResult, RejectReason, TransactionResult},
-    confidential::{get_range_proof_service, ConfidentialClaim, ConfidentialOutput},
+    confidential::{get_commitment_factory, get_range_proof_service, ConfidentialClaim, ConfidentialOutput},
+    hashing::ownership_proof_hasher,
     logs::LogEntry,
     resource_container::ResourceContainer,
 };
@@ -64,18 +64,15 @@ use tari_template_lib::{
 };
 use tari_utilities::ByteArray;
 
-use crate::{
-    base_layer_hashers::ConfidentialOutputHasher,
-    runtime::{
-        engine_args::EngineArgs,
-        tracker::StateTracker,
-        AuthParams,
-        ConsensusContext,
-        RuntimeError,
-        RuntimeInterface,
-        RuntimeModule,
-        RuntimeState,
-    },
+use crate::runtime::{
+    engine_args::EngineArgs,
+    tracker::StateTracker,
+    AuthParams,
+    ConsensusContext,
+    RuntimeError,
+    RuntimeInterface,
+    RuntimeModule,
+    RuntimeState,
 };
 
 const LOG_TARGET: &str = "tari::dan::engine::runtime::impl";
@@ -636,18 +633,16 @@ impl RuntimeInterface for RuntimeInterfaceImpl {
         let unclaimed_output = self.tracker.take_unclaimed_confidential_output(output_address)?;
         // 2. owner_sig must be valid
         // TODO: Probably want a better challenge
-        let factory = PedersenCommitmentFactory::default();
-        let hasher = ConfidentialOutputHasher::new_with_label("commitment_signature")
-            .chain(proof_of_knowledge.public_nonce().as_bytes())
-            .chain(unclaimed_output.commitment.as_bytes())
-            .chain(self.sender_public_key.as_bytes());
+        let challenge = ownership_proof_hasher()
+            .chain(proof_of_knowledge.public_nonce())
+            .chain(&unclaimed_output.commitment)
+            .chain(&self.sender_public_key)
+            .result();
 
-        let challenge: FixedHash = digest::Digest::finalize(hasher).into();
         if !proof_of_knowledge.verify(
             &unclaimed_output.commitment,
-            &RistrettoSecretKey::from_bytes(challenge.as_bytes())
-                .map_err(|_e| RuntimeError::InvalidClaimingSignature)?,
-            &factory,
+            &RistrettoSecretKey::from_bytes(&challenge).map_err(|_e| RuntimeError::InvalidClaimingSignature)?,
+            get_commitment_factory(),
         ) {
             warn!(target: LOG_TARGET, "Claim burn failed - Invalid signature");
             return Err(RuntimeError::InvalidClaimingSignature);

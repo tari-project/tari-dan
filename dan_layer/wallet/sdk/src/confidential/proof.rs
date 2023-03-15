@@ -8,12 +8,16 @@ use chacha20poly1305::{
     KeyInit,
     Nonce,
 };
+use digest::FixedOutput;
 use lazy_static::lazy_static;
 use tari_common_types::types::{BulletRangeProof, Commitment, CommitmentFactory, PrivateKey, PublicKey};
 use tari_crypto::{
     commitment::{ExtensionDegree, HomomorphicCommitmentFactory},
     errors::RangeProofError,
     extended_range_proof::ExtendedRangeProofService,
+    hash::blake2::Blake256,
+    hash_domain,
+    hashing::DomainSeparatedHasher,
     ristretto::bulletproofs_plus::{BulletproofsPlusService, RistrettoExtendedMask, RistrettoExtendedWitness},
     tari_utilities::ByteArray,
 };
@@ -21,10 +25,11 @@ use tari_template_lib::{
     crypto::RistrettoPublicKeyBytes,
     models::{Amount, ConfidentialOutputProof, ConfidentialStatement, EncryptedValue},
 };
+use tari_utilities::safe_array::SafeArray;
 
 use crate::{
     byte_utils::copy_fixed,
-    confidential::{error::ConfidentialProofError, kdfs::encrypted_value_kdf_aead},
+    confidential::{error::ConfidentialProofError, kdfs, kdfs::EncryptedValueKey},
 };
 
 lazy_static! {
@@ -87,11 +92,8 @@ pub fn generate_confidential_proof(
         .transpose()?;
 
     let commitment = output_statement.to_commitment();
-    let encrypted_value = encrypt_value(
-        &output_statement.mask,
-        &commitment,
-        output_statement.amount.value() as u64,
-    )?;
+    let encryption_key = kdfs::encrypted_value_kdf_aead(&output_statement.mask, &commitment);
+    let encrypted_value = encrypt_value(&encryption_key, &commitment, output_statement.amount.value() as u64)?;
     let output_range_proof = generate_extended_bullet_proof(output_statement, change_statement)?;
 
     Ok(ConfidentialOutputProof {
@@ -110,13 +112,24 @@ pub fn generate_confidential_proof(
     })
 }
 
+fn inner_encrypted_value_kdf_aead(encryption_key: &PrivateKey, commitment: &Commitment) -> EncryptedValueKey {
+    let mut aead_key = EncryptedValueKey::from(SafeArray::default());
+    // This has to be the same as the base layer so that burn claims are spendable
+    hash_domain!(TransactionKdfDomain, "com.tari.base_layer.core.transactions.kdf", 0);
+    DomainSeparatedHasher::<Blake256, TransactionKdfDomain>::new_with_label("encrypted_value")
+        .chain(encryption_key.as_bytes())
+        .chain(commitment.as_bytes())
+        .finalize_into(GenericArray::from_mut_slice(aead_key.reveal_mut()));
+    aead_key
+}
+
 const ENCRYPTED_VALUE_TAG: &[u8] = b"TARI_AAD_VALUE";
 fn encrypt_value(
     encryption_key: &PrivateKey,
     commitment: &Commitment,
     amount: u64,
 ) -> Result<EncryptedValue, aead::Error> {
-    let aead_key = encrypted_value_kdf_aead(encryption_key, commitment);
+    let aead_key = inner_encrypted_value_kdf_aead(encryption_key, commitment);
     let chacha_poly = ChaCha20Poly1305::new(GenericArray::from_slice(aead_key.reveal()));
     let payload = Payload {
         msg: &amount.to_le_bytes(),
@@ -134,7 +147,7 @@ pub fn decrypt_value(
     commitment: &Commitment,
     encrypted_value: &EncryptedValue,
 ) -> Result<u64, aead::Error> {
-    let aead_key = encrypted_value_kdf_aead(encryption_key, commitment);
+    let aead_key = inner_encrypted_value_kdf_aead(encryption_key, commitment);
     // Authenticate and decrypt the value
     let aead_payload = Payload {
         msg: encrypted_value.as_ref(),
@@ -187,32 +200,51 @@ mod tests {
 
     use super::*;
 
-    fn create_valid_proof(amount: Amount, minimum_value_promise: u64) -> ConfidentialOutputProof {
-        let mask = PrivateKey::random(&mut OsRng);
-        generate_confidential_proof(
-            &ConfidentialProofStatement {
-                amount,
-                minimum_value_promise,
-                mask,
-                sender_public_nonce: Default::default(),
-            },
-            None,
-        )
-        .unwrap()
+    mod confidential_proof {
+        use super::*;
+
+        fn create_valid_proof(amount: Amount, minimum_value_promise: u64) -> ConfidentialOutputProof {
+            let mask = PrivateKey::random(&mut OsRng);
+            generate_confidential_proof(
+                &ConfidentialProofStatement {
+                    amount,
+                    minimum_value_promise,
+                    mask,
+                    sender_public_nonce: Default::default(),
+                },
+                None,
+            )
+            .unwrap()
+        }
+
+        #[test]
+        fn it_is_valid_if_proof_is_valid() {
+            let proof = create_valid_proof(100.into(), 0);
+            validate_confidential_proof(&proof).unwrap();
+        }
+
+        #[test]
+        fn it_is_invalid_if_minimum_value_changed() {
+            let mut proof = create_valid_proof(100.into(), 100);
+            proof.output_statement.minimum_value_promise = 99;
+            validate_confidential_proof(&proof).unwrap_err();
+            proof.output_statement.minimum_value_promise = 1000;
+            validate_confidential_proof(&proof).unwrap_err();
+        }
     }
 
-    #[test]
-    fn it_is_valid_if_proof_is_valid() {
-        let proof = create_valid_proof(100.into(), 0);
-        validate_confidential_proof(&proof).unwrap();
-    }
+    mod encrypt_decrypt {
+        use super::*;
 
-    #[test]
-    fn it_is_invalid_if_minimum_value_changed() {
-        let mut proof = create_valid_proof(100.into(), 100);
-        proof.output_statement.minimum_value_promise = 99;
-        validate_confidential_proof(&proof).unwrap_err();
-        proof.output_statement.minimum_value_promise = 1000;
-        validate_confidential_proof(&proof).unwrap_err();
+        #[test]
+        fn it_encrypts_and_decrypts() {
+            let key = PrivateKey::random(&mut OsRng);
+            let amount = 100;
+            let commitment = get_commitment_factory().commit_value(&key, amount);
+            let encrypted = encrypt_value(&key, &commitment, amount).unwrap();
+
+            let val = decrypt_value(&key, &commitment, &encrypted).unwrap();
+            assert_eq!(val, 100);
+        }
     }
 }

@@ -30,7 +30,7 @@ use crate::resource::builder::{
     non_fungible::NonFungibleResourceBuilder,
 };
 
-const TOKEN_SYMBOL: &str = "SYMBOL";
+pub const TOKEN_SYMBOL: &str = "SYMBOL";
 
 pub struct ResourceBuilder;
 

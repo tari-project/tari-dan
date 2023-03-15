@@ -12,13 +12,19 @@ fn get_and_set_branch_index() {
     let mut tx = db.create_write_tx().unwrap();
     let index = tx.key_manager_get_active_index("").optional().unwrap();
     assert!(index.is_none());
-    tx.key_manager_set_active_index("", 123).unwrap();
-    tx.key_manager_set_active_index("another", 321).unwrap();
+    tx.key_manager_insert("", 123).unwrap();
+    let index = tx.key_manager_get_active_index("").unwrap();
+    assert_eq!(index, 123);
+    tx.key_manager_insert("another", 1).unwrap();
+    tx.key_manager_insert("another", 2).unwrap();
+    let index = tx.key_manager_get_active_index("another").unwrap();
+    assert_eq!(index, 1);
+    tx.key_manager_set_active_index("another", 2).unwrap();
     tx.commit().unwrap();
 
     let mut tx = db.create_read_tx().unwrap();
     let index = tx.key_manager_get_active_index("").unwrap();
     assert_eq!(index, 123);
     let index = tx.key_manager_get_active_index("another").unwrap();
-    assert_eq!(index, 321);
+    assert_eq!(index, 2);
 }

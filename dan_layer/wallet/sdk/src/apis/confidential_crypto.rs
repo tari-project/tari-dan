@@ -34,13 +34,23 @@ impl ConfidentialCryptoApi {
     pub fn derive_output_mask_for_destination(&self, destination_public_key: &PublicKey) -> (PrivateKey, PublicKey) {
         let (nonce, public_nonce) = PublicKey::random_keypair(&mut OsRng);
         let shared_secret = DiffieHellmanSharedSecret::<PublicKey>::new(&nonce, destination_public_key);
+        let shared_secret = PrivateKey::from_bytes(shared_secret.as_bytes()).unwrap();
         let shared_secret = kdfs::output_mask_kdf(&shared_secret);
         (shared_secret, public_nonce)
     }
 
     pub fn derive_output_mask_for_receiver(&self, public_nonce: &PublicKey, secret_key: &PrivateKey) -> PrivateKey {
         let shared_secret = DiffieHellmanSharedSecret::<PublicKey>::new(secret_key, public_nonce);
+        let shared_secret = PrivateKey::from_bytes(shared_secret.as_bytes()).unwrap();
         kdfs::output_mask_kdf(&shared_secret)
+    }
+
+    pub fn derive_value_encryption_key_for_receiver(
+        &self,
+        private_key: &PrivateKey,
+        commitment: &Commitment,
+    ) -> PrivateKey {
+        kdfs::encrypted_value_kdf_aead(private_key, commitment)
     }
 
     pub fn generate_withdraw_proof(
@@ -83,11 +93,11 @@ impl ConfidentialCryptoApi {
 
     pub fn extract_value(
         &self,
-        mask: &PrivateKey,
+        encryption_key: &PrivateKey,
         commitment: &Commitment,
         encrypted_value: &EncryptedValue,
     ) -> Result<u64, ConfidentialCryptoApiError> {
-        let value = decrypt_value(mask, commitment, encrypted_value)
+        let value = decrypt_value(encryption_key, commitment, encrypted_value)
             .map_err(|_| ConfidentialCryptoApiError::FailedDecryptValue)?;
         Ok(value)
     }

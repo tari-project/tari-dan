@@ -25,6 +25,7 @@ use std::{io, io::Read};
 use anyhow::anyhow;
 use clap::{Args, Subcommand};
 use serde_json as json;
+use tari_utilities::ByteArray;
 use tari_wallet_daemon_client::{
     types::{
         AccountByNameResponse,
@@ -129,6 +130,8 @@ async fn handle_create(args: CreateArgs, client: &mut WalletDaemonClient) -> Res
     println!();
     println!("✅ Account created");
     println!("   address: {}", resp.address);
+    println!("   public key (hex): {}", resp.public_key);
+    println!("   public key (base64): {}", base64::encode(resp.public_key.as_bytes()));
     Ok(())
 }
 
@@ -177,8 +180,12 @@ async fn handle_get_balances(args: GetBalancesArgs, client: &mut WalletDaemonCli
     let mut table = Table::new();
     table.enable_row_count();
     table.set_titles(vec!["VaultId", "Resource", "Balance"]);
-    for (vault_id, resx, amt) in resp.balances {
-        table.add_row(table_row!(vault_id, resx, amt));
+    for balance in resp.balances {
+        table.add_row(table_row!(
+            balance.vault_address,
+            format!("{} {:?}", balance.resource_address, balance.resource_type),
+            balance.to_balance_string()
+        ));
     }
     table.print_stdout();
     Ok(())
@@ -191,7 +198,7 @@ pub async fn handle_claim_burn(args: ClaimBurnArgs, client: &mut WalletDaemonCli
         fee,
     } = args;
 
-    let AccountByNameResponse { account_address } = client.accounts_get_by_name(account_name).await?;
+    let AccountByNameResponse { account } = client.accounts_get_by_name(&account_name).await?;
 
     let claim_proof = if let Some(proof_json) = proof_json {
         proof_json
@@ -209,7 +216,7 @@ pub async fn handle_claim_burn(args: ClaimBurnArgs, client: &mut WalletDaemonCli
     println!("✅ Claim burn submitted");
 
     let req = ClaimBurnRequest {
-        account: account_address.as_component_address().unwrap(),
+        account: account.address.as_component_address().unwrap(),
         claim_proof,
         fee: fee.unwrap_or(1),
     };
@@ -234,10 +241,10 @@ async fn handle_list(client: &mut WalletDaemonClient) -> Result<(), anyhow::Erro
 
     let mut table = Table::new();
     table.enable_row_count();
-    table.set_titles(vec!["Name", "Address", "Key Index"]);
+    table.set_titles(vec!["Name", "Address", "Public Key"]);
     println!("Accounts:");
-    for account in resp.accounts {
-        table.add_row(table_row!(account.name, account.address, account.key_index));
+    for (account, pk) in resp.accounts {
+        table.add_row(table_row!(account.name, account.address, pk));
     }
     table.print_stdout();
     Ok(())
@@ -245,9 +252,9 @@ async fn handle_list(client: &mut WalletDaemonClient) -> Result<(), anyhow::Erro
 
 async fn handle_get_by_name(args: GetByNameArgs, client: &mut WalletDaemonClient) -> Result<(), anyhow::Error> {
     println!("Get account component address by its name...");
-    let resp = client.accounts_get_by_name(args.name.clone()).await?;
+    let resp = client.accounts_get_by_name(&args.name).await?;
 
-    println!("Account {} substate_address: {}", args.name, resp.account_address);
+    println!("Account {} substate_address: {}", args.name, resp.account.address);
     println!();
 
     Ok(())

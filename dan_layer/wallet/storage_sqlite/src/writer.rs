@@ -68,39 +68,72 @@ impl WalletStoreWriter for WriteTransaction<'_> {
 
     // -------------------------------- KeyManager -------------------------------- //
 
+    fn key_manager_insert(&mut self, branch: &str, index: u64) -> Result<(), WalletStorageError> {
+        use crate::schema::key_manager_states;
+        let index =
+            i64::try_from(index).map_err(|_| WalletStorageError::general("key_manager_insert", "index is negative"))?;
+        let count = key_manager_states::table
+            .select(key_manager_states::id)
+            .filter(key_manager_states::branch_seed.eq(branch))
+            .limit(1)
+            .count()
+            .first::<i64>(self.connection())
+            .map_err(|e| WalletStorageError::general("key_manager_insert", e))?;
+
+        // Set active if this is the only key branch
+        let is_active = count == 0;
+
+        let value_set = (
+            key_manager_states::branch_seed.eq(branch),
+            key_manager_states::index.eq(index),
+            key_manager_states::is_active.eq(is_active),
+        );
+
+        diesel::insert_into(key_manager_states::table)
+            .values(value_set)
+            .execute(self.connection())
+            .map_err(|e| WalletStorageError::general("key_manager_insert", e))?;
+
+        Ok(())
+    }
+
     fn key_manager_set_active_index(&mut self, branch: &str, index: u64) -> Result<(), WalletStorageError> {
         use crate::schema::key_manager_states;
         let index = i64::try_from(index)
-            .map_err(|_| WalletStorageError::general("key_manager_set_index", "index is negative"))?;
+            .map_err(|_| WalletStorageError::general("key_manager_set_active_index", "index too large"))?;
 
-        let maybe_active_id = key_manager_states::table
+        let active_id = key_manager_states::table
             .select(key_manager_states::id)
             .filter(key_manager_states::branch_seed.eq(branch))
             .filter(key_manager_states::index.eq(index))
             .limit(1)
             .first::<i32>(self.connection())
             .optional()
-            .map_err(|e| WalletStorageError::general("key_manager_set_index", e))?;
+            .map_err(|e| WalletStorageError::general("key_manager_set_active_index", e))?
+            .ok_or_else(|| WalletStorageError::NotFound {
+                operation: "key_manager_set_active_index",
+                entity: "key_manager_states".to_string(),
+                key: format!("branch = {}, index = {}", branch, index),
+            })?;
 
-        sql_query(
-            "UPDATE key_manager_states SET `is_active` = 0, updated_at = CURRENT_TIMESTAMP WHERE branch_seed = ?",
-        )
-        .bind::<Text, _>(branch)
-        .execute(self.connection())
-        .map_err(|e| WalletStorageError::general("key_manager_set_index", e))?;
+        diesel::update(key_manager_states::table)
+            .set((
+                key_manager_states::is_active.eq(false),
+                key_manager_states::updated_at.eq(diesel::dsl::now),
+            ))
+            .filter(key_manager_states::branch_seed.eq(branch))
+            .filter(key_manager_states::is_active.eq(true))
+            .execute(self.connection())
+            .map_err(|e| WalletStorageError::general("key_manager_set_active_index", e))?;
 
-        if let Some(active_id) = maybe_active_id {
-            sql_query("UPDATE key_manager_states SET `is_active` = 1, updated_at = CURRENT_TIMESTAMP WHERE id = ?")
-                .bind::<Integer, _>(active_id)
-                .execute(self.connection())
-                .map_err(|e| WalletStorageError::general("key_manager_set_index", e))?;
-        } else {
-            sql_query("INSERT INTO key_manager_states (branch_seed, `index`, is_active) VALUES (?, ?, 1)")
-                .bind::<Text, _>(branch)
-                .bind::<BigInt, _>(index)
-                .execute(self.connection())
-                .map_err(|e| WalletStorageError::general("key_manager_set_index", e))?;
-        }
+        diesel::update(key_manager_states::table)
+            .set((
+                key_manager_states::is_active.eq(true),
+                key_manager_states::updated_at.eq(diesel::dsl::now),
+            ))
+            .filter(key_manager_states::id.eq(active_id))
+            .execute(self.connection())
+            .map_err(|e| WalletStorageError::general("key_manager_set_active_index", e))?;
 
         Ok(())
     }
@@ -308,6 +341,8 @@ impl WalletStoreWriter for WriteTransaction<'_> {
             vaults::address.eq(vault.address.to_string()),
             vaults::balance.eq(vault.balance.value()),
             vaults::resource_address.eq(vault.resource_address.to_string()),
+            vaults::resource_type.eq(format!("{:?}", vault.resource_type)),
+            vaults::token_symbol.eq(vault.token_symbol),
         );
         diesel::insert_into(vaults::table)
             .values(values)

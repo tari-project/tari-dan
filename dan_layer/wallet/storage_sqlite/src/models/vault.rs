@@ -7,7 +7,10 @@ use chrono::NaiveDateTime;
 use diesel::{Identifiable, Queryable};
 use tari_dan_wallet_sdk::storage::WalletStorageError;
 use tari_engine_types::substate::SubstateAddress;
-use tari_template_lib::models::{Amount, ResourceAddress};
+use tari_template_lib::{
+    models::{Amount, ResourceAddress},
+    resource::ResourceType,
+};
 
 use crate::schema::vaults;
 
@@ -18,7 +21,9 @@ pub struct Vault {
     pub account_id: i32,
     pub address: String,
     pub resource_address: String,
+    pub resource_type: String,
     pub balance: i64,
+    pub token_symbol: Option<String>,
     pub created_at: NaiveDateTime,
     pub updated_at: NaiveDateTime,
 }
@@ -42,7 +47,22 @@ impl Vault {
                     details: e.to_string(),
                 }
             })?,
+            resource_type: db_str_to_resource_type(&self.resource_type)?,
+            token_symbol: self.token_symbol,
             balance: Amount(self.balance),
         })
+    }
+}
+
+fn db_str_to_resource_type(s: &str) -> Result<ResourceType, WalletStorageError> {
+    match s {
+        "Fungible" => Ok(ResourceType::Fungible),
+        "NonFungible" => Ok(ResourceType::NonFungible),
+        "Confidential" => Ok(ResourceType::Confidential),
+        _ => Err(WalletStorageError::DecodingError {
+            operation: "db_str_to_resource_type",
+            item: "vault.resource_type",
+            details: format!("Invalid resource type: {}", s),
+        }),
     }
 }

@@ -74,4 +74,8 @@ impl Resource {
     pub fn total_supply(&self) -> Amount {
         self.total_supply
     }
+
+    pub fn metadata(&self) -> &Metadata {
+        &self.metadata
+    }
 }
