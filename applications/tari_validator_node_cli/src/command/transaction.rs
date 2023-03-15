@@ -115,6 +115,7 @@ pub struct CommonSubmitArgs {
 #[derive(Debug, Args, Clone)]
 pub struct SubmitManifestArgs {
     manifest: PathBuf,
+    /// A list of globals to be used by the manifest in the format `name=value`
     #[clap(long, short = 'g')]
     input_variables: Vec<String>,
     #[clap(flatten)]
