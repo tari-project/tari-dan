@@ -72,7 +72,7 @@ impl SubstateState {
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Hash, Deserialize, Serialize)]
 #[serde(transparent)]
 pub struct PayloadId {
-    // #[serde(with = "serde_with::hex")]
+    #[serde(with = "serde_with::hex")]
     id: [u8; 32],
 }
 

@@ -5,6 +5,7 @@ use std::{fmt::Display, str::FromStr};
 
 use serde::{Deserialize, Serialize};
 use tari_common_types::types::FixedHash;
+use tari_dan_common_types::serde_with;
 use tari_engine_types::substate::SubstateAddress;
 
 #[derive(Debug, Clone)]
@@ -17,7 +18,7 @@ pub struct SubstateRecord {
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct VersionedSubstateAddress {
-    // #[serde(with = "serde_with::string")]
+    #[serde(with = "serde_with::string")]
     pub address: SubstateAddress,
     pub version: u32,
 }

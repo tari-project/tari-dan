@@ -9,12 +9,12 @@ use tari_common_types::types::{FixedHash, PublicKey, Signature};
 use tari_crypto::hash::blake2::Blake256;
 use tari_mmr::MerkleProof;
 
-use crate::{NodeAddressable, ShardId};
+use crate::{serde_with, NodeAddressable, ShardId};
 
 #[derive(Clone, Debug, PartialEq, Eq, Deserialize, Serialize)]
 pub struct ValidatorMetadata {
     pub public_key: PublicKey,
-    //#[serde(with = "serde_with::hex")]
+    #[serde(with = "serde_with::hex")]
     pub vn_shard_key: ShardId,
     pub signature: Signature,
     pub merkle_proof: MerkleProof,
