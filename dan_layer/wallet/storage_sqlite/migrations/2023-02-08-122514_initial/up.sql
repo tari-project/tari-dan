@@ -88,6 +88,7 @@ CREATE TABLE vaults
     resource_address TEXT     NOT NULL,
     resource_type    TEXT     NOT NULL,
     balance          BIGINT   NOT NULL DEFAULT 0,
+    token_symbol     TEXT     NULL,
     created_at       DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at       DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
 );

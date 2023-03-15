@@ -184,7 +184,7 @@ async fn handle_get_balances(args: GetBalancesArgs, client: &mut WalletDaemonCli
         table.add_row(table_row!(
             balance.vault_address,
             format!("{} {:?}", balance.resource_address, balance.resource_type),
-            balance.balance + balance.confidential_balance
+            balance.to_balance_string()
         ));
     }
     table.print_stdout();

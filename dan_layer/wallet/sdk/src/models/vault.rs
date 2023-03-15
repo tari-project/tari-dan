@@ -14,4 +14,5 @@ pub struct VaultModel {
     pub resource_address: ResourceAddress,
     pub resource_type: ResourceType,
     pub balance: Amount,
+    pub token_symbol: Option<String>,
 }

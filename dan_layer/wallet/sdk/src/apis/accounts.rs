@@ -111,6 +111,7 @@ impl<'a, TStore: WalletStore> AccountsApi<'a, TStore> {
         vault_address: SubstateAddress,
         resource_address: ResourceAddress,
         resource_type: ResourceType,
+        token_symbol: Option<String>,
     ) -> Result<(), AccountsApiError> {
         let mut tx = self.store.create_write_tx()?;
         tx.vaults_insert(VaultModel {
@@ -119,6 +120,7 @@ impl<'a, TStore: WalletStore> AccountsApi<'a, TStore> {
             resource_address,
             resource_type,
             balance: Amount::zero(),
+            token_symbol,
         })?;
         tx.commit()?;
         Ok(())

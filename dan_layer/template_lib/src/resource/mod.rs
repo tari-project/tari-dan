@@ -23,7 +23,7 @@
 use tari_bor::{borsh, Decode, Encode};
 
 mod builder;
-pub use builder::ResourceBuilder;
+pub use builder::{ResourceBuilder, TOKEN_SYMBOL};
 
 mod manager;
 pub use manager::ResourceManager;

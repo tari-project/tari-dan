@@ -20,6 +20,7 @@ use tari_engine_types::{
     vault::Vault,
 };
 use tari_shutdown::ShutdownSignal;
+use tari_template_lib::resource::TOKEN_SYMBOL;
 use tokio::{time, time::MissedTickBehavior};
 
 use crate::{
@@ -63,7 +64,7 @@ where TStore: WalletStore + Clone + Send + Sync + 'static
                 }
 
                   Ok(event) = events_subscription.recv() => {
-                    if let Err(e) = self.on_event(event) {
+                    if let Err(e) = self.on_event(event).await {
                         error!(target: LOG_TARGET, "Error handling event: {}", e);
                     }
                 },
@@ -156,7 +157,7 @@ where TStore: WalletStore + Clone + Send + Sync + 'static
         Ok(())
     }
 
-    fn process_result(&self, diff: &SubstateDiff) -> Result<(), AccountMonitorError> {
+    async fn process_result(&self, diff: &SubstateDiff) -> Result<(), AccountMonitorError> {
         let vaults = diff.up_iter().filter(|(a, _)| a.is_vault()).collect::<Vec<_>>();
         for (vault_addr, substate) in vaults {
             let SubstateValue::Vault(vault) = substate.substate_value() else {
@@ -195,6 +196,34 @@ where TStore: WalletStore + Clone + Send + Sync + 'static
 
             // Add the vault if it does not exist
             if !self.wallet_sdk.accounts_api().has_vault(&vault_addr)? {
+                let scan_result = self
+                    .wallet_sdk
+                    .substate_api()
+                    .scan_from_vn(&(*vault.resource_address()).into())
+                    .await;
+                let maybe_resource = match scan_result {
+                    Ok((_, resource)) => {
+                        let resx = resource.into_resource().ok_or_else(|| {
+                            AccountMonitorError::UnexpectedSubstate(format!(
+                                "Expected {} to be a resource.",
+                                vault.resource_address()
+                            ))
+                        })?;
+                        Some(resx)
+                    },
+                    // Dont fail to update if scanning fails
+                    Err(err) => {
+                        warn!(
+                            target: LOG_TARGET,
+                            "👁️‍🗨️ Failed to scan vault {} from VN: {}",
+                            vault.vault_id(),
+                            err
+                        );
+                        None
+                    },
+                };
+
+                let token_symbol = maybe_resource.and_then(|r| r.metadata().get(TOKEN_SYMBOL).map(|s| s.to_string()));
                 info!(
                     target: LOG_TARGET,
                     "👁️‍🗨️ New {} in account {}",
@@ -206,6 +235,7 @@ where TStore: WalletStore + Clone + Send + Sync + 'static
                     vault_addr.clone(),
                     *vault.resource_address(),
                     vault.resource_type(),
+                    token_symbol,
                 )?;
             }
 
@@ -215,12 +245,12 @@ where TStore: WalletStore + Clone + Send + Sync + 'static
         Ok(())
     }
 
-    fn on_event(&self, event: WalletEvent) -> Result<(), AccountMonitorError> {
+    async fn on_event(&self, event: WalletEvent) -> Result<(), AccountMonitorError> {
         match event {
             WalletEvent::TransactionSubmitted(_) => {},
             WalletEvent::TransactionFinalized(event) => {
                 if let Some(diff) = event.result.result.accept() {
-                    self.process_result(diff)?;
+                    self.process_result(diff).await?;
                 }
             },
             WalletEvent::AccountChanged(_) => {},
@@ -253,4 +283,6 @@ pub enum AccountMonitorError {
     Substate(#[from] SubstateApiError),
     #[error("Outputs API error: {0}")]
     ConfidentialOutputs(#[from] ConfidentialOutputsApiError),
+    #[error("Unexpected substate: {0}")]
+    UnexpectedSubstate(String),
 }

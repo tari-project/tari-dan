@@ -206,6 +206,30 @@ pub struct BalanceEntry {
     pub balance: Amount,
     pub resource_type: ResourceType,
     pub confidential_balance: Amount,
+    pub token_symbol: Option<String>,
+}
+
+impl BalanceEntry {
+    pub fn to_balance_string(&self) -> String {
+        let symbol = self.token_symbol.as_deref().unwrap_or_default();
+        match self.resource_type {
+            ResourceType::Fungible => {
+                format!("{} {}", self.balance, symbol)
+            },
+            ResourceType::NonFungible => {
+                format!("{} {} tokens", self.balance, symbol)
+            },
+            ResourceType::Confidential => {
+                format!(
+                    "{} revealed + {} blinded = {} {}",
+                    self.balance,
+                    self.confidential_balance,
+                    self.balance + self.confidential_balance,
+                    symbol
+                )
+            },
+        }
+    }
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
