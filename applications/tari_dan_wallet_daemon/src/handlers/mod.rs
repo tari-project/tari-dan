@@ -1,14 +1,13 @@
 //   Copyright 2023 The Tari Project
 //   SPDX-License-Identifier: BSD-3-Clause
 
-pub mod keys;
-pub mod transaction;
-
 pub mod accounts;
+pub mod confidential;
 mod context;
 pub mod error;
-
-pub(crate) const TRANSACTION_KEYMANAGER_BRANCH: &str = "transactions";
+pub mod keys;
+pub mod rpc;
+pub mod transaction;
 
 use std::future::Future;
 

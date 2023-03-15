@@ -27,23 +27,22 @@ use std::{
 
 use serde::{Deserialize, Serialize};
 use tari_bor::{borsh, decode, decode_exact, encode, Decode, Encode};
-use tari_common_types::types::Commitment;
 use tari_template_lib::{
     models::{
         ComponentAddress,
         ComponentHeader,
-        LayerOneCommitmentAddress,
         NonFungibleAddress,
         NonFungibleId,
         NonFungibleIndexAddress,
         ResourceAddress,
+        UnclaimedConfidentialOutputAddress,
         VaultId,
     },
     Hash,
 };
-use tari_utilities::ByteArray;
 
 use crate::{
+    confidential::UnclaimedConfidentialOutput,
     hashing::{hasher, EngineHashDomainLabel},
     non_fungible::NonFungibleContainer,
     non_fungible_index::NonFungibleIndex,
@@ -92,7 +91,7 @@ pub enum SubstateAddress {
     Component(ComponentAddress),
     Resource(ResourceAddress),
     Vault(VaultId),
-    LayerOneCommitment(LayerOneCommitmentAddress),
+    UnclaimedConfidentialOutput(UnclaimedConfidentialOutputAddress),
     NonFungible(NonFungibleAddress),
     NonFungibleIndex(NonFungibleIndexAddress),
 }
@@ -124,7 +123,7 @@ impl SubstateAddress {
             SubstateAddress::Component(address) => *address.hash(),
             SubstateAddress::Resource(address) => *address.hash(),
             SubstateAddress::Vault(id) => *id.hash(),
-            SubstateAddress::LayerOneCommitment(address) => *address.hash(),
+            SubstateAddress::UnclaimedConfidentialOutput(address) => *address.hash(),
             SubstateAddress::NonFungible(address) => hasher(EngineHashDomainLabel::NonFungibleId)
                 .chain(address.resource_address().hash())
                 .chain(address.id())
@@ -184,7 +183,7 @@ impl SubstateAddress {
     }
 
     pub fn is_layer1_commitment(&self) -> bool {
-        matches!(self, Self::LayerOneCommitment(_))
+        matches!(self, Self::UnclaimedConfidentialOutput(_))
     }
 }
 
@@ -218,6 +217,12 @@ impl From<NonFungibleIndexAddress> for SubstateAddress {
     }
 }
 
+impl From<UnclaimedConfidentialOutputAddress> for SubstateAddress {
+    fn from(address: UnclaimedConfidentialOutputAddress) -> Self {
+        Self::UnclaimedConfidentialOutput(address)
+    }
+}
+
 impl Display for SubstateAddress {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
@@ -226,7 +231,7 @@ impl Display for SubstateAddress {
             SubstateAddress::Vault(addr) => write!(f, "{}", addr),
             SubstateAddress::NonFungible(addr) => write!(f, "{}", addr),
             SubstateAddress::NonFungibleIndex(addr) => write!(f, "{}", addr),
-            SubstateAddress::LayerOneCommitment(commitment_address) => write!(f, "{}", commitment_address),
+            SubstateAddress::UnclaimedConfidentialOutput(commitment_address) => write!(f, "{}", commitment_address),
         }
     }
 }
@@ -281,9 +286,9 @@ impl FromStr for SubstateAddress {
                 Ok(SubstateAddress::Vault(id))
             },
             Some(("commitment", addr)) => {
-                let commitment_address = LayerOneCommitmentAddress::from_hex(addr)
+                let commitment_address = UnclaimedConfidentialOutputAddress::from_hex(addr)
                     .map_err(|_| InvalidSubstateAddressFormat(s.to_string()))?;
-                Ok(SubstateAddress::LayerOneCommitment(commitment_address))
+                Ok(SubstateAddress::UnclaimedConfidentialOutput(commitment_address))
             },
             Some(_) | None => Err(InvalidSubstateAddressFormat(s.to_string())),
         }
@@ -310,7 +315,7 @@ macro_rules! impl_partial_eq {
 impl_partial_eq!(ComponentAddress, Component);
 impl_partial_eq!(ResourceAddress, Resource);
 impl_partial_eq!(VaultId, Vault);
-impl_partial_eq!(LayerOneCommitmentAddress, LayerOneCommitment);
+impl_partial_eq!(UnclaimedConfidentialOutputAddress, UnclaimedConfidentialOutput);
 impl_partial_eq!(NonFungibleAddress, NonFungible);
 
 #[derive(Debug, Clone, Encode, Decode, Serialize, Deserialize)]
@@ -320,7 +325,7 @@ pub enum SubstateValue {
     Vault(Vault),
     NonFungible(NonFungibleContainer),
     NonFungibleIndex(NonFungibleIndex),
-    LayerOneCommitment(Vec<u8>),
+    UnclaimedConfidentialOutput(UnclaimedConfidentialOutput),
 }
 
 impl SubstateValue {
@@ -387,12 +392,9 @@ impl SubstateValue {
         }
     }
 
-    pub fn into_layer_one_commitment(self) -> Option<Commitment> {
+    pub fn into_unclaimed_confidential_output(self) -> Option<UnclaimedConfidentialOutput> {
         match self {
-            SubstateValue::LayerOneCommitment(commitment) => Some(
-                Commitment::from_bytes(&commitment)
-                    .expect("Should never fail to parse commitment, because it's saved from the db"),
-            ),
+            SubstateValue::UnclaimedConfidentialOutput(output) => Some(output),
             _ => None,
         }
     }

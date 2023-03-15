@@ -20,14 +20,24 @@
 //   WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //   USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+use std::{io, io::Read};
+
+use anyhow::anyhow;
 use clap::{Args, Subcommand};
+use serde_json as json;
 use tari_wallet_daemon_client::{
-    types::{AccountsCreateRequest, AccountsGetBalancesRequest, AccountsInvokeRequest},
+    types::{
+        AccountByNameResponse,
+        AccountsCreateRequest,
+        AccountsGetBalancesRequest,
+        AccountsInvokeRequest,
+        ClaimBurnRequest,
+    },
     WalletDaemonClient,
 };
 
 use crate::{
-    command::transaction::{print_execution_results, CliArg},
+    command::transaction::{print_execution_results, summarize_finalize_result, CliArg},
     table::Table,
     table_row,
 };
@@ -48,6 +58,8 @@ pub enum AccountsSubcommand {
     },
     #[clap(alias = "get")]
     GetByName(GetByNameArgs),
+    #[clap(alias = "claim-burn")]
+    ClaimBurn(ClaimBurnArgs),
 }
 
 #[derive(Debug, Args, Clone)]
@@ -70,6 +82,17 @@ pub struct GetByNameArgs {
     pub name: String,
 }
 
+#[derive(Debug, Args, Clone)]
+pub struct ClaimBurnArgs {
+    #[clap(long, short = 'n', alias = "name")]
+    account_name: String,
+    /// Optional proof JSON from the L1 console wallet. If not provided, you will be prompted to enter it.
+    #[clap(long, short = 'j', alias = "json")]
+    proof_json: Option<serde_json::Value>,
+    #[clap(long, short = 'f')]
+    fee: Option<u64>,
+}
+
 impl AccountsSubcommand {
     pub async fn handle(self, mut client: WalletDaemonClient) -> Result<(), anyhow::Error> {
         match self {
@@ -86,6 +109,7 @@ impl AccountsSubcommand {
                 hande_invoke(account, method, args, &mut client).await?
             },
             AccountsSubcommand::GetByName(args) => handle_get_by_name(args, &mut client).await?,
+            AccountsSubcommand::ClaimBurn(args) => handle_claim_burn(args, &mut client).await?,
         }
         Ok(())
     }
@@ -152,17 +176,56 @@ async fn handle_get_balances(args: GetBalancesArgs, client: &mut WalletDaemonCli
     println!();
     let mut table = Table::new();
     table.enable_row_count();
-    table.set_titles(vec!["Resource", "Balance"]);
-    for (resx, amt) in resp.balances {
-        table.add_row(table_row!(resx, amt));
+    table.set_titles(vec!["VaultId", "Resource", "Balance"]);
+    for (vault_id, resx, amt) in resp.balances {
+        table.add_row(table_row!(vault_id, resx, amt));
     }
     table.print_stdout();
     Ok(())
 }
 
+pub async fn handle_claim_burn(args: ClaimBurnArgs, client: &mut WalletDaemonClient) -> Result<(), anyhow::Error> {
+    let ClaimBurnArgs {
+        account_name,
+        proof_json,
+        fee,
+    } = args;
+
+    let AccountByNameResponse { account_address } = client.accounts_get_by_name(account_name).await?;
+
+    let claim_proof = if let Some(proof_json) = proof_json {
+        proof_json
+    } else {
+        println!(
+            "Please paste console wallet JSON output from claim_burn call in the terminal: Press <Ctrl/Cmd + d> once \
+             done"
+        );
+
+        let mut proof_json = String::new();
+        io::stdin().read_to_string(&mut proof_json)?;
+        json::from_str::<json::Value>(proof_json.trim()).map_err(|e| anyhow!("Failed to parse proof JSON: {}", e))?
+    };
+
+    println!("✅ Claim burn submitted");
+
+    let req = ClaimBurnRequest {
+        account: account_address.as_component_address().unwrap(),
+        claim_proof,
+        fee: fee.unwrap_or(1),
+    };
+
+    let resp = client
+        .claim_burn(req)
+        .await
+        .map_err(|e| anyhow!("Failed to claim burn with error = {}", e.to_string()))?;
+
+    summarize_finalize_result(&resp.result);
+    Ok(())
+}
+
 async fn handle_list(client: &mut WalletDaemonClient) -> Result<(), anyhow::Error> {
     println!("Submitted account list transaction...");
-    let resp = client.list_accounts(100).await?;
+    let resp = client.list_accounts(0, 100).await?;
 
     if resp.accounts.is_empty() {
         println!("No accounts found");
@@ -182,7 +245,7 @@ async fn handle_list(client: &mut WalletDaemonClient) -> Result<(), anyhow::Erro
 
 async fn handle_get_by_name(args: GetByNameArgs, client: &mut WalletDaemonClient) -> Result<(), anyhow::Error> {
     println!("Get account component address by its name...");
-    let resp = client.get_by_name(args.name.clone()).await?;
+    let resp = client.accounts_get_by_name(args.name.clone()).await?;
 
     println!("Account {} substate_address: {}", args.name, resp.account_address);
     println!();

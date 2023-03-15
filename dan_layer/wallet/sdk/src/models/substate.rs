@@ -9,7 +9,7 @@ use tari_dan_common_types::serde_with;
 use tari_engine_types::substate::SubstateAddress;
 
 #[derive(Debug, Clone)]
-pub struct SubstateRecord {
+pub struct SubstateModel {
     pub module_name: Option<String>,
     pub address: VersionedSubstateAddress,
     pub parent_address: Option<SubstateAddress>,

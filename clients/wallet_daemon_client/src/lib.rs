@@ -28,6 +28,14 @@ use reqwest::{header, header::HeaderMap, IntoUrl, Url};
 use serde::{de::DeserializeOwned, Serialize};
 use serde_json as json;
 use serde_json::json;
+use types::{
+    ProofsCancelRequest,
+    ProofsCancelResponse,
+    ProofsFinalizeRequest,
+    ProofsFinalizeResponse,
+    ProofsGenerateRequest,
+    ProofsGenerateResponse,
+};
 
 use crate::{
     error::WalletDaemonClientError,
@@ -42,6 +50,10 @@ use crate::{
         AccountsInvokeResponse,
         AccountsListRequest,
         AccountsListResponse,
+        ClaimBurnRequest,
+        ClaimBurnResponse,
+        ConfidentialCreateOutputProofRequest,
+        ConfidentialCreateOutputProofResponse,
         KeysCreateRequest,
         KeysCreateResponse,
         KeysListRequest,
@@ -163,12 +175,56 @@ impl WalletDaemonClient {
         self.send_request("accounts.get_balances", request.borrow()).await
     }
 
-    pub async fn list_accounts(&mut self, limit: u64) -> Result<AccountsListResponse, WalletDaemonClientError> {
-        self.send_request("accounts.list", &AccountsListRequest { limit }).await
+    pub async fn list_accounts(
+        &mut self,
+        offset: u64,
+        limit: u64,
+    ) -> Result<AccountsListResponse, WalletDaemonClientError> {
+        self.send_request("accounts.list", &AccountsListRequest { offset, limit })
+            .await
     }
 
-    pub async fn get_by_name(&mut self, name: String) -> Result<AccountByNameResponse, WalletDaemonClientError> {
+    pub async fn accounts_get_by_name(
+        &mut self,
+        name: String,
+    ) -> Result<AccountByNameResponse, WalletDaemonClientError> {
         self.send_request("accounts.get_by_name", &AccountByNameRequest { name })
+            .await
+    }
+
+    pub async fn claim_burn<T: Borrow<ClaimBurnRequest>>(
+        &mut self,
+        req: T,
+    ) -> Result<ClaimBurnResponse, WalletDaemonClientError> {
+        self.send_request("accounts.claim_burn", req.borrow()).await
+    }
+
+    pub async fn create_transfer_proof<T: Borrow<ProofsGenerateRequest>>(
+        &mut self,
+        req: T,
+    ) -> Result<ProofsGenerateResponse, WalletDaemonClientError> {
+        self.send_request("confidential.create", req.borrow()).await
+    }
+
+    pub async fn cancel_transfer_proof<T: Borrow<ProofsCancelRequest>>(
+        &mut self,
+        req: T,
+    ) -> Result<ProofsCancelResponse, WalletDaemonClientError> {
+        self.send_request("confidential.cancel", req.borrow()).await
+    }
+
+    pub async fn finalize_transfer_proof<T: Borrow<ProofsFinalizeRequest>>(
+        &mut self,
+        req: T,
+    ) -> Result<ProofsFinalizeResponse, WalletDaemonClientError> {
+        self.send_request("confidential.finalize", req.borrow()).await
+    }
+
+    pub async fn create_confidential_output_proof<T: Borrow<ConfidentialCreateOutputProofRequest>>(
+        &mut self,
+        req: T,
+    ) -> Result<ConfidentialCreateOutputProofResponse, WalletDaemonClientError> {
+        self.send_request("confidential.create_output_proof", req.borrow())
             .await
     }
 

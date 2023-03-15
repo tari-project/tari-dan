@@ -153,7 +153,7 @@ impl Vault {
         let resp: InvokeResult = call_engine(EngineOp::VaultInvoke, &VaultInvokeArg {
             vault_ref: self.vault_ref(),
             action: VaultAction::Withdraw,
-            args: invoke_args![VaultWithdrawArg::Confidential { proof }],
+            args: invoke_args![VaultWithdrawArg::Confidential { proof: Box::new(proof) }],
         });
 
         resp.decode().expect("failed to decode Bucket")
@@ -225,6 +225,10 @@ impl Vault {
     pub fn join_confidential(&mut self, proof: ConfidentialWithdrawProof) {
         let bucket = self.withdraw_confidential(proof);
         self.deposit(bucket);
+    }
+
+    pub fn vault_id(&self) -> VaultId {
+        self.vault_id
     }
 
     pub fn vault_ref(&self) -> VaultRef {

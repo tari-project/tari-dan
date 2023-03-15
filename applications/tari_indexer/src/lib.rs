@@ -42,8 +42,9 @@ use std::{
 };
 
 use dan_layer_scanner::DanLayerScanner;
+pub use dan_layer_scanner::NonFungible;
 use http_ui::server::run_http_ui_server;
-pub use json_rpc::GetSubstateRequest;
+pub use json_rpc::{AddAddressRequest, GetNonFungibleCountRequest, GetNonFungiblesRequest, GetSubstateRequest};
 use log::*;
 use substate_manager::SubstateManager;
 use tari_app_utilities::identity_management::setup_node_identity;
@@ -70,7 +71,7 @@ pub const DAN_PEER_FEATURES: PeerFeatures = PeerFeatures::COMMUNICATION_NODE;
 pub async fn run_indexer(config: ApplicationConfig, mut shutdown_signal: ShutdownSignal) -> Result<(), ExitError> {
     let node_identity = setup_node_identity(
         &config.indexer.identity_file,
-        config.indexer.public_address.as_ref(),
+        vec![config.indexer.public_address.clone().unwrap()],
         true,
         DAN_PEER_FEATURES,
     )?;

@@ -1,6 +1,6 @@
 [package]
 name = "tari_template_macros"
-version = "0.35.1"
+version = "0.50.0-pre.0"
 edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
@@ -10,7 +10,8 @@ proc-macro = true
 
 [dependencies]
 proc-macro2 = "1.0.42"
-quote = "1.0.20"
+# Locked due to https://github.com/diesel-rs/diesel/issues/3541
+quote = "=1.0.20"
 syn = { version = "1.0.98", features = ["full", "extra-traits"] }
 
 [dev-dependencies]

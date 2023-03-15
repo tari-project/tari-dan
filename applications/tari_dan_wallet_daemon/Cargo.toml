@@ -4,14 +4,14 @@ authors = ["The Tari Development Community"]
 description = "The Tari DAN wallet daemon"
 repository = "https://github.com/tari-project/tari"
 license = "BSD-3-Clause"
-version = "0.35.1"
+version = "0.50.0-pre.0"
 edition = "2018"
 
 [dependencies]
-tari_common = { git = "https://github.com/tari-project/tari.git", branch = "development" }
-tari_crypto = { git = "https://github.com/tari-project/tari-crypto.git", tag = "v0.16.6" }
-tari_common_types = { git = "https://github.com/tari-project/tari.git", branch = "development" }
-tari_shutdown = { git = "https://github.com/tari-project/tari.git", branch = "development" }
+tari_common = { git = "https://github.com/tari-project/tari.git", tag = "v0.49.0-pre.0" }
+tari_crypto = { git = "https://github.com/tari-project/tari-crypto.git", tag = "v0.16.8" }
+tari_common_types = { git = "https://github.com/tari-project/tari.git", tag = "v0.49.0-pre.0" }
+tari_shutdown = { git = "https://github.com/tari-project/tari.git", tag = "v0.49.0-pre.0" }
 tari_dan_wallet_sdk = { path = "../../dan_layer/wallet/sdk" }
 tari_dan_wallet_storage_sqlite = { path = "../../dan_layer/wallet/storage_sqlite" }
 tari_transaction = { path = "../../dan_layer/transaction" }
@@ -22,8 +22,10 @@ tari_wallet_daemon_client = { path = "../../clients/wallet_daemon_client" }
 tari_template_builtin = { path = "../../dan_layer/template_builtin" }
 # TODO: Ideally we should not have to include the WASM template lib, we should perhaps extract the address types into a separate crate (e.g. template_types)
 tari_template_lib = { path = "../../dan_layer/template_lib" }
+tari_bor = { path = "../../dan_layer/tari_bor" }
 
 anyhow = "1.0.69"
+base64 = "0.20.0-alpha.1"
 axum = "0.6"
 axum-jrpc = { version = "0.3.2", features = ["anyhow_error"] }
 clap = { version = "4.1.4", features = ["derive", "env"] }

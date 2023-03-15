@@ -133,7 +133,7 @@ impl TemplateManagerService {
 
                 // validation of the downloaded template binary hash
                 let actual_binary_hash = calculate_template_binary_hash(&bytes);
-                let template_status = if actual_binary_hash == download.expected_binary_hash {
+                let template_status = if actual_binary_hash.as_slice() == download.expected_binary_hash.as_slice() {
                     info!(
                         target: LOG_TARGET,
                         "✅ Template {} is active", download.template_address,

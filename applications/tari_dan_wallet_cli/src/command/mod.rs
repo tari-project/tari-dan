@@ -22,10 +22,16 @@
 
 use clap::Subcommand;
 
-use crate::command::{account::AccountsSubcommand, key::KeysSubcommand, transaction::TransactionSubcommand};
+use crate::command::{
+    account::AccountsSubcommand,
+    key::KeysSubcommand,
+    proof::ProofsSubcommand,
+    transaction::TransactionSubcommand,
+};
 
 mod account;
 mod key;
+mod proof;
 pub mod transaction;
 
 #[allow(clippy::large_enum_variant)]
@@ -35,6 +41,8 @@ pub enum Command {
     Keys(KeysSubcommand),
     #[clap(subcommand, alias = "transaction")]
     Transactions(TransactionSubcommand),
-    #[clap(subcommand, alias = "accounts")]
+    #[clap(subcommand, alias = "account")]
     Accounts(AccountsSubcommand),
+    #[clap(subcommand, alias = "proof")]
+    Proofs(ProofsSubcommand),
 }

@@ -71,7 +71,7 @@ use tari_dan_core::{
         StorageError,
     },
 };
-use tari_engine_types::instruction::Instruction;
+use tari_engine_types::{instruction::Instruction, substate::SubstateAddress};
 use tari_transaction::{InstructionSignature, Transaction, TransactionMeta};
 use tari_utilities::{
     hex::{to_hex, Hex},
@@ -552,26 +552,17 @@ impl ShardStoreReadTransaction<PublicKey, TariDanPayload> for SqliteShardStoreRe
             .map(|sh| Vec::from(sh.as_bytes()))
             .collect::<Vec<Vec<u8>>>();
 
-        let substate_states: Option<Vec<crate::models::substate::Substate>> = substates::table
+        let substate_states: Vec<crate::models::substate::Substate> = substates::table
             .filter(substates::shard_id.eq_any(shard_ids))
             .get_results(self.transaction.connection())
-            .optional()
             .map_err(|e| StorageError::QueryError {
                 reason: format!("Get substate change error: {}", e),
-            })
-            .unwrap();
+            })?;
 
-        if let Some(substate_states) = substate_states {
-            substate_states
-                .iter()
-                .map(Self::map_substate_to_shard_data)
-                .collect::<Result<_, _>>()
-        } else {
-            Err(StorageError::NotFound {
-                item: "substate".to_string(),
-                key: "No data found for available shards".to_string(),
-            })
-        }
+        substate_states
+            .iter()
+            .map(Self::map_substate_to_shard_data)
+            .collect::<Result<_, _>>()
     }
 
     fn get_substate_states_by_range(
@@ -1588,12 +1579,12 @@ impl ShardStoreWriteTransaction<PublicKey, TariDanPayload> for SqliteShardStoreW
     fn save_burnt_utxo(
         &mut self,
         substate: &tari_engine_types::substate::Substate,
-        commitment_address: String,
+        commitment_address: SubstateAddress,
         shard_id: ShardId,
     ) -> Result<(), StorageError> {
         let new_row = NewSubstate {
             shard_id: shard_id.as_bytes().to_vec(),
-            address: commitment_address,
+            address: commitment_address.to_string(),
             version: i64::from(substate.version()),
             data: serde_json::to_string_pretty(substate).unwrap(),
             created_by_payload_id: vec![0; 32],

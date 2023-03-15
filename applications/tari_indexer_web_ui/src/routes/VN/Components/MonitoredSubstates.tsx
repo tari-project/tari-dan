@@ -21,7 +21,12 @@
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 import { useEffect, useState } from 'react';
-import { addAddress, deleteAddress, getAddresses, getSubstate } from '../../../utils/json_rpc';
+import {
+  addAddress,
+  deleteAddress,
+  getAddresses,
+  getSubstate,
+} from '../../../utils/json_rpc';
 import { Form } from 'react-router-dom';
 import { renderJson } from '../../../utils/helpers';
 import Table from '@mui/material/Table';
@@ -34,6 +39,7 @@ import {
   DataTableCell,
   CodeBlock,
   AccordionIconButton,
+  BoxHeading2,
 } from '../../../Components/StyledComponents';
 import KeyboardArrowDownIcon from '@mui/icons-material/KeyboardArrowDown';
 import KeyboardArrowUpIcon from '@mui/icons-material/KeyboardArrowUp';
@@ -42,6 +48,7 @@ import TablePagination from '@mui/material/TablePagination';
 import Typography from '@mui/material/Typography';
 import { Button, TextField } from '@mui/material';
 import AddIcon from '@mui/icons-material/Add';
+import { ConfirmDialog } from '../../../Components/AlertDialog';
 
 interface ITableAddresses {
   id: string;
@@ -51,14 +58,17 @@ interface ITableAddresses {
 
 type ColumnKey = keyof ITableAddresses;
 
-function RowData(
-  { id, address, version, onDelete }: {
-    id: string,
-    address: string,
-    version: number,
-    onDelete: (address: string) => void,
-  }
-) {
+function RowData({
+  id,
+  address,
+  version,
+  onDelete,
+}: {
+  id: string;
+  address: string;
+  version: number;
+  onDelete: (address: string) => void;
+}) {
   const [open1, setOpen1] = useState(false);
   const [data, setData] = useState<string | null>(null);
   return (
@@ -91,11 +101,13 @@ function RowData(
             size="small"
             onClick={() => {
               if (data === null) {
-                getSubstate(address).then(resp => {
-                  setData(JSON.stringify(resp));
-                }).catch((error) => {
-                  console.log("Error", error);
-                });
+                getSubstate(address)
+                  .then((resp) => {
+                    setData(JSON.stringify(resp));
+                  })
+                  .catch((error) => {
+                    console.log('Error', error);
+                  });
               }
               setOpen1(!open1);
             }}
@@ -104,7 +116,14 @@ function RowData(
           </AccordionIconButton>
         </DataTableCell>
         <DataTableCell>
-          <span onClick={() => onDelete(address)}>Delete</span>
+          <ConfirmDialog
+            buttonTitle="Delete"
+            confirmTitle="Yes, Delete Address"
+            confirmFunction={() => onDelete(address)}
+            cancelTitle="Cancel"
+            dialogTitle="Delete Address"
+            dialogDescription="You are about to delete this address. Are you sure?"
+          />
         </DataTableCell>
       </TableRow>
       <TableRow key={`${id}-2`}>
@@ -121,37 +140,34 @@ function RowData(
 }
 
 function MonitoredSubstates() {
-  const [addresses, setAddresses] = useState<
-    ITableAddresses[]
-  >([]);
+  const [addresses, setAddresses] = useState<ITableAddresses[]>([]);
   const [lastSort, setLastSort] = useState({ column: '', order: -1 });
 
   const [page, setPage] = useState(0);
   const [rowsPerPage, setRowsPerPage] = useState(10);
 
   const [showAddressDialog, setShowAddAddressDialog] = useState(false);
-  const [formState, setFormState] = useState({ address: "" });
+  const [formState, setFormState] = useState({ address: '' });
 
-  const showAddAddressDialog = (setElseToggle: boolean = !showAddressDialog) => {
+  const showAddAddressDialog = (
+    setElseToggle: boolean = !showAddressDialog
+  ) => {
     setShowAddAddressDialog(setElseToggle);
   };
   const onSubmitAddAddress = () => {
     addAddress(formState.address).then((resp) => {
       updatedAddresses();
     });
-    setFormState({ address: "" });
+    setFormState({ address: '' });
     setShowAddAddressDialog(false);
   };
   const onChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setFormState({ ...formState, [e.target.name]: e.target.value });
   };
 
-
   // Avoid a layout jump when reaching the last page with empty rows.
   const emptyRows =
-    page > 0
-      ? Math.max(0, (1 + page) * rowsPerPage - addresses.length)
-      : 0;
+    page > 0 ? Math.max(0, (1 + page) * rowsPerPage - addresses.length) : 0;
 
   const handleChangePage = (event: unknown, newPage: number) => {
     setPage(newPage);
@@ -166,20 +182,26 @@ function MonitoredSubstates() {
 
   const updatedAddresses = () => {
     getAddresses().then((resp) => {
-      setAddresses(resp.map(([address, version]: [string, number]) => ({ id: address, address: address, version: version })));
-    })
+      setAddresses(
+        resp.map(([address, version]: [string, number]) => ({
+          id: address,
+          address: address,
+          version: version,
+        }))
+      );
+    });
   };
 
   useEffect(() => {
-    updatedAddresses()
+    updatedAddresses();
   }, []);
 
   const onDelete = (address: string) => {
     deleteAddress(address).then((resp) => {
-      console.log(`Address ${address} deleted`)
+      console.log(`Address ${address} deleted`);
       updatedAddresses();
-    })
-  }
+    });
+  };
   const sort = (column: ColumnKey) => {
     let order = 1;
     if (lastSort.column === column) {
@@ -200,22 +222,43 @@ function MonitoredSubstates() {
 
   return (
     <TableContainer>
-      <Button startIcon={<AddIcon />} onClick={() => showAddAddressDialog()}>
-        Add address
-      </Button>
-      {showAddressDialog ? (
-        <Form onSubmit={onSubmitAddAddress}>
-          <TextField name="address" label="Address" value={formState.address} onChange={onChange} />
-          <Button type="submit">Add Address</Button>
-          <Button onClick={() => showAddAddressDialog(false)}>Cancel</Button>
-        </Form>
-      ) : null}
+      <BoxHeading2 style={{ minHeight: '75px' }}>
+        {showAddressDialog ? (
+          <Form onSubmit={onSubmitAddAddress} className="add-confirm-form">
+            <TextField
+              name="address"
+              label="Address"
+              value={formState.address}
+              onChange={onChange}
+            />
+            <Button variant="contained" type="submit">
+              Add Address
+            </Button>
+            <Button
+              variant="outlined"
+              onClick={() => showAddAddressDialog(false)}
+            >
+              Cancel
+            </Button>
+          </Form>
+        ) : (
+          <Button
+            startIcon={<AddIcon />}
+            onClick={() => showAddAddressDialog()}
+            variant="outlined"
+          >
+            Add address
+          </Button>
+        )}
+      </BoxHeading2>
+
       <Table>
         <TableHead>
           <TableRow>
-          <TableCell
+            <TableCell
               onClick={() => sort('address')}
-              style={{ textAlign: 'center' }}>
+              style={{ textAlign: 'center' }}
+            >
               <div
                 style={{
                   display: 'flex',
@@ -238,7 +281,8 @@ function MonitoredSubstates() {
             </TableCell>
             <TableCell
               onClick={() => sort('version')}
-              style={{ textAlign: 'center' }}>
+              style={{ textAlign: 'center' }}
+            >
               <div
                 style={{
                   display: 'flex',
@@ -273,8 +317,7 @@ function MonitoredSubstates() {
                 version={version}
                 onDelete={onDelete}
               />
-            )
-            )}
+            ))}
           {emptyRows > 0 && (
             <TableRow
               style={{

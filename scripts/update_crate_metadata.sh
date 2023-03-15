@@ -6,38 +6,38 @@ if [ "x$VERSION" == "x" ]; then
   exit 1
 fi
 
-#   infrastructure/derive
-#   infrastructure/shutdown
-#   infrastructure/storage
-#   infrastructure/test_utils
-#   base_layer/core
-#   base_layer/key_manager
-#   base_layer/mmr
-#   base_layer/p2p
-#   base_layer/service_framework
-#   base_layer/wallet
-#   base_layer/wallet_ffi
-#   common
-#   comms
-#   comms/dht
-#   applications/tari_base_node
-#   applications/tari_app_grpc
-#   applications/tari_app_utilities
-#   applications/tari_console_wallet
-#   applications/tari_merge_mining_proxy
-#   applications/test_faucet
-
 function update_versions {
     packages=${@:-'
+   applications/tari_dan_app_grpc
+   applications/tari_dan_app_utilities
+   applications/tari_dan_wallet_cli
+   applications/tari_dan_wallet_daemon
+   applications/tari_indexer
    applications/tari_validator_node
+   applications/tari_validator_node_cli
+   clients/tari_indexer_client
+   clients/validator_node_client
+   clients/validator_node_grpc_client
+   clients/wallet_daemon_client
+   comms/tari_comms_logging
    dan_layer/common_types
    dan_layer/core
    dan_layer/engine
+   dan_layer/engine_types
+   dan_layer/integration_tests
+   dan_layer/storage
    dan_layer/storage_lmdb
    dan_layer/storage_sqlite
+   dan_layer/tari_bor
    dan_layer/template_abi
+   dan_layer/template_builtin
    dan_layer/template_lib
    dan_layer/template_macros
+   dan_layer/template_test_tooling
+   dan_layer/transaction
+   dan_layer/transaction_manifest
+   dan_layer/wallet/sdk
+   dan_layer/wallet/storage_sqlite
 '}
 
   p_arr=($packages)

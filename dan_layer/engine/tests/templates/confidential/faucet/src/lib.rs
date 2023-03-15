@@ -31,7 +31,7 @@ mod faucet_template {
     }
 
     impl ConfidentialFaucet {
-        pub fn mint(confidential_proof: ConfidentialProof) -> Self {
+        pub fn mint(confidential_proof: ConfidentialOutputProof) -> Self {
             let coins = ResourceBuilder::confidential()
                 .with_token_symbol("🪙")
                 .initial_supply(confidential_proof)

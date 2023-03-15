@@ -3,15 +3,16 @@ name = "tari_dan_wallet_storage_sqlite"
 authors = ["The Tari Development Community"]
 description = "The Tari DAN wallet library"
 repository = "https://github.com/tari-project/tari-dan"
-version = "0.35.1"
+version = "0.50.0-pre.0"
 edition = "2021"
 license = "BSD-3-Clause"
 
 [dependencies]
-tari_common_types = { git = "https://github.com/tari-project/tari.git", branch = "development" }
+tari_common_types = { git = "https://github.com/tari-project/tari.git", tag = "v0.49.0-pre.0" }
 tari_dan_common_types = { path = "../../common_types" }
 tari_dan_wallet_sdk = { path = "../sdk" }
 tari_engine_types = { path = "../../engine_types" }
+tari_template_lib = { path = "../../template_lib" }
 tari_transaction = { path = "../../transaction" }
 tari_utilities = { git = "https://github.com/tari-project/tari_utilities.git", tag = "v0.4.10" }
 
@@ -22,6 +23,7 @@ diesel = { version = "2", features = ["sqlite", "chrono"] }
 diesel_migrations = "2"
 log = "0.4.17"
 chrono = "*"
+bigdecimal = "0.3"
 
 # Bundle libsqlite3
 libsqlite3-sys = { version = "0.25", features = ["bundled"] }

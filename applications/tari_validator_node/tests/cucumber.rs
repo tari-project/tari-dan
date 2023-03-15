@@ -45,7 +45,7 @@ use tari_common::initialize_logging;
 use tari_common_types::types::{FixedHash, PublicKey};
 use tari_comms::multiaddr::Multiaddr;
 use tari_crypto::{
-    ristretto::{RistrettoPublicKey, RistrettoSecretKey},
+    ristretto::{RistrettoComSig, RistrettoPublicKey, RistrettoSecretKey},
     tari_utilities::hex::Hex,
 };
 use tari_dan_app_utilities::base_node_client::GrpcBaseNodeClient;
@@ -95,11 +95,12 @@ pub struct TariWorld {
     cli_data_dir: Option<String>,
     current_scenario_name: Option<String>,
     commitments: IndexMap<String, Vec<u8>>,
-    commitment_ownership_proofs: IndexMap<String, Vec<u8>>,
+    commitment_ownership_proofs: IndexMap<String, RistrettoComSig>,
     rangeproofs: IndexMap<String, Vec<u8>>,
     addresses: IndexMap<String, String>,
     num_databases_saved: usize,
     account_public_keys: IndexMap<String, (RistrettoSecretKey, PublicKey)>,
+    claim_public_keys: IndexMap<String, PublicKey>,
 }
 
 impl TariWorld {
@@ -165,7 +166,8 @@ impl cucumber::World for TariWorld {
 #[tokio::main]
 async fn main() {
     let log_path = create_log_config_file();
-    initialize_logging(log_path.as_path(), include_str!("./log4rs/cucumber.yml")).unwrap();
+    let base_path = get_base_dir();
+    initialize_logging(log_path.as_path(), &base_path, include_str!("./log4rs/cucumber.yml")).unwrap();
 
     TariWorld::cucumber()
         .max_concurrent_scenarios(1)
@@ -613,6 +615,13 @@ async fn start_indexer(world: &mut TariWorld, indexer_name: String, bn_name: Str
     spawn_indexer(world, indexer_name, bn_name).await;
 }
 
+#[when(expr = "the indexer {word} tracks the address {word}")]
+async fn track_addresss_in_indexer(world: &mut TariWorld, indexer_name: String, output_ref: String) {
+    let indexer = world.indexers.get(&indexer_name).unwrap();
+    assert!(!indexer.handle.is_finished(), "Indexer {} is not running", indexer_name);
+    indexer.add_address(world, output_ref).await;
+}
+
 #[then(expr = "the indexer {word} returns version {int} for substate {word}")]
 async fn assert_indexer_substate_version(
     world: &mut TariWorld,
@@ -625,6 +634,15 @@ async fn assert_indexer_substate_version(
     let substate = indexer.get_substate(world, output_ref, version).await;
     eprintln!("indexer.get_substate result: {:?}", substate);
     assert_eq!(substate.version(), version);
+}
+
+#[then(expr = "the indexer {word} returns {int} non fungibles for resource {word}")]
+async fn assert_indexer_non_fungible_list(world: &mut TariWorld, indexer_name: String, count: u32, output_ref: String) {
+    let indexer = world.indexers.get(&indexer_name).unwrap();
+    assert!(!indexer.handle.is_finished(), "Indexer {} is not running", indexer_name);
+    let nfts = indexer.get_non_fungibles(world, output_ref, 0, u64::from(count)).await;
+    eprintln!("indexer.get_non_fungibles result: {:?}", nfts);
+    assert_eq!(nfts.len() as u32, count);
 }
 
 #[when(expr = "I wait {int} seconds")]

@@ -122,9 +122,9 @@ dependencies = [
 
 [[package]]
 name = "quote"
-version = "1.0.21"
+version = "1.0.20"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "bbe448f377a7d6961e30f5955f9b8d106c3f5e449d493ee1b125c1d43c2b5179"
+checksum = "3bcdf212e9776fbcb2d23ab029360416bb1706b1aea2d1a5ba002727cbcab804"
 dependencies = [
  "proc-macro2",
 ]
@@ -148,21 +148,21 @@ dependencies = [
 
 [[package]]
 name = "tari_bor"
-version = "0.1.0"
+version = "0.50.0-pre.0"
 dependencies = [
  "borsh",
 ]
 
 [[package]]
 name = "tari_template_abi"
-version = "0.35.1"
+version = "0.50.0-pre.0"
 dependencies = [
  "tari_bor",
 ]
 
 [[package]]
 name = "tari_template_lib"
-version = "0.35.1"
+version = "0.50.0-pre.0"
 dependencies = [
  "newtype-ops",
  "tari_bor",
@@ -172,7 +172,7 @@ dependencies = [
 
 [[package]]
 name = "tari_template_macros"
-version = "0.35.1"
+version = "0.50.0-pre.0"
 dependencies = [
  "proc-macro2",
  "quote",

@@ -177,7 +177,7 @@ fn add_substate_addresses(world: &mut TariWorld, outputs_name: String, diff: &Su
                 });
                 counters[3] += 1;
             },
-            SubstateAddress::LayerOneCommitment(_) => {
+            SubstateAddress::UnclaimedConfidentialOutput(_) => {
                 outputs.insert(
                     format!("layer_one_commitments/{}", counters[4]),
                     VersionedSubstateAddress {

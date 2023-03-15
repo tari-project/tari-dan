@@ -22,7 +22,7 @@ Feature: Claim Burn
     # When I create a component SECOND_LAYER_TARI of template "fees" on VN using "new"
     When I create an account ACC_1 on VN
 
-    When I burn 10T on wallet WALLET into commitment COMMITMENT with proof PROOF for ACC_1 and range proof RANGEPROOF
+    When I burn 10T on wallet WALLET into commitment COMMITMENT with proof PROOF for ACC_1, range proof RANGEPROOF and claim public key CLAIM_PUBKEY
 
     # unfortunately have to wait for this to get into the mempool....
     Then there is 1 transaction in the mempool of BASE within 10 seconds
@@ -36,7 +36,7 @@ Feature: Claim Burn
     When miner MINER mines 5 new blocks
 
     When I save the state database of VN
-    When I claim burn COMMITMENT with PROOF and RANGEPROOF and spend it into account ACC_1 on VN
+    When I claim burn COMMITMENT with PROOF, RANGEPROOF and CLAIM_PUBKEY and spend it into account ACC_1 on VN
     # Then account ACC_1 has one confidential bucket in it
 
   @serial
@@ -58,7 +58,7 @@ Feature: Claim Burn
     # When I create a component SECOND_LAYER_TARI of template "fees" on VN using "new"
     When I create an account ACC_1 on VN
 
-    When I burn 10T on wallet WALLET into commitment COMMITMENT with proof PROOF for ACC_1 and range proof RANGEPROOF
+    When I burn 10T on wallet WALLET into commitment COMMITMENT with proof PROOF for ACC_1, range proof RANGEPROOF and claim public key CLAIM_PUBKEY
 
     # unfortunately have to wait for this to get into the mempool....
     Then there is 1 transaction in the mempool of BASE within 10 seconds
@@ -72,5 +72,5 @@ Feature: Claim Burn
     When miner MINER mines 5 new blocks
 
     When I save the state database of VN
-    When I claim burn COMMITMENT with PROOF and RANGEPROOF and spend it into account ACC_1 on VN
-    When I claim burn COMMITMENT with PROOF and RANGEPROOF and spend it into account ACC_1 on VN a second time, it fails
+    When I claim burn COMMITMENT with PROOF, RANGEPROOF and CLAIM_PUBKEY and spend it into account ACC_1 on VN
+    When I claim burn COMMITMENT with PROOF, RANGEPROOF and CLAIM_PUBKEY and spend it into account ACC_1 on VN a second time, it fails
