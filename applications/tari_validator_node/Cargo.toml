@@ -21,7 +21,6 @@ tari_core = { git = "https://github.com/tari-project/tari.git", tag = "v0.49.0-p
 tari_dan_app_grpc = { path = "../tari_dan_app_grpc" }
 tari_dan_app_utilities = { path = "../tari_dan_app_utilities" }
 tari_dan_wallet_daemon = { path = "../tari_dan_wallet_daemon" }
-tari_dan_wallet_sdk = { path = "../../dan_layer/wallet/sdk" }
 tari_dan_wallet_storage_sqlite = { path = "../../dan_layer/wallet/storage_sqlite" }
 tari_dan_core = { path = "../../dan_layer/core" }
 tari_dan_storage = { path = "../../dan_layer/storage" }
@@ -75,6 +74,7 @@ tari_common = { git = "https://github.com/tari-project/tari.git", tag = "v0.49.0
 
 [dev-dependencies]
 # FIXME: the newest version failed compilation due to a missing "bool_to_option" unstable feature
+base64 = "0.20.0-alpha.1"
 cucumber = { version = "0.13.0" }
 tempfile = "3.3.0"
 tari_test_utils = { git = "https://github.com/tari-project/tari.git", tag = "v0.49.0-pre.0", package = "tari_test_utils" }

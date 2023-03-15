@@ -54,3 +54,12 @@ async fn when_i_claim_burn_via_wallet_daemon(
 
     assert!(claim_burn_resp.result.is_accept());
 }
+
+#[when(expr = "I create an account {word} via the wallet daemon {word}")]
+async fn when_i_create_account_via_wallet_daemon(
+    world: &mut TariWorld,
+    account_name: String,
+    wallet_daemon_name: String,
+) {
+    wallet_daemon_cli::create_account(world, account_name, wallet_daemon_name).await;
+}

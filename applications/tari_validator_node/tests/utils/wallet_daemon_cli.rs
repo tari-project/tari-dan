@@ -20,15 +20,16 @@
 //   WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //   USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+use base64;
 use serde::Serialize;
 use tari_crypto::{
     ristretto::{RistrettoPublicKey, RistrettoSecretKey},
     signatures::CommitmentSignature,
-    tari_utilities::message_format::MessageFormat,
+    tari_utilities::ByteArray,
 };
 use tari_template_lib::prelude::ComponentAddress;
 use tari_wallet_daemon_client::{
-    types::{ClaimBurnRequest, ClaimBurnResponse},
+    types::{AccountsCreateRequest, ClaimBurnRequest, ClaimBurnResponse},
     WalletDaemonClient,
 };
 
@@ -59,15 +60,17 @@ pub async fn claim_burn(
         range_proof: String,
     }
 
+    let ownership_proof = OwnershipProof {
+        public_nonce: base64::encode(ownership_proof.public_nonce().as_bytes()),
+        u: base64::encode(ownership_proof.u().as_bytes()),
+        v: base64::encode(ownership_proof.v().as_bytes()),
+    };
+
     let value = ClaimValue {
-        commitment: commitment.to_base64().unwrap(),
-        ownership_proof: OwnershipProof {
-            public_nonce: ownership_proof.public_nonce().to_base64().unwrap(),
-            u: ownership_proof.u().clone().to_base64().unwrap(),
-            v: ownership_proof.v().to_base64().unwrap(),
-        },
-        reciprocal_claim_public_key: reciprocal_claim_public_key.to_base64().unwrap(),
-        range_proof: range_proof.to_base64().unwrap(),
+        commitment: base64::encode(commitment.as_bytes()),
+        ownership_proof,
+        reciprocal_claim_public_key: base64::encode(reciprocal_claim_public_key.as_bytes()),
+        range_proof: base64::encode(range_proof.as_bytes()),
     };
 
     let claim_proof = serde_json::to_value(value).unwrap();
@@ -80,6 +83,18 @@ pub async fn claim_burn(
 
     let mut client = get_wallet_daemon_client(world, wallet_daemon_name).await;
     client.claim_burn(claim_burn_request).await.unwrap()
+}
+
+pub async fn create_account(world: &mut TariWorld, account_name: String, wallet_daemon_name: String) {
+    let request = AccountsCreateRequest {
+        account_name: Some(account_name),
+        signing_key_index: None,
+        custom_access_rules: None,
+        fee: None,
+    };
+
+    let mut client = get_wallet_daemon_client(world, wallet_daemon_name).await;
+    let _resp = client.create_account(request).await.unwrap();
 }
 
 async fn get_wallet_daemon_client(world: &TariWorld, wallet_daemon_name: String) -> WalletDaemonClient {

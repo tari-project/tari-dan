@@ -192,7 +192,6 @@ pub async fn handle_claim_burn(
     context: &HandlerContext,
     req: ClaimBurnRequest,
 ) -> Result<ClaimBurnResponse, anyhow::Error> {
-    warn!(target: LOG_TARGET, "FLAG: CUCUMBER HANDLE CLAIM BURN");
     let ClaimBurnRequest {
         account,
         claim_proof,
@@ -220,6 +219,7 @@ pub async fn handle_claim_burn(
             .ok_or_else(|| invalid_params("range_proof", None))?,
     )
     .map_err(|e| invalid_params("range_proof", Some(e.to_string())))?;
+
     let public_nonce = PublicKey::from_bytes(
         &base64::decode(
             claim_proof["ownership_proof"]["public_nonce"]

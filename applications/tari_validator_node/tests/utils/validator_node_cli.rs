@@ -382,7 +382,7 @@ async fn get_validator_node_client(world: &TariWorld, validator_node_name: Strin
     get_vn_client(port).await
 }
 
-fn get_cli_data_dir(world: &mut TariWorld) -> String {
+pub(crate) fn get_cli_data_dir(world: &mut TariWorld) -> String {
     if let Some(dir) = &world.cli_data_dir {
         return dir.to_string();
     }
