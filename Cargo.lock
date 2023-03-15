@@ -6363,6 +6363,7 @@ dependencies = [
  "hex",
  "lmdb-zero",
  "serde",
+ "tari_bor",
  "tari_dan_common_types",
  "tari_dan_engine",
  "tari_storage",

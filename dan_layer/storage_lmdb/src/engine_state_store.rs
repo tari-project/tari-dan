@@ -23,6 +23,7 @@
 use std::{ops::Deref, path::Path, sync::Arc};
 
 use lmdb_zero::{db, put, ConstTransaction, LmdbResultExt, ReadTransaction, WriteTransaction};
+use tari_bor::encode;
 use tari_dan_common_types::optional::Optional;
 use tari_dan_engine::state_store::{AtomicDb, StateReader, StateStoreError, StateWriter};
 use tari_storage::lmdb_store::{DatabaseRef, LMDBBuilder};
@@ -94,7 +95,7 @@ impl<'a, T: Deref<Target = ConstTransaction<'a>>> StateReader for LmdbTransactio
     }
 
     fn exists(&self, key: &[u8]) -> Result<bool, StateStoreError> {
-        Ok(self.get_state_raw(key).optional()?.is_some())
+        Ok(self.get_state_raw(&encode(key)?).optional()?.is_some())
     }
 }
 
