@@ -27,21 +27,17 @@ use tari_crypto::{
     signatures::CommitmentSignature,
     tari_utilities::ByteArray,
 };
-use tari_template_lib::prelude::ComponentAddress;
 use tari_wallet_daemon_client::{
     types::{AccountsCreateRequest, ClaimBurnRequest, ClaimBurnResponse},
     WalletDaemonClient,
 };
 
-use super::{
-    validator_node_cli::{add_substate_addresses, get_key_manager},
-    wallet_daemon::get_walletd_client,
-};
+use super::{validator_node_cli::get_key_manager, wallet_daemon::get_walletd_client};
 use crate::TariWorld;
 
 pub async fn claim_burn(
     world: &mut TariWorld,
-    account_address: ComponentAddress,
+    account_name: String,
     commitment: Vec<u8>,
     range_proof: Vec<u8>,
     ownership_proof: CommitmentSignature<RistrettoPublicKey, RistrettoSecretKey>,
@@ -78,13 +74,17 @@ pub async fn claim_burn(
 
     let claim_proof = serde_json::to_value(value).unwrap();
 
+    let mut client = get_wallet_daemon_client(world, wallet_daemon_name).await;
+
+    let account = client.accounts_get_by_name(account_name.as_str()).await.unwrap();
+    let account_address = account.account.address.as_component_address().unwrap();
+
     let claim_burn_request = ClaimBurnRequest {
         account: account_address,
         claim_proof,
         fee: 1,
     };
 
-    let mut client = get_wallet_daemon_client(world, wallet_daemon_name).await;
     client.claim_burn(claim_burn_request).await.unwrap()
 }
 
@@ -102,12 +102,10 @@ pub async fn create_account(world: &mut TariWorld, account_name: String, wallet_
     };
 
     let mut client = get_wallet_daemon_client(world, wallet_daemon_name).await;
-    let resp = client.create_account(request).await.unwrap();
-
-    add_substate_addresses(world, account_name, resp.result.result.accept().unwrap());
+    let _resp = client.create_account(request).await.unwrap();
 }
 
-async fn get_wallet_daemon_client(world: &TariWorld, wallet_daemon_name: String) -> WalletDaemonClient {
+pub(crate) async fn get_wallet_daemon_client(world: &TariWorld, wallet_daemon_name: String) -> WalletDaemonClient {
     let port = world.wallet_daemons.get(&wallet_daemon_name).unwrap().json_rpc_port;
     get_walletd_client(port).await
 }

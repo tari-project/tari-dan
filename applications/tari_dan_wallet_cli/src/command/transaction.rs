@@ -340,7 +340,7 @@ pub async fn handle_send(
         common,
     } = args;
 
-    let AccountByNameResponse { account } = client.accounts_get_by_name(&source_account_name).await?;
+    let AccountByNameResponse { account, .. } = client.accounts_get_by_name(&source_account_name).await?;
     let source_component_address = account
         .address
         .as_component_address()
@@ -378,7 +378,7 @@ pub async fn handle_confidential_transfer(
         common,
     } = args;
 
-    let AccountByNameResponse { account } = client.accounts_get_by_name(&source_account_name).await?;
+    let AccountByNameResponse { account, .. } = client.accounts_get_by_name(&source_account_name).await?;
     let source_component_address = account
         .address
         .as_component_address()

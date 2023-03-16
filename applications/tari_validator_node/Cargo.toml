@@ -73,8 +73,8 @@ tower-layer = "0.3"
 tari_common = { git = "https://github.com/tari-project/tari.git", tag = "v0.49.0-pre.1", package = "tari_common", features = ["build"] }
 
 [dev-dependencies]
-# FIXME: the newest version failed compilation due to a missing "bool_to_option" unstable feature
 base64 = "0.20.0-alpha.1"
+# FIXME: the newest version failed compilation due to a missing "bool_to_option" unstable feature
 cucumber = { version = "0.13.0" }
 tempfile = "3.3.0"
 tari_test_utils = { git = "https://github.com/tari-project/tari.git", tag = "v0.49.0-pre.1", package = "tari_test_utils" }
