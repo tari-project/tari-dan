@@ -112,7 +112,5 @@ Feature: Claim Burn
     When validator node VN registers the template "fees"
     When miner MINER mines 5 new blocks
 
-    # When I save the state database of VN
-    When I wait 5 seconds
     When I claim burn COMMITMENT with PROOF, RANGEPROOF and CLAIM_PUBKEY and spend it into account ACC_1 via the wallet daemon WALLET_D
 # Then account ACC_1 has one confidential bucket in it

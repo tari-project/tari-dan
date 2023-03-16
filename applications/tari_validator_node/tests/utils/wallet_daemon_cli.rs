@@ -21,7 +21,7 @@
 //   USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 use base64;
-use serde::Serialize;
+use serde_json::json;
 use tari_crypto::{
     ristretto::{RistrettoPublicKey, RistrettoSecretKey},
     signatures::CommitmentSignature,
@@ -44,35 +44,35 @@ pub async fn claim_burn(
     reciprocal_claim_public_key: RistrettoPublicKey,
     wallet_daemon_name: String,
 ) -> ClaimBurnResponse {
-    #[derive(Serialize)]
-    struct OwnershipProof {
-        public_nonce: String,
-        u: String,
-        v: String,
-    }
+    // #[derive(Serialize)]
+    // struct OwnershipProof {
+    //     public_nonce: String,
+    //     u: String,
+    //     v: String,
+    // }
 
-    #[derive(Serialize)]
-    struct ClaimValue {
-        commitment: String,
-        ownership_proof: OwnershipProof,
-        reciprocal_claim_public_key: String,
-        range_proof: String,
-    }
+    // #[derive(Serialize)]
+    // struct ClaimValue {
+    //     commitment: String,
+    //     ownership_proof: OwnershipProof,
+    //     reciprocal_claim_public_key: String,
+    //     range_proof: String,
+    // }
 
-    let ownership_proof = OwnershipProof {
-        public_nonce: base64::encode(ownership_proof.public_nonce().as_bytes()),
-        u: base64::encode(ownership_proof.u().as_bytes()),
-        v: base64::encode(ownership_proof.v().as_bytes()),
-    };
+    // let ownership_proof = OwnershipProof {
+    //     public_nonce: base64::encode(ownership_proof.public_nonce().as_bytes()),
+    //     u: base64::encode(ownership_proof.u().as_bytes()),
+    //     v: base64::encode(ownership_proof.v().as_bytes()),
+    // };
 
-    let value = ClaimValue {
-        commitment: base64::encode(commitment.as_bytes()),
-        ownership_proof,
-        reciprocal_claim_public_key: base64::encode(reciprocal_claim_public_key.as_bytes()),
-        range_proof: base64::encode(range_proof.as_bytes()),
-    };
+    // let value = ClaimValue {
+    //     commitment: base64::encode(commitment.as_bytes()),
+    //     ownership_proof,
+    //     reciprocal_claim_public_key: base64::encode(reciprocal_claim_public_key.as_bytes()),
+    //     range_proof: base64::encode(range_proof.as_bytes()),
+    // };
 
-    let claim_proof = serde_json::to_value(value).unwrap();
+    // let claim_proof = serde_json::to_value(value).unwrap();
 
     let mut client = get_wallet_daemon_client(world, wallet_daemon_name).await;
 
@@ -81,7 +81,16 @@ pub async fn claim_burn(
 
     let claim_burn_request = ClaimBurnRequest {
         account: account_address,
-        claim_proof,
+        claim_proof: json!({
+            "commitment": base64::encode(commitment.as_bytes()),
+            "ownership_proof": {
+                "public_nonce": base64::encode(ownership_proof.public_nonce().as_bytes()),
+                "u": base64::encode(ownership_proof.u().as_bytes()),
+                "v": base64::encode(ownership_proof.v().as_bytes())
+            },
+            "reciprocal_claim_public_key": base64::encode(reciprocal_claim_public_key.as_bytes()),
+            "range_proof": base64::encode(range_proof.as_bytes()),
+        }),
         fee: 1,
     };
 

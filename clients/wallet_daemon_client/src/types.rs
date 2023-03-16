@@ -241,7 +241,7 @@ pub struct AccountByNameRequest {
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct AccountByNameResponse {
     pub account: Account,
-    pub pubkey: PublicKey,
+    pub public_key: PublicKey,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]

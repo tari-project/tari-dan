@@ -80,7 +80,7 @@ async fn when_i_burn_funds_with_wallet_daemon(
         .accounts_get_by_name(account_name.as_str())
         .await
         .unwrap();
-    let public_key = account.pubkey;
+    let public_key = account.public_key;
 
     let wallet = world
         .wallets

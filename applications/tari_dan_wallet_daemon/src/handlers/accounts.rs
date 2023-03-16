@@ -214,8 +214,8 @@ pub async fn handle_get_by_name(
     let account = sdk.accounts_api().get_account_by_name(&req.name)?;
     let km = sdk.key_manager_api();
     let key = km.derive_key(key_manager::TRANSACTION_BRANCH, account.key_index)?;
-    let pubkey = PublicKey::from_secret_key(&key.k);
-    Ok(AccountByNameResponse { account, pubkey })
+    let public_key = PublicKey::from_secret_key(&key.k);
+    Ok(AccountByNameResponse { account, public_key })
 }
 
 #[allow(clippy::too_many_lines)]
