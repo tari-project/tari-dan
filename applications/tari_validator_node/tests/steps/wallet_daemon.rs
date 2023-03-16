@@ -61,7 +61,7 @@ async fn when_i_create_account_via_wallet_daemon(
 }
 
 #[when(
-    expr = "I burn {int}T on wallet {word} with wallet daemon {word} into commitment {word} with proof PROOF for \
+    expr = "I burn {int}T on wallet {word} with wallet daemon {word} into commitment {word} with proof {word} for \
             {word}, range proof {word} and claim public key {word}"
 )]
 async fn when_i_burn_funds_with_wallet_daemon(
