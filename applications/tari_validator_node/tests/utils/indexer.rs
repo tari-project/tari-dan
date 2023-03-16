@@ -158,7 +158,7 @@ pub async fn spawn_indexer(world: &mut TariWorld, indexer_name: String, base_nod
         config.indexer.p2p.transport.tcp.listener_address =
             Multiaddr::from_str(&format!("/ip4/127.0.0.1/tcp/{}", port)).unwrap();
         config.indexer.p2p.public_addresses = vec![config.indexer.p2p.transport.tcp.listener_address.clone()];
-        config.indexer.public_address = Some(config.indexer.p2p.transport.tcp.listener_address.clone());
+        config.indexer.public_addresses = vec![config.indexer.p2p.transport.tcp.listener_address.clone()];
         config.indexer.p2p.datastore_path = temp_dir.to_path_buf().join("peer_db/vn");
         config.indexer.p2p.dht = DhtConfig {
             // Not all platforms support sqlite memory connection urls

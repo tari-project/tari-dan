@@ -32,4 +32,8 @@ pub enum TransactionError {
     TemplateNotFound { address: TemplateAddress },
     #[error(transparent)]
     RuntimeError(#[from] RuntimeError),
+    #[error(transparent)]
+    FlowEngineError(#[from] crate::flow::FlowEngineError),
+    #[error("Recursion limit exceeded")]
+    RecursionLimitExceeded,
 }

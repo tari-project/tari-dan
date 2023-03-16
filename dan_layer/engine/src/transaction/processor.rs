@@ -28,6 +28,7 @@ use tari_template_lib::{
     arg,
     args::{Arg, WorkspaceAction},
     invoke_args,
+    models::ComponentAddress,
 };
 use tari_transaction::{id_provider::IdProvider, Transaction};
 
@@ -92,12 +93,12 @@ impl TransactionProcessor {
         );
         let package = self.package;
 
-        let auth_scope = AuthorizationScope::new(&initial_proofs);
+        let auth_scope = AuthorizationScope::new(Arc::new(initial_proofs));
         let runtime = Runtime::new(Arc::new(runtime_interface));
         let exec_results = transaction
             .into_instructions()
             .into_iter()
-            .map(|instruction| Self::process_instruction(&package, &runtime, &auth_scope, instruction))
+            .map(|instruction| Self::process_instruction(&package, &runtime, auth_scope.clone(), instruction))
             .collect::<Result<Vec<_>, _>>()?;
 
         let mut finalize_result = runtime.interface().finalize()?;
@@ -108,7 +109,7 @@ impl TransactionProcessor {
     fn process_instruction(
         package: &Package,
         runtime: &Runtime,
-        auth_scope: &AuthorizationScope<'_>,
+        auth_scope: AuthorizationScope,
         instruction: Instruction,
     ) -> Result<ExecutionResult, TransactionError> {
         debug!(target: LOG_TARGET, "instruction = {:?}", instruction);
@@ -129,42 +130,23 @@ impl TransactionProcessor {
                             address: template_address,
                         })?;
 
-                let result = Self::invoke_template(template.clone(), runtime.clone(), &function, args)?;
+                let result = Self::invoke_template(
+                    template.clone(),
+                    package,
+                    runtime.clone(),
+                    auth_scope,
+                    &function,
+                    args,
+                    0,
+                    1,
+                )?;
                 Ok(result)
             },
             Instruction::CallMethod {
                 component_address,
                 method,
                 args,
-            } => {
-                let component = runtime.interface().get_component(&component_address)?;
-                // TODO: In this very basic auth system, you can only call on owned objects (because
-                // initial_ownership_proofs is       usually set to include the owner token).
-                auth_scope.check_access_rules(
-                    &FunctionIdent::Template {
-                        module_name: component.module_name.clone(),
-                        function: method.clone(),
-                    },
-                    &component.access_rules,
-                )?;
-
-                let template = package.get_template_by_address(&component.template_address).ok_or(
-                    TransactionError::TemplateNotFound {
-                        address: component.template_address,
-                    },
-                )?;
-
-                runtime.interface().set_current_runtime_state(RuntimeState {
-                    template_address: component.template_address,
-                })?;
-
-                let mut final_args = Vec::with_capacity(args.len() + 1);
-                final_args.push(arg![component_address]);
-                final_args.extend(args);
-
-                let result = Self::invoke_template(template.clone(), runtime.clone(), &method, final_args)?;
-                Ok(result)
-            },
+            } => Self::call_method(package, runtime, auth_scope, &component_address, &method, args, 0, 1),
             Instruction::PutLastInstructionOutputOnWorkspace { key } => {
                 let _result = runtime
                     .interface()
@@ -183,20 +165,82 @@ impl TransactionProcessor {
         }
     }
 
+    fn call_method(
+        package: &Package,
+        runtime: &Runtime,
+        auth_scope: AuthorizationScope,
+        component_address: &ComponentAddress,
+        method: &String,
+        args: Vec<Arg>,
+        recursion_depth: usize,
+        max_recursion_depth: usize,
+    ) -> Result<ExecutionResult, TransactionError> {
+        let component = runtime.interface().get_component(&component_address)?;
+        // TODO: In this very basic auth system, you can only call on owned objects (because
+        // initial_ownership_proofs is       usually set to include the owner token).
+        auth_scope.check_access_rules(
+            &FunctionIdent::Template {
+                module_name: component.module_name.clone(),
+                function: method.clone(),
+            },
+            &component.access_rules,
+        )?;
+
+        let template =
+            package
+                .get_template_by_address(&component.template_address)
+                .ok_or(TransactionError::TemplateNotFound {
+                    address: component.template_address,
+                })?;
+
+        runtime.interface().set_current_runtime_state(RuntimeState {
+            template_address: component.template_address,
+        })?;
+
+        let mut final_args = Vec::with_capacity(args.len() + 1);
+        final_args.push(arg![component_address]);
+        final_args.extend(args);
+
+        let result = Self::invoke_template(
+            template.clone(),
+            package,
+            runtime.clone(),
+            auth_scope,
+            &method,
+            final_args,
+            recursion_depth,
+            max_recursion_depth,
+        )?;
+        Ok(result)
+    }
+
     fn invoke_template(
         module: LoadedTemplate,
+        package: &Package,
         runtime: Runtime,
+        auth_scope: AuthorizationScope,
         function: &str,
         args: Vec<Arg>,
+        recursion_depth: usize,
+        max_recursion_depth: usize,
     ) -> Result<ExecutionResult, TransactionError> {
+        if recursion_depth > max_recursion_depth {
+            return Err(TransactionError::RecursionLimitExceeded);
+        }
         let result = match module {
             LoadedTemplate::Wasm(wasm_module) => {
                 let process = WasmProcess::start(wasm_module, runtime)?;
                 process.invoke_by_name(function, args)?
             },
-            LoadedTemplate::Flow(_) => {
-                todo!()
-            },
+            LoadedTemplate::Flow(flow_factory) => flow_factory.run_new_instance(
+                package.clone(),
+                runtime,
+                auth_scope,
+                function,
+                args,
+                recursion_depth,
+                max_recursion_depth,
+            )?,
         };
         Ok(result)
     }
