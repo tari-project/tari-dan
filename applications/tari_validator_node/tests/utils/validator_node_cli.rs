@@ -140,7 +140,7 @@ pub async fn create_component(
     );
 }
 
-fn add_substate_addresses(world: &mut TariWorld, outputs_name: String, diff: &SubstateDiff) {
+pub(crate) fn add_substate_addresses(world: &mut TariWorld, outputs_name: String, diff: &SubstateDiff) {
     let outputs = world.outputs.entry(outputs_name).or_default();
     let mut counters = [0usize, 0, 0, 0, 0, 0, 0];
     for (addr, data) in diff.up_iter() {

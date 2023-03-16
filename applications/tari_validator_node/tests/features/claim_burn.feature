@@ -37,7 +37,7 @@ Feature: Claim Burn
 
     When I save the state database of VN
     When I claim burn COMMITMENT with PROOF, RANGEPROOF and CLAIM_PUBKEY and spend it into account ACC_1 on VN
-    # Then account ACC_1 has one confidential bucket in it
+  # Then account ACC_1 has one confidential bucket in it
 
   @serial
   Scenario: Double claim burn funds is invalid
@@ -76,9 +76,9 @@ Feature: Claim Burn
     When I claim burn COMMITMENT with PROOF, RANGEPROOF and CLAIM_PUBKEY and spend it into account ACC_1 on VN
     When I claim burn COMMITMENT with PROOF, RANGEPROOF and CLAIM_PUBKEY and spend it into account ACC_1 on VN a second time, it fails
 
-@serial
+  @serial
   Scenario: Claim base layer burn funds with wallet daemon
-   # Initialize a base node, wallet, miner and VN
+    # Initialize a base node, wallet, miner and VN
     Given a base node BASE
     Given a wallet WALLET connected to base node BASE
     Given a miner MINER connected to base node BASE and wallet WALLET
@@ -96,6 +96,7 @@ Feature: Claim Burn
     # A file-base CLI account must be created to sign future calls
     When I create a DAN wallet
     # When I create a component SECOND_LAYER_TARI of template "fees" on VN using "new"
+    When I wait 3 seconds
     When I create an account ACC_1 via the wallet daemon WALLET_D
     # When I create an account ACC_1 on VN
 
@@ -112,6 +113,7 @@ Feature: Claim Burn
     When validator node VN registers the template "fees"
     When miner MINER mines 5 new blocks
 
-    When I save the state database of VN
+    # When I save the state database of VN
+    When I wait 5 seconds
     When I claim burn COMMITMENT with PROOF, RANGEPROOF and CLAIM_PUBKEY and spend it into account ACC_1 via the wallet daemon WALLET_D
-    # Then account ACC_1 has one confidential bucket in it
+# Then account ACC_1 has one confidential bucket in it

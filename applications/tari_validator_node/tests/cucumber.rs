@@ -152,6 +152,11 @@ impl TariWorld {
             // You have explicitly trigger the shutdown now because of the change to use Arc/Mutex in tari_shutdown
             p.shutdown.trigger();
         }
+        for (name, mut p) in self.wallet_daemons.drain(..) {
+            println!("Shutting down wallet daemon {}", name);
+            // You have explicitly trigger the shutdown now because of the change to use Arc/Mutex in tari_shutdown
+            p.shutdown.trigger();
+        }
         self.miners.clear();
     }
 }

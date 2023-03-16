@@ -89,6 +89,7 @@ pub async fn handle_create(
     context.notifier().notify(TransactionSubmittedEvent { hash: tx_hash });
 
     let finalized = wait_for_result(&mut events, tx_hash).await?;
+
     let diff = finalized.result.accept().unwrap();
     let (addr, _) = diff
         .up_iter()
@@ -101,6 +102,7 @@ pub async fn handle_create(
     Ok(AccountsCreateResponse {
         address: addr.clone(),
         public_key: owner_pk,
+        result: finalized,
     })
 }
 

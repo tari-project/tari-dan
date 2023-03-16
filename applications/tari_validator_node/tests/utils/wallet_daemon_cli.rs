@@ -20,8 +20,6 @@
 //   WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //   USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use std::time::Duration;
-
 use base64;
 use serde::Serialize;
 use tari_crypto::{
@@ -35,7 +33,10 @@ use tari_wallet_daemon_client::{
     WalletDaemonClient,
 };
 
-use super::wallet_daemon::get_walletd_client;
+use super::{
+    validator_node_cli::{add_substate_addresses, get_key_manager},
+    wallet_daemon::get_walletd_client,
+};
 use crate::TariWorld;
 
 pub async fn claim_burn(
@@ -88,17 +89,22 @@ pub async fn claim_burn(
 }
 
 pub async fn create_account(world: &mut TariWorld, account_name: String, wallet_daemon_name: String) {
+    let key = get_key_manager(world).get_active_key().expect("No active keypair");
+    world
+        .account_public_keys
+        .insert(account_name.clone(), (key.secret_key.clone(), key.public_key.clone()));
+
     let request = AccountsCreateRequest {
-        account_name: Some(account_name),
+        account_name: Some(account_name.clone()),
         signing_key_index: None,
         custom_access_rules: None,
         fee: None,
     };
 
-    tokio::time::sleep(Duration::from_secs(5)).await;
-
     let mut client = get_wallet_daemon_client(world, wallet_daemon_name).await;
-    let _resp = client.create_account(request).await.unwrap();
+    let resp = client.create_account(request).await.unwrap();
+
+    add_substate_addresses(world, account_name, resp.result.result.accept().unwrap());
 }
 
 async fn get_wallet_daemon_client(world: &TariWorld, wallet_daemon_name: String) -> WalletDaemonClient {

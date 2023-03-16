@@ -74,7 +74,7 @@ pub async fn spawn_wallet_daemon(world: &mut TariWorld, wallet_daemon_name: Stri
     });
 
     // give it some time for the wallet daemon to start
-    tokio::time::sleep(Duration::from_secs(1)).await;
+    tokio::time::sleep(Duration::from_secs(10)).await;
 
     if handle.is_finished() {
         handle.await.unwrap();

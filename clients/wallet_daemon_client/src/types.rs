@@ -162,6 +162,7 @@ pub struct AccountsCreateRequest {
 pub struct AccountsCreateResponse {
     pub address: SubstateAddress,
     pub public_key: PublicKey,
+    pub result: FinalizeResult,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
