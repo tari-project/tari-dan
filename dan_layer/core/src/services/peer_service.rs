@@ -23,7 +23,7 @@
 use std::fmt::{Display, Formatter};
 
 use async_trait::async_trait;
-use tari_comms::{multiaddr::Multiaddr, peer_manager::Peer, types::CommsPublicKey};
+use tari_comms::{multiaddr::Multiaddr, net_address::PeerAddressSource, peer_manager::Peer, types::CommsPublicKey};
 use tari_dan_common_types::NodeAddressable;
 
 #[async_trait]
@@ -33,7 +33,7 @@ pub trait PeerProvider {
 
     async fn get_seed_peers(&self) -> Result<Vec<DanPeer<Self::Addr>>, Self::Error>;
     async fn get_peer(&self, addr: &Self::Addr) -> Result<DanPeer<Self::Addr>, Self::Error>;
-    async fn add_peer(&self, peer: DanPeer<Self::Addr>) -> Result<(), Self::Error>;
+    async fn add_peer(&self, peer: DanPeer<Self::Addr>, source: PeerAddressSource) -> Result<(), Self::Error>;
     async fn update_peer(&self, peer: DanPeer<Self::Addr>) -> Result<(), Self::Error>;
     async fn peers_for_current_epoch_iter(
         &self,

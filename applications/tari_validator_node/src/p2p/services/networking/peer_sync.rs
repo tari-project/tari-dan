@@ -23,7 +23,11 @@
 use std::convert::TryInto;
 
 use log::*;
-use tari_comms::{types::CommsPublicKey, PeerConnection};
+use tari_comms::{
+    peer_manager::{PeerFeatures, PeerIdentityClaim},
+    types::CommsPublicKey,
+    PeerConnection,
+};
 use tari_crypto::tari_utilities::ByteArray;
 use tari_dan_app_grpc::proto;
 use tari_dan_core::services::{DanPeer, PeerProvider};
@@ -70,6 +74,7 @@ impl<TPeerProvider: PeerProvider<Addr = CommsPublicKey>> PeerSyncProtocol<TPeerP
                 identity,
                 addresses: resp
                     .addresses
+                    .clone()
                     .into_iter()
                     .map(TryInto::try_into)
                     .collect::<Result<_, _>>()?,
@@ -84,7 +89,20 @@ impl<TPeerProvider: PeerProvider<Addr = CommsPublicKey>> PeerSyncProtocol<TPeerP
                 ));
             }
 
-            self.peer_provider.add_peer(peer).await?;
+            let source = tari_comms::net_address::PeerAddressSource::FromPeerConnection {
+                peer_identity_claim: PeerIdentityClaim {
+                    addresses: resp
+                        .addresses
+                        .into_iter()
+                        .map(TryInto::try_into)
+                        .collect::<Result<_, _>>()?,
+                    features: PeerFeatures::COMMUNICATION_NODE,
+                    signature: resp.identity_signature.map(TryInto::try_into).transpose()?,
+                    unverified_data: None,
+                },
+            };
+
+            self.peer_provider.add_peer(peer, source).await?;
             count += 1;
         }
 

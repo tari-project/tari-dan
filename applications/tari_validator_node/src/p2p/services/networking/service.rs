@@ -25,7 +25,7 @@ use std::sync::Arc;
 use log::*;
 use tari_comms::{
     connectivity::{ConnectivityEvent, ConnectivityRequester},
-    peer_manager::NodeId,
+    peer_manager::{NodeId, PeerFeatures, PeerIdentityClaim},
     types::CommsPublicKey,
     NodeIdentity,
     PeerConnection,
@@ -179,6 +179,15 @@ impl Networking {
             ));
         }
 
+        let source = tari_comms::net_address::PeerAddressSource::FromPeerConnection {
+            peer_identity_claim: PeerIdentityClaim {
+                addresses: announce.addresses.clone(),
+                signature: announce.identity_signature.clone(),
+                features: PeerFeatures::COMMUNICATION_NODE,
+                unverified_data: None,
+            },
+        };
+
         match self.peer_provider.get_peer(&announce.identity).await.optional()? {
             Some(existing_peer) => {
                 // TODO: Verify identity signatures
@@ -204,7 +213,7 @@ impl Networking {
                 }
             },
             None => {
-                self.peer_provider.add_peer(peer).await?;
+                self.peer_provider.add_peer(peer, source).await?;
                 self.outbound
                     .flood(Default::default(), DanMessage::NetworkAnnounce(Box::new(announce)))
                     .await?;

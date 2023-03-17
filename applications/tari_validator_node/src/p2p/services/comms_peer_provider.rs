@@ -25,7 +25,7 @@ use std::sync::Arc;
 use async_trait::async_trait;
 use tari_comms::{
     net_address::{MultiaddrWithStats, MultiaddressesWithStats, PeerAddressSource},
-    peer_manager::{NodeId, Peer, PeerFeatures, PeerFlags, PeerManagerError, PeerQuery},
+    peer_manager::{NodeId, Peer, PeerFeatures, PeerFlags, PeerIdentityClaim, PeerManagerError, PeerQuery},
     types::CommsPublicKey,
     PeerManager,
 };
@@ -72,7 +72,7 @@ impl PeerProvider for CommsPeerProvider {
         }))
     }
 
-    async fn add_peer(&self, peer: DanPeer<Self::Addr>) -> Result<(), Self::Error> {
+    async fn add_peer(&self, peer: DanPeer<Self::Addr>, source: PeerAddressSource) -> Result<(), Self::Error> {
         let node_id = NodeId::from_public_key(&peer.identity);
         self.peer_manager
             .add_peer(Peer::new(
@@ -81,13 +81,7 @@ impl PeerProvider for CommsPeerProvider {
                 MultiaddressesWithStats::new(
                     peer.addresses
                         .iter()
-                        .map(|a| {
-                            let srouce = PeerAddressSource::FromAnotherPeer {
-                                peer_identity_claim: (),
-                                source_peer: (),
-                            };
-                            MultiaddrWithStats::new(a.clone(), tari_comms::net_address::PeerAddressSource::Config)
-                        })
+                        .map(|a| MultiaddrWithStats::new(a.clone(), source))
                         .collect(),
                 ),
                 PeerFlags::NONE,
