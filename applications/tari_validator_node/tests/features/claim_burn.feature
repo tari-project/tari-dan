@@ -109,8 +109,5 @@ Feature: Claim Burn
     When I convert commitment COMMITMENT into COMM_ADDRESS address
     Then validator node VN has state at COMM_ADDRESS
 
-    When validator node VN registers the template "fees"
-    When miner MINER mines 5 new blocks
-
     When I claim burn COMMITMENT with PROOF, RANGEPROOF and CLAIM_PUBKEY and spend it into account ACC_1 via the wallet daemon WALLET_D
 # Then account ACC_1 has one confidential bucket in it
