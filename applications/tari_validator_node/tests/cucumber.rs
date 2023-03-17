@@ -22,22 +22,15 @@
 
 mod steps;
 mod utils;
-use std::{
-    convert::{Infallible, TryFrom},
-    future,
-    io,
-    str::FromStr,
-    time::Duration,
-};
+use std::{convert::TryFrom, future, io, str::FromStr, time::Duration};
 
-use async_trait::async_trait;
 use cucumber::{
     gherkin::{Scenario, Step},
     given,
     then,
     when,
     writer,
-    WorldInit,
+    World,
     WriterExt,
 };
 use indexmap::IndexMap;
@@ -82,7 +75,7 @@ use crate::utils::{
     wallet_daemon::{spawn_wallet_daemon, DanWalletDaemonProcess},
 };
 
-#[derive(Debug, Default, WorldInit)]
+#[derive(Debug, Default, cucumber::World)]
 pub struct TariWorld {
     base_nodes: IndexMap<String, BaseNodeProcess>,
     wallets: IndexMap<String, WalletProcess>,
@@ -161,15 +154,6 @@ impl TariWorld {
     }
 }
 
-#[async_trait(?Send)]
-impl cucumber::World for TariWorld {
-    type Error = Infallible;
-
-    async fn new() -> Result<Self, Self::Error> {
-        Ok(Self::default())
-    }
-}
-
 #[tokio::main]
 async fn main() {
     let log_path = create_log_config_file();
@@ -188,7 +172,7 @@ async fn main() {
             world.current_scenario_name = Some(scenario.name.clone());
             Box::pin(future::ready(()))
         })
-        .after(move |_feature, _rule, scenario, maybe_world| {
+        .after(move |_feature, _rule, scenario, _finished, maybe_world| {
             if let Some(world) = maybe_world {
                 world.after(scenario);
             }
@@ -285,12 +269,12 @@ async fn all_vns_send_registration(world: &mut TariWorld) {
     for vn_ps in world.validator_nodes.values() {
         let jrpc_port = vn_ps.json_rpc_port;
         let mut client = get_vn_client(jrpc_port).await;
-
         let _resp = client.register_validator_node().await.unwrap();
-
-        // give it some time for the registration tx to be processed by the wallet and the base node
-        tokio::time::sleep(Duration::from_secs(4)).await;
     }
+
+    eprintln!("WAITING AND GETS HERE");
+    // give it some time for the registration tx to be processed by the wallet and the base node
+    tokio::time::sleep(Duration::from_secs(4)).await;
 }
 
 #[when(expr = "validator node {word} registers the template \"{word}\"")]
