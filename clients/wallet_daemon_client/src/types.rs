@@ -162,6 +162,7 @@ pub struct AccountsCreateRequest {
 pub struct AccountsCreateResponse {
     pub address: SubstateAddress,
     pub public_key: PublicKey,
+    pub result: FinalizeResult,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -240,6 +241,7 @@ pub struct AccountByNameRequest {
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct AccountByNameResponse {
     pub account: Account,
+    pub public_key: PublicKey,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]

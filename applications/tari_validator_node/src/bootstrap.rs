@@ -346,7 +346,7 @@ where
         // Create the second layer tari resource
         let mut metadata = Metadata::new();
         // TODO: decide on symbol for L2 tari
-        metadata.insert(TOKEN_SYMBOL, "tXTR".to_string());
+        metadata.insert(TOKEN_SYMBOL, "tXTR2".to_string());
 
         tx.insert_substates(SubstateShardData::new(
             shard_id,

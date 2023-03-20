@@ -29,6 +29,8 @@ use serde::{de::DeserializeOwned, Serialize};
 use serde_json as json;
 use serde_json::json;
 use types::{
+    ClaimBurnRequest,
+    ClaimBurnResponse,
     ProofsCancelRequest,
     ProofsCancelResponse,
     ProofsFinalizeRequest,
@@ -50,8 +52,6 @@ use crate::{
         AccountsInvokeResponse,
         AccountsListRequest,
         AccountsListResponse,
-        ClaimBurnRequest,
-        ClaimBurnResponse,
         ConfidentialCreateOutputProofRequest,
         ConfidentialCreateOutputProofResponse,
         KeysCreateRequest,
