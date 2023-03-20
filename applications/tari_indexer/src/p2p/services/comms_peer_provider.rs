@@ -52,8 +52,15 @@ impl PeerProvider for CommsPeerProvider {
         match self.peer_manager.find_by_public_key(addr).await? {
             Some(peer) => Ok(DanPeer {
                 identity: peer.public_key,
-                addresses: peer.addresses.into_vec(),
-                // identity_signature: peer.identity_signature,
+                addresses: peer
+                    .addresses
+                    .addresses()
+                    .into_iter()
+                    .filter_map(|a| match a.source.peer_identity_claim() {
+                        Some(claim) => Some((a.address().clone(), claim.clone())),
+                        None => None,
+                    })
+                    .collect(),
             }),
             None => Err(CommsPeerProviderError::PeerNotFound),
         }
@@ -66,8 +73,15 @@ impl PeerProvider for CommsPeerProvider {
         Box::new(self.peer_manager.all().await.unwrap().into_iter().map(|p| {
             Ok(DanPeer {
                 identity: p.public_key,
-                addresses: p.addresses.into_vec(),
-                // identity_signature: p.identity_signature,
+                addresses: p
+                    .addresses
+                    .addresses()
+                    .into_iter()
+                    .filter_map(|a| match a.source.peer_identity_claim() {
+                        Some(claim) => Some((a.address().clone(), claim.clone())),
+                        None => None,
+                    })
+                    .collect(),
             })
         }))
     }
@@ -76,12 +90,20 @@ impl PeerProvider for CommsPeerProvider {
         let node_id = NodeId::from_public_key(&peer.identity);
         self.peer_manager
             .add_peer(Peer::new(
-                peer.identity,
+                peer.identity.clone(),
                 node_id,
                 MultiaddressesWithStats::new(
                     peer.addresses
                         .iter()
-                        .map(|a| MultiaddrWithStats::new(a.clone(), tari_comms::net_address::PeerAddressSource::Config))
+                        .map(|(a, c)| {
+                            MultiaddrWithStats::new(
+                                a.clone(),
+                                tari_comms::net_address::PeerAddressSource::FromAnotherPeer {
+                                    peer_identity_claim: c.clone(),
+                                    source_peer: peer.identity.clone(),
+                                },
+                            )
+                        })
                         .collect(),
                 ),
                 PeerFlags::NONE,
@@ -103,7 +125,7 @@ impl PeerProvider for CommsPeerProvider {
             .add_or_update_online_peer(
                 &peer.identity,
                 node_id,
-                peer.addresses,
+                peer.addresses.into_iter().map(|(a, _)| a).collect(),
                 PeerFeatures::NONE,
                 &tari_comms::net_address::PeerAddressSource::Config,
             )

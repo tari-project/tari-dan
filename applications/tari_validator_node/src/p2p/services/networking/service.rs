@@ -166,10 +166,22 @@ impl Networking {
 
         info!(target: LOG_TARGET, "👋 Received announce from {}", announce.identity);
 
+        let identity_signature = announce.identity_signature.clone();
         let peer = DanPeer {
             identity: announce.identity.clone(),
-            addresses: announce.addresses.clone(),
-            // identity_signature: Some(announce.identity_signature.clone()),
+            addresses: announce
+                .addresses
+                .iter()
+                .map(|a| {
+                    let claim = PeerIdentityClaim {
+                        addresses: vec![a.clone()],
+                        features: PeerFeatures::COMMUNICATION_NODE,
+                        signature: identity_signature.clone(),
+                        unverified_data: None,
+                    };
+                    (a.clone(), claim)
+                })
+                .collect(),
         };
 
         if !peer.is_valid() {
@@ -178,15 +190,6 @@ impl Networking {
                 peer.identity,
             ));
         }
-
-        let source = tari_comms::net_address::PeerAddressSource::FromPeerConnection {
-            peer_identity_claim: PeerIdentityClaim {
-                addresses: announce.addresses.clone(),
-                signature: announce.identity_signature.clone(),
-                features: PeerFeatures::COMMUNICATION_NODE,
-                unverified_data: None,
-            },
-        };
 
         match self.peer_provider.get_peer(&announce.identity).await.optional()? {
             Some(existing_peer) => {
@@ -213,7 +216,7 @@ impl Networking {
                 }
             },
             None => {
-                self.peer_provider.add_peer(peer, source).await?;
+                self.peer_provider.add_peer(peer).await?;
                 self.outbound
                     .flood(Default::default(), DanMessage::NetworkAnnounce(Box::new(announce)))
                     .await?;

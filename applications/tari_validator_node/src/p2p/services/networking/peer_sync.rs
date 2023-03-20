@@ -23,11 +23,7 @@
 use std::convert::TryInto;
 
 use log::*;
-use tari_comms::{
-    peer_manager::{PeerFeatures, PeerIdentityClaim},
-    types::CommsPublicKey,
-    PeerConnection,
-};
+use tari_comms::{multiaddr::Multiaddr, peer_manager::PeerIdentityClaim, types::CommsPublicKey, PeerConnection};
 use tari_crypto::tari_utilities::ByteArray;
 use tari_dan_app_grpc::proto;
 use tari_dan_core::services::{DanPeer, PeerProvider};
@@ -70,15 +66,22 @@ impl<TPeerProvider: PeerProvider<Addr = CommsPublicKey>> PeerSyncProtocol<TPeerP
                 continue;
             }
 
+            let addresses: Vec<Multiaddr> = resp
+                .addresses
+                .clone()
+                .into_iter()
+                .map(TryInto::try_into)
+                .collect::<Result<_, _>>()?;
+            let claims: Vec<PeerIdentityClaim> = resp
+                .claims
+                .clone()
+                .into_iter()
+                .map(TryInto::try_into)
+                .collect::<Result<_, _>>()?;
+
             let peer = DanPeer {
                 identity,
-                addresses: resp
-                    .addresses
-                    .clone()
-                    .into_iter()
-                    .map(TryInto::try_into)
-                    .collect::<Result<_, _>>()?,
-                // identity_signature: resp.identity_signature.map(TryInto::try_into).transpose()?,
+                addresses: addresses.into_iter().zip(claims).collect(),
             };
             debug!(target: LOG_TARGET, "Received peer: {}", peer);
             if !peer.is_valid() {
@@ -89,20 +92,7 @@ impl<TPeerProvider: PeerProvider<Addr = CommsPublicKey>> PeerSyncProtocol<TPeerP
                 ));
             }
 
-            let source = tari_comms::net_address::PeerAddressSource::FromPeerConnection {
-                peer_identity_claim: PeerIdentityClaim {
-                    addresses: resp
-                        .addresses
-                        .into_iter()
-                        .map(TryInto::try_into)
-                        .collect::<Result<_, _>>()?,
-                    features: PeerFeatures::COMMUNICATION_NODE,
-                    signature: resp.identity_signature.map(TryInto::try_into).transpose()?,
-                    unverified_data: None,
-                },
-            };
-
-            self.peer_provider.add_peer(peer, source).await?;
+            self.peer_provider.add_peer(peer).await?;
             count += 1;
         }
 
