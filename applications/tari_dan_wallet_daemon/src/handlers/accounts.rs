@@ -89,6 +89,7 @@ pub async fn handle_create(
     context.notifier().notify(TransactionSubmittedEvent { hash: tx_hash });
 
     let finalized = wait_for_result(&mut events, tx_hash).await?;
+
     let diff = finalized.result.accept().unwrap();
     let (addr, _) = diff
         .up_iter()
@@ -101,6 +102,7 @@ pub async fn handle_create(
     Ok(AccountsCreateResponse {
         address: addr.clone(),
         public_key: owner_pk,
+        result: finalized,
     })
 }
 
@@ -210,7 +212,10 @@ pub async fn handle_get_by_name(
 ) -> Result<AccountByNameResponse, anyhow::Error> {
     let sdk = context.wallet_sdk();
     let account = sdk.accounts_api().get_account_by_name(&req.name)?;
-    Ok(AccountByNameResponse { account })
+    let km = sdk.key_manager_api();
+    let key = km.derive_key(key_manager::TRANSACTION_BRANCH, account.key_index)?;
+    let public_key = PublicKey::from_secret_key(&key.k);
+    Ok(AccountByNameResponse { account, public_key })
 }
 
 #[allow(clippy::too_many_lines)]
@@ -245,6 +250,7 @@ pub async fn handle_claim_burn(
             .ok_or_else(|| invalid_params("range_proof", None))?,
     )
     .map_err(|e| invalid_params("range_proof", Some(e.to_string())))?;
+
     let public_nonce = PublicKey::from_bytes(
         &base64::decode(
             claim_proof["ownership_proof"]["public_nonce"]
