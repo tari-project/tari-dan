@@ -25,7 +25,7 @@ use std::sync::Arc;
 use async_trait::async_trait;
 use tari_comms::{
     net_address::{MultiaddrWithStats, MultiaddressesWithStats, PeerAddressSource},
-    peer_manager::{NodeId, Peer, PeerFeatures, PeerFlags, PeerIdentityClaim, PeerManagerError, PeerQuery},
+    peer_manager::{NodeId, Peer, PeerFeatures, PeerFlags, PeerManagerError, PeerQuery},
     types::CommsPublicKey,
     PeerManager,
 };
