@@ -3,7 +3,7 @@
 
 use chacha20poly1305::{aead::generic_array::GenericArray, Key};
 use tari_common_types::types::{Commitment, PrivateKey};
-use tari_engine_types::hashing::{encrypted_value_hasher, output_mask_hasher};
+use tari_engine_types::base_layer_hashing::{encrypted_value_hasher, output_mask_hasher};
 use tari_utilities::{hidden_type, safe_array::SafeArray, ByteArray, Hidden};
 use zeroize::Zeroize;
 

@@ -20,80 +20,82 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use std::{io, io::Write, marker::PhantomData};
+use std::{io, io::Write};
 
 use borsh::BorshSerialize;
-use digest::{consts::U32, Digest};
+use digest::Digest;
 use tari_crypto::{hash::blake2::Blake256, hash_domain, hashing::DomainSeparation};
+use tari_template_lib::Hash;
 
-/// Domain separated consensus encoding hasher.
-pub struct DomainSeparatedConsensusHasher<M>(PhantomData<M>);
+hash_domain!(
+    ConfidentialOutputHashDomain,
+    "com.tari.layer_two.confidential_output",
+    1
+);
 
-impl<M: DomainSeparation> DomainSeparatedConsensusHasher<M> {
-    #[allow(clippy::new_ret_no_self)]
-    pub fn new(label: &'static str) -> ConsensusHasher<Blake256> {
-        let mut digest = Blake256::new();
-        M::add_domain_separation_tag(&mut digest, label);
-        ConsensusHasher::from_digest(digest)
-    }
+fn confidential_hasher(label: &'static str) -> TariBaseLayerHasher {
+    TariBaseLayerHasher::new_with_label::<ConfidentialOutputHashDomain>(label)
 }
 
-#[derive(Clone)]
-pub struct ConsensusHasher<D> {
-    writer: WriteHashWrapper<D>,
+pub fn encrypted_value_hasher() -> TariBaseLayerHasher {
+    confidential_hasher("encryption_key")
 }
 
-impl<D: Digest> ConsensusHasher<D> {
-    fn from_digest(digest: D) -> Self {
-        Self {
-            writer: WriteHashWrapper(digest),
-        }
-    }
+pub fn output_mask_hasher() -> TariBaseLayerHasher {
+    confidential_hasher("spend_key")
 }
 
-impl<D> ConsensusHasher<D>
-where D: Digest<OutputSize = U32>
-{
-    pub fn finalize(self) -> [u8; 32] {
-        self.writer.0.finalize().into()
+pub fn ownership_proof_hasher() -> TariBaseLayerHasher {
+    confidential_hasher("commitment_signature")
+}
+
+#[derive(Debug, Clone)]
+pub struct TariBaseLayerHasher {
+    hasher: Blake256,
+}
+
+impl TariBaseLayerHasher {
+    pub fn new_with_label<TDomain: DomainSeparation>(label: &'static str) -> Self {
+        let mut hasher = Blake256::new();
+        TDomain::add_domain_separation_tag(&mut hasher, label);
+        Self { hasher }
     }
 
-    pub fn update_consensus_encode<T: BorshSerialize>(&mut self, data: &T) {
-        BorshSerialize::serialize(data, &mut self.writer)
+    pub fn update<T: BorshSerialize>(&mut self, data: &T) {
+        BorshSerialize::serialize(data, &mut self.hash_writer())
             .expect("Incorrect implementation of BorshSerialize encountered. Implementations MUST be infallible.");
     }
 
     pub fn chain<T: BorshSerialize>(mut self, data: &T) -> Self {
-        self.update_consensus_encode(data);
+        self.update(data);
         self
     }
-}
 
-impl Default for ConsensusHasher<Blake256> {
-    /// This `default` implementation is provided for convenience, but should not be used as the de-facto consensus
-    /// hasher, rather create a new unique hash domain.
-    fn default() -> Self {
-        hash_domain!(
-            DefaultConsensusHashDomain,
-            "com.tari.base_layer.core.consensus.consensus_encoding.hashing",
-            0
-        );
-        DomainSeparatedConsensusHasher::<DefaultConsensusHashDomain>::new("default")
-    }
-}
-
-/// This private struct wraps a Digest and implements the Write trait to satisfy the consensus encoding trait.
-/// Do not use the DomainSeparatedHasher with this.
-#[derive(Clone)]
-struct WriteHashWrapper<D>(D);
-
-impl<D: Digest> Write for WriteHashWrapper<D> {
-    fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
-        self.0.update(buf);
-        Ok(buf.len())
+    pub fn digest<T: BorshSerialize>(self, data: &T) -> Hash {
+        self.chain(data).result()
     }
 
-    fn flush(&mut self) -> io::Result<()> {
-        Ok(())
+    pub fn result(self) -> Hash {
+        let hash: [u8; 32] = self.hasher.finalize().into();
+        hash.into()
+    }
+
+    pub fn finalize_into(self, output: &mut digest::Output<Blake256>) {
+        digest::FixedOutput::finalize_into(self.hasher, output)
+    }
+
+    fn hash_writer(&mut self) -> impl Write + '_ {
+        struct HashWriter<'a>(&'a mut Blake256);
+        impl Write for HashWriter<'_> {
+            fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
+                self.0.update(buf);
+                Ok(buf.len())
+            }
+
+            fn flush(&mut self) -> io::Result<()> {
+                Ok(())
+            }
+        }
+        HashWriter(&mut self.hasher)
     }
 }

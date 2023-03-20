@@ -40,18 +40,6 @@ hash_domain!(
     1
 );
 
-fn confidential_hasher(label: &'static str) -> TariHasher {
-    TariHasher::new_with_label::<ConfidentialOutputHashDomain>(label)
-}
-
-pub fn encrypted_value_hasher() -> TariHasher {
-    confidential_hasher("encryption_key")
-}
-
-pub fn output_mask_hasher() -> TariHasher {
-    confidential_hasher("spend_key")
-}
-
 #[derive(Debug, Clone)]
 pub struct TariHasher {
     hasher: Blake256,
