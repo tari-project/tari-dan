@@ -63,6 +63,7 @@ async fn handler(Extension(context): Extension<Arc<HandlerContext>>, value: Json
             _ => Ok(value.method_not_found(&value.method)),
         },
         Some(("accounts", method)) => match method {
+            "claim_burn" => call_handler(context, value, accounts::handle_claim_burn).await,
             "create" => call_handler(context, value, accounts::handle_create).await,
             "list" => call_handler(context, value, accounts::handle_list).await,
             "get_balances" => call_handler(context, value, accounts::handle_get_balances).await,
@@ -71,9 +72,10 @@ async fn handler(Extension(context): Extension<Arc<HandlerContext>>, value: Json
             _ => Ok(value.method_not_found(&value.method)),
         },
         Some(("confidential", method)) => match method {
-            "create" => call_handler(context, value, confidential::handle_create_transfer_proof).await,
+            "create_transfer_proof" => call_handler(context, value, confidential::handle_create_transfer_proof).await,
             "finalize" => call_handler(context, value, confidential::handle_finalize_transfer).await,
             "cancel" => call_handler(context, value, confidential::handle_cancel_transfer).await,
+            "create_output_proof" => call_handler(context, value, confidential::handle_create_output_proof).await,
             _ => Ok(value.method_not_found(&value.method)),
         },
         _ => Ok(value.method_not_found(&value.method)),

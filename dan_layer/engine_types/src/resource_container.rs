@@ -271,7 +271,10 @@ impl ResourceContainer {
                         match commitments.remove(&commitment) {
                             Some(_) => Ok(commitment),
                             None => Err(ResourceError::InvalidConfidentialProof {
-                                details: format!("Input commitment {} found in resource", commitment),
+                                details: format!(
+                                    "withdraw_confidential: input commitment {} not found in resource",
+                                    commitment
+                                ),
                             }),
                         }
                     })
@@ -324,7 +327,10 @@ impl ResourceContainer {
                         match commitments.remove(&commitment) {
                             Some(_) => Ok(commitment),
                             None => Err(ResourceError::InvalidConfidentialProof {
-                                details: format!("Input commitment {} found in resource", commitment),
+                                details: format!(
+                                    "reveal_confidential: input commitment {} not found in resource",
+                                    commitment
+                                ),
                             }),
                         }
                     })
@@ -350,6 +356,14 @@ impl ResourceContainer {
                     validated_proof.revealed_amount,
                 ))
             },
+        }
+    }
+
+    /// Returns all confidential outputs. If the resource is not confidential, None is returned.
+    pub fn get_confidential_outputs(&self) -> Option<Vec<&ConfidentialOutput>> {
+        match self {
+            ResourceContainer::Fungible { .. } | ResourceContainer::NonFungible { .. } => None,
+            ResourceContainer::Confidential { commitments, .. } => Some(commitments.values().collect()),
         }
     }
 }

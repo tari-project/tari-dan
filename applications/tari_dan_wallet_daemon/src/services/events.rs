@@ -4,12 +4,13 @@
 use tari_common_types::types::FixedHash;
 use tari_dan_common_types::QuorumCertificate;
 use tari_dan_wallet_sdk::models::TransactionStatus;
-use tari_engine_types::commit_result::FinalizeResult;
+use tari_engine_types::{commit_result::FinalizeResult, substate::SubstateAddress};
 
 #[derive(Debug, Clone)]
 pub enum WalletEvent {
     TransactionSubmitted(TransactionSubmittedEvent),
     TransactionFinalized(TransactionFinalizedEvent),
+    AccountChanged(AccountChangedEvent),
 }
 
 impl From<TransactionSubmittedEvent> for WalletEvent {
@@ -17,9 +18,16 @@ impl From<TransactionSubmittedEvent> for WalletEvent {
         Self::TransactionSubmitted(value)
     }
 }
+
 impl From<TransactionFinalizedEvent> for WalletEvent {
     fn from(value: TransactionFinalizedEvent) -> Self {
         Self::TransactionFinalized(value)
+    }
+}
+
+impl From<AccountChangedEvent> for WalletEvent {
+    fn from(value: AccountChangedEvent) -> Self {
+        Self::AccountChanged(value)
     }
 }
 
@@ -34,4 +42,9 @@ pub struct TransactionFinalizedEvent {
     pub result: FinalizeResult,
     pub qcs: Vec<QuorumCertificate>,
     pub status: TransactionStatus,
+}
+
+#[derive(Debug, Clone)]
+pub struct AccountChangedEvent {
+    pub account_address: SubstateAddress,
 }

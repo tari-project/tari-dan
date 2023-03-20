@@ -4,6 +4,7 @@
 mod events;
 pub use events::*;
 
+mod account_monitor;
 mod transaction_service;
 
 // -------------------------------- Spawn -------------------------------- //
@@ -16,7 +17,7 @@ use tari_shutdown::ShutdownSignal;
 use tokio::task::JoinHandle;
 use transaction_service::TransactionService;
 
-use crate::notify::Notify;
+use crate::{notify::Notify, services::account_monitor::AccountMonitor};
 
 pub fn spawn_services<TStore>(
     shutdown_signal: ShutdownSignal,
@@ -26,9 +27,11 @@ pub fn spawn_services<TStore>(
 where
     TStore: WalletStore + Clone + Send + Sync + 'static,
 {
-    let handle = tokio::spawn(TransactionService::new(notify, wallet_sdk, shutdown_signal).run());
+    let transaction_service_handle =
+        tokio::spawn(TransactionService::new(notify.clone(), wallet_sdk.clone(), shutdown_signal.clone()).run());
+    let account_monitor_handle = tokio::spawn(AccountMonitor::new(notify, wallet_sdk, shutdown_signal).run());
 
-    try_select_any(Some(handle).into_iter())
+    try_select_any([transaction_service_handle, account_monitor_handle])
 }
 
 async fn try_select_any<I>(handles: I) -> Result<(), anyhow::Error>

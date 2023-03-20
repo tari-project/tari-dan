@@ -8,9 +8,9 @@ use crate::{hash::HashParseError, Hash};
 
 #[derive(Debug, Clone, Copy, Hash, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(transparent)]
-pub struct LayerOneCommitmentAddress(Hash);
+pub struct UnclaimedConfidentialOutputAddress(Hash);
 
-impl LayerOneCommitmentAddress {
+impl UnclaimedConfidentialOutputAddress {
     pub fn new(hash: Hash) -> Self {
         Self(hash)
     }
@@ -32,7 +32,15 @@ impl LayerOneCommitmentAddress {
     }
 }
 
-impl Display for LayerOneCommitmentAddress {
+impl TryFrom<&[u8]> for UnclaimedConfidentialOutputAddress {
+    type Error = HashParseError;
+
+    fn try_from(value: &[u8]) -> Result<Self, Self::Error> {
+        Hash::try_from(value).map(Self)
+    }
+}
+
+impl Display for UnclaimedConfidentialOutputAddress {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         write!(f, "commitment_{}", self.0)
     }

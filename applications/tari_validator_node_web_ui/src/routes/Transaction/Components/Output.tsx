@@ -95,11 +95,12 @@ function RowData({ row, justify }: any) {
                           />
                         </DataTableCell>
                         <DataTableCell>
-                          {row.proposed_by}
+                          {shortenString(toHexString(row.proposed_by))}
+                          <CopyToClipboard
+                            copy={toHexString(row.proposed_by)}
+                          />
                         </DataTableCell>
-                        <DataTableCell>
-                          {row.leader_round}
-                        </DataTableCell>
+                        <DataTableCell>{row.leader_round}</DataTableCell>
                       </TableRow>
                     );
                   })
@@ -137,7 +138,7 @@ function RowData({ row, justify }: any) {
         >
           <Collapse in={open} timeout="auto" unmountOnExit>
             <CodeBlock style={{ marginBottom: '10px' }}>
-              {row.justify ? renderJson(JSON.parse(row.justify)) : ''}
+              {justify && renderJson(justify)}
             </CodeBlock>
           </Collapse>
         </DataTableCell>
@@ -153,29 +154,32 @@ export default function Output({
 }: {
   shard: string;
   output: any[];
-  current_state: [string,number,string] | undefined;
+  current_state: [string, number, string] | undefined;
 }) {
   return (
-    <div id={shard} className="output">
+    <div id={shard}>
+      <BoxHeading
+        style={{
+          marginBottom: '20px',
+          display: 'flex',
+          alignItems: 'flex-start',
+          justifyContent: 'flex-start',
+          gap: '10px',
+        }}
+      >
+        <CommitOutlinedIcon style={{ color: 'rgba(35, 11, 73, 0.20)' }} />
+        Shard: {shard}
+        <br />
+        Current leader : {current_state ? current_state[0] : 'Unknown'}
+        <br />
+        Leader round : {current_state ? current_state[1] : 'Unknown'}
+        <br />
+        Leader timestamp :{' '}
+        {current_state
+          ? new Date(current_state[2]).toLocaleString()
+          : 'Unknown'}
+      </BoxHeading>
       <TableContainer>
-        <BoxHeading
-          style={{
-            marginBottom: '20px',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'flex-start',
-            gap: '10px',
-          }}
-        >
-          <CommitOutlinedIcon style={{ color: 'rgba(35, 11, 73, 0.20)' }} />
-          Shard: {shard}
-          <br/>
-          Current leader : {current_state?current_state[0]:"Unknown"}
-          <br/>
-          Leader round : {current_state?current_state[1]:"Unknown"}
-          <br/>
-          Leader timestamp : {current_state?new Date(current_state[2]).toLocaleString():"Unknown"}
-        </BoxHeading>
         <Table>
           <TableHead>
             <TableRow>

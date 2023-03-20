@@ -8,10 +8,13 @@ mod config;
 pub use config::Config;
 
 mod output;
-pub use output::ConfidentialOutputModel;
+pub use output::ConfidentialOutput;
 
 mod substate;
 pub use substate::Substate;
 
 mod transaction;
 pub use transaction::Transaction;
+
+mod vault;
+pub use vault::Vault;

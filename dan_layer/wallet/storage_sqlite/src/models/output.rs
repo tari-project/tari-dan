@@ -3,16 +3,17 @@
 
 use chrono::NaiveDateTime;
 use tari_common_types::types::{Commitment, PublicKey};
-use tari_dan_wallet_sdk::{models::ConfidentialOutput, storage::WalletStorageError};
+use tari_dan_wallet_sdk::{models::ConfidentialOutputModel, storage::WalletStorageError};
 use tari_utilities::hex::Hex;
 
 use crate::schema::outputs;
 
 #[derive(Debug, Clone, Identifiable, Queryable)]
 #[diesel(table_name = outputs)]
-pub struct ConfidentialOutputModel {
+pub struct ConfidentialOutput {
     pub id: i32,
     pub account_id: i32,
+    pub vault_id: i32,
     pub commitment: String,
     pub value: i64,
     pub sender_public_nonce: Option<String>,
@@ -25,10 +26,25 @@ pub struct ConfidentialOutputModel {
     pub updated_at: NaiveDateTime,
 }
 
-impl ConfidentialOutputModel {
-    pub fn try_into_output(self, account_name: String) -> Result<ConfidentialOutput, WalletStorageError> {
-        Ok(ConfidentialOutput {
-            account_name,
+impl ConfidentialOutput {
+    pub(crate) fn try_into_output(
+        self,
+        account_address_str: &str,
+        vault_addr_str: &str,
+    ) -> Result<ConfidentialOutputModel, WalletStorageError> {
+        Ok(ConfidentialOutputModel {
+            account_address: account_address_str
+                .parse()
+                .map_err(|_| WalletStorageError::DecodingError {
+                    operation: "try_into_output",
+                    item: "output",
+                    details: format!("Corrupt db: invalid account address '{}'", account_address_str),
+                })?,
+            vault_address: vault_addr_str.parse().map_err(|_| WalletStorageError::DecodingError {
+                operation: "try_into_output",
+                item: "output",
+                details: format!("Corrupt db: invalid vault address '{}'", vault_addr_str),
+            })?,
             commitment: Commitment::from_hex(&self.commitment).map_err(|_| WalletStorageError::DecodingError {
                 operation: "outputs_lock_smallest_amount",
                 item: "output commitment",

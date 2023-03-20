@@ -3,6 +3,7 @@
 
 Feature: Leader failure scenarios
 
+  @serial
   Scenario: Leader failure with single committee
     # Initialize a base node, wallet and miner
     Given a base node BASE

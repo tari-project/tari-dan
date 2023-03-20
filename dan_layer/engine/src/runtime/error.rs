@@ -30,9 +30,9 @@ use tari_template_lib::models::{
     Amount,
     BucketId,
     ComponentAddress,
-    LayerOneCommitmentAddress,
     NonFungibleId,
     ResourceAddress,
+    UnclaimedConfidentialOutputAddress,
     VaultId,
 };
 use tari_transaction::id_provider::MaxIdsExceeded;
@@ -55,7 +55,9 @@ pub enum RuntimeError {
     #[error("Component not found with address '{address}'")]
     ComponentNotFound { address: ComponentAddress },
     #[error("Layer one commitment not found with address '{address}'")]
-    LayerOneCommitmentNotFound { address: LayerOneCommitmentAddress },
+    LayerOneCommitmentNotFound {
+        address: UnclaimedConfidentialOutputAddress,
+    },
     #[error("Invalid argument {argument}: {reason}")]
     InvalidArgument { argument: &'static str, reason: String },
     #[error("Invalid amount '{amount}': {reason}")]
@@ -106,7 +108,9 @@ pub enum RuntimeError {
     #[error("Invalid substate type")]
     InvalidSubstateType,
     #[error("Layer one commitment already claimed with address '{address}'")]
-    LayerOneCommitmentAlreadyClaimed { address: LayerOneCommitmentAddress },
+    ConfidentialOutputAlreadyClaimed {
+        address: UnclaimedConfidentialOutputAddress,
+    },
 }
 
 impl RuntimeError {

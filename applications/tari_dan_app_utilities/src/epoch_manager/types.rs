@@ -22,7 +22,7 @@
 
 use tari_common_types::types::FixedHash;
 use tari_comms::types::CommsPublicKey;
-use tari_core::{transactions::transaction_components::ValidatorNodeRegistration, ValidatorNodeMmr};
+use tari_core::{transactions::transaction_components::ValidatorNodeRegistration, ValidatorNodeBMT};
 use tari_dan_common_types::{Epoch, ShardId};
 use tari_dan_core::{
     consensus_constants::BaseLayerConsensusConstants,
@@ -81,9 +81,9 @@ pub enum EpochManagerRequest {
         epoch: Epoch,
         reply: Reply<Vec<ValidatorNode<CommsPublicKey>>>,
     },
-    GetValidatorNodeMmr {
+    GetValidatorNodeBMT {
         epoch: Epoch,
-        reply: Reply<ValidatorNodeMmr>,
+        reply: Reply<ValidatorNodeBMT>,
     },
     GetValidatorNodeMerkleRoot {
         epoch: Epoch,

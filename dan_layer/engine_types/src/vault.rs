@@ -23,10 +23,14 @@
 use std::collections::BTreeSet;
 
 use serde::{Deserialize, Serialize};
-use tari_template_lib::models::{Amount, ConfidentialWithdrawProof, NonFungibleId, ResourceAddress, VaultId};
+use tari_template_lib::{
+    models::{Amount, ConfidentialWithdrawProof, NonFungibleId, ResourceAddress, VaultId},
+    prelude::ResourceType,
+};
 
 use crate::{
     bucket::Bucket,
+    confidential::ConfidentialOutput,
     resource_container::{ResourceContainer, ResourceError},
 };
 
@@ -79,8 +83,16 @@ impl Vault {
         self.resource_container.get_commitment_count()
     }
 
+    pub fn get_confidential_outputs(&self) -> Option<Vec<&ConfidentialOutput>> {
+        self.resource_container.get_confidential_outputs()
+    }
+
     pub fn resource_address(&self) -> &ResourceAddress {
         self.resource_container.resource_address()
+    }
+
+    pub fn resource_type(&self) -> ResourceType {
+        self.resource_container.resource_type()
     }
 
     pub fn get_non_fungible_ids(&self) -> Option<&BTreeSet<NonFungibleId>> {
@@ -92,5 +104,9 @@ impl Vault {
         proof: ConfidentialWithdrawProof,
     ) -> Result<ResourceContainer, ResourceError> {
         self.resource_container.reveal_confidential(proof)
+    }
+
+    pub fn vault_id(&self) -> &VaultId {
+        &self.vault_id
     }
 }

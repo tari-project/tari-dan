@@ -22,9 +22,11 @@ pub struct ConfidentialStatement {
     // #[cfg_attr(feature = "hex", serde(with = "hex::serde"))]
     pub commitment: [u8; 32],
     /// Public nonce (R) that was used to generate the commitment mask
+    // #[cfg_attr(feature = "serde", serde(with = "hex::serde"))]
     pub sender_public_nonce: Option<RistrettoPublicKeyBytes>,
     /// Commitment value encrypted for the receiver. Without this it would be difficult (not impossible) for the
     /// receiver to determine the value component of the commitment.
+    // #[cfg_attr(feature = "serde", serde(with = "hex::serde"))]
     pub encrypted_value: EncryptedValue,
     pub minimum_value_promise: u64,
 }
@@ -48,5 +50,11 @@ pub struct EncryptedValue(
 impl EncryptedValue {
     pub const fn size() -> usize {
         24
+    }
+}
+
+impl AsRef<[u8]> for EncryptedValue {
+    fn as_ref(&self) -> &[u8] {
+        &self.0
     }
 }

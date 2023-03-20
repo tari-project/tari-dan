@@ -33,8 +33,8 @@ use tari_engine_types::{
 use tari_template_lib::{
     args::Arg,
     auth::AccessRules,
-    models::{Amount, ComponentAddress, NonFungibleId, ResourceAddress},
-    prelude::ConfidentialWithdrawProof,
+    models::{Amount, ComponentAddress, ConfidentialOutputProof, NonFungibleId, ResourceAddress},
+    prelude::{ConfidentialWithdrawProof, ResourceType},
 };
 use tari_transaction::Transaction;
 
@@ -161,6 +161,8 @@ pub struct AccountsCreateRequest {
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct AccountsCreateResponse {
     pub address: SubstateAddress,
+    pub public_key: PublicKey,
+    pub result: FinalizeResult,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -177,14 +179,16 @@ pub struct AccountsInvokeResponse {
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct AccountsListRequest {
+    pub offset: u64,
     pub limit: u64,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct AccountsListResponse {
-    pub accounts: Vec<Account>,
+    pub accounts: Vec<(Account, PublicKey)>,
     pub total: u64,
 }
+
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct AccountsGetBalancesRequest {
     pub account_name: String,
@@ -193,7 +197,40 @@ pub struct AccountsGetBalancesRequest {
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct AccountsGetBalancesResponse {
     pub address: SubstateAddress,
-    pub balances: Vec<(ResourceAddress, Amount)>,
+    pub balances: Vec<BalanceEntry>,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct BalanceEntry {
+    pub vault_address: SubstateAddress,
+    pub resource_address: ResourceAddress,
+    pub balance: Amount,
+    pub resource_type: ResourceType,
+    pub confidential_balance: Amount,
+    pub token_symbol: Option<String>,
+}
+
+impl BalanceEntry {
+    pub fn to_balance_string(&self) -> String {
+        let symbol = self.token_symbol.as_deref().unwrap_or_default();
+        match self.resource_type {
+            ResourceType::Fungible => {
+                format!("{} {}", self.balance, symbol)
+            },
+            ResourceType::NonFungible => {
+                format!("{} {} tokens", self.balance, symbol)
+            },
+            ResourceType::Confidential => {
+                format!(
+                    "{} revealed + {} blinded = {} {}",
+                    self.balance,
+                    self.confidential_balance,
+                    self.balance + self.confidential_balance,
+                    symbol
+                )
+            },
+        }
+    }
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -203,13 +240,15 @@ pub struct AccountByNameRequest {
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct AccountByNameResponse {
-    pub account_address: SubstateAddress,
+    pub account: Account,
+    pub public_key: PublicKey,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct ProofsGenerateRequest {
     pub amount: Amount,
     pub source_account_name: String,
+    pub resource_address: ResourceAddress,
     pub destination_account: ComponentAddress,
     // TODO: For now, we assume that this is obtained "somehow" from the destination account
     pub destination_stealth_public_key: PublicKey,
@@ -232,6 +271,30 @@ pub struct ProofsFinalizeResponse {}
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct ProofsCancelRequest {
     pub proof_id: ConfidentialProofId,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct ConfidentialCreateOutputProofRequest {
+    pub amount: Amount,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct ConfidentialCreateOutputProofResponse {
+    pub proof: ConfidentialOutputProof,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct ClaimBurnRequest {
+    pub account: ComponentAddress,
+    pub claim_proof: serde_json::Value,
+    pub fee: u64,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct ClaimBurnResponse {
+    #[serde(with = "serde_with::hex")]
+    pub hash: FixedHash,
+    pub result: FinalizeResult,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]

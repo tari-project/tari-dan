@@ -95,7 +95,20 @@ pub async fn spawn_validator_node(
 
     let shutdown = Shutdown::new();
     let shutdown_signal = shutdown.to_signal();
-    let temp_dir = get_base_dir().join("validator_nodes").join(validator_node_name.clone());
+    let scenario_slug = world
+        .current_scenario_name
+        .as_ref()
+        .unwrap()
+        .chars()
+        .map(|x| match x {
+            'A'..='Z' | 'a'..='z' | '0'..='9' => x,
+            _ => '-',
+        })
+        .collect::<String>();
+    let temp_dir = get_base_dir()
+        .join("validator_nodes")
+        .join(scenario_slug)
+        .join(validator_node_name.clone());
     let temp_dir_path = temp_dir.clone();
     let handle = task::spawn(async move {
         let mut config = ApplicationConfig {
@@ -118,8 +131,8 @@ pub async fn spawn_validator_node(
         config.validator_node.p2p.transport.transport_type = TransportType::Tcp;
         config.validator_node.p2p.transport.tcp.listener_address =
             Multiaddr::from_str(&format!("/ip4/127.0.0.1/tcp/{}", port)).unwrap();
-        config.validator_node.p2p.public_address =
-            Some(config.validator_node.p2p.transport.tcp.listener_address.clone());
+        config.validator_node.p2p.public_addresses =
+            vec![config.validator_node.p2p.transport.tcp.listener_address.clone()];
         config.validator_node.public_address = Some(config.validator_node.p2p.transport.tcp.listener_address.clone());
         config.validator_node.p2p.datastore_path = temp_dir.to_path_buf().join("peer_db/vn");
         config.validator_node.p2p.dht = DhtConfig {

@@ -30,19 +30,41 @@ use tari_template_lib::Hash;
 
 hash_domain!(TariEngineHashDomain, "tari.dan.engine", 0);
 
-pub fn hasher(label: EngineHashDomainLabel) -> TariEngineHasher {
-    TariEngineHasher::new_with_label(label.as_label())
+pub fn hasher(label: EngineHashDomainLabel) -> TariHasher {
+    TariHasher::new_with_label::<TariEngineHashDomain>(label.as_label())
+}
+
+hash_domain!(
+    ConfidentialOutputHashDomain,
+    "com.tari.layer_two.confidential_output",
+    1
+);
+
+fn confidential_hasher(label: &'static str) -> TariHasher {
+    TariHasher::new_with_label::<ConfidentialOutputHashDomain>(label)
+}
+
+pub fn encrypted_value_hasher() -> TariHasher {
+    confidential_hasher("encryption_key")
+}
+
+pub fn output_mask_hasher() -> TariHasher {
+    confidential_hasher("spend_key")
+}
+
+pub fn ownership_proof_hasher() -> TariHasher {
+    confidential_hasher("commitment_signature")
 }
 
 #[derive(Debug, Clone)]
-pub struct TariEngineHasher {
+pub struct TariHasher {
     hasher: Blake256,
 }
 
-impl TariEngineHasher {
-    pub fn new_with_label(label: &'static str) -> Self {
+impl TariHasher {
+    pub fn new_with_label<TDomain: DomainSeparation>(label: &'static str) -> Self {
         let mut hasher = Blake256::new();
-        TariEngineHashDomain::add_domain_separation_tag(&mut hasher, label);
+        TDomain::add_domain_separation_tag(&mut hasher, label);
         Self { hasher }
     }
 
@@ -66,6 +88,10 @@ impl TariEngineHasher {
     pub fn result(self) -> Hash {
         let hash: [u8; 32] = self.hasher.finalize().into();
         hash.into()
+    }
+
+    pub fn finalize_into(self, output: &mut digest::Output<Blake256>) {
+        digest::FixedOutput::finalize_into(self.hasher, output)
     }
 
     fn hash_writer(&mut self) -> impl Write + '_ {

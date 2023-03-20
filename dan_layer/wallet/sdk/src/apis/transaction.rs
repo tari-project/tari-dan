@@ -14,6 +14,7 @@ use tari_transaction::Transaction;
 use tari_validator_node_client::{
     types::{GetTransactionQcsRequest, GetTransactionResultRequest, SubmitTransactionRequest},
     ValidatorNodeClient,
+    ValidatorNodeClientError,
 };
 
 use crate::{
@@ -67,8 +68,7 @@ impl<'a, TStore: WalletStore> TransactionApi<'a, TStore> {
                 wait_for_result_timeout: None,
                 is_dry_run,
             })
-            .await
-            .map_err(TransactionApiError::ValidatorNodeClientError)?;
+            .await?;
 
         self.store.with_write_tx(|tx| {
             tx.transactions_set_result_and_status(
@@ -140,15 +140,17 @@ impl<'a, TStore: WalletStore> TransactionApi<'a, TStore> {
                     }
 
                     tx.transactions_set_result_and_status(hash, Some(&result), Some(&qc_resp.qcs), new_status)?;
-                    // if the transaction being processed is confidential,
-                    // we should make sure that the account's locked outputs
-                    // are either set to spent or released, depending if the
-                    // transaction was finalized or rejected
-                    if let Some(proof_id) = tx.proofs_get_by_transaction_hash(hash).optional()? {
-                        if new_status == TransactionStatus::Accepted {
-                            tx.outputs_finalize_by_proof_id(proof_id)?;
-                        } else {
-                            tx.outputs_release_by_proof_id(proof_id)?;
+                    if !transaction.is_dry_run {
+                        // if the transaction being processed is confidential,
+                        // we should make sure that the account's locked outputs
+                        // are either set to spent or released, depending if the
+                        // transaction was finalized or rejected
+                        if let Some(proof_id) = tx.proofs_get_by_transaction_hash(hash).optional()? {
+                            if new_status == TransactionStatus::Accepted {
+                                tx.outputs_finalize_by_proof_id(proof_id)?;
+                            } else {
+                                tx.outputs_release_by_proof_id(proof_id)?;
+                            }
                         }
                     }
 
@@ -223,7 +225,7 @@ impl<'a, TStore: WalletStore> TransactionApi<'a, TStore> {
                         version: substate.version(),
                     });
                 },
-                addr @ SubstateAddress::LayerOneCommitment(_) => {
+                addr @ SubstateAddress::UnclaimedConfidentialOutput(_) => {
                     todo!("Not supported {}", addr);
                 },
             }
@@ -278,7 +280,7 @@ pub enum TransactionApiError {
     #[error("Store error: {0}")]
     StoreError(#[from] WalletStorageError),
     #[error("Validator node client error: {0}")]
-    ValidatorNodeClientError(anyhow::Error),
+    ValidatorNodeClientError(#[from] ValidatorNodeClientError),
 }
 
 impl IsNotFoundError for TransactionApiError {

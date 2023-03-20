@@ -27,6 +27,7 @@ use tari_common_types::types::{Commitment, FixedHash, FixedHashSizeError};
 use tari_core::transactions::transaction_components::{
     CodeTemplateRegistration,
     SideChainFeature,
+    TransactionOutput,
     ValidatorNodeRegistration,
 };
 use tari_crypto::tari_utilities::ByteArray;
@@ -52,9 +53,12 @@ use tari_dan_storage_sqlite::{
     global::SqliteGlobalDbAdapter,
     sqlite_shard_store_factory::SqliteShardStore,
 };
-use tari_engine_types::substate::{Substate, SubstateAddress, SubstateValue};
+use tari_engine_types::{
+    confidential::UnclaimedConfidentialOutput,
+    substate::{Substate, SubstateAddress, SubstateValue},
+};
 use tari_shutdown::ShutdownSignal;
-use tari_template_lib::models::{LayerOneCommitmentAddress, TemplateAddress};
+use tari_template_lib::models::{EncryptedValue, TemplateAddress, UnclaimedConfidentialOutputAddress};
 use tokio::{task, task::JoinHandle, time};
 
 use crate::{
@@ -234,6 +238,7 @@ impl BaseLayerScanner {
         }
     }
 
+    #[allow(clippy::too_many_lines)]
     async fn sync_blockchain(&mut self) -> Result<(), BaseLayerScannerError> {
         let start_scan_height = self.last_scanned_height;
         let mut current_hash = self.last_scanned_hash;
@@ -285,29 +290,44 @@ impl BaseLayerScanner {
 
             for output in utxos.outputs {
                 let output_hash = output.hash();
-                if output.is_burned() {
-                    info!(target: LOG_TARGET, "Found burned output: {}", output_hash);
-                    self.register_burnt_utxo(output.commitment)?;
-                } else {
-                    let sidechain_feature = output.features.sidechain_feature.ok_or_else(|| {
-                        BaseLayerScannerError::InvalidSideChainUtxoResponse(
-                            "Validator node registration output must have a sidechain features".to_string(),
-                        )
-                    })?;
-                    match sidechain_feature {
-                        SideChainFeature::ValidatorNodeRegistration(reg) => {
-                            self.register_validator_node_registration(current_height, reg).await?;
-                        },
-                        SideChainFeature::TemplateRegistration(reg) => {
-                            self.register_code_template_registration(
-                                reg.clone().template_name.into_string(),
-                                (*output_hash).into(),
-                                reg,
-                                &block_info,
-                            )
+                let sidechain_feature = output.features.sidechain_feature.as_ref().ok_or_else(|| {
+                    BaseLayerScannerError::InvalidSideChainUtxoResponse(
+                        "Validator node registration output must have a sidechain features".to_string(),
+                    )
+                })?;
+                match sidechain_feature {
+                    SideChainFeature::ValidatorNodeRegistration(reg) => {
+                        self.register_validator_node_registration(current_height, reg.clone())
                             .await?;
-                        },
-                    }
+                    },
+                    SideChainFeature::TemplateRegistration(reg) => {
+                        self.register_code_template_registration(
+                            reg.template_name.to_string(),
+                            (*output_hash).into(),
+                            reg.clone(),
+                            &block_info,
+                        )
+                        .await?;
+                    },
+                    SideChainFeature::ConfidentialOutput(_data) => {
+                        // Should be checked by the base layer
+                        if !output.is_burned() {
+                            warn!(
+                                target: LOG_TARGET,
+                                "Ignoring confidential output that is not burned: {} with commitment {}",
+                                output_hash,
+                                output.commitment.as_public_key()
+                            );
+                            continue;
+                        }
+                        info!(
+                            target: LOG_TARGET,
+                            "Found burned output: {} with commitment {}",
+                            output_hash,
+                            output.commitment.as_public_key()
+                        );
+                        self.register_burnt_utxo(&output)?;
+                    },
                 }
             }
 
@@ -338,18 +358,24 @@ impl BaseLayerScanner {
         Ok(())
     }
 
-    fn register_burnt_utxo(&mut self, commitment: Commitment) -> Result<(), BaseLayerScannerError> {
-        let address = SubstateAddress::LayerOneCommitment(
-            LayerOneCommitmentAddress::try_from_commitment(commitment.as_bytes()).map_err(|e|
+    fn register_burnt_utxo(&mut self, output: &TransactionOutput) -> Result<(), BaseLayerScannerError> {
+        let address = SubstateAddress::UnclaimedConfidentialOutput(
+            UnclaimedConfidentialOutputAddress::try_from_commitment(output.commitment.as_bytes()).map_err(|e|
                 // Technically impossible, but anyway
                 BaseLayerScannerError::InvalidSideChainUtxoResponse(format!("Invalid commitment: {}", e)))?,
         );
-        let substate = Substate::new(0, SubstateValue::LayerOneCommitment(commitment.as_bytes().to_vec()));
+        let substate = Substate::new(
+            0,
+            SubstateValue::UnclaimedConfidentialOutput(UnclaimedConfidentialOutput {
+                commitment: output.commitment.clone(),
+                encrypted_value: EncryptedValue(output.encrypted_value.0),
+            }),
+        );
         let shard_id = ShardId::from_address(&address, 0);
         self.shard_store
             .with_write_tx(|tx| tx.save_burnt_utxo(&substate, address, shard_id))
             .map_err(|source| BaseLayerScannerError::CouldNotRegisterBurntUtxo {
-                commitment: Box::new(commitment),
+                commitment: Box::new(output.commitment.clone()),
                 source,
             })?;
         Ok(())

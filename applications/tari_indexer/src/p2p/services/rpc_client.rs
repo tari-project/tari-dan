@@ -20,7 +20,7 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use std::convert::{TryFrom, TryInto};
+use std::convert::TryFrom;
 
 use anyhow::anyhow;
 use async_trait::async_trait;
@@ -82,7 +82,7 @@ impl ValidatorNodeRpcClient for TariCommsValidatorNodeRpcClient {
             .await?
             .map(|result| {
                 let p = result?;
-                let identity_sig = p.identity_signature.unwrap_or_default();
+                // let identity_sig = p.identity_signature.unwrap_or_default();
                 Result::<_, ValidatorNodeClientError>::Ok(DanPeer {
                     identity: CommsPublicKey::from_bytes(&p.identity)
                         .map_err(|_| ValidatorNodeClientError::InvalidResponse(anyhow!("Invalid identity")))?,
@@ -94,11 +94,11 @@ impl ValidatorNodeRpcClient for TariCommsValidatorNodeRpcClient {
                                 .map_err(|_| ValidatorNodeClientError::InvalidResponse(anyhow!("Invalid address")))
                         })
                         .collect::<Result<_, _>>()?,
-                    identity_signature: Some(
-                        identity_sig
-                            .try_into()
-                            .map_err(ValidatorNodeClientError::InvalidResponse)?,
-                    ),
+                    // identity_signature: Some(
+                    //     identity_sig
+                    //         .try_into()
+                    //         .map_err(ValidatorNodeClientError::InvalidResponse)?,
+                    // ),
                 })
             })
             .collect::<Result<Vec<_>, _>>()

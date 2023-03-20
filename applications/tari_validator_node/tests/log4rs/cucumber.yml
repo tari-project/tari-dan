@@ -118,6 +118,13 @@ loggers:
       - stdout
       - dan_layer
     additive: false
+
+  tari::dan_wallet_daemon:
+    level: debug
+    appenders:
+      - stdout
+      - dan_layer
+    additive: false
   
   tari::indexer:
     level: debug

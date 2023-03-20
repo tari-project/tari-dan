@@ -146,8 +146,8 @@ impl EpochManagerService {
                 );
             },
             EpochManagerRequest::Subscribe { reply } => handle(reply, Ok(self.events.1.resubscribe())),
-            EpochManagerRequest::GetValidatorNodeMmr { epoch, reply } => {
-                handle(reply, self.inner.get_validator_node_mmr(epoch))
+            EpochManagerRequest::GetValidatorNodeBMT { epoch, reply } => {
+                handle(reply, self.inner.get_validator_node_bmt(epoch))
             },
             EpochManagerRequest::GetValidatorNodeMerkleRoot { epoch, reply } => {
                 handle(reply, self.inner.get_validator_node_merkle_root(epoch))

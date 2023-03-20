@@ -34,7 +34,7 @@ mod tree_node_hash;
 pub use tree_node_hash::TreeNodeHash;
 
 mod validator_metadata;
-pub use validator_metadata::{vn_mmr_node_hash, ValidatorMetadata};
+pub use validator_metadata::{vn_bmt_node_hash, ValidatorMetadata};
 
 mod object_pledge;
 pub use object_pledge::{ObjectPledge, ObjectPledgeInfo};
@@ -43,7 +43,6 @@ mod node_addressable;
 pub use node_addressable::NodeAddressable;
 
 mod shard_id;
-
 pub use shard_id::ShardId;
 
 #[derive(Debug, Clone, Deserialize, Serialize)]

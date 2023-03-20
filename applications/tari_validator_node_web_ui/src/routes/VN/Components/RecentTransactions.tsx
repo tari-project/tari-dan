@@ -35,26 +35,33 @@ import {
   DataTableCell,
   CodeBlock,
   AccordionIconButton,
+  BoxHeading2,
 } from '../../../Components/StyledComponents';
 import KeyboardArrowDownIcon from '@mui/icons-material/KeyboardArrowDown';
 import KeyboardArrowUpIcon from '@mui/icons-material/KeyboardArrowUp';
 import Collapse from '@mui/material/Collapse';
 import TablePagination from '@mui/material/TablePagination';
 import Typography from '@mui/material/Typography';
+import HeadingMenu from '../../../Components/HeadingMenu';
+import IconButton from '@mui/material/IconButton';
+import TransactionFilter from '../../../Components/TransactionFilter';
+import Fade from '@mui/material/Fade';
 
 interface IRecentTransaction {
   payload_id: number[];
   timestamp: string;
   instructions: string;
   meta: string;
+  show?: boolean;
 }
 
-interface ITableRecentTransaction {
+export interface ITableRecentTransaction {
   id: string;
   payload_id: string;
   timestamp: string;
   instructions: string;
   meta: string;
+  show?: boolean;
 }
 
 type ColumnKey = keyof ITableRecentTransaction;
@@ -173,14 +180,28 @@ function RecentTransactions() {
     setPage(0);
   };
 
+  const ascendingTimestamp = () => {
+    sort('timestamp', 1);
+  };
+
+  const descendingTimestamp = () => {
+    sort('timestamp', -1);
+  };
+
+  const ascendingPayloadId = () => {
+    sort('payload_id', 1);
+  };
+
+  const descendingPayloadId = () => {
+    sort('payload_id', -1);
+  };
+
   useEffect(() => {
     getRecentTransactions().then((resp) => {
-      console.log('Response: ', resp);
       setRecentTransactions(
         // Display from newest to oldest by reversing
 
-        resp
-          .transactions
+        resp.transactions
           .slice()
           .reverse()
           .map(
@@ -189,120 +210,184 @@ function RecentTransactions() {
               meta,
               payload_id,
               timestamp,
+              show = true,
             }: IRecentTransaction) => ({
               id: toHexString(payload_id),
               payload_id: toHexString(payload_id),
               timestamp: timestamp,
               meta: meta,
               instructions: instructions,
+              show: show,
             })
           )
       );
     });
   }, []);
-  const sort = (column: ColumnKey) => {
-    let order = 1;
-    if (lastSort.column === column) {
-      order = -lastSort.order;
+
+  const sort = (column: ColumnKey, order: number) => {
+    // let order = 1;
+    // if (lastSort.column === column) {
+    //   order = -lastSort.order;
+    // }
+    if (column) {
+      setRecentTransactions(
+        [...recentTransactions].sort((r0: any, r1: any) =>
+          r0[column] > r1[column] ? order : r0[column] < r1[column] ? -order : 0
+        )
+      );
+      setLastSort({ column, order });
     }
-    setRecentTransactions(
-      [...recentTransactions].sort((r0, r1) =>
-        r0[column] > r1[column] ? order : r0[column] < r1[column] ? -order : 0
-      )
-    );
-    setLastSort({ column, order });
   };
-  if (recentTransactions === undefined) {
-    return (
-      <Typography variant="h4">Recent transactions ... loading</Typography>
-    );
-  }
 
   return (
-    <TableContainer>
-      <Table>
-        <TableHead>
-          <TableRow>
-            <TableCell onClick={() => sort('payload_id')}>
-              <div
-                style={{
-                  display: 'flex',
-                  justifyContent: 'flex-start',
-                  alignItems: 'center',
-                  gap: '5px',
-                }}
-              >
-                Payload id
-                {lastSort.column === 'payload_id' ? (
-                  lastSort.order === 1 ? (
-                    <KeyboardArrowUpIcon />
-                  ) : (
-                    <KeyboardArrowDownIcon />
-                  )
-                ) : (
-                  ''
-                )}
-              </div>
-            </TableCell>
-            <TableCell onClick={() => sort('timestamp')}>
-              <div
-                style={{
-                  display: 'flex',
-                  justifyContent: 'flex-start',
-                  alignItems: 'center',
-                  gap: '5px',
-                }}
-              >
-                Timestamp
-                {lastSort.column === 'timestamp' ? (
-                  lastSort.order === 1 ? (
-                    <KeyboardArrowUpIcon />
-                  ) : (
-                    <KeyboardArrowDownIcon />
-                  )
-                ) : (
-                  ''
-                )}
-              </div>
-            </TableCell>
-            <TableCell style={{ textAlign: 'center' }}>Meta</TableCell>
-            <TableCell style={{ textAlign: 'center' }}>Instructions</TableCell>
-          </TableRow>
-        </TableHead>
-        <TableBody>
-          {recentTransactions
-            .slice(page * rowsPerPage, page * rowsPerPage + rowsPerPage)
-            .map(({ id, payload_id, timestamp, instructions, meta }) => (
-              <RowData
-                key={id}
-                id={id}
-                payload_id={payload_id}
-                timestamp={timestamp}
-                instructions={instructions}
-                meta={meta}
-              />
-            ))}
-          {emptyRows > 0 && (
-            <TableRow
-              style={{
-                height: 67 * emptyRows,
-              }}
-            >
-              <TableCell colSpan={4} />
+    <>
+      <BoxHeading2>
+        <TransactionFilter
+          recentTransactions={recentTransactions}
+          setRecentTransactions={setRecentTransactions}
+          setPage={setPage}
+        />
+      </BoxHeading2>
+      <TableContainer>
+        <Table>
+          <TableHead>
+            <TableRow>
+              <TableCell>
+                <div
+                  style={{
+                    display: 'flex',
+                    justifyContent: 'flex-start',
+                    alignItems: 'center',
+                    gap: '5px',
+                  }}
+                >
+                  <HeadingMenu
+                    menuTitle="Payload ID"
+                    menuItems={[
+                      {
+                        title: 'Sort Ascending',
+                        fn: ascendingPayloadId,
+                        icon: <KeyboardArrowUpIcon />,
+                      },
+                      {
+                        title: 'Sort Descending',
+                        fn: descendingPayloadId,
+                        icon: <KeyboardArrowDownIcon />,
+                      },
+                    ]}
+                  />
+                  <IconButton>
+                    {lastSort.column === 'payload_id' ? (
+                      lastSort.order === 1 ? (
+                        <KeyboardArrowUpIcon onClick={descendingPayloadId} />
+                      ) : (
+                        <KeyboardArrowDownIcon onClick={ascendingPayloadId} />
+                      )
+                    ) : (
+                      ''
+                    )}
+                  </IconButton>
+                </div>
+              </TableCell>
+              <TableCell>
+                <div
+                  style={{
+                    display: 'flex',
+                    justifyContent: 'flex-start',
+                    alignItems: 'center',
+                    gap: '5px',
+                  }}
+                >
+                  <HeadingMenu
+                    menuTitle="Timestamp"
+                    menuItems={[
+                      {
+                        title: 'Sort Ascending',
+                        fn: ascendingTimestamp,
+                        icon: <KeyboardArrowUpIcon />,
+                      },
+                      {
+                        title: 'Sort Descending',
+                        fn: descendingTimestamp,
+                        icon: <KeyboardArrowDownIcon />,
+                      },
+                    ]}
+                  />
+                  <IconButton>
+                    {lastSort.column === 'timestamp' ? (
+                      lastSort.order === 1 ? (
+                        <KeyboardArrowUpIcon onClick={descendingTimestamp} />
+                      ) : (
+                        <KeyboardArrowDownIcon onClick={ascendingTimestamp} />
+                      )
+                    ) : (
+                      ''
+                    )}
+                  </IconButton>
+                </div>
+              </TableCell>
+              <TableCell style={{ textAlign: 'center' }}>Meta</TableCell>
+              <TableCell style={{ textAlign: 'center' }}>
+                Instructions
+              </TableCell>
             </TableRow>
-          )}
-        </TableBody>
-      </Table>
-      <TablePagination
-        rowsPerPageOptions={[10, 25, 50]}
-        component="div"
-        count={recentTransactions.length}
-        rowsPerPage={rowsPerPage}
-        page={page}
-        onPageChange={handleChangePage}
-        onRowsPerPageChange={handleChangeRowsPerPage}
-      />
-    </TableContainer>
+          </TableHead>
+          <TableBody>
+            {recentTransactions
+              .filter(({ show }) => show === true)
+              .slice(page * rowsPerPage, page * rowsPerPage + rowsPerPage)
+              .map(({ id, payload_id, timestamp, instructions, meta }) => (
+                <RowData
+                  key={id}
+                  id={id}
+                  payload_id={payload_id}
+                  timestamp={timestamp}
+                  instructions={instructions}
+                  meta={meta}
+                />
+              ))}
+            {recentTransactions.filter(({ show }) => show === true).length ===
+              0 && (
+              <TableRow>
+                <TableCell colSpan={4} style={{ textAlign: 'center' }}>
+                  <Fade
+                    in={
+                      recentTransactions.filter(({ show }) => show === true)
+                        .length === 0
+                    }
+                    timeout={500}
+                  >
+                    <Typography variant="h5">No results found</Typography>
+                  </Fade>
+                </TableCell>
+              </TableRow>
+            )}
+            {emptyRows > 0 && (
+              <TableRow
+                style={{
+                  height: 67 * emptyRows,
+                }}
+              >
+                <TableCell colSpan={4} />
+              </TableRow>
+            )}
+          </TableBody>
+        </Table>
+        <TablePagination
+          rowsPerPageOptions={[10, 25, 50]}
+          component="div"
+          count={
+            recentTransactions.filter(
+              (transaction) => transaction.show === true
+            ).length
+          }
+          rowsPerPage={rowsPerPage}
+          page={page}
+          onPageChange={handleChangePage}
+          onRowsPerPageChange={handleChangeRowsPerPage}
+        />
+      </TableContainer>
+    </>
   );
 }
 

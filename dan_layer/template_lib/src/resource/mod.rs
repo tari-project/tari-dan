@@ -21,7 +21,7 @@
 //   USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 mod builder;
-pub use builder::ResourceBuilder;
+pub use builder::{ResourceBuilder, TOKEN_SYMBOL};
 
 mod manager;
 pub use manager::ResourceManager;

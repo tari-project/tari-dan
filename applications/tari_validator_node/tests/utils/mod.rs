@@ -30,3 +30,5 @@ pub mod template;
 pub mod validator_node;
 pub mod validator_node_cli;
 pub mod wallet;
+pub mod wallet_daemon;
+pub mod wallet_daemon_cli;
