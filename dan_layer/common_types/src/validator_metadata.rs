@@ -43,14 +43,13 @@ impl ValidatorMetadata {
         vn_mmr_node_hash(&self.public_key, &self.vn_shard_key)
     }
 
-    // TODO: impl Borsh for merkle proof
+    // TODO: impl CBOR for merkle proof
     pub fn encode_merkle_proof(&self) -> Vec<u8> {
         bincode::serialize(&self.merkle_proof).unwrap()
     }
 
-    // TODO: impl Borsh for merkle proof
+    // TODO: impl CBOR for merkle proof
     pub fn decode_merkle_proof(bytes: &[u8]) -> Result<MerkleProof, io::Error> {
-        // Map to an io error because borsh uses that
         bincode::deserialize(bytes).map_err(|e| io::Error::new(io::ErrorKind::Other, e))
     }
 }

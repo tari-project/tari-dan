@@ -80,7 +80,7 @@ impl SigningService for NodeIdentitySigningService {
     }
 }
 
-// TODO: this wont be required when borsh support is added to tari crypto
+// TODO: this wont be required when CBOR support is added to tari crypto
 fn key_to_fixed_bytes(key: &CommsPublicKey) -> [u8; 32] {
     let mut buf = [0u8; 32];
     buf.copy_from_slice(key.as_bytes());

@@ -47,7 +47,7 @@ impl TariEngineHasher {
     }
 
     pub fn update<T: Serialize + ?Sized>(&mut self, data: &T) {
-        // Borsh encoding does not make any contract to say that if the writer is infallible (as it is here) then
+        // CBOR encoding does not make any contract to say that if the writer is infallible (as it is here) then
         // encoding in infallible. However this should be the case. Since it is very unergonomic to return an
         // error in hash chain functions, and therefore all usages of the hasher, we assume all types implement
         // infallible encoding.
