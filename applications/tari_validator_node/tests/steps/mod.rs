@@ -6,3 +6,4 @@ mod common;
 mod miner;
 mod validator_node;
 mod wallet;
+mod wallet_daemon;

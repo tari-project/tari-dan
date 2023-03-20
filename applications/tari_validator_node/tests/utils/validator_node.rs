@@ -95,7 +95,20 @@ pub async fn spawn_validator_node(
 
     let shutdown = Shutdown::new();
     let shutdown_signal = shutdown.to_signal();
-    let temp_dir = get_base_dir().join("validator_nodes").join(validator_node_name.clone());
+    let scenario_slug = world
+        .current_scenario_name
+        .as_ref()
+        .unwrap()
+        .chars()
+        .map(|x| match x {
+            'A'..='Z' | 'a'..='z' | '0'..='9' => x,
+            _ => '-',
+        })
+        .collect::<String>();
+    let temp_dir = get_base_dir()
+        .join("validator_nodes")
+        .join(scenario_slug)
+        .join(validator_node_name.clone());
     let temp_dir_path = temp_dir.clone();
     let handle = task::spawn(async move {
         let mut config = ApplicationConfig {

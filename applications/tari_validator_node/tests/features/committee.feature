@@ -55,6 +55,7 @@ Feature: Committee scenarios
     # When I print the cucumber world
     # When I wait 5000 seconds
 
+  @serial
   Scenario: Template registration and invocation in a 4-VN committee
     # Initialize a base node, wallet and miner
     Given a base node BASE

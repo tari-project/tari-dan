@@ -22,22 +22,15 @@
 
 mod steps;
 mod utils;
-use std::{
-    convert::{Infallible, TryFrom},
-    future,
-    io,
-    str::FromStr,
-    time::Duration,
-};
+use std::{convert::TryFrom, future, io, str::FromStr, time::Duration};
 
-use async_trait::async_trait;
 use cucumber::{
     gherkin::{Scenario, Step},
     given,
     then,
     when,
     writer,
-    WorldInit,
+    World,
     WriterExt,
 };
 use indexmap::IndexMap;
@@ -79,9 +72,10 @@ use crate::utils::{
     template::{send_template_registration, RegisteredTemplate},
     validator_node::{get_vn_client, ValidatorNodeProcess},
     wallet::WalletProcess,
+    wallet_daemon::{spawn_wallet_daemon, DanWalletDaemonProcess},
 };
 
-#[derive(Debug, Default, WorldInit)]
+#[derive(Debug, Default, cucumber::World)]
 pub struct TariWorld {
     base_nodes: IndexMap<String, BaseNodeProcess>,
     wallets: IndexMap<String, WalletProcess>,
@@ -101,6 +95,7 @@ pub struct TariWorld {
     num_databases_saved: usize,
     account_public_keys: IndexMap<String, (RistrettoSecretKey, PublicKey)>,
     claim_public_keys: IndexMap<String, PublicKey>,
+    wallet_daemons: IndexMap<String, DanWalletDaemonProcess>,
 }
 
 impl TariWorld {
@@ -150,16 +145,12 @@ impl TariWorld {
             // You have explicitly trigger the shutdown now because of the change to use Arc/Mutex in tari_shutdown
             p.shutdown.trigger();
         }
+        for (name, mut p) in self.wallet_daemons.drain(..) {
+            println!("Shutting down wallet daemon {}", name);
+            // You have explicitly trigger the shutdown now because of the change to use Arc/Mutex in tari_shutdown
+            p.shutdown.trigger();
+        }
         self.miners.clear();
-    }
-}
-
-#[async_trait(?Send)]
-impl cucumber::World for TariWorld {
-    type Error = Infallible;
-
-    async fn new() -> Result<Self, Self::Error> {
-        Ok(Self::default())
     }
 }
 
@@ -181,7 +172,7 @@ async fn main() {
             world.current_scenario_name = Some(scenario.name.clone());
             Box::pin(future::ready(()))
         })
-        .after(move |_feature, _rule, scenario, maybe_world| {
+        .after(move |_feature, _rule, scenario, _finished, maybe_world| {
             if let Some(world) = maybe_world {
                 world.after(scenario);
             }
@@ -251,6 +242,17 @@ async fn stop_validator_node(world: &mut TariWorld, vn_name: String) {
     vn_ps.stop();
 }
 
+#[given(expr = "a wallet daemon {word} connected to validator node {word}")]
+async fn start_wallet_daemon(world: &mut TariWorld, wallet_daemon_name: String, vn_name: String) {
+    spawn_wallet_daemon(world, wallet_daemon_name, vn_name).await;
+}
+
+#[when(expr = "I stop wallet daemon {word}")]
+async fn stop_wallet_daemon(world: &mut TariWorld, wallet_daemon_name: String) {
+    let walletd_ps = world.wallet_daemons.get_mut(&wallet_daemon_name).unwrap();
+    walletd_ps.stop();
+}
+
 #[when(expr = "validator node {word} sends a registration transaction")]
 async fn send_vn_registration(world: &mut TariWorld, vn_name: String) {
     let jrpc_port = world.validator_nodes.get(&vn_name).unwrap().json_rpc_port;
@@ -267,12 +269,12 @@ async fn all_vns_send_registration(world: &mut TariWorld) {
     for vn_ps in world.validator_nodes.values() {
         let jrpc_port = vn_ps.json_rpc_port;
         let mut client = get_vn_client(jrpc_port).await;
-
         let _resp = client.register_validator_node().await.unwrap();
-
-        // give it some time for the registration tx to be processed by the wallet and the base node
-        tokio::time::sleep(Duration::from_secs(4)).await;
     }
+
+    eprintln!("WAITING AND GETS HERE");
+    // give it some time for the registration tx to be processed by the wallet and the base node
+    tokio::time::sleep(Duration::from_secs(4)).await;
 }
 
 #[when(expr = "validator node {word} registers the template \"{word}\"")]

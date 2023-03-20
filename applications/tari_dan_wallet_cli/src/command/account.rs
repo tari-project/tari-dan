@@ -198,7 +198,7 @@ pub async fn handle_claim_burn(args: ClaimBurnArgs, client: &mut WalletDaemonCli
         fee,
     } = args;
 
-    let AccountByNameResponse { account } = client.accounts_get_by_name(&account_name).await?;
+    let AccountByNameResponse { account, .. } = client.accounts_get_by_name(&account_name).await?;
 
     let claim_proof = if let Some(proof_json) = proof_json {
         proof_json
