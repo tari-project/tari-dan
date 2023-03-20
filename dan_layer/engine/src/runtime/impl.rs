@@ -29,9 +29,10 @@ use tari_crypto::{
     ristretto::{RistrettoPublicKey, RistrettoSecretKey},
 };
 use tari_engine_types::{
+    base_layer_hashing::DomainSeparatedConsensusHasher,
     commit_result::{FinalizeResult, RejectReason, TransactionResult},
     confidential::{get_commitment_factory, get_range_proof_service, ConfidentialClaim, ConfidentialOutput},
-    hashing::ownership_proof_hasher,
+    hashing::ConfidentialOutputHashDomain,
     logs::LogEntry,
     resource_container::ResourceContainer,
 };
@@ -633,11 +634,11 @@ impl RuntimeInterface for RuntimeInterfaceImpl {
         let unclaimed_output = self.tracker.take_unclaimed_confidential_output(output_address)?;
         // 2. owner_sig must be valid
         // TODO: Probably want a better challenge
-        let challenge = ownership_proof_hasher()
+        let challenge = DomainSeparatedConsensusHasher::<ConfidentialOutputHashDomain>::new("commitment_signature")
             .chain(proof_of_knowledge.public_nonce())
             .chain(&unclaimed_output.commitment)
             .chain(&self.sender_public_key)
-            .result();
+            .finalize();
 
         if !proof_of_knowledge.verify(
             &unclaimed_output.commitment,

@@ -6750,12 +6750,14 @@ dependencies = [
 name = "tari_engine_types"
 version = "0.50.0-pre.0"
 dependencies = [
+ "borsh",
  "digest 0.9.0",
  "lazy_static",
  "rand 0.7.3",
  "serde",
  "tari_bor",
  "tari_common_types 0.49.0-pre.1 (git+https://github.com/tari-project/tari.git?tag=v0.49.0-pre.1)",
+ "tari_core",
  "tari_crypto",
  "tari_template_abi",
  "tari_template_lib",

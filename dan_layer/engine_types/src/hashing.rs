@@ -52,10 +52,6 @@ pub fn output_mask_hasher() -> TariHasher {
     confidential_hasher("spend_key")
 }
 
-pub fn ownership_proof_hasher() -> TariHasher {
-    confidential_hasher("commitment_signature")
-}
-
 #[derive(Debug, Clone)]
 pub struct TariHasher {
     hasher: Blake256,
