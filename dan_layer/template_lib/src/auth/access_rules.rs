@@ -2,6 +2,7 @@
 //   SPDX-License-Identifier: BSD-3-Clause
 
 use serde::{Deserialize, Serialize};
+use tari_bor::serde_ordered_map;
 use tari_template_abi::rust::collections::HashMap;
 
 use crate::{auth::NativeFunctionCall, models::NonFungibleAddress};
@@ -40,7 +41,9 @@ impl RestrictedAccessRule {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AccessRules {
+    #[serde(serialize_with = "serde_ordered_map")]
     method_access: HashMap<String, AccessRule>,
+    #[serde(serialize_with = "serde_ordered_map")]
     native_method_access: HashMap<NativeFunctionCall, AccessRule>,
     default: AccessRule,
 }

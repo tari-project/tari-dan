@@ -3,6 +3,9 @@
 
 #![cfg_attr(not(feature = "std"), no_std)]
 
+extern crate alloc;
+use alloc::collections::BTreeMap;
+
 use ciborium::{de::from_reader, ser::into_writer};
 use serde::{de::DeserializeOwned, Serialize};
 
@@ -99,4 +102,15 @@ pub fn decode_len(input: &[u8]) -> Result<usize, BorError> {
 fn to_bor_error<E>(e: E) -> BorError
 where E: core::fmt::Display {
     BorError(e.to_string())
+}
+
+#[cfg(feature = "std")]
+pub fn serde_ordered_map<S, K, V>(value: &std::collections::HashMap<K, V>, serializer: S) -> Result<S::Ok, S::Error>
+where
+    S: serde::Serializer,
+    K: Serialize + Ord,
+    V: Serialize,
+{
+    let ordered: BTreeMap<_, _> = value.iter().collect();
+    ordered.serialize(serializer)
 }
