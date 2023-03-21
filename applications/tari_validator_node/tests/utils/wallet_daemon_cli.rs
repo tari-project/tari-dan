@@ -20,6 +20,8 @@
 //   WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //   USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+use std::{collections::HashMap, str::FromStr, time::Duration};
+
 use base64::{engine::general_purpose::STANDARD as BASE64, Engine};
 use serde_json::json;
 use tari_crypto::{
@@ -27,8 +29,20 @@ use tari_crypto::{
     signatures::CommitmentSignature,
     tari_utilities::ByteArray,
 };
+use tari_engine_types::instruction::Instruction;
+use tari_template_lib::{arg, args::Arg, prelude::NonFungibleId};
+use tari_transaction_manifest::{parse_manifest, ManifestValue};
+use tari_validator_node_cli::command::transaction::CliArg;
 use tari_wallet_daemon_client::{
-    types::{AccountsCreateRequest, AccountsGetBalancesRequest, ClaimBurnRequest, ClaimBurnResponse},
+    types::{
+        AccountsCreateRequest,
+        AccountsGetBalancesRequest,
+        ClaimBurnRequest,
+        ClaimBurnResponse,
+        TransactionGetRequest,
+        TransactionGetResultRequest,
+        TransactionSubmitRequest,
+    },
     WalletDaemonClient,
 };
 
@@ -80,8 +94,14 @@ pub async fn create_account(world: &mut TariWorld, account_name: String, wallet_
         fee: None,
     };
 
-    let mut client = get_wallet_daemon_client(world, wallet_daemon_name).await;
-    let _resp = client.create_account(request).await.unwrap();
+    let mut client = get_wallet_daemon_client(world, wallet_daemon_name.clone()).await;
+    let resp = client.create_account(request).await.unwrap();
+
+    let wallet_daemon_txs = world.wallet_daemons_txs.entry(wallet_daemon_name).or_default();
+    wallet_daemon_txs.insert(
+        account_name,
+        resp.result.result.expect("Failed to obtain substate diffs"),
+    );
 }
 
 pub async fn get_balance(world: &mut TariWorld, account_name: String, wallet_daemon_name: String) -> i64 {
@@ -93,6 +113,172 @@ pub async fn get_balance(world: &mut TariWorld, account_name: String, wallet_dae
         .expect("Failed to get balance from account");
     let balances = resp.balances;
     balances.iter().map(|e| e.balance.value()).sum()
+}
+
+pub async fn submit_manifest(
+    world: &mut TariWorld,
+    wallet_daemon_name: String,
+    manifest_content: String,
+    inputs: String,
+    num_outputs: u64,
+    outputs_name: String,
+) {
+    let input_groups = inputs.split(',').map(|s| s.trim()).collect::<Vec<_>>();
+
+    // generate globals for component addresses
+    let globals: HashMap<String, ManifestValue> = world
+        .outputs
+        .iter()
+        .filter(|(name, _)| input_groups.contains(&name.as_str()))
+        .flat_map(|(name, outputs)| {
+            outputs
+                .iter()
+                .map(move |(child_name, addr)| (format!("{}/{}", name, child_name), addr.address.clone().into()))
+        })
+        .collect();
+
+    // parse the minting specific outputs (if any) specified in the manifest as comments
+    let new_non_fungible_outputs = manifest_content
+        .lines()
+        .filter(|l| l.starts_with("// $mint "))
+        .map(|l| l.split_whitespace().skip(2).collect::<Vec<&str>>())
+        .map(|l| {
+            let manifest_value = globals.get(l[0]).unwrap();
+            let resource_address = manifest_value.as_address().unwrap().as_resource_address().unwrap();
+            let count = l[1].parse::<u8>().unwrap();
+            (resource_address, count)
+        })
+        .collect::<Vec<_>>();
+
+    let new_non_fungible_index_outputs = manifest_content
+        .lines()
+        .filter(|l| l.starts_with("// $nft_index "))
+        .map(|l| l.split_whitespace().skip(2).collect::<Vec<&str>>())
+        .map(|l| {
+            let manifest_value = globals.get(l[0]).unwrap();
+            let parent_address = manifest_value.as_address().unwrap().as_resource_address().unwrap();
+            let index = u64::from_str(l[1]).unwrap();
+            (parent_address, index)
+        })
+        .collect::<Vec<_>>();
+
+    let specific_non_fungible_outputs = manifest_content
+        .lines()
+        .filter(|l| l.starts_with("// $mint_specific "))
+        .map(|l| l.split_whitespace().skip(2).collect::<Vec<&str>>())
+        .map(|l| {
+            let manifest_value = globals.get(l[0]).unwrap();
+            let resource_address = manifest_value.as_address().unwrap().as_resource_address().unwrap();
+            let non_fungible_id = NonFungibleId::try_from_canonical_string(l[1]).unwrap();
+            (resource_address, non_fungible_id)
+        })
+        .collect::<Vec<_>>();
+
+    // Supply the inputs explicitly. If this is empty, the internal component manager
+    // will attempt to supply the correct inputs
+    let inputs = inputs
+        .split(',')
+        .flat_map(|s| {
+            let diff = world
+                .wallet_daemons_txs
+                .get(&wallet_daemon_name)
+                .unwrap_or_else(|| panic!("No wallet daemon {} transactions", wallet_daemon_name))
+                .get(s.trim())
+                .unwrap_or_else(|| panic!("No outputs named {}", s.trim()));
+            diff.up_iter()
+        })
+        .map(|(addr, state)| tari_dan_wallet_sdk::models::VersionedSubstateAddress {
+            version: state.version(),
+            address: addr.clone(),
+        })
+        .collect::<Vec<_>>();
+
+    let instructions = parse_manifest(&manifest_content, globals).unwrap();
+    let transaction_submit_req = TransactionSubmitRequest {
+        signing_key_index: None,
+        instructions,
+        fee: 1,
+        override_inputs: false,
+        is_dry_run: false,
+        proof_id: None,
+        new_outputs: num_outputs as u8,
+        specific_non_fungible_outputs,
+        inputs,
+        new_non_fungible_outputs,
+        new_non_fungible_index_outputs,
+    };
+
+    let mut client = get_wallet_daemon_client(world, wallet_daemon_name.clone()).await;
+    let resp = client.submit_transaction(transaction_submit_req).await.unwrap();
+
+    tokio::time::sleep(Duration::from_secs(5)).await;
+
+    let get_tx_req = TransactionGetResultRequest { hash: resp.hash };
+    let get_tx_resp = client.get_transaction_result(get_tx_req).await.unwrap();
+
+    let wallet_daemon_txs = world.wallet_daemons_txs.entry(wallet_daemon_name).or_default();
+    wallet_daemon_txs.insert(
+        outputs_name,
+        get_tx_resp
+            .result
+            .unwrap()
+            .result
+            .expect("Failed to obtain substate diffs"),
+    );
+}
+
+pub async fn create_component(
+    world: &mut TariWorld,
+    outputs_name: String,
+    template_name: String,
+    wallet_daemon_name: String,
+    function_call: String,
+    args: Vec<String>,
+    num_outputs: u64,
+) {
+    let template_address = world
+        .templates
+        .get(&template_name)
+        .unwrap_or_else(|| panic!("Template not found with name {}", template_name))
+        .address;
+    let args = args.iter().map(|a| CliArg::from_str(a).unwrap().into_arg()).collect();
+    let instruction = Instruction::CallFunction {
+        template_address,
+        function: function_call,
+        args,
+    };
+
+    let transaction_submit_req = TransactionSubmitRequest {
+        signing_key_index: None,
+        instructions: vec![instruction],
+        fee: 1,
+        override_inputs: false,
+        is_dry_run: false,
+        proof_id: None,
+        new_outputs: num_outputs as u8,
+        specific_non_fungible_outputs: vec![],
+        inputs: vec![],
+        new_non_fungible_outputs: vec![],
+        new_non_fungible_index_outputs: vec![],
+    };
+
+    let mut client = get_wallet_daemon_client(world, wallet_daemon_name.clone()).await;
+    let resp = client.submit_transaction(transaction_submit_req).await.unwrap();
+
+    tokio::time::sleep(Duration::from_secs(5)).await;
+
+    let get_tx_req = TransactionGetResultRequest { hash: resp.hash };
+    let get_tx_resp = client.get_transaction_result(get_tx_req).await.unwrap();
+
+    let wallet_daemon_txs = world.wallet_daemons_txs.entry(wallet_daemon_name).or_default();
+    wallet_daemon_txs.insert(
+        outputs_name,
+        get_tx_resp
+            .result
+            .unwrap()
+            .result
+            .expect("Failed to obtain substate diffs"),
+    );
 }
 
 pub(crate) async fn get_wallet_daemon_client(world: &TariWorld, wallet_daemon_name: String) -> WalletDaemonClient {
