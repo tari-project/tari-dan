@@ -58,10 +58,7 @@ impl PeerProvider for CommsPeerProvider {
                     .iter()
                     .filter_map(|a| {
                         let claim = a.source.peer_identity_claim().cloned();
-                        match claim {
-                            Some(claim) => Some((a.address().clone(), claim)),
-                            None => None,
-                        }
+                        claim.map(|claim| (a.address().clone(), claim))
                     })
                     .collect(),
             }),
@@ -82,10 +79,7 @@ impl PeerProvider for CommsPeerProvider {
                     .iter()
                     .filter_map(|a| {
                         let claim = a.source.peer_identity_claim().cloned();
-                        match claim {
-                            Some(claim) => Some((a.address().clone(), claim)),
-                            None => None,
-                        }
+                        claim.map(|claim| (a.address().clone(), claim))
                     })
                     .collect(),
             })
