@@ -27,7 +27,10 @@ use std::{
 
 use anyhow::anyhow;
 use chrono::{DateTime, NaiveDateTime, Utc};
-use tari_comms::{peer_manager::IdentitySignature, types::CommsPublicKey};
+use tari_comms::{
+    peer_manager::{IdentitySignature, PeerFeatures, PeerIdentityClaim},
+    types::CommsPublicKey,
+};
 use tari_crypto::tari_utilities::ByteArray;
 use tari_dan_core::{
     message::{DanMessage, NetworkAnnounce},
@@ -203,6 +206,37 @@ impl From<RecoveryMessage> for proto::network::RecoveryMessage {
                     },
                 )),
             },
+        }
+    }
+}
+
+// -------------------------------- PeerIdentityClaim -------------------------------- //
+
+impl TryFrom<proto::network::PeerIdentityClaim> for PeerIdentityClaim {
+    type Error = anyhow::Error;
+
+    fn try_from(value: proto::network::PeerIdentityClaim) -> Result<Self, Self::Error> {
+        let signature = IdentitySignature::try_from(value.signature.unwrap())?;
+        let addresses = value
+            .addresses
+            .iter()
+            .map(|u| u.clone().try_into())
+            .collect::<Result<Vec<_>, _>>()?;
+
+        Ok(Self {
+            signature,
+            features: PeerFeatures::COMMUNICATION_NODE,
+            addresses,
+            unverified_data: None,
+        })
+    }
+}
+
+impl From<PeerIdentityClaim> for proto::network::PeerIdentityClaim {
+    fn from(value: PeerIdentityClaim) -> Self {
+        Self {
+            signature: Some(value.signature.into()),
+            addresses: value.addresses.into_iter().map(|a| a.to_vec()).collect(),
         }
     }
 }

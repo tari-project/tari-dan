@@ -82,7 +82,7 @@ message GetPeersRequest {
 message GetPeersResponse {
   bytes identity = 1;
   repeated bytes addresses = 2;
-  // tari.dan.network.IdentitySignature identity_signature = 3;
+  repeated tari.dan.network.PeerIdentityClaim claims = 3;
 }
 
 message VNStateSyncRequest {
