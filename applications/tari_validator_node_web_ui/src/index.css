@@ -41,6 +41,13 @@ code {
   gap: 10px;
 }
 
+.heading-menu {
+  display: flex;
+  justify-content: flex-start;
+  align-items: center;
+  gap: 5px;
+}
+
 @media screen and (max-width: 767px) {
   .flex-container > * {
     width: 100%;

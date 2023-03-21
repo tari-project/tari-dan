@@ -30,24 +30,36 @@ import MenuItem from '@mui/material/MenuItem';
 import InputAdornment from '@mui/material/InputAdornment';
 import SearchIcon from '@mui/icons-material/Search';
 import CloseRoundedIcon from '@mui/icons-material/CloseRounded';
-import { ITableRecentTransaction } from '../routes/VN/Components/RecentTransactions';
 
-interface ISearchProps {
-  recentTransactions: ITableRecentTransaction[];
-  setRecentTransactions: (
-    recentTransactions: ITableRecentTransaction[]
-  ) => void;
-  setPage: (page: number) => void;
+interface IFilterItems {
+  title: string;
+  value: string;
+  filterFn: (value: string, row: any) => void;
 }
 
+interface ISearchProps {
+  setPage: (page: number) => void;
+  stateObject: any;
+  setStateObject: any;
+  filterItems: IFilterItems[];
+  placeholder: string;
+  defaultSearch?: string;
+}
+
+// The stateObject being passed to the filter function needs to have an id property for the filter to work
+
 const TransactionFilter: React.FC<ISearchProps> = ({
-  recentTransactions,
-  setRecentTransactions,
   setPage,
+  stateObject,
+  setStateObject,
+  filterItems,
+  placeholder,
+  defaultSearch = 'id',
 }) => {
   const [formState, setFormState] = useState({ searchValue: '' });
-  const [filterBy, setFilterBy] = useState('');
+  const [filterBy, setFilterBy] = useState(defaultSearch);
   const [showClearBtn, setShowClearBtn] = useState(false);
+  const [initialUpdate, setInitialUpdate] = useState(true);
   const filterInputRef = useRef<any>(null);
 
   const onSelectChange = (event: any) => {
@@ -71,54 +83,44 @@ const TransactionFilter: React.FC<ISearchProps> = ({
   }, [formState]);
 
   // once selected filter, focus on input
+
   useEffect(() => {
-    if (filterBy !== '') {
+    if (filterBy !== '' && !initialUpdate) {
       filterInputRef.current.focus();
+    } else {
+      setInitialUpdate(false);
     }
   }, [filterBy]);
 
   // search function
   const requestSearch = (searchedVal: string, filter: string) => {
-    const filteredRows = recentTransactions.filter((row) => {
-      let result;
-      switch (filter) {
-        case 'id':
-          result = row.id.toLowerCase().includes(searchedVal.toLowerCase());
-          break;
-        case 'timestamp':
-          result = row.timestamp.includes(searchedVal);
-          break;
-        case 'template':
-          console.log('filter by template address');
-          break;
-        default:
-          result = row.id.toLowerCase().includes(searchedVal.toLowerCase());
-          break;
-      }
-      return result;
+    const filteredRows = stateObject.filter((row: any) => {
+      const index = filterItems.findIndex((item) => item.value === filter);
+      const filterFunction = filterItems[index].filterFn;
+      return filterFunction(searchedVal, row);
     });
 
     // Create a new array that is a copy of the original
-    const updatedTransactions = [...recentTransactions];
+    const updatedObject = [...stateObject];
 
     // Set the "show" property of all transactions in the copy to false
-    updatedTransactions.forEach((transaction) => {
-      transaction.show = false;
+    updatedObject.forEach((template) => {
+      template.show = false;
     });
 
     // Loop over the filtered array, find the matching object in the
     // original array, and set its "show" property to true
-    filteredRows.forEach((filteredRow) => {
-      const index = updatedTransactions.findIndex(
-        (transaction) => transaction.id === filteredRow.id
+    filteredRows.forEach((filteredRow: any) => {
+      const index = updatedObject.findIndex(
+        (item) => item.id === filteredRow.id
       );
       if (index !== -1) {
-        updatedTransactions[index].show = true;
+        updatedObject[index].show = true;
       }
     });
 
     // Update the state with the modified copy of the original array
-    setRecentTransactions(updatedTransactions);
+    setStateObject(updatedObject);
 
     // Set paging to first page
     setPage(0);
@@ -136,7 +138,7 @@ const TransactionFilter: React.FC<ISearchProps> = ({
   const cancelSearch = () => {
     setFormState({ ...formState, searchValue: '' });
     setShowClearBtn(false);
-    setFilterBy('');
+    // setFilterBy('');
   };
 
   return (
@@ -153,9 +155,11 @@ const TransactionFilter: React.FC<ISearchProps> = ({
             name="filterBy"
             style={{ flexGrow: '1', minWidth: '200px' }}
           >
-            <MenuItem value={'template'}>Template Address</MenuItem>
-            <MenuItem value={'id'}>Payload ID</MenuItem>
-            <MenuItem value={'timestamp'}>Timestamp</MenuItem>
+            {filterItems.map((item) => (
+              <MenuItem key={item.value} value={item.value}>
+                {item.title}
+              </MenuItem>
+            ))}
           </Select>
         </FormControl>
         <TextField
@@ -164,7 +168,7 @@ const TransactionFilter: React.FC<ISearchProps> = ({
           onChange={onTextChange}
           style={{ flexGrow: 1 }}
           inputRef={filterInputRef}
-          placeholder="Search for transactions"
+          placeholder={placeholder}
           onKeyDown={(e) => {
             if (e.key === 'Enter') {
               confirmSearch();
@@ -178,9 +182,11 @@ const TransactionFilter: React.FC<ISearchProps> = ({
             ),
             endAdornment: (
               <InputAdornment position="end">
-                <IconButton>
-                  {showClearBtn && <CloseRoundedIcon onClick={cancelSearch} />}
-                </IconButton>
+                {showClearBtn && (
+                  <IconButton>
+                    <CloseRoundedIcon onClick={cancelSearch} />
+                  </IconButton>
+                )}
               </InputAdornment>
             ),
           }}
