@@ -101,8 +101,8 @@ impl PeerProvider for CommsPeerProvider {
                 MultiaddressesWithStats::new(
                     peer.addresses
                         .iter()
-                        .map(|(address, claim)| {
-                            MultiaddrWithStats::new(address.clone(), PeerAddressSource::FromAnotherPeer {
+                        .map(|(addr, claim)| {
+                            MultiaddrWithStats::new(addr.clone(), PeerAddressSource::FromAnotherPeer {
                                 peer_identity_claim: claim.clone(),
                                 source_peer: peer.identity.clone(),
                             })
@@ -123,16 +123,15 @@ impl PeerProvider for CommsPeerProvider {
         if !self.peer_manager.exists(&peer.identity).await {
             return Err(CommsPeerProviderError::PeerNotFound);
         }
-        // let identity_signature = peer.identity_signature;
         let peer = Peer::new(
             peer.identity.clone(),
             node_id,
             MultiaddressesWithStats::new(
                 peer.addresses
                     .iter()
-                    .map(|(address, claim)| {
+                    .map(|(addr, claim)| {
                         MultiaddrWithStats::new(
-                            address.clone(),
+                            addr.clone(),
                             tari_comms::net_address::PeerAddressSource::FromAnotherPeer {
                                 peer_identity_claim: claim.clone(),
                                 source_peer: peer.identity.clone(),
@@ -146,7 +145,6 @@ impl PeerProvider for CommsPeerProvider {
             vec![],
             String::new(),
         );
-        // peer.identity_signature = identity_signature;
 
         self.peer_manager.add_peer(peer).await?;
 

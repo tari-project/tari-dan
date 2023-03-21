@@ -51,9 +51,9 @@ pub struct DanPeer<TAddr> {
 
 impl DanPeer<CommsPublicKey> {
     pub fn is_valid(&self) -> bool {
-        self.addresses.iter().all(|a| {
-            let identity_signature = &a.1.signature;
-            identity_signature.is_valid(&self.identity, PeerFeatures::COMMUNICATION_NODE, &[a.0.clone()])
+        self.addresses.iter().all(|(addr, claim)| {
+            let identity_signature = &claim.signature;
+            identity_signature.is_valid(&self.identity, PeerFeatures::COMMUNICATION_NODE, &[addr.clone()])
         })
     }
 }

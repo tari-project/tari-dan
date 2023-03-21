@@ -95,11 +95,11 @@ impl PeerProvider for CommsPeerProvider {
                 MultiaddressesWithStats::new(
                     peer.addresses
                         .iter()
-                        .map(|(a, c)| {
+                        .map(|(addr, claim)| {
                             MultiaddrWithStats::new(
-                                a.clone(),
+                                addr.clone(),
                                 tari_comms::net_address::PeerAddressSource::FromAnotherPeer {
-                                    peer_identity_claim: c.clone(),
+                                    peer_identity_claim: claim.clone(),
                                     source_peer: peer.identity.clone(),
                                 },
                             )
