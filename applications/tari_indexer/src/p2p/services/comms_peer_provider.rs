@@ -55,10 +55,11 @@ impl PeerProvider for CommsPeerProvider {
                 addresses: peer
                     .addresses
                     .addresses()
-                    .into_iter()
-                    .filter_map(|a| match a.source.peer_identity_claim() {
-                        Some(claim) => Some((a.address().clone(), claim.clone())),
-                        None => None,
+                    .iter()
+                    .filter_map(|a| {
+                        a.source
+                            .peer_identity_claim()
+                            .map(|claim| (a.address().clone(), claim.clone()))
                     })
                     .collect(),
             }),
@@ -76,10 +77,11 @@ impl PeerProvider for CommsPeerProvider {
                 addresses: p
                     .addresses
                     .addresses()
-                    .into_iter()
-                    .filter_map(|a| match a.source.peer_identity_claim() {
-                        Some(claim) => Some((a.address().clone(), claim.clone())),
-                        None => None,
+                    .iter()
+                    .filter_map(|a| {
+                        a.source
+                            .peer_identity_claim()
+                            .map(|claim| (a.address().clone(), claim.clone()))
                     })
                     .collect(),
             })

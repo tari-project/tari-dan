@@ -219,7 +219,6 @@ impl TryFrom<proto::network::PeerIdentityClaim> for PeerIdentityClaim {
         let signature = IdentitySignature::try_from(value.signature.unwrap())?;
         let addresses = value
             .addresses
-            .clone()
             .iter()
             .map(|u| u.clone().try_into())
             .collect::<Result<Vec<_>, _>>()?;
