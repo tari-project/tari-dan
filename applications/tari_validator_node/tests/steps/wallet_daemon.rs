@@ -117,3 +117,14 @@ async fn when_i_burn_funds_with_wallet_daemon(
         PublicKey::from_bytes(&resp.reciprocal_claim_public_key).unwrap(),
     );
 }
+
+#[when(expr = "I check the balance of {word} on wallet daemon {word} the amount is at least {int}")]
+async fn check_account_balance_via_daemon(
+    world: &mut TariWorld,
+    account_name: String,
+    wallet_daemon_name: String,
+    amount: i64,
+) {
+    let current_balance = wallet_daemon_cli::get_balance(world, account_name, wallet_daemon_name).await;
+    assert!(current_balance >= amount);
+}

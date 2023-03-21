@@ -28,7 +28,7 @@ use tari_crypto::{
     tari_utilities::ByteArray,
 };
 use tari_wallet_daemon_client::{
-    types::{AccountsCreateRequest, ClaimBurnRequest, ClaimBurnResponse},
+    types::{AccountsCreateRequest, AccountsGetBalancesRequest, ClaimBurnRequest, ClaimBurnResponse},
     WalletDaemonClient,
 };
 
@@ -82,6 +82,17 @@ pub async fn create_account(world: &mut TariWorld, account_name: String, wallet_
 
     let mut client = get_wallet_daemon_client(world, wallet_daemon_name).await;
     let _resp = client.create_account(request).await.unwrap();
+}
+
+pub async fn get_balance(world: &mut TariWorld, account_name: String, wallet_daemon_name: String) -> i64 {
+    let get_balance_req = AccountsGetBalancesRequest { account_name };
+    let mut client = get_wallet_daemon_client(world, wallet_daemon_name).await;
+    let resp = client
+        .get_account_balances(get_balance_req)
+        .await
+        .expect("Failed to get balance from account");
+    let balances = resp.balances;
+    balances.iter().map(|e| e.balance.value()).sum()
 }
 
 pub(crate) async fn get_wallet_daemon_client(world: &TariWorld, wallet_daemon_name: String) -> WalletDaemonClient {
