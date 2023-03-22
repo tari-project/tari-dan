@@ -7,7 +7,7 @@ use d3ne::WorkersBuilder;
 use serde_json::Value as JsValue;
 use tari_dan_common_types::services::template_provider::TemplateProvider;
 use tari_engine_types::{execution_result::ExecutionResult, instruction::Instruction};
-use tari_template_abi::{FunctionDef, TemplateDef, Type};
+use tari_template_abi::{ArgDef, FunctionDef, TemplateDef, Type};
 use tari_template_lib::args::Arg;
 
 use crate::{
@@ -32,7 +32,14 @@ impl FlowFactory {
             template_name: flow_definition.name.clone(),
             functions: vec![FunctionDef {
                 name: "main".to_string(),
-                arguments: flow_definition.args.iter().map(|a| a.arg_type.to_type()).collect(),
+                arguments: flow_definition
+                    .args
+                    .iter()
+                    .map(|a| ArgDef {
+                        name: a.name.clone(),
+                        arg_type: a.arg_type.to_type(),
+                    })
+                    .collect(),
                 output: Type::Unit,
                 is_mut: false,
             }],

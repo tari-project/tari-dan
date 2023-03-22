@@ -34,7 +34,7 @@ pub fn generate_abi(ast: &TemplateAst) -> Result<TokenStream> {
     let output = quote! {
         #[no_mangle]
         pub unsafe extern "C" fn #abi_function_name() -> *mut u8 {
-            use ::tari_template_abi::{FunctionDef, TemplateDef, Type, wrap_ptr};
+            use ::tari_template_abi::{ArgDef, FunctionDef, TemplateDef, Type, wrap_ptr};
             use ::tari_template_lib::template_dependencies::encode_with_len;
 
             let template = TemplateDef {
@@ -73,7 +73,13 @@ fn generate_function_def(f: &FunctionAst) -> Expr {
 fn generate_abi_type(rust_type: &TypeAst) -> Expr {
     match rust_type {
         // on "&self" we want to pass the component id
-        TypeAst::Receiver { .. } => get_component_address_type(),
+        TypeAst::Receiver { .. } => {
+            let ty = get_component_address_type();
+            parse_quote!(ArgDef {
+                name: "self".to_string(),
+                arg_type: #ty
+            })
+        },
         // basic type
         // TODO: there may be a better way of handling this
         TypeAst::Typed {
@@ -209,7 +215,7 @@ mod tests {
         assert_code_eq(output, quote! {
             #[no_mangle]
             pub unsafe extern "C" fn Foo_abi() -> *mut u8 {
-                use ::tari_template_abi::{FunctionDef, TemplateDef, Type, wrap_ptr};
+                use ::tari_template_abi::{ArgDef, FunctionDef, TemplateDef, Type, wrap_ptr};
                 use ::tari_template_lib::template_dependencies::encode_with_len;
 
                 let template = TemplateDef {
@@ -242,7 +248,7 @@ mod tests {
                         },
                         FunctionDef {
                             name: "method".to_string(),
-                            arguments: vec![Type::Other { name: "pointer".to_string() }],
+                            arguments: vec![ArgDef{ name: "self".to_string(), arg_type: Type::Other { name: "pointer".to_string() }}],
                             output: Type::Unit,
                             is_mut: false,
                         }
@@ -257,5 +263,135 @@ mod tests {
 
     fn assert_code_eq(a: TokenStream, b: TokenStream) {
         assert_eq!(a.to_string(), b.to_string());
+    }
+
+    #[test]
+    fn test_built_in_account_compiles() {
+        let input = TokenStream::from_str(indoc! {r#"
+mod account_template {
+                 pub struct Account {
+        // TODO: Lazy key value map/store
+        vaults: HashMap<ResourceAddress, Vault>,
+    }
+
+    impl Account {
+        pub fn create(owner_token: NonFungibleAddress) -> AccountComponent {
+            let rules = AccessRules::new()
+                .add_method_rule("balance", AccessRule::AllowAll)
+                .add_method_rule("get_balances", AccessRule::AllowAll)
+                .add_method_rule("deposit", AccessRule::AllowAll)
+                .add_method_rule("deposit_all", AccessRule::AllowAll)
+                .add_method_rule("get_non_fungible_ids", AccessRule::AllowAll)
+                .default(AccessRule::Restricted(Require(owner_token)));
+
+            Self::create_with_rules(rules)
+        }
+
+        pub fn create_with_rules(access_rules: AccessRules) -> AccountComponent {
+            Self { vaults: HashMap::new() }.create_with_access_rules(access_rules)
+        }
+
+        // #[access_rule(allow_all)]
+        pub fn balance(&self, resource: ResourceAddress) -> Amount {
+            self.vaults
+                .get(&resource)
+                .map(|v| v.balance())
+                .unwrap_or_else(Amount::zero)
+        }
+
+        pub fn confidential_commitment_count(&self, resource: ResourceAddress) -> u32 {
+            self.get_vault(resource).commitment_count()
+        }
+
+        // #[access_rule(requires(owner_badge))]
+        pub fn withdraw(&mut self, resource: ResourceAddress, amount: Amount) -> Bucket {
+            let v = self.get_vault_mut(resource);
+            v.withdraw(amount)
+        }
+
+        // #[access_rules(requires(owner_badge))]
+        pub fn withdraw_non_fungible(&mut self, resource: ResourceAddress, nf_id: NonFungibleId) -> Bucket {
+            let v = self.get_vault_mut(resource);
+            v.withdraw_non_fungibles([nf_id])
+        }
+
+        // #[access_rules(requires(owner_badge))]
+        pub fn withdraw_confidential(
+            &mut self,
+            resource: ResourceAddress,
+            withdraw_proof: ConfidentialWithdrawProof,
+        ) -> Bucket {
+            let v = self.get_vault_mut(resource);
+            v.withdraw_confidential(withdraw_proof)
+        }
+
+        // #[access_rules(allow_all)]
+        pub fn deposit(&mut self, bucket: Bucket) {
+            let resource_address = bucket.resource_address();
+            let vault_mut = self
+                .vaults
+                .entry(resource_address)
+                .or_insert_with(|| Vault::new_empty(resource_address));
+            vault_mut.deposit(bucket);
+        }
+
+        pub fn deposit_all(&mut self, buckets: Vec<Bucket>) {
+            for bucket in buckets {
+                self.deposit(bucket);
+            }
+        }
+
+        // #[access_rules(require(owner_badge))]
+        pub fn get_non_fungible_ids(&self, resource: ResourceAddress) -> Vec<NonFungibleId> {
+            let v = self.get_vault(resource);
+            v.get_non_fungible_ids()
+        }
+
+        fn get_vault(&self, resource: ResourceAddress) -> &Vault {
+            self.vaults
+                .get(&resource)
+                .unwrap_or_else(|| panic!("No vault for resource {}", resource))
+        }
+
+        fn get_vault_mut(&mut self, resource: ResourceAddress) -> &mut Vault {
+            self.vaults
+                .get_mut(&resource)
+                .unwrap_or_else(|| panic!("No vault for resource {}", resource))
+        }
+
+        pub fn get_balances(&self) -> Vec<(ResourceAddress, Amount)> {
+            self.vaults.iter().map(|(k, v)| (*k, v.balance())).collect()
+        }
+
+        pub fn reveal_confidential(&mut self, resource: ResourceAddress, proof: ConfidentialWithdrawProof) -> Bucket {
+            let v = self.get_vault_mut(resource);
+            v.reveal_amount(proof)
+        }
+
+        pub fn join_confidential(&mut self, resource: ResourceAddress, proof: ConfidentialWithdrawProof) {
+            let v = self.get_vault_mut(resource);
+            v.join_confidential(proof);
+        }
+
+    }
+}"#
+        })
+        .unwrap();
+
+        let ast = parse2::<TemplateAst>(input).unwrap();
+
+        let output = generate_abi(&ast).unwrap();
+
+        assert_code_eq(output, quote! {
+            #[no_mangle]
+
+        #[no_mangle]
+        pub unsafe extern "C" fn Foo_abi() -> *mut u8 {
+            use ::tari_template_abi::{FunctionDef, TemplateDef, Type, wrap_ptr};
+            use ::tari_template_lib::template_dependencies::encode_with_len;
+
+            let template = TemplateDef {}
+        }
+            });
     }
 }

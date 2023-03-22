@@ -89,7 +89,11 @@ async fn handle_get(template_address: TemplateAddress, mut client: ValidatorNode
     for f in abi.functions {
         table.add_row(table_row![
             format!("{}::{}", abi.template_name, f.name),
-            f.arguments.join(","),
+            f.arguments
+                .iter()
+                .map(|a| format!("{}:{}", a.name, a.arg_type))
+                .collect::<Vec<_>>()
+                .join(","),
             f.output
         ]);
     }

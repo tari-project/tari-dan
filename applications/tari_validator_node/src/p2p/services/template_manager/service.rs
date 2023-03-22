@@ -32,7 +32,7 @@ use tari_dan_storage::global::{DbTemplateType, DbTemplateUpdate, TemplateStatus}
 use tari_engine_types::calculate_template_binary_hash;
 use tari_shutdown::ShutdownSignal;
 use tari_template_lib::{models::TemplateAddress, Hash};
-use tari_validator_node_client::types::{FunctionDef, TemplateAbi};
+use tari_validator_node_client::types::{ArgDef, FunctionDef, TemplateAbi};
 use tokio::{
     sync::{mpsc, mpsc::Receiver, oneshot},
     task::JoinHandle,
@@ -140,7 +140,14 @@ impl TemplateManagerService {
                 .iter()
                 .map(|f| FunctionDef {
                     name: f.name.clone(),
-                    arguments: f.arguments.iter().map(|a| a.to_string()).collect(),
+                    arguments: f
+                        .arguments
+                        .iter()
+                        .map(|a| ArgDef {
+                            name: a.name.to_string(),
+                            arg_type: a.arg_type.to_string(),
+                        })
+                        .collect(),
                     output: f.output.to_string(),
                     is_mut: f.is_mut,
                 })

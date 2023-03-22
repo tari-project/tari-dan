@@ -111,7 +111,7 @@ fn get_function_block(template_ident: &Ident, ast: FunctionAst) -> Expr {
             },
             // non-self argument
             TypeAst::Typed { name, type_path } => {
-                args.push(parse_quote! { #name });
+                args.push(parse_quote! { #arg_ident });
                 vec![parse_quote! {
                     let #arg_ident = decode_exact::<#type_path>(&call_info.args[#i])
                         .unwrap_or_else(|e| panic!("failed to decode argument at position {} for function '{}': {}", #i, #func_name, e));
@@ -166,7 +166,7 @@ fn replace_self_in_output(template_ident: &Ident, ast: &FunctionAst) -> Vec<Stmt
     let mut stmts: Vec<Stmt> = vec![];
     match &ast.output_type {
         Some(output_type) => match output_type {
-            TypeAst::Typed { _name, type_path } => {
+            TypeAst::Typed { type_path, .. } => {
                 if let Some(stmt) = replace_self_in_single_value(template_ident, type_path) {
                     stmts.push(stmt);
                 }
