@@ -166,7 +166,7 @@ fn replace_self_in_output(template_ident: &Ident, ast: &FunctionAst) -> Vec<Stmt
     let mut stmts: Vec<Stmt> = vec![];
     match &ast.output_type {
         Some(output_type) => match output_type {
-            TypeAst::Typed { name, type_path } => {
+            TypeAst::Typed { _name, type_path } => {
                 if let Some(stmt) = replace_self_in_single_value(template_ident, type_path) {
                     stmts.push(stmt);
                 }

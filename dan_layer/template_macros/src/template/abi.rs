@@ -79,69 +79,79 @@ fn generate_abi_type(rust_type: &TypeAst) -> Expr {
         TypeAst::Typed {
             name: arg_name,
             type_path: path,
-        } => match path.path.segments[0].ident.to_string().as_str() {
-            "" => parse_quote!(Type::Unit),
-            "bool" => parse_quote!(Type::Bool),
-            "i8" => parse_quote!(Type::I8),
-            "i16" => parse_quote!(Type::I16),
-            "i32" => parse_quote!(Type::I32),
-            "i64" => parse_quote!(Type::I64),
-            "i128" => parse_quote!(Type::I128),
-            "u8" => parse_quote!(Type::U8),
-            "u16" => parse_quote!(Type::U16),
-            "u32" => parse_quote!(Type::U32),
-            "u64" => parse_quote!(Type::U64),
-            "u128" => parse_quote!(Type::U128),
-            "String" => parse_quote!(Type::String),
-            "Vec" => {
-                let ty = match &path.path.segments[0].arguments {
-                    PathArguments::AngleBracketed(AngleBracketedGenericArguments { args, .. }) => {
-                        match &args[0] {
-                            GenericArgument::Type(Type::Path(path)) => {
-                                match path.path.segments[0].ident.to_string().as_str() {
-                                    "" => parse_quote!(Type::Unit),
-                                    "bool" => parse_quote!(Type::Bool),
-                                    "i8" => parse_quote!(Type::I8),
-                                    "i16" => parse_quote!(Type::I16),
-                                    "i32" => parse_quote!(Type::I32),
-                                    "i64" => parse_quote!(Type::I64),
-                                    "i128" => parse_quote!(Type::I128),
-                                    "u8" => parse_quote!(Type::U8),
-                                    "u16" => parse_quote!(Type::U16),
-                                    "u32" => parse_quote!(Type::U32),
-                                    "u64" => parse_quote!(Type::U64),
-                                    "u128" => parse_quote!(Type::U128),
-                                    "String" => parse_quote!(Type::String),
-                                    "Vec" => {
-                                        panic!("Nested Vecs are not supported")
-                                    },
-                                    "Self" => get_component_address_type(),
-                                    name => parse_quote!(Type::Other { name: #name.to_string() }),
-                                }
-                            },
-                            GenericArgument::Type(Type::Tuple(tuple)) => {
-                                // FIXME: improve
-                                let tuple_str = tuple
-                                    .elems
-                                    .iter()
-                                    .map(|t| format!("{:?}", t))
-                                    .collect::<Vec<_>>()
-                                    .join(",");
-                                parse_quote!(Type::Other { name: #tuple_str.to_string() })
-                            },
-                            // TODO: These should be errors
-                            a => panic!("Invalid vec generic argument {:?}", a),
-                        }
-                    },
-                    PathArguments::Parenthesized(_) | PathArguments::None => {
-                        panic!("Vec must specify a type {:?}", path.path)
-                    },
-                };
+        } => {
+            let type_str = match path.path.segments[0].ident.to_string().as_str() {
+                "" => parse_quote!(Type::Unit),
+                "bool" => parse_quote!(Type::Bool),
+                "i8" => parse_quote!(Type::I8),
+                "i16" => parse_quote!(Type::I16),
+                "i32" => parse_quote!(Type::I32),
+                "i64" => parse_quote!(Type::I64),
+                "i128" => parse_quote!(Type::I128),
+                "u8" => parse_quote!(Type::U8),
+                "u16" => parse_quote!(Type::U16),
+                "u32" => parse_quote!(Type::U32),
+                "u64" => parse_quote!(Type::U64),
+                "u128" => parse_quote!(Type::U128),
+                "String" => parse_quote!(Type::String),
+                "Vec" => {
+                    let ty = match &path.path.segments[0].arguments {
+                        PathArguments::AngleBracketed(AngleBracketedGenericArguments { args, .. }) => {
+                            match &args[0] {
+                                GenericArgument::Type(Type::Path(path)) => {
+                                    match path.path.segments[0].ident.to_string().as_str() {
+                                        "" => parse_quote!(Type::Unit),
+                                        "bool" => parse_quote!(Type::Bool),
+                                        "i8" => parse_quote!(Type::I8),
+                                        "i16" => parse_quote!(Type::I16),
+                                        "i32" => parse_quote!(Type::I32),
+                                        "i64" => parse_quote!(Type::I64),
+                                        "i128" => parse_quote!(Type::I128),
+                                        "u8" => parse_quote!(Type::U8),
+                                        "u16" => parse_quote!(Type::U16),
+                                        "u32" => parse_quote!(Type::U32),
+                                        "u64" => parse_quote!(Type::U64),
+                                        "u128" => parse_quote!(Type::U128),
+                                        "String" => parse_quote!(Type::String),
+                                        "Vec" => {
+                                            panic!("Nested Vecs are not supported")
+                                        },
+                                        "Self" => get_component_address_type(),
+                                        name => parse_quote!(Type::Other { name: #name.to_string() }),
+                                    }
+                                },
+                                GenericArgument::Type(Type::Tuple(tuple)) => {
+                                    // FIXME: improve
+                                    let tuple_str = tuple
+                                        .elems
+                                        .iter()
+                                        .map(|t| format!("{:?}", t))
+                                        .collect::<Vec<_>>()
+                                        .join(",");
+                                    parse_quote!(Type::Other { name: #tuple_str.to_string() })
+                                },
+                                // TODO: These should be errors
+                                a => panic!("Invalid vec generic argument {:?}", a),
+                            }
+                        },
+                        PathArguments::Parenthesized(_) | PathArguments::None => {
+                            panic!("Vec must specify a type {:?}", path.path)
+                        },
+                    };
 
-                parse_quote!(Type::Vec(Box::new(#ty)))
-            },
-            "Self" => get_component_address_type(),
-            name => parse_quote!(Type::Other { name: #name.to_string() }),
+                    parse_quote!(Type::Vec(Box::new(#ty)))
+                },
+                "Self" => get_component_address_type(),
+                type_name => parse_quote!(Type::Other { name: #type_name.to_string() }),
+            };
+            // For arguments, put the name and type. For return types, just return the type
+            match arg_name {
+                Some(name) => parse_quote!(ArgDef {
+                    name: #name.to_string(),
+                    arg_type: #type_str,
+                }),
+                None => type_str,
+            }
         },
 
         TypeAst::Tuple(_) => {
@@ -213,7 +223,8 @@ mod tests {
                         },
                         FunctionDef {
                             name: "some_args_function".to_string(),
-                            arguments: vec![Type::I8, Type::String],
+                            arguments: vec![ArgDef{ name: "a".to_string(), arg_type: Type::I8, },
+                                ArgDef{ name: "b".to_string(), arg_type: Type::String, }],
                             output: Type::U32,
                             is_mut: false,
                         },

@@ -161,7 +161,14 @@ impl TemplateAst {
                 // TODO: handle "Self"
                 // TODO: detect more complex types
                 TypeAst::Typed {
-                    name: pat.map(|p| format!("{:?}", p)),
+                    name: pat.map(|p| match p {
+                        syn::Pat::Ident(ident) => ident.ident.to_string(),
+                        // There may be other patterns we are interested in, the following code
+                        // will print out the details, and the resulting code will not compile
+                        // but it will allow us to see the patterns we need.
+                        _ => format!("{:?}", p),
+                    }),
+
                     type_path: type_path.clone(),
                 }
             },
