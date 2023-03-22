@@ -79,3 +79,8 @@ message ElectionInProgress {
   bytes shard_id = 2;
   bytes payload_id = 3;
 }
+
+message PeerIdentityClaim {
+  repeated bytes addresses = 1;
+  IdentitySignature signature = 3;
+}

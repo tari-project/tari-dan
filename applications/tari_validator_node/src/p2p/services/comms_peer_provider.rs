@@ -24,7 +24,7 @@ use std::sync::Arc;
 
 use async_trait::async_trait;
 use tari_comms::{
-    net_address::{MultiaddrWithStats, MultiaddressesWithStats},
+    net_address::{MultiaddrWithStats, MultiaddressesWithStats, PeerAddressSource},
     peer_manager::{NodeId, Peer, PeerFeatures, PeerFlags, PeerManagerError, PeerQuery},
     types::CommsPublicKey,
     PeerManager,
@@ -52,8 +52,15 @@ impl PeerProvider for CommsPeerProvider {
         match self.peer_manager.find_by_public_key(addr).await? {
             Some(peer) => Ok(DanPeer {
                 identity: peer.public_key,
-                addresses: peer.addresses.into_vec(),
-                // identity_signature: peer.identity_signature,
+                addresses: peer
+                    .addresses
+                    .addresses()
+                    .iter()
+                    .filter_map(|a| {
+                        let claim = a.source.peer_identity_claim().cloned();
+                        claim.map(|claim| (a.address().clone(), claim))
+                    })
+                    .collect(),
             }),
             None => Err(CommsPeerProviderError::PeerNotFound),
         }
@@ -66,8 +73,15 @@ impl PeerProvider for CommsPeerProvider {
         Box::new(self.peer_manager.all().await.unwrap().into_iter().map(|p| {
             Ok(DanPeer {
                 identity: p.public_key,
-                addresses: p.addresses.into_vec(),
-                // identity_signature: p.identity_signature,
+                addresses: p
+                    .addresses
+                    .addresses()
+                    .iter()
+                    .filter_map(|a| {
+                        let claim = a.source.peer_identity_claim().cloned();
+                        claim.map(|claim| (a.address().clone(), claim))
+                    })
+                    .collect(),
             })
         }))
     }
@@ -76,12 +90,17 @@ impl PeerProvider for CommsPeerProvider {
         let node_id = NodeId::from_public_key(&peer.identity);
         self.peer_manager
             .add_peer(Peer::new(
-                peer.identity,
+                peer.identity.clone(),
                 node_id,
                 MultiaddressesWithStats::new(
                     peer.addresses
                         .iter()
-                        .map(|a| MultiaddrWithStats::new(a.clone(), tari_comms::net_address::PeerAddressSource::Config))
+                        .map(|(addr, claim)| {
+                            MultiaddrWithStats::new(addr.clone(), PeerAddressSource::FromAnotherPeer {
+                                peer_identity_claim: claim.clone(),
+                                source_peer: peer.identity.clone(),
+                            })
+                        })
                         .collect(),
                 ),
                 PeerFlags::NONE,
@@ -98,14 +117,21 @@ impl PeerProvider for CommsPeerProvider {
         if !self.peer_manager.exists(&peer.identity).await {
             return Err(CommsPeerProviderError::PeerNotFound);
         }
-        // let identity_signature = peer.identity_signature;
         let peer = Peer::new(
-            peer.identity,
+            peer.identity.clone(),
             node_id,
             MultiaddressesWithStats::new(
                 peer.addresses
                     .iter()
-                    .map(|a| MultiaddrWithStats::new(a.clone(), tari_comms::net_address::PeerAddressSource::Config))
+                    .map(|(addr, claim)| {
+                        MultiaddrWithStats::new(
+                            addr.clone(),
+                            tari_comms::net_address::PeerAddressSource::FromAnotherPeer {
+                                peer_identity_claim: claim.clone(),
+                                source_peer: peer.identity.clone(),
+                            },
+                        )
+                    })
                     .collect(),
             ),
             PeerFlags::NONE,
@@ -113,7 +139,6 @@ impl PeerProvider for CommsPeerProvider {
             vec![],
             String::new(),
         );
-        // peer.identity_signature = identity_signature;
 
         self.peer_manager.add_peer(peer).await?;
 

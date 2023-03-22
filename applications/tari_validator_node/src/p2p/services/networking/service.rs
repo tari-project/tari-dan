@@ -25,7 +25,7 @@ use std::sync::Arc;
 use log::*;
 use tari_comms::{
     connectivity::{ConnectivityEvent, ConnectivityRequester},
-    peer_manager::NodeId,
+    peer_manager::{NodeId, PeerFeatures, PeerIdentityClaim},
     types::CommsPublicKey,
     NodeIdentity,
     PeerConnection,
@@ -166,10 +166,22 @@ impl Networking {
 
         info!(target: LOG_TARGET, "👋 Received announce from {}", announce.identity);
 
+        let identity_signature = announce.identity_signature.clone();
         let peer = DanPeer {
             identity: announce.identity.clone(),
-            addresses: announce.addresses.clone(),
-            // identity_signature: Some(announce.identity_signature.clone()),
+            addresses: announce
+                .addresses
+                .iter()
+                .map(|a| {
+                    let claim = PeerIdentityClaim {
+                        addresses: vec![a.clone()],
+                        features: PeerFeatures::COMMUNICATION_NODE,
+                        signature: identity_signature.clone(),
+                        unverified_data: None,
+                    };
+                    (a.clone(), claim)
+                })
+                .collect(),
         };
 
         if !peer.is_valid() {
