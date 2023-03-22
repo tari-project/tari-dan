@@ -23,7 +23,6 @@
 use std::collections::BTreeSet;
 
 use serde::{Deserialize, Serialize};
-use tari_bor::{borsh, Decode, Encode};
 use tari_template_lib::{
     models::{Amount, ConfidentialWithdrawProof, NonFungibleId, ResourceAddress, VaultId},
     prelude::ResourceType,
@@ -35,7 +34,7 @@ use crate::{
     resource_container::{ResourceContainer, ResourceError},
 };
 
-#[derive(Debug, Clone, Encode, Decode, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Vault {
     vault_id: VaultId,
     resource_container: ResourceContainer,

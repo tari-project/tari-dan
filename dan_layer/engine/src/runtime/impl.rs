@@ -29,9 +29,9 @@ use tari_crypto::{
     ristretto::{RistrettoPublicKey, RistrettoSecretKey},
 };
 use tari_engine_types::{
+    base_layer_hashing::ownership_proof_hasher,
     commit_result::{FinalizeResult, RejectReason, TransactionResult},
     confidential::{get_commitment_factory, get_range_proof_service, ConfidentialClaim, ConfidentialOutput},
-    hashing::ownership_proof_hasher,
     logs::LogEntry,
     resource_container::ResourceContainer,
 };

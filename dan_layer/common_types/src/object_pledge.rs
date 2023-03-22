@@ -2,11 +2,10 @@
 //   SPDX-License-Identifier: BSD-3-Clause
 
 use serde::{Deserialize, Serialize};
-use tari_bor::borsh::BorshSerialize;
 
 use crate::{PayloadId, ShardId, SubstateState, TreeNodeHash};
 
-#[derive(Debug, Clone, Deserialize, Serialize, BorshSerialize)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct ObjectPledge {
     pub shard_id: ShardId,
     pub current_state: SubstateState,

@@ -4,12 +4,10 @@
 use std::{
     convert::TryFrom,
     fmt::{Display, Formatter},
-    io::{self, Write},
 };
 
 use digest::{consts::U32, generic_array};
 use serde::{Deserialize, Serialize};
-use tari_bor::Encode;
 use tari_common_types::types::{FixedHash, FixedHashSizeError};
 use tari_utilities::hex::{Hex, HexError};
 
@@ -17,13 +15,6 @@ use crate::serde_with;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Deserialize, Serialize)]
 pub struct TreeNodeHash(#[serde(with = "serde_with::hex")] FixedHash);
-
-// TODO: remove this implementation once the Borsh is on FixedHash
-impl Encode for TreeNodeHash {
-    fn serialize<W: Write>(&self, writer: &mut W) -> io::Result<()> {
-        Encode::serialize(&self.as_bytes(), writer)
-    }
-}
 
 impl TreeNodeHash {
     pub fn zero() -> Self {

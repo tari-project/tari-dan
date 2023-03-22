@@ -22,17 +22,10 @@
 
 use std::{io, io::Write};
 
+use borsh::BorshSerialize;
 use digest::Digest;
-use serde::Serialize;
-use tari_bor::encode_into;
 use tari_crypto::{hash::blake2::Blake256, hash_domain, hashing::DomainSeparation};
 use tari_template_lib::Hash;
-
-hash_domain!(TariEngineHashDomain, "tari.dan.engine", 0);
-
-pub fn hasher(label: EngineHashDomainLabel) -> TariHasher {
-    TariHasher::new_with_label::<TariEngineHashDomain>(label.as_label())
-}
 
 hash_domain!(
     ConfidentialOutputHashDomain,
@@ -40,32 +33,45 @@ hash_domain!(
     1
 );
 
+fn confidential_hasher(label: &'static str) -> TariBaseLayerHasher {
+    TariBaseLayerHasher::new_with_label::<ConfidentialOutputHashDomain>(label)
+}
+
+pub fn encrypted_value_hasher() -> TariBaseLayerHasher {
+    confidential_hasher("encryption_key")
+}
+
+pub fn output_mask_hasher() -> TariBaseLayerHasher {
+    confidential_hasher("spend_key")
+}
+
+pub fn ownership_proof_hasher() -> TariBaseLayerHasher {
+    confidential_hasher("commitment_signature")
+}
+
 #[derive(Debug, Clone)]
-pub struct TariHasher {
+pub struct TariBaseLayerHasher {
     hasher: Blake256,
 }
 
-impl TariHasher {
+impl TariBaseLayerHasher {
     pub fn new_with_label<TDomain: DomainSeparation>(label: &'static str) -> Self {
         let mut hasher = Blake256::new();
         TDomain::add_domain_separation_tag(&mut hasher, label);
         Self { hasher }
     }
 
-    pub fn update<T: Serialize + ?Sized>(&mut self, data: &T) {
-        // CBOR encoding does not make any contract to say that if the writer is infallible (as it is here) then
-        // encoding in infallible. However this should be the case. Since it is very unergonomic to return an
-        // error in hash chain functions, and therefore all usages of the hasher, we assume all types implement
-        // infallible encoding.
-        encode_into(data, &mut self.hash_writer()).expect("encoding failed")
+    pub fn update<T: BorshSerialize>(&mut self, data: &T) {
+        BorshSerialize::serialize(data, &mut self.hash_writer())
+            .expect("Incorrect implementation of BorshSerialize encountered. Implementations MUST be infallible.");
     }
 
-    pub fn chain<T: Serialize + ?Sized>(mut self, data: &T) -> Self {
+    pub fn chain<T: BorshSerialize>(mut self, data: &T) -> Self {
         self.update(data);
         self
     }
 
-    pub fn digest<T: Serialize + ?Sized>(self, data: &T) -> Hash {
+    pub fn digest<T: BorshSerialize>(self, data: &T) -> Hash {
         self.chain(data).result()
     }
 
@@ -91,40 +97,5 @@ impl TariHasher {
             }
         }
         HashWriter(&mut self.hasher)
-    }
-}
-
-#[derive(Debug)]
-pub enum EngineHashDomainLabel {
-    Template,
-    ShardId,
-    ConfidentialProof,
-    ConfidentialTransfer,
-    ShardPledgeCollection,
-    HotStuffTreeNode,
-    Transaction,
-    NonFungibleId,
-    NonFungibleIndex,
-    UuidOutput,
-    Output,
-    InstructionSignature,
-}
-
-impl EngineHashDomainLabel {
-    pub fn as_label(&self) -> &'static str {
-        match self {
-            Self::Template => "Template",
-            Self::ShardId => "ShardId",
-            Self::ConfidentialProof => "ConfidentialProof",
-            Self::ConfidentialTransfer => "ConfidentialTransfer",
-            Self::ShardPledgeCollection => "ShardPledgeCollection",
-            Self::HotStuffTreeNode => "HotStuffTreeNode",
-            Self::Transaction => "Transaction",
-            Self::NonFungibleId => "NonFungibleId",
-            Self::NonFungibleIndex => "NonFungibleIndex",
-            Self::UuidOutput => "UuidOutput",
-            Self::Output => "Output",
-            Self::InstructionSignature => "InstructionSignature",
-        }
     }
 }

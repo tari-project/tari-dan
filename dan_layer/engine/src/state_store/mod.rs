@@ -22,9 +22,10 @@
 
 pub mod memory;
 
-use std::{error::Error, fmt::Debug, io};
+use std::{error::Error, fmt::Debug};
 
-use tari_bor::{decode_exact, encode, Decode, Encode};
+use serde::{de::DeserializeOwned, Serialize};
+use tari_bor::{decode_exact, encode, BorError};
 use tari_dan_common_types::optional::IsNotFoundError;
 
 // pub trait StateStorage<'a>: AtomicDb<'a, Error = StateStoreError> + Send + Sync {}
@@ -53,7 +54,7 @@ pub trait AtomicDb<'a> {
 pub trait StateReader {
     fn get_state_raw(&self, key: &[u8]) -> Result<Vec<u8>, StateStoreError>;
 
-    fn get_state<K: Encode + Debug, V: Decode>(&self, key: &K) -> Result<V, StateStoreError> {
+    fn get_state<K: Serialize + Debug, V: DeserializeOwned>(&self, key: &K) -> Result<V, StateStoreError> {
         let value = self.get_state_raw(&encode(key)?)?;
         let value = decode_exact(&value).map_err(|err| StateStoreError::ValueDecodeError {
             key: format!("{:?}", key),
@@ -69,13 +70,13 @@ pub trait StateReader {
 pub trait StateWriter: StateReader {
     fn set_state_raw(&mut self, key: &[u8], value: Vec<u8>) -> Result<(), StateStoreError>;
 
-    fn set_state<K: Encode, V: Encode>(&mut self, key: &K, value: V) -> Result<(), StateStoreError> {
+    fn set_state<K: Serialize, V: Serialize>(&mut self, key: &K, value: V) -> Result<(), StateStoreError> {
         self.set_state_raw(&encode(key)?, encode(&value)?)
     }
 
     fn delete_state_raw(&mut self, key: &[u8]) -> Result<(), StateStoreError>;
 
-    fn delete_state<K: Encode>(&mut self, key: &K) -> Result<(), StateStoreError> {
+    fn delete_state<K: Serialize>(&mut self, key: &K) -> Result<(), StateStoreError> {
         self.delete_state_raw(&encode(key)?)
     }
 
@@ -86,14 +87,14 @@ pub trait StateWriter: StateReader {
 pub enum StateStoreError {
     #[error("Non existent shard: {shard:?}")]
     NonExistentShard { shard: Vec<u8> },
-    #[error("State store decode error for {value_type} at key '{key}': {err}")]
+    #[error("State store decode error for {value_type} at key '{key}': {err:?}")]
     ValueDecodeError {
         key: String,
         value_type: &'static str,
-        err: io::Error,
+        err: BorError,
     },
     #[error("State store encoding error: {0}")]
-    EncodingError(#[from] io::Error),
+    EncodingError(#[from] BorError),
     #[error(transparent)]
     Custom(#[from] anyhow::Error),
     #[error("Error: {0}")]

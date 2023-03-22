@@ -1,12 +1,15 @@
 //   Copyright 2023 The Tari Project
 //   SPDX-License-Identifier: BSD-3-Clause
 
-use tari_bor::{borsh, Decode, Encode};
+use serde::{Deserialize, Serialize};
+// #[cfg(not(feature = "hex"))]
+use serde_big_array::BigArray;
 
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Encode, Decode, Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default, Serialize, Deserialize)]
+#[serde(transparent)]
 pub struct RistrettoPublicKeyBytes(
-    #[cfg_attr(feature = "serde", serde(with = "hex::serde"))] [u8; RistrettoPublicKeyBytes::length()],
+    // #[cfg_attr(feature = "hex", serde(with = "hex::serde"))]
+    [u8; RistrettoPublicKeyBytes::length()],
 );
 
 impl RistrettoPublicKeyBytes {
@@ -46,10 +49,12 @@ pub struct InvalidByteLengthError {
     size: usize,
 }
 
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Decode, Encode)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(transparent)]
 pub struct BalanceProofSignature(
-    #[cfg_attr(feature = "serde", serde(with = "hex::serde"))] [u8; BalanceProofSignature::length()],
+    // #[cfg_attr(feature = "hex", serde(with = "hex::serde"))]
+    //#[cfg_attr(not(feature = "hex"), serde(with = "BigArray"))]
+    #[serde(with = "BigArray")] [u8; BalanceProofSignature::length()],
 );
 
 impl BalanceProofSignature {

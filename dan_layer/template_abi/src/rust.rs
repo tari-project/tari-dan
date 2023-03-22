@@ -34,8 +34,6 @@ mod no_std {
         #[cfg(feature = "alloc")]
         pub use hashbrown::{HashMap, HashSet};
     }
-
-    pub use tari_bor::borsh::maybestd::io;
 }
 
 #[cfg(not(feature = "std"))]

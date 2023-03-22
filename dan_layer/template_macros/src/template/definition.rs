@@ -48,7 +48,8 @@ pub fn generate_definition(ast: &TemplateAst) -> TokenStream {
                 }
             }
 
-            #[derive(Decode, Encode)]
+            #[derive(serde::Serialize, serde::Deserialize)]
+            #[serde(transparent)]
             pub struct #component_wrapper_ident {
                 address: tari_template_lib::models::ComponentAddress,
             }

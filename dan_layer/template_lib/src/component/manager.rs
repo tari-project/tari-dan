@@ -20,7 +20,8 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use tari_bor::{decode_exact, encode, Decode, Encode};
+use serde::{de::DeserializeOwned, Serialize};
+use tari_bor::{decode_exact, encode};
 use tari_template_abi::{call_engine, EngineOp};
 
 use crate::{
@@ -39,7 +40,7 @@ impl ComponentManager {
     }
 
     /// Get the component state
-    pub fn get_state<T: Decode>(&self) -> T {
+    pub fn get_state<T: DeserializeOwned>(&self) -> T {
         let result = call_engine::<_, InvokeResult>(EngineOp::ComponentInvoke, &ComponentInvokeArg {
             component_ref: ComponentRef::Ref(self.address),
             action: ComponentAction::Get,
@@ -50,7 +51,7 @@ impl ComponentManager {
         decode_exact(component.state()).expect("Failed to decode component state")
     }
 
-    pub fn set_state<T: Encode>(&self, state: T) {
+    pub fn set_state<T: Serialize>(&self, state: T) {
         let state = encode(&state).expect("Failed to encode component state");
         let _result = call_engine::<_, InvokeResult>(EngineOp::ComponentInvoke, &ComponentInvokeArg {
             component_ref: ComponentRef::Ref(self.address),

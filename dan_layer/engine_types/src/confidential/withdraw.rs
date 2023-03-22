@@ -2,7 +2,6 @@
 //   SPDX-License-Identifier: BSD-3-Clause
 
 use serde::{Deserialize, Serialize};
-use tari_bor::{borsh, Decode, Encode};
 use tari_common_types::types::{BulletRangeProof, Commitment, PrivateKey, PublicKey, Signature};
 use tari_crypto::commitment::HomomorphicCommitmentFactory;
 use tari_template_lib::{
@@ -22,7 +21,7 @@ pub struct ValidatedConfidentialWithdrawProof {
     pub revealed_amount: Amount,
 }
 
-#[derive(Debug, Clone, Decode, Encode, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ConfidentialOutput {
     pub commitment: Commitment,
     pub stealth_public_nonce: Option<PublicKey>,

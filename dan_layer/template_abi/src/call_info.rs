@@ -20,11 +20,11 @@
 //   WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //   USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use tari_bor::{borsh, Decode, Encode};
+use serde::{Deserialize, Serialize};
 
 use crate::rust::{string::String, vec::Vec};
 
-#[derive(Debug, Clone, Encode, Decode)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CallInfo {
     pub func_name: String,
     pub args: Vec<Vec<u8>>,

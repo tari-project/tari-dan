@@ -21,13 +21,12 @@
 //   USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 use serde::{Deserialize, Serialize};
-use tari_bor::{borsh, Decode, Encode};
 use tari_template_lib::{
     models::{Amount, Metadata},
     resource::ResourceType,
 };
 
-#[derive(Debug, Clone, Encode, Decode, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct Resource {
     resource_type: ResourceType,
     metadata: Metadata,

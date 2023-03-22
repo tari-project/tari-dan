@@ -20,7 +20,7 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use tari_bor::{borsh, Decode, Encode};
+use serde::{Deserialize, Serialize};
 use tari_template_abi::{
     call_engine,
     rust::{
@@ -37,8 +37,8 @@ use crate::{
     Hash,
 };
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Encode, Decode)]
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(transparent)]
 pub struct VaultId(Hash);
 
 impl VaultId {
@@ -68,7 +68,7 @@ impl Display for VaultId {
     }
 }
 
-#[derive(Clone, Debug, Decode, Encode)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub enum VaultRef {
     Vault { address: ResourceAddress },
     Ref(VaultId),
@@ -90,7 +90,8 @@ impl VaultRef {
     }
 }
 
-#[derive(Clone, Debug, Decode, Encode)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(transparent)]
 pub struct Vault {
     vault_id: VaultId,
 }

@@ -44,7 +44,7 @@ use tari_crypto::{
 use tari_dan_app_utilities::base_node_client::GrpcBaseNodeClient;
 use tari_dan_common_types::QuorumDecision;
 use tari_dan_core::services::BaseNodeClient;
-use tari_engine_types::execution_result::Type;
+use tari_dan_engine::abi::Type;
 use tari_template_lib::Hash;
 use tari_validator_node_cli::versioned_substate_address::VersionedSubstateAddress;
 use tari_validator_node_client::types::{

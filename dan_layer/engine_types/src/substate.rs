@@ -26,7 +26,7 @@ use std::{
 };
 
 use serde::{Deserialize, Serialize};
-use tari_bor::{borsh, decode, decode_exact, encode, Decode, Encode};
+use tari_bor::{decode, decode_exact, encode, BorError};
 use tari_template_lib::{
     models::{
         ComponentAddress,
@@ -50,7 +50,7 @@ use crate::{
     vault::Vault,
 };
 
-#[derive(Debug, Clone, Encode, Decode, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Substate {
     substate: SubstateValue,
     version: u32,
@@ -80,13 +80,13 @@ impl Substate {
         encode(self).unwrap()
     }
 
-    pub fn from_bytes(bytes: &[u8]) -> std::io::Result<Self> {
+    pub fn from_bytes(bytes: &[u8]) -> Result<Self, BorError> {
         decode(bytes)
     }
 }
 
 /// Base object address, version tuples
-#[derive(Debug, Clone, PartialEq, Eq, Hash, Encode, Decode, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum SubstateAddress {
     Component(ComponentAddress),
     Resource(ResourceAddress),
@@ -139,7 +139,7 @@ impl SubstateAddress {
         encode(self).unwrap()
     }
 
-    pub fn from_bytes(bytes: &[u8]) -> std::io::Result<Self> {
+    pub fn from_bytes(bytes: &[u8]) -> Result<Self, BorError> {
         decode_exact(bytes)
     }
 
@@ -318,7 +318,7 @@ impl_partial_eq!(VaultId, Vault);
 impl_partial_eq!(UnclaimedConfidentialOutputAddress, UnclaimedConfidentialOutput);
 impl_partial_eq!(NonFungibleAddress, NonFungible);
 
-#[derive(Debug, Clone, Encode, Decode, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum SubstateValue {
     Component(ComponentHeader),
     Resource(Resource),

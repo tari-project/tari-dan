@@ -19,7 +19,6 @@ anyhow = "1.0"
 # TODO: remove once we use borsh for all serialization
 bincode = "1.0"
 base64 = "0.20.0-alpha.1"
-borsh = "0.9"
 digest = "0.9"
 newtype-ops = "0.1.4"
 rand = "0.7"

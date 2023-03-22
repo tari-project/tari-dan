@@ -22,11 +22,10 @@
 //
 
 use serde::{Deserialize, Serialize};
-use tari_bor::{borsh, Decode, Encode};
 use tari_common_types::types::Commitment;
 use tari_template_lib::models::EncryptedValue;
 
-#[derive(Debug, Clone, Encode, Decode, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct UnclaimedConfidentialOutput {
     pub commitment: Commitment,
     pub encrypted_value: EncryptedValue,

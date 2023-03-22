@@ -63,7 +63,8 @@ impl Parse for TemplateAst {
         for item in items {
             match item {
                 Item::Struct(ref mut item) => {
-                    item.attrs.push(syn::parse_quote!(#[derive(Debug, Decode, Encode)]));
+                    item.attrs
+                        .push(syn::parse_quote!(#[derive(Debug, serde::Serialize, serde::Deserialize)]));
                     // Use the first struct name as the template name
                     // TODO: remove this assumption in favor of "marking" the struct as a template struct
                     // #[template(Component)]

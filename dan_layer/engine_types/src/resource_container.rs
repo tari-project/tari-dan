@@ -8,7 +8,6 @@
 use std::{collections::BTreeMap, iter};
 
 use serde::{Deserialize, Serialize};
-use tari_bor::{borsh, Decode, Encode};
 use tari_common_types::types::PublicKey;
 use tari_template_abi::rust::collections::BTreeSet;
 use tari_template_lib::{
@@ -20,7 +19,7 @@ use tari_utilities::ByteArray;
 use crate::confidential::{validate_confidential_proof, validate_confidential_withdraw, ConfidentialOutput};
 
 /// Instances of a single resource kept in Buckets and Vaults
-#[derive(Debug, Clone, Encode, Decode, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum ResourceContainer {
     Fungible {
         address: ResourceAddress,

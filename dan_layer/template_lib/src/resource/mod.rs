@@ -20,16 +20,14 @@
 //   WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //   USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use tari_bor::{borsh, Decode, Encode};
-
 mod builder;
 pub use builder::{ResourceBuilder, TOKEN_SYMBOL};
 
 mod manager;
 pub use manager::ResourceManager;
+use serde::{Deserialize, Serialize};
 
-#[derive(Clone, Copy, Debug, Decode, Encode, PartialEq)]
-#[cfg_attr(feature = "serde", derive(serde::Deserialize, serde::Serialize))]
+#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
 pub enum ResourceType {
     Fungible,
     NonFungible,
