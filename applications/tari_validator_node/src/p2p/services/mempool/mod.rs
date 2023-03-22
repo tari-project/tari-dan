@@ -20,13 +20,7 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-mod initializer;
-
-pub use initializer::spawn;
-
-mod handle;
 use async_trait::async_trait;
-pub use handle::{MempoolHandle, MempoolRequest};
 use tari_dan_app_utilities::template_manager::TemplateManagerError;
 use tari_dan_core::services::epoch_manager::EpochManagerError;
 use thiserror::Error;
@@ -34,8 +28,18 @@ use tokio::sync::{mpsc::error::SendError, oneshot};
 
 use crate::p2p::services::messaging::MessagingError;
 
+mod handle;
+pub use handle::{MempoolHandle, MempoolRequest};
+
+mod initializer;
+pub use initializer::spawn;
+
+mod and_then;
+pub use and_then::AndThen;
+
 mod service;
 mod validator;
+pub use validator::{FeeTransactionValidator, TemplateExistsValidator};
 
 #[derive(Error, Debug)]
 pub enum MempoolError {
@@ -47,6 +51,8 @@ pub enum MempoolError {
     InvalidTemplateAddress(#[from] TemplateManagerError),
     #[error("Internal service request cancelled")]
     RequestCancelled,
+    #[error("No fee instructions")]
+    NoFeeInstructions,
 }
 
 impl From<SendError<MempoolRequest>> for MempoolError {
@@ -66,4 +72,30 @@ pub trait Validator<T> {
     type Error;
 
     async fn validate(&self, input: &T) -> Result<(), Self::Error>;
+
+    fn boxed(self) -> BoxedValidator<T, Self::Error>
+    where Self: Sized + Send + Sync + 'static {
+        BoxedValidator { inner: Box::new(self) }
+    }
+
+    fn and_then<V>(self, other: V) -> AndThen<Self, V>
+    where
+        V: Validator<T>,
+        Self: Sized,
+    {
+        AndThen::new(self, other)
+    }
+}
+
+pub struct BoxedValidator<T, E> {
+    inner: Box<dyn Validator<T, Error = E> + Send + Sync + 'static>,
+}
+
+#[async_trait]
+impl<T: Send + Sync, E> Validator<T> for BoxedValidator<T, E> {
+    type Error = E;
+
+    async fn validate(&self, input: &T) -> Result<(), Self::Error> {
+        self.inner.validate(input).await
+    }
 }

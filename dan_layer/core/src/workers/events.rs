@@ -21,7 +21,7 @@
 //   USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 use tari_dan_common_types::{PayloadId, QuorumCertificate};
-use tari_engine_types::commit_result::FinalizeResult;
+use tari_engine_types::commit_result::ExecuteResult;
 use tokio::sync::broadcast;
 
 /// Wraps a broadcast sender, allowing a subscription (Receiver) to be obtained but removing the ability to send an
@@ -46,6 +46,6 @@ impl<T> Clone for EventSubscription<T> {
 
 #[derive(Debug, Clone)]
 pub enum HotStuffEvent {
-    OnFinalized(Box<QuorumCertificate>, FinalizeResult),
+    OnFinalized(Box<QuorumCertificate>, ExecuteResult),
     Failed(PayloadId, String),
 }

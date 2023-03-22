@@ -20,10 +20,12 @@ pub struct Transaction {
     pub instructions: String,
     pub signature: String,
     pub sender_address: String,
-    pub fee: i64,
+    pub fee_instructions: String,
     pub meta: String,
     pub result: Option<String>,
+    pub transaction_failure: Option<String>,
     pub qcs: Option<String>,
+    pub final_fee: Option<i64>,
     pub status: String,
     pub is_dry_run: bool,
     pub updated_at: NaiveDateTime,
@@ -41,7 +43,7 @@ impl Transaction {
 
         Ok(WalletTransaction {
             transaction: tari_transaction::Transaction::new(
-                self.fee as u64,
+                deserialize_json(&self.fee_instructions)?,
                 deserialize_json(&self.instructions)?,
                 signature,
                 sender_address,
@@ -53,6 +55,8 @@ impl Transaction {
                 details: e.to_string(),
             })?,
             result: self.result.map(|r| deserialize_json(&r)).transpose()?,
+            transaction_failure: self.transaction_failure.map(|r| deserialize_json(&r)).transpose()?,
+            final_fee: self.final_fee.map(|f| f.into()),
             qcs: self.qcs.map(|q| deserialize_json(&q)).transpose()?.unwrap_or_default(),
             is_dry_run: self.is_dry_run,
         })

@@ -4,4 +4,4 @@
 mod template_test;
 mod track_calls;
 
-pub use template_test::{SubstateType, TemplateTest};
+pub use template_test::{SubstateType, TemplateTest, TEST_FAUCET_COMPONENT};

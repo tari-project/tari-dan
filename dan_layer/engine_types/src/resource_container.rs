@@ -190,7 +190,10 @@ impl ResourceContainer {
             ResourceContainer::Fungible { amount, .. } => {
                 if amt > *amount {
                     return Err(ResourceError::InsufficientBalance {
-                        details: "Bucket contained insufficient funds".to_string(),
+                        details: format!(
+                            "Bucket contained insufficient funds. Required: {}, Available: {}",
+                            amt, amount
+                        ),
                     });
                 }
                 *amount -= amt;
@@ -199,7 +202,11 @@ impl ResourceContainer {
             ResourceContainer::NonFungible { token_ids, .. } => {
                 if amt > token_ids.len().into() {
                     return Err(ResourceError::InsufficientBalance {
-                        details: "Bucket contained insufficient tokens".to_string(),
+                        details: format!(
+                            "Bucket contained insufficient tokens. Required: {}, Available: {}",
+                            amt,
+                            token_ids.len()
+                        ),
                     });
                 }
                 let num_to_take = usize::try_from(amt.value())
@@ -217,13 +224,20 @@ impl ResourceContainer {
             ResourceContainer::Confidential { revealed_amount, .. } => {
                 if amt > *revealed_amount {
                     return Err(ResourceError::InsufficientBalance {
-                        details: "Bucket contained insufficient revealed amount".to_string(),
+                        details: format!(
+                            "Bucket contained insufficient revealed funds. Required: {}, Available: {}",
+                            amt, revealed_amount
+                        ),
                     });
                 }
                 *revealed_amount -= amt;
                 Ok(ResourceContainer::confidential(*self.resource_address(), None, amt))
             },
         }
+    }
+
+    pub fn withdraw_all(&mut self) -> Result<ResourceContainer, ResourceError> {
+        self.withdraw(self.amount())
     }
 
     pub fn withdraw_by_ids(&mut self, ids: &BTreeSet<NonFungibleId>) -> Result<ResourceContainer, ResourceError> {
@@ -259,7 +273,11 @@ impl ResourceContainer {
             ResourceContainer::NonFungible { .. } => Err(ResourceError::OperationNotAllowed(
                 "Cannot withdraw confidential assets from a non-fungible resource".to_string(),
             )),
-            ResourceContainer::Confidential { commitments, .. } => {
+            ResourceContainer::Confidential {
+                commitments,
+                revealed_amount,
+                ..
+            } => {
                 let inputs = proof
                     .inputs
                     .iter()
@@ -290,6 +308,7 @@ impl ResourceContainer {
                             "Confidential deposit contained duplicate commitment in change commitment".to_string(),
                         ));
                     }
+                    *revealed_amount += validated_proof.change_revealed_amount;
                 }
 
                 Ok(ResourceContainer::confidential(
@@ -298,65 +317,18 @@ impl ResourceContainer {
                         validated_proof.output.commitment.as_public_key().clone(),
                         validated_proof.output,
                     )),
-                    Amount::zero(),
+                    validated_proof.output_revealed_amount,
                 ))
             },
         }
     }
 
+    // TODO: remove this as it is exactly the same as withdraw_confidential
     pub fn reveal_confidential(
         &mut self,
         proof: ConfidentialWithdrawProof,
     ) -> Result<ResourceContainer, ResourceError> {
-        match self {
-            ResourceContainer::Fungible { .. } => Err(ResourceError::OperationNotAllowed(
-                "Cannot reveal confidential assets from a fungible resource".to_string(),
-            )),
-            ResourceContainer::NonFungible { .. } => Err(ResourceError::OperationNotAllowed(
-                "Cannot reveal confidential assets from a non-fungible resource".to_string(),
-            )),
-            ResourceContainer::Confidential { commitments, .. } => {
-                let inputs = proof
-                    .inputs
-                    .iter()
-                    .map(|input| {
-                        let commitment =
-                            PublicKey::from_bytes(input).map_err(|_| ResourceError::InvalidConfidentialProof {
-                                details: "Invalid input commitment".to_string(),
-                            })?;
-                        match commitments.remove(&commitment) {
-                            Some(_) => Ok(commitment),
-                            None => Err(ResourceError::InvalidConfidentialProof {
-                                details: format!(
-                                    "reveal_confidential: input commitment {} not found in resource",
-                                    commitment
-                                ),
-                            }),
-                        }
-                    })
-                    .collect::<Result<Vec<_>, ResourceError>>()?;
-
-                let validated_proof = validate_confidential_withdraw(&inputs, proof)?;
-                if let Some(change) = validated_proof.change_output {
-                    if commitments
-                        .insert(change.commitment.as_public_key().clone(), change)
-                        .is_some()
-                    {
-                        return Err(ResourceError::InvariantError(
-                            "Confidential reveal contained duplicate commitment in change commitment".to_string(),
-                        ));
-                    }
-                }
-                Ok(ResourceContainer::confidential(
-                    *self.resource_address(),
-                    Some((
-                        validated_proof.output.commitment.as_public_key().clone(),
-                        validated_proof.output,
-                    )),
-                    validated_proof.revealed_amount,
-                ))
-            },
-        }
+        self.withdraw_confidential(proof)
     }
 
     /// Returns all confidential outputs. If the resource is not confidential, None is returned.

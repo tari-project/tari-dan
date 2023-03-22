@@ -7,6 +7,7 @@ extern crate alloc;
 use alloc::collections::BTreeMap;
 
 use ciborium::{de::from_reader, ser::into_writer};
+pub use serde;
 use serde::{de::DeserializeOwned, Serialize};
 
 #[derive(Debug, Clone)]

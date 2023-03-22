@@ -228,6 +228,7 @@ pub enum VaultAction {
     GetNonFungibleIds,
     GetCommitmentCount,
     ConfidentialReveal,
+    PayFee,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -241,6 +242,13 @@ pub enum VaultWithdrawArg {
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct ConfidentialRevealArg {
     pub proof: ConfidentialWithdrawProof,
+}
+
+// -------------------------------- Fees -------------------------------- //
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct PayFeeArg {
+    pub amount: Amount,
+    pub proof: Option<ConfidentialWithdrawProof>,
 }
 
 // -------------------------------- Bucket -------------------------------- //

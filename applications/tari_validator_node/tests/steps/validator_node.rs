@@ -4,9 +4,9 @@
 use std::{convert::TryInto, str::FromStr};
 
 use cucumber::{then, when};
-use tari_crypto::tari_utilities::{hex::Hex, ByteArray};
+use tari_crypto::tari_utilities::hex::Hex;
 use tari_dan_common_types::{Epoch, ShardId};
-use tari_engine_types::{confidential::ConfidentialClaim, instruction::Instruction, substate::SubstateAddress};
+use tari_engine_types::{confidential::ConfidentialClaim, substate::SubstateAddress};
 use tari_template_lib::{args, prelude::ComponentAddress};
 use tari_transaction::Transaction;
 use tari_validator_node_client::types::{GetStateRequest, SubmitTransactionRequest};
@@ -75,35 +75,24 @@ async fn when_i_claim_burn(
         .get(&claim_public_key_name)
         .unwrap_or_else(|| panic!("Claim public key {} not found", claim_public_key_name));
 
-    let instructions = [
-        Instruction::ClaimBurn {
-            claim: Box::new(ConfidentialClaim {
-                public_key: reciprocal_public_key.clone(),
-                output_address: commitment.as_slice().try_into()?,
-                range_proof: rangeproof.clone(),
-                proof_of_knowledge: proof.clone(),
-            }),
-        },
-        Instruction::PutLastInstructionOutputOnWorkspace { key: b"burn".to_vec() },
-        Instruction::CallMethod {
-            component_address,
-            method: "deposit".to_string(),
-            args: args![Variable("burn")],
-        },
-    ];
-
     let account_shard = ShardId::from_address(&SubstateAddress::from_str(&account_address).unwrap(), 0);
     let account_v1_shard = ShardId::from_address(&SubstateAddress::from_str(&account_address).unwrap(), 1);
 
-    let mut builder = Transaction::builder();
-    builder
-        .with_instructions(instructions.to_vec())
+    let transaction = Transaction::builder()
+        .claim_burn(ConfidentialClaim {
+            public_key: reciprocal_public_key.clone(),
+            output_address: commitment.as_slice().try_into()?,
+            range_proof: rangeproof.clone(),
+            proof_of_knowledge: proof.clone(),
+            withdraw_proof: None,
+        })
+        .put_last_instruction_output_on_workspace("burn")
+        .call_method(component_address, "deposit", args![Workspace("burn")])
         .with_outputs(vec![account_v1_shard])
         .with_inputs(vec![commitment_shard, account_shard])
-        .with_fee(1)
         .with_new_outputs(1)
-        .sign(account_secret);
-    let transaction = builder.build();
+        .sign(account_secret)
+        .build();
 
     let request = SubmitTransactionRequest {
         transaction,

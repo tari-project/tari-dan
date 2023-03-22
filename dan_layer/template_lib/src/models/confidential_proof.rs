@@ -8,16 +8,15 @@ use crate::{
     models::Amount,
 };
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct ConfidentialOutputProof {
     pub output_statement: ConfidentialStatement,
     pub change_statement: Option<ConfidentialStatement>,
     // #[cfg_attr(feature = "hex", serde(with = "hex::serde"))]
     pub range_proof: Vec<u8>,
-    pub revealed_amount: Amount,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct ConfidentialStatement {
     // #[cfg_attr(feature = "hex", serde(with = "hex::serde"))]
     pub commitment: [u8; 32],
@@ -29,9 +28,10 @@ pub struct ConfidentialStatement {
     // #[cfg_attr(feature = "serde", serde(with = "hex::serde"))]
     pub encrypted_value: EncryptedValue,
     pub minimum_value_promise: u64,
+    pub revealed_amount: Amount,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct ConfidentialWithdrawProof {
     // #[cfg_attr(feature = "hex", serde(with = "hex::serde"))]
     pub inputs: Vec<[u8; 32]>,

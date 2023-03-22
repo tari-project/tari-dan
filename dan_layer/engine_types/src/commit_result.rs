@@ -23,28 +23,97 @@
 use serde::{Deserialize, Serialize};
 use tari_template_lib::Hash;
 
-use crate::{execution_result::ExecutionResult, logs::LogEntry, substate::SubstateDiff};
+use crate::{
+    fees::{FeeCostBreakdown, FeeReceipt},
+    instruction_result::InstructionResult,
+    logs::LogEntry,
+    substate::SubstateDiff,
+};
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ExecuteResult {
+    /// The finalized result to commit. If the fee transaction succeeds but the transaction fails, this will be accept.
+    pub finalize: FinalizeResult,
+    /// If the fee transaction passes but the transaction fails, this will be the reason for the transaction failure.
+    pub transaction_failure: Option<RejectReason>,
+    /// The fee payment summary including the Resource containing the fees taken during execution.
+    pub fee_receipt: Option<FeeReceipt>,
+}
+
+impl ExecuteResult {
+    pub fn expect_success(&self) -> &SubstateDiff {
+        let diff = self.expect_finalization_success();
+
+        if let Some(ref reason) = self.transaction_failure {
+            panic!("Transaction failed: {}", reason);
+        }
+
+        diff
+    }
+
+    pub fn expect_failure(&self) -> &RejectReason {
+        match self.finalize.result {
+            TransactionResult::Accept(_) => panic!("Transaction succeeded"),
+            TransactionResult::Reject(ref reason) => reason,
+        }
+    }
+
+    pub fn expect_transaction_failure(&self) -> &RejectReason {
+        if let Some(ref reason) = self.transaction_failure {
+            reason
+        } else {
+            panic!("Transaction succeeded");
+        }
+    }
+
+    pub fn expect_finalization_success(&self) -> &SubstateDiff {
+        match self.finalize.result {
+            TransactionResult::Accept(ref diff) => diff,
+            TransactionResult::Reject(ref reason) => panic!("Transaction failed: {}", reason),
+        }
+    }
+
+    pub fn expect_fees_paid_in_full(&self) -> &FeeReceipt {
+        let receipt = self.fee_receipt.as_ref().expect("No fee receipt");
+        assert!(receipt.is_paid_in_full(), "Fees not paid in full");
+        receipt
+    }
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct FinalizeResult {
     pub transaction_hash: Hash,
     pub logs: Vec<LogEntry>,
-    pub execution_results: Vec<ExecutionResult>,
+    // TOOD: Remove from FinalizeResult
+    pub execution_results: Vec<InstructionResult>,
     pub result: TransactionResult,
+    pub cost_breakdown: Option<FeeCostBreakdown>,
 }
 
 impl FinalizeResult {
-    pub fn new(transaction_hash: Hash, logs: Vec<LogEntry>, result: TransactionResult) -> Self {
+    pub fn new(
+        transaction_hash: Hash,
+        logs: Vec<LogEntry>,
+        result: TransactionResult,
+        cost_breakdown: FeeCostBreakdown,
+    ) -> Self {
         Self {
             transaction_hash,
             logs,
             execution_results: Vec::new(),
             result,
+            cost_breakdown: Some(cost_breakdown),
         }
     }
 
     pub fn reject(transaction_hash: Hash, reason: RejectReason) -> Self {
-        Self::new(transaction_hash, Vec::new(), TransactionResult::Reject(reason))
+        Self {
+            transaction_hash,
+            logs: vec![],
+            execution_results: Vec::new(),
+            result: TransactionResult::Reject(reason),
+            cost_breakdown: None,
+        }
     }
 
     pub fn is_accept(&self) -> bool {
@@ -61,6 +130,10 @@ pub enum TransactionResult {
 impl TransactionResult {
     pub fn is_accept(&self) -> bool {
         matches!(self, Self::Accept(_))
+    }
+
+    pub fn is_reject(&self) -> bool {
+        matches!(self, Self::Reject(_))
     }
 
     pub fn accept(&self) -> Option<&SubstateDiff> {
@@ -94,6 +167,8 @@ pub enum RejectReason {
     PreviousQcRejection,
     ShardPledgedToAnotherPayload(String),
     ShardRejected(String),
+    FeeTransactionFailed,
+    FeesNotPaid(String),
 }
 
 impl std::fmt::Display for RejectReason {
@@ -104,6 +179,8 @@ impl std::fmt::Display for RejectReason {
             RejectReason::PreviousQcRejection => write!(f, "Previous QC was a rejection"),
             RejectReason::ShardPledgedToAnotherPayload(msg) => write!(f, "Shard pledged to another payload: {}", msg),
             RejectReason::ShardRejected(msg) => write!(f, "Shard was rejected: {}", msg),
+            RejectReason::FeeTransactionFailed => write!(f, "Fee transaction failed"),
+            RejectReason::FeesNotPaid(msg) => write!(f, "Fee not paid: {}", msg),
         }
     }
 }

@@ -2,11 +2,12 @@
 //   SPDX-License-Identifier: BSD-3-Clause
 
 use log::*;
-use tari_common_types::types::{FixedHash, PrivateKey, PublicKey};
-use tari_crypto::{commitment::HomomorphicCommitmentFactory, dhke::DiffieHellmanSharedSecret};
+use tari_common_types::types::{PrivateKey, PublicKey};
+use tari_crypto::dhke::DiffieHellmanSharedSecret;
 use tari_dan_common_types::optional::{IsNotFoundError, Optional};
 use tari_engine_types::{confidential::ConfidentialOutput, substate::SubstateAddress};
 use tari_key_manager::key_manager::DerivedKey;
+use tari_template_lib::Hash;
 use tari_utilities::ByteArray;
 
 use crate::{
@@ -16,7 +17,7 @@ use crate::{
         key_manager,
         key_manager::{KeyManagerApi, KeyManagerApiError},
     },
-    confidential::{get_commitment_factory, kdfs, ConfidentialProofError},
+    confidential::{kdfs, ConfidentialProofError},
     models::{Account, ConfidentialOutputModel, ConfidentialOutputWithMask, ConfidentialProofId, OutputStatus},
     storage::{WalletStorageError, WalletStore, WalletStoreReader, WalletStoreWriter},
 };
@@ -209,32 +210,15 @@ impl<'a, TStore: WalletStore> ConfidentialOutputsApi<'a, TStore> {
             .as_ref()
             .ok_or_else(|| ConfidentialOutputsApiError::FixMe("Missing encrypted value".to_string()))?;
 
-        let mask = self.crypto_api.derive_output_mask_for_receiver(public_nonce, &key.k);
-        let encryption_key = self
-            .crypto_api
-            .derive_value_encryption_key_for_receiver(&mask, &output.commitment);
-
-        let value_result = self
-            .crypto_api
-            .extract_value(&encryption_key, &output.commitment, encrypted_value);
-        let (value, status) = match value_result {
-            Ok(value) => {
-                let commitment = get_commitment_factory().commit_value(&mask, value);
-                if output.commitment == commitment {
-                    (value, OutputStatus::Unspent)
-                } else {
-                    warn!(
-                        target: LOG_TARGET,
-                        "Output invalid: Unable to derive the mask for commitment {}",
-                        output.commitment.as_public_key()
-                    );
-                    (value, OutputStatus::Invalid)
-                }
-            },
+        let unblinded_result =
+            self.crypto_api
+                .unblind_output(&output.commitment, encrypted_value, &key.k, public_nonce);
+        let (value, status) = match unblinded_result {
+            Ok(output) => (output.value, OutputStatus::Unspent),
             Err(e) => {
                 warn!(
                     target: LOG_TARGET,
-                    "Failed to extract value from output. (commitment: {}, error: {})",
+                    "Failed to unblind output. (commitment: {}, error: {})",
                     output.commitment.as_public_key(),
                     e
                 );
@@ -258,7 +242,7 @@ impl<'a, TStore: WalletStore> ConfidentialOutputsApi<'a, TStore> {
     pub fn proofs_set_transaction_hash(
         &self,
         proof_id: ConfidentialProofId,
-        transaction_hash: FixedHash,
+        transaction_hash: Hash,
     ) -> Result<(), ConfidentialOutputsApiError> {
         let mut tx = self.store.create_write_tx()?;
         tx.proofs_set_transaction_hash(proof_id, transaction_hash)?;

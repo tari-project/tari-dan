@@ -85,7 +85,6 @@ impl ConfidentialCryptoApi {
                 output_statement,
                 change_statement,
                 range_proof: output_proof.range_proof,
-                revealed_amount: output_proof.revealed_amount,
             },
             balance_proof,
         })
@@ -109,6 +108,30 @@ impl ConfidentialCryptoApi {
         let proof = generate_confidential_proof(statement, None)?;
         Ok(proof)
     }
+
+    pub fn unblind_output(
+        &self,
+        output_commitment: &Commitment,
+        output_encrypted_value: &EncryptedValue,
+        claim_secret: &PrivateKey,
+        reciprocal_public_key: &PublicKey,
+    ) -> Result<ConfidentialOutputWithMask, ConfidentialCryptoApiError> {
+        let mask = self.derive_output_mask_for_receiver(reciprocal_public_key, claim_secret);
+        let encryption_key = self.derive_value_encryption_key_for_receiver(&mask, output_commitment);
+
+        let value = self.extract_value(&encryption_key, output_commitment, output_encrypted_value)?;
+        let commitment = get_commitment_factory().commit_value(&mask, value);
+        if *output_commitment == commitment {
+            Ok(ConfidentialOutputWithMask {
+                commitment,
+                value,
+                mask,
+                public_asset_tag: None,
+            })
+        } else {
+            Err(ConfidentialCryptoApiError::UnableToOpenCommitment)
+        }
+    }
 }
 
 fn generate_balance_proof(
@@ -131,4 +154,6 @@ pub enum ConfidentialCryptoApiError {
     ConfidentialProof(#[from] ConfidentialProofError),
     #[error("Failed to decrypt value")]
     FailedDecryptValue,
+    #[error("Unable to open the commitment")]
+    UnableToOpenCommitment,
 }

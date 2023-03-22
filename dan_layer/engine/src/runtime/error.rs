@@ -111,6 +111,10 @@ pub enum RuntimeError {
     ConfidentialOutputAlreadyClaimed {
         address: UnclaimedConfidentialOutputAddress,
     },
+    #[error("Insufficient fees paid: required {required_fee}, paid {fees_paid}")]
+    InsufficientFeesPaid { required_fee: Amount, fees_paid: Amount },
+    #[error("No checkpoint")]
+    NoCheckpoint,
 }
 
 impl RuntimeError {

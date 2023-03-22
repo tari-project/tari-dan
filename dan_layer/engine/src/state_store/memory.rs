@@ -61,6 +61,9 @@ impl MemoryStateStore {
     }
 }
 
+pub type MemoryReadTransaction<'a> = MemoryTransaction<RwLockReadGuard<'a, InnerKvMap>>;
+pub type MemoryWriteTransaction<'a> = MemoryTransaction<RwLockWriteGuard<'a, InnerKvMap>>;
+
 pub struct MemoryTransaction<T> {
     pending: InnerKvMap,
     // TODO: this is copied from the state store, there's probably a better way
@@ -70,8 +73,8 @@ pub struct MemoryTransaction<T> {
 
 impl<'a> AtomicDb<'a> for MemoryStateStore {
     type Error = anyhow::Error;
-    type ReadAccess = MemoryTransaction<RwLockReadGuard<'a, InnerKvMap>>;
-    type WriteAccess = MemoryTransaction<RwLockWriteGuard<'a, InnerKvMap>>;
+    type ReadAccess = MemoryReadTransaction<'a>;
+    type WriteAccess = MemoryWriteTransaction<'a>;
 
     fn read_access(&'a self) -> Result<Self::ReadAccess, Self::Error> {
         let guard = self.state.read().map_err(|_| anyhow!("Failed to read state"))?;
@@ -135,8 +138,14 @@ impl<'a> StateWriter for MemoryTransaction<RwLockWriteGuard<'a, InnerKvMap>> {
     }
 
     fn delete_state_raw(&mut self, key: &[u8]) -> Result<(), StateStoreError> {
-        self.pending.remove(key);
-        self.guard.remove(key);
+        let pending_exist = self.pending.remove(key);
+        let lock_exist = self.guard.remove(key);
+        if pending_exist.is_none() && lock_exist.is_none() {
+            return Err(StateStoreError::NotFound {
+                kind: "state",
+                key: to_hex(key),
+            });
+        }
         Ok(())
     }
 

@@ -30,10 +30,15 @@ use tari_common_types::types::{Commitment, PrivateKey, PublicKey, Signature};
 use tari_crypto::{ristretto::RistrettoComSig, tari_utilities::ByteArray};
 use tari_dan_common_types::ShardId;
 use tari_engine_types::{confidential::ConfidentialClaim, instruction::Instruction};
-use tari_template_lib::{args::Arg, Hash};
+use tari_template_lib::{
+    args::Arg,
+    crypto::{BalanceProofSignature, RistrettoPublicKeyBytes},
+    models::{ConfidentialOutputProof, ConfidentialStatement, ConfidentialWithdrawProof, EncryptedValue},
+    Hash,
+};
 use tari_transaction::{ObjectClaim, SubstateChange, Transaction, TransactionMeta};
 
-use crate::proto;
+use crate::{proto, utils::checked_copy_fixed};
 
 //---------------------------------- Transaction --------------------------------------------//
 impl TryFrom<proto::transaction::Transaction> for Transaction {
@@ -42,6 +47,11 @@ impl TryFrom<proto::transaction::Transaction> for Transaction {
     fn try_from(request: proto::transaction::Transaction) -> Result<Self, Self::Error> {
         let instructions = request
             .instructions
+            .into_iter()
+            .map(TryInto::try_into)
+            .collect::<Result<Vec<tari_engine_types::instruction::Instruction>, _>>()?;
+        let fee_instructions = request
+            .fee_instructions
             .into_iter()
             .map(TryInto::try_into)
             .collect::<Result<Vec<tari_engine_types::instruction::Instruction>, _>>()?;
@@ -54,7 +64,7 @@ impl TryFrom<proto::transaction::Transaction> for Transaction {
             PublicKey::from_bytes(&request.sender_public_key).map_err(|_| anyhow!("invalid sender_public_key"))?;
         let meta = request.meta.map(TryInto::try_into).transpose()?;
         let transaction = Transaction::new(
-            request.fee,
+            fee_instructions,
             instructions,
             instruction_signature,
             sender_public_key,
@@ -67,18 +77,17 @@ impl TryFrom<proto::transaction::Transaction> for Transaction {
 
 impl From<Transaction> for proto::transaction::Transaction {
     fn from(transaction: Transaction) -> Self {
-        let fee = transaction.fee();
         let meta = transaction.meta().clone();
-        let (instructions, signature, sender_public_key) = transaction.destruct();
+        let (instructions, fee_instructions, signature, sender_public_key) = transaction.destruct();
 
         proto::transaction::Transaction {
             // TODO: Thaum inputs and outputs
             inputs: vec![],
             outputs: vec![],
+            fee_instructions: fee_instructions.into_iter().map(Into::into).collect(),
             instructions: instructions.into_iter().map(Into::into).collect(),
             signature: Some(signature.signature().into()),
             sender_public_key: sender_public_key.to_vec(),
-            fee,
             meta: Some(meta.into()),
             balance_proof: vec![],
         }
@@ -135,6 +144,7 @@ impl TryFrom<proto::transaction::Instruction> for tari_engine_types::instruction
                         .ok_or_else(|| anyhow!("claim_burn_proof_of_knowledge not provided"))?
                         .try_into()
                         .map_err(|e| anyhow!("claim_burn_proof_of_knowledge: {}", e))?,
+                    withdraw_proof: request.claim_burn_withdraw_proof.map(TryInto::try_into).transpose()?,
                 }),
             },
             _ => return Err(anyhow!("invalid instruction_type")),
@@ -144,8 +154,8 @@ impl TryFrom<proto::transaction::Instruction> for tari_engine_types::instruction
     }
 }
 
-impl From<tari_engine_types::instruction::Instruction> for proto::transaction::Instruction {
-    fn from(instruction: tari_engine_types::instruction::Instruction) -> Self {
+impl From<Instruction> for proto::transaction::Instruction {
+    fn from(instruction: Instruction) -> Self {
         let mut result = proto::transaction::Instruction::default();
 
         match instruction {
@@ -184,6 +194,7 @@ impl From<tari_engine_types::instruction::Instruction> for proto::transaction::I
                 result.claim_burn_range_proof = claim.range_proof.to_vec();
                 result.claim_burn_proof_of_knowledge = Some(claim.proof_of_knowledge.into());
                 result.claim_burn_public_key = claim.public_key.to_vec();
+                result.claim_burn_withdraw_proof = claim.withdraw_proof.map(Into::into);
             },
         }
         result
@@ -199,7 +210,7 @@ impl TryFrom<proto::transaction::Arg> for Arg {
         let data = request.data.clone();
         let arg = match request.arg_type {
             0 => Arg::Literal(data),
-            1 => Arg::Variable(data),
+            1 => Arg::Workspace(data),
             _ => return Err(anyhow!("invalid arg_type")),
         };
 
@@ -216,7 +227,7 @@ impl From<Arg> for proto::transaction::Arg {
                 result.arg_type = 0;
                 result.data = data;
             },
-            Arg::Variable(data) => {
+            Arg::Workspace(data) => {
                 result.arg_type = 1;
                 result.data = data;
             },
@@ -316,6 +327,108 @@ impl From<RistrettoComSig> for proto::transaction::CommitmentSignature {
             public_nonce_commitment: val.public_nonce().to_vec(),
             signature_u: val.u().to_vec(),
             signature_v: val.v().to_vec(),
+        }
+    }
+}
+// -------------------------------- ConfidentialWithdrawProof -------------------------------- //
+
+impl TryFrom<proto::transaction::ConfidentialWithdrawProof> for ConfidentialWithdrawProof {
+    type Error = anyhow::Error;
+
+    fn try_from(val: proto::transaction::ConfidentialWithdrawProof) -> Result<Self, Self::Error> {
+        Ok(ConfidentialWithdrawProof {
+            inputs: val
+                .inputs
+                .into_iter()
+                .map(|v| checked_copy_fixed(&v).ok_or_else(|| anyhow!("Invalid length of input commitment bytes")))
+                .collect::<Result<_, _>>()?,
+            output_proof: val
+                .output_proof
+                .ok_or_else(|| anyhow!("output_proof is missing"))?
+                .try_into()?,
+            balance_proof: BalanceProofSignature::from_bytes(&val.balance_proof)
+                .map_err(|e| anyhow!("Invalid balance proof signature: {}", e.to_error_string()))?,
+        })
+    }
+}
+
+impl From<ConfidentialWithdrawProof> for proto::transaction::ConfidentialWithdrawProof {
+    fn from(val: ConfidentialWithdrawProof) -> Self {
+        Self {
+            inputs: val.inputs.iter().map(|v| v.to_vec()).collect(),
+            output_proof: Some(val.output_proof.into()),
+            balance_proof: val.balance_proof.as_bytes().to_vec(),
+        }
+    }
+}
+
+// -------------------------------- ConfidentialOutputProof -------------------------------- //
+
+impl TryFrom<proto::transaction::ConfidentialOutputProof> for ConfidentialOutputProof {
+    type Error = anyhow::Error;
+
+    fn try_from(val: proto::transaction::ConfidentialOutputProof) -> Result<Self, Self::Error> {
+        Ok(ConfidentialOutputProof {
+            output_statement: val
+                .output_statement
+                .ok_or_else(|| anyhow!("output is missing"))?
+                .try_into()?,
+            change_statement: val.change_statement.map(TryInto::try_into).transpose()?,
+            range_proof: val.range_proof,
+        })
+    }
+}
+
+impl From<ConfidentialOutputProof> for proto::transaction::ConfidentialOutputProof {
+    fn from(val: ConfidentialOutputProof) -> Self {
+        Self {
+            output_statement: Some(val.output_statement.into()),
+            change_statement: val.change_statement.map(Into::into),
+            range_proof: val.range_proof,
+        }
+    }
+}
+
+// -------------------------------- ConfidentialStatement -------------------------------- //
+
+impl TryFrom<proto::transaction::ConfidentialStatement> for ConfidentialStatement {
+    type Error = anyhow::Error;
+
+    fn try_from(val: proto::transaction::ConfidentialStatement) -> Result<Self, Self::Error> {
+        Ok(ConfidentialStatement {
+            commitment: checked_copy_fixed(&val.commitment)
+                .ok_or_else(|| anyhow!("Invalid length of commitment bytes"))?,
+            sender_public_nonce: Some(val.sender_public_nonce)
+                .filter(|v| !v.is_empty())
+                .map(|v| {
+                    RistrettoPublicKeyBytes::from_bytes(&v)
+                        .map_err(|e| anyhow!("Invalid sender_public_nonce: {}", e.to_error_string()))
+                })
+                .transpose()?,
+            encrypted_value: EncryptedValue(
+                checked_copy_fixed(&val.encrypted_value)
+                    .ok_or_else(|| anyhow!("Invalid length of encrypted_value bytes"))?,
+            ),
+            minimum_value_promise: val.minimum_value_promise,
+            revealed_amount: val.revealed_amount.try_into()?,
+        })
+    }
+}
+
+impl From<ConfidentialStatement> for proto::transaction::ConfidentialStatement {
+    fn from(val: ConfidentialStatement) -> Self {
+        Self {
+            commitment: val.commitment.to_vec(),
+            sender_public_nonce: val
+                .sender_public_nonce
+                .map(|v| v.as_bytes().to_vec())
+                .unwrap_or_default(),
+            encrypted_value: val.encrypted_value.as_ref().to_vec(),
+            minimum_value_promise: val.minimum_value_promise,
+            revealed_amount: val
+                .revealed_amount
+                .as_u64_checked()
+                .expect("revealed_amount is negative or too large"),
         }
     }
 }

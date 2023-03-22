@@ -26,7 +26,7 @@ use chrono::Utc;
 use serde::{Deserialize, Serialize};
 use tari_common_types::types::FixedHash;
 use tari_dan_common_types::ShardId;
-use tari_engine_types::commit_result::FinalizeResult;
+use tari_engine_types::commit_result::ExecuteResult;
 use tari_transaction::{ObjectClaim, SubstateChange, Transaction};
 
 use crate::models::{ConsensusHash, Payload};
@@ -35,7 +35,7 @@ use crate::models::{ConsensusHash, Payload};
 pub struct TariDanPayload {
     transaction: Transaction,
     timestamp: i64,
-    result: Option<FinalizeResult>,
+    result: Option<ExecuteResult>,
 }
 
 impl TariDanPayload {
@@ -59,11 +59,11 @@ impl TariDanPayload {
         self.timestamp
     }
 
-    pub fn result(&self) -> Option<&FinalizeResult> {
+    pub fn result(&self) -> Option<&ExecuteResult> {
         self.result.as_ref()
     }
 
-    pub fn set_result(&mut self, result: FinalizeResult) {
+    pub fn set_result(&mut self, result: ExecuteResult) {
         self.result = Some(result);
     }
 }

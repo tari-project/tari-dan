@@ -23,10 +23,13 @@ use std::iter;
 
 use tari_dan_engine::{
     packager::{PackageError, TemplateModuleLoader},
-    transaction::TransactionError,
     wasm::{compile::compile_template, WasmExecutionError},
 };
-use tari_engine_types::{commit_result::FinalizeResult, instruction::Instruction, substate::SubstateAddress};
+use tari_engine_types::{
+    commit_result::{FinalizeResult, RejectReason},
+    instruction::Instruction,
+    substate::SubstateAddress,
+};
 use tari_template_lib::{
     args,
     models::{Amount, ComponentAddress, NonFungibleAddress},
@@ -188,14 +191,16 @@ fn test_tuples() {
 }
 
 mod errors {
+
     use super::*;
 
     #[test]
     fn panic() {
         let mut template_test = TemplateTest::new(vec!["tests/templates/errors"]);
 
-        let err = template_test
-            .try_execute(
+        let result = template_test
+            .try_execute_instructions(
+                vec![],
                 vec![Instruction::CallFunction {
                     template_address: template_test.get_template_address("Errors"),
                     function: "panic".to_string(),
@@ -203,12 +208,15 @@ mod errors {
                 }],
                 vec![],
             )
-            .unwrap_err();
-        match err {
-            TransactionError::WasmExecutionError(WasmExecutionError::Panic { message, .. }) => {
-                assert_eq!(message, "This error message should be included in the execution result");
+            .unwrap();
+        match result.transaction_failure.unwrap() {
+            RejectReason::ExecutionFailure(message) => {
+                assert_eq!(
+                    message,
+                    "Panic! This error message should be included in the execution result"
+                );
             },
-            _ => panic!("Unexpected error: {}", err),
+            reason => panic!("Unexpected transaction reject reason: {}", reason),
         }
     }
 
@@ -217,8 +225,9 @@ mod errors {
         let mut template_test = TemplateTest::new(vec!["tests/templates/errors"]);
 
         let text = "this isn't an amount";
-        let err = template_test
-            .try_execute(
+        let result = template_test
+            .try_execute_instructions(
+                vec![],
                 vec![Instruction::CallFunction {
                     template_address: template_test.get_template_address("Errors"),
                     function: "please_pass_invalid_args".to_string(),
@@ -226,13 +235,14 @@ mod errors {
                 }],
                 vec![],
             )
-            .unwrap_err();
-        match err {
-            TransactionError::WasmExecutionError(WasmExecutionError::Panic { message, .. }) => {
-                assert!(message
-                    .starts_with("failed to decode argument at position 0 for function 'please_pass_invalid_args':"),);
+            .unwrap();
+        match result.transaction_failure.unwrap() {
+            RejectReason::ExecutionFailure(message) => {
+                assert!(message.starts_with(
+                    "Panic! failed to decode argument at position 0 for function 'please_pass_invalid_args':"
+                ),);
             },
-            _ => panic!("Unexpected error: {}", err),
+            reason => panic!("Unexpected failure reason: {}", reason),
         }
     }
 }
@@ -308,7 +318,7 @@ mod fungible {
             .unwrap();
 
         assert_eq!(
-            result.execution_results[1].decode::<Amount>().unwrap(),
+            result.finalize.execution_results[1].decode::<Amount>().unwrap(),
             initial_supply - Amount(500)
         );
 
@@ -330,7 +340,10 @@ mod fungible {
             )
             .unwrap();
 
-        assert_eq!(result.execution_results[1].decode::<Amount>().unwrap(), Amount(0));
+        assert_eq!(
+            result.finalize.execution_results[1].decode::<Amount>().unwrap(),
+            Amount(0)
+        );
 
         template_test
             .execute_and_commit(
@@ -394,7 +407,7 @@ mod basic_nft {
             )
             .unwrap();
 
-        let diff = result.result.expect("execution failed");
+        let diff = result.finalize.result.expect("execution failed");
 
         // Resource is changed
         assert_eq!(diff.down_iter().filter(|(addr, _)| addr.is_resource()).count(), 1);
@@ -433,13 +446,22 @@ mod basic_nft {
                 vec![],
             )
             .unwrap();
-        result.result.expect("execution failed");
+        result.finalize.result.expect("execution failed");
         // sparkle_nft.inner_vault_balance()
-        assert_eq!(result.execution_results[3].decode::<Amount>().unwrap(), Amount(0));
+        assert_eq!(
+            result.finalize.execution_results[3].decode::<Amount>().unwrap(),
+            Amount(0)
+        );
         // account.balance(nft_resx)
-        assert_eq!(result.execution_results[4].decode::<Amount>().unwrap(), Amount(5));
+        assert_eq!(
+            result.finalize.execution_results[4].decode::<Amount>().unwrap(),
+            Amount(5)
+        );
         // sparkle_nft.total_supply()
-        assert_eq!(result.execution_results[5].decode::<Amount>().unwrap(), Amount(5));
+        assert_eq!(
+            result.finalize.execution_results[5].decode::<Amount>().unwrap(),
+            Amount(5)
+        );
     }
 
     #[test]
@@ -465,7 +487,7 @@ mod basic_nft {
             )
             .unwrap();
 
-        let diff = result.result.expect("execution failed");
+        let diff = result.finalize.result.expect("execution failed");
         let (_, state) = diff.up_iter().find(|(addr, _)| addr.is_non_fungible()).unwrap();
 
         #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -581,7 +603,7 @@ mod basic_nft {
             )
             .unwrap();
 
-        let diff = result.result.expect("execution failed");
+        let diff = result.finalize.result.expect("execution failed");
         let nfts = diff
             .up_iter()
             .filter_map(|(a, _)| match a {
@@ -605,7 +627,10 @@ mod basic_nft {
             1
         );
         assert_eq!(nfts.len(), 4);
-        assert_eq!(result.execution_results[12].decode::<Amount>().unwrap(), Amount(8));
+        assert_eq!(
+            result.finalize.execution_results[12].decode::<Amount>().unwrap(),
+            Amount(8)
+        );
 
         // Try mint 2 nfts with the same id in a single transaction - should fail
         template_test
@@ -672,7 +697,10 @@ mod basic_nft {
             )
             .unwrap();
 
-        assert_eq!(result.execution_results[3].decode::<Amount>().unwrap(), Amount(4));
+        assert_eq!(
+            result.finalize.execution_results[3].decode::<Amount>().unwrap(),
+            Amount(4)
+        );
 
         let total_supply: Amount = template_test.call_method(nft_component, "total_supply", args![], vec![]);
         assert_eq!(total_supply, Amount(4));
@@ -721,7 +749,7 @@ mod emoji_id {
         emoji_id: &EmojiId,
         owner_proof: NonFungibleAddress,
     ) -> Result<FinalizeResult, anyhow::Error> {
-        template_test.execute_and_commit(
+        let result = template_test.execute_and_commit(
             vec![
                 Instruction::CallMethod {
                     component_address: account_address,
@@ -746,7 +774,8 @@ mod emoji_id {
                 },
             ],
             vec![owner_proof],
-        )
+        )?;
+        Ok(result.finalize)
     }
 
     #[test]
@@ -771,8 +800,9 @@ mod emoji_id {
                 vec![],
             )
             .unwrap();
-        let faucet_component: ComponentAddress = result.execution_results[0].decode().unwrap();
+        let faucet_component: ComponentAddress = result.finalize.execution_results[0].decode().unwrap();
         let faucet_resource = result
+            .finalize
             .result
             .expect("Faucet mint failed")
             .up_iter()
@@ -793,8 +823,9 @@ mod emoji_id {
                 vec![],
             )
             .unwrap();
-        let emoji_id_minter: ComponentAddress = result.execution_results[0].decode().unwrap();
+        let emoji_id_minter: ComponentAddress = result.finalize.execution_results[0].decode().unwrap();
         let emoji_id_resource = result
+            .finalize
             .result
             .expect("Emoji id initialization failed")
             .up_iter()
@@ -918,8 +949,9 @@ mod tickets {
                 vec![],
             )
             .unwrap();
-        let faucet_component: ComponentAddress = result.execution_results[0].decode().unwrap();
+        let faucet_component: ComponentAddress = result.finalize.execution_results[0].decode().unwrap();
         let faucet_resource = result
+            .finalize
             .result
             .expect("Faucet mint failed")
             .up_iter()
@@ -941,8 +973,9 @@ mod tickets {
                 vec![],
             )
             .unwrap();
-        let ticket_seller: ComponentAddress = result.execution_results[0].decode().unwrap();
+        let ticket_seller: ComponentAddress = result.finalize.execution_results[0].decode().unwrap();
         let ticket_resource = result
+            .finalize
             .result
             .expect("TicketSeller initialization failed")
             .up_iter()
@@ -1091,7 +1124,7 @@ mod nft_indexes {
             )
             .unwrap();
 
-        let diff = result.result.expect("execution failed");
+        let diff = result.finalize.result.expect("execution failed");
 
         // Resource is changed
         assert_eq!(diff.down_iter().filter(|(addr, _)| addr.is_resource()).count(), 1);

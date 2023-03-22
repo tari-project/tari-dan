@@ -25,8 +25,9 @@ fn basic_faucet_transfer() {
             vec![],
         )
         .unwrap();
-    let faucet_component: ComponentAddress = result.execution_results[0].decode().unwrap();
+    let faucet_component: ComponentAddress = result.finalize.execution_results[0].decode().unwrap();
     let faucet_resource = result
+        .finalize
         .result
         .expect("Faucet mint failed")
         .up_iter()
@@ -89,12 +90,9 @@ fn basic_faucet_transfer() {
             vec![sender_proof],
         )
         .unwrap();
-    for log in result.logs {
-        eprintln!("LOG: {}", log);
-    }
-    eprintln!("{:?}", result.execution_results);
-    assert_eq!(result.execution_results[3].decode::<Amount>().unwrap(), 900);
-    assert_eq!(result.execution_results[4].decode::<Amount>().unwrap(), 100);
+
+    assert_eq!(result.finalize.execution_results[3].decode::<Amount>().unwrap(), 900);
+    assert_eq!(result.finalize.execution_results[4].decode::<Amount>().unwrap(), 100);
 }
 
 #[test]
@@ -114,8 +112,9 @@ fn withdraw_from_account_prevented() {
             vec![],
         )
         .unwrap();
-    let faucet_component: ComponentAddress = result.execution_results[0].decode().unwrap();
+    let faucet_component: ComponentAddress = result.finalize.execution_results[0].decode().unwrap();
     let faucet_resource = result
+        .finalize
         .result
         .expect("Faucet mint failed")
         .up_iter()
@@ -180,5 +179,8 @@ fn withdraw_from_account_prevented() {
             vec![],
         )
         .unwrap();
-    assert_eq!(result.execution_results[0].decode::<Amount>().unwrap(), Amount(0));
+    assert_eq!(
+        result.finalize.execution_results[0].decode::<Amount>().unwrap(),
+        Amount(0)
+    );
 }

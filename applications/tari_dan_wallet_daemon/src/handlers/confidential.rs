@@ -12,6 +12,7 @@ use tari_dan_wallet_sdk::{
     confidential::{get_commitment_factory, ConfidentialProofStatement},
     models::{ConfidentialOutputModel, OutputStatus},
 };
+use tari_template_lib::models::Amount;
 use tari_wallet_daemon_client::types::{
     ConfidentialCreateOutputProofRequest,
     ConfidentialCreateOutputProofResponse,
@@ -46,9 +47,11 @@ pub async fn handle_create_transfer_proof(
         .get_vault_by_resource(&account.address, &req.resource_address)?;
     let proof_id = sdk.confidential_outputs_api().add_proof(&vault.address)?;
     // Lock inputs we're going to spend
-    let (inputs, total_input_value) =
-        sdk.confidential_outputs_api()
-            .lock_outputs_by_amount(&vault.address, req.amount.value() as u64, proof_id)?;
+    let (inputs, total_input_value) = sdk.confidential_outputs_api().lock_outputs_by_amount(
+        &vault.address,
+        req.amount.value() as u64 + req.reveal_amount.value() as u64,
+        proof_id,
+    )?;
 
     info!(
         target: LOG_TARGET,
@@ -62,16 +65,17 @@ pub async fn handle_create_transfer_proof(
 
     let (output_mask, public_nonce) = sdk
         .confidential_crypto_api()
-        .derive_output_mask_for_destination(&req.destination_stealth_public_key);
+        .derive_output_mask_for_destination(&req.destination_public_key);
 
     let output_statement = ConfidentialProofStatement {
         amount: req.amount,
         mask: output_mask,
         sender_public_nonce: Some(public_nonce),
         minimum_value_promise: 0,
+        reveal_amount: req.reveal_amount,
     };
 
-    let change_amount = total_input_value - req.amount.value() as u64;
+    let change_amount = total_input_value - req.amount.value() as u64 - req.reveal_amount.value() as u64;
     let change_key = sdk.key_manager_api().next_key(key_manager::TRANSACTION_BRANCH)?;
     sdk.confidential_outputs_api().add_output(ConfidentialOutputModel {
         account_address: account.address,
@@ -90,6 +94,7 @@ pub async fn handle_create_transfer_proof(
         mask: change_key.k,
         sender_public_nonce: None,
         minimum_value_promise: 0,
+        reveal_amount: Amount::zero(),
     };
 
     let inputs = sdk
@@ -133,6 +138,7 @@ pub async fn handle_create_output_proof(
         mask: key.k,
         sender_public_nonce: None,
         minimum_value_promise: 0,
+        reveal_amount: Amount::zero(),
     };
     let proof = sdk.confidential_crypto_api().generate_output_proof(&statement)?;
     Ok(ConfidentialCreateOutputProofResponse { proof })

@@ -62,6 +62,7 @@ pub struct ConfidentialProofStatement {
     pub mask: PrivateKey,
     pub sender_public_nonce: Option<PublicKey>,
     pub minimum_value_promise: u64,
+    pub reveal_amount: Amount,
 }
 
 impl ConfidentialProofStatement {
@@ -87,6 +88,7 @@ pub fn generate_confidential_proof(
                 }),
                 encrypted_value,
                 minimum_value_promise: stmt.minimum_value_promise,
+                revealed_amount: stmt.reveal_amount,
             })
         })
         .transpose()?;
@@ -105,10 +107,10 @@ pub fn generate_confidential_proof(
             }),
             encrypted_value,
             minimum_value_promise: output_statement.minimum_value_promise,
+            revealed_amount: output_statement.reveal_amount,
         },
         change_statement: proof_change_statement,
         range_proof: output_range_proof.0,
-        revealed_amount: Amount::zero(),
     })
 }
 
@@ -211,6 +213,7 @@ mod tests {
                     minimum_value_promise,
                     mask,
                     sender_public_nonce: Default::default(),
+                    reveal_amount: Default::default(),
                 },
                 None,
             )

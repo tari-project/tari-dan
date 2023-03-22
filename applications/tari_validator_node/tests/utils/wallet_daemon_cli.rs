@@ -27,6 +27,7 @@ use tari_crypto::{
     signatures::CommitmentSignature,
     tari_utilities::ByteArray,
 };
+use tari_template_lib::models::Amount;
 use tari_wallet_daemon_client::{
     types::{AccountsCreateRequest, ClaimBurnRequest, ClaimBurnResponse},
     WalletDaemonClient,
@@ -61,7 +62,7 @@ pub async fn claim_burn(
             "reciprocal_claim_public_key": BASE64.encode(reciprocal_claim_public_key.as_bytes()),
             "range_proof": BASE64.encode(range_proof.as_bytes()),
         }),
-        fee: 1,
+        fee: Amount(1),
     };
 
     client.claim_burn(claim_burn_request).await.unwrap()

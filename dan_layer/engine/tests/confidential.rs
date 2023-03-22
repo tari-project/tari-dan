@@ -68,7 +68,8 @@ fn transfer_confidential_amounts_between_accounts() {
             vec![],
         )
         .unwrap();
-    let diff = result.result.expect("Failed to execute manifest");
+
+    let diff = result.finalize.result.expect("Failed to execute manifest");
     assert_eq!(diff.up_iter().filter(|(addr, _)| *addr == account1).count(), 1);
     assert_eq!(diff.down_iter().filter(|(addr, _)| *addr == account1).count(), 1);
     assert_eq!(diff.up_iter().filter(|(addr, _)| *addr == faucet).count(), 1);
@@ -109,7 +110,7 @@ fn transfer_confidential_amounts_between_accounts() {
             vec![owner1],
         )
         .unwrap();
-    let diff = result.result.expect("Failed to execute manifest");
+    let diff = result.finalize.result.expect("Failed to execute manifest");
     assert_eq!(diff.up_iter().filter(|(addr, _)| *addr == account1).count(), 1);
     assert_eq!(diff.down_iter().filter(|(addr, _)| *addr == account1).count(), 1);
     assert_eq!(diff.up_iter().filter(|(addr, _)| *addr == account2).count(), 1);
@@ -217,8 +218,14 @@ fn reveal_confidential_and_transfer() {
         )
         .unwrap();
 
-    assert_eq!(result.execution_results[12].decode::<Amount>().unwrap(), Amount(10));
-    assert_eq!(result.execution_results[13].decode::<Amount>().unwrap(), Amount(90));
+    assert_eq!(
+        result.finalize.execution_results[12].decode::<Amount>().unwrap(),
+        Amount(10)
+    );
+    assert_eq!(
+        result.finalize.execution_results[13].decode::<Amount>().unwrap(),
+        Amount(90)
+    );
 }
 
 #[test]
@@ -351,13 +358,13 @@ fn multi_commitment_join() {
         )
         .unwrap();
 
-    assert_eq!(result.execution_results[3].decode::<u32>().unwrap(), 1);
-    assert_eq!(result.execution_results[7].decode::<u32>().unwrap(), 2);
-    assert_eq!(result.execution_results[9].decode::<u32>().unwrap(), 1);
+    assert_eq!(result.finalize.execution_results[3].decode::<u32>().unwrap(), 1);
+    assert_eq!(result.finalize.execution_results[7].decode::<u32>().unwrap(), 2);
+    assert_eq!(result.finalize.execution_results[9].decode::<u32>().unwrap(), 1);
 }
 
 /// These would live in the wallet
-mod utilities {
+pub mod utilities {
     use rand::rngs::OsRng;
     use tari_common_types::types::{BulletRangeProof, PrivateKey, PublicKey, Signature};
     use tari_crypto::{
@@ -452,15 +459,16 @@ mod utilities {
                         sender_public_nonce: None,
                         encrypted_value: EncryptedValue::default(),
                         minimum_value_promise: output_statement.minimum_value_promise,
+                        revealed_amount,
                     },
                     change_statement: Some(ConfidentialStatement {
                         commitment: change_statement.commitment,
                         sender_public_nonce: None,
                         encrypted_value: EncryptedValue::default(),
                         minimum_value_promise: change_statement.minimum_value_promise,
+                        revealed_amount: Amount::zero(),
                     }),
                     range_proof: output_proof.range_proof,
-                    revealed_amount,
                 },
                 balance_proof,
             },
@@ -501,15 +509,16 @@ mod utilities {
                         sender_public_nonce: None,
                         encrypted_value: Default::default(),
                         minimum_value_promise: output_statement.minimum_value_promise,
+                        revealed_amount,
                     },
                     change_statement: change_statement.map(|change| ConfidentialStatement {
                         commitment: change.commitment,
                         sender_public_nonce: None,
                         encrypted_value: Default::default(),
                         minimum_value_promise: change.minimum_value_promise,
+                        revealed_amount: Amount::zero(),
                     }),
                     range_proof: output_proof.range_proof,
-                    revealed_amount,
                 },
                 balance_proof,
             },
@@ -534,6 +543,7 @@ mod utilities {
             ),
             encrypted_value: Default::default(),
             minimum_value_promise: statement.minimum_value_promise,
+            revealed_amount: Amount::zero(),
         });
 
         let output_range_proof = generate_extended_bullet_proof(&output_statement, change_statement.as_ref())?;
@@ -547,10 +557,10 @@ mod utilities {
                 ),
                 encrypted_value: Default::default(),
                 minimum_value_promise: output_statement.minimum_value_promise,
+                revealed_amount: Amount::zero(),
             },
             change_statement: proof_change_statement,
             range_proof: output_range_proof.0,
-            revealed_amount: Amount::zero(),
         })
     }
 

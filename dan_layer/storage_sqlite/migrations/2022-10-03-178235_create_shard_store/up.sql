@@ -1,15 +1,15 @@
 create table payloads
 (
-    id             integer   not null primary key AUTOINCREMENT,
-    payload_id     blob      not null,
-    instructions   text      not NULL,
-    public_nonce   blob      not NULL,
-    scalar         blob      not NULL,
-    fee            bigint    not NULL,
-    sender_address blob      not NULL,
-    meta           text      not NULL,
-    result         text      NULL,
-    timestamp      timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP
+    id               integer   not null primary key AUTOINCREMENT,
+    payload_id       blob      not null,
+    fee_instructions text      not NULL,
+    instructions     text      not NULL,
+    public_nonce     blob      not NULL,
+    scalar           blob      not NULL,
+    sender_address   blob      not NULL,
+    meta             text      not NULL,
+    result           text      NULL,
+    timestamp        timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
 create unique index payload_index_payload_id on payloads (payload_id);
@@ -40,11 +40,12 @@ create index leaf_nodes_index_payload_id_shard_id on leaf_nodes (payload_id, sha
 
 create table last_voted_heights
 (
-    id          integer   not null primary key AUTOINCREMENT,
-    payload_id  blob      not NULL,
-    shard_id    blob      not NULL,
-    node_height bigint    not NULL,
-    timestamp   timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP
+    id           integer   not null primary key AUTOINCREMENT,
+    payload_id   blob      not NULL,
+    shard_id     blob      not NULL,
+    node_height  bigint    not NULL,
+    leader_round bigint             DEFAULT 0 NOT NULL,
+    timestamp    timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
 -- fetching by shard_id will be a very common operation
@@ -73,6 +74,7 @@ create table nodes
     shard            blob      not NULL,
     payload_id       blob      not NULL,
     payload_height   bigint    not NULL,
+    leader_round     bigint    not NULL DEFAULT 0,
     local_pledges    text      not NULL,
     epoch            bigint    not NULL,
     proposed_by      blob      not NULL,
@@ -102,6 +104,7 @@ create table leader_proposals
     payload_id         blob      not NULL,
     shard_id           blob      not NULL,
     payload_height     bigint    not NULL,
+    leader_round       bigint    not NULL DEFAULT 0,
     node_hash          blob      not NULL,
     hotstuff_tree_node text      not NULL,
     timestamp          timestamp not NULL default current_timestamp
@@ -156,3 +159,15 @@ create table high_qcs
     timestamp  timestamp NOT NULL default current_timestamp
 );
 create unique index high_qcs_index_shard_id_height on high_qcs (shard_id, payload_id, height);
+
+CREATE TABLE current_leader_states
+(
+    id           integer   NOT NULL PRIMARY KEY AUTOINCREMENT,
+    payload_id   blob      NOT NULL,
+    shard_id     blob      NOT NULL,
+    leader_round bigint    NOT NULL,
+    leader       blob      NOT NULL,
+    timestamp    timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE UNIQUE INDEX current_leader_states_index_payload_id_shard_id ON current_leader_states (payload_id, shard_id);

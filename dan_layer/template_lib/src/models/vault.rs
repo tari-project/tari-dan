@@ -31,7 +31,7 @@ use tari_template_abi::{
 };
 
 use crate::{
-    args::{ConfidentialRevealArg, InvokeResult, VaultAction, VaultInvokeArg, VaultWithdrawArg},
+    args::{ConfidentialRevealArg, InvokeResult, PayFeeArg, VaultAction, VaultInvokeArg, VaultWithdrawArg},
     hash::HashParseError,
     models::{Amount, Bucket, ConfidentialWithdrawProof, NonFungibleId, ResourceAddress},
     Hash,
@@ -212,15 +212,33 @@ impl Vault {
             .expect("GetResourceAddress returned invalid resource address")
     }
 
-    pub fn reveal_amount(&mut self, proof: ConfidentialWithdrawProof) -> Bucket {
+    pub fn reveal_confidential(&mut self, proof: ConfidentialWithdrawProof) -> Bucket {
         let resp: InvokeResult = call_engine(EngineOp::VaultInvoke, &VaultInvokeArg {
             vault_ref: self.vault_ref(),
             action: VaultAction::ConfidentialReveal,
             args: invoke_args![ConfidentialRevealArg { proof }],
         });
 
-        resp.decode()
-            .expect("get_non_fungible_ids returned invalid non fungible ids")
+        Bucket::from_id(resp.decode().expect("reveal_confidential returned invalid bucket"))
+    }
+
+    pub fn pay_fee(&mut self, amount: Amount) {
+        let _resp: InvokeResult = call_engine(EngineOp::VaultInvoke, &VaultInvokeArg {
+            vault_ref: self.vault_ref(),
+            action: VaultAction::PayFee,
+            args: invoke_args![PayFeeArg { amount, proof: None }],
+        });
+    }
+
+    pub fn pay_fee_confidential(&mut self, proof: ConfidentialWithdrawProof) {
+        let _resp: InvokeResult = call_engine(EngineOp::VaultInvoke, &VaultInvokeArg {
+            vault_ref: self.vault_ref(),
+            action: VaultAction::PayFee,
+            args: invoke_args![PayFeeArg {
+                amount: Amount::zero(),
+                proof: Some(proof)
+            }],
+        });
     }
 
     pub fn join_confidential(&mut self, proof: ConfidentialWithdrawProof) {
@@ -234,5 +252,9 @@ impl Vault {
 
     pub fn vault_ref(&self) -> VaultRef {
         VaultRef::Ref(self.vault_id)
+    }
+
+    pub fn for_test(vault_id: VaultId) -> Self {
+        Self { vault_id }
     }
 }

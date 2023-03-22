@@ -95,6 +95,8 @@ pub struct ValidatorNodeConfig {
     pub auto_register: bool,
     /// Template config
     pub templates: TemplateConfig,
+    /// Dont charge fees
+    pub no_fees: bool,
 }
 
 impl ValidatorNodeConfig {
@@ -143,6 +145,7 @@ impl Default for ValidatorNodeConfig {
             http_ui_address: Some("127.0.0.1:5000".parse().unwrap()),
             auto_register: true,
             templates: TemplateConfig::default(),
+            no_fees: false,
         }
     }
 }

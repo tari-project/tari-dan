@@ -77,25 +77,25 @@ use crate::utils::{
 
 #[derive(Debug, Default, cucumber::World)]
 pub struct TariWorld {
-    base_nodes: IndexMap<String, BaseNodeProcess>,
-    wallets: IndexMap<String, WalletProcess>,
-    validator_nodes: IndexMap<String, ValidatorNodeProcess>,
-    indexers: IndexMap<String, IndexerProcess>,
-    vn_seeds: IndexMap<String, ValidatorNodeProcess>,
-    miners: IndexMap<String, MinerProcess>,
-    templates: IndexMap<String, RegisteredTemplate>,
-    outputs: IndexMap<String, IndexMap<String, VersionedSubstateAddress>>,
-    http_server: Option<MockHttpServer>,
-    cli_data_dir: Option<String>,
-    current_scenario_name: Option<String>,
-    commitments: IndexMap<String, Vec<u8>>,
-    commitment_ownership_proofs: IndexMap<String, RistrettoComSig>,
-    rangeproofs: IndexMap<String, Vec<u8>>,
-    addresses: IndexMap<String, String>,
-    num_databases_saved: usize,
-    account_public_keys: IndexMap<String, (RistrettoSecretKey, PublicKey)>,
-    claim_public_keys: IndexMap<String, PublicKey>,
-    wallet_daemons: IndexMap<String, DanWalletDaemonProcess>,
+    pub base_nodes: IndexMap<String, BaseNodeProcess>,
+    pub wallets: IndexMap<String, WalletProcess>,
+    pub validator_nodes: IndexMap<String, ValidatorNodeProcess>,
+    pub indexers: IndexMap<String, IndexerProcess>,
+    pub vn_seeds: IndexMap<String, ValidatorNodeProcess>,
+    pub miners: IndexMap<String, MinerProcess>,
+    pub templates: IndexMap<String, RegisteredTemplate>,
+    pub outputs: IndexMap<String, IndexMap<String, VersionedSubstateAddress>>,
+    pub http_server: Option<MockHttpServer>,
+    pub cli_data_dir: Option<String>,
+    pub current_scenario_name: Option<String>,
+    pub commitments: IndexMap<String, Vec<u8>>,
+    pub commitment_ownership_proofs: IndexMap<String, RistrettoComSig>,
+    pub rangeproofs: IndexMap<String, Vec<u8>>,
+    pub addresses: IndexMap<String, String>,
+    pub num_databases_saved: usize,
+    pub account_public_keys: IndexMap<String, (RistrettoSecretKey, PublicKey)>,
+    pub claim_public_keys: IndexMap<String, PublicKey>,
+    pub wallet_daemons: IndexMap<String, DanWalletDaemonProcess>,
 }
 
 impl TariWorld {
@@ -673,8 +673,7 @@ async fn successful_transaction(world: &mut TariWorld) {
             let get_transaction_req = GetTransactionResultRequest { hash };
             let get_transaction_res = client.get_transaction_result(get_transaction_req).await.unwrap();
             let finalized_tx = get_transaction_res.result.unwrap();
-
-            assert!(finalized_tx.result.is_accept());
+            finalized_tx.expect_success();
         }
     }
 }
