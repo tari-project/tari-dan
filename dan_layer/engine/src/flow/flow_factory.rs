@@ -1,10 +1,11 @@
 // Copyright 2022 The Tari Project
 // SPDX-License-Identifier: BSD-3-Clause
 
-use std::collections::HashMap;
+use std::{collections::HashMap, sync::Arc};
 
 use d3ne::WorkersBuilder;
 use serde_json::Value as JsValue;
+use tari_dan_common_types::services::template_provider::TemplateProvider;
 use tari_engine_types::{execution_result::ExecutionResult, instruction::Instruction};
 use tari_template_abi::{FunctionDef, TemplateDef, Type};
 use tari_template_lib::args::Arg;
@@ -12,7 +13,7 @@ use tari_template_lib::args::Arg;
 use crate::{
     flow::{FlowContext, FlowEngineError, FlowInstance},
     function_definitions::{FlowFunctionDefinition, FunctionArgDefinition},
-    packager::Package,
+    packager::{LoadedTemplate, Package},
     runtime::{AuthorizationScope, Runtime, RuntimeInterface},
 };
 
@@ -24,7 +25,9 @@ pub struct FlowFactory {
     template_def: TemplateDef,
 }
 impl FlowFactory {
-    pub fn try_create(flow_definition: FlowFunctionDefinition) -> Result<Self, FlowEngineError> {
+    pub fn try_create<TTemplateProvider: TemplateProvider<Template = LoadedTemplate>>(
+        flow_definition: FlowFunctionDefinition,
+    ) -> Result<Self, FlowEngineError> {
         let template_def = TemplateDef {
             template_name: flow_definition.name.clone(),
             functions: vec![FunctionDef {
@@ -37,7 +40,7 @@ impl FlowFactory {
 
         let _test_build = FlowInstance::try_build(
             flow_definition.flow.clone(),
-            WorkersBuilder::<FlowContext>::default().build(),
+            WorkersBuilder::<FlowContext<TTemplateProvider>>::default().build(),
         )?;
         Ok(Self {
             name: flow_definition.name,
@@ -55,9 +58,9 @@ impl FlowFactory {
         &self.template_def
     }
 
-    pub fn run_new_instance(
+    pub fn run_new_instance<TTemplateProvider: TemplateProvider<Template = LoadedTemplate>>(
         &self,
-        package: Package,
+        template_provider: Arc<TTemplateProvider>,
         runtime: Runtime,
         auth_scope: AuthorizationScope,
         function: &str,
@@ -65,9 +68,12 @@ impl FlowFactory {
         recursion_depth: usize,
         max_recursion_depth: usize,
     ) -> Result<ExecutionResult, FlowEngineError> {
-        let new_instance = FlowInstance::try_build(self.flow_definition.clone(), WorkersBuilder::default().build())?;
+        let new_instance = FlowInstance::try_build::<TTemplateProvider>(
+            self.flow_definition.clone(),
+            WorkersBuilder::default().build(),
+        )?;
         new_instance.invoke(
-            package,
+            template_provider,
             runtime,
             auth_scope,
             &args,

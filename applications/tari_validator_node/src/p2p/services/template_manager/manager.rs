@@ -36,7 +36,7 @@ use tari_dan_app_utilities::template_manager::{
     TemplateMetadata,
     TemplateRegistration,
 };
-use tari_dan_core::services::TemplateProvider;
+use tari_dan_common_types::services::template_provider::TemplateProvider;
 use tari_dan_engine::{
     flow::{FlowFactory, FlowInstance},
     function_definitions::FlowFunctionDefinition,
@@ -244,7 +244,7 @@ impl TemplateProvider for TemplateManager {
             TemplateExecutable::Manifest(_) => return Err(TemplateManagerError::UnsupportedTemplateType),
             TemplateExecutable::Flow(flow_json) => {
                 let definition: FlowFunctionDefinition = serde_json::from_str(&flow_json)?;
-                let factory = FlowFactory::try_create(definition)?;
+                let factory = FlowFactory::try_create::<Self>(definition)?;
                 LoadedTemplate::Flow(factory)
             },
         };

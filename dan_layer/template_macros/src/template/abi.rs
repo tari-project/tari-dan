@@ -76,7 +76,10 @@ fn generate_abi_type(rust_type: &TypeAst) -> Expr {
         TypeAst::Receiver { .. } => get_component_address_type(),
         // basic type
         // TODO: there may be a better way of handling this
-        TypeAst::Typed(path) => match path.path.segments[0].ident.to_string().as_str() {
+        TypeAst::Typed {
+            name: arg_name,
+            type_path: path,
+        } => match path.path.segments[0].ident.to_string().as_str() {
             "" => parse_quote!(Type::Unit),
             "bool" => parse_quote!(Type::Bool),
             "i8" => parse_quote!(Type::I8),
@@ -184,7 +187,7 @@ mod tests {
                     pub fn constructor() -> Self {}
                     pub fn method(&self){}
                     fn private_function() {}
-                } 
+                }
             }
         "})
         .unwrap();

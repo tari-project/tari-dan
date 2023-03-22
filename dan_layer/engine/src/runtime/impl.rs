@@ -29,6 +29,7 @@ use tari_crypto::{
     range_proof::RangeProofService,
     ristretto::{pedersen::commitment_factory::PedersenCommitmentFactory, RistrettoPublicKey, RistrettoSecretKey},
 };
+use tari_dan_common_types::services::template_provider::TemplateProvider;
 use tari_engine_types::{
     commit_result::{FinalizeResult, RejectReason, TransactionResult},
     confidential::{get_range_proof_service, ConfidentialClaim, ConfidentialOutput},
@@ -66,6 +67,7 @@ use tari_utilities::ByteArray;
 
 use crate::{
     base_layer_hashers::ConfidentialOutputHasher,
+    packager::LoadedTemplate,
     runtime::{
         engine_args::EngineArgs,
         tracker::StateTracker,
@@ -80,21 +82,21 @@ use crate::{
 
 const LOG_TARGET: &str = "tari::dan::engine::runtime::impl";
 
-pub struct RuntimeInterfaceImpl {
-    tracker: StateTracker,
+pub struct RuntimeInterfaceImpl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate>> {
+    tracker: StateTracker<TTemplateProvider>,
     _auth_params: AuthParams,
     consensus: ConsensusContext,
     sender_public_key: RistrettoPublicKey,
-    modules: Vec<Box<dyn RuntimeModule>>,
+    modules: Vec<Box<dyn RuntimeModule<TTemplateProvider>>>,
 }
 
-impl RuntimeInterfaceImpl {
+impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate>> RuntimeInterfaceImpl<TTemplateProvider> {
     pub fn new(
-        tracker: StateTracker,
+        tracker: StateTracker<TTemplateProvider>,
         auth_params: AuthParams,
         consensus: ConsensusContext,
         sender_public_key: RistrettoPublicKey,
-        modules: Vec<Box<dyn RuntimeModule>>,
+        modules: Vec<Box<dyn RuntimeModule<TTemplateProvider>>>,
     ) -> Self {
         Self {
             tracker,
@@ -121,7 +123,9 @@ impl RuntimeInterfaceImpl {
     }
 }
 
-impl RuntimeInterface for RuntimeInterfaceImpl {
+impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate>> RuntimeInterface
+    for RuntimeInterfaceImpl<TTemplateProvider>
+{
     fn set_current_runtime_state(&self, state: RuntimeState) -> Result<(), RuntimeError> {
         self.invoke_on_runtime_call_modules("set_current_runtime_state")?;
         self.tracker.set_current_runtime_state(state);
@@ -161,7 +165,7 @@ impl RuntimeInterface for RuntimeInterfaceImpl {
             ComponentAction::Create => {
                 let arg: CreateComponentArg = args.get(0)?;
                 let template_def = self.tracker.get_template_def()?;
-                validate_access_rules(&arg.access_rules, template_def)?;
+                validate_access_rules(&arg.access_rules, &template_def)?;
                 let component_address =
                     self.tracker
                         .new_component(arg.module_name, arg.encoded_state, arg.access_rules)?;
@@ -552,6 +556,8 @@ impl RuntimeInterface for RuntimeInterfaceImpl {
                 Ok(InvokeResult::encode(&bucket_ids)?)
             },
             WorkspaceAction::Put => todo!(),
+            // Basically names an output on the workspace so that you can refer to it as an
+            // Arg::Variable
             WorkspaceAction::PutLastInstructionOutput => {
                 let key = args.get(0)?;
                 let last_output = self

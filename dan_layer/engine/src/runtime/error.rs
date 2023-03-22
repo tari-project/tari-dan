@@ -110,6 +110,8 @@ pub enum RuntimeError {
     ConfidentialOutputAlreadyClaimed {
         address: UnclaimedConfidentialOutputAddress,
     },
+    #[error("Template not found with name '{template_name}'")]
+    TemplateNotFound { template_name: String },
 }
 
 impl RuntimeError {

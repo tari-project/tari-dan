@@ -15,12 +15,16 @@ pub struct FunctionArgDefinition {
 #[serde(rename_all = "snake_case")]
 pub enum ArgType {
     String,
+    Bytes,
 }
 
 impl ArgType {
     pub fn to_type(&self) -> Type {
         match self {
             ArgType::String => Type::String,
+            ArgType::Bytes => Type::Other {
+                name: "Bytes".to_string(),
+            },
         }
     }
 }

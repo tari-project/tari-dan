@@ -3,18 +3,22 @@
 
 use std::collections::HashMap;
 
-use d3ne::{InputData, Node, OutputData, OutputDataBuilder, OutputValue, Worker};
+use d3ne::{Node, OutputValue, Worker};
+use tari_dan_common_types::services::template_provider::TemplateProvider;
 use tari_template_lib::args::Arg;
 use tari_utilities::hex::Hex;
 
 use crate::{
     flow::{ArgValue, FlowContext},
     function_definitions::ArgType,
+    packager::LoadedTemplate,
 };
 
 pub struct ArgWorker {}
 
-impl Worker<FlowContext> for ArgWorker {
+impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate>> Worker<FlowContext<TTemplateProvider>>
+    for ArgWorker
+{
     // fn call(&self, node: Node, inputs: InputData) -> OutputData {
     //     let name = node.get_string_field("name", &inputs).unwrap();
     //     let mut map = HashMap::new();
@@ -40,7 +44,7 @@ impl Worker<FlowContext> for ArgWorker {
 
     fn work(
         &self,
-        context: &FlowContext,
+        context: &FlowContext<TTemplateProvider>,
         node: &Node,
         input_data: HashMap<String, OutputValue>,
     ) -> Result<HashMap<String, OutputValue>, anyhow::Error> {
@@ -57,8 +61,11 @@ impl Worker<FlowContext> for ArgWorker {
             ArgType::String => {
                 result.insert(
                     "default".to_string(),
-                    OutputValue::String(String::from_utf8(value.to_bytes())?),
+                    OutputValue::String(String::from_utf8(value.clone())?),
                 );
+            },
+            ArgType::Bytes => {
+                result.insert("default".to_string(), OutputValue::Bytes(value.clone()));
             },
         };
         Ok(result)

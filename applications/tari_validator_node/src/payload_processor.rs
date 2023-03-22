@@ -23,13 +23,14 @@
 use std::{
     collections::{hash_map::RandomState, HashMap, HashSet},
     iter::FromIterator,
+    sync::Arc,
 };
 
 use tari_crypto::tari_utilities::ByteArray;
-use tari_dan_common_types::{ObjectPledge, ShardId, SubstateState};
+use tari_dan_common_types::{services::template_provider::TemplateProvider, ObjectPledge, ShardId, SubstateState};
 use tari_dan_core::{
     models::TariDanPayload,
-    services::{PayloadProcessor, PayloadProcessorError, TemplateProvider},
+    services::{PayloadProcessor, PayloadProcessorError},
 };
 use tari_dan_engine::{
     bootstrap_state,
@@ -52,12 +53,14 @@ use tari_transaction::Transaction;
 
 #[derive(Debug, Default, Clone)]
 pub struct TariDanPayloadProcessor<TTemplateProvider> {
-    template_provider: TTemplateProvider,
+    template_provider: Arc<TTemplateProvider>,
 }
 
 impl<TTemplateProvider> TariDanPayloadProcessor<TTemplateProvider> {
     pub fn new(template_provider: TTemplateProvider) -> Self {
-        Self { template_provider }
+        Self {
+            template_provider: Arc::new(template_provider),
+        }
     }
 }
 
@@ -71,13 +74,13 @@ where TTemplateProvider: TemplateProvider<Template = LoadedTemplate>
         consensus: ConsensusContext,
     ) -> Result<FinalizeResult, PayloadProcessorError> {
         let transaction = payload.into_payload();
-        let mut template_addresses = HashSet::<_, RandomState>::from_iter(transaction.required_templates());
-        let components = transaction.required_components();
+        // let mut template_addresses = HashSet::<_, RandomState>::from_iter(transaction.required_templates());
+        // let components = transaction.required_components();
 
         let state_store = create_populated_state_store(pledges.into_values())?;
-        template_addresses.extend(load_template_addresses_for_components(&state_store, &components)?);
+        // template_addresses.extend(load_template_addresses_for_components(&state_store, &components)?);
 
-        let package = build_package(&self.template_provider, template_addresses)?;
+        // let package = build_package(&self.template_provider, template_addresses)?;
 
         // Include ownership token for the signers of this in the auth scope
         let owner_token = get_auth_token(&transaction);
@@ -87,7 +90,13 @@ where TTemplateProvider: TemplateProvider<Template = LoadedTemplate>
 
         let modules = vec![]; // No modules for now, currently used in tests. Also will be useful for more advanced use-cases like fees, etc.
 
-        let processor = TransactionProcessor::new(package, state_store, auth_params, consensus, modules);
+        let processor = TransactionProcessor::new(
+            self.template_provider.clone(),
+            state_store,
+            auth_params,
+            consensus,
+            modules,
+        );
         let tx_hash = *transaction.hash();
         match processor.execute(transaction) {
             Ok(result) => Ok(result),

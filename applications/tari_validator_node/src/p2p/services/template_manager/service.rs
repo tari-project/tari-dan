@@ -26,7 +26,7 @@ use log::*;
 use tari_common_types::types::FixedHash;
 use tari_core::transactions::transaction_components::TemplateType;
 use tari_dan_app_utilities::template_manager::{TemplateManagerError, TemplateManagerRequest, TemplateRegistration};
-use tari_dan_core::services::TemplateProvider;
+use tari_dan_common_types::services::template_provider::TemplateProvider;
 use tari_dan_engine::function_definitions::FlowFunctionDefinition;
 use tari_dan_storage::global::{DbTemplateType, DbTemplateUpdate, TemplateStatus};
 use tari_engine_types::calculate_template_binary_hash;

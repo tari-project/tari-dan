@@ -212,29 +212,30 @@ impl TemplateTest {
         instructions: Vec<Instruction>,
         proofs: Vec<NonFungibleAddress>,
     ) -> Result<FinalizeResult, TransactionError> {
-        let mut builder = Transaction::builder();
-        for instruction in instructions {
-            builder.add_instruction(instruction);
-        }
-        builder.sign(&self.secret_key);
-        let transaction = builder.build();
-
-        let modules: Vec<Box<dyn RuntimeModule>> = vec![Box::new(self.track_calls.clone())];
-        let auth_params = AuthParams {
-            initial_ownership_proofs: proofs,
-        };
-        let processor = TransactionProcessor::new(
-            self.package.clone(),
-            self.state_store.clone(),
-            auth_params,
-            self.consensus_context.clone(),
-            modules,
-        );
-
-        match processor.execute(transaction) {
-            Ok(result) => Ok(result),
-            Err(err) => Err(err),
-        }
+        todo!()
+        // let mut builder = Transaction::builder();
+        // for instruction in instructions {
+        //     builder.add_instruction(instruction);
+        // }
+        // builder.sign(&self.secret_key);
+        // let transaction = builder.build();
+        //
+        // let modules: Vec<Box<dyn RuntimeModule>> = vec![Box::new(self.track_calls.clone())];
+        // let auth_params = AuthParams {
+        //     initial_ownership_proofs: proofs,
+        // };
+        // let processor = TransactionProcessor::new(
+        //     self.package.clone(),
+        //     self.state_store.clone(),
+        //     auth_params,
+        //     self.consensus_context.clone(),
+        //     modules,
+        // );
+        //
+        // match processor.execute(transaction) {
+        //     Ok(result) => Ok(result),
+        //     Err(err) => Err(err),
+        // }
     }
 
     pub fn execute_and_commit(

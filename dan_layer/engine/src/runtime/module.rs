@@ -1,10 +1,16 @@
 //   Copyright 2023 The Tari Project
 //   SPDX-License-Identifier: BSD-3-Clause
 
-use crate::runtime::StateTracker;
+use tari_dan_common_types::services::template_provider::TemplateProvider;
 
-pub trait RuntimeModule: Send + Sync {
-    fn on_runtime_call(&self, _track: &StateTracker, _call: &'static str) -> Result<(), RuntimeModuleError> {
+use crate::{packager::LoadedTemplate, runtime::StateTracker};
+
+pub trait RuntimeModule<TTemplateProvider: TemplateProvider<Template = LoadedTemplate>>: Send + Sync {
+    fn on_runtime_call(
+        &self,
+        _track: &StateTracker<TTemplateProvider>,
+        _call: &'static str,
+    ) -> Result<(), RuntimeModuleError> {
         Ok(())
     }
     // Add more runtime "hooks"

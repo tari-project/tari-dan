@@ -23,6 +23,7 @@
 use std::sync::Arc;
 
 use log::*;
+use tari_dan_common_types::services::template_provider::TemplateProvider;
 use tari_engine_types::{commit_result::FinalizeResult, execution_result::ExecutionResult, instruction::Instruction};
 use tari_template_lib::{
     arg,
@@ -53,24 +54,25 @@ use crate::{
 
 const LOG_TARGET: &str = "tari::dan::engine::instruction_processor";
 
-pub struct TransactionProcessor {
-    package: Package,
+pub struct TransactionProcessor<TTemplateProvider> {
+    // package: Package,
+    template_provider: Arc<TTemplateProvider>,
     state_db: MemoryStateStore,
     auth_params: AuthParams,
     consensus: ConsensusContext,
-    modules: Vec<Box<dyn RuntimeModule>>,
+    modules: Vec<Box<dyn RuntimeModule<TTemplateProvider>>>,
 }
 
-impl TransactionProcessor {
+impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate> + 'static> TransactionProcessor<TTemplateProvider> {
     pub fn new(
-        package: Package,
+        template_provider: Arc<TTemplateProvider>,
         state_db: MemoryStateStore,
         auth_params: AuthParams,
         consensus: ConsensusContext,
-        modules: Vec<Box<dyn RuntimeModule>>,
+        modules: Vec<Box<dyn RuntimeModule<TTemplateProvider>>>,
     ) -> Self {
         Self {
-            package,
+            template_provider,
             state_db,
             auth_params,
             consensus,
@@ -81,9 +83,10 @@ impl TransactionProcessor {
     pub fn execute(self, transaction: Transaction) -> Result<FinalizeResult, TransactionError> {
         let id_provider = IdProvider::new(*transaction.hash(), 1000);
         // TODO: We can avoid this for each execution with improved design
-        let template_defs = self.package.get_template_defs();
-        let tracker = StateTracker::new(self.state_db.clone(), id_provider, template_defs);
+        // let template_defs = self.package.get_template_defs();
+        let tracker = StateTracker::new(self.state_db.clone(), id_provider, self.template_provider.clone());
         let initial_proofs = self.auth_params.initial_ownership_proofs.clone();
+        let template_provider = self.template_provider.clone();
         let runtime_interface = RuntimeInterfaceImpl::new(
             tracker,
             self.auth_params,
@@ -91,14 +94,15 @@ impl TransactionProcessor {
             transaction.sender_public_key().clone(),
             self.modules,
         );
-        let package = self.package;
 
         let auth_scope = AuthorizationScope::new(Arc::new(initial_proofs));
         let runtime = Runtime::new(Arc::new(runtime_interface));
         let exec_results = transaction
             .into_instructions()
             .into_iter()
-            .map(|instruction| Self::process_instruction(&package, &runtime, auth_scope.clone(), instruction))
+            .map(|instruction| {
+                Self::process_instruction(template_provider.clone(), &runtime, auth_scope.clone(), instruction)
+            })
             .collect::<Result<Vec<_>, _>>()?;
 
         let mut finalize_result = runtime.interface().finalize()?;
@@ -107,7 +111,8 @@ impl TransactionProcessor {
     }
 
     fn process_instruction(
-        package: &Package,
+        template_provider: Arc<TTemplateProvider>,
+        // package: &Package,
         runtime: &Runtime,
         auth_scope: AuthorizationScope,
         instruction: Instruction,
@@ -123,16 +128,15 @@ impl TransactionProcessor {
                     .interface()
                     .set_current_runtime_state(RuntimeState { template_address })?;
 
-                let template =
-                    package
-                        .get_template_by_address(&template_address)
-                        .ok_or(TransactionError::TemplateNotFound {
-                            address: template_address,
-                        })?;
+                let template = template_provider.get_template_module(&template_address).map_err(|_e| {
+                    TransactionError::TemplateNotFound {
+                        address: template_address,
+                    }
+                })?;
 
                 let result = Self::invoke_template(
                     template.clone(),
-                    package,
+                    template_provider.clone(),
                     runtime.clone(),
                     auth_scope,
                     &function,
@@ -146,11 +150,20 @@ impl TransactionProcessor {
                 component_address,
                 method,
                 args,
-            } => Self::call_method(package, runtime, auth_scope, &component_address, &method, args, 0, 1),
+            } => Self::call_method(
+                template_provider.clone(),
+                runtime,
+                auth_scope,
+                &component_address,
+                &method,
+                args,
+                0,
+                1,
+            ),
+            // Basically names an output on the workspace so that you can refer to it as an
+            // Arg::Variable
             Instruction::PutLastInstructionOutputOnWorkspace { key } => {
-                let _result = runtime
-                    .interface()
-                    .workspace_invoke(WorkspaceAction::PutLastInstructionOutput, invoke_args![key].into())?;
+                Self::put_output_on_workspace_with_name(runtime, key)?;
                 Ok(ExecutionResult::empty())
             },
             Instruction::EmitLog { level, message } => {
@@ -165,8 +178,15 @@ impl TransactionProcessor {
         }
     }
 
-    fn call_method(
-        package: &Package,
+    pub fn put_output_on_workspace_with_name(runtime: &Runtime, key: Vec<u8>) -> Result<(), TransactionError> {
+        runtime
+            .interface()
+            .workspace_invoke(WorkspaceAction::PutLastInstructionOutput, invoke_args![key].into())?;
+        Ok(())
+    }
+
+    pub fn call_method(
+        template_provider: Arc<TTemplateProvider>,
         runtime: &Runtime,
         auth_scope: AuthorizationScope,
         component_address: &ComponentAddress,
@@ -186,12 +206,11 @@ impl TransactionProcessor {
             &component.access_rules,
         )?;
 
-        let template =
-            package
-                .get_template_by_address(&component.template_address)
-                .ok_or(TransactionError::TemplateNotFound {
-                    address: component.template_address,
-                })?;
+        let template = template_provider
+            .get_template_module(&component.template_address)
+            .map_err(|_e| TransactionError::TemplateNotFound {
+                address: component.template_address,
+            })?;
 
         runtime.interface().set_current_runtime_state(RuntimeState {
             template_address: component.template_address,
@@ -203,7 +222,7 @@ impl TransactionProcessor {
 
         let result = Self::invoke_template(
             template.clone(),
-            package,
+            template_provider,
             runtime.clone(),
             auth_scope,
             &method,
@@ -216,7 +235,7 @@ impl TransactionProcessor {
 
     fn invoke_template(
         module: LoadedTemplate,
-        package: &Package,
+        template_provider: Arc<TTemplateProvider>,
         runtime: Runtime,
         auth_scope: AuthorizationScope,
         function: &str,
@@ -233,7 +252,7 @@ impl TransactionProcessor {
                 process.invoke_by_name(function, args)?
             },
             LoadedTemplate::Flow(flow_factory) => flow_factory.run_new_instance(
-                package.clone(),
+                template_provider,
                 runtime,
                 auth_scope,
                 function,

@@ -10,6 +10,7 @@ use std::{
 use d3ne::{Engine, Node, Workers, WorkersBuilder};
 use serde_json::Value as JsValue;
 use tari_common_types::types::PublicKey;
+use tari_dan_common_types::services::template_provider::TemplateProvider;
 use tari_engine_types::execution_result::ExecutionResult;
 use tari_template_lib::args::Arg;
 use tari_utilities::ByteArray;
@@ -23,7 +24,7 @@ use crate::{
         FlowEngineError,
     },
     function_definitions::FunctionArgDefinition,
-    packager::Package,
+    packager::{LoadedTemplate, Package},
     runtime::{AuthorizationScope, Runtime},
 };
 
@@ -37,7 +38,10 @@ pub struct FlowInstance {
 }
 
 impl FlowInstance {
-    pub fn try_build(value: JsValue, workers: Workers<FlowContext>) -> Result<Self, FlowEngineError> {
+    pub fn try_build<TTemplateProvider: TemplateProvider<Template = LoadedTemplate>>(
+        value: JsValue,
+        workers: Workers<FlowContext<TTemplateProvider>>,
+    ) -> Result<Self, FlowEngineError> {
         let engine = Engine::new("tari_engine@0.1.0".to_string(), workers);
         // dbg!(&value);
         let nodes = engine.parse_value(value).expect("could not create engine");
@@ -48,9 +52,9 @@ impl FlowInstance {
         })
     }
 
-    pub fn invoke(
+    pub fn invoke<TTemplateProvider: TemplateProvider<Template = LoadedTemplate>>(
         &self,
-        package: Package,
+        template_provider: Arc<TTemplateProvider>,
         runtime: Runtime,
         auth_scope: AuthorizationScope,
         args: &[Arg],
@@ -58,36 +62,8 @@ impl FlowInstance {
         recursion_depth: usize,
         max_recursion_depth: usize,
     ) -> Result<ExecutionResult, FlowEngineError> {
-        // let mut engine_args = HashMap::new();
-
-        // let mut remaining_args = Vec::from(args);
-        // for ad in arg_defs {
-        //     let value = match ad.arg_type {
-        //         ArgType::String => {
-        //             let length = remaining_args.pop().expect("no more args: len") as usize;
-        //             let s_bytes: Vec<u8> = remaining_args.drain(0..length).collect();
-        //             let s = String::from_utf8(s_bytes).expect("could not convert string");
-        //             ArgValue::String(s)
-        //         },
-        //             ArgType::Byte => ArgValue::Byte(remaining_args.pop().expect("No byte to read")),
-        //             ArgType::PublicKey => {
-        //                 let bytes: Vec<u8> = remaining_args.drain(0..32).collect();
-        //                 let pk = PublicKey::from_bytes(&bytes).expect("Not a valid public key");
-        //                 ArgValue::PublicKey(pk)
-        //             },
-        //             ArgType::Uint => {
-        //                 let bytes: Vec<u8> = remaining_args.drain(0..8).collect();
-        //                 let mut fixed: [u8; 8] = [0u8; 8];
-        //                 fixed.copy_from_slice(&bytes);
-        //                 let value = u64::from_le_bytes(fixed);
-        //                 ArgValue::Uint(value)
-        //             },
-        //         };
-        //         engine_args.insert(ad.name.clone(), value);
-        //     }
-        //
-        // let state_db = Arc::new(RwLock::new(state_db));
         let engine = Engine::new("tari@0.1.0".to_string(), load_workers());
+        let args = runtime.resolve_args(args.to_vec())?;
         let mut args_map = HashMap::new();
         for (i, arg_def) in arg_defs.iter().enumerate() {
             if i >= args.len() {
@@ -97,32 +73,24 @@ impl FlowInstance {
             }
             args_map.insert(arg_def.name.clone(), (args[i].clone(), arg_def.clone()));
         }
+
         let context = FlowContext {
-            package,
+            template_provider,
             runtime,
             auth_scope,
             args: args_map,
             recursion_depth,
             max_recursion_depth,
         };
-        engine.process(&context, &self.nodes, self.start_node).unwrap();
-        //     let output = engine.process(&self.nodes, self.start_node);
-        //     let _od = output.expect("engine process failed");
-        //     if let Some(err) = od.get("error") {
-        //     match err {
-        //         Ok(_) => todo!("Unexpected Ok result returned from error"),
-        //         Err(e) => {
-        //             return Err(FlowEngineError::InstructionFailed { inner: e.to_string() });
-        //         },
-        //     }
-        // }
-        // let inner = state_db.read().map(|s| s.deref().clone()).unwrap();
-        // Ok(inner)
-        todo!()
+        let result = engine.process(&context, &self.nodes, self.start_node)?;
+
+        // TODO: return actual result from flow
+        Ok(ExecutionResult::empty())
     }
 }
 
-fn load_workers() -> Workers<FlowContext> {
+fn load_workers<TTemplateProvider: TemplateProvider<Template = LoadedTemplate>>(
+) -> Workers<FlowContext<TTemplateProvider>> {
     let mut workers = WorkersBuilder::default();
 
     // workers.add(StartWorker {});

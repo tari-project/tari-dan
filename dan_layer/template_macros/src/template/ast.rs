@@ -143,7 +143,7 @@ impl TemplateAst {
                     let mutability = r.mutability.is_some();
                     TypeAst::Receiver { mutability }
                 },
-                syn::FnArg::Typed(t) => Self::get_type_ast(&t.ty),
+                syn::FnArg::Typed(t) => Self::get_type_ast(Some(&t.pat), &t.ty),
             })
             .collect()
     }
@@ -151,16 +151,19 @@ impl TemplateAst {
     fn get_output_type_token(ast_type: &ReturnType) -> Option<TypeAst> {
         match ast_type {
             ReturnType::Default => None, // the function does not return anything
-            ReturnType::Type(_, t) => Some(Self::get_type_ast(t)),
+            ReturnType::Type(_, t) => Some(Self::get_type_ast(None, t)),
         }
     }
 
-    fn get_type_ast(syn_type: &syn::Type) -> TypeAst {
+    fn get_type_ast(pat: Option<&syn::Pat>, syn_type: &syn::Type) -> TypeAst {
         match syn_type {
             syn::Type::Path(type_path) => {
                 // TODO: handle "Self"
                 // TODO: detect more complex types
-                TypeAst::Typed(type_path.clone())
+                TypeAst::Typed {
+                    name: pat.map(|p| format!("{:?}", p)),
+                    type_path: type_path.clone(),
+                }
             },
             syn::Type::Tuple(tuple) => TypeAst::Tuple(tuple.clone()),
             _ => todo!(
@@ -200,7 +203,7 @@ pub struct FunctionAst {
 
 pub enum TypeAst {
     Receiver { mutability: bool },
-    Typed(TypePath),
+    Typed { name: Option<String>, type_path: TypePath },
     Tuple(TypeTuple),
 }
 
