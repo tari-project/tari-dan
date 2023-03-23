@@ -10,6 +10,7 @@ mod serialization;
 mod writer;
 
 use std::{
+    fmt::{Debug, Formatter},
     fs::create_dir_all,
     path::Path,
     sync::{Arc, Mutex},
@@ -71,5 +72,13 @@ impl WalletStore for SqliteWalletStore {
             .execute(&mut *lock)
             .map_err(|e| WalletStorageError::general("BEGIN transaction", e))?;
         Ok(WriteTransaction::new(lock))
+    }
+}
+
+impl Debug for SqliteWalletStore {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("SqliteWalletStore")
+            .field("connection", &"SqliteConnection")
+            .finish()
     }
 }

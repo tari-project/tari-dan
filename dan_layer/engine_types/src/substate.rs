@@ -118,6 +118,13 @@ impl SubstateAddress {
         }
     }
 
+    pub fn as_unclaimed_confidential_output_address(&self) -> Option<UnclaimedConfidentialOutputAddress> {
+        match self {
+            Self::UnclaimedConfidentialOutput(address) => Some(*address),
+            _ => None,
+        }
+    }
+
     pub fn to_canonical_hash(&self) -> Hash {
         match self {
             SubstateAddress::Component(address) => *address.hash(),

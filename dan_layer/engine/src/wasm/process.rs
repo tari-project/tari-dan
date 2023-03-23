@@ -22,7 +22,7 @@
 
 use serde::{de::DeserializeOwned, Serialize};
 use tari_bor::{decode_exact, encode, encode_into, encode_with_len};
-use tari_engine_types::execution_result::ExecutionResult;
+use tari_engine_types::instruction_result::InstructionResult;
 use tari_template_abi::{CallInfo, EngineOp};
 use tari_template_lib::{
     args::{
@@ -183,7 +183,7 @@ impl WasmProcess {
 impl Invokable for WasmProcess {
     type Error = WasmExecutionError;
 
-    fn invoke_by_name(&self, name: &str, args: Vec<Arg>) -> Result<ExecutionResult, Self::Error> {
+    fn invoke_by_name(&self, name: &str, args: Vec<Arg>) -> Result<InstructionResult, Self::Error> {
         let func_def = self
             .module
             .find_func_by_name(name)
@@ -233,7 +233,7 @@ impl Invokable for WasmProcess {
                 .set_last_instruction_output(Some(raw.clone()))?;
         }
 
-        Ok(ExecutionResult {
+        Ok(InstructionResult {
             raw,
             return_type: func_def.output.clone(),
         })

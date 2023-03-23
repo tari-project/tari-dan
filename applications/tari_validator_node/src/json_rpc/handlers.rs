@@ -183,7 +183,7 @@ impl JsonRpcHandlers {
                 .process_transaction(transaction)
                 .await;
             match result {
-                Ok(finalize_result) => {
+                Ok(exec_result) => {
                     let epoch = match self.epoch_manager.current_epoch().await {
                         Ok(epoch) => epoch,
                         Err(e) => {
@@ -198,7 +198,9 @@ impl JsonRpcHandlers {
                         hash: hash.into_array().into(),
                         result: Some(TransactionFinalizeResult {
                             decision: QuorumDecision::Accept,
-                            finalize: finalize_result,
+                            finalize: exec_result.finalize,
+                            transaction_failure: exec_result.transaction_failure,
+                            fee_breakdown: exec_result.fee_receipt.map(|f| f.to_cost_breakdown()),
                             // TODO: Get correct QC
                             qc: QuorumCertificate::genesis(epoch, PayloadId::new(hash), ShardId::zero()),
                         }),
@@ -785,7 +787,9 @@ async fn wait_for_transaction_result(
                         hash: hash.into_array().into(),
                         result: Some(TransactionFinalizeResult {
                             decision: *qc.decision(),
-                            finalize: result,
+                            finalize: result.finalize,
+                            transaction_failure: result.transaction_failure,
+                            fee_breakdown: result.fee_receipt.map(|f| f.to_cost_breakdown()),
                             qc: *qc,
                         }),
                     };

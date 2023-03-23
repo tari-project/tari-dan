@@ -34,19 +34,35 @@ mod account_template {
 
     impl Account {
         pub fn create(owner_token: NonFungibleAddress) -> AccountComponent {
+            Self::create_with_withdraw_rule(AccessRule::Restricted(Require(owner_token)), None)
+        }
+
+        pub fn create_with_rules(access_rules: AccessRules) -> AccountComponent {
+            Self::internal_create(access_rules, None)
+        }
+
+        pub fn create_with_bucket(owner_token: NonFungibleAddress, bucket: Bucket) -> AccountComponent {
+            Self::create_with_withdraw_rule(AccessRule::Restricted(Require(owner_token)), Some(bucket))
+        }
+
+        pub fn create_with_withdraw_rule(withdraw_rule: AccessRule, bucket: Option<Bucket>) -> AccountComponent {
             let rules = AccessRules::new()
                 .add_method_rule("balance", AccessRule::AllowAll)
                 .add_method_rule("get_balances", AccessRule::AllowAll)
                 .add_method_rule("deposit", AccessRule::AllowAll)
                 .add_method_rule("deposit_all", AccessRule::AllowAll)
                 .add_method_rule("get_non_fungible_ids", AccessRule::AllowAll)
-                .default(AccessRule::Restricted(Require(owner_token)));
-
-            Self::create_with_rules(rules)
+                .default(withdraw_rule);
+            Self::internal_create(rules, bucket)
         }
 
-        pub fn create_with_rules(access_rules: AccessRules) -> AccountComponent {
-            Self { vaults: HashMap::new() }.create_with_access_rules(access_rules)
+        fn internal_create(rules: AccessRules, bucket: Option<Bucket>) -> AccountComponent {
+            let mut vaults = HashMap::new();
+            if let Some(b) = bucket {
+                vaults.insert(b.resource_address(), Vault::from_bucket(b));
+            }
+
+            Self { vaults }.create_with_access_rules(rules)
         }
 
         // #[access_rule(allow_all)]
@@ -123,12 +139,29 @@ mod account_template {
 
         pub fn reveal_confidential(&mut self, resource: ResourceAddress, proof: ConfidentialWithdrawProof) -> Bucket {
             let v = self.get_vault_mut(resource);
-            v.reveal_amount(proof)
+            v.reveal_confidential(proof)
         }
 
         pub fn join_confidential(&mut self, resource: ResourceAddress, proof: ConfidentialWithdrawProof) {
             let v = self.get_vault_mut(resource);
             v.join_confidential(proof);
+        }
+
+        pub fn reveal_funds(&mut self, resource: ResourceAddress, proof: ConfidentialWithdrawProof) -> Bucket {
+            self.get_vault_mut(resource).reveal_confidential(proof)
+        }
+
+        // Fee methods. These are used to pay fees and satisfy a "duck-typed" interface.
+
+        /// Pay fees from previously revealed confidential resource.
+        pub fn pay_fee(&mut self, amount: Amount) {
+            self.get_vault_mut(CONFIDENTIAL_TARI_RESOURCE_ADDRESS).pay_fee(amount);
+        }
+
+        /// Reveal confidential tokens and return the revealed bucket to pay fees.
+        pub fn pay_fee_confidential(&mut self, proof: ConfidentialWithdrawProof) {
+            self.get_vault_mut(CONFIDENTIAL_TARI_RESOURCE_ADDRESS)
+                .pay_fee_confidential(proof);
         }
     }
 }

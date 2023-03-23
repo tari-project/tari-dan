@@ -26,8 +26,8 @@ use tari_dan_common_types::{serde_with, QuorumCertificate, ShardId};
 use tari_dan_wallet_sdk::models::{Account, ConfidentialProofId, TransactionStatus, VersionedSubstateAddress};
 use tari_engine_types::{
     commit_result::FinalizeResult,
-    execution_result::ExecutionResult,
     instruction::Instruction,
+    instruction_result::InstructionResult,
     substate::SubstateAddress,
 };
 use tari_template_lib::{
@@ -41,8 +41,8 @@ use tari_transaction::Transaction;
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct TransactionSubmitRequest {
     pub signing_key_index: Option<u64>,
+    pub fee_instructions: Vec<Instruction>,
     pub instructions: Vec<Instruction>,
-    pub fee: u64,
     pub inputs: Vec<VersionedSubstateAddress>,
     pub override_inputs: bool,
     pub new_outputs: u8,
@@ -50,7 +50,7 @@ pub struct TransactionSubmitRequest {
     pub new_non_fungible_outputs: Vec<(ResourceAddress, u8)>,
     pub new_non_fungible_index_outputs: Vec<(ResourceAddress, u64)>,
     pub is_dry_run: bool,
-    pub proof_id: Option<ConfidentialProofId>,
+    pub proof_ids: Vec<ConfidentialProofId>,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -170,11 +170,12 @@ pub struct AccountsInvokeRequest {
     pub account_name: String,
     pub method: String,
     pub args: Vec<Arg>,
+    pub fee: Amount,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct AccountsInvokeResponse {
-    pub result: Option<ExecutionResult>,
+    pub result: Option<InstructionResult>,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -247,11 +248,11 @@ pub struct AccountByNameResponse {
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct ProofsGenerateRequest {
     pub amount: Amount,
+    pub reveal_amount: Amount,
     pub source_account_name: String,
     pub resource_address: ResourceAddress,
-    pub destination_account: ComponentAddress,
     // TODO: For now, we assume that this is obtained "somehow" from the destination account
-    pub destination_stealth_public_key: PublicKey,
+    pub destination_public_key: PublicKey,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -284,18 +285,57 @@ pub struct ConfidentialCreateOutputProofResponse {
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct ConfidentialTransferRequest {
+    pub account: ComponentAddress,
+    pub amount: Amount,
+    pub resource_address: ResourceAddress,
+    pub destination_account: ComponentAddress,
+    pub destination_public_key: PublicKey,
+    pub fee: Amount,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct ConfidentialTransferResponse {
+    #[serde(with = "serde_with::hex")]
+    pub hash: FixedHash,
+    pub fee: Amount,
+    pub result: FinalizeResult,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct ClaimBurnRequest {
     pub account: ComponentAddress,
     pub claim_proof: serde_json::Value,
-    pub fee: u64,
+    pub fee: Amount,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct ClaimBurnResponse {
     #[serde(with = "serde_with::hex")]
     pub hash: FixedHash,
+    pub fee: Amount,
     pub result: FinalizeResult,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct ProofsCancelResponse {}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct RevealFundsRequest {
+    /// Account with funds to reveal
+    pub account: ComponentAddress,
+    /// Amount to reveal
+    pub amount_to_reveal: Amount,
+    /// Pay fee from revealed funds. If false, previously revealed funds in the account are used.
+    pub pay_fee_from_reveal: bool,
+    /// The amount of fees to add to the transaction. Any fees not charged are refunded.
+    pub fee: Amount,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct RevealFundsResponse {
+    #[serde(with = "serde_with::hex")]
+    pub hash: FixedHash,
+    pub fee: Amount,
+    pub result: FinalizeResult,
+}

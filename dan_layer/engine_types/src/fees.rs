@@ -1,0 +1,79 @@
+//   Copyright 2023 The Tari Project
+//   SPDX-License-Identifier: BSD-3-Clause
+
+use std::collections::HashMap;
+
+use serde::{Deserialize, Serialize};
+use tari_template_lib::models::{Amount, VaultId};
+
+use crate::resource_container::ResourceContainer;
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct FeeReceipt {
+    /// The total amount of the fee payment(s)
+    pub total_fee_payment: Amount,
+    /// The resource containing the fees deducted excluding refunds
+    pub fee_resource: ResourceContainer,
+    /// Breakdown of fee costs
+    pub cost_breakdown: Vec<(FeeSource, u64)>,
+}
+
+impl FeeReceipt {
+    pub fn to_cost_breakdown(&self) -> FeeCostBreakdown {
+        FeeCostBreakdown {
+            total_fees_charged: self.total_fees_charged(),
+            breakdown: self.cost_breakdown.clone(),
+        }
+    }
+
+    pub fn total_fees_charged(&self) -> Amount {
+        Amount::try_from(self.cost_breakdown.iter().map(|(_, c)| *c).sum::<u64>()).unwrap()
+    }
+
+    pub fn total_refunded(&self) -> Amount {
+        self.total_fee_payment
+            .checked_sub_positive(self.total_fees_charged())
+            .unwrap_or_default()
+    }
+
+    /// The total amount of fees allocated to the transaction
+    pub fn total_allocated_fee_payments(&self) -> Amount {
+        self.total_fee_payment
+    }
+
+    /// The total amount of fees paid after refunds
+    pub fn total_fees_paid(&self) -> Amount {
+        self.fee_resource.amount()
+    }
+
+    /// The amount of unpaid fees
+    pub fn unpaid_debt(&self) -> Amount {
+        self.total_fees_charged()
+            .checked_sub_positive(self.total_fees_paid())
+            .unwrap_or_default()
+    }
+
+    /// Returns true if the total fees charged is equal to the total fees paid, otherwise false
+    pub fn is_paid_in_full(&self) -> bool {
+        self.unpaid_debt().is_zero()
+    }
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+pub enum FeeSource {
+    Initial,
+    RuntimeCall,
+    Storage,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct FeeCostBreakdown {
+    pub total_fees_charged: Amount,
+    pub breakdown: Vec<(FeeSource, u64)>,
+}
+
+#[derive(Debug, Clone)]
+pub struct FeePayment {
+    pub resource: ResourceContainer,
+    pub breakdown: HashMap<VaultId, Amount>,
+}

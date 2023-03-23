@@ -18,7 +18,8 @@ pub struct ValidatedConfidentialWithdrawProof {
     pub output: ConfidentialOutput,
     pub change_output: Option<ConfidentialOutput>,
     pub range_proof: BulletRangeProof,
-    pub revealed_amount: Amount,
+    pub output_revealed_amount: Amount,
+    pub change_revealed_amount: Amount,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -36,12 +37,16 @@ pub fn validate_confidential_withdraw<'a, I: IntoIterator<Item = &'a PublicKey>>
     let validated_proof = validate_confidential_proof(&withdraw_proof.output_proof)?;
 
     // We expect the revealed amount to be excluded from the output commitment.
+    let revealed_amount = withdraw_proof.output_proof.output_statement.revealed_amount +
+        withdraw_proof
+            .output_proof
+            .change_statement
+            .as_ref()
+            .map(|s| s.revealed_amount)
+            .unwrap_or_default();
     let output_commitment_with_revealed = validated_proof.output.commitment.as_public_key() +
         get_commitment_factory()
-            .commit_value(
-                &PrivateKey::default(),
-                withdraw_proof.output_proof.revealed_amount.value() as u64,
-            )
+            .commit_value(&PrivateKey::default(), revealed_amount.value() as u64)
             .as_public_key();
 
     let balance_proof =
@@ -57,7 +62,8 @@ pub fn validate_confidential_withdraw<'a, I: IntoIterator<Item = &'a PublicKey>>
             .map(|output| output.commitment.as_public_key())
             .unwrap_or(&PublicKey::default());
 
-    let challenge = challenges::confidential_withdraw(&public_excess, balance_proof.get_public_nonce());
+    let challenge =
+        challenges::confidential_withdraw(&public_excess, balance_proof.get_public_nonce(), revealed_amount);
 
     if !balance_proof.verify_challenge(&public_excess, &challenge) {
         return Err(ResourceError::InvalidBalanceProof {
@@ -69,7 +75,12 @@ pub fn validate_confidential_withdraw<'a, I: IntoIterator<Item = &'a PublicKey>>
         output: validated_proof.output,
         change_output: validated_proof.change_output,
         range_proof: BulletRangeProof(withdraw_proof.output_proof.range_proof),
-        revealed_amount: withdraw_proof.output_proof.revealed_amount,
+        output_revealed_amount: withdraw_proof.output_proof.output_statement.revealed_amount,
+        change_revealed_amount: withdraw_proof
+            .output_proof
+            .change_statement
+            .map(|s| s.revealed_amount)
+            .unwrap_or_default(),
     })
 }
 

@@ -149,7 +149,7 @@ impl ManifestInstructionGenerator {
                         .or_else(|| {
                             // Or is it a variable on the worktop?
                             if self.variables.contains(&ident.to_string()) {
-                                Some(Ok(Arg::Variable(ident.to_string().into_bytes())))
+                                Some(Ok(Arg::Workspace(ident.to_string().into_bytes())))
                             } else {
                                 None
                             }

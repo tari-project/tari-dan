@@ -34,6 +34,10 @@ pub fn hasher(label: EngineHashDomainLabel) -> TariHasher {
     TariHasher::new_with_label::<TariEngineHashDomain>(label.as_label())
 }
 
+pub fn template_hasher() -> TariHasher {
+    hasher(EngineHashDomainLabel::Template)
+}
+
 hash_domain!(
     ConfidentialOutputHashDomain,
     "com.tari.layer_two.confidential_output",

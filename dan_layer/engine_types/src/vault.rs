@@ -48,6 +48,10 @@ impl Vault {
         }
     }
 
+    pub fn vault_id(&self) -> &VaultId {
+        &self.vault_id
+    }
+
     pub fn deposit(&mut self, bucket: Bucket) -> Result<(), ResourceError> {
         self.resource_container.deposit(bucket.into_resource())?;
         Ok(())
@@ -106,7 +110,7 @@ impl Vault {
         self.resource_container.reveal_confidential(proof)
     }
 
-    pub fn vault_id(&self) -> &VaultId {
-        &self.vault_id
+    pub fn resource_container_mut(&mut self) -> &mut ResourceContainer {
+        &mut self.resource_container
     }
 }

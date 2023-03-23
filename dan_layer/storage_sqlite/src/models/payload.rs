@@ -28,10 +28,10 @@ use crate::schema::*;
 pub struct Payload {
     pub id: i32,
     pub payload_id: Vec<u8>,
+    pub fee_instructions: String,
     pub instructions: String,
     pub public_nonce: Vec<u8>,
     pub scalar: Vec<u8>,
-    pub fee: i64,
     pub sender_address: Vec<u8>,
     pub meta: String,
     pub result: Option<String>,
@@ -42,10 +42,10 @@ pub struct Payload {
 #[diesel(table_name = payloads)]
 pub struct NewPayload {
     pub payload_id: Vec<u8>,
+    pub fee_instructions: String,
     pub instructions: String,
     pub public_nonce: Vec<u8>,
     pub scalar: Vec<u8>,
-    pub fee: i64,
     pub sender_address: Vec<u8>,
     pub meta: String,
     pub result: Option<String>,

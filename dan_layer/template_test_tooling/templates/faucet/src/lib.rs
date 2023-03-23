@@ -20,25 +20,45 @@
 //   WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //   USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use serde::{de::DeserializeOwned, Deserialize, Serialize};
-use tari_bor::BorError;
-use tari_template_abi::Type;
+use tari_template_lib::prelude::*;
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-pub struct ExecutionResult {
-    pub raw: Vec<u8>,
-    pub return_type: Type,
-}
+#[template]
+mod faucet_template {
+    use super::*;
 
-impl ExecutionResult {
-    pub fn empty() -> Self {
-        ExecutionResult {
-            raw: Vec::new(),
-            return_type: Type::Unit,
-        }
+    pub struct TestFaucet {
+        vault: Vault,
     }
 
-    pub fn decode<T: DeserializeOwned>(&self) -> Result<T, BorError> {
-        tari_bor::decode(&self.raw)
+    impl TestFaucet {
+        pub fn new(bucket: Bucket) -> Self {
+            Self {
+                vault: Vault::from_bucket(bucket),
+            }
+        }
+
+        pub fn take_free_coins(&mut self) -> Bucket {
+            debug("Withdrawing 1000 coins from faucet");
+            self.vault.withdraw(Amount(1000))
+        }
+
+        pub fn take_free_coins_confidential(&mut self, proof: ConfidentialWithdrawProof) -> Bucket {
+            debug("Withdrawing <unknown> coins from faucet");
+            self.vault.withdraw_confidential(proof)
+        }
+
+        pub fn total_supply(&self) -> Amount {
+            ResourceManager::get(self.vault.resource_address()).total_supply()
+        }
+
+        pub fn pay_fee(&mut self, amount: Amount) {
+            debug("Paying fee from faucet");
+            self.vault.pay_fee(amount);
+        }
+
+        pub fn pay_fee_confidential(&mut self, proof: ConfidentialWithdrawProof) {
+            debug("Paying fee from faucet");
+            self.vault.pay_fee_confidential(proof);
+        }
     }
 }

@@ -53,6 +53,7 @@ use tari_dan_core::{
     },
     workers::events::{EventSubscription, HotStuffEvent},
 };
+use tari_dan_engine::fees::{FeeTable, DEFAULT_FEE_LOAN};
 use tari_dan_storage::global::GlobalDb;
 use tari_dan_storage_sqlite::{global::SqliteGlobalDbAdapter, sqlite_shard_store_factory::SqliteShardStore};
 use tari_engine_types::{
@@ -78,7 +79,7 @@ use crate::{
             epoch_manager,
             hotstuff,
             mempool,
-            mempool::MempoolHandle,
+            mempool::{FeeTransactionValidator, MempoolHandle, TemplateExistsValidator, Validator},
             messaging,
             messaging::DanMessageReceivers,
             networking,
@@ -170,12 +171,16 @@ pub async fn spawn_services(
     handles.push(join_handle);
 
     // Mempool
+    let mut validator = TemplateExistsValidator::new(template_manager.clone()).boxed();
+    if !config.validator_node.no_fees {
+        validator = validator.and_then(FeeTransactionValidator).boxed();
+    }
     let (mempool, join_handle) = mempool::spawn(
         rx_new_transaction_message,
         outbound_messaging.clone(),
         epoch_manager.clone(),
         node_identity.clone(),
-        template_manager.clone(),
+        validator,
     );
     handles.push(join_handle);
 
@@ -194,7 +199,12 @@ pub async fn spawn_services(
     handles.push(join_handle);
 
     // Payload processor
-    let payload_processor = TariDanPayloadProcessor::new(template_manager);
+    let fee_table = if config.validator_node.no_fees {
+        FeeTable::zero_rated()
+    } else {
+        FeeTable::new(1, 1, 1, DEFAULT_FEE_LOAN)
+    };
+    let payload_processor = TariDanPayloadProcessor::new(template_manager, fee_table);
 
     // Consensus
     let (hotstuff_events, waiter_join_handle, service_join_handle) = hotstuff::try_spawn(

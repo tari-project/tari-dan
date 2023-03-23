@@ -32,7 +32,7 @@ pub fn get_commitment_factory() -> &'static CommitmentFactory {
 
 pub mod challenges {
     use tari_common_types::types::{Commitment, PublicKey};
-    use tari_template_lib::Hash;
+    use tari_template_lib::{models::Amount, Hash};
 
     use crate::hashing::{hasher, EngineHashDomainLabel};
 
@@ -48,10 +48,11 @@ pub mod challenges {
             .result()
     }
 
-    pub fn confidential_withdraw(excess: &PublicKey, public_nonce: &PublicKey) -> Hash {
+    pub fn confidential_withdraw(excess: &PublicKey, public_nonce: &PublicKey, revealed_amount: Amount) -> Hash {
         hasher(EngineHashDomainLabel::ConfidentialTransfer)
             .chain(excess)
             .chain(public_nonce)
+            .chain(&revealed_amount)
             .result()
     }
 }

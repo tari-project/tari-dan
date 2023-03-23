@@ -4,6 +4,7 @@
 use serde::{Deserialize, Serialize};
 // #[cfg(not(feature = "hex"))]
 use serde_big_array::BigArray;
+use tari_template_abi::rust::string::String;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default, Serialize, Deserialize)]
 #[serde(transparent)]
@@ -19,7 +20,10 @@ impl RistrettoPublicKeyBytes {
 
     pub fn from_bytes(bytes: &[u8]) -> Result<Self, InvalidByteLengthError> {
         if bytes.len() != Self::length() {
-            return Err(InvalidByteLengthError { size: bytes.len() });
+            return Err(InvalidByteLengthError {
+                size: bytes.len(),
+                expected: Self::length(),
+            });
         }
 
         let mut key = [0u8; Self::length()];
@@ -47,6 +51,20 @@ impl TryFrom<&[u8]> for RistrettoPublicKeyBytes {
 #[derive(Debug, PartialEq, Eq)]
 pub struct InvalidByteLengthError {
     size: usize,
+    expected: usize,
+}
+
+impl InvalidByteLengthError {
+    pub fn actual_size(&self) -> usize {
+        self.size
+    }
+
+    pub fn to_error_string(&self) -> String {
+        format!(
+            "Invalid byte length. Expected {} bytes, got {}",
+            self.expected, self.size
+        )
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -66,10 +84,14 @@ impl BalanceProofSignature {
         if public_nonce.len() != 32 {
             return Err(InvalidByteLengthError {
                 size: public_nonce.len(),
+                expected: 32,
             });
         }
         if signature.len() != 32 {
-            return Err(InvalidByteLengthError { size: signature.len() });
+            return Err(InvalidByteLengthError {
+                size: signature.len(),
+                expected: 32,
+            });
         }
 
         let mut key = [0u8; Self::length()];
@@ -80,7 +102,10 @@ impl BalanceProofSignature {
 
     pub fn from_bytes(bytes: &[u8]) -> Result<Self, InvalidByteLengthError> {
         if bytes.len() != Self::length() {
-            return Err(InvalidByteLengthError { size: bytes.len() });
+            return Err(InvalidByteLengthError {
+                size: bytes.len(),
+                expected: Self::length(),
+            });
         }
 
         let mut key = [0u8; Self::length()];

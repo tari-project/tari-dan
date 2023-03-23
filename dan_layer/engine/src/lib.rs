@@ -8,6 +8,7 @@ pub mod packager;
 pub mod runtime;
 // pub mod state;
 mod bootstrap;
+pub mod fees;
 pub mod state_store;
 pub mod traits;
 pub mod transaction;

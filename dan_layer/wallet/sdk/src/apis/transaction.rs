@@ -74,6 +74,11 @@ impl<'a, TStore: WalletStore> TransactionApi<'a, TStore> {
             tx.transactions_set_result_and_status(
                 resp.hash,
                 resp.result.as_ref().map(|a| &a.finalize),
+                resp.result.as_ref().and_then(|r| r.transaction_failure.as_ref()),
+                resp.result
+                    .as_ref()
+                    .and_then(|a| a.fee_breakdown.as_ref())
+                    .map(|b| b.total_fees_charged),
                 None,
                 if is_dry_run {
                     TransactionStatus::DryRun
@@ -121,7 +126,7 @@ impl<'a, TStore: WalletStore> TransactionApi<'a, TStore> {
 
         match resp.result {
             Some(result) => {
-                let new_status = if result.is_accept() {
+                let new_status = if result.finalize.result.is_accept() && result.transaction_failure.is_none() {
                     TransactionStatus::Accepted
                 } else {
                     TransactionStatus::Rejected
@@ -134,12 +139,19 @@ impl<'a, TStore: WalletStore> TransactionApi<'a, TStore> {
 
                 self.store.with_write_tx(|tx| {
                     if !transaction.is_dry_run {
-                        if let Some(diff) = result.result.accept() {
+                        if let Some(diff) = result.finalize.result.accept() {
                             self.commit_result(tx, hash, diff)?;
                         }
                     }
 
-                    tx.transactions_set_result_and_status(hash, Some(&result), Some(&qc_resp.qcs), new_status)?;
+                    tx.transactions_set_result_and_status(
+                        hash,
+                        Some(&result.finalize),
+                        result.transaction_failure.as_ref(),
+                        result.fee_receipt.as_ref().map(|f| f.total_fees_charged()),
+                        Some(&qc_resp.qcs),
+                        new_status,
+                    )?;
                     if !transaction.is_dry_run {
                         // if the transaction being processed is confidential,
                         // we should make sure that the account's locked outputs
@@ -159,7 +171,9 @@ impl<'a, TStore: WalletStore> TransactionApi<'a, TStore> {
                 Ok(Some(WalletTransaction {
                     transaction: transaction.transaction,
                     status: new_status,
-                    result: Some(result),
+                    result: Some(result.finalize),
+                    transaction_failure: result.transaction_failure,
+                    final_fee: result.fee_receipt.as_ref().map(|f| f.total_fees_charged()),
                     qcs: qc_resp.qcs,
                     is_dry_run: transaction.is_dry_run,
                 }))

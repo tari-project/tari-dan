@@ -32,8 +32,12 @@ use tari_dan_wallet_sdk::{
     },
     storage::{WalletStorageError, WalletStoreReader, WalletStoreWriter},
 };
-use tari_engine_types::{commit_result::FinalizeResult, substate::SubstateAddress, TemplateAddress};
-use tari_template_lib::models::Amount;
+use tari_engine_types::{
+    commit_result::{FinalizeResult, RejectReason},
+    substate::SubstateAddress,
+    TemplateAddress,
+};
+use tari_template_lib::{models::Amount, Hash};
 use tari_transaction::Transaction;
 use tari_utilities::hex::Hex;
 
@@ -170,28 +174,28 @@ impl WalletStoreWriter for WriteTransaction<'_> {
     }
 
     // -------------------------------- Transactions -------------------------------- //
-
     fn transactions_insert(&mut self, transaction: &Transaction, is_dry_run: bool) -> Result<(), WalletStorageError> {
+        use crate::schema::transactions;
+
         let status = if is_dry_run {
             TransactionStatus::DryRun
         } else {
             TransactionStatus::New
         };
 
-        sql_query(
-            "INSERT INTO transactions (hash, instructions, sender_address, fee, signature, meta, status, dry_run) \
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-        )
-        .bind::<Text, _>(transaction.hash().to_string())
-        .bind::<Text, _>(serialize_json(transaction.instructions())?)
-        .bind::<Text, _>(transaction.sender_public_key().to_hex())
-        .bind::<BigInt, _>(transaction.fee() as i64)
-        .bind::<Text, _>(serialize_json(transaction.signature())?)
-        .bind::<Text, _>(serialize_json(transaction.meta())?)
-        .bind::<Text, _>(status.as_key_str())
-        .bind::<Bool, _>(is_dry_run)
-        .execute(self.connection())
-        .map_err(|e| WalletStorageError::general("transactions_insert", e))?;
+        diesel::insert_into(transactions::table)
+            .values((
+                transactions::hash.eq(transaction.hash().to_string()),
+                transactions::fee_instructions.eq(serialize_json(transaction.fee_instructions())?),
+                transactions::instructions.eq(serialize_json(transaction.instructions())?),
+                transactions::sender_address.eq(transaction.sender_public_key().to_hex()),
+                transactions::signature.eq(serialize_json(transaction.signature())?),
+                transactions::meta.eq(serialize_json(transaction.meta())?),
+                transactions::status.eq(status.as_key_str()),
+                transactions::dry_run.eq(is_dry_run),
+            ))
+            .execute(self.connection())
+            .map_err(|e| WalletStorageError::general("transactions_insert", e))?;
 
         Ok(())
     }
@@ -200,18 +204,25 @@ impl WalletStoreWriter for WriteTransaction<'_> {
         &mut self,
         hash: FixedHash,
         result: Option<&FinalizeResult>,
+        transaction_failure: Option<&RejectReason>,
+        final_fee: Option<Amount>,
         qcs: Option<&[QuorumCertificate]>,
         new_status: TransactionStatus,
     ) -> Result<(), WalletStorageError> {
-        let num_rows = sql_query(
-            "UPDATE transactions SET result = ?, status = ?, qcs = ?, updated_at = CURRENT_TIMESTAMP WHERE hash = ?",
-        )
-        .bind::<Nullable<Text>, _>(result.map(serialize_json).transpose()?)
-        .bind::<Text, _>(new_status.as_key_str())
-        .bind::<Nullable<Text>, _>(qcs.map(serialize_json).transpose()?)
-        .bind::<Text, _>(hash.to_string())
-        .execute(self.connection())
-        .map_err(|e| WalletStorageError::general("transactions_set_result_and_status", e))?;
+        use crate::schema::transactions;
+
+        let num_rows = diesel::update(transactions::table)
+            .set((
+                transactions::result.eq(result.map(serialize_json).transpose()?),
+                transactions::transaction_failure.eq(transaction_failure.map(serialize_json).transpose()?),
+                transactions::status.eq(new_status.as_key_str()),
+                transactions::final_fee.eq(final_fee.map(|v| v.value())),
+                transactions::qcs.eq(qcs.map(serialize_json).transpose()?),
+                transactions::updated_at.eq(diesel::dsl::now),
+            ))
+            .filter(transactions::hash.eq(hash.to_string()))
+            .execute(self.connection())
+            .map_err(|e| WalletStorageError::general("transactions_set_result_and_status", e))?;
 
         if num_rows == 0 {
             return Err(WalletStorageError::NotFound {
@@ -581,7 +592,7 @@ impl WalletStoreWriter for WriteTransaction<'_> {
     fn proofs_set_transaction_hash(
         &mut self,
         proof_id: ConfidentialProofId,
-        transaction_hash: FixedHash,
+        transaction_hash: Hash,
     ) -> Result<(), WalletStorageError> {
         use crate::schema::proofs;
 

@@ -65,6 +65,7 @@ impl Parse for TemplateAst {
                 Item::Struct(ref mut item) => {
                     item.attrs
                         .push(syn::parse_quote!(#[derive(Debug, serde::Serialize, serde::Deserialize)]));
+                    item.attrs.push(syn::parse_quote!(#[serde(crate = "self::serde")]));
                     // Use the first struct name as the template name
                     // TODO: remove this assumption in favor of "marking" the struct as a template struct
                     // #[template(Component)]

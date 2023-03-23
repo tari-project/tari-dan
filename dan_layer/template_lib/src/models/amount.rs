@@ -20,15 +20,15 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use std::{
+use newtype_ops::newtype_ops;
+use serde::{Deserialize, Serialize};
+use tari_template_abi::rust::{
     fmt::{Display, Formatter},
+    iter::Sum,
     num::TryFromIntError,
 };
 
-use newtype_ops::newtype_ops;
-use serde::{Deserialize, Serialize};
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize, Default)]
 #[serde(transparent)]
 pub struct Amount(pub i64);
 
@@ -65,12 +65,23 @@ impl Amount {
         Amount(self.0.saturating_add(other.0))
     }
 
-    pub fn checked_sub(&self, other: &Self) -> Option<Self> {
+    pub fn checked_sub(&self, other: Self) -> Option<Self> {
         self.0.checked_sub(other.0).map(Amount)
     }
 
-    pub fn saturating_sub(&self, other: &Self) -> Self {
+    pub fn saturating_sub(&self, other: Self) -> Self {
         Amount(self.0.saturating_sub(other.0))
+    }
+
+    pub fn checked_sub_positive(&self, other: Self) -> Option<Self> {
+        if self.is_negative() || other.is_negative() {
+            return None;
+        }
+        if self < &other {
+            return None;
+        }
+
+        Some(Amount(self.0 - other.0))
     }
 
     pub fn checked_mul(&self, other: &Self) -> Option<Self> {
@@ -87,6 +98,10 @@ impl Amount {
 
     pub fn saturating_div(&self, other: &Self) -> Self {
         Amount(self.0.saturating_div(other.0))
+    }
+
+    pub fn as_u64_checked(&self) -> Option<u64> {
+        self.0.try_into().ok()
     }
 }
 
@@ -133,6 +148,12 @@ newtype_ops! { [Amount] {add sub mul div} {:=} Self &i64 }
 impl PartialEq<i64> for Amount {
     fn eq(&self, other: &i64) -> bool {
         self.0 == *other
+    }
+}
+
+impl Sum for Amount {
+    fn sum<I: Iterator<Item = Self>>(iter: I) -> Self {
+        iter.fold(Amount::zero(), |a, b| a + b)
     }
 }
 

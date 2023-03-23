@@ -1,7 +1,7 @@
 //   Copyright 2023 The Tari Project
 //   SPDX-License-Identifier: BSD-3-Clause
 
-use std::collections::HashMap;
+use std::collections::{BTreeSet, HashMap};
 
 use serde::{Deserialize, Serialize};
 use tari_common_types::types::PublicKey;
@@ -20,12 +20,12 @@ use crate::{change::SubstateChange, InstructionSignature, ObjectClaim, Transacti
 #[derive(Debug, Clone)]
 pub struct BalanceProof {}
 
-#[derive(Debug, Clone, Serialize, Deserialize, Eq, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Transaction {
     hash: Hash,
+    fee_instructions: Vec<Instruction>,
     instructions: Vec<Instruction>,
     signature: InstructionSignature,
-    _fee: u64,
     sender_public_key: PublicKey,
     // Not part of signature. TODO: Should it be?
     meta: TransactionMeta,
@@ -37,7 +37,7 @@ impl Transaction {
     }
 
     pub fn new(
-        fee: u64,
+        fee_instructions: Vec<Instruction>,
         instructions: Vec<Instruction>,
         signature: InstructionSignature,
         sender_public_key: PublicKey,
@@ -45,9 +45,9 @@ impl Transaction {
     ) -> Self {
         let mut s = Self {
             hash: Hash::default(),
+            fee_instructions,
             instructions,
             signature,
-            _fee: fee,
             sender_public_key,
             meta,
         };
@@ -57,35 +57,36 @@ impl Transaction {
 
     /// Returns the template addresses that are statically known to be executed by this transaction.
     /// This does not include templates for component invocation as that data is not contained within the transaction.
-    pub fn required_templates(&self) -> Vec<TemplateAddress> {
-        self.instructions
+    pub fn required_templates(&self) -> BTreeSet<TemplateAddress> {
+        self.fee_instructions
             .iter()
             .filter_map(|instruction| match instruction {
-                Instruction::CallFunction {
-                    template_address: package_address,
-                    ..
-                } => Some(*package_address),
+                Instruction::CallFunction { template_address, .. } => Some(*template_address),
                 _ => None,
             })
+            .chain(self.instructions.iter().filter_map(|instruction| match instruction {
+                Instruction::CallFunction { template_address, .. } => Some(*template_address),
+                _ => None,
+            }))
             .collect()
     }
 
-    pub fn required_components(&self) -> Vec<ComponentAddress> {
-        self.instructions
+    pub fn required_components(&self) -> BTreeSet<ComponentAddress> {
+        self.fee_instructions
             .iter()
             .filter_map(|instruction| match instruction {
                 Instruction::CallMethod { component_address, .. } => Some(*component_address),
                 _ => None,
             })
+            .chain(self.instructions.iter().filter_map(|instruction| match instruction {
+                Instruction::CallMethod { component_address, .. } => Some(*component_address),
+                _ => None,
+            }))
             .collect()
     }
 
     pub fn hash(&self) -> &Hash {
         &self.hash
-    }
-
-    pub fn fee(&self) -> u64 {
-        self._fee
     }
 
     pub fn meta(&self) -> &TransactionMeta {
@@ -101,8 +102,13 @@ impl Transaction {
             .chain(&self.sender_public_key)
             .chain(self.signature.signature().get_public_nonce())
             .chain(self.signature.signature().get_signature())
+            .chain(&self.fee_instructions)
             .chain(&self.instructions)
             .result()
+    }
+
+    pub fn fee_instructions(&self) -> &[Instruction] {
+        &self.fee_instructions
     }
 
     pub fn instructions(&self) -> &[Instruction] {
@@ -121,10 +127,22 @@ impl Transaction {
         &self.sender_public_key
     }
 
-    pub fn destruct(self) -> (Vec<Instruction>, InstructionSignature, PublicKey) {
-        (self.instructions, self.signature, self.sender_public_key)
+    pub fn destruct(self) -> (Vec<Instruction>, Vec<Instruction>, InstructionSignature, PublicKey) {
+        (
+            self.instructions,
+            self.fee_instructions,
+            self.signature,
+            self.sender_public_key,
+        )
     }
 }
+
+impl PartialEq for Transaction {
+    fn eq(&self, other: &Self) -> bool {
+        self.hash == other.hash
+    }
+}
+impl Eq for Transaction {}
 
 #[derive(Debug, Clone, Default, Deserialize, Serialize, Eq, PartialEq)]
 pub struct TransactionMeta {

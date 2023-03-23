@@ -34,7 +34,7 @@ use crate::{hash::HashParseError, models::TemplateAddress, prelude::AccessRules,
 pub struct ComponentAddress(Hash);
 
 impl ComponentAddress {
-    pub fn new(address: Hash) -> Self {
+    pub const fn new(address: Hash) -> Self {
         Self(address)
     }
 

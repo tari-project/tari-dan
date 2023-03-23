@@ -26,7 +26,7 @@ use tari_bor::{decode, encode, BorError};
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 //#[serde(tag = "type", content = "value")]
 pub enum Arg {
-    Variable(Vec<u8>),
+    Workspace(Vec<u8>),
     // TODO: this should be a `Value` instead of a `Vec<u8>`, but that is a larger refactor
     Literal(Vec<u8>),
 }
@@ -36,8 +36,8 @@ impl Arg {
         Arg::Literal(value)
     }
 
-    pub fn variable<T: Into<Vec<u8>>>(key: T) -> Self {
-        Arg::Variable(key.into())
+    pub fn workspace<T: Into<Vec<u8>>>(key: T) -> Self {
+        Arg::Workspace(key.into())
     }
 
     pub fn from_bytes(bytes: &[u8]) -> Result<Self, BorError> {

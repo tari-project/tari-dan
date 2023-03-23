@@ -143,6 +143,9 @@ pub async fn spawn_validator_node(
         config.validator_node.json_rpc_address = Some(format!("127.0.0.1:{}", json_rpc_port).parse().unwrap());
         config.validator_node.http_ui_address = Some(format!("127.0.0.1:{}", http_ui_port).parse().unwrap());
 
+        // TODO: test fees in cucumber
+        config.validator_node.no_fees = true;
+
         // The VNS will try to auto register upon startup
         config.validator_node.auto_register = false;
 
