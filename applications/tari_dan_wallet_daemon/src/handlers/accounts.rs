@@ -649,29 +649,33 @@ pub async fn handle_confidential_transfer(
 
         let change_amount = total_input_value - req.amount.as_u64_checked().unwrap();
         let change_key = sdk.key_manager_api().next_key(key_manager::TRANSACTION_BRANCH)?;
-        outputs_api.add_output(ConfidentialOutputModel {
-            account_address: account.address,
-            vault_address: src_vault.address,
-            commitment: get_commitment_factory().commit_value(&change_key.k, change_amount),
-            value: change_amount,
-            sender_public_nonce: None,
-            secret_key_index: change_key.key_index,
-            public_asset_tag: None,
-            status: OutputStatus::LockedUnconfirmed,
-            locked_by_proof: Some(proof_id),
-        })?;
+        let maybe_change_statement = if change_amount > 0 {
+            outputs_api.add_output(ConfidentialOutputModel {
+                account_address: account.address,
+                vault_address: src_vault.address,
+                commitment: get_commitment_factory().commit_value(&change_key.k, change_amount),
+                value: change_amount,
+                sender_public_nonce: None,
+                secret_key_index: change_key.key_index,
+                public_asset_tag: None,
+                status: OutputStatus::LockedUnconfirmed,
+                locked_by_proof: Some(proof_id),
+            })?;
 
-        let change_statement = ConfidentialProofStatement {
-            amount: change_amount.try_into()?,
-            mask: change_key.k,
-            sender_public_nonce: None,
-            minimum_value_promise: 0,
-            reveal_amount: Amount::zero(),
+            Some(ConfidentialProofStatement {
+                amount: change_amount.try_into()?,
+                mask: change_key.k,
+                sender_public_nonce: None,
+                minimum_value_promise: 0,
+                reveal_amount: Amount::zero(),
+            })
+        } else {
+            None
         };
 
         let inputs = outputs_api.resolve_output_masks(inputs, key_manager::TRANSACTION_BRANCH)?;
 
-        let proof = crypto_api.generate_withdraw_proof(&inputs, &output_statement, Some(&change_statement))?;
+        let proof = crypto_api.generate_withdraw_proof(&inputs, &output_statement, maybe_change_statement.as_ref())?;
 
         let mut shard_inputs = vec![
             // Source account input
