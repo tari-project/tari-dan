@@ -7,6 +7,7 @@ use d3ne::{Node, OutputValue, Worker};
 use tari_dan_common_types::services::template_provider::TemplateProvider;
 use tari_engine_types::substate::SubstateAddress;
 use tari_template_lib::{
+    args::Arg,
     models::{ComponentAddress, TemplateAddress},
     Hash,
 };
@@ -41,29 +42,45 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate>> Worker<Flow
             .ok_or_else(|| anyhow::anyhow!("could not find arg `method`"))?;
         // TODO: There might be a better way to get the template, but for now, you must specify it
         // on the node...
-        // let template_address: TemplateAddress = node
-        //     .get_data::<String>("template")?
-        //     .ok_or_else(|| anyhow::anyhow!("Template not set in data"))?
-        //     .parse()?;
-        //
-        // let function_definition = context
-        //     .template_provider
-        //     .get_template_module(&template_address)?
-        //     .template_def()
-        //     .functions
-        //     .iter()
-        //     .find(|f| f.name == *method_name)
-        //     .ok_or_else(|| anyhow::anyhow!("could not find method"))?;
-        //
-        // let mut args = Vec::new();
-        // for arg in function_definition.arguments.iter() {
-        //     let arg_value = input_data
-        //         .get(arg.name.as_str())
-        //         .cloned()
-        //         .or(node.get_data(arg.name.as_str())?.map(|v| OutputValue::Bytes(v)))
-        //         .ok_or_else(|| anyhow::anyhow!("could not find arg `{}`", arg.name))?;
-        //     args.push(arg_value);
-        // }
+        let mut template_hash = node
+            .get_data::<String>("template")?
+            .ok_or_else(|| anyhow::anyhow!("Template not set in data"))?;
+        if template_hash.starts_with("0x") {
+            template_hash = template_hash[2..].to_string();
+        }
+        let template_address: TemplateAddress = TemplateAddress::from_hex(&template_hash).map_err(|e| {
+            anyhow::anyhow!(format!(
+                "Template address `{}` was not a valid hash:{}",
+                &template_hash, e
+            ))
+        })?;
+
+        let function_definition = context
+            .template_provider
+            .get_template_module(&template_address)?
+            .template_def()
+            .functions
+            .iter()
+            .find(|f| f.name == *method_name)
+            .ok_or_else(|| anyhow::anyhow!("could not find method"))?
+            .clone();
+
+        let mut args = Vec::new();
+        for arg in function_definition.arguments.iter() {
+            if arg.name == "self" {
+                // self has already been added
+                continue;
+            }
+            let arg_value = input_data
+                .get(arg.name.as_str())
+                .cloned()
+                .or(node.get_data(arg.name.as_str())?.map(|v| OutputValue::Bytes(v)))
+                .ok_or_else(|| anyhow::anyhow!("could not find arg `{}`", arg.name))?;
+            args.push(Arg::Literal(arg_value.as_bytes()?.to_vec()));
+        }
+
+        dbg!(&function_definition);
+        dbg!(&args);
 
         let exec_result = TransactionProcessor::call_method(
             context.template_provider.clone(),
@@ -72,23 +89,25 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate>> Worker<Flow
             &component_address,
             &method_name,
             // TODO: put in rest of args
-            vec![],
+            args,
             context.recursion_depth + 1,
             context.max_recursion_depth,
         )?;
 
-        let workspace_key = format!("node[{}].default", node.id);
-        // put output on worktop.
-        TransactionProcessor::<TTemplateProvider>::put_output_on_workspace_with_name(
-            &context.runtime,
-            format!("node[{}].default", node.id).into_bytes(),
-        )?;
+        let result = exec_result.raw.clone();
+        // let workspace_key = format!("node[{}].default", node.id);
+        // // put output on worktop.
+        // TransactionProcessor::<TTemplateProvider>::put_output_on_workspace_with_name(
+        //     &context.runtime,
+        //     format!("node[{}].default", node.id).into_bytes(),
+        // )?;
 
         dbg!(&exec_result);
         let mut h = HashMap::new();
         h.insert(
             "default".to_string(),
-            OutputValue::String(format!("workspace::{}", workspace_key)),
+            // OutputValue::String(format!("workspace::{}", workspace_key)),
+            OutputValue::Bytes(result),
         );
         Ok(h)
     }
