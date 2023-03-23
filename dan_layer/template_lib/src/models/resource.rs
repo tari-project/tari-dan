@@ -20,7 +20,7 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use tari_bor::{borsh, Decode, Encode};
+use serde::{Deserialize, Serialize};
 use tari_template_abi::rust::{
     fmt,
     fmt::{Display, Formatter},
@@ -29,8 +29,8 @@ use tari_template_abi::rust::{
 
 use crate::{hash::HashParseError, Hash};
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Encode, Decode)]
-#[cfg_attr(feature = "serde", derive(serde::Deserialize, serde::Serialize))]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+#[serde(transparent)]
 pub struct ResourceAddress(Hash);
 
 impl ResourceAddress {

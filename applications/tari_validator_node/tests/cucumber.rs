@@ -22,22 +22,15 @@
 
 mod steps;
 mod utils;
-use std::{
-    convert::{Infallible, TryFrom},
-    future,
-    io,
-    str::FromStr,
-    time::Duration,
-};
+use std::{convert::TryFrom, future, io, str::FromStr, time::Duration};
 
-use async_trait::async_trait;
 use cucumber::{
     gherkin::{Scenario, Step},
     given,
     then,
     when,
     writer,
-    WorldInit,
+    World,
     WriterExt,
 };
 use indexmap::IndexMap;
@@ -51,7 +44,7 @@ use tari_crypto::{
 use tari_dan_app_utilities::base_node_client::GrpcBaseNodeClient;
 use tari_dan_common_types::QuorumDecision;
 use tari_dan_core::services::BaseNodeClient;
-use tari_engine_types::execution_result::Type;
+use tari_dan_engine::abi::Type;
 use tari_template_lib::Hash;
 use tari_validator_node_cli::versioned_substate_address::VersionedSubstateAddress;
 use tari_validator_node_client::types::{
@@ -79,28 +72,30 @@ use crate::utils::{
     template::{send_template_registration, RegisteredTemplate},
     validator_node::{get_vn_client, ValidatorNodeProcess},
     wallet::WalletProcess,
+    wallet_daemon::{spawn_wallet_daemon, DanWalletDaemonProcess},
 };
 
-#[derive(Debug, Default, WorldInit)]
+#[derive(Debug, Default, cucumber::World)]
 pub struct TariWorld {
-    base_nodes: IndexMap<String, BaseNodeProcess>,
-    wallets: IndexMap<String, WalletProcess>,
-    validator_nodes: IndexMap<String, ValidatorNodeProcess>,
-    indexers: IndexMap<String, IndexerProcess>,
-    vn_seeds: IndexMap<String, ValidatorNodeProcess>,
-    miners: IndexMap<String, MinerProcess>,
-    templates: IndexMap<String, RegisteredTemplate>,
-    outputs: IndexMap<String, IndexMap<String, VersionedSubstateAddress>>,
-    http_server: Option<MockHttpServer>,
-    cli_data_dir: Option<String>,
-    current_scenario_name: Option<String>,
-    commitments: IndexMap<String, Vec<u8>>,
-    commitment_ownership_proofs: IndexMap<String, RistrettoComSig>,
-    rangeproofs: IndexMap<String, Vec<u8>>,
-    addresses: IndexMap<String, String>,
-    num_databases_saved: usize,
-    account_public_keys: IndexMap<String, (RistrettoSecretKey, PublicKey)>,
-    claim_public_keys: IndexMap<String, PublicKey>,
+    pub base_nodes: IndexMap<String, BaseNodeProcess>,
+    pub wallets: IndexMap<String, WalletProcess>,
+    pub validator_nodes: IndexMap<String, ValidatorNodeProcess>,
+    pub indexers: IndexMap<String, IndexerProcess>,
+    pub vn_seeds: IndexMap<String, ValidatorNodeProcess>,
+    pub miners: IndexMap<String, MinerProcess>,
+    pub templates: IndexMap<String, RegisteredTemplate>,
+    pub outputs: IndexMap<String, IndexMap<String, VersionedSubstateAddress>>,
+    pub http_server: Option<MockHttpServer>,
+    pub cli_data_dir: Option<String>,
+    pub current_scenario_name: Option<String>,
+    pub commitments: IndexMap<String, Vec<u8>>,
+    pub commitment_ownership_proofs: IndexMap<String, RistrettoComSig>,
+    pub rangeproofs: IndexMap<String, Vec<u8>>,
+    pub addresses: IndexMap<String, String>,
+    pub num_databases_saved: usize,
+    pub account_public_keys: IndexMap<String, (RistrettoSecretKey, PublicKey)>,
+    pub claim_public_keys: IndexMap<String, PublicKey>,
+    pub wallet_daemons: IndexMap<String, DanWalletDaemonProcess>,
 }
 
 impl TariWorld {
@@ -150,16 +145,12 @@ impl TariWorld {
             // You have explicitly trigger the shutdown now because of the change to use Arc/Mutex in tari_shutdown
             p.shutdown.trigger();
         }
+        for (name, mut p) in self.wallet_daemons.drain(..) {
+            println!("Shutting down wallet daemon {}", name);
+            // You have explicitly trigger the shutdown now because of the change to use Arc/Mutex in tari_shutdown
+            p.shutdown.trigger();
+        }
         self.miners.clear();
-    }
-}
-
-#[async_trait(?Send)]
-impl cucumber::World for TariWorld {
-    type Error = Infallible;
-
-    async fn new() -> Result<Self, Self::Error> {
-        Ok(Self::default())
     }
 }
 
@@ -181,7 +172,7 @@ async fn main() {
             world.current_scenario_name = Some(scenario.name.clone());
             Box::pin(future::ready(()))
         })
-        .after(move |_feature, _rule, scenario, maybe_world| {
+        .after(move |_feature, _rule, scenario, _finished, maybe_world| {
             if let Some(world) = maybe_world {
                 world.after(scenario);
             }
@@ -251,6 +242,17 @@ async fn stop_validator_node(world: &mut TariWorld, vn_name: String) {
     vn_ps.stop();
 }
 
+#[given(expr = "a wallet daemon {word} connected to validator node {word}")]
+async fn start_wallet_daemon(world: &mut TariWorld, wallet_daemon_name: String, vn_name: String) {
+    spawn_wallet_daemon(world, wallet_daemon_name, vn_name).await;
+}
+
+#[when(expr = "I stop wallet daemon {word}")]
+async fn stop_wallet_daemon(world: &mut TariWorld, wallet_daemon_name: String) {
+    let walletd_ps = world.wallet_daemons.get_mut(&wallet_daemon_name).unwrap();
+    walletd_ps.stop();
+}
+
 #[when(expr = "validator node {word} sends a registration transaction")]
 async fn send_vn_registration(world: &mut TariWorld, vn_name: String) {
     let jrpc_port = world.validator_nodes.get(&vn_name).unwrap().json_rpc_port;
@@ -267,12 +269,12 @@ async fn all_vns_send_registration(world: &mut TariWorld) {
     for vn_ps in world.validator_nodes.values() {
         let jrpc_port = vn_ps.json_rpc_port;
         let mut client = get_vn_client(jrpc_port).await;
-
         let _resp = client.register_validator_node().await.unwrap();
-
-        // give it some time for the registration tx to be processed by the wallet and the base node
-        tokio::time::sleep(Duration::from_secs(4)).await;
     }
+
+    eprintln!("WAITING AND GETS HERE");
+    // give it some time for the registration tx to be processed by the wallet and the base node
+    tokio::time::sleep(Duration::from_secs(4)).await;
 }
 
 #[when(expr = "validator node {word} registers the template \"{word}\"")]
@@ -671,8 +673,7 @@ async fn successful_transaction(world: &mut TariWorld) {
             let get_transaction_req = GetTransactionResultRequest { hash };
             let get_transaction_res = client.get_transaction_result(get_transaction_req).await.unwrap();
             let finalized_tx = get_transaction_res.result.unwrap();
-
-            assert!(finalized_tx.result.is_accept());
+            finalized_tx.expect_success();
         }
     }
 }

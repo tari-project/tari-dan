@@ -9,6 +9,7 @@ edition = "2021"
 [dependencies]
 tari_template_abi = { path = "../../../../../template_abi" }
 tari_template_lib = { path = "../../../../../template_lib" }
+serde = { version = "1.0.143", default-features = false, features = ["derive", "alloc"] }
 
 [profile.release]
 opt-level = 's'     # Optimize for size.

@@ -4,7 +4,11 @@
 use tari_common_types::types::FixedHash;
 use tari_dan_common_types::QuorumCertificate;
 use tari_dan_wallet_sdk::models::TransactionStatus;
-use tari_engine_types::{commit_result::FinalizeResult, substate::SubstateAddress};
+use tari_engine_types::{
+    commit_result::{FinalizeResult, RejectReason},
+    substate::SubstateAddress,
+};
+use tari_template_lib::models::Amount;
 
 #[derive(Debug, Clone)]
 pub enum WalletEvent {
@@ -39,7 +43,9 @@ pub struct TransactionSubmittedEvent {
 #[derive(Debug, Clone)]
 pub struct TransactionFinalizedEvent {
     pub hash: FixedHash,
-    pub result: FinalizeResult,
+    pub finalize: FinalizeResult,
+    pub transaction_failure: Option<RejectReason>,
+    pub final_fee: Amount,
     pub qcs: Vec<QuorumCertificate>,
     pub status: TransactionStatus,
 }

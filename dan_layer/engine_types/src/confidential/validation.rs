@@ -23,7 +23,13 @@ pub struct ValidatedConfidentialProof {
 pub fn validate_confidential_proof(
     proof: &ConfidentialOutputProof,
 ) -> Result<ValidatedConfidentialProof, ResourceError> {
-    if proof.revealed_amount.is_negative() {
+    if proof.output_statement.revealed_amount.is_negative() ||
+        proof
+            .change_statement
+            .as_ref()
+            .map(|s| s.revealed_amount.is_negative())
+            .unwrap_or(false)
+    {
         return Err(ResourceError::InvalidConfidentialProof {
             details: "Revealed amount must be positive".to_string(),
         });

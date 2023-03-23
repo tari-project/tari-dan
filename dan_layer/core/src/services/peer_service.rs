@@ -23,7 +23,11 @@
 use std::fmt::{Display, Formatter};
 
 use async_trait::async_trait;
-use tari_comms::{multiaddr::Multiaddr, peer_manager::Peer, types::CommsPublicKey};
+use tari_comms::{
+    multiaddr::Multiaddr,
+    peer_manager::{Peer, PeerFeatures, PeerIdentityClaim},
+    types::CommsPublicKey,
+};
 use tari_dan_common_types::NodeAddressable;
 
 #[async_trait]
@@ -42,20 +46,15 @@ pub trait PeerProvider {
 
 pub struct DanPeer<TAddr> {
     pub identity: TAddr,
-    pub addresses: Vec<Multiaddr>,
-    // pub identity_signature: Option<IdentitySignature>,
+    pub addresses: Vec<(Multiaddr, PeerIdentityClaim)>,
 }
 
 impl DanPeer<CommsPublicKey> {
     pub fn is_valid(&self) -> bool {
-        // TODO: refactor this code
-        // match self.identity_signature {
-        //     Some(ref identity_signature) => {
-        //         identity_signature.is_valid(&self.identity, PeerFeatures::COMMUNICATION_NODE, &self.addresses)
-        //     },
-        //     None => false,
-        // }
-        true
+        self.addresses.iter().all(|(addr, claim)| {
+            let identity_signature = &claim.signature;
+            identity_signature.is_valid(&self.identity, PeerFeatures::COMMUNICATION_NODE, &[addr.clone()])
+        })
     }
 }
 
@@ -63,8 +62,15 @@ impl From<Peer> for DanPeer<CommsPublicKey> {
     fn from(peer: Peer) -> Self {
         Self {
             identity: peer.public_key,
-            addresses: peer.addresses.into_vec(),
-            // identity_signature: peer.identity_signature,
+            addresses: peer
+                .addresses
+                .addresses()
+                .iter()
+                .filter_map(|a| {
+                    let claim = a.source.peer_identity_claim().cloned();
+                    claim.map(|claim| (a.address().clone(), claim))
+                })
+                .collect(),
         }
     }
 }
@@ -77,7 +83,7 @@ impl<TAddr: Display> Display for DanPeer<TAddr> {
             self.identity,
             self.addresses
                 .iter()
-                .map(ToString::to_string)
+                .map(|a| ToString::to_string(&a.0))
                 .collect::<Vec<_>>()
                 .join(", ")
         )

@@ -23,8 +23,10 @@
 use std::collections::BTreeSet;
 
 use serde::{Deserialize, Serialize};
-use tari_bor::{borsh, Decode, Encode};
-use tari_template_lib::models::{Amount, ConfidentialWithdrawProof, NonFungibleId, ResourceAddress, VaultId};
+use tari_template_lib::{
+    models::{Amount, ConfidentialWithdrawProof, NonFungibleId, ResourceAddress, VaultId},
+    prelude::ResourceType,
+};
 
 use crate::{
     bucket::Bucket,
@@ -32,7 +34,7 @@ use crate::{
     resource_container::{ResourceContainer, ResourceError},
 };
 
-#[derive(Debug, Clone, Encode, Decode, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Vault {
     vault_id: VaultId,
     resource_container: ResourceContainer,
@@ -44,6 +46,10 @@ impl Vault {
             vault_id,
             resource_container: resource,
         }
+    }
+
+    pub fn vault_id(&self) -> &VaultId {
+        &self.vault_id
     }
 
     pub fn deposit(&mut self, bucket: Bucket) -> Result<(), ResourceError> {
@@ -89,6 +95,10 @@ impl Vault {
         self.resource_container.resource_address()
     }
 
+    pub fn resource_type(&self) -> ResourceType {
+        self.resource_container.resource_type()
+    }
+
     pub fn get_non_fungible_ids(&self) -> Option<&BTreeSet<NonFungibleId>> {
         self.resource_container.non_fungible_token_ids()
     }
@@ -100,7 +110,7 @@ impl Vault {
         self.resource_container.reveal_confidential(proof)
     }
 
-    pub fn vault_id(&self) -> &VaultId {
-        &self.vault_id
+    pub fn resource_container_mut(&mut self) -> &mut ResourceContainer {
+        &mut self.resource_container
     }
 }

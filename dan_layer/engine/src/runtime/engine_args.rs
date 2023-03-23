@@ -3,11 +3,12 @@
 
 use std::any::type_name;
 
-use tari_bor::{borsh, decode_exact, Decode, Encode};
+use serde::de::DeserializeOwned;
+use tari_bor::decode_exact;
 
 use crate::runtime::RuntimeError;
 
-#[derive(Debug, Clone, Encode, Decode, Default)]
+#[derive(Debug, Clone, Default)]
 pub struct EngineArgs {
     args: Vec<Vec<u8>>,
 }
@@ -17,14 +18,14 @@ impl EngineArgs {
         Self { args: Vec::new() }
     }
 
-    pub fn get<T: Decode>(&self, index: usize) -> Result<T, RuntimeError> {
+    pub fn get<T: DeserializeOwned>(&self, index: usize) -> Result<T, RuntimeError> {
         self.args
             .get(index)
             .map(|arg| decode_exact(arg))
             .transpose()
             .map_err(|e| RuntimeError::InvalidArgument {
                 argument: type_name::<T>(),
-                reason: format!("Argument failed to decode. Err: {}", e),
+                reason: format!("Argument failed to decode. Err: {:?}", e),
             })?
             .ok_or_else(|| RuntimeError::InvalidArgument {
                 argument: type_name::<T>(),

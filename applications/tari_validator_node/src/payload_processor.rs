@@ -21,8 +21,8 @@
 //   USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 use std::{
-    collections::{hash_map::RandomState, HashMap, HashSet},
-    iter::FromIterator,
+    collections::{BTreeSet, HashMap},
+    convert::TryFrom,
     sync::Arc,
 };
 
@@ -34,32 +34,34 @@ use tari_dan_core::{
 };
 use tari_dan_engine::{
     bootstrap_state,
+    fees::{FeeModule, FeeTable},
     packager::{LoadedTemplate, Package},
-    runtime::{AuthParams, ConsensusContext},
+    runtime::{AuthParams, ConsensusContext, RuntimeModule},
     state_store::{memory::MemoryStateStore, AtomicDb, StateReader, StateStoreError, StateWriter},
-    transaction::{TransactionError, TransactionProcessor},
-    wasm::WasmExecutionError,
+    transaction::TransactionProcessor,
 };
 use tari_engine_types::{
-    commit_result::{FinalizeResult, RejectReason},
+    commit_result::{ExecuteResult, FinalizeResult, RejectReason},
     substate::{Substate, SubstateAddress},
 };
 use tari_template_lib::{
     crypto::RistrettoPublicKeyBytes,
-    models::{ComponentAddress, TemplateAddress},
+    models::{Amount, ComponentAddress, TemplateAddress},
     prelude::NonFungibleAddress,
 };
 use tari_transaction::Transaction;
 
-#[derive(Debug, Default, Clone)]
+#[derive(Debug, Clone)]
 pub struct TariDanPayloadProcessor<TTemplateProvider> {
     template_provider: Arc<TTemplateProvider>,
+    fee_table: FeeTable,
 }
 
 impl<TTemplateProvider> TariDanPayloadProcessor<TTemplateProvider> {
-    pub fn new(template_provider: TTemplateProvider) -> Self {
+    pub fn new(template_provider: TTemplateProvider, fee_table: FeeTable) -> Self {
         Self {
             template_provider: Arc::new(template_provider),
+            fee_table,
         }
     }
 }
@@ -72,9 +74,9 @@ where TTemplateProvider: TemplateProvider<Template = LoadedTemplate>
         payload: TariDanPayload,
         pledges: HashMap<ShardId, ObjectPledge>,
         consensus: ConsensusContext,
-    ) -> Result<FinalizeResult, PayloadProcessorError> {
+    ) -> Result<ExecuteResult, PayloadProcessorError> {
         let transaction = payload.into_payload();
-        // let mut template_addresses = HashSet::<_, RandomState>::from_iter(transaction.required_templates());
+        // let mut template_addresses = transaction.required_templates();
         // let components = transaction.required_components();
 
         let state_store = create_populated_state_store(pledges.into_values())?;
@@ -88,7 +90,10 @@ where TTemplateProvider: TemplateProvider<Template = LoadedTemplate>
             initial_ownership_proofs: vec![owner_token],
         };
 
-        let modules = vec![]; // No modules for now, currently used in tests. Also will be useful for more advanced use-cases like fees, etc.
+        // 1 per byte
+        // Divide by 2 to account for the cost of CBOR
+        let initial_cost = self.fee_table.per_kb_wasm_size() * package.total_code_byte_size() as u64 / 1024 / 2;
+        let modules: Vec<Box<dyn RuntimeModule>> = vec![Box::new(FeeModule::new(initial_cost, self.fee_table.clone()))];
 
         let processor = TransactionProcessor::new(
             self.template_provider.clone(),
@@ -96,24 +101,23 @@ where TTemplateProvider: TemplateProvider<Template = LoadedTemplate>
             auth_params,
             consensus,
             modules,
+            Amount::try_from(self.fee_table.loan()).expect("Fee loan too large"),
         );
         let tx_hash = *transaction.hash();
         match processor.execute(transaction) {
             Ok(result) => Ok(result),
-            Err(TransactionError::WasmExecutionError(WasmExecutionError::Panic { message, .. })) => {
-                Ok(FinalizeResult::reject(tx_hash, RejectReason::ExecutionFailure(message)))
-            },
-            Err(err) => Ok(FinalizeResult::reject(
-                tx_hash,
-                RejectReason::ExecutionFailure(err.to_string()),
-            )),
+            Err(err) => Ok(ExecuteResult {
+                finalize: FinalizeResult::reject(tx_hash, RejectReason::ExecutionFailure(err.to_string())),
+                transaction_failure: None,
+                fee_receipt: None,
+            }),
         }
     }
 }
 
 fn build_package<TTemplateProvider: TemplateProvider<Template = LoadedTemplate>>(
     template_provider: &TTemplateProvider,
-    template_addresses: HashSet<TemplateAddress>,
+    template_addresses: BTreeSet<TemplateAddress>,
 ) -> Result<Package, PayloadProcessorError> {
     let mut builder = Package::builder();
 
@@ -135,19 +139,19 @@ fn get_auth_token(transaction: &Transaction) -> NonFungibleAddress {
 
 fn load_template_addresses_for_components(
     state_db: &MemoryStateStore,
-    components: &[ComponentAddress],
-) -> Result<Vec<TemplateAddress>, PayloadProcessorError> {
+    components: &BTreeSet<ComponentAddress>,
+) -> Result<BTreeSet<TemplateAddress>, PayloadProcessorError> {
     let access = state_db
         .read_access()
         .map_err(PayloadProcessorError::FailedToLoadTemplate)?;
-    let mut template_addresses = Vec::with_capacity(components.len());
+    let mut template_addresses = BTreeSet::new();
     for component in components {
         let component = access.get_state::<_, Substate>(&SubstateAddress::Component(*component))?;
         let component = component
             .into_substate_value()
             .into_component()
             .expect("Component substate should be a component");
-        template_addresses.push(component.template_address);
+        template_addresses.insert(component.template_address);
     }
     Ok(template_addresses)
 }

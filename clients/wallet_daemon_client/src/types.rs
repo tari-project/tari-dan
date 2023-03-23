@@ -26,23 +26,23 @@ use tari_dan_common_types::{serde_with, QuorumCertificate, ShardId};
 use tari_dan_wallet_sdk::models::{Account, ConfidentialProofId, TransactionStatus, VersionedSubstateAddress};
 use tari_engine_types::{
     commit_result::FinalizeResult,
-    execution_result::ExecutionResult,
     instruction::Instruction,
+    instruction_result::InstructionResult,
     substate::SubstateAddress,
 };
 use tari_template_lib::{
     args::Arg,
     auth::AccessRules,
-    models::{Amount, ComponentAddress, NonFungibleId, ResourceAddress},
-    prelude::ConfidentialWithdrawProof,
+    models::{Amount, ComponentAddress, ConfidentialOutputProof, NonFungibleId, ResourceAddress},
+    prelude::{ConfidentialWithdrawProof, ResourceType},
 };
 use tari_transaction::Transaction;
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct TransactionSubmitRequest {
     pub signing_key_index: Option<u64>,
+    pub fee_instructions: Vec<Instruction>,
     pub instructions: Vec<Instruction>,
-    pub fee: u64,
     pub inputs: Vec<VersionedSubstateAddress>,
     pub override_inputs: bool,
     pub new_outputs: u8,
@@ -50,7 +50,7 @@ pub struct TransactionSubmitRequest {
     pub new_non_fungible_outputs: Vec<(ResourceAddress, u8)>,
     pub new_non_fungible_index_outputs: Vec<(ResourceAddress, u64)>,
     pub is_dry_run: bool,
-    pub proof_id: Option<ConfidentialProofId>,
+    pub proof_ids: Vec<ConfidentialProofId>,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -161,6 +161,8 @@ pub struct AccountsCreateRequest {
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct AccountsCreateResponse {
     pub address: SubstateAddress,
+    pub public_key: PublicKey,
+    pub result: FinalizeResult,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -168,11 +170,12 @@ pub struct AccountsInvokeRequest {
     pub account_name: String,
     pub method: String,
     pub args: Vec<Arg>,
+    pub fee: Amount,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct AccountsInvokeResponse {
-    pub result: Option<ExecutionResult>,
+    pub result: Option<InstructionResult>,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -183,9 +186,10 @@ pub struct AccountsListRequest {
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct AccountsListResponse {
-    pub accounts: Vec<Account>,
+    pub accounts: Vec<(Account, PublicKey)>,
     pub total: u64,
 }
+
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct AccountsGetBalancesRequest {
     pub account_name: String,
@@ -194,7 +198,40 @@ pub struct AccountsGetBalancesRequest {
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct AccountsGetBalancesResponse {
     pub address: SubstateAddress,
-    pub balances: Vec<(ResourceAddress, Amount)>,
+    pub balances: Vec<BalanceEntry>,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct BalanceEntry {
+    pub vault_address: SubstateAddress,
+    pub resource_address: ResourceAddress,
+    pub balance: Amount,
+    pub resource_type: ResourceType,
+    pub confidential_balance: Amount,
+    pub token_symbol: Option<String>,
+}
+
+impl BalanceEntry {
+    pub fn to_balance_string(&self) -> String {
+        let symbol = self.token_symbol.as_deref().unwrap_or_default();
+        match self.resource_type {
+            ResourceType::Fungible => {
+                format!("{} {}", self.balance, symbol)
+            },
+            ResourceType::NonFungible => {
+                format!("{} {} tokens", self.balance, symbol)
+            },
+            ResourceType::Confidential => {
+                format!(
+                    "{} revealed + {} blinded = {} {}",
+                    self.balance,
+                    self.confidential_balance,
+                    self.balance + self.confidential_balance,
+                    symbol
+                )
+            },
+        }
+    }
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -204,17 +241,18 @@ pub struct AccountByNameRequest {
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct AccountByNameResponse {
-    pub account_address: SubstateAddress,
+    pub account: Account,
+    pub public_key: PublicKey,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct ProofsGenerateRequest {
     pub amount: Amount,
+    pub reveal_amount: Amount,
     pub source_account_name: String,
     pub resource_address: ResourceAddress,
-    pub destination_account: ComponentAddress,
     // TODO: For now, we assume that this is obtained "somehow" from the destination account
-    pub destination_stealth_public_key: PublicKey,
+    pub destination_public_key: PublicKey,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -237,18 +275,67 @@ pub struct ProofsCancelRequest {
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct ConfidentialCreateOutputProofRequest {
+    pub amount: Amount,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct ConfidentialCreateOutputProofResponse {
+    pub proof: ConfidentialOutputProof,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct ConfidentialTransferRequest {
+    pub account: ComponentAddress,
+    pub amount: Amount,
+    pub resource_address: ResourceAddress,
+    pub destination_account: ComponentAddress,
+    pub destination_public_key: PublicKey,
+    pub fee: Amount,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct ConfidentialTransferResponse {
+    #[serde(with = "serde_with::hex")]
+    pub hash: FixedHash,
+    pub fee: Amount,
+    pub result: FinalizeResult,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct ClaimBurnRequest {
     pub account: ComponentAddress,
     pub claim_proof: serde_json::Value,
-    pub fee: u64,
+    pub fee: Amount,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct ClaimBurnResponse {
     #[serde(with = "serde_with::hex")]
     pub hash: FixedHash,
+    pub fee: Amount,
     pub result: FinalizeResult,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct ProofsCancelResponse {}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct RevealFundsRequest {
+    /// Account with funds to reveal
+    pub account: ComponentAddress,
+    /// Amount to reveal
+    pub amount_to_reveal: Amount,
+    /// Pay fee from revealed funds. If false, previously revealed funds in the account are used.
+    pub pay_fee_from_reveal: bool,
+    /// The amount of fees to add to the transaction. Any fees not charged are refunded.
+    pub fee: Amount,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct RevealFundsResponse {
+    #[serde(with = "serde_with::hex")]
+    pub hash: FixedHash,
+    pub fee: Amount,
+    pub result: FinalizeResult,
+}

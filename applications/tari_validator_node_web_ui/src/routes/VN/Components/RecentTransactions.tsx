@@ -43,8 +43,7 @@ import Collapse from '@mui/material/Collapse';
 import TablePagination from '@mui/material/TablePagination';
 import Typography from '@mui/material/Typography';
 import HeadingMenu from '../../../Components/HeadingMenu';
-import IconButton from '@mui/material/IconButton';
-import TransactionFilter from '../../../Components/TransactionFilter';
+import SearchFilter from '../../../Components/SearchFilter';
 import Fade from '@mui/material/Fade';
 
 interface IRecentTransaction {
@@ -180,22 +179,6 @@ function RecentTransactions() {
     setPage(0);
   };
 
-  const ascendingTimestamp = () => {
-    sort('timestamp', 1);
-  };
-
-  const descendingTimestamp = () => {
-    sort('timestamp', -1);
-  };
-
-  const ascendingPayloadId = () => {
-    sort('payload_id', 1);
-  };
-
-  const descendingPayloadId = () => {
-    sort('payload_id', -1);
-  };
-
   useEffect(() => {
     getRecentTransactions().then((resp) => {
       setRecentTransactions(
@@ -242,10 +225,25 @@ function RecentTransactions() {
   return (
     <>
       <BoxHeading2>
-        <TransactionFilter
-          recentTransactions={recentTransactions}
-          setRecentTransactions={setRecentTransactions}
+        <SearchFilter
+          stateObject={recentTransactions}
+          setStateObject={setRecentTransactions}
           setPage={setPage}
+          filterItems={[
+            {
+              title: 'Payload Id',
+              value: 'id',
+              filterFn: (value: string, row: ITableRecentTransaction) =>
+                row.id.toLowerCase().includes(value.toLowerCase()),
+            },
+            {
+              title: 'Timestamp',
+              value: 'timestamp',
+              filterFn: (value: string, row: ITableRecentTransaction) =>
+                row.timestamp.includes(value),
+            },
+          ]}
+          placeholder="Search for Transactions"
         />
       </BoxHeading2>
       <TableContainer>
@@ -253,78 +251,46 @@ function RecentTransactions() {
           <TableHead>
             <TableRow>
               <TableCell>
-                <div
-                  style={{
-                    display: 'flex',
-                    justifyContent: 'flex-start',
-                    alignItems: 'center',
-                    gap: '5px',
-                  }}
-                >
-                  <HeadingMenu
-                    menuTitle="Payload ID"
-                    menuItems={[
-                      {
-                        title: 'Sort Ascending',
-                        fn: ascendingPayloadId,
-                        icon: <KeyboardArrowUpIcon />,
-                      },
-                      {
-                        title: 'Sort Descending',
-                        fn: descendingPayloadId,
-                        icon: <KeyboardArrowDownIcon />,
-                      },
-                    ]}
-                  />
-                  <IconButton>
-                    {lastSort.column === 'payload_id' ? (
-                      lastSort.order === 1 ? (
-                        <KeyboardArrowUpIcon onClick={descendingPayloadId} />
-                      ) : (
-                        <KeyboardArrowDownIcon onClick={ascendingPayloadId} />
-                      )
-                    ) : (
-                      ''
-                    )}
-                  </IconButton>
-                </div>
+                <HeadingMenu
+                  menuTitle="Payload ID"
+                  menuItems={[
+                    {
+                      title: 'Sort Ascending',
+                      fn: () => sort('id', 1),
+                      icon: <KeyboardArrowUpIcon />,
+                    },
+                    {
+                      title: 'Sort Descending',
+                      fn: () => sort('id', -1),
+                      icon: <KeyboardArrowDownIcon />,
+                    },
+                  ]}
+                  showArrow
+                  lastSort={lastSort}
+                  columnName="id"
+                  sortFunction={sort}
+                />
               </TableCell>
               <TableCell>
-                <div
-                  style={{
-                    display: 'flex',
-                    justifyContent: 'flex-start',
-                    alignItems: 'center',
-                    gap: '5px',
-                  }}
-                >
-                  <HeadingMenu
-                    menuTitle="Timestamp"
-                    menuItems={[
-                      {
-                        title: 'Sort Ascending',
-                        fn: ascendingTimestamp,
-                        icon: <KeyboardArrowUpIcon />,
-                      },
-                      {
-                        title: 'Sort Descending',
-                        fn: descendingTimestamp,
-                        icon: <KeyboardArrowDownIcon />,
-                      },
-                    ]}
-                  />
-                  <IconButton>
-                    {lastSort.column === 'timestamp' ? (
-                      lastSort.order === 1 ? (
-                        <KeyboardArrowUpIcon onClick={descendingTimestamp} />
-                      ) : (
-                        <KeyboardArrowDownIcon onClick={ascendingTimestamp} />
-                      )
-                    ) : (
-                      ''
-                    )}
-                  </IconButton>
-                </div>
+                <HeadingMenu
+                  menuTitle="Timestamp"
+                  menuItems={[
+                    {
+                      title: 'Sort Ascending',
+                      fn: () => sort('timestamp', 1),
+                      icon: <KeyboardArrowUpIcon />,
+                    },
+                    {
+                      title: 'Sort Descending',
+                      fn: () => sort('timestamp', -1),
+                      icon: <KeyboardArrowDownIcon />,
+                    },
+                  ]}
+                  showArrow
+                  lastSort={lastSort}
+                  columnName="timestamp"
+                  sortFunction={sort}
+                />
               </TableCell>
               <TableCell style={{ textAlign: 'center' }}>Meta</TableCell>
               <TableCell style={{ textAlign: 'center' }}>

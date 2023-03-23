@@ -4,7 +4,6 @@
 use std::fmt::{Display, Formatter};
 
 use serde::{Deserialize, Serialize};
-use tari_bor::{borsh, Encode};
 use tari_template_lib::{
     args::{Arg, LogLevel},
     models::{ComponentAddress, TemplateAddress},
@@ -12,8 +11,8 @@ use tari_template_lib::{
 
 use crate::confidential::ConfidentialClaim;
 
-#[derive(Debug, Clone, Encode, Deserialize, Serialize, Eq, PartialEq)]
-#[serde(tag = "type")]
+#[derive(Debug, Clone, Deserialize, Serialize, Eq, PartialEq)]
+//#[serde(tag = "type")]
 pub enum Instruction {
     CallFunction {
         template_address: TemplateAddress,

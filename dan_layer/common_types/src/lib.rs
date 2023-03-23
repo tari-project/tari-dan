@@ -7,7 +7,6 @@ use std::{
 };
 
 use ::serde::{Deserialize, Serialize};
-use tari_bor::{borsh, Decode, Encode};
 use tari_common_types::types::{FixedHash, FixedHashSizeError};
 use tari_engine_types::substate::{Substate, SubstateAddress};
 use tari_utilities::hex::Hex;
@@ -45,10 +44,9 @@ pub use node_addressable::NodeAddressable;
 
 pub mod services;
 mod shard_id;
-
 pub use shard_id::ShardId;
 
-#[derive(Debug, Clone, Encode, Decode, Deserialize, Serialize)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 pub enum SubstateState {
     DoesNotExist,
     Up {
@@ -71,7 +69,7 @@ impl SubstateState {
     }
 }
 
-#[derive(Copy, Clone, Debug, PartialEq, Eq, Hash, Encode, Decode, Deserialize, Serialize)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Hash, Deserialize, Serialize)]
 #[serde(transparent)]
 pub struct PayloadId {
     #[serde(with = "serde_with::hex")]

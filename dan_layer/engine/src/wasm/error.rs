@@ -1,8 +1,7 @@
 // Copyright 2022 The Tari Project
 // SPDX-License-Identifier: BSD-3-Clause
 
-use std::io;
-
+use tari_bor::BorError;
 use thiserror::Error;
 use wasmer::{ExportError, HostEnvInitError, InstantiationError};
 
@@ -42,12 +41,12 @@ pub enum WasmExecutionError {
     MissingAbiFunction { function: String },
     #[error("Runtime error: {0}")]
     RuntimeError(#[from] RuntimeError),
-    #[error("Failed to decode argument for engine call: {0}")]
-    EngineArgDecodeFailed(io::Error),
+    #[error("Failed to decode argument for engine call: {0:?}")]
+    EngineArgDecodeFailed(BorError),
     #[error("maximum module memory size exceeded")]
     MaxMemorySizeExceeded,
-    #[error("Failed to decode ABI: {0}")]
-    AbiDecodeError(io::Error),
+    #[error("Failed to decode ABI: {0:?}")]
+    AbiDecodeError(BorError),
     #[error("package ABI function returned an invalid type")]
     InvalidReturnTypeFromAbiFunc,
     #[error("package did not contain an ABI definition")]

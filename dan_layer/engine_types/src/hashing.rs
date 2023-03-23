@@ -23,48 +23,63 @@
 use std::{io, io::Write};
 
 use digest::Digest;
-use tari_bor::{encode_into, Encode};
+use serde::Serialize;
+use tari_bor::encode_into;
 use tari_crypto::{hash::blake2::Blake256, hash_domain, hashing::DomainSeparation};
 use tari_template_lib::Hash;
 
 hash_domain!(TariEngineHashDomain, "tari.dan.engine", 0);
 
-pub fn hasher(label: EngineHashDomainLabel) -> TariEngineHasher {
-    TariEngineHasher::new_with_label(label.as_label())
+pub fn hasher(label: EngineHashDomainLabel) -> TariHasher {
+    TariHasher::new_with_label::<TariEngineHashDomain>(label.as_label())
 }
 
+pub fn template_hasher() -> TariHasher {
+    hasher(EngineHashDomainLabel::Template)
+}
+
+hash_domain!(
+    ConfidentialOutputHashDomain,
+    "com.tari.layer_two.confidential_output",
+    1
+);
+
 #[derive(Debug, Clone)]
-pub struct TariEngineHasher {
+pub struct TariHasher {
     hasher: Blake256,
 }
 
-impl TariEngineHasher {
-    pub fn new_with_label(label: &'static str) -> Self {
+impl TariHasher {
+    pub fn new_with_label<TDomain: DomainSeparation>(label: &'static str) -> Self {
         let mut hasher = Blake256::new();
-        TariEngineHashDomain::add_domain_separation_tag(&mut hasher, label);
+        TDomain::add_domain_separation_tag(&mut hasher, label);
         Self { hasher }
     }
 
-    pub fn update<T: Encode + ?Sized>(&mut self, data: &T) {
-        // Borsh encoding does not make any contract to say that if the writer is infallible (as it is here) then
+    pub fn update<T: Serialize + ?Sized>(&mut self, data: &T) {
+        // CBOR encoding does not make any contract to say that if the writer is infallible (as it is here) then
         // encoding in infallible. However this should be the case. Since it is very unergonomic to return an
         // error in hash chain functions, and therefore all usages of the hasher, we assume all types implement
         // infallible encoding.
         encode_into(data, &mut self.hash_writer()).expect("encoding failed")
     }
 
-    pub fn chain<T: Encode + ?Sized>(mut self, data: &T) -> Self {
+    pub fn chain<T: Serialize + ?Sized>(mut self, data: &T) -> Self {
         self.update(data);
         self
     }
 
-    pub fn digest<T: Encode + ?Sized>(self, data: &T) -> Hash {
+    pub fn digest<T: Serialize + ?Sized>(self, data: &T) -> Hash {
         self.chain(data).result()
     }
 
     pub fn result(self) -> Hash {
         let hash: [u8; 32] = self.hasher.finalize().into();
         hash.into()
+    }
+
+    pub fn finalize_into(self, output: &mut digest::Output<Blake256>) {
+        digest::FixedOutput::finalize_into(self.hasher, output)
     }
 
     fn hash_writer(&mut self) -> impl Write + '_ {

@@ -4,13 +4,12 @@
 use std::ops::Deref;
 
 use serde::{Deserialize, Serialize};
-use tari_bor::borsh::BorshSerialize;
 use tari_common_types::types::FixedHash;
-use tari_engine_types::hashing::{hasher, EngineHashDomainLabel, TariEngineHasher};
+use tari_engine_types::hashing::{hasher, EngineHashDomainLabel, TariHasher};
 
 use crate::{object_pledge::ObjectPledge, ShardId, TreeNodeHash};
 
-#[derive(Debug, Clone, Deserialize, Serialize, BorshSerialize)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct ShardPledge {
     pub shard_id: ShardId,
     pub node_hash: TreeNodeHash,
@@ -18,7 +17,7 @@ pub struct ShardPledge {
 }
 
 /// An ordered list of ShardPledges.
-#[derive(Debug, Clone, Deserialize, Serialize, BorshSerialize, Default)]
+#[derive(Debug, Clone, Deserialize, Serialize, Default)]
 pub struct ShardPledgeCollection {
     pledges: Vec<ShardPledge>,
     pledge_hash: FixedHash,
@@ -51,10 +50,7 @@ fn hash_pledges(pledges: &[ShardPledge]) -> FixedHash {
     pledges
         .iter()
         .map(|p| &p.pledge)
-        .fold(
-            hasher(EngineHashDomainLabel::ShardPledgeCollection),
-            TariEngineHasher::chain,
-        )
+        .fold(hasher(EngineHashDomainLabel::ShardPledgeCollection), TariHasher::chain)
         .result()
         .into_array()
         .into()

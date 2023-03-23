@@ -1,12 +1,14 @@
 //  Copyright 2022 The Tari Project
 //  SPDX-License-Identifier: BSD-3-Clause
 
+pub mod base_layer_hashing;
 pub mod bucket;
 pub mod commit_result;
 pub mod confidential;
-pub mod execution_result;
+pub mod fees;
 pub mod hashing;
 pub mod instruction;
+pub mod instruction_result;
 pub mod logs;
 pub mod non_fungible;
 pub mod non_fungible_index;

@@ -6,7 +6,7 @@ license = "BSD-3-Clause"
 
 [dependencies]
 tari_dan_core = { path = "../core" }
-tari_common_types = { git = "https://github.com/tari-project/tari.git", tag = "v0.49.0-pre.0", package = "tari_common_types" }
+tari_common_types = { git = "https://github.com/tari-project/tari.git", tag = "v0.49.0-pre.1", package = "tari_common_types" }
 tari_dan_common_types = { path = "../common_types" }
 tari_utilities = { git = "https://github.com/tari-project/tari_utilities.git", tag = "v0.4.10" }
 tari_dan_engine = { path = "../engine" }
@@ -14,7 +14,6 @@ tari_dan_storage = { path = "../storage" }
 tari_engine_types = { path = "../engine_types" }
 tari_transaction = { path = "../transaction" }
 
-borsh = "0.9.3"
 diesel = { version = "2", default-features = false, features = ["sqlite", "chrono"] }
 diesel_migrations = "2"
 thiserror = "1.0.30"

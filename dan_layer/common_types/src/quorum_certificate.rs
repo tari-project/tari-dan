@@ -3,7 +3,6 @@
 
 use std::borrow::Borrow;
 
-use borsh::BorshSerialize;
 use digest::Digest;
 use serde::{Deserialize, Serialize};
 use tari_common_types::types::FixedHash;
@@ -12,7 +11,7 @@ use tari_engine_types::commit_result::RejectReason;
 
 use crate::{Epoch, NodeHeight, PayloadId, ShardId, ShardPledgeCollection, TreeNodeHash, ValidatorMetadata};
 
-#[derive(Debug, Clone, Copy, Deserialize, Serialize, PartialEq, Eq, BorshSerialize)]
+#[derive(Debug, Clone, Copy, Deserialize, Serialize, PartialEq, Eq)]
 pub enum QuorumDecision {
     Accept,
     Reject(QuorumRejectReason),
@@ -24,13 +23,15 @@ impl QuorumDecision {
     }
 }
 
-#[derive(Debug, Clone, Copy, Deserialize, Serialize, PartialEq, Eq, BorshSerialize)]
+#[derive(Debug, Clone, Copy, Deserialize, Serialize, PartialEq, Eq)]
 pub enum QuorumRejectReason {
     ShardNotPledged,
     ExecutionFailure,
     PreviousQcRejection,
     ShardPledgedToAnotherPayload,
     ShardRejected,
+    FeeTransactionFailed,
+    FeeInitializationFailed,
 }
 
 impl QuorumRejectReason {
@@ -41,6 +42,8 @@ impl QuorumRejectReason {
             QuorumRejectReason::PreviousQcRejection => 3,
             QuorumRejectReason::ShardPledgedToAnotherPayload => 4,
             QuorumRejectReason::ShardRejected => 5,
+            QuorumRejectReason::FeeTransactionFailed => 6,
+            QuorumRejectReason::FeeInitializationFailed => 7,
         }
     }
 }
@@ -61,6 +64,8 @@ impl QuorumDecision {
             3 => Ok(QuorumDecision::Reject(QuorumRejectReason::PreviousQcRejection)),
             4 => Ok(QuorumDecision::Reject(QuorumRejectReason::ShardPledgedToAnotherPayload)),
             5 => Ok(QuorumDecision::Reject(QuorumRejectReason::ShardRejected)),
+            6 => Ok(QuorumDecision::Reject(QuorumRejectReason::FeeTransactionFailed)),
+            7 => Ok(QuorumDecision::Reject(QuorumRejectReason::FeeInitializationFailed)),
             // TODO: Add error type
             _ => Err(anyhow::anyhow!("Invalid QuorumDecision")),
         }
@@ -75,11 +80,13 @@ impl<T: Borrow<RejectReason>> From<T> for QuorumRejectReason {
             RejectReason::PreviousQcRejection => QuorumRejectReason::PreviousQcRejection,
             RejectReason::ShardPledgedToAnotherPayload(_) => QuorumRejectReason::ShardPledgedToAnotherPayload,
             RejectReason::ShardRejected(_) => QuorumRejectReason::ShardRejected,
+            RejectReason::FeeTransactionFailed => QuorumRejectReason::FeeTransactionFailed,
+            RejectReason::FeesNotPaid(_) => QuorumRejectReason::FeeTransactionFailed,
         }
     }
 }
 
-#[derive(Debug, Clone, Deserialize, Serialize, BorshSerialize)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct QuorumCertificate {
     payload_id: PayloadId,
     payload_height: NodeHeight,

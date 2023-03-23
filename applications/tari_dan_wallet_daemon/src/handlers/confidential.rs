@@ -4,6 +4,7 @@
 use std::convert::TryInto;
 
 use axum_jrpc::error::{JsonRpcError, JsonRpcErrorReason};
+use log::*;
 use serde_json::json;
 use tari_crypto::commitment::HomomorphicCommitmentFactory;
 use tari_dan_wallet_sdk::{
@@ -11,7 +12,10 @@ use tari_dan_wallet_sdk::{
     confidential::{get_commitment_factory, ConfidentialProofStatement},
     models::{ConfidentialOutputModel, OutputStatus},
 };
+use tari_template_lib::models::Amount;
 use tari_wallet_daemon_client::types::{
+    ConfidentialCreateOutputProofRequest,
+    ConfidentialCreateOutputProofResponse,
     ProofsCancelRequest,
     ProofsCancelResponse,
     ProofsGenerateRequest,
@@ -19,6 +23,8 @@ use tari_wallet_daemon_client::types::{
 };
 
 use crate::handlers::HandlerContext;
+
+const LOG_TARGET: &str = "tari::dan_wallet_daemon::json_rpc::confidential";
 
 pub async fn handle_create_transfer_proof(
     context: &HandlerContext,
@@ -41,52 +47,69 @@ pub async fn handle_create_transfer_proof(
         .get_vault_by_resource(&account.address, &req.resource_address)?;
     let proof_id = sdk.confidential_outputs_api().add_proof(&vault.address)?;
     // Lock inputs we're going to spend
-    let (inputs, total_input_value) =
-        sdk.confidential_outputs_api()
-            .lock_outputs_by_amount(&vault.address, req.amount.value() as u64, proof_id)?;
+    let (inputs, total_input_value) = sdk.confidential_outputs_api().lock_outputs_by_amount(
+        &vault.address,
+        req.amount.value() as u64 + req.reveal_amount.value() as u64,
+        proof_id,
+    )?;
+
+    info!(
+        target: LOG_TARGET,
+        "Locked {} inputs for proof {} worth {} µT",
+        inputs.len(),
+        proof_id,
+        total_input_value
+    );
 
     // TODO: Any errors from here need to unlock the outputs, ideally just roll back (refactor required but doable).
 
     let (output_mask, public_nonce) = sdk
         .confidential_crypto_api()
-        .derive_output_mask_for_destination(&req.destination_stealth_public_key);
+        .derive_output_mask_for_destination(&req.destination_public_key);
 
     let output_statement = ConfidentialProofStatement {
         amount: req.amount,
         mask: output_mask,
         sender_public_nonce: Some(public_nonce),
         minimum_value_promise: 0,
+        reveal_amount: req.reveal_amount,
     };
 
-    let change_amount = total_input_value - req.amount.value() as u64;
-    let change_key = sdk.key_manager_api().next_key(key_manager::OUTPUT_BRANCH)?;
-    sdk.confidential_outputs_api().add_output(ConfidentialOutputModel {
-        account_address: account.address,
-        vault_address: vault.address,
-        commitment: get_commitment_factory().commit_value(&change_key.k, change_amount),
-        value: change_amount,
-        sender_public_nonce: None,
-        secret_key_index: change_key.key_index,
-        public_asset_tag: None,
-        status: OutputStatus::LockedUnconfirmed,
-        locked_by_proof: Some(proof_id),
-    })?;
+    let change_amount = total_input_value - req.amount.value() as u64 - req.reveal_amount.value() as u64;
+    let change_key = sdk.key_manager_api().next_key(key_manager::TRANSACTION_BRANCH)?;
+    let maybe_change_statement = if change_amount > 0 {
+        sdk.confidential_outputs_api().add_output(ConfidentialOutputModel {
+            account_address: account.address,
+            vault_address: vault.address,
+            commitment: get_commitment_factory().commit_value(&change_key.k, change_amount),
+            value: change_amount,
+            sender_public_nonce: None,
+            secret_key_index: change_key.key_index,
+            public_asset_tag: None,
+            status: OutputStatus::LockedUnconfirmed,
+            locked_by_proof: Some(proof_id),
+        })?;
 
-    let change_statement = ConfidentialProofStatement {
-        amount: change_amount.try_into()?,
-        mask: change_key.k,
-        sender_public_nonce: None,
-        minimum_value_promise: 0,
+        Some(ConfidentialProofStatement {
+            amount: change_amount.try_into()?,
+            mask: change_key.k,
+            sender_public_nonce: None,
+            minimum_value_promise: 0,
+            reveal_amount: Amount::zero(),
+        })
+    } else {
+        None
     };
 
-    // TODO: Should use a different key branch for accounts?
     let inputs = sdk
         .confidential_outputs_api()
         .resolve_output_masks(inputs, key_manager::TRANSACTION_BRANCH)?;
 
-    let proof =
-        sdk.confidential_crypto_api()
-            .generate_withdraw_proof(&inputs, &output_statement, Some(&change_statement))?;
+    let proof = sdk.confidential_crypto_api().generate_withdraw_proof(
+        &inputs,
+        &output_statement,
+        maybe_change_statement.as_ref(),
+    )?;
 
     Ok(ProofsGenerateResponse { proof_id, proof })
 }
@@ -108,4 +131,21 @@ pub async fn handle_cancel_transfer(
     let sdk = context.wallet_sdk();
     sdk.confidential_outputs_api().release_proof_outputs(req.proof_id)?;
     Ok(ProofsCancelResponse {})
+}
+
+pub async fn handle_create_output_proof(
+    context: &HandlerContext,
+    req: ConfidentialCreateOutputProofRequest,
+) -> Result<ConfidentialCreateOutputProofResponse, anyhow::Error> {
+    let sdk = context.wallet_sdk();
+    let key = sdk.key_manager_api().next_key(key_manager::TRANSACTION_BRANCH)?;
+    let statement = ConfidentialProofStatement {
+        amount: req.amount,
+        mask: key.k,
+        sender_public_nonce: None,
+        minimum_value_promise: 0,
+        reveal_amount: Amount::zero(),
+    };
+    let proof = sdk.confidential_crypto_api().generate_output_proof(&statement)?;
+    Ok(ConfidentialCreateOutputProofResponse { proof })
 }

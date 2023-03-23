@@ -24,7 +24,7 @@ use std::collections::HashMap;
 
 use tari_dan_common_types::{ObjectPledge, ShardId};
 use tari_dan_engine::{runtime::ConsensusContext, state_store::StateStoreError, transaction::TransactionError};
-use tari_engine_types::commit_result::FinalizeResult;
+use tari_engine_types::commit_result::ExecuteResult;
 
 use crate::models::Payload;
 
@@ -34,7 +34,7 @@ pub trait PayloadProcessor<TPayload: Payload> {
         payload: TPayload,
         pledges: HashMap<ShardId, ObjectPledge>,
         consensus: ConsensusContext,
-    ) -> Result<FinalizeResult, PayloadProcessorError>;
+    ) -> Result<ExecuteResult, PayloadProcessorError>;
 }
 
 #[derive(Debug, thiserror::Error)]

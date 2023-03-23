@@ -9,7 +9,6 @@ use std::{
 };
 
 use serde::{Deserialize, Serialize};
-use tari_bor::Encode;
 use tari_common_types::types::{FixedHash, FixedHashSizeError};
 use tari_engine_types::{
     hashing::{hasher, EngineHashDomainLabel},
@@ -19,7 +18,7 @@ use tari_utilities::hex::{from_hex, Hex};
 
 use crate::serde_with;
 
-#[derive(Copy, Clone, Debug, Eq, PartialEq, Hash, Serialize, Deserialize, Encode)]
+#[derive(Copy, Clone, Debug, Eq, PartialEq, Hash, Serialize, Deserialize)]
 pub struct ShardId(#[serde(with = "serde_with::hex")] pub [u8; 32]);
 
 impl ShardId {

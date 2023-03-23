@@ -180,16 +180,16 @@ impl WorkingState {
         }
     }
 
-    pub fn borrow_vault<R, F: FnOnce(&Vault) -> R>(&self, vault_id: &VaultId, f: F) -> Result<R, RuntimeError> {
-        match self.new_vaults.get(vault_id) {
+    pub fn borrow_vault<R, F: FnOnce(&Vault) -> R>(&self, vault_id: VaultId, f: F) -> Result<R, RuntimeError> {
+        match self.new_vaults.get(&vault_id) {
             Some(vault) => Ok(f(vault)),
             None => {
                 let substate = self
                     .state_store
                     .read_access()?
-                    .get_state::<_, Substate>(&SubstateAddress::Vault(*vault_id))
+                    .get_state::<_, Substate>(&SubstateAddress::Vault(vault_id))
                     .optional()?
-                    .ok_or(RuntimeError::VaultNotFound { vault_id: *vault_id })?;
+                    .ok_or(RuntimeError::VaultNotFound { vault_id })?;
 
                 let vault = substate
                     .into_substate_value()
@@ -203,10 +203,10 @@ impl WorkingState {
 
     pub fn borrow_vault_mut<R, F: FnOnce(&mut Vault) -> R>(
         &mut self,
-        vault_id: &VaultId,
+        vault_id: VaultId,
         f: F,
     ) -> Result<R, RuntimeError> {
-        let vault_mut = self.new_vaults.get_mut(vault_id);
+        let vault_mut = self.new_vaults.get_mut(&vault_id);
         match vault_mut {
             Some(vault_mut) => Ok(f(vault_mut)),
             None => {
@@ -214,16 +214,16 @@ impl WorkingState {
                     .state_store
                     .read_access()
                     .unwrap()
-                    .get_state::<_, Substate>(&SubstateAddress::Vault(*vault_id))
+                    .get_state::<_, Substate>(&SubstateAddress::Vault(vault_id))
                     .optional()?
-                    .ok_or(RuntimeError::VaultNotFound { vault_id: *vault_id })?;
+                    .ok_or(RuntimeError::VaultNotFound { vault_id })?;
 
                 let mut vault = substate
                     .into_substate_value()
                     .into_vault()
                     .expect("Substate was not a vault type at vault address");
                 let ret = f(&mut vault);
-                self.new_vaults.insert(*vault_id, vault);
+                self.new_vaults.insert(vault_id, vault);
                 Ok(ret)
             },
         }
@@ -271,13 +271,6 @@ impl WorkingState {
                 count: self.buckets.len(),
             });
         }
-
-        // We actually only care that there are no buckets - this can be removed but keeping it here for this PR
-        // if !self.workspace.is_empty() {
-        //     return Err(TransactionCommitError::WorkspaceNotEmpty {
-        //         count: self.workspace.len(),
-        //     });
-        // }
 
         Ok(())
     }

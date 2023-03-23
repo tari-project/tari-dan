@@ -49,7 +49,7 @@ use tari_dan_core::{
 use tari_dan_engine::runtime::ConsensusContext;
 use tari_dan_storage_sqlite::sqlite_shard_store_factory::SqliteShardStore;
 use tari_engine_types::{
-    commit_result::FinalizeResult,
+    commit_result::ExecuteResult,
     substate::{Substate, SubstateAddress},
 };
 use tari_transaction::Transaction;
@@ -105,7 +105,7 @@ impl DryRunTransactionProcessor {
     pub async fn process_transaction(
         &self,
         transaction: Transaction,
-    ) -> Result<FinalizeResult, DryRunTransactionProcessorError> {
+    ) -> Result<ExecuteResult, DryRunTransactionProcessorError> {
         // get the list of involved shards for the transaction
         let payload = TariDanPayload::new(transaction.clone());
         let involved_shards = payload.involved_shards();
@@ -130,6 +130,11 @@ impl DryRunTransactionProcessor {
         let result = self
             .payload_processor
             .process_payload(payload, shard_pledges, consensus_context)?;
+
+        if let Some(ref fees) = result.fee_receipt {
+            info!(target: LOG_TARGET, "Transaction fees: {}", fees.total_fees_charged());
+        }
+
         Ok(result)
     }
 

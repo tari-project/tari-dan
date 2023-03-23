@@ -4,12 +4,12 @@
 use std::{convert::TryInto, str::FromStr};
 
 use cucumber::{then, when};
-use tari_crypto::tari_utilities::{hex::Hex, ByteArray};
+use tari_crypto::tari_utilities::hex::Hex;
 use tari_dan_common_types::{Epoch, ShardId};
-use tari_engine_types::{confidential::ConfidentialClaim, instruction::Instruction, substate::SubstateAddress};
+use tari_engine_types::{confidential::ConfidentialClaim, substate::SubstateAddress};
 use tari_template_lib::{args, prelude::ComponentAddress};
 use tari_transaction::Transaction;
-use tari_validator_node_client::types::{GetStateRequest, SubmitTransactionRequest};
+use tari_validator_node_client::types::{GetStateRequest, SubmitTransactionRequest, TransactionFinalizeResult};
 
 use crate::TariWorld;
 
@@ -40,7 +40,7 @@ async fn when_i_claim_burn(
     claim_public_key_name: String,
     account_name: String,
     vn_name: String,
-) -> Result<(), anyhow::Error> {
+) -> Result<TransactionFinalizeResult, anyhow::Error> {
     let commitment = world
         .commitments
         .get(&commitment_name)
@@ -75,35 +75,24 @@ async fn when_i_claim_burn(
         .get(&claim_public_key_name)
         .unwrap_or_else(|| panic!("Claim public key {} not found", claim_public_key_name));
 
-    let instructions = [
-        Instruction::ClaimBurn {
-            claim: Box::new(ConfidentialClaim {
-                public_key: reciprocal_public_key.clone(),
-                output_address: commitment.as_slice().try_into()?,
-                range_proof: rangeproof.clone(),
-                proof_of_knowledge: proof.clone(),
-            }),
-        },
-        Instruction::PutLastInstructionOutputOnWorkspace { key: b"burn".to_vec() },
-        Instruction::CallMethod {
-            component_address,
-            method: "deposit".to_string(),
-            args: args![Variable("burn")],
-        },
-    ];
-
     let account_shard = ShardId::from_address(&SubstateAddress::from_str(&account_address).unwrap(), 0);
     let account_v1_shard = ShardId::from_address(&SubstateAddress::from_str(&account_address).unwrap(), 1);
 
-    let mut builder = Transaction::builder();
-    builder
-        .with_instructions(instructions.to_vec())
+    let transaction = Transaction::builder()
+        .claim_burn(ConfidentialClaim {
+            public_key: reciprocal_public_key.clone(),
+            output_address: commitment.as_slice().try_into()?,
+            range_proof: rangeproof.clone(),
+            proof_of_knowledge: proof.clone(),
+            withdraw_proof: None,
+        })
+        .put_last_instruction_output_on_workspace("burn")
+        .call_method(component_address, "deposit", args![Workspace("burn")])
         .with_outputs(vec![account_v1_shard])
         .with_inputs(vec![commitment_shard, account_shard])
-        .with_fee(1)
         .with_new_outputs(1)
-        .sign(account_secret);
-    let transaction = builder.build();
+        .sign(account_secret)
+        .build();
 
     let request = SubmitTransactionRequest {
         transaction,
@@ -113,9 +102,10 @@ async fn when_i_claim_burn(
     };
 
     let mut client = vn.create_client().await;
-    client.submit_transaction(request).await?;
+    let resp = client.submit_transaction(request).await?;
+    let result = resp.result.ok_or_else(|| anyhow::anyhow!("Transaction failed"))?;
 
-    Ok(())
+    Ok(result)
 }
 
 #[when(
@@ -131,7 +121,7 @@ async fn when_i_claim_burn_second_time_fails(
     account_name: String,
     vn_name: String,
 ) {
-    when_i_claim_burn(
+    let result = when_i_claim_burn(
         world,
         commitment_name,
         proof_name,
@@ -141,7 +131,9 @@ async fn when_i_claim_burn_second_time_fails(
         vn_name,
     )
     .await
-    .unwrap_err();
+    .unwrap();
+    let reason = result.transaction_failure.expect("Transaction should have failed");
+    eprintln!("Expected transaction failure. Reason: {}", reason);
 }
 
 #[then(expr = "{word} is on epoch {int} within {int} seconds")]

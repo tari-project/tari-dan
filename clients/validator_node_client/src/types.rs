@@ -31,7 +31,8 @@ use tari_dan_common_types::{
 };
 use tari_dan_core::models::RecentTransaction;
 use tari_engine_types::{
-    commit_result::FinalizeResult,
+    commit_result::{ExecuteResult, FinalizeResult, RejectReason},
+    fees::FeeCostBreakdown,
     substate::{SubstateAddress, SubstateValue},
     TemplateAddress,
 };
@@ -159,6 +160,8 @@ pub struct TransactionFinalizeResult {
     // TODO: we should not return the whole state but only the addresses and perhaps a hash of the state
     pub decision: QuorumDecision,
     pub finalize: FinalizeResult,
+    pub transaction_failure: Option<RejectReason>,
+    pub fee_breakdown: Option<FeeCostBreakdown>,
     pub qc: QuorumCertificate,
 }
 
@@ -181,7 +184,7 @@ pub struct GetTransactionResultRequest {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct GetTransactionResultResponse {
-    pub result: Option<FinalizeResult>,
+    pub result: Option<ExecuteResult>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

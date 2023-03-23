@@ -5,8 +5,12 @@ use std::ops::{Deref, DerefMut};
 
 use tari_common_types::types::{Commitment, FixedHash};
 use tari_dan_common_types::{optional::IsNotFoundError, QuorumCertificate};
-use tari_engine_types::{commit_result::FinalizeResult, substate::SubstateAddress, TemplateAddress};
-use tari_template_lib::{models::Amount, prelude::ResourceAddress};
+use tari_engine_types::{
+    commit_result::{FinalizeResult, RejectReason},
+    substate::SubstateAddress,
+    TemplateAddress,
+};
+use tari_template_lib::{models::Amount, prelude::ResourceAddress, Hash};
 use tari_transaction::Transaction;
 
 use crate::models::{
@@ -103,6 +107,7 @@ pub trait WalletStoreReader {
     // Key manager
     fn key_manager_get_all(&mut self, branch: &str) -> Result<Vec<(u64, bool)>, WalletStorageError>;
     fn key_manager_get_active_index(&mut self, branch: &str) -> Result<u64, WalletStorageError>;
+    fn key_manager_get_last_index(&mut self, branch: &str) -> Result<u64, WalletStorageError>;
     // Config
     fn config_get<T: serde::de::DeserializeOwned>(&mut self, key: &str) -> Result<Config<T>, WalletStorageError>;
     // Transactions
@@ -128,9 +133,10 @@ pub trait WalletStoreReader {
         account_addr: &SubstateAddress,
         resource_address: &ResourceAddress,
     ) -> Result<VaultModel, WalletStorageError>;
+    fn vaults_get_by_account(&mut self, account_addr: &SubstateAddress) -> Result<Vec<VaultModel>, WalletStorageError>;
 
     // Outputs
-    fn outputs_get_unspent_balance(&mut self, account_address: &SubstateAddress) -> Result<u64, WalletStorageError>;
+    fn outputs_get_unspent_balance(&mut self, vault_address: &SubstateAddress) -> Result<u64, WalletStorageError>;
     fn outputs_get_locked_by_proof(
         &mut self,
         proof_id: ConfidentialProofId,
@@ -158,6 +164,7 @@ pub trait WalletStoreWriter {
     fn rollback(self) -> Result<(), WalletStorageError>;
 
     // Key manager
+    fn key_manager_insert(&mut self, branch: &str, index: u64) -> Result<(), WalletStorageError>;
     fn key_manager_set_active_index(&mut self, branch: &str, index: u64) -> Result<(), WalletStorageError>;
 
     // Config
@@ -174,6 +181,8 @@ pub trait WalletStoreWriter {
         &mut self,
         hash: FixedHash,
         result: Option<&FinalizeResult>,
+        transaction_failure: Option<&RejectReason>,
+        final_fee: Option<Amount>,
         qcs: Option<&[QuorumCertificate]>,
         new_status: TransactionStatus,
     ) -> Result<(), WalletStorageError>;
@@ -231,6 +240,6 @@ pub trait WalletStoreWriter {
     fn proofs_set_transaction_hash(
         &mut self,
         proof_id: ConfidentialProofId,
-        transaction_hash: FixedHash,
+        transaction_hash: Hash,
     ) -> Result<(), WalletStorageError>;
 }

@@ -4,8 +4,10 @@ version = "0.50.0-pre.0"
 edition = "2021"
 
 [dependencies]
-borsh = { version ="0.9.3", default-features = false }
+ciborium = { version = "0.2.0", default-features = false }
+ciborium-io = { version = "0.2.0", default-features = false }
+serde = { version = "1.0.143", default-features = false, features = ["alloc", "derive"] }
 
 [features]
 default = ["std"]
-std = ["borsh/std"]
+std = ["ciborium/std", "serde/std"]

@@ -1,6 +1,17 @@
 // @generated automatically by Diesel CLI.
 
 diesel::table! {
+    current_leader_states (id) {
+        id -> Integer,
+        payload_id -> Binary,
+        shard_id -> Binary,
+        leader_round -> BigInt,
+        leader -> Binary,
+        timestamp -> Timestamp,
+    }
+}
+
+diesel::table! {
     high_qcs (id) {
         id -> Integer,
         shard_id -> Binary,
@@ -91,24 +102,13 @@ diesel::table! {
     payloads (id) {
         id -> Integer,
         payload_id -> Binary,
+        fee_instructions -> Text,
         instructions -> Text,
         public_nonce -> Binary,
         scalar -> Binary,
-        fee -> BigInt,
         sender_address -> Binary,
         meta -> Text,
         result -> Nullable<Text>,
-        timestamp -> Timestamp,
-    }
-}
-
-diesel::table! {
-    current_leader_states (id) {
-        id -> Integer,
-        payload_id -> Binary,
-        shard_id -> Binary,
-        leader_round -> BigInt,
-        leader -> Binary,
         timestamp -> Timestamp,
     }
 }
@@ -158,6 +158,7 @@ diesel::table! {
 }
 
 diesel::allow_tables_to_appear_in_same_query!(
+    current_leader_states,
     high_qcs,
     last_executed_heights,
     last_voted_heights,

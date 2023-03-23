@@ -20,8 +20,9 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use tari_bor::{decode_exact, encode, encode_into, encode_with_len, Decode, Encode};
-use tari_engine_types::execution_result::ExecutionResult;
+use serde::{de::DeserializeOwned, Serialize};
+use tari_bor::{decode_exact, encode, encode_into, encode_with_len};
+use tari_engine_types::instruction_result::InstructionResult;
 use tari_template_abi::{CallInfo, EngineOp};
 use tari_template_lib::{
     args::{
@@ -70,7 +71,7 @@ impl WasmProcess {
         Ok(Self { module, env, instance })
     }
 
-    fn alloc_and_write<T: Encode>(&self, val: &T) -> Result<AllocPtr, WasmExecutionError> {
+    fn alloc_and_write<T: Serialize>(&self, val: &T) -> Result<AllocPtr, WasmExecutionError> {
         let mut buf = Vec::with_capacity(512);
         encode_into(val, &mut buf).unwrap();
         let ptr = self.env.alloc(buf.len() as u32)?;
@@ -160,8 +161,8 @@ impl WasmProcess {
         f: fn(&WasmEnv<Runtime>, T) -> Result<U, E>,
     ) -> Result<i32, WasmExecutionError>
     where
-        T: Decode,
-        U: Encode,
+        T: DeserializeOwned,
+        U: Serialize,
         WasmExecutionError: From<E>,
     {
         let decoded = decode_exact(&args).map_err(WasmExecutionError::EngineArgDecodeFailed)?;
@@ -182,7 +183,7 @@ impl WasmProcess {
 impl Invokable for WasmProcess {
     type Error = WasmExecutionError;
 
-    fn invoke_by_name(&self, name: &str, args: Vec<Arg>) -> Result<ExecutionResult, Self::Error> {
+    fn invoke_by_name(&self, name: &str, args: Vec<Arg>) -> Result<InstructionResult, Self::Error> {
         let func_def = self
             .module
             .find_func_by_name(name)
@@ -232,9 +233,9 @@ impl Invokable for WasmProcess {
                 .set_last_instruction_output(Some(raw.clone()))?;
         }
 
-        Ok(ExecutionResult {
+        Ok(InstructionResult {
             raw,
-            return_type: func_def.output.clone().into(),
+            return_type: func_def.output.clone(),
         })
     }
 }

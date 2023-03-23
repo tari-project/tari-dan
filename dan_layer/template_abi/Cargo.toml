@@ -5,7 +5,7 @@ edition = "2021"
 
 [dependencies]
 tari_bor = { path = "../tari_bor", default-features = false }
-
+serde = { version = "1.0.143", default-features = false, features = ["alloc", "derive"] }
 hashbrown = { version = "0.13.2", optional = true }
 
 [features]

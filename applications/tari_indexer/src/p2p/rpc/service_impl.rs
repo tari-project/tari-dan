@@ -73,7 +73,8 @@ where TPeerProvider: PeerProvider + Clone + Send + Sync + 'static
                     .send(Ok(proto::rpc::GetPeersResponse {
                         identity: peer.identity.as_bytes().to_vec(),
                         // identity_signature: peer.identity_signature.map(Into::into),
-                        addresses: peer.addresses.into_iter().map(|a| a.to_vec()).collect(),
+                        addresses: peer.addresses.iter().map(|(a, _)| a.to_vec()).collect(),
+                        claims: peer.addresses.into_iter().map(|(_, c)| c.into()).collect(),
                     }))
                     .await
                     .is_err()

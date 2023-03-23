@@ -8,9 +8,8 @@ use std::{
 };
 
 use serde::{Deserialize, Serialize};
-use tari_bor::{borsh, Encode};
 
-#[derive(Copy, Clone, Debug, PartialEq, Eq, Hash, Deserialize, Serialize, Encode)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Hash, Deserialize, Serialize)]
 pub struct NodeHeight(pub u64);
 
 impl NodeHeight {

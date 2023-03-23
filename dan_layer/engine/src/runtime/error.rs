@@ -20,9 +20,10 @@
 //   WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //   USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use std::{fmt::Display, io};
+use std::fmt::Display;
 
 use anyhow::anyhow;
+use tari_bor::BorError;
 use tari_dan_common_types::optional::IsNotFoundError;
 use tari_engine_types::{resource_container::ResourceError, substate::SubstateAddress};
 use tari_template_lib::models::{
@@ -44,7 +45,7 @@ use crate::{
 #[derive(Debug, thiserror::Error)]
 pub enum RuntimeError {
     #[error("Runtime encoding error: {0}")]
-    EncodingError(#[from] io::Error),
+    EncodingError(#[from] BorError),
     #[error("State DB error: {0}")]
     StateDbError(#[from] anyhow::Error),
     #[error("State storage error: {0}")]
@@ -112,6 +113,10 @@ pub enum RuntimeError {
     },
     #[error("Template not found with name '{template_name}'")]
     TemplateNotFound { template_name: String },
+    #[error("Insufficient fees paid: required {required_fee}, paid {fees_paid}")]
+    InsufficientFeesPaid { required_fee: Amount, fees_paid: Amount },
+    #[error("No checkpoint")]
+    NoCheckpoint,
 }
 
 impl RuntimeError {

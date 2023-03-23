@@ -65,7 +65,7 @@ impl WasmModule {
         let mut cranelift = Cranelift::new();
         cranelift.opt_level(CraneliftOptLevel::Speed).canonicalize_nans(true);
         // TODO: Configure metering limit
-        cranelift.push_middleware(Arc::new(metering::middleware(1_000_000)));
+        cranelift.push_middleware(Arc::new(metering::middleware(100_000_000)));
         let engine = Universal::new(cranelift).engine();
         let tunables = BaseTunables::for_target(engine.target());
         Store::new_with_tunables(&engine, tunables)

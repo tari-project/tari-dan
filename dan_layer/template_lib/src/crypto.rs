@@ -1,12 +1,16 @@
 //   Copyright 2023 The Tari Project
 //   SPDX-License-Identifier: BSD-3-Clause
 
-use tari_bor::{borsh, Decode, Encode};
+use serde::{Deserialize, Serialize};
+// #[cfg(not(feature = "hex"))]
+use serde_big_array::BigArray;
+use tari_template_abi::rust::string::String;
 
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Encode, Decode, Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default, Serialize, Deserialize)]
+#[serde(transparent)]
 pub struct RistrettoPublicKeyBytes(
-    #[cfg_attr(feature = "serde", serde(with = "hex::serde"))] [u8; RistrettoPublicKeyBytes::length()],
+    // #[cfg_attr(feature = "hex", serde(with = "hex::serde"))]
+    [u8; RistrettoPublicKeyBytes::length()],
 );
 
 impl RistrettoPublicKeyBytes {
@@ -16,7 +20,10 @@ impl RistrettoPublicKeyBytes {
 
     pub fn from_bytes(bytes: &[u8]) -> Result<Self, InvalidByteLengthError> {
         if bytes.len() != Self::length() {
-            return Err(InvalidByteLengthError { size: bytes.len() });
+            return Err(InvalidByteLengthError {
+                size: bytes.len(),
+                expected: Self::length(),
+            });
         }
 
         let mut key = [0u8; Self::length()];
@@ -44,12 +51,28 @@ impl TryFrom<&[u8]> for RistrettoPublicKeyBytes {
 #[derive(Debug, PartialEq, Eq)]
 pub struct InvalidByteLengthError {
     size: usize,
+    expected: usize,
 }
 
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Decode, Encode)]
+impl InvalidByteLengthError {
+    pub fn actual_size(&self) -> usize {
+        self.size
+    }
+
+    pub fn to_error_string(&self) -> String {
+        format!(
+            "Invalid byte length. Expected {} bytes, got {}",
+            self.expected, self.size
+        )
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(transparent)]
 pub struct BalanceProofSignature(
-    #[cfg_attr(feature = "serde", serde(with = "hex::serde"))] [u8; BalanceProofSignature::length()],
+    // #[cfg_attr(feature = "hex", serde(with = "hex::serde"))]
+    //#[cfg_attr(not(feature = "hex"), serde(with = "BigArray"))]
+    #[serde(with = "BigArray")] [u8; BalanceProofSignature::length()],
 );
 
 impl BalanceProofSignature {
@@ -61,10 +84,14 @@ impl BalanceProofSignature {
         if public_nonce.len() != 32 {
             return Err(InvalidByteLengthError {
                 size: public_nonce.len(),
+                expected: 32,
             });
         }
         if signature.len() != 32 {
-            return Err(InvalidByteLengthError { size: signature.len() });
+            return Err(InvalidByteLengthError {
+                size: signature.len(),
+                expected: 32,
+            });
         }
 
         let mut key = [0u8; Self::length()];
@@ -75,7 +102,10 @@ impl BalanceProofSignature {
 
     pub fn from_bytes(bytes: &[u8]) -> Result<Self, InvalidByteLengthError> {
         if bytes.len() != Self::length() {
-            return Err(InvalidByteLengthError { size: bytes.len() });
+            return Err(InvalidByteLengthError {
+                size: bytes.len(),
+                expected: Self::length(),
+            });
         }
 
         let mut key = [0u8; Self::length()];

@@ -20,21 +20,23 @@
 //   WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //   USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use std::collections::BTreeSet;
+use std::collections::{BTreeSet, HashMap};
 
 use log::warn;
 use tari_bor::encode;
-use tari_common_types::types::FixedHash;
 use tari_crypto::{
     range_proof::RangeProofService,
-    ristretto::{pedersen::commitment_factory::PedersenCommitmentFactory, RistrettoPublicKey, RistrettoSecretKey},
+    ristretto::{RistrettoPublicKey, RistrettoSecretKey},
 };
 use tari_dan_common_types::services::template_provider::TemplateProvider;
 use tari_engine_types::{
-    commit_result::{FinalizeResult, RejectReason, TransactionResult},
-    confidential::{get_range_proof_service, ConfidentialClaim, ConfidentialOutput},
+    base_layer_hashing::ownership_proof_hasher,
+    commit_result::FinalizeResult,
+    confidential::{get_commitment_factory, get_range_proof_service, ConfidentialClaim, ConfidentialOutput},
+    fees::FeeReceipt,
     logs::LogEntry,
     resource_container::ResourceContainer,
+    substate::{SubstateAddress, SubstateValue},
 };
 use tari_template_abi::TemplateDef;
 use tari_template_lib::{
@@ -51,6 +53,7 @@ use tari_template_lib::{
         LogLevel,
         MintResourceArg,
         NonFungibleAction,
+        PayFeeArg,
         ResourceAction,
         ResourceGetNonFungibleArg,
         ResourceRef,
@@ -65,19 +68,15 @@ use tari_template_lib::{
 };
 use tari_utilities::ByteArray;
 
-use crate::{
-    base_layer_hashers::ConfidentialOutputHasher,
-    packager::LoadedTemplate,
-    runtime::{
-        engine_args::EngineArgs,
-        tracker::StateTracker,
-        AuthParams,
-        ConsensusContext,
-        RuntimeError,
-        RuntimeInterface,
-        RuntimeModule,
-        RuntimeState,
-    },
+use crate::runtime::{
+    engine_args::EngineArgs,
+    tracker::StateTracker,
+    AuthParams,
+    ConsensusContext,
+    RuntimeError,
+    RuntimeInterface,
+    RuntimeModule,
+    RuntimeState,
 };
 
 const LOG_TARGET: &str = "tari::dan::engine::runtime::impl";
@@ -88,23 +87,28 @@ pub struct RuntimeInterfaceImpl<TTemplateProvider: TemplateProvider<Template = L
     consensus: ConsensusContext,
     sender_public_key: RistrettoPublicKey,
     modules: Vec<Box<dyn RuntimeModule<TTemplateProvider>>>,
+    fee_loan: Amount,
 }
 
 impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate>> RuntimeInterfaceImpl<TTemplateProvider> {
-    pub fn new(
+    pub fn initialize(
         tracker: StateTracker<TTemplateProvider>,
         auth_params: AuthParams,
         consensus: ConsensusContext,
         sender_public_key: RistrettoPublicKey,
         modules: Vec<Box<dyn RuntimeModule<TTemplateProvider>>>,
-    ) -> Self {
-        Self {
+        fee_loan: Amount,
+    ) -> Result<Self, RuntimeError> {
+        let runtime = Self {
             tracker,
             _auth_params: auth_params,
             consensus,
             sender_public_key,
             modules,
-        }
+            fee_loan,
+        };
+        runtime.invoke_modules_on_initialize()?;
+        Ok(runtime)
     }
 
     // TODO: this will be needed when we restrict Resources
@@ -115,9 +119,26 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate>> RuntimeInte
     //     auth_zone.check_access_rules(&function, access_rules)
     // }
 
-    fn invoke_on_runtime_call_modules(&self, function: &'static str) -> Result<(), RuntimeError> {
+    fn invoke_modules_on_initialize(&self) -> Result<(), RuntimeError> {
+        for module in &self.modules {
+            module.on_initialize(&self.tracker)?;
+        }
+        Ok(())
+    }
+
+    fn invoke_modules_on_runtime_call(&self, function: &'static str) -> Result<(), RuntimeError> {
         for module in &self.modules {
             module.on_runtime_call(&self.tracker, function)?;
+        }
+        Ok(())
+    }
+
+    fn invoke_modules_on_before_finalize(
+        &self,
+        substates_to_persist: &HashMap<SubstateAddress, SubstateValue>,
+    ) -> Result<(), RuntimeError> {
+        for module in &self.modules {
+            module.on_before_finalize(&self.tracker, substates_to_persist)?;
         }
         Ok(())
     }
@@ -127,13 +148,13 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate>> RuntimeInte
     for RuntimeInterfaceImpl<TTemplateProvider>
 {
     fn set_current_runtime_state(&self, state: RuntimeState) -> Result<(), RuntimeError> {
-        self.invoke_on_runtime_call_modules("set_current_runtime_state")?;
+        self.invoke_modules_on_runtime_call("set_current_runtime_state")?;
         self.tracker.set_current_runtime_state(state);
         Ok(())
     }
 
     fn emit_log(&self, level: LogLevel, message: String) -> Result<(), RuntimeError> {
-        self.invoke_on_runtime_call_modules("emit_log")?;
+        self.invoke_modules_on_runtime_call("emit_log")?;
 
         let log_level = match level {
             LogLevel::Error => log::Level::Error,
@@ -149,7 +170,7 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate>> RuntimeInte
     }
 
     fn get_component(&self, address: &ComponentAddress) -> Result<ComponentHeader, RuntimeError> {
-        self.invoke_on_runtime_call_modules("get_component")?;
+        self.invoke_modules_on_runtime_call("get_component")?;
         self.tracker.get_component(address)
     }
 
@@ -159,7 +180,7 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate>> RuntimeInte
         action: ComponentAction,
         args: EngineArgs,
     ) -> Result<InvokeResult, RuntimeError> {
-        self.invoke_on_runtime_call_modules("component_invoke")?;
+        self.invoke_modules_on_runtime_call("component_invoke")?;
 
         match action {
             ComponentAction::Create => {
@@ -220,7 +241,7 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate>> RuntimeInte
         action: ResourceAction,
         args: EngineArgs,
     ) -> Result<InvokeResult, RuntimeError> {
-        self.invoke_on_runtime_call_modules("resource_invoke")?;
+        self.invoke_modules_on_runtime_call("resource_invoke")?;
 
         match action {
             ResourceAction::Create => {
@@ -330,7 +351,7 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate>> RuntimeInte
         action: VaultAction,
         args: EngineArgs,
     ) -> Result<InvokeResult, RuntimeError> {
-        self.invoke_on_runtime_call_modules("vault_invoke")?;
+        self.invoke_modules_on_runtime_call("vault_invoke")?;
 
         match action {
             VaultAction::Create => {
@@ -355,7 +376,7 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate>> RuntimeInte
 
                 let bucket = self.tracker.take_bucket(bucket_id)?;
                 self.tracker
-                    .borrow_vault_mut(&vault_id, |vault| vault.deposit(bucket))??;
+                    .borrow_vault_mut(vault_id, |vault| vault.deposit(bucket))??;
                 Ok(InvokeResult::unit())
             },
             VaultAction::Withdraw => {
@@ -366,7 +387,7 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate>> RuntimeInte
                 let arg: VaultWithdrawArg = args.get(0)?;
 
                 // TODO: access check
-                let resource = self.tracker.borrow_vault_mut(&vault_id, |vault| match arg {
+                let resource = self.tracker.borrow_vault_mut(vault_id, |vault| match arg {
                     VaultWithdrawArg::Fungible { amount } => vault.withdraw(amount),
                     VaultWithdrawArg::NonFungible { ids } => vault.withdraw_non_fungibles(&ids),
                     VaultWithdrawArg::Confidential { proof } => vault.withdraw_confidential(*proof),
@@ -383,7 +404,7 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate>> RuntimeInte
                 // TODO: access check
                 let resource = self
                     .tracker
-                    .borrow_vault_mut(&vault_id, |vault| vault.withdraw_all())??;
+                    .borrow_vault_mut(vault_id, |vault| vault.withdraw_all())??;
                 let bucket = self.tracker.new_bucket(resource)?;
                 Ok(InvokeResult::encode(&bucket)?)
             },
@@ -394,7 +415,7 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate>> RuntimeInte
                 })?;
                 // TODO: access check
 
-                let balance = self.tracker.borrow_vault(&vault_id, |v| v.balance())?;
+                let balance = self.tracker.borrow_vault(vault_id, |v| v.balance())?;
                 Ok(InvokeResult::encode(&balance)?)
             },
             VaultAction::GetResourceAddress => {
@@ -406,7 +427,7 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate>> RuntimeInte
                 // TODO: access check
                 let address = self
                     .tracker
-                    .borrow_vault_mut(&vault_id, |vault| *vault.resource_address())?;
+                    .borrow_vault_mut(vault_id, |vault| *vault.resource_address())?;
                 Ok(InvokeResult::encode(&address)?)
             },
             VaultAction::GetNonFungibleIds => {
@@ -416,7 +437,7 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate>> RuntimeInte
                 })?;
 
                 // TODO: access check
-                let resp = self.tracker.borrow_vault(&vault_id, |vault| {
+                let resp = self.tracker.borrow_vault(vault_id, |vault| {
                     let empty = BTreeSet::new();
                     let ids = vault.get_non_fungible_ids().unwrap_or(&empty);
                     // NOTE: A BTreeSet does not decode when received in the WASM
@@ -431,7 +452,7 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate>> RuntimeInte
                     reason: "vault action requires a vault id".to_string(),
                 })?;
 
-                self.tracker.borrow_vault(&vault_id, |vault| {
+                self.tracker.borrow_vault(vault_id, |vault| {
                     let count = vault.get_commitment_count();
                     Ok(InvokeResult::encode(&count)?)
                 })?
@@ -447,10 +468,46 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate>> RuntimeInte
                 // TODO: access check
                 let resource = self
                     .tracker
-                    .borrow_vault_mut(&vault_id, |vault| vault.reveal_confidential(arg.proof))??;
+                    .borrow_vault_mut(vault_id, |vault| vault.reveal_confidential(arg.proof))??;
 
                 let bucket_id = self.tracker.new_bucket(resource)?;
                 Ok(InvokeResult::encode(&bucket_id)?)
+            },
+            VaultAction::PayFee => {
+                let vault_id = vault_ref.vault_id().ok_or_else(|| RuntimeError::InvalidArgument {
+                    argument: "vault_ref",
+                    reason: "vault action requires a vault id".to_string(),
+                })?;
+
+                let arg: PayFeeArg = args.get(0)?;
+                if arg.amount.is_negative() {
+                    return Err(RuntimeError::InvalidArgument {
+                        argument: "amount",
+                        reason: "Amount must be positive".to_string(),
+                    });
+                }
+
+                let resource = self.tracker.borrow_vault_mut(vault_id, |vault| {
+                    let mut resource = ResourceContainer::confidential(*vault.resource_address(), None, Amount::zero());
+                    if !arg.amount.is_zero() {
+                        let withdrawn = vault.withdraw(arg.amount)?;
+                        resource.deposit(withdrawn)?;
+                    }
+                    if let Some(proof) = arg.proof {
+                        let revealed = vault.reveal_confidential(proof)?;
+                        resource.deposit(revealed)?;
+                    }
+                    if resource.amount().is_zero() {
+                        return Err(RuntimeError::InvalidArgument {
+                            argument: "TakeFeesArg",
+                            reason: "Fee payment has zero value".to_string(),
+                        });
+                    }
+                    Ok(resource)
+                })??;
+
+                self.tracker.pay_fee(resource, vault_id)?;
+                Ok(InvokeResult::unit())
             },
         }
     }
@@ -461,7 +518,7 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate>> RuntimeInte
         action: BucketAction,
         args: EngineArgs,
     ) -> Result<InvokeResult, RuntimeError> {
-        self.invoke_on_runtime_call_modules("bucket_invoke")?;
+        self.invoke_modules_on_runtime_call("bucket_invoke")?;
 
         match action {
             BucketAction::Create => {
@@ -549,7 +606,7 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate>> RuntimeInte
     }
 
     fn workspace_invoke(&self, action: WorkspaceAction, args: EngineArgs) -> Result<InvokeResult, RuntimeError> {
-        self.invoke_on_runtime_call_modules("workspace_invoke")?;
+        self.invoke_modules_on_runtime_call("workspace_invoke")?;
         match action {
             WorkspaceAction::ListBuckets => {
                 let bucket_ids = self.tracker.list_buckets();
@@ -581,7 +638,7 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate>> RuntimeInte
         action: NonFungibleAction,
         _args: EngineArgs,
     ) -> Result<InvokeResult, RuntimeError> {
-        self.invoke_on_runtime_call_modules("non_fungible_invoke")?;
+        self.invoke_modules_on_runtime_call("non_fungible_invoke")?;
         match action {
             NonFungibleAction::GetData => {
                 let container = self.tracker.get_non_fungible(&nf_addr)?;
@@ -613,20 +670,20 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate>> RuntimeInte
     }
 
     fn consensus_invoke(&self, action: ConsensusAction) -> Result<InvokeResult, RuntimeError> {
-        self.invoke_on_runtime_call_modules("consensus_invoke")?;
+        self.invoke_modules_on_runtime_call("consensus_invoke")?;
         match action {
             ConsensusAction::GetCurrentEpoch => Ok(InvokeResult::encode(&self.consensus.current_epoch)?),
         }
     }
 
     fn generate_uuid(&self) -> Result<[u8; 32], RuntimeError> {
-        self.invoke_on_runtime_call_modules("generate_uuid")?;
+        self.invoke_modules_on_runtime_call("generate_uuid")?;
         let uuid = self.tracker.id_provider().new_uuid()?;
         Ok(uuid)
     }
 
     fn set_last_instruction_output(&self, value: Option<Vec<u8>>) -> Result<(), RuntimeError> {
-        self.invoke_on_runtime_call_modules("set_last_instruction_output")?;
+        self.invoke_modules_on_runtime_call("set_last_instruction_output")?;
         self.tracker.set_last_instruction_output(value);
         Ok(())
     }
@@ -637,23 +694,22 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate>> RuntimeInte
             output_address,
             range_proof,
             proof_of_knowledge,
+            withdraw_proof,
         } = claim;
         // 1. Must exist
         let unclaimed_output = self.tracker.take_unclaimed_confidential_output(output_address)?;
         // 2. owner_sig must be valid
         // TODO: Probably want a better challenge
-        let factory = PedersenCommitmentFactory::default();
-        let hasher = ConfidentialOutputHasher::new_with_label("commitment_signature")
-            .chain(proof_of_knowledge.public_nonce().as_bytes())
-            .chain(unclaimed_output.commitment.as_bytes())
-            .chain(self.sender_public_key.as_bytes());
+        let challenge = ownership_proof_hasher()
+            .chain(proof_of_knowledge.public_nonce())
+            .chain(&unclaimed_output.commitment)
+            .chain(&self.sender_public_key)
+            .result();
 
-        let challenge: FixedHash = digest::Digest::finalize(hasher).into();
         if !proof_of_knowledge.verify(
             &unclaimed_output.commitment,
-            &RistrettoSecretKey::from_bytes(challenge.as_bytes())
-                .map_err(|_e| RuntimeError::InvalidClaimingSignature)?,
-            &factory,
+            &RistrettoSecretKey::from_bytes(&challenge).map_err(|_e| RuntimeError::InvalidClaimingSignature)?,
+            get_commitment_factory(),
         ) {
             warn!(target: LOG_TARGET, "Claim burn failed - Invalid signature");
             return Err(RuntimeError::InvalidClaimingSignature);
@@ -665,7 +721,8 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate>> RuntimeInte
             return Err(RuntimeError::InvalidRangeProof);
         }
 
-        let resource = ResourceContainer::confidential(
+        // 4. Create the confidential resource
+        let mut resource = ResourceContainer::confidential(
             CONFIDENTIAL_TARI_RESOURCE_ADDRESS,
             Some((
                 unclaimed_output.commitment.as_public_key().clone(),
@@ -679,22 +736,53 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate>> RuntimeInte
             Amount::zero(),
         );
 
+        // If a withdraw proof is provided, we execute it and deposit back into the resource
+        // This allows some funds to be revealed and/or reblinded within a single instruction
+        if let Some(proof) = withdraw_proof {
+            let withdraw = resource.withdraw_confidential(proof)?;
+            resource.deposit(withdraw)?;
+        }
+
         let bucket_id = self.tracker.new_bucket(resource)?;
 
         self.tracker.set_last_instruction_output(Some(encode(&bucket_id)?));
         Ok(())
     }
 
-    fn finalize(&self) -> Result<FinalizeResult, RuntimeError> {
-        self.invoke_on_runtime_call_modules("finalize")?;
-        let result = match self.tracker.finalize() {
-            Ok(substate_diff) => TransactionResult::Accept(substate_diff),
-            Err(err) => TransactionResult::Reject(RejectReason::ExecutionFailure(err.to_string())),
-        };
-        let logs = self.tracker.take_logs();
-        let commit = FinalizeResult::new(self.tracker.transaction_hash(), logs, result);
+    fn fee_checkpoint(&self) -> Result<(), RuntimeError> {
+        if self.tracker.total_payments() < self.tracker.total_charges() - self.fee_loan {
+            return Err(RuntimeError::InsufficientFeesPaid {
+                required_fee: self.tracker.total_charges(),
+                fees_paid: self.tracker.total_payments(),
+            });
+        }
+        self.tracker.fee_checkpoint()
+    }
 
-        Ok(commit)
+    fn reset_to_fee_checkpoint(&self) -> Result<(), RuntimeError> {
+        self.tracker.reset_to_fee_checkpoint()
+    }
+
+    fn finalize(&self) -> Result<(FinalizeResult, FeeReceipt), RuntimeError> {
+        self.invoke_modules_on_runtime_call("finalize")?;
+
+        if !self.tracker.are_fees_paid_in_full() && self.tracker.total_charges() > self.fee_loan {
+            self.reset_to_fee_checkpoint()?;
+        }
+
+        let substates_to_persist = self.tracker.take_substates_to_persist();
+        self.invoke_modules_on_before_finalize(&substates_to_persist)?;
+
+        let (result, fee_receipt) = self.tracker.finalize(substates_to_persist)?;
+        let logs = self.tracker.take_logs();
+        let finalized = FinalizeResult::new(
+            self.tracker.transaction_hash(),
+            logs,
+            result,
+            fee_receipt.to_cost_breakdown(),
+        );
+
+        Ok((finalized, fee_receipt))
     }
 }
 

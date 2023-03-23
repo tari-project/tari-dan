@@ -8,15 +8,14 @@ version = "0.50.0-pre.0"
 edition = "2018"
 
 [dependencies]
-tari_common_types = { git = "https://github.com/tari-project/tari.git", tag = "v0.49.0-pre.0" }
+tari_common_types = { git = "https://github.com/tari-project/tari.git", tag = "v0.49.0-pre.1" }
 tari_crypto = { git = "https://github.com/tari-project/tari-crypto.git", tag = "v0.16.8" }
 tari_dan_common_types = { path = "../../dan_layer/common_types" }
 tari_dan_engine = { path = "../../dan_layer/engine" }
 tari_engine_types = { path = "../../dan_layer/engine_types" }
 tari_utilities = { git = "https://github.com/tari-project/tari_utilities.git", tag = "v0.4.10" }
-tari_dan_wallet_daemon = { path = "../tari_dan_wallet_daemon" }
 tari_wallet_daemon_client = { path = "../../clients/wallet_daemon_client" }
-tari_template_lib = { path = "../../dan_layer/template_lib" }
+tari_template_lib = { path = "../../dan_layer/template_lib"}
 tari_transaction_manifest = { path = "../../dan_layer/transaction_manifest" }
 tari_transaction = { path = "../../dan_layer/transaction" }
 tari_template_builtin = { path = "../../dan_layer/template_builtin" }
@@ -35,3 +34,4 @@ serde_json = "1.0.85"
 time = "0.3.15"
 thiserror = "1.0.36"
 tokio = { version = "1", features = ["macros"] }
+url = "2.3.1"

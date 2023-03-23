@@ -24,12 +24,16 @@ use std::sync::Arc;
 
 use log::*;
 use tari_dan_common_types::services::template_provider::TemplateProvider;
-use tari_engine_types::{commit_result::FinalizeResult, execution_result::ExecutionResult, instruction::Instruction};
+use tari_engine_types::{
+    commit_result::{ExecuteResult, FinalizeResult, RejectReason},
+    instruction::Instruction,
+    instruction_result::InstructionResult,
+};
 use tari_template_lib::{
     arg,
     args::{Arg, WorkspaceAction},
     invoke_args,
-    models::ComponentAddress,
+    models::{Amount, ComponentAddress},
 };
 use tari_transaction::{id_provider::IdProvider, Transaction};
 
@@ -61,6 +65,7 @@ pub struct TransactionProcessor<TTemplateProvider> {
     auth_params: AuthParams,
     consensus: ConsensusContext,
     modules: Vec<Box<dyn RuntimeModule<TTemplateProvider>>>,
+    fee_loan: Amount,
 }
 
 impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate> + 'static> TransactionProcessor<TTemplateProvider> {
@@ -70,6 +75,7 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate> + 'static> T
         auth_params: AuthParams,
         consensus: ConsensusContext,
         modules: Vec<Box<dyn RuntimeModule<TTemplateProvider>>>,
+        fee_loan: Amount,
     ) -> Self {
         Self {
             template_provider,
@@ -77,37 +83,107 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate> + 'static> T
             auth_params,
             consensus,
             modules,
+            fee_loan,
         }
     }
 
-    pub fn execute(self, transaction: Transaction) -> Result<FinalizeResult, TransactionError> {
+    pub fn execute(self, transaction: Transaction) -> Result<ExecuteResult, TransactionError> {
         let id_provider = IdProvider::new(*transaction.hash(), 1000);
         // TODO: We can avoid this for each execution with improved design
         // let template_defs = self.package.get_template_defs();
         let tracker = StateTracker::new(self.state_db.clone(), id_provider, self.template_provider.clone());
         let initial_proofs = self.auth_params.initial_ownership_proofs.clone();
         let template_provider = self.template_provider.clone();
-        let runtime_interface = RuntimeInterfaceImpl::new(
+        let runtime_interface = RuntimeInterfaceImpl::initialize(
             tracker,
             self.auth_params,
             self.consensus,
             transaction.sender_public_key().clone(),
             self.modules,
-        );
+            self.fee_loan,
+        )?;
 
         let auth_scope = AuthorizationScope::new(Arc::new(initial_proofs));
         let runtime = Runtime::new(Arc::new(runtime_interface));
-        let exec_results = transaction
-            .into_instructions()
+        let transaction_hash = *transaction.hash();
+
+        let (instructions, fee_instructions, _sig, _pk) = transaction.destruct();
+
+        let fee_exec_results = fee_instructions
+            .into_iter()
+            .map(|instruction| Self::process_instruction(&package, &runtime, &auth_scope, instruction))
+            .collect::<Result<Vec<_>, _>>();
+
+        let fee_exec_result = match fee_exec_results {
+            Ok(execution_results) => {
+                // Checkpoint the tracker state after the fee instructions have been executed in case of transaction
+                // failure.
+                if let Err(err) = runtime.interface().fee_checkpoint() {
+                    let mut finalize =
+                        FinalizeResult::reject(transaction_hash, RejectReason::ExecutionFailure(err.to_string()));
+                    finalize.execution_results = execution_results;
+                    return Ok(ExecuteResult {
+                        fee_receipt: None,
+                        finalize,
+                        transaction_failure: Some(RejectReason::FeeTransactionFailed),
+                    });
+                }
+                execution_results
+            },
+            Err(err) => {
+                return Ok(ExecuteResult {
+                    fee_receipt: None,
+                    finalize: FinalizeResult::reject(transaction_hash, RejectReason::ExecutionFailure(err.to_string())),
+                    transaction_failure: Some(RejectReason::FeeTransactionFailed),
+                });
+            },
+        };
+
+        let instruction_result = instructions
             .into_iter()
             .map(|instruction| {
                 Self::process_instruction(template_provider.clone(), &runtime, auth_scope.clone(), instruction)
             })
-            .collect::<Result<Vec<_>, _>>()?;
+            .collect::<Result<Vec<_>, _>>();
 
-        let mut finalize_result = runtime.interface().finalize()?;
-        finalize_result.execution_results = exec_results;
-        Ok(finalize_result)
+        match instruction_result {
+            Ok(execution_results) => {
+                let (mut finalize, fee_receipt) = runtime.interface().finalize()?;
+                if !fee_receipt.is_paid_in_full() && fee_receipt.unpaid_debt() > self.fee_loan {
+                    return Ok(ExecuteResult {
+                        finalize,
+                        transaction_failure: Some(RejectReason::FeesNotPaid(format!(
+                            "Required fees {} but {} paid",
+                            fee_receipt.total_fees_charged(),
+                            fee_receipt.total_fees_paid()
+                        ))),
+                        fee_receipt: Some(fee_receipt),
+                    });
+                }
+                finalize.execution_results = execution_results;
+
+                Ok(ExecuteResult {
+                    finalize,
+                    fee_receipt: Some(fee_receipt),
+                    transaction_failure: None,
+                })
+            },
+            // This can happen e.g if you have dangling buckets after running the instructions
+            Err(err) => {
+                // Reset the state to when the state at the end of the fee instructions. The fee charges for the
+                // successful instructions are still charged even though the transaction failed.
+                runtime.interface().reset_to_fee_checkpoint()?;
+                // Finalize will now contain the fee payments and vault refunds only
+                let (mut finalize, fee_payment) = runtime.interface().finalize()?;
+                finalize.execution_results = fee_exec_result;
+
+                Ok(ExecuteResult {
+                    finalize,
+                    fee_receipt: Some(fee_payment),
+                    transaction_failure: Some(RejectReason::ExecutionFailure(err.to_string())),
+                })
+            },
+        }
     }
 
     fn process_instruction(
@@ -116,7 +192,7 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate> + 'static> T
         runtime: &Runtime,
         auth_scope: AuthorizationScope,
         instruction: Instruction,
-    ) -> Result<ExecutionResult, TransactionError> {
+    ) -> Result<InstructionResult, TransactionError> {
         debug!(target: LOG_TARGET, "instruction = {:?}", instruction);
         match instruction {
             Instruction::CallFunction {
@@ -242,7 +318,7 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate> + 'static> T
         args: Vec<Arg>,
         recursion_depth: usize,
         max_recursion_depth: usize,
-    ) -> Result<ExecutionResult, TransactionError> {
+    ) -> Result<InstructionResult, TransactionError> {
         if recursion_depth > max_recursion_depth {
             return Err(TransactionError::RecursionLimitExceeded);
         }

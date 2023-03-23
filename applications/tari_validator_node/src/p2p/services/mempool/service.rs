@@ -58,9 +58,7 @@ pub struct MempoolService<V> {
 }
 
 impl<V> MempoolService<V>
-where
-    V: Validator<Transaction>,
-    MempoolError: From<V::Error>,
+where V: Validator<Transaction, Error = MempoolError>
 {
     pub(super) fn new(
         new_transactions: mpsc::Receiver<Transaction>,
@@ -130,11 +128,7 @@ where
         }
 
         if let Err(e) = self.validator.validate(&transaction).await {
-            error!(
-                target: LOG_TARGET,
-                "⚠ Invalid templates found for transaction: {}",
-                MempoolError::from(e)
-            );
+            error!(target: LOG_TARGET, "⚠ Invalid templates found for transaction: {}", e);
             return;
         }
 

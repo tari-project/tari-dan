@@ -4,10 +4,7 @@
 use std::path::PathBuf;
 
 use tari_dan_engine::wasm::compile::compile_template;
-use tari_engine_types::{
-    hashing::{hasher, EngineHashDomainLabel},
-    TemplateAddress,
-};
+use tari_engine_types::{hashing::template_hasher, TemplateAddress};
 use tari_validator_node_client::types::{TemplateRegistrationRequest, TemplateRegistrationResponse};
 
 use super::http_server::MockHttpServer;
@@ -61,10 +58,7 @@ fn get_template_binary_hash(template_name: String) -> Vec<u8> {
     template_path.push(template_name);
     let wasm_module = compile_template(template_path.as_path(), &[]).unwrap();
     let wasm_code = wasm_module.code();
-    hasher(EngineHashDomainLabel::Template)
-        .chain(&wasm_code)
-        .result()
-        .to_vec()
+    template_hasher().chain(&wasm_code).result().to_vec()
 }
 
 fn get_template_wasm_path(template_name: String) -> PathBuf {

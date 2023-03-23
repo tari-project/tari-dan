@@ -238,6 +238,7 @@ impl BaseLayerScanner {
         }
     }
 
+    #[allow(clippy::too_many_lines)]
     async fn sync_blockchain(&mut self) -> Result<(), BaseLayerScannerError> {
         let start_scan_height = self.last_scanned_height;
         let mut current_hash = self.last_scanned_hash;
@@ -289,32 +290,43 @@ impl BaseLayerScanner {
 
             for output in utxos.outputs {
                 let output_hash = output.hash();
-                if output.is_burned() {
-                    info!(target: LOG_TARGET, "Found burned output: {}", output_hash);
-                    self.register_burnt_utxo(&output)?;
-                } else {
-                    let sidechain_feature = output.features.sidechain_feature.ok_or_else(|| {
-                        BaseLayerScannerError::InvalidSideChainUtxoResponse(
-                            "Validator node registration output must have a sidechain features".to_string(),
-                        )
-                    })?;
-                    match sidechain_feature {
-                        SideChainFeature::ValidatorNodeRegistration(reg) => {
-                            self.register_validator_node_registration(current_height, reg).await?;
-                        },
-                        SideChainFeature::TemplateRegistration(reg) => {
-                            self.register_code_template_registration(
-                                reg.clone().template_name.into_string(),
-                                (*output_hash).into(),
-                                reg,
-                                &block_info,
-                            )
+                let Some(sidechain_feature) = output.features.sidechain_feature.as_ref() else {
+                    warn!(target: LOG_TARGET, "Validator node registration output must have sidechain features");
+                    continue;
+                };
+                match sidechain_feature {
+                    SideChainFeature::ValidatorNodeRegistration(reg) => {
+                        self.register_validator_node_registration(current_height, reg.clone())
                             .await?;
-                        },
-                        SideChainFeature::ConfidentialOutput(_) => {
-                            todo!();
-                        },
-                    }
+                    },
+                    SideChainFeature::TemplateRegistration(reg) => {
+                        self.register_code_template_registration(
+                            reg.template_name.to_string(),
+                            (*output_hash).into(),
+                            reg.clone(),
+                            &block_info,
+                        )
+                        .await?;
+                    },
+                    SideChainFeature::ConfidentialOutput(_data) => {
+                        // Should be checked by the base layer
+                        if !output.is_burned() {
+                            warn!(
+                                target: LOG_TARGET,
+                                "Ignoring confidential output that is not burned: {} with commitment {}",
+                                output_hash,
+                                output.commitment.as_public_key()
+                            );
+                            continue;
+                        }
+                        info!(
+                            target: LOG_TARGET,
+                            "Found burned output: {} with commitment {}",
+                            output_hash,
+                            output.commitment.as_public_key()
+                        );
+                        self.register_burnt_utxo(&output)?;
+                    },
                 }
             }
 

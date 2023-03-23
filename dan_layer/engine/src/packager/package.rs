@@ -47,6 +47,10 @@ impl Package {
             .map(|(addr, template)| (*addr, template.template_def().clone()))
             .collect()
     }
+
+    pub fn total_code_byte_size(&self) -> usize {
+        self.templates.values().map(|t| t.code_size()).sum()
+    }
 }
 
 #[derive(Debug, Clone, Default)]

@@ -95,7 +95,10 @@ function RowData({ row, justify }: any) {
                           />
                         </DataTableCell>
                         <DataTableCell>
-                          <p>{row.proposed_by}</p>
+                          {shortenString(toHexString(row.proposed_by))}
+                          <CopyToClipboard
+                            copy={toHexString(row.proposed_by)}
+                          />
                         </DataTableCell>
                         <DataTableCell>{row.leader_round}</DataTableCell>
                       </TableRow>
@@ -135,7 +138,7 @@ function RowData({ row, justify }: any) {
         >
           <Collapse in={open} timeout="auto" unmountOnExit>
             <CodeBlock style={{ marginBottom: '10px' }}>
-              {row.justify ? renderJson(JSON.parse(row.justify)) : ''}
+              {justify && renderJson(justify)}
             </CodeBlock>
           </Collapse>
         </DataTableCell>

@@ -7,7 +7,7 @@ use tari_crypto::{commitment::HomomorphicCommitmentFactory, dhke::DiffieHellmanS
 use tari_engine_types::confidential::challenges;
 use tari_template_lib::{
     crypto::BalanceProofSignature,
-    models::{ConfidentialOutputProof, ConfidentialWithdrawProof, EncryptedValue},
+    models::{Amount, ConfidentialOutputProof, ConfidentialWithdrawProof, EncryptedValue},
 };
 use tari_utilities::ByteArray;
 
@@ -34,13 +34,23 @@ impl ConfidentialCryptoApi {
     pub fn derive_output_mask_for_destination(&self, destination_public_key: &PublicKey) -> (PrivateKey, PublicKey) {
         let (nonce, public_nonce) = PublicKey::random_keypair(&mut OsRng);
         let shared_secret = DiffieHellmanSharedSecret::<PublicKey>::new(&nonce, destination_public_key);
+        let shared_secret = PrivateKey::from_bytes(shared_secret.as_bytes()).unwrap();
         let shared_secret = kdfs::output_mask_kdf(&shared_secret);
         (shared_secret, public_nonce)
     }
 
     pub fn derive_output_mask_for_receiver(&self, public_nonce: &PublicKey, secret_key: &PrivateKey) -> PrivateKey {
         let shared_secret = DiffieHellmanSharedSecret::<PublicKey>::new(secret_key, public_nonce);
+        let shared_secret = PrivateKey::from_bytes(shared_secret.as_bytes()).unwrap();
         kdfs::output_mask_kdf(&shared_secret)
+    }
+
+    pub fn derive_value_encryption_key_for_receiver(
+        &self,
+        private_key: &PrivateKey,
+        commitment: &Commitment,
+    ) -> PrivateKey {
+        kdfs::encrypted_value_kdf_aead(private_key, commitment)
     }
 
     pub fn generate_withdraw_proof(
@@ -60,10 +70,18 @@ impl ConfidentialCryptoApi {
         let input_private_excess = inputs
             .iter()
             .fold(PrivateKey::default(), |acc, output| acc + &output.mask);
+
+        let revealed_amount = output_proof.output_statement.revealed_amount +
+            output_proof
+                .change_statement
+                .as_ref()
+                .map(|st| st.revealed_amount)
+                .unwrap_or_default();
         let balance_proof = generate_balance_proof(
             &input_private_excess,
             &output_statement.mask,
             change_statement.as_ref().map(|ch| &ch.mask),
+            revealed_amount,
         );
 
         let output_statement = output_proof.output_statement;
@@ -75,7 +93,6 @@ impl ConfidentialCryptoApi {
                 output_statement,
                 change_statement,
                 range_proof: output_proof.range_proof,
-                revealed_amount: output_proof.revealed_amount,
             },
             balance_proof,
         })
@@ -83,13 +100,45 @@ impl ConfidentialCryptoApi {
 
     pub fn extract_value(
         &self,
-        mask: &PrivateKey,
+        encryption_key: &PrivateKey,
         commitment: &Commitment,
         encrypted_value: &EncryptedValue,
     ) -> Result<u64, ConfidentialCryptoApiError> {
-        let value = decrypt_value(mask, commitment, encrypted_value)
+        let value = decrypt_value(encryption_key, commitment, encrypted_value)
             .map_err(|_| ConfidentialCryptoApiError::FailedDecryptValue)?;
         Ok(value)
+    }
+
+    pub fn generate_output_proof(
+        &self,
+        statement: &ConfidentialProofStatement,
+    ) -> Result<ConfidentialOutputProof, ConfidentialCryptoApiError> {
+        let proof = generate_confidential_proof(statement, None)?;
+        Ok(proof)
+    }
+
+    pub fn unblind_output(
+        &self,
+        output_commitment: &Commitment,
+        output_encrypted_value: &EncryptedValue,
+        claim_secret: &PrivateKey,
+        reciprocal_public_key: &PublicKey,
+    ) -> Result<ConfidentialOutputWithMask, ConfidentialCryptoApiError> {
+        let mask = self.derive_output_mask_for_receiver(reciprocal_public_key, claim_secret);
+        let encryption_key = self.derive_value_encryption_key_for_receiver(&mask, output_commitment);
+
+        let value = self.extract_value(&encryption_key, output_commitment, output_encrypted_value)?;
+        let commitment = get_commitment_factory().commit_value(&mask, value);
+        if *output_commitment == commitment {
+            Ok(ConfidentialOutputWithMask {
+                commitment,
+                value,
+                mask,
+                public_asset_tag: None,
+            })
+        } else {
+            Err(ConfidentialCryptoApiError::UnableToOpenCommitment)
+        }
     }
 }
 
@@ -97,11 +146,12 @@ fn generate_balance_proof(
     input_mask: &PrivateKey,
     output_mask: &PrivateKey,
     change_mask: Option<&PrivateKey>,
+    reveal_amount: Amount,
 ) -> BalanceProofSignature {
     let secret_excess = input_mask - output_mask - change_mask.unwrap_or(&PrivateKey::default());
     let excess = PublicKey::from_secret_key(&secret_excess);
     let (nonce, public_nonce) = PublicKey::random_keypair(&mut OsRng);
-    let challenge = challenges::confidential_withdraw(&excess, &public_nonce);
+    let challenge = challenges::confidential_withdraw(&excess, &public_nonce, reveal_amount);
 
     let sig = Signature::sign_raw(&secret_excess, nonce, &challenge).unwrap();
     BalanceProofSignature::try_from_parts(sig.get_public_nonce().as_bytes(), sig.get_signature().as_bytes()).unwrap()
@@ -113,4 +163,6 @@ pub enum ConfidentialCryptoApiError {
     ConfidentialProof(#[from] ConfidentialProofError),
     #[error("Failed to decrypt value")]
     FailedDecryptValue,
+    #[error("Unable to open the commitment")]
+    UnableToOpenCommitment,
 }

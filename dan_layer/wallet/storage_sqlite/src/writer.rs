@@ -32,8 +32,12 @@ use tari_dan_wallet_sdk::{
     },
     storage::{WalletStorageError, WalletStoreReader, WalletStoreWriter},
 };
-use tari_engine_types::{commit_result::FinalizeResult, substate::SubstateAddress, TemplateAddress};
-use tari_template_lib::models::Amount;
+use tari_engine_types::{
+    commit_result::{FinalizeResult, RejectReason},
+    substate::SubstateAddress,
+    TemplateAddress,
+};
+use tari_template_lib::{models::Amount, Hash};
 use tari_transaction::Transaction;
 use tari_utilities::hex::Hex;
 
@@ -68,39 +72,72 @@ impl WalletStoreWriter for WriteTransaction<'_> {
 
     // -------------------------------- KeyManager -------------------------------- //
 
+    fn key_manager_insert(&mut self, branch: &str, index: u64) -> Result<(), WalletStorageError> {
+        use crate::schema::key_manager_states;
+        let index =
+            i64::try_from(index).map_err(|_| WalletStorageError::general("key_manager_insert", "index is negative"))?;
+        let count = key_manager_states::table
+            .select(key_manager_states::id)
+            .filter(key_manager_states::branch_seed.eq(branch))
+            .limit(1)
+            .count()
+            .first::<i64>(self.connection())
+            .map_err(|e| WalletStorageError::general("key_manager_insert", e))?;
+
+        // Set active if this is the only key branch
+        let is_active = count == 0;
+
+        let value_set = (
+            key_manager_states::branch_seed.eq(branch),
+            key_manager_states::index.eq(index),
+            key_manager_states::is_active.eq(is_active),
+        );
+
+        diesel::insert_into(key_manager_states::table)
+            .values(value_set)
+            .execute(self.connection())
+            .map_err(|e| WalletStorageError::general("key_manager_insert", e))?;
+
+        Ok(())
+    }
+
     fn key_manager_set_active_index(&mut self, branch: &str, index: u64) -> Result<(), WalletStorageError> {
         use crate::schema::key_manager_states;
         let index = i64::try_from(index)
-            .map_err(|_| WalletStorageError::general("key_manager_set_index", "index is negative"))?;
+            .map_err(|_| WalletStorageError::general("key_manager_set_active_index", "index too large"))?;
 
-        let maybe_active_id = key_manager_states::table
+        let active_id = key_manager_states::table
             .select(key_manager_states::id)
             .filter(key_manager_states::branch_seed.eq(branch))
             .filter(key_manager_states::index.eq(index))
             .limit(1)
             .first::<i32>(self.connection())
             .optional()
-            .map_err(|e| WalletStorageError::general("key_manager_set_index", e))?;
+            .map_err(|e| WalletStorageError::general("key_manager_set_active_index", e))?
+            .ok_or_else(|| WalletStorageError::NotFound {
+                operation: "key_manager_set_active_index",
+                entity: "key_manager_states".to_string(),
+                key: format!("branch = {}, index = {}", branch, index),
+            })?;
 
-        sql_query(
-            "UPDATE key_manager_states SET `is_active` = 0, updated_at = CURRENT_TIMESTAMP WHERE branch_seed = ?",
-        )
-        .bind::<Text, _>(branch)
-        .execute(self.connection())
-        .map_err(|e| WalletStorageError::general("key_manager_set_index", e))?;
+        diesel::update(key_manager_states::table)
+            .set((
+                key_manager_states::is_active.eq(false),
+                key_manager_states::updated_at.eq(diesel::dsl::now),
+            ))
+            .filter(key_manager_states::branch_seed.eq(branch))
+            .filter(key_manager_states::is_active.eq(true))
+            .execute(self.connection())
+            .map_err(|e| WalletStorageError::general("key_manager_set_active_index", e))?;
 
-        if let Some(active_id) = maybe_active_id {
-            sql_query("UPDATE key_manager_states SET `is_active` = 1, updated_at = CURRENT_TIMESTAMP WHERE id = ?")
-                .bind::<Integer, _>(active_id)
-                .execute(self.connection())
-                .map_err(|e| WalletStorageError::general("key_manager_set_index", e))?;
-        } else {
-            sql_query("INSERT INTO key_manager_states (branch_seed, `index`, is_active) VALUES (?, ?, 1)")
-                .bind::<Text, _>(branch)
-                .bind::<BigInt, _>(index)
-                .execute(self.connection())
-                .map_err(|e| WalletStorageError::general("key_manager_set_index", e))?;
-        }
+        diesel::update(key_manager_states::table)
+            .set((
+                key_manager_states::is_active.eq(true),
+                key_manager_states::updated_at.eq(diesel::dsl::now),
+            ))
+            .filter(key_manager_states::id.eq(active_id))
+            .execute(self.connection())
+            .map_err(|e| WalletStorageError::general("key_manager_set_active_index", e))?;
 
         Ok(())
     }
@@ -137,28 +174,28 @@ impl WalletStoreWriter for WriteTransaction<'_> {
     }
 
     // -------------------------------- Transactions -------------------------------- //
-
     fn transactions_insert(&mut self, transaction: &Transaction, is_dry_run: bool) -> Result<(), WalletStorageError> {
+        use crate::schema::transactions;
+
         let status = if is_dry_run {
             TransactionStatus::DryRun
         } else {
             TransactionStatus::New
         };
 
-        sql_query(
-            "INSERT INTO transactions (hash, instructions, sender_address, fee, signature, meta, status, dry_run) \
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-        )
-        .bind::<Text, _>(transaction.hash().to_string())
-        .bind::<Text, _>(serialize_json(transaction.instructions())?)
-        .bind::<Text, _>(transaction.sender_public_key().to_hex())
-        .bind::<BigInt, _>(transaction.fee() as i64)
-        .bind::<Text, _>(serialize_json(transaction.signature())?)
-        .bind::<Text, _>(serialize_json(transaction.meta())?)
-        .bind::<Text, _>(status.as_key_str())
-        .bind::<Bool, _>(is_dry_run)
-        .execute(self.connection())
-        .map_err(|e| WalletStorageError::general("transactions_insert", e))?;
+        diesel::insert_into(transactions::table)
+            .values((
+                transactions::hash.eq(transaction.hash().to_string()),
+                transactions::fee_instructions.eq(serialize_json(transaction.fee_instructions())?),
+                transactions::instructions.eq(serialize_json(transaction.instructions())?),
+                transactions::sender_address.eq(transaction.sender_public_key().to_hex()),
+                transactions::signature.eq(serialize_json(transaction.signature())?),
+                transactions::meta.eq(serialize_json(transaction.meta())?),
+                transactions::status.eq(status.as_key_str()),
+                transactions::dry_run.eq(is_dry_run),
+            ))
+            .execute(self.connection())
+            .map_err(|e| WalletStorageError::general("transactions_insert", e))?;
 
         Ok(())
     }
@@ -167,18 +204,25 @@ impl WalletStoreWriter for WriteTransaction<'_> {
         &mut self,
         hash: FixedHash,
         result: Option<&FinalizeResult>,
+        transaction_failure: Option<&RejectReason>,
+        final_fee: Option<Amount>,
         qcs: Option<&[QuorumCertificate]>,
         new_status: TransactionStatus,
     ) -> Result<(), WalletStorageError> {
-        let num_rows = sql_query(
-            "UPDATE transactions SET result = ?, status = ?, qcs = ?, updated_at = CURRENT_TIMESTAMP WHERE hash = ?",
-        )
-        .bind::<Nullable<Text>, _>(result.map(serialize_json).transpose()?)
-        .bind::<Text, _>(new_status.as_key_str())
-        .bind::<Nullable<Text>, _>(qcs.map(serialize_json).transpose()?)
-        .bind::<Text, _>(hash.to_string())
-        .execute(self.connection())
-        .map_err(|e| WalletStorageError::general("transactions_set_result_and_status", e))?;
+        use crate::schema::transactions;
+
+        let num_rows = diesel::update(transactions::table)
+            .set((
+                transactions::result.eq(result.map(serialize_json).transpose()?),
+                transactions::transaction_failure.eq(transaction_failure.map(serialize_json).transpose()?),
+                transactions::status.eq(new_status.as_key_str()),
+                transactions::final_fee.eq(final_fee.map(|v| v.value())),
+                transactions::qcs.eq(qcs.map(serialize_json).transpose()?),
+                transactions::updated_at.eq(diesel::dsl::now),
+            ))
+            .filter(transactions::hash.eq(hash.to_string()))
+            .execute(self.connection())
+            .map_err(|e| WalletStorageError::general("transactions_set_result_and_status", e))?;
 
         if num_rows == 0 {
             return Err(WalletStorageError::NotFound {
@@ -308,6 +352,8 @@ impl WalletStoreWriter for WriteTransaction<'_> {
             vaults::address.eq(vault.address.to_string()),
             vaults::balance.eq(vault.balance.value()),
             vaults::resource_address.eq(vault.resource_address.to_string()),
+            vaults::resource_type.eq(format!("{:?}", vault.resource_type)),
+            vaults::token_symbol.eq(vault.token_symbol),
         );
         diesel::insert_into(vaults::table)
             .values(values)
@@ -546,7 +592,7 @@ impl WalletStoreWriter for WriteTransaction<'_> {
     fn proofs_set_transaction_hash(
         &mut self,
         proof_id: ConfidentialProofId,
-        transaction_hash: FixedHash,
+        transaction_hash: Hash,
     ) -> Result<(), WalletStorageError> {
         use crate::schema::proofs;
 

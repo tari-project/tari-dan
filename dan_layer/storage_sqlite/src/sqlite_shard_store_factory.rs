@@ -71,7 +71,7 @@ use tari_dan_core::{
         StorageError,
     },
 };
-use tari_engine_types::{instruction::Instruction, substate::SubstateAddress};
+use tari_engine_types::substate::SubstateAddress;
 use tari_transaction::{InstructionSignature, Transaction, TransactionMeta};
 use tari_utilities::{
     hex::{to_hex, Hex},
@@ -387,9 +387,8 @@ impl ShardStoreReadTransaction<PublicKey, TariDanPayload> for SqliteShardStoreRe
             key: id.to_string(),
         })?;
 
-        let instructions: Vec<Instruction> = serde_json::from_str(&payload.instructions).unwrap();
-
-        let fee = payload.fee as u64;
+        let instructions = serde_json::from_str(&payload.instructions).unwrap();
+        let fee_instructions = serde_json::from_str(&payload.fee_instructions).unwrap();
 
         let public_nonce =
             PublicKey::from_vec(&payload.public_nonce).map_err(StorageError::InvalidByteArrayConversion)?;
@@ -406,7 +405,7 @@ impl ShardStoreReadTransaction<PublicKey, TariDanPayload> for SqliteShardStoreRe
             PublicKey::from_vec(&payload.sender_address).map_err(StorageError::InvalidByteArrayConversion)?;
         let meta: TransactionMeta = serde_json::from_str(&payload.meta).unwrap();
 
-        let transaction = Transaction::new(fee, instructions, signature, sender_public_key, meta);
+        let transaction = Transaction::new(fee_instructions, instructions, signature, sender_public_key, meta);
         let mut tari_dan_payload = TariDanPayload::new(transaction);
 
         // deserialize the transaction result
@@ -419,7 +418,7 @@ impl ShardStoreReadTransaction<PublicKey, TariDanPayload> for SqliteShardStoreRe
             None => None,
         };
         if let Some(result) = result_field {
-            tari_dan_payload.set_result(result.finalize_result);
+            tari_dan_payload.set_result(result.exec_result);
         }
 
         Ok(tari_dan_payload)
@@ -945,14 +944,14 @@ impl ShardStoreWriteTransaction<PublicKey, TariDanPayload> for SqliteShardStoreW
         use crate::schema::payloads;
 
         let transaction = payload.transaction();
-        let instructions = json!(&transaction.instructions()).to_string();
+        let instructions = serde_json::to_string_pretty(transaction.instructions()).unwrap();
+        let fee_instructions = serde_json::to_string_pretty(transaction.fee_instructions()).unwrap();
 
         let signature = transaction.signature();
 
         let public_nonce = Vec::from(signature.signature().get_public_nonce().as_bytes());
         let scalar = Vec::from(signature.signature().get_signature().as_bytes());
 
-        let fee = transaction.fee() as i64;
         let sender_public_key = Vec::from(transaction.sender_public_key().as_bytes());
 
         let meta = json!(transaction.meta()).to_string();
@@ -961,10 +960,10 @@ impl ShardStoreWriteTransaction<PublicKey, TariDanPayload> for SqliteShardStoreW
 
         let new_row = NewPayload {
             payload_id,
+            fee_instructions,
             instructions,
             public_nonce,
             scalar,
-            fee,
             sender_address: sender_public_key,
             meta,
             result: None,

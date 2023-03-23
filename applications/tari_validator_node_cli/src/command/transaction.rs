@@ -31,10 +31,11 @@ use anyhow::anyhow;
 use clap::{Args, Subcommand};
 use tari_common_types::types::FixedHash;
 use tari_dan_common_types::ShardId;
+use tari_dan_engine::abi::Type;
 use tari_engine_types::{
     commit_result::{FinalizeResult, TransactionResult},
-    execution_result::{ExecutionResult, Type},
     instruction::Instruction,
+    instruction_result::InstructionResult,
     substate::{SubstateAddress, SubstateValue},
     TemplateAddress,
 };
@@ -115,6 +116,7 @@ pub struct CommonSubmitArgs {
 #[derive(Debug, Args, Clone)]
 pub struct SubmitManifestArgs {
     manifest: PathBuf,
+    /// A list of globals to be used by the manifest in the format `name=value`
     #[clap(long, short = 'g')]
     input_variables: Vec<String>,
     #[clap(flatten)]
@@ -166,7 +168,7 @@ async fn handle_get(args: GetArgs, client: &mut ValidatorNodeClient) -> Result<(
         println!("Transaction {}", args.transaction_hash);
         println!();
 
-        summarize_finalize_result(&result);
+        summarize_finalize_result(&result.finalize);
     } else {
         println!("Transaction not finalized",);
     }
@@ -257,9 +259,7 @@ pub async fn submit_transaction(
     summarize_request(&instructions, &inputs, &outputs, 1, common.dry_run);
     println!();
 
-    let mut builder = Transaction::builder();
-
-    builder
+    let transaction = Transaction::builder()
         .with_instructions(instructions)
         .with_inputs(inputs)
         .with_new_outputs(common.num_outputs.unwrap_or(0))
@@ -278,10 +278,8 @@ pub async fn submit_transaction(
                 .map(|i| (i.parent_address, i.index))
                 .collect(),
         )
-        .with_fee(1)
-        .sign(&key.secret_key);
-
-    let transaction = builder.build();
+        .sign(&key.secret_key)
+        .build();
 
     if transaction.meta().involved_shards().is_empty() {
         return Err(anyhow::anyhow!(
@@ -486,7 +484,7 @@ fn summarize_finalize_result(finalize: &FinalizeResult) {
     }
 }
 
-fn display_vec<W: fmt::Write>(writer: &mut W, ty: &Type, result: &ExecutionResult) -> fmt::Result {
+fn display_vec<W: fmt::Write>(writer: &mut W, ty: &Type, result: &InstructionResult) -> fmt::Result {
     fn stringify_slice<T: fmt::Display>(slice: &[T]) -> String {
         slice.iter().map(|v| v.to_string()).collect::<Vec<_>>().join(", ")
     }

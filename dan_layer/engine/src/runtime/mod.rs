@@ -41,6 +41,7 @@ pub use functions::FunctionIdent;
 mod module;
 pub use module::{RuntimeModule, RuntimeModuleError};
 
+mod fee_state;
 mod tracker;
 mod working_state;
 
@@ -49,7 +50,7 @@ mod tests;
 
 use std::{fmt::Debug, sync::Arc};
 
-use tari_engine_types::{commit_result::FinalizeResult, confidential::ConfidentialClaim};
+use tari_engine_types::{commit_result::FinalizeResult, confidential::ConfidentialClaim, fees::FeeReceipt};
 use tari_template_lib::{
     args::{
         Arg,
@@ -123,7 +124,9 @@ pub trait RuntimeInterface: Send + Sync {
 
     fn claim_burn(&self, claim: ConfidentialClaim) -> Result<(), RuntimeError>;
 
-    fn finalize(&self) -> Result<FinalizeResult, RuntimeError>;
+    fn fee_checkpoint(&self) -> Result<(), RuntimeError>;
+    fn reset_to_fee_checkpoint(&self) -> Result<(), RuntimeError>;
+    fn finalize(&self) -> Result<(FinalizeResult, FeeReceipt), RuntimeError>;
 }
 
 #[derive(Clone)]
@@ -136,7 +139,7 @@ impl Runtime {
         let mut resolved = Vec::with_capacity(args.len());
         for arg in args {
             match arg {
-                Arg::Variable(key) => {
+                Arg::Workspace(key) => {
                     let value = self
                         .interface
                         .workspace_invoke(WorkspaceAction::Get, invoke_args![key].into())?;

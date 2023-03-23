@@ -20,11 +20,17 @@
 //   WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //   USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use std::{io, io::Read};
+use std::{
+    convert::{TryFrom, TryInto},
+    io,
+    io::Read,
+};
 
 use anyhow::anyhow;
 use clap::{Args, Subcommand};
 use serde_json as json;
+use tari_template_lib::models::Amount;
+use tari_utilities::ByteArray;
 use tari_wallet_daemon_client::{
     types::{
         AccountByNameResponse,
@@ -32,6 +38,7 @@ use tari_wallet_daemon_client::{
         AccountsGetBalancesRequest,
         AccountsInvokeRequest,
         ClaimBurnRequest,
+        RevealFundsRequest,
     },
     WalletDaemonClient,
 };
@@ -46,7 +53,7 @@ use crate::{
 pub enum AccountsSubcommand {
     #[clap(alias = "new")]
     Create(CreateArgs),
-    #[clap(alias = "get-balance")]
+    #[clap(alias = "get-balance", alias = "balance")]
     GetBalances(GetBalancesArgs),
     List,
     Invoke {
@@ -58,8 +65,9 @@ pub enum AccountsSubcommand {
     },
     #[clap(alias = "get")]
     GetByName(GetByNameArgs),
-    #[clap(alias = "claim-burn")]
     ClaimBurn(ClaimBurnArgs),
+    #[clap(alias = "reveal")]
+    RevealFunds(RevealFundsArgs),
 }
 
 #[derive(Debug, Args, Clone)]
@@ -72,7 +80,6 @@ pub struct CreateArgs {
 
 #[derive(Debug, Args, Clone)]
 pub struct GetBalancesArgs {
-    #[clap(long, alias = "name")]
     pub account_name: String,
 }
 
@@ -89,8 +96,23 @@ pub struct ClaimBurnArgs {
     /// Optional proof JSON from the L1 console wallet. If not provided, you will be prompted to enter it.
     #[clap(long, short = 'j', alias = "json")]
     proof_json: Option<serde_json::Value>,
-    #[clap(long, short = 'f')]
-    fee: Option<u64>,
+    #[clap(long, short = 'f', default_value_t = 1000)]
+    fee: u64,
+}
+
+#[derive(Debug, Args, Clone)]
+pub struct RevealFundsArgs {
+    /// The account name where the funds will be revealed
+    account_name: String,
+    /// Amount of funds to reveal
+    reveal_amount: u64,
+    /// The fee to pay for the reveal transaction
+    #[clap(long, short = 'f', default_value_t = 1000)]
+    fee: u64,
+    /// If set, the fee will be paid from the revealed funds instead of from the account resulting in less revealed
+    /// funds than requested.
+    #[clap(long)]
+    pay_from_reveal: bool,
 }
 
 impl AccountsSubcommand {
@@ -110,6 +132,7 @@ impl AccountsSubcommand {
             },
             AccountsSubcommand::GetByName(args) => handle_get_by_name(args, &mut client).await?,
             AccountsSubcommand::ClaimBurn(args) => handle_claim_burn(args, &mut client).await?,
+            AccountsSubcommand::RevealFunds(args) => handle_reveal_funds(args, &mut client).await?,
         }
         Ok(())
     }
@@ -129,6 +152,8 @@ async fn handle_create(args: CreateArgs, client: &mut WalletDaemonClient) -> Res
     println!();
     println!("✅ Account created");
     println!("   address: {}", resp.address);
+    println!("   public key (hex): {}", resp.public_key);
+    println!("   public key (base64): {}", base64::encode(resp.public_key.as_bytes()));
     Ok(())
 }
 
@@ -144,6 +169,7 @@ async fn hande_invoke(
             account_name: account,
             method,
             args: args.into_iter().map(|a| a.into_arg()).collect(),
+            fee: Amount(1000),
         })
         .await?;
 
@@ -176,9 +202,13 @@ async fn handle_get_balances(args: GetBalancesArgs, client: &mut WalletDaemonCli
     println!();
     let mut table = Table::new();
     table.enable_row_count();
-    table.set_titles(vec!["Resource", "Balance"]);
-    for (resx, amt) in resp.balances {
-        table.add_row(table_row!(resx, amt));
+    table.set_titles(vec!["VaultId", "Resource", "Balance"]);
+    for balance in resp.balances {
+        table.add_row(table_row!(
+            balance.vault_address,
+            format!("{} {:?}", balance.resource_address, balance.resource_type),
+            balance.to_balance_string()
+        ));
     }
     table.print_stdout();
     Ok(())
@@ -191,7 +221,7 @@ pub async fn handle_claim_burn(args: ClaimBurnArgs, client: &mut WalletDaemonCli
         fee,
     } = args;
 
-    let AccountByNameResponse { account_address } = client.get_by_name(account_name).await?;
+    let AccountByNameResponse { account, .. } = client.accounts_get_by_name(&account_name).await?;
 
     let claim_proof = if let Some(proof_json) = proof_json {
         proof_json
@@ -209,15 +239,18 @@ pub async fn handle_claim_burn(args: ClaimBurnArgs, client: &mut WalletDaemonCli
     println!("✅ Claim burn submitted");
 
     let req = ClaimBurnRequest {
-        account: account_address.as_component_address().unwrap(),
+        account: account.address.as_component_address().unwrap(),
         claim_proof,
-        fee: fee.unwrap_or(1),
+        fee: fee.try_into()?,
     };
 
     let resp = client
         .claim_burn(req)
         .await
         .map_err(|e| anyhow!("Failed to claim burn with error = {}", e.to_string()))?;
+
+    println!("Total transaction fee: {}", resp.fee);
+    println!();
 
     summarize_finalize_result(&resp.result);
     Ok(())
@@ -234,10 +267,10 @@ async fn handle_list(client: &mut WalletDaemonClient) -> Result<(), anyhow::Erro
 
     let mut table = Table::new();
     table.enable_row_count();
-    table.set_titles(vec!["Name", "Address", "Key Index"]);
+    table.set_titles(vec!["Name", "Address", "Public Key"]);
     println!("Accounts:");
-    for account in resp.accounts {
-        table.add_row(table_row!(account.name, account.address, account.key_index));
+    for (account, pk) in resp.accounts {
+        table.add_row(table_row!(account.name, account.address, pk));
     }
     table.print_stdout();
     Ok(())
@@ -245,10 +278,38 @@ async fn handle_list(client: &mut WalletDaemonClient) -> Result<(), anyhow::Erro
 
 async fn handle_get_by_name(args: GetByNameArgs, client: &mut WalletDaemonClient) -> Result<(), anyhow::Error> {
     println!("Get account component address by its name...");
-    let resp = client.get_by_name(args.name.clone()).await?;
+    let resp = client.accounts_get_by_name(&args.name).await?;
 
-    println!("Account {} substate_address: {}", args.name, resp.account_address);
+    println!("Account {} substate_address: {}", args.name, resp.account.address);
     println!();
+
+    Ok(())
+}
+
+pub async fn handle_reveal_funds(args: RevealFundsArgs, client: &mut WalletDaemonClient) -> Result<(), anyhow::Error> {
+    let RevealFundsArgs {
+        account_name,
+        reveal_amount,
+        fee,
+        pay_from_reveal,
+    } = args;
+
+    let AccountByNameResponse { account, .. } = client.accounts_get_by_name(&account_name).await?;
+
+    println!("Submitting reveal transaction...");
+    let resp = client
+        .accounts_reveal_funds(RevealFundsRequest {
+            account: account.address.as_component_address().unwrap(),
+            amount_to_reveal: Amount::try_from(reveal_amount).expect("Reveal amount too large"),
+            fee: fee.try_into()?,
+            pay_fee_from_reveal: pay_from_reveal,
+        })
+        .await?;
+
+    println!("Transaction: {}", resp.hash);
+    println!("Fee: {}", resp.fee);
+    println!();
+    summarize_finalize_result(&resp.result);
 
     Ok(())
 }

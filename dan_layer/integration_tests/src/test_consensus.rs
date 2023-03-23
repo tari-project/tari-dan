@@ -135,7 +135,7 @@ async fn test_receives_new_payload_starts_new_chain() {
         *NEVER,
     );
 
-    let new_payload = TariDanPayload::new(Transaction::builder().sign(&node1_pk).clone().build());
+    let new_payload = TariDanPayload::new(Transaction::builder().sign(&node1_pk).build());
     instance.tx_new.send((new_payload, *SHARD0)).await.unwrap();
     let leader_message = instance.rx_leader.recv().await.expect("Did not receive leader message");
     dbg!(leader_message);
@@ -157,13 +157,7 @@ async fn test_hs_waiter_leader_proposes() {
         *NEVER,
     );
     // let payload = ("Hello World".to_string(), vec![*SHARD0]);
-    let payload = TariDanPayload::new(
-        Transaction::builder()
-            .add_input(*SHARD0)
-            .sign(&node1_pk)
-            .clone()
-            .build(),
-    );
+    let payload = TariDanPayload::new(Transaction::builder().add_input(*SHARD0).sign(&node1_pk).build());
 
     let qc = create_test_default_qc(
         vec![(node1.clone(), node1_pk), (node2.clone(), node2_pk)],
@@ -207,13 +201,7 @@ async fn test_hs_waiter_replica_sends_vote_for_proposal() {
         *NEVER,
     );
     // let payload = ("Hello World".to_string(), vec![*SHARD0]);
-    let payload = TariDanPayload::new(
-        Transaction::builder()
-            .add_input(*SHARD0)
-            .sign(&node1_pk)
-            .clone()
-            .build(),
-    );
+    let payload = TariDanPayload::new(Transaction::builder().add_input(*SHARD0).sign(&node1_pk).build());
     let qc = create_test_default_qc(
         vec![(node1.clone(), node1_pk), (node2.clone(), node2_pk)],
         vec![node1.clone(), node2.clone()],
@@ -279,7 +267,6 @@ async fn test_hs_waiter_leader_sends_new_proposal_when_enough_votes_are_received
             .add_input(*SHARD0)
             .add_output(*SHARD1)
             .sign(&node1_pk)
-            .clone()
             .build(),
     );
 
@@ -353,13 +340,7 @@ async fn test_hs_waiter_execute_called_at_prepare_phase_only() {
         AlwaysFirstLeader {},
         *NEVER,
     );
-    let payload = TariDanPayload::new(
-        Transaction::builder()
-            .add_input(*SHARD0)
-            .sign(&node1_pk)
-            .clone()
-            .build(),
-    );
+    let payload = TariDanPayload::new(Transaction::builder().add_input(*SHARD0).sign(&node1_pk).build());
 
     let qc = create_test_default_qc(vec![(node1.clone(), node1_pk.clone())], vec![node1.clone()], &payload);
     let new_view_message = HotStuffMessage::new_view(qc, *SHARD0, payload.clone());
@@ -441,7 +422,6 @@ async fn test_hs_waiter_multishard_votes() {
         Transaction::builder()
             .with_inputs(vec![*SHARD0, *SHARD1])
             .sign(&node1_pk)
-            .clone()
             .build(),
     );
 
@@ -557,7 +537,6 @@ async fn test_leader_fails_only_foreignly() {
             .add_input(*SHARD0)
             .add_input(*SHARD1)
             .sign(&node0_pk)
-            .clone()
             .build(),
     );
 
@@ -977,7 +956,6 @@ impl Test {
                         .collect::<Vec<_>>(),
                 )
                 .sign(&committees[0].keys[0].0)
-                .clone()
                 .build(),
         );
 
@@ -1359,14 +1337,15 @@ async fn test_kitchen_sink() {
     };
     let secret_key = PrivateKey::from_bytes(&[1; 32]).unwrap();
 
-    let mut builder = TransactionBuilder::new();
-    builder.add_instruction(instruction);
-    // Only creating a single component
-    // This tells us which shards are involved in the transaction
-    // Because there are no inputs, we need to say that there are 2 components
-    // being created, so that two shards are involved, not just one.
-    builder.with_new_outputs(2).sign(&secret_key);
-    let transaction = builder.build();
+    let transaction = TransactionBuilder::new()
+        .add_instruction(instruction)
+        // Only creating a single component
+        // This tells us which shards are involved in the transaction
+        // Because there are no inputs, we need to say that there are 2 components
+        // being created, so that two shards are involved, not just one.
+        .with_new_outputs(2)
+        .sign(&secret_key)
+        .build();
 
     let mut involved_shards = transaction.meta().involved_shards();
     // Sort the shards so that we can create a range epoch manager

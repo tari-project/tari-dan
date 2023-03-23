@@ -44,6 +44,7 @@ fn airdrop() {
         .unwrap();
 
     let addresses = result
+        .finalize
         .execution_results
         .iter()
         .map(|r| r.decode::<ComponentAddress>().unwrap())
@@ -96,7 +97,9 @@ fn airdrop() {
 
     for i in 0..100 {
         assert_eq!(
-            result.execution_results[3 + (i * 4)].decode::<Amount>().unwrap(),
+            result.finalize.execution_results[3 + (i * 4)]
+                .decode::<Amount>()
+                .unwrap(),
             Amount(1)
         );
     }

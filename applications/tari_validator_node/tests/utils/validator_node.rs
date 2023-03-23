@@ -95,7 +95,20 @@ pub async fn spawn_validator_node(
 
     let shutdown = Shutdown::new();
     let shutdown_signal = shutdown.to_signal();
-    let temp_dir = get_base_dir().join("validator_nodes").join(validator_node_name.clone());
+    let scenario_slug = world
+        .current_scenario_name
+        .as_ref()
+        .unwrap()
+        .chars()
+        .map(|x| match x {
+            'A'..='Z' | 'a'..='z' | '0'..='9' => x,
+            _ => '-',
+        })
+        .collect::<String>();
+    let temp_dir = get_base_dir()
+        .join("validator_nodes")
+        .join(scenario_slug)
+        .join(validator_node_name.clone());
     let temp_dir_path = temp_dir.clone();
     let handle = task::spawn(async move {
         let mut config = ApplicationConfig {
@@ -129,6 +142,9 @@ pub async fn spawn_validator_node(
         };
         config.validator_node.json_rpc_address = Some(format!("127.0.0.1:{}", json_rpc_port).parse().unwrap());
         config.validator_node.http_ui_address = Some(format!("127.0.0.1:{}", http_ui_port).parse().unwrap());
+
+        // TODO: test fees in cucumber
+        config.validator_node.no_fees = true;
 
         // The VNS will try to auto register upon startup
         config.validator_node.auto_register = false;
