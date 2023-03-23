@@ -81,15 +81,11 @@ impl From<Transaction> for proto::transaction::Transaction {
         let (instructions, fee_instructions, signature, sender_public_key) = transaction.destruct();
 
         proto::transaction::Transaction {
-            // TODO: Thaum inputs and outputs
-            inputs: vec![],
-            outputs: vec![],
             fee_instructions: fee_instructions.into_iter().map(Into::into).collect(),
             instructions: instructions.into_iter().map(Into::into).collect(),
             signature: Some(signature.signature().into()),
             sender_public_key: sender_public_key.to_vec(),
             meta: Some(meta.into()),
-            balance_proof: vec![],
         }
     }
 }
