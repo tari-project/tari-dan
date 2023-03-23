@@ -9,7 +9,7 @@ use tari_dan_common_types::{Epoch, ShardId};
 use tari_engine_types::{confidential::ConfidentialClaim, substate::SubstateAddress};
 use tari_template_lib::{args, prelude::ComponentAddress};
 use tari_transaction::Transaction;
-use tari_validator_node_client::types::{GetStateRequest, SubmitTransactionRequest};
+use tari_validator_node_client::types::{GetStateRequest, SubmitTransactionRequest, TransactionFinalizeResult};
 
 use crate::TariWorld;
 
@@ -40,7 +40,7 @@ async fn when_i_claim_burn(
     claim_public_key_name: String,
     account_name: String,
     vn_name: String,
-) -> Result<(), anyhow::Error> {
+) -> Result<TransactionFinalizeResult, anyhow::Error> {
     let commitment = world
         .commitments
         .get(&commitment_name)
@@ -102,9 +102,10 @@ async fn when_i_claim_burn(
     };
 
     let mut client = vn.create_client().await;
-    client.submit_transaction(request).await?;
+    let resp = client.submit_transaction(request).await?;
+    let result = resp.result.ok_or_else(|| anyhow::anyhow!("Transaction failed"))?;
 
-    Ok(())
+    Ok(result)
 }
 
 #[when(
@@ -120,7 +121,7 @@ async fn when_i_claim_burn_second_time_fails(
     account_name: String,
     vn_name: String,
 ) {
-    when_i_claim_burn(
+    let result = when_i_claim_burn(
         world,
         commitment_name,
         proof_name,
@@ -130,7 +131,9 @@ async fn when_i_claim_burn_second_time_fails(
         vn_name,
     )
     .await
-    .unwrap_err();
+    .unwrap();
+    let reason = result.transaction_failure.expect("Transaction should have failed");
+    eprintln!("Expected transaction failure. Reason: {}", reason);
 }
 
 #[then(expr = "{word} is on epoch {int} within {int} seconds")]
