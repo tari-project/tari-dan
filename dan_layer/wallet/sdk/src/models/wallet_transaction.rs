@@ -1,7 +1,7 @@
 //   Copyright 2023 The Tari Project
 //   SPDX-License-Identifier: BSD-3-Clause
 
-use std::str::FromStr;
+use std::{fmt::Display, str::FromStr};
 
 use anyhow::anyhow;
 use serde::{Deserialize, Serialize};
@@ -14,7 +14,7 @@ use tari_transaction::Transaction;
 pub struct WalletTransaction {
     pub transaction: Transaction,
     pub status: TransactionStatus,
-    pub result: Option<FinalizeResult>,
+    pub finalize: Option<FinalizeResult>,
     pub transaction_failure: Option<RejectReason>,
     pub final_fee: Option<Amount>,
     pub qcs: Vec<QuorumCertificate>,
@@ -29,6 +29,7 @@ pub enum TransactionStatus {
     Pending,
     Accepted,
     Rejected,
+    InvalidTransaction,
 }
 
 impl TransactionStatus {
@@ -39,6 +40,7 @@ impl TransactionStatus {
             TransactionStatus::Pending => "Pending",
             TransactionStatus::Accepted => "Accepted",
             TransactionStatus::Rejected => "Rejected",
+            TransactionStatus::InvalidTransaction => "InvalidTransaction",
         }
     }
 }
@@ -53,7 +55,14 @@ impl FromStr for TransactionStatus {
             "Pending" => Ok(TransactionStatus::Pending),
             "Accepted" => Ok(TransactionStatus::Accepted),
             "Rejected" => Ok(TransactionStatus::Rejected),
+            "InvalidTransaction" => Ok(TransactionStatus::InvalidTransaction),
             _ => Err(anyhow!("Invalid TransactionStatus: {}", s)),
         }
+    }
+}
+
+impl Display for TransactionStatus {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.as_key_str())
     }
 }

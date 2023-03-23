@@ -14,6 +14,7 @@ use tari_template_lib::models::Amount;
 pub enum WalletEvent {
     TransactionSubmitted(TransactionSubmittedEvent),
     TransactionFinalized(TransactionFinalizedEvent),
+    TransactionInvalid(TransactionInvalidEvent),
     AccountChanged(AccountChangedEvent),
 }
 
@@ -35,6 +36,12 @@ impl From<AccountChangedEvent> for WalletEvent {
     }
 }
 
+impl From<TransactionInvalidEvent> for WalletEvent {
+    fn from(value: TransactionInvalidEvent) -> Self {
+        Self::TransactionInvalid(value)
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct TransactionSubmittedEvent {
     pub hash: FixedHash,
@@ -53,4 +60,11 @@ pub struct TransactionFinalizedEvent {
 #[derive(Debug, Clone)]
 pub struct AccountChangedEvent {
     pub account_address: SubstateAddress,
+}
+
+#[derive(Debug, Clone)]
+pub struct TransactionInvalidEvent {
+    pub hash: FixedHash,
+    pub status: TransactionStatus,
+    pub final_fee: Amount,
 }

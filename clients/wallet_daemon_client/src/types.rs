@@ -112,6 +112,7 @@ pub struct TransactionWaitResultResponse {
     pub result: Option<FinalizeResult>,
     pub qcs: Vec<QuorumCertificate>,
     pub status: TransactionStatus,
+    pub final_fee: Amount,
     pub timed_out: bool,
 }
 
