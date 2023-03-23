@@ -7,7 +7,7 @@ use tari_crypto::{commitment::HomomorphicCommitmentFactory, dhke::DiffieHellmanS
 use tari_engine_types::confidential::challenges;
 use tari_template_lib::{
     crypto::BalanceProofSignature,
-    models::{ConfidentialOutputProof, ConfidentialWithdrawProof, EncryptedValue},
+    models::{Amount, ConfidentialOutputProof, ConfidentialWithdrawProof, EncryptedValue},
 };
 use tari_utilities::ByteArray;
 
@@ -70,10 +70,18 @@ impl ConfidentialCryptoApi {
         let input_private_excess = inputs
             .iter()
             .fold(PrivateKey::default(), |acc, output| acc + &output.mask);
+
+        let revealed_amount = output_proof.output_statement.revealed_amount +
+            output_proof
+                .change_statement
+                .as_ref()
+                .map(|st| st.revealed_amount)
+                .unwrap_or_default();
         let balance_proof = generate_balance_proof(
             &input_private_excess,
             &output_statement.mask,
             change_statement.as_ref().map(|ch| &ch.mask),
+            revealed_amount,
         );
 
         let output_statement = output_proof.output_statement;
@@ -138,11 +146,12 @@ fn generate_balance_proof(
     input_mask: &PrivateKey,
     output_mask: &PrivateKey,
     change_mask: Option<&PrivateKey>,
+    reveal_amount: Amount,
 ) -> BalanceProofSignature {
     let secret_excess = input_mask - output_mask - change_mask.unwrap_or(&PrivateKey::default());
     let excess = PublicKey::from_secret_key(&secret_excess);
     let (nonce, public_nonce) = PublicKey::random_keypair(&mut OsRng);
-    let challenge = challenges::confidential_withdraw(&excess, &public_nonce);
+    let challenge = challenges::confidential_withdraw(&excess, &public_nonce, reveal_amount);
 
     let sig = Signature::sign_raw(&secret_excess, nonce, &challenge).unwrap();
     BalanceProofSignature::try_from_parts(sig.get_public_nonce().as_bytes(), sig.get_signature().as_bytes()).unwrap()

@@ -62,8 +62,8 @@ pub fn validate_confidential_withdraw<'a, I: IntoIterator<Item = &'a PublicKey>>
             .map(|output| output.commitment.as_public_key())
             .unwrap_or(&PublicKey::default());
 
-    // TODO: the revealed amount needs to be in this challenge. Base layer update needed using zero.
-    let challenge = challenges::confidential_withdraw(&public_excess, balance_proof.get_public_nonce());
+    let challenge =
+        challenges::confidential_withdraw(&public_excess, balance_proof.get_public_nonce(), revealed_amount);
 
     if !balance_proof.verify_challenge(&public_excess, &challenge) {
         return Err(ResourceError::InvalidBalanceProof {
