@@ -104,4 +104,4 @@ Feature: Claim Burn
     Then validator node VN has state at COMM_ADDRESS
 
     When I claim burn COMMITMENT with PROOF, RANGEPROOF and CLAIM_PUBKEY and spend it into account ACC_1 via the wallet daemon WALLET_D
-    # Then account ACC_1 has one confidential bucket in it
+# Then account ACC_1 has one confidential bucket in it

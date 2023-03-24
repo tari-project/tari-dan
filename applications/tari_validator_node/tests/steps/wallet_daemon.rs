@@ -1,7 +1,7 @@
 //  Copyright 2022 The Tari Project
 //  SPDX-License-Identifier: BSD-3-Clause
 
-use cucumber::when;
+use cucumber::{then, when};
 use tari_common_types::types::{Commitment, PrivateKey, PublicKey};
 use tari_crypto::{ristretto::RistrettoComSig, tari_utilities::ByteArray};
 
@@ -49,6 +49,29 @@ async fn when_i_claim_burn_via_wallet_daemon(
     .await;
 
     assert!(claim_burn_resp.result.is_accept());
+}
+
+#[then(
+    expr = "I make a confidential transfer with amount {int}T with {word}, {word}, {word} and {word} from {word} to \
+            {word} creating output {word} via the wallet_daemon {word}"
+)]
+async fn when_i_create_transfer_proof_via_wallet_daemon(
+    world: &mut TariWorld,
+    amount: u64,
+    source_account_name: String,
+    dest_account_name: String,
+    outputs_name: String,
+    wallet_daemon_name: String,
+) {
+    wallet_daemon_cli::create_transfer_proof(
+        world,
+        source_account_name,
+        dest_account_name,
+        amount,
+        wallet_daemon_name,
+        outputs_name,
+    )
+    .await;
 }
 
 #[when(expr = "I create an account {word} via the wallet daemon {word}")]
@@ -119,7 +142,7 @@ async fn when_i_burn_funds_with_wallet_daemon(
 }
 
 #[when(expr = "I check the balance of {word} on wallet daemon {word} the amount is at least {int}")]
-async fn check_account_balance_via_daemon(
+async fn check_account_balance_is_at_least_via_daemon(
     world: &mut TariWorld,
     account_name: String,
     wallet_daemon_name: String,
@@ -127,4 +150,15 @@ async fn check_account_balance_via_daemon(
 ) {
     let current_balance = wallet_daemon_cli::get_balance(world, account_name, wallet_daemon_name).await;
     assert!(current_balance >= amount);
+}
+
+#[when(expr = "I check the balance of {word} on wallet daemon {word} the amount is at most {int}")]
+async fn check_account_balance_is_at_most_daemon(
+    world: &mut TariWorld,
+    account_name: String,
+    wallet_daemon_name: String,
+    amount: i64,
+) {
+    let current_balance = wallet_daemon_cli::get_balance(world, account_name, wallet_daemon_name).await;
+    assert!(current_balance <= amount);
 }

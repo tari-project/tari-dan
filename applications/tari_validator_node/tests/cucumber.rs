@@ -44,7 +44,7 @@ use tari_crypto::{
 use tari_dan_app_utilities::base_node_client::GrpcBaseNodeClient;
 use tari_dan_common_types::QuorumDecision;
 use tari_dan_core::services::BaseNodeClient;
-use tari_engine_types::{execution_result::Type, substate::SubstateDiff};
+use tari_engine_types::execution_result::Type;
 use tari_template_lib::Hash;
 use tari_validator_node_cli::versioned_substate_address::VersionedSubstateAddress;
 use tari_validator_node_client::types::{
@@ -97,7 +97,7 @@ pub struct TariWorld {
     account_public_keys: IndexMap<String, (RistrettoSecretKey, PublicKey)>,
     claim_public_keys: IndexMap<String, PublicKey>,
     wallet_daemons: IndexMap<String, DanWalletDaemonProcess>,
-    wallet_daemons_txs: IndexMap<String, IndexMap<String, SubstateDiff>>,
+    wallet_daemon_outputs: IndexMap<String, IndexMap<String, VersionedSubstateAddress>>,
 }
 
 impl TariWorld {
@@ -784,14 +784,10 @@ async fn print_world(world: &mut TariWorld) {
     }
 
     // wallet daemon substate addresses
-    for (name, wallet_daemon_diffs) in world.wallet_daemons_txs.iter() {
+    for (name, outputs) in world.wallet_daemon_outputs.iter() {
         eprintln!("Outputs \"{}\"", name);
-        for (name, diff) in wallet_daemon_diffs {
-            eprintln!(
-                "  - {}: {:?}",
-                name,
-                diff.up_iter().map(|(addr, _)| addr).collect::<Vec<_>>()
-            );
+        for (name, addr) in outputs {
+            eprintln!("  - {}: {}", name, addr);
         }
     }
 
