@@ -24,7 +24,6 @@ use std::{
     collections::HashMap,
     convert::{TryFrom, TryInto},
     str::FromStr,
-    time::Duration,
 };
 
 use base64::{engine::general_purpose::STANDARD as BASE64, Engine};
@@ -49,7 +48,6 @@ use tari_wallet_daemon_client::{
         ClaimBurnRequest,
         ClaimBurnResponse,
         ProofsGenerateRequest,
-        TransactionGetResultRequest,
         TransactionSubmitRequest,
         TransactionWaitResultRequest,
     },
@@ -335,7 +333,7 @@ pub async fn create_component(
     world: &mut TariWorld,
     outputs_name: String,
     template_name: String,
-    account_name: String,
+    _account_name: String,
     wallet_daemon_name: String,
     function_call: String,
     args: Vec<String>,
@@ -353,16 +351,6 @@ pub async fn create_component(
         args,
     };
 
-    let mut client = get_wallet_daemon_client(world, wallet_daemon_name.clone()).await;
-    let source_component_address = client
-        .accounts_get_by_name(account_name.as_str())
-        .await
-        .unwrap()
-        .account
-        .address
-        .as_component_address()
-        .unwrap();
-
     let transaction_submit_req = TransactionSubmitRequest {
         signing_key_index: None,
         instructions: vec![instruction],
@@ -377,6 +365,7 @@ pub async fn create_component(
         new_non_fungible_index_outputs: vec![],
     };
 
+    let mut client = get_wallet_daemon_client(world, wallet_daemon_name.clone()).await;
     let resp = client.submit_transaction(transaction_submit_req).await.unwrap();
 
     let wait_req = TransactionWaitResultRequest {
@@ -398,6 +387,7 @@ pub async fn create_component(
 
 pub(crate) async fn get_wallet_daemon_client(world: &TariWorld, wallet_daemon_name: String) -> WalletDaemonClient {
     let port = world.wallet_daemons.get(&wallet_daemon_name).unwrap().json_rpc_port;
+    eprintln!("FLAG: CUCUMBER");
     get_walletd_client(port).await
 }
 

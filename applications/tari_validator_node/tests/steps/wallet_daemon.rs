@@ -52,8 +52,8 @@ async fn when_i_claim_burn_via_wallet_daemon(
 }
 
 #[then(
-    expr = "I make a confidential transfer with amount {int}T with {word}, {word}, {word} and {word} from {word} to \
-            {word} creating output {word} via the wallet_daemon {word}"
+    expr = "I make a confidential transfer with amount {int}T from {word} to {word} creating output {word} via the \
+            wallet_daemon {word}"
 )]
 async fn when_i_create_transfer_proof_via_wallet_daemon(
     world: &mut TariWorld,
