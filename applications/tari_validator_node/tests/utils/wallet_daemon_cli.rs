@@ -142,7 +142,7 @@ pub async fn create_transfer_proof(
             key: b"bucket".to_vec(),
         },
         Instruction::CallMethod {
-            component_address: destination_account.clone(),
+            component_address: destination_account,
             method: String::from("deposit"),
             args: args![Variable("bucket")],
         },
@@ -280,23 +280,6 @@ pub async fn submit_manifest(
         })
         .collect::<Vec<_>>();
 
-    // retrieve account from inputs
-    let account_names = inputs
-        .split(',')
-        .filter_map(|i| if i.contains("ACC") { Some(i.to_string()) } else { None })
-        .collect::<Vec<_>>();
-    let account_name = account_names.first().expect("Account name not found");
-
-    let mut client = get_wallet_daemon_client(world, wallet_daemon_name.clone()).await;
-    let source_component_address = client
-        .accounts_get_by_name(account_name.as_str())
-        .await
-        .unwrap()
-        .account
-        .address
-        .as_component_address()
-        .unwrap();
-
     // Supply the inputs explicitly. If this is empty, the internal component manager
     // will attempt to supply the correct inputs
     let inputs = inputs
@@ -317,11 +300,7 @@ pub async fn submit_manifest(
     let transaction_submit_req = TransactionSubmitRequest {
         signing_key_index: None,
         instructions,
-        fee_instructions: vec![Instruction::CallMethod {
-            component_address: source_component_address,
-            method: "pay_fee".to_string(),
-            args: args![Amount::try_from(1).unwrap()],
-        }],
+        fee_instructions: vec![],
         override_inputs: false,
         is_dry_run: false,
         proof_ids: vec![],
@@ -332,6 +311,7 @@ pub async fn submit_manifest(
         new_non_fungible_index_outputs,
     };
 
+    let mut client = get_wallet_daemon_client(world, wallet_daemon_name.clone()).await;
     let resp = client.submit_transaction(transaction_submit_req).await.unwrap();
 
     let wait_req = TransactionWaitResultRequest {
@@ -386,11 +366,7 @@ pub async fn create_component(
     let transaction_submit_req = TransactionSubmitRequest {
         signing_key_index: None,
         instructions: vec![instruction],
-        fee_instructions: vec![Instruction::CallMethod {
-            component_address: source_component_address,
-            method: "pay_fee".to_string(),
-            args: args![Amount::try_from(0).unwrap()],
-        }],
+        fee_instructions: vec![],
         override_inputs: false,
         is_dry_run: false,
         proof_ids: vec![],
@@ -403,15 +379,16 @@ pub async fn create_component(
 
     let resp = client.submit_transaction(transaction_submit_req).await.unwrap();
 
-    tokio::time::sleep(Duration::from_secs(5)).await;
-
-    let get_tx_req = TransactionGetResultRequest { hash: resp.hash };
-    let get_tx_resp = client.get_transaction_result(get_tx_req).await.unwrap();
+    let wait_req = TransactionWaitResultRequest {
+        hash: resp.hash,
+        timeout_secs: Some(120),
+    };
+    let wait_resp = client.wait_transaction_result(wait_req).await.unwrap();
 
     add_substate_addresses_from_wallet_daemon(
         world,
         outputs_name,
-        &get_tx_resp
+        &wait_resp
             .result
             .unwrap()
             .result
