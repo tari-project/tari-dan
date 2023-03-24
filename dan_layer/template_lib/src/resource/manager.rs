@@ -20,7 +20,8 @@
 //   WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //   USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use tari_bor::{encode, Encode};
+use serde::Serialize;
+use tari_bor::encode;
 use tari_template_abi::{call_engine, rust::collections::HashMap, EngineOp};
 
 use crate::{
@@ -94,7 +95,7 @@ impl ResourceManager {
             .expect("[register_non_fungible] Failed to decode ResourceAddress")
     }
 
-    pub fn mint_non_fungible<T: Encode, U: Encode>(
+    pub fn mint_non_fungible<T: Serialize, U: Serialize>(
         &mut self,
         id: NonFungibleId,
         metadata: &T,
@@ -109,7 +110,7 @@ impl ResourceManager {
         })
     }
 
-    pub fn mint_many_non_fungible<T: Encode, U: Encode>(
+    pub fn mint_many_non_fungible<T: Serialize, U: Serialize>(
         &mut self,
         metadata: &T,
         mutable_data: &U,
@@ -163,7 +164,7 @@ impl ResourceManager {
         resp.decode().expect("[get_non_fungible] Failed to decode NonFungible")
     }
 
-    pub fn update_non_fungible_data<T: Encode + ?Sized>(&self, id: NonFungibleId, data: &T) {
+    pub fn update_non_fungible_data<T: Serialize + ?Sized>(&self, id: NonFungibleId, data: &T) {
         let resp: InvokeResult = call_engine(EngineOp::ResourceInvoke, &ResourceInvokeArg {
             resource_ref: self.expect_resource_address(),
             action: ResourceAction::UpdateNonFungibleData,

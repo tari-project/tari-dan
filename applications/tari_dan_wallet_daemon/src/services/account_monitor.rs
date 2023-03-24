@@ -249,7 +249,7 @@ where TStore: WalletStore + Clone + Send + Sync + 'static
         match event {
             WalletEvent::TransactionSubmitted(_) => {},
             WalletEvent::TransactionFinalized(event) => {
-                if let Some(diff) = event.result.result.accept() {
+                if let Some(diff) = event.finalize.result.accept() {
                     self.process_result(diff).await?;
                 }
             },

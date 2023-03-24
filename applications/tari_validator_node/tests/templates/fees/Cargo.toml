@@ -7,9 +7,10 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-tari_template_abi = { path = "../../../../../dan_layer/template_abi" }
-tari_template_lib = { path = "../../../../../dan_layer/template_lib" }
-tari_template_macros = { path = "../../../../../dan_layer/template_macros" }
+tari_template_abi = { path="../../../../../dan_layer/template_abi" }
+tari_template_lib = {path="../../../../../dan_layer/template_lib"}
+tari_template_macros = {path="../../../../../dan_layer/template_macros"}
+serde = { version = "1.0.143", default-features = false, features = ["derive", "alloc"] }
 
 [profile.release]
 opt-level = 's'     # Optimize for size.

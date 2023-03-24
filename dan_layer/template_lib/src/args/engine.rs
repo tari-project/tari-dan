@@ -22,7 +22,7 @@
 
 use std::collections::BTreeSet;
 
-use tari_bor::{borsh, Decode, Encode};
+use serde::{Deserialize, Serialize};
 use tari_template_abi::rust::{
     collections::HashMap,
     fmt::{Display, Formatter},
@@ -46,14 +46,13 @@ use crate::{
 };
 
 // -------------------------------- LOGS -------------------------------- //
-#[derive(Debug, Clone, Encode, Decode)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct EmitLogArg {
     pub message: String,
     pub level: LogLevel,
 }
 
-#[derive(Debug, Clone, Copy, Encode, Decode, Eq, PartialEq)]
-#[cfg_attr(feature = "serde", derive(serde::Deserialize, serde::Serialize))]
+#[derive(Debug, Clone, Copy, Eq, PartialEq, Serialize, Deserialize)]
 pub enum LogLevel {
     Error,
     Warn,
@@ -98,15 +97,14 @@ impl Display for LogLevelParseError {
 impl std::error::Error for LogLevelParseError {}
 
 // -------------------------------- Component -------------------------------- //
-#[derive(Debug, Clone, Encode, Decode)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ComponentInvokeArg {
     pub component_ref: ComponentRef,
     pub action: ComponentAction,
     pub args: Vec<Vec<u8>>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord, Decode, Encode)]
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
 pub enum ComponentAction {
     Get,
     Create,
@@ -114,7 +112,7 @@ pub enum ComponentAction {
     SetAccessRules,
 }
 
-#[derive(Clone, Copy, Hash, Debug, Decode, Encode)]
+#[derive(Clone, Copy, Hash, Debug, Serialize, Deserialize)]
 pub enum ComponentRef {
     Component,
     Ref(ComponentAddress),
@@ -129,7 +127,7 @@ impl ComponentRef {
     }
 }
 
-#[derive(Debug, Clone, Decode, Encode)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CreateComponentArg {
     pub module_name: String,
     pub encoded_state: Vec<u8>,
@@ -137,14 +135,14 @@ pub struct CreateComponentArg {
 }
 
 // -------------------------------- Resource -------------------------------- //
-#[derive(Clone, Debug, Decode, Encode)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct ResourceInvokeArg {
     pub resource_ref: ResourceRef,
     pub action: ResourceAction,
     pub args: Vec<Vec<u8>>,
 }
 
-#[derive(Clone, Copy, Hash, Debug, Decode, Encode)]
+#[derive(Clone, Copy, Hash, Debug, Serialize, Deserialize)]
 pub enum ResourceRef {
     Resource,
     Ref(ResourceAddress),
@@ -165,8 +163,7 @@ impl From<ResourceAddress> for ResourceRef {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord, Decode, Encode)]
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
 pub enum ResourceAction {
     GetTotalSupply,
     GetResourceType,
@@ -176,7 +173,7 @@ pub enum ResourceAction {
     UpdateNonFungibleData,
 }
 
-#[derive(Clone, Debug, Decode, Encode)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub enum MintArg {
     Fungible {
         amount: Amount,
@@ -189,39 +186,38 @@ pub enum MintArg {
     },
 }
 
-#[derive(Clone, Debug, Decode, Encode)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct CreateResourceArg {
     pub resource_type: ResourceType,
     pub metadata: Metadata,
     pub mint_arg: Option<MintArg>,
 }
 
-#[derive(Clone, Debug, Decode, Encode)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct MintResourceArg {
     pub mint_arg: MintArg,
 }
 
-#[derive(Clone, Debug, Decode, Encode)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct ResourceGetNonFungibleArg {
     pub id: NonFungibleId,
 }
 
-#[derive(Clone, Debug, Decode, Encode)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct ResourceUpdateNonFungibleDataArg {
     pub id: NonFungibleId,
     pub data: Vec<u8>,
 }
 
 // -------------------------------- Vault -------------------------------- //
-#[derive(Clone, Debug, Decode, Encode)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct VaultInvokeArg {
     pub vault_ref: VaultRef,
     pub action: VaultAction,
     pub args: Vec<Vec<u8>>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord, Decode, Encode)]
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
 pub enum VaultAction {
     Create,
     Deposit,
@@ -232,9 +228,10 @@ pub enum VaultAction {
     GetNonFungibleIds,
     GetCommitmentCount,
     ConfidentialReveal,
+    PayFee,
 }
 
-#[derive(Clone, Debug, Decode, Encode)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub enum VaultWithdrawArg {
     Fungible { amount: Amount },
     NonFungible { ids: BTreeSet<NonFungibleId> },
@@ -242,20 +239,27 @@ pub enum VaultWithdrawArg {
 }
 
 // -------------------------------- Confidential -------------------------------- //
-#[derive(Clone, Debug, Decode, Encode)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct ConfidentialRevealArg {
     pub proof: ConfidentialWithdrawProof,
 }
 
+// -------------------------------- Fees -------------------------------- //
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct PayFeeArg {
+    pub amount: Amount,
+    pub proof: Option<ConfidentialWithdrawProof>,
+}
+
 // -------------------------------- Bucket -------------------------------- //
-#[derive(Clone, Debug, Decode, Encode)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct BucketInvokeArg {
     pub bucket_ref: BucketRef,
     pub action: BucketAction,
     pub args: Vec<Vec<u8>>,
 }
 
-#[derive(Clone, Copy, Debug, Decode, Encode)]
+#[derive(Clone, Copy, Debug, Serialize, Deserialize)]
 pub enum BucketRef {
     Bucket(ResourceAddress),
     Ref(BucketId),
@@ -277,7 +281,7 @@ impl BucketRef {
     }
 }
 
-#[derive(Clone, Copy, Debug, Decode, Encode)]
+#[derive(Clone, Copy, Debug, Serialize, Deserialize)]
 pub enum BucketAction {
     Create,
     GetResourceAddress,
@@ -289,13 +293,13 @@ pub enum BucketAction {
     Burn,
 }
 
-#[derive(Clone, Debug, Decode, Encode)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct BucketBurnArg {
     pub bucket_id: BucketId,
 }
 
 // -------------------------------- Workspace -------------------------------- //
-#[derive(Clone, Copy, Debug, Decode, Encode)]
+#[derive(Clone, Copy, Debug, Serialize, Deserialize)]
 pub enum WorkspaceAction {
     Put,
     PutLastInstructionOutput,
@@ -303,33 +307,33 @@ pub enum WorkspaceAction {
     ListBuckets,
 }
 
-#[derive(Clone, Debug, Decode, Encode)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct WorkspaceInvokeArg {
     pub action: WorkspaceAction,
     pub args: Vec<Vec<u8>>,
 }
 
 // -------------------------------- NonFungible -------------------------------- //
-#[derive(Clone, Debug, Decode, Encode)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct NonFungibleInvokeArg {
     pub address: NonFungibleAddress,
     pub action: NonFungibleAction,
     pub args: Vec<Vec<u8>>,
 }
 
-#[derive(Clone, Debug, Decode, Encode)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub enum NonFungibleAction {
     GetData,
     GetMutableData,
 }
 
 // -------------------------------- Consensus -------------------------------- //
-#[derive(Clone, Debug, Decode, Encode)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct ConsensusInvokeArg {
     pub action: ConsensusAction,
 }
 
-#[derive(Clone, Debug, Decode, Encode)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub enum ConsensusAction {
     GetCurrentEpoch,
 }

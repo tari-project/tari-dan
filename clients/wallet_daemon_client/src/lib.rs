@@ -54,12 +54,16 @@ use crate::{
         AccountsListResponse,
         ConfidentialCreateOutputProofRequest,
         ConfidentialCreateOutputProofResponse,
+        ConfidentialTransferRequest,
+        ConfidentialTransferResponse,
         KeysCreateRequest,
         KeysCreateResponse,
         KeysListRequest,
         KeysListResponse,
         KeysSetActiveRequest,
         KeysSetActiveResponse,
+        RevealFundsRequest,
+        RevealFundsResponse,
         TransactionGetRequest,
         TransactionGetResponse,
         TransactionGetResultRequest,
@@ -189,11 +193,25 @@ impl WalletDaemonClient {
             .await
     }
 
+    pub async fn accounts_confidential_transfer<T: Borrow<ConfidentialTransferRequest>>(
+        &mut self,
+        req: T,
+    ) -> Result<ConfidentialTransferResponse, WalletDaemonClientError> {
+        self.send_request("accounts.confidential_transfer", req.borrow()).await
+    }
+
     pub async fn claim_burn<T: Borrow<ClaimBurnRequest>>(
         &mut self,
         req: T,
     ) -> Result<ClaimBurnResponse, WalletDaemonClientError> {
         self.send_request("accounts.claim_burn", req.borrow()).await
+    }
+
+    pub async fn accounts_reveal_funds<T: Borrow<RevealFundsRequest>>(
+        &mut self,
+        req: T,
+    ) -> Result<RevealFundsResponse, WalletDaemonClientError> {
+        self.send_request("accounts.reveal_funds", req.borrow()).await
     }
 
     pub async fn create_transfer_proof<T: Borrow<ProofsGenerateRequest>>(

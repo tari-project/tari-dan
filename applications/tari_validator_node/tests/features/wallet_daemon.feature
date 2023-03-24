@@ -35,12 +35,12 @@ Feature: Wallet Daemon
         # A file-base CLI account must be created to sign future calls
         When I create a DAN wallet
 
-        # Create a new Faucet component
-        When I call function "mint" on template "faucet" via wallet daemon WALLET_D with args "10000" and 3 outputs named "FAUCET"
-
         # Create two accounts to test sending the tokens
         When I create an account ACC_1 via the wallet daemon WALLET_D
         When I create an account ACC_2 via the wallet daemon WALLET_D
+
+        # Create a new Faucet component
+        When I call function "mint" on template "faucet" using account ACC_1 to pay fees via wallet daemon WALLET_D with args "10000" and 3 outputs named "FAUCET"
 
         # Submit a transaction manifest
         When I print the cucumber world

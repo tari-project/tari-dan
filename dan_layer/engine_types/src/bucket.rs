@@ -22,7 +22,7 @@
 
 use std::collections::BTreeSet;
 
-use tari_bor::{borsh, Decode, Encode};
+use serde::{Deserialize, Serialize};
 use tari_template_lib::{
     models::{Amount, ConfidentialWithdrawProof, NonFungibleId, ResourceAddress},
     prelude::ResourceType,
@@ -30,7 +30,7 @@ use tari_template_lib::{
 
 use crate::resource_container::{ResourceContainer, ResourceError};
 
-#[derive(Debug, Clone, Encode, Decode)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Bucket {
     resource: ResourceContainer,
 }

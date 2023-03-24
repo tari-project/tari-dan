@@ -44,7 +44,7 @@ use tari_crypto::{
 use tari_dan_app_utilities::base_node_client::GrpcBaseNodeClient;
 use tari_dan_common_types::QuorumDecision;
 use tari_dan_core::services::BaseNodeClient;
-use tari_engine_types::execution_result::Type;
+use tari_dan_engine::abi::Type;
 use tari_template_lib::Hash;
 use tari_validator_node_cli::versioned_substate_address::VersionedSubstateAddress;
 use tari_validator_node_client::types::{
@@ -78,26 +78,26 @@ use crate::utils::{
 
 #[derive(Debug, Default, cucumber::World)]
 pub struct TariWorld {
-    base_nodes: IndexMap<String, BaseNodeProcess>,
-    wallets: IndexMap<String, WalletProcess>,
-    validator_nodes: IndexMap<String, ValidatorNodeProcess>,
-    indexers: IndexMap<String, IndexerProcess>,
-    vn_seeds: IndexMap<String, ValidatorNodeProcess>,
-    miners: IndexMap<String, MinerProcess>,
-    templates: IndexMap<String, RegisteredTemplate>,
-    outputs: IndexMap<String, IndexMap<String, VersionedSubstateAddress>>,
-    http_server: Option<MockHttpServer>,
-    cli_data_dir: Option<String>,
-    current_scenario_name: Option<String>,
-    commitments: IndexMap<String, Vec<u8>>,
-    commitment_ownership_proofs: IndexMap<String, RistrettoComSig>,
-    rangeproofs: IndexMap<String, Vec<u8>>,
-    addresses: IndexMap<String, String>,
-    num_databases_saved: usize,
-    account_public_keys: IndexMap<String, (RistrettoSecretKey, PublicKey)>,
-    claim_public_keys: IndexMap<String, PublicKey>,
-    wallet_daemons: IndexMap<String, DanWalletDaemonProcess>,
-    wallet_daemon_outputs: IndexMap<String, IndexMap<String, VersionedSubstateAddress>>,
+    pub base_nodes: IndexMap<String, BaseNodeProcess>,
+    pub wallets: IndexMap<String, WalletProcess>,
+    pub validator_nodes: IndexMap<String, ValidatorNodeProcess>,
+    pub indexers: IndexMap<String, IndexerProcess>,
+    pub vn_seeds: IndexMap<String, ValidatorNodeProcess>,
+    pub miners: IndexMap<String, MinerProcess>,
+    pub templates: IndexMap<String, RegisteredTemplate>,
+    pub outputs: IndexMap<String, IndexMap<String, VersionedSubstateAddress>>,
+    pub http_server: Option<MockHttpServer>,
+    pub cli_data_dir: Option<String>,
+    pub current_scenario_name: Option<String>,
+    pub commitments: IndexMap<String, Vec<u8>>,
+    pub commitment_ownership_proofs: IndexMap<String, RistrettoComSig>,
+    pub rangeproofs: IndexMap<String, Vec<u8>>,
+    pub addresses: IndexMap<String, String>,
+    pub num_databases_saved: usize,
+    pub account_public_keys: IndexMap<String, (RistrettoSecretKey, PublicKey)>,
+    pub claim_public_keys: IndexMap<String, PublicKey>,
+    pub wallet_daemons: IndexMap<String, DanWalletDaemonProcess>,
+    pub wallet_daemon_outputs: IndexMap<String, IndexMap<String, VersionedSubstateAddress>>,
 }
 
 impl TariWorld {
@@ -379,12 +379,13 @@ async fn assert_template_is_registered_by_all(world: &mut TariWorld, template_na
 }
 
 #[when(
-    expr = r#"I call function "{word}" on template "{word}" via wallet daemon {word} with args "{word}" and {int} outputs named "{word}""#
+    expr = r#"I call function "{word}" on template "{word}" using account {word} to pay fees via wallet daemon {word} with args "{word}" and {int} outputs named "{word}""#
 )]
 async fn call_template_constructor_via_wallet_daemon(
     world: &mut TariWorld,
     function_call: String,
     template_name: String,
+    account_name: String,
     wallet_daemon_name: String,
     args: String,
     num_outputs: u64,
@@ -395,6 +396,7 @@ async fn call_template_constructor_via_wallet_daemon(
         world,
         outputs_name,
         template_name,
+        account_name,
         wallet_daemon_name,
         function_call,
         args,
@@ -718,8 +720,7 @@ async fn successful_transaction(world: &mut TariWorld) {
             let get_transaction_req = GetTransactionResultRequest { hash };
             let get_transaction_res = client.get_transaction_result(get_transaction_req).await.unwrap();
             let finalized_tx = get_transaction_res.result.unwrap();
-
-            assert!(finalized_tx.result.is_accept());
+            finalized_tx.expect_success();
         }
     }
 }

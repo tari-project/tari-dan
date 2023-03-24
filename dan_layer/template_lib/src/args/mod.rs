@@ -39,10 +39,13 @@ macro_rules! __expr_counter {
 
 #[macro_export]
 macro_rules! arg {
+    // Deprecated
     (Variable($arg:expr)) => {
-        $crate::args::Arg::variable($arg)
+        $crate::args::Arg::workspace($arg)
     };
-
+    (Workspace($arg:expr)) => {
+        $crate::args::Arg::workspace($arg)
+    };
     (Literal($arg:expr)) => {
         $crate::args::Arg::Literal($crate::encode(&$arg).unwrap())
     };
@@ -55,12 +58,21 @@ macro_rules! arg {
 #[macro_export]
 macro_rules! __args_inner {
     (@ { $this:ident } Variable($e:expr), $($tail:tt)*) => {
-        $crate::args::__push(&mut $this, $crate::arg!(Variable($e)));
+        $crate::args::__push(&mut $this, $crate::arg!(Workspace($e)));
         $crate::__args_inner!(@ { $this } $($tail)*);
     };
 
     (@ { $this:ident } Variable($e:expr) $(,)?) => {
-        $crate::args::__push(&mut $this, $crate::arg!(Variable($e)));
+        $crate::args::__push(&mut $this, $crate::arg!(Workspace($e)));
+    };
+
+    (@ { $this:ident } Workspace($e:expr), $($tail:tt)*) => {
+        $crate::args::__push(&mut $this, $crate::arg!(Workspace($e)));
+        $crate::__args_inner!(@ { $this } $($tail)*);
+    };
+
+    (@ { $this:ident } Workspace($e:expr) $(,)?) => {
+        $crate::args::__push(&mut $this, $crate::arg!(Workspace($e)));
     };
 
     (@ { $this:ident } Literal($e:expr), $($tail:tt)*) => {
@@ -142,7 +154,7 @@ mod tests {
     #[test]
     fn args_macro() {
         let args = args![Variable("foo")];
-        assert_eq!(args[0], Arg::Variable("foo".into()));
+        assert_eq!(args[0], Arg::Workspace("foo".into()));
 
         let args = args!["foo".to_string()];
         assert!(matches!(args[0], Arg::Literal(_)));
@@ -152,12 +164,12 @@ mod tests {
         assert!(matches!(args[1], Arg::Literal(_)));
 
         let args = args![Variable("foo"), "bar".to_string()];
-        assert_eq!(args[0], Arg::Variable("foo".into()));
+        assert_eq!(args[0], Arg::Workspace("foo".into()));
         assert_eq!(args[1], Arg::Literal(tari_bor::encode(&"bar".to_string()).unwrap()));
 
         let args = args!["foo".to_string(), Variable("bar"), 123u64];
         assert_eq!(args[0], Arg::Literal(tari_bor::encode(&"foo".to_string()).unwrap()));
-        assert_eq!(args[1], Arg::Variable("bar".into()));
+        assert_eq!(args[1], Arg::Workspace("bar".into()));
         assert_eq!(args[2], Arg::Literal(tari_bor::encode(&123u64).unwrap()));
     }
 }

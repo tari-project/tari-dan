@@ -5,8 +5,12 @@ use std::ops::{Deref, DerefMut};
 
 use tari_common_types::types::{Commitment, FixedHash};
 use tari_dan_common_types::{optional::IsNotFoundError, QuorumCertificate};
-use tari_engine_types::{commit_result::FinalizeResult, substate::SubstateAddress, TemplateAddress};
-use tari_template_lib::{models::Amount, prelude::ResourceAddress};
+use tari_engine_types::{
+    commit_result::{FinalizeResult, RejectReason},
+    substate::SubstateAddress,
+    TemplateAddress,
+};
+use tari_template_lib::{models::Amount, prelude::ResourceAddress, Hash};
 use tari_transaction::Transaction;
 
 use crate::models::{
@@ -177,6 +181,8 @@ pub trait WalletStoreWriter {
         &mut self,
         hash: FixedHash,
         result: Option<&FinalizeResult>,
+        transaction_failure: Option<&RejectReason>,
+        final_fee: Option<Amount>,
         qcs: Option<&[QuorumCertificate]>,
         new_status: TransactionStatus,
     ) -> Result<(), WalletStorageError>;
@@ -234,6 +240,6 @@ pub trait WalletStoreWriter {
     fn proofs_set_transaction_hash(
         &mut self,
         proof_id: ConfidentialProofId,
-        transaction_hash: FixedHash,
+        transaction_hash: Hash,
     ) -> Result<(), WalletStorageError>;
 }

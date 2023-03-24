@@ -1,13 +1,13 @@
 //   Copyright 2023 The Tari Project
 //   SPDX-License-Identifier: BSD-3-Clause
 
-use tari_bor::{borsh, Decode, Encode};
+use serde::{Deserialize, Serialize};
+use tari_bor::serde_ordered_map;
 use tari_template_abi::rust::collections::HashMap;
 
 use crate::{auth::NativeFunctionCall, models::NonFungibleAddress};
 
-#[derive(Debug, Clone, Decode, Encode)]
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum AccessRule {
     AllowAll,
     DenyAll,
@@ -24,8 +24,7 @@ impl AccessRule {
     }
 }
 
-#[derive(Debug, Clone, Decode, Encode)]
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum RestrictedAccessRule {
     Require(NonFungibleAddress),
     // TODO: Other requirements, for example, holder of a particular resource or particular balance of funds locked
@@ -40,10 +39,11 @@ impl RestrictedAccessRule {
     }
 }
 
-#[derive(Debug, Clone, Decode, Encode)]
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AccessRules {
+    #[serde(serialize_with = "serde_ordered_map")]
     method_access: HashMap<String, AccessRule>,
+    #[serde(serialize_with = "serde_ordered_map")]
     native_method_access: HashMap<NativeFunctionCall, AccessRule>,
     default: AccessRule,
 }

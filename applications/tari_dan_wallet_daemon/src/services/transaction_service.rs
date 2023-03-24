@@ -135,7 +135,9 @@ where TStore: WalletStore + Clone + Send + Sync + 'static
                     );
                     notify.notify(TransactionFinalizedEvent {
                         hash: transaction.transaction.hash().into_array().into(),
-                        result: transaction.result.unwrap(),
+                        finalize: transaction.result.unwrap(),
+                        transaction_failure: transaction.transaction_failure,
+                        final_fee: transaction.final_fee.unwrap_or_default(),
                         qcs: transaction.qcs,
                         status: transaction.status,
                     });

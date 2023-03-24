@@ -46,7 +46,7 @@ use tari_dan_common_types::{
 };
 use tari_dan_engine::runtime::ConsensusContext;
 use tari_engine_types::{
-    commit_result::{FinalizeResult, RejectReason, TransactionResult},
+    commit_result::{ExecuteResult, FinalizeResult, RejectReason, TransactionResult},
     substate::SubstateDiff,
 };
 use tari_shutdown::ShutdownSignal;
@@ -615,7 +615,7 @@ where
             .unwrap_or_else(|| QuorumCertificate::genesis(epoch, payload_id, shard_id));
 
         // TODO: should we send this? the new leader probably has it
-        let payload = self.shard_store.create_read_tx()?.get_payload(&payload_id).unwrap();
+        let payload = self.shard_store.create_read_tx()?.get_payload(&payload_id)?;
 
         // We leave the payload empty, this is just new round, so the nodes should have it.
         let new_view = HotStuffMessage::new_view(high_qc, shard_id, payload);
@@ -847,7 +847,7 @@ where
         // Check if we have resolved all pledges, if so, we are ready to commit resultant substate changes
         if resolved_pledges.len() == involved_shards.len() {
             let payload_result = tx.get_payload_result(&node.payload_id())?;
-            match &payload_result.finalize_result.result {
+            match &payload_result.exec_result.finalize.result {
                 TransactionResult::Accept(diff) => {
                     if resolved_pledges
                         .iter()
@@ -875,7 +875,7 @@ where
 
                     self.publish_event(HotStuffEvent::OnFinalized(
                         Box::new(node.justify().clone()),
-                        payload_result.finalize_result,
+                        payload_result.exec_result,
                     ));
                 },
                 TransactionResult::Reject(reason) => {
@@ -1056,7 +1056,8 @@ where
             return Err(HotStuffError::AllShardsRejected {
                 payload_id,
                 reason: payload_result
-                    .finalize_result
+                    .exec_result
+                    .finalize
                     .result
                     .reject()
                     .map(|r| r.to_string())
@@ -1084,7 +1085,7 @@ where
             let mut tx = self.shard_store.create_write_tx()?;
             let current_payload_result = tx.get_payload_result(payload_id)?;
             // Only change to reject is we arent already rejecting for another reason
-            if current_payload_result.finalize_result.is_accept() {
+            if current_payload_result.exec_result.finalize.is_accept() {
                 // If a shard has been rejected, we vote to reject all our shards
                 let finalize_result = FinalizeResult::reject(
                     payload_id.into_array().into(),
@@ -1105,7 +1106,11 @@ where
                 );
 
                 tx.update_payload_result(payload_id, PayloadResult {
-                    finalize_result,
+                    exec_result: ExecuteResult {
+                        finalize: finalize_result,
+                        transaction_failure: None,
+                        fee_receipt: None,
+                    },
                     pledge_hash,
                 })?;
             }
@@ -1140,7 +1145,11 @@ where
 
                 self.shard_store.with_write_tx(|tx| {
                     tx.update_payload_result(&node.payload_id(), PayloadResult {
-                        finalize_result: finalize_result.clone(),
+                        exec_result: ExecuteResult {
+                            finalize: finalize_result.clone(),
+                            transaction_failure: None,
+                            fee_receipt: None,
+                        },
                         pledge_hash,
                     })
                 })?;
@@ -1173,33 +1182,41 @@ where
                     );
                     self.shard_store.with_write_tx(|tx| {
                         tx.update_payload_result(&node.payload_id(), PayloadResult {
-                            finalize_result: finalize_result.clone(),
+                            exec_result: ExecuteResult {
+                                finalize: finalize_result.clone(),
+                                transaction_failure: None,
+                                fee_receipt: None,
+                            },
                             pledge_hash,
                         })
                     })?;
 
                     return Ok(finalize_result);
                 }
-                let finalize_result = match task::block_in_place(|| self.execute(payload, shard_pledges, node.epoch()))
-                {
-                    Ok(finalize_result) => finalize_result,
-                    Err(err) => FinalizeResult::reject(
-                        payload_id.into_array().into(),
-                        RejectReason::ExecutionFailure(err.to_string()),
-                    ),
-                };
+                let exec_result = task::block_in_place(|| self.execute(payload, shard_pledges, node.epoch()))
+                    .unwrap_or_else(|err| ExecuteResult {
+                        finalize: FinalizeResult::reject(
+                            payload_id.into_array().into(),
+                            RejectReason::ExecutionFailure(err.to_string()),
+                        ),
+                        transaction_failure: Some(RejectReason::ExecutionFailure(err.to_string())),
+                        fee_receipt: None,
+                    });
 
-                if let TransactionResult::Accept(ref diff) = finalize_result.result {
+                if let TransactionResult::Accept(ref diff) = exec_result.finalize.result {
                     match Self::validate_pledges(shard_pledges, diff) {
-                        Ok(_) => {
-                            self.shard_store.with_write_tx(|tx| {
-                                tx.update_payload_result(&node.payload_id(), PayloadResult {
-                                    finalize_result: finalize_result.clone(),
-                                    pledge_hash,
-                                })
+                        Ok(_) => self.shard_store.with_write_tx(|tx| {
+                            let finalize = exec_result.finalize.clone();
+                            tx.update_payload_result(&node.payload_id(), PayloadResult {
+                                exec_result: ExecuteResult {
+                                    finalize: exec_result.finalize,
+                                    transaction_failure: exec_result.transaction_failure,
+                                    fee_receipt: exec_result.fee_receipt,
+                                },
+                                pledge_hash,
                             })?;
-                            Ok(finalize_result)
-                        },
+                            Ok(finalize)
+                        }),
                         Err(e @ HotStuffError::MissingPledges(_)) => {
                             let finalize_result = FinalizeResult::reject(
                                 payload_id.into_array().into(),
@@ -1207,7 +1224,11 @@ where
                             );
                             self.shard_store.with_write_tx(|tx| {
                                 tx.update_payload_result(&node.payload_id(), PayloadResult {
-                                    finalize_result: finalize_result.clone(),
+                                    exec_result: ExecuteResult {
+                                        finalize: finalize_result.clone(),
+                                        transaction_failure: exec_result.transaction_failure,
+                                        fee_receipt: exec_result.fee_receipt,
+                                    },
                                     pledge_hash,
                                 })
                             })?;
@@ -1218,27 +1239,31 @@ where
                     }
                 } else {
                     self.shard_store.with_write_tx(|tx| {
+                        let finalize = exec_result.finalize.clone();
                         tx.update_payload_result(&node.payload_id(), PayloadResult {
-                            finalize_result: finalize_result.clone(),
+                            exec_result: ExecuteResult {
+                                finalize: exec_result.finalize,
+                                transaction_failure: exec_result.transaction_failure,
+                                fee_receipt: exec_result.fee_receipt,
+                            },
                             pledge_hash,
-                        })
-                    })?;
-
-                    Ok(finalize_result)
+                        })?;
+                        Ok(finalize)
+                    })
                 }
             },
             _phase => {
-                let finalize_result = self
+                let result = self
                     .shard_store
                     .with_read_tx(|tx| tx.get_payload_result(&node.payload_id()))?;
 
-                if pledge_hash != finalize_result.pledge_hash {
+                if pledge_hash != result.pledge_hash {
                     return Err(HotStuffError::ShardPledgesChanged {
                         payload_id: node.payload_id(),
                     });
                 }
 
-                Ok(finalize_result.finalize_result)
+                Ok(result.exec_result.finalize)
             },
         }
     }
@@ -1617,7 +1642,7 @@ where
                         node.payload_id()
                     );
                     let payload_result = tx.get_payload_result(&node.payload_id())?;
-                    match payload_result.finalize_result.result {
+                    match payload_result.exec_result.finalize.result {
                         TransactionResult::Accept(_) => {
                             tx.complete_pledges(node.shard(), node.payload_id(), node.hash())?;
                         },
@@ -1656,14 +1681,14 @@ where
         payload: TPayload,
         shard_pledges: &ShardPledgeCollection,
         epoch: Epoch,
-    ) -> Result<FinalizeResult, HotStuffError> {
+    ) -> Result<ExecuteResult, HotStuffError> {
         let maybe_payload_result = self
             .shard_store
             .with_read_tx(|tx| tx.get_payload_result(&payload.to_id()).optional())?;
 
         if let Some(payload_result) = maybe_payload_result {
             if shard_pledges.pledge_hash() == payload_result.pledge_hash {
-                return Ok(payload_result.finalize_result);
+                return Ok(payload_result.exec_result);
             }
             warn!(
                 target: LOG_TARGET,
@@ -1691,10 +1716,44 @@ where
         let consensus_context = ConsensusContext {
             current_epoch: epoch.as_u64(),
         };
-        let finalize_result = self
+        let exec_result = self
             .payload_processor
             .process_payload(payload, pledges, consensus_context)?;
-        Ok(finalize_result)
+
+        if let Some(ref fail_reason) = exec_result.finalize.result.reject() {
+            warn!(
+                target: LOG_TARGET,
+                "❌️ [execute] Fee transaction failed: {}", fail_reason
+            );
+            return Ok(exec_result);
+        }
+
+        if let Some(ref fee) = exec_result.fee_receipt {
+            if !fee.is_paid_in_full() {
+                warn!(
+                    target: LOG_TARGET,
+                    "💰️ [execute] Fee payment not paid in full. Unpaid fee: {}, total paid: {}",
+                    fee.unpaid_debt(),
+                    fee.total_fees_paid()
+                );
+            }
+            // TODO: Collect fees from the fee payment
+            info!(
+                target: LOG_TARGET,
+                "💰️ [execute] Collected fees: {}",
+                fee.fee_resource.amount()
+            );
+            for (source, amt) in &fee.cost_breakdown {
+                info!(target: LOG_TARGET, "💰️ [execute] Fee breakdown: {:?} {}", source, amt);
+            }
+        }
+
+        // The transaction failed, the fee transaction may have been accepted.
+        if let Some(ref fail_reason) = exec_result.transaction_failure {
+            warn!(target: LOG_TARGET, "❌️ [execute] Transaction failed: {}", fail_reason);
+        }
+
+        Ok(exec_result)
     }
 
     async fn get_leader(&self, node: &HotStuffTreeNode<TAddr, TPayload>) -> Result<TAddr, HotStuffError> {

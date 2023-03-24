@@ -25,7 +25,7 @@ use std::fmt::Debug;
 use serde::{Deserialize, Serialize};
 use tari_common_types::types::FixedHash;
 use tari_dan_common_types::{PayloadId, ShardId};
-use tari_engine_types::commit_result::FinalizeResult;
+use tari_engine_types::commit_result::ExecuteResult;
 use tari_transaction::{ObjectClaim, SubstateChange};
 
 use crate::models::ConsensusHash;
@@ -65,6 +65,6 @@ impl Payload for (String, Vec<ShardId>) {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PayloadResult {
-    pub finalize_result: FinalizeResult,
+    pub exec_result: ExecuteResult,
     pub pledge_hash: FixedHash,
 }

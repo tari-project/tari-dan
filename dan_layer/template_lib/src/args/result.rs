@@ -1,22 +1,22 @@
 //   Copyright 2023 The Tari Project
 //   SPDX-License-Identifier: BSD-3-Clause
 
-use tari_bor::{borsh, decode_exact, encode, Decode, Encode};
-use tari_template_abi::rust::io;
+use serde::{de::DeserializeOwned, Deserialize, Serialize};
+use tari_bor::{decode_exact, encode, BorError};
 
-#[derive(Clone, Debug, Decode, Encode)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct InvokeResult(Result<Vec<u8>, String>);
 
 impl InvokeResult {
-    pub fn encode<T: Encode + ?Sized>(output: &T) -> io::Result<Self> {
+    pub fn encode<T: Serialize + ?Sized>(output: &T) -> Result<Self, BorError> {
         let output = encode(output)?;
         Ok(Self(Ok(output)))
     }
 
-    pub fn decode<T: Decode>(self) -> io::Result<T> {
+    pub fn decode<T: DeserializeOwned>(self) -> Result<T, BorError> {
         match self.0 {
             Ok(output) => decode_exact(&output),
-            Err(err) => Err(io::Error::new(io::ErrorKind::Other, err)),
+            Err(err) => Err(BorError::new(err)),
         }
     }
 
@@ -24,7 +24,7 @@ impl InvokeResult {
         Self(Ok(data))
     }
 
-    pub fn unwrap_decode<T: Decode>(self) -> T {
+    pub fn unwrap_decode<T: DeserializeOwned>(self) -> T {
         self.decode().unwrap()
     }
 

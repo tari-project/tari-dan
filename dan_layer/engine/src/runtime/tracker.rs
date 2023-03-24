@@ -21,22 +21,26 @@
 //   USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 use std::{
+    cmp::min,
     collections::{BTreeSet, HashMap},
+    convert::TryFrom,
     mem,
-    sync::{Arc, RwLock},
+    sync::{Arc, Mutex, RwLock},
 };
 
 use log::debug;
 use tari_dan_common_types::optional::Optional;
 use tari_engine_types::{
     bucket::Bucket,
+    commit_result::{RejectReason, TransactionResult},
     confidential::UnclaimedConfidentialOutput,
+    fees::{FeeReceipt, FeeSource},
     logs::LogEntry,
     non_fungible::NonFungibleContainer,
     non_fungible_index::NonFungibleIndex,
     resource::Resource,
     resource_container::ResourceContainer,
-    substate::{Substate, SubstateAddress, SubstateDiff},
+    substate::{Substate, SubstateAddress, SubstateDiff, SubstateValue},
     vault::Vault,
     TemplateAddress,
 };
@@ -44,6 +48,7 @@ use tari_template_abi::TemplateDef;
 use tari_template_lib::{
     args::MintArg,
     auth::AccessRules,
+    constants::CONFIDENTIAL_TARI_RESOURCE_ADDRESS,
     models::{
         Amount,
         BucketId,
@@ -63,7 +68,7 @@ use tari_template_lib::{
 use tari_transaction::id_provider::IdProvider;
 
 use crate::{
-    runtime::{working_state::WorkingState, RuntimeError, TransactionCommitError},
+    runtime::{fee_state::FeeState, working_state::WorkingState, RuntimeError, TransactionCommitError},
     state_store::{memory::MemoryStateStore, AtomicDb, StateReader},
 };
 
@@ -72,11 +77,11 @@ const LOG_TARGET: &str = "tari::dan::engine::runtime::state_tracker";
 #[derive(Debug, Clone)]
 pub struct StateTracker {
     working_state: Arc<RwLock<WorkingState>>,
+    fee_state: Arc<RwLock<FeeState>>,
     id_provider: IdProvider,
     template_defs: HashMap<TemplateAddress, TemplateDef>,
+    fee_checkpoint: Arc<Mutex<Option<WorkingState>>>,
 }
-
-impl StateTracker {}
 
 #[derive(Debug, Clone)]
 pub struct RuntimeState {
@@ -91,8 +96,10 @@ impl StateTracker {
     ) -> Self {
         Self {
             working_state: Arc::new(RwLock::new(WorkingState::new(state_store))),
+            fee_state: Arc::new(RwLock::new(FeeState::new())),
             id_provider,
             template_defs,
+            fee_checkpoint: Arc::new(Mutex::new(None)),
         }
     }
 
@@ -399,11 +406,11 @@ impl StateTracker {
         Ok(vault_id)
     }
 
-    pub fn borrow_vault<R, F: FnOnce(&Vault) -> R>(&self, vault_id: &VaultId, f: F) -> Result<R, RuntimeError> {
+    pub fn borrow_vault<R, F: FnOnce(&Vault) -> R>(&self, vault_id: VaultId, f: F) -> Result<R, RuntimeError> {
         self.read_with(|state| state.borrow_vault(vault_id, f))
     }
 
-    pub fn borrow_vault_mut<R, F: FnOnce(&mut Vault) -> R>(&self, vault_id: &VaultId, f: F) -> Result<R, RuntimeError> {
+    pub fn borrow_vault_mut<R, F: FnOnce(&mut Vault) -> R>(&self, vault_id: VaultId, f: F) -> Result<R, RuntimeError> {
         self.write_with(|state| state.borrow_vault_mut(vault_id, f))
     }
 
@@ -440,89 +447,197 @@ impl StateTracker {
         })
     }
 
-    pub fn finalize(&self) -> Result<SubstateDiff, TransactionCommitError> {
-        let substates = self.write_with(|current_state| {
-            // Finalise will always reset the state
-            let state = mem::replace(current_state, WorkingState::new(current_state.state_store.clone()));
+    pub fn pay_fee(&self, resource: ResourceContainer, return_vault: VaultId) -> Result<(), RuntimeError> {
+        let mut fee_state = self.fee_state.write().unwrap();
+        fee_state.fee_payments.push((resource, return_vault));
+        Ok(())
+    }
+
+    pub fn add_fee_charge(&self, source: FeeSource, amount: u64) {
+        let mut fee_state = self.fee_state.write().unwrap();
+        fee_state.fee_charges.push((source, amount));
+    }
+
+    pub fn finalize(
+        &self,
+        mut substates_to_persist: HashMap<SubstateAddress, SubstateValue>,
+    ) -> Result<(TransactionResult, FeeReceipt), RuntimeError> {
+        // Resolve the transfers to the fee pool resource and vault refunds
+        let finalized_fee = self.finalize_fees(&mut substates_to_persist)?;
+        // Finalise will always reset the state
+        let state = self.take_working_state();
+
+        let result = state
+            .validate_finalized()
+            .and_then(|_| self.generate_substate_diff(state, substates_to_persist));
+
+        let result = match result {
+            Ok(substate_diff) => TransactionResult::Accept(substate_diff),
+            Err(err) => TransactionResult::Reject(RejectReason::ExecutionFailure(err.to_string())),
+        };
+
+        Ok((result, finalized_fee))
+    }
+
+    fn generate_substate_diff(
+        &self,
+        state: WorkingState,
+        substates_to_persist: HashMap<SubstateAddress, SubstateValue>,
+    ) -> Result<SubstateDiff, TransactionCommitError> {
+        let tx = state
+            .state_store
+            .read_access()
+            .map_err(TransactionCommitError::StateStoreTransactionError)?;
+
+        let mut substate_diff = SubstateDiff::new();
+
+        for (address, substate) in substates_to_persist {
+            let new_substate = match tx.get_state::<_, Substate>(&address).optional()? {
+                Some(existing_state) => {
+                    substate_diff.down(address.clone(), existing_state.version());
+                    Substate::new(existing_state.version() + 1, substate)
+                },
+                None => Substate::new(0, substate),
+            };
+            substate_diff.up(address, new_substate);
+        }
+
+        for claimed in state.claimed_confidential_outputs {
+            substate_diff.down(SubstateAddress::UnclaimedConfidentialOutput(claimed), 0);
+        }
+
+        Ok(substate_diff)
+    }
+
+    pub fn fee_checkpoint(&self) -> Result<(), RuntimeError> {
+        self.read_with(|state| {
+            // Check that the checkpoint is in a valid state
             state.validate_finalized()?;
+            let mut checkpoint = self.fee_checkpoint.lock().unwrap();
+            *checkpoint = Some(state.clone());
+            Ok(())
+        })
+    }
 
-            let tx = state
-                .state_store
-                .read_access()
-                .map_err(TransactionCommitError::StateStoreTransactionError)?;
-            let mut substate_diff = SubstateDiff::new();
+    pub fn reset_to_fee_checkpoint(&self) -> Result<(), RuntimeError> {
+        let mut checkpoint = self.fee_checkpoint.lock().unwrap();
+        if let Some(checkpoint) = checkpoint.take() {
+            self.write_with(|state| *state = checkpoint);
+            Ok(())
+        } else {
+            Err(RuntimeError::NoCheckpoint)
+        }
+    }
 
-            for (component_addr, substate) in state.new_components {
+    fn finalize_fees(
+        &self,
+        substates_to_persist: &mut HashMap<SubstateAddress, SubstateValue>,
+    ) -> Result<FeeReceipt, RuntimeError> {
+        let mut fee_state = self.fee_state.write().unwrap();
+        let total_fees = fee_state
+            .fee_charges
+            .iter()
+            .map(|(_, fee)| Amount::try_from(*fee).expect("fee overflowed i64::MAX"))
+            .sum::<Amount>();
+        let total_fee_payment = fee_state
+            .fee_payments
+            .iter()
+            .map(|(resx, _)| resx.amount())
+            .sum::<Amount>();
+
+        let mut fee_resource = ResourceContainer::confidential(CONFIDENTIAL_TARI_RESOURCE_ADDRESS, None, Amount(0));
+
+        // Collect the fee
+        let mut remaining_fees = total_fees;
+        for (resx, _) in &mut fee_state.fee_payments {
+            if remaining_fees.is_zero() {
+                break;
+            }
+            let amount_to_withdraw = min(resx.amount(), remaining_fees);
+            remaining_fees -= amount_to_withdraw;
+            fee_resource.deposit(resx.withdraw(amount_to_withdraw)?)?;
+        }
+
+        // Refund the remaining payments if any
+        for (mut resx, refund_vault) in fee_state.fee_payments.drain(..) {
+            if resx.amount().is_zero() {
+                continue;
+            }
+
+            let vault = substates_to_persist
+                .remove(&refund_vault.into())
+                .expect("invariant: vault that made fee payment not in changeset");
+            let mut vault = vault.into_vault().unwrap();
+            vault.resource_container_mut().deposit(resx.withdraw_all()?)?;
+            substates_to_persist.insert(refund_vault.into(), vault.into());
+        }
+
+        Ok(FeeReceipt {
+            total_fee_payment,
+            fee_resource,
+            cost_breakdown: fee_state.fee_charges.drain(..).collect(),
+        })
+    }
+
+    fn take_working_state(&self) -> WorkingState {
+        self.write_with(|current_state| {
+            mem::replace(current_state, WorkingState::new(current_state.state_store.clone()))
+        })
+    }
+
+    pub fn take_substates_to_persist(&self) -> HashMap<SubstateAddress, SubstateValue> {
+        self.write_with(|state| {
+            let total_items = state.new_resources.len() +
+                state.new_components.len() +
+                state.new_vaults.len() +
+                state.new_non_fungibles.len() +
+                state.new_non_fungible_indexes.len();
+            let mut up_states = HashMap::with_capacity(total_items);
+
+            for (component_addr, substate) in state.new_components.drain() {
                 let addr = SubstateAddress::Component(component_addr);
-                let new_substate = match tx.get_state::<_, Substate>(&addr).optional()? {
-                    Some(existing_state) => {
-                        substate_diff.down(addr.clone(), existing_state.version());
-                        Substate::new(existing_state.version() + 1, substate)
-                    },
-                    None => Substate::new(0, substate),
-                };
-                substate_diff.up(addr, new_substate);
+                up_states.insert(addr, substate.into());
             }
 
-            for (vault_id, substate) in state.new_vaults {
+            for (vault_id, substate) in state.new_vaults.drain() {
                 let addr = SubstateAddress::Vault(vault_id);
-                let new_substate = match tx.get_state::<_, Substate>(&addr).optional()? {
-                    Some(existing_state) => {
-                        substate_diff.down(addr.clone(), existing_state.version());
-                        Substate::new(existing_state.version() + 1, substate)
-                    },
-                    None => Substate::new(0, substate),
-                };
-                substate_diff.up(addr, new_substate);
+                up_states.insert(addr, substate.into());
             }
 
-            for (resource_addr, substate) in state.new_resources {
+            for (resource_addr, substate) in state.new_resources.drain() {
                 let addr = SubstateAddress::Resource(resource_addr);
-                let new_substate = match tx.get_state::<_, Substate>(&addr).optional()? {
-                    Some(existing_state) => {
-                        substate_diff.down(addr.clone(), existing_state.version());
-                        Substate::new(existing_state.version() + 1, substate)
-                    },
-                    None => Substate::new(0, substate),
-                };
-                substate_diff.up(addr, new_substate);
+                up_states.insert(addr, substate.into());
             }
 
-            for (address, substate) in state.new_non_fungibles {
+            for (address, substate) in state.new_non_fungibles.drain() {
                 let addr = SubstateAddress::NonFungible(address);
-                let new_substate = match tx.get_state::<_, Substate>(&addr).optional()? {
-                    Some(existing_state) => {
-                        substate_diff.down(addr.clone(), existing_state.version());
-                        Substate::new(existing_state.version() + 1, substate)
-                    },
-                    None => Substate::new(0, substate),
-                };
-                substate_diff.up(addr, new_substate);
+                up_states.insert(addr, substate.into());
             }
 
-            for (address, substate) in state.new_non_fungible_indexes {
+            for (address, substate) in state.new_non_fungible_indexes.drain() {
                 let addr = SubstateAddress::NonFungibleIndex(address.clone());
-                let new_substate = match tx.get_state::<_, Substate>(&addr).optional()? {
-                    Some(_) => {
-                        // nft indexes are immutable
-                        return Err(TransactionCommitError::NonFungibleIndexMutation {
-                            resource_address: *address.resource_address(),
-                            index: address.index(),
-                        });
-                    },
-                    None => Substate::new(0, substate),
-                };
-                substate_diff.up(addr, new_substate);
+                up_states.insert(addr, substate.into());
             }
 
-            for claimed in state.claimed_confidential_outputs {
-                substate_diff.down(SubstateAddress::UnclaimedConfidentialOutput(claimed), 0);
-            }
+            up_states
+        })
+    }
 
-            Result::<_, TransactionCommitError>::Ok(substate_diff)
-        })?;
+    pub fn are_fees_paid_in_full(&self) -> bool {
+        let tx = self.fee_state.read().unwrap();
+        let total_payments = tx.total_payments();
+        let total_charges = Amount::try_from(tx.total_charges()).expect("fee overflowed i64::MAX");
+        total_payments >= total_charges
+    }
 
-        Ok(substates)
+    pub fn total_payments(&self) -> Amount {
+        let tx = self.fee_state.read().unwrap();
+        tx.total_payments()
+    }
+
+    pub fn total_charges(&self) -> Amount {
+        let tx = self.fee_state.read().unwrap();
+        Amount::try_from(tx.total_charges()).expect("fee overflowed i64::MAX")
     }
 
     fn read_with<R, F: FnOnce(&WorkingState) -> R>(&self, f: F) -> R {

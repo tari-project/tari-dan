@@ -1,11 +1,10 @@
 //   Copyright 2023 The Tari Project
 //   SPDX-License-Identifier: BSD-3-Clause
-use std::time::Duration;
+use std::{collections::HashSet, time::Duration};
 
 use anyhow::anyhow;
 use futures::{future, future::Either};
 use log::*;
-use tari_common_types::types::FixedHash;
 use tari_dan_common_types::{optional::Optional, ShardId};
 use tari_dan_wallet_sdk::apis::key_manager;
 use tari_engine_types::{instruction::Instruction, substate::SubstateAddress};
@@ -45,11 +44,12 @@ pub async fn handle_submit(
     let inputs = if req.override_inputs {
         req.inputs
     } else {
-        // If we are not overring inputs, we will use the our own
-        // inputs, together with default inputs
-        // sdk.transaction_api().default_inputs().await?
-        let substates = get_referenced_component_addresses(&req.instructions);
-        let loaded_dependent_substates = sdk.substate_api().load_dependent_substates(&substates)?;
+        // If we are not overriding inputs, we will use inputs that we know about in the local substate address db
+        let mut substates = get_referenced_component_addresses(&req.instructions);
+        substates.extend(get_referenced_component_addresses(&req.fee_instructions));
+        let loaded_dependent_substates = sdk
+            .substate_api()
+            .load_dependent_substates(&substates.into_iter().collect::<Vec<_>>())?;
         vec![req.inputs, loaded_dependent_substates].concat()
     };
 
@@ -69,22 +69,21 @@ pub async fn handle_submit(
         .map(|versioned_addr| ShardId::from_address(&versioned_addr.address, versioned_addr.version))
         .collect::<Vec<_>>();
 
-    let mut builder = Transaction::builder();
-    builder
-        .with_fee(req.fee)
+    let transaction = Transaction::builder()
+        .with_instructions(req.instructions)
+        .with_fee_instructions(req.fee_instructions)
         .with_inputs(inputs.clone())
         .with_outputs(outputs.clone())
         .with_new_outputs(req.new_outputs)
         .with_new_non_fungible_outputs(req.new_non_fungible_outputs)
         .with_new_non_fungible_index_outputs(req.new_non_fungible_index_outputs)
-        .with_instructions(req.instructions)
-        .sign(&key.k);
+        .sign(&key.k)
+        .build();
 
-    let transaction = builder.build();
-    if let Some(proof_id) = req.proof_id {
+    for proof_id in req.proof_ids {
         // update the proofs table with the corresponding transaction hash
         sdk.confidential_outputs_api()
-            .proofs_set_transaction_hash(proof_id, FixedHash::from(transaction.hash().into_array()))?;
+            .proofs_set_transaction_hash(proof_id, *transaction.hash())?;
     }
 
     info!(
@@ -187,7 +186,7 @@ pub async fn handle_wait_result(
             Some(WalletEvent::TransactionFinalized(finalized)) if finalized.hash == req.hash => {
                 return Ok(TransactionWaitResultResponse {
                     hash: req.hash,
-                    result: Some(finalized.result),
+                    result: Some(finalized.finalize),
                     qcs: finalized.qcs,
                     status: finalized.status,
                     timed_out: false,
@@ -207,11 +206,11 @@ pub async fn handle_wait_result(
     }
 }
 
-fn get_referenced_component_addresses(instructions: &[Instruction]) -> Vec<SubstateAddress> {
-    let mut components = Vec::new();
+fn get_referenced_component_addresses(instructions: &[Instruction]) -> HashSet<SubstateAddress> {
+    let mut components = HashSet::new();
     for instruction in instructions {
         if let Instruction::CallMethod { component_address, .. } = instruction {
-            components.push(SubstateAddress::Component(*component_address));
+            components.insert(SubstateAddress::Component(*component_address));
         }
     }
     components

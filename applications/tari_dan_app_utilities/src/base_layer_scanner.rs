@@ -290,11 +290,10 @@ impl BaseLayerScanner {
 
             for output in utxos.outputs {
                 let output_hash = output.hash();
-                let sidechain_feature = output.features.sidechain_feature.as_ref().ok_or_else(|| {
-                    BaseLayerScannerError::InvalidSideChainUtxoResponse(
-                        "Validator node registration output must have a sidechain features".to_string(),
-                    )
-                })?;
+                let Some(sidechain_feature) = output.features.sidechain_feature.as_ref() else {
+                    warn!(target: LOG_TARGET, "Validator node registration output must have sidechain features");
+                    continue;
+                };
                 match sidechain_feature {
                     SideChainFeature::ValidatorNodeRegistration(reg) => {
                         self.register_validator_node_registration(current_height, reg.clone())

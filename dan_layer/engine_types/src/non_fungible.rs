@@ -1,11 +1,10 @@
 //   Copyright 2023 The Tari Project
 //   SPDX-License-Identifier: BSD-3-Clause
 
-use std::io;
+use serde::{de::DeserializeOwned, Deserialize, Serialize};
+use tari_bor::{decode_exact, BorError};
 
-use tari_bor::{borsh, decode_exact, Decode, Encode};
-
-#[derive(Debug, Clone, Encode, Decode, serde::Deserialize, serde::Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct NonFungibleContainer(Option<NonFungible>);
 
 impl NonFungibleContainer {
@@ -34,7 +33,7 @@ impl NonFungibleContainer {
     }
 }
 
-#[derive(Debug, Clone, Encode, Decode, serde::Deserialize, serde::Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct NonFungible {
     data: Vec<u8>,
     mutable_data: Vec<u8>,
@@ -53,7 +52,7 @@ impl NonFungible {
         &self.mutable_data
     }
 
-    pub fn decode_mutable_data<T: Decode>(&self) -> Result<T, io::Error> {
+    pub fn decode_mutable_data<T: DeserializeOwned>(&self) -> Result<T, BorError> {
         decode_exact(&self.mutable_data)
     }
 

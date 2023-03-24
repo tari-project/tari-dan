@@ -24,11 +24,12 @@ use tari_dan_core::{
 };
 use tari_dan_engine::runtime::ConsensusContext;
 use tari_engine_types::{
-    commit_result::{FinalizeResult, RejectReason, TransactionResult},
+    commit_result::{ExecuteResult, FinalizeResult, RejectReason, TransactionResult},
+    fees::FeeCostBreakdown,
     substate::SubstateDiff,
 };
 use tari_shutdown::Shutdown;
-use tari_template_lib::Hash;
+use tari_template_lib::{models::Amount, Hash};
 use tokio::{
     sync::{
         broadcast,
@@ -58,13 +59,21 @@ impl PayloadProcessor<TariDanPayload> for PayloadProcessorListener {
         payload: TariDanPayload,
         pledges: HashMap<ShardId, ObjectPledge>,
         _consensus: ConsensusContext,
-    ) -> Result<FinalizeResult, PayloadProcessorError> {
+    ) -> Result<ExecuteResult, PayloadProcessorError> {
         self.sender.send((payload, pledges)).unwrap();
-        Ok(FinalizeResult::new(
-            Hash::default(),
-            vec![],
-            TransactionResult::Accept(SubstateDiff::new()),
-        ))
+        Ok(ExecuteResult {
+            finalize: FinalizeResult::new(
+                Hash::default(),
+                vec![],
+                TransactionResult::Accept(SubstateDiff::new()),
+                FeeCostBreakdown {
+                    total_fees_charged: Amount::zero(),
+                    breakdown: vec![],
+                },
+            ),
+            transaction_failure: None,
+            fee_receipt: None,
+        })
     }
 }
 
@@ -82,12 +91,15 @@ impl PayloadProcessor<TariDanPayload> for NullPayloadProcessor {
         payload: TariDanPayload,
         _pledges: HashMap<ShardId, ObjectPledge>,
         _consensus: ConsensusContext,
-    ) -> Result<FinalizeResult, PayloadProcessorError> {
-        Ok(FinalizeResult::new(
-            payload.to_id().into_array().into(),
-            vec![],
-            TransactionResult::Reject(RejectReason::ExecutionFailure("NullPayloadProcessor".to_string())),
-        ))
+    ) -> Result<ExecuteResult, PayloadProcessorError> {
+        Ok(ExecuteResult {
+            finalize: FinalizeResult::reject(
+                payload.to_id().into_array().into(),
+                RejectReason::ExecutionFailure("NullPayloadProcessor".to_string()),
+            ),
+            transaction_failure: None,
+            fee_receipt: None,
+        })
     }
 }
 

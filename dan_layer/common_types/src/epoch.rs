@@ -22,11 +22,10 @@
 
 use std::fmt::Display;
 
-use borsh::BorshSerialize;
 use newtype_ops::newtype_ops;
 use serde::{Deserialize, Serialize};
 
-#[derive(Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Deserialize, Serialize, BorshSerialize)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Deserialize, Serialize)]
 pub struct Epoch(pub u64);
 
 impl Epoch {

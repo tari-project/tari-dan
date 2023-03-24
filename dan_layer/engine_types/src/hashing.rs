@@ -23,7 +23,8 @@
 use std::{io, io::Write};
 
 use digest::Digest;
-use tari_bor::{encode_into, Encode};
+use serde::Serialize;
+use tari_bor::encode_into;
 use tari_crypto::{hash::blake2::Blake256, hash_domain, hashing::DomainSeparation};
 use tari_template_lib::Hash;
 
@@ -33,27 +34,15 @@ pub fn hasher(label: EngineHashDomainLabel) -> TariHasher {
     TariHasher::new_with_label::<TariEngineHashDomain>(label.as_label())
 }
 
+pub fn template_hasher() -> TariHasher {
+    hasher(EngineHashDomainLabel::Template)
+}
+
 hash_domain!(
     ConfidentialOutputHashDomain,
     "com.tari.layer_two.confidential_output",
     1
 );
-
-fn confidential_hasher(label: &'static str) -> TariHasher {
-    TariHasher::new_with_label::<ConfidentialOutputHashDomain>(label)
-}
-
-pub fn encrypted_value_hasher() -> TariHasher {
-    confidential_hasher("encryption_key")
-}
-
-pub fn output_mask_hasher() -> TariHasher {
-    confidential_hasher("spend_key")
-}
-
-pub fn ownership_proof_hasher() -> TariHasher {
-    confidential_hasher("commitment_signature")
-}
 
 #[derive(Debug, Clone)]
 pub struct TariHasher {
@@ -67,20 +56,20 @@ impl TariHasher {
         Self { hasher }
     }
 
-    pub fn update<T: Encode + ?Sized>(&mut self, data: &T) {
-        // Borsh encoding does not make any contract to say that if the writer is infallible (as it is here) then
+    pub fn update<T: Serialize + ?Sized>(&mut self, data: &T) {
+        // CBOR encoding does not make any contract to say that if the writer is infallible (as it is here) then
         // encoding in infallible. However this should be the case. Since it is very unergonomic to return an
         // error in hash chain functions, and therefore all usages of the hasher, we assume all types implement
         // infallible encoding.
         encode_into(data, &mut self.hash_writer()).expect("encoding failed")
     }
 
-    pub fn chain<T: Encode + ?Sized>(mut self, data: &T) -> Self {
+    pub fn chain<T: Serialize + ?Sized>(mut self, data: &T) -> Self {
         self.update(data);
         self
     }
 
-    pub fn digest<T: Encode + ?Sized>(self, data: &T) -> Hash {
+    pub fn digest<T: Serialize + ?Sized>(self, data: &T) -> Hash {
         self.chain(data).result()
     }
 

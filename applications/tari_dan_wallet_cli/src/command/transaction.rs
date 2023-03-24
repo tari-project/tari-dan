@@ -22,6 +22,7 @@
 
 use std::{
     collections::HashMap,
+    convert::{TryFrom, TryInto},
     fmt,
     fs,
     path::PathBuf,
@@ -33,11 +34,12 @@ use anyhow::anyhow;
 use clap::{Args, Subcommand};
 use tari_common_types::types::{FixedHash, PublicKey};
 use tari_dan_common_types::ShardId;
-use tari_dan_wallet_sdk::models::{ConfidentialProofId, VersionedSubstateAddress};
+use tari_dan_engine::abi::Type;
+use tari_dan_wallet_sdk::models::VersionedSubstateAddress;
 use tari_engine_types::{
     commit_result::{FinalizeResult, TransactionResult},
-    execution_result::{ExecutionResult, Type},
     instruction::Instruction,
+    instruction_result::InstructionResult,
     substate::{SubstateAddress, SubstateValue},
     TemplateAddress,
 };
@@ -54,7 +56,7 @@ use tari_utilities::{hex::to_hex, ByteArray};
 use tari_wallet_daemon_client::{
     types::{
         AccountByNameResponse,
-        ProofsGenerateRequest,
+        ConfidentialTransferRequest,
         TransactionGetResultRequest,
         TransactionSubmitRequest,
         TransactionSubmitResponse,
@@ -111,8 +113,10 @@ pub struct CommonSubmitArgs {
     pub new_non_fungible_outputs: Vec<NewNonFungibleMintOutput>,
     #[clap(long, alias = "new-nft-index")]
     pub new_non_fungible_index_outputs: Vec<NewNonFungibleIndexOutput>,
-    #[clap(long)]
-    pub fee: Option<u64>,
+    #[clap(long, default_value_t = 1000)]
+    pub fee: u64,
+    #[clap(long, short = 'a')]
+    pub fee_account_name: Option<String>,
 }
 
 #[derive(Debug, Args, Clone)]
@@ -122,6 +126,9 @@ pub struct SubmitManifestArgs {
     input_variables: Vec<String>,
     #[clap(flatten)]
     common: CommonSubmitArgs,
+    // TODO: we should perhaps let the user set a default fee account
+    #[clap(long, short = 'f')]
+    fee_from_account: ComponentAddress,
 }
 
 #[derive(Debug, Args, Clone)]
@@ -139,7 +146,7 @@ pub struct ConfidentialTransferArgs {
     source_account_name: String,
     amount: u32,
     destination_account: ComponentAddress,
-    destination_stealth_public_key: FromHex<Vec<u8>>,
+    destination_public_key: FromHex<Vec<u8>>,
     /// The address of the resource to send. If not provided, use the default Tari confidential resource
     #[clap(long, short = 'r')]
     resource_address: Option<ResourceAddress>,
@@ -202,10 +209,7 @@ async fn handle_get(args: GetArgs, client: &mut WalletDaemonClient) -> Result<()
     Ok(())
 }
 
-pub async fn handle_submit(
-    args: SubmitArgs,
-    client: &mut WalletDaemonClient,
-) -> Result<TransactionSubmitResponse, anyhow::Error> {
+pub async fn handle_submit(args: SubmitArgs, client: &mut WalletDaemonClient) -> Result<(), anyhow::Error> {
     let SubmitArgs { instruction, common } = args;
     let instruction = match instruction {
         CliInstruction::CallFunction {
@@ -230,32 +234,10 @@ pub async fn handle_submit(
         },
     };
 
-    submit_transaction(vec![instruction], common, None, None, client).await
-}
-
-async fn handle_submit_manifest(
-    args: SubmitManifestArgs,
-    client: &mut WalletDaemonClient,
-) -> Result<TransactionSubmitResponse, anyhow::Error> {
-    let contents = fs::read_to_string(&args.manifest).map_err(|e| anyhow!("Failed to read manifest: {}", e))?;
-    let instructions = parse_manifest(&contents, parse_globals(args.input_variables)?)?;
-    submit_transaction(instructions, args.common, None, None, client).await
-}
-
-pub async fn submit_transaction(
-    instructions: Vec<Instruction>,
-    common: CommonSubmitArgs,
-    proof_id: Option<ConfidentialProofId>,
-    signing_key_index: Option<u64>,
-    client: &mut WalletDaemonClient,
-) -> Result<TransactionSubmitResponse, anyhow::Error> {
-    // If we're calling a component, then this will be used as an input
-    let has_call_method = instructions.iter().any(|i| matches!(i, Instruction::CallMethod { .. }));
-
     let request = TransactionSubmitRequest {
-        signing_key_index,
-        instructions,
-        fee: common.fee.unwrap_or(1),
+        signing_key_index: None,
+        fee_instructions: vec![],
+        instructions: vec![instruction],
         inputs: common.inputs,
         override_inputs: common.override_inputs.unwrap_or_default(),
         new_outputs: common.num_outputs.unwrap_or(0),
@@ -275,8 +257,162 @@ pub async fn submit_transaction(
             .map(|i| (i.parent_address, i.index))
             .collect(),
         is_dry_run: common.dry_run,
-        proof_id,
+        proof_ids: vec![],
     };
+
+    submit_transaction(request, client).await?;
+    Ok(())
+}
+
+async fn handle_submit_manifest(
+    args: SubmitManifestArgs,
+    client: &mut WalletDaemonClient,
+) -> Result<(), anyhow::Error> {
+    let contents = fs::read_to_string(&args.manifest).map_err(|e| anyhow!("Failed to read manifest: {}", e))?;
+    let instructions = parse_manifest(&contents, parse_globals(args.input_variables)?)?;
+    let common = args.common;
+    let request = TransactionSubmitRequest {
+        signing_key_index: None,
+        fee_instructions: vec![Instruction::CallMethod {
+            component_address: args.fee_from_account,
+            method: "pay_fee".to_string(),
+            args: args![Amount::try_from(common.fee)?],
+        }],
+        instructions,
+        inputs: common.inputs,
+        override_inputs: common.override_inputs.unwrap_or_default(),
+        new_outputs: common.num_outputs.unwrap_or(0),
+        specific_non_fungible_outputs: common
+            .non_fungible_mint_outputs
+            .into_iter()
+            .map(|m| (m.resource_address, m.non_fungible_id))
+            .collect(),
+        new_non_fungible_outputs: common
+            .new_non_fungible_outputs
+            .into_iter()
+            .map(|m| (m.resource_address, m.count))
+            .collect(),
+        new_non_fungible_index_outputs: common
+            .new_non_fungible_index_outputs
+            .into_iter()
+            .map(|i| (i.parent_address, i.index))
+            .collect(),
+        is_dry_run: common.dry_run,
+        proof_ids: vec![],
+    };
+
+    submit_transaction(request, client).await?;
+    Ok(())
+}
+
+pub async fn handle_send(args: SendArgs, client: &mut WalletDaemonClient) -> Result<(), anyhow::Error> {
+    let SendArgs {
+        source_account_name,
+        amount,
+        resource_address,
+        dest_address,
+        common,
+    } = args;
+
+    let AccountByNameResponse { account, .. } = client.accounts_get_by_name(&source_account_name).await?;
+    let source_component_address = account
+        .address
+        .as_component_address()
+        .ok_or_else(|| anyhow!("Invalid component address for source address"))?;
+
+    let instructions = vec![
+        Instruction::CallMethod {
+            component_address: source_component_address,
+            method: String::from("withdraw"),
+            args: args![resource_address, Amount::from(amount)], // amount is u32
+        },
+        Instruction::PutLastInstructionOutputOnWorkspace {
+            key: b"bucket".to_vec(),
+        },
+        Instruction::CallMethod {
+            component_address: dest_address,
+            method: String::from("deposit"),
+            args: args![Variable("bucket")],
+        },
+    ];
+
+    let request = TransactionSubmitRequest {
+        signing_key_index: Some(account.key_index),
+        fee_instructions: vec![Instruction::CallMethod {
+            component_address: source_component_address,
+            method: "pay_fee".to_string(),
+            args: args![Amount::try_from(common.fee)?],
+        }],
+        instructions,
+        inputs: common.inputs,
+        override_inputs: common.override_inputs.unwrap_or_default(),
+        new_outputs: common.num_outputs.unwrap_or(0),
+        specific_non_fungible_outputs: common
+            .non_fungible_mint_outputs
+            .into_iter()
+            .map(|m| (m.resource_address, m.non_fungible_id))
+            .collect(),
+        new_non_fungible_outputs: common
+            .new_non_fungible_outputs
+            .into_iter()
+            .map(|m| (m.resource_address, m.count))
+            .collect(),
+        new_non_fungible_index_outputs: common
+            .new_non_fungible_index_outputs
+            .into_iter()
+            .map(|i| (i.parent_address, i.index))
+            .collect(),
+        is_dry_run: common.dry_run,
+        proof_ids: vec![],
+    };
+
+    submit_transaction(request, client).await?;
+    Ok(())
+}
+
+pub async fn handle_confidential_transfer(
+    args: ConfidentialTransferArgs,
+    client: &mut WalletDaemonClient,
+) -> Result<(), anyhow::Error> {
+    let ConfidentialTransferArgs {
+        source_account_name,
+        resource_address,
+        amount,
+        destination_account,
+        destination_public_key,
+        common,
+    } = args;
+
+    let AccountByNameResponse { account, .. } = client.accounts_get_by_name(&source_account_name).await?;
+    let destination_public_key = PublicKey::from_bytes(&destination_public_key.into_inner())?;
+    let resp = client
+        .accounts_confidential_transfer(ConfidentialTransferRequest {
+            account: account.address.as_component_address().unwrap(),
+            amount: Amount::from(amount),
+            resource_address: resource_address.unwrap_or(CONFIDENTIAL_TARI_RESOURCE_ADDRESS),
+            destination_account,
+            destination_public_key,
+            fee: common.fee.try_into()?,
+        })
+        .await?;
+
+    println!("Transaction: {}", resp.hash);
+    println!("Fee: {}", resp.fee);
+    println!();
+    summarize_finalize_result(&resp.result);
+
+    Ok(())
+}
+
+pub async fn submit_transaction(
+    request: TransactionSubmitRequest,
+    client: &mut WalletDaemonClient,
+) -> Result<TransactionSubmitResponse, anyhow::Error> {
+    // If we're calling a component, then this will be used as an input
+    let has_call_method = request
+        .instructions
+        .iter()
+        .any(|i| matches!(i, Instruction::CallMethod { .. }));
 
     let has_no_outputs = request.new_outputs == 0 &&
         request.specific_non_fungible_outputs.is_empty() &&
@@ -312,14 +448,12 @@ pub async fn submit_transaction(
     let wait_resp = client
         .wait_transaction_result(TransactionWaitResultRequest {
             hash: resp.hash,
-            timeout_secs: common.wait_for_result_timeout_secs,
+            // Never timeout, you can ctrl+c to exit
+            timeout_secs: None,
         })
         .await?;
     if wait_resp.timed_out {
-        println!(
-            "⏳️ Transaction result not available after {} seconds.",
-            common.wait_for_result_timeout_secs.unwrap_or(0)
-        );
+        println!("⏳️ Transaction result timed out.",);
         println!();
     } else {
         summarize(&wait_resp, timer.elapsed());
@@ -328,100 +462,11 @@ pub async fn submit_transaction(
     Ok(resp)
 }
 
-pub async fn handle_send(
-    args: SendArgs,
-    client: &mut WalletDaemonClient,
-) -> Result<TransactionSubmitResponse, anyhow::Error> {
-    let SendArgs {
-        source_account_name,
-        amount,
-        resource_address,
-        dest_address,
-        common,
-    } = args;
-
-    let AccountByNameResponse { account, .. } = client.accounts_get_by_name(&source_account_name).await?;
-    let source_component_address = account
-        .address
-        .as_component_address()
-        .ok_or_else(|| anyhow!("Invalid component address for source address"))?;
-
-    let instructions = vec![
-        Instruction::CallMethod {
-            component_address: source_component_address,
-            method: String::from("withdraw"),
-            args: args![resource_address, Amount::from(amount)], // amount is u32
-        },
-        Instruction::PutLastInstructionOutputOnWorkspace {
-            key: b"bucket".to_vec(),
-        },
-        Instruction::CallMethod {
-            component_address: dest_address,
-            method: String::from("deposit"),
-            args: args![Variable("bucket")],
-        },
-    ];
-
-    submit_transaction(instructions, common, None, Some(account.key_index), client).await
-}
-
-pub async fn handle_confidential_transfer(
-    args: ConfidentialTransferArgs,
-    client: &mut WalletDaemonClient,
-) -> Result<TransactionSubmitResponse, anyhow::Error> {
-    let ConfidentialTransferArgs {
-        source_account_name,
-        resource_address,
-        amount,
-        destination_account,
-        destination_stealth_public_key,
-        common,
-    } = args;
-
-    let AccountByNameResponse { account, .. } = client.accounts_get_by_name(&source_account_name).await?;
-    let source_component_address = account
-        .address
-        .as_component_address()
-        .ok_or_else(|| anyhow!("Invalid component address for source address"))?;
-    let destination_stealth_public_key = PublicKey::from_bytes(&destination_stealth_public_key.into_inner())?;
-
-    let resource_address = resource_address.unwrap_or(CONFIDENTIAL_TARI_RESOURCE_ADDRESS);
-    let proof_generate_req = ProofsGenerateRequest {
-        amount: Amount::from(amount),
-        source_account_name,
-        resource_address,
-        destination_account,
-        destination_stealth_public_key,
-    };
-    let proof_generate_resp = client.create_transfer_proof(proof_generate_req).await?;
-    let withdraw_proof = proof_generate_resp.proof;
-    let proof_id = proof_generate_resp.proof_id;
-
-    let instructions = vec![
-        Instruction::CallMethod {
-            component_address: source_component_address,
-            method: String::from("withdraw_confidential"),
-            args: args![resource_address, withdraw_proof],
-        },
-        Instruction::PutLastInstructionOutputOnWorkspace {
-            key: b"bucket".to_vec(),
-        },
-        Instruction::CallMethod {
-            component_address: destination_account,
-            method: String::from("deposit"),
-            args: args![Variable("bucket")],
-        },
-    ];
-
-    submit_transaction(instructions, common, Some(proof_id), Some(account.key_index), client).await
-}
-
 fn summarize_request(request: &TransactionSubmitRequest, inputs: &[ShardId], outputs: &[ShardId]) {
     if request.is_dry_run {
         println!("NOTE: Dry run is enabled. This transaction will not be processed by the network.");
         println!();
     }
-    println!("Fee: {}", request.fee);
     println!("Inputs:");
     if inputs.is_empty() {
         println!("  None");
@@ -439,6 +484,11 @@ fn summarize_request(request: &TransactionSubmitRequest, inputs: &[ShardId], out
             println!("- {}", shard_id);
         }
         println!("- {} new output(s)", request.new_outputs);
+    }
+    println!();
+    println!("🌟 Submitting fee instructions:");
+    for instruction in &request.fee_instructions {
+        println!("- {}", instruction);
     }
     println!();
     println!("🌟 Submitting instructions:");
@@ -532,7 +582,7 @@ pub fn summarize_finalize_result(finalize: &FinalizeResult) {
     }
 }
 
-fn display_vec<W: fmt::Write>(writer: &mut W, ty: &Type, result: &ExecutionResult) -> fmt::Result {
+fn display_vec<W: fmt::Write>(writer: &mut W, ty: &Type, result: &InstructionResult) -> fmt::Result {
     fn stringify_slice<T: fmt::Display>(slice: &[T]) -> String {
         slice.iter().map(|v| v.to_string()).collect::<Vec<_>>().join(", ")
     }
@@ -604,7 +654,7 @@ fn display_vec<W: fmt::Write>(writer: &mut W, ty: &Type, result: &ExecutionResul
     Ok(())
 }
 
-pub fn print_execution_results(results: &[ExecutionResult]) {
+pub fn print_execution_results(results: &[InstructionResult]) {
     for result in results {
         match &result.return_type {
             Type::Unit => {},

@@ -28,7 +28,7 @@ use tari_common_types::types::PublicKey;
 use tari_comms::{
     connectivity::ConnectivityRequester,
     multiaddr::Multiaddr,
-    peer_manager::NodeId,
+    peer_manager::{NodeId, PeerIdentityClaim},
     types::CommsPublicKey,
 };
 use tari_crypto::tari_utilities::ByteArray;
@@ -82,23 +82,26 @@ impl ValidatorNodeRpcClient for TariCommsValidatorNodeRpcClient {
             .await?
             .map(|result| {
                 let p = result?;
-                // let identity_sig = p.identity_signature.unwrap_or_default();
+                let addresses: Vec<Multiaddr> = p
+                    .addresses
+                    .into_iter()
+                    .map(|a| {
+                        Multiaddr::try_from(a)
+                            .map_err(|_| ValidatorNodeClientError::InvalidResponse(anyhow!("Invalid address")))
+                    })
+                    .collect::<Result<_, _>>()?;
+                let claims: Vec<PeerIdentityClaim> = p
+                    .claims
+                    .into_iter()
+                    .map(|c| {
+                        PeerIdentityClaim::try_from(c)
+                            .map_err(|_| ValidatorNodeClientError::InvalidResponse(anyhow!("Invalid claim")))
+                    })
+                    .collect::<Result<_, _>>()?;
                 Result::<_, ValidatorNodeClientError>::Ok(DanPeer {
                     identity: CommsPublicKey::from_bytes(&p.identity)
                         .map_err(|_| ValidatorNodeClientError::InvalidResponse(anyhow!("Invalid identity")))?,
-                    addresses: p
-                        .addresses
-                        .into_iter()
-                        .map(|a| {
-                            Multiaddr::try_from(a)
-                                .map_err(|_| ValidatorNodeClientError::InvalidResponse(anyhow!("Invalid address")))
-                        })
-                        .collect::<Result<_, _>>()?,
-                    // identity_signature: Some(
-                    //     identity_sig
-                    //         .try_into()
-                    //         .map_err(ValidatorNodeClientError::InvalidResponse)?,
-                    // ),
+                    addresses: addresses.into_iter().zip(claims).collect(),
                 })
             })
             .collect::<Result<Vec<_>, _>>()

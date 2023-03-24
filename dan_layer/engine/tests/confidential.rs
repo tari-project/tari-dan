@@ -68,7 +68,8 @@ fn transfer_confidential_amounts_between_accounts() {
             vec![],
         )
         .unwrap();
-    let diff = result.result.expect("Failed to execute manifest");
+
+    let diff = result.finalize.result.expect("Failed to execute manifest");
     assert_eq!(diff.up_iter().filter(|(addr, _)| *addr == account1).count(), 1);
     assert_eq!(diff.down_iter().filter(|(addr, _)| *addr == account1).count(), 1);
     assert_eq!(diff.up_iter().filter(|(addr, _)| *addr == faucet).count(), 1);
@@ -109,7 +110,7 @@ fn transfer_confidential_amounts_between_accounts() {
             vec![owner1],
         )
         .unwrap();
-    let diff = result.result.expect("Failed to execute manifest");
+    let diff = result.finalize.result.expect("Failed to execute manifest");
     assert_eq!(diff.up_iter().filter(|(addr, _)| *addr == account1).count(), 1);
     assert_eq!(diff.down_iter().filter(|(addr, _)| *addr == account1).count(), 1);
     assert_eq!(diff.up_iter().filter(|(addr, _)| *addr == account2).count(), 1);
@@ -217,8 +218,14 @@ fn reveal_confidential_and_transfer() {
         )
         .unwrap();
 
-    assert_eq!(result.execution_results[12].decode::<Amount>().unwrap(), Amount(10));
-    assert_eq!(result.execution_results[13].decode::<Amount>().unwrap(), Amount(90));
+    assert_eq!(
+        result.finalize.execution_results[12].decode::<Amount>().unwrap(),
+        Amount(10)
+    );
+    assert_eq!(
+        result.finalize.execution_results[13].decode::<Amount>().unwrap(),
+        Amount(90)
+    );
 }
 
 #[test]
@@ -351,13 +358,13 @@ fn multi_commitment_join() {
         )
         .unwrap();
 
-    assert_eq!(result.execution_results[3].decode::<u32>().unwrap(), 1);
-    assert_eq!(result.execution_results[7].decode::<u32>().unwrap(), 2);
-    assert_eq!(result.execution_results[9].decode::<u32>().unwrap(), 1);
+    assert_eq!(result.finalize.execution_results[3].decode::<u32>().unwrap(), 1);
+    assert_eq!(result.finalize.execution_results[7].decode::<u32>().unwrap(), 2);
+    assert_eq!(result.finalize.execution_results[9].decode::<u32>().unwrap(), 1);
 }
 
 /// These would live in the wallet
-mod utilities {
+pub mod utilities {
     use rand::rngs::OsRng;
     use tari_common_types::types::{BulletRangeProof, PrivateKey, PublicKey, Signature};
     use tari_crypto::{
@@ -409,11 +416,12 @@ mod utilities {
         input_mask: &PrivateKey,
         output_mask: &PrivateKey,
         change_mask: Option<&PrivateKey>,
+        revealed_amount: Amount,
     ) -> BalanceProofSignature {
         let secret_excess = input_mask - output_mask - change_mask.unwrap_or(&PrivateKey::default());
         let excess = PublicKey::from_secret_key(&secret_excess);
         let (nonce, public_nonce) = PublicKey::random_keypair(&mut OsRng);
-        let challenge = challenges::confidential_withdraw(&excess, &public_nonce);
+        let challenge = challenges::confidential_withdraw(&excess, &public_nonce, revealed_amount);
 
         let sig = Signature::sign_raw(&secret_excess, nonce, &challenge).unwrap();
         BalanceProofSignature::try_from_parts(sig.get_public_nonce().as_bytes(), sig.get_signature().as_bytes())
@@ -436,7 +444,7 @@ mod utilities {
         let total_amount = output_amount + change_amount.unwrap_or_else(Amount::zero) + revealed_amount;
         let input_commitment = get_commitment_factory().commit_value(input_mask, total_amount.value() as u64);
         let input_commitment = copy_fixed(input_commitment.as_bytes());
-        let balance_proof = generate_balance_proof(input_mask, &output_mask, change_mask.as_ref());
+        let balance_proof = generate_balance_proof(input_mask, &output_mask, change_mask.as_ref(), revealed_amount);
 
         let output_statement = output_proof.output_statement;
         let change_statement = output_proof.change_statement.unwrap();
@@ -452,15 +460,16 @@ mod utilities {
                         sender_public_nonce: None,
                         encrypted_value: EncryptedValue::default(),
                         minimum_value_promise: output_statement.minimum_value_promise,
+                        revealed_amount,
                     },
                     change_statement: Some(ConfidentialStatement {
                         commitment: change_statement.commitment,
                         sender_public_nonce: None,
                         encrypted_value: EncryptedValue::default(),
                         minimum_value_promise: change_statement.minimum_value_promise,
+                        revealed_amount: Amount::zero(),
                     }),
                     range_proof: output_proof.range_proof,
-                    revealed_amount,
                 },
                 balance_proof,
             },
@@ -484,7 +493,12 @@ mod utilities {
         let input_private_excess = input
             .iter()
             .fold(PrivateKey::default(), |acc, (input_mask, _)| acc + input_mask);
-        let balance_proof = generate_balance_proof(&input_private_excess, &output_mask, change_mask.as_ref());
+        let balance_proof = generate_balance_proof(
+            &input_private_excess,
+            &output_mask,
+            change_mask.as_ref(),
+            revealed_amount,
+        );
 
         let output_statement = output_proof.output_statement;
         let change_statement = output_proof.change_statement;
@@ -501,15 +515,16 @@ mod utilities {
                         sender_public_nonce: None,
                         encrypted_value: Default::default(),
                         minimum_value_promise: output_statement.minimum_value_promise,
+                        revealed_amount,
                     },
                     change_statement: change_statement.map(|change| ConfidentialStatement {
                         commitment: change.commitment,
                         sender_public_nonce: None,
                         encrypted_value: Default::default(),
                         minimum_value_promise: change.minimum_value_promise,
+                        revealed_amount: Amount::zero(),
                     }),
                     range_proof: output_proof.range_proof,
-                    revealed_amount,
                 },
                 balance_proof,
             },
@@ -534,6 +549,7 @@ mod utilities {
             ),
             encrypted_value: Default::default(),
             minimum_value_promise: statement.minimum_value_promise,
+            revealed_amount: Amount::zero(),
         });
 
         let output_range_proof = generate_extended_bullet_proof(&output_statement, change_statement.as_ref())?;
@@ -547,10 +563,10 @@ mod utilities {
                 ),
                 encrypted_value: Default::default(),
                 minimum_value_promise: output_statement.minimum_value_promise,
+                revealed_amount: Amount::zero(),
             },
             change_statement: proof_change_statement,
             range_proof: output_range_proof.0,
-            revealed_amount: Amount::zero(),
         })
     }
 

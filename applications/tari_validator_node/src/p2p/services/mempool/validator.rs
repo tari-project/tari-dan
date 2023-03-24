@@ -4,6 +4,7 @@
 use async_trait::async_trait;
 use tari_dan_app_utilities::template_manager::TemplateManagerError;
 use tari_engine_types::instruction::Instruction;
+use tari_template_builtin::ACCOUNT_TEMPLATE_ADDRESS;
 use tari_transaction::Transaction;
 
 use crate::p2p::services::{
@@ -12,21 +13,22 @@ use crate::p2p::services::{
 };
 
 #[derive(Debug)]
-pub struct MempoolTransactionValidator {
+pub struct TemplateExistsValidator {
     template_manager: TemplateManager,
 }
 
-impl MempoolTransactionValidator {
+impl TemplateExistsValidator {
     pub(crate) fn new(template_manager: TemplateManager) -> Self {
         Self { template_manager }
     }
 }
+
 #[async_trait]
-impl Validator<Transaction> for MempoolTransactionValidator {
+impl Validator<Transaction> for TemplateExistsValidator {
     type Error = MempoolError;
 
-    async fn validate(&self, inner: &Transaction) -> Result<(), MempoolError> {
-        let instructions = inner.instructions();
+    async fn validate(&self, transaction: &Transaction) -> Result<(), MempoolError> {
+        let instructions = transaction.instructions();
         for instruction in instructions {
             match instruction {
                 Instruction::CallFunction { template_address, .. } => {
@@ -47,6 +49,31 @@ impl Validator<Transaction> for MempoolTransactionValidator {
             }
         }
 
+        Ok(())
+    }
+}
+
+#[derive(Debug)]
+pub struct FeeTransactionValidator;
+
+#[async_trait]
+impl Validator<Transaction> for FeeTransactionValidator {
+    type Error = MempoolError;
+
+    async fn validate(&self, transaction: &Transaction) -> Result<(), MempoolError> {
+        if transaction.fee_instructions().is_empty() {
+            // Allow 0 fee instructions for account create transactions
+            if transaction.instructions().len() == 1 {
+                let first = transaction.instructions().first().unwrap();
+                let Instruction::CallFunction { template_address, function, args } = first else {
+                    return Err(MempoolError::NoFeeInstructions);
+                };
+                if *template_address == ACCOUNT_TEMPLATE_ADDRESS && function == "create" && args.len() == 1 {
+                    return Ok(());
+                }
+            }
+            return Err(MempoolError::NoFeeInstructions);
+        }
         Ok(())
     }
 }

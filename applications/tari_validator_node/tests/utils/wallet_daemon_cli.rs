@@ -20,7 +20,12 @@
 //   WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //   USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use std::{collections::HashMap, convert::TryInto, str::FromStr, time::Duration};
+use std::{
+    collections::HashMap,
+    convert::{TryFrom, TryInto},
+    str::FromStr,
+    time::Duration,
+};
 
 use base64::{engine::general_purpose::STANDARD as BASE64, Engine};
 use serde_json::json;
@@ -33,11 +38,7 @@ use tari_engine_types::{
     instruction::Instruction,
     substate::{SubstateAddress, SubstateDiff},
 };
-use tari_template_lib::{
-    args,
-    constants::CONFIDENTIAL_TARI_RESOURCE_ADDRESS,
-    prelude::{Amount, NonFungibleId},
-};
+use tari_template_lib::{args, constants::CONFIDENTIAL_TARI_RESOURCE_ADDRESS, models::Amount, prelude::NonFungibleId};
 use tari_transaction_manifest::{parse_manifest, ManifestValue};
 use tari_validator_node_cli::{command::transaction::CliArg, versioned_substate_address::VersionedSubstateAddress};
 use tari_wallet_daemon_client::{
@@ -84,7 +85,7 @@ pub async fn claim_burn(
             "reciprocal_claim_public_key": BASE64.encode(reciprocal_claim_public_key.as_bytes()),
             "range_proof": BASE64.encode(range_proof.as_bytes()),
         }),
-        fee: 1,
+        fee: Amount(1),
     };
 
     client.claim_burn(claim_burn_request).await.unwrap()
@@ -116,16 +117,16 @@ pub async fn create_transfer_proof(
         .address
         .as_component_address()
         .expect("Failed to get component address from destination account");
-    let destination_stealth_public_key = destination_account_resp.public_key;
+    let destination_public_key = destination_account_resp.public_key;
 
     let resource_address = CONFIDENTIAL_TARI_RESOURCE_ADDRESS;
 
     let create_transfer_proof_req = ProofsGenerateRequest {
         amount: Amount(amount.try_into().unwrap()),
+        reveal_amount: Amount(0),
         source_account_name: source_account_name.clone(),
         resource_address,
-        destination_account,
-        destination_stealth_public_key,
+        destination_public_key,
     };
     let transfer_proof_resp = client.create_transfer_proof(create_transfer_proof_req).await.unwrap();
     let withdraw_proof = transfer_proof_resp.proof;
@@ -149,8 +150,12 @@ pub async fn create_transfer_proof(
 
     let submit_req = TransactionSubmitRequest {
         signing_key_index: None,
-        fee: 1,
-        proof_id: Some(proof_id),
+        fee_instructions: vec![Instruction::CallMethod {
+            component_address: source_component_address,
+            method: "pay_fee".to_string(),
+            args: args![Amount::try_from(0).unwrap()],
+        }],
+        proof_ids: vec![proof_id],
         new_non_fungible_index_outputs: vec![],
         new_non_fungible_outputs: vec![],
         specific_non_fungible_outputs: vec![],
@@ -275,6 +280,23 @@ pub async fn submit_manifest(
         })
         .collect::<Vec<_>>();
 
+    // retrieve account from inputs
+    let account_names = inputs
+        .split(',')
+        .filter_map(|i| if i.contains("ACC") { Some(i.to_string()) } else { None })
+        .collect::<Vec<_>>();
+    let account_name = account_names.first().expect("Account name not found");
+
+    let mut client = get_wallet_daemon_client(world, wallet_daemon_name.clone()).await;
+    let source_component_address = client
+        .accounts_get_by_name(account_name.as_str())
+        .await
+        .unwrap()
+        .account
+        .address
+        .as_component_address()
+        .unwrap();
+
     // Supply the inputs explicitly. If this is empty, the internal component manager
     // will attempt to supply the correct inputs
     let inputs = inputs
@@ -295,10 +317,14 @@ pub async fn submit_manifest(
     let transaction_submit_req = TransactionSubmitRequest {
         signing_key_index: None,
         instructions,
-        fee: 1,
+        fee_instructions: vec![Instruction::CallMethod {
+            component_address: source_component_address,
+            method: "pay_fee".to_string(),
+            args: args![Amount::try_from(1).unwrap()],
+        }],
         override_inputs: false,
         is_dry_run: false,
-        proof_id: None,
+        proof_ids: vec![],
         new_outputs: num_outputs as u8,
         specific_non_fungible_outputs,
         inputs,
@@ -306,7 +332,6 @@ pub async fn submit_manifest(
         new_non_fungible_index_outputs,
     };
 
-    let mut client = get_wallet_daemon_client(world, wallet_daemon_name.clone()).await;
     let resp = client.submit_transaction(transaction_submit_req).await.unwrap();
 
     let wait_req = TransactionWaitResultRequest {
@@ -330,6 +355,7 @@ pub async fn create_component(
     world: &mut TariWorld,
     outputs_name: String,
     template_name: String,
+    account_name: String,
     wallet_daemon_name: String,
     function_call: String,
     args: Vec<String>,
@@ -347,13 +373,27 @@ pub async fn create_component(
         args,
     };
 
+    let mut client = get_wallet_daemon_client(world, wallet_daemon_name.clone()).await;
+    let source_component_address = client
+        .accounts_get_by_name(account_name.as_str())
+        .await
+        .unwrap()
+        .account
+        .address
+        .as_component_address()
+        .unwrap();
+
     let transaction_submit_req = TransactionSubmitRequest {
         signing_key_index: None,
         instructions: vec![instruction],
-        fee: 1,
+        fee_instructions: vec![Instruction::CallMethod {
+            component_address: source_component_address,
+            method: "pay_fee".to_string(),
+            args: args![Amount::try_from(0).unwrap()],
+        }],
         override_inputs: false,
         is_dry_run: false,
-        proof_id: None,
+        proof_ids: vec![],
         new_outputs: num_outputs as u8,
         specific_non_fungible_outputs: vec![],
         inputs: vec![],
@@ -361,7 +401,6 @@ pub async fn create_component(
         new_non_fungible_index_outputs: vec![],
     };
 
-    let mut client = get_wallet_daemon_client(world, wallet_daemon_name.clone()).await;
     let resp = client.submit_transaction(transaction_submit_req).await.unwrap();
 
     tokio::time::sleep(Duration::from_secs(5)).await;
