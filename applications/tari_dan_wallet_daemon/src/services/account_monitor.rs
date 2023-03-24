@@ -253,6 +253,7 @@ where TStore: WalletStore + Clone + Send + Sync + 'static
                     self.process_result(diff).await?;
                 }
             },
+            WalletEvent::TransactionInvalid(_) => {},
             WalletEvent::AccountChanged(_) => {},
         }
         Ok(())

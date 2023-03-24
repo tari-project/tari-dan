@@ -22,6 +22,7 @@
 
 use std::{
     collections::{HashMap, HashSet},
+    fmt::Display,
     sync::Arc,
 };
 
@@ -35,7 +36,7 @@ use tari_dan_core::{
 };
 use tari_template_lib::Hash;
 use tari_transaction::Transaction;
-use tokio::sync::{broadcast, mpsc};
+use tokio::sync::{broadcast, mpsc, oneshot};
 
 use super::MempoolError;
 use crate::p2p::services::{
@@ -85,7 +86,11 @@ where V: Validator<Transaction, Error = MempoolError>
         loop {
             tokio::select! {
                 Some(req) = self.mempool_requests.recv() => self.handle_request(req).await,
-                Some(tx) = self.new_transactions.recv() => self.handle_new_transaction(tx).await,
+                Some(tx) = self.new_transactions.recv() => {
+                    if let Err(e) = self .handle_new_transaction(tx).await {
+                        warn!(target: LOG_TARGET, "Mempool rejected transaction: {}", e);
+                    }
+                }
 
                 else => {
                     info!(target: LOG_TARGET, "Mempool service shutting down");
@@ -98,7 +103,9 @@ where V: Validator<Transaction, Error = MempoolError>
 
     async fn handle_request(&mut self, request: MempoolRequest) {
         match request {
-            MempoolRequest::SubmitTransaction(transaction) => self.handle_new_transaction(*transaction).await,
+            MempoolRequest::SubmitTransaction(transaction, reply) => {
+                handle(reply, self.handle_new_transaction(*transaction).await);
+            },
             MempoolRequest::RemoveTransaction { transaction_hash } => self.remove_transaction(&transaction_hash),
             MempoolRequest::GetMempoolSize { reply } => {
                 let _ignore = reply.send(self.transactions.len());
@@ -110,7 +117,7 @@ where V: Validator<Transaction, Error = MempoolError>
         self.transactions.remove(hash);
     }
 
-    async fn handle_new_transaction(&mut self, transaction: Transaction) {
+    async fn handle_new_transaction(&mut self, transaction: Transaction) -> Result<(), MempoolError> {
         debug!(
             target: LOG_TARGET,
             "Received transaction: {} {:?}",
@@ -124,13 +131,10 @@ where V: Validator<Transaction, Error = MempoolError>
                 "🎱 Transaction {} already in mempool",
                 transaction.hash()
             );
-            return;
+            return Ok(());
         }
 
-        if let Err(e) = self.validator.validate(&transaction).await {
-            error!(target: LOG_TARGET, "⚠ Invalid templates found for transaction: {}", e);
-            return;
-        }
+        self.validator.validate(&transaction).await?;
 
         let shards = transaction.meta().involved_shards();
         if shards.is_empty() {
@@ -142,18 +146,12 @@ where V: Validator<Transaction, Error = MempoolError>
         let mut committee_shards = Vec::with_capacity(shards.len());
         // TODO(perf): n queries
         for sid in &shards {
-            match self
+            if self
                 .epoch_manager
                 .is_validator_in_committee_for_current_epoch(*sid, current_node_pubkey.clone())
-                .await
+                .await?
             {
-                Ok(true) => committee_shards.push(*sid),
-                Ok(false) => {},
-                Err(e) => error!(
-                    target: LOG_TARGET,
-                    "Failed to retrieve validator in the committee for current epoch: {}",
-                    e.to_string(),
-                ),
+                committee_shards.push(*sid);
             }
         }
 
@@ -191,6 +189,7 @@ where V: Validator<Transaction, Error = MempoolError>
                 );
             }
         }
+        Ok(())
     }
 
     pub async fn propagate_transaction(
@@ -198,16 +197,8 @@ where V: Validator<Transaction, Error = MempoolError>
         transaction: &Transaction,
         shards: &[ShardId],
     ) -> Result<(), MempoolError> {
-        let epoch = self
-            .epoch_manager
-            .current_epoch()
-            .await
-            .map_err(|e| MempoolError::EpochManagerError(Box::new(e)))?;
-        let committees = self
-            .epoch_manager
-            .get_committees(epoch, shards)
-            .await
-            .map_err(|e| MempoolError::EpochManagerError(Box::new(e)))?;
+        let epoch = self.epoch_manager.current_epoch().await?;
+        let committees = self.epoch_manager.get_committees(epoch, shards).await?;
 
         let msg = DanMessage::NewTransaction(Box::new(transaction.clone()));
 
@@ -225,5 +216,14 @@ where V: Validator<Transaction, Error = MempoolError>
             .await?;
 
         Ok(())
+    }
+}
+
+fn handle<T, E: Display>(reply: oneshot::Sender<Result<T, E>>, result: Result<T, E>) {
+    if let Err(ref e) = result {
+        error!(target: LOG_TARGET, "Request failed with error: {}", e);
+    }
+    if reply.send(result).is_err() {
+        error!(target: LOG_TARGET, "Requester abandoned request");
     }
 }

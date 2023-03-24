@@ -216,10 +216,17 @@ impl JsonRpcHandlers {
         } else {
             let subscription = self.hotstuff_events.subscribe();
             // Submit to mempool.
-            self.mempool
-                .submit_transaction(transaction)
-                .await
-                .map_err(internal_error(answer_id))?;
+            self.mempool.submit_transaction(transaction).await.map_err(|e| {
+                log::error!(target: LOG_TARGET, "🚨 Mempool error: {}", e);
+                JsonRpcResponse::error(
+                    answer_id,
+                    JsonRpcError::new(
+                        JsonRpcErrorReason::InternalError,
+                        format!("Mempool rejected transaction: {}", e),
+                        serde_json::Value::Null,
+                    ),
+                )
+            })?;
 
             if wait_for_result {
                 return wait_for_transaction_result(
