@@ -77,9 +77,6 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate>> Worker<Flow
             args.push(Arg::Literal(arg_value.as_bytes()?.to_vec()));
         }
 
-        dbg!(&function_definition);
-        dbg!(&args);
-
         let exec_result = TransactionProcessor::call_method(
             context.template_provider.clone(),
             &context.runtime,
@@ -93,36 +90,9 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate>> Worker<Flow
         )?;
 
         let result = exec_result.raw.clone();
-        // let workspace_key = format!("node[{}].default", node.id);
-        // // put output on worktop.
-        // TransactionProcessor::<TTemplateProvider>::put_output_on_workspace_with_name(
-        //     &context.runtime,
-        //     format!("node[{}].default", node.id).into_bytes(),
-        // )?;
 
-        dbg!(&exec_result);
         let mut h = HashMap::new();
-        h.insert(
-            "default".to_string(),
-            // OutputValue::String(format!("workspace::{}", workspace_key)),
-            OutputValue::Bytes(result),
-        );
+        h.insert("default".to_string(), OutputValue::Bytes(result));
         Ok(h)
     }
-
-    // fn work(&self, context: &FlowContext, node: &Node, input_data: InputData) -> anyhow::Result<OutputData> {
-    //     let component_address = node.get_string_field("component_address", &input_data)?;
-    //         .component_address
-    //         .clone()
-    //         .unwrap_or_else(|| node.get_string_field("component_address", &input_data)?);
-    //     todo!()
-    // let name = node.get_string_field("name", &input_data)?;
-    // let value = self.args.get(&name).cloned().expect("could not find arg");
-    // let output = match value {
-    //     ArgValue::Uint(x) => OutputDataBuilder::new().data("default", Box::new(x as i64)),
-    //     ArgValue::PublicKey(pk) => OutputDataBuilder::new().data("default", Box::new(pk.to_hex())),
-    //     _ => todo!(),
-    // };
-    // Ok(output.build())
-    // }
 }

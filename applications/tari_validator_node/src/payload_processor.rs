@@ -65,13 +65,8 @@ where TTemplateProvider: TemplateProvider<Template = LoadedTemplate>
         consensus: ConsensusContext,
     ) -> Result<ExecuteResult, PayloadProcessorError> {
         let transaction = payload.into_payload();
-        // let mut template_addresses = transaction.required_templates();
-        // let components = transaction.required_components();
 
         let state_store = create_populated_state_store(pledges.into_values())?;
-        // template_addresses.extend(load_template_addresses_for_components(&state_store, &components)?);
-
-        // let package = build_package(&self.template_provider, template_addresses)?;
 
         // Include ownership token for the signers of this in the auth scope
         let owner_token = get_auth_token(&transaction);

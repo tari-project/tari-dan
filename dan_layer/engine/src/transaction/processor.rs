@@ -90,7 +90,6 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate> + 'static> T
     pub fn execute(self, transaction: Transaction) -> Result<ExecuteResult, TransactionError> {
         let id_provider = IdProvider::new(*transaction.hash(), 1000);
         // TODO: We can avoid this for each execution with improved design
-        // let template_defs = self.package.get_template_defs();
         let tracker = StateTracker::new(self.state_db.clone(), id_provider, self.template_provider.clone());
         let initial_proofs = self.auth_params.initial_ownership_proofs.clone();
         let template_provider = self.template_provider.clone();
@@ -190,7 +189,6 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate> + 'static> T
 
     fn process_instruction(
         template_provider: Arc<TTemplateProvider>,
-        // package: &Package,
         runtime: &Runtime,
         auth_scope: AuthorizationScope,
         instruction: Instruction,

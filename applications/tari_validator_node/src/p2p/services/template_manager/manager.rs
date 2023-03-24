@@ -239,8 +239,6 @@ impl TemplateProvider for TemplateManager {
                 let module = WasmModule::from_code(wasm);
                 module.load_template()?
             },
-
-            // _ => return Err(TemplateManagerError::UnsupportedTemplateType),
             TemplateExecutable::Manifest(_) => return Err(TemplateManagerError::UnsupportedTemplateType),
             TemplateExecutable::Flow(flow_json) => {
                 let definition: FlowFunctionDefinition = serde_json::from_str(&flow_json)?;
