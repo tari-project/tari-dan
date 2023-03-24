@@ -20,11 +20,7 @@
 //   WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //   USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use std::{
-    collections::{BTreeSet, HashMap},
-    convert::TryFrom,
-    sync::Arc,
-};
+use std::{collections::HashMap, convert::TryFrom, sync::Arc};
 
 use tari_crypto::tari_utilities::ByteArray;
 use tari_dan_common_types::{services::template_provider::TemplateProvider, ObjectPledge, ShardId, SubstateState};
@@ -35,20 +31,13 @@ use tari_dan_core::{
 use tari_dan_engine::{
     bootstrap_state,
     fees::{FeeModule, FeeTable},
-    packager::{LoadedTemplate, Package},
+    packager::LoadedTemplate,
     runtime::{AuthParams, ConsensusContext, RuntimeModule},
-    state_store::{memory::MemoryStateStore, AtomicDb, StateReader, StateStoreError, StateWriter},
+    state_store::{memory::MemoryStateStore, AtomicDb, StateStoreError, StateWriter},
     transaction::TransactionProcessor,
 };
-use tari_engine_types::{
-    commit_result::{ExecuteResult, FinalizeResult, RejectReason},
-    substate::{Substate, SubstateAddress},
-};
-use tari_template_lib::{
-    crypto::RistrettoPublicKeyBytes,
-    models::{Amount, ComponentAddress, TemplateAddress},
-    prelude::NonFungibleAddress,
-};
+use tari_engine_types::commit_result::{ExecuteResult, FinalizeResult, RejectReason};
+use tari_template_lib::{crypto::RistrettoPublicKeyBytes, models::Amount, prelude::NonFungibleAddress};
 use tari_transaction::Transaction;
 
 #[derive(Debug, Clone)]
@@ -90,10 +79,9 @@ where TTemplateProvider: TemplateProvider<Template = LoadedTemplate>
             initial_ownership_proofs: vec![owner_token],
         };
 
-        // 1 per byte
-        // Divide by 2 to account for the cost of CBOR
-        let initial_cost = self.fee_table.per_kb_wasm_size() * package.total_code_byte_size() as u64 / 1024 / 2;
-        let modules: Vec<Box<dyn RuntimeModule>> = vec![Box::new(FeeModule::new(initial_cost, self.fee_table.clone()))];
+        let initial_cost = 0;
+        let modules: Vec<Box<dyn RuntimeModule<TTemplateProvider>>> =
+            vec![Box::new(FeeModule::new(initial_cost, self.fee_table.clone()))];
 
         let processor = TransactionProcessor::new(
             self.template_provider.clone(),
@@ -115,45 +103,10 @@ where TTemplateProvider: TemplateProvider<Template = LoadedTemplate>
     }
 }
 
-fn build_package<TTemplateProvider: TemplateProvider<Template = LoadedTemplate>>(
-    template_provider: &TTemplateProvider,
-    template_addresses: BTreeSet<TemplateAddress>,
-) -> Result<Package, PayloadProcessorError> {
-    let mut builder = Package::builder();
-
-    for addr in template_addresses {
-        let template = template_provider
-            .get_template_module(&addr)
-            .map_err(|err| PayloadProcessorError::FailedToLoadTemplate(err.into()))?;
-        builder.add_template(addr, template);
-    }
-
-    Ok(builder.build())
-}
-
 fn get_auth_token(transaction: &Transaction) -> NonFungibleAddress {
     let public_key = RistrettoPublicKeyBytes::from_bytes(transaction.sender_public_key().as_bytes())
         .expect("Expected public key to be 32 bytes");
     NonFungibleAddress::from_public_key(public_key)
-}
-
-fn load_template_addresses_for_components(
-    state_db: &MemoryStateStore,
-    components: &BTreeSet<ComponentAddress>,
-) -> Result<BTreeSet<TemplateAddress>, PayloadProcessorError> {
-    let access = state_db
-        .read_access()
-        .map_err(PayloadProcessorError::FailedToLoadTemplate)?;
-    let mut template_addresses = BTreeSet::new();
-    for component in components {
-        let component = access.get_state::<_, Substate>(&SubstateAddress::Component(*component))?;
-        let component = component
-            .into_substate_value()
-            .into_component()
-            .expect("Component substate should be a component");
-        template_addresses.insert(component.template_address);
-    }
-    Ok(template_addresses)
 }
 
 fn create_populated_state_store<I: IntoIterator<Item = ObjectPledge>>(

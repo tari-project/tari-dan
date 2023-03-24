@@ -38,7 +38,7 @@ use tari_dan_app_utilities::template_manager::{
 };
 use tari_dan_common_types::services::template_provider::TemplateProvider;
 use tari_dan_engine::{
-    flow::{FlowFactory, FlowInstance},
+    flow::FlowFactory,
     function_definitions::FlowFunctionDefinition,
     packager::{LoadedTemplate, TemplateModuleLoader},
     wasm::WasmModule,

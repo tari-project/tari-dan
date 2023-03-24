@@ -1,30 +1,22 @@
 // Copyright 2022 The Tari Project
 // SPDX-License-Identifier: BSD-3-Clause
 
-use std::{
-    collections::HashMap,
-    ops::Deref,
-    sync::{Arc, RwLock},
-};
+use std::{collections::HashMap, sync::Arc};
 
 use d3ne::{Engine, Node, Workers, WorkersBuilder};
 use serde_json::Value as JsValue;
-use tari_common_types::types::PublicKey;
 use tari_dan_common_types::services::template_provider::TemplateProvider;
-use tari_engine_types::execution_result::ExecutionResult;
+use tari_engine_types::instruction_result::InstructionResult;
 use tari_template_lib::args::Arg;
-use tari_utilities::ByteArray;
 
 use crate::{
-    flow,
     flow::{
         workers::{ArgWorker, CallMethodWorker},
-        ArgValue,
         FlowContext,
         FlowEngineError,
     },
     function_definitions::FunctionArgDefinition,
-    packager::{LoadedTemplate, Package},
+    packager::LoadedTemplate,
     runtime::{AuthorizationScope, Runtime},
 };
 
@@ -61,7 +53,7 @@ impl FlowInstance {
         arg_defs: &[FunctionArgDefinition],
         recursion_depth: usize,
         max_recursion_depth: usize,
-    ) -> Result<ExecutionResult, FlowEngineError> {
+    ) -> Result<InstructionResult, FlowEngineError> {
         let engine = Engine::new("tari@0.1.0".to_string(), load_workers());
         let args = runtime.resolve_args(args.to_vec())?;
         let mut args_map = HashMap::new();
@@ -83,9 +75,11 @@ impl FlowInstance {
             max_recursion_depth,
         };
         let result = engine.process(&context, &self.nodes, self.start_node)?;
-
-        // TODO: return actual result from flow
-        Ok(ExecutionResult::empty())
+        if result.is_empty() {
+            Ok(InstructionResult::empty())
+        } else {
+            todo!("Returning results from a flow is not yet implemented")
+        }
     }
 }
 

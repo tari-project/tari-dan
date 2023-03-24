@@ -22,10 +22,7 @@
 
 use tari_template_abi::TemplateDef;
 
-use crate::{
-    flow::{FlowFactory, FlowInstance},
-    wasm::LoadedWasmTemplate,
-};
+use crate::{flow::FlowFactory, wasm::LoadedWasmTemplate};
 
 #[derive(Debug, Clone)]
 pub enum LoadedTemplate {

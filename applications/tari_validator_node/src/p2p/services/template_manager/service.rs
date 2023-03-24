@@ -100,10 +100,10 @@ impl TemplateManagerService {
                 let _ignore = self
                     .download_queue
                     .send(DownloadRequest {
-                        template_type: template.template_type.into(),
+                        template_type: template.template_type,
                         address: Hash::try_from(template.template_address.as_slice()).unwrap(),
                         url: template.url.clone(),
-                        expected_binary_hash: template.expected_hash.clone(),
+                        expected_binary_hash: template.expected_hash,
                     })
                     .await;
                 info!(

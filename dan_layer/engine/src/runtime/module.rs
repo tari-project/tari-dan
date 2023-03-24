@@ -9,7 +9,7 @@ use tari_engine_types::substate::{SubstateAddress, SubstateValue};
 use crate::{packager::LoadedTemplate, runtime::StateTracker};
 
 pub trait RuntimeModule<TTemplateProvider: TemplateProvider<Template = LoadedTemplate>>: Send + Sync {
-    fn on_initialize(&self, _track: &StateTracker) -> Result<(), RuntimeModuleError> {
+    fn on_initialize(&self, _track: &StateTracker<TTemplateProvider>) -> Result<(), RuntimeModuleError> {
         Ok(())
     }
 
@@ -23,7 +23,7 @@ pub trait RuntimeModule<TTemplateProvider: TemplateProvider<Template = LoadedTem
 
     fn on_before_finalize(
         &self,
-        _track: &StateTracker,
+        _track: &StateTracker<TTemplateProvider>,
         _changes: &HashMap<SubstateAddress, SubstateValue>,
     ) -> Result<(), RuntimeModuleError> {
         Ok(())

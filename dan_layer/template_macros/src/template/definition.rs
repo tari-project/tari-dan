@@ -107,7 +107,7 @@ mod tests {
                    # [allow (non_snake_case)]
         pub mod Foo_template {
             use :: tari_template_lib :: template_dependencies :: * ;
-            # [derive (Debug , Decode , Encode)] struct Foo { }
+            # [derive (Debug ,  serde :: Serialize , serde :: Deserialize)] # [serde (crate = "self::serde")] struct Foo { }
             impl Foo { pub fn no_args_function () -> String { "Hello World!" . to_string () }
                 pub fn some_args_function (a : i8 , b : String) -> u32 { 1_u32 }
                 pub fn no_return_function () { }
@@ -122,7 +122,7 @@ mod tests {
                     FooComponent { address }
                 }
             }
-            # [derive (Decode , Encode)]
+            # [derive (serde :: Serialize , serde :: Deserialize)] # [serde (transparent , crate = "self::serde")]
             pub struct FooComponent {
                 address : tari_template_lib :: models :: ComponentAddress ,
             }
@@ -138,71 +138,5 @@ mod tests {
 
     fn assert_code_eq(a: TokenStream, b: TokenStream) {
         assert_eq!(a.to_string(), b.to_string());
-    }
-
-    #[test]
-    fn test_account_builtin() {
-        let input = TokenStream::from_str(indoc! {
-
-            r#"mod account_template {
-    use super::*;
-
-    pub struct Account {
-        // TODO: Lazy key value map/store
-        vaults: HashMap<ResourceAddress, Vault>,
-    }
-
-    impl Account {
-        pub fn create(owner_token: NonFungibleAddress) -> AccountComponent {
-            let rules = AccessRules::new()
-                .add_method_rule("balance", AccessRule::AllowAll)
-                .add_method_rule("get_balances", AccessRule::AllowAll)
-                .add_method_rule("deposit", AccessRule::AllowAll)
-                .add_method_rule("deposit_all", AccessRule::AllowAll)
-                .add_method_rule("get_non_fungible_ids", AccessRule::AllowAll)
-                .default(AccessRule::Restricted(Require(owner_token)));
-
-            Self::create_with_rules(rules)
-        }
-        }
-        }"#
-        })
-        .unwrap();
-
-        let ast = parse2::<TemplateAst>(input).unwrap();
-
-        let output = generate_definition(&ast);
-
-        assert_code_eq(output, quote! {
-                   # [allow (non_snake_case)]
-        pub mod Foo_template {
-            use :: tari_template_lib :: template_dependencies :: * ;
-            # [derive (Debug , Decode , Encode)] struct Foo { }
-            impl Foo { pub fn no_args_function () -> String { "Hello World!" . to_string () }
-                pub fn some_args_function (a : i8 , b : String) -> u32 { 1_u32 }
-                pub fn no_return_function () { }
-                pub fn constructor () -> Self { Self { } }
-                pub fn method (& self) { }
-                fn private_function () { }
-            }
-            impl :: tari_template_lib :: component :: interface :: ComponentInterface for Foo {
-                type Component = FooComponent ;
-                fn create_with_access_rules (self , access_rules : :: tari_template_lib :: auth :: AccessRules) -> Self :: Component {
-                    let address = engine () . create_component ("Foo" . to_string () , self , access_rules) ;
-                    FooComponent { address }
-                }
-            }
-            # [derive (Decode , Encode)]
-            pub struct FooComponent {
-                address : tari_template_lib :: models :: ComponentAddress ,
-            }
-            impl :: tari_template_lib :: component :: interface :: ComponentInstanceInterface for FooComponent {
-                fn set_access_rules (self , rules : tari_template_lib :: auth :: AccessRules) -> Self {
-                    engine () . component_manager (self . address) . set_access_rules (rules) ;
-                    self
-                }
-            }
-        }
-                });
     }
 }

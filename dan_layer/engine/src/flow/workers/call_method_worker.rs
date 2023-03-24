@@ -1,15 +1,13 @@
 //  Copyright 2022 The Tari Project
 //  SPDX-License-Identifier: BSD-3-Clause
 
-use std::{collections::HashMap, convert::TryFrom, sync::Arc};
+use std::{collections::HashMap, convert::TryFrom};
 
 use d3ne::{Node, OutputValue, Worker};
 use tari_dan_common_types::services::template_provider::TemplateProvider;
-use tari_engine_types::substate::SubstateAddress;
 use tari_template_lib::{
     args::Arg,
     models::{ComponentAddress, TemplateAddress},
-    Hash,
 };
 
 use crate::{flow::FlowContext, packager::LoadedTemplate, transaction::TransactionProcessor};
@@ -32,7 +30,7 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate>> Worker<Flow
         let component_address = input_data
             .get("self")
             .cloned()
-            .or(node.get_data("self")?.map(|v| OutputValue::Bytes(v)))
+            .or(node.get_data("self")?.map(OutputValue::Bytes))
             .ok_or_else(|| anyhow::anyhow!("could not find arg `self`"))?;
         dbg!(&component_address);
         let component_address = ComponentAddress::try_from(component_address.as_bytes()?.to_vec())?;
@@ -74,7 +72,7 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate>> Worker<Flow
             let arg_value = input_data
                 .get(arg.name.as_str())
                 .cloned()
-                .or(node.get_data(arg.name.as_str())?.map(|v| OutputValue::Bytes(v)))
+                .or(node.get_data(arg.name.as_str())?.map(OutputValue::Bytes))
                 .ok_or_else(|| anyhow::anyhow!("could not find arg `{}`", arg.name))?;
             args.push(Arg::Literal(arg_value.as_bytes()?.to_vec()));
         }
@@ -87,7 +85,7 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate>> Worker<Flow
             &context.runtime,
             context.auth_scope.clone(),
             &component_address,
-            &method_name,
+            method_name,
             // TODO: put in rest of args
             args,
             context.recursion_depth + 1,

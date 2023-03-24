@@ -5,48 +5,19 @@ use std::collections::HashMap;
 
 use d3ne::{Node, OutputValue, Worker};
 use tari_dan_common_types::services::template_provider::TemplateProvider;
-use tari_template_lib::args::Arg;
-use tari_utilities::hex::Hex;
 
-use crate::{
-    flow::{ArgValue, FlowContext},
-    function_definitions::ArgType,
-    packager::LoadedTemplate,
-};
+use crate::{flow::FlowContext, function_definitions::ArgType, packager::LoadedTemplate};
 
 pub struct ArgWorker {}
 
 impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate>> Worker<FlowContext<TTemplateProvider>>
     for ArgWorker
 {
-    // fn call(&self, node: Node, inputs: InputData) -> OutputData {
-    //     let name = node.get_string_field("name", &inputs).unwrap();
-    //     let mut map = HashMap::new();
-    //     let value = self.args.get(&name).cloned().expect("could not find arg");
-    //     match value {
-    //         ArgValue::Uint(x) => map.insert(
-    //             "default".to_string(),
-    //             Ok(IOData {
-    //                 data: Box::new(x as i64),
-    //             }),
-    //         ),
-    //         ArgValue::PublicKey(pk) => map.insert(
-    //             "default".to_string(),
-    //             Ok(IOData {
-    //                 data: Box::new(pk.to_hex()),
-    //             }),
-    //         ),
-    //         _ => todo!(),
-    //     };
-    //
-    //     Rc::new(map)
-    // }
-
     fn work(
         &self,
         context: &FlowContext<TTemplateProvider>,
         node: &Node,
-        input_data: HashMap<String, OutputValue>,
+        _input_data: HashMap<String, OutputValue>,
     ) -> Result<HashMap<String, OutputValue>, anyhow::Error> {
         let arg_name: String = node
             .get_data("name")?
@@ -74,15 +45,4 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate>> Worker<Flow
     fn name(&self) -> &str {
         "tari::arg"
     }
-
-    // fn work(&self, node: &Node, input_data: InputData) -> anyhow::Result<OutputData> {
-    //     let name = node.get_string_field("name", &input_data)?;
-    //     let value = self.args.get(&name).cloned().expect("could not find arg");
-    //     let output = match value {
-    //         ArgValue::Uint(x) => OutputDataBuilder::new().data("default", Box::new(x as i64)),
-    //         ArgValue::PublicKey(pk) => OutputDataBuilder::new().data("default", Box::new(pk.to_hex())),
-    //         _ => todo!(),
-    //     };
-    //     Ok(output.build())
-    // }
 }

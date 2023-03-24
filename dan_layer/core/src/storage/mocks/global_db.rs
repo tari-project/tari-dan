@@ -124,8 +124,8 @@ impl GlobalDbAdapter for MockGlobalDbBackupAdapter {
 
     fn get_pending_templates(
         &self,
-        tx: &mut Self::DbTransaction<'_>,
-        limit: usize,
+        _tx: &mut Self::DbTransaction<'_>,
+        _limit: usize,
     ) -> Result<Vec<DbTemplate>, Self::Error> {
         todo!()
     }

@@ -202,7 +202,7 @@ pub async fn spawn_services(
     let fee_table = if config.validator_node.no_fees {
         FeeTable::zero_rated()
     } else {
-        FeeTable::new(1, 1, 1, DEFAULT_FEE_LOAN)
+        FeeTable::new(1, 1, DEFAULT_FEE_LOAN)
     };
     let payload_processor = TariDanPayloadProcessor::new(template_manager, fee_table);
 

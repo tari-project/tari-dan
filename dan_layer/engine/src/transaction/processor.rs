@@ -38,7 +38,7 @@ use tari_template_lib::{
 use tari_transaction::{id_provider::IdProvider, Transaction};
 
 use crate::{
-    packager::{LoadedTemplate, Package},
+    packager::LoadedTemplate,
     runtime::{
         AuthParams,
         AuthorizationScope,
@@ -111,7 +111,9 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate> + 'static> T
 
         let fee_exec_results = fee_instructions
             .into_iter()
-            .map(|instruction| Self::process_instruction(&package, &runtime, &auth_scope, instruction))
+            .map(|instruction| {
+                Self::process_instruction(template_provider.clone(), &runtime, auth_scope.clone(), instruction)
+            })
             .collect::<Result<Vec<_>, _>>();
 
         let fee_exec_result = match fee_exec_results {
@@ -211,8 +213,8 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate> + 'static> T
                 })?;
 
                 let result = Self::invoke_template(
-                    template.clone(),
-                    template_provider.clone(),
+                    template,
+                    template_provider,
                     runtime.clone(),
                     auth_scope,
                     &function,
@@ -227,7 +229,7 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate> + 'static> T
                 method,
                 args,
             } => Self::call_method(
-                template_provider.clone(),
+                template_provider,
                 runtime,
                 auth_scope,
                 &component_address,
@@ -240,16 +242,16 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate> + 'static> T
             // Arg::Variable
             Instruction::PutLastInstructionOutputOnWorkspace { key } => {
                 Self::put_output_on_workspace_with_name(runtime, key)?;
-                Ok(ExecutionResult::empty())
+                Ok(InstructionResult::empty())
             },
             Instruction::EmitLog { level, message } => {
                 runtime.interface().emit_log(level, message)?;
-                Ok(ExecutionResult::empty())
+                Ok(InstructionResult::empty())
             },
             Instruction::ClaimBurn { claim } => {
                 // Need to call it on the runtime so that a bucket is created.
                 runtime.interface().claim_burn(*claim)?;
-                Ok(ExecutionResult::empty())
+                Ok(InstructionResult::empty())
             },
         }
     }
@@ -266,18 +268,18 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate> + 'static> T
         runtime: &Runtime,
         auth_scope: AuthorizationScope,
         component_address: &ComponentAddress,
-        method: &String,
+        method: &str,
         args: Vec<Arg>,
         recursion_depth: usize,
         max_recursion_depth: usize,
-    ) -> Result<ExecutionResult, TransactionError> {
-        let component = runtime.interface().get_component(&component_address)?;
+    ) -> Result<InstructionResult, TransactionError> {
+        let component = runtime.interface().get_component(component_address)?;
         // TODO: In this very basic auth system, you can only call on owned objects (because
         // initial_ownership_proofs is       usually set to include the owner token).
         auth_scope.check_access_rules(
             &FunctionIdent::Template {
                 module_name: component.module_name.clone(),
-                function: method.clone(),
+                function: method.to_string(),
             },
             &component.access_rules,
         )?;
@@ -297,11 +299,11 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate> + 'static> T
         final_args.extend(args);
 
         let result = Self::invoke_template(
-            template.clone(),
+            template,
             template_provider,
             runtime.clone(),
             auth_scope,
-            &method,
+            method,
             final_args,
             recursion_depth,
             max_recursion_depth,

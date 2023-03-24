@@ -44,7 +44,7 @@ pub struct FunctionDef {
     pub is_mut: bool,
 }
 
-#[derive(Debug, Clone, Encode, Decode)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ArgDef {
     pub name: String,
     pub arg_type: Type,

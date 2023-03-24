@@ -165,16 +165,14 @@ async fn handle_publish(args: PublishTemplateArgs, mut client: ValidatorNodeClie
 
         version = cargo_version;
         name = cargo_name;
-    } else {
-        if let Some(arg_binary_url) = args.binary_url {
-            let parsed_url = Url::parse(&arg_binary_url)?;
-            let file_name = parsed_url.path().split('/').last().unwrap();
-            version = file_name.split('-').nth(1).unwrap_or("0").parse::<u16>()?;
-            name = file_name.split('-').nth(0).unwrap_or(file_name).to_string();
+    } else if let Some(arg_binary_url) = args.binary_url {
+        let parsed_url = Url::parse(&arg_binary_url)?;
+        let file_name = parsed_url.path().split('/').last().unwrap();
+        version = file_name.split('-').nth(1).unwrap_or("0").parse::<u16>()?;
+        name = file_name.split('-').next().unwrap_or(file_name).to_string();
 
-            binary_sha = calculate_template_binary_hash(reqwest::get(&arg_binary_url).await?.bytes().await?.as_ref());
-            binary_url = arg_binary_url;
-        }
+        binary_sha = calculate_template_binary_hash(reqwest::get(&arg_binary_url).await?.bytes().await?.as_ref());
+        binary_url = arg_binary_url;
     }
     // ask the template name (skip if already passed as a CLI argument)
     let template_name = Prompt::new("Choose an user-friendly name for the template (max 32 characters):")

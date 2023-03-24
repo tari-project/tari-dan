@@ -68,15 +68,18 @@ use tari_template_lib::{
 };
 use tari_utilities::ByteArray;
 
-use crate::runtime::{
-    engine_args::EngineArgs,
-    tracker::StateTracker,
-    AuthParams,
-    ConsensusContext,
-    RuntimeError,
-    RuntimeInterface,
-    RuntimeModule,
-    RuntimeState,
+use crate::{
+    packager::LoadedTemplate,
+    runtime::{
+        engine_args::EngineArgs,
+        tracker::StateTracker,
+        AuthParams,
+        ConsensusContext,
+        RuntimeError,
+        RuntimeInterface,
+        RuntimeModule,
+        RuntimeState,
+    },
 };
 
 const LOG_TARGET: &str = "tari::dan::engine::runtime::impl";

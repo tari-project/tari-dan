@@ -110,7 +110,7 @@ fn get_function_block(template_ident: &Ident, ast: FunctionAst) -> Expr {
                 ]
             },
             // non-self argument
-            TypeAst::Typed { name, type_path } => {
+            TypeAst::Typed { type_path, .. } => {
                 args.push(parse_quote! { #arg_ident });
                 vec![parse_quote! {
                     let #arg_ident = decode_exact::<#type_path>(&call_info.args[#i])

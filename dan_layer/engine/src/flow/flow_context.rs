@@ -4,11 +4,10 @@
 use std::{collections::HashMap, sync::Arc};
 
 use tari_dan_common_types::services::template_provider::TemplateProvider;
-use tari_template_lib::args::Arg;
 
 use crate::{
     function_definitions::FunctionArgDefinition,
-    packager::{LoadedTemplate, Package},
+    packager::LoadedTemplate,
     runtime::{AuthorizationScope, Runtime},
 };
 
