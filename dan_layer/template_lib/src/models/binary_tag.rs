@@ -25,4 +25,5 @@ pub enum BinaryTag {
     ComponentAddress = 1,
     Metadata = 2,
     NonFungibleAddress = 3,
+    ResourceAddress = 4,
 }
