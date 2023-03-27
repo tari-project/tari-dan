@@ -20,7 +20,7 @@
 //   WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //   USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use std::{sync::Arc, time::Duration};
+use std::{convert::TryInto, sync::Arc, time::Duration};
 
 use axum_jrpc::{
     error::{JsonRpcError, JsonRpcErrorReason},
@@ -88,7 +88,10 @@ use tokio::sync::{broadcast, broadcast::error::RecvError};
 use crate::{
     dry_run_transaction_processor::DryRunTransactionProcessor,
     grpc::services::wallet_client::GrpcWalletClient,
-    json_rpc::jrpc_errors::internal_error,
+    json_rpc::{
+        jrpc_errors::{internal_error, invalid_argument},
+        JsonTransactionResult,
+    },
     p2p::services::mempool::MempoolHandle,
     registration,
     Services,
@@ -344,10 +347,20 @@ impl JsonRpcHandlers {
         let answer_id = value.get_answer_id();
         let data: TransactionRequest = value.parse_params()?;
         let mut tx = self.shard_store.create_read_tx().unwrap();
+        let id = data
+            .payload_id
+            .clone()
+            .try_into()
+            .map_err(invalid_argument(answer_id))?;
+        let dan_payload = tx.get_payload(&id).map_err(internal_error(answer_id))?;
+
         match tx.get_transaction(data.payload_id) {
             // TODO: return the transaction with the Response struct, and probably rename this jrpc method to
             // get_transaction_status
-            Ok(transaction) => Ok(JsonRpcResponse::success(answer_id, transaction)),
+            Ok(transaction) => Ok(JsonRpcResponse::success(answer_id, JsonTransactionResult {
+                nodes: transaction,
+                payload: dan_payload,
+            })),
             Err(err) => {
                 println!("error {:?}", err);
                 Err(JsonRpcResponse::error(

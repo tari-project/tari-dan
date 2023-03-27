@@ -20,7 +20,7 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-import { useEffect } from 'react';
+import {useEffect, useState} from 'react';
 import { Form, useLoaderData } from 'react-router-dom';
 import { getSubstates, getTransaction, getCurrentLeaderState } from '../../utils/json_rpc';
 import {
@@ -32,7 +32,7 @@ import Output from './Components/Output';
 import Substates from './Components/Substates';
 import './Transaction.css';
 import mermaid from 'mermaid';
-import { StyledPaper } from '../../Components/StyledComponents';
+import {AccordionIconButton, CodeBlock, StyledPaper} from '../../Components/StyledComponents';
 import PageHeading from '../../Components/PageHeading';
 import Typography from '@mui/material/Typography';
 import Grid from '@mui/material/Grid';
@@ -44,8 +44,12 @@ import TableContainer from '@mui/material/TableContainer';
 import TableHead from '@mui/material/TableHead';
 import TableRow from '@mui/material/TableRow';
 import TablePagination from '@mui/material/TablePagination';
+import {renderJson} from "../../utils/helpers";
+import Collapse from "@mui/material/Collapse";
+import KeyboardArrowUpIcon from "@mui/icons-material/KeyboardArrowUp";
+import KeyboardArrowDownIcon from "@mui/icons-material/KeyboardArrowDown";
 
-type loaderData = [string, Map<string, any[]>, Map<string, any[]>, Map<string, [string, number, string]>];
+type loaderData = [string, Map<string, any[]>, Map<string, any[]>, Map<string, [string, number, string]>, any];
 
 mermaid.initialize({
   startOnLoad: true,
@@ -60,16 +64,16 @@ function Mermaid(props: { chart: string }) {
   return <pre className="mermaid">{props.chart}</pre>;
 }
 
-function splitToOutputs(transactions: any[]) {
+function splitToOutputs(transaction: any) {
   let shard_transactions = new Map<string, any[]>();
-  for (let transaction of transactions) {
-    let shard = toHexString(transaction.shard);
+  for (let tx of transaction.nodes) {
+    let shard = toHexString(tx.shard);
     if (!shard_transactions.has(shard)) {
       shard_transactions.set(shard, []);
     }
-    shard_transactions.get(shard)?.push(transaction);
+    shard_transactions.get(shard)?.push(tx);
   }
-  return shard_transactions;
+  return { payload: transaction.payload, outputs:  shard_transactions };
 }
 
 function splitToShards(current_leader_states: any[]) {
@@ -82,7 +86,7 @@ function splitToShards(current_leader_states: any[]) {
 }
 
 export async function transactionLoader({ params }: { params: any }) {
-  const outputs = splitToOutputs(await getTransaction(params.payloadId));
+  const { payload, outputs } = splitToOutputs(await getTransaction(params.payloadId));
   const current_leader_states = splitToShards(await getCurrentLeaderState(params.payloadId));
   let substates = new Map<string, any[]>();
 
@@ -91,7 +95,7 @@ export async function transactionLoader({ params }: { params: any }) {
       substates.set(shard, await getSubstates(params.payloadId, shard));
     })
   );
-  return [params.payloadId, substates, outputs, current_leader_states];
+  return [params.payloadId, substates, outputs, current_leader_states, payload];
 }
 
 function mapHeight(height: number) {
@@ -110,10 +114,13 @@ function mapHeight(height: number) {
 }
 
 export default function Transaction() {
-const [payloadId, substates, outputs, current_leader_states] = useLoaderData() as loaderData;
+  const [open1, setOpen1] = useState(false);
+  const [open2, setOpen2] = useState(false);
+const [payloadId, substates, outputs, current_leader_states, payload] = useLoaderData() as loaderData;
   console.log('Substates: ', substates);
   console.log('Outputs: ', outputs);
   console.log('Current states: ', current_leader_states);
+  console.log("Payload:", payload);
   let mermaid = 'gantt\ndateFormat YYYY-MM-DDTHH:mm:ss\naxisFormat  %Hh%M:%S';
   let shardNo = 0;
   for (let [shard, output] of Array.from(outputs.entries())) {
@@ -144,6 +151,98 @@ const [payloadId, substates, outputs, current_leader_states] = useLoaderData() a
           <Typography variant="h5" sx={{ mt: 4, mb: 4, textAlign: 'center' }}>
             {payloadId}
           </Typography>
+        </Grid>
+        <Grid item xs={12} md={12} lg={12}>
+          <StyledPaper>
+            <Typography>
+              <TableContainer>
+                <Table>
+                  <TableHead>
+                    <TableRow>
+                      <TableCell>Instructions
+                        <AccordionIconButton
+                            open={open1}
+                            aria-label="expand row"
+                            size="small"
+                            onClick={() => {
+                              setOpen1(!open1);
+                            }}
+                        >
+                          {open1 ? <KeyboardArrowUpIcon /> : <KeyboardArrowDownIcon />}
+                        </AccordionIconButton>
+                      </TableCell>
+                    </TableRow>
+                  </TableHead>
+                  <TableBody>
+                    {payload?.transaction?.instructions.map((instruction: any, index: number) => {
+                      const key = Object.keys(instruction)[0];
+                      return (
+                          <TableRow key={index}>
+                            <TableCell>
+                              <Typography>
+                                {key}: {instruction[key].template_address || instruction[key].component_address}:{instruction[key].function || instruction[key].method}
+                                <Collapse in={open1} timeout="auto" unmountOnExit>
+                                  <CodeBlock style={{marginBottom: '10px'}}>
+                                    <pre>{renderJson(instruction)}</pre>
+                                  </CodeBlock>
+                                </Collapse>
+                              </Typography>
+                            </TableCell>
+                          </TableRow>
+                      );
+                    })}
+                  </TableBody>
+                </Table>
+              </TableContainer>
+            </Typography>
+          </StyledPaper>
+        </Grid>
+
+        <Grid item xs={12} md={12} lg={12}>
+          <StyledPaper>
+            <Typography>
+              <TableContainer>
+                <Table>
+                  <TableHead>
+                    <TableRow>
+                      <TableCell>Fee Instructions
+                        <AccordionIconButton
+                            open={open2}
+                            aria-label="expand row"
+                            size="small"
+                            onClick={() => {
+                              setOpen2(!open2);
+                            }}
+                        >
+                          {open2 ? <KeyboardArrowUpIcon /> : <KeyboardArrowDownIcon />}
+                        </AccordionIconButton>
+                      </TableCell>
+                    </TableRow>
+                  </TableHead>
+                  <TableBody>
+                    {payload?.transaction?.fee_instructions.map((instruction: any, index: number) => {
+
+                      const key =Object.keys(instruction)[0];
+                      return (
+                          <TableRow key={index}>
+                            <TableCell>
+                              <Typography>
+                                {key}: {instruction[key].template_address || instruction[key].component_address}:{ instruction[key].function || instruction[key].method }
+                                <Collapse in={open2} timeout="auto" unmountOnExit>
+                                  <CodeBlock style={{ marginBottom: '10px' }}>
+                                    <pre>{renderJson(instruction)}</pre>
+                                  </CodeBlock>
+                                </Collapse>
+                              </Typography>
+                            </TableCell>
+                          </TableRow>
+                      );
+                    })}
+                  </TableBody>
+                </Table>
+              </TableContainer>
+            </Typography>
+          </StyledPaper>
         </Grid>
         <Grid item xs={12} md={12} lg={12}>
           <StyledPaper>

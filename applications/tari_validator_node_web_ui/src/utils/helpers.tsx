@@ -23,7 +23,10 @@
 import { toHexString } from "../routes/VN/Components/helpers";
 
 const renderJson = (json: any) => {
-  if (Array.isArray(json)) {
+  if (!json) {
+      return <span>Null</span>
+  }
+    if (Array.isArray(json)) {
     if (json.length == 32) {
       return <span className="string">"{toHexString(json)}"</span>;
     }
