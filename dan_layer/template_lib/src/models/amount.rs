@@ -30,12 +30,15 @@ use tari_template_abi::rust::{
     num::TryFromIntError,
 };
 
+use super::BinaryTag;
+const TAG: u64 = BinaryTag::Amount as u64;
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
-pub struct Amount(pub Required<i64, 1>);
+pub struct Amount(pub Required<i64, TAG>);
 
 impl Amount {
     pub const fn new(amount: i64) -> Self {
-        Amount(Required::<i64, 1>(amount))
+        Amount(Required::<i64, TAG>(amount))
     }
 
     pub const fn zero() -> Self {
@@ -236,6 +239,6 @@ mod tests {
     fn can_serialize() {
         let a = Amount::new(4);
         let b = serde_json::to_string(&a).unwrap();
-        assert_eq!(b, "{\"@@TAGGED@@\":[1,4]}");
+        assert_eq!(b, "{\"@@TAGGED@@\":[0,4]}");
     }
 }

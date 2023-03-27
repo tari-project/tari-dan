@@ -28,14 +28,17 @@ use std::{
 use ciborium::tag::Required;
 use serde::{Deserialize, Serialize};
 
+use super::BinaryTag;
 use crate::{hash::HashParseError, models::TemplateAddress, prelude::AccessRules, Hash};
 
+const TAG: u64 = BinaryTag::ComponentAddress as u64;
+
 #[derive(Debug, Clone, Copy, Hash, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
-pub struct ComponentAddress(Required<Hash, 2>);
+pub struct ComponentAddress(Required<Hash, TAG>);
 
 impl ComponentAddress {
     pub const fn new(address: Hash) -> Self {
-        Self(Required::<Hash, 2>(address))
+        Self(Required::<Hash, TAG>(address))
     }
 
     pub fn hash(&self) -> &Hash {
