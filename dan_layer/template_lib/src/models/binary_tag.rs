@@ -23,4 +23,5 @@
 pub enum BinaryTag {
     Amount = 0,
     ComponentAddress = 1,
+    Metadata = 2,
 }

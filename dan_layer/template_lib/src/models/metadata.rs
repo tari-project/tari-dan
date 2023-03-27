@@ -22,28 +22,34 @@
 
 use std::collections::HashMap;
 
+use ciborium::tag::Required;
 use serde::{Deserialize, Serialize};
 
-#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
-pub struct Metadata {
-    metadata: HashMap<String, String>,
-}
+use super::BinaryTag;
+const TAG: u64 = BinaryTag::Metadata as u64;
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct Metadata(Required<HashMap<String, String>, TAG>);
 
 impl Metadata {
     pub fn new() -> Self {
-        Self {
-            metadata: HashMap::new(),
-        }
+        Self(Required::<HashMap<String, String>, TAG>(HashMap::new()))
     }
 
     pub fn insert<K: Into<String>, V: Into<String>>(&mut self, key: K, value: V) -> &mut Self {
         let key = key.into();
         let value = value.into();
-        self.metadata.insert(key, value);
+        self.0 .0.insert(key, value);
         self
     }
 
     pub fn get(&self, key: &str) -> Option<&str> {
-        self.metadata.get(key).map(|v| v.as_str())
+        self.0 .0.get(key).map(|v| v.as_str())
+    }
+}
+
+impl Default for Metadata {
+    fn default() -> Self {
+        Self::new()
     }
 }
