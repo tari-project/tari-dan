@@ -20,7 +20,9 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use newtype_ops::newtype_ops;
+use core::ops::{Add, AddAssign, Div, Mul, Sub, SubAssign};
+
+use ciborium::tag::Required;
 use serde::{Deserialize, Serialize};
 use tari_template_abi::rust::{
     fmt::{Display, Formatter},
@@ -28,25 +30,24 @@ use tari_template_abi::rust::{
     num::TryFromIntError,
 };
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize, Default)]
-#[serde(transparent)]
-pub struct Amount(pub i64);
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+pub struct Amount(pub Required<i64, 1>);
 
 impl Amount {
     pub const fn new(amount: i64) -> Self {
-        Amount(amount)
+        Amount(Required::<i64, 1>(amount))
     }
 
     pub const fn zero() -> Self {
-        Amount(0)
+        Amount::new(0)
     }
 
     pub fn is_zero(&self) -> bool {
-        self.0 == 0
+        self.0 .0 == 0
     }
 
     pub fn is_positive(&self) -> bool {
-        self.0 >= 0
+        self.0 .0 >= 0
     }
 
     pub fn is_negative(&self) -> bool {
@@ -54,23 +55,23 @@ impl Amount {
     }
 
     pub fn value(&self) -> i64 {
-        self.0
+        self.0 .0
     }
 
     pub fn checked_add(&self, other: &Self) -> Option<Self> {
-        self.0.checked_add(other.0).map(Amount)
+        self.0 .0.checked_add(other.0 .0).map(Amount::new)
     }
 
     pub fn saturating_add(&self, other: &Self) -> Self {
-        Amount(self.0.saturating_add(other.0))
+        Amount::new(self.0 .0.saturating_add(other.0 .0))
     }
 
     pub fn checked_sub(&self, other: Self) -> Option<Self> {
-        self.0.checked_sub(other.0).map(Amount)
+        self.0 .0.checked_sub(other.0 .0).map(Amount::new)
     }
 
     pub fn saturating_sub(&self, other: Self) -> Self {
-        Amount(self.0.saturating_sub(other.0))
+        Amount::new(self.0 .0.saturating_sub(other.0 .0))
     }
 
     pub fn checked_sub_positive(&self, other: Self) -> Option<Self> {
@@ -81,27 +82,33 @@ impl Amount {
             return None;
         }
 
-        Some(Amount(self.0 - other.0))
+        Some(Amount::new(self.0 .0 - other.0 .0))
     }
 
     pub fn checked_mul(&self, other: &Self) -> Option<Self> {
-        self.0.checked_mul(other.0).map(Amount)
+        self.0 .0.checked_mul(other.0 .0).map(Amount::new)
     }
 
     pub fn saturating_mul(&self, other: &Self) -> Self {
-        Amount(self.0.saturating_mul(other.0))
+        Amount::new(self.0 .0.saturating_mul(other.0 .0))
     }
 
     pub fn checked_div(&self, other: &Self) -> Option<Self> {
-        self.0.checked_div(other.0).map(Amount)
+        self.0 .0.checked_div(other.0 .0).map(Amount::new)
     }
 
     pub fn saturating_div(&self, other: &Self) -> Self {
-        Amount(self.0.saturating_div(other.0))
+        Amount::new(self.0 .0.saturating_div(other.0 .0))
     }
 
     pub fn as_u64_checked(&self) -> Option<u64> {
-        self.0.try_into().ok()
+        self.0 .0.try_into().ok()
+    }
+}
+
+impl Default for Amount {
+    fn default() -> Self {
+        Self::new(0)
     }
 }
 
@@ -109,7 +116,7 @@ impl TryFrom<u64> for Amount {
     type Error = TryFromIntError;
 
     fn try_from(value: u64) -> Result<Self, Self::Error> {
-        Ok(Amount(i64::try_from(value)?))
+        Ok(Amount::new(i64::try_from(value)?))
     }
 }
 
@@ -137,17 +144,61 @@ impl From<i64> for Amount {
     }
 }
 
-newtype_ops! { [Amount] {add sub mul div} {:=} Self Self }
-newtype_ops! { [Amount] {add sub mul div} {:=} &Self &Self }
-newtype_ops! { [Amount] {add sub mul div} {:=} Self &Self }
+// newtype_ops! { [Amount] {add sub mul div} {:=} Self Self }
+// newtype_ops! { [Amount] {add sub mul div} {:=} &Self &Self }
+// newtype_ops! { [Amount] {add sub mul div} {:=} Self &Self }
+//
+// newtype_ops! { [Amount] {add sub mul div} {:=} Self i64 }
+// newtype_ops! { [Amount] {add sub mul div} {:=} &Self &i64 }
+// newtype_ops! { [Amount] {add sub mul div} {:=} Self &i64 }
 
-newtype_ops! { [Amount] {add sub mul div} {:=} Self i64 }
-newtype_ops! { [Amount] {add sub mul div} {:=} &Self &i64 }
-newtype_ops! { [Amount] {add sub mul div} {:=} Self &i64 }
+impl Add for Amount {
+    type Output = Self;
+
+    fn add(self, other: Self) -> Self {
+        Self::new(self.0 .0 + other.0 .0)
+    }
+}
+
+impl Sub for Amount {
+    type Output = Self;
+
+    fn sub(self, other: Self) -> Self::Output {
+        Self::new(self.0 .0 - other.0 .0)
+    }
+}
+
+impl Mul for Amount {
+    type Output = Self;
+
+    fn mul(self, other: Self) -> Self {
+        Self::new(self.0 .0 * other.0 .0)
+    }
+}
+
+impl Div for Amount {
+    type Output = Self;
+
+    fn div(self, other: Self) -> Self {
+        Self::new(self.0 .0 / other.0 .0)
+    }
+}
+
+impl AddAssign for Amount {
+    fn add_assign(&mut self, other: Amount) {
+        self.0 .0 += other.0 .0;
+    }
+}
+
+impl SubAssign for Amount {
+    fn sub_assign(&mut self, other: Amount) {
+        self.0 .0 -= other.0 .0;
+    }
+}
 
 impl PartialEq<i64> for Amount {
     fn eq(&self, other: &i64) -> bool {
-        self.0 == *other
+        self.0 .0 == *other
     }
 }
 
@@ -159,7 +210,7 @@ impl Sum for Amount {
 
 impl Display for Amount {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.0)
+        write!(f, "{}", self.0 .0)
     }
 }
 
@@ -185,6 +236,6 @@ mod tests {
     fn can_serialize() {
         let a = Amount::new(4);
         let b = serde_json::to_string(&a).unwrap();
-        assert_eq!(b, "4");
+        assert_eq!(b, "{\"@@TAGGED@@\":[1,4]}");
     }
 }

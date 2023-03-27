@@ -167,7 +167,13 @@ impl StateTracker {
                     );
                     let mut token_ids = BTreeSet::new();
                     let resource = state.get_resource(&resource_address)?;
-                    let mut index = resource.total_supply().0 as u64;
+                    let mut index = resource
+                        .total_supply()
+                        .as_u64_checked()
+                        .ok_or(RuntimeError::InvalidAmount {
+                            amount: resource.total_supply(),
+                            reason: "Could not convert to u64".to_owned(),
+                        })?;
                     for (id, (data, mut_data)) in tokens {
                         let nft_address = NonFungibleAddress::new(resource_address, id.clone());
                         if state.get_non_fungible(&nft_address).optional()?.is_some() {
@@ -545,7 +551,8 @@ impl StateTracker {
             .map(|(resx, _)| resx.amount())
             .sum::<Amount>();
 
-        let mut fee_resource = ResourceContainer::confidential(CONFIDENTIAL_TARI_RESOURCE_ADDRESS, None, Amount(0));
+        let mut fee_resource =
+            ResourceContainer::confidential(CONFIDENTIAL_TARI_RESOURCE_ADDRESS, None, Amount::zero());
 
         // Collect the fee
         let mut remaining_fees = total_fees;
