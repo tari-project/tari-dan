@@ -26,4 +26,5 @@ pub enum BinaryTag {
     Metadata = 2,
     NonFungibleAddress = 3,
     ResourceAddress = 4,
+    VaultId = 5,
 }
