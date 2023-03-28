@@ -28,7 +28,7 @@ use tokio::sync::{broadcast, broadcast::error::RecvError, mpsc, oneshot};
 use crate::p2p::services::mempool::MempoolError;
 
 pub enum MempoolRequest {
-    SubmitTransaction(Box<Transaction>),
+    SubmitTransaction(Box<Transaction>, oneshot::Sender<Result<(), MempoolError>>),
     RemoveTransaction { transaction_hash: Hash },
     GetMempoolSize { reply: oneshot::Sender<usize> },
 }
@@ -60,10 +60,11 @@ impl MempoolHandle {
     }
 
     pub async fn submit_transaction(&self, transaction: Transaction) -> Result<(), MempoolError> {
+        let (tx, rx) = oneshot::channel();
         self.tx_mempool_request
-            .send(MempoolRequest::SubmitTransaction(Box::new(transaction)))
+            .send(MempoolRequest::SubmitTransaction(Box::new(transaction), tx))
             .await?;
-        Ok(())
+        rx.await?
     }
 
     pub async fn remove_transaction(&self, transaction_hash: Hash) -> Result<(), MempoolError> {

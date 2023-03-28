@@ -54,7 +54,7 @@ impl Transaction {
                 item: "status",
                 details: e.to_string(),
             })?,
-            result: self.result.map(|r| deserialize_json(&r)).transpose()?,
+            finalize: self.result.map(|r| deserialize_json(&r)).transpose()?,
             transaction_failure: self.transaction_failure.map(|r| deserialize_json(&r)).transpose()?,
             final_fee: self.final_fee.map(|f| f.into()),
             qcs: self.qcs.map(|q| deserialize_json(&q)).transpose()?.unwrap_or_default(),

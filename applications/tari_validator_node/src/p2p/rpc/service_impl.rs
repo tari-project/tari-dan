@@ -78,22 +78,18 @@ where TPeerProvider: PeerProvider + Clone + Send + Sync + 'static
             },
         };
 
-        // TODO: Implement a mempool handle that returns if the transaction was accepted or not
         match self.mempool.submit_transaction(transaction).await {
             Ok(_) => {
                 debug!(target: LOG_TARGET, "Accepted instruction into mempool");
-                return Ok(Response::new(proto::rpc::SubmitTransactionResponse {
+                Ok(Response::new(proto::rpc::SubmitTransactionResponse {
                     result: vec![],
                     status: "Accepted".to_string(),
-                }));
+                }))
             },
-            Err(_err) => {
-                // debug!(target: LOG_TARGET, "Mempool rejected instruction: {}", err);
-                return Ok(Response::new(proto::rpc::SubmitTransactionResponse {
-                    result: vec![],
-                    status: "Mempool has shut down".to_string(),
-                }));
-            },
+            Err(err) => Ok(Response::new(proto::rpc::SubmitTransactionResponse {
+                result: vec![],
+                status: format!("Failed to submit transaction to mempool: {}", err),
+            })),
         }
     }
 
