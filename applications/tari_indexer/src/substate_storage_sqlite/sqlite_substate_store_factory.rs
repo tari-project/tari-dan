@@ -371,7 +371,7 @@ impl SubstateStoreWriteTransaction for SqliteSubstateStoreWriteTransaction<'_> {
     fn add_non_fungible_index(&mut self, new_nft_index: NewNonFungibleIndex) -> Result<(), StorageError> {
         use crate::substate_storage_sqlite::schema::non_fungible_indexes;
 
-        diesel::insert_into(non_fungible_indexes::table)
+        diesel::insert_or_ignore_into(non_fungible_indexes::table)
             .values(&new_nft_index)
             .execute(&mut *self.connection())
             .map_err(|e| StorageError::QueryError {
