@@ -18,14 +18,14 @@ fn main() {
     let mut account = global!["account"];
 
     // initialize a user account with some faucet funds
-    let funds = faucet.take_free_coins(Amount(1_000));
+    let funds = faucet.take_free_coins(Amount::new(1_000));
     account.deposit(funds);
 
     // TODO: XTR builtin
     let XTR = global!["xtr_resource"];
 
     // buy a picture
-    let bucket = account.withdraw(XTR, 1_000u64);
+    let bucket = account.withdraw(XTR, Amount::new(1_000));
     let picture = picture_seller.buy(bucket);
 
     // store our brand new picture in our account

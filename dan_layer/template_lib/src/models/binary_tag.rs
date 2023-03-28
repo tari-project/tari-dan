@@ -1,4 +1,4 @@
-//   Copyright 2022. The Tari Project
+//   Copyright 2023. The Tari Project
 //
 //   Redistribution and use in source and binary forms, with or without modification, are permitted provided that the
 //   following conditions are met:
@@ -20,41 +20,11 @@
 //   WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //   USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use tari_template_lib::prelude::*;
-
-#[template]
-mod faucet_template {
-    use super::*;
-
-    pub struct ConfidentialFaucet {
-        vault: Vault,
-    }
-
-    impl ConfidentialFaucet {
-        pub fn mint(confidential_proof: ConfidentialOutputProof) -> Self {
-            let coins = ResourceBuilder::confidential()
-                .with_token_symbol("🪙")
-                .initial_supply(confidential_proof)
-                .build_bucket();
-
-            Self {
-                vault: Vault::from_bucket(coins),
-            }
-        }
-
-        pub fn take_free_coins(&mut self, proof: ConfidentialWithdrawProof) -> Bucket {
-            // let proof = engine().create_confidential_proof(partial_proof, Amount::new(1000));
-            debug("Withdrawing <unknown> coins from faucet");
-            self.vault.withdraw_confidential(proof)
-        }
-
-        pub fn total_supply(&self) -> Amount {
-            ResourceManager::get(self.vault.resource_address()).total_supply()
-        }
-
-        /// Utility function for tests
-        pub fn split_coins(bucket: Bucket, proof: ConfidentialWithdrawProof) -> (Bucket, Bucket) {
-            bucket.split_confidential(proof)
-        }
-    }
+pub enum BinaryTag {
+    Amount = 0,
+    ComponentAddress = 1,
+    Metadata = 2,
+    NonFungibleAddress = 3,
+    ResourceAddress = 4,
+    VaultId = 5,
 }

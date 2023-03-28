@@ -49,7 +49,7 @@ impl Vault {
             })?,
             resource_type: db_str_to_resource_type(&self.resource_type)?,
             token_symbol: self.token_symbol,
-            balance: Amount(self.balance),
+            balance: Amount::new(self.balance),
         })
     }
 }
