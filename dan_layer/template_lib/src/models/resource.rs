@@ -20,6 +20,7 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+use ciborium::tag::Required;
 use serde::{Deserialize, Serialize};
 use tari_template_abi::rust::{
     fmt,
@@ -27,19 +28,21 @@ use tari_template_abi::rust::{
     str::FromStr,
 };
 
+use super::BinaryTag;
 use crate::{hash::HashParseError, Hash};
 
+const TAG: u64 = BinaryTag::ResourceAddress as u64;
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
-#[serde(transparent)]
-pub struct ResourceAddress(Hash);
+pub struct ResourceAddress(Required<Hash, TAG>);
 
 impl ResourceAddress {
     pub const fn new(address: Hash) -> Self {
-        Self(address)
+        Self(Required::<Hash, TAG>(address))
     }
 
     pub fn hash(&self) -> &Hash {
-        &self.0
+        &self.0 .0
     }
 
     pub fn from_hex(hex: &str) -> Result<Self, HashParseError> {
@@ -70,6 +73,6 @@ impl<T: Into<Hash>> From<T> for ResourceAddress {
 
 impl Display for ResourceAddress {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        write!(f, "resource_{}", self.0)
+        write!(f, "resource_{}", self.0 .0)
     }
 }

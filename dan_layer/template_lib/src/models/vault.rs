@@ -20,6 +20,7 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+use ciborium::tag::Required;
 use serde::{Deserialize, Serialize};
 use tari_template_abi::{
     call_engine,
@@ -30,6 +31,7 @@ use tari_template_abi::{
     EngineOp,
 };
 
+use super::BinaryTag;
 use crate::{
     args::{ConfidentialRevealArg, InvokeResult, PayFeeArg, VaultAction, VaultInvokeArg, VaultWithdrawArg},
     hash::HashParseError,
@@ -37,17 +39,18 @@ use crate::{
     Hash,
 };
 
+const TAG: u64 = BinaryTag::VaultId as u64;
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
-#[serde(transparent)]
-pub struct VaultId(Hash);
+pub struct VaultId(Required<Hash, TAG>);
 
 impl VaultId {
     pub fn new(address: Hash) -> Self {
-        Self(address)
+        Self(Required::<Hash, TAG>(address))
     }
 
     pub fn hash(&self) -> &Hash {
-        &self.0
+        &self.0 .0
     }
 
     pub fn from_hex(hex: &str) -> Result<Self, HashParseError> {
@@ -64,7 +67,7 @@ impl From<Hash> for VaultId {
 
 impl Display for VaultId {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        write!(f, "vault_{}", self.0)
+        write!(f, "vault_{}", self.0 .0)
     }
 }
 

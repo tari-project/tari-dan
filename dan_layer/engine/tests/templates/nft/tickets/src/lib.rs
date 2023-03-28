@@ -80,7 +80,7 @@ mod tickets {
             self.earnings.deposit(payment);
 
             // no need to manually check that the tickes are all sold out, as the withdraw operation will fail automatically
-            let ticket_bucket = self.tickets.withdraw(Amount(1));
+            let ticket_bucket = self.tickets.withdraw(Amount::new(1));
 
             ticket_bucket
         }

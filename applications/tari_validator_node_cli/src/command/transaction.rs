@@ -597,6 +597,7 @@ pub enum CliArg {
     I16(i16),
     I8(i8),
     Bool(bool),
+    Amount(i64),
     NonFungibleId(NonFungibleId),
     SubstateAddress(SubstateAddress),
 }
@@ -650,6 +651,21 @@ impl FromStr for CliArg {
                 },
             }
         }
+
+        if let Some(("amount", amount)) = s.split_once('_') {
+            match amount.parse::<i64>() {
+                Ok(number) => {
+                    return Ok(CliArg::Amount(number));
+                },
+                Err(e) => {
+                    eprintln!(
+                        "WARN: '{}' is not a valid Amount ({:?}) and will be interpreted as a string",
+                        s, e
+                    );
+                },
+            }
+        }
+
         Ok(CliArg::String(s.to_string()))
     }
 }
@@ -669,6 +685,7 @@ impl CliArg {
             CliArg::Bool(v) => arg!(v),
             CliArg::SubstateAddress(v) => arg!(v.to_canonical_hash()),
             CliArg::NonFungibleId(v) => arg!(v),
+            CliArg::Amount(v) => arg!(Amount::new(v)),
         }
     }
 }

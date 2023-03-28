@@ -26,6 +26,9 @@ pub use non_fungible_index::NonFungibleIndexAddress;
 mod amount;
 pub use amount::Amount;
 
+mod binary_tag;
+pub use binary_tag::BinaryTag;
+
 mod bucket;
 pub use bucket::{Bucket, BucketId};
 
