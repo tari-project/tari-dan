@@ -1728,8 +1728,6 @@ where
             return Ok(exec_result);
         }
 
-        dbg!(&exec_result);
-
         if let Some(ref fee) = exec_result.fee_receipt {
             if !fee.is_paid_in_full() {
                 warn!(
