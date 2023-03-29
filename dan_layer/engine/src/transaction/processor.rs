@@ -145,7 +145,8 @@ impl TransactionProcessor {
         match instruction_result {
             Ok(execution_results) => {
                 let (mut finalize, fee_receipt) = runtime.interface().finalize()?;
-                if !fee_receipt.is_paid_in_full() && fee_receipt.unpaid_debt() > self.fee_loan {
+
+                if !fee_receipt.is_paid_in_full() && fee_receipt.total_fees_charged() > self.fee_loan {
                     return Ok(ExecuteResult {
                         finalize,
                         transaction_failure: Some(RejectReason::FeesNotPaid(format!(

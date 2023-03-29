@@ -371,6 +371,9 @@ fn summarize(result: &TransactionFinalizeResult, time_taken: Duration) {
     println!();
     println!("Time taken: {:?}", time_taken);
     println!();
+    if let Some(tx_failure) = &result.transaction_failure {
+        println!("Transaction failure: {:?}", tx_failure);
+    }
     println!("OVERALL DECISION: {:?}", result.decision);
 }
 

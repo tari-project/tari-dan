@@ -26,4 +26,12 @@ pub use handlers::JsonRpcHandlers;
 mod jrpc_errors;
 mod server;
 
+use serde::Serialize;
 pub use server::spawn_json_rpc;
+use tari_dan_core::models::{SQLTransaction, TariDanPayload};
+
+#[derive(Debug, Serialize)]
+pub struct JsonTransactionResult {
+    pub payload: TariDanPayload,
+    pub nodes: Vec<SQLTransaction>,
+}
