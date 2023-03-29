@@ -21,7 +21,10 @@
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 use anyhow::Context;
-use tari_engine_types::substate::{Substate, SubstateValue};
+use tari_engine_types::{
+    non_fungible::NonFungibleContainer,
+    substate::{Substate, SubstateValue},
+};
 
 pub type JsonValue = serde_json::Value;
 pub type JsonObject = serde_json::Map<String, JsonValue>;
@@ -32,23 +35,38 @@ pub fn decode_substate_into_json(substate: &Substate) -> Result<JsonValue, anyho
     let mut result = serde_json::to_value(substate_cbor)?;
 
     let substate_field = get_mut_json_field(&mut result, "substate")?;
-    if let SubstateValue::NonFungible(s) = substate.substate_value() {
-        if let Some(nf) = s.contents() {
-            // let non_fungible_field = substate_field.as_object_mut().context("invalid field")?;
-            let non_fungible_field = get_mut_json_field(substate_field, "NonFungible")?;
-            let non_fungible_object = json_value_as_object(non_fungible_field)?;
-
-            let data = decode_into_cbor(nf.data())?;
-            let data_json = serde_json::to_value(data)?;
-            non_fungible_object.insert("data".to_owned(), data_json);
-
-            let mutable_data = decode_into_cbor(nf.mutable_data())?;
-            let mutable_data_json = serde_json::to_value(mutable_data)?;
-            non_fungible_object.insert("mutable_data".to_owned(), mutable_data_json);
-        }
+    if let SubstateValue::NonFungible(nf_container) = substate.substate_value() {
+        decode_non_fungible_into_json(nf_container, substate_field)?;
     }
 
     Ok(result)
+}
+
+fn decode_non_fungible_into_json(
+    nf_container: &NonFungibleContainer,
+    substate_json_field: &mut JsonValue,
+) -> Result<(), anyhow::Error> {
+    if let Some(nf) = nf_container.contents() {
+        let non_fungible_field = get_mut_json_field(substate_json_field, "NonFungible")?;
+        let non_fungible_object = json_value_as_object(non_fungible_field)?;
+
+        decode_cbor_field_into_json(nf.data(), non_fungible_object, "data")?;
+        decode_cbor_field_into_json(nf.mutable_data(), non_fungible_object, "mutable_data")?;
+    }
+
+    Ok(())
+}
+
+fn decode_cbor_field_into_json(
+    bytes: &[u8],
+    parent_object: &mut JsonObject,
+    field_name: &str,
+) -> Result<(), anyhow::Error> {
+    let cbor_value = decode_into_cbor(bytes)?;
+    let json_value = serde_json::to_value(cbor_value)?;
+    parent_object.insert(field_name.to_owned(), json_value);
+
+    Ok(())
 }
 
 fn get_mut_json_field<'a>(value: &'a mut JsonValue, field_name: &str) -> Result<&'a mut JsonValue, anyhow::Error> {
