@@ -60,7 +60,13 @@ Feature: Indexer node
     # Initialize an indexer
     Given an indexer IDX connected to base node BASE
 
-    # Explicitly track the NFT resource so the indexer tries to get all individual NFTs
+    # Track a component
+    When the indexer IDX tracks the address ACC1/components/Account
+
+    # Track a vault
+    When the indexer IDX tracks the address TX2/vaults/0
+
+    # Track the NFT resource so the indexer tries to get all individual NFTs
     When the indexer IDX tracks the address NFT/resources/0
 
     # The indexer needs a bit of time to track and store all NFTs of a resource
@@ -78,5 +84,5 @@ Feature: Indexer node
     # List the nfts of a resource
     Then the indexer IDX returns 2 non fungibles for resource NFT/resources/0
     
-    # When I print the cucumber world
+    # When I print the cucumber world
     # When I wait 5000 seconds

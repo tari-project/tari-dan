@@ -215,9 +215,16 @@ fn store_substate_in_db(
     address: &SubstateAddress,
     substate: &Substate,
 ) -> Result<(), anyhow::Error> {
-    let substate_json = decode_substate_into_json(substate)?;
-    let substate_json_string = serde_json::to_string_pretty(&substate_json)?;
-    info!(target: LOG_TARGET, "store_substate_in_db: {}", substate_json_string,);
+    info!(target: LOG_TARGET, "store_substate_in_db");
+    match decode_substate_into_json(substate) {
+        Ok(json) => {
+            let substate_json_string = serde_json::to_string_pretty(&json)?;
+            info!(target: LOG_TARGET, "store_substate_in_db: {}", substate_json_string,);
+        },
+        Err(err) => {
+            log::error!(target: LOG_TARGET, "{}", err.to_string());
+        },
+    }
 
     let substate_row = map_substate_to_db_row(address, substate)?;
     tx.set_substate(substate_row)?;

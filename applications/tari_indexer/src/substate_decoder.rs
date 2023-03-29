@@ -25,6 +25,7 @@ use tari_engine_types::{
     non_fungible::NonFungibleContainer,
     substate::{Substate, SubstateValue},
 };
+use tari_template_lib::models::ComponentHeader;
 
 pub type JsonValue = serde_json::Value;
 pub type JsonObject = serde_json::Map<String, JsonValue>;
@@ -35,8 +36,14 @@ pub fn decode_substate_into_json(substate: &Substate) -> Result<JsonValue, anyho
     let mut result = serde_json::to_value(substate_cbor)?;
 
     let substate_field = get_mut_json_field(&mut result, "substate")?;
-    if let SubstateValue::NonFungible(nf_container) = substate.substate_value() {
-        decode_non_fungible_into_json(nf_container, substate_field)?;
+    match substate.substate_value() {
+        SubstateValue::NonFungible(nf_container) => {
+            decode_non_fungible_into_json(nf_container, substate_field)?;
+        },
+        SubstateValue::Component(header) => {
+            decode_component_into_json(header, substate_field)?;
+        },
+        _ => {},
     }
 
     Ok(result)
@@ -57,16 +64,71 @@ fn decode_non_fungible_into_json(
     Ok(())
 }
 
+fn decode_component_into_json(
+    header: &ComponentHeader,
+    substate_json_field: &mut JsonValue,
+) -> Result<(), anyhow::Error> {
+    let component_field = get_mut_json_field(substate_json_field, "Component")?;
+    let component_object = json_value_as_object(component_field)?;
+    decode_cbor_field_into_json(header.state(), component_object, "state")?;
+
+    Ok(())
+}
+
 fn decode_cbor_field_into_json(
     bytes: &[u8],
     parent_object: &mut JsonObject,
     field_name: &str,
 ) -> Result<(), anyhow::Error> {
     let cbor_value = decode_into_cbor(bytes)?;
+    let cbor_value = fix_invalid_object_keys(&cbor_value);
     let json_value = serde_json::to_value(cbor_value)?;
     parent_object.insert(field_name.to_owned(), json_value);
 
     Ok(())
+}
+
+// In JSON, all object keys must be string values.
+// But ciborium sometimes will use other types (e.g. Tags) as keys,
+// so in that case we transform the object into an array so it can be safely converted to JSON
+// AND we need to to it recursively
+fn fix_invalid_object_keys(value: &CborValue) -> CborValue {
+    match value {
+        ciborium::value::Value::Tag(tag, content) => {
+            let fixed_content = fix_invalid_object_keys(content);
+            ciborium::value::Value::Tag(*tag, Box::new(fixed_content))
+        },
+        ciborium::value::Value::Array(arr) => {
+            let fixed_items = arr.iter().map(fix_invalid_object_keys).collect();
+            ciborium::value::Value::Array(fixed_items)
+        },
+        ciborium::value::Value::Map(map) => {
+            let has_invalid_keys = map.iter().any(|(k, _)| !k.is_text());
+
+            if has_invalid_keys {
+                let map_entries_as_arrays = map
+                    .iter()
+                    .map(|(k, v)| {
+                        let fixed_key = fix_invalid_object_keys(k);
+                        let fixed_value = fix_invalid_object_keys(v);
+                        ciborium::value::Value::Array(vec![fixed_key, fixed_value])
+                    })
+                    .collect();
+                return ciborium::value::Value::Array(map_entries_as_arrays);
+            }
+
+            let fixed_entries = map
+                .iter()
+                .map(|(k, v)| {
+                    let fixed_value = fix_invalid_object_keys(v);
+                    (k.to_owned(), fixed_value)
+                })
+                .collect();
+            ciborium::value::Value::Map(fixed_entries)
+        },
+        // other types are atomic and do not cause problems, so we just return them directly
+        _ => value.to_owned(),
+    }
 }
 
 fn get_mut_json_field<'a>(value: &'a mut JsonValue, field_name: &str) -> Result<&'a mut JsonValue, anyhow::Error> {
