@@ -40,6 +40,8 @@ async-trait = "0.1.50"
 axum = "0.6.0"
 axum-jrpc = { version = "0.3.2", features = ["anyhow_error"] }
 chrono = "0.4.22"
+ciborium = { version = "0.2.0" }
+ciborium-io = { version = "0.2.0" }
 clap = { version = "3.2.22", features = ["derive", "env"] }
 config = "0.13.0"
 diesel = { version = "2", default-features = false, features = ["sqlite", "chrono"] }

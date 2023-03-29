@@ -33,6 +33,7 @@ mod dan_layer_scanner;
 mod http_ui;
 mod json_rpc;
 mod p2p;
+mod substate_decoder;
 mod substate_manager;
 mod substate_storage_sqlite;
 

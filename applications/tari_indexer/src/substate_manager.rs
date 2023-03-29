@@ -28,6 +28,7 @@ use tari_engine_types::substate::{Substate, SubstateAddress};
 
 use crate::{
     dan_layer_scanner::{DanLayerScanner, NonFungible},
+    substate_decoder::decode_substate_into_json,
     substate_storage_sqlite::{
         models::{
             non_fungible_index::{IndexedNftSubstate, NewNonFungibleIndex},
@@ -214,6 +215,10 @@ fn store_substate_in_db(
     address: &SubstateAddress,
     substate: &Substate,
 ) -> Result<(), anyhow::Error> {
+    let substate_json = decode_substate_into_json(substate)?;
+    let substate_json_string = serde_json::to_string_pretty(&substate_json)?;
+    info!(target: LOG_TARGET, "store_substate_in_db: {}", substate_json_string,);
+
     let substate_row = map_substate_to_db_row(address, substate)?;
     tx.set_substate(substate_row)?;
 

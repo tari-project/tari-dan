@@ -6774,6 +6774,8 @@ dependencies = [
  "axum",
  "axum-jrpc",
  "chrono",
+ "ciborium",
+ "ciborium-io",
  "clap 3.2.23",
  "config",
  "diesel",
