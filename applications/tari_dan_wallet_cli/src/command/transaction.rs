@@ -554,6 +554,10 @@ fn summarize(resp: &TransactionWaitResultResponse, time_taken: Duration) {
     println!("Fee: {}", resp.final_fee);
     println!("Time taken: {:?}", time_taken);
     println!();
+    // dbg!(&resp);
+    if let Some(result) = &resp.transaction_failure {
+        println!("Transaction failure: {}", result);
+    }
     if let Some(qc) = resp.qcs.first() {
         println!("OVERALL DECISION: {:?}", qc.decision());
     } else {

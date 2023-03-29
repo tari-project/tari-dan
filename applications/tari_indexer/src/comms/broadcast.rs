@@ -106,7 +106,7 @@ where
             let type_str = msg.as_type_str();
             let bytes = encode_message(&proto::network::DanMessage::from(msg.clone()));
 
-            log::info!(
+            log::debug!(
                 target: LOG_TARGET,
                 "📨 Tx: {} ({} bytes) to {}",
                 type_str,

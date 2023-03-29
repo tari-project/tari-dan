@@ -180,7 +180,7 @@ const [payloadId, substates, outputs, current_leader_states, payload] = useLoade
                           <TableRow key={index}>
                             <TableCell>
                               <Typography>
-                                {key}: {instruction[key].template_address || instruction[key].component_address}:{instruction[key].function || instruction[key].method}
+                                {key}: {instruction[key].template_address || (instruction[key].component_address ?  instruction[key].component_address["@@TAGGED@@"][1]  : "") }:{instruction[key].function || instruction[key].method}
                                 <Collapse in={open1} timeout="auto" unmountOnExit>
                                   <CodeBlock style={{marginBottom: '10px'}}>
                                     <pre>{renderJson(instruction)}</pre>
@@ -227,7 +227,7 @@ const [payloadId, substates, outputs, current_leader_states, payload] = useLoade
                           <TableRow key={index}>
                             <TableCell>
                               <Typography>
-                                {key}: {instruction[key].template_address || instruction[key].component_address}:{ instruction[key].function || instruction[key].method }
+                                {key}: {instruction[key].template_address || (instruction[key].component_address ?  instruction[key].component_address["@@TAGGED@@"][1]  : "")  }:{ instruction[key].function || instruction[key].method }
                                 <Collapse in={open2} timeout="auto" unmountOnExit>
                                   <CodeBlock style={{ marginBottom: '10px' }}>
                                     <pre>{renderJson(instruction)}</pre>

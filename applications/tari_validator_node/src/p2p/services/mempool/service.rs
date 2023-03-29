@@ -162,7 +162,7 @@ where V: Validator<Transaction, Error = MempoolError>
                 transaction.hash()
             );
         } else {
-            info!(target: LOG_TARGET, "🎱 New transaction in mempool");
+            debug!(target: LOG_TARGET, "🎱 New transaction in mempool");
             self.transactions
                 .insert(*transaction.hash(), (transaction.clone(), None));
         }
@@ -176,7 +176,7 @@ where V: Validator<Transaction, Error = MempoolError>
         }
 
         for shard_id in committee_shards {
-            info!(
+            debug!(
                 target: LOG_TARGET,
                 " 🚀 Sending transaction {} for shard {} to consensus",
                 transaction.hash(),

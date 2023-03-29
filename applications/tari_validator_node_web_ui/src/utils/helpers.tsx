@@ -26,7 +26,7 @@ const renderJson = (json: any) => {
   if (!json) {
       return <span>Null</span>
   }
-    if (Array.isArray(json)) {
+  if (Array.isArray(json)) {
     if (json.length == 32) {
       return <span className="string">"{toHexString(json)}"</span>;
     }

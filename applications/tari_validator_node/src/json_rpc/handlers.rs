@@ -165,7 +165,7 @@ impl JsonRpcHandlers {
             wait_for_result,
             wait_for_result_timeout,
         } = value.parse_params()?;
-        info!(
+        debug!(
             target: LOG_TARGET,
             "Transaction {} has involved shards {:?}",
             transaction.hash(),

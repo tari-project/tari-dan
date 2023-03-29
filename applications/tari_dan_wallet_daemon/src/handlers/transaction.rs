@@ -163,6 +163,7 @@ pub async fn handle_wait_result(
             qcs: transaction.qcs,
             final_fee: transaction.final_fee.unwrap_or_default(),
             timed_out: false,
+            transaction_failure: transaction.transaction_failure,
         });
     }
 
@@ -190,6 +191,7 @@ pub async fn handle_wait_result(
                     result: Some(event.finalize),
                     qcs: event.qcs,
                     status: event.status,
+                    transaction_failure: event.transaction_failure,
                     final_fee: event.final_fee,
                     timed_out: false,
                 });
@@ -200,6 +202,7 @@ pub async fn handle_wait_result(
                     result: None,
                     qcs: vec![],
                     status: event.status,
+                    transaction_failure: None,
                     final_fee: event.final_fee,
                     timed_out: false,
                 });
@@ -211,6 +214,7 @@ pub async fn handle_wait_result(
                     result: None,
                     qcs: vec![],
                     status: transaction.status,
+                    transaction_failure: transaction.transaction_failure,
                     final_fee: Amount::zero(),
                     timed_out: true,
                 });
