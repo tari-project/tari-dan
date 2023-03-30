@@ -120,8 +120,8 @@ pub async fn create_transfer_proof(
     let resource_address = CONFIDENTIAL_TARI_RESOURCE_ADDRESS;
 
     let create_transfer_proof_req = ProofsGenerateRequest {
-        amount: Amount(amount.try_into().unwrap()),
-        reveal_amount: Amount(0),
+        amount: Amount::new(amount.try_into().unwrap()),
+        reveal_amount: Amount::new(0_i64),
         source_account_name: source_account_name.clone(),
         resource_address,
         destination_public_key,
