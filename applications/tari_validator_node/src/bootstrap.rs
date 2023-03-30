@@ -338,7 +338,10 @@ where
             shard_id,
             address,
             0,
-            Substate::new(0, Resource::new(ResourceType::NonFungible, Default::default())),
+            Substate::new(
+                0,
+                Resource::new(ResourceType::NonFungible, "ID".to_string(), Default::default()),
+            ),
             NodeHeight(0),
             None,
             TreeNodeHash::zero(),
@@ -356,13 +359,16 @@ where
         // Create the second layer tari resource
         let mut metadata = Metadata::new();
         // TODO: decide on symbol for L2 tari
-        metadata.insert(TOKEN_SYMBOL, "tXTR2".to_string());
+        // metadata.insert(TOKEN_SYMBOL, "tXTR2".to_string());
 
         tx.insert_substates(SubstateShardData::new(
             shard_id,
             address,
             0,
-            Substate::new(0, Resource::new(ResourceType::Confidential, metadata)),
+            Substate::new(
+                0,
+                Resource::new(ResourceType::Confidential, "tXTR2".to_string(), metadata),
+            ),
             NodeHeight(0),
             None,
             TreeNodeHash::zero(),

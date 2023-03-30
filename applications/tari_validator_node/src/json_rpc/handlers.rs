@@ -172,7 +172,7 @@ impl JsonRpcHandlers {
             transaction
                 .meta()
                 .involved_objects_iter()
-                .map(|(s, (ch, _))| format!("{}:{}", s, ch))
+                .map(|(s, ch)| format!("{}:{}", s, ch))
                 .collect::<Vec<_>>()
         );
 

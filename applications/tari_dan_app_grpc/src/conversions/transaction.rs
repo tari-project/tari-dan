@@ -36,7 +36,7 @@ use tari_template_lib::{
     models::{ConfidentialOutputProof, ConfidentialStatement, ConfidentialWithdrawProof, EncryptedValue},
     Hash,
 };
-use tari_transaction::{ObjectClaim, SubstateChange, Transaction, TransactionMeta};
+use tari_transaction::{SubstateChange, Transaction, TransactionMeta};
 
 use crate::{proto, utils::checked_copy_fixed};
 
@@ -257,7 +257,7 @@ impl TryFrom<proto::transaction::TransactionMeta> for TransactionMeta {
             .map(|(a, b)| {
                 let a = a?;
                 let b = b?;
-                Result::<_, anyhow::Error>::Ok((a, (b, ObjectClaim {})))
+                Result::<_, anyhow::Error>::Ok((a, b))
             })
             .collect::<Result<_, _>>()?;
 
@@ -268,7 +268,7 @@ impl TryFrom<proto::transaction::TransactionMeta> for TransactionMeta {
 impl<T: Borrow<TransactionMeta>> From<T> for proto::transaction::TransactionMeta {
     fn from(val: T) -> Self {
         let mut meta = proto::transaction::TransactionMeta::default();
-        for (k, (ch, _)) in val.borrow().involved_objects_iter() {
+        for (k, ch) in val.borrow().involved_objects_iter() {
             meta.involved_shard_ids.push(k.as_bytes().to_vec());
             meta.involved_substates.push(proto::transaction::SubstateRef {
                 change: proto::transaction::SubstateChange::from(*ch) as i32,

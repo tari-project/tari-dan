@@ -39,6 +39,7 @@ use crate::{
         NonFungibleAddress,
         NonFungibleId,
         ResourceAddress,
+        TemplateAddress,
         VaultRef,
     },
     prelude::{AccessRules, ConfidentialOutputProof},
