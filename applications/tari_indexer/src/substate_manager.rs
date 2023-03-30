@@ -28,7 +28,7 @@ use tari_engine_types::substate::{Substate, SubstateAddress};
 
 use crate::{
     dan_layer_scanner::{DanLayerScanner, NonFungible},
-    substate_decoder::decode_substate_into_json,
+    substate_decoder::{decode_substate_into_json, find_related_substates},
     substate_storage_sqlite::{
         models::{
             non_fungible_index::{IndexedNftSubstate, NewNonFungibleIndex},
@@ -220,6 +220,18 @@ fn store_substate_in_db(
         Ok(json) => {
             let substate_json_string = serde_json::to_string_pretty(&json)?;
             info!(target: LOG_TARGET, "store_substate_in_db: {}", substate_json_string,);
+        },
+        Err(err) => {
+            log::error!(target: LOG_TARGET, "{}", err.to_string());
+        },
+    }
+    match find_related_substates(substate) {
+        Ok(addresses) => {
+            let readable_addresses: Vec<String> = addresses.into_iter().map(|a| a.to_address_string()).collect();
+            info!(
+                target: LOG_TARGET,
+                "store_substate_in_db related substates: {:?}", readable_addresses
+            );
         },
         Err(err) => {
             log::error!(target: LOG_TARGET, "{}", err.to_string());

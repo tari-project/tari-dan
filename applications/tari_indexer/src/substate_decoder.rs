@@ -23,9 +23,12 @@
 use anyhow::Context;
 use tari_engine_types::{
     non_fungible::NonFungibleContainer,
-    substate::{Substate, SubstateValue},
+    substate::{Substate, SubstateAddress, SubstateValue},
 };
-use tari_template_lib::models::ComponentHeader;
+use tari_template_lib::{
+    models::{BinaryTag, ComponentHeader, VaultId},
+    prelude::{ComponentAddress, NonFungibleAddress, ResourceAddress},
+};
 
 pub type JsonValue = serde_json::Value;
 pub type JsonObject = serde_json::Map<String, JsonValue>;
@@ -147,4 +150,95 @@ fn json_value_as_object(value: &mut JsonValue) -> Result<&mut JsonObject, anyhow
 
 fn decode_into_cbor(bytes: &[u8]) -> Result<CborValue, anyhow::Error> {
     Ok(ciborium::de::from_reader::<CborValue, _>(bytes)?)
+}
+
+// Recursively scan a substate for references to other substates
+pub fn find_related_substates(substate: &Substate) -> Result<Vec<SubstateAddress>, anyhow::Error> {
+    match substate.substate_value() {
+        SubstateValue::Component(header) => {
+            // a component "state" is encoded using CBOR, so we need to decode and then scan inside for references
+            let cbor_state = decode_into_cbor(header.state())?;
+            let related_substates = find_related_substates_in_cbor_value(&cbor_state)?;
+            Ok(related_substates)
+        },
+        SubstateValue::NonFungible(nf_container) => {
+            let mut related_substates = vec![];
+
+            // both the "data" and "mutable_data" fields are encoded as CBOR and could hold substate references
+            if let Some(nf) = nf_container.contents() {
+                let cbor_data = decode_into_cbor(nf.data())?;
+                related_substates.append(&mut find_related_substates_in_cbor_value(&cbor_data)?);
+
+                let cbor_mutable_data = decode_into_cbor(nf.mutable_data())?;
+                related_substates.append(&mut find_related_substates_in_cbor_value(&cbor_mutable_data)?);
+            }
+
+            Ok(related_substates)
+        },
+        SubstateValue::NonFungibleIndex(index) => {
+            // by definition a non fungible index always holds a reference to a non fungible substate
+            let substate_address = SubstateAddress::NonFungible(index.referenced_address().clone());
+            Ok(vec![substate_address])
+        },
+        // Other types of substates cannot hold references to other substates
+        _ => Ok(vec![]),
+    }
+}
+
+// recursively scan a CBOR value tree for substate references (represented as "tagged" values)
+fn find_related_substates_in_cbor_value(value: &CborValue) -> Result<Vec<SubstateAddress>, anyhow::Error> {
+    match value {
+        ciborium::value::Value::Tag(tag, _) => {
+            if let Some(tag_type) = BinaryTag::from_u64(*tag) {
+                match tag_type {
+                    BinaryTag::ComponentAddress => {
+                        let component_address: ComponentAddress = value.deserialized()?;
+                        let substate_address = SubstateAddress::Component(component_address);
+                        return Ok(vec![substate_address]);
+                    },
+                    BinaryTag::NonFungibleAddress => {
+                        let non_fungible_address: NonFungibleAddress = value.deserialized()?;
+                        let substate_address = SubstateAddress::NonFungible(non_fungible_address);
+                        return Ok(vec![substate_address]);
+                    },
+                    BinaryTag::ResourceAddress => {
+                        let resource_address: ResourceAddress = value.deserialized()?;
+                        let substate_address = SubstateAddress::Resource(resource_address);
+                        return Ok(vec![substate_address]);
+                    },
+                    BinaryTag::VaultId => {
+                        let vault_id: VaultId = value.deserialized()?;
+                        let substate_address = SubstateAddress::Vault(vault_id);
+                        return Ok(vec![substate_address]);
+                    },
+                    // other types of tags do not correspond with any type of addresses
+                    _ => return Ok(vec![]),
+                }
+            }
+            Ok(vec![])
+        },
+        ciborium::value::Value::Array(values) => {
+            // recursively scan all the items in the array
+            let related_substates = find_related_substates_in_cbor_values(values)?;
+            Ok(related_substates)
+        },
+        ciborium::value::Value::Map(values) => {
+            // recursively scan all fields in the map
+            // we need to flatten the vec of value pairs into a vec of values, so it's easier to process
+            let values: Vec<CborValue> = values.iter().flat_map(|(k, v)| vec![k.clone(), v.clone()]).collect();
+            let related_substates = find_related_substates_in_cbor_values(&values)?;
+            Ok(related_substates)
+        },
+        // other types are atomic so they will not contain any related substates
+        _ => Ok(vec![]),
+    }
+}
+
+fn find_related_substates_in_cbor_values(values: &[CborValue]) -> Result<Vec<SubstateAddress>, anyhow::Error> {
+    let related_substates_per_item: Vec<Vec<SubstateAddress>> = values
+        .iter()
+        .map(find_related_substates_in_cbor_value)
+        .collect::<Result<Vec<_>, _>>()?;
+    let related_substates = related_substates_per_item.into_iter().flatten().collect();
+    Ok(related_substates)
 }

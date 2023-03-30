@@ -28,3 +28,17 @@ pub enum BinaryTag {
     ResourceAddress = 4,
     VaultId = 5,
 }
+
+impl BinaryTag {
+    pub fn from_u64(value: u64) -> Option<Self> {
+        match value {
+            0 => Some(Self::Amount),
+            1 => Some(Self::ComponentAddress),
+            2 => Some(Self::Metadata),
+            3 => Some(Self::NonFungibleAddress),
+            4 => Some(Self::ResourceAddress),
+            5 => Some(Self::VaultId),
+            _ => None,
+        }
+    }
+}
