@@ -755,6 +755,7 @@ impl RuntimeInterface for RuntimeInterfaceImpl {
     }
 
     fn reset_to_fee_checkpoint(&self) -> Result<(), RuntimeError> {
+        warn!(target: LOG_TARGET, "Resetting to fee checkpoint");
         self.tracker.reset_to_fee_checkpoint()
     }
 

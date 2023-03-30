@@ -27,7 +27,7 @@ impl TryFrom<Account> for tari_dan_wallet_sdk::models::Account {
         Ok(Self {
             name: account.name,
             address: account.address.parse()?,
-            balance: Amount(account.balance),
+            balance: Amount::new(account.balance),
             key_index: account.owner_key_index as u64,
         })
     }

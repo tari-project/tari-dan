@@ -25,7 +25,7 @@ use tari_common_types::types::{FixedHash, PublicKey};
 use tari_dan_common_types::{serde_with, QuorumCertificate, ShardId};
 use tari_dan_wallet_sdk::models::{Account, ConfidentialProofId, TransactionStatus, VersionedSubstateAddress};
 use tari_engine_types::{
-    commit_result::FinalizeResult,
+    commit_result::{FinalizeResult, RejectReason},
     instruction::Instruction,
     instruction_result::InstructionResult,
     substate::SubstateAddress,
@@ -112,6 +112,7 @@ pub struct TransactionWaitResultResponse {
     pub result: Option<FinalizeResult>,
     pub qcs: Vec<QuorumCertificate>,
     pub status: TransactionStatus,
+    pub transaction_failure: Option<RejectReason>,
     pub final_fee: Amount,
     pub timed_out: bool,
 }

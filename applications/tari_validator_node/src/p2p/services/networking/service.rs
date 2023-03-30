@@ -122,11 +122,11 @@ impl Networking {
     async fn handle_connectivity_event(&self, event: ConnectivityEvent) -> Result<(), NetworkingError> {
         match event {
             ConnectivityEvent::PeerConnected(conn) => {
-                info!(target: LOG_TARGET, "📡 Peer connected: {}", conn);
+                debug!(target: LOG_TARGET, "📡 Peer connected: {}", conn);
                 self.initiate_sync_protocol(conn.as_ref().clone());
             },
             evt => {
-                info!(target: LOG_TARGET, "ℹ️  Network event: {}", evt);
+                debug!(target: LOG_TARGET, "ℹ️  Network event: {}", evt);
             },
         }
         Ok(())

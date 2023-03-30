@@ -127,7 +127,7 @@ where TStore: WalletStore + Clone + Send + Sync + 'static
 
             match maybe_finalized_transaction {
                 Some(transaction) => {
-                    info!(
+                    debug!(
                         target: LOG_TARGET,
                         "Transaction {} has been finalized: {:?}",
                         transaction.transaction.hash(),

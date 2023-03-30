@@ -8,6 +8,7 @@ tari_template_abi = { path = "../template_abi" }
 tari_template_macros = { path = "../template_macros", optional = true }
 tari_bor = { path = "../tari_bor" }
 
+ciborium = { version = "0.2.0", default-features = false }
 newtype-ops = "0.1.4"
 serde = { version = "1.0.143", default-features = false, features = ["derive", "alloc"] }
 serde-big-array = "0.5.1"

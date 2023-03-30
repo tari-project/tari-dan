@@ -72,7 +72,7 @@ fn manifest_smoke_test() {
         Instruction::CallMethod {
             component_address: test_faucet_component,
             method: "take_free_coins".to_string(),
-            args: args![Amount(1_000)],
+            args: args![Amount::new(1_000)],
         },
         Instruction::PutLastInstructionOutputOnWorkspace { key: b"funds".to_vec() },
         Instruction::CallMethod {
@@ -83,7 +83,7 @@ fn manifest_smoke_test() {
         Instruction::CallMethod {
             component_address: account_component,
             method: "withdraw".to_string(),
-            args: args![xtr_resource, Amount(1_000)],
+            args: args![xtr_resource, Amount::new(1_000)],
         },
         Instruction::PutLastInstructionOutputOnWorkspace {
             key: b"bucket".to_vec(),

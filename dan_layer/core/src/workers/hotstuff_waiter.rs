@@ -303,7 +303,7 @@ where
             leader,
             if *leader == self.public_key { " (this node)" } else { "" }
         );
-        info!(
+        debug!(
             target: LOG_TARGET,
             "🔥 Sending NEWVIEW with high qc {} {} to leader",
             new_view.high_qc().unwrap().node_height(),
@@ -355,7 +355,7 @@ where
         payload: TPayload,
     ) -> Result<(), HotStuffError> {
         let payload_id = payload.to_id();
-        info!(
+        debug!(
             target: LOG_TARGET,
             "🔥 Receive NEWVIEW for payload {}, shard {} and height {}",
             payload_id,
@@ -436,7 +436,7 @@ where
                 high_qc,
             );
 
-            info!(
+            debug!(
                 target: LOG_TARGET,
                 "🌿 PROPOSING new leaf node {} {} in phase {:?} ({}) for payload {} shard {}",
                 leaf_node.height(),
@@ -469,7 +469,7 @@ where
         node: HotStuffTreeNode<TAddr, TPayload>,
     ) -> Result<(), HotStuffError> {
         let payload_id = node.payload_id();
-        info!(
+        debug!(
             target: LOG_TARGET,
             "🔥 Receive PROPOSAL for payload {}, shard {}, height {}, payload phase {:?}, hash {} from {}",
             payload_id,
@@ -709,7 +709,7 @@ where
         let payload = match self.shard_store.create_read_tx()?.get_payload(&payload_id).optional()? {
             Some(payload) => payload,
             None => {
-                info!(
+                warn!(
                     target: LOG_TARGET,
                     "Payload = {} is missing from node shard store", payload_id
                 );
@@ -725,7 +725,7 @@ where
 
         // if `from` doesn't belong to any shard involved in processing the current payload, we should ignore it
         if local_shards.is_empty() {
-            info!(
+            warn!(
                 target: LOG_TARGET,
                 "Missing proposal sent by node = {} which is not processing current payload = {}", from, payload_id
             );
@@ -744,7 +744,7 @@ where
             );
             let committee = self.epoch_manager.get_committee(epoch, shard_id).await?;
             if !committee.contains(&self.public_key) {
-                info!(
+                warn!(
                     target: LOG_TARGET,
                     "Current node with public key = {} is not involved in processing payload = {}",
                     self.public_key,
@@ -1019,7 +1019,7 @@ where
                         // If the substate was pledged to a different payload, we didn't pledge for this payload so the pledge may not exist
                         .optional()
                 })?;
-                info!(
+                warn!(
                     target: LOG_TARGET,
                     "🔥 Skipping PRECOMMIT REJECT vote on node {} for payload {}, shard {}",
                     node.hash(),
@@ -1098,7 +1098,7 @@ where
                     ),
                 );
 
-                info!(
+                warn!(
                     target: LOG_TARGET,
                     "🔥 {} rejected shard(s) for payload {}. Voting to REJECT all local shards.",
                     rejected_nodes.len(),
@@ -1337,7 +1337,7 @@ where
     /// Step 6: The leader receives votes from the local shard, and once it has enough ($n - f$) votes, it commits a
     /// high QC and sends the next round of proposals.
     async fn leader_on_receive_vote(&mut self, from: TAddr, msg: VoteMessage) -> Result<(), HotStuffError> {
-        info!(
+        debug!(
             target: LOG_TARGET,
             "🔥 Receive {:?} VOTE for node {} from {}",
             msg.decision(),
@@ -1552,7 +1552,7 @@ where
         let (_node_lock_hash, locked_node_height) =
             tx.get_locked_node_hash_and_height(node.payload_id(), node.shard())?;
         if precommit_node.height() > locked_node_height {
-            info!(target: LOG_TARGET, "Updating locked node to: {}", precommit_node.hash());
+            debug!(target: LOG_TARGET, "Updating locked node to: {}", precommit_node.hash());
             // precommit_node is at COMMIT phase
             tx.set_locked(
                 precommit_node.payload_id(),
@@ -1565,7 +1565,7 @@ where
         // b <- b'.justify.node
         let prepare_node = precommit_node.justify().node_hash();
         if commit_node.parent() == precommit_node.hash() && *precommit_node.parent() == prepare_node {
-            info!(
+            debug!(
                 target: LOG_TARGET,
                 "✅ Node {} forms a 3-chain b'' = {}, b' = {}, b = {}",
                 node.hash(),
@@ -1604,7 +1604,7 @@ where
             .map(|hqc| hqc.node_height());
 
         if high_qc_height.map(|height| qc.node_height() > height).unwrap_or(true) {
-            info!(
+            debug!(
                 target: LOG_TARGET,
                 "🔥 UPDATE_HIGH_QC (node: {} {}, shard: {}, payload: {}, previous: {})",
                 qc.node_height(),
