@@ -20,7 +20,7 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use std::{str::FromStr, sync::Arc};
+use std::{collections::HashMap, str::FromStr, sync::Arc};
 
 use anyhow::anyhow;
 use log::info;
@@ -67,6 +67,15 @@ impl SubstateManager {
             None => return Err(anyhow!("Substate not found in the network")),
         };
 
+        // fetch all related substates
+        let related_addresses = find_related_substates(&substate)?;
+        let mut related_substates = HashMap::new();
+        for address in related_addresses {
+            if let Some(related_substate) = self.get_substate_from_dan_layer(&address, None).await {
+                related_substates.insert(address, related_substate);
+            }
+        }
+
         // if it's a resource, we need also to retrieve all the individual nfts
         let non_fungibles = if let SubstateAddress::Resource(addr) = substate_address {
             // TODO: fetch the last index from database to avoid scaning always from the beginning
@@ -85,6 +94,17 @@ impl SubstateManager {
             substate.version()
         );
 
+        // store related substates in the database
+        for (address, substate) in related_substates {
+            store_substate_in_db(&mut tx, &address, &substate)?;
+            info!(
+                target: LOG_TARGET,
+                "Added related substate {} of {} to the database",
+                address.to_address_string(),
+                substate_address.to_address_string()
+            );
+        }
+
         // store the associated non fungibles in the database
         for nft in non_fungibles {
             // store the substate of the nft in the databas
@@ -95,7 +115,9 @@ impl SubstateManager {
             tx.add_non_fungible_index(nft_index_db_row)?;
             info!(
                 target: LOG_TARGET,
-                "Added non fungible {} at index {} to the database", nft.address, nft.index,
+                "Added non fungible {} at index {} to the database",
+                nft.address.to_address_string(),
+                nft.index,
             );
         }
         tx.commit()?;
@@ -215,29 +237,6 @@ fn store_substate_in_db(
     address: &SubstateAddress,
     substate: &Substate,
 ) -> Result<(), anyhow::Error> {
-    info!(target: LOG_TARGET, "store_substate_in_db");
-    match decode_substate_into_json(substate) {
-        Ok(json) => {
-            let substate_json_string = serde_json::to_string_pretty(&json)?;
-            info!(target: LOG_TARGET, "store_substate_in_db: {}", substate_json_string,);
-        },
-        Err(err) => {
-            log::error!(target: LOG_TARGET, "{}", err.to_string());
-        },
-    }
-    match find_related_substates(substate) {
-        Ok(addresses) => {
-            let readable_addresses: Vec<String> = addresses.into_iter().map(|a| a.to_address_string()).collect();
-            info!(
-                target: LOG_TARGET,
-                "store_substate_in_db related substates: {:?}", readable_addresses
-            );
-        },
-        Err(err) => {
-            log::error!(target: LOG_TARGET, "{}", err.to_string());
-        },
-    }
-
     let substate_row = map_substate_to_db_row(address, substate)?;
     tx.set_substate(substate_row)?;
 
