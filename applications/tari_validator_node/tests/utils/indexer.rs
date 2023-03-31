@@ -48,6 +48,7 @@ pub struct IndexerProcess {
     pub port: u16,
     pub json_rpc_port: u16,
     pub base_node_grpc_port: u16,
+    pub http_ui_port: u16,
     pub handle: task::JoinHandle<()>,
     pub temp_dir_path: String,
     pub shutdown: Shutdown,
@@ -120,7 +121,7 @@ fn get_adddress_from_output(world: &TariWorld, output_ref: String) -> String {
 pub async fn spawn_indexer(world: &mut TariWorld, indexer_name: String, base_node_name: String) {
     // each spawned indexer will use different ports
     let (port, json_rpc_port) = get_os_assigned_ports();
-
+    let (http_ui_port, _) = get_os_assigned_ports();
     let base_node_grpc_port = world.base_nodes.get(&base_node_name).unwrap().grpc_port;
     let name = indexer_name.clone();
 
@@ -152,7 +153,7 @@ pub async fn spawn_indexer(world: &mut TariWorld, indexer_name: String, base_nod
         config.indexer.identity_file = temp_dir.join("indexer_id.json");
         config.indexer.tor_identity_file = temp_dir.join("indexer_tor_id.json");
         config.indexer.base_node_grpc_address = Some(format!("127.0.0.1:{}", base_node_grpc_port).parse().unwrap());
-        config.indexer.dan_layer_scanning_internal = Duration::from_secs(2);
+        config.indexer.dan_layer_scanning_internal = Duration::from_secs(60);
 
         config.indexer.p2p.transport.transport_type = TransportType::Tcp;
         config.indexer.p2p.transport.tcp.listener_address =
@@ -166,6 +167,7 @@ pub async fn spawn_indexer(world: &mut TariWorld, indexer_name: String, base_nod
             ..DhtConfig::default_local_test()
         };
         config.indexer.json_rpc_address = Some(format!("127.0.0.1:{}", json_rpc_port).parse().unwrap());
+        config.indexer.http_ui_address = Some(format!("127.0.0.1:{}", http_ui_port).parse().unwrap());
 
         // Add all other VNs as peer seeds
         config.peer_seeds.peer_seeds = StringList::from(peer_seeds);
@@ -189,6 +191,7 @@ pub async fn spawn_indexer(world: &mut TariWorld, indexer_name: String, base_nod
         name: name.clone(),
         port,
         base_node_grpc_port,
+        http_ui_port,
         handle,
         json_rpc_port,
         temp_dir_path,
