@@ -9,7 +9,6 @@ use tari_template_lib::{
     constants::{CONFIDENTIAL_TARI_RESOURCE_ADDRESS, PUBLIC_IDENTITY_RESOURCE_ADDRESS},
     models::Metadata,
     prelude::ResourceType,
-    resource::TOKEN_SYMBOL,
 };
 
 use crate::state_store::{StateStoreError, StateWriter};
@@ -27,7 +26,7 @@ pub fn bootstrap_state<T: StateWriter>(state_db: &mut T) -> Result<(), StateStor
 
     // Create the second layer tari resource
     let address = SubstateAddress::Resource(CONFIDENTIAL_TARI_RESOURCE_ADDRESS);
-    let mut metadata = Metadata::new();
+    let metadata = Metadata::new();
     // TODO: decide on symbol for L2 tari
     // metadata.insert(TOKEN_SYMBOL, "tXTR2".to_string());
     state_db.set_state(

@@ -4,7 +4,7 @@
 use crate::{
     args::MintArg,
     models::{Amount, Bucket, Metadata, ResourceAddress},
-    resource::{builder::TOKEN_SYMBOL, ResourceManager, ResourceType},
+    resource::{ResourceManager, ResourceType},
 };
 
 pub struct FungibleResourceBuilder {

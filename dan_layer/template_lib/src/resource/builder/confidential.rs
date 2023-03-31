@@ -5,7 +5,7 @@ use crate::{
     args::MintArg,
     models::{Bucket, Metadata, ResourceAddress},
     prelude::ConfidentialOutputProof,
-    resource::{builder::TOKEN_SYMBOL, ResourceManager, ResourceType},
+    resource::{ResourceManager, ResourceType},
 };
 
 pub struct ConfidentialResourceBuilder {

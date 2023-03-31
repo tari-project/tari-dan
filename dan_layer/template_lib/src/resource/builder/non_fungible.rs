@@ -8,7 +8,7 @@ use tari_template_abi::rust::{collections::HashMap, fmt, ops::RangeInclusive};
 use crate::{
     args::MintArg,
     models::{Bucket, Metadata, NonFungibleId, ResourceAddress},
-    resource::{builder::TOKEN_SYMBOL, ResourceManager, ResourceType},
+    resource::{ResourceManager, ResourceType},
 };
 
 pub struct NonFungibleResourceBuilder {
