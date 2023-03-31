@@ -132,7 +132,7 @@ pub struct HotStuffWaiter<
     /// Vote messages that should be delivered to the leader
     tx_vote_message: Sender<(VoteMessage, TAddr)>,
     /// HotstuffEvent channel
-    tx_events: broadcast::Sender<HotStuffEvent>,
+    tx_events: broadcast::Sender<HotStuffEvent<TAddr>>,
     /// The pacemaker handle. Provides an interface to request timing leader responses
     #[allow(dead_code)]
     pacemaker: PacemakerHandle<PacemakerEvents>,
@@ -159,7 +159,7 @@ impl<TPayload, TAddr, TLeaderStrategy, TEpochManager, TPayloadProcessor, TShardS
     HotStuffWaiter<TPayload, TAddr, TLeaderStrategy, TEpochManager, TPayloadProcessor, TShardStore, TSigningService>
 where
     TPayload: Payload + 'static,
-    TAddr: NodeAddressable + 'static,
+    TAddr: NodeAddressable + Serialize + 'static,
     TLeaderStrategy: LeaderStrategy<TAddr> + 'static + Send + Sync,
     TEpochManager: EpochManager<TAddr> + 'static + Send + Sync,
     TPayloadProcessor: PayloadProcessor<TPayload> + 'static + Send + Sync,
@@ -180,7 +180,7 @@ where
         tx_recovery: Sender<(RecoveryMessage, TAddr)>,
         tx_recovery_broadcast: Sender<(RecoveryMessage, Vec<TAddr>)>,
         tx_vote_message: Sender<(VoteMessage, TAddr)>,
-        tx_events: broadcast::Sender<HotStuffEvent>,
+        tx_events: broadcast::Sender<HotStuffEvent<TAddr>>,
         pacemaker: PacemakerHandle<PacemakerEvents>,
         payload_processor: TPayloadProcessor,
         shard_store: TShardStore,
@@ -229,7 +229,7 @@ where
         tx_recovery: Sender<(RecoveryMessage, TAddr)>,
         tx_recovery_broadcast: Sender<(RecoveryMessage, Vec<TAddr>)>,
         tx_vote_message: Sender<(VoteMessage, TAddr)>,
-        tx_events: broadcast::Sender<HotStuffEvent>,
+        tx_events: broadcast::Sender<HotStuffEvent<TAddr>>,
         pacemaker: PacemakerHandle<PacemakerEvents>,
         payload_processor: TPayloadProcessor,
         shard_store: TShardStore,
@@ -285,7 +285,7 @@ where
             let high_qc = tx
                 .get_high_qc_for(payload_id, shard)
                 .optional()?
-                .unwrap_or_else(|| QuorumCertificate::genesis(epoch, payload_id, shard));
+                .unwrap_or_else(|| QuorumCertificate::genesis(epoch, payload_id, shard, leader.clone()));
 
             //  Save the payload, because we will need it when the proposal comes back
             tx.save_payload(payload.clone())?;
@@ -351,7 +351,7 @@ where
         &mut self,
         from: TAddr,
         shard: ShardId,
-        qc: QuorumCertificate,
+        qc: QuorumCertificate<TAddr>,
         payload: TPayload,
     ) -> Result<(), HotStuffError> {
         let payload_id = payload.to_id();
@@ -607,27 +607,30 @@ where
         payload_id: PayloadId,
         shard_id: ShardId,
     ) -> Result<(), HotStuffError> {
-        let high_qc = self
-            .shard_store
-            .create_read_tx()?
-            .get_high_qc_for(payload_id, shard_id)
-            .optional()?
-            .unwrap_or_else(|| QuorumCertificate::genesis(epoch, payload_id, shard_id));
-
-        // TODO: should we send this? the new leader probably has it
-        let payload = self.shard_store.create_read_tx()?.get_payload(&payload_id)?;
-
-        // We leave the payload empty, this is just new round, so the nodes should have it.
-        let new_view = HotStuffMessage::new_view(high_qc, shard_id, payload);
+        // get current leader round
         let current_leader = *self
             .current_leader_round
             .entry((shard_id, payload_id))
             .and_modify(|round| *round += 1)
             .or_default();
         let committee = self.epoch_manager.get_committee(epoch, shard_id).await?;
+        // new leader
         let leader = self
             .leader_strategy
             .get_leader(&committee, payload_id, shard_id, current_leader);
+
+        let high_qc = self
+            .shard_store
+            .create_read_tx()?
+            .get_high_qc_for(payload_id, shard_id)
+            .optional()?
+            .unwrap_or_else(|| QuorumCertificate::genesis(epoch, payload_id, shard_id, leader.clone()));
+
+        // TODO: should we send this? the new leader probably has it
+        let payload = self.shard_store.create_read_tx()?.get_payload(&payload_id)?;
+
+        // We leave the payload empty, this is just new round, so the nodes should have it.
+        let new_view = HotStuffMessage::new_view(high_qc, shard_id, payload);
         self.shard_store
             .with_write_tx(|tx| tx.save_current_leader_state(payload_id, shard_id, current_leader, leader.clone()))?;
         self.tx_leader
@@ -1392,6 +1395,7 @@ where
                     node.height(),
                     node.shard(),
                     node.epoch(),
+                    self.public_key.clone(),
                     main_vote.decision(),
                     main_vote.all_shard_pledges().clone(),
                     validator_metadata,
@@ -1453,7 +1457,7 @@ where
         }
     }
 
-    async fn validate_qc(&self, qc: &QuorumCertificate, min_signers: usize) -> Result<(), HotStuffError> {
+    async fn validate_qc(&self, qc: &QuorumCertificate<TAddr>, min_signers: usize) -> Result<(), HotStuffError> {
         // extract all the pairs of signer-signature present in the QC
         let signer_signatures = Self::extract_signer_signatures_from_qc(qc);
 
@@ -1511,14 +1515,14 @@ where
         Ok(())
     }
 
-    fn validate_vote(&self, qc: &QuorumCertificate, public_key: &PublicKey, signature: &Signature) -> bool {
+    fn validate_vote(&self, qc: &QuorumCertificate<TAddr>, public_key: &PublicKey, signature: &Signature) -> bool {
         let vote = VoteMessage::new(qc.node_hash(), *qc.decision(), qc.all_shard_pledges().clone());
         let challenge = vote.construct_challenge();
         self.signing_service
             .verify_for_public_key(public_key, signature, &*challenge)
     }
 
-    fn extract_signer_signatures_from_qc(qc: &QuorumCertificate) -> Vec<(PublicKey, Signature)> {
+    fn extract_signer_signatures_from_qc(qc: &QuorumCertificate<TAddr>) -> Vec<(PublicKey, Signature)> {
         qc.validators_metadata()
             .iter()
             .map(|md| (md.public_key.clone(), md.signature.clone()))
@@ -1596,7 +1600,7 @@ where
         &self,
         tx: &mut TShardStore::WriteTransaction<'_>,
         proposed_by: TAddr,
-        qc: QuorumCertificate,
+        qc: QuorumCertificate<TAddr>,
     ) -> Result<(), HotStuffError> {
         let high_qc_height = tx
             .get_high_qc_for(qc.payload_id(), qc.shard())
@@ -1856,7 +1860,7 @@ where
         Ok(())
     }
 
-    fn publish_event(&self, event: HotStuffEvent) {
+    fn publish_event(&self, event: HotStuffEvent<TAddr>) {
         let _ignore = self.tx_events.send(event);
     }
 

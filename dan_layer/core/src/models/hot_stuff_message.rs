@@ -32,7 +32,7 @@ use crate::models::{HotStuffMessageType, HotStuffTreeNode};
 pub struct HotStuffMessage<TPayload, TAddr> {
     message_type: HotStuffMessageType,
     // The high qc: used for new view messages
-    high_qc: Option<QuorumCertificate>,
+    high_qc: Option<QuorumCertificate<TAddr>>,
     node: Option<HotStuffTreeNode<TAddr, TPayload>>,
     shard: ShardId,
     // Used for broadcasting the payload in new view
@@ -51,10 +51,10 @@ impl<TPayload, TAddr> Default for HotStuffMessage<TPayload, TAddr> {
     }
 }
 
-impl<TPayload, TAddr> HotStuffMessage<TPayload, TAddr> {
+impl<TPayload, TAddr: Clone> HotStuffMessage<TPayload, TAddr> {
     pub fn new(
         message_type: HotStuffMessageType,
-        high_qc: Option<QuorumCertificate>,
+        high_qc: Option<QuorumCertificate<TAddr>>,
         node: Option<HotStuffTreeNode<TAddr, TPayload>>,
         shard: ShardId,
         new_view_payload: Option<TPayload>,
@@ -68,7 +68,7 @@ impl<TPayload, TAddr> HotStuffMessage<TPayload, TAddr> {
         }
     }
 
-    pub fn new_view(high_qc: QuorumCertificate, shard: ShardId, payload: TPayload) -> Self {
+    pub fn new_view(high_qc: QuorumCertificate<TAddr>, shard: ShardId, payload: TPayload) -> Self {
         Self {
             message_type: HotStuffMessageType::NewView,
             high_qc: Some(high_qc),
@@ -90,7 +90,7 @@ impl<TPayload, TAddr> HotStuffMessage<TPayload, TAddr> {
         }
     }
 
-    pub fn high_qc(&self) -> Option<QuorumCertificate> {
+    pub fn high_qc(&self) -> Option<QuorumCertificate<TAddr>> {
         self.high_qc.clone()
     }
 

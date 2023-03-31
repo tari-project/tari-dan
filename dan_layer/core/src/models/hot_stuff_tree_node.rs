@@ -50,12 +50,12 @@ pub struct HotStuffTreeNode<TAddr, TPayload> {
     leader_round: u32,
     local_pledge: Option<ObjectPledge>,
     epoch: Epoch,
-    justify: QuorumCertificate,
+    justify: QuorumCertificate<TAddr>,
     // Mostly used for debugging
     proposed_by: TAddr,
 }
 
-impl<TAddr: NodeAddressable, TPayload: Payload> HotStuffTreeNode<TAddr, TPayload> {
+impl<TAddr: Clone + NodeAddressable + Serialize, TPayload: Payload> HotStuffTreeNode<TAddr, TPayload> {
     pub fn new(
         parent: TreeNodeHash,
         shard: ShardId,
@@ -67,7 +67,7 @@ impl<TAddr: NodeAddressable, TPayload: Payload> HotStuffTreeNode<TAddr, TPayload
         local_pledge: Option<ObjectPledge>,
         epoch: Epoch,
         proposed_by: TAddr,
-        justify: QuorumCertificate,
+        justify: QuorumCertificate<TAddr>,
     ) -> Self {
         let mut s = HotStuffTreeNode {
             hash: TreeNodeHash::zero(),
@@ -106,7 +106,7 @@ impl<TAddr: NodeAddressable, TPayload: Payload> HotStuffTreeNode<TAddr, TPayload
             leader_round: 0,
             local_pledge,
             epoch,
-            justify: QuorumCertificate::genesis(epoch, payload_id, shard_id),
+            justify: QuorumCertificate::genesis(epoch, payload_id, shard_id, proposed_by.clone()),
             proposed_by,
         }
     }
@@ -170,7 +170,7 @@ impl<TAddr, TPayload> HotStuffTreeNode<TAddr, TPayload> {
     }
 
     /// The quorum certificate for this node
-    pub fn justify(&self) -> &QuorumCertificate {
+    pub fn justify(&self) -> &QuorumCertificate<TAddr> {
         &self.justify
     }
 

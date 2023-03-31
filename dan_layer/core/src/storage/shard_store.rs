@@ -114,8 +114,12 @@ impl From<StorageError> for StoreError {
 }
 
 pub trait ShardStoreReadTransaction<TAddr: NodeAddressable, TPayload: Payload> {
-    fn get_high_qc_for(&mut self, payload_id: PayloadId, shard: ShardId) -> Result<QuorumCertificate, StorageError>;
-    fn get_high_qcs(&mut self, payload_id: PayloadId) -> Result<Vec<QuorumCertificate>, StorageError>;
+    fn get_high_qc_for(
+        &mut self,
+        payload_id: PayloadId,
+        shard: ShardId,
+    ) -> Result<QuorumCertificate<TAddr>, StorageError>;
+    fn get_high_qcs(&mut self, payload_id: PayloadId) -> Result<Vec<QuorumCertificate<TAddr>>, StorageError>;
     /// Returns the current leaf node for the shard
     fn get_leaf_node(&mut self, payload_id: &PayloadId, shard: &ShardId) -> Result<LeafNode, StorageError>;
     fn get_current_leaders_states(&mut self, payload: &PayloadId) -> Result<Vec<CurrentLeaderStates>, StorageError>;
@@ -169,7 +173,8 @@ pub trait ShardStoreReadTransaction<TAddr: NodeAddressable, TPayload: Payload> {
 pub trait ShardStoreWriteTransaction<TAddr: NodeAddressable, TPayload: Payload> {
     fn commit(self) -> Result<(), StorageError>;
     fn rollback(self) -> Result<(), StorageError>;
-    fn insert_high_qc(&mut self, from: TAddr, shard: ShardId, qc: QuorumCertificate) -> Result<(), StorageError>;
+    fn insert_high_qc(&mut self, from: TAddr, shard: ShardId, qc: QuorumCertificate<TAddr>)
+        -> Result<(), StorageError>;
     fn save_payload(&mut self, payload: TPayload) -> Result<(), StorageError>;
     fn save_current_leader_state(
         &mut self,

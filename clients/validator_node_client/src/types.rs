@@ -155,7 +155,7 @@ pub struct TransactionFinalizeResult {
     pub finalize: FinalizeResult,
     pub transaction_failure: Option<RejectReason>,
     pub fee_breakdown: Option<FeeCostBreakdown>,
-    pub qc: QuorumCertificate,
+    pub qc: QuorumCertificate<PublicKey>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -188,7 +188,7 @@ pub struct GetTransactionQcsRequest {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct GetTransactionQcsResponse {
-    pub qcs: Vec<QuorumCertificate>,
+    pub qcs: Vec<QuorumCertificate<PublicKey>>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

@@ -276,14 +276,20 @@ impl<'a> SqliteShardStoreReadTransaction<'a> {
                 .as_ref()
                 .map(|v| PayloadId::try_from(v.clone()).map_err(|_| StorageError::DecodingError))
                 .transpose()?,
-            serde_json::from_str(&ss.created_justify).unwrap(),
+            ss.created_justify
+                .as_ref()
+                .map(|justify| serde_json::from_str(justify.as_str()).unwrap()),
             ss.destroyed_justify.as_ref().map(|v| serde_json::from_str(v).unwrap()),
         ))
     }
 }
 
 impl ShardStoreReadTransaction<PublicKey, TariDanPayload> for SqliteShardStoreReadTransaction<'_> {
-    fn get_high_qc_for(&mut self, payload_id: PayloadId, shard_id: ShardId) -> Result<QuorumCertificate, StorageError> {
+    fn get_high_qc_for(
+        &mut self,
+        payload_id: PayloadId,
+        shard_id: ShardId,
+    ) -> Result<QuorumCertificate<PublicKey>, StorageError> {
         use crate::schema::high_qcs;
 
         let qc: Option<HighQc> = high_qcs::table
@@ -305,7 +311,7 @@ impl ShardStoreReadTransaction<PublicKey, TariDanPayload> for SqliteShardStoreRe
         Ok(qc)
     }
 
-    fn get_high_qcs(&mut self, payload_id: PayloadId) -> Result<Vec<QuorumCertificate>, StorageError> {
+    fn get_high_qcs(&mut self, payload_id: PayloadId) -> Result<Vec<QuorumCertificate<PublicKey>>, StorageError> {
         use crate::schema::high_qcs;
 
         let qcs: Vec<HighQc> = high_qcs::table
@@ -457,7 +463,7 @@ impl ShardStoreReadTransaction<PublicKey, TariDanPayload> for SqliteShardStoreRe
         let epoch = node.epoch as u64;
         let proposed_by = PublicKey::from_vec(&node.proposed_by).map_err(StorageError::InvalidByteArrayConversion)?;
 
-        let justify: QuorumCertificate = serde_json::from_str(&node.justify).unwrap();
+        let justify: QuorumCertificate<PublicKey> = serde_json::from_str(&node.justify).unwrap();
 
         Ok(HotStuffTreeNode::new(
             parent,
@@ -894,7 +900,7 @@ impl ShardStoreWriteTransaction<PublicKey, TariDanPayload> for SqliteShardStoreW
         &mut self,
         identity: PublicKey,
         shard: ShardId,
-        qc: QuorumCertificate,
+        qc: QuorumCertificate<PublicKey>,
     ) -> Result<(), StorageError> {
         use crate::schema::high_qcs;
         // update all others for this shard to highest == false
@@ -1242,7 +1248,7 @@ impl ShardStoreWriteTransaction<PublicKey, TariDanPayload> for SqliteShardStoreW
                         version: d.version().into(),
                         data: pretty_data,
                         created_by_payload_id: node.payload_id().as_bytes().to_vec(),
-                        created_justify: serde_json::to_string_pretty(node.justify()).unwrap(),
+                        created_justify: Some(serde_json::to_string_pretty(node.justify()).unwrap()),
                         created_node_hash: node.hash().as_bytes().to_vec(),
                         created_height: node.height().as_u64() as i64,
                     };
@@ -1302,7 +1308,10 @@ impl ShardStoreWriteTransaction<PublicKey, TariDanPayload> for SqliteShardStoreW
             version: i64::from(substate_data.version()),
             data: serde_json::to_string_pretty(substate_data.substate()).unwrap(),
             created_by_payload_id: substate_data.created_payload_id().as_bytes().to_vec(),
-            created_justify: serde_json::to_string_pretty(substate_data.created_justify()).unwrap(),
+            created_justify: substate_data
+                .created_justify()
+                .as_ref()
+                .map(|justify| serde_json::to_string_pretty(&justify).unwrap()),
             created_height: substate_data.created_height().as_u64() as i64,
             created_node_hash: substate_data.created_node_hash().as_bytes().to_vec(),
             destroyed_by_payload_id: substate_data.destroyed_payload_id().map(|v| v.as_bytes().to_vec()),
@@ -1587,12 +1596,7 @@ impl ShardStoreWriteTransaction<PublicKey, TariDanPayload> for SqliteShardStoreW
             version: i64::from(substate.version()),
             data: serde_json::to_string_pretty(substate).unwrap(),
             created_by_payload_id: vec![0; 32],
-            created_justify: serde_json::to_string_pretty(&QuorumCertificate::genesis(
-                Epoch(0),
-                PayloadId::new(vec![0; 32]),
-                ShardId::zero(),
-            ))
-            .unwrap(),
+            created_justify: None,
             created_node_hash: TreeNodeHash::zero().as_bytes().to_vec(),
             created_height: 0,
         };

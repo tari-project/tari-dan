@@ -94,7 +94,7 @@ pub struct TransactionGetResultResponse {
     pub hash: FixedHash,
     pub result: Option<FinalizeResult>,
     // TODO: Always None
-    pub qc: Option<QuorumCertificate>,
+    pub qc: Option<QuorumCertificate<PublicKey>>,
     pub status: TransactionStatus,
 }
 
@@ -110,7 +110,7 @@ pub struct TransactionWaitResultResponse {
     #[serde(with = "serde_with::hex")]
     pub hash: FixedHash,
     pub result: Option<FinalizeResult>,
-    pub qcs: Vec<QuorumCertificate>,
+    pub qcs: Vec<QuorumCertificate<PublicKey>>,
     pub status: TransactionStatus,
     pub transaction_failure: Option<RejectReason>,
     pub final_fee: Amount,

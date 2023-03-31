@@ -36,6 +36,7 @@ use tari_common::{
     configuration::bootstrap::{grpc_default_port, ApplicationType},
     exit_codes::{ExitCode, ExitError},
 };
+use tari_common_types::types::PublicKey;
 use tari_comms::{protocol::rpc::RpcServer, CommsNode, NodeIdentity, UnspawnedCommsNode};
 use tari_dan_app_utilities::{
     base_layer_scanner,
@@ -43,7 +44,7 @@ use tari_dan_app_utilities::{
     epoch_manager::EpochManagerHandle,
     template_manager::TemplateManagerHandle,
 };
-use tari_dan_common_types::{Epoch, NodeAddressable, NodeHeight, PayloadId, QuorumCertificate, ShardId, TreeNodeHash};
+use tari_dan_common_types::{NodeAddressable, NodeHeight, PayloadId, ShardId, TreeNodeHash};
 use tari_dan_core::{
     consensus_constants::ConsensusConstants,
     models::{Payload, SubstateShardData},
@@ -283,7 +284,7 @@ pub struct Services {
     pub mempool: MempoolHandle,
     pub epoch_manager: EpochManagerHandle,
     pub template_manager: TemplateManagerHandle,
-    pub hotstuff_events: EventSubscription<HotStuffEvent>,
+    pub hotstuff_events: EventSubscription<HotStuffEvent<PublicKey>>,
     pub shard_store: SqliteShardStore,
     pub dry_run_transaction_processor: DryRunTransactionProcessor,
     pub handles: Vec<JoinHandle<Result<(), anyhow::Error>>>,
@@ -345,7 +346,7 @@ where
             None,
             genesis_payload,
             None,
-            QuorumCertificate::genesis(Epoch(0), genesis_payload, shard_id),
+            None,
             None,
         ))?;
     }
@@ -369,7 +370,7 @@ where
             None,
             genesis_payload,
             None,
-            QuorumCertificate::genesis(Epoch(0), genesis_payload, shard_id),
+            None,
             None,
         ))?;
     }

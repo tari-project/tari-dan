@@ -145,7 +145,7 @@ diesel::table! {
         version -> BigInt,
         data -> Text,
         created_by_payload_id -> Binary,
-        created_justify -> Text,
+        created_justify -> Nullable<Text>,
         created_node_hash -> Binary,
         created_height -> BigInt,
         destroyed_by_payload_id -> Nullable<Binary>,

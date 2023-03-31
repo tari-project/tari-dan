@@ -147,8 +147,8 @@ impl From<HotStuffTreeNode<CommsPublicKey, TariDanPayload>> for proto::consensus
 
 // -------------------------------- QuorumCertificate -------------------------------- //
 
-impl From<QuorumCertificate> for proto::consensus::QuorumCertificate {
-    fn from(source: QuorumCertificate) -> Self {
+impl From<QuorumCertificate<PublicKey>> for proto::consensus::QuorumCertificate {
+    fn from(source: QuorumCertificate<PublicKey>) -> Self {
         Self {
             payload_id: source.payload_id().as_bytes().to_vec(),
             payload_height: source.payload_height().as_u64(),
@@ -160,13 +160,14 @@ impl From<QuorumCertificate> for proto::consensus::QuorumCertificate {
                 QuorumDecision::Accept => 0,
                 QuorumDecision::Reject(ref reason) => reason.as_u8().into(),
             },
+            proposed_by: source.proposed_by().as_bytes().to_vec(),
             all_shard_pledges: source.all_shard_pledges().iter().map(|p| p.clone().into()).collect(),
             validators_metadata: source.validators_metadata().iter().map(|p| p.clone().into()).collect(),
         }
     }
 }
 
-impl TryFrom<proto::consensus::QuorumCertificate> for QuorumCertificate {
+impl TryFrom<proto::consensus::QuorumCertificate> for QuorumCertificate<PublicKey> {
     type Error = anyhow::Error;
 
     fn try_from(value: proto::consensus::QuorumCertificate) -> Result<Self, Self::Error> {
@@ -177,6 +178,7 @@ impl TryFrom<proto::consensus::QuorumCertificate> for QuorumCertificate {
             value.local_node_height.into(),
             value.shard.try_into()?,
             value.epoch.into(),
+            PublicKey::from_vec(&value.proposed_by)?,
             QuorumDecision::from_u8(value.decision.try_into()?)?,
             value
                 .all_shard_pledges

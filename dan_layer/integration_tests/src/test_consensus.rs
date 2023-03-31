@@ -59,7 +59,7 @@ fn create_test_default_qc(
     committee_keys: Vec<(PublicKey, PrivateKey)>,
     all_vn_keys: Vec<PublicKey>,
     payload: &TariDanPayload,
-) -> QuorumCertificate {
+) -> QuorumCertificate<PublicKey> {
     create_test_qc(ShardId::zero(), committee_keys, all_vn_keys, payload)
 }
 
@@ -68,8 +68,9 @@ fn create_test_qc(
     committee_keys: Vec<(PublicKey, PrivateKey)>,
     all_vn_keys: Vec<PublicKey>,
     payload: &TariDanPayload,
-) -> QuorumCertificate {
-    let qc = QuorumCertificate::genesis(Epoch(0), payload.to_id(), shard_id);
+) -> QuorumCertificate<PublicKey> {
+    let (_, proposed_by) = PublicKey::random_keypair(&mut OsRng);
+    let qc = QuorumCertificate::genesis(Epoch(0), payload.to_id(), shard_id, proposed_by.clone());
     let vote = VoteMessage::new(qc.node_hash(), *qc.decision(), qc.all_shard_pledges().clone());
 
     let mut vn_bmt_vec = Vec::new();
@@ -105,6 +106,7 @@ fn create_test_qc(
         qc.node_height(),
         shard_id,
         qc.epoch(),
+        proposed_by,
         *qc.decision(),
         qc.all_shard_pledges().clone(),
         validators_metadata,

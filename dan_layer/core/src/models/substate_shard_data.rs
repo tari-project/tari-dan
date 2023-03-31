@@ -2,6 +2,7 @@
 //   SPDX-License-Identifier: BSD-3-Clause
 
 use serde::{Deserialize, Serialize};
+use tari_common_types::types::PublicKey;
 use tari_dan_common_types::{
     quorum_certificate::QuorumCertificate,
     NodeHeight,
@@ -24,8 +25,8 @@ pub struct SubstateShardData {
     destroyed_node_hash: Option<TreeNodeHash>,
     created_payload_id: PayloadId,
     destroyed_payload_id: Option<PayloadId>,
-    created_justify: QuorumCertificate,
-    destroyed_justify: Option<QuorumCertificate>,
+    created_justify: Option<QuorumCertificate<PublicKey>>,
+    destroyed_justify: Option<QuorumCertificate<PublicKey>>,
 }
 
 impl SubstateShardData {
@@ -40,8 +41,8 @@ impl SubstateShardData {
         destroyed_node_hash: Option<TreeNodeHash>,
         created_payload_id: PayloadId,
         destroyed_payload_id: Option<PayloadId>,
-        created_justify: QuorumCertificate,
-        destroyed_justify: Option<QuorumCertificate>,
+        created_justify: Option<QuorumCertificate<PublicKey>>,
+        destroyed_justify: Option<QuorumCertificate<PublicKey>>,
     ) -> Self {
         Self {
             shard_id,
@@ -103,11 +104,11 @@ impl SubstateShardData {
         self.destroyed_payload_id
     }
 
-    pub fn created_justify(&self) -> &QuorumCertificate {
-        &self.created_justify
+    pub fn created_justify(&self) -> Option<&QuorumCertificate<PublicKey>> {
+        self.created_justify.as_ref()
     }
 
-    pub fn destroyed_justify(&self) -> &Option<QuorumCertificate> {
+    pub fn destroyed_justify(&self) -> &Option<QuorumCertificate<PublicKey>> {
         &self.destroyed_justify
     }
 

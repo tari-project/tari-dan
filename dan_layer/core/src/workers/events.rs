@@ -45,7 +45,7 @@ impl<T> Clone for EventSubscription<T> {
 }
 
 #[derive(Debug, Clone)]
-pub enum HotStuffEvent {
-    OnFinalized(Box<QuorumCertificate>, ExecuteResult),
+pub enum HotStuffEvent<TAddr> {
+    OnFinalized(Box<QuorumCertificate<TAddr>>, ExecuteResult),
     Failed(PayloadId, String),
 }
