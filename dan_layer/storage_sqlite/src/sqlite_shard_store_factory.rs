@@ -1251,6 +1251,12 @@ impl ShardStoreWriteTransaction<PublicKey, TariDanPayload> for SqliteShardStoreW
                         created_justify: Some(serde_json::to_string_pretty(node.justify()).unwrap()),
                         created_node_hash: node.hash().as_bytes().to_vec(),
                         created_height: node.height().as_u64() as i64,
+                        fee_paid_for_created_justify: 0, // 0
+                        fee_paid_for_deleted_justify: 0,
+                        created_justify_leader: None,
+                        deleted_justify_leader: None,
+                        created_at_epoch: None,
+                        deleted_at_epoch: None,
                     };
                     diesel::insert_into(substates::table)
                         .values(&new_row)
@@ -1321,6 +1327,12 @@ impl ShardStoreWriteTransaction<PublicKey, TariDanPayload> for SqliteShardStoreW
                 .map(|v| serde_json::to_string_pretty(v).unwrap()),
             destroyed_height: substate_data.destroyed_height().map(|v| v.as_u64() as i64),
             destroyed_node_hash: substate_data.destroyed_node_hash().map(|v| v.as_bytes().to_vec()),
+            fee_paid_for_created_justify: 0, // TODO: CHANGE ME
+            fee_paid_for_deleted_justify: 0,
+            created_justify_leader: None,
+            deleted_justify_leader: None,
+            created_at_epoch: None,
+            deleted_at_epoch: None,
         };
 
         diesel::insert_into(substates::table)
@@ -1599,6 +1611,12 @@ impl ShardStoreWriteTransaction<PublicKey, TariDanPayload> for SqliteShardStoreW
             created_justify: None,
             created_node_hash: TreeNodeHash::zero().as_bytes().to_vec(),
             created_height: 0,
+            fee_paid_for_created_justify: 0,
+            fee_paid_for_deleted_justify: 0,
+            created_justify_leader: None,
+            deleted_justify_leader: None,
+            created_at_epoch: None,
+            deleted_at_epoch: None,
         };
         use crate::schema::substates;
         diesel::insert_into(substates::table)
