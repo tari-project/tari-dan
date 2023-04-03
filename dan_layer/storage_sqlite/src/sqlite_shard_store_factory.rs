@@ -1262,9 +1262,9 @@ impl ShardStoreWriteTransaction<PublicKey, TariDanPayload> for SqliteShardStoreW
                         created_height: node.height().as_u64() as i64,
                         fee_paid_for_created_justify: *fees_accrued as i64, // 0
                         fee_paid_for_deleted_justify: 0,
-                        created_justify_leader: None,
+                        created_justify_leader: Some(node.justify().proposed_by().to_hex()),
                         deleted_justify_leader: None,
-                        created_at_epoch: None,
+                        created_at_epoch: Some(node.epoch().as_u64() as i64),
                         deleted_at_epoch: None,
                     };
                     diesel::insert_into(substates::table)
@@ -1339,12 +1339,21 @@ impl ShardStoreWriteTransaction<PublicKey, TariDanPayload> for SqliteShardStoreW
                 .map(|v| serde_json::to_string_pretty(v).unwrap()),
             destroyed_height: substate_data.destroyed_height().map(|v| v.as_u64() as i64),
             destroyed_node_hash: substate_data.destroyed_node_hash().map(|v| v.as_bytes().to_vec()),
-            fee_paid_for_created_justify: 0, // TODO: CHANGE ME
-            fee_paid_for_deleted_justify: 0,
-            created_justify_leader: None,
-            deleted_justify_leader: None,
-            created_at_epoch: None,
-            deleted_at_epoch: None,
+            fee_paid_for_created_justify: substate_data.created_fee_accrued() as i64,
+            fee_paid_for_deleted_justify: substate_data.created_fee_accrued() as i64,
+            created_justify_leader: substate_data
+                .created_justify()
+                .as_ref()
+                .map(|justify| justify.proposed_by().to_hex()),
+            deleted_justify_leader: substate_data
+                .destroyed_justify()
+                .as_ref()
+                .map(|justify| justify.proposed_by().to_hex()),
+            created_at_epoch: substate_data.created_justify().map(|j| j.epoch().as_u64() as i64),
+            deleted_at_epoch: substate_data
+                .destroyed_justify()
+                .as_ref()
+                .map(|j| j.epoch().as_u64() as i64),
         };
 
         diesel::insert_into(substates::table)
