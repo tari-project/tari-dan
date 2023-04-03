@@ -70,6 +70,8 @@ pub enum AccountsSubcommand {
     ClaimBurn(ClaimBurnArgs),
     #[clap(alias = "reveal")]
     RevealFunds(RevealFundsArgs),
+    #[clap(alias = "faucet")]
+    CreateFreeTestCoins(CreateFreeTestCoinsArgs),
 }
 
 #[derive(Debug, Args, Clone)]
@@ -119,6 +121,13 @@ pub struct RevealFundsArgs {
     pay_from_reveal: bool,
 }
 
+pub struct CreateFreeTestCoinsArgs {
+    #[clap(long, short = 'n', alias = "name")]
+    pub account_name: Option<String>,
+    #[clap(long, short, alias = "amount")]
+    pub value: u64,
+}
+
 impl AccountsSubcommand {
     pub async fn handle(self, mut client: WalletDaemonClient) -> Result<(), anyhow::Error> {
         match self {
@@ -137,6 +146,7 @@ impl AccountsSubcommand {
             AccountsSubcommand::GetByName(args) => handle_get_by_name(args, &mut client).await?,
             AccountsSubcommand::ClaimBurn(args) => handle_claim_burn(args, &mut client).await?,
             AccountsSubcommand::RevealFunds(args) => handle_reveal_funds(args, &mut client).await?,
+            AccountsSubcommand::CreateFreeTestCoins(args) => handle_create_free_test_coins(args, &mut client).await?,
         }
         Ok(())
     }
@@ -261,6 +271,24 @@ pub async fn handle_claim_burn(args: ClaimBurnArgs, client: &mut WalletDaemonCli
     println!();
 
     summarize_finalize_result(&resp.result);
+    Ok(())
+}
+
+async fn create_free_test_coins(
+    args: CreateFreeTestCoinsArgs,
+    client: &mut WalletDaemonClient,
+) -> Result<(), anyhow::Error> {
+    println!("Creating free test coins for account '{}'...", args.account_name);
+    let resp = client
+        .create_free_test_coins(AccountsCreateFreeTestCoinsRequest {
+            account_name: args.account_name,
+            amount: args.amount,
+        })
+        .await?;
+
+    println!("✅ Free test coins created");
+    println!("   amount: {}", resp.amount);
+    println!("   transaction fee: {}", resp.fee);
     Ok(())
 }
 
