@@ -105,36 +105,36 @@ burning tari on the Tari base layer, the client is prompted with the following d
 
 ```
 {
-    "transaction_id": <TRANSACTION_ID>,
+    "transaction_id": <transaction_id>,
     "is_success": <IS_SUCCESS>,
     "failure_message": <FAILURE_MESSAGE>,
-    "commitment": <COMMITMENT>,
-    "ownership_proof": <OWNERSHIP_PROOF>,
-    "rangeproof": <RANGEPROOF>
+    "commitment": <commitment>,
+    "ownership_proof": <ownership_proof>,
+    "rangeproof": <rangeproof>
 }
 ```
 
 Now, it is possible to claim burn Tari on the DAN layer, as follows. Create a new `.json` file, with path
-`<JSON_FILE_TO_RETRIEVE_BURN_TARI>`
+`<json_file_to_retrieve_burn_tari>`
 
 ```
 {
-    "claim_public_key": <CLAIM_PUBLIC_KEY>,
-    "transaction_id": <TRANSACTION_ID>,
-    "commitment": <COMMITMENT>,
-    "ownership_proof": <OWNERSHIP_PROOF>,
-    "rangeproof": <RANGEPROOF>
+    "claim_public_key": <claim_public_key>,
+    "transaction_id": <transaction_id>,
+    "commitment": <commitment>,
+    "ownership_proof": <ownership_proof>,
+    "rangeproof": <rangeproof>
 }
 ```
 
-where `<CLAIM_PUBLIC_KEY>` is the claim public key that it was provided to the tari console wallet to burn base layer Tari,
+where `<claim_public_key>` is the claim public key that it was provided to the tari console wallet to burn base layer Tari,
 in the first place.
 
 ```
-cargo run --bin tari_dan_wallet_cli --claim-burn --account <ACCOUNT_NAME> --input <JSON_FILE_TO_RETRIEVE_BURN_TARI> --fee 1
+cargo run --bin tari_dan_wallet_cli --claim-burn --account <account_name> --input <json_file_to_retrieve_burn_tari> --fee 1
 ```
 
-where `<ACCOUNT_NAME>` is the user account name, `<JSON_FILE_TO_RETRIEVE_BURN_TARI>` is the json generate previously.
+where `<account_name>` is the user account name, `<json_file_to_retrieve_burn_tari>` is the json generate previously.
 
 
 ### Calling a function
