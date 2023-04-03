@@ -54,6 +54,16 @@ cargo run --bin tari_validator_node_cli -- vn register
 
 You'll need to mine a number of blocks, but after that the vn should have a shard key and show up as registered on the web ui
 
+#### Running the Tari Dan Wallet Daemon
+To be able to use the Tari Dan Wallet CLI communicate with the running validator node, one needs to set up a tari dan wallet daemon,
+as follows:
+```
+cargo run --bin tari_dan_wallet_daemon -- -b .
+```
+
+The wallet daemon will listen to wallet requests and submit it to the running VN. Notice that, each VN running should have
+its own wallet daemon. 
+
 #### Creating a template 
 
 The easiest way to create a template is with the template at https://github.com/tari-project/wasm-template 
@@ -87,8 +97,48 @@ cargo run --bin tari_validator_node_cli -- templates publish
 
 Once the template is registered on the base layer and sufficiently mined, you should see it in the `templates` table of the `global_storage.sqlite` file  under `data/validator`. The `compiled_code` column should contain binary data and the `status` column should be `Active`.
 
+### Claiming L1 burn Tari on the DAN
+
+The user will need to claim burn tari (from the L1) before submitting transactions, otherwise, it will not be
+able to pay for network fees. To be able to claim burn tari, it is necessary to first burn L1 tari, on the base layer. After
+burning tari on the Tari base layer, the client is prompted with the following data
+
+```
+{
+    "transaction_id": <TRANSACTION_ID>,
+    "is_success": <IS_SUCCESS>,
+    "failure_message": <FAILURE_MESSAGE>,
+    "commitment": <COMMITMENT>,
+    "ownership_proof": <OWNERSHIP_PROOF>,
+    "rangeproof": <RANGEPROOF>
+}
+```
+
+Now, it is possible to claim burn Tari on the DAN layer, as follows. Create a new `.json` file, with path
+`<JSON_FILE_TO_RETRIEVE_BURN_TARI>`
+
+```
+{
+    "claim_public_key": <CLAIM_PUBLIC_KEY>,
+    "transaction_id": <TRANSACTION_ID>,
+    "commitment": <COMMITMENT>,
+    "ownership_proof": <OWNERSHIP_PROOF>,
+    "rangeproof": <RANGEPROOF>
+}
+```
+
+where `<CLAIM_PUBLIC_KEY>` is the claim public key that it was provided to the tari console wallet to burn base layer Tari,
+in the first place.
+
+```
+cargo run --bin tari_dan_wallet_cli --claim-burn --account <ACCOUNT_NAME> --input <JSON_FILE_TO_RETRIEVE_BURN_TARI> --fee 1
+```
+
+where `<ACCOUNT_NAME>` is the user account name, `<JSON_FILE_TO_RETRIEVE_BURN_TARI>` is the json generate previously.
+
+
 ### Calling a function
-With the templated registered we can invoke a function by using the `validator_node_cli`.
+With the templated registered we can invoke a function by using the `tari_dan_wallet_cli`.
 
 Next we can get a list of templates
 
@@ -96,10 +146,11 @@ Next we can get a list of templates
 cargo run --bin tari_validator_node_cli -- templates list
 ```
 
+To be entitled to pay for network fees, the user will have to claim burn Tari, see the previous section.
 Finally, call the function (In this case we'll be calling the `new` function on the example `Counter` template)
 
 ```
-cargo run --bin tari_validator_node_cli -- transactions submit --wait-for-result call-function <template_address> new 
+cargo run --bin tari_dan_wallet_cli -- transactions submit --wait-for-result call-function <template_address> new 
 ```
 
 ### Debugging Hotstuff 
