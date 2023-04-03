@@ -44,8 +44,7 @@ mod sparkle_nft_template {
                 (NonFungibleId::from_string("Sparkle1"), (&(), &())),
                 (NonFungibleId::from_u256([0u8; 32]), (&(), &())),
             ];
-            let bucket = ResourceBuilder::non_fungible()
-                .with_token_symbol("SPKL")
+            let bucket = ResourceBuilder::non_fungible("SPKL")
                 .with_non_fungibles(tokens)
                 .build_bucket();
 

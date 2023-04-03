@@ -171,7 +171,7 @@ impl TransactionMeta {
     }
 
     pub fn change_for_shard(&self, shard_id: ShardId) -> Option<SubstateChange> {
-        self.involved_objects.get(&shard_id).cloned()
+        self.involved_objects.get(&shard_id).copied()
     }
 
     pub fn set_max_outputs(&mut self, max_outputs: u32) -> &mut Self {
