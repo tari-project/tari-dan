@@ -114,12 +114,16 @@ impl SubstateShardData {
 
     pub fn into_substate_state(self) -> SubstateState {
         if let Some(payload_id) = self.destroyed_payload_id() {
-            SubstateState::Down { deleted_by: payload_id }
+            SubstateState::Down {
+                deleted_by: payload_id,
+                fees_accrued: 0,
+            }
         } else {
             SubstateState::Up {
                 address: self.address.clone(),
                 created_by: self.created_payload_id(),
                 data: self.into_substate(),
+                fees_accrued: 0,
             }
         }
     }

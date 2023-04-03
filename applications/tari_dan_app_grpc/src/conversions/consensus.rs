@@ -260,9 +260,11 @@ impl TryFrom<proto::consensus::SubstateState> for SubstateState {
                 address: SubstateAddress::from_bytes(&up.address)?,
                 created_by: up.created_by.try_into()?,
                 data: Substate::from_bytes(&up.data)?,
+                fees_accrued: value.fees_accrued,
             }),
             Some(State::Down(down)) => Ok(Self::Down {
                 deleted_by: down.deleted_by.try_into()?,
+                fees_accrued: value.fees_accrued,
             }),
             None => Err(anyhow!("SubstateState missing")),
         }
@@ -280,16 +282,22 @@ impl From<SubstateState> for proto::consensus::SubstateState {
                 created_by,
                 data,
                 address,
+                fees_accrued,
             } => Self {
                 state: Some(State::Up(proto::consensus::UpState {
                     address: address.to_bytes(),
                     created_by: created_by.as_bytes().to_vec(),
                     data: data.to_bytes(),
+                    fees_accrued,
                 })),
             },
-            SubstateState::Down { deleted_by } => Self {
+            SubstateState::Down {
+                deleted_by,
+                fees_accrued,
+            } => Self {
                 state: Some(State::Down(proto::consensus::DownState {
                     deleted_by: deleted_by.as_bytes().to_vec(),
+                    fees_accrued,
                 })),
             },
         }

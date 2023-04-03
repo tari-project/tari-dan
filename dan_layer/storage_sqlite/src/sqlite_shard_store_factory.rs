@@ -865,6 +865,7 @@ impl<'a> SqliteShardStoreWriteTransaction<'a> {
                 current_state: if current_state.is_destroyed() {
                     SubstateState::Down {
                         deleted_by: PayloadId::try_from(current_state.destroyed_by_payload_id.unwrap_or_default())?,
+                        fees_accrued: current_state.fee_paid_for_deleted_justify as u64,
                     }
                 } else {
                     SubstateState::Up {
@@ -872,6 +873,7 @@ impl<'a> SqliteShardStoreWriteTransaction<'a> {
                         created_by: PayloadId::try_from(current_state.created_by_payload_id)?,
                         data: serde_json::from_str::<tari_engine_types::substate::Substate>(&current_state.data)
                             .unwrap(),
+                        fees_accrued: current_state.fee_paid_for_created_justify as u64,
                     }
                 },
             })
@@ -1230,7 +1232,12 @@ impl ShardStoreWriteTransaction<PublicKey, TariDanPayload> for SqliteShardStoreW
         for st_change in changes {
             match st_change {
                 SubstateState::DoesNotExist => (),
-                SubstateState::Up { address, data: d, .. } => {
+                SubstateState::Up {
+                    address,
+                    data: d,
+                    fees_accrued,
+                    ..
+                } => {
                     if let Some(s) = &current_state {
                         if !s.is_destroyed() {
                             return Err(StorageError::QueryError {
@@ -1251,7 +1258,7 @@ impl ShardStoreWriteTransaction<PublicKey, TariDanPayload> for SqliteShardStoreW
                         created_justify: Some(serde_json::to_string_pretty(node.justify()).unwrap()),
                         created_node_hash: node.hash().as_bytes().to_vec(),
                         created_height: node.height().as_u64() as i64,
-                        fee_paid_for_created_justify: 0, // 0
+                        fee_paid_for_created_justify: *fees_accrued as i64, // 0
                         fee_paid_for_deleted_justify: 0,
                         created_justify_leader: None,
                         deleted_justify_leader: None,
@@ -1265,7 +1272,7 @@ impl ShardStoreWriteTransaction<PublicKey, TariDanPayload> for SqliteShardStoreW
                             reason: format!("Save substate changes error. Could not insert new substate: {}", e),
                         })?;
                 },
-                SubstateState::Down { .. } => {
+                SubstateState::Down { fees_accrued, .. } => {
                     if let Some(s) = &current_state {
                         if s.is_destroyed() {
                             return Err(StorageError::QueryError {
@@ -1282,6 +1289,9 @@ impl ShardStoreWriteTransaction<PublicKey, TariDanPayload> for SqliteShardStoreW
                                 substates::destroyed_height.eq(node.height().as_u64() as i64),
                                 substates::destroyed_node_hash.eq(node.hash().as_bytes()),
                                 substates::destroyed_timestamp.eq(now),
+                                substates::deleted_at_epoch.eq(node.epoch().as_u64() as i64),
+                                substates::fee_paid_for_deleted_justify.eq(*fees_accrued as i64),
+                                substates::deleted_justify_leader.eq(node.justify().proposed_by().to_hex()),
                             ))
                             .execute(self.connection())
                             .map_err(|e| StorageError::QueryError {

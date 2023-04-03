@@ -102,8 +102,10 @@ message UpState {
   bytes created_by = 1;
   bytes address = 2;
   bytes data = 3;
+  uint64 fees_accrued = 4;
 }
 
 message DownState {
   bytes deleted_by = 1;
+  uint64 fees_accrued = 2;
 }

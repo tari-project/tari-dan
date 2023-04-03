@@ -1315,7 +1315,7 @@ where
                                 details: format!("Pledged substate is already UP'd by payload {}", created_by),
                             });
                         },
-                        SubstateState::Down { deleted_by } => {
+                        SubstateState::Down { deleted_by, .. } => {
                             return Err(HotStuffError::InvalidPledge {
                                 shard: shard_id,
                                 pledged_payload: *pledged_to_payload,
@@ -1923,10 +1923,10 @@ fn extract_changes_for_shards(
     for (address, version) in diff.down_iter() {
         let shard_id = ShardId::from_address(address, *version);
         if shard_ids.contains(&shard_id) {
-            changes
-                .entry(shard_id)
-                .or_default()
-                .push(SubstateState::Down { deleted_by: payload_id });
+            changes.entry(shard_id).or_default().push(SubstateState::Down {
+                deleted_by: payload_id,
+                fees_accrued: 0,
+            });
         }
     }
     for (address, substate) in diff.up_iter() {
@@ -1936,6 +1936,7 @@ fn extract_changes_for_shards(
                 address: address.clone(),
                 created_by: payload_id,
                 data: substate.clone(),
+                fees_accrued: 0,
             });
         }
     }
