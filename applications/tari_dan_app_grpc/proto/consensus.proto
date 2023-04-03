@@ -39,10 +39,10 @@ message QuorumCertificate {
   uint64 local_node_height = 4;
   bytes shard = 5;
   uint64 epoch = 6;
-  bytes proposed_by = 7;
-  QuorumDecision decision = 8;
-  repeated ShardPledge all_shard_pledges = 9;
-  repeated ValidatorMetadata validators_metadata = 10;
+  QuorumDecision decision = 7;
+  repeated ShardPledge all_shard_pledges = 8;
+  repeated ValidatorMetadata validators_metadata = 9;
+  bytes proposed_by = 10;
 }
 
 message HotStuffTreeNode {

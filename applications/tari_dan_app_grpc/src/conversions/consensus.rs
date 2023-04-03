@@ -117,7 +117,7 @@ impl TryFrom<proto::consensus::HotStuffTreeNode> for HotStuffTreeNode<CommsPubli
             value.leader_round as u32,
             value.local_pledge.map(|lp| lp.try_into()).transpose()?,
             value.epoch.into(),
-            value.proposed_by,
+            PublicKey::from_bytes(&value.proposed_by)?,
             value
                 .justify
                 .map(|j| j.try_into())
