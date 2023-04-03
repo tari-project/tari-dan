@@ -280,6 +280,8 @@ impl<'a> SqliteShardStoreReadTransaction<'a> {
                 .as_ref()
                 .map(|justify| serde_json::from_str(justify.as_str()).unwrap()),
             ss.destroyed_justify.as_ref().map(|v| serde_json::from_str(v).unwrap()),
+            ss.fee_paid_for_created_justify as u64,
+            ss.fee_paid_for_deleted_justify as u64,
         ))
     }
 }

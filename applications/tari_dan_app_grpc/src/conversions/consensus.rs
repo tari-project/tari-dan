@@ -260,11 +260,11 @@ impl TryFrom<proto::consensus::SubstateState> for SubstateState {
                 address: SubstateAddress::from_bytes(&up.address)?,
                 created_by: up.created_by.try_into()?,
                 data: Substate::from_bytes(&up.data)?,
-                fees_accrued: value.fees_accrued,
+                fees_accrued: up.fees_accrued,
             }),
             Some(State::Down(down)) => Ok(Self::Down {
                 deleted_by: down.deleted_by.try_into()?,
-                fees_accrued: value.fees_accrued,
+                fees_accrued: down.fees_accrued,
             }),
             None => Err(anyhow!("SubstateState missing")),
         }

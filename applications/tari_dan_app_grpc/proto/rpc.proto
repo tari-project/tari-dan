@@ -104,4 +104,6 @@ message VNStateSyncResponse {
   bytes destroyed_payload_id = 10;
   tari.dan.consensus.QuorumCertificate created_justify = 11;
   tari.dan.consensus.QuorumCertificate destroyed_justify = 12;
+  uint64 created_fee_accrued = 13;
+  uint64 destroyed_fee_accrued = 14;
 }

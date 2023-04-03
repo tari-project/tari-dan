@@ -44,6 +44,8 @@ impl TryFrom<proto::rpc::VnStateSyncResponse> for SubstateShardData {
                     .ok_or_else(|| anyhow::anyhow!("VnStateSyncResponse created_justify is required"))?,
             ),
             value.destroyed_justify.map(|v| v.try_into()).transpose()?,
+            value.created_fee_accrued,
+            value.destroyed_fee_accrued,
         ))
     }
 }
@@ -81,6 +83,8 @@ impl TryFrom<SubstateShardData> for proto::rpc::VnStateSyncResponse {
                 .as_ref()
                 .map(|v| v.clone().try_into())
                 .transpose()?,
+            created_fee_accrued: value.created_fee_accrued(),
+            destroyed_fee_accrued: value.destroyed_fee_accrued(),
         })
     }
 }
