@@ -129,7 +129,7 @@ create table substates
     destroyed_node_hash          blob      NULL,
     destroyed_height             bigint    NULL,
     created_timestamp            timestamp not NULL DEFAULT CURRENT_TIMESTAMP,
-    destroyed_timestamp          timestamp NULL
+    destroyed_timestamp          timestamp NULL,
     fee_paid_for_created_justify bigint    not NULL,
     fee_paid_for_deleted_justify bigint    not NULL,
     created_at_epoch             bigint    NULL,
