@@ -850,15 +850,6 @@ where
         // Check if we have resolved all pledges, if so, we are ready to commit resultant substate changes
         if resolved_pledges.len() == involved_shards.len() {
             let payload_result = tx.get_payload_result(&node.payload_id())?;
-            // let total_fee_accrued = 0;
-            let total_fee_accrued = payload_result
-                .exec_result
-                .clone()
-                .fee_receipt
-                .unwrap()
-                .total_fee_payment
-                .as_u64_checked()
-                .ok_or(HotStuffError::MathOverflow)?;
 
             match &payload_result.exec_result.finalize.result {
                 TransactionResult::Accept(diff) => {
@@ -873,6 +864,13 @@ where
                         ));
                         return Ok(());
                     }
+
+                    let total_fee_accrued = payload_result
+                        .exec_result
+                        .clone()
+                        .fee_receipt
+                        .map(|f| f.total_fee_payment.as_u64_checked().unwrap_or_default())
+                        .unwrap_or_default();
 
                     let local_change_set =
                         extract_changes_for_shards(&local_shards, node.payload_id(), diff, total_fee_accrued)?;

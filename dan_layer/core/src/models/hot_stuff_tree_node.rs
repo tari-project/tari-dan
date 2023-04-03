@@ -50,9 +50,9 @@ pub struct HotStuffTreeNode<TAddr, TPayload> {
     leader_round: u32,
     local_pledge: Option<ObjectPledge>,
     epoch: Epoch,
-    justify: QuorumCertificate<TAddr>,
     // Mostly used for debugging
     proposed_by: TAddr,
+    justify: QuorumCertificate<TAddr>,
 }
 
 impl<TAddr: Clone + NodeAddressable + Serialize, TPayload: Payload> HotStuffTreeNode<TAddr, TPayload> {
@@ -80,8 +80,8 @@ impl<TAddr: Clone + NodeAddressable + Serialize, TPayload: Payload> HotStuffTree
             leader_round,
             justify,
             payload_height,
-            local_pledge,
             proposed_by,
+            local_pledge,
         };
         s.hash = s.calculate_hash();
         s
@@ -106,8 +106,8 @@ impl<TAddr: Clone + NodeAddressable + Serialize, TPayload: Payload> HotStuffTree
             leader_round: 0,
             local_pledge,
             epoch,
-            justify: QuorumCertificate::genesis(epoch, payload_id, shard_id, proposed_by.clone()),
-            proposed_by,
+            proposed_by: proposed_by.clone(),
+            justify: QuorumCertificate::genesis(epoch, payload_id, shard_id, proposed_by),
         }
     }
 
@@ -124,7 +124,7 @@ impl<TAddr: Clone + NodeAddressable + Serialize, TPayload: Payload> HotStuffTree
             .chain(&self.shard)
             .chain(&self.payload_id)
             .chain(&self.payload_height)
-            .chain(&self.proposed_by.as_bytes())
+            .chain(&self.proposed_by)
             .chain(&self.local_pledge)
             .result()
             .into_array()
@@ -132,7 +132,7 @@ impl<TAddr: Clone + NodeAddressable + Serialize, TPayload: Payload> HotStuffTree
     }
 }
 
-impl<TAddr, TPayload> HotStuffTreeNode<TAddr, TPayload> {
+impl<TAddr: NodeAddressable, TPayload> HotStuffTreeNode<TAddr, TPayload> {
     pub fn hash(&self) -> &TreeNodeHash {
         &self.hash
     }

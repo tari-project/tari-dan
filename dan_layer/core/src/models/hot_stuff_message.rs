@@ -23,7 +23,7 @@
 use std::fmt::{Display, Formatter};
 
 use serde::Serialize;
-use tari_dan_common_types::{quorum_certificate::QuorumCertificate, ShardId, ValidatorMetadata};
+use tari_dan_common_types::{quorum_certificate::QuorumCertificate, NodeAddressable, ShardId, ValidatorMetadata};
 
 use crate::models::{HotStuffMessageType, HotStuffTreeNode};
 
@@ -119,7 +119,7 @@ impl<TPayload, TAddr: Clone> HotStuffMessage<TPayload, TAddr> {
     }
 }
 
-impl<TPayload, TAddr> Display for HotStuffMessage<TPayload, TAddr> {
+impl<TPayload, TAddr: NodeAddressable> Display for HotStuffMessage<TPayload, TAddr> {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         write!(
             f,
