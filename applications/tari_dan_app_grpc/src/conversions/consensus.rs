@@ -117,7 +117,6 @@ impl TryFrom<proto::consensus::HotStuffTreeNode> for HotStuffTreeNode<CommsPubli
             value.leader_round as u32,
             value.local_pledge.map(|lp| lp.try_into()).transpose()?,
             value.epoch.into(),
-            PublicKey::from_bytes(value.proposed_by.as_slice())?,
             value
                 .justify
                 .map(|j| j.try_into())
@@ -139,7 +138,6 @@ impl From<HotStuffTreeNode<CommsPublicKey, TariDanPayload>> for proto::consensus
             leader_round: u64::from(source.leader_round()),
             local_pledge: source.local_pledge().map(|p| p.clone().into()),
             epoch: source.epoch().as_u64(),
-            proposed_by: source.proposed_by().as_bytes().to_vec(),
             justify: Some(source.justify().clone().into()),
         }
     }
@@ -260,9 +258,11 @@ impl TryFrom<proto::consensus::SubstateState> for SubstateState {
                 address: SubstateAddress::from_bytes(&up.address)?,
                 created_by: up.created_by.try_into()?,
                 data: Substate::from_bytes(&up.data)?,
+                fee_accrued: up.fee_accrued,
             }),
             Some(State::Down(down)) => Ok(Self::Down {
                 deleted_by: down.deleted_by.try_into()?,
+                fee_accrued: down.fee_accrued,
             }),
             None => Err(anyhow!("SubstateState missing")),
         }
@@ -280,16 +280,22 @@ impl From<SubstateState> for proto::consensus::SubstateState {
                 created_by,
                 data,
                 address,
+                fee_accrued,
             } => Self {
                 state: Some(State::Up(proto::consensus::UpState {
                     address: address.to_bytes(),
                     created_by: created_by.as_bytes().to_vec(),
                     data: data.to_bytes(),
+                    fee_accrued,
                 })),
             },
-            SubstateState::Down { deleted_by } => Self {
+            SubstateState::Down {
+                deleted_by,
+                fee_accrued,
+            } => Self {
                 state: Some(State::Down(proto::consensus::DownState {
                     deleted_by: deleted_by.as_bytes().to_vec(),
+                    fee_accrued,
                 })),
             },
         }

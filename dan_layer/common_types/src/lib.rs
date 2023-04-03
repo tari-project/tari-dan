@@ -52,9 +52,11 @@ pub enum SubstateState {
         created_by: PayloadId,
         address: SubstateAddress,
         data: Substate,
+        fee_accrued: u64,
     },
     Down {
         deleted_by: PayloadId,
+        fee_accrued: u64,
     },
 }
 

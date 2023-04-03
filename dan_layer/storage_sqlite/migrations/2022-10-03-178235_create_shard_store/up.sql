@@ -114,22 +114,28 @@ create unique index leader_proposals_index on leader_proposals (payload_id, shar
 
 create table substates
 (
-    id                      integer   not NULL primary key AUTOINCREMENT,
-    shard_id                blob      not NULL,
-    address                 text      not NULL,
+    id                           integer   not NULL primary key AUTOINCREMENT,
+    shard_id                     blob      not NULL,
+    address                      text      not NULL,
     -- To be deleted in future
-    version                 bigint    not NULL,
-    data                    text      not NULL,
-    created_by_payload_id   blob      not NULL,
-    created_justify         text      NULL,
-    created_node_hash       blob      not NULL,
-    created_height          bigint    not NULL,
-    destroyed_by_payload_id blob      NULL,
-    destroyed_justify       text      NULL,
-    destroyed_node_hash     blob      NULL,
-    destroyed_height        bigint    NULL,
-    created_timestamp       timestamp not NULL DEFAULT CURRENT_TIMESTAMP,
-    destroyed_timestamp     timestamp NULL
+    version                      bigint    not NULL,
+    data                         text      not NULL,
+    created_by_payload_id        blob      not NULL,
+    created_justify              text      NULL,
+    created_node_hash            blob      not NULL,
+    created_height               bigint    not NULL,
+    destroyed_by_payload_id      blob      NULL,
+    destroyed_justify            text      NULL,
+    destroyed_node_hash          blob      NULL,
+    destroyed_height             bigint    NULL,
+    created_timestamp            timestamp not NULL DEFAULT CURRENT_TIMESTAMP,
+    destroyed_timestamp          timestamp NULL
+    fee_paid_for_created_justify bigint    not NULL,
+    fee_paid_for_deleted_justify bigint    not NULL,
+    created_at_epoch             bigint    NULL,
+    deleted_at_epoch             bigint    NULL,
+    created_justify_leader       text      NULL,
+    deleted_justify_leader       text      NULL
 );
 
 -- All shard ids are unique

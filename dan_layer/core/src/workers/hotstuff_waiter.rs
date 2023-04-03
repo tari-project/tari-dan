@@ -432,7 +432,6 @@ where
                 *self.current_leader_round.entry((shard, payload_id)).or_default(),
                 Some(local_pledge),
                 epoch,
-                self.public_key.clone(),
                 high_qc,
             );
 
@@ -850,6 +849,15 @@ where
         // Check if we have resolved all pledges, if so, we are ready to commit resultant substate changes
         if resolved_pledges.len() == involved_shards.len() {
             let payload_result = tx.get_payload_result(&node.payload_id())?;
+            let total_fee_accrued = payload_result
+                .exec_result
+                .clone()
+                .fee_receipt
+                .unwrap()
+                .total_fee_payment
+                .as_u64_checked()
+                .ok_or(HotStuffError::MathOverflow)?;
+
             match &payload_result.exec_result.finalize.result {
                 TransactionResult::Accept(diff) => {
                     if resolved_pledges
@@ -864,7 +872,9 @@ where
                         return Ok(());
                     }
 
-                    let local_change_set = extract_changes_for_shards(&local_shards, node.payload_id(), diff)?;
+                    let local_change_set =
+                        extract_changes_for_shards(&local_shards, node.payload_id(), diff, total_fee_accrued)?;
+
                     for pledge in resolved_pledges {
                         // Only persist local shards
                         if let Some(changes) = local_change_set.get(&pledge.shard_id) {
@@ -1315,7 +1325,7 @@ where
                                 details: format!("Pledged substate is already UP'd by payload {}", created_by),
                             });
                         },
-                        SubstateState::Down { deleted_by } => {
+                        SubstateState::Down { deleted_by, .. } => {
                             return Err(HotStuffError::InvalidPledge {
                                 shard: shard_id,
                                 pledged_payload: *pledged_to_payload,
@@ -1917,16 +1927,22 @@ fn extract_changes_for_shards(
     shard_ids: &[ShardId],
     payload_id: PayloadId,
     diff: &SubstateDiff,
+    total_fee_accrued: u64,
 ) -> Result<HashMap<ShardId, Vec<SubstateState>>, HotStuffError> {
     let mut changes = HashMap::<_, Vec<_>>::new();
+    // we split the total accrued fee over all substate differences
+    let total_diffs = diff.len() as u64;
+    let accrued_fee_per_diff = total_fee_accrued
+        .checked_div(total_diffs)
+        .ok_or(HotStuffError::MathOverflow)?;
     // down first, then up
     for (address, version) in diff.down_iter() {
         let shard_id = ShardId::from_address(address, *version);
         if shard_ids.contains(&shard_id) {
-            changes
-                .entry(shard_id)
-                .or_default()
-                .push(SubstateState::Down { deleted_by: payload_id });
+            changes.entry(shard_id).or_default().push(SubstateState::Down {
+                deleted_by: payload_id,
+                fee_accrued: accrued_fee_per_diff,
+            });
         }
     }
     for (address, substate) in diff.up_iter() {
@@ -1936,6 +1952,7 @@ fn extract_changes_for_shards(
                 address: address.clone(),
                 created_by: payload_id,
                 data: substate.clone(),
+                fee_accrued: accrued_fee_per_diff,
             });
         }
     }

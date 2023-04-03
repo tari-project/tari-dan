@@ -36,14 +36,10 @@ impl TryFrom<proto::rpc::VnStateSyncResponse> for SubstateShardData {
             } else {
                 Some(value.destroyed_payload_id.try_into()?)
             },
-            Some(
-                value
-                    .created_justify
-                    .map(|v| v.try_into())
-                    .transpose()?
-                    .ok_or_else(|| anyhow::anyhow!("VnStateSyncResponse created_justify is required"))?,
-            ),
+            value.created_justify.map(|v| v.try_into()).transpose()?,
             value.destroyed_justify.map(|v| v.try_into()).transpose()?,
+            value.created_fee_accrued,
+            value.destroyed_fee_accrued,
         ))
     }
 }
@@ -69,18 +65,18 @@ impl TryFrom<SubstateShardData> for proto::rpc::VnStateSyncResponse {
                 .destroyed_payload_id()
                 .map(|v| v.as_bytes().to_vec())
                 .unwrap_or_default(),
-            created_justify: Some(
-                value
-                    .created_justify()
-                    .ok_or_else(|| anyhow::anyhow!("VnStateSyncResponse created_justify is required"))?
-                    .clone()
-                    .try_into()?,
-            ),
+            created_justify: value
+                .created_justify()
+                .as_ref()
+                .map(|v| (*v).clone().try_into())
+                .transpose()?,
             destroyed_justify: value
                 .destroyed_justify()
                 .as_ref()
-                .map(|v| v.clone().try_into())
+                .map(|v| (*v).clone().try_into())
                 .transpose()?,
+            created_fee_accrued: value.created_fee_accrued(),
+            destroyed_fee_accrued: value.destroyed_fee_accrued(),
         })
     }
 }

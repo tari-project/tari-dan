@@ -51,8 +51,6 @@ pub struct HotStuffTreeNode<TAddr, TPayload> {
     local_pledge: Option<ObjectPledge>,
     epoch: Epoch,
     justify: QuorumCertificate<TAddr>,
-    // Mostly used for debugging
-    proposed_by: TAddr,
 }
 
 impl<TAddr: Clone + NodeAddressable + Serialize, TPayload: Payload> HotStuffTreeNode<TAddr, TPayload> {
@@ -66,7 +64,6 @@ impl<TAddr: Clone + NodeAddressable + Serialize, TPayload: Payload> HotStuffTree
         leader_round: u32,
         local_pledge: Option<ObjectPledge>,
         epoch: Epoch,
-        proposed_by: TAddr,
         justify: QuorumCertificate<TAddr>,
     ) -> Self {
         let mut s = HotStuffTreeNode {
@@ -81,7 +78,6 @@ impl<TAddr: Clone + NodeAddressable + Serialize, TPayload: Payload> HotStuffTree
             justify,
             payload_height,
             local_pledge,
-            proposed_by,
         };
         s.hash = s.calculate_hash();
         s
@@ -107,7 +103,6 @@ impl<TAddr: Clone + NodeAddressable + Serialize, TPayload: Payload> HotStuffTree
             local_pledge,
             epoch,
             justify: QuorumCertificate::genesis(epoch, payload_id, shard_id, proposed_by.clone()),
-            proposed_by,
         }
     }
 
@@ -124,7 +119,7 @@ impl<TAddr: Clone + NodeAddressable + Serialize, TPayload: Payload> HotStuffTree
             .chain(&self.shard)
             .chain(&self.payload_id)
             .chain(&self.payload_height)
-            .chain(&self.proposed_by.as_bytes())
+            .chain(&self.justify.proposed_by().as_bytes())
             .chain(&self.local_pledge)
             .result()
             .into_array()
@@ -132,13 +127,13 @@ impl<TAddr: Clone + NodeAddressable + Serialize, TPayload: Payload> HotStuffTree
     }
 }
 
-impl<TAddr, TPayload> HotStuffTreeNode<TAddr, TPayload> {
+impl<TAddr: NodeAddressable, TPayload> HotStuffTreeNode<TAddr, TPayload> {
     pub fn hash(&self) -> &TreeNodeHash {
         &self.hash
     }
 
     pub fn proposed_by(&self) -> &TAddr {
-        &self.proposed_by
+        self.justify().proposed_by()
     }
 
     pub fn parent(&self) -> &TreeNodeHash {

@@ -232,6 +232,7 @@ impl DryRunTransactionProcessor {
         let current_state = if let Some(deleted_by) = Some(msg.destroyed_payload_id).filter(|p| !p.is_empty()) {
             SubstateState::Down {
                 deleted_by: deleted_by.try_into()?,
+                fee_accrued: msg.destroyed_fee_accrued,
             }
         } else {
             let substate = Substate::from_bytes(&msg.substate)?;
@@ -239,6 +240,7 @@ impl DryRunTransactionProcessor {
                 created_by: msg.created_payload_id.try_into()?,
                 address: SubstateAddress::from_bytes(&msg.address)?,
                 data: substate,
+                fee_accrued: msg.created_fee_accrued,
             }
         };
 

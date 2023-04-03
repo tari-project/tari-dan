@@ -91,6 +91,8 @@ pub enum HotStuffError {
     AllShardsRejected { payload_id: PayloadId, reason: String },
     #[error("Current node is not involved in processing payload {payload_id}")]
     NodeIsNotInvolvedInPayload { payload_id: PayloadId },
+    #[error("Math overflow, division by zero")]
+    MathOverflow,
 }
 
 impl<T> From<mpsc::error::SendError<T>> for HotStuffError {

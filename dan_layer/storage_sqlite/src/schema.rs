@@ -154,6 +154,12 @@ diesel::table! {
         destroyed_height -> Nullable<BigInt>,
         created_timestamp -> Timestamp,
         destroyed_timestamp -> Nullable<Timestamp>,
+        fee_paid_for_created_justify -> BigInt,
+        fee_paid_for_deleted_justify -> BigInt,
+        created_at_epoch -> Nullable<BigInt>,
+        deleted_at_epoch -> Nullable<BigInt>,
+        created_justify_leader -> Nullable<Text>,
+        deleted_justify_leader -> Nullable<Text>,
     }
 }
 

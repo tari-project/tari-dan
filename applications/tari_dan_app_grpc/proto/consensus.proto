@@ -53,10 +53,9 @@ message HotStuffTreeNode {
   uint64 payload_height = 5;
   ObjectPledge local_pledge = 6;
   uint64 epoch = 7;
-  bytes proposed_by = 8;
-  QuorumCertificate justify = 9;
-  TariDanPayload payload = 10;
-  uint64 leader_round = 11;
+  QuorumCertificate justify = 8;
+  TariDanPayload payload = 9;
+  uint64 leader_round = 10;
 }
 
 message ValidatorMetadata {
@@ -102,8 +101,10 @@ message UpState {
   bytes created_by = 1;
   bytes address = 2;
   bytes data = 3;
+  uint64 fee_accrued = 4;
 }
 
 message DownState {
   bytes deleted_by = 1;
+  uint64 fee_accrued = 2;
 }

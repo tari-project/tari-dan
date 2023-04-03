@@ -27,6 +27,8 @@ pub struct SubstateShardData {
     destroyed_payload_id: Option<PayloadId>,
     created_justify: Option<QuorumCertificate<PublicKey>>,
     destroyed_justify: Option<QuorumCertificate<PublicKey>>,
+    created_fee_accrued: u64,
+    destroyed_fee_accrued: u64,
 }
 
 impl SubstateShardData {
@@ -43,6 +45,8 @@ impl SubstateShardData {
         destroyed_payload_id: Option<PayloadId>,
         created_justify: Option<QuorumCertificate<PublicKey>>,
         destroyed_justify: Option<QuorumCertificate<PublicKey>>,
+        created_fee_accrued: u64,
+        destroyed_fee_accrued: u64,
     ) -> Self {
         Self {
             shard_id,
@@ -57,6 +61,8 @@ impl SubstateShardData {
             destroyed_payload_id,
             created_justify,
             destroyed_justify,
+            created_fee_accrued,
+            destroyed_fee_accrued,
         }
     }
 
@@ -108,17 +114,29 @@ impl SubstateShardData {
         self.created_justify.as_ref()
     }
 
-    pub fn destroyed_justify(&self) -> &Option<QuorumCertificate<PublicKey>> {
-        &self.destroyed_justify
+    pub fn destroyed_justify(&self) -> Option<&QuorumCertificate<PublicKey>> {
+        self.destroyed_justify.as_ref()
+    }
+
+    pub fn created_fee_accrued(&self) -> u64 {
+        self.created_fee_accrued
+    }
+
+    pub fn destroyed_fee_accrued(&self) -> u64 {
+        self.destroyed_fee_accrued
     }
 
     pub fn into_substate_state(self) -> SubstateState {
         if let Some(payload_id) = self.destroyed_payload_id() {
-            SubstateState::Down { deleted_by: payload_id }
+            SubstateState::Down {
+                deleted_by: payload_id,
+                fee_accrued: self.destroyed_fee_accrued(),
+            }
         } else {
             SubstateState::Up {
                 address: self.address.clone(),
                 created_by: self.created_payload_id(),
+                fee_accrued: self.created_fee_accrued(),
                 data: self.into_substate(),
             }
         }
