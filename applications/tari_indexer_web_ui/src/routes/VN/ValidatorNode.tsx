@@ -33,6 +33,7 @@ import { StyledPaper } from '../../Components/StyledComponents';
 import Grid from '@mui/material/Grid';
 import SecondaryHeading from '../../Components/SecondaryHeading';
 import MonitoredSubstates from './Components/MonitoredSubstates';
+import MonitoredNftCollections from './Components/MonitoredNftCollections';
 
 function ValidatorNode() {
   const [identity, setIdentity] = useState<IIdentity | undefined>(undefined);
@@ -67,6 +68,12 @@ function ValidatorNode() {
       <Grid item xs={12} md={12} lg={12}>
         <StyledPaper>
           <MonitoredSubstates />
+        </StyledPaper>
+      </Grid>
+      <SecondaryHeading>Monitored NFT collections</SecondaryHeading>
+      <Grid item xs={12} md={12} lg={12}>
+        <StyledPaper>
+          <MonitoredNftCollections />
         </StyledPaper>
       </Grid>
       <SecondaryHeading>Connections</SecondaryHeading>

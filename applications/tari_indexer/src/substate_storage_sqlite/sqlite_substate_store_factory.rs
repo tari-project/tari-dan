@@ -28,6 +28,7 @@ use std::{
 };
 
 use diesel::{
+    dsl::count,
     prelude::*,
     sql_query,
     sql_types::{Integer, Text},
@@ -170,6 +171,7 @@ pub trait SubstateStoreReadTransaction {
     fn get_substate(&mut self, address: String) -> Result<Option<Substate>, StorageError>;
     fn get_all_addresses(&mut self) -> Result<Vec<(String, i64)>, StorageError>;
     fn get_all_substates(&mut self) -> Result<Vec<Substate>, StorageError>;
+    fn get_non_fungible_collections(&mut self) -> Result<Vec<(String, i64)>, StorageError>;
     fn get_non_fungible_count(&mut self, resource_address: String) -> Result<i64, StorageError>;
     fn get_non_fungibles(
         &mut self,
@@ -223,6 +225,24 @@ impl SubstateStoreReadTransaction for SqliteSubstateStoreReadTransaction<'_> {
 
         match substates {
             Some(substates_vec) => Ok(substates_vec),
+            None => Ok(vec![]),
+        }
+    }
+
+    fn get_non_fungible_collections(&mut self) -> Result<Vec<(String, i64)>, StorageError> {
+        use crate::substate_storage_sqlite::schema::non_fungible_indexes as nfts;
+
+        let collections = nfts::table
+            .group_by(nfts::resource_address)
+            .select((nfts::resource_address, count(nfts::id)))
+            .get_results(self.connection())
+            .optional()
+            .map_err(|e| StorageError::QueryError {
+                reason: format!("get_all_addresses: {}", e),
+            })?;
+
+        match collections {
+            Some(collections_vec) => Ok(collections_vec),
             None => Ok(vec![]),
         }
     }

@@ -239,6 +239,11 @@ impl SubstateManager {
         self.dan_layer_scanner.get_substate(substate_address, version).await
     }
 
+    pub async fn get_non_fungible_collections(&self) -> Result<Vec<(String, i64)>, anyhow::Error> {
+        let mut tx = self.substate_store.create_read_tx()?;
+        tx.get_non_fungible_collections().map_err(|e| e.into())
+    }
+
     pub async fn get_non_fungible_count(&self, substate_address: &SubstateAddress) -> Result<i64, anyhow::Error> {
         let address_str = substate_address.to_address_string();
         let mut tx = self.substate_store.create_read_tx()?;

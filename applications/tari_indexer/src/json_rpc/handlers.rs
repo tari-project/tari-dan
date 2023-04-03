@@ -279,6 +279,17 @@ impl JsonRpcHandlers {
         }
     }
 
+    pub async fn get_non_fungible_collections(&self, value: JsonRpcExtractor) -> JrpcResult {
+        let answer_id = value.get_answer_id();
+
+        let res = self.substate_manager.get_non_fungible_collections().await;
+
+        match res {
+            Ok(collections) => Ok(JsonRpcResponse::success(answer_id, collections)),
+            Err(_) => Err(Self::generic_error_response(answer_id)),
+        }
+    }
+
     pub async fn get_non_fungible_count(&self, value: JsonRpcExtractor) -> JrpcResult {
         let answer_id = value.get_answer_id();
         let request: GetNonFungibleCountRequest = value.parse_params()?;

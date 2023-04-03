@@ -88,6 +88,10 @@ async function clearAddresses() {
   return await jsonRpc("clear_addresses")
 }
 
+async function getNonFungibleCollections() {
+  return await jsonRpc('get_non_fungible_collections');
+}
+
 export {
   addAddress,
   addPeer,
@@ -98,7 +102,8 @@ export {
   getCommsStats,
   getConnections,
   getIdentity,
-    getOpenRpcSchema,
+  getOpenRpcSchema,
   getRecentTransactions,
   getSubstate,
+  getNonFungibleCollections,
 };
