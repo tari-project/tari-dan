@@ -23,10 +23,11 @@
 use std::{collections::HashMap, str::FromStr, time::Duration};
 
 use reqwest::Url;
+use serde_json::Value;
 use tari_common::configuration::{CommonConfig, StringList};
 use tari_comms::multiaddr::Multiaddr;
 use tari_comms_dht::{DbConnectionUrl, DhtConfig};
-use tari_engine_types::substate::{Substate, SubstateAddress};
+use tari_engine_types::substate::SubstateAddress;
 use tari_indexer::{
     config::{ApplicationConfig, IndexerConfig},
     run_indexer,
@@ -64,7 +65,7 @@ impl IndexerProcess {
         let _: () = client.send_request("add_address", params).await.unwrap();
     }
 
-    pub async fn get_substate(&self, world: &TariWorld, output_ref: String, version: u32) -> Substate {
+    pub async fn get_substate(&self, world: &TariWorld, output_ref: String, version: u32) -> Value {
         let address = get_adddress_from_output(world, output_ref);
 
         let params = GetSubstateRequest {
@@ -73,7 +74,7 @@ impl IndexerProcess {
         };
 
         let mut client = self.get_indexer_client().await;
-        let resp: Substate = client.send_request("get_substate", params).await.unwrap();
+        let resp: Value = client.send_request("get_substate", params).await.unwrap();
         resp
     }
 
@@ -83,7 +84,7 @@ impl IndexerProcess {
         output_ref: String,
         start_index: u64,
         end_index: u64,
-    ) -> Vec<tari_indexer::NonFungible> {
+    ) -> Vec<Value> {
         let address = get_adddress_from_output(world, output_ref);
 
         let params = GetNonFungiblesRequest {
@@ -93,7 +94,7 @@ impl IndexerProcess {
         };
 
         let mut client = self.get_indexer_client().await;
-        let resp: Vec<tari_indexer::NonFungible> = client.send_request("get_non_fungibles", params).await.unwrap();
+        let resp: Vec<Value> = client.send_request("get_non_fungibles", params).await.unwrap();
         resp
     }
 

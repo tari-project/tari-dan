@@ -22,6 +22,7 @@
 
 use std::{collections::HashMap, str::FromStr, sync::Arc};
 
+use anyhow::Context;
 use axum_jrpc::{
     error::{JsonRpcError, JsonRpcErrorReason},
     JrpcResult,
@@ -43,7 +44,11 @@ use tari_engine_types::substate::SubstateAddress;
 use tari_validator_node_client::types::{AddPeerRequest, AddPeerResponse, GetIdentityResponse};
 
 // use tari_validator_node_client::types::GetRecentTransactionsResponse;
-use crate::{bootstrap::Services, substate_manager::SubstateManager, GrpcBaseNodeClient};
+use crate::{
+    bootstrap::Services,
+    substate_manager::{NonFungibleResponse, SubstateManager, SubstateResponse},
+    GrpcBaseNodeClient,
+};
 
 #[derive(Serialize, Debug)]
 struct Connection {
@@ -209,10 +214,23 @@ impl JsonRpcHandlers {
             .await
             .unwrap_or(None);
 
-        match res {
-            Some(substate) => Ok(JsonRpcResponse::success(answer_id, substate)),
-            None => Err(Self::generic_error_response(answer_id)),
+        if let Some(substate) = res {
+            if let Ok(json) = Self::build_substate_json(&substate) {
+                return Ok(JsonRpcResponse::success(answer_id, json));
+            }
         }
+
+        Err(Self::generic_error_response(answer_id))
+    }
+
+    fn build_substate_json(substate: &SubstateResponse) -> Result<Value, anyhow::Error> {
+        let mut json_value = serde_json::to_value(substate)?;
+        let data: Value = serde_json::from_str(&substate.data)?;
+        json_value
+            .as_object_mut()
+            .context("Invalid object")?
+            .insert("data".to_owned(), data);
+        Ok(json_value)
     }
 
     pub async fn get_addresses(&self, value: JsonRpcExtractor) -> JrpcResult {
@@ -284,10 +302,27 @@ impl JsonRpcHandlers {
             .get_non_fungibles(&substate_address, request.start_index, request.end_index)
             .await;
 
-        match res {
-            Ok(nfts) => Ok(JsonRpcResponse::success(answer_id, nfts)),
-            Err(_) => Err(Self::generic_error_response(answer_id)),
+        if let Ok(non_fungibles) = res {
+            let nf_json_res = non_fungibles
+                .iter()
+                .map(Self::build_non_fungible_json)
+                .collect::<Result<Vec<_>, _>>();
+            if let Ok(nf_json) = nf_json_res {
+                return Ok(JsonRpcResponse::success(answer_id, nf_json));
+            }
         }
+
+        Err(Self::generic_error_response(answer_id))
+    }
+
+    fn build_non_fungible_json(nf: &NonFungibleResponse) -> Result<Value, anyhow::Error> {
+        let mut json_value = serde_json::to_value(nf)?;
+        let substate: Value = serde_json::from_str(&nf.substate)?;
+        json_value
+            .as_object_mut()
+            .context("Invalid object")?
+            .insert("substate".to_owned(), substate);
+        Ok(json_value)
     }
 
     fn parse_substate_address(address_str: &str, answer_id: i64) -> Result<SubstateAddress, JsonRpcResponse> {
@@ -295,15 +330,19 @@ impl JsonRpcHandlers {
         Ok(address)
     }
 
-    fn generic_error_response(answer_id: i64) -> JsonRpcResponse {
+    fn error_response(answer_id: i64, message: &str) -> JsonRpcResponse {
         JsonRpcResponse::error(
             answer_id,
             JsonRpcError::new(
                 JsonRpcErrorReason::InvalidParams,
-                "Something went wrong".to_string(),
+                message.to_string(),
                 json::Value::Null,
             ),
         )
+    }
+
+    fn generic_error_response(answer_id: i64) -> JsonRpcResponse {
+        Self::error_response(answer_id, "Something went wrong")
     }
 }
 
