@@ -28,6 +28,7 @@ use tari_template_lib::{
     args::{
         Arg,
         BucketInvokeArg,
+        CallerContextInvokeArg,
         ComponentInvokeArg,
         ConsensusInvokeArg,
         EmitLogArg,
@@ -138,6 +139,9 @@ impl WasmProcess {
             },
             EngineOp::ConsensusInvoke => Self::handle(env, arg, |env, arg: ConsensusInvokeArg| {
                 env.state().interface().consensus_invoke(arg.action)
+            }),
+            EngineOp::CallerContextInvoke => Self::handle(env, arg, |env, arg: CallerContextInvokeArg| {
+                env.state().interface().caller_context_invoke(arg.action)
             }),
         };
 

@@ -21,6 +21,7 @@
 //   USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 use std::iter;
 
+use tari_crypto::ristretto::RistrettoPublicKey;
 use tari_dan_engine::{
     packager::{PackageError, TemplateModuleLoader},
     wasm::{compile::compile_template, WasmExecutionError},
@@ -37,6 +38,7 @@ use tari_template_lib::{
 };
 use tari_template_test_tooling::{SubstateType, TemplateTest};
 use tari_transaction_manifest::ManifestValue;
+use tari_utilities::hex::Hex;
 
 #[test]
 fn test_hello_world() {
@@ -196,6 +198,11 @@ fn test_caller_context() {
 
     // tuples returned in a regular function
     let component: ComponentAddress = template_test.call_function("CallerContextTest", "create", args![], vec![]);
+    let value: RistrettoPublicKey = template_test.call_method(component, "caller_pub_key", args![], vec![]);
+    assert_eq!(
+        value,
+        RistrettoPublicKey::from_hex("66cad05f12652276f0656288f60963753f50a7947c54a640aa1e1c62097a406d").unwrap()
+    );
 }
 
 mod errors {

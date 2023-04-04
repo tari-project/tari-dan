@@ -32,6 +32,7 @@ pub mod models;
 pub mod component;
 pub mod consensus;
 
+pub mod caller_context;
 mod context;
 pub use context::{get_context, init_context, AbiContext};
 

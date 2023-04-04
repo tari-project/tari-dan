@@ -337,3 +337,14 @@ pub struct ConsensusInvokeArg {
 pub enum ConsensusAction {
     GetCurrentEpoch,
 }
+
+// -------------------------------- CallerContext -------------------------------- //
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct CallerContextInvokeArg {
+    pub action: CallerContextAction,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub enum CallerContextAction {
+    GetCallerPublicKey,
+}

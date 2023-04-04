@@ -56,6 +56,7 @@ use tari_template_lib::{
         Arg,
         BucketAction,
         BucketRef,
+        CallerContextAction,
         ComponentAction,
         ComponentRef,
         ConsensusAction,
@@ -127,6 +128,8 @@ pub trait RuntimeInterface: Send + Sync {
     fn fee_checkpoint(&self) -> Result<(), RuntimeError>;
     fn reset_to_fee_checkpoint(&self) -> Result<(), RuntimeError>;
     fn finalize(&self) -> Result<(FinalizeResult, FeeReceipt), RuntimeError>;
+
+    fn caller_context_invoke(&self, action: CallerContextAction) -> Result<InvokeResult, RuntimeError>;
 }
 
 #[derive(Clone)]

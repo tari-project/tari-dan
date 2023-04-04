@@ -10,7 +10,7 @@ edition = "2021"
 tari_template_abi = { path = "../../../../template_abi" }
 tari_template_lib = { path = "../../../../template_lib" }
 serde = { version = "1", default-features = false, features = ["derive", "alloc"] }
-tari_crypto = { version = "0.16.10" }
+tari_crypto = { version = "0.16.11" }
 
 
 [profile.release]

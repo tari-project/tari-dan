@@ -20,6 +20,7 @@
 //   WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //   USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+use tari_crypto::ristretto::RistrettoPublicKey;
 use tari_template_lib::prelude::*;
 
 #[template]
@@ -34,6 +35,10 @@ mod caller_context_template {
         pub fn create() -> Self {
             let caller_pub_key = CallerContext::caller();
             Self { caller_pub_key }
+        }
+
+        pub fn caller_pub_key(&self) -> RistrettoPublicKey {
+            self.caller_pub_key.clone()
         }
     }
 }
