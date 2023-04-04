@@ -11,8 +11,7 @@ use anyhow::anyhow;
 use serde::de::DeserializeOwned;
 use tari_bor::encode;
 use tari_crypto::{
-    keys::PublicKey,
-    ristretto::{RistrettoPublicKey, RistrettoSecretKey},
+    ristretto::RistrettoSecretKey,
     tari_utilities::{hex::Hex, ByteArray},
 };
 use tari_dan_common_types::crypto::create_key_pair;
