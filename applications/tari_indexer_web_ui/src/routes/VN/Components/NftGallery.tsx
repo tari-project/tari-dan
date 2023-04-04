@@ -22,7 +22,8 @@
 
 import { useEffect, useState } from 'react';
 import {
-  addAddress,
+  getNonFungibles,
+  getNonFungibleCount,
   getNonFungibleCollections,
 } from '../../../utils/json_rpc';
 import { Form, useParams } from 'react-router-dom';
@@ -48,248 +49,32 @@ import { Button, TextField } from '@mui/material';
 import AddIcon from '@mui/icons-material/Add';
 import { ConfirmDialog } from '../../../Components/AlertDialog';
 
-interface ITableAddresses {
-  id: string;
-  address: string;
-  count: number;
-}
-
-type ColumnKey = keyof ITableAddresses;
-
-function RowData({
-  id,
-  address,
-  count,
-}: {
-  id: string;
-  address: string;
-  count: number;
-}) {
-  const [open1, setOpen1] = useState(false);
-  const [data, setData] = useState<string | null>(null);
-  return (
-    <>
-      <TableRow key={id} sx={{ borderBottom: 'none' }}>
-        <DataTableCell
-          style={{
-            paddingBottom: 0,
-            paddingTop: 0,
-            borderBottom: 'none',
-          }}
-          colSpan={1}
-        >
-          {address}
-        </DataTableCell>
-        <DataTableCell
-          style={{
-            paddingBottom: 0,
-            paddingTop: 0,
-            borderBottom: 'none',
-          }}
-          colSpan={1}
-        >
-          {count}
-        </DataTableCell>
-      </TableRow>
-    </>
-  );
-}
 
 function NftGallery() {
   let { resourceAddress } = useParams();
-  console.log(resourceAddress);
 
-  const [addresses, setAddresses] = useState<ITableAddresses[]>([]);
-  const [lastSort, setLastSort] = useState({ column: '', order: -1 });
+  const updateCollection = () => {
+    if(resourceAddress !== undefined) {
+      getNonFungibles(resourceAddress,0,10).then((resp) => {
+        console.log({resp});
 
-  const [page, setPage] = useState(0);
-  const [rowsPerPage, setRowsPerPage] = useState(10);
-
-  const [showAddressDialog, setShowAddAddressDialog] = useState(false);
-  const [formState, setFormState] = useState({ address: '' });
-
-  const showAddAddressDialog = (
-    setElseToggle: boolean = !showAddressDialog
-  ) => {
-    setShowAddAddressDialog(setElseToggle);
-  };
-  const onSubmitAddAddress = () => {
-    addAddress(formState.address).then((resp) => {
-      updatedAddresses();
-    });
-    setFormState({ address: '' });
-    setShowAddAddressDialog(false);
-  };
-  const onChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setFormState({ ...formState, [e.target.name]: e.target.value });
-  };
-
-  // Avoid a layout jump when reaching the last page with empty rows.
-  const emptyRows =
-    page > 0 ? Math.max(0, (1 + page) * rowsPerPage - addresses.length) : 0;
-
-  const handleChangePage = (event: unknown, newPage: number) => {
-    setPage(newPage);
-  };
-
-  const handleChangeRowsPerPage = (
-    event: React.ChangeEvent<HTMLInputElement>
-  ) => {
-    setRowsPerPage(parseInt(event.target.value, 10));
-    setPage(0);
-  };
-
-  const updatedAddresses = () => {
-    getNonFungibleCollections().then((resp) => {
-      setAddresses(
-        resp.map(([address, count]: [string, number]) => ({
-          id: address,
-          address: address,
-          count: count,
-        }))
-      );
-    });
+        resp.forEach((nft: any) => {
+          console.log(nft);
+          let nft_data = nft.substate.substate.NonFungible.data['@@TAGGED@@'][1];
+          let {image_url, name} = nft_data;
+          console.log(image_url);
+          console.log(nft_data);
+        });
+      });
+    }
   };
 
   useEffect(() => {
-    updatedAddresses();
+    updateCollection();
   }, []);
 
-  const sort = (column: ColumnKey) => {
-    let order = 1;
-    if (lastSort.column === column) {
-      order = -lastSort.order;
-    }
-    setAddresses(
-      [...addresses].sort((r0, r1) =>
-        r0[column] > r1[column] ? order : r0[column] < r1[column] ? -order : 0
-      )
-    );
-    setLastSort({ column, order });
-  };
-  if (addresses === undefined) {
-    return (
-      <Typography variant="h4">Monitored NFT collections ... loading</Typography>
-    );
-  }
-
   return (
-    <TableContainer>
-      <BoxHeading2 style={{ minHeight: '75px' }}>
-        {showAddressDialog ? (
-          <Form onSubmit={onSubmitAddAddress} className="add-confirm-form">
-            <TextField
-              name="address"
-              label="Address"
-              value={formState.address}
-              onChange={onChange}
-            />
-            <Button variant="contained" type="submit">
-              Add Address
-            </Button>
-            <Button
-              variant="outlined"
-              onClick={() => showAddAddressDialog(false)}
-            >
-              Cancel
-            </Button>
-          </Form>
-        ) : (
-          <Button
-            startIcon={<AddIcon />}
-            onClick={() => showAddAddressDialog()}
-            variant="outlined"
-          >
-            Add address
-          </Button>
-        )}
-      </BoxHeading2>
-
-      <Table>
-        <TableHead>
-          <TableRow>
-            <TableCell
-              onClick={() => sort('address')}
-              style={{ textAlign: 'center' }}
-            >
-              <div
-                style={{
-                  display: 'flex',
-                  justifyContent: 'flex-start',
-                  alignItems: 'center',
-                  gap: '5px',
-                }}
-              >
-                Collection Address
-                {lastSort.column === 'address' ? (
-                  lastSort.order === 1 ? (
-                    <KeyboardArrowUpIcon />
-                  ) : (
-                    <KeyboardArrowDownIcon />
-                  )
-                ) : (
-                  ''
-                )}
-              </div>
-            </TableCell>
-            <TableCell
-              onClick={() => sort('count')}
-              style={{ textAlign: 'center' }}
-            >
-              <div
-                style={{
-                  display: 'flex',
-                  justifyContent: 'flex-start',
-                  alignItems: 'center',
-                  gap: '5px',
-                }}
-              >
-                Number of items
-                {lastSort.column === 'count' ? (
-                  lastSort.order === 1 ? (
-                    <KeyboardArrowUpIcon />
-                  ) : (
-                    <KeyboardArrowDownIcon />
-                  )
-                ) : (
-                  ''
-                )}
-              </div>
-            </TableCell>
-          </TableRow>
-        </TableHead>
-        <TableBody>
-          {addresses
-            .slice(page * rowsPerPage, page * rowsPerPage + rowsPerPage)
-            .map(({ id, address, count }) => (
-              <RowData
-                key={id}
-                id={id}
-                address={address}
-                count={count}
-              />
-            ))}
-          {emptyRows > 0 && (
-            <TableRow
-              style={{
-                height: 67 * emptyRows,
-              }}
-            >
-              <TableCell colSpan={4} />
-            </TableRow>
-          )}
-        </TableBody>
-      </Table>
-      <TablePagination
-        rowsPerPageOptions={[10, 25, 50]}
-        component="div"
-        count={addresses.length}
-        rowsPerPage={rowsPerPage}
-        page={page}
-        onPageChange={handleChangePage}
-        onRowsPerPageChange={handleChangeRowsPerPage}
-      />
-    </TableContainer>
+    <Typography variant="h4">Monitored NFT collections ... loading</Typography>
   );
 }
 

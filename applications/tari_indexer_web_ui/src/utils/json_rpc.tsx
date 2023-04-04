@@ -25,7 +25,7 @@ async function jsonRpc(method: string, params: any = null) {
   id += 1;
   let address = 'localhost:18022';
   try {
-    let text = await (await fetch('json_rpc_address')).text();
+    let text = await (await fetch('/json_rpc_address')).text();
     if (/^\d+(\.\d+){3}:[0-9]+$/.test(text)) {
       address = text;
     }
@@ -87,9 +87,14 @@ async function deleteAddress(address:string) {
 async function clearAddresses() {
   return await jsonRpc("clear_addresses")
 }
-
 async function getNonFungibleCollections() {
   return await jsonRpc('get_non_fungible_collections');
+}
+async function getNonFungibles(address:string, start_index: number, end_index: number) {
+  return await jsonRpc('get_non_fungibles',{address,start_index,end_index});
+}
+async function getNonFungibleCount(address:string) {
+  return await jsonRpc('get_non_fungible_count', [address]);
 }
 
 export {
@@ -106,4 +111,6 @@ export {
   getRecentTransactions,
   getSubstate,
   getNonFungibleCollections,
+  getNonFungibles,
+  getNonFungibleCount,
 };
