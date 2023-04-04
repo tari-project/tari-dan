@@ -15,6 +15,7 @@ use tari_crypto::{
     ristretto::{RistrettoPublicKey, RistrettoSecretKey},
     tari_utilities::{hex::Hex, ByteArray},
 };
+use tari_dan_common_types::crypto::create_key_pair;
 use tari_dan_engine::{
     bootstrap_state,
     fees::{FeeModule, FeeTable},
@@ -331,11 +332,9 @@ impl TemplateTest {
     }
 
     pub fn create_owner_proof(&self) -> (NonFungibleAddress, RistrettoSecretKey) {
-        let secret_key =
-            RistrettoSecretKey::from_hex("f84f04e6e22220575dfdaeebaf4da2ea839714665c53f32226fa1a9f409557").unwrap();
-        let public_key = RistrettoPublicKey::from_secret_key(&secret_key);
-        let owner_token =
-            NonFungibleAddress::from_public_key(RistrettoPublicKeyBytes::from_bytes(public_key.as_bytes()).unwrap());
+        let (secret_key, public_key) = create_key_pair();
+        let public_key = RistrettoPublicKeyBytes::from_bytes(public_key.as_bytes()).unwrap();
+        let owner_token = NonFungibleAddress::from_public_key(public_key);
         (owner_token, secret_key)
     }
 
