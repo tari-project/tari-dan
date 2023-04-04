@@ -190,6 +190,22 @@ fn test_tuples() {
     assert_eq!(value, new_value);
 }
 
+#[test]
+fn test_random() {
+    let mut template_test = TemplateTest::new(vec!["tests/templates/random"]);
+    let component_address: ComponentAddress = template_test.call_function("RandomTest", "create", args![], vec![]);
+    let value: u32 = template_test.call_method(component_address, "get_random", args![], vec![]);
+    assert_ne!(value, 0);
+
+    let value: Vec<u8> = template_test.call_method(component_address, "get_random_bytes", args![], vec![]);
+    assert_eq!(value.len(), 32);
+    assert_ne!(value, vec![0; 32]);
+
+    let value: Vec<u8> = template_test.call_method(component_address, "get_random_long_bytes", args![], vec![]);
+    assert_eq!(value.len(), 300);
+    assert_ne!(value, vec![0; 300]);
+}
+
 mod errors {
 
     use super::*;
@@ -398,7 +414,7 @@ mod basic_nft {
                 r#"
             let account = var!["account"];
             let sparkle_nft = var!["nft"];
-        
+
             let nft_bucket = sparkle_nft.mint();
             account.deposit(nft_bucket);
         "#,
@@ -433,11 +449,11 @@ mod basic_nft {
                 r#"
             let account = var!["account"];
             let sparkle_nft = var!["nft"];
-        
+
             let nft_bucket = sparkle_nft.withdraw_all();
             account.deposit(nft_bucket);
             sparkle_nft.inner_vault_balance();
-            
+
             let nft_resx = var!["nft_resx"];
             account.balance(nft_resx);
             sparkle_nft.total_supply();
@@ -478,7 +494,7 @@ mod basic_nft {
                 r#"
             let account = var!["account"];
             let sparkle_nft = var!["nft"];
-        
+
             let nft_bucket = sparkle_nft.mint();
             account.deposit(nft_bucket);
         "#,
@@ -523,7 +539,7 @@ mod basic_nft {
             let account = var!["account"];
             let sparkle_nft_resource = var!["nft_resx"];
             account.get_non_fungible_ids(sparkle_nft_resource);
-            
+
             let sparkle_nft = var!["nft"];
             let sparkle_nft_id = var!["nft_id"];
             sparkle_nft.inc_brightness(sparkle_nft_id, 10u32);
@@ -583,10 +599,10 @@ mod basic_nft {
                 r#"
             let account = var!["account"];
             let sparkle_nft = var!["nft"];
-        
+
             let nft_bucket = sparkle_nft.mint_specific(NonFungibleId("SpecialNft"));
             account.deposit(nft_bucket);
-            
+
             let nft_bucket = sparkle_nft.mint_specific(NonFungibleId(123u32));
             account.deposit(nft_bucket);
 
@@ -595,7 +611,7 @@ mod basic_nft {
 
             let nft_bucket = sparkle_nft.mint_specific(NonFungibleId(b"this will be interpreted as uuid"));
             account.deposit(nft_bucket);
-            
+
             sparkle_nft.total_supply();
         "#,
                 vars.clone(),
@@ -638,7 +654,7 @@ mod basic_nft {
                 r#"
             let account = var!["account"];
             let sparkle_nft = var!["nft"];
-        
+
             let nft_bucket1 = sparkle_nft.mint_specific(NonFungibleId("Duplicate"));
             let nft_bucket2 = sparkle_nft.mint_specific(NonFungibleId("Duplicate"));
             account.deposit(nft_bucket1);
@@ -668,7 +684,7 @@ mod basic_nft {
                 r#"
             let account = var!["account"];
             let sparkle_nft = var!["nft"];
-        
+
             let nft_bucket = sparkle_nft.mint_specific(NonFungibleId("Burn!"));
             account.deposit(nft_bucket);
         "#,
@@ -686,7 +702,7 @@ mod basic_nft {
             let account = var!["account"];
             let sparkle_nft = var!["nft"];
             let nft_resx = var!["nft_resx"];
-        
+
             let bucket = account.withdraw_non_fungible(nft_resx, NonFungibleId("Burn!"));
             sparkle_nft.burn(bucket);
             sparkle_nft.total_supply();
@@ -712,7 +728,7 @@ mod basic_nft {
             let account = var!["account"];
             let sparkle_nft = var!["nft"];
             let nft_resx = var!["nft_resx"];
-        
+
             let nft_bucket = sparkle_nft.mint_specific(NonFungibleId("Burn!"));
             account.deposit(nft_bucket);
         "#,
@@ -847,7 +863,7 @@ mod emoji_id {
                 r#"
             let account = var!["account"];
             let faucet = var!["faucet"];
-        
+
             let coins = faucet.take_free_coins();
             account.deposit(coins);
         "#,
@@ -998,7 +1014,7 @@ mod tickets {
                 r#"
             let account = var!["account"];
             let faucet = var!["faucet"];
-        
+
             let coins = faucet.take_free_coins();
             account.deposit(coins);
         "#,
@@ -1014,7 +1030,7 @@ mod tickets {
             let account = var!["account"];
             let faucet_resource = var!["faucet_resource"];
             let ticket_seller = var!["ticket_seller"];
-        
+
             let payment = account.withdraw(faucet_resource, Amount::new(20));
             let nft_bucket = ticket_seller.buy_ticket(payment);
             account.deposit(nft_bucket);
@@ -1115,7 +1131,7 @@ mod nft_indexes {
                 r#"
             let account = var!["account"];
             let sparkle_nft = var!["nft"];
-        
+
             let nft_bucket = sparkle_nft.mint();
             account.deposit(nft_bucket);
         "#,
