@@ -25,8 +25,7 @@ import {
   addAddress,
   getNonFungibleCollections,
 } from '../../../utils/json_rpc';
-import { Form } from 'react-router-dom';
-import { useNavigate } from "react-router-dom";
+import { Form, useParams } from 'react-router-dom';
 import { renderJson } from '../../../utils/helpers';
 import Table from '@mui/material/Table';
 import TableBody from '@mui/material/TableBody';
@@ -68,10 +67,9 @@ function RowData({
 }) {
   const [open1, setOpen1] = useState(false);
   const [data, setData] = useState<string | null>(null);
-  let navigate = useNavigate();
   return (
     <>
-      <TableRow key={id} sx={{ borderBottom: 'none', cursor: 'pointer' }} onClick={() => { navigate(`/nfts/${address}/`); }}>
+      <TableRow key={id} sx={{ borderBottom: 'none' }}>
         <DataTableCell
           style={{
             paddingBottom: 0,
@@ -97,7 +95,10 @@ function RowData({
   );
 }
 
-function MonitoredNftCollections() {
+function NftGallery() {
+  let { resourceAddress } = useParams();
+  console.log(resourceAddress);
+
   const [addresses, setAddresses] = useState<ITableAddresses[]>([]);
   const [lastSort, setLastSort] = useState({ column: '', order: -1 });
 
@@ -292,4 +293,4 @@ function MonitoredNftCollections() {
   );
 }
 
-export default MonitoredNftCollections;
+export default NftGallery;
