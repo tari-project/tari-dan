@@ -60,6 +60,7 @@ use tari_template_lib::{
         ComponentAction,
         ComponentRef,
         ConsensusAction,
+        GenerateRandomAction,
         InvokeResult,
         LogLevel,
         NonFungibleAction,
@@ -118,6 +119,8 @@ pub trait RuntimeInterface: Send + Sync {
     ) -> Result<InvokeResult, RuntimeError>;
 
     fn consensus_invoke(&self, action: ConsensusAction) -> Result<InvokeResult, RuntimeError>;
+
+    fn generate_random_invoke(&self, action: GenerateRandomAction) -> Result<InvokeResult, RuntimeError>;
 
     fn generate_uuid(&self) -> Result<[u8; 32], RuntimeError>;
 

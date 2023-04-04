@@ -205,6 +205,22 @@ fn test_caller_context() {
     );
 }
 
+#[test]
+fn test_random() {
+    let mut template_test = TemplateTest::new(vec!["tests/templates/random"]);
+    let component_address: ComponentAddress = template_test.call_function("RandomTest", "create", args![], vec![]);
+    let value: u32 = template_test.call_method(component_address, "get_random", args![], vec![]);
+    assert_ne!(value, 0);
+
+    let value: Vec<u8> = template_test.call_method(component_address, "get_random_bytes", args![], vec![]);
+    assert_eq!(value.len(), 32);
+    assert_ne!(value, vec![0; 32]);
+
+    let value: Vec<u8> = template_test.call_method(component_address, "get_random_long_bytes", args![], vec![]);
+    assert_eq!(value.len(), 300);
+    assert_ne!(value, vec![0; 300]);
+}
+
 mod errors {
 
     use super::*;
