@@ -337,3 +337,14 @@ pub struct ConsensusInvokeArg {
 pub enum ConsensusAction {
     GetCurrentEpoch,
 }
+
+// -------------------------------- GenerateRandom -------------------------------- //
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct GenerateRandomInvokeArg {
+    pub action: GenerateRandomAction,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub enum GenerateRandomAction {
+    GetRandomBytes { len: u32 },
+}

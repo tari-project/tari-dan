@@ -20,32 +20,40 @@
 //   WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //   USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-pub use tari_bor::{encode, serde};
-#[cfg(feature = "macro")]
-pub use tari_template_macros::template;
+use tari_template_lib::prelude::*;
 
-pub use crate::{
-    auth::{AccessRule, AccessRules, RestrictedAccessRule::*},
-    component::{
-        interface::{ComponentInstanceInterface, ComponentInterface},
-        ComponentManager,
-    },
-    consensus::Consensus,
-    constants::{CONFIDENTIAL_TARI_RESOURCE_ADDRESS, PUBLIC_IDENTITY_RESOURCE_ADDRESS},
-    models::{
-        Amount,
-        Bucket,
-        BucketId,
-        ComponentAddress,
-        ConfidentialOutputProof,
-        ConfidentialWithdrawProof,
-        Metadata,
-        NonFungible,
-        NonFungibleAddress,
-        NonFungibleId,
-        ResourceAddress,
-        Vault,
-    },
-    rand,
-    resource::{ResourceBuilder, ResourceManager, ResourceType},
-};
+#[template]
+mod random_template {
+    use super::*;
+
+    pub struct RandomTest {
+        random: u32,
+        random_bytes: Vec<u8>,
+        random_long_bytes: Vec<u8>,
+    }
+
+    impl RandomTest {
+        pub fn create() -> Self {
+            let random: u32 = rand::random_u32();
+            let random_bytes = rand::random_bytes(32);
+            let random_long_bytes = rand::random_bytes(300);
+            Self {
+                random,
+                random_bytes,
+                random_long_bytes,
+            }
+        }
+
+        pub fn get_random(&self) -> u32 {
+            self.random
+        }
+
+        pub fn get_random_bytes(&self) -> Vec<u8> {
+            self.random_bytes.clone()
+        }
+
+        pub fn get_random_long_bytes(&self) -> Vec<u8> {
+            self.random_long_bytes.clone()
+        }
+    }
+}

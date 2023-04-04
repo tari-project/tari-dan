@@ -31,6 +31,7 @@ use tari_template_lib::{
         ComponentInvokeArg,
         ConsensusInvokeArg,
         EmitLogArg,
+        GenerateRandomInvokeArg,
         LogLevel,
         NonFungibleInvokeArg,
         ResourceInvokeArg,
@@ -138,6 +139,9 @@ impl WasmProcess {
             },
             EngineOp::ConsensusInvoke => Self::handle(env, arg, |env, arg: ConsensusInvokeArg| {
                 env.state().interface().consensus_invoke(arg.action)
+            }),
+            EngineOp::GenerateRandomInvoke => Self::handle(env, arg, |env, arg: GenerateRandomInvokeArg| {
+                env.state().interface().generate_random_invoke(arg.action)
             }),
         };
 
