@@ -49,8 +49,15 @@ import { Button, ImageList, ImageListItem, ImageListItemBar, TextField } from '@
 import AddIcon from '@mui/icons-material/Add';
 import { ConfirmDialog } from '../../../Components/AlertDialog';
 
+interface IImageData {
+  img: string;
+  title: string;
+  index: number;
+}
 
 function NftGallery() {
+  const [items, setItems] = useState<IImageData[]>([]);
+
   let { resourceAddress } = useParams();
 
   const updateCollection = () => {
@@ -58,13 +65,23 @@ function NftGallery() {
       getNonFungibles(resourceAddress,0,10).then((resp) => {
         console.log({resp});
 
-        resp.forEach((nft: any) => {
+        let nfts: any = [];
+        resp.forEach((nft: any, i: number) => {
           console.log(nft);
           let nft_data = nft.substate.substate.NonFungible.data['@@TAGGED@@'][1];
           let {image_url, name} = nft_data;
           console.log(image_url);
           console.log(name);
+          nfts.push({image_url, name, index: i});
         });
+
+        setItems(
+          nfts.map((nft: any) => ({
+            img: nft.image_url,
+            title: nft.name,
+            index: nft.index,
+          }))
+        );
       });
     }
   };
@@ -73,42 +90,9 @@ function NftGallery() {
     updateCollection();
   }, []);
 
-  const itemData = [
-    {
-      img: 'https://img.freepik.com/free-vector/hand-drawn-nft-style-ape-illustration_23-2149622024.jpg',
-      title: 'Astronaut (Image by Freepik.com)',
-      index: 0,
-    },
-    {
-      img: 'https://img.freepik.com/free-vector/hand-drawn-nft-style-ape-illustration_23-2149629576.jpg',
-      title: 'Baby  (Image by Freepik.com)',
-      index: 1,
-    },
-    {
-      img: 'https://img.freepik.com/free-vector/hand-drawn-nft-style-ape-illustration_23-2149622021.jpg',
-      title: 'Cool (Image by Freepik.com)',
-      index: 2,
-    },
-    {
-      img: 'https://img.freepik.com/premium-vector/hand-drawn-monkey-ape-vr-box-virtual-nft-style_361671-246.jpg',
-      title: 'Metaverse (Image by Freepik.com)',
-      index: 3,
-    },
-    {
-      img: 'https://img.freepik.com/free-vector/hand-drawn-nft-style-ape-illustration_23-2149629594.jpg',
-      title: 'Suit (Image by Freepik.com)',
-      index: 4,
-    },
-    {
-      img: 'https://img.freepik.com/free-vector/hand-drawn-nft-style-ape-illustration_23-2149629582.jpg',
-      title: 'Cook  (Image by Freepik.com)',
-      index: 5,
-    },
-  ];
-
   return (
     <ImageList cols={4} gap={8}>
-      {itemData.map((item) => (
+      {items.map((item) => (
         <ImageListItem key={item.img}>
         <img
           src={`${item.img}?size=248&fit=fill&auto=format`}
