@@ -64,7 +64,7 @@ impl OutboundService for OutboundMessaging {
         message: DanMessage<Self::Payload, Self::Addr>,
     ) -> Result<(), MessagingError> {
         // Comment this in to slow down messages for debugging
-        info!(
+        debug!(
             target: LOG_TARGET,
             "------------------------------------------------------\n",
         );

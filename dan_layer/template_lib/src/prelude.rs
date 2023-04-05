@@ -46,5 +46,6 @@ pub use crate::{
         ResourceAddress,
         Vault,
     },
+    rand,
     resource::{ResourceBuilder, ResourceManager, ResourceType},
 };

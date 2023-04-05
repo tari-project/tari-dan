@@ -48,6 +48,7 @@ use tari_template_lib::{
         ConsensusAction,
         CreateComponentArg,
         CreateResourceArg,
+        GenerateRandomAction,
         InvokeResult,
         LogLevel,
         MintResourceArg,
@@ -671,6 +672,16 @@ impl RuntimeInterface for RuntimeInterfaceImpl {
         }
     }
 
+    fn generate_random_invoke(&self, action: GenerateRandomAction) -> Result<InvokeResult, RuntimeError> {
+        self.invoke_modules_on_runtime_call("generate_random_invoke")?;
+        match action {
+            GenerateRandomAction::GetRandomBytes { len } => {
+                let random = self.tracker.id_provider().get_random_bytes(len)?;
+                Ok(InvokeResult::encode(&random)?)
+            },
+        }
+    }
+
     fn generate_uuid(&self) -> Result<[u8; 32], RuntimeError> {
         self.invoke_modules_on_runtime_call("generate_uuid")?;
         let uuid = self.tracker.id_provider().new_uuid()?;
@@ -694,7 +705,6 @@ impl RuntimeInterface for RuntimeInterfaceImpl {
         // 1. Must exist
         let unclaimed_output = self.tracker.take_unclaimed_confidential_output(output_address)?;
         // 2. owner_sig must be valid
-        // TODO: Probably want a better challenge
         let challenge = ownership_proof_hasher()
             .chain(proof_of_knowledge.public_nonce())
             .chain(&unclaimed_output.commitment)
@@ -755,6 +765,7 @@ impl RuntimeInterface for RuntimeInterfaceImpl {
     }
 
     fn reset_to_fee_checkpoint(&self) -> Result<(), RuntimeError> {
+        warn!(target: LOG_TARGET, "Resetting to fee checkpoint");
         self.tracker.reset_to_fee_checkpoint()
     }
 

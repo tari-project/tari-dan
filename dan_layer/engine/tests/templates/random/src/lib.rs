@@ -20,39 +20,40 @@
 //   WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //   USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-const LOG_TARGET: &str = "tari::validator_node::json_rpc::handlers";
+use tari_template_lib::prelude::*;
 
-use std::fmt::Display;
+#[template]
+mod random_template {
+    use super::*;
 
-use axum_jrpc::{
-    error::{JsonRpcError, JsonRpcErrorReason},
-    JsonRpcResponse,
-};
-
-pub fn invalid_argument<T: Display>(answer_id: i64) -> impl Fn(T) -> JsonRpcResponse {
-    move |err| {
-        log::error!(target: LOG_TARGET, "🚨 Invalid argument: {}", err);
-        JsonRpcResponse::error(
-            answer_id,
-            JsonRpcError::new(
-                JsonRpcErrorReason::InvalidParams,
-                "Invalid argument".to_string(),
-                serde_json::Value::Null,
-            ),
-        )
+    pub struct RandomTest {
+        random: u32,
+        random_bytes: Vec<u8>,
+        random_long_bytes: Vec<u8>,
     }
-}
 
-pub fn internal_error<T: Display>(answer_id: i64) -> impl Fn(T) -> JsonRpcResponse {
-    move |err| {
-        log::error!(target: LOG_TARGET, "🚨 Internal error: {}", err);
-        JsonRpcResponse::error(
-            answer_id,
-            JsonRpcError::new(
-                JsonRpcErrorReason::InternalError,
-                "Internal error".to_string(),
-                serde_json::Value::Null,
-            ),
-        )
+    impl RandomTest {
+        pub fn create() -> Self {
+            let random: u32 = rand::random_u32();
+            let random_bytes = rand::random_bytes(32);
+            let random_long_bytes = rand::random_bytes(300);
+            Self {
+                random,
+                random_bytes,
+                random_long_bytes,
+            }
+        }
+
+        pub fn get_random(&self) -> u32 {
+            self.random
+        }
+
+        pub fn get_random_bytes(&self) -> Vec<u8> {
+            self.random_bytes.clone()
+        }
+
+        pub fn get_random_long_bytes(&self) -> Vec<u8> {
+            self.random_long_bytes.clone()
+        }
     }
 }

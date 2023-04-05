@@ -35,6 +35,7 @@ pub mod consensus;
 mod context;
 pub use context::{get_context, init_context, AbiContext};
 
+pub mod rand;
 pub mod resource;
 
 pub mod crypto;
