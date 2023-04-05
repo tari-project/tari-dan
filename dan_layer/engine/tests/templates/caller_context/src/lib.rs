@@ -20,33 +20,25 @@
 //   WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //   USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-pub use tari_bor::{encode, serde};
-#[cfg(feature = "macro")]
-pub use tari_template_macros::template;
+use tari_crypto::ristretto::RistrettoPublicKey;
+use tari_template_lib::prelude::*;
 
-pub use crate::{
-    auth::{AccessRule, AccessRules, RestrictedAccessRule::*},
-    caller_context::CallerContext,
-    component::{
-        interface::{ComponentInstanceInterface, ComponentInterface},
-        ComponentManager,
-    },
-    consensus::Consensus,
-    constants::{CONFIDENTIAL_TARI_RESOURCE_ADDRESS, PUBLIC_IDENTITY_RESOURCE_ADDRESS},
-    models::{
-        Amount,
-        Bucket,
-        BucketId,
-        ComponentAddress,
-        ConfidentialOutputProof,
-        ConfidentialWithdrawProof,
-        Metadata,
-        NonFungible,
-        NonFungibleAddress,
-        NonFungibleId,
-        ResourceAddress,
-        Vault,
-    },
-    rand,
-    resource::{ResourceBuilder, ResourceManager, ResourceType},
-};
+#[template]
+mod caller_context_template {
+    use super::*;
+
+    pub struct CallerContextTest {
+        caller_pub_key: RistrettoPublicKey,
+    }
+
+    impl CallerContextTest {
+        pub fn create() -> Self {
+            let caller_pub_key = CallerContext::caller();
+            Self { caller_pub_key }
+        }
+
+        pub fn caller_pub_key(&self) -> RistrettoPublicKey {
+            self.caller_pub_key.clone()
+        }
+    }
+}
