@@ -22,12 +22,14 @@
 
 use std::{collections::HashMap, str::FromStr, sync::Arc};
 
+use anyhow::Context;
 use axum_jrpc::{
     error::{JsonRpcError, JsonRpcErrorReason},
     JrpcResult,
     JsonRpcExtractor,
     JsonRpcResponse,
 };
+use log::warn;
 use serde::{Deserialize, Serialize};
 use serde_json::{self as json, json, Value};
 use tari_comms::{
@@ -43,7 +45,13 @@ use tari_engine_types::substate::SubstateAddress;
 use tari_validator_node_client::types::{AddPeerRequest, AddPeerResponse, GetIdentityResponse};
 
 // use tari_validator_node_client::types::GetRecentTransactionsResponse;
-use crate::{bootstrap::Services, substate_manager::SubstateManager, GrpcBaseNodeClient};
+use crate::{
+    bootstrap::Services,
+    substate_manager::{NonFungibleResponse, SubstateManager, SubstateResponse},
+    GrpcBaseNodeClient,
+};
+
+const LOG_TARGET: &str = "tari::indexer::json_rpc::handlers";
 
 #[derive(Serialize, Debug)]
 struct Connection {
@@ -108,11 +116,15 @@ impl JsonRpcHandlers {
     pub async fn get_all_vns(&self, value: JsonRpcExtractor) -> JrpcResult {
         let answer_id = value.get_answer_id();
         let epoch: u64 = value.parse_params()?;
-        if let Ok(vns) = self.base_node_client.clone().get_validator_nodes(epoch * 10).await {
-            let response = json!({ "vns": vns });
-            Ok(JsonRpcResponse::success(answer_id, response))
-        } else {
-            Err(Self::generic_error_response(answer_id))
+        match self.base_node_client.clone().get_validator_nodes(epoch * 10).await {
+            Ok(vns) => {
+                let response = json!({ "vns": vns });
+                Ok(JsonRpcResponse::success(answer_id, response))
+            },
+            Err(e) => {
+                warn!(target: LOG_TARGET, "Failed to get all vns: {}", e);
+                Err(Self::generic_error_response(answer_id))
+            },
         }
     }
 
@@ -157,43 +169,51 @@ impl JsonRpcHandlers {
 
     pub async fn get_comms_stats(&self, value: JsonRpcExtractor) -> JrpcResult {
         let answer_id = value.get_answer_id();
-        if let Ok(stats) = self.comms.connectivity().get_connectivity_status().await {
-            let response = json!({ "connection_status": format!("{:?}", stats) });
-            Ok(JsonRpcResponse::success(answer_id, response))
-        } else {
-            Err(Self::generic_error_response(answer_id))
+        match self.comms.connectivity().get_connectivity_status().await {
+            Ok(stats) => {
+                let response = json!({ "connection_status": format!("{:?}", stats) });
+                Ok(JsonRpcResponse::success(answer_id, response))
+            },
+            Err(e) => {
+                warn!(target: LOG_TARGET, "Failed to get comms stats: {}", e);
+                Err(Self::generic_error_response(answer_id))
+            },
         }
     }
 
     pub async fn get_connections(&self, value: JsonRpcExtractor) -> JrpcResult {
         let answer_id = value.get_answer_id();
-        if let Ok(active_connections) = self.comms.connectivity().get_active_connections().await {
-            let mut response = GetConnectionsResponse { connections: vec![] };
-            let peer_manager = self.comms.peer_manager();
-            for conn in active_connections {
-                let peer = peer_manager
-                    .find_by_node_id(conn.peer_node_id())
-                    .await
-                    .expect("Unexpected peer database error")
-                    .expect("Peer not found");
-                response.connections.push(Connection {
-                    node_id: peer.node_id,
-                    public_key: peer.public_key,
-                    address: conn.address().clone(),
-                    direction: conn.direction().is_inbound(),
-                    age: conn.age().as_secs(),
-                });
-            }
-            Ok(JsonRpcResponse::success(answer_id, response))
-        } else {
-            Err(JsonRpcResponse::error(
-                answer_id,
-                JsonRpcError::new(
-                    JsonRpcErrorReason::InvalidParams,
-                    "Something went wrong".to_string(),
-                    json::Value::Null,
-                ),
-            ))
+        match self.comms.connectivity().get_active_connections().await {
+            Ok(active_connections) => {
+                let mut response = GetConnectionsResponse { connections: vec![] };
+                let peer_manager = self.comms.peer_manager();
+                for conn in active_connections {
+                    let peer = peer_manager
+                        .find_by_node_id(conn.peer_node_id())
+                        .await
+                        .expect("Unexpected peer database error")
+                        .expect("Peer not found");
+                    response.connections.push(Connection {
+                        node_id: peer.node_id,
+                        public_key: peer.public_key,
+                        address: conn.address().clone(),
+                        direction: conn.direction().is_inbound(),
+                        age: conn.age().as_secs(),
+                    });
+                }
+                Ok(JsonRpcResponse::success(answer_id, response))
+            },
+            Err(e) => {
+                warn!(target: LOG_TARGET, "Failed to get connections: {}", e);
+                Err(JsonRpcResponse::error(
+                    answer_id,
+                    JsonRpcError::new(
+                        JsonRpcErrorReason::InvalidParams,
+                        "Something went wrong".to_string(),
+                        json::Value::Null,
+                    ),
+                ))
+            },
         }
     }
 
@@ -209,10 +229,23 @@ impl JsonRpcHandlers {
             .await
             .unwrap_or(None);
 
-        match res {
-            Some(substate) => Ok(JsonRpcResponse::success(answer_id, substate)),
-            None => Err(Self::generic_error_response(answer_id)),
+        if let Some(substate) = res {
+            if let Ok(json) = Self::build_substate_json(&substate) {
+                return Ok(JsonRpcResponse::success(answer_id, json));
+            }
         }
+
+        Err(Self::generic_error_response(answer_id))
+    }
+
+    fn build_substate_json(substate: &SubstateResponse) -> Result<Value, anyhow::Error> {
+        let mut json_value = serde_json::to_value(substate)?;
+        let data: Value = serde_json::from_str(&substate.data)?;
+        json_value
+            .as_object_mut()
+            .context("Invalid object")?
+            .insert("data".to_owned(), data);
+        Ok(json_value)
     }
 
     pub async fn get_addresses(&self, value: JsonRpcExtractor) -> JrpcResult {
@@ -222,7 +255,10 @@ impl JsonRpcHandlers {
 
         match res {
             Ok(addresses) => Ok(JsonRpcResponse::success(answer_id, addresses)),
-            Err(_) => Err(Self::generic_error_response(answer_id)),
+            Err(e) => {
+                warn!(target: LOG_TARGET, "Error getting addresses: {}", e);
+                Err(Self::generic_error_response(answer_id))
+            },
         }
     }
 
@@ -237,7 +273,10 @@ impl JsonRpcHandlers {
             .await
         {
             Ok(_) => Ok(JsonRpcResponse::success(answer_id, ())),
-            Err(_) => Err(Self::generic_error_response(answer_id)),
+            Err(e) => {
+                warn!(target: LOG_TARGET, "Error adding address: {}", e);
+                Err(Self::generic_error_response(answer_id))
+            },
         }
     }
 
@@ -248,7 +287,10 @@ impl JsonRpcHandlers {
 
         match self.substate_manager.delete_substate_from_db(&substate_address).await {
             Ok(_) => Ok(JsonRpcResponse::success(answer_id, ())),
-            Err(_) => Err(Self::generic_error_response(answer_id)),
+            Err(e) => {
+                warn!(target: LOG_TARGET, "Error deleting address: {}", e);
+                Err(Self::generic_error_response(answer_id))
+            },
         }
     }
 
@@ -257,7 +299,24 @@ impl JsonRpcHandlers {
 
         match self.substate_manager.delete_all_substates_from_db().await {
             Ok(_) => Ok(JsonRpcResponse::success(answer_id, ())),
-            Err(_) => Err(Self::generic_error_response(answer_id)),
+            Err(e) => {
+                warn!(target: LOG_TARGET, "Error clearing addresses: {}", e);
+                Err(Self::generic_error_response(answer_id))
+            },
+        }
+    }
+
+    pub async fn get_non_fungible_collections(&self, value: JsonRpcExtractor) -> JrpcResult {
+        let answer_id = value.get_answer_id();
+
+        let res = self.substate_manager.get_non_fungible_collections().await;
+
+        match res {
+            Ok(collections) => Ok(JsonRpcResponse::success(answer_id, collections)),
+            Err(e) => {
+                warn!(target: LOG_TARGET, "Error getting non fungible collections: {}", e);
+                Err(Self::generic_error_response(answer_id))
+            },
         }
     }
 
@@ -270,7 +329,10 @@ impl JsonRpcHandlers {
 
         match res {
             Ok(count) => Ok(JsonRpcResponse::success(answer_id, count)),
-            Err(_) => Err(Self::generic_error_response(answer_id)),
+            Err(e) => {
+                warn!(target: LOG_TARGET, "Error getting non fungible count: {}", e);
+                Err(Self::generic_error_response(answer_id))
+            },
         }
     }
 
@@ -284,10 +346,27 @@ impl JsonRpcHandlers {
             .get_non_fungibles(&substate_address, request.start_index, request.end_index)
             .await;
 
-        match res {
-            Ok(nfts) => Ok(JsonRpcResponse::success(answer_id, nfts)),
-            Err(_) => Err(Self::generic_error_response(answer_id)),
+        if let Ok(non_fungibles) = res {
+            let nf_json_res = non_fungibles
+                .iter()
+                .map(Self::build_non_fungible_json)
+                .collect::<Result<Vec<_>, _>>();
+            if let Ok(nf_json) = nf_json_res {
+                return Ok(JsonRpcResponse::success(answer_id, nf_json));
+            }
         }
+
+        Err(Self::generic_error_response(answer_id))
+    }
+
+    fn build_non_fungible_json(nf: &NonFungibleResponse) -> Result<Value, anyhow::Error> {
+        let mut json_value = serde_json::to_value(nf)?;
+        let substate: Value = serde_json::from_str(&nf.substate)?;
+        json_value
+            .as_object_mut()
+            .context("Invalid object")?
+            .insert("substate".to_owned(), substate);
+        Ok(json_value)
     }
 
     fn parse_substate_address(address_str: &str, answer_id: i64) -> Result<SubstateAddress, JsonRpcResponse> {
@@ -295,15 +374,19 @@ impl JsonRpcHandlers {
         Ok(address)
     }
 
-    fn generic_error_response(answer_id: i64) -> JsonRpcResponse {
+    fn error_response(answer_id: i64, message: &str) -> JsonRpcResponse {
         JsonRpcResponse::error(
             answer_id,
             JsonRpcError::new(
                 JsonRpcErrorReason::InvalidParams,
-                "Something went wrong".to_string(),
+                message.to_string(),
                 json::Value::Null,
             ),
         )
+    }
+
+    fn generic_error_response(answer_id: i64) -> JsonRpcResponse {
+        Self::error_response(answer_id, "Something went wrong")
     }
 }
 
