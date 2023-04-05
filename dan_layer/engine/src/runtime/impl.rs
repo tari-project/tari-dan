@@ -42,6 +42,7 @@ use tari_template_lib::{
     args::{
         BucketAction,
         BucketRef,
+        CallerContextAction,
         ComponentAction,
         ComponentRef,
         ConfidentialRevealArg,
@@ -170,6 +171,14 @@ impl RuntimeInterface for RuntimeInterfaceImpl {
     fn get_component(&self, address: &ComponentAddress) -> Result<ComponentHeader, RuntimeError> {
         self.invoke_modules_on_runtime_call("get_component")?;
         self.tracker.get_component(address)
+    }
+
+    fn caller_context_invoke(&self, action: CallerContextAction) -> Result<InvokeResult, RuntimeError> {
+        self.invoke_modules_on_runtime_call("caller_context_invoke")?;
+
+        match action {
+            CallerContextAction::GetCallerPublicKey => Ok(InvokeResult::encode(&self.sender_public_key)?),
+        }
     }
 
     fn component_invoke(
