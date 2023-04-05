@@ -36,6 +36,7 @@ pub type CborValue = ciborium::value::Value;
 
 pub fn decode_substate_into_json(substate: &Substate) -> Result<JsonValue, anyhow::Error> {
     let substate_cbor = decode_into_cbor(&substate.to_bytes())?;
+    let substate_cbor = fix_invalid_object_keys(&substate_cbor);
     let mut result = serde_json::to_value(substate_cbor)?;
 
     let substate_field = get_mut_json_field(&mut result, "substate")?;
@@ -241,4 +242,48 @@ fn find_related_substates_in_cbor_values(values: &[CborValue]) -> Result<Vec<Sub
         .collect::<Result<Vec<_>, _>>()?;
     let related_substates = related_substates_per_item.into_iter().flatten().collect();
     Ok(related_substates)
+}
+
+#[cfg(test)]
+mod tests {
+    use tari_common_types::types::PublicKey;
+    use tari_crypto::commitment::HomomorphicCommitment;
+    use tari_engine_types::{
+        confidential::ConfidentialOutput,
+        resource_container::ResourceContainer,
+        substate::{Substate, SubstateValue},
+        vault::Vault,
+    };
+    use tari_template_lib::{
+        models::{EncryptedValue, VaultId},
+        prelude::{Amount, ResourceAddress},
+        Hash,
+    };
+
+    use crate::substate_decoder::decode_substate_into_json;
+
+    #[test]
+    fn it_decodes_confidential_vaults() {
+        let address = ResourceAddress::new(Hash::default());
+
+        let public_key = PublicKey::default();
+        let confidential_output = ConfidentialOutput {
+            commitment: HomomorphicCommitment::from_public_key(&public_key),
+            stealth_public_nonce: Some(public_key.clone()),
+            encrypted_value: Some(EncryptedValue([0; 24])),
+            minimum_value_promise: 0,
+        };
+        let commitment = Some((public_key, confidential_output));
+
+        let revealed_amount = Amount::zero();
+        let container = ResourceContainer::confidential(address, commitment, revealed_amount);
+
+        let vault_id = VaultId::new(Hash::default());
+        let vault = Vault::new(vault_id, container);
+
+        let substate_value = SubstateValue::Vault(vault);
+        let substate = Substate::new(0, substate_value);
+
+        assert!(decode_substate_into_json(&substate).is_ok());
+    }
 }
