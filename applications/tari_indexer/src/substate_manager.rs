@@ -20,14 +20,16 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use std::{str::FromStr, sync::Arc};
+use std::{collections::HashMap, str::FromStr, sync::Arc};
 
 use anyhow::anyhow;
 use log::info;
+use serde::{Deserialize, Serialize};
 use tari_engine_types::substate::{Substate, SubstateAddress};
 
 use crate::{
     dan_layer_scanner::{DanLayerScanner, NonFungible},
+    substate_decoder::{decode_substate_into_json, find_related_substates},
     substate_storage_sqlite::{
         models::{
             non_fungible_index::{IndexedNftSubstate, NewNonFungibleIndex},
@@ -44,6 +46,40 @@ use crate::{
 };
 
 const LOG_TARGET: &str = "tari::indexer::substate_manager";
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct SubstateResponse {
+    pub address: String,
+    pub version: i64,
+    pub data: String,
+}
+
+impl From<SubstateRow> for SubstateResponse {
+    fn from(row: SubstateRow) -> Self {
+        SubstateResponse {
+            address: row.address,
+            version: row.version,
+            data: row.data,
+        }
+    }
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct NonFungibleResponse {
+    pub index: u64,
+    pub address: String,
+    pub substate: String,
+}
+
+impl From<IndexedNftSubstate> for NonFungibleResponse {
+    fn from(row: IndexedNftSubstate) -> Self {
+        NonFungibleResponse {
+            index: row.idx as u64,
+            address: row.address,
+            substate: row.data,
+        }
+    }
+}
 
 pub struct SubstateManager {
     dan_layer_scanner: Arc<DanLayerScanner>,
@@ -66,6 +102,15 @@ impl SubstateManager {
             None => return Err(anyhow!("Substate not found in the network")),
         };
 
+        // fetch all related substates
+        let related_addresses = find_related_substates(&substate)?;
+        let mut related_substates = HashMap::new();
+        for address in related_addresses {
+            if let Some(related_substate) = self.get_substate_from_dan_layer(&address, None).await {
+                related_substates.insert(address, related_substate);
+            }
+        }
+
         // if it's a resource, we need also to retrieve all the individual nfts
         let non_fungibles = if let SubstateAddress::Resource(addr) = substate_address {
             // TODO: fetch the last index from database to avoid scaning always from the beginning
@@ -84,6 +129,17 @@ impl SubstateManager {
             substate.version()
         );
 
+        // store related substates in the database
+        for (address, substate) in related_substates {
+            store_substate_in_db(&mut tx, &address, &substate)?;
+            info!(
+                target: LOG_TARGET,
+                "Added related substate {} of {} to the database",
+                address.to_address_string(),
+                substate_address.to_address_string()
+            );
+        }
+
         // store the associated non fungibles in the database
         for nft in non_fungibles {
             // store the substate of the nft in the databas
@@ -94,7 +150,9 @@ impl SubstateManager {
             tx.add_non_fungible_index(nft_index_db_row)?;
             info!(
                 target: LOG_TARGET,
-                "Added non fungible {} at index {} to the database", nft.address, nft.index,
+                "Added non fungible {} at index {} to the database",
+                nft.address.to_address_string(),
+                nft.index,
             );
         }
         tx.commit()?;
@@ -129,7 +187,7 @@ impl SubstateManager {
         &self,
         substate_address: &SubstateAddress,
         version: Option<u32>,
-    ) -> Result<Option<Substate>, anyhow::Error> {
+    ) -> Result<Option<SubstateResponse>, anyhow::Error> {
         // we store the latest version of the substates in the watchlist,
         // so we will return the substate directly from database if it's there
         if let Some(substate) = self.get_substate_from_db(substate_address, version).await? {
@@ -137,15 +195,22 @@ impl SubstateManager {
         }
 
         // the substate is not in db (or is not the requested version) so we fetch it from the dan layer commitee
-        let substate = self.get_substate_from_dan_layer(substate_address, version).await;
-        Ok(substate)
+        let dan_layer_result = self.get_substate_from_dan_layer(substate_address, version).await;
+        match dan_layer_result {
+            Some(substate) => Ok(Some(SubstateResponse {
+                address: substate_address.to_address_string(),
+                version: i64::from(substate.version()),
+                data: decode_substate(&substate)?,
+            })),
+            None => Ok(None),
+        }
     }
 
     async fn get_substate_from_db(
         &self,
         substate_address: &SubstateAddress,
         version: Option<u32>,
-    ) -> Result<Option<Substate>, anyhow::Error> {
+    ) -> Result<Option<SubstateResponse>, anyhow::Error> {
         let address_str = substate_address.to_address_string();
 
         let mut tx = self.substate_store.create_read_tx()?;
@@ -158,8 +223,8 @@ impl SubstateManager {
             }
 
             // the substate is present in db and the version matches the requested version
-            let substate = map_db_row_to_substate(&row)?;
-            return Ok(Some(substate));
+            let substate_resp = row.into();
+            return Ok(Some(substate_resp));
         };
 
         // the substate is not present in db
@@ -174,6 +239,11 @@ impl SubstateManager {
         self.dan_layer_scanner.get_substate(substate_address, version).await
     }
 
+    pub async fn get_non_fungible_collections(&self) -> Result<Vec<(String, i64)>, anyhow::Error> {
+        let mut tx = self.substate_store.create_read_tx()?;
+        tx.get_non_fungible_collections().map_err(|e| e.into())
+    }
+
     pub async fn get_non_fungible_count(&self, substate_address: &SubstateAddress) -> Result<i64, anyhow::Error> {
         let address_str = substate_address.to_address_string();
         let mut tx = self.substate_store.create_read_tx()?;
@@ -185,14 +255,14 @@ impl SubstateManager {
         substate_address: &SubstateAddress,
         start_index: u64,
         end_index: u64,
-    ) -> Result<Vec<NonFungible>, anyhow::Error> {
+    ) -> Result<Vec<NonFungibleResponse>, anyhow::Error> {
         let address_str = substate_address.to_address_string();
         let mut tx = self.substate_store.create_read_tx()?;
         let db_rows = tx.get_non_fungibles(address_str, start_index as i32, end_index as i32)?;
 
         let mut nfts = vec![];
         for row in db_rows {
-            nfts.push(map_db_row_to_nft_index(&row)?);
+            nfts.push(row.into());
         }
         Ok(nfts)
     }
@@ -220,29 +290,13 @@ fn store_substate_in_db(
     Ok(())
 }
 
-fn map_db_row_to_substate(row: &SubstateRow) -> Result<Substate, anyhow::Error> {
-    let substate: Substate = serde_json::from_str(&row.data)?;
-    Ok(substate)
-}
-
 fn map_substate_to_db_row(address: &SubstateAddress, substate: &Substate) -> Result<NewSubstate, anyhow::Error> {
-    let pretty_data = serde_json::to_string_pretty(&substate)?;
     let row = NewSubstate {
         address: address.to_address_string(),
         version: i64::from(substate.version()),
-        data: pretty_data,
+        data: decode_substate(substate)?,
     };
     Ok(row)
-}
-
-fn map_db_row_to_nft_index(row: &IndexedNftSubstate) -> Result<NonFungible, anyhow::Error> {
-    let substate: Substate = serde_json::from_str(&row.data)?;
-    let address = SubstateAddress::from_str(&row.address)?;
-    Ok(NonFungible {
-        index: row.idx as u64,
-        address,
-        substate,
-    })
 }
 
 fn map_nft_index_to_db_row(
@@ -254,4 +308,10 @@ fn map_nft_index_to_db_row(
         idx: nft.index as i32,
         non_fungible_address: nft.address.to_address_string(),
     })
+}
+
+fn decode_substate(substate: &Substate) -> Result<String, anyhow::Error> {
+    let decoded_data = decode_substate_into_json(substate)?;
+    let pretty_json = serde_json::to_string_pretty(&decoded_data)?;
+    Ok(pretty_json)
 }

@@ -114,6 +114,7 @@ pub enum EngineHashDomainLabel {
     InstructionSignature,
     ResourceAddress,
     ComponentAddress,
+    RandomBytes,
 }
 
 impl EngineHashDomainLabel {
@@ -133,6 +134,7 @@ impl EngineHashDomainLabel {
             Self::InstructionSignature => "InstructionSignature",
             Self::ResourceAddress => "ResourceAddress",
             Self::ComponentAddress => "ComponentAddress",
+            Self::RandomBytes => "RandomBytes",
         }
     }
 }

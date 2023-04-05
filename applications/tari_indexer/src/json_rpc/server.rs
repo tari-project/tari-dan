@@ -67,6 +67,7 @@ async fn handler(Extension(handlers): Extension<Arc<JsonRpcHandlers>>, value: Js
         "delete_address" => handlers.delete_address(value).await,
         "clear_addresses" => handlers.clear_addresses(value).await,
         "get_connections" => handlers.get_connections(value).await,
+        "get_non_fungible_collections" => handlers.get_non_fungible_collections(value).await,
         "get_non_fungible_count" => handlers.get_non_fungible_count(value).await,
         "get_non_fungibles" => handlers.get_non_fungibles(value).await,
         method => Ok(value.method_not_found(method)),

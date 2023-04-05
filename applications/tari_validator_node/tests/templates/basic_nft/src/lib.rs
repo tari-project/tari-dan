@@ -43,19 +43,19 @@ mod sparkle_nft_template {
             }
         }
 
-        pub fn mint(&mut self) -> Bucket {
+        pub fn mint(&mut self, name: String, url: String) -> Bucket {
             // Mint a new token with a random ID
             let id = NonFungibleId::random();
-            self.mint_specific(id)
+            self.mint_specific(id, name, url)
         }
 
-        pub fn mint_specific(&mut self, id: NonFungibleId) -> Bucket {
+        pub fn mint_specific(&mut self, id: NonFungibleId, name: String, url: String) -> Bucket {
             debug(format!("Minting {}", id));
             // These are characteristic of the NFT and are immutable
             let mut immutable_data = Metadata::new();
             immutable_data
-                .insert("name", format!("Sparkle{}", id))
-                .insert("image_url", format!("https://nft.storage/sparkle{}.png", id));
+                .insert("name", name)
+                .insert("image_url", url);
 
             // Mint the NFT, this will fail if the token ID already exists
             let mut res_manager = ResourceManager::get(self.resource_address);

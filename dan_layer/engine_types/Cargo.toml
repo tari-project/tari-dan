@@ -6,12 +6,12 @@ edition = "2021"
 
 [dependencies]
 tari_bor = { path = "../tari_bor" }
-tari_core = { git = "https://github.com/tari-project/tari.git", tag = "v0.49.0-pre.1", default-features = false, features = ["transactions"] }
-tari_common_types = { git = "https://github.com/tari-project/tari.git", tag = "v0.49.0-pre.1" }
-tari_crypto = { git = "https://github.com/tari-project/tari-crypto.git", tag = "v0.16.8", features = ["borsh"] }
+tari_core = { git = "https://github.com/tari-project/tari.git", tag = "v0.49.0-pre.5", default-features = false, features = ["transactions"] }
+tari_common_types = { git = "https://github.com/tari-project/tari.git", tag = "v0.49.0-pre.5" }
+tari_crypto = { version="0.16.10", features = ["borsh"] }
 tari_template_abi = { path = "../template_abi", features = ["std"] }
 tari_template_lib = { path = "../template_lib" }
-tari_utilities = { git = "https://github.com/tari-project/tari_utilities.git", tag = "v0.4.10" }
+tari_utilities = "0.4.10"
 
 borsh = "0.9.3"
 rand = "0.7"

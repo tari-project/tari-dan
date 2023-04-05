@@ -34,7 +34,6 @@ use tari_common::{
     DefaultConfigLoader,
     SubConfigPath,
 };
-use tari_comms::multiaddr::Multiaddr;
 use tari_engine_types::substate::SubstateAddress;
 use tari_p2p::{P2pConfig, PeerSeedsConfig};
 
@@ -68,8 +67,6 @@ pub struct IndexerConfig {
     pub identity_file: PathBuf,
     /// A path to the file that stores the tor hidden service private key, if using the tor transport
     pub tor_identity_file: PathBuf,
-    /// The node's publicly-accessible hostname
-    pub public_address: Option<Multiaddr>,
     /// The Tari base node's GRPC address
     pub base_node_grpc_address: Option<SocketAddr>,
     /// How often do we want to scan the base layer for changes
@@ -120,7 +117,6 @@ impl Default for IndexerConfig {
             override_from: None,
             identity_file: PathBuf::from("indexer_id.json"),
             tor_identity_file: PathBuf::from("indexer_tor_id.json"),
-            public_address: None,
             base_node_grpc_address: None,
             base_layer_scanning_interval: Duration::from_secs(10),
             data_dir: PathBuf::from("data/indexer"),
