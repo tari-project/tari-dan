@@ -36,11 +36,9 @@ mod sparkle_nft_template {
 
     impl SparkleNft {
         pub fn new() -> Self {
-            let resource_address = ResourceBuilder::non_fungible().build();
+            let resource_address = ResourceBuilder::non_fungible("SPKL").build();
 
-            Self {
-                resource_address,
-            }
+            Self { resource_address }
         }
 
         pub fn mint(&mut self, name: String, url: String) -> Bucket {
@@ -53,9 +51,7 @@ mod sparkle_nft_template {
             debug(format!("Minting {}", id));
             // These are characteristic of the NFT and are immutable
             let mut immutable_data = Metadata::new();
-            immutable_data
-                .insert("name", name)
-                .insert("image_url", url);
+            immutable_data.insert("name", name).insert("image_url", url);
 
             // Mint the NFT, this will fail if the token ID already exists
             let mut res_manager = ResourceManager::get(self.resource_address);
