@@ -1928,12 +1928,17 @@ fn extract_changes_for_shards(
     diff: &SubstateDiff,
     total_fee_accrued: u64,
 ) -> Result<HashMap<ShardId, Vec<SubstateState>>, HotStuffError> {
-    // we split the total accrued fee over all substate differences
-    let total_diffs = diff.len() as u64;
-    let accrued_fee_per_diff = total_fee_accrued
-        .checked_div(total_diffs)
-        .ok_or(HotStuffError::MathOverflow)?;
     let mut changes = HashMap::<_, Vec<_>>::new();
+    // we split the total accrued fee over all substate differences
+    let accrued_fee_per_diff = if let Some(fee) = total_fee_accrued.checked_div(diff.len() as u64) {
+        fee
+    } else {
+        // if the division overflows, it means that `diff` is empty,
+        // so no new substates are being updated/inserted. This means we are dealing
+        // with a view method, so no write operation is performed. For now we leave it
+        // without fees.
+        return Ok(changes);
+    };
     // down first, then up
     for (address, version) in diff.down_iter() {
         let shard_id = ShardId::from_address(address, *version);
