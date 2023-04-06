@@ -25,6 +25,7 @@ mod handlers;
 mod jrpc_server;
 mod notify;
 mod services;
+mod webrtc;
 
 use std::{error::Error, panic, process};
 
@@ -65,8 +66,9 @@ pub async fn run_tari_dan_wallet_daemon(cli: Cli, shutdown_signal: ShutdownSigna
     let service_handles = spawn_services(shutdown_signal.clone(), notify.clone(), wallet_sdk.clone());
 
     let address = cli.listen_address();
+    let signaling_server_address = cli.signaling_server_address();
     let handlers = HandlerContext::new(wallet_sdk.clone(), notify);
-    let listen_fut = jrpc_server::listen(address, handlers, shutdown_signal);
+    let listen_fut = jrpc_server::listen(address, signaling_server_address, handlers, shutdown_signal);
 
     // Wait for shutdown, or for any service to error
     tokio::select! {

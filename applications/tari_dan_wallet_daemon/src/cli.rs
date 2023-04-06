@@ -32,6 +32,8 @@ use multiaddr::{Multiaddr, Protocol};
 pub struct Cli {
     #[clap(long, alias = "endpoint", env = "JRPC_ENDPOINT")]
     pub listen_addr: Option<SocketAddr>,
+    #[clap(long, alias = "signaling_server_address", env = "SIGNALING_SERVER_ADDRESS")]
+    pub signaling_server_addr: Option<SocketAddr>,
     #[clap(long, short = 'b', alias = "basedir")]
     pub base_dir: Option<PathBuf>,
     #[clap(long, alias = "vn_url")]
@@ -46,6 +48,11 @@ impl Cli {
     pub fn listen_address(&self) -> SocketAddr {
         self.listen_addr
             .unwrap_or_else(|| SocketAddr::from(([127u8, 0, 0, 1], 9000)))
+    }
+
+    pub fn signaling_server_address(&self) -> SocketAddr {
+        self.signaling_server_addr
+            .unwrap_or_else(|| SocketAddr::from(([127u8, 0, 0, 1], 9100)))
     }
 
     pub fn base_dir(&self) -> PathBuf {

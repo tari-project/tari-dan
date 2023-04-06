@@ -42,6 +42,8 @@ tower-http = { version = "0.3.5", default-features = false, features = ["cors", 
 
 libsqlite3-sys = { version = "0.25", features = ["bundled"] }
 log4rs = { version = "1.1.1", features = ["rolling_file_appender", "compound_policy", "size_trigger", "fixed_window_roller"] }
+webrtc = "0.7.1"
+reqwest = "0.11.16"
 
 [dev-dependencies]
 tari_utilities = "0.4.10"
