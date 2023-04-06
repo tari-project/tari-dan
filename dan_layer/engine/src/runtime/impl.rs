@@ -254,7 +254,9 @@ impl RuntimeInterface for RuntimeInterfaceImpl {
             ResourceAction::Create => {
                 let arg: CreateResourceArg = args.get(0)?;
 
-                let resource_address = self.tracker.new_resource(arg.resource_type, arg.metadata)?;
+                let resource_address =
+                    self.tracker
+                        .new_resource(arg.resource_type, arg.token_symbol.clone(), arg.metadata)?;
 
                 let mut output_bucket = None;
                 if let Some(mint_arg) = arg.mint_arg {
@@ -781,6 +783,9 @@ impl RuntimeInterface for RuntimeInterfaceImpl {
     fn finalize(&self) -> Result<(FinalizeResult, FeeReceipt), RuntimeError> {
         self.invoke_modules_on_runtime_call("finalize")?;
 
+        // TODO: this should not be checked here because it will silently fail
+        // and the transaction will think it succeeds. Rather move this check to the transaction
+        // processor and reset to fee checkpoint there.
         if !self.tracker.are_fees_paid_in_full() && self.tracker.total_charges() > self.fee_loan {
             self.reset_to_fee_checkpoint()?;
         }

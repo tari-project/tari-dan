@@ -23,12 +23,10 @@
 mod builder;
 mod change;
 pub mod id_provider;
-mod object_claim;
 mod signature;
 mod transaction;
 
 pub use builder::TransactionBuilder;
 pub use change::SubstateChange;
-pub use object_claim::ObjectClaim;
 pub use signature::InstructionSignature;
 pub use transaction::{Transaction, TransactionMeta};

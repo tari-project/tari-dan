@@ -2,6 +2,7 @@
 //   SPDX-License-Identifier: BSD-3-Clause
 
 use serde::{Deserialize, Serialize};
+use tari_common_types::types::PublicKey;
 use tari_dan_common_types::{
     quorum_certificate::QuorumCertificate,
     NodeHeight,
@@ -24,8 +25,10 @@ pub struct SubstateShardData {
     destroyed_node_hash: Option<TreeNodeHash>,
     created_payload_id: PayloadId,
     destroyed_payload_id: Option<PayloadId>,
-    created_justify: QuorumCertificate,
-    destroyed_justify: Option<QuorumCertificate>,
+    created_justify: Option<QuorumCertificate<PublicKey>>,
+    destroyed_justify: Option<QuorumCertificate<PublicKey>>,
+    created_fee_accrued: u64,
+    destroyed_fee_accrued: u64,
 }
 
 impl SubstateShardData {
@@ -40,8 +43,10 @@ impl SubstateShardData {
         destroyed_node_hash: Option<TreeNodeHash>,
         created_payload_id: PayloadId,
         destroyed_payload_id: Option<PayloadId>,
-        created_justify: QuorumCertificate,
-        destroyed_justify: Option<QuorumCertificate>,
+        created_justify: Option<QuorumCertificate<PublicKey>>,
+        destroyed_justify: Option<QuorumCertificate<PublicKey>>,
+        created_fee_accrued: u64,
+        destroyed_fee_accrued: u64,
     ) -> Self {
         Self {
             shard_id,
@@ -56,6 +61,8 @@ impl SubstateShardData {
             destroyed_payload_id,
             created_justify,
             destroyed_justify,
+            created_fee_accrued,
+            destroyed_fee_accrued,
         }
     }
 
@@ -103,22 +110,34 @@ impl SubstateShardData {
         self.destroyed_payload_id
     }
 
-    pub fn created_justify(&self) -> &QuorumCertificate {
-        &self.created_justify
+    pub fn created_justify(&self) -> Option<&QuorumCertificate<PublicKey>> {
+        self.created_justify.as_ref()
     }
 
-    pub fn destroyed_justify(&self) -> &Option<QuorumCertificate> {
+    pub fn destroyed_justify(&self) -> &Option<QuorumCertificate<PublicKey>> {
         &self.destroyed_justify
+    }
+
+    pub fn created_fee_accrued(&self) -> u64 {
+        self.created_fee_accrued
+    }
+
+    pub fn destroyed_fee_accrued(&self) -> u64 {
+        self.destroyed_fee_accrued
     }
 
     pub fn into_substate_state(self) -> SubstateState {
         if let Some(payload_id) = self.destroyed_payload_id() {
-            SubstateState::Down { deleted_by: payload_id }
+            SubstateState::Down {
+                deleted_by: payload_id,
+                fees_accrued: 0,
+            }
         } else {
             SubstateState::Up {
                 address: self.address.clone(),
                 created_by: self.created_payload_id(),
                 data: self.into_substate(),
+                fees_accrued: 0,
             }
         }
     }

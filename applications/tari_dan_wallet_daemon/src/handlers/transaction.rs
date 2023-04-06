@@ -74,6 +74,7 @@ pub async fn handle_submit(
         .with_fee_instructions(req.fee_instructions)
         .with_inputs(inputs.clone())
         .with_outputs(outputs.clone())
+        .with_new_resources(req.new_resources)
         .with_new_outputs(req.new_outputs)
         .with_new_non_fungible_outputs(req.new_non_fungible_outputs)
         .with_new_non_fungible_index_outputs(req.new_non_fungible_index_outputs)

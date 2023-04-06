@@ -189,6 +189,7 @@ pub enum MintArg {
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct CreateResourceArg {
     pub resource_type: ResourceType,
+    pub token_symbol: String,
     pub metadata: Metadata,
     pub mint_arg: Option<MintArg>,
 }

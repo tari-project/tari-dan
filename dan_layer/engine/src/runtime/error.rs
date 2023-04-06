@@ -115,6 +115,8 @@ pub enum RuntimeError {
     InsufficientFeesPaid { required_fee: Amount, fees_paid: Amount },
     #[error("No checkpoint")]
     NoCheckpoint,
+    #[error("Component address must be sequential. Index before {index} was not found")]
+    ComponentAddressMustBeSequential { index: u32 },
 }
 
 impl RuntimeError {

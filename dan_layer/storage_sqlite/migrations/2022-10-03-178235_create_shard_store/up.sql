@@ -121,7 +121,7 @@ create table substates
     version                 bigint    not NULL,
     data                    text      not NULL,
     created_by_payload_id   blob      not NULL,
-    created_justify         text      not NULL,
+    created_justify         text      NULL,
     created_node_hash       blob      not NULL,
     created_height          bigint    not NULL,
     destroyed_by_payload_id blob      NULL,
