@@ -3,7 +3,7 @@
 
 Feature: Indexer node
 
-  @serial
+  @serial @current
   Scenario: Indexer is able to connect to validator nodes
     # Initialize a base node, wallet, miner and VN
     Given a base node BASE
@@ -40,14 +40,9 @@ Feature: Indexer node
     When I create an account ACC1 on VN
 
     # Create a new SparkleNft component and mint an NFT
-    When I call function "new" on template "basic_nft" on VN with 3 outputs named "NFT"
+    When I call function "new" on template "basic_nft" on VN with 3 outputs named "NFT" with new resource "SPKL"
     When I submit a transaction manifest on VN with inputs "NFT, ACC1" and 12 outputs named "TX2"
         ```
-            // $mint NFT/resources/0 1
-            // $mint NFT/resources/0 2
-            // $mint NFT/resources/0 3
-            // $mint NFT/resources/0 4
-            // $mint NFT/resources/0 5
             // $mint NFT/resources/0 6
             // $nft_index NFT/resources/0 0
             // $nft_index NFT/resources/0 1
@@ -99,6 +94,6 @@ Feature: Indexer node
 
     # List the nfts of a resource
     Then the indexer IDX returns 6 non fungibles for resource NFT/resources/0
-    
+
     # When I print the cucumber world
     # When I wait 5000 seconds

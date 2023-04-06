@@ -105,6 +105,8 @@ pub struct CommonSubmitArgs {
     pub account_template_address: Option<String>,
     #[clap(long)]
     pub dry_run: bool,
+    #[clap(long, short = 'r', alias = "resource")]
+    pub new_resources: Vec<NewResourceOutput>,
     #[clap(long, short = 'm', alias = "mint-specific")]
     pub non_fungible_mint_outputs: Vec<SpecificNonFungibleMintOutput>,
     #[clap(long, alias = "mint-new")]
@@ -264,6 +266,13 @@ pub async fn submit_transaction(
         .with_inputs(inputs)
         .with_new_outputs(common.num_outputs.unwrap_or(0))
         .with_outputs(outputs)
+        .with_new_resources(
+            common
+                .new_resources
+                .into_iter()
+                .map(|r| (r.template_address, r.token_symbol))
+                .collect(),
+        )
         .with_new_non_fungible_outputs(
             common
                 .new_non_fungible_outputs
@@ -286,6 +295,7 @@ pub async fn submit_transaction(
             "No inputs or outputs, transaction will not be processed by the network"
         ));
     }
+
     let tx_hash = *transaction.hash();
     let request = SubmitTransactionRequest {
         transaction,
@@ -690,6 +700,27 @@ impl CliArg {
             CliArg::NonFungibleId(v) => arg!(v),
             CliArg::Amount(v) => arg!(Amount::new(v)),
         }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct NewResourceOutput {
+    pub template_address: TemplateAddress,
+    pub token_symbol: String,
+}
+
+impl FromStr for NewResourceOutput {
+    type Err = anyhow::Error;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let (template_address, token_symbol) = s
+            .split_once(':')
+            .ok_or_else(|| anyhow!("Expected template address and token symbol"))?;
+        let template_address = TemplateAddress::from_hex(template_address)?;
+        Ok(NewResourceOutput {
+            template_address,
+            token_symbol: token_symbol.to_string(),
+        })
     }
 }
 

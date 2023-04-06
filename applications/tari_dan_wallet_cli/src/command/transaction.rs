@@ -109,8 +109,6 @@ pub struct CommonSubmitArgs {
     pub dry_run: bool,
     #[clap(long, short = 'r', alias = "resource")]
     pub new_resources: Vec<NewResourceOutput>,
-    #[clap(long, short = 'c', alias = "component")]
-    pub new_components: Vec<NewComponentOutput>,
     #[clap(long, short = 'm', alias = "mint-specific")]
     pub non_fungible_mint_outputs: Vec<SpecificNonFungibleMintOutput>,
     /// New non-fungible outputs to mint in the format <resource_address>,<num>
@@ -900,28 +898,6 @@ impl FromStr for NewResourceOutput {
         Ok(NewResourceOutput {
             template_address,
             token_symbol: token_symbol.to_string(),
-        })
-    }
-}
-
-#[derive(Debug, Clone)]
-pub struct NewComponentOutput {
-    pub template_address: TemplateAddress,
-    pub index: u32,
-}
-
-impl FromStr for NewComponentOutput {
-    type Err = anyhow::Error;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let (template_address, index) = s
-            .split_once(':')
-            .ok_or_else(|| anyhow!("Expected template address and index"))?;
-        let template_address = TemplateAddress::from_hex(template_address)?;
-        let index = index.parse()?;
-        Ok(NewComponentOutput {
-            template_address,
-            index,
         })
     }
 }
