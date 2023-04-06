@@ -109,8 +109,10 @@ pub struct CommonSubmitArgs {
     pub dry_run: bool,
     #[clap(long, short = 'm', alias = "mint-specific")]
     pub non_fungible_mint_outputs: Vec<SpecificNonFungibleMintOutput>,
+    /// New non-fungible outputs to mint in the format <resource_address>,<num>
     #[clap(long, alias = "mint-new")]
     pub new_non_fungible_outputs: Vec<NewNonFungibleMintOutput>,
+    /// New non-fungible index outputs to mint in the format <resource_address>,<index>
     #[clap(long, alias = "new-nft-index")]
     pub new_non_fungible_index_outputs: Vec<NewNonFungibleIndexOutput>,
     #[clap(long, default_value_t = 1000)]
@@ -239,6 +241,22 @@ pub async fn handle_submit(args: SubmitArgs, client: &mut WalletDaemonClient) ->
         account: fee_account, ..
     } = client.accounts_get_by_name(fee_account_name).await?;
 
+    let mut instructions = vec![instruction];
+    if let Some(dump_account) = common.dump_outputs_into {
+        instructions.push(Instruction::PutLastInstructionOutputOnWorkspace {
+            key: b"bucket".to_vec(),
+        });
+        let AccountByNameResponse {
+            account: dump_account2, ..
+        } = client.accounts_get_by_name(&dump_account).await?;
+
+        instructions.push(Instruction::CallMethod {
+            component_address: dump_account2.address.as_component_address().unwrap(),
+            method: "deposit".to_string(),
+            args: args![Variable("bucket")],
+        });
+    }
+
     let request = TransactionSubmitRequest {
         signing_key_index: None,
         fee_instructions: vec![Instruction::CallMethod {
@@ -246,7 +264,7 @@ pub async fn handle_submit(args: SubmitArgs, client: &mut WalletDaemonClient) ->
             method: "pay_fee".to_string(),
             args: args![Amount::try_from(common.fee)?],
         }],
-        instructions: vec![instruction],
+        instructions,
         inputs: common.inputs,
         override_inputs: common.override_inputs.unwrap_or_default(),
         new_outputs: common.num_outputs.unwrap_or(0),

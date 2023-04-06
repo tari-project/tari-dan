@@ -10,7 +10,10 @@ use std::{
 use anyhow::anyhow;
 use serde::de::DeserializeOwned;
 use tari_bor::encode;
-use tari_crypto::{ristretto::RistrettoSecretKey, tari_utilities::ByteArray};
+use tari_crypto::{
+    ristretto::RistrettoSecretKey,
+    tari_utilities::{hex::Hex, ByteArray},
+};
 use tari_dan_common_types::crypto::create_key_pair;
 use tari_dan_engine::{
     bootstrap_state,
@@ -66,7 +69,8 @@ pub struct TemplateTest {
 
 impl TemplateTest {
     pub fn new<I: IntoIterator<Item = P>, P: AsRef<Path>>(template_paths: I) -> Self {
-        let (secret_key, _pk) = create_key_pair();
+        let secret_key =
+            RistrettoSecretKey::from_hex("7e100429f979d37999f051e65b94734e206925e9346759fd73caafb2f3232578").unwrap();
 
         let mut name_to_template = HashMap::new();
         let mut builder = Package::builder();

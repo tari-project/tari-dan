@@ -634,8 +634,9 @@ async fn assert_indexer_substate_version(
     let indexer = world.indexers.get(&indexer_name).unwrap();
     assert!(!indexer.handle.is_finished(), "Indexer {} is not running", indexer_name);
     let substate = indexer.get_substate(world, output_ref, version).await;
-    eprintln!("indexer.get_substate result: {:?}", substate);
-    assert_eq!(substate.version(), version);
+    eprintln!("indexer.get_substate result: {:?}", substate.to_string());
+    let substate_version = substate.as_object().unwrap().get("version").unwrap().as_u64().unwrap();
+    assert_eq!(substate_version, u64::from(version));
 }
 
 #[then(expr = "the indexer {word} returns {int} non fungibles for resource {word}")]
@@ -713,8 +714,8 @@ async fn print_world(world: &mut TariWorld) {
     // indexes
     for (name, node) in world.indexers.iter() {
         eprintln!(
-            "Indexer \"{}\": json rpc port \"{}\", temp dir path \"{}\"",
-            name, node.json_rpc_port, node.temp_dir_path
+            "Indexer \"{}\": json rpc port \"{}\", http ui port  \"{}\", temp dir path \"{}\"",
+            name, node.json_rpc_port, node.http_ui_port, node.temp_dir_path
         );
     }
 
