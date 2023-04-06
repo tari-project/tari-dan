@@ -343,3 +343,8 @@ pub struct RevealFundsResponse {
     pub fee: Amount,
     pub result: FinalizeResult,
 }
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct WebRtcStart {
+    pub jwt: String,
+}

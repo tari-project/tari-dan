@@ -49,7 +49,7 @@ pub struct DanWalletDaemonProcess {
 }
 
 pub async fn spawn_wallet_daemon(world: &mut TariWorld, wallet_daemon_name: String, validator_node_name: String) {
-    let (_, json_rpc_port) = get_os_assigned_ports();
+    let (signaling_server_port, json_rpc_port) = get_os_assigned_ports();
     let base_dir = get_base_dir();
 
     let validator_node_jrpc_port = world.validator_nodes.get(&validator_node_name).unwrap().json_rpc_port;
@@ -57,11 +57,13 @@ pub async fn spawn_wallet_daemon(world: &mut TariWorld, wallet_daemon_name: Stri
     let shutdown_signal = shutdown.to_signal();
 
     let listen_addr = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), json_rpc_port);
+    let signaling_server_addr = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), signaling_server_port);
     let validator_node_endpoint =
         Multiaddr::from_str(&format!("/ip4/127.0.0.1/tcp/{}", validator_node_jrpc_port)).unwrap();
 
     let cli = Cli {
         listen_addr: Some(listen_addr),
+        signaling_server_addr: Some(signaling_server_addr),
         base_dir: Some(base_dir.clone()),
         validator_node_endpoint: Some(validator_node_endpoint),
     };
