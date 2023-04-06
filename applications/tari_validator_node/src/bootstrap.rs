@@ -65,7 +65,6 @@ use tari_template_lib::{
     constants::{CONFIDENTIAL_TARI_RESOURCE_ADDRESS, PUBLIC_IDENTITY_RESOURCE_ADDRESS},
     models::Metadata,
     prelude::ResourceType,
-    resource::TOKEN_SYMBOL,
 };
 use tokio::task::JoinHandle;
 
@@ -338,7 +337,10 @@ where
             shard_id,
             address,
             0,
-            Substate::new(0, Resource::new(ResourceType::NonFungible, Default::default())),
+            Substate::new(
+                0,
+                Resource::new(ResourceType::NonFungible, "ID".to_string(), Default::default()),
+            ),
             NodeHeight(0),
             None,
             TreeNodeHash::zero(),
@@ -354,15 +356,18 @@ where
     let shard_id = ShardId::from_address(&address, 0);
     if tx.get_substate_states(&[shard_id])?.is_empty() {
         // Create the second layer tari resource
-        let mut metadata = Metadata::new();
+        let metadata = Metadata::new();
         // TODO: decide on symbol for L2 tari
-        metadata.insert(TOKEN_SYMBOL, "tXTR2".to_string());
+        // metadata.insert(TOKEN_SYMBOL, "tXTR2".to_string());
 
         tx.insert_substates(SubstateShardData::new(
             shard_id,
             address,
             0,
-            Substate::new(0, Resource::new(ResourceType::Confidential, metadata)),
+            Substate::new(
+                0,
+                Resource::new(ResourceType::Confidential, "tXTR2".to_string(), metadata),
+            ),
             NodeHeight(0),
             None,
             TreeNodeHash::zero(),

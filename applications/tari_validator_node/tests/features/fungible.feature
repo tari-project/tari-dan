@@ -3,7 +3,7 @@
 
 Feature: Fungible tokens
 
-  @serial
+  @serial @current
   Scenario: Mint fungible tokens
     # Initialize a base node, wallet, miner and VN
     Given a base node BASE
@@ -32,7 +32,7 @@ Feature: Fungible tokens
     When I create a DAN wallet
 
     # Create a new Faucet component
-    When I call function "mint" on template "faucet" on VN with args "amount_10000" and 3 outputs named "FAUCET"
+    When I call function "mint" on template "faucet" on VN with args "amount_10000" and 3 outputs named "FAUCET" with new resource "test"
 
     # Create two accounts to test sending the tokens
     When I create an account ACC_1 on VN

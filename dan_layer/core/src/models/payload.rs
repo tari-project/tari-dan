@@ -26,7 +26,7 @@ use serde::{Deserialize, Serialize};
 use tari_common_types::types::FixedHash;
 use tari_dan_common_types::{PayloadId, ShardId};
 use tari_engine_types::commit_result::ExecuteResult;
-use tari_transaction::{ObjectClaim, SubstateChange};
+use tari_transaction::SubstateChange;
 
 use crate::models::ConsensusHash;
 
@@ -35,7 +35,7 @@ pub trait Payload: Debug + Clone + Send + Sync + ConsensusHash {
     fn to_id(&self) -> PayloadId {
         PayloadId::new(self.consensus_hash())
     }
-    fn objects_for_shard(&self, shard: ShardId) -> Option<(SubstateChange, ObjectClaim)>;
+    fn change_for_shard(&self, shard: ShardId) -> Option<SubstateChange>;
     fn max_outputs(&self) -> u32;
 }
 
@@ -50,9 +50,9 @@ impl Payload for (String, Vec<ShardId>) {
         self.1.clone()
     }
 
-    fn objects_for_shard(&self, shard: ShardId) -> Option<(SubstateChange, ObjectClaim)> {
+    fn change_for_shard(&self, shard: ShardId) -> Option<SubstateChange> {
         if self.1.contains(&shard) {
-            Some((SubstateChange::Create, ObjectClaim {}))
+            Some(SubstateChange::Create)
         } else {
             None
         }

@@ -36,11 +36,9 @@ mod sparkle_nft_template {
 
     impl SparkleNft {
         pub fn new() -> Self {
-            let resource_address = ResourceBuilder::non_fungible().build();
+            let resource_address = ResourceBuilder::non_fungible("sparkle").build();
 
-            Self {
-                resource_address,
-            }
+            Self { resource_address }
         }
 
         pub fn mint(&mut self) -> Bucket {

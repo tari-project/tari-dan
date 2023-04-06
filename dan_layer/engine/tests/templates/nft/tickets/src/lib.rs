@@ -42,19 +42,27 @@ mod tickets {
 
     impl TicketSeller {
         // TODO: in this example we need to specify the payment resource, but there should be native support for Thaums
-        pub fn new(payment_resource_address: ResourceAddress, initial_supply: usize, price: Amount, event_description: String) -> Self {
+        pub fn new(
+            payment_resource_address: ResourceAddress,
+            initial_supply: usize,
+            price: Amount,
+            event_description: String,
+        ) -> Self {
             // Create the non-fungible resource
             // TODO: restrict minting to only the owner
-            let resource_address = ResourceBuilder::non_fungible()
+            let resource_address = ResourceBuilder::non_fungible("tix")
                 // The event description is common for all tickets
                 .add_metadata("event", event_description)
                 .build();
 
             // Mint the initial tickets
-            let ticket_bucket = ResourceManager::get(resource_address)
-                .mint_many_non_fungible(&Metadata::new(), &Ticket::default(), initial_supply);
+            let ticket_bucket = ResourceManager::get(resource_address).mint_many_non_fungible(
+                &Metadata::new(),
+                &Ticket::default(),
+                initial_supply,
+            );
             let tickets = Vault::from_bucket(ticket_bucket);
- 
+
             let earnings = Vault::new_empty(payment_resource_address);
 
             Self {
@@ -67,8 +75,11 @@ mod tickets {
 
         // TODO: this method should only be allowed for the owner, when they want to increase attendance of the event
         pub fn mint_more_tickets(&mut self, supply: usize) {
-            let ticket_bucket = ResourceManager::get(self.resource_address)
-                .mint_many_non_fungible(&Metadata::new(), &Ticket::default(), supply);
+            let ticket_bucket = ResourceManager::get(self.resource_address).mint_many_non_fungible(
+                &Metadata::new(),
+                &Ticket::default(),
+                supply,
+            );
             self.tickets.deposit(ticket_bucket);
         }
 
@@ -79,7 +90,8 @@ mod tickets {
 
             self.earnings.deposit(payment);
 
-            // no need to manually check that the tickes are all sold out, as the withdraw operation will fail automatically
+            // no need to manually check that the tickes are all sold out, as the withdraw operation will fail
+            // automatically
             let ticket_bucket = self.tickets.withdraw(Amount::new(1));
 
             ticket_bucket

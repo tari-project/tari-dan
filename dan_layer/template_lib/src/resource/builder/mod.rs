@@ -35,15 +35,15 @@ pub const TOKEN_SYMBOL: &str = "SYMBOL";
 pub struct ResourceBuilder;
 
 impl ResourceBuilder {
-    pub fn fungible() -> FungibleResourceBuilder {
-        FungibleResourceBuilder::new()
+    pub fn fungible<S: Into<String>>(token_symbol: S) -> FungibleResourceBuilder {
+        FungibleResourceBuilder::new(token_symbol)
     }
 
-    pub fn non_fungible() -> NonFungibleResourceBuilder {
-        NonFungibleResourceBuilder::new()
+    pub fn non_fungible<S: Into<String>>(token_symbol: S) -> NonFungibleResourceBuilder {
+        NonFungibleResourceBuilder::new(token_symbol)
     }
 
-    pub fn confidential() -> ConfidentialResourceBuilder {
-        ConfidentialResourceBuilder::new()
+    pub fn confidential<S: Into<String>>(token_symbol: S) -> ConfidentialResourceBuilder {
+        ConfidentialResourceBuilder::new(token_symbol)
     }
 }

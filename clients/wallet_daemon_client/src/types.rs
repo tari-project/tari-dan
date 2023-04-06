@@ -29,6 +29,7 @@ use tari_engine_types::{
     instruction::Instruction,
     instruction_result::InstructionResult,
     substate::SubstateAddress,
+    TemplateAddress,
 };
 use tari_template_lib::{
     args::Arg,
@@ -47,6 +48,7 @@ pub struct TransactionSubmitRequest {
     pub override_inputs: bool,
     pub new_outputs: u8,
     pub specific_non_fungible_outputs: Vec<(ResourceAddress, NonFungibleId)>,
+    pub new_resources: Vec<(TemplateAddress, String)>,
     pub new_non_fungible_outputs: Vec<(ResourceAddress, u8)>,
     pub new_non_fungible_index_outputs: Vec<(ResourceAddress, u64)>,
     pub is_dry_run: bool,
