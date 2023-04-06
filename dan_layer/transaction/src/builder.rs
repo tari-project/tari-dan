@@ -247,6 +247,8 @@ impl TransactionBuilder {
             }));
         }
 
+        transaction.meta_mut().involved_objects_mut().extend(new_nft_outputs);
+
         for (template_address, token_symbol) in self.new_resources {
             let address: ResourceAddress = hasher(EngineHashDomainLabel::ResourceAddress)
                 .chain(&template_address)
