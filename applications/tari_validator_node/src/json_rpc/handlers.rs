@@ -31,6 +31,7 @@ use axum_jrpc::{
 use log::*;
 use serde::Serialize;
 use serde_json::{self as json, json};
+use tari_common_types::types::PublicKey;
 use tari_comms::{
     multiaddr::Multiaddr,
     peer_manager::{NodeId, PeerFeatures},
@@ -39,7 +40,7 @@ use tari_comms::{
     NodeIdentity,
 };
 use tari_comms_logging::SqliteMessageLog;
-use tari_crypto::tari_utilities::hex::Hex;
+use tari_crypto::tari_utilities::{hex::Hex, ByteArray};
 use tari_dan_app_utilities::{
     base_node_client::GrpcBaseNodeClient,
     epoch_manager::EpochManagerHandle,
@@ -56,6 +57,8 @@ use tari_template_lib::Hash;
 use tari_validator_node_client::types::{
     AddPeerRequest,
     AddPeerResponse,
+    GetClaimFeesRequest,
+    GetClaimableFeesResponse,
     GetCommitteeRequest,
     GetEpochManagerStatsResponse,
     GetIdentityResponse,
@@ -107,7 +110,7 @@ pub struct JsonRpcHandlers {
     template_manager: TemplateManagerHandle,
     epoch_manager: EpochManagerHandle,
     comms: CommsNode,
-    hotstuff_events: EventSubscription<HotStuffEvent>,
+    hotstuff_events: EventSubscription<HotStuffEvent<CommsPublicKey>>,
     base_node_client: GrpcBaseNodeClient,
     shard_store: SqliteShardStore,
     dry_run_transaction_processor: DryRunTransactionProcessor,
@@ -205,7 +208,12 @@ impl JsonRpcHandlers {
                             transaction_failure: exec_result.transaction_failure,
                             fee_breakdown: exec_result.fee_receipt.map(|f| f.to_cost_breakdown()),
                             // TODO: Get correct QC
-                            qc: QuorumCertificate::genesis(epoch, PayloadId::new(hash), ShardId::zero()),
+                            qc: QuorumCertificate::genesis(
+                                epoch,
+                                PayloadId::new(hash),
+                                ShardId::zero(),
+                                PublicKey::from_vec(&vec![0; 32]).unwrap(),
+                            ),
                         }),
                     };
 
@@ -417,6 +425,37 @@ impl JsonRpcHandlers {
         let mut tx = self.shard_store.create_read_tx().unwrap();
         match tx.get_substates_for_payload(data.payload_id, data.shard_id) {
             Ok(substates) => Ok(JsonRpcResponse::success(answer_id, json!(substates))),
+            Err(err) => {
+                println!("error {:?}", err);
+                Err(JsonRpcResponse::error(
+                    answer_id,
+                    JsonRpcError::new(
+                        JsonRpcErrorReason::InvalidParams,
+                        "Something went wrong".to_string(),
+                        json::Value::Null,
+                    ),
+                ))
+            },
+        }
+    }
+
+    pub async fn get_fees(&self, value: JsonRpcExtractor) -> JrpcResult {
+        let answer_id = value.get_answer_id();
+        let data: GetClaimFeesRequest = value.parse_params()?;
+        let mut tx = self.shard_store.create_read_tx().unwrap();
+        match tx.get_fees_by_epoch(data.epoch, data.claim_leader_public_key.to_vec()) {
+            Ok(claim_fees) => Ok(JsonRpcResponse::success(answer_id, GetClaimableFeesResponse {
+                total_accrued_fees: claim_fees
+                    .iter()
+                    .map(|fees| {
+                        if fees.destroyed_at_epoch.is_none() {
+                            fees.fee_paid_for_created_justify
+                        } else {
+                            fees.fee_paid_for_destroyed_justify
+                        }
+                    })
+                    .sum::<i64>() as u64,
+            })),
             Err(err) => {
                 println!("error {:?}", err);
                 Err(JsonRpcResponse::error(
@@ -792,7 +831,7 @@ struct GetConnectionsResponse {
 async fn wait_for_transaction_result(
     answer_id: i64,
     hash: Hash,
-    mut subscription: broadcast::Receiver<HotStuffEvent>,
+    mut subscription: broadcast::Receiver<HotStuffEvent<CommsPublicKey>>,
     timeout: Duration,
 ) -> JrpcResult {
     loop {

@@ -261,6 +261,7 @@ pub async fn call_method(
     };
     let mut client = get_validator_node_client(world, vn_name).await;
     let resp = handle_submit(args, data_dir, &mut client).await.unwrap();
+
     // store the account component address and other substate addresses for later reference
     add_substate_addresses(
         world,

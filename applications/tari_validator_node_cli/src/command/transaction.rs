@@ -206,7 +206,6 @@ pub async fn handle_submit(
             args: args.into_iter().map(|s| s.into_arg()).collect(),
         },
     };
-
     submit_transaction(vec![instruction], common, base_dir, client).await
 }
 
@@ -315,12 +314,14 @@ pub async fn submit_transaction(
 
     // dbg!(&request);
     let resp = client.submit_transaction(request).await?;
+
     if let Some(result) = &resp.result {
         if let Some(diff) = result.finalize.result.accept() {
             component_manager.commit_diff(diff)?;
         }
         summarize(result, timer.elapsed());
     }
+
     Ok(resp)
 }
 

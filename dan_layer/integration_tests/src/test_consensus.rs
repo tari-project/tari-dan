@@ -59,8 +59,9 @@ fn create_test_default_qc(
     committee_keys: Vec<(PublicKey, PrivateKey)>,
     all_vn_keys: Vec<PublicKey>,
     payload: &TariDanPayload,
-) -> QuorumCertificate {
-    create_test_qc(ShardId::zero(), committee_keys, all_vn_keys, payload)
+    proposed_by: PublicKey,
+) -> QuorumCertificate<PublicKey> {
+    create_test_qc(ShardId::zero(), committee_keys, all_vn_keys, payload, proposed_by)
 }
 
 fn create_test_qc(
@@ -68,8 +69,9 @@ fn create_test_qc(
     committee_keys: Vec<(PublicKey, PrivateKey)>,
     all_vn_keys: Vec<PublicKey>,
     payload: &TariDanPayload,
-) -> QuorumCertificate {
-    let qc = QuorumCertificate::genesis(Epoch(0), payload.to_id(), shard_id);
+    proposed_by: PublicKey,
+) -> QuorumCertificate<PublicKey> {
+    let qc = QuorumCertificate::genesis(Epoch(0), payload.to_id(), shard_id, proposed_by.clone());
     let vote = VoteMessage::new(qc.node_hash(), *qc.decision(), qc.all_shard_pledges().clone());
 
     let mut vn_bmt_vec = Vec::new();
@@ -105,6 +107,7 @@ fn create_test_qc(
         qc.node_height(),
         shard_id,
         qc.epoch(),
+        proposed_by,
         *qc.decision(),
         qc.all_shard_pledges().clone(),
         validators_metadata,
@@ -163,6 +166,7 @@ async fn test_hs_waiter_leader_proposes() {
         vec![(node1.clone(), node1_pk), (node2.clone(), node2_pk)],
         vec![node1.clone(), node2.clone()],
         &payload,
+        node1.clone(),
     );
     let new_view_message = HotStuffMessage::new_view(qc, *SHARD0, payload);
 
@@ -206,6 +210,7 @@ async fn test_hs_waiter_replica_sends_vote_for_proposal() {
         vec![(node1.clone(), node1_pk), (node2.clone(), node2_pk)],
         vec![node1.clone(), node2.clone()],
         &payload,
+        node1.clone(),
     );
     let new_view_message = HotStuffMessage::new_view(qc, *SHARD0, payload);
 
@@ -275,6 +280,7 @@ async fn test_hs_waiter_leader_sends_new_proposal_when_enough_votes_are_received
         vec![(node1.clone(), node1_pk.clone()), (node2.clone(), node2_pk.clone())],
         vec![node1.clone(), node2.clone()],
         &payload,
+        node1.clone(),
     );
     let new_view_message = HotStuffMessage::new_view(qc, *SHARD0, payload.clone());
     instance
@@ -342,7 +348,12 @@ async fn test_hs_waiter_execute_called_at_prepare_phase_only() {
     );
     let payload = TariDanPayload::new(Transaction::builder().add_input(*SHARD0).sign(&node1_pk).build());
 
-    let qc = create_test_default_qc(vec![(node1.clone(), node1_pk.clone())], vec![node1.clone()], &payload);
+    let qc = create_test_default_qc(
+        vec![(node1.clone(), node1_pk.clone())],
+        vec![node1.clone()],
+        &payload,
+        node1.clone(),
+    );
     let new_view_message = HotStuffMessage::new_view(qc, *SHARD0, payload.clone());
     instance
         .tx_hs_messages
@@ -430,6 +441,7 @@ async fn test_hs_waiter_multishard_votes() {
         vec![(node1.clone(), node1_pk.clone())],
         vec![node1.clone(), node2.clone()],
         &payload,
+        node1.clone(),
     );
     let new_view_message = HotStuffMessage::new_view(qc_shard0, *SHARD0, payload.clone());
     node1_instance
@@ -443,6 +455,7 @@ async fn test_hs_waiter_multishard_votes() {
         vec![(node2.clone(), node2_pk.clone())],
         vec![node1.clone(), node2.clone()],
         &payload,
+        node2.clone(),
     );
     let new_view_message = HotStuffMessage::new_view(qc_shard1, *SHARD1, payload.clone());
     node2_instance
@@ -1384,6 +1397,7 @@ async fn test_kitchen_sink() {
         vec![(node1.clone(), node1_pk.clone())],
         vec![node1.clone(), node2.clone()],
         &payload,
+        node1.clone(),
     );
     let new_view_message = HotStuffMessage::new_view(qc_s1, s1, payload.clone());
     node1_instance
@@ -1397,6 +1411,7 @@ async fn test_kitchen_sink() {
         vec![(node2.clone(), node2_pk.clone())],
         vec![node1.clone(), node2.clone()],
         &payload,
+        node1.clone(),
     );
     let new_view_message = HotStuffMessage::new_view(qc_s2, s2, payload.clone());
     node2_instance

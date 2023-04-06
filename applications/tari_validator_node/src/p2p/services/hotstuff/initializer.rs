@@ -26,15 +26,13 @@ use tari_comms::{types::CommsPublicKey, NodeIdentity};
 use tari_dan_app_utilities::epoch_manager::EpochManagerHandle;
 use tari_dan_core::{
     models::{vote_message::VoteMessage, HotStuffMessage, TariDanPayload},
-    workers::{
-        events::{EventSubscription, HotStuffEvent},
-        hotstuff_waiter::RecoveryMessage,
-    },
+    workers::hotstuff_waiter::RecoveryMessage,
 };
 use tari_dan_storage_sqlite::sqlite_shard_store_factory::SqliteShardStore;
 use tari_shutdown::ShutdownSignal;
-use tokio::{sync::mpsc, task::JoinHandle};
+use tokio::sync::mpsc;
 
+use super::hotstuff_service::HotstuffServiceSpawnOutput;
 use crate::{
     p2p::services::{
         hotstuff::hotstuff_service::HotstuffService,
@@ -56,11 +54,7 @@ pub fn try_spawn(
     rx_recovery_message: mpsc::Receiver<(CommsPublicKey, RecoveryMessage)>,
     rx_vote_message: mpsc::Receiver<(CommsPublicKey, VoteMessage)>,
     shutdown: ShutdownSignal,
-) -> (
-    EventSubscription<HotStuffEvent>,
-    JoinHandle<anyhow::Result<()>>,
-    JoinHandle<anyhow::Result<()>>,
-) {
+) -> HotstuffServiceSpawnOutput {
     HotstuffService::spawn(
         node_identity,
         epoch_manager,
