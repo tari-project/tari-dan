@@ -1,3 +1,6 @@
+//   Copyright 2022 The Tari Project
+//   SPDX-License-Identifier: BSD-3-Clause
+
 import { Table, TableBody, TableCell, TableHead, TableRow, TableContainer } from '@mui/material';
 import React, { useEffect, useState } from 'react'
 

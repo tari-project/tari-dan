@@ -1,3 +1,6 @@
+//   Copyright 2022 The Tari Project
+//   SPDX-License-Identifier: BSD-3-Clause
+
 var allowedWebPages = []
 // Get current saved state when browser starts
 chrome.storage.local.get('allowedWebPages', (result) => {
