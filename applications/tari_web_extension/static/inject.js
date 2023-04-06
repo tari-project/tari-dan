@@ -3,11 +3,6 @@
 
 var wasm_url = document.currentScript.getAttribute('wasm');
 
-// This one can't be changed because it's passed to the getDc function
-const callback = (s) => { window.tari_callback(JSON.parse(s)) }
-// So it's just recalling this one, and any app can change this to their own
-window.tari_callback = (s) => { console.log("From callback", s) };
-
 class SignaligServer {
   constructor() {
     this.token = undefined;
