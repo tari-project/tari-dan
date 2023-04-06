@@ -157,9 +157,9 @@ diesel::table! {
         fee_paid_for_created_justify -> BigInt,
         fee_paid_for_deleted_justify -> BigInt,
         created_at_epoch -> Nullable<BigInt>,
-        deleted_at_epoch -> Nullable<BigInt>,
+        destroyed_at_epoch -> Nullable<BigInt>,
         created_justify_leader -> Nullable<Text>,
-        deleted_justify_leader -> Nullable<Text>,
+        destroyed_justify_leader -> Nullable<Text>,
     }
 }
 

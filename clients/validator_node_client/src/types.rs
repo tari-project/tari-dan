@@ -149,6 +149,11 @@ pub struct SubmitTransactionResponse {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct GetClaimableFeesResponse {
+    pub total_accrued_fees: u64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TransactionFinalizeResult {
     // TODO: we should not return the whole state but only the addresses and perhaps a hash of the state
     pub decision: QuorumDecision,
@@ -161,6 +166,12 @@ pub struct TransactionFinalizeResult {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TransactionRequest {
     pub payload_id: Vec<u8>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct GetClaimFeesRequest {
+    pub claim_leader_public_key: PublicKey,
+    pub epoch: u64,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

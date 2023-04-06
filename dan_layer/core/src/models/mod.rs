@@ -207,3 +207,12 @@ pub struct CurrentLeaderStates {
     pub leader: Vec<u8>,
     pub timestamp: NaiveDateTime,
 }
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct ClaimLeaderFees {
+    pub justify_leader_public_key: String,
+    pub created_at_epoch: i64,
+    pub destroyed_at_epoch: Option<i64>,
+    pub fee_paid_for_created_justify: i64,
+    pub fee_paid_for_destroyed_justify: i64,
+}

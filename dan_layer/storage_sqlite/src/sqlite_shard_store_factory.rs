@@ -55,6 +55,7 @@ use tari_dan_common_types::{
 use tari_dan_core::{
     models::{
         vote_message::VoteMessage,
+        ClaimLeaderFees,
         CurrentLeaderStates,
         HotStuffTreeNode,
         LeafNode,
@@ -195,6 +196,32 @@ impl From<QueryableSubstate> for SQLSubstate {
             data: transaction.data,
             created_justify: transaction.created_justify,
             destroyed_justify: transaction.destroyed_justify,
+        }
+    }
+}
+
+#[derive(Debug, QueryableByName)]
+pub struct QueryableClaimFeesSubstate {
+    #[diesel(sql_type = Text)]
+    pub justify_leader_public_key: String,
+    #[diesel(sql_type = BigInt)]
+    pub created_at_epoch: i64,
+    #[diesel(sql_type = Nullable<BigInt>)]
+    pub destroyed_at_epoch: Option<i64>,
+    #[diesel(sql_type = BigInt)]
+    pub fee_paid_for_created_justify: i64,
+    #[diesel(sql_type = BigInt)]
+    pub fee_paid_for_destroyed_justify: i64,
+}
+
+impl From<QueryableClaimFeesSubstate> for ClaimLeaderFees {
+    fn from(transaction: QueryableClaimFeesSubstate) -> Self {
+        Self {
+            justify_leader_public_key: transaction.justify_leader_public_key,
+            created_at_epoch: transaction.created_at_epoch,
+            destroyed_at_epoch: transaction.destroyed_at_epoch,
+            fee_paid_for_created_justify: transaction.fee_paid_for_created_justify,
+            fee_paid_for_destroyed_justify: transaction.fee_paid_for_destroyed_justify,
         }
     }
 }
@@ -808,6 +835,26 @@ impl ShardStoreReadTransaction<PublicKey, TariDanPayload> for SqliteShardStoreRe
         Ok(res.into_iter().map(|transaction| transaction.into()).collect())
     }
 
+    fn get_fees_by_epoch(
+        &mut self,
+        epoch: u64,
+        claim_leader_public_key: Vec<u8>,
+    ) -> Result<Vec<ClaimLeaderFees>, StorageError> {
+        let res = sql_query(
+            "select * from substates where (created_justify_leader == ? and created_at_epoch == ?) or
+                (destroyed_justify_leader == ? and destroyed_at_epoch == ?);",
+        )
+        .bind::<Text, _>(claim_leader_public_key.to_hex())
+        .bind::<BigInt, _>(epoch as i64)
+        .bind::<Text, _>(claim_leader_public_key.to_hex())
+        .bind::<BigInt, _>(epoch as i64)
+        .load::<QueryableClaimFeesSubstate>(self.transaction.connection())
+        .map_err(|e| StorageError::QueryError {
+            reason: format!("Get claimable substates fees: {}", e),
+        })?;
+        Ok(res.into_iter().map(|transaction| transaction.into()).collect())
+    }
+
     // -------------------------------- Pledges -------------------------------- //
     fn get_resolved_pledges_for_payload(&mut self, payload: PayloadId) -> Result<Vec<ObjectPledgeInfo>, StorageError> {
         use crate::schema::shard_pledges;
@@ -1263,9 +1310,9 @@ impl ShardStoreWriteTransaction<PublicKey, TariDanPayload> for SqliteShardStoreW
                         fee_paid_for_created_justify: *fees_accrued as i64, // 0
                         fee_paid_for_deleted_justify: 0,
                         created_justify_leader: Some(node.justify().proposed_by().to_hex()),
-                        deleted_justify_leader: None,
+                        destroyed_justify_leader: None,
                         created_at_epoch: Some(node.epoch().as_u64() as i64),
-                        deleted_at_epoch: None,
+                        destroyed_at_epoch: None,
                     };
                     diesel::insert_into(substates::table)
                         .values(&new_row)
@@ -1291,9 +1338,9 @@ impl ShardStoreWriteTransaction<PublicKey, TariDanPayload> for SqliteShardStoreW
                                 substates::destroyed_height.eq(node.height().as_u64() as i64),
                                 substates::destroyed_node_hash.eq(node.hash().as_bytes()),
                                 substates::destroyed_timestamp.eq(now),
-                                substates::deleted_at_epoch.eq(node.epoch().as_u64() as i64),
+                                substates::destroyed_at_epoch.eq(node.epoch().as_u64() as i64),
                                 substates::fee_paid_for_deleted_justify.eq(*fees_accrued as i64),
-                                substates::deleted_justify_leader.eq(node.justify().proposed_by().to_hex()),
+                                substates::destroyed_justify_leader.eq(node.justify().proposed_by().to_hex()),
                             ))
                             .execute(self.connection())
                             .map_err(|e| StorageError::QueryError {
@@ -1345,12 +1392,12 @@ impl ShardStoreWriteTransaction<PublicKey, TariDanPayload> for SqliteShardStoreW
                 .created_justify()
                 .as_ref()
                 .map(|justify| justify.proposed_by().to_hex()),
-            deleted_justify_leader: substate_data
+            destroyed_justify_leader: substate_data
                 .destroyed_justify()
                 .as_ref()
                 .map(|justify| justify.proposed_by().to_hex()),
             created_at_epoch: substate_data.created_justify().map(|j| j.epoch().as_u64() as i64),
-            deleted_at_epoch: substate_data
+            destroyed_at_epoch: substate_data
                 .destroyed_justify()
                 .as_ref()
                 .map(|j| j.epoch().as_u64() as i64),
@@ -1635,9 +1682,9 @@ impl ShardStoreWriteTransaction<PublicKey, TariDanPayload> for SqliteShardStoreW
             fee_paid_for_created_justify: 0,
             fee_paid_for_deleted_justify: 0,
             created_justify_leader: None,
-            deleted_justify_leader: None,
+            destroyed_justify_leader: None,
             created_at_epoch: None,
-            deleted_at_epoch: None,
+            destroyed_at_epoch: None,
         };
         use crate::schema::substates;
         diesel::insert_into(substates::table)

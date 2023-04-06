@@ -43,9 +43,9 @@ pub struct Substate {
     pub fee_paid_for_created_justify: i64,
     pub fee_paid_for_deleted_justify: i64,
     pub created_at_epoch: Option<i64>,
-    pub deleted_at_epoch: Option<i64>,
+    pub destroyed_at_epoch: Option<i64>,
     pub created_justify_leader: Option<String>,
-    pub deleted_justify_leader: Option<String>,
+    pub destroyed_justify_leader: Option<String>,
 }
 
 #[derive(Debug, Insertable)]
@@ -62,9 +62,9 @@ pub struct NewSubstate {
     pub fee_paid_for_created_justify: i64,
     pub fee_paid_for_deleted_justify: i64,
     pub created_at_epoch: Option<i64>,
-    pub deleted_at_epoch: Option<i64>,
+    pub destroyed_at_epoch: Option<i64>,
     pub created_justify_leader: Option<String>,
-    pub deleted_justify_leader: Option<String>,
+    pub destroyed_justify_leader: Option<String>,
 }
 
 #[derive(Debug, Insertable)]
@@ -85,9 +85,9 @@ pub struct ImportedSubstate {
     pub fee_paid_for_created_justify: i64,
     pub fee_paid_for_deleted_justify: i64,
     pub created_at_epoch: Option<i64>,
-    pub deleted_at_epoch: Option<i64>,
+    pub destroyed_at_epoch: Option<i64>,
     pub created_justify_leader: Option<String>,
-    pub deleted_justify_leader: Option<String>,
+    pub destroyed_justify_leader: Option<String>,
 }
 
 impl Substate {

@@ -57,6 +57,8 @@ use tari_template_lib::Hash;
 use tari_validator_node_client::types::{
     AddPeerRequest,
     AddPeerResponse,
+    GetClaimFeesRequest,
+    GetClaimableFeesResponse,
     GetCommitteeRequest,
     GetEpochManagerStatsResponse,
     GetIdentityResponse,
@@ -423,6 +425,37 @@ impl JsonRpcHandlers {
         let mut tx = self.shard_store.create_read_tx().unwrap();
         match tx.get_substates_for_payload(data.payload_id, data.shard_id) {
             Ok(substates) => Ok(JsonRpcResponse::success(answer_id, json!(substates))),
+            Err(err) => {
+                println!("error {:?}", err);
+                Err(JsonRpcResponse::error(
+                    answer_id,
+                    JsonRpcError::new(
+                        JsonRpcErrorReason::InvalidParams,
+                        "Something went wrong".to_string(),
+                        json::Value::Null,
+                    ),
+                ))
+            },
+        }
+    }
+
+    pub async fn get_fees(&self, value: JsonRpcExtractor) -> JrpcResult {
+        let answer_id = value.get_answer_id();
+        let data: GetClaimFeesRequest = value.parse_params()?;
+        let mut tx = self.shard_store.create_read_tx().unwrap();
+        match tx.get_fees_by_epoch(data.epoch, data.claim_leader_public_key.to_vec()) {
+            Ok(claim_fees) => Ok(JsonRpcResponse::success(answer_id, GetClaimableFeesResponse {
+                total_accrued_fees: claim_fees
+                    .iter()
+                    .map(|fees| {
+                        if fees.destroyed_at_epoch.is_none() {
+                            fees.fee_paid_for_created_justify
+                        } else {
+                            fees.fee_paid_for_destroyed_justify
+                        }
+                    })
+                    .sum::<i64>() as u64,
+            })),
             Err(err) => {
                 println!("error {:?}", err);
                 Err(JsonRpcResponse::error(

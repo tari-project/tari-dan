@@ -8,10 +8,10 @@ ALTER TABLE substates
     ADD COLUMN created_at_epoch             bigint NULL;
 
 ALTER TABLE substates
-    ADD COLUMN deleted_at_epoch             bigint NULL;
+    ADD COLUMN destroyed_at_epoch             bigint NULL;
 
 ALTER TABLE substates
-    ADD COLUMN created_justify_leader       bigint NULL;
+    ADD COLUMN created_justify_leader       text NULL;
 
 ALTER TABLE substates
-    ADD COLUMN deleted_justify_leader       bigint NULL;
+    ADD COLUMN destroyed_justify_leader       text NULL;

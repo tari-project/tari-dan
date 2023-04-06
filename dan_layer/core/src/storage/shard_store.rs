@@ -39,6 +39,7 @@ use thiserror::Error;
 use crate::{
     models::{
         vote_message::VoteMessage,
+        ClaimLeaderFees,
         CurrentLeaderStates,
         HotStuffTreeNode,
         LeafNode,
@@ -166,6 +167,11 @@ pub trait ShardStoreReadTransaction<TAddr: NodeAddressable, TPayload: Payload> {
         payload_id: Vec<u8>,
         shard_id: Vec<u8>,
     ) -> Result<Vec<SQLSubstate>, StorageError>;
+    fn get_fees_by_epoch(
+        &mut self,
+        epoch: u64,
+        claim_leader_public_key: Vec<u8>,
+    ) -> Result<Vec<ClaimLeaderFees>, StorageError>;
     fn get_payload_result(&mut self, payload_id: &PayloadId) -> Result<PayloadResult, StorageError>;
     fn get_resolved_pledges_for_payload(&mut self, payload: PayloadId) -> Result<Vec<ObjectPledgeInfo>, StorageError>;
 }
