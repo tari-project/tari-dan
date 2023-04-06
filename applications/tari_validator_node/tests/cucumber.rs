@@ -406,6 +406,36 @@ async fn call_template_constructor(
 }
 
 #[when(
+    expr = r#"I call function "{word}" on template "{word}" on {word} with args "{word}" and {int} outputs named "{word}" with new resource "{word}""#
+)]
+async fn call_template_constructor_resource(
+    world: &mut TariWorld,
+    function_call: String,
+    template_name: String,
+    vn_name: String,
+    args: String,
+    num_outputs: u64,
+    outputs_name: String,
+    new_resource_token: String,
+) {
+    let args = args.split(',').map(|a| a.trim().to_string()).collect();
+    validator_node_cli::create_component(
+        world,
+        outputs_name,
+        template_name,
+        vn_name,
+        function_call,
+        args,
+        num_outputs,
+        vec![new_resource_token],
+    )
+    .await;
+
+    // give it some time between transactions
+    tokio::time::sleep(Duration::from_secs(4)).await;
+}
+
+#[when(
     expr = r#"I call function "{word}" on template "{word}" on {word} with {int} outputs named "{word}" with new resource "{word}""#
 )]
 async fn call_template_constructor_with_no_args(
