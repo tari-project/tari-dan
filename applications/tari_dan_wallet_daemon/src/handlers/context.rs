@@ -6,7 +6,7 @@ use tari_dan_wallet_storage_sqlite::SqliteWalletStore;
 
 use crate::{notify::Notify, services::WalletEvent};
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct HandlerContext {
     wallet_sdk: DanWalletSdk<SqliteWalletStore>,
     notifier: Notify<WalletEvent>,

@@ -42,6 +42,7 @@ message QuorumCertificate {
   QuorumDecision decision = 7;
   repeated ShardPledge all_shard_pledges = 8;
   repeated ValidatorMetadata validators_metadata = 9;
+  bytes proposed_by = 10;
 }
 
 message HotStuffTreeNode {
@@ -101,8 +102,10 @@ message UpState {
   bytes created_by = 1;
   bytes address = 2;
   bytes data = 3;
+  uint64 fees_accrued = 4;
 }
 
 message DownState {
   bytes deleted_by = 1;
+  uint64 fees_accrued = 2;
 }

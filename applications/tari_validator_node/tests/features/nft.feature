@@ -31,7 +31,7 @@ Feature: NFTs
     When I create a DAN wallet
 
     # Create a new BasicNft component
-    When I call function "new" on template "basic_nft" on VN with 3 outputs named "NFT"
+    When I call function "new" on template "basic_nft" on VN with 3 outputs named "NFT" with new resource "SPKL"
 
     # Create an account to deposit the minted nfts
     When I create an account ACC1 on VN

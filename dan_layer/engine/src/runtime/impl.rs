@@ -42,12 +42,14 @@ use tari_template_lib::{
     args::{
         BucketAction,
         BucketRef,
+        CallerContextAction,
         ComponentAction,
         ComponentRef,
         ConfidentialRevealArg,
         ConsensusAction,
         CreateComponentArg,
         CreateResourceArg,
+        GenerateRandomAction,
         InvokeResult,
         LogLevel,
         MintResourceArg,
@@ -171,6 +173,14 @@ impl RuntimeInterface for RuntimeInterfaceImpl {
         self.tracker.get_component(address)
     }
 
+    fn caller_context_invoke(&self, action: CallerContextAction) -> Result<InvokeResult, RuntimeError> {
+        self.invoke_modules_on_runtime_call("caller_context_invoke")?;
+
+        match action {
+            CallerContextAction::GetCallerPublicKey => Ok(InvokeResult::encode(&self.sender_public_key)?),
+        }
+    }
+
     fn component_invoke(
         &self,
         component_ref: ComponentRef,
@@ -244,7 +254,9 @@ impl RuntimeInterface for RuntimeInterfaceImpl {
             ResourceAction::Create => {
                 let arg: CreateResourceArg = args.get(0)?;
 
-                let resource_address = self.tracker.new_resource(arg.resource_type, arg.metadata)?;
+                let resource_address =
+                    self.tracker
+                        .new_resource(arg.resource_type, arg.token_symbol.clone(), arg.metadata)?;
 
                 let mut output_bucket = None;
                 if let Some(mint_arg) = arg.mint_arg {
@@ -671,6 +683,16 @@ impl RuntimeInterface for RuntimeInterfaceImpl {
         }
     }
 
+    fn generate_random_invoke(&self, action: GenerateRandomAction) -> Result<InvokeResult, RuntimeError> {
+        self.invoke_modules_on_runtime_call("generate_random_invoke")?;
+        match action {
+            GenerateRandomAction::GetRandomBytes { len } => {
+                let random = self.tracker.id_provider().get_random_bytes(len)?;
+                Ok(InvokeResult::encode(&random)?)
+            },
+        }
+    }
+
     fn generate_uuid(&self) -> Result<[u8; 32], RuntimeError> {
         self.invoke_modules_on_runtime_call("generate_uuid")?;
         let uuid = self.tracker.id_provider().new_uuid()?;
@@ -694,7 +716,6 @@ impl RuntimeInterface for RuntimeInterfaceImpl {
         // 1. Must exist
         let unclaimed_output = self.tracker.take_unclaimed_confidential_output(output_address)?;
         // 2. owner_sig must be valid
-        // TODO: Probably want a better challenge
         let challenge = ownership_proof_hasher()
             .chain(proof_of_knowledge.public_nonce())
             .chain(&unclaimed_output.commitment)
@@ -762,6 +783,9 @@ impl RuntimeInterface for RuntimeInterfaceImpl {
     fn finalize(&self) -> Result<(FinalizeResult, FeeReceipt), RuntimeError> {
         self.invoke_modules_on_runtime_call("finalize")?;
 
+        // TODO: this should not be checked here because it will silently fail
+        // and the transaction will think it succeeds. Rather move this check to the transaction
+        // processor and reset to fee checkpoint there.
         if !self.tracker.are_fees_paid_in_full() && self.tracker.total_charges() > self.fee_loan {
             self.reset_to_fee_checkpoint()?;
         }

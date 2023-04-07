@@ -30,6 +30,7 @@ import Connections from './routes/Connections/Connections';
 import RecentTransactions from './routes/RecentTransactions/RecentTransactions';
 import ErrorPage from './routes/ErrorPage';
 import MonitoredSubstates from './routes/VN/Components/MonitoredSubstates';
+import MonitoredNftCollections from './routes/VN/Components/MonitoredNftCollections';
 
 const router = createBrowserRouter([
   {
@@ -44,6 +45,10 @@ const router = createBrowserRouter([
       {
         path: 'monitored_substates',
         element: <MonitoredSubstates />,
+      },
+      {
+        path: 'nfts',
+        element: <MonitoredNftCollections />,
       },
       {
         path: 'transactions',

@@ -189,6 +189,7 @@ pub enum MintArg {
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct CreateResourceArg {
     pub resource_type: ResourceType,
+    pub token_symbol: String,
     pub metadata: Metadata,
     pub mint_arg: Option<MintArg>,
 }
@@ -336,4 +337,26 @@ pub struct ConsensusInvokeArg {
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub enum ConsensusAction {
     GetCurrentEpoch,
+}
+
+// -------------------------------- GenerateRandom -------------------------------- //
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct GenerateRandomInvokeArg {
+    pub action: GenerateRandomAction,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub enum GenerateRandomAction {
+    GetRandomBytes { len: u32 },
+}
+
+// -------------------------------- CallerContext -------------------------------- //
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct CallerContextInvokeArg {
+    pub action: CallerContextAction,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub enum CallerContextAction {
+    GetCallerPublicKey,
 }

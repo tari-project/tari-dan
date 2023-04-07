@@ -36,6 +36,7 @@ use tari_common::{
     configuration::bootstrap::{grpc_default_port, ApplicationType},
     exit_codes::{ExitCode, ExitError},
 };
+use tari_common_types::types::PublicKey;
 use tari_comms::{protocol::rpc::RpcServer, CommsNode, NodeIdentity, UnspawnedCommsNode};
 use tari_dan_app_utilities::{
     base_layer_scanner,
@@ -43,7 +44,7 @@ use tari_dan_app_utilities::{
     epoch_manager::EpochManagerHandle,
     template_manager::TemplateManagerHandle,
 };
-use tari_dan_common_types::{Epoch, NodeAddressable, NodeHeight, PayloadId, QuorumCertificate, ShardId, TreeNodeHash};
+use tari_dan_common_types::{NodeAddressable, NodeHeight, PayloadId, ShardId, TreeNodeHash};
 use tari_dan_core::{
     consensus_constants::ConsensusConstants,
     models::{Payload, SubstateShardData},
@@ -65,7 +66,6 @@ use tari_template_lib::{
     constants::{CONFIDENTIAL_TARI_RESOURCE_ADDRESS, PUBLIC_IDENTITY_RESOURCE_ADDRESS},
     models::Metadata,
     prelude::ResourceType,
-    resource::TOKEN_SYMBOL,
 };
 use tokio::task::JoinHandle;
 
@@ -283,7 +283,7 @@ pub struct Services {
     pub mempool: MempoolHandle,
     pub epoch_manager: EpochManagerHandle,
     pub template_manager: TemplateManagerHandle,
-    pub hotstuff_events: EventSubscription<HotStuffEvent>,
+    pub hotstuff_events: EventSubscription<HotStuffEvent<PublicKey>>,
     pub shard_store: SqliteShardStore,
     pub dry_run_transaction_processor: DryRunTransactionProcessor,
     pub handles: Vec<JoinHandle<Result<(), anyhow::Error>>>,
@@ -338,15 +338,20 @@ where
             shard_id,
             address,
             0,
-            Substate::new(0, Resource::new(ResourceType::NonFungible, Default::default())),
+            Substate::new(
+                0,
+                Resource::new(ResourceType::NonFungible, "ID".to_string(), Default::default()),
+            ),
             NodeHeight(0),
             None,
             TreeNodeHash::zero(),
             None,
             genesis_payload,
             None,
-            QuorumCertificate::genesis(Epoch(0), genesis_payload, shard_id),
             None,
+            None,
+            0,
+            0,
         ))?;
     }
 
@@ -354,23 +359,28 @@ where
     let shard_id = ShardId::from_address(&address, 0);
     if tx.get_substate_states(&[shard_id])?.is_empty() {
         // Create the second layer tari resource
-        let mut metadata = Metadata::new();
+        let metadata = Metadata::new();
         // TODO: decide on symbol for L2 tari
-        metadata.insert(TOKEN_SYMBOL, "tXTR2".to_string());
+        // metadata.insert(TOKEN_SYMBOL, "tXTR2".to_string());
 
         tx.insert_substates(SubstateShardData::new(
             shard_id,
             address,
             0,
-            Substate::new(0, Resource::new(ResourceType::Confidential, metadata)),
+            Substate::new(
+                0,
+                Resource::new(ResourceType::Confidential, "tXTR2".to_string(), metadata),
+            ),
             NodeHeight(0),
             None,
             TreeNodeHash::zero(),
             None,
             genesis_payload,
             None,
-            QuorumCertificate::genesis(Epoch(0), genesis_payload, shard_id),
             None,
+            None,
+            0,
+            0,
         ))?;
     }
 

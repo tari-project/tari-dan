@@ -80,6 +80,7 @@ async fn handler(Extension(handlers): Extension<Arc<JsonRpcHandlers>>, value: Js
         "get_shard_key" => handlers.get_shard_key(value).await,
         "get_committee" => handlers.get_committee(value).await,
         "get_all_vns" => handlers.get_all_vns(value).await,
+        "get_fees" => handlers.get_fees(value).await,
         // Comms
         "add_peer" => handlers.add_peer(value).await,
         "get_comms_stats" => handlers.get_comms_stats(value).await,

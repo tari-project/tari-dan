@@ -56,9 +56,11 @@ use tari_template_lib::{
         Arg,
         BucketAction,
         BucketRef,
+        CallerContextAction,
         ComponentAction,
         ComponentRef,
         ConsensusAction,
+        GenerateRandomAction,
         InvokeResult,
         LogLevel,
         NonFungibleAction,
@@ -118,6 +120,8 @@ pub trait RuntimeInterface: Send + Sync {
 
     fn consensus_invoke(&self, action: ConsensusAction) -> Result<InvokeResult, RuntimeError>;
 
+    fn generate_random_invoke(&self, action: GenerateRandomAction) -> Result<InvokeResult, RuntimeError>;
+
     fn generate_uuid(&self) -> Result<[u8; 32], RuntimeError>;
 
     fn set_last_instruction_output(&self, value: Option<Vec<u8>>) -> Result<(), RuntimeError>;
@@ -127,6 +131,8 @@ pub trait RuntimeInterface: Send + Sync {
     fn fee_checkpoint(&self) -> Result<(), RuntimeError>;
     fn reset_to_fee_checkpoint(&self) -> Result<(), RuntimeError>;
     fn finalize(&self) -> Result<(FinalizeResult, FeeReceipt), RuntimeError>;
+
+    fn caller_context_invoke(&self, action: CallerContextAction) -> Result<InvokeResult, RuntimeError>;
 }
 
 #[derive(Clone)]

@@ -32,6 +32,12 @@ export async function jsonRpc(method: string, params: any = null) {
       address = text;
     }
   } catch {}
+  console.log(JSON.stringify({
+    method: method,
+    jsonrpc: "2.0",
+    id: id,
+    params: params,
+  }));
   let response = await fetch(`http://${address}`, {
     method: "POST",
     body: JSON.stringify({
@@ -127,3 +133,5 @@ export const confidentialCreateTransferProof = (
 export const confidentialFinalize = (proofId: number) => jsonRpc("confidential.finalize", [proofId]);
 export const confidentialCancel = (proofId: number) => jsonRpc("confidential.cancel", [proofId]);
 export const confidentialCreateOutputProof = (amount: number) => jsonRpc("confidential.create_output_proof", [amount]);
+
+export const webrtc = (session: string) => jsonRpc("webrtc.start", [session]);

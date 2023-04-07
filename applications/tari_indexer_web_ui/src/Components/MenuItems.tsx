@@ -29,6 +29,7 @@ import AssessmentOutlinedIcon from '@mui/icons-material/AssessmentOutlined';
 import AccountTreeOutlinedIcon from '@mui/icons-material/AccountTreeOutlined';
 import CopyAllOutlinedIcon from '@mui/icons-material/CopyAllOutlined';
 import CottageOutlinedIcon from '@mui/icons-material/CottageOutlined';
+import CollectionsIcon from '@mui/icons-material/Collections';
 import { Link } from 'react-router-dom';
 
 import Tooltip from '@mui/material/Tooltip';
@@ -44,6 +45,11 @@ const mainItems = [
     title: 'Monitored substates',
     icon: <CopyAllOutlinedIcon />,
     link: 'monitored_substates',
+  },
+  {
+    title: 'Monitored NFT collections',
+    icon: <CollectionsIcon />,
+    link: 'nfts',
   },
   {
     title: 'Recent Transactions',

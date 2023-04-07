@@ -112,6 +112,9 @@ pub enum EngineHashDomainLabel {
     UuidOutput,
     Output,
     InstructionSignature,
+    ResourceAddress,
+    ComponentAddress,
+    RandomBytes,
 }
 
 impl EngineHashDomainLabel {
@@ -129,6 +132,9 @@ impl EngineHashDomainLabel {
             Self::UuidOutput => "UuidOutput",
             Self::Output => "Output",
             Self::InstructionSignature => "InstructionSignature",
+            Self::ResourceAddress => "ResourceAddress",
+            Self::ComponentAddress => "ComponentAddress",
+            Self::RandomBytes => "RandomBytes",
         }
     }
 }

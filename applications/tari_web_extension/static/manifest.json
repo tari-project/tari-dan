@@ -1,0 +1,31 @@
+{
+  "name": "Tari",
+  "version": "0.1",
+  "description": "Tari",
+  "permissions": ["storage", "scripting"],
+  "host_permissions": ["http://*/*", "https://*/*"],
+  "background": {
+    "service_worker": "background.js",
+    "type": "module"
+  },
+  "content_scripts": [
+    {
+      "matches": ["<all_urls>"],
+      "js": ["content.js"]
+    }
+  ],
+  "web_accessible_resources": [
+    {
+      "resources": ["index_bg.wasm", "inject.js", "index_bg.js", "popup/*"],
+      "matches": ["<all_urls>"]
+    }
+  ],
+  "manifest_version": 3,
+  "content_security_policy": {
+    "extension_pages": "default-src 'self' 'wasm-unsafe-eval'; style-src 'unsafe-inline'"
+  },
+  "options_page": "./options.html",
+  "action": {
+    "default_popup": "popup/index.html"
+  }
+}
