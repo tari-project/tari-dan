@@ -62,7 +62,7 @@ const mainItems = [
     title: 'Fees',
     icon: <SavingsIcon />,
     link: 'fees',
-  }
+  },
   {
     title: 'Mempool',
     icon: <AddchartIcon />,
