@@ -68,25 +68,20 @@ const useInterval = (fn: () => Promise<unknown>, ms: number) => {
 function Fees() {
     const [connections, setConnections] = useState<IFees[]>([]);
     const [showPeerDialog, setShowAddPeerDialog] = useState(false);
-    const [formState, setFormState] = useState({ publicKey: '', address: '' });
+    const [formState, setFormState] = useState({ epoch: '', publicKey: '' });
 
     const showAddPeerDialog = (setElseToggle: boolean = !showPeerDialog) => {
         setShowAddPeerDialog(setElseToggle);
     };
 
-    const onSubmitAddPeer = () => {
-        addPeer(formState.publicKey, [formState.address]);
-        setFormState({ publicKey: '', address: '' });
+    const getVNFees = () => {
+        getFees(formState.epoch, formState.publicKey);
         setShowAddPeerDialog(false);
     };
     const onChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         setFormState({ ...formState, [e.target.name]: e.target.value });
     };
 
-    let getVNFees = useCallback(async () => {
-        const resp = await getFees();
-        setConnections(resp.connections);
-    }, []);
     useInterval(getVNFees, 5000);
 
     return (
@@ -94,18 +89,18 @@ function Fees() {
             <BoxHeading2>
                 {showPeerDialog && (
                     <Fade in={showPeerDialog}>
-                        <Form onSubmit={onSubmitAddPeer} className="flex-container">
+                        <Form onSubmit={getFees} className="flex-container">
                             <TextField
                                 name="epoch"
                                 label="Epoch"
-                                value={formState.publicKey}
+                                value={formState.epoch}
                                 onChange={onChange}
                                 style={{ flexGrow: 1 }}
                             />
                             <TextField
                                 name="claimablePublicKey"
                                 label="VN Public Key"
-                                value={formState.address}
+                                value={formState.publicKey}
                                 onChange={onChange}
                                 style={{ flexGrow: 1 }}
                             />
@@ -139,27 +134,19 @@ function Fees() {
                 <Table>
                     <TableHead>
                         <TableRow>
-                            <TableCell>Address</TableCell>
-                            <TableCell>Age</TableCell>
-                            <TableCell>Direction</TableCell>
-                            <TableCell>Node id</TableCell>
-                            <TableCell>Public key</TableCell>
+                            <TableCell>Epoch</TableCell>
+                            <TableCell>claimablePublicKey</TableCell>
+                            <TableCell>totalAccruedFee</TableCell>
                         </TableRow>
                     </TableHead>
                     <TableBody>
                         {connections.map(
-                            ({ address, age, direction, node_id, public_key }) => (
-                                <TableRow key={public_key}>
-                                    <DataTableCell>{address}</DataTableCell>
-                                    <DataTableCell>{age}</DataTableCell>
-                                    <DataTableCell>
-                                        {direction ? 'Inbound' : 'Outbound'}
-                                    </DataTableCell>
-                                    <DataTableCell>{toHexString(node_id)}</DataTableCell>
-                                    <DataTableCell>
-                                        {shortenString(public_key)}
-                                        <CopyToClipboard copy={public_key} />
-                                    </DataTableCell>
+                            ({ epoch, claimablePublicKey, totalAccruedFee }) => (
+                                <TableRow key={claimablePublicKey}>
+                                    <DataTableCell>{epoch}</DataTableCell>
+                                    <DataTableCell>{claimablePublicKey}</DataTableCell>
+                                    <DataTableCell>{totalAccruedFee}</DataTableCell>
+
                                 </TableRow>
                             )
                         )}
@@ -170,4 +157,4 @@ function Fees() {
     );
 }
 
-export default Connections;
+export default Fees;
