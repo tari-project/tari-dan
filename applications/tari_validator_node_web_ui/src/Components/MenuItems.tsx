@@ -28,6 +28,7 @@ import PeopleOutlinedIcon from '@mui/icons-material/PeopleOutlined';
 import WebhookOutlinedIcon from '@mui/icons-material/WebhookOutlined';
 import AssessmentOutlinedIcon from '@mui/icons-material/AssessmentOutlined';
 import AccountTreeOutlinedIcon from '@mui/icons-material/AccountTreeOutlined';
+import SavingsIcon from '@mui/icons-material/Savings';
 import CopyAllOutlinedIcon from '@mui/icons-material/CopyAllOutlined';
 import CottageOutlinedIcon from '@mui/icons-material/CottageOutlined';
 import AddchartIcon from '@mui/icons-material/Addchart';
@@ -57,6 +58,11 @@ const mainItems = [
     icon: <WebhookOutlinedIcon />,
     link: 'connections',
   },
+  {
+    title: 'Fees',
+    icon: <SavingsIcon />,
+    link: 'fees',
+  }
   {
     title: 'Mempool',
     icon: <AddchartIcon />,
