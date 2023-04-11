@@ -40,12 +40,10 @@ import { Form } from 'react-router-dom';
 import Fade from '@mui/material/Fade';
 import CopyToClipboard from '../../../Components/CopyToClipboard';
 
-interface IConnection {
-    address: string;
-    age: number;
-    direction: boolean;
-    node_id: number[];
-    public_key: string;
+interface IFees {
+    epoch: number;
+    claimablePublicKey: string;
+    totalAccruedFee: number;
 }
 
 const useInterval = (fn: () => Promise<unknown>, ms: number) => {
@@ -68,7 +66,7 @@ const useInterval = (fn: () => Promise<unknown>, ms: number) => {
 };
 
 function Fees() {
-    const [connections, setConnections] = useState<IConnection[]>([]);
+    const [connections, setConnections] = useState<IFees[]>([]);
     const [showPeerDialog, setShowAddPeerDialog] = useState(false);
     const [formState, setFormState] = useState({ publicKey: '', address: '' });
 
@@ -85,11 +83,11 @@ function Fees() {
         setFormState({ ...formState, [e.target.name]: e.target.value });
     };
 
-    let fetchConnections = useCallback(async () => {
-        const resp = await getConnections();
+    let getVNFees = useCallback(async () => {
+        const resp = await getFees();
         setConnections(resp.connections);
     }, []);
-    useInterval(fetchConnections, 5000);
+    useInterval(getVNFees, 5000);
 
     return (
         <>
@@ -98,15 +96,15 @@ function Fees() {
                     <Fade in={showPeerDialog}>
                         <Form onSubmit={onSubmitAddPeer} className="flex-container">
                             <TextField
-                                name="publicKey"
-                                label="Public Key"
+                                name="epoch"
+                                label="Epoch"
                                 value={formState.publicKey}
                                 onChange={onChange}
                                 style={{ flexGrow: 1 }}
                             />
                             <TextField
-                                name="address"
-                                label="Address"
+                                name="claimablePublicKey"
+                                label="VN Public Key"
                                 value={formState.address}
                                 onChange={onChange}
                                 style={{ flexGrow: 1 }}
@@ -172,4 +170,4 @@ function Fees() {
     );
 }
 
-export default Fees;
+export default Connections;
