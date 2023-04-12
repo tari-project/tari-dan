@@ -21,6 +21,7 @@
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 use std::{
+    error::Error,
     fmt::{Display, Formatter},
     str::FromStr,
 };
@@ -29,64 +30,78 @@ use ciborium::tag::Required;
 use serde::{Deserialize, Serialize};
 
 use super::BinaryTag;
-use crate::{hash::HashParseError, models::TemplateAddress, prelude::AccessRules, Hash};
+use crate::{models::TemplateAddress, prelude::AccessRules};
 
 const TAG: u64 = BinaryTag::ComponentAddress as u64;
 
-#[derive(Debug, Clone, Copy, Hash, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
-pub struct ComponentAddress(Required<Hash, TAG>);
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Hash, PartialOrd, Ord)]
+pub struct ComponentAddress(Required<ComponentAddressInner, TAG>);
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Hash, PartialOrd, Ord)]
+struct ComponentAddressInner {
+    template_address: TemplateAddress,
+    index: u64,
+}
 
 impl ComponentAddress {
-    pub const fn new(address: Hash) -> Self {
-        Self(Required::<Hash, TAG>(address))
+    pub fn new(template_address: TemplateAddress, index: u64) -> Self {
+        let inner = ComponentAddressInner {
+            template_address,
+            index,
+        };
+        Self(Required::<ComponentAddressInner, TAG>(inner))
     }
 
-    pub fn hash(&self) -> &Hash {
-        &self.0 .0
+    pub fn template_address(&self) -> &TemplateAddress {
+        &self.0 .0.template_address
     }
 
-    pub fn as_bytes(&self) -> &[u8] {
-        &self.0 .0
-    }
-
-    pub fn from_hex(hex: &str) -> Result<Self, HashParseError> {
-        let hash = Hash::from_hex(hex)?;
-        Ok(Self::new(hash))
+    pub fn index(&self) -> u64 {
+        self.0 .0.index
     }
 }
 
 impl FromStr for ComponentAddress {
-    type Err = HashParseError;
+    type Err = ComponentAddressParseError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let s = if let Some(stripped) = s.strip_prefix("component_") {
+        let (template_str, index_str) = s.split_once(' ').ok_or(ComponentAddressParseError)?;
+
+        // parse the template addres
+        let template_str = if let Some(stripped) = template_str.strip_prefix("component_") {
             stripped
         } else {
-            s
+            template_str
         };
-        let hash = Hash::from_hex(s)?;
-        Ok(Self::new(hash))
+        let template_address = TemplateAddress::from_hex(template_str).map_err(|_| ComponentAddressParseError)?;
+
+        // parse the index
+        let index_str = if let Some(stripped) = index_str.strip_prefix("index_") {
+            stripped
+        } else {
+            index_str
+        };
+        let index = u64::from_str(index_str).map_err(|_| ComponentAddressParseError)?;
+
+        // build and return the comopnent address
+        Ok(Self::new(template_address, index))
     }
 }
 
-impl<T: Into<Hash>> From<T> for ComponentAddress {
-    fn from(address: T) -> Self {
-        Self::new(address.into())
-    }
-}
+#[derive(Debug)]
+pub struct ComponentAddressParseError;
 
-impl TryFrom<Vec<u8>> for ComponentAddress {
-    type Error = HashParseError;
+impl Error for ComponentAddressParseError {}
 
-    fn try_from(value: Vec<u8>) -> Result<Self, Self::Error> {
-        let hash = Hash::try_from(value)?;
-        Ok(Self::new(hash))
+impl Display for ComponentAddressParseError {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(f, "Failed to parse component address")
     }
 }
 
 impl Display for ComponentAddress {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(f, "component_{}", self.0 .0)
+        write!(f, "component_{} index_{}", self.0 .0.template_address, self.0 .0.index)
     }
 }
 

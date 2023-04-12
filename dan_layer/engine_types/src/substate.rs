@@ -127,7 +127,10 @@ impl SubstateAddress {
 
     pub fn to_canonical_hash(&self) -> Hash {
         match self {
-            SubstateAddress::Component(address) => *address.hash(),
+            SubstateAddress::Component(address) => hasher(EngineHashDomainLabel::ComponentAddress)
+                .chain(address.template_address())
+                .chain(&address.index())
+                .result(),
             SubstateAddress::Resource(address) => *address.hash(),
             SubstateAddress::Vault(id) => *id.hash(),
             SubstateAddress::UnclaimedConfidentialOutput(address) => *address.hash(),
@@ -252,8 +255,8 @@ impl FromStr for SubstateAddress {
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s.split_once('_') {
-            Some(("component", addr)) => {
-                let addr = ComponentAddress::from_hex(addr).map_err(|_| InvalidSubstateAddressFormat(s.to_string()))?;
+            Some(("component", _)) => {
+                let addr = ComponentAddress::from_str(s).map_err(|_| InvalidSubstateAddressFormat(s.to_string()))?;
                 Ok(SubstateAddress::Component(addr))
             },
             Some(("resource", addr)) => {

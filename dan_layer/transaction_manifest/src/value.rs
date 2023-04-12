@@ -69,13 +69,14 @@ mod tests {
 
     #[test]
     fn it_parses_address_strings() {
-        let addr = "component_0000000000000000000000000000000000000000000000000000000000000000"
+        let addr = "component_0000000000000000000000000000000000000000000000000000000000000000 index 0"
             .parse::<ManifestValue>()
             .unwrap();
         assert_eq!(
             *addr.as_address().unwrap(),
             SubstateAddress::Component(
-                ComponentAddress::from_hex("0000000000000000000000000000000000000000000000000000000000000000").unwrap()
+                ComponentAddress::from_str("0000000000000000000000000000000000000000000000000000000000000000 0")
+                    .unwrap()
             )
         );
 
