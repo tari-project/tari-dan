@@ -23,13 +23,15 @@
 use std::{
     net::{IpAddr, Ipv4Addr, SocketAddr},
     path::PathBuf,
-    str::FromStr,
     time::Duration,
 };
 
-use multiaddr::Multiaddr;
 use reqwest::Url;
-use tari_dan_wallet_daemon::{cli::Cli, run_tari_dan_wallet_daemon};
+use tari_common::configuration::CommonConfig;
+use tari_dan_wallet_daemon::{
+    config::{ApplicationConfig, WalletDaemonConfig},
+    run_tari_dan_wallet_daemon,
+};
 use tari_shutdown::Shutdown;
 use tari_wallet_daemon_client::WalletDaemonClient;
 use tokio::task;
@@ -58,18 +60,19 @@ pub async fn spawn_wallet_daemon(world: &mut TariWorld, wallet_daemon_name: Stri
 
     let listen_addr = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), json_rpc_port);
     let signaling_server_addr = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), signaling_server_port);
-    let validator_node_endpoint =
-        Multiaddr::from_str(&format!("/ip4/127.0.0.1/tcp/{}", validator_node_jrpc_port)).unwrap();
+    let validator_node_endpoint = format!("/ip4/127.0.0.1/tcp/{}", validator_node_jrpc_port);
 
-    let cli = Cli {
-        listen_addr: Some(listen_addr),
-        signaling_server_addr: Some(signaling_server_addr),
-        base_dir: Some(base_dir.clone()),
-        validator_node_endpoint: Some(validator_node_endpoint),
+    let mut config = ApplicationConfig {
+        common: CommonConfig::default(),
+        dan_wallet_daemon: WalletDaemonConfig::default(),
     };
 
+    config.dan_wallet_daemon.listen_addr = Some(listen_addr);
+    config.dan_wallet_daemon.signaling_server_addr = Some(signaling_server_addr);
+    config.dan_wallet_daemon.validator_node_endpoint = Some(validator_node_endpoint);
+
     let handle = task::spawn(async move {
-        let result = run_tari_dan_wallet_daemon(cli, shutdown_signal).await;
+        let result = run_tari_dan_wallet_daemon(config, shutdown_signal).await;
         if let Err(e) = result {
             panic!("{:?}", e);
         }

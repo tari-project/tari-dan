@@ -36,7 +36,7 @@ pub async fn listen(
         // TODO: Get these traces to work
         .layer(TraceLayer::new_for_http())
         .layer(Extension(Arc::new(context)))
-        .layer(Extension(Arc::new((preferred_address.clone(),signaling_server_address))))
+        .layer(Extension(Arc::new((preferred_address,signaling_server_address))))
         .layer(Extension(Arc::new(shutdown_signal.clone())))
         .layer(CorsLayer::permissive());
 

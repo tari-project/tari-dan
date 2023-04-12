@@ -37,7 +37,7 @@ pub async fn handle_data(
     method: String,
     params: String,
 ) -> Result<serde_json::Value> {
-    let url = format!("http://{}", address.to_string());
+    let url = format!("http://{}", address);
     let client = reqwest::Client::new();
     let body = format!(
         "{{\"method\":\"{}\", \"jsonrpc\":\"2.0\", \"id\": 1, \"params\":{}}}",
@@ -49,13 +49,7 @@ pub async fn handle_data(
         println!("With token {}", token);
         builder = builder.header(AUTHORIZATION, format!("Bearer {token}"));
     }
-    let resp = builder
-        .body(body)
-        .send()
-        .await
-        .map_err(|e| e)?
-        .json::<JsonRpcResponse>()
-        .await?;
+    let resp = builder.body(body).send().await?.json::<JsonRpcResponse>().await?;
     println!("Resp {:?}", resp);
     match resp.result {
         JsonRpcAnswer::Result(result) => Ok(result),
