@@ -20,25 +20,20 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { addPeer, getConnections, getFees } from '../../../utils/json_rpc';
-import { toHexString, shortenString } from './helpers';
+import React, { useCallback, useState } from 'react';
+import { getFees } from '../../../utils/json_rpc';
 import Table from '@mui/material/Table';
 import TableBody from '@mui/material/TableBody';
 import TableCell from '@mui/material/TableCell';
 import TableContainer from '@mui/material/TableContainer';
 import TableHead from '@mui/material/TableHead';
 import TableRow from '@mui/material/TableRow';
-import {
-    DataTableCell,
-    BoxHeading2,
-} from '../../../Components/StyledComponents';
-import AddIcon from '@mui/icons-material/Add';
+import { DataTableCell } from '../../../Components/StyledComponents';
 import Button from '@mui/material/Button';
 import { TextField } from '@mui/material';
 import { Form } from 'react-router-dom';
 import Fade from '@mui/material/Fade';
-import CopyToClipboard from '../../../Components/CopyToClipboard';
+import Divider from '@mui/material/Divider';
 
 interface IFees {
     epoch: number;
@@ -46,113 +41,92 @@ interface IFees {
     totalAccruedFee: number;
 }
 
-const useInterval = (fn: () => Promise<unknown>, ms: number) => {
-    const timeout = useRef<number>();
-    const mountedRef = useRef(false);
-    const run = useCallback(async () => {
-        await fn();
-        if (mountedRef.current) {
-            timeout.current = window.setTimeout(run, ms);
-        }
-    }, [fn, ms]);
-    useEffect(() => {
-        mountedRef.current = true;
-        run();
-        return () => {
-            mountedRef.current = false;
-            window.clearTimeout(timeout.current);
-        };
-    }, [run]);
-};
-
 function Fees() {
-    const [connections, setConnections] = useState<IFees[]>([]);
-    const [showPeerDialog, setShowAddPeerDialog] = useState(false);
+    const [fees, setFees] = useState<IFees>({
+        epoch: 0,
+        claimablePublicKey: '',
+        totalAccruedFee: 0,
+    });
+    const [showFees, setShowFees] = useState(false);
     const [formState, setFormState] = useState({ epoch: '', publicKey: '' });
 
-    const showAddPeerDialog = (setElseToggle: boolean = !showPeerDialog) => {
-        setShowAddPeerDialog(setElseToggle);
+    let fetchFees = useCallback(async () => {
+        const resp = await getFees(parseInt(formState.epoch), formState.publicKey);
+        setFees({
+            epoch: parseInt(formState.epoch),
+            claimablePublicKey: formState.publicKey,
+            totalAccruedFee: resp.totalAccruedFee,
+        });
+    }, []);
+
+    // fetchFees should actually be called here, but I don't have access to the method on the mock server to test it
+    // so you can delete the setFees call underneath, uncomment the fetchFees method and then try connecting to the
+    // VN for real data for totalAccruedFee
+    // if we want to later display various searches, we can just change fees to an array of objects and then map over it
+    const getVNFees = () => {
+        fetchFees();
+        setShowFees(true);
     };
 
-    const getVNFees = () => {
-        getFees(formState.epoch, formState.publicKey);
-        setShowAddPeerDialog(false);
-    };
     const onChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        e.preventDefault();
         setFormState({ ...formState, [e.target.name]: e.target.value });
     };
 
-    useInterval(getVNFees, 5000);
+    const onCancel = () => {
+        setFormState({ epoch: '', publicKey: '' });
+        setShowFees(false);
+    };
 
     return (
         <>
-            <BoxHeading2>
-                {showPeerDialog && (
-                    <Fade in={showPeerDialog}>
-                        <Form onSubmit={getFees} className="flex-container">
-                            <TextField
-                                name="epoch"
-                                label="Epoch"
-                                value={formState.epoch}
-                                onChange={onChange}
-                                style={{ flexGrow: 1 }}
-                            />
-                            <TextField
-                                name="claimablePublicKey"
-                                label="VN Public Key"
-                                value={formState.publicKey}
-                                onChange={onChange}
-                                style={{ flexGrow: 1 }}
-                            />
-                            <Button variant="contained" type="submit">
-                                Add Peer
-                            </Button>
-                            <Button
-                                variant="outlined"
-                                onClick={() => showAddPeerDialog(false)}
-                            >
-                                Cancel
-                            </Button>
-                        </Form>
-                    </Fade>
-                )}
-                {!showPeerDialog && (
-                    <Fade in={!showPeerDialog}>
-                        <div className="flex-container">
-                            <Button
-                                variant="outlined"
-                                startIcon={<AddIcon />}
-                                onClick={() => showAddPeerDialog()}
-                            >
-                                Add Peer
-                            </Button>
-                        </div>
-                    </Fade>
-                )}
-            </BoxHeading2>
-            <TableContainer>
-                <Table>
-                    <TableHead>
-                        <TableRow>
-                            <TableCell>Epoch</TableCell>
-                            <TableCell>claimablePublicKey</TableCell>
-                            <TableCell>totalAccruedFee</TableCell>
-                        </TableRow>
-                    </TableHead>
-                    <TableBody>
-                        {connections.map(
-                            ({ epoch, claimablePublicKey, totalAccruedFee }) => (
-                                <TableRow key={claimablePublicKey}>
-                                    <DataTableCell>{epoch}</DataTableCell>
-                                    <DataTableCell>{claimablePublicKey}</DataTableCell>
-                                    <DataTableCell>{totalAccruedFee}</DataTableCell>
-
+            <Form onSubmit={getVNFees} className="flex-container">
+                <TextField
+                    name="epoch"
+                    label="Epoch"
+                    value={formState.epoch}
+                    onChange={onChange}
+                    style={{ flexGrow: 1 }}
+                />
+                <TextField
+                    name="publicKey"
+                    label="VN Public Key"
+                    value={formState.publicKey}
+                    onChange={onChange}
+                    style={{ flexGrow: 10 }}
+                />
+                <>
+                    <Button variant="contained" type="submit">
+                        Calculate Fees
+                    </Button>
+                    <Button variant="outlined" onClick={onCancel}>
+                        Clear
+                    </Button>
+                </>
+            </Form>
+            {showFees && (
+                <Fade in={showFees}>
+                    <div>
+                        <Divider style={{ marginBottom: '10px', marginTop: '20px' }} />
+                        <TableContainer>
+                            <Table>
+                                <TableRow>
+                                    <TableCell width={200}>Epoch</TableCell>
+                                    <DataTableCell>{fees.epoch}</DataTableCell>
                                 </TableRow>
-                            )
-                        )}
-                    </TableBody>
-                </Table>
-            </TableContainer>
+                                <TableRow>
+                                    <TableCell>Public Key</TableCell>
+                                    <DataTableCell>{fees.claimablePublicKey}</DataTableCell>
+                                </TableRow>
+                                <TableRow>
+                                    <TableCell>Fees</TableCell>
+                                    <DataTableCell>{fees.totalAccruedFee} Tari</DataTableCell>
+                                </TableRow>
+                            </Table>
+                        </TableContainer>
+                    </div>
+                </Fade>
+            )}
         </>
     );
 }
