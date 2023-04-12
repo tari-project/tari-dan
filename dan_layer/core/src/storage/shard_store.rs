@@ -39,6 +39,7 @@ use thiserror::Error;
 use crate::{
     models::{
         vote_message::VoteMessage,
+        ClaimLeaderFees,
         CurrentLeaderStates,
         HotStuffTreeNode,
         LeafNode,
@@ -114,8 +115,12 @@ impl From<StorageError> for StoreError {
 }
 
 pub trait ShardStoreReadTransaction<TAddr: NodeAddressable, TPayload: Payload> {
-    fn get_high_qc_for(&mut self, payload_id: PayloadId, shard: ShardId) -> Result<QuorumCertificate, StorageError>;
-    fn get_high_qcs(&mut self, payload_id: PayloadId) -> Result<Vec<QuorumCertificate>, StorageError>;
+    fn get_high_qc_for(
+        &mut self,
+        payload_id: PayloadId,
+        shard: ShardId,
+    ) -> Result<QuorumCertificate<TAddr>, StorageError>;
+    fn get_high_qcs(&mut self, payload_id: PayloadId) -> Result<Vec<QuorumCertificate<TAddr>>, StorageError>;
     /// Returns the current leaf node for the shard
     fn get_leaf_node(&mut self, payload_id: &PayloadId, shard: &ShardId) -> Result<LeafNode, StorageError>;
     fn get_current_leaders_states(&mut self, payload: &PayloadId) -> Result<Vec<CurrentLeaderStates>, StorageError>;
@@ -162,6 +167,11 @@ pub trait ShardStoreReadTransaction<TAddr: NodeAddressable, TPayload: Payload> {
         payload_id: Vec<u8>,
         shard_id: Vec<u8>,
     ) -> Result<Vec<SQLSubstate>, StorageError>;
+    fn get_fees_by_epoch(
+        &mut self,
+        epoch: u64,
+        claim_leader_public_key: Vec<u8>,
+    ) -> Result<Vec<ClaimLeaderFees>, StorageError>;
     fn get_payload_result(&mut self, payload_id: &PayloadId) -> Result<PayloadResult, StorageError>;
     fn get_resolved_pledges_for_payload(&mut self, payload: PayloadId) -> Result<Vec<ObjectPledgeInfo>, StorageError>;
 }
@@ -169,7 +179,8 @@ pub trait ShardStoreReadTransaction<TAddr: NodeAddressable, TPayload: Payload> {
 pub trait ShardStoreWriteTransaction<TAddr: NodeAddressable, TPayload: Payload> {
     fn commit(self) -> Result<(), StorageError>;
     fn rollback(self) -> Result<(), StorageError>;
-    fn insert_high_qc(&mut self, from: TAddr, shard: ShardId, qc: QuorumCertificate) -> Result<(), StorageError>;
+    fn insert_high_qc(&mut self, from: TAddr, shard: ShardId, qc: QuorumCertificate<TAddr>)
+        -> Result<(), StorageError>;
     fn save_payload(&mut self, payload: TPayload) -> Result<(), StorageError>;
     fn save_current_leader_state(
         &mut self,

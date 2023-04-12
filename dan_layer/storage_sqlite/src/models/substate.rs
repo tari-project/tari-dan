@@ -31,7 +31,7 @@ pub struct Substate {
     pub version: i64,
     pub data: String,
     pub created_by_payload_id: Vec<u8>,
-    pub created_justify: String,
+    pub created_justify: Option<String>,
     pub created_node_hash: Vec<u8>,
     pub created_height: i64,
     pub destroyed_by_payload_id: Option<Vec<u8>>,
@@ -40,6 +40,12 @@ pub struct Substate {
     pub destroyed_height: Option<i64>,
     pub created_timestamp: NaiveDateTime,
     pub destroyed_timestamp: Option<NaiveDateTime>,
+    pub fee_paid_for_created_justify: i64,
+    pub fee_paid_for_deleted_justify: i64,
+    pub created_at_epoch: Option<i64>,
+    pub destroyed_at_epoch: Option<i64>,
+    pub created_justify_leader: Option<String>,
+    pub destroyed_justify_leader: Option<String>,
 }
 
 #[derive(Debug, Insertable)]
@@ -50,9 +56,15 @@ pub struct NewSubstate {
     pub version: i64,
     pub data: String,
     pub created_by_payload_id: Vec<u8>,
-    pub created_justify: String,
+    pub created_justify: Option<String>,
     pub created_node_hash: Vec<u8>,
     pub created_height: i64,
+    pub fee_paid_for_created_justify: i64,
+    pub fee_paid_for_deleted_justify: i64,
+    pub created_at_epoch: Option<i64>,
+    pub destroyed_at_epoch: Option<i64>,
+    pub created_justify_leader: Option<String>,
+    pub destroyed_justify_leader: Option<String>,
 }
 
 #[derive(Debug, Insertable)]
@@ -63,13 +75,19 @@ pub struct ImportedSubstate {
     pub version: i64,
     pub data: String,
     pub created_by_payload_id: Vec<u8>,
-    pub created_justify: String,
+    pub created_justify: Option<String>,
     pub created_node_hash: Vec<u8>,
     pub created_height: i64,
     pub destroyed_by_payload_id: Option<Vec<u8>>,
     pub destroyed_justify: Option<String>,
     pub destroyed_node_hash: Option<Vec<u8>>,
     pub destroyed_height: Option<i64>,
+    pub fee_paid_for_created_justify: i64,
+    pub fee_paid_for_deleted_justify: i64,
+    pub created_at_epoch: Option<i64>,
+    pub destroyed_at_epoch: Option<i64>,
+    pub created_justify_leader: Option<String>,
+    pub destroyed_justify_leader: Option<String>,
 }
 
 impl Substate {

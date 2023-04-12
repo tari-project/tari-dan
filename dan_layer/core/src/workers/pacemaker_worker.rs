@@ -87,12 +87,12 @@ where T: Clone + Debug + PartialEq + Eq + Hash + Send + Sync + 'static
     }
 
     fn handle_start_signal(&mut self, wait_over: T, duration: Duration) {
-        info!(
+        debug!(
             target: LOG_TARGET,
             "Received start wait signal for value: {:?}", wait_over
         );
         if self.pending_timeouts.contains_key(&wait_over) {
-            info!(
+            debug!(
                 target: LOG_TARGET,
                 "Already received an existing wait timer for value = {:?}", wait_over
             );
@@ -102,11 +102,11 @@ where T: Clone + Debug + PartialEq + Eq + Hash + Send + Sync + 'static
             self.waiting_futures.push(Box::pin(async move {
                 tokio::select! {
                     _ = tokio::time::sleep(duration) => {
-                        info!("The wait signal for value = {:?} has timeout", wait_over);
+                        debug!("The wait signal for value = {:?} has timeout", wait_over);
                         (wait_over, true)
                     },
                     _ = rx_stop_signal => {
-                        info!("The wait signal for wait_over = {:?} has been shut down", wait_over);
+                        debug!("The wait signal for wait_over = {:?} has been shut down", wait_over);
                         (wait_over, false)
                     }
                 }
@@ -116,7 +116,7 @@ where T: Clone + Debug + PartialEq + Eq + Hash + Send + Sync + 'static
 
     fn handle_stop_signal(&mut self, wait_over: T) {
         if let Some(signal) = self.pending_timeouts.remove(&wait_over) {
-            info!(
+            debug!(
                 target: LOG_TARGET,
                 "Received stop wait signal for value: {:?}", wait_over
             );
@@ -175,7 +175,7 @@ pub struct PacemakerHandle<T> {
 
 impl<T: Debug> PacemakerHandle<T> {
     pub async fn start_timer(&self, wait_over: T, duration_timeout: Duration) -> Result<(), HotStuffError> {
-        info!(
+        debug!(
             target: LOG_TARGET,
             "Pacemaker: start wait timer for value = {:?}", wait_over
         );
@@ -186,7 +186,7 @@ impl<T: Debug> PacemakerHandle<T> {
     }
 
     pub async fn stop_timer(&self, wait_over: T) -> Result<(), HotStuffError> {
-        info!(
+        debug!(
             target: LOG_TARGET,
             "Pacemaker: stop wait timer for value = {:?}", wait_over
         );

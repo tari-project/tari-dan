@@ -3,7 +3,7 @@
 
 Feature: Fungible tokens
 
-  @serial
+  @serial @current
   Scenario: Mint fungible tokens
     # Initialize a base node, wallet, miner and VN
     Given a base node BASE
@@ -32,7 +32,7 @@ Feature: Fungible tokens
     When I create a DAN wallet
 
     # Create a new Faucet component
-    When I call function "mint" on template "faucet" on VN with args "10000" and 3 outputs named "FAUCET"
+    When I call function "mint" on template "faucet" on VN with args "amount_10000" and 3 outputs named "FAUCET" with new resource "test"
 
     # Create two accounts to test sending the tokens
     When I create an account ACC_1 on VN
@@ -58,7 +58,7 @@ Feature: Fungible tokens
         let faucet_resource = global!["FAUCET/resources/0"];
 
         // Withdraw 50 of the tokens and send them to acc2
-        let tokens = acc1.withdraw(faucet_resource, Amount(50));
+        let tokens = acc1.withdraw(faucet_resource, Amount::new(50));
         acc2.deposit(tokens);
         acc2.balance(faucet_resource);
         acc1.balance(faucet_resource);

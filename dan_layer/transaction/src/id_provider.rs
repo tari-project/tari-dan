@@ -1,11 +1,11 @@
 //   Copyright 2023 The Tari Project
 //   SPDX-License-Identifier: BSD-3-Clause
 
-use std::sync::{atomic::AtomicU32, Arc};
+use std::sync::{atomic::AtomicU32, Arc, Mutex};
 
 use tari_engine_types::hashing::{hasher, EngineHashDomainLabel};
 use tari_template_lib::{
-    models::{BucketId, ComponentAddress, ResourceAddress, VaultId},
+    models::{BucketId, ComponentAddress, ResourceAddress, TemplateAddress, VaultId},
     Hash,
 };
 
@@ -16,17 +16,21 @@ pub struct IdProvider {
     current_id: Arc<AtomicU32>,
     bucket_id: Arc<AtomicU32>,
     uuid: Arc<AtomicU32>,
+    last_random: Arc<Mutex<Hash>>,
 }
 
 #[derive(Debug, thiserror::Error)]
-#[error("Maximum ID allocation of {max} exceeded")]
-pub struct MaxIdsExceeded {
-    max: u32,
+pub enum IdProviderError {
+    #[error("Maximum ID allocation of {max} exceeded")]
+    MaxIdsExceeded { max: u32 },
+    #[error("Failed to acquire lock")]
+    LockingError { operation: String },
 }
 
 impl IdProvider {
     pub fn new(transaction_hash: Hash, max_ids: u32) -> Self {
         Self {
+            last_random: Arc::new(Mutex::new(transaction_hash)),
             transaction_hash,
             max_ids,
             // TODO: these should be ranges
@@ -36,10 +40,10 @@ impl IdProvider {
         }
     }
 
-    fn next(&self) -> Result<u32, MaxIdsExceeded> {
+    fn next(&self) -> Result<u32, IdProviderError> {
         let id = self.current_id.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
         if id >= self.max_ids {
-            return Err(MaxIdsExceeded { max: self.max_ids });
+            return Err(IdProviderError::MaxIdsExceeded { max: self.max_ids });
         }
         Ok(id)
     }
@@ -50,24 +54,32 @@ impl IdProvider {
 
     /// Generates a new unique id H(tx_hash || n).
     /// NOTE: we rely on IDs being predictable for all outputs (components, resources, vaults).
-    fn new_id(&self) -> Result<Hash, MaxIdsExceeded> {
+    fn new_id(&self) -> Result<Hash, IdProviderError> {
         let id = generate_output_id(&self.transaction_hash, self.next()?);
         Ok(id)
     }
 
-    pub fn new_resource_address(&self) -> Result<ResourceAddress, MaxIdsExceeded> {
+    pub fn new_resource_address(
+        &self,
+        template_address: &TemplateAddress,
+        token_symbol: &str,
+    ) -> Result<ResourceAddress, IdProviderError> {
+        Ok(hasher(EngineHashDomainLabel::ResourceAddress)
+            .chain(&template_address)
+            .chain(&token_symbol)
+            .result()
+            .into())
+    }
+
+    pub fn new_component_address(&self) -> Result<ComponentAddress, IdProviderError> {
         Ok(self.new_id()?.into())
     }
 
-    pub fn new_component_address(&self) -> Result<ComponentAddress, MaxIdsExceeded> {
-        Ok(self.new_id()?.into())
-    }
-
-    pub fn new_address_hash(&self) -> Result<Hash, MaxIdsExceeded> {
+    pub fn new_address_hash(&self) -> Result<Hash, IdProviderError> {
         self.new_id()
     }
 
-    pub fn new_vault_id(&self) -> Result<VaultId, MaxIdsExceeded> {
+    pub fn new_vault_id(&self) -> Result<VaultId, IdProviderError> {
         Ok(self.new_id()?.into())
     }
 
@@ -76,13 +88,30 @@ impl IdProvider {
         self.bucket_id.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
     }
 
-    pub fn new_uuid(&self) -> Result<[u8; 32], MaxIdsExceeded> {
+    pub fn new_uuid(&self) -> Result<[u8; 32], IdProviderError> {
         let n = self.uuid.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
         let id = hasher(EngineHashDomainLabel::UuidOutput)
             .chain(&self.transaction_hash)
             .chain(&n)
             .result();
         Ok(id.into_array())
+    }
+
+    pub fn get_random_bytes(&self, len: u32) -> Result<Vec<u8>, IdProviderError> {
+        let mut last_random = self.last_random.lock().map_err(|_| IdProviderError::LockingError {
+            operation: "get_random_bytes".to_string(),
+        })?;
+        let mut result = Vec::with_capacity(len as usize);
+        while result.len() < len as usize {
+            let new_random = hasher(EngineHashDomainLabel::RandomBytes).chain(&*last_random).result();
+            result.extend_from_slice(&new_random);
+            *last_random = new_random;
+        }
+        if result.len() > len as usize {
+            result.truncate(len as usize);
+        }
+
+        Ok(result)
     }
 }
 

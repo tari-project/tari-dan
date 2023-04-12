@@ -22,8 +22,10 @@
 
 use std::{
     convert::{TryFrom, TryInto},
+    fs,
     io,
     io::Read,
+    path::PathBuf,
 };
 
 use anyhow::anyhow;
@@ -93,6 +95,8 @@ pub struct GetByNameArgs {
 pub struct ClaimBurnArgs {
     #[clap(long, short = 'n', alias = "name")]
     account_name: String,
+    #[clap(long, short = 'i', alias = "input")]
+    proof_file: Option<PathBuf>,
     /// Optional proof JSON from the L1 console wallet. If not provided, you will be prompted to enter it.
     #[clap(long, short = 'j', alias = "json")]
     proof_json: Option<serde_json::Value>,
@@ -169,7 +173,7 @@ async fn hande_invoke(
             account_name: account,
             method,
             args: args.into_iter().map(|a| a.into_arg()).collect(),
-            fee: Amount(1000),
+            fee: Amount::new(1000),
         })
         .await?;
 
@@ -219,12 +223,16 @@ pub async fn handle_claim_burn(args: ClaimBurnArgs, client: &mut WalletDaemonCli
         account_name,
         proof_json,
         fee,
+        proof_file,
     } = args;
 
     let AccountByNameResponse { account, .. } = client.accounts_get_by_name(&account_name).await?;
 
     let claim_proof = if let Some(proof_json) = proof_json {
         proof_json
+    } else if let Some(proof_file) = proof_file {
+        let proof_json = fs::read_to_string(proof_file).map_err(|e| anyhow!("Failed to read proof file: {}", e))?;
+        json::from_str::<json::Value>(proof_json.trim()).map_err(|e| anyhow!("Failed to parse proof JSON: {}", e))?
     } else {
         println!(
             "Please paste console wallet JSON output from claim_burn call in the terminal: Press <Ctrl/Cmd + d> once \

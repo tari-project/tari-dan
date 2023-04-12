@@ -26,7 +26,7 @@ pub enum Value {
     String(String),
 
     // Complex values
-    Amount(Amount),
+    Amount::new(Amount),
     Tuple(Vec<Value>),
     ComponentAddress(ComponentAddress),
 }

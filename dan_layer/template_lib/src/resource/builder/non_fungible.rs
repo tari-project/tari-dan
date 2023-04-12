@@ -8,25 +8,22 @@ use tari_template_abi::rust::{collections::HashMap, fmt, ops::RangeInclusive};
 use crate::{
     args::MintArg,
     models::{Bucket, Metadata, NonFungibleId, ResourceAddress},
-    resource::{builder::TOKEN_SYMBOL, ResourceManager, ResourceType},
+    resource::{ResourceManager, ResourceType},
 };
 
 pub struct NonFungibleResourceBuilder {
+    token_symbol: String,
     metadata: Metadata,
     tokens_ids: HashMap<NonFungibleId, (Vec<u8>, Vec<u8>)>,
 }
 
 impl NonFungibleResourceBuilder {
-    pub(super) fn new() -> Self {
+    pub(super) fn new<S: Into<String>>(symbol: S) -> Self {
         Self {
+            token_symbol: symbol.into(),
             metadata: Metadata::new(),
             tokens_ids: HashMap::new(),
         }
-    }
-
-    pub fn with_token_symbol<S: Into<String>>(mut self, symbol: S) -> Self {
-        self.metadata.insert(TOKEN_SYMBOL, symbol);
-        self
     }
 
     pub fn add_metadata<K: Into<String>, V: Into<String>>(mut self, key: K, value: V) -> Self {
@@ -61,7 +58,7 @@ impl NonFungibleResourceBuilder {
     pub fn build(self) -> ResourceAddress {
         // TODO: Improve API
         assert!(self.tokens_ids.is_empty(), "call build_bucket with initial tokens set");
-        let (address, _) = Self::build_internal(self.metadata, None);
+        let (address, _) = Self::build_internal(self.token_symbol, self.metadata, None);
         address
     }
 
@@ -70,11 +67,15 @@ impl NonFungibleResourceBuilder {
             tokens: self.tokens_ids,
         };
 
-        let (_, bucket) = Self::build_internal(self.metadata, Some(mint_args));
+        let (_, bucket) = Self::build_internal(self.token_symbol, self.metadata, Some(mint_args));
         bucket.expect("[build_bucket] Bucket not returned from system")
     }
 
-    fn build_internal(metadata: Metadata, mint_args: Option<MintArg>) -> (ResourceAddress, Option<Bucket>) {
-        ResourceManager::new().create(ResourceType::NonFungible, metadata, mint_args)
+    fn build_internal(
+        token_symbol: String,
+        metadata: Metadata,
+        mint_args: Option<MintArg>,
+    ) -> (ResourceAddress, Option<Bucket>) {
+        ResourceManager::new().create(ResourceType::NonFungible, token_symbol, metadata, mint_args)
     }
 }

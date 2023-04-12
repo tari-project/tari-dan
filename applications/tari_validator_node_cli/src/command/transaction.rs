@@ -105,6 +105,8 @@ pub struct CommonSubmitArgs {
     pub account_template_address: Option<String>,
     #[clap(long)]
     pub dry_run: bool,
+    #[clap(long, short = 'r', alias = "resource")]
+    pub new_resources: Vec<NewResourceOutput>,
     #[clap(long, short = 'm', alias = "mint-specific")]
     pub non_fungible_mint_outputs: Vec<SpecificNonFungibleMintOutput>,
     #[clap(long, alias = "mint-new")]
@@ -204,7 +206,6 @@ pub async fn handle_submit(
             args: args.into_iter().map(|s| s.into_arg()).collect(),
         },
     };
-
     submit_transaction(vec![instruction], common, base_dir, client).await
 }
 
@@ -264,6 +265,13 @@ pub async fn submit_transaction(
         .with_inputs(inputs)
         .with_new_outputs(common.num_outputs.unwrap_or(0))
         .with_outputs(outputs)
+        .with_new_resources(
+            common
+                .new_resources
+                .into_iter()
+                .map(|r| (r.template_address, r.token_symbol))
+                .collect(),
+        )
         .with_new_non_fungible_outputs(
             common
                 .new_non_fungible_outputs
@@ -286,6 +294,7 @@ pub async fn submit_transaction(
             "No inputs or outputs, transaction will not be processed by the network"
         ));
     }
+
     let tx_hash = *transaction.hash();
     let request = SubmitTransactionRequest {
         transaction,
@@ -305,12 +314,14 @@ pub async fn submit_transaction(
 
     // dbg!(&request);
     let resp = client.submit_transaction(request).await?;
+
     if let Some(result) = &resp.result {
         if let Some(diff) = result.finalize.result.accept() {
             component_manager.commit_diff(diff)?;
         }
         summarize(result, timer.elapsed());
     }
+
     Ok(resp)
 }
 
@@ -371,6 +382,9 @@ fn summarize(result: &TransactionFinalizeResult, time_taken: Duration) {
     println!();
     println!("Time taken: {:?}", time_taken);
     println!();
+    if let Some(tx_failure) = &result.transaction_failure {
+        println!("Transaction failure: {:?}", tx_failure);
+    }
     println!("OVERALL DECISION: {:?}", result.decision);
 }
 
@@ -597,6 +611,7 @@ pub enum CliArg {
     I16(i16),
     I8(i8),
     Bool(bool),
+    Amount(i64),
     NonFungibleId(NonFungibleId),
     SubstateAddress(SubstateAddress),
 }
@@ -650,6 +665,21 @@ impl FromStr for CliArg {
                 },
             }
         }
+
+        if let Some(("amount", amount)) = s.split_once('_') {
+            match amount.parse::<i64>() {
+                Ok(number) => {
+                    return Ok(CliArg::Amount(number));
+                },
+                Err(e) => {
+                    eprintln!(
+                        "WARN: '{}' is not a valid Amount ({:?}) and will be interpreted as a string",
+                        s, e
+                    );
+                },
+            }
+        }
+
         Ok(CliArg::String(s.to_string()))
     }
 }
@@ -669,7 +699,29 @@ impl CliArg {
             CliArg::Bool(v) => arg!(v),
             CliArg::SubstateAddress(v) => arg!(v.to_canonical_hash()),
             CliArg::NonFungibleId(v) => arg!(v),
+            CliArg::Amount(v) => arg!(Amount::new(v)),
         }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct NewResourceOutput {
+    pub template_address: TemplateAddress,
+    pub token_symbol: String,
+}
+
+impl FromStr for NewResourceOutput {
+    type Err = anyhow::Error;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let (template_address, token_symbol) = s
+            .split_once(':')
+            .ok_or_else(|| anyhow!("Expected template address and token symbol"))?;
+        let template_address = TemplateAddress::from_hex(template_address)?;
+        Ok(NewResourceOutput {
+            template_address,
+            token_symbol: token_symbol.to_string(),
+        })
     }
 }
 

@@ -25,10 +25,11 @@ use tari_common_types::types::{FixedHash, PublicKey};
 use tari_dan_common_types::{serde_with, QuorumCertificate, ShardId};
 use tari_dan_wallet_sdk::models::{Account, ConfidentialProofId, TransactionStatus, VersionedSubstateAddress};
 use tari_engine_types::{
-    commit_result::FinalizeResult,
+    commit_result::{FinalizeResult, RejectReason},
     instruction::Instruction,
     instruction_result::InstructionResult,
     substate::SubstateAddress,
+    TemplateAddress,
 };
 use tari_template_lib::{
     args::Arg,
@@ -47,6 +48,7 @@ pub struct TransactionSubmitRequest {
     pub override_inputs: bool,
     pub new_outputs: u8,
     pub specific_non_fungible_outputs: Vec<(ResourceAddress, NonFungibleId)>,
+    pub new_resources: Vec<(TemplateAddress, String)>,
     pub new_non_fungible_outputs: Vec<(ResourceAddress, u8)>,
     pub new_non_fungible_index_outputs: Vec<(ResourceAddress, u64)>,
     pub is_dry_run: bool,
@@ -94,7 +96,7 @@ pub struct TransactionGetResultResponse {
     pub hash: FixedHash,
     pub result: Option<FinalizeResult>,
     // TODO: Always None
-    pub qc: Option<QuorumCertificate>,
+    pub qc: Option<QuorumCertificate<PublicKey>>,
     pub status: TransactionStatus,
 }
 
@@ -110,8 +112,10 @@ pub struct TransactionWaitResultResponse {
     #[serde(with = "serde_with::hex")]
     pub hash: FixedHash,
     pub result: Option<FinalizeResult>,
-    pub qcs: Vec<QuorumCertificate>,
+    pub qcs: Vec<QuorumCertificate<PublicKey>>,
     pub status: TransactionStatus,
+    pub transaction_failure: Option<RejectReason>,
+    pub final_fee: Amount,
     pub timed_out: bool,
 }
 
@@ -338,4 +342,9 @@ pub struct RevealFundsResponse {
     pub hash: FixedHash,
     pub fee: Amount,
     pub result: FinalizeResult,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct WebRtcStart {
+    pub jwt: String,
 }

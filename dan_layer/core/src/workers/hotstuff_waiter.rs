@@ -132,7 +132,7 @@ pub struct HotStuffWaiter<
     /// Vote messages that should be delivered to the leader
     tx_vote_message: Sender<(VoteMessage, TAddr)>,
     /// HotstuffEvent channel
-    tx_events: broadcast::Sender<HotStuffEvent>,
+    tx_events: broadcast::Sender<HotStuffEvent<TAddr>>,
     /// The pacemaker handle. Provides an interface to request timing leader responses
     #[allow(dead_code)]
     pacemaker: PacemakerHandle<PacemakerEvents>,
@@ -159,7 +159,7 @@ impl<TPayload, TAddr, TLeaderStrategy, TEpochManager, TPayloadProcessor, TShardS
     HotStuffWaiter<TPayload, TAddr, TLeaderStrategy, TEpochManager, TPayloadProcessor, TShardStore, TSigningService>
 where
     TPayload: Payload + 'static,
-    TAddr: NodeAddressable + 'static,
+    TAddr: NodeAddressable + Serialize + 'static,
     TLeaderStrategy: LeaderStrategy<TAddr> + 'static + Send + Sync,
     TEpochManager: EpochManager<TAddr> + 'static + Send + Sync,
     TPayloadProcessor: PayloadProcessor<TPayload> + 'static + Send + Sync,
@@ -180,7 +180,7 @@ where
         tx_recovery: Sender<(RecoveryMessage, TAddr)>,
         tx_recovery_broadcast: Sender<(RecoveryMessage, Vec<TAddr>)>,
         tx_vote_message: Sender<(VoteMessage, TAddr)>,
-        tx_events: broadcast::Sender<HotStuffEvent>,
+        tx_events: broadcast::Sender<HotStuffEvent<TAddr>>,
         pacemaker: PacemakerHandle<PacemakerEvents>,
         payload_processor: TPayloadProcessor,
         shard_store: TShardStore,
@@ -229,7 +229,7 @@ where
         tx_recovery: Sender<(RecoveryMessage, TAddr)>,
         tx_recovery_broadcast: Sender<(RecoveryMessage, Vec<TAddr>)>,
         tx_vote_message: Sender<(VoteMessage, TAddr)>,
-        tx_events: broadcast::Sender<HotStuffEvent>,
+        tx_events: broadcast::Sender<HotStuffEvent<TAddr>>,
         pacemaker: PacemakerHandle<PacemakerEvents>,
         payload_processor: TPayloadProcessor,
         shard_store: TShardStore,
@@ -285,7 +285,7 @@ where
             let high_qc = tx
                 .get_high_qc_for(payload_id, shard)
                 .optional()?
-                .unwrap_or_else(|| QuorumCertificate::genesis(epoch, payload_id, shard));
+                .unwrap_or_else(|| QuorumCertificate::genesis(epoch, payload_id, shard, leader.clone()));
 
             //  Save the payload, because we will need it when the proposal comes back
             tx.save_payload(payload.clone())?;
@@ -303,7 +303,7 @@ where
             leader,
             if *leader == self.public_key { " (this node)" } else { "" }
         );
-        info!(
+        debug!(
             target: LOG_TARGET,
             "🔥 Sending NEWVIEW with high qc {} {} to leader",
             new_view.high_qc().unwrap().node_height(),
@@ -351,11 +351,11 @@ where
         &mut self,
         from: TAddr,
         shard: ShardId,
-        qc: QuorumCertificate,
+        qc: QuorumCertificate<TAddr>,
         payload: TPayload,
     ) -> Result<(), HotStuffError> {
         let payload_id = payload.to_id();
-        info!(
+        debug!(
             target: LOG_TARGET,
             "🔥 Receive NEWVIEW for payload {}, shard {} and height {}",
             payload_id,
@@ -436,7 +436,7 @@ where
                 high_qc,
             );
 
-            info!(
+            debug!(
                 target: LOG_TARGET,
                 "🌿 PROPOSING new leaf node {} {} in phase {:?} ({}) for payload {} shard {}",
                 leaf_node.height(),
@@ -469,7 +469,7 @@ where
         node: HotStuffTreeNode<TAddr, TPayload>,
     ) -> Result<(), HotStuffError> {
         let payload_id = node.payload_id();
-        info!(
+        debug!(
             target: LOG_TARGET,
             "🔥 Receive PROPOSAL for payload {}, shard {}, height {}, payload phase {:?}, hash {} from {}",
             payload_id,
@@ -607,27 +607,30 @@ where
         payload_id: PayloadId,
         shard_id: ShardId,
     ) -> Result<(), HotStuffError> {
-        let high_qc = self
-            .shard_store
-            .create_read_tx()?
-            .get_high_qc_for(payload_id, shard_id)
-            .optional()?
-            .unwrap_or_else(|| QuorumCertificate::genesis(epoch, payload_id, shard_id));
-
-        // TODO: should we send this? the new leader probably has it
-        let payload = self.shard_store.create_read_tx()?.get_payload(&payload_id)?;
-
-        // We leave the payload empty, this is just new round, so the nodes should have it.
-        let new_view = HotStuffMessage::new_view(high_qc, shard_id, payload);
+        // get current leader round
         let current_leader = *self
             .current_leader_round
             .entry((shard_id, payload_id))
             .and_modify(|round| *round += 1)
             .or_default();
         let committee = self.epoch_manager.get_committee(epoch, shard_id).await?;
+        // new leader
         let leader = self
             .leader_strategy
             .get_leader(&committee, payload_id, shard_id, current_leader);
+
+        let high_qc = self
+            .shard_store
+            .create_read_tx()?
+            .get_high_qc_for(payload_id, shard_id)
+            .optional()?
+            .unwrap_or_else(|| QuorumCertificate::genesis(epoch, payload_id, shard_id, leader.clone()));
+
+        // TODO: should we send this? the new leader probably has it
+        let payload = self.shard_store.create_read_tx()?.get_payload(&payload_id)?;
+
+        // We leave the payload empty, this is just new round, so the nodes should have it.
+        let new_view = HotStuffMessage::new_view(high_qc, shard_id, payload);
         self.shard_store
             .with_write_tx(|tx| tx.save_current_leader_state(payload_id, shard_id, current_leader, leader.clone()))?;
         self.tx_leader
@@ -709,7 +712,7 @@ where
         let payload = match self.shard_store.create_read_tx()?.get_payload(&payload_id).optional()? {
             Some(payload) => payload,
             None => {
-                info!(
+                warn!(
                     target: LOG_TARGET,
                     "Payload = {} is missing from node shard store", payload_id
                 );
@@ -725,7 +728,7 @@ where
 
         // if `from` doesn't belong to any shard involved in processing the current payload, we should ignore it
         if local_shards.is_empty() {
-            info!(
+            warn!(
                 target: LOG_TARGET,
                 "Missing proposal sent by node = {} which is not processing current payload = {}", from, payload_id
             );
@@ -744,7 +747,7 @@ where
             );
             let committee = self.epoch_manager.get_committee(epoch, shard_id).await?;
             if !committee.contains(&self.public_key) {
-                info!(
+                warn!(
                     target: LOG_TARGET,
                     "Current node with public key = {} is not involved in processing payload = {}",
                     self.public_key,
@@ -847,6 +850,7 @@ where
         // Check if we have resolved all pledges, if so, we are ready to commit resultant substate changes
         if resolved_pledges.len() == involved_shards.len() {
             let payload_result = tx.get_payload_result(&node.payload_id())?;
+
             match &payload_result.exec_result.finalize.result {
                 TransactionResult::Accept(diff) => {
                     if resolved_pledges
@@ -861,7 +865,15 @@ where
                         return Ok(());
                     }
 
-                    let local_change_set = extract_changes_for_shards(&local_shards, node.payload_id(), diff)?;
+                    let total_fee_accrued = payload_result
+                        .exec_result
+                        .clone()
+                        .fee_receipt
+                        .map(|f| f.total_fee_payment.as_u64_checked().unwrap_or_default())
+                        .unwrap_or_default();
+
+                    let local_change_set =
+                        extract_changes_for_shards(&local_shards, node.payload_id(), diff, total_fee_accrued)?;
                     for pledge in resolved_pledges {
                         // Only persist local shards
                         if let Some(changes) = local_change_set.get(&pledge.shard_id) {
@@ -1019,7 +1031,7 @@ where
                         // If the substate was pledged to a different payload, we didn't pledge for this payload so the pledge may not exist
                         .optional()
                 })?;
-                info!(
+                warn!(
                     target: LOG_TARGET,
                     "🔥 Skipping PRECOMMIT REJECT vote on node {} for payload {}, shard {}",
                     node.hash(),
@@ -1098,7 +1110,7 @@ where
                     ),
                 );
 
-                info!(
+                warn!(
                     target: LOG_TARGET,
                     "🔥 {} rejected shard(s) for payload {}. Voting to REJECT all local shards.",
                     rejected_nodes.len(),
@@ -1312,7 +1324,7 @@ where
                                 details: format!("Pledged substate is already UP'd by payload {}", created_by),
                             });
                         },
-                        SubstateState::Down { deleted_by } => {
+                        SubstateState::Down { deleted_by, .. } => {
                             return Err(HotStuffError::InvalidPledge {
                                 shard: shard_id,
                                 pledged_payload: *pledged_to_payload,
@@ -1337,7 +1349,7 @@ where
     /// Step 6: The leader receives votes from the local shard, and once it has enough ($n - f$) votes, it commits a
     /// high QC and sends the next round of proposals.
     async fn leader_on_receive_vote(&mut self, from: TAddr, msg: VoteMessage) -> Result<(), HotStuffError> {
-        info!(
+        debug!(
             target: LOG_TARGET,
             "🔥 Receive {:?} VOTE for node {} from {}",
             msg.decision(),
@@ -1392,6 +1404,7 @@ where
                     node.height(),
                     node.shard(),
                     node.epoch(),
+                    self.public_key.clone(),
                     main_vote.decision(),
                     main_vote.all_shard_pledges().clone(),
                     validator_metadata,
@@ -1453,7 +1466,7 @@ where
         }
     }
 
-    async fn validate_qc(&self, qc: &QuorumCertificate, min_signers: usize) -> Result<(), HotStuffError> {
+    async fn validate_qc(&self, qc: &QuorumCertificate<TAddr>, min_signers: usize) -> Result<(), HotStuffError> {
         // extract all the pairs of signer-signature present in the QC
         let signer_signatures = Self::extract_signer_signatures_from_qc(qc);
 
@@ -1511,14 +1524,14 @@ where
         Ok(())
     }
 
-    fn validate_vote(&self, qc: &QuorumCertificate, public_key: &PublicKey, signature: &Signature) -> bool {
+    fn validate_vote(&self, qc: &QuorumCertificate<TAddr>, public_key: &PublicKey, signature: &Signature) -> bool {
         let vote = VoteMessage::new(qc.node_hash(), *qc.decision(), qc.all_shard_pledges().clone());
         let challenge = vote.construct_challenge();
         self.signing_service
             .verify_for_public_key(public_key, signature, &*challenge)
     }
 
-    fn extract_signer_signatures_from_qc(qc: &QuorumCertificate) -> Vec<(PublicKey, Signature)> {
+    fn extract_signer_signatures_from_qc(qc: &QuorumCertificate<TAddr>) -> Vec<(PublicKey, Signature)> {
         qc.validators_metadata()
             .iter()
             .map(|md| (md.public_key.clone(), md.signature.clone()))
@@ -1552,7 +1565,7 @@ where
         let (_node_lock_hash, locked_node_height) =
             tx.get_locked_node_hash_and_height(node.payload_id(), node.shard())?;
         if precommit_node.height() > locked_node_height {
-            info!(target: LOG_TARGET, "Updating locked node to: {}", precommit_node.hash());
+            debug!(target: LOG_TARGET, "Updating locked node to: {}", precommit_node.hash());
             // precommit_node is at COMMIT phase
             tx.set_locked(
                 precommit_node.payload_id(),
@@ -1565,7 +1578,7 @@ where
         // b <- b'.justify.node
         let prepare_node = precommit_node.justify().node_hash();
         if commit_node.parent() == precommit_node.hash() && *precommit_node.parent() == prepare_node {
-            info!(
+            debug!(
                 target: LOG_TARGET,
                 "✅ Node {} forms a 3-chain b'' = {}, b' = {}, b = {}",
                 node.hash(),
@@ -1596,7 +1609,7 @@ where
         &self,
         tx: &mut TShardStore::WriteTransaction<'_>,
         proposed_by: TAddr,
-        qc: QuorumCertificate,
+        qc: QuorumCertificate<TAddr>,
     ) -> Result<(), HotStuffError> {
         let high_qc_height = tx
             .get_high_qc_for(qc.payload_id(), qc.shard())
@@ -1604,7 +1617,7 @@ where
             .map(|hqc| hqc.node_height());
 
         if high_qc_height.map(|height| qc.node_height() > height).unwrap_or(true) {
-            info!(
+            debug!(
                 target: LOG_TARGET,
                 "🔥 UPDATE_HIGH_QC (node: {} {}, shard: {}, payload: {}, previous: {})",
                 qc.node_height(),
@@ -1856,7 +1869,7 @@ where
         Ok(())
     }
 
-    fn publish_event(&self, event: HotStuffEvent) {
+    fn publish_event(&self, event: HotStuffEvent<TAddr>) {
         let _ignore = self.tx_events.send(event);
     }
 
@@ -1913,16 +1926,27 @@ fn extract_changes_for_shards(
     shard_ids: &[ShardId],
     payload_id: PayloadId,
     diff: &SubstateDiff,
+    total_fee_accrued: u64,
 ) -> Result<HashMap<ShardId, Vec<SubstateState>>, HotStuffError> {
     let mut changes = HashMap::<_, Vec<_>>::new();
+    // we split the total accrued fee over all substate differences
+    let accrued_fee_per_diff = if let Some(fee) = total_fee_accrued.checked_div(diff.len() as u64) {
+        fee
+    } else {
+        // if the division overflows, it means that `diff` is empty,
+        // so no new substates are being updated/inserted. This means we are dealing
+        // with a view method, so no write operation is performed. For now we leave it
+        // without fees.
+        return Ok(changes);
+    };
     // down first, then up
     for (address, version) in diff.down_iter() {
         let shard_id = ShardId::from_address(address, *version);
         if shard_ids.contains(&shard_id) {
-            changes
-                .entry(shard_id)
-                .or_default()
-                .push(SubstateState::Down { deleted_by: payload_id });
+            changes.entry(shard_id).or_default().push(SubstateState::Down {
+                deleted_by: payload_id,
+                fees_accrued: accrued_fee_per_diff,
+            });
         }
     }
     for (address, substate) in diff.up_iter() {
@@ -1932,6 +1956,7 @@ fn extract_changes_for_shards(
                 address: address.clone(),
                 created_by: payload_id,
                 data: substate.clone(),
+                fees_accrued: accrued_fee_per_diff,
             });
         }
     }

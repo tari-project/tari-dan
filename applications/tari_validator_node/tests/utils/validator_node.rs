@@ -78,11 +78,7 @@ pub async fn spawn_validator_node(
 ) {
     // each spawned VN will use different ports
     let (port, json_rpc_port) = get_os_assigned_ports();
-    let http_ui_port = 21000;
-    // let (port, json_rpc_port, http_ui_port) = match world.validator_nodes.values().last() {
-    //     Some(v) => (v.port + 1, v.json_rpc_port + 1, v.http_ui_port + 1),
-    //     None => (20000, 20500, 21000), // default ports if it's the first vn to be spawned
-    // };
+    let (http_ui_port, _) = get_os_assigned_ports();
     let base_node_grpc_port = world.base_nodes.get(&base_node_name).unwrap().grpc_port;
     let wallet_grpc_port = world.wallets.get(&wallet_name).unwrap().grpc_port;
     let name = validator_node_name.clone();

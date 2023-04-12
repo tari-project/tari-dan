@@ -3,7 +3,7 @@
 
 use std::ops::{Deref, DerefMut};
 
-use tari_common_types::types::{Commitment, FixedHash};
+use tari_common_types::types::{Commitment, FixedHash, PublicKey};
 use tari_dan_common_types::{optional::IsNotFoundError, QuorumCertificate};
 use tari_engine_types::{
     commit_result::{FinalizeResult, RejectReason},
@@ -183,7 +183,7 @@ pub trait WalletStoreWriter {
         result: Option<&FinalizeResult>,
         transaction_failure: Option<&RejectReason>,
         final_fee: Option<Amount>,
-        qcs: Option<&[QuorumCertificate]>,
+        qcs: Option<&[QuorumCertificate<PublicKey>]>,
         new_status: TransactionStatus,
     ) -> Result<(), WalletStorageError>;
 

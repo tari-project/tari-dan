@@ -8,7 +8,7 @@ use log::*;
 use tari_dan_common_types::{optional::Optional, ShardId};
 use tari_dan_wallet_sdk::apis::key_manager;
 use tari_engine_types::{instruction::Instruction, substate::SubstateAddress};
-use tari_template_lib::prelude::NonFungibleAddress;
+use tari_template_lib::{models::Amount, prelude::NonFungibleAddress};
 use tari_transaction::Transaction;
 use tari_wallet_daemon_client::types::{
     TransactionGetRequest,
@@ -74,6 +74,7 @@ pub async fn handle_submit(
         .with_fee_instructions(req.fee_instructions)
         .with_inputs(inputs.clone())
         .with_outputs(outputs.clone())
+        .with_new_resources(req.new_resources)
         .with_new_outputs(req.new_outputs)
         .with_new_non_fungible_outputs(req.new_non_fungible_outputs)
         .with_new_non_fungible_index_outputs(req.new_non_fungible_index_outputs)
@@ -118,7 +119,7 @@ pub async fn handle_get(
     Ok(TransactionGetResponse {
         hash: req.hash,
         transaction: transaction.transaction,
-        result: transaction.result,
+        result: transaction.finalize,
         status: transaction.status,
     })
 }
@@ -136,7 +137,7 @@ pub async fn handle_get_result(
 
     Ok(TransactionGetResultResponse {
         hash: req.hash,
-        result: transaction.result,
+        result: transaction.finalize,
         // TODO: Populate QC
         qc: None,
         status: transaction.status,
@@ -155,13 +156,15 @@ pub async fn handle_wait_result(
         .optional()?
         .ok_or(HandlerError::NotFound)?;
 
-    if let Some(result) = transaction.result {
+    if let Some(result) = transaction.finalize {
         return Ok(TransactionWaitResultResponse {
             hash: req.hash,
             result: Some(result),
             status: transaction.status,
             qcs: transaction.qcs,
+            final_fee: transaction.final_fee.unwrap_or_default(),
             timed_out: false,
+            transaction_failure: transaction.transaction_failure,
         });
     }
 
@@ -183,12 +186,25 @@ pub async fn handle_wait_result(
         };
 
         match evt_or_timeout {
-            Some(WalletEvent::TransactionFinalized(finalized)) if finalized.hash == req.hash => {
+            Some(WalletEvent::TransactionFinalized(event)) if event.hash == req.hash => {
                 return Ok(TransactionWaitResultResponse {
                     hash: req.hash,
-                    result: Some(finalized.finalize),
-                    qcs: finalized.qcs,
-                    status: finalized.status,
+                    result: Some(event.finalize),
+                    qcs: event.qcs,
+                    status: event.status,
+                    transaction_failure: event.transaction_failure,
+                    final_fee: event.final_fee,
+                    timed_out: false,
+                });
+            },
+            Some(WalletEvent::TransactionInvalid(event)) if event.hash == req.hash => {
+                return Ok(TransactionWaitResultResponse {
+                    hash: req.hash,
+                    result: None,
+                    qcs: vec![],
+                    status: event.status,
+                    transaction_failure: None,
+                    final_fee: event.final_fee,
                     timed_out: false,
                 });
             },
@@ -199,6 +215,8 @@ pub async fn handle_wait_result(
                     result: None,
                     qcs: vec![],
                     status: transaction.status,
+                    transaction_failure: transaction.transaction_failure,
+                    final_fee: Amount::zero(),
                     timed_out: true,
                 });
             },

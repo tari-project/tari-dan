@@ -117,7 +117,7 @@ impl TryFrom<proto::consensus::HotStuffTreeNode> for HotStuffTreeNode<CommsPubli
             value.leader_round as u32,
             value.local_pledge.map(|lp| lp.try_into()).transpose()?,
             value.epoch.into(),
-            PublicKey::from_bytes(value.proposed_by.as_slice())?,
+            PublicKey::from_bytes(&value.proposed_by)?,
             value
                 .justify
                 .map(|j| j.try_into())
@@ -147,8 +147,8 @@ impl From<HotStuffTreeNode<CommsPublicKey, TariDanPayload>> for proto::consensus
 
 // -------------------------------- QuorumCertificate -------------------------------- //
 
-impl From<QuorumCertificate> for proto::consensus::QuorumCertificate {
-    fn from(source: QuorumCertificate) -> Self {
+impl From<QuorumCertificate<PublicKey>> for proto::consensus::QuorumCertificate {
+    fn from(source: QuorumCertificate<PublicKey>) -> Self {
         Self {
             payload_id: source.payload_id().as_bytes().to_vec(),
             payload_height: source.payload_height().as_u64(),
@@ -160,13 +160,14 @@ impl From<QuorumCertificate> for proto::consensus::QuorumCertificate {
                 QuorumDecision::Accept => 0,
                 QuorumDecision::Reject(ref reason) => reason.as_u8().into(),
             },
+            proposed_by: source.proposed_by().as_bytes().to_vec(),
             all_shard_pledges: source.all_shard_pledges().iter().map(|p| p.clone().into()).collect(),
             validators_metadata: source.validators_metadata().iter().map(|p| p.clone().into()).collect(),
         }
     }
 }
 
-impl TryFrom<proto::consensus::QuorumCertificate> for QuorumCertificate {
+impl TryFrom<proto::consensus::QuorumCertificate> for QuorumCertificate<PublicKey> {
     type Error = anyhow::Error;
 
     fn try_from(value: proto::consensus::QuorumCertificate) -> Result<Self, Self::Error> {
@@ -177,6 +178,7 @@ impl TryFrom<proto::consensus::QuorumCertificate> for QuorumCertificate {
             value.local_node_height.into(),
             value.shard.try_into()?,
             value.epoch.into(),
+            PublicKey::from_vec(&value.proposed_by)?,
             QuorumDecision::from_u8(value.decision.try_into()?)?,
             value
                 .all_shard_pledges
@@ -258,9 +260,11 @@ impl TryFrom<proto::consensus::SubstateState> for SubstateState {
                 address: SubstateAddress::from_bytes(&up.address)?,
                 created_by: up.created_by.try_into()?,
                 data: Substate::from_bytes(&up.data)?,
+                fees_accrued: up.fees_accrued,
             }),
             Some(State::Down(down)) => Ok(Self::Down {
                 deleted_by: down.deleted_by.try_into()?,
+                fees_accrued: down.fees_accrued,
             }),
             None => Err(anyhow!("SubstateState missing")),
         }
@@ -278,16 +282,22 @@ impl From<SubstateState> for proto::consensus::SubstateState {
                 created_by,
                 data,
                 address,
+                fees_accrued,
             } => Self {
                 state: Some(State::Up(proto::consensus::UpState {
                     address: address.to_bytes(),
                     created_by: created_by.as_bytes().to_vec(),
                     data: data.to_bytes(),
+                    fees_accrued,
                 })),
             },
-            SubstateState::Down { deleted_by } => Self {
+            SubstateState::Down {
+                deleted_by,
+                fees_accrued,
+            } => Self {
                 state: Some(State::Down(proto::consensus::DownState {
                     deleted_by: deleted_by.as_bytes().to_vec(),
+                    fees_accrued,
                 })),
             },
         }

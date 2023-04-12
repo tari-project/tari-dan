@@ -107,15 +107,19 @@ pub struct CommonSubmitArgs {
     pub dump_outputs_into: Option<String>,
     #[clap(long)]
     pub dry_run: bool,
+    #[clap(long, short = 'r', alias = "resource")]
+    pub new_resources: Vec<NewResourceOutput>,
     #[clap(long, short = 'm', alias = "mint-specific")]
     pub non_fungible_mint_outputs: Vec<SpecificNonFungibleMintOutput>,
+    /// New non-fungible outputs to mint in the format <resource_address>,<num>
     #[clap(long, alias = "mint-new")]
     pub new_non_fungible_outputs: Vec<NewNonFungibleMintOutput>,
+    /// New non-fungible index outputs to mint in the format <resource_address>,<index>
     #[clap(long, alias = "new-nft-index")]
     pub new_non_fungible_index_outputs: Vec<NewNonFungibleIndexOutput>,
     #[clap(long, default_value_t = 1000)]
     pub fee: u64,
-    #[clap(long, short = 'a')]
+    #[clap(long, short = 'f', alias = "fee-account")]
     pub fee_account_name: Option<String>,
 }
 
@@ -126,9 +130,6 @@ pub struct SubmitManifestArgs {
     input_variables: Vec<String>,
     #[clap(flatten)]
     common: CommonSubmitArgs,
-    // TODO: we should perhaps let the user set a default fee account
-    #[clap(long, short = 'f')]
-    fee_from_account: ComponentAddress,
 }
 
 #[derive(Debug, Args, Clone)]
@@ -234,10 +235,38 @@ pub async fn handle_submit(args: SubmitArgs, client: &mut WalletDaemonClient) ->
         },
     };
 
+    let fee_account_name = common
+        .fee_account_name
+        .as_ref()
+        .ok_or_else(|| anyhow!("No fee account name provided"))?;
+    let AccountByNameResponse {
+        account: fee_account, ..
+    } = client.accounts_get_by_name(fee_account_name).await?;
+
+    let mut instructions = vec![instruction];
+    if let Some(dump_account) = common.dump_outputs_into {
+        instructions.push(Instruction::PutLastInstructionOutputOnWorkspace {
+            key: b"bucket".to_vec(),
+        });
+        let AccountByNameResponse {
+            account: dump_account2, ..
+        } = client.accounts_get_by_name(&dump_account).await?;
+
+        instructions.push(Instruction::CallMethod {
+            component_address: dump_account2.address.as_component_address().unwrap(),
+            method: "deposit".to_string(),
+            args: args![Variable("bucket")],
+        });
+    }
+
     let request = TransactionSubmitRequest {
         signing_key_index: None,
-        fee_instructions: vec![],
-        instructions: vec![instruction],
+        fee_instructions: vec![Instruction::CallMethod {
+            component_address: fee_account.address.as_component_address().unwrap(),
+            method: "pay_fee".to_string(),
+            args: args![Amount::try_from(common.fee)?],
+        }],
+        instructions,
         inputs: common.inputs,
         override_inputs: common.override_inputs.unwrap_or_default(),
         new_outputs: common.num_outputs.unwrap_or(0),
@@ -245,6 +274,11 @@ pub async fn handle_submit(args: SubmitArgs, client: &mut WalletDaemonClient) ->
             .non_fungible_mint_outputs
             .into_iter()
             .map(|m| (m.resource_address, m.non_fungible_id))
+            .collect(),
+        new_resources: common
+            .new_resources
+            .into_iter()
+            .map(|r| (r.template_address, r.token_symbol))
             .collect(),
         new_non_fungible_outputs: common
             .new_non_fungible_outputs
@@ -271,10 +305,19 @@ async fn handle_submit_manifest(
     let contents = fs::read_to_string(&args.manifest).map_err(|e| anyhow!("Failed to read manifest: {}", e))?;
     let instructions = parse_manifest(&contents, parse_globals(args.input_variables)?)?;
     let common = args.common;
+
+    let fee_account_name = common
+        .fee_account_name
+        .as_ref()
+        .ok_or_else(|| anyhow!("No fee account name provided"))?;
+    let AccountByNameResponse {
+        account: fee_account, ..
+    } = client.accounts_get_by_name(fee_account_name).await?;
+
     let request = TransactionSubmitRequest {
         signing_key_index: None,
         fee_instructions: vec![Instruction::CallMethod {
-            component_address: args.fee_from_account,
+            component_address: fee_account.address.as_component_address().unwrap(),
             method: "pay_fee".to_string(),
             args: args![Amount::try_from(common.fee)?],
         }],
@@ -286,6 +329,11 @@ async fn handle_submit_manifest(
             .non_fungible_mint_outputs
             .into_iter()
             .map(|m| (m.resource_address, m.non_fungible_id))
+            .collect(),
+        new_resources: common
+            .new_resources
+            .into_iter()
+            .map(|r| (r.template_address, r.token_symbol))
             .collect(),
         new_non_fungible_outputs: common
             .new_non_fungible_outputs
@@ -320,6 +368,15 @@ pub async fn handle_send(args: SendArgs, client: &mut WalletDaemonClient) -> Res
         .as_component_address()
         .ok_or_else(|| anyhow!("Invalid component address for source address"))?;
 
+    let fee_account = if let Some(fee_account_name) = common.fee_account_name.as_ref() {
+        let AccountByNameResponse {
+            account: fee_account, ..
+        } = client.accounts_get_by_name(fee_account_name).await?;
+        fee_account.address.as_component_address().unwrap()
+    } else {
+        source_component_address
+    };
+
     let instructions = vec![
         Instruction::CallMethod {
             component_address: source_component_address,
@@ -339,7 +396,7 @@ pub async fn handle_send(args: SendArgs, client: &mut WalletDaemonClient) -> Res
     let request = TransactionSubmitRequest {
         signing_key_index: Some(account.key_index),
         fee_instructions: vec![Instruction::CallMethod {
-            component_address: source_component_address,
+            component_address: fee_account,
             method: "pay_fee".to_string(),
             args: args![Amount::try_from(common.fee)?],
         }],
@@ -351,6 +408,11 @@ pub async fn handle_send(args: SendArgs, client: &mut WalletDaemonClient) -> Res
             .non_fungible_mint_outputs
             .into_iter()
             .map(|m| (m.resource_address, m.non_fungible_id))
+            .collect(),
+        new_resources: common
+            .new_resources
+            .into_iter()
+            .map(|r| (r.template_address, r.token_symbol))
             .collect(),
         new_non_fungible_outputs: common
             .new_non_fungible_outputs
@@ -417,6 +479,7 @@ pub async fn submit_transaction(
     let has_no_outputs = request.new_outputs == 0 &&
         request.specific_non_fungible_outputs.is_empty() &&
         request.new_non_fungible_outputs.is_empty() &&
+        request.new_resources.is_empty() &&
         request.new_non_fungible_index_outputs.is_empty();
 
     if has_no_outputs {
@@ -499,10 +562,10 @@ fn summarize_request(request: &TransactionSubmitRequest, inputs: &[ShardId], out
 }
 
 #[allow(clippy::too_many_lines)]
-fn summarize(result: &TransactionWaitResultResponse, time_taken: Duration) {
-    println!("✅️ Transaction finalized");
+fn summarize(resp: &TransactionWaitResultResponse, time_taken: Duration) {
+    println!("✅️ Transaction complete");
     println!();
-    if let Some(qc) = result.qcs.first() {
+    if let Some(qc) = resp.qcs.first() {
         println!("Epoch: {}", qc.epoch());
         println!("Payload height: {}", qc.payload_height());
         println!("Signed by: {} validator nodes", qc.validators_metadata().len());
@@ -511,9 +574,11 @@ fn summarize(result: &TransactionWaitResultResponse, time_taken: Duration) {
     }
     println!();
 
-    summarize_finalize_result(result.result.as_ref().unwrap());
+    if let Some(ref result) = resp.result {
+        summarize_finalize_result(result);
+    }
 
-    if let Some(qc) = result.qcs.first() {
+    if let Some(qc) = resp.qcs.first() {
         println!();
         println!("========= Pledges =========");
         for p in qc.all_shard_pledges().iter() {
@@ -522,12 +587,17 @@ fn summarize(result: &TransactionWaitResultResponse, time_taken: Duration) {
     }
 
     println!();
+    println!("Fee: {}", resp.final_fee);
     println!("Time taken: {:?}", time_taken);
     println!();
-    if let Some(qc) = result.qcs.first() {
+    // dbg!(&resp);
+    if let Some(result) = &resp.transaction_failure {
+        println!("Transaction failure: {}", result);
+    }
+    if let Some(qc) = resp.qcs.first() {
         println!("OVERALL DECISION: {:?}", qc.decision());
     } else {
-        println!("STATUS: {:?}", result.status);
+        println!("STATUS: {:?}", resp.status);
     }
 }
 
@@ -808,6 +878,27 @@ impl CliArg {
             CliArg::SubstateAddress(v) => arg!(v.to_canonical_hash()),
             CliArg::NonFungibleId(v) => arg!(v),
         }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct NewResourceOutput {
+    pub template_address: TemplateAddress,
+    pub token_symbol: String,
+}
+
+impl FromStr for NewResourceOutput {
+    type Err = anyhow::Error;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let (template_address, token_symbol) = s
+            .split_once(':')
+            .ok_or_else(|| anyhow!("Expected template address and token symbol"))?;
+        let template_address = TemplateAddress::from_hex(template_address)?;
+        Ok(NewResourceOutput {
+            template_address,
+            token_symbol: token_symbol.to_string(),
+        })
     }
 }
 

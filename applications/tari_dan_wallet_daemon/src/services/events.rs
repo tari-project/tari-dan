@@ -1,7 +1,7 @@
 //   Copyright 2023 The Tari Project
 //   SPDX-License-Identifier: BSD-3-Clause
 
-use tari_common_types::types::FixedHash;
+use tari_common_types::types::{FixedHash, PublicKey};
 use tari_dan_common_types::QuorumCertificate;
 use tari_dan_wallet_sdk::models::TransactionStatus;
 use tari_engine_types::{
@@ -14,6 +14,7 @@ use tari_template_lib::models::Amount;
 pub enum WalletEvent {
     TransactionSubmitted(TransactionSubmittedEvent),
     TransactionFinalized(TransactionFinalizedEvent),
+    TransactionInvalid(TransactionInvalidEvent),
     AccountChanged(AccountChangedEvent),
 }
 
@@ -35,6 +36,12 @@ impl From<AccountChangedEvent> for WalletEvent {
     }
 }
 
+impl From<TransactionInvalidEvent> for WalletEvent {
+    fn from(value: TransactionInvalidEvent) -> Self {
+        Self::TransactionInvalid(value)
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct TransactionSubmittedEvent {
     pub hash: FixedHash,
@@ -46,11 +53,18 @@ pub struct TransactionFinalizedEvent {
     pub finalize: FinalizeResult,
     pub transaction_failure: Option<RejectReason>,
     pub final_fee: Amount,
-    pub qcs: Vec<QuorumCertificate>,
+    pub qcs: Vec<QuorumCertificate<PublicKey>>,
     pub status: TransactionStatus,
 }
 
 #[derive(Debug, Clone)]
 pub struct AccountChangedEvent {
     pub account_address: SubstateAddress,
+}
+
+#[derive(Debug, Clone)]
+pub struct TransactionInvalidEvent {
+    pub hash: FixedHash,
+    pub status: TransactionStatus,
+    pub final_fee: Amount,
 }

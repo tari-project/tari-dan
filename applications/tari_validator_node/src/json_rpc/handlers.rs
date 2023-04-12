@@ -20,7 +20,7 @@
 //   WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //   USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use std::{sync::Arc, time::Duration};
+use std::{convert::TryInto, sync::Arc, time::Duration};
 
 use axum_jrpc::{
     error::{JsonRpcError, JsonRpcErrorReason},
@@ -31,6 +31,7 @@ use axum_jrpc::{
 use log::*;
 use serde::Serialize;
 use serde_json::{self as json, json};
+use tari_common_types::types::PublicKey;
 use tari_comms::{
     multiaddr::Multiaddr,
     peer_manager::{NodeId, PeerFeatures},
@@ -39,7 +40,7 @@ use tari_comms::{
     NodeIdentity,
 };
 use tari_comms_logging::SqliteMessageLog;
-use tari_crypto::tari_utilities::hex::Hex;
+use tari_crypto::tari_utilities::{hex::Hex, ByteArray};
 use tari_dan_app_utilities::{
     base_node_client::GrpcBaseNodeClient,
     epoch_manager::EpochManagerHandle,
@@ -56,6 +57,8 @@ use tari_template_lib::Hash;
 use tari_validator_node_client::types::{
     AddPeerRequest,
     AddPeerResponse,
+    GetClaimFeesRequest,
+    GetClaimableFeesResponse,
     GetCommitteeRequest,
     GetEpochManagerStatsResponse,
     GetIdentityResponse,
@@ -88,7 +91,10 @@ use tokio::sync::{broadcast, broadcast::error::RecvError};
 use crate::{
     dry_run_transaction_processor::DryRunTransactionProcessor,
     grpc::services::wallet_client::GrpcWalletClient,
-    json_rpc::jrpc_errors::internal_error,
+    json_rpc::{
+        jrpc_errors::{internal_error, invalid_argument},
+        JsonTransactionResult,
+    },
     p2p::services::mempool::MempoolHandle,
     registration,
     Services,
@@ -104,7 +110,7 @@ pub struct JsonRpcHandlers {
     template_manager: TemplateManagerHandle,
     epoch_manager: EpochManagerHandle,
     comms: CommsNode,
-    hotstuff_events: EventSubscription<HotStuffEvent>,
+    hotstuff_events: EventSubscription<HotStuffEvent<CommsPublicKey>>,
     base_node_client: GrpcBaseNodeClient,
     shard_store: SqliteShardStore,
     dry_run_transaction_processor: DryRunTransactionProcessor,
@@ -162,14 +168,14 @@ impl JsonRpcHandlers {
             wait_for_result,
             wait_for_result_timeout,
         } = value.parse_params()?;
-        info!(
+        debug!(
             target: LOG_TARGET,
             "Transaction {} has involved shards {:?}",
             transaction.hash(),
             transaction
                 .meta()
                 .involved_objects_iter()
-                .map(|(s, (ch, _))| format!("{}:{}", s, ch))
+                .map(|(s, ch)| format!("{}:{}", s, ch))
                 .collect::<Vec<_>>()
         );
 
@@ -202,7 +208,12 @@ impl JsonRpcHandlers {
                             transaction_failure: exec_result.transaction_failure,
                             fee_breakdown: exec_result.fee_receipt.map(|f| f.to_cost_breakdown()),
                             // TODO: Get correct QC
-                            qc: QuorumCertificate::genesis(epoch, PayloadId::new(hash), ShardId::zero()),
+                            qc: QuorumCertificate::genesis(
+                                epoch,
+                                PayloadId::new(hash),
+                                ShardId::zero(),
+                                PublicKey::from_vec(&vec![0; 32]).unwrap(),
+                            ),
                         }),
                     };
 
@@ -216,10 +227,17 @@ impl JsonRpcHandlers {
         } else {
             let subscription = self.hotstuff_events.subscribe();
             // Submit to mempool.
-            self.mempool
-                .submit_transaction(transaction)
-                .await
-                .map_err(internal_error(answer_id))?;
+            self.mempool.submit_transaction(transaction).await.map_err(|e| {
+                log::error!(target: LOG_TARGET, "🚨 Mempool error: {}", e);
+                JsonRpcResponse::error(
+                    answer_id,
+                    JsonRpcError::new(
+                        JsonRpcErrorReason::InternalError,
+                        format!("Mempool rejected transaction: {}", e),
+                        serde_json::Value::Null,
+                    ),
+                )
+            })?;
 
             if wait_for_result {
                 return wait_for_transaction_result(
@@ -337,10 +355,20 @@ impl JsonRpcHandlers {
         let answer_id = value.get_answer_id();
         let data: TransactionRequest = value.parse_params()?;
         let mut tx = self.shard_store.create_read_tx().unwrap();
+        let id = data
+            .payload_id
+            .clone()
+            .try_into()
+            .map_err(invalid_argument(answer_id))?;
+        let dan_payload = tx.get_payload(&id).map_err(internal_error(answer_id))?;
+
         match tx.get_transaction(data.payload_id) {
             // TODO: return the transaction with the Response struct, and probably rename this jrpc method to
             // get_transaction_status
-            Ok(transaction) => Ok(JsonRpcResponse::success(answer_id, transaction)),
+            Ok(transaction) => Ok(JsonRpcResponse::success(answer_id, JsonTransactionResult {
+                nodes: transaction,
+                payload: dan_payload,
+            })),
             Err(err) => {
                 println!("error {:?}", err);
                 Err(JsonRpcResponse::error(
@@ -397,6 +425,37 @@ impl JsonRpcHandlers {
         let mut tx = self.shard_store.create_read_tx().unwrap();
         match tx.get_substates_for_payload(data.payload_id, data.shard_id) {
             Ok(substates) => Ok(JsonRpcResponse::success(answer_id, json!(substates))),
+            Err(err) => {
+                println!("error {:?}", err);
+                Err(JsonRpcResponse::error(
+                    answer_id,
+                    JsonRpcError::new(
+                        JsonRpcErrorReason::InvalidParams,
+                        "Something went wrong".to_string(),
+                        json::Value::Null,
+                    ),
+                ))
+            },
+        }
+    }
+
+    pub async fn get_fees(&self, value: JsonRpcExtractor) -> JrpcResult {
+        let answer_id = value.get_answer_id();
+        let data: GetClaimFeesRequest = value.parse_params()?;
+        let mut tx = self.shard_store.create_read_tx().unwrap();
+        match tx.get_fees_by_epoch(data.epoch, data.claim_leader_public_key.to_vec()) {
+            Ok(claim_fees) => Ok(JsonRpcResponse::success(answer_id, GetClaimableFeesResponse {
+                total_accrued_fees: claim_fees
+                    .iter()
+                    .map(|fees| {
+                        if fees.destroyed_at_epoch.is_none() {
+                            fees.fee_paid_for_created_justify
+                        } else {
+                            fees.fee_paid_for_destroyed_justify
+                        }
+                    })
+                    .sum::<i64>() as u64,
+            })),
             Err(err) => {
                 println!("error {:?}", err);
                 Err(JsonRpcResponse::error(
@@ -772,7 +831,7 @@ struct GetConnectionsResponse {
 async fn wait_for_transaction_result(
     answer_id: i64,
     hash: Hash,
-    mut subscription: broadcast::Receiver<HotStuffEvent>,
+    mut subscription: broadcast::Receiver<HotStuffEvent<CommsPublicKey>>,
     timeout: Duration,
 ) -> JrpcResult {
     loop {

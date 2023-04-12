@@ -66,7 +66,7 @@ impl ProofsSubcommand {
             Generate(args) => {
                 let resp = client
                     .create_confidential_output_proof(ConfidentialCreateOutputProofRequest {
-                        amount: Amount(args.amount),
+                        amount: Amount::new(args.amount),
                     })
                     .await?;
 

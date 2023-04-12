@@ -1,6 +1,7 @@
 //   Copyright 2023 The Tari Project
 //   SPDX-License-Identifier: BSD-3-Clause
 
+use ciborium::tag::Required;
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use tari_template_abi::{
     call_engine,
@@ -8,6 +9,7 @@ use tari_template_abi::{
     EngineOp,
 };
 
+use super::BinaryTag;
 use crate::{
     args::{InvokeResult, NonFungibleAction, NonFungibleInvokeArg},
     constants::PUBLIC_IDENTITY_RESOURCE_ADDRESS,
@@ -17,6 +19,7 @@ use crate::{
     Hash,
 };
 
+const TAG: u64 = BinaryTag::NonFungibleAddress as u64;
 const DELIM: char = ':';
 
 #[derive(Debug, Clone, Ord, PartialOrd, PartialEq, Eq, Serialize, Deserialize, Hash)]
@@ -164,22 +167,26 @@ impl Display for NonFungibleId {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
-pub struct NonFungibleAddress {
+pub struct NonFungibleAddress(Required<NonFungibleAddressInner, TAG>);
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
+struct NonFungibleAddressInner {
     resource_address: ResourceAddress,
     id: NonFungibleId,
 }
 
 impl NonFungibleAddress {
     pub fn new(resource_address: ResourceAddress, id: NonFungibleId) -> Self {
-        Self { resource_address, id }
+        let inner = NonFungibleAddressInner { resource_address, id };
+        Self(Required::<NonFungibleAddressInner, TAG>(inner))
     }
 
     pub fn resource_address(&self) -> &ResourceAddress {
-        &self.resource_address
+        &self.0 .0.resource_address
     }
 
     pub fn id(&self) -> &NonFungibleId {
-        &self.id
+        &self.0 .0.id
     }
 
     pub fn from_public_key(public_key: RistrettoPublicKeyBytes) -> Self {
@@ -192,7 +199,7 @@ impl NonFungibleAddress {
 
 impl Display for NonFungibleAddress {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{} nft_{}", self.resource_address, self.id)
+        write!(f, "{} nft_{}", self.0 .0.resource_address, self.0 .0.id)
     }
 }
 

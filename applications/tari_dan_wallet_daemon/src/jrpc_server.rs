@@ -17,12 +17,16 @@ use tari_shutdown::ShutdownSignal;
 use tower_http::{cors::CorsLayer, trace::TraceLayer};
 
 use super::handlers::HandlerContext;
-use crate::handlers::{accounts, confidential, error::HandlerError, keys, rpc, transaction, Handler};
+use crate::{
+    handlers::{accounts, confidential, error::HandlerError, keys, rpc, transaction, Handler},
+    webrtc::webrtc_start_session,
+};
 
 const LOG_TARGET: &str = "tari::dan_wallet_daemon::json_rpc";
 
 pub async fn listen(
     preferred_address: SocketAddr,
+    signaling_server_address: SocketAddr,
     context: HandlerContext,
     shutdown_signal: ShutdownSignal,
 ) -> Result<(), anyhow::Error> {
@@ -32,6 +36,8 @@ pub async fn listen(
         // TODO: Get these traces to work
         .layer(TraceLayer::new_for_http())
         .layer(Extension(Arc::new(context)))
+        .layer(Extension(Arc::new((preferred_address,signaling_server_address))))
+        .layer(Extension(Arc::new(shutdown_signal.clone())))
         .layer(CorsLayer::permissive());
 
     let server = axum::Server::try_bind(&preferred_address)?;
@@ -44,7 +50,12 @@ pub async fn listen(
     Ok(())
 }
 
-async fn handler(Extension(context): Extension<Arc<HandlerContext>>, value: JsonRpcExtractor) -> JrpcResult {
+async fn handler(
+    Extension(context): Extension<Arc<HandlerContext>>,
+    Extension(addresses): Extension<Arc<(SocketAddr, SocketAddr)>>,
+    Extension(shutdown_signal): Extension<Arc<ShutdownSignal>>,
+    value: JsonRpcExtractor,
+) -> JrpcResult {
     info!(target: LOG_TARGET, "🌐 JSON-RPC request: {}", value.method);
 
     match value.method.as_str().split_once('.') {
@@ -79,6 +90,18 @@ async fn handler(Extension(context): Extension<Arc<HandlerContext>>, value: Json
             "cancel" => call_handler(context, value, confidential::handle_cancel_transfer).await,
             "create_output_proof" => call_handler(context, value, confidential::handle_create_output_proof).await,
             _ => Ok(value.method_not_found(&value.method)),
+        },
+        Some(("webrtc", "start")) => {
+            let answer_id = value.get_answer_id();
+            let token = value.parse_params::<String>()?;
+            let shutdown_signal = (*shutdown_signal).clone();
+            let (preferred_address, signaling_server_address) = *addresses.clone();
+            tokio::spawn(async move {
+                webrtc_start_session(token, preferred_address, signaling_server_address, shutdown_signal)
+                    .await
+                    .unwrap();
+            });
+            Ok(JsonRpcResponse::success(answer_id, "started"))
         },
         _ => Ok(value.method_not_found(&value.method)),
     }

@@ -112,17 +112,42 @@ impl<'a, TStore: WalletStore> TransactionApi<'a, TStore> {
         // Multithreaded considerations: The transaction result could be requested more than once because db
         // transactions cannot be used around await points.
         let transaction = self.store.with_read_tx(|tx| tx.transaction_get(hash))?;
-        if transaction.result.is_some() {
+        if transaction.finalize.is_some() {
             return Ok(Some(transaction));
         }
 
         let mut client = self.get_validator_node_client()?;
 
-        let resp = client
+        let maybe_resp = client
             .get_transaction_result(GetTransactionResultRequest { hash })
             .await
-            // TODO: If the transaction is not found, we should set the status to Rejected. We need better errors in the client for this.
+            .optional()
             .map_err(TransactionApiError::ValidatorNodeClientError)?;
+
+        let Some(resp) = maybe_resp else {
+            warn!( target: LOG_TARGET, "Transaction result not found for transaction with hash {}. Marking transaction as invalid", hash);
+            self.store.with_write_tx(|tx| {
+                tx.transactions_set_result_and_status(
+                    hash,
+                    None,
+                    None,
+                    None,
+                    None,
+                    TransactionStatus::InvalidTransaction,
+                )
+            })?;
+
+            // Not found - TODO: this probably means the transaction was rejected in the mempool, but we cant be sure. Perhaps we should store it in its entirety and allow the user to resubmit it.
+            return Ok(Some(WalletTransaction {
+                transaction: transaction.transaction,
+                status: TransactionStatus::InvalidTransaction,
+                finalize: None,
+                transaction_failure: None,
+                final_fee: None,
+                qcs: vec![],
+                is_dry_run: transaction.is_dry_run,
+            }));
+        };
 
         match resp.result {
             Some(result) => {
@@ -171,7 +196,7 @@ impl<'a, TStore: WalletStore> TransactionApi<'a, TStore> {
                 Ok(Some(WalletTransaction {
                     transaction: transaction.transaction,
                     status: new_status,
-                    result: Some(result.finalize),
+                    finalize: Some(result.finalize),
                     transaction_failure: result.transaction_failure,
                     final_fee: result.fee_receipt.as_ref().map(|f| f.total_fees_charged()),
                     qcs: qc_resp.qcs,

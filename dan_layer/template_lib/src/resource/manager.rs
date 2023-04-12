@@ -78,6 +78,7 @@ impl ResourceManager {
     pub fn create(
         &mut self,
         resource_type: ResourceType,
+        token_symbol: String,
         metadata: Metadata,
         mint_arg: Option<MintArg>,
     ) -> (ResourceAddress, Option<Bucket>) {
@@ -86,6 +87,7 @@ impl ResourceManager {
             action: ResourceAction::Create,
             args: invoke_args![CreateResourceArg {
                 resource_type,
+                token_symbol,
                 metadata,
                 mint_arg
             }],

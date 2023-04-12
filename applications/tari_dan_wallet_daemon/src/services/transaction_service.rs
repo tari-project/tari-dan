@@ -19,7 +19,7 @@ use tokio::{
 
 use crate::{
     notify::Notify,
-    services::{TransactionFinalizedEvent, WalletEvent},
+    services::{TransactionFinalizedEvent, TransactionInvalidEvent, WalletEvent},
 };
 
 const LOG_TARGET: &str = "tari::dan_wallet_daemon::transaction_service";
@@ -127,20 +127,30 @@ where TStore: WalletStore + Clone + Send + Sync + 'static
 
             match maybe_finalized_transaction {
                 Some(transaction) => {
-                    info!(
+                    debug!(
                         target: LOG_TARGET,
                         "Transaction {} has been finalized: {:?}",
                         transaction.transaction.hash(),
                         transaction.status,
                     );
-                    notify.notify(TransactionFinalizedEvent {
-                        hash: transaction.transaction.hash().into_array().into(),
-                        finalize: transaction.result.unwrap(),
-                        transaction_failure: transaction.transaction_failure,
-                        final_fee: transaction.final_fee.unwrap_or_default(),
-                        qcs: transaction.qcs,
-                        status: transaction.status,
-                    });
+
+                    match transaction.finalize {
+                        Some(finalize) => {
+                            notify.notify(TransactionFinalizedEvent {
+                                hash: transaction.transaction.hash().into_array().into(),
+                                finalize,
+                                transaction_failure: transaction.transaction_failure,
+                                final_fee: transaction.final_fee.unwrap_or_default(),
+                                qcs: transaction.qcs,
+                                status: transaction.status,
+                            });
+                        },
+                        None => notify.notify(TransactionInvalidEvent {
+                            hash: transaction.transaction.hash().into_array().into(),
+                            status: transaction.status,
+                            final_fee: transaction.final_fee.unwrap_or_default(),
+                        }),
+                    }
                 },
                 None => {
                     debug!(
@@ -159,7 +169,9 @@ where TStore: WalletStore + Clone + Send + Sync + 'static
             WalletEvent::TransactionSubmitted(_) => {
                 let _ = self.trigger_poll.send(());
             },
-            WalletEvent::TransactionFinalized(_) | WalletEvent::AccountChanged(_) => {},
+            WalletEvent::TransactionInvalid(_) |
+            WalletEvent::TransactionFinalized(_) |
+            WalletEvent::AccountChanged(_) => {},
         }
         Ok(())
     }

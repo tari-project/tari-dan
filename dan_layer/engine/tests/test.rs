@@ -21,6 +21,7 @@
 //   USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 use std::iter;
 
+use tari_crypto::ristretto::RistrettoPublicKey;
 use tari_dan_engine::{
     packager::{PackageError, TemplateModuleLoader},
     wasm::{compile::compile_template, WasmExecutionError},
@@ -37,6 +38,7 @@ use tari_template_lib::{
 };
 use tari_template_test_tooling::{SubstateType, TemplateTest};
 use tari_transaction_manifest::ManifestValue;
+use tari_utilities::hex::Hex;
 
 #[test]
 fn test_hello_world() {
@@ -190,6 +192,35 @@ fn test_tuples() {
     assert_eq!(value, new_value);
 }
 
+#[test]
+fn test_caller_context() {
+    let mut template_test = TemplateTest::new(vec!["tests/templates/caller_context"]);
+
+    // tuples returned in a regular function
+    let component: ComponentAddress = template_test.call_function("CallerContextTest", "create", args![], vec![]);
+    let value: RistrettoPublicKey = template_test.call_method(component, "caller_pub_key", args![], vec![]);
+    assert_eq!(
+        value,
+        RistrettoPublicKey::from_hex("66cad05f12652276f0656288f60963753f50a7947c54a640aa1e1c62097a406d").unwrap()
+    );
+}
+
+#[test]
+fn test_random() {
+    let mut template_test = TemplateTest::new(vec!["tests/templates/random"]);
+    let component_address: ComponentAddress = template_test.call_function("RandomTest", "create", args![], vec![]);
+    let value: u32 = template_test.call_method(component_address, "get_random", args![], vec![]);
+    assert_ne!(value, 0);
+
+    let value: Vec<u8> = template_test.call_method(component_address, "get_random_bytes", args![], vec![]);
+    assert_eq!(value.len(), 32);
+    assert_ne!(value, vec![0; 32]);
+
+    let value: Vec<u8> = template_test.call_method(component_address, "get_random_long_bytes", args![], vec![]);
+    assert_eq!(value.len(), 300);
+    assert_ne!(value, vec![0; 300]);
+}
+
 mod errors {
 
     use super::*;
@@ -278,7 +309,7 @@ mod fungible {
 
         let faucet_template = template_test.get_template_address("TestFaucet");
 
-        let initial_supply = Amount(1_000_000_000_000);
+        let initial_supply = Amount::new(1_000_000_000_000);
         template_test
             .execute_and_commit(
                 vec![Instruction::CallFunction {
@@ -305,7 +336,7 @@ mod fungible {
                     Instruction::CallMethod {
                         component_address: faucet_component,
                         method: "burn_coins".to_string(),
-                        args: args![Amount(500)],
+                        args: args![Amount::new(500)],
                     },
                     Instruction::CallMethod {
                         component_address: faucet_component,
@@ -319,7 +350,7 @@ mod fungible {
 
         assert_eq!(
             result.finalize.execution_results[1].decode::<Amount>().unwrap(),
-            initial_supply - Amount(500)
+            initial_supply - Amount::new(500)
         );
 
         let result = template_test
@@ -328,7 +359,7 @@ mod fungible {
                     Instruction::CallMethod {
                         component_address: faucet_component,
                         method: "burn_coins".to_string(),
-                        args: args![initial_supply - Amount(500)],
+                        args: args![initial_supply - Amount::new(500)],
                     },
                     Instruction::CallMethod {
                         component_address: faucet_component,
@@ -342,7 +373,7 @@ mod fungible {
 
         assert_eq!(
             result.finalize.execution_results[1].decode::<Amount>().unwrap(),
-            Amount(0)
+            Amount::new(0)
         );
 
         template_test
@@ -350,7 +381,7 @@ mod fungible {
                 vec![Instruction::CallMethod {
                     component_address: faucet_component,
                     method: "burn_coins".to_string(),
-                    args: args![Amount(1)],
+                    args: args![Amount::new(1)],
                 }],
                 vec![],
             )
@@ -391,14 +422,14 @@ mod basic_nft {
         ];
 
         let total_supply: Amount = template_test.call_method(nft_component, "total_supply", args![], vec![]);
-        assert_eq!(total_supply, Amount(4));
+        assert_eq!(total_supply, Amount::new(4));
 
         let result = template_test
             .execute_and_commit_manifest(
                 r#"
             let account = var!["account"];
             let sparkle_nft = var!["nft"];
-        
+
             let nft_bucket = sparkle_nft.mint();
             account.deposit(nft_bucket);
         "#,
@@ -426,18 +457,18 @@ mod basic_nft {
         assert_eq!(diff.up_iter().filter(|(addr, _)| addr.is_non_fungible()).count(), 1);
 
         let total_supply: Amount = template_test.call_method(nft_component, "total_supply", args![], vec![]);
-        assert_eq!(total_supply, Amount(5));
+        assert_eq!(total_supply, Amount::new(5));
 
         let result = template_test
             .execute_and_commit_manifest(
                 r#"
             let account = var!["account"];
             let sparkle_nft = var!["nft"];
-        
+
             let nft_bucket = sparkle_nft.withdraw_all();
             account.deposit(nft_bucket);
             sparkle_nft.inner_vault_balance();
-            
+
             let nft_resx = var!["nft_resx"];
             account.balance(nft_resx);
             sparkle_nft.total_supply();
@@ -450,17 +481,17 @@ mod basic_nft {
         // sparkle_nft.inner_vault_balance()
         assert_eq!(
             result.finalize.execution_results[3].decode::<Amount>().unwrap(),
-            Amount(0)
+            Amount::new(0)
         );
         // account.balance(nft_resx)
         assert_eq!(
             result.finalize.execution_results[4].decode::<Amount>().unwrap(),
-            Amount(5)
+            Amount::new(5)
         );
         // sparkle_nft.total_supply()
         assert_eq!(
             result.finalize.execution_results[5].decode::<Amount>().unwrap(),
-            Amount(5)
+            Amount::new(5)
         );
     }
 
@@ -469,7 +500,7 @@ mod basic_nft {
         let (mut template_test, (account_address, _), nft_component, _nft_resx) = setup();
 
         let total_supply: Amount = template_test.call_method(nft_component, "total_supply", args![], vec![]);
-        assert_eq!(total_supply, Amount(4));
+        assert_eq!(total_supply, Amount::new(4));
 
         let vars = [("account", account_address.into()), ("nft", nft_component.into())];
 
@@ -478,7 +509,7 @@ mod basic_nft {
                 r#"
             let account = var!["account"];
             let sparkle_nft = var!["nft"];
-        
+
             let nft_bucket = sparkle_nft.mint();
             account.deposit(nft_bucket);
         "#,
@@ -523,7 +554,7 @@ mod basic_nft {
             let account = var!["account"];
             let sparkle_nft_resource = var!["nft_resx"];
             account.get_non_fungible_ids(sparkle_nft_resource);
-            
+
             let sparkle_nft = var!["nft"];
             let sparkle_nft_id = var!["nft_id"];
             sparkle_nft.inc_brightness(sparkle_nft_id, 10u32);
@@ -576,17 +607,17 @@ mod basic_nft {
         ];
 
         let total_supply: Amount = template_test.call_method(nft_component, "total_supply", args![], vec![]);
-        assert_eq!(total_supply, Amount(4));
+        assert_eq!(total_supply, Amount::new(4));
 
         let result = template_test
             .execute_and_commit_manifest(
                 r#"
             let account = var!["account"];
             let sparkle_nft = var!["nft"];
-        
+
             let nft_bucket = sparkle_nft.mint_specific(NonFungibleId("SpecialNft"));
             account.deposit(nft_bucket);
-            
+
             let nft_bucket = sparkle_nft.mint_specific(NonFungibleId(123u32));
             account.deposit(nft_bucket);
 
@@ -595,7 +626,7 @@ mod basic_nft {
 
             let nft_bucket = sparkle_nft.mint_specific(NonFungibleId(b"this will be interpreted as uuid"));
             account.deposit(nft_bucket);
-            
+
             sparkle_nft.total_supply();
         "#,
                 vars.clone(),
@@ -629,7 +660,7 @@ mod basic_nft {
         assert_eq!(nfts.len(), 4);
         assert_eq!(
             result.finalize.execution_results[12].decode::<Amount>().unwrap(),
-            Amount(8)
+            Amount::new(8)
         );
 
         // Try mint 2 nfts with the same id in a single transaction - should fail
@@ -638,7 +669,7 @@ mod basic_nft {
                 r#"
             let account = var!["account"];
             let sparkle_nft = var!["nft"];
-        
+
             let nft_bucket1 = sparkle_nft.mint_specific(NonFungibleId("Duplicate"));
             let nft_bucket2 = sparkle_nft.mint_specific(NonFungibleId("Duplicate"));
             account.deposit(nft_bucket1);
@@ -661,14 +692,14 @@ mod basic_nft {
         ];
 
         let total_supply: Amount = template_test.call_method(nft_component, "total_supply", args![], vec![]);
-        assert_eq!(total_supply, Amount(4));
+        assert_eq!(total_supply, Amount::new(4));
 
         template_test
             .execute_and_commit_manifest(
                 r#"
             let account = var!["account"];
             let sparkle_nft = var!["nft"];
-        
+
             let nft_bucket = sparkle_nft.mint_specific(NonFungibleId("Burn!"));
             account.deposit(nft_bucket);
         "#,
@@ -678,7 +709,7 @@ mod basic_nft {
             .unwrap();
 
         let total_supply: Amount = template_test.call_method(nft_component, "total_supply", args![], vec![]);
-        assert_eq!(total_supply, Amount(5));
+        assert_eq!(total_supply, Amount::new(5));
 
         let result = template_test
             .execute_and_commit_manifest(
@@ -686,7 +717,7 @@ mod basic_nft {
             let account = var!["account"];
             let sparkle_nft = var!["nft"];
             let nft_resx = var!["nft_resx"];
-        
+
             let bucket = account.withdraw_non_fungible(nft_resx, NonFungibleId("Burn!"));
             sparkle_nft.burn(bucket);
             sparkle_nft.total_supply();
@@ -699,11 +730,11 @@ mod basic_nft {
 
         assert_eq!(
             result.finalize.execution_results[3].decode::<Amount>().unwrap(),
-            Amount(4)
+            Amount::new(4)
         );
 
         let total_supply: Amount = template_test.call_method(nft_component, "total_supply", args![], vec![]);
-        assert_eq!(total_supply, Amount(4));
+        assert_eq!(total_supply, Amount::new(4));
 
         // Cannot mint it again
         template_test
@@ -712,7 +743,7 @@ mod basic_nft {
             let account = var!["account"];
             let sparkle_nft = var!["nft"];
             let nft_resx = var!["nft_resx"];
-        
+
             let nft_bucket = sparkle_nft.mint_specific(NonFungibleId("Burn!"));
             account.deposit(nft_bucket);
         "#,
@@ -754,7 +785,7 @@ mod emoji_id {
                 Instruction::CallMethod {
                     component_address: account_address,
                     method: "withdraw".to_string(),
-                    args: args![faucet_resource, Amount(20)],
+                    args: args![faucet_resource, Amount::new(20)],
                 },
                 Instruction::PutLastInstructionOutputOnWorkspace {
                     key: b"payment".to_vec(),
@@ -789,7 +820,7 @@ mod emoji_id {
         // create a fungible token faucet, we are going to use those tokens as payments
         // TODO: use Thaums instead when they're implemented
         let faucet_template = template_test.get_template_address("TestFaucet");
-        let initial_supply = Amount(1_000_000_000_000);
+        let initial_supply = Amount::new(1_000_000_000_000);
         let result = template_test
             .execute_and_commit(
                 vec![Instruction::CallFunction {
@@ -812,7 +843,7 @@ mod emoji_id {
         // initialize the emoji id minter
         let emoji_id_template = template_test.get_template_address("EmojiIdMinter");
         let max_emoji_id_len = 10_u64;
-        let price = Amount(20);
+        let price = Amount::new(20);
         let result = template_test
             .execute_and_commit(
                 vec![Instruction::CallFunction {
@@ -834,7 +865,7 @@ mod emoji_id {
 
         // at the beggining we don't have any emojis minted
         let total_supply: Amount = template_test.call_method(emoji_id_minter, "total_supply", args![], vec![]);
-        assert_eq!(total_supply, Amount(0));
+        assert_eq!(total_supply, Amount::new(0));
 
         // get some funds into the account
         let vars = vec![
@@ -847,7 +878,7 @@ mod emoji_id {
                 r#"
             let account = var!["account"];
             let faucet = var!["faucet"];
-        
+
             let coins = faucet.take_free_coins();
             account.deposit(coins);
         "#,
@@ -872,11 +903,11 @@ mod emoji_id {
         // check that the account holds the newly minted nft
         let nft_balance: Amount =
             template_test.call_method(account_address, "balance", args![emoji_id_resource], vec![]);
-        assert_eq!(nft_balance, Amount(1));
+        assert_eq!(nft_balance, Amount::new(1));
 
         // the supply of emoji ids should have increased
         let total_supply: Amount = template_test.call_method(emoji_id_minter, "total_supply", args![], vec![]);
-        assert_eq!(total_supply, Amount(1));
+        assert_eq!(total_supply, Amount::new(1));
 
         // emoji id are unique, so minting the same emojis again must fail
         mint_emoji_id(
@@ -938,7 +969,7 @@ mod tickets {
         // create a fungible token faucet, we are going to use those tokens as payments
         // TODO: use Thaums instead when they're implemented
         let faucet_template = template_test.get_template_address("TestFaucet");
-        let initial_supply = Amount(1_000_000_000_000);
+        let initial_supply = Amount::new(1_000_000_000_000);
         let result = template_test
             .execute_and_commit(
                 vec![Instruction::CallFunction {
@@ -961,7 +992,7 @@ mod tickets {
         // initialize the ticket seller
         let ticket_template = template_test.get_template_address("TicketSeller");
         let initial_supply: usize = 10;
-        let price = Amount(20);
+        let price = Amount::new(20);
         let event_description = "My music festival".to_string();
         let result = template_test
             .execute_and_commit(
@@ -984,7 +1015,7 @@ mod tickets {
 
         // at the beggining we have the initial supply of tickeds
         let total_supply: Amount = template_test.call_method(ticket_seller, "total_supply", args![], vec![]);
-        assert_eq!(total_supply, Amount(initial_supply as i64));
+        assert_eq!(total_supply, Amount::new(initial_supply as i64));
 
         // get some funds into the account
         let vars = vec![
@@ -998,7 +1029,7 @@ mod tickets {
                 r#"
             let account = var!["account"];
             let faucet = var!["faucet"];
-        
+
             let coins = faucet.take_free_coins();
             account.deposit(coins);
         "#,
@@ -1014,8 +1045,8 @@ mod tickets {
             let account = var!["account"];
             let faucet_resource = var!["faucet_resource"];
             let ticket_seller = var!["ticket_seller"];
-        
-            let payment = account.withdraw(faucet_resource, Amount(20));
+
+            let payment = account.withdraw(faucet_resource, Amount::new(20));
             let nft_bucket = ticket_seller.buy_ticket(payment);
             account.deposit(nft_bucket);
         "#,
@@ -1108,14 +1139,14 @@ mod nft_indexes {
         ];
 
         let total_supply: Amount = template_test.call_method(nft_component, "total_supply", args![], vec![]);
-        assert_eq!(total_supply, Amount(0));
+        assert_eq!(total_supply, Amount::new(0));
 
         let result = template_test
             .execute_and_commit_manifest(
                 r#"
             let account = var!["account"];
             let sparkle_nft = var!["nft"];
-        
+
             let nft_bucket = sparkle_nft.mint();
             account.deposit(nft_bucket);
         "#,
@@ -1178,6 +1209,6 @@ mod nft_indexes {
 
         // The total supply of the resource is increased
         let total_supply: Amount = template_test.call_method(nft_component, "total_supply", args![], vec![]);
-        assert_eq!(total_supply, Amount(1));
+        assert_eq!(total_supply, Amount::new(1));
     }
 }

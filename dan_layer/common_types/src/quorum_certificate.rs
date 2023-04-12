@@ -9,7 +9,16 @@ use tari_common_types::types::FixedHash;
 use tari_crypto::hash::blake2::Blake256;
 use tari_engine_types::commit_result::RejectReason;
 
-use crate::{Epoch, NodeHeight, PayloadId, ShardId, ShardPledgeCollection, TreeNodeHash, ValidatorMetadata};
+use crate::{
+    Epoch,
+    NodeAddressable,
+    NodeHeight,
+    PayloadId,
+    ShardId,
+    ShardPledgeCollection,
+    TreeNodeHash,
+    ValidatorMetadata,
+};
 
 #[derive(Debug, Clone, Copy, Deserialize, Serialize, PartialEq, Eq)]
 pub enum QuorumDecision {
@@ -87,7 +96,7 @@ impl<T: Borrow<RejectReason>> From<T> for QuorumRejectReason {
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
-pub struct QuorumCertificate {
+pub struct QuorumCertificate<TAddr> {
     payload_id: PayloadId,
     payload_height: NodeHeight,
     // Cache the node hash
@@ -96,12 +105,13 @@ pub struct QuorumCertificate {
     local_node_height: NodeHeight,
     shard: ShardId,
     epoch: Epoch,
+    proposed_by: TAddr,
     decision: QuorumDecision,
     all_shard_pledges: ShardPledgeCollection,
     validators_metadata: Vec<ValidatorMetadata>,
 }
 
-impl QuorumCertificate {
+impl<TAddr: Clone> QuorumCertificate<TAddr> {
     pub fn set_node(&mut self, node_hash: TreeNodeHash, node_height: NodeHeight) -> &mut Self {
         self.local_node_hash = node_hash;
         self.local_node_height = node_height;
@@ -109,7 +119,7 @@ impl QuorumCertificate {
     }
 }
 
-impl QuorumCertificate {
+impl<TAddr: NodeAddressable> QuorumCertificate<TAddr> {
     pub fn new(
         payload: PayloadId,
         payload_height: NodeHeight,
@@ -117,6 +127,7 @@ impl QuorumCertificate {
         local_node_height: NodeHeight,
         shard: ShardId,
         epoch: Epoch,
+        proposed_by: TAddr,
         decision: QuorumDecision,
         all_shard_pledges: ShardPledgeCollection,
         validators_metadata: Vec<ValidatorMetadata>,
@@ -128,13 +139,14 @@ impl QuorumCertificate {
             local_node_height,
             shard,
             epoch,
+            proposed_by,
             decision,
             all_shard_pledges,
             validators_metadata,
         }
     }
 
-    pub fn genesis(epoch: Epoch, payload_id: PayloadId, shard_id: ShardId) -> Self {
+    pub fn genesis(epoch: Epoch, payload_id: PayloadId, shard_id: ShardId, proposed_by: TAddr) -> Self {
         Self {
             payload_id,
             payload_height: NodeHeight(0),
@@ -142,6 +154,7 @@ impl QuorumCertificate {
             local_node_height: NodeHeight(0),
             shard: shard_id,
             epoch,
+            proposed_by,
             decision: QuorumDecision::Accept,
             all_shard_pledges: ShardPledgeCollection::empty(),
             validators_metadata: vec![],
@@ -158,6 +171,10 @@ impl QuorumCertificate {
 
     pub fn epoch(&self) -> Epoch {
         self.epoch
+    }
+
+    pub fn proposed_by(&self) -> &TAddr {
+        &self.proposed_by
     }
 
     pub fn validators_metadata(&self) -> &[ValidatorMetadata] {

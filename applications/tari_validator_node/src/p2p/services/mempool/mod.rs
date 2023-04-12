@@ -44,7 +44,7 @@ pub use validator::{FeeTransactionValidator, TemplateExistsValidator};
 #[derive(Error, Debug)]
 pub enum MempoolError {
     #[error("Epoch Manager Error: {0}")]
-    EpochManagerError(#[from] Box<EpochManagerError>),
+    EpochManagerError(#[from] EpochManagerError),
     #[error("Broadcast failed: {0}")]
     BroadcastFailed(#[from] MessagingError),
     #[error("Invalid template address: {0}")]

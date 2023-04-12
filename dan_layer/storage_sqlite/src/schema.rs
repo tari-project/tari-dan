@@ -145,7 +145,7 @@ diesel::table! {
         version -> BigInt,
         data -> Text,
         created_by_payload_id -> Binary,
-        created_justify -> Text,
+        created_justify -> Nullable<Text>,
         created_node_hash -> Binary,
         created_height -> BigInt,
         destroyed_by_payload_id -> Nullable<Binary>,
@@ -154,6 +154,12 @@ diesel::table! {
         destroyed_height -> Nullable<BigInt>,
         created_timestamp -> Timestamp,
         destroyed_timestamp -> Nullable<Timestamp>,
+        fee_paid_for_created_justify -> BigInt,
+        fee_paid_for_deleted_justify -> BigInt,
+        created_at_epoch -> Nullable<BigInt>,
+        destroyed_at_epoch -> Nullable<BigInt>,
+        created_justify_leader -> Nullable<Text>,
+        destroyed_justify_leader -> Nullable<Text>,
     }
 }
 

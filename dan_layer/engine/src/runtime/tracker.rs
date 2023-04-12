@@ -137,10 +137,13 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate>> StateTracke
     pub fn new_resource(
         &self,
         resource_type: ResourceType,
+        token_symbol: String,
         metadata: Metadata,
     ) -> Result<ResourceAddress, RuntimeError> {
-        let resource_address = self.id_provider.new_resource_address()?;
-        let resource = Resource::new(resource_type, metadata);
+        let resource_address = self
+            .id_provider
+            .new_resource_address(&self.runtime_state()?.template_address, &token_symbol)?;
+        let resource = Resource::new(resource_type, token_symbol, metadata);
         self.write_with(|state| {
             state.new_resources.insert(resource_address, resource);
         });
@@ -172,7 +175,13 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate>> StateTracke
                     );
                     let mut token_ids = BTreeSet::new();
                     let resource = state.get_resource(&resource_address)?;
-                    let mut index = resource.total_supply().0 as u64;
+                    let mut index = resource
+                        .total_supply()
+                        .as_u64_checked()
+                        .ok_or(RuntimeError::InvalidAmount {
+                            amount: resource.total_supply(),
+                            reason: "Could not convert to u64".to_owned(),
+                        })?;
                     for (id, (data, mut_data)) in tokens {
                         let nft_address = NonFungibleAddress::new(resource_address, id.clone());
                         if state.get_non_fungible(&nft_address).optional()?.is_some() {
@@ -550,7 +559,8 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate>> StateTracke
             .map(|(resx, _)| resx.amount())
             .sum::<Amount>();
 
-        let mut fee_resource = ResourceContainer::confidential(CONFIDENTIAL_TARI_RESOURCE_ADDRESS, None, Amount(0));
+        let mut fee_resource =
+            ResourceContainer::confidential(CONFIDENTIAL_TARI_RESOURCE_ADDRESS, None, Amount::zero());
 
         // Collect the fee
         let mut remaining_fees = total_fees;

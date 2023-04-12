@@ -39,9 +39,12 @@ import ValidatorNode from './routes/VN/ValidatorNode';
 import Connections from './routes/Connections/Connections';
 import RecentTransactions from './routes/RecentTransactions/RecentTransactions';
 import MonitoredSubstates from './routes/MonitoredSubstates/MonitoredSubstates';
+import MonitoredNftCollections from './routes/MonitoredNftCollections/MonitoredNftCollections';
+import NftGallery from './routes/NftGallery/NftGallery';
 import ErrorPage from './routes/ErrorPage';
 import Logo from './Components/Logo';
 import Container from '@mui/material/Container';
+
 
 const drawerWidth = 300;
 
@@ -188,6 +191,8 @@ export default function App() {
           <Route index element={<ValidatorNode />} />
           <Route path="connections" element={<Connections />} />
           <Route path="monitored_substates" element={<MonitoredSubstates />} />
+          <Route path="nfts" element={<MonitoredNftCollections />} />
+          <Route path="nfts/:resourceAddress" element={<NftGallery />} />
           <Route path="transactions" element={<RecentTransactions />} />
           <Route path="*" element={<ErrorPage />} />
         </Route>

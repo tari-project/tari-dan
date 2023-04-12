@@ -33,6 +33,7 @@ mod dan_layer_scanner;
 mod http_ui;
 mod json_rpc;
 mod p2p;
+mod substate_decoder;
 mod substate_manager;
 mod substate_storage_sqlite;
 
@@ -71,7 +72,7 @@ pub const DAN_PEER_FEATURES: PeerFeatures = PeerFeatures::COMMUNICATION_NODE;
 pub async fn run_indexer(config: ApplicationConfig, mut shutdown_signal: ShutdownSignal) -> Result<(), ExitError> {
     let node_identity = setup_node_identity(
         &config.indexer.identity_file,
-        config.indexer.public_addresses.clone(),
+        config.indexer.p2p.public_addresses.clone(),
         true,
         DAN_PEER_FEATURES,
     )?;
