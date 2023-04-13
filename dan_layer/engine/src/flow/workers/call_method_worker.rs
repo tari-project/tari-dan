@@ -89,7 +89,7 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate>> Worker<Flow
             context.max_recursion_depth,
         )?;
 
-        let result = exec_result.raw.clone();
+        let result = exec_result.raw;
 
         let mut h = HashMap::new();
         h.insert("default".to_string(), OutputValue::Bytes(result));
