@@ -64,7 +64,7 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate>> Worker<Flow
             .clone();
 
         let mut args = Vec::new();
-        for arg in function_definition.arguments.iter() {
+        for arg in &function_definition.arguments {
             if arg.name == "self" {
                 // self has already been added
                 continue;
