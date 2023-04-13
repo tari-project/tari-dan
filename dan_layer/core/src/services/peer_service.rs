@@ -49,6 +49,22 @@ pub struct DanPeer<TAddr> {
     pub addresses: Vec<(Multiaddr, PeerIdentityClaim)>,
 }
 
+impl<TAddr: PartialEq> PartialEq for DanPeer<TAddr> {
+    fn eq(&self, other: &Self) -> bool {
+        // Compare everything but self.addresses[].1.unverified_data
+        self.identity == other.identity &&
+            self.addresses.len() == other.addresses.len() &&
+            self.addresses.iter().zip(other.addresses.iter()).all(
+                |((multiadd, peer_identity_claim), (other_multiadd, other_peer_identity_claim))| {
+                    multiadd == other_multiadd &&
+                        peer_identity_claim.addresses == other_peer_identity_claim.addresses &&
+                        peer_identity_claim.features == other_peer_identity_claim.features &&
+                        peer_identity_claim.signature == other_peer_identity_claim.signature
+                },
+            )
+    }
+}
+
 impl DanPeer<CommsPublicKey> {
     pub fn is_valid(&self) -> bool {
         self.addresses.iter().all(|(addr, claim)| {

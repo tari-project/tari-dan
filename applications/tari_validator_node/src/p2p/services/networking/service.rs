@@ -205,8 +205,9 @@ impl Networking {
                 //     .unwrap_or(true)
                 // {
 
-                // If there was an update, we forward the announce to other peers
-                if existing_peer.addresses != peer.addresses {
+                // If there was an update, we forward the announce to other peers, we compare everything but
+                // unverified_data
+                if existing_peer != peer {
                     self.peer_provider.update_peer(peer).await?;
 
                     // TODO: should not forward announce to sending peer
