@@ -205,15 +205,15 @@ impl Networking {
                 //     .unwrap_or(true)
                 // {
 
-                // If there was an update, we forward the announce to other peers
-                if existing_peer.addresses != peer.addresses {
-                    self.peer_provider.update_peer(peer).await?;
-
-                    // TODO: should not forward announce to sending peer
-                    self.outbound
-                        .flood(Default::default(), DanMessage::NetworkAnnounce(Box::new(announce)))
-                        .await?;
-                }
+                // // If there was an update, we forward the announce to other peers
+                // if existing_peer.addresses != peer.addresses {
+                //     self.peer_provider.update_peer(peer).await?;
+                //
+                //     // TODO: should not forward announce to sending peer
+                //     self.outbound
+                //         .flood(Default::default(), DanMessage::NetworkAnnounce(Box::new(announce)))
+                //         .await?;
+                // }
             },
             None => {
                 self.peer_provider.add_peer(peer).await?;
