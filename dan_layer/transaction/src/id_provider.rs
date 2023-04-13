@@ -1,16 +1,23 @@
 //   Copyright 2023 The Tari Project
 //   SPDX-License-Identifier: BSD-3-Clause
 
-use std::sync::{atomic::AtomicU32, Arc, Mutex};
+use std::{
+    collections::HashMap,
+    sync::{atomic::AtomicU32, Arc, Mutex},
+};
 
 use tari_engine_types::hashing::{hasher, EngineHashDomainLabel};
 use tari_template_lib::{
     models::{BucketId, ResourceAddress, TemplateAddress, VaultId},
+    prelude::ComponentAddress,
     Hash,
 };
 
+use crate::Transaction;
+
 #[derive(Debug, Clone)]
 pub struct IdProvider {
+    transaction: Transaction,
     transaction_hash: Hash,
     max_ids: u32,
     current_id: Arc<AtomicU32>,
@@ -28,9 +35,11 @@ pub enum IdProviderError {
 }
 
 impl IdProvider {
-    pub fn new(transaction_hash: Hash, max_ids: u32) -> Self {
+    pub fn new(transaction: Transaction, max_ids: u32) -> Self {
+        let transaction_hash = *transaction.hash();
         Self {
             last_random: Arc::new(Mutex::new(transaction_hash)),
+            transaction,
             transaction_hash,
             max_ids,
             // TODO: these should be ranges
@@ -57,6 +66,23 @@ impl IdProvider {
     fn new_id(&self) -> Result<Hash, IdProviderError> {
         let id = generate_output_id(&self.transaction_hash, self.next()?);
         Ok(id)
+    }
+
+    pub fn new_component_address(
+        &self,
+        template_address: &TemplateAddress,
+    ) -> Result<ComponentAddress, IdProviderError> {
+        let component_addresses = self.transaction.required_components();
+        let template_component_map: HashMap<_, _> = component_addresses
+            .iter()
+            .map(|c| (c.template_address(), c.index()))
+            .collect();
+        let index = match template_component_map.get(template_address) {
+            Some(index) => *index,
+            None => 0_u64,
+        };
+        let component_address = ComponentAddress::new(*template_address, index);
+        Ok(component_address)
     }
 
     pub fn new_resource_address(
@@ -117,13 +143,20 @@ fn generate_output_id(hash: &Hash, n: u32) -> Hash {
 
 #[cfg(test)]
 mod tests {
+    use tari_common_types::types::PrivateKey;
+
     use super::*;
+
+    fn build_transaction() -> Transaction {
+        Transaction::builder().sign(&PrivateKey::default()).build()
+    }
 
     #[test]
     fn it_fails_if_generating_more_ids_than_the_max() {
-        let id_provider = IdProvider::new(Hash::default(), 0);
+        let tx = build_transaction();
+        let id_provider = IdProvider::new(tx.clone(), 0);
         id_provider.new_id().unwrap_err();
-        let id_provider = IdProvider::new(Hash::default(), 1);
+        let id_provider = IdProvider::new(tx, 1);
         id_provider.new_id().unwrap();
         id_provider.new_id().unwrap_err();
     }

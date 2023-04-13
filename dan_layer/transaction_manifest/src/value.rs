@@ -69,7 +69,7 @@ mod tests {
 
     #[test]
     fn it_parses_address_strings() {
-        let addr = "component_0000000000000000000000000000000000000000000000000000000000000000 index 0"
+        let addr = "component_0000000000000000000000000000000000000000000000000000000000000000 index_0"
             .parse::<ManifestValue>()
             .unwrap();
         assert_eq!(

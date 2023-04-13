@@ -219,7 +219,7 @@ impl TransactionBuilder {
             .iter()
             .map(|(_, count)| u32::from(*count))
             .sum::<u32>();
-        let id_provider = IdProvider::new(*transaction.hash(), max_outputs + total_new_nft_outputs);
+        let id_provider = IdProvider::new(transaction.clone(), max_outputs + total_new_nft_outputs);
 
         transaction
             .meta_mut()

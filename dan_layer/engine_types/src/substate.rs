@@ -492,10 +492,12 @@ mod tests {
 
         #[test]
         fn it_parses_valid_substate_addresses() {
-            SubstateAddress::from_str("component_7cbfe29101c24924b1b6ccefbfff98986d648622272ae24f7585dab55ff1ff64")
-                .unwrap()
-                .as_component_address()
-                .unwrap();
+            SubstateAddress::from_str(
+                "component_7cbfe29101c24924b1b6ccefbfff98986d648622272ae24f7585dab55ff1ff64 index_0",
+            )
+            .unwrap()
+            .as_component_address()
+            .unwrap();
             SubstateAddress::from_str("vault_7cbfe29101c24924b1b6ccefbfff98986d648622272ae24f7585dab55ff1ff64")
                 .unwrap()
                 .as_vault_id()

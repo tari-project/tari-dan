@@ -9,7 +9,7 @@ use tari_template_lib::{
     constants::CONFIDENTIAL_TARI_RESOURCE_ADDRESS,
     models::{Amount, ComponentAddress},
 };
-use tari_template_test_tooling::{TemplateTest, TEST_FAUCET_COMPONENT};
+use tari_template_test_tooling::{test_faucet_component, TemplateTest};
 use tari_transaction::Transaction;
 
 #[test]
@@ -89,7 +89,7 @@ fn deposit_from_faucet_then_pay() {
             Transaction::builder()
                 .with_fee_instructions(vec![
                     Instruction::CallMethod {
-                        component_address: TEST_FAUCET_COMPONENT,
+                        component_address: test_faucet_component(),
                         method: "take_free_coins".to_string(),
                         args: args![],
                     },
@@ -144,10 +144,10 @@ fn another_account_pays_partially_for_fees() {
         .try_execute_and_commit(
             Transaction::builder()
                 // Faucet pays a little
-                .fee_transaction_pay_from_component(TEST_FAUCET_COMPONENT, Amount::new(200))
+                .fee_transaction_pay_from_component(test_faucet_component(), Amount::new(200))
                 // Account pays the rest
                 .fee_transaction_pay_from_component(account_fee, Amount::new(1000))
-                .call_method(TEST_FAUCET_COMPONENT, "take_free_coins", args![])
+                .call_method(test_faucet_component(), "take_free_coins", args![])
                 .put_last_instruction_output_on_workspace("bucket")
                 .call_method(account, "deposit", args![Workspace("bucket")])
                 .sign(&private_key)

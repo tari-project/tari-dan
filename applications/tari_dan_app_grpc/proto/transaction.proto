@@ -57,7 +57,7 @@ message Instruction {
   string function = 4;
 
   // method only
-  bytes component_address = 5;
+  uint64 component_index = 5;
   string method = 6;
 
   // PutLastInstructionOutputOnWorkspace

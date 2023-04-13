@@ -86,7 +86,7 @@ impl TransactionProcessor {
     }
 
     pub fn execute(self, transaction: Transaction) -> Result<ExecuteResult, TransactionError> {
-        let id_provider = IdProvider::new(*transaction.hash(), 1000);
+        let id_provider = IdProvider::new(transaction.clone(), 1000);
         // TODO: We can avoid this for each execution with improved design
         let template_defs = self.package.get_template_defs();
         let tracker = StateTracker::new(self.state_db.clone(), id_provider, template_defs);
