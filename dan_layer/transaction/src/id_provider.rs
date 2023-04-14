@@ -17,7 +17,7 @@ use crate::Transaction;
 
 #[derive(Debug, Clone)]
 pub struct IdProvider {
-    transaction: Transaction,
+    template_index_map: HashMap<TemplateAddress, u64>,
     transaction_hash: Hash,
     max_ids: u32,
     current_id: Arc<AtomicU32>,
@@ -37,9 +37,10 @@ pub enum IdProviderError {
 impl IdProvider {
     pub fn new(transaction: Transaction, max_ids: u32) -> Self {
         let transaction_hash = *transaction.hash();
+        let template_index_map = generate_template_index_map(transaction);
         Self {
             last_random: Arc::new(Mutex::new(transaction_hash)),
-            transaction,
+            template_index_map,
             transaction_hash,
             max_ids,
             // TODO: these should be ranges
@@ -72,13 +73,9 @@ impl IdProvider {
         &self,
         template_address: &TemplateAddress,
     ) -> Result<ComponentAddress, IdProviderError> {
-        let component_addresses = self.transaction.required_components();
-        let template_component_map: HashMap<_, _> = component_addresses
-            .iter()
-            .map(|c| (c.template_address(), c.index()))
-            .collect();
-        let index = match template_component_map.get(template_address) {
+        let index = match self.template_index_map.get(template_address) {
             Some(index) => *index,
+            // for convenience, if no component address was specified in the outputs, we are going to default to index 0
             None => 0_u64,
         };
         let component_address = ComponentAddress::new(*template_address, index);
@@ -141,6 +138,14 @@ fn generate_output_id(hash: &Hash, n: u32) -> Hash {
     hasher(EngineHashDomainLabel::Output).chain(hash).chain(&n).result()
 }
 
+fn generate_template_index_map(transaction: Transaction) -> HashMap<TemplateAddress, u64> {
+    let component_addresses = transaction.required_components();
+    let template_index_map: HashMap<_, _> = component_addresses
+        .iter()
+        .map(|c| (*c.template_address(), c.index()))
+        .collect();
+    template_index_map
+}
 #[cfg(test)]
 mod tests {
     use tari_common_types::types::PrivateKey;
