@@ -21,6 +21,7 @@
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 use core::ops::{Add, AddAssign, Div, Mul, Sub, SubAssign};
+use std::{num::ParseIntError, str::FromStr};
 
 use ciborium::tag::Required;
 use serde::{Deserialize, Serialize};
@@ -214,6 +215,14 @@ impl Sum for Amount {
 impl Display for Amount {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", self.0 .0)
+    }
+}
+
+impl FromStr for Amount {
+    type Err = ParseIntError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        Ok(Amount::new(s.parse()?))
     }
 }
 

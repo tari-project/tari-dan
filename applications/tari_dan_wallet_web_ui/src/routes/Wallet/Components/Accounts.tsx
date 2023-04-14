@@ -34,17 +34,19 @@ import { BoxHeading2 } from "../../../Components/StyledComponents";
 import Fade from "@mui/material/Fade";
 import { Form } from "react-router-dom";
 import TextField from "@mui/material/TextField/TextField";
+import Select from "@mui/material/Select/Select";
 import Button from "@mui/material/Button/Button";
 import AddIcon from "@mui/icons-material/Add";
 import { removeTagged } from "../../../utils/helpers";
+import MenuItem from "@mui/material/MenuItem";
+import Alert from "@mui/material/Alert";
+import Link from "@mui/material/Link";
 
 function Account(account: any) {
   return (
-    // <TableRow key={toHexString(account.account.address.Component)}>
-      <TableRow >
-      <TableCell>{account.account.name}</TableCell>
+    <TableRow key={toHexString(account.account.address.Component)}>
+      <TableCell><Link href={"accounts/" + account.account.name}>{account.account.name}</Link></TableCell>
       <TableCell>{toHexString(account.account.address.Component)}</TableCell>
-      <TableCell>{removeTagged(account.account.balance)}</TableCell>
       <TableCell>{account.account.key_index}</TableCell>
       <TableCell>{account.public_key}</TableCell>
     </TableRow>
@@ -96,13 +98,14 @@ function Accounts() {
   };
 
   const onClaimBurn = () => {
-    accountsClaimBurn(fromHexString(claimBurnFormState.account), claimBurnFormState.claimProof, +claimBurnFormState.fee)
+    accountsClaimBurn(claimBurnFormState.account, JSON.parse(claimBurnFormState.claimProof), +claimBurnFormState.fee)
       .then((response) => {
         console.log(response);
         loadAccounts();
       })
       .catch((reason) => {
         console.log(reason);
+        setError(reason.message);
       });
     setClaimBurnFormState({ account: "", claimProof: "", fee: "" });
     setShowClaimBurnDialog(false);
@@ -115,11 +118,12 @@ function Accounts() {
   useEffect(() => {
     loadAccounts();
   }, []);
-  if (error) {
-    return <Error component="Accounts" message={error} />;
-  }
+
   return (
     <>
+      {error ? (
+          <Alert severity="error">{error}</Alert>
+      ) : ( <span></span>) }
       <BoxHeading2>
         {showAccountDialog && (
           <Fade in={showAccountDialog}>
@@ -166,13 +170,16 @@ function Accounts() {
         {showClaimDialog && (
           <Fade in={showClaimDialog}>
             <Form onSubmit={onClaimBurn} className="flex-container">
-              <TextField
-                name="account"
-                label="Account"
-                value={claimBurnFormState.account}
-                onChange={onClaimBurnChange}
-                style={{ flexGrow: 1 }}
-              />
+              <Select name="account"
+                      label="Account"
+                      value={claimBurnFormState.account}
+                      onChange={onClaimBurnChange}
+                      style={{ flexGrow: 1 }}  >
+                {state?.accounts.map((account: any) => (
+                    <MenuItem key={toHexString(account.account.address.Component)} value={"component_" + toHexString(account.account.address.Component)}>{account.account.name} </MenuItem>
+
+                ))}
+              </Select>
               <TextField
                 name="claimProof"
                 label="Claim Proof"
@@ -212,7 +219,6 @@ function Accounts() {
             <TableRow>
               <TableCell>Name</TableCell>
               <TableCell>Address</TableCell>
-              <TableCell>Balance</TableCell>
               <TableCell>Key index</TableCell>
               <TableCell>Public key</TableCell>
             </TableRow>

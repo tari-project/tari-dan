@@ -38,8 +38,7 @@ import Button from '@mui/material/Button/Button';
 
 function Key(key:any,setActive:any) {
   return (
-    // <TableRow key={key[0]}>
-      <TableRow >
+    <TableRow key={key[0]}>
       <TableCell>
         {key[0]}
       </TableCell>
