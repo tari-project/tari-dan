@@ -32,6 +32,7 @@ use tari_utilities::ByteArray;
 use tari_wallet_daemon_client::types::{
     AccountByNameRequest,
     AccountByNameResponse,
+    AccountInfo,
     AccountsCreateRequest,
     AccountsCreateResponse,
     AccountsGetBalancesRequest,
@@ -125,7 +126,10 @@ pub async fn handle_list(
         .map(|a| {
             let key = km.derive_key(key_manager::TRANSACTION_BRANCH, a.key_index)?;
             let pk = PublicKey::from_secret_key(&key.k);
-            Ok((a, pk))
+            Ok(AccountInfo {
+                account: a,
+                public_key: pk,
+            })
         })
         .collect::<Result<_, anyhow::Error>>()?;
 

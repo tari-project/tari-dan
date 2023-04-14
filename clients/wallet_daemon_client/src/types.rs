@@ -189,8 +189,14 @@ pub struct AccountsListRequest {
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct AccountInfo {
+    pub account: Account,
+    pub public_key: PublicKey,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct AccountsListResponse {
-    pub accounts: Vec<(Account, PublicKey)>,
+    pub accounts: Vec<AccountInfo>,
     pub total: u64,
 }
 

@@ -36,15 +36,17 @@ import { Form } from "react-router-dom";
 import TextField from "@mui/material/TextField/TextField";
 import Button from "@mui/material/Button/Button";
 import AddIcon from "@mui/icons-material/Add";
+import { removeTagged } from "../../../utils/helpers";
 
 function Account(account: any) {
   return (
-    <TableRow key={account[0].address.Component}>
-      <TableCell>{account[0].name}</TableCell>
-      <TableCell>{toHexString(account[0].address.Component)}</TableCell>
-      <TableCell>{account[0].balance}</TableCell>
-      <TableCell>{account[0].key_index}</TableCell>
-      <TableCell>{account[1]}</TableCell>
+    // <TableRow key={toHexString(account.account.address.Component)}>
+      <TableRow >
+      <TableCell>{account.account.name}</TableCell>
+      <TableCell>{toHexString(account.account.address.Component)}</TableCell>
+      <TableCell>{removeTagged(account.account.balance)}</TableCell>
+      <TableCell>{account.account.key_index}</TableCell>
+      <TableCell>{account.public_key}</TableCell>
     </TableRow>
   );
 }
