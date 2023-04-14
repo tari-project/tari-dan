@@ -9,3 +9,11 @@ pub async fn handle_discover(
 ) -> Result<serde_json::Value, anyhow::Error> {
     Ok(serde_json::from_str(include_str!("../../openrpc.json"))?)
 }
+
+pub async fn handle_init(
+    context: &HandlerContext,
+    _value: serde_json::Value,
+) -> Result<serde_json::Value, anyhow::Error> {
+    let token = context.jwt().generate()?;
+    Ok(serde_json::to_value(token)?)
+}

@@ -9,7 +9,7 @@ class SignaligServer {
   }
 
   async initToken() {
-    this.token = await this.#getToken()
+    this.token = await this.#authLogin()
     window.tari_token = this.token;
   }
 
@@ -45,8 +45,8 @@ class SignaligServer {
     return json.result;
   }
 
-  async #getToken() {
-    return await this.#jsonRpc("get.jwt");
+  async #authLogin() {
+    return await this.#jsonRpc("auth.login");
   }
 
   async storeIceCandidate(ice_candidate) {
