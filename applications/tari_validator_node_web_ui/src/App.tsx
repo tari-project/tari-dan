@@ -39,6 +39,7 @@ import Mempool from './routes/Mempool/Mempool';
 import Committees from './routes/Committees/Committees';
 import ValidatorNode from './routes/VN/ValidatorNode';
 import Connections from './routes/Connections/Connections';
+import Fees from './routes/Fees/Fees';
 import RecentTransactions from './routes/RecentTransactions/RecentTransactions';
 import Templates from './routes/Templates/Templates';
 import ValidatorNodes from './routes/ValidatorNodes/ValidatorNodes';
@@ -193,6 +194,7 @@ export default function App() {
           <Route index element={<ValidatorNode />} />
           <Route path="committees" element={<Committees />} />
           <Route path="connections" element={<Connections />} />
+          <Route path="fees" element={<Fees />} />
           <Route path="transactions" element={<RecentTransactions />} />
           <Route path="templates" element={<Templates />} />
           <Route path="vns" element={<ValidatorNodes />} />

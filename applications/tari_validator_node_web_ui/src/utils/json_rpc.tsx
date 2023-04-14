@@ -31,7 +31,7 @@ async function jsonRpc(method: string, params: any = null) {
     if (/^\d+(\.\d+){3}:[0-9]+$/.test(text)) {
       address = text;
     }
-  } catch {}
+  } catch { }
   let response = await fetch(`http://${address}`, {
     method: 'POST',
     body: JSON.stringify({
@@ -75,7 +75,7 @@ async function getConnections() {
   return await jsonRpc('get_connections');
 }
 async function addPeer(public_key: string, addresses: string[]) {
-  return await jsonRpc('add_peer', {public_key, addresses, wait_for_dial: false});
+  return await jsonRpc('add_peer', { public_key, addresses, wait_for_dial: false });
 }
 async function registerValidatorNode() {
   return await jsonRpc('register_validator_node');
@@ -85,6 +85,9 @@ async function getRecentTransactions() {
 }
 async function getTransaction(payload_id: string) {
   return await jsonRpc('get_transaction', [fromHexString(payload_id)]);
+}
+async function getFees(epoch: number, claim_leader_public_key: string) {
+  return await jsonRpc('get_fees', [fromHexString(claim_leader_public_key), epoch]);
 }
 async function getCurrentLeaderState(payload_id: string) {
   return await jsonRpc('get_current_leader_state', [fromHexString(payload_id)]);
@@ -118,6 +121,7 @@ export {
   getTemplate,
   getTemplates,
   getTransaction,
+  getFees,
   getSubstates,
   registerValidatorNode,
 };

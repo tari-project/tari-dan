@@ -24,6 +24,7 @@ import { useEffect, useState } from 'react';
 import AllVNs from './Components/AllVNs';
 import Committees from './Components/Committees';
 import Connections from './Components/Connections';
+import Fees from './Components/Fees';
 import Info from './Components/Info';
 import { IEpoch, IIdentity } from '../../utils/interfaces';
 import {
@@ -120,6 +121,12 @@ function ValidatorNode() {
       <Grid item xs={12} md={12} lg={12}>
         <StyledPaper>
           <Connections />
+        </StyledPaper>
+      </Grid>
+      <SecondaryHeading>Fees</SecondaryHeading>
+      <Grid item xs={12} md={12} lg={12}>
+        <StyledPaper>
+          <Fees />
         </StyledPaper>
       </Grid>
       <SecondaryHeading>Mempool</SecondaryHeading>
