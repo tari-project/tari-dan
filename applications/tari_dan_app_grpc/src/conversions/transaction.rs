@@ -192,6 +192,7 @@ impl From<Instruction> for proto::transaction::Instruction {
                 result.claim_burn_public_key = claim.public_key.to_vec();
                 result.claim_burn_withdraw_proof = claim.withdraw_proof.map(Into::into);
             },
+            Instruction::CreateFreeTestCoins { .. } => {},
         }
         result
     }

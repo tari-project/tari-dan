@@ -50,6 +50,7 @@ mod tests;
 
 use std::{fmt::Debug, sync::Arc};
 
+use tari_crypto::{keys::SecretKey, ristretto::RistrettoSecretKey};
 use tari_engine_types::{commit_result::FinalizeResult, confidential::ConfidentialClaim, fees::FeeReceipt};
 use tari_template_lib::{
     args::{
@@ -128,6 +129,7 @@ pub trait RuntimeInterface: Send + Sync {
 
     fn claim_burn(&self, claim: ConfidentialClaim) -> Result<(), RuntimeError>;
 
+    fn create_free_test_coins(&self, amount: u64, private_key: RistrettoSecretKey) -> Result<(), RuntimeError>;
     fn fee_checkpoint(&self) -> Result<(), RuntimeError>;
     fn reset_to_fee_checkpoint(&self) -> Result<(), RuntimeError>;
     fn finalize(&self) -> Result<(FinalizeResult, FeeReceipt), RuntimeError>;
