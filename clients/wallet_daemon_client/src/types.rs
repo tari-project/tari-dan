@@ -345,6 +345,21 @@ pub struct RevealFundsResponse {
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct AccountsCreateFreeTestCoinsRequest {
+    pub account_name: String,
+    pub amount: Amount,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct AccountsCreateFreeTestCoinsResponse {
+    #[serde(with = "serde_with::hex")]
+    pub hash: FixedHash,
+    pub amount: Amount,
+    pub fee: Amount,
+    pub result: FinalizeResult,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct WebRtcStart {
     pub jwt: String,
 }

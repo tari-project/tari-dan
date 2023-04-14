@@ -30,23 +30,11 @@ use tari_template_lib::{
 use tari_transaction::Transaction;
 use tari_utilities::ByteArray;
 use tari_wallet_daemon_client::types::{
-    AccountByNameRequest,
-    AccountByNameResponse,
-    AccountsCreateRequest,
-    AccountsCreateResponse,
-    AccountsGetBalancesRequest,
-    AccountsGetBalancesResponse,
-    AccountsInvokeRequest,
-    AccountsInvokeResponse,
-    AccountsListRequest,
-    AccountsListResponse,
-    BalanceEntry,
-    ClaimBurnRequest,
-    ClaimBurnResponse,
-    ConfidentialTransferRequest,
-    ConfidentialTransferResponse,
-    RevealFundsRequest,
-    RevealFundsResponse,
+    AccountByNameRequest, AccountByNameResponse, AccountsCreateFreeTestCoinsRequest,
+    AccountsCreateFreeTestCoinsResponse, AccountsCreateRequest, AccountsCreateResponse, AccountsGetBalancesRequest,
+    AccountsGetBalancesResponse, AccountsInvokeRequest, AccountsInvokeResponse, AccountsListRequest,
+    AccountsListResponse, BalanceEntry, ClaimBurnRequest, ClaimBurnResponse, ConfidentialTransferRequest,
+    ConfidentialTransferResponse, RevealFundsRequest, RevealFundsResponse,
 };
 use tokio::{sync::broadcast, task};
 
@@ -349,10 +337,11 @@ pub async fn handle_reveal_funds(
         } else {
             builder = builder
                 .fee_transaction_pay_from_component(account_address, req.fee)
-                .call_method(account_address, "withdraw_confidential", args![
-                    CONFIDENTIAL_TARI_RESOURCE_ADDRESS,
-                    reveal_proof
-                ])
+                .call_method(
+                    account_address,
+                    "withdraw_confidential",
+                    args![CONFIDENTIAL_TARI_RESOURCE_ADDRESS, reveal_proof],
+                )
                 .put_last_instruction_output_on_workspace("revealed")
                 .call_method(account_address, "deposit", args![Workspace("revealed")]);
         }
@@ -595,6 +584,94 @@ pub async fn handle_claim_burn(
     Ok(ClaimBurnResponse {
         hash: tx_hash,
         fee: finalized.final_fee,
+        result: finalized.finalize,
+    })
+}
+
+pub async fn handle_create_free_test_coins(
+    context: &HandlerContext,
+    req: AccountsCreateFreeTestCoinsRequest,
+) -> Result<AccountsCreateFreeTestCoinsResponse, anyhow::Error> {
+    let sdk = context.wallet_sdk().clone();
+    let account = sdk.accounts_api().get_account_by_name(req.account_name.as_str())?;
+
+    let account_secret_key = sdk
+        .key_manager_api()
+        .derive_key(key_manager::TRANSACTION_BRANCH, account.key_index)?;
+
+    let mut inputs = vec![];
+
+    // Add the account component
+    let account_substate = sdk.substate_api().get_substate(&account.address)?;
+    inputs.push(account_substate.address);
+
+    // Add all versioned account child addresses as inputs
+    let child_addresses = sdk
+        .substate_api()
+        .load_dependent_substates(&[account.address.clone()])?;
+    inputs.extend(child_addresses);
+
+    // TODO: we assume that all inputs will be consumed and produce a new output however this is only the case when the
+    //       object is mutated
+    let outputs = inputs
+        .iter()
+        .map(|versioned_addr| ShardId::from_address(&versioned_addr.address, versioned_addr.version + 1))
+        .collect::<Vec<_>>();
+
+    let inputs = inputs
+        .into_iter()
+        .map(|s| ShardId::from_address(&s.address, s.version))
+        .collect();
+
+    let account_address = account
+        .address
+        .as_component_address()
+        .ok_or(anyhow!("Invalid account address"))?;
+
+    let fee = Amount::new(1);
+
+    let transaction = Transaction::builder()
+    .with_fee_instructions(vec![
+            Instruction::PutLastInstructionOutputOnWorkspace {key: b"create_free_test_coins".to_vec()},
+            Instruction::CreateFreeTestCoins {
+                amount: req.amount.value() as u64,
+                private_key: account_secret_key.k.to_vec(),
+            },
+            Instruction::CallMethod {
+                component_address: account_address,
+                method: "pay_fee".to_string(),
+                args: args![fee]
+            }
+        ])
+        .with_inputs(inputs)
+        .with_outputs(outputs)
+        // transaction should have one output, corresponding to the same shard
+        // as the account substate address
+        // TODO: on a second claim burn, we shouldn't have any new outputs being created.
+        .with_new_outputs(1)
+        .sign(&account_secret_key.k)
+        .build();
+
+    let tx_hash = sdk.transaction_api().submit_to_vn(transaction).await?;
+
+    let mut events = context.notifier().subscribe();
+    context.notifier().notify(TransactionSubmittedEvent { hash: tx_hash });
+
+    let finalized = wait_for_result(&mut events, tx_hash).await?;
+    if let Some(reject) = finalized.finalize.result.reject() {
+        return Err(anyhow::anyhow!("Fee transaction rejected: {}", reject));
+    }
+    if let Some(reason) = finalized.transaction_failure {
+        return Err(anyhow::anyhow!(
+            "Fee transaction succeeded (fees charged) however the transaction failed: {}",
+            reason
+        ));
+    }
+
+    Ok(AccountsCreateFreeTestCoinsResponse {
+        hash: tx_hash,
+        amount: req.amount,
+        fee,
         result: finalized.finalize,
     })
 }

@@ -22,8 +22,7 @@
 
 use std::{
     convert::{TryFrom, TryInto},
-    fs,
-    io,
+    fs, io,
     io::Read,
     path::PathBuf,
 };
@@ -35,12 +34,8 @@ use tari_template_lib::models::Amount;
 use tari_utilities::ByteArray;
 use tari_wallet_daemon_client::{
     types::{
-        AccountByNameResponse,
-        AccountsCreateRequest,
-        AccountsGetBalancesRequest,
-        AccountsInvokeRequest,
-        ClaimBurnRequest,
-        RevealFundsRequest,
+        AccountByNameResponse, AccountsCreateFreeTestCoinsRequest, AccountsCreateRequest, AccountsGetBalancesRequest,
+        AccountsInvokeRequest, ClaimBurnRequest, RevealFundsRequest,
     },
     WalletDaemonClient,
 };
@@ -121,11 +116,12 @@ pub struct RevealFundsArgs {
     pay_from_reveal: bool,
 }
 
+#[derive(Debug, Args, Clone)]
 pub struct CreateFreeTestCoinsArgs {
     #[clap(long, short = 'n', alias = "name")]
-    pub account_name: Option<String>,
+    pub account_name: String,
     #[clap(long, short, alias = "amount")]
-    pub value: u64,
+    pub amount: u64,
 }
 
 impl AccountsSubcommand {
@@ -274,7 +270,7 @@ pub async fn handle_claim_burn(args: ClaimBurnArgs, client: &mut WalletDaemonCli
     Ok(())
 }
 
-async fn create_free_test_coins(
+async fn handle_create_free_test_coins(
     args: CreateFreeTestCoinsArgs,
     client: &mut WalletDaemonClient,
 ) -> Result<(), anyhow::Error> {
@@ -282,7 +278,7 @@ async fn create_free_test_coins(
     let resp = client
         .create_free_test_coins(AccountsCreateFreeTestCoinsRequest {
             account_name: args.account_name,
-            amount: args.amount,
+            amount: Amount::new(args.amount as i64),
         })
         .await?;
 

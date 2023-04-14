@@ -29,49 +29,22 @@ use serde::{de::DeserializeOwned, Serialize};
 use serde_json as json;
 use serde_json::json;
 use types::{
-    ClaimBurnRequest,
-    ClaimBurnResponse,
-    ProofsCancelRequest,
-    ProofsCancelResponse,
-    ProofsFinalizeRequest,
-    ProofsFinalizeResponse,
-    ProofsGenerateRequest,
+    AccountsCreateFreeTestCoinsRequest, AccountsCreateFreeTestCoinsResponse, ClaimBurnRequest, ClaimBurnResponse,
+    ProofsCancelRequest, ProofsCancelResponse, ProofsFinalizeRequest, ProofsFinalizeResponse, ProofsGenerateRequest,
     ProofsGenerateResponse,
 };
 
 use crate::{
     error::WalletDaemonClientError,
     types::{
-        AccountByNameRequest,
-        AccountByNameResponse,
-        AccountsCreateRequest,
-        AccountsCreateResponse,
-        AccountsGetBalancesRequest,
-        AccountsGetBalancesResponse,
-        AccountsInvokeRequest,
-        AccountsInvokeResponse,
-        AccountsListRequest,
-        AccountsListResponse,
-        ConfidentialCreateOutputProofRequest,
-        ConfidentialCreateOutputProofResponse,
-        ConfidentialTransferRequest,
-        ConfidentialTransferResponse,
-        KeysCreateRequest,
-        KeysCreateResponse,
-        KeysListRequest,
-        KeysListResponse,
-        KeysSetActiveRequest,
-        KeysSetActiveResponse,
-        RevealFundsRequest,
-        RevealFundsResponse,
-        TransactionGetRequest,
-        TransactionGetResponse,
-        TransactionGetResultRequest,
-        TransactionGetResultResponse,
-        TransactionSubmitRequest,
-        TransactionSubmitResponse,
-        TransactionWaitResultRequest,
-        TransactionWaitResultResponse,
+        AccountByNameRequest, AccountByNameResponse, AccountsCreateRequest, AccountsCreateResponse,
+        AccountsGetBalancesRequest, AccountsGetBalancesResponse, AccountsInvokeRequest, AccountsInvokeResponse,
+        AccountsListRequest, AccountsListResponse, ConfidentialCreateOutputProofRequest,
+        ConfidentialCreateOutputProofResponse, ConfidentialTransferRequest, ConfidentialTransferResponse,
+        KeysCreateRequest, KeysCreateResponse, KeysListRequest, KeysListResponse, KeysSetActiveRequest,
+        KeysSetActiveResponse, RevealFundsRequest, RevealFundsResponse, TransactionGetRequest, TransactionGetResponse,
+        TransactionGetResultRequest, TransactionGetResultResponse, TransactionSubmitRequest, TransactionSubmitResponse,
+        TransactionWaitResultRequest, TransactionWaitResultResponse,
     },
 };
 
@@ -242,6 +215,13 @@ impl WalletDaemonClient {
     ) -> Result<ConfidentialCreateOutputProofResponse, WalletDaemonClientError> {
         self.send_request("confidential.create_output_proof", req.borrow())
             .await
+    }
+
+    pub async fn create_free_test_coins<T: Borrow<AccountsCreateFreeTestCoinsRequest>>(
+        &mut self,
+        req: T,
+    ) -> Result<AccountsCreateFreeTestCoinsResponse, WalletDaemonClientError> {
+        self.send_request("account.create_free_test_coins", req.borrow()).await
     }
 
     fn next_request_id(&mut self) -> i64 {
