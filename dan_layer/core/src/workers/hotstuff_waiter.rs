@@ -49,6 +49,7 @@ use tari_engine_types::{
     commit_result::{ExecuteResult, FinalizeResult, RejectReason, TransactionResult},
     substate::SubstateDiff,
 };
+use tari_mmr::MergedBalancedBinaryMerkleProof;
 use tari_shutdown::ShutdownSignal;
 use tari_transaction::SubstateChange;
 use tokio::{
@@ -1398,7 +1399,9 @@ where
 
             if votes.len() == valid_committee.consensus_threshold() {
                 let validator_metadata = votes.iter().map(|v| v.validator_metadata().clone()).collect();
-
+                let proofs = votes.iter().map(|v| v.merkle_proof().unwrap()).collect();
+                let merged_proof = MergedBalancedBinaryMerkleProof::create_from_proofs(proofs).unwrap();
+                let leaves_hashes = votes.iter().map(|v| v.node_hash()).collect();
                 // TODO: Check all votes
                 let main_vote = votes.get(0).unwrap();
 
@@ -1413,6 +1416,8 @@ where
                     main_vote.decision(),
                     main_vote.all_shard_pledges().clone(),
                     validator_metadata,
+                    Some(merged_proof),
+                    leaves_hashes,
                 );
                 self.update_high_qc(&mut tx, node.proposed_by().clone(), qc)?;
 
@@ -1495,13 +1500,14 @@ where
 
         // all merkle proofs for the signers must be valid
         let validator_node_root = self.epoch_manager.get_validator_node_merkle_root(qc.epoch()).await?;
-        // TODO: Combine all validator merkle proofs before sending them
-        let mut verify_all = true;
-        for md in qc.validators_metadata() {
-            verify_all &= md
-                .merkle_proof
-                .verify(&validator_node_root, md.get_node_hash().to_vec());
-            if !verify_all {
+        if !qc.is_genesis() {
+            // Check the proof only for non-genesis blocks
+            let res = qc
+                .merged_proof()
+                .unwrap()
+                .verify_consume(&validator_node_root, qc.leave_hashes());
+            let res = res.unwrap();
+            if !res {
                 return Err(HotStuffError::InvalidQuorumCertificate(
                     "invalid merkle proof".to_string(),
                 ));

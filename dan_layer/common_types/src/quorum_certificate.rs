@@ -1,13 +1,15 @@
 //   Copyright 2022 The Tari Project
 //   SPDX-License-Identifier: BSD-3-Clause
 
-use std::borrow::Borrow;
+use std::{borrow::Borrow, io};
 
 use digest::Digest;
 use serde::{Deserialize, Serialize};
 use tari_common_types::types::FixedHash;
+use tari_core::ValidatorNodeBmtHasherBlake256;
 use tari_crypto::hash::blake2::Blake256;
 use tari_engine_types::commit_result::RejectReason;
+use tari_mmr::{Hash, MergedBalancedBinaryMerkleProof};
 
 use crate::{
     Epoch,
@@ -109,6 +111,8 @@ pub struct QuorumCertificate<TAddr> {
     decision: QuorumDecision,
     all_shard_pledges: ShardPledgeCollection,
     validators_metadata: Vec<ValidatorMetadata>,
+    merged_proof: Option<MergedBalancedBinaryMerkleProof<ValidatorNodeBmtHasherBlake256>>,
+    leaves_hashes: Vec<Hash>,
 }
 
 impl<TAddr: Clone> QuorumCertificate<TAddr> {
@@ -131,6 +135,8 @@ impl<TAddr: NodeAddressable> QuorumCertificate<TAddr> {
         decision: QuorumDecision,
         all_shard_pledges: ShardPledgeCollection,
         validators_metadata: Vec<ValidatorMetadata>,
+        merged_proof: Option<MergedBalancedBinaryMerkleProof<ValidatorNodeBmtHasherBlake256>>,
+        leaves_hashes: Vec<Hash>,
     ) -> Self {
         Self {
             payload_id: payload,
@@ -143,6 +149,8 @@ impl<TAddr: NodeAddressable> QuorumCertificate<TAddr> {
             decision,
             all_shard_pledges,
             validators_metadata,
+            merged_proof,
+            leaves_hashes,
         }
     }
 
@@ -158,6 +166,8 @@ impl<TAddr: NodeAddressable> QuorumCertificate<TAddr> {
             decision: QuorumDecision::Accept,
             all_shard_pledges: ShardPledgeCollection::empty(),
             validators_metadata: vec![],
+            merged_proof: None,
+            leaves_hashes: vec![],
         }
     }
 
@@ -177,6 +187,27 @@ impl<TAddr: NodeAddressable> QuorumCertificate<TAddr> {
         &self.proposed_by
     }
 
+    pub fn merged_proof(&self) -> Option<MergedBalancedBinaryMerkleProof<ValidatorNodeBmtHasherBlake256>> {
+        self.merged_proof.clone()
+    }
+
+    // TODO: impl CBOR for merged merkle proof
+    pub fn encode_merged_merkle_proof(&self) -> Vec<u8> {
+        bincode::serialize(&self.merged_proof).unwrap()
+    }
+
+    // TODO: impl CBOR for merkle proof
+    pub fn decode_merged_merkle_proof(
+        bytes: &[u8],
+    ) -> Result<Option<MergedBalancedBinaryMerkleProof<ValidatorNodeBmtHasherBlake256>>, io::Error> {
+        // Map to an io error because borsh uses that
+        bincode::deserialize(bytes).map_err(|e| io::Error::new(io::ErrorKind::Other, e))
+    }
+
+    pub fn leave_hashes(&self) -> Vec<Hash> {
+        self.leaves_hashes.clone()
+    }
+
     pub fn validators_metadata(&self) -> &[ValidatorMetadata] {
         self.validators_metadata.as_slice()
     }
@@ -186,16 +217,15 @@ impl<TAddr: NodeAddressable> QuorumCertificate<TAddr> {
     }
 
     pub fn to_hash(&self) -> FixedHash {
-        let mut result = Blake256::new()
+        let result = Blake256::new()
             .chain(self.local_node_hash.as_bytes())
             .chain(self.local_node_height.to_le_bytes())
             .chain(self.shard.as_bytes())
-            .chain((self.validators_metadata.len() as u64).to_le_bytes());
+            .chain((self.validators_metadata.len() as u64).to_le_bytes())
+            .chain(bincode::serialize(&self.merged_proof).unwrap())
+            .chain(bincode::serialize(&self.leaves_hashes).unwrap());
         // TODO: add all fields
 
-        for vm in &self.validators_metadata {
-            result = result.chain(vm.encode_merkle_proof());
-        }
         // result = result.chain((self.involved_shards.len() as u32).to_le_bytes());
         // for shard in &self.involved_shards {
         //     result = result.chain((*shard).to_le_bytes());

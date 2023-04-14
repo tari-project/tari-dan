@@ -20,10 +20,12 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+use std::io;
+
 use log::*;
 use serde::{Deserialize, Serialize};
 use tari_common_types::types::FixedHash;
-use tari_core::ValidatorNodeBMT;
+use tari_core::{ValidatorNodeBMT, ValidatorNodeBmtHasherBlake256};
 use tari_dan_common_types::{
     hashing::tari_hasher,
     vn_bmt_node_hash,
@@ -47,6 +49,8 @@ pub struct VoteMessage {
     decision: QuorumDecision,
     all_shard_pledges: ShardPledgeCollection,
     validator_metadata: Option<ValidatorMetadata>,
+    merkle_proof: Option<BalancedBinaryMerkleProof<ValidatorNodeBmtHasherBlake256>>,
+    node_hash: Vec<u8>,
 }
 
 impl VoteMessage {
@@ -56,6 +60,8 @@ impl VoteMessage {
             decision,
             all_shard_pledges: shard_pledges,
             validator_metadata: None,
+            merkle_proof: None,
+            node_hash: vec![],
         }
     }
 
@@ -77,12 +83,16 @@ impl VoteMessage {
         decision: QuorumDecision,
         all_shard_pledges: ShardPledgeCollection,
         validator_metadata: ValidatorMetadata,
+        merkle_proof: Option<BalancedBinaryMerkleProof<ValidatorNodeBmtHasherBlake256>>,
+        node_hash: Vec<u8>,
     ) -> Self {
         Self {
             local_node_hash,
             decision,
             all_shard_pledges,
             validator_metadata: Some(validator_metadata),
+            merkle_proof,
+            node_hash,
         }
     }
 
@@ -124,15 +134,11 @@ impl VoteMessage {
             );
         }
 
-        let validator_metadata = ValidatorMetadata::new(
-            signing_service.public_key().clone(),
-            shard_id,
-            signature,
-            merkle_proof,
-            leaf_index.into(),
-        );
+        let validator_metadata = ValidatorMetadata::new(signing_service.public_key().clone(), shard_id, signature);
 
         self.validator_metadata = Some(validator_metadata);
+        self.merkle_proof = Some(merkle_proof);
+        self.node_hash = node_hash;
         Ok(())
     }
 
@@ -158,5 +164,26 @@ impl VoteMessage {
 
     pub fn all_shard_pledges(&self) -> &ShardPledgeCollection {
         &self.all_shard_pledges
+    }
+
+    pub fn merkle_proof(&self) -> Option<BalancedBinaryMerkleProof<ValidatorNodeBmtHasherBlake256>> {
+        self.merkle_proof.clone()
+    }
+
+    // TODO: impl CBOR for merged merkle proof
+    pub fn encode_merkle_proof(&self) -> Vec<u8> {
+        bincode::serialize(&self.merkle_proof).unwrap()
+    }
+
+    // TODO: impl CBOR for merkle proof
+    pub fn decode_merkle_proof(
+        bytes: &[u8],
+    ) -> Result<Option<BalancedBinaryMerkleProof<ValidatorNodeBmtHasherBlake256>>, io::Error> {
+        // Map to an io error because borsh uses that
+        bincode::deserialize(bytes).map_err(|e| io::Error::new(io::ErrorKind::Other, e))
+    }
+
+    pub fn node_hash(&self) -> Vec<u8> {
+        self.node_hash.clone()
     }
 }
