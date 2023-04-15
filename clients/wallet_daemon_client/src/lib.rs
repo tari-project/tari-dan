@@ -221,7 +221,7 @@ impl WalletDaemonClient {
         &mut self,
         req: T,
     ) -> Result<AccountsCreateFreeTestCoinsResponse, WalletDaemonClientError> {
-        self.send_request("account.create_free_test_coins", req.borrow()).await
+        self.send_request("accounts.create_free_test_coins", req.borrow()).await
     }
 
     fn next_request_id(&mut self) -> i64 {

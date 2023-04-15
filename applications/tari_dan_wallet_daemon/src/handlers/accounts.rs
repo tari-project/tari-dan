@@ -631,23 +631,27 @@ pub async fn handle_create_free_test_coins(
     let fee = Amount::new(1);
 
     let transaction = Transaction::builder()
-    .with_fee_instructions(vec![
-            Instruction::PutLastInstructionOutputOnWorkspace {key: b"create_free_test_coins".to_vec()},
+        .with_fee_instructions(vec![
             Instruction::CreateFreeTestCoins {
                 amount: req.amount.value() as u64,
                 private_key: account_secret_key.k.to_vec(),
             },
+            Instruction::PutLastInstructionOutputOnWorkspace {
+                key: b"create_free_test_coins".to_vec(),
+            },
+            Instruction::CallMethod {
+                component_address: account_address,
+                method: "deposit".to_string(),
+                args: args![Workspace("create_free_test_coins")],
+            },
             Instruction::CallMethod {
                 component_address: account_address,
                 method: "pay_fee".to_string(),
-                args: args![fee]
-            }
+                args: args![fee],
+            },
         ])
         .with_inputs(inputs)
         .with_outputs(outputs)
-        // transaction should have one output, corresponding to the same shard
-        // as the account substate address
-        // TODO: on a second claim burn, we shouldn't have any new outputs being created.
         .with_new_outputs(1)
         .sign(&account_secret_key.k)
         .build();
