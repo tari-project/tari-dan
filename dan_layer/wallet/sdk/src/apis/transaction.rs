@@ -13,8 +13,7 @@ use tari_engine_types::{
 use tari_transaction::Transaction;
 use tari_validator_node_client::{
     types::{GetTransactionQcsRequest, GetTransactionResultRequest, SubmitTransactionRequest},
-    ValidatorNodeClient,
-    ValidatorNodeClientError,
+    ValidatorNodeClient, ValidatorNodeClientError,
 };
 
 use crate::{
@@ -255,10 +254,10 @@ impl<'a, TStore: WalletStore> TransactionApi<'a, TStore> {
                     )?;
                     component = Some(addr);
                 },
-                addr @ SubstateAddress::Resource(_) |
-                addr @ SubstateAddress::Vault(_) |
-                addr @ SubstateAddress::NonFungible(_) |
-                addr @ SubstateAddress::NonFungibleIndex(_) => {
+                addr @ SubstateAddress::Resource(_)
+                | addr @ SubstateAddress::Vault(_)
+                | addr @ SubstateAddress::NonFungible(_)
+                | addr @ SubstateAddress::NonFungibleIndex(_) => {
                     children.push(VersionedSubstateAddress {
                         address: addr.clone(),
                         version: substate.version(),
@@ -273,10 +272,14 @@ impl<'a, TStore: WalletStore> TransactionApi<'a, TStore> {
         for ch in children {
             match downed_children.remove(&ch.address) {
                 Some(parent) => {
-                    tx.substates_insert_child(tx_hash, parent, VersionedSubstateAddress {
-                        address: ch.address.clone(),
-                        version: ch.version,
-                    })?;
+                    tx.substates_insert_child(
+                        tx_hash,
+                        parent,
+                        VersionedSubstateAddress {
+                            address: ch.address.clone(),
+                            version: ch.version,
+                        },
+                    )?;
                 },
                 None => {
                     // FIXME: We dont really know what the parent is, so we just use a component from the transaction

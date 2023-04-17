@@ -25,10 +25,7 @@ use std::time::Duration;
 use log::*;
 use tari_common_types::types::{Commitment, FixedHash, FixedHashSizeError};
 use tari_core::transactions::transaction_components::{
-    CodeTemplateRegistration,
-    SideChainFeature,
-    TransactionOutput,
-    ValidatorNodeRegistration,
+    CodeTemplateRegistration, SideChainFeature, TransactionOutput, ValidatorNodeRegistration,
 };
 use tari_crypto::tari_utilities::ByteArray;
 use tari_dan_common_types::{optional::Optional, ShardId};
@@ -38,8 +35,7 @@ use tari_dan_core::{
     services::{
         base_node_error::BaseNodeError,
         epoch_manager::{EpochManager, EpochManagerError},
-        BaseNodeClient,
-        BlockInfo,
+        BaseNodeClient, BlockInfo,
     },
     storage::{
         shard_store::{ShardStore, ShardStoreWriteTransaction},
@@ -49,9 +45,7 @@ use tari_dan_core::{
 };
 use tari_dan_storage::global::{GlobalDb, MetadataKey};
 use tari_dan_storage_sqlite::{
-    error::SqliteStorageError,
-    global::SqliteGlobalDbAdapter,
-    sqlite_shard_store_factory::SqliteShardStore,
+    error::SqliteStorageError, global::SqliteGlobalDbAdapter, sqlite_shard_store_factory::SqliteShardStore,
 };
 use tari_engine_types::{
     confidential::UnclaimedConfidentialOutput,

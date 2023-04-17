@@ -150,19 +150,23 @@ impl TemplateManagerService {
                     // TemplateStatus::Invalid
                 };
 
-                self.manager
-                    .update_template(download.template_address, DbTemplateUpdate {
+                self.manager.update_template(
+                    download.template_address,
+                    DbTemplateUpdate {
                         compiled_code: Some(bytes.to_vec()),
                         status: Some(template_status),
-                    })?;
+                    },
+                )?;
             },
             Err(err) => {
                 warn!(target: LOG_TARGET, "🚨 Failed to download template: {}", err);
-                self.manager
-                    .update_template(download.template_address, DbTemplateUpdate {
+                self.manager.update_template(
+                    download.template_address,
+                    DbTemplateUpdate {
                         status: Some(TemplateStatus::DownloadFailed),
                         ..Default::default()
-                    })?;
+                    },
+                )?;
             },
         }
         Ok(())
@@ -175,10 +179,13 @@ impl TemplateManagerService {
             .map_err(|_| TemplateManagerError::InvalidBaseLayerTemplate)?;
         self.manager.add_template(template)?;
         // We could queue this up much later, at which point we'd update to pending
-        self.manager.update_template(address, DbTemplateUpdate {
-            status: Some(TemplateStatus::Pending),
-            ..Default::default()
-        })?;
+        self.manager.update_template(
+            address,
+            DbTemplateUpdate {
+                status: Some(TemplateStatus::Pending),
+                ..Default::default()
+            },
+        )?;
 
         let _ignore = self
             .download_queue

@@ -31,10 +31,8 @@ use tari_dan_storage_sqlite::{global::SqliteGlobalDbAdapter, SqliteDbFactory};
 use crate::{
     grpc::services::wallet_client::GrpcWalletClient,
     p2p::services::{
-        comms_peer_provider::CommsPeerProvider,
-        messaging::OutboundMessaging,
-        rpc_client::TariCommsValidatorNodeClientFactory,
-        template_manager::TemplateManager,
+        comms_peer_provider::CommsPeerProvider, messaging::OutboundMessaging,
+        rpc_client::TariCommsValidatorNodeClientFactory, template_manager::TemplateManager,
     },
     payload_processor::TariDanPayloadProcessor,
 };

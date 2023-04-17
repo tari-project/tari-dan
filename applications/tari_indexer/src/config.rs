@@ -30,9 +30,7 @@ use config::Config;
 use serde::{Deserialize, Serialize};
 use tari_common::{
     configuration::{serializers, CommonConfig, Network},
-    ConfigurationError,
-    DefaultConfigLoader,
-    SubConfigPath,
+    ConfigurationError, DefaultConfigLoader, SubConfigPath,
 };
 use tari_engine_types::substate::SubstateAddress;
 use tari_p2p::{P2pConfig, PeerSeedsConfig};

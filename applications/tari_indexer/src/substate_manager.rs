@@ -36,10 +36,7 @@ use crate::{
             substate::{NewSubstate, Substate as SubstateRow},
         },
         sqlite_substate_store_factory::{
-            SqliteSubstateStore,
-            SqliteSubstateStoreWriteTransaction,
-            SubstateStore,
-            SubstateStoreReadTransaction,
+            SqliteSubstateStore, SqliteSubstateStoreWriteTransaction, SubstateStore, SubstateStoreReadTransaction,
             SubstateStoreWriteTransaction,
         },
     },

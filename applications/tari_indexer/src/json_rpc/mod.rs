@@ -22,11 +22,7 @@
 
 mod handlers;
 pub use handlers::{
-    AddAddressRequest,
-    GetNonFungibleCountRequest,
-    GetNonFungiblesRequest,
-    GetSubstateRequest,
-    JsonRpcHandlers,
+    AddAddressRequest, GetNonFungibleCountRequest, GetNonFungiblesRequest, GetSubstateRequest, JsonRpcHandlers,
 };
 
 mod server;

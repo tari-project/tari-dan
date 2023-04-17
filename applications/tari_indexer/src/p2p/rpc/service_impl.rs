@@ -47,7 +47,8 @@ impl<TPeerProvider: PeerProvider> ValidatorNodeRpcServiceImpl<TPeerProvider> {
 
 #[tari_comms::async_trait]
 impl<TPeerProvider> ValidatorNodeRpcService for ValidatorNodeRpcServiceImpl<TPeerProvider>
-where TPeerProvider: PeerProvider + Clone + Send + Sync + 'static
+where
+    TPeerProvider: PeerProvider + Clone + Send + Sync + 'static,
 {
     async fn submit_transaction(
         &self,

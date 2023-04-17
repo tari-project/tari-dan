@@ -5,10 +5,7 @@ use std::{sync::Arc, time::Duration};
 
 use log::*;
 use tari_dan_wallet_sdk::{
-    apis::transaction::TransactionApiError,
-    models::TransactionStatus,
-    storage::WalletStore,
-    DanWalletSdk,
+    apis::transaction::TransactionApiError, models::TransactionStatus, storage::WalletStore, DanWalletSdk,
 };
 use tari_shutdown::ShutdownSignal;
 use tokio::{
@@ -34,7 +31,8 @@ pub struct TransactionService<TStore> {
 }
 
 impl<TStore> TransactionService<TStore>
-where TStore: WalletStore + Clone + Send + Sync + 'static
+where
+    TStore: WalletStore + Clone + Send + Sync + 'static,
 {
     pub fn new(notify: Notify<WalletEvent>, wallet_sdk: DanWalletSdk<TStore>, shutdown_signal: ShutdownSignal) -> Self {
         let (trigger, rx_trigger) = watch::channel(());
@@ -169,9 +167,9 @@ where TStore: WalletStore + Clone + Send + Sync + 'static
             WalletEvent::TransactionSubmitted(_) => {
                 let _ = self.trigger_poll.send(());
             },
-            WalletEvent::TransactionInvalid(_) |
-            WalletEvent::TransactionFinalized(_) |
-            WalletEvent::AccountChanged(_) => {},
+            WalletEvent::TransactionInvalid(_)
+            | WalletEvent::TransactionFinalized(_)
+            | WalletEvent::AccountChanged(_) => {},
         }
         Ok(())
     }

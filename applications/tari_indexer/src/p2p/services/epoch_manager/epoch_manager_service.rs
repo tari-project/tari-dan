@@ -35,8 +35,7 @@ use tokio::{
 };
 
 use crate::p2p::services::{
-    epoch_manager::base_layer_epoch_manager::BaseLayerEpochManager,
-    rpc_client::TariCommsValidatorNodeClientFactory,
+    epoch_manager::base_layer_epoch_manager::BaseLayerEpochManager, rpc_client::TariCommsValidatorNodeClientFactory,
 };
 
 const LOG_TARGET: &str = "tari::indexer::epoch_manager";

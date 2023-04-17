@@ -10,14 +10,7 @@ use tari_crypto::hash::blake2::Blake256;
 use tari_engine_types::commit_result::RejectReason;
 
 use crate::{
-    Epoch,
-    NodeAddressable,
-    NodeHeight,
-    PayloadId,
-    ShardId,
-    ShardPledgeCollection,
-    TreeNodeHash,
-    ValidatorMetadata,
+    Epoch, NodeAddressable, NodeHeight, PayloadId, ShardId, ShardPledgeCollection, TreeNodeHash, ValidatorMetadata,
 };
 
 #[derive(Debug, Clone, Copy, Deserialize, Serialize, PartialEq, Eq)]

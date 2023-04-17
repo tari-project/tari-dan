@@ -47,22 +47,28 @@ impl Bucket {
     }
 
     pub fn resource_address(&self) -> ResourceAddress {
-        let resp: InvokeResult = call_engine(EngineOp::BucketInvoke, &BucketInvokeArg {
-            bucket_ref: BucketRef::Ref(self.id),
-            action: BucketAction::GetResourceAddress,
-            args: invoke_args![],
-        });
+        let resp: InvokeResult = call_engine(
+            EngineOp::BucketInvoke,
+            &BucketInvokeArg {
+                bucket_ref: BucketRef::Ref(self.id),
+                action: BucketAction::GetResourceAddress,
+                args: invoke_args![],
+            },
+        );
 
         resp.decode()
             .expect("Bucket GetResourceAddress returned invalid resource address")
     }
 
     pub fn resource_type(&self) -> ResourceType {
-        let resp: InvokeResult = call_engine(EngineOp::BucketInvoke, &BucketInvokeArg {
-            bucket_ref: BucketRef::Ref(self.id),
-            action: BucketAction::GetResourceType,
-            args: invoke_args![],
-        });
+        let resp: InvokeResult = call_engine(
+            EngineOp::BucketInvoke,
+            &BucketInvokeArg {
+                bucket_ref: BucketRef::Ref(self.id),
+                action: BucketAction::GetResourceType,
+                args: invoke_args![],
+            },
+        );
 
         resp.decode()
             .expect("Bucket GetResourceType returned invalid resource type")
@@ -70,31 +76,40 @@ impl Bucket {
 
     pub fn take(&mut self, amount: Amount) -> Self {
         assert!(!amount.is_zero() && amount.is_positive());
-        let resp: InvokeResult = call_engine(EngineOp::BucketInvoke, &BucketInvokeArg {
-            bucket_ref: BucketRef::Ref(self.id),
-            action: BucketAction::Take,
-            args: invoke_args![amount],
-        });
+        let resp: InvokeResult = call_engine(
+            EngineOp::BucketInvoke,
+            &BucketInvokeArg {
+                bucket_ref: BucketRef::Ref(self.id),
+                action: BucketAction::Take,
+                args: invoke_args![amount],
+            },
+        );
 
         resp.decode().expect("Bucket Take returned invalid bucket")
     }
 
     pub fn take_confidential(&mut self, proof: ConfidentialWithdrawProof) -> Self {
-        let resp: InvokeResult = call_engine(EngineOp::BucketInvoke, &BucketInvokeArg {
-            bucket_ref: BucketRef::Ref(self.id),
-            action: BucketAction::TakeConfidential,
-            args: invoke_args![proof],
-        });
+        let resp: InvokeResult = call_engine(
+            EngineOp::BucketInvoke,
+            &BucketInvokeArg {
+                bucket_ref: BucketRef::Ref(self.id),
+                action: BucketAction::TakeConfidential,
+                args: invoke_args![proof],
+            },
+        );
 
         resp.decode().expect("Bucket Take returned invalid bucket")
     }
 
     pub fn burn(&mut self) {
-        let resp: InvokeResult = call_engine(EngineOp::BucketInvoke, &BucketInvokeArg {
-            bucket_ref: BucketRef::Ref(self.id),
-            action: BucketAction::Burn,
-            args: invoke_args![],
-        });
+        let resp: InvokeResult = call_engine(
+            EngineOp::BucketInvoke,
+            &BucketInvokeArg {
+                bucket_ref: BucketRef::Ref(self.id),
+                action: BucketAction::Burn,
+                args: invoke_args![],
+            },
+        );
 
         resp.decode().expect("Bucket Burn returned invalid result")
     }
@@ -110,21 +125,27 @@ impl Bucket {
     }
 
     pub fn amount(&self) -> Amount {
-        let resp: InvokeResult = call_engine(EngineOp::BucketInvoke, &BucketInvokeArg {
-            bucket_ref: BucketRef::Ref(self.id),
-            action: BucketAction::GetAmount,
-            args: invoke_args![],
-        });
+        let resp: InvokeResult = call_engine(
+            EngineOp::BucketInvoke,
+            &BucketInvokeArg {
+                bucket_ref: BucketRef::Ref(self.id),
+                action: BucketAction::GetAmount,
+                args: invoke_args![],
+            },
+        );
 
         resp.decode().expect("Bucket GetAmount returned invalid amount")
     }
 
     pub fn reveal_confidential(&mut self, proof: ConfidentialWithdrawProof) -> Bucket {
-        let resp: InvokeResult = call_engine(EngineOp::BucketInvoke, &BucketInvokeArg {
-            bucket_ref: BucketRef::Ref(self.id),
-            action: BucketAction::RevealConfidential,
-            args: invoke_args![proof],
-        });
+        let resp: InvokeResult = call_engine(
+            EngineOp::BucketInvoke,
+            &BucketInvokeArg {
+                bucket_ref: BucketRef::Ref(self.id),
+                action: BucketAction::RevealConfidential,
+                args: invoke_args![proof],
+            },
+        );
 
         resp.decode()
             .expect("Bucket RevealConfidential returned invalid result")

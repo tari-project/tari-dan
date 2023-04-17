@@ -11,10 +11,7 @@ use chrono::NaiveDateTime;
 use diesel::{
     sql_query,
     sql_types::{BigInt, Bool, Integer, Nullable, Text},
-    OptionalExtension,
-    QueryDsl,
-    RunQueryDsl,
-    SqliteConnection,
+    OptionalExtension, QueryDsl, RunQueryDsl, SqliteConnection,
 };
 use log::*;
 use serde::Serialize;
@@ -22,12 +19,7 @@ use tari_common_types::types::{Commitment, FixedHash, PublicKey};
 use tari_dan_common_types::QuorumCertificate;
 use tari_dan_wallet_sdk::{
     models::{
-        ConfidentialOutputModel,
-        ConfidentialProofId,
-        OutputStatus,
-        SubstateModel,
-        TransactionStatus,
-        VaultModel,
+        ConfidentialOutputModel, ConfidentialProofId, OutputStatus, SubstateModel, TransactionStatus, VaultModel,
         VersionedSubstateAddress,
     },
     storage::{WalletStorageError, WalletStoreReader, WalletStoreWriter},

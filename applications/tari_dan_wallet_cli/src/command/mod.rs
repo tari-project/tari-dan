@@ -23,10 +23,7 @@
 use clap::Subcommand;
 
 use crate::command::{
-    account::AccountsSubcommand,
-    key::KeysSubcommand,
-    proof::ProofsSubcommand,
-    transaction::TransactionSubcommand,
+    account::AccountsSubcommand, key::KeysSubcommand, proof::ProofsSubcommand, transaction::TransactionSubcommand,
 };
 
 mod account;

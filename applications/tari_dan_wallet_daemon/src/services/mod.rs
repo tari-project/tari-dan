@@ -35,7 +35,9 @@ where
 }
 
 async fn try_select_any<I>(handles: I) -> Result<(), anyhow::Error>
-where I: IntoIterator<Item = JoinHandle<Result<(), anyhow::Error>>> {
+where
+    I: IntoIterator<Item = JoinHandle<Result<(), anyhow::Error>>>,
+{
     let (res, _, _) = future::select_all(handles).await;
     match res {
         Ok(res) => res,

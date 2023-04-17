@@ -15,14 +15,8 @@ use tari_engine_types::{
     vault::Vault,
 };
 use tari_template_lib::models::{
-    BucketId,
-    ComponentAddress,
-    ComponentHeader,
-    NonFungibleAddress,
-    NonFungibleIndexAddress,
-    ResourceAddress,
-    UnclaimedConfidentialOutputAddress,
-    VaultId,
+    BucketId, ComponentAddress, ComponentHeader, NonFungibleAddress, NonFungibleIndexAddress, ResourceAddress,
+    UnclaimedConfidentialOutputAddress, VaultId,
 };
 
 use crate::{

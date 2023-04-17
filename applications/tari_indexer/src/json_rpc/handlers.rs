@@ -25,9 +25,7 @@ use std::{collections::HashMap, str::FromStr, sync::Arc};
 use anyhow::Context;
 use axum_jrpc::{
     error::{JsonRpcError, JsonRpcErrorReason},
-    JrpcResult,
-    JsonRpcExtractor,
-    JsonRpcResponse,
+    JrpcResult, JsonRpcExtractor, JsonRpcResponse,
 };
 use log::warn;
 use serde::{Deserialize, Serialize};
@@ -36,8 +34,7 @@ use tari_comms::{
     multiaddr::Multiaddr,
     peer_manager::{NodeId, PeerFeatures},
     types::CommsPublicKey,
-    CommsNode,
-    NodeIdentity,
+    CommsNode, NodeIdentity,
 };
 use tari_crypto::tari_utilities::hex::Hex;
 use tari_dan_core::services::BaseNodeClient;

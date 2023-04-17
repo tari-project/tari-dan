@@ -31,15 +31,8 @@ use tari_template_abi::rust::{
 
 use crate::{
     models::{
-        Amount,
-        BucketId,
-        ComponentAddress,
-        ConfidentialWithdrawProof,
-        Metadata,
-        NonFungibleAddress,
-        NonFungibleId,
-        ResourceAddress,
-        VaultRef,
+        Amount, BucketId, ComponentAddress, ConfidentialWithdrawProof, Metadata, NonFungibleAddress, NonFungibleId,
+        ResourceAddress, VaultRef,
     },
     prelude::{AccessRules, ConfidentialOutputProof},
     resource::ResourceType,

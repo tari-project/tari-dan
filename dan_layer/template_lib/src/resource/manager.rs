@@ -26,15 +26,8 @@ use tari_template_abi::{call_engine, rust::collections::HashMap, EngineOp};
 
 use crate::{
     args::{
-        CreateResourceArg,
-        InvokeResult,
-        MintArg,
-        MintResourceArg,
-        ResourceAction,
-        ResourceGetNonFungibleArg,
-        ResourceInvokeArg,
-        ResourceRef,
-        ResourceUpdateNonFungibleDataArg,
+        CreateResourceArg, InvokeResult, MintArg, MintResourceArg, ResourceAction, ResourceGetNonFungibleArg,
+        ResourceInvokeArg, ResourceRef, ResourceUpdateNonFungibleDataArg,
     },
     models::{Amount, Bucket, Metadata, NonFungible, NonFungibleId, ResourceAddress},
     prelude::ResourceType,
@@ -66,11 +59,14 @@ impl ResourceManager {
     }
 
     pub fn resource_type(&self) -> ResourceType {
-        let resp: InvokeResult = call_engine(EngineOp::ResourceInvoke, &ResourceInvokeArg {
-            resource_ref: self.expect_resource_address(),
-            action: ResourceAction::GetResourceType,
-            args: invoke_args![],
-        });
+        let resp: InvokeResult = call_engine(
+            EngineOp::ResourceInvoke,
+            &ResourceInvokeArg {
+                resource_ref: self.expect_resource_address(),
+                action: ResourceAction::GetResourceType,
+                args: invoke_args![],
+            },
+        );
         resp.decode()
             .expect("Resource GetResourceType returned invalid resource type")
     }
@@ -82,16 +78,19 @@ impl ResourceManager {
         metadata: Metadata,
         mint_arg: Option<MintArg>,
     ) -> (ResourceAddress, Option<Bucket>) {
-        let resp: InvokeResult = call_engine(EngineOp::ResourceInvoke, &ResourceInvokeArg {
-            resource_ref: ResourceRef::Resource,
-            action: ResourceAction::Create,
-            args: invoke_args![CreateResourceArg {
-                resource_type,
-                token_symbol,
-                metadata,
-                mint_arg
-            }],
-        });
+        let resp: InvokeResult = call_engine(
+            EngineOp::ResourceInvoke,
+            &ResourceInvokeArg {
+                resource_ref: ResourceRef::Resource,
+                action: ResourceAction::Create,
+                args: invoke_args![CreateResourceArg {
+                    resource_type,
+                    token_symbol,
+                    metadata,
+                    mint_arg
+                }],
+            },
+        );
 
         resp.decode()
             .expect("[register_non_fungible] Failed to decode ResourceAddress")
@@ -136,45 +135,57 @@ impl ResourceManager {
     }
 
     fn mint_internal(&mut self, arg: MintResourceArg) -> Bucket {
-        let resp: InvokeResult = call_engine(EngineOp::ResourceInvoke, &ResourceInvokeArg {
-            resource_ref: self.expect_resource_address(),
-            action: ResourceAction::Mint,
-            args: invoke_args![arg],
-        });
+        let resp: InvokeResult = call_engine(
+            EngineOp::ResourceInvoke,
+            &ResourceInvokeArg {
+                resource_ref: self.expect_resource_address(),
+                action: ResourceAction::Mint,
+                args: invoke_args![arg],
+            },
+        );
 
         let bucket_id = resp.decode().expect("Failed to decode Bucket");
         Bucket::from_id(bucket_id)
     }
 
     pub fn total_supply(&self) -> Amount {
-        let resp: InvokeResult = call_engine(EngineOp::ResourceInvoke, &ResourceInvokeArg {
-            resource_ref: self.expect_resource_address(),
-            action: ResourceAction::GetTotalSupply,
-            args: invoke_args![],
-        });
+        let resp: InvokeResult = call_engine(
+            EngineOp::ResourceInvoke,
+            &ResourceInvokeArg {
+                resource_ref: self.expect_resource_address(),
+                action: ResourceAction::GetTotalSupply,
+                args: invoke_args![],
+            },
+        );
 
         resp.decode().expect("[total_supply] Failed to decode Amount")
     }
 
     pub fn get_non_fungible(&self, id: &NonFungibleId) -> NonFungible {
-        let resp: InvokeResult = call_engine(EngineOp::ResourceInvoke, &ResourceInvokeArg {
-            resource_ref: self.expect_resource_address(),
-            action: ResourceAction::GetNonFungible,
-            args: invoke_args![ResourceGetNonFungibleArg { id: id.clone() }],
-        });
+        let resp: InvokeResult = call_engine(
+            EngineOp::ResourceInvoke,
+            &ResourceInvokeArg {
+                resource_ref: self.expect_resource_address(),
+                action: ResourceAction::GetNonFungible,
+                args: invoke_args![ResourceGetNonFungibleArg { id: id.clone() }],
+            },
+        );
 
         resp.decode().expect("[get_non_fungible] Failed to decode NonFungible")
     }
 
     pub fn update_non_fungible_data<T: Serialize + ?Sized>(&self, id: NonFungibleId, data: &T) {
-        let resp: InvokeResult = call_engine(EngineOp::ResourceInvoke, &ResourceInvokeArg {
-            resource_ref: self.expect_resource_address(),
-            action: ResourceAction::UpdateNonFungibleData,
-            args: invoke_args![ResourceUpdateNonFungibleDataArg {
-                id,
-                data: encode(data).unwrap()
-            }],
-        });
+        let resp: InvokeResult = call_engine(
+            EngineOp::ResourceInvoke,
+            &ResourceInvokeArg {
+                resource_ref: self.expect_resource_address(),
+                action: ResourceAction::UpdateNonFungibleData,
+                args: invoke_args![ResourceUpdateNonFungibleDataArg {
+                    id,
+                    data: encode(data).unwrap()
+                }],
+            },
+        );
 
         resp.decode()
             .expect("[update_non_fungible_data] Failed to decode Amount")

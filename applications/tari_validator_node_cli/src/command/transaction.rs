@@ -50,19 +50,13 @@ use tari_transaction_manifest::parse_manifest;
 use tari_utilities::hex::to_hex;
 use tari_validator_node_client::{
     types::{
-        GetTransactionResultRequest,
-        SubmitTransactionRequest,
-        SubmitTransactionResponse,
-        TransactionFinalizeResult,
+        GetTransactionResultRequest, SubmitTransactionRequest, SubmitTransactionResponse, TransactionFinalizeResult,
     },
     ValidatorNodeClient,
 };
 
 use crate::{
-    command::manifest,
-    component_manager::ComponentManager,
-    from_hex::FromHex,
-    key_manager::KeyManager,
+    command::manifest, component_manager::ComponentManager, from_hex::FromHex, key_manager::KeyManager,
     versioned_substate_address::VersionedSubstateAddress,
 };
 

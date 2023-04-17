@@ -30,10 +30,7 @@ use tari_comms_dht::{DbConnectionUrl, DhtConfig};
 use tari_engine_types::substate::SubstateAddress;
 use tari_indexer::{
     config::{ApplicationConfig, IndexerConfig},
-    run_indexer,
-    AddAddressRequest,
-    GetNonFungiblesRequest,
-    GetSubstateRequest,
+    run_indexer, AddAddressRequest, GetNonFungiblesRequest, GetSubstateRequest,
 };
 use tari_indexer_client::IndexerClient;
 use tari_p2p::{Network, PeerSeedsConfig, TransportType};

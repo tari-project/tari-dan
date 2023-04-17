@@ -5,8 +5,7 @@ use tari_dan_common_types::optional::{IsNotFoundError, Optional};
 use tari_engine_types::substate::{SubstateAddress, SubstateValue};
 use tari_validator_node_client::{
     types::{GetSubstateRequest, SubstateStatus},
-    ValidatorNodeClient,
-    ValidatorNodeClientError,
+    ValidatorNodeClient, ValidatorNodeClientError,
 };
 
 use crate::{
@@ -114,8 +113,8 @@ pub enum SubstateApiError {
 
 impl IsNotFoundError for SubstateApiError {
     fn is_not_found_error(&self) -> bool {
-        matches!(self, Self::SubstateDoesNotExist { .. }) ||
-            matches!(self, Self::StoreError(e) if e.is_not_found_error()) ||
-            matches!(self, Self::ValidatorNodeClientError(e) if e.is_not_found_error())
+        matches!(self, Self::SubstateDoesNotExist { .. })
+            || matches!(self, Self::StoreError(e) if e.is_not_found_error())
+            || matches!(self, Self::ValidatorNodeClientError(e) if e.is_not_found_error())
     }
 }

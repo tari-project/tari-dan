@@ -11,14 +11,8 @@ use tari_engine_types::{instruction::Instruction, substate::SubstateAddress};
 use tari_template_lib::{models::Amount, prelude::NonFungibleAddress};
 use tari_transaction::Transaction;
 use tari_wallet_daemon_client::types::{
-    TransactionGetRequest,
-    TransactionGetResponse,
-    TransactionGetResultRequest,
-    TransactionGetResultResponse,
-    TransactionSubmitRequest,
-    TransactionSubmitResponse,
-    TransactionWaitResultRequest,
-    TransactionWaitResultResponse,
+    TransactionGetRequest, TransactionGetResponse, TransactionGetResultRequest, TransactionGetResultResponse,
+    TransactionSubmitRequest, TransactionSubmitResponse, TransactionWaitResultRequest, TransactionWaitResultResponse,
 };
 use tokio::time;
 

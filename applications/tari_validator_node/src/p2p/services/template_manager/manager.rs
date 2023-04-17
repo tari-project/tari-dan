@@ -24,10 +24,7 @@ use std::{collections::HashMap, convert::TryFrom, fs};
 
 use log::*;
 use tari_dan_app_utilities::template_manager::{
-    Template,
-    TemplateManagerError,
-    TemplateMetadata,
-    TemplateRegistration,
+    Template, TemplateManagerError, TemplateMetadata, TemplateRegistration,
 };
 use tari_dan_core::services::TemplateProvider;
 use tari_dan_engine::{

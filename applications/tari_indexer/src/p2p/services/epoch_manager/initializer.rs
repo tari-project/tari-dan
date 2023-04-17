@@ -28,8 +28,7 @@ use tari_shutdown::ShutdownSignal;
 use tokio::sync::mpsc;
 
 use crate::p2p::services::{
-    epoch_manager::epoch_manager_service::EpochManagerService,
-    rpc_client::TariCommsValidatorNodeClientFactory,
+    epoch_manager::epoch_manager_service::EpochManagerService, rpc_client::TariCommsValidatorNodeClientFactory,
 };
 
 pub fn spawn(

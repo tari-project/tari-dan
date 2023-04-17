@@ -21,8 +21,7 @@
 //   USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 use std::{
-    fs,
-    io,
+    fs, io,
     net::{IpAddr, Ipv4Addr, SocketAddr},
     sync::Arc,
 };
@@ -34,9 +33,7 @@ use tari_common::{
 };
 use tari_comms::{protocol::rpc::RpcServer, CommsNode, NodeIdentity, UnspawnedCommsNode};
 use tari_dan_app_utilities::{
-    base_layer_scanner,
-    base_node_client::GrpcBaseNodeClient,
-    epoch_manager::EpochManagerHandle,
+    base_layer_scanner, base_node_client::GrpcBaseNodeClient, epoch_manager::EpochManagerHandle,
 };
 use tari_dan_core::consensus_constants::ConsensusConstants;
 use tari_dan_storage::global::GlobalDb;
@@ -48,9 +45,7 @@ use crate::{
     p2p::{
         create_validator_node_rpc_service,
         services::{
-            comms_peer_provider::CommsPeerProvider,
-            epoch_manager,
-            rpc_client::TariCommsValidatorNodeClientFactory,
+            comms_peer_provider::CommsPeerProvider, epoch_manager, rpc_client::TariCommsValidatorNodeClientFactory,
             template_manager,
         },
     },

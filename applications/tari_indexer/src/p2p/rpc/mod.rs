@@ -54,6 +54,8 @@ pub trait ValidatorNodeRpcService: Send + Sync + 'static {
 pub fn create_validator_node_rpc_service<TPeerProvider>(
     peer_provider: TPeerProvider,
 ) -> ValidatorNodeRpcServer<ValidatorNodeRpcServiceImpl<TPeerProvider>>
-where TPeerProvider: PeerProvider + Clone + Send + Sync + 'static {
+where
+    TPeerProvider: PeerProvider + Clone + Send + Sync + 'static,
+{
     ValidatorNodeRpcServer::new(ValidatorNodeRpcServiceImpl::new(peer_provider))
 }

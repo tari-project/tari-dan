@@ -7,9 +7,7 @@ use log::*;
 use tari_dan_common_types::optional::Optional;
 use tari_dan_wallet_sdk::{
     apis::{
-        accounts::AccountsApiError,
-        confidential_outputs::ConfidentialOutputsApiError,
-        substate::SubstateApiError,
+        accounts::AccountsApiError, confidential_outputs::ConfidentialOutputsApiError, substate::SubstateApiError,
         transaction::TransactionApiError,
     },
     storage::WalletStore,
@@ -37,7 +35,8 @@ pub struct AccountMonitor<TStore> {
 }
 
 impl<TStore> AccountMonitor<TStore>
-where TStore: WalletStore + Clone + Send + Sync + 'static
+where
+    TStore: WalletStore + Clone + Send + Sync + 'static,
 {
     pub fn new(notify: Notify<WalletEvent>, wallet_sdk: DanWalletSdk<TStore>, shutdown_signal: ShutdownSignal) -> Self {
         Self {
