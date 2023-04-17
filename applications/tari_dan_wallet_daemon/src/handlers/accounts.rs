@@ -418,8 +418,6 @@ pub async fn handle_claim_burn(
         claim_proof,
         fee,
     } = req;
-    dbg!(claim_proof.clone());
-    dbg!(claim_proof["reciprocal_claim_public_key"].as_str());
     let reciprocal_claim_public_key = PublicKey::from_bytes(
         &base64::decode(
             claim_proof["reciprocal_claim_public_key"]

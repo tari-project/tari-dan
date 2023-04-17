@@ -65,6 +65,7 @@ function removeTagged(obj: any) {
   if (obj["@@TAGGED@@"] !== undefined) {
     return obj["@@TAGGED@@"][1];
   }
+  return obj;
 }
 
 function toHexString(byteArray: any ) {

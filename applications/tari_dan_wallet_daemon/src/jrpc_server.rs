@@ -140,7 +140,6 @@ where
 }
 
 fn resolve_handler_error(answer_id: i64, e: &HandlerError) -> JsonRpcResponse {
-    dbg!("here2");
     match e {
         HandlerError::Anyhow(e) => resolve_any_error(answer_id, e),
         HandlerError::NotFound => JsonRpcResponse::error(

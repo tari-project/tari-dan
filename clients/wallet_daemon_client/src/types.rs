@@ -259,9 +259,7 @@ pub struct AccountByNameResponse {
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct ProofsGenerateRequest {
-    #[serde(deserialize_with = "string_or_struct")]
     pub amount: Amount,
-    #[serde(deserialize_with = "string_or_struct")]
     pub reveal_amount: Amount,
     pub source_account_name: String,
     #[serde(deserialize_with = "string_or_struct")]
@@ -291,7 +289,6 @@ pub struct ProofsCancelRequest {
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct ConfidentialCreateOutputProofRequest {
-    #[serde(deserialize_with = "string_or_struct")]
     pub amount: Amount,
 }
 
@@ -304,12 +301,10 @@ pub struct ConfidentialCreateOutputProofResponse {
 pub struct ConfidentialTransferRequest {
     #[serde(deserialize_with = "string_or_struct")]
     pub account: ComponentAddress,
-    #[serde(deserialize_with = "string_or_struct")]
     pub amount: Amount,
     pub resource_address: ResourceAddress,
     pub destination_account: ComponentAddress,
     pub destination_public_key: PublicKey,
-    #[serde(deserialize_with = "string_or_struct")]
     pub fee: Amount,
 }
 
@@ -326,7 +321,6 @@ pub struct ClaimBurnRequest {
     #[serde(deserialize_with = "string_or_struct")]
     pub account: ComponentAddress,
     pub claim_proof: serde_json::Value,
-    #[serde(deserialize_with = "string_or_struct")]
     pub fee: Amount,
 }
 
@@ -346,12 +340,10 @@ pub struct RevealFundsRequest {
     #[serde(deserialize_with = "string_or_struct")]
     /// Account with funds to reveal
     pub account: ComponentAddress,
-    #[serde(deserialize_with = "string_or_struct")]
     /// Amount to reveal
     pub amount_to_reveal: Amount,
     /// Pay fee from revealed funds. If false, previously revealed funds in the account are used.
     pub pay_fee_from_reveal: bool,
-    #[serde(deserialize_with = "string_or_struct")]
     /// The amount of fees to add to the transaction. Any fees not charged are refunded.
     pub fee: Amount,
 }

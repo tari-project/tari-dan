@@ -123,7 +123,7 @@ function Accounts() {
     <>
       {error ? (
           <Alert severity="error">{error}</Alert>
-      ) : ( <span></span>) }
+      ) : ( null ) }
       <BoxHeading2>
         {showAccountDialog && (
           <Fade in={showAccountDialog}>

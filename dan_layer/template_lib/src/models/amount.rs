@@ -163,14 +163,6 @@ impl Display for Amount {
     }
 }
 
-impl FromStr for Amount {
-    type Err = ParseIntError;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        Ok(Amount::new(s.parse()?))
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;

@@ -22,7 +22,7 @@
 
 import PageHeading from '../../Components/PageHeading';
 import Grid from '@mui/material/Grid';
-import { StyledPaper } from '../../Components/StyledComponents';
+import {StyledPaper} from '../../Components/StyledComponents';
 import Accounts from '../Wallet/Components/Accounts';
 import TableContainer from "@mui/material/TableContainer";
 import Table from "@mui/material/Table";
@@ -31,12 +31,12 @@ import TableRow from "@mui/material/TableRow";
 import TableCell from "@mui/material/TableCell";
 import TableBody from "@mui/material/TableBody";
 import {useEffect, useState} from "react";
-import { useParams } from 'react-router-dom';
+import {useParams} from 'react-router-dom';
 import {accountsGetBalances, accountsGetByName} from "../../utils/json_rpc";
 import Alert from '@mui/material/Alert';
-import { removeTagged, toHexString } from '../../utils/helpers';
+import {removeTagged, toHexString} from '../../utils/helpers';
 
-function BalanceRow( props: any) {
+function BalanceRow(props: any) {
     return (
         <TableRow>
             <TableCell>{toHexString(props.resource_address)}</TableCell>
@@ -48,21 +48,21 @@ function BalanceRow( props: any) {
 
 
 function AccountDetailsLayout() {
-    const { name } = useParams<{ name: string }>();
+    const {name} = useParams<{ name: string }>();
     let [state, setState] = useState(null);
     let [balances, setBalances] = useState(null);
     let [error, setError] = useState(null);
 
-    const loadAccount = () =>  {
-         accountsGetByName(name).then((response: any) => {
+    const loadAccount = () => {
+        accountsGetByName(name).then((response: any) => {
             setState(response);
-         }).catch((error: any) => {
-             console.error(error);
-             setError(error.message);
-         });
+        }).catch((error: any) => {
+            console.error(error);
+            setError(error.message);
+        });
     }
 
-    const loadBalances = () =>  {
+    const loadBalances = () => {
         accountsGetBalances(name).then((response: any) => {
             setBalances(response);
         }).catch((error: any) => {
@@ -73,58 +73,58 @@ function AccountDetailsLayout() {
 
 
     useEffect(() => loadAccount(), []);
-    useEffect(()=> loadBalances(), []);
+    useEffect(() => loadBalances(), []);
 
-  return (
-    <>
-      <Grid container spacing={5}>
-        <PageHeading>Account Details</PageHeading>
-        <Grid item xs={12} md={12} lg={12}>
-            { error? (<Alert severity="error">{error}</Alert>) : null }
-          <StyledPaper>
-              <TableContainer>
-                  <Table>
-                      <TableHead>
-                          <TableRow>
-                              <TableCell>Name</TableCell>
-                              <TableCell>Address</TableCell>
-                              <TableCell>Public key</TableCell>
-                          </TableRow>
-                      </TableHead>
-                      <TableBody>
-                          <TableRow>
-                              <TableCell>{state?.account.name}
-                              </TableCell>
-                              <TableCell>{toHexString(state?.account.address.Component)}</TableCell>
-                             <TableCell>{state?.public_key}</TableCell>
-                          </TableRow>
-                              </TableBody>
-                  </Table>
-              </TableContainer>
-          </StyledPaper>
-        </Grid>
-          <Grid item xs={12} md={12} lg={12}>
-              <StyledPaper>
-                  Balances
-                  <TableContainer>
-                      <Table>
-                          <TableHead>
-                              <TableRow>
-                                  <TableCell>Resource</TableCell>
-                                  <TableCell>Revealed Balance</TableCell>
-                                  <TableCell>Confidential Balance</TableCell>
-                              </TableRow>
-                          </TableHead>
-                          <TableBody>
-                              { balances?.balances.map((balance: any) => BalanceRow(balance))}
-                          </TableBody>
-                      </Table>
-                  </TableContainer>
-              </StyledPaper>
-          </Grid>
-      </Grid>
-    </>
-  );
+    return (
+        <>
+            <Grid container spacing={5}>
+                <PageHeading>Account Details</PageHeading>
+                <Grid item xs={12} md={12} lg={12}>
+                    {error ? (<Alert severity="error">{error}</Alert>) : null}
+                    <StyledPaper>
+                        <TableContainer>
+                            <Table>
+                                <TableHead>
+                                    <TableRow>
+                                        <TableCell>Name</TableCell>
+                                        <TableCell>Address</TableCell>
+                                        <TableCell>Public key</TableCell>
+                                    </TableRow>
+                                </TableHead>
+                                <TableBody>
+                                    <TableRow>
+                                        <TableCell>{state?.account.name}
+                                        </TableCell>
+                                        <TableCell>{toHexString(state?.account.address.Component)}</TableCell>
+                                        <TableCell>{state?.public_key}</TableCell>
+                                    </TableRow>
+                                </TableBody>
+                            </Table>
+                        </TableContainer>
+                    </StyledPaper>
+                </Grid>
+                <Grid item xs={12} md={12} lg={12}>
+                    <StyledPaper>
+                        Balances
+                        <TableContainer>
+                            <Table>
+                                <TableHead>
+                                    <TableRow>
+                                        <TableCell>Resource</TableCell>
+                                        <TableCell>Revealed Balance</TableCell>
+                                        <TableCell>Confidential Balance</TableCell>
+                                    </TableRow>
+                                </TableHead>
+                                <TableBody>
+                                    {balances?.balances.map((balance: any) => BalanceRow(balance))}
+                                </TableBody>
+                            </Table>
+                        </TableContainer>
+                    </StyledPaper>
+                </Grid>
+            </Grid>
+        </>
+    );
 }
 
 export default AccountDetailsLayout;
