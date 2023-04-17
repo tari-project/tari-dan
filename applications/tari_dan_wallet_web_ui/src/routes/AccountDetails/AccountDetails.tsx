@@ -72,8 +72,8 @@ function AccountDetailsLayout() {
     }
 
 
-    useEffect(() => loadAccount());
-    useEffect(()=> loadBalances());
+    useEffect(() => loadAccount(), []);
+    useEffect(()=> loadBalances(), []);
 
   return (
     <>
