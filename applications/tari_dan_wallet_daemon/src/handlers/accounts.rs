@@ -628,8 +628,6 @@ pub async fn handle_create_free_test_coins(
         .as_component_address()
         .ok_or(anyhow!("Invalid account address"))?;
 
-    let fee = Amount::new(1);
-
     let transaction = Transaction::builder()
         .with_fee_instructions(vec![
             Instruction::CreateFreeTestCoins {
@@ -647,7 +645,7 @@ pub async fn handle_create_free_test_coins(
             Instruction::CallMethod {
                 component_address: account_address,
                 method: "pay_fee".to_string(),
-                args: args![fee],
+                args: args![req.fee],
             },
         ])
         .with_inputs(inputs)
@@ -675,7 +673,7 @@ pub async fn handle_create_free_test_coins(
     Ok(AccountsCreateFreeTestCoinsResponse {
         hash: tx_hash,
         amount: req.amount,
-        fee,
+        fee: req.fee,
         result: finalized.finalize,
     })
 }

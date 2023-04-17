@@ -348,6 +348,7 @@ pub struct RevealFundsResponse {
 pub struct AccountsCreateFreeTestCoinsRequest {
     pub account_name: String,
     pub amount: Amount,
+    pub fee: Amount,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
