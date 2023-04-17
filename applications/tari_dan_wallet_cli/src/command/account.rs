@@ -179,7 +179,7 @@ async fn hande_invoke(
             account_name: account,
             method,
             args: args.into_iter().map(|a| a.into_arg()).collect(),
-            fee: Amount::new(1000),
+            fee: Amount(1000),
         })
         .await?;
 

@@ -699,7 +699,7 @@ impl CliArg {
             CliArg::Bool(v) => arg!(v),
             CliArg::SubstateAddress(v) => arg!(v.to_canonical_hash()),
             CliArg::NonFungibleId(v) => arg!(v),
-            CliArg::Amount(v) => arg!(Amount::new(v)),
+            CliArg::Amount(v) => arg!(Amount(v)),
         }
     }
 }
