@@ -122,8 +122,6 @@ pub struct CreateFreeTestCoinsArgs {
     pub account_name: String,
     #[clap(long, short, alias = "amount")]
     pub amount: u64,
-    #[clap(long, short, alias = "fee")]
-    pub fee: u64,
 }
 
 impl AccountsSubcommand {
@@ -281,7 +279,6 @@ async fn handle_create_free_test_coins(
         .create_free_test_coins(AccountsCreateFreeTestCoinsRequest {
             account_name: args.account_name,
             amount: Amount::new(args.amount as i64),
-            fee: Amount::new(args.fee as i64),
         })
         .await?;
 

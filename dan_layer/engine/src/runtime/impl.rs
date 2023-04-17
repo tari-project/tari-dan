@@ -755,7 +755,7 @@ impl RuntimeInterface for RuntimeInterfaceImpl {
                     minimum_value_promise: 0,
                 },
             )),
-            Amount::new(amount as i64),
+            Amount::zero(),
         );
 
         let bucket_id = self.tracker.new_bucket(resource)?;
