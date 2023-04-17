@@ -6,7 +6,9 @@ use std::{net::SocketAddr, sync::Arc};
 use axum::{extract::Extension, routing::post, Router};
 use axum_jrpc::{
     error::{JsonRpcError, JsonRpcErrorReason},
-    JrpcResult, JsonRpcExtractor, JsonRpcResponse,
+    JrpcResult,
+    JsonRpcExtractor,
+    JsonRpcResponse,
 };
 use log::*;
 use serde::{de::DeserializeOwned, Serialize};

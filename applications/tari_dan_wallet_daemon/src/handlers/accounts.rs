@@ -30,11 +30,25 @@ use tari_template_lib::{
 use tari_transaction::Transaction;
 use tari_utilities::ByteArray;
 use tari_wallet_daemon_client::types::{
-    AccountByNameRequest, AccountByNameResponse, AccountsCreateFreeTestCoinsRequest,
-    AccountsCreateFreeTestCoinsResponse, AccountsCreateRequest, AccountsCreateResponse, AccountsGetBalancesRequest,
-    AccountsGetBalancesResponse, AccountsInvokeRequest, AccountsInvokeResponse, AccountsListRequest,
-    AccountsListResponse, BalanceEntry, ClaimBurnRequest, ClaimBurnResponse, ConfidentialTransferRequest,
-    ConfidentialTransferResponse, RevealFundsRequest, RevealFundsResponse,
+    AccountByNameRequest,
+    AccountByNameResponse,
+    AccountsCreateFreeTestCoinsRequest,
+    AccountsCreateFreeTestCoinsResponse,
+    AccountsCreateRequest,
+    AccountsCreateResponse,
+    AccountsGetBalancesRequest,
+    AccountsGetBalancesResponse,
+    AccountsInvokeRequest,
+    AccountsInvokeResponse,
+    AccountsListRequest,
+    AccountsListResponse,
+    BalanceEntry,
+    ClaimBurnRequest,
+    ClaimBurnResponse,
+    ConfidentialTransferRequest,
+    ConfidentialTransferResponse,
+    RevealFundsRequest,
+    RevealFundsResponse,
 };
 use tokio::{sync::broadcast, task};
 
@@ -337,11 +351,10 @@ pub async fn handle_reveal_funds(
         } else {
             builder = builder
                 .fee_transaction_pay_from_component(account_address, req.fee)
-                .call_method(
-                    account_address,
-                    "withdraw_confidential",
-                    args![CONFIDENTIAL_TARI_RESOURCE_ADDRESS, reveal_proof],
-                )
+                .call_method(account_address, "withdraw_confidential", args![
+                    CONFIDENTIAL_TARI_RESOURCE_ADDRESS,
+                    reveal_proof
+                ])
                 .put_last_instruction_output_on_workspace("revealed")
                 .call_method(account_address, "deposit", args![Workspace("revealed")]);
         }
