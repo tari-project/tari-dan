@@ -176,7 +176,7 @@ pub struct TransactionRequest {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct GetClaimFeesRequest {
+pub struct GetClaimableFeesRequest {
     pub claim_leader_public_key: PublicKey,
     pub epoch: u64,
 }

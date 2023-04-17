@@ -100,7 +100,7 @@ mod marketplace {
             );
 
             assert!(
-                nft_bucket.amount() == Amount::new(1),
+                nft_bucket.amount() == Amount(1),
                 "Can only start an auction of a single NFT"
             );
 

@@ -214,7 +214,7 @@ pub fn run_wallet(runtime: Runtime, config: &mut ApplicationConfig, shutdown: &m
             log_config: Some(log_config),
             log_level: Some(Level::Debug),
             config_property_overrides: vec![],
-            network: Some(Network::LocalNet),
+            network: None,
         },
         password: None,
         change_password: false,

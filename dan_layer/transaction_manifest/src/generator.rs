@@ -161,7 +161,7 @@ impl ManifestInstructionGenerator {
                             }
                         })?
                 },
-                ManifestLiteral::Special(SpecialLiteral::Amount(amount)) => Ok(arg!(Amount::new(amount))),
+                ManifestLiteral::Special(SpecialLiteral::Amount(amount)) => Ok(arg!(Amount(amount))),
                 ManifestLiteral::Special(SpecialLiteral::NonFungibleId(lit)) => {
                     let id = lit_to_nonfungible_id(&lit)?;
                     Ok(arg!(id))
