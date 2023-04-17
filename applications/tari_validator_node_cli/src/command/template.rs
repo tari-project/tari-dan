@@ -28,7 +28,6 @@ use std::{
 use cargo_metadata::MetadataCommand;
 use clap::{Args, Subcommand};
 use reqwest::Url;
-use tari_common_types::types::FixedHash;
 use tari_dan_engine::wasm::compile::compile_template;
 use tari_engine_types::{calculate_template_binary_hash, TemplateAddress};
 use tari_validator_node_client::{
@@ -123,10 +122,10 @@ async fn handle_list(mut client: ValidatorNodeClient) -> Result<(), anyhow::Erro
 }
 
 async fn handle_publish(args: PublishTemplateArgs, mut client: ValidatorNodeClient) -> anyhow::Result<()> {
-    let mut version = 0;
-    let mut name = "unknown".to_string();
-    let mut binary_sha = FixedHash::zero();
-    let mut binary_url = "".to_string();
+    let version;
+    let name;
+    let binary_sha;
+    let binary_url;
     if let Some(root_folder) = args.template_code_path {
         // retrieve the root folder of the template
         println!("Template code path {}", root_folder.display());
@@ -173,7 +172,11 @@ async fn handle_publish(args: PublishTemplateArgs, mut client: ValidatorNodeClie
 
         binary_sha = calculate_template_binary_hash(reqwest::get(&arg_binary_url).await?.bytes().await?.as_ref());
         binary_url = arg_binary_url;
+    } else {
+        println!("Please specify a template code path or a binary url");
+        return Ok(());
     }
+
     // ask the template name (skip if already passed as a CLI argument)
     let template_name = Prompt::new("Choose an user-friendly name for the template (max 32 characters):")
         .with_default(name)

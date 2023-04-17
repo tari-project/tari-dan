@@ -1958,19 +1958,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "curve25519-dalek"
-version = "4.0.1"
-source = "git+https://github.com/tari-project/curve25519-dalek?tag=v4.0.1#380f59be1fd2eaf924c62b94d3673a660c650c74"
-dependencies = [
- "byteorder",
- "digest 0.9.0",
- "rand_core 0.5.1",
- "serde",
- "subtle",
- "zeroize",
-]
-
-[[package]]
 name = "cxx"
 version = "1.0.92"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2012,6 +1999,17 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn",
+]
+
+[[package]]
+name = "d3ne"
+version = "0.8.0-pre.0"
+source = "git+https://github.com/stringhandler/d3ne-rs.git?tag=v0.8.0-pre.3#05cd46e3d1cd2a23f37e9eba9a3b965bfc3303a8"
+dependencies = [
+ "anyhow",
+ "serde",
+ "serde_json",
+ "thiserror",
 ]
 
 [[package]]
@@ -4037,18 +4035,6 @@ dependencies = [
  "byteorder",
  "keccak",
  "rand_core 0.5.1",
- "zeroize",
-]
-
-[[package]]
-name = "merlin"
-version = "3.0.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "58c38e2799fc0978b65dfff8023ec7843e2330bb462f19198840b34b6582397d"
-dependencies = [
- "byteorder",
- "keccak",
- "rand_core 0.6.4",
  "zeroize",
 ]
 
@@ -6680,9 +6666,9 @@ dependencies = [
  "tari_common_types 0.50.0-pre.0",
  "tari_comms",
  "tari_core",
- "tari_crypto 0.16.11",
+ "tari_crypto",
  "tari_script",
- "tari_utilities 0.4.10 (registry+https://github.com/rust-lang/crates.io-index)",
+ "tari_utilities",
  "thiserror",
  "tonic 0.6.2",
  "tonic-build",
@@ -6704,7 +6690,7 @@ dependencies = [
  "tari_common_types 0.50.0-pre.0",
  "tari_comms",
  "tari_features",
- "tari_utilities 0.4.10 (registry+https://github.com/rust-lang/crates.io-index)",
+ "tari_utilities",
  "thiserror",
  "tokio",
 ]
@@ -6741,14 +6727,14 @@ dependencies = [
  "tari_comms",
  "tari_comms_dht",
  "tari_core",
- "tari_crypto 0.16.11",
+ "tari_crypto",
  "tari_features",
  "tari_metrics",
  "tari_p2p",
  "tari_service_framework",
- "tari_shutdown 0.50.0-pre.0",
+ "tari_shutdown",
  "tari_storage",
- "tari_utilities 0.4.10 (registry+https://github.com/rust-lang/crates.io-index)",
+ "tari_utilities",
  "thiserror",
  "tokio",
  "tonic 0.6.2",
@@ -6773,26 +6759,6 @@ dependencies = [
 
 [[package]]
 name = "tari_bulletproofs"
-version = "4.4.0"
-source = "git+https://github.com/tari-project/bulletproofs?tag=v4.4.0#b2f933feaaf00264e9212be5bce10c3a7a5508cc"
-dependencies = [
- "blake2 0.9.2",
- "byteorder",
- "curve25519-dalek 4.0.1",
- "digest 0.9.0",
- "merlin 2.0.1",
- "rand 0.7.3",
- "rand_core 0.5.1",
- "serde",
- "serde_derive",
- "sha3",
- "subtle",
- "thiserror",
- "zeroize",
-]
-
-[[package]]
-name = "tari_bulletproofs"
 version = "4.4.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a2386133cd3bb3dc075aa39016523a375919aa0316ba27b9dc27b7a9bbda24ca"
@@ -6800,7 +6766,7 @@ dependencies = [
  "blake2 0.9.2",
  "byteorder",
  "digest 0.9.0",
- "merlin 2.0.1",
+ "merlin",
  "rand 0.7.3",
  "rand_core 0.5.1",
  "serde",
@@ -6808,27 +6774,6 @@ dependencies = [
  "sha3",
  "subtle",
  "tari-curve25519-dalek",
- "thiserror",
- "zeroize",
-]
-
-[[package]]
-name = "tari_bulletproofs_plus"
-version = "0.2.1"
-source = "git+https://github.com/tari-project/bulletproofs-plus?tag=v0.2.1#34c10ba72d17658c37ee81365608c19a36589747"
-dependencies = [
- "blake2 0.9.2",
- "byteorder",
- "curve25519-dalek 4.0.1",
- "derivative",
- "derive_more",
- "digest 0.9.0",
- "lazy_static",
- "merlin 3.0.0",
- "rand 0.7.3",
- "rand_core 0.5.1",
- "serde",
- "sha3",
  "thiserror",
  "zeroize",
 ]
@@ -6845,7 +6790,7 @@ dependencies = [
  "derive_more",
  "digest 0.9.0",
  "lazy_static",
- "merlin 2.0.1",
+ "merlin",
  "rand 0.7.3",
  "rand_core 0.5.1",
  "serde",
@@ -6853,29 +6798,6 @@ dependencies = [
  "tari-curve25519-dalek",
  "thiserror",
  "zeroize",
-]
-
-[[package]]
-name = "tari_common"
-version = "0.49.0-pre.1"
-source = "git+https://github.com/tari-project/tari.git?tag=v0.49.0-pre.1#57781b63cec3f0cf6b3d739408c10a467988c092"
-dependencies = [
- "anyhow",
- "blake2 0.9.2",
- "config",
- "dirs-next 1.0.2",
- "log",
- "log4rs",
- "multiaddr 0.14.0",
- "path-clean",
- "serde",
- "serde_json",
- "serde_yaml 0.9.19",
- "sha2 0.9.9",
- "structopt",
- "tari_crypto 0.16.8",
- "tempfile",
- "thiserror",
 ]
 
 [[package]]
@@ -6896,7 +6818,7 @@ dependencies = [
  "serde_yaml 0.9.19",
  "sha2 0.9.9",
  "structopt",
- "tari_crypto 0.16.11",
+ "tari_crypto",
  "tempfile",
  "thiserror",
 ]
@@ -6921,7 +6843,7 @@ dependencies = [
  "serde_yaml 0.9.19",
  "sha2 0.9.9",
  "structopt",
- "tari_crypto 0.16.11",
+ "tari_crypto",
  "tempfile",
  "thiserror",
  "toml",
@@ -6936,7 +6858,7 @@ dependencies = [
  "diesel_migrations",
  "log",
  "serde",
- "tari_utilities 0.4.10 (registry+https://github.com/rust-lang/crates.io-index)",
+ "tari_utilities",
  "thiserror",
  "tokio",
 ]
@@ -6953,8 +6875,8 @@ dependencies = [
  "rand 0.7.3",
  "serde",
  "tari_common 0.49.0-pre.5",
- "tari_crypto 0.16.11",
- "tari_utilities 0.4.10 (registry+https://github.com/rust-lang/crates.io-index)",
+ "tari_crypto",
+ "tari_utilities",
  "thiserror",
  "tokio",
 ]
@@ -6972,8 +6894,8 @@ dependencies = [
  "rand 0.7.3",
  "serde",
  "tari_common 0.50.0-pre.0",
- "tari_crypto 0.16.11",
- "tari_utilities 0.4.10 (registry+https://github.com/rust-lang/crates.io-index)",
+ "tari_crypto",
+ "tari_utilities",
  "thiserror",
  "tokio",
 ]
@@ -7008,11 +6930,11 @@ dependencies = [
  "serde_derive",
  "snow",
  "tari_common 0.50.0-pre.0",
- "tari_crypto 0.16.11",
+ "tari_crypto",
  "tari_metrics",
- "tari_shutdown 0.50.0-pre.0",
+ "tari_shutdown",
  "tari_storage",
- "tari_utilities 0.4.10 (registry+https://github.com/rust-lang/crates.io-index)",
+ "tari_utilities",
  "thiserror",
  "tokio",
  "tokio-stream",
@@ -7048,10 +6970,10 @@ dependencies = [
  "tari_common_sqlite",
  "tari_comms",
  "tari_comms_rpc_macros",
- "tari_crypto 0.16.11",
- "tari_shutdown 0.50.0-pre.0",
+ "tari_crypto",
+ "tari_shutdown",
  "tari_storage",
- "tari_utilities 0.4.10 (registry+https://github.com/rust-lang/crates.io-index)",
+ "tari_utilities",
  "thiserror",
  "tokio",
  "tower",
@@ -7111,13 +7033,13 @@ dependencies = [
  "tari_comms_dht",
  "tari_contacts",
  "tari_core",
- "tari_crypto 0.16.11",
+ "tari_crypto",
  "tari_features",
  "tari_key_manager",
  "tari_p2p",
  "tari_script",
- "tari_shutdown 0.50.0-pre.0",
- "tari_utilities 0.4.10 (registry+https://github.com/rust-lang/crates.io-index)",
+ "tari_shutdown",
+ "tari_utilities",
  "tari_wallet",
  "thiserror",
  "tokio",
@@ -7145,11 +7067,11 @@ dependencies = [
  "tari_common_sqlite",
  "tari_common_types 0.50.0-pre.0",
  "tari_comms",
- "tari_crypto 0.16.11",
+ "tari_crypto",
  "tari_p2p",
  "tari_service_framework",
- "tari_shutdown 0.50.0-pre.0",
- "tari_utilities 0.4.10 (registry+https://github.com/rust-lang/crates.io-index)",
+ "tari_shutdown",
+ "tari_utilities",
  "thiserror",
  "tokio",
  "tower",
@@ -7198,47 +7120,20 @@ dependencies = [
  "tari_comms",
  "tari_comms_dht",
  "tari_comms_rpc_macros",
- "tari_crypto 0.16.11",
+ "tari_crypto",
  "tari_metrics",
  "tari_mmr",
  "tari_p2p",
  "tari_script",
  "tari_service_framework",
- "tari_shutdown 0.50.0-pre.0",
+ "tari_shutdown",
  "tari_storage",
  "tari_test_utils",
- "tari_utilities 0.4.10 (registry+https://github.com/rust-lang/crates.io-index)",
+ "tari_utilities",
  "thiserror",
  "tokio",
  "tracing",
  "uint",
- "zeroize",
-]
-
-[[package]]
-name = "tari_crypto"
-version = "0.16.8"
-source = "git+https://github.com/tari-project/tari-crypto.git?tag=v0.16.8#abbd7208a4fef9664d233aff50a34a9637825dbe"
-dependencies = [
- "base64 0.10.1",
- "blake2 0.9.2",
- "cbindgen",
- "curve25519-dalek 4.0.1",
- "digest 0.9.0",
- "lazy_static",
- "log",
- "merlin 2.0.1",
- "once_cell",
- "rand 0.7.3",
- "rand_chacha 0.3.1",
- "rand_core 0.6.4",
- "serde",
- "serde_json",
- "sha3",
- "tari_bulletproofs 4.4.0",
- "tari_bulletproofs_plus 0.2.1",
- "tari_utilities 0.4.10 (git+https://github.com/tari-project/tari_utilities.git?tag=v0.4.10)",
- "thiserror",
  "zeroize",
 ]
 
@@ -7255,7 +7150,7 @@ dependencies = [
  "digest 0.9.0",
  "lazy_static",
  "log",
- "merlin 2.0.1",
+ "merlin",
  "once_cell",
  "rand 0.7.3",
  "rand_chacha 0.3.1",
@@ -7264,9 +7159,9 @@ dependencies = [
  "serde_json",
  "sha3",
  "tari-curve25519-dalek",
- "tari_bulletproofs 4.4.1",
- "tari_bulletproofs_plus 0.2.3",
- "tari_utilities 0.4.10 (registry+https://github.com/rust-lang/crates.io-index)",
+ "tari_bulletproofs",
+ "tari_bulletproofs_plus",
+ "tari_utilities",
  "thiserror",
  "zeroize",
 ]
@@ -7281,7 +7176,7 @@ dependencies = [
  "tari_common 0.50.0-pre.0",
  "tari_common_types 0.50.0-pre.0",
  "tari_comms",
- "tari_crypto 0.16.11",
+ "tari_crypto",
  "tari_dan_common_types",
  "tari_dan_core",
  "tari_engine_types",
@@ -7297,19 +7192,21 @@ dependencies = [
  "anyhow",
  "async-trait",
  "log",
+ "serde",
+ "serde_json",
  "tari_app_grpc",
  "tari_base_node_grpc_client",
  "tari_common_types 0.50.0-pre.0",
  "tari_comms",
  "tari_core",
- "tari_crypto 0.16.11",
+ "tari_crypto",
  "tari_dan_common_types",
  "tari_dan_core",
  "tari_dan_engine",
  "tari_dan_storage",
  "tari_dan_storage_sqlite",
  "tari_engine_types",
- "tari_shutdown 0.50.0-pre.0",
+ "tari_shutdown",
  "tari_template_lib",
  "tari_validator_node_client",
  "thiserror",
@@ -7334,10 +7231,10 @@ dependencies = [
  "tari_common 0.50.0-pre.0",
  "tari_common_types 0.50.0-pre.0",
  "tari_core",
- "tari_crypto 0.16.11",
+ "tari_crypto",
  "tari_engine_types",
  "tari_mmr",
- "tari_utilities 0.4.10 (registry+https://github.com/rust-lang/crates.io-index)",
+ "tari_utilities",
 ]
 
 [[package]]
@@ -7360,17 +7257,17 @@ dependencies = [
  "tari_comms",
  "tari_comms_dht",
  "tari_core",
- "tari_crypto 0.16.11",
+ "tari_crypto",
  "tari_dan_common_types",
  "tari_dan_engine",
  "tari_dan_storage",
  "tari_engine_types",
  "tari_mmr",
- "tari_shutdown 0.50.0-pre.0",
+ "tari_shutdown",
  "tari_storage",
  "tari_test_utils",
  "tari_transaction",
- "tari_utilities 0.4.10 (registry+https://github.com/rust-lang/crates.io-index)",
+ "tari_utilities",
  "thiserror",
  "tokio",
  "tonic 0.6.2",
@@ -7382,6 +7279,7 @@ version = "0.50.0-pre.0"
 dependencies = [
  "anyhow",
  "cargo_toml",
+ "d3ne",
  "digest 0.9.0",
  "log",
  "rand 0.7.3",
@@ -7389,7 +7287,7 @@ dependencies = [
  "serde_json",
  "tari_bor",
  "tari_common_types 0.50.0-pre.0",
- "tari_crypto 0.16.11",
+ "tari_crypto",
  "tari_dan_common_types",
  "tari_engine_types",
  "tari_mmr",
@@ -7398,7 +7296,7 @@ dependencies = [
  "tari_template_test_tooling",
  "tari_transaction",
  "tari_transaction_manifest",
- "tari_utilities 0.4.10 (registry+https://github.com/rust-lang/crates.io-index)",
+ "tari_utilities",
  "tempfile",
  "thiserror",
  "wasmer",
@@ -7409,6 +7307,7 @@ dependencies = [
 name = "tari_dan_storage"
 version = "0.50.0-pre.0"
 dependencies = [
+ "chrono",
  "serde",
  "tari_common_types 0.50.0-pre.0",
  "tari_dan_common_types",
@@ -7447,7 +7346,7 @@ dependencies = [
  "tari_dan_storage",
  "tari_engine_types",
  "tari_transaction",
- "tari_utilities 0.4.10 (registry+https://github.com/rust-lang/crates.io-index)",
+ "tari_utilities",
  "thiserror",
  "time 0.3.20",
 ]
@@ -7464,16 +7363,16 @@ dependencies = [
  "tari_common_types 0.50.0-pre.0",
  "tari_comms",
  "tari_core",
- "tari_crypto 0.16.11",
+ "tari_crypto",
  "tari_dan_common_types",
  "tari_dan_core",
  "tari_dan_engine",
  "tari_dan_storage_sqlite",
  "tari_engine_types",
- "tari_shutdown 0.50.0-pre.0",
+ "tari_shutdown",
  "tari_template_lib",
  "tari_transaction",
- "tari_utilities 0.4.10 (registry+https://github.com/rust-lang/crates.io-index)",
+ "tari_utilities",
  "tempdir",
  "tokio",
 ]
@@ -7492,7 +7391,7 @@ dependencies = [
  "serde",
  "serde_json",
  "tari_common_types 0.50.0-pre.0",
- "tari_crypto 0.16.11",
+ "tari_crypto",
  "tari_dan_common_types",
  "tari_dan_engine",
  "tari_dan_wallet_sdk",
@@ -7501,7 +7400,7 @@ dependencies = [
  "tari_template_lib",
  "tari_transaction",
  "tari_transaction_manifest",
- "tari_utilities 0.4.10 (registry+https://github.com/rust-lang/crates.io-index)",
+ "tari_utilities",
  "tari_wallet_daemon_client",
  "thiserror",
  "time 0.3.20",
@@ -7532,16 +7431,16 @@ dependencies = [
  "tari_bor",
  "tari_common 0.50.0-pre.0",
  "tari_common_types 0.50.0-pre.0",
- "tari_crypto 0.16.11",
+ "tari_crypto",
  "tari_dan_common_types",
  "tari_dan_wallet_sdk",
  "tari_dan_wallet_storage_sqlite",
  "tari_engine_types",
- "tari_shutdown 0.50.0-pre.0",
+ "tari_shutdown",
  "tari_template_builtin",
  "tari_template_lib",
  "tari_transaction",
- "tari_utilities 0.4.10 (registry+https://github.com/rust-lang/crates.io-index)",
+ "tari_utilities",
  "tari_wallet_daemon_client",
  "thiserror",
  "tokio",
@@ -7563,14 +7462,14 @@ dependencies = [
  "serde",
  "tari_bor",
  "tari_common_types 0.50.0-pre.0",
- "tari_crypto 0.16.11",
+ "tari_crypto",
  "tari_dan_common_types",
  "tari_dan_wallet_storage_sqlite",
  "tari_engine_types",
  "tari_key_manager",
  "tari_template_lib",
  "tari_transaction",
- "tari_utilities 0.4.10 (registry+https://github.com/rust-lang/crates.io-index)",
+ "tari_utilities",
  "tari_validator_node_client",
  "tempfile",
  "thiserror",
@@ -7596,7 +7495,7 @@ dependencies = [
  "tari_engine_types",
  "tari_template_lib",
  "tari_transaction",
- "tari_utilities 0.4.10 (registry+https://github.com/rust-lang/crates.io-index)",
+ "tari_utilities",
 ]
 
 [[package]]
@@ -7611,10 +7510,10 @@ dependencies = [
  "tari_bor",
  "tari_common_types 0.50.0-pre.0",
  "tari_core",
- "tari_crypto 0.16.11",
+ "tari_crypto",
  "tari_template_abi",
  "tari_template_lib",
- "tari_utilities 0.4.10 (registry+https://github.com/rust-lang/crates.io-index)",
+ "tari_utilities",
  "thiserror",
 ]
 
@@ -7658,7 +7557,7 @@ dependencies = [
  "tari_comms_logging",
  "tari_comms_rpc_macros",
  "tari_core",
- "tari_crypto 0.16.11",
+ "tari_crypto",
  "tari_dan_app_grpc",
  "tari_dan_app_utilities",
  "tari_dan_common_types",
@@ -7668,7 +7567,7 @@ dependencies = [
  "tari_dan_storage_sqlite",
  "tari_engine_types",
  "tari_p2p",
- "tari_shutdown 0.50.0-pre.0",
+ "tari_shutdown",
  "tari_storage",
  "tari_template_lib",
  "tari_transaction",
@@ -7722,9 +7621,9 @@ dependencies = [
  "subtle",
  "tari_common_sqlite",
  "tari_common_types 0.50.0-pre.0",
- "tari_crypto 0.16.11",
+ "tari_crypto",
  "tari_service_framework",
- "tari_utilities 0.4.10 (registry+https://github.com/rust-lang/crates.io-index)",
+ "tari_utilities",
  "thiserror",
  "tokio",
  "zeroize",
@@ -7757,8 +7656,8 @@ dependencies = [
  "log",
  "serde",
  "tari_common 0.50.0-pre.0",
- "tari_crypto 0.16.11",
- "tari_utilities 0.4.10 (registry+https://github.com/rust-lang/crates.io-index)",
+ "tari_crypto",
+ "tari_utilities",
  "thiserror",
 ]
 
@@ -7782,11 +7681,11 @@ dependencies = [
  "tari_common 0.50.0-pre.0",
  "tari_comms",
  "tari_comms_dht",
- "tari_crypto 0.16.11",
+ "tari_crypto",
  "tari_service_framework",
- "tari_shutdown 0.50.0-pre.0",
+ "tari_shutdown",
  "tari_storage",
- "tari_utilities 0.4.10 (registry+https://github.com/rust-lang/crates.io-index)",
+ "tari_utilities",
  "thiserror",
  "tokio",
  "tokio-stream",
@@ -7807,8 +7706,8 @@ dependencies = [
  "serde",
  "sha2 0.9.9",
  "sha3",
- "tari_crypto 0.16.11",
- "tari_utilities 0.4.10 (registry+https://github.com/rust-lang/crates.io-index)",
+ "tari_crypto",
+ "tari_utilities",
  "thiserror",
 ]
 
@@ -7821,18 +7720,10 @@ dependencies = [
  "async-trait",
  "futures 0.3.27",
  "log",
- "tari_shutdown 0.50.0-pre.0",
+ "tari_shutdown",
  "thiserror",
  "tokio",
  "tower-service",
-]
-
-[[package]]
-name = "tari_shutdown"
-version = "0.49.0-pre.1"
-source = "git+https://github.com/tari-project/tari.git?tag=v0.49.0-pre.1#57781b63cec3f0cf6b3d739408c10a467988c092"
-dependencies = [
- "futures 0.3.27",
 ]
 
 [[package]]
@@ -7861,9 +7752,9 @@ dependencies = [
  "regex",
  "serde",
  "serde_json",
- "tari_common 0.49.0-pre.1",
+ "tari_common 0.50.0-pre.0",
  "tari_dan_wallet_storage_sqlite",
- "tari_shutdown 0.49.0-pre.1",
+ "tari_shutdown",
  "tokio",
  "tower-http",
 ]
@@ -7907,7 +7798,7 @@ dependencies = [
  "serde-big-array 0.5.1",
  "serde_json",
  "tari_bor",
- "tari_crypto 0.16.11",
+ "tari_crypto",
  "tari_template_abi",
  "tari_template_macros",
 ]
@@ -7930,7 +7821,7 @@ dependencies = [
  "serde",
  "tari_bor",
  "tari_common_types 0.49.0-pre.5",
- "tari_crypto 0.16.11",
+ "tari_crypto",
  "tari_dan_common_types",
  "tari_dan_engine",
  "tari_engine_types",
@@ -7949,7 +7840,7 @@ dependencies = [
  "futures 0.3.27",
  "rand 0.7.3",
  "tari_comms",
- "tari_shutdown 0.50.0-pre.0",
+ "tari_shutdown",
  "tempfile",
  "tokio",
 ]
@@ -7961,7 +7852,7 @@ dependencies = [
  "rand 0.7.3",
  "serde",
  "tari_common_types 0.50.0-pre.0",
- "tari_crypto 0.16.11",
+ "tari_crypto",
  "tari_dan_common_types",
  "tari_engine_types",
  "tari_template_lib",
@@ -7990,23 +7881,6 @@ dependencies = [
  "base64 0.13.1",
  "bincode",
  "borsh",
- "generic-array",
- "newtype-ops",
- "serde",
- "serde_json",
- "subtle",
- "thiserror",
- "zeroize",
-]
-
-[[package]]
-name = "tari_utilities"
-version = "0.4.10"
-source = "git+https://github.com/tari-project/tari_utilities.git?tag=v0.4.10#1fd912bd69ac4980a96d7863632c69779a295ce9"
-dependencies = [
- "base58-monero 0.3.2",
- "base64 0.13.1",
- "bincode",
  "generic-array",
  "newtype-ops",
  "serde",
@@ -8058,7 +7932,7 @@ dependencies = [
  "tari_comms_rpc_macros",
  "tari_console_wallet",
  "tari_core",
- "tari_crypto 0.16.11",
+ "tari_crypto",
  "tari_dan_app_grpc",
  "tari_dan_app_utilities",
  "tari_dan_common_types",
@@ -8072,7 +7946,7 @@ dependencies = [
  "tari_indexer",
  "tari_indexer_client",
  "tari_p2p",
- "tari_shutdown 0.50.0-pre.0",
+ "tari_shutdown",
  "tari_storage",
  "tari_template_builtin",
  "tari_template_lib",
@@ -8110,7 +7984,7 @@ dependencies = [
  "serde",
  "serde_json",
  "tari_common_types 0.50.0-pre.0",
- "tari_crypto 0.16.11",
+ "tari_crypto",
  "tari_dan_common_types",
  "tari_dan_engine",
  "tari_engine_types",
@@ -8118,11 +7992,12 @@ dependencies = [
  "tari_template_lib",
  "tari_transaction",
  "tari_transaction_manifest",
- "tari_utilities 0.4.10 (registry+https://github.com/rust-lang/crates.io-index)",
+ "tari_utilities",
  "tari_validator_node_client",
  "thiserror",
  "time 0.3.20",
  "tokio",
+ "url 2.3.1",
 ]
 
 [[package]]
@@ -8177,13 +8052,13 @@ dependencies = [
  "tari_comms_dht",
  "tari_contacts",
  "tari_core",
- "tari_crypto 0.16.11",
+ "tari_crypto",
  "tari_key_manager",
  "tari_p2p",
  "tari_script",
  "tari_service_framework",
- "tari_shutdown 0.50.0-pre.0",
- "tari_utilities 0.4.10 (registry+https://github.com/rust-lang/crates.io-index)",
+ "tari_shutdown",
+ "tari_utilities",
  "tempfile",
  "thiserror",
  "tokio",
