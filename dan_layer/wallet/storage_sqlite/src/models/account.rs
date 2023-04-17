@@ -4,7 +4,6 @@
 use chrono::NaiveDateTime;
 use diesel::{Identifiable, Queryable};
 use tari_engine_types::substate::InvalidSubstateAddressFormat;
-use tari_template_lib::models::Amount;
 
 use crate::schema::accounts;
 

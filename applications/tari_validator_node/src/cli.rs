@@ -47,7 +47,7 @@ pub struct Cli {
 impl ConfigOverrideProvider for Cli {
     fn get_config_property_overrides(&self, default_network: Network) -> Vec<(String, String)> {
         let mut overrides = self.common.get_config_property_overrides(default_network);
-        let network = self.common.network.clone().unwrap_or_else(|| default_network);
+        let network = self.common.network.unwrap_or(default_network);
         overrides.push(("network".to_string(), network.to_string()));
         overrides.push(("validator_node.override_from".to_string(), network.to_string()));
         overrides.push(("p2p.seeds.override_from".to_string(), network.to_string()));
