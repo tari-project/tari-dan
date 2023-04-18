@@ -642,7 +642,7 @@ pub async fn handle_create_free_test_coins(
     let account_address = account
         .address
         .as_component_address()
-        .ok_or(anyhow!("Invalid account address"))?;
+        .ok_or_else(|| anyhow!("Invalid account address"))?;
 
     let transaction = Transaction::builder()
         .with_fee_instructions(vec![
