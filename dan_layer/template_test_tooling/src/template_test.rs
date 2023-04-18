@@ -10,6 +10,7 @@ use std::{
 use anyhow::anyhow;
 use serde::de::DeserializeOwned;
 use tari_bor::encode;
+use tari_common_types::types::PrivateKey;
 use tari_crypto::{
     ristretto::RistrettoSecretKey,
     tari_utilities::{hex::Hex, ByteArray},
@@ -47,13 +48,17 @@ use tari_template_lib::{
     prelude::{AccessRules, CONFIDENTIAL_TARI_RESOURCE_ADDRESS},
     Hash,
 };
-use tari_transaction::{id_provider::IdProvider, Transaction, TransactionBuilder};
+use tari_transaction::{id_provider::IdProvider, Transaction};
 use tari_transaction_manifest::{parse_manifest, ManifestValue};
 
 use crate::track_calls::TrackCallsModule;
 
 pub fn test_faucet_component() -> ComponentAddress {
     ComponentAddress::new(Hash::from_array([0xfau8; 32]), 0)
+}
+
+fn build_transaction() -> Transaction {
+    Transaction::builder().sign(&PrivateKey::default()).build()
 }
 
 pub struct TemplateTest {
@@ -63,6 +68,7 @@ pub struct TemplateTest {
     last_outputs: HashSet<SubstateAddress>,
     name_to_template: HashMap<String, TemplateAddress>,
     state_store: MemoryStateStore,
+    template_indexes: HashMap<TemplateAddress, u64>,
     // TODO: cleanup
     consensus_context: ConsensusContext,
     enable_fees: bool,
@@ -119,6 +125,7 @@ impl TemplateTest {
             consensus_context: ConsensusContext { current_epoch: 0 },
             enable_fees: false,
             fee_table: FeeTable::new(10, 1, 1, 250),
+            template_indexes: HashMap::new(),
         }
     }
 
@@ -127,7 +134,7 @@ impl TemplateTest {
         initial_supply: Amount,
         test_faucet_template_address: TemplateAddress,
     ) {
-        let id_provider = IdProvider::new(TransactionBuilder::new().build(), 10);
+        let id_provider = IdProvider::new(build_transaction(), 10);
         let vault_id = id_provider.new_vault_id().unwrap();
         let vault = Vault::new(vault_id, ResourceContainer::Confidential {
             address: CONFIDENTIAL_TARI_RESOURCE_ADDRESS,
@@ -262,6 +269,33 @@ impl TemplateTest {
         result.finalize.execution_results[0].decode().unwrap()
     }
 
+    pub fn call_function_with_new_components<T>(
+        &mut self,
+        template_name: &str,
+        func_name: &str,
+        args: Vec<Arg>,
+        proofs: Vec<NonFungibleAddress>,
+        new_component_index: u64,
+    ) -> T
+    where
+        T: DeserializeOwned,
+    {
+        let template_address = self.get_template_address(template_name);
+        let component_address = ComponentAddress::new(template_address, new_component_index);
+        let result = self
+            .execute_and_commit_with_new_components(
+                vec![Instruction::CallFunction {
+                    template_address,
+                    function: func_name.to_owned(),
+                    args,
+                }],
+                proofs,
+                vec![component_address],
+            )
+            .unwrap();
+        result.finalize.execution_results[0].decode().unwrap()
+    }
+
     pub fn call_method<T>(
         &mut self,
         component_address: ComponentAddress,
@@ -298,7 +332,13 @@ impl TemplateTest {
         let (owner_proof, secret_key) = self.create_owner_proof();
         let old_fail_fees = self.enable_fees;
         self.enable_fees = false;
+
+        let account_template_addr = self.get_template_address("Account");
+        let account_template_index = *self.template_indexes.get(&account_template_addr).unwrap_or(&0);
+        self.template_indexes
+            .insert(account_template_addr, account_template_index + 1);
         let component = self.call_function("Account", "create", args![owner_proof], vec![owner_proof.clone()]);
+
         self.enable_fees = old_fail_fees;
         (component, owner_proof, secret_key)
     }
@@ -307,15 +347,23 @@ impl TemplateTest {
         let (owner_proof, secret_key) = self.create_owner_proof();
         let old_fail_fees = self.enable_fees;
         self.enable_fees = false;
+
+        let account_template_addr = self.get_template_address("Account");
+        let account_template_index = *self.template_indexes.get(&account_template_addr).unwrap_or(&0);
+        self.template_indexes
+            .insert(account_template_addr, account_template_index + 1);
+        let component_address = ComponentAddress::new(account_template_addr, account_template_index);
+
         let result = self
             .try_execute_and_commit(
                 Transaction::builder()
                     .call_method(test_faucet_component(), "take_free_coins", args![])
                     .put_last_instruction_output_on_workspace("bucket")
-                    .call_function(self.get_template_address("Account"), "create_with_bucket", args![
+                    .call_function(account_template_addr, "create_with_bucket", args![
                         &owner_proof,
                         Workspace("bucket")
                     ])
+                    .with_new_components(vec![component_address])
                     .sign(&secret_key)
                     .build(),
                 vec![owner_proof.clone()],
@@ -344,13 +392,14 @@ impl TemplateTest {
         fee_instructions: Vec<Instruction>,
         instructions: Vec<Instruction>,
         proofs: Vec<NonFungibleAddress>,
+        new_components: Vec<ComponentAddress>,
     ) -> Result<ExecuteResult, TransactionError> {
         let transaction = Transaction::builder()
             .with_fee_instructions(fee_instructions)
             .with_instructions(instructions)
+            .with_new_components(new_components)
             .sign(&self.secret_key)
             .build();
-
         self.try_execute(transaction, proofs)
     }
 
@@ -411,7 +460,16 @@ impl TemplateTest {
         instructions: Vec<Instruction>,
         proofs: Vec<NonFungibleAddress>,
     ) -> anyhow::Result<ExecuteResult> {
-        self.execute_and_commit_with_fees(vec![], instructions, proofs)
+        self.execute_and_commit_with_fees(vec![], instructions, proofs, vec![])
+    }
+
+    pub fn execute_and_commit_with_new_components(
+        &mut self,
+        instructions: Vec<Instruction>,
+        proofs: Vec<NonFungibleAddress>,
+        new_components: Vec<ComponentAddress>,
+    ) -> anyhow::Result<ExecuteResult> {
+        self.execute_and_commit_with_fees(vec![], instructions, proofs, new_components)
     }
 
     pub fn execute_and_commit_with_fees(
@@ -419,8 +477,9 @@ impl TemplateTest {
         fee_instructions: Vec<Instruction>,
         instructions: Vec<Instruction>,
         proofs: Vec<NonFungibleAddress>,
+        new_components: Vec<ComponentAddress>,
     ) -> anyhow::Result<ExecuteResult> {
-        let result = self.try_execute_instructions(fee_instructions, instructions, proofs)?;
+        let result = self.try_execute_instructions(fee_instructions, instructions, proofs, new_components)?;
         let diff = result
             .finalize
             .result

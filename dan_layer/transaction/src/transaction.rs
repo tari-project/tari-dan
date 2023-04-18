@@ -147,13 +147,19 @@ impl Eq for Transaction {}
 #[derive(Debug, Clone, Default, Deserialize, Serialize, Eq, PartialEq)]
 pub struct TransactionMeta {
     involved_objects: HashMap<ShardId, SubstateChange>,
+    new_components: Vec<ComponentAddress>,
     max_outputs: u32,
 }
 
 impl TransactionMeta {
-    pub fn new(involved_objects: HashMap<ShardId, SubstateChange>, max_outputs: u32) -> Self {
+    pub fn new(
+        involved_objects: HashMap<ShardId, SubstateChange>,
+        new_components: Vec<ComponentAddress>,
+        max_outputs: u32,
+    ) -> Self {
         Self {
             involved_objects,
+            new_components,
             max_outputs,
         }
     }
@@ -172,6 +178,14 @@ impl TransactionMeta {
 
     pub fn change_for_shard(&self, shard_id: ShardId) -> Option<SubstateChange> {
         self.involved_objects.get(&shard_id).copied()
+    }
+
+    pub fn new_components_iter(&self) -> impl Iterator<Item = &ComponentAddress> + '_ {
+        self.new_components.iter()
+    }
+
+    pub(crate) fn new_components_mut(&mut self) -> &mut Vec<ComponentAddress> {
+        &mut self.new_components
     }
 
     pub fn set_max_outputs(&mut self, max_outputs: u32) -> &mut Self {

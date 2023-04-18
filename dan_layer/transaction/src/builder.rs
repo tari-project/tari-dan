@@ -39,7 +39,7 @@ pub struct TransactionBuilder {
     sender_public_key: Option<RistrettoPublicKey>,
     new_non_fungible_outputs: Vec<(ResourceAddress, u8)>,
     new_resources: Vec<(TemplateAddress, String)>,
-    new_components: Vec<(TemplateAddress, u32)>,
+    new_components: Vec<ComponentAddress>,
     new_non_fungible_index_outputs: Vec<(ResourceAddress, u64)>,
 }
 
@@ -191,7 +191,7 @@ impl TransactionBuilder {
         self
     }
 
-    pub fn with_new_components(mut self, new_components: Vec<(TemplateAddress, u32)>) -> Self {
+    pub fn with_new_components(mut self, new_components: Vec<ComponentAddress>) -> Self {
         self.new_components = new_components;
         self
     }
@@ -230,6 +230,15 @@ impl TransactionBuilder {
                     .expect("id provider provides num_outputs IDs");
                 (ShardId::from_hash(&new_hash, 0), SubstateChange::Create)
             }));
+
+        for component_addr in self.new_components {
+            let substate_addr = SubstateAddress::Component(component_addr);
+            transaction.meta_mut().involved_objects_mut().insert(
+                ShardId::from_hash(&substate_addr.to_canonical_hash(), 0),
+                SubstateChange::Create,
+            );
+            transaction.meta_mut().new_components_mut().push(component_addr);
+        }
 
         let mut new_nft_outputs =
             Vec::with_capacity(usize::try_from(total_new_nft_outputs).expect("too many new NFT outputs"));

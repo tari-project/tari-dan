@@ -264,7 +264,13 @@ impl TryFrom<proto::transaction::TransactionMeta> for TransactionMeta {
             })
             .collect::<Result<_, _>>()?;
 
-        Ok(TransactionMeta::new(involved_objects, val.max_outputs))
+        let new_components: Vec<ComponentAddress> = val
+            .new_components
+            .into_iter()
+            .map(ComponentAddress::try_from)
+            .collect::<Result<_, _>>()?;
+
+        Ok(TransactionMeta::new(involved_objects, new_components, val.max_outputs))
     }
 }
 
@@ -279,6 +285,26 @@ impl<T: Borrow<TransactionMeta>> From<T> for proto::transaction::TransactionMeta
         }
         meta.max_outputs = val.borrow().max_outputs();
         meta
+    }
+}
+
+// -------------------------------- ComponentAddress -------------------------------- //
+
+impl TryFrom<proto::transaction::ComponentAddress> for ComponentAddress {
+    type Error = anyhow::Error;
+
+    fn try_from(val: proto::transaction::ComponentAddress) -> Result<Self, Self::Error> {
+        let template_address = TemplateAddress::try_from(val.template_address)?;
+        Ok(ComponentAddress::new(template_address, val.index))
+    }
+}
+
+impl From<ComponentAddress> for proto::transaction::ComponentAddress {
+    fn from(val: ComponentAddress) -> Self {
+        Self {
+            template_address: val.template_address().to_vec(),
+            index: val.index(),
+        }
     }
 }
 

@@ -17,7 +17,7 @@ use crate::Transaction;
 
 #[derive(Debug, Clone)]
 pub struct IdProvider {
-    template_index_map: HashMap<TemplateAddress, u64>,
+    template_index_map: Arc<Mutex<HashMap<TemplateAddress, u64>>>,
     transaction_hash: Hash,
     max_ids: u32,
     current_id: Arc<AtomicU32>,
@@ -37,7 +37,7 @@ pub enum IdProviderError {
 impl IdProvider {
     pub fn new(transaction: Transaction, max_ids: u32) -> Self {
         let transaction_hash = *transaction.hash();
-        let template_index_map = generate_template_index_map(transaction);
+        let template_index_map = Arc::new(Mutex::new(generate_template_index_map(transaction)));
         Self {
             last_random: Arc::new(Mutex::new(transaction_hash)),
             template_index_map,
@@ -73,11 +73,18 @@ impl IdProvider {
         &self,
         template_address: &TemplateAddress,
     ) -> Result<ComponentAddress, IdProviderError> {
-        let index = match self.template_index_map.get(template_address) {
+        let mut template_index_map = self
+            .template_index_map
+            .lock()
+            .map_err(|_| IdProviderError::LockingError {
+                operation: "new_component_address".to_string(),
+            })?;
+        let index = match template_index_map.get(template_address) {
             Some(index) => *index,
             // for convenience, if no component address was specified in the outputs, we are going to default to index 0
             None => 0_u64,
         };
+        template_index_map.insert(*template_address, index + 1);
         let component_address = ComponentAddress::new(*template_address, index);
         Ok(component_address)
     }
@@ -139,9 +146,9 @@ fn generate_output_id(hash: &Hash, n: u32) -> Hash {
 }
 
 fn generate_template_index_map(transaction: Transaction) -> HashMap<TemplateAddress, u64> {
-    let component_addresses = transaction.required_components();
-    let template_index_map: HashMap<_, _> = component_addresses
-        .iter()
+    let template_index_map: HashMap<_, _> = transaction
+        .meta()
+        .new_components_iter()
         .map(|c| (*c.template_address(), c.index()))
         .collect();
     template_index_map

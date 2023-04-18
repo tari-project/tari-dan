@@ -149,7 +149,7 @@ fn withdraw_from_account_prevented() {
                 let source_account = var!["source_account"];
                 let dest_account = var!["dest_account"];
                 let resource = var!["resource"];
-                let stolen_coins = source_account.withdraw(resource, 100);
+                let stolen_coins = source_account.withdraw(resource, Amount::new(100));
                 dest_account.deposit(stolen_coins);
             "#,
             [

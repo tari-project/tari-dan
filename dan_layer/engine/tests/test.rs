@@ -63,7 +63,8 @@ fn test_state() {
         "finalize",
     ]);
 
-    let component_address2: ComponentAddress = template_test.call_function("State", "new", args![], vec![]);
+    let component_address2: ComponentAddress =
+        template_test.call_function_with_new_components("State", "new", args![], vec![], 1);
     assert_ne!(component_address1, component_address2);
 
     let component = store.get_component(component_address1).unwrap();
@@ -238,6 +239,7 @@ mod errors {
                     args: args![],
                 }],
                 vec![],
+                vec![],
             )
             .unwrap();
         match result.transaction_failure.unwrap() {
@@ -264,6 +266,7 @@ mod errors {
                     function: "please_pass_invalid_args".to_string(),
                     args: args![text],
                 }],
+                vec![],
                 vec![],
             )
             .unwrap();

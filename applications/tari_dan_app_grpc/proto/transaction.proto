@@ -85,12 +85,18 @@ message Arg {
 message TransactionMeta {
   repeated bytes involved_shard_ids = 1;
   repeated SubstateRef involved_substates = 2;
-  uint32 max_outputs = 3;
+  repeated ComponentAddress new_components = 3;
+  uint32 max_outputs = 4;
 }
 
 message SubstateRef {
   SubstateChange change = 1;
   // claim = 2
+}
+
+message ComponentAddress {
+  bytes template_address = 1;
+  uint64 index = 2;
 }
 
 enum SubstateChange {
