@@ -6,7 +6,6 @@ diesel::table! {
         name -> Text,
         address -> Text,
         owner_key_index -> BigInt,
-        balance -> BigInt,
         created_at -> Timestamp,
         updated_at -> Timestamp,
     }

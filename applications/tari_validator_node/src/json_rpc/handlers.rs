@@ -57,7 +57,7 @@ use tari_template_lib::Hash;
 use tari_validator_node_client::types::{
     AddPeerRequest,
     AddPeerResponse,
-    GetClaimFeesRequest,
+    GetClaimableFeesRequest,
     GetClaimableFeesResponse,
     GetCommitteeRequest,
     GetEpochManagerStatsResponse,
@@ -441,7 +441,7 @@ impl JsonRpcHandlers {
 
     pub async fn get_fees(&self, value: JsonRpcExtractor) -> JrpcResult {
         let answer_id = value.get_answer_id();
-        let data: GetClaimFeesRequest = value.parse_params()?;
+        let data: GetClaimableFeesRequest = value.parse_params()?;
         let mut tx = self.shard_store.create_read_tx().unwrap();
         match tx.get_fees_by_epoch(data.epoch, data.claim_leader_public_key.to_vec()) {
             Ok(claim_fees) => Ok(JsonRpcResponse::success(answer_id, GetClaimableFeesResponse {

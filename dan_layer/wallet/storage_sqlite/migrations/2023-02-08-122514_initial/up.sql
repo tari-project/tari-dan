@@ -73,7 +73,6 @@ CREATE TABLE accounts
     name            TEXT     NOT NULL,
     address         TEXT     NOT NULL,
     owner_key_index BIGINT   NOT NULL,
-    balance         BIGINT   NOT NULL DEFAULT 0,
     created_at      DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at      DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
 );

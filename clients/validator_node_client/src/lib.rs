@@ -28,7 +28,7 @@ use serde::{de::DeserializeOwned, Serialize};
 use serde_json as json;
 use serde_json::json;
 use tari_comms_logging::LoggedMessage;
-use types::{GetClaimFeesRequest, GetClaimableFeesResponse};
+use types::{GetClaimableFeesRequest, GetClaimableFeesResponse};
 
 use crate::types::{
     AddPeerRequest,
@@ -125,7 +125,7 @@ impl ValidatorNodeClient {
 
     pub async fn get_fees(
         &mut self,
-        request: GetClaimFeesRequest,
+        request: GetClaimableFeesRequest,
     ) -> Result<GetClaimableFeesResponse, ValidatorNodeClientError> {
         self.send_request("get_fees", request).await
     }

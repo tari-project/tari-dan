@@ -7,15 +7,15 @@ license = "BSD-3-Clause"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-tari_comms = { git = "https://github.com/tari-project/tari.git", tag = "v0.49.0-pre.5", package = "tari_comms" }
-tari_comms_dht = { git = "https://github.com/tari-project/tari.git", tag = "v0.49.0-pre.5", package = "tari_comms_dht" }
+tari_comms = { git = "https://github.com/tari-project/tari.git", tag = "v0.50.0-pre.0", package = "tari_comms" }
+tari_comms_dht = { git = "https://github.com/tari-project/tari.git", tag = "v0.50.0-pre.0", package = "tari_comms_dht" }
 tari_crypto ={ version = "0.16.10" }
-tari_mmr = { git = "https://github.com/tari-project/tari.git", tag = "v0.49.0-pre.5", package = "tari_mmr" }
-tari_shutdown = { git = "https://github.com/tari-project/tari.git", tag = "v0.49.0-pre.5", package = "tari_shutdown" }
-tari_storage = { git = "https://github.com/tari-project/tari.git", tag = "v0.49.0-pre.5", package = "tari_storage" }
-tari_core = { git = "https://github.com/tari-project/tari.git", tag = "v0.49.0-pre.5", package = "tari_core" }
+tari_mmr = { git = "https://github.com/tari-project/tari.git", tag = "v0.50.0-pre.0", package = "tari_mmr" }
+tari_shutdown = { git = "https://github.com/tari-project/tari.git", tag = "v0.50.0-pre.0", package = "tari_shutdown" }
+tari_storage = { git = "https://github.com/tari-project/tari.git", tag = "v0.50.0-pre.0", package = "tari_storage" }
+tari_core = { git = "https://github.com/tari-project/tari.git", tag = "v0.50.0-pre.0", package = "tari_core" }
 tari_dan_common_types = { path = "../common_types" }
-tari_common_types = { git = "https://github.com/tari-project/tari.git", tag = "v0.49.0-pre.5", package = "tari_common_types" }
+tari_common_types = { git = "https://github.com/tari-project/tari.git", tag = "v0.50.0-pre.0", package = "tari_common_types" }
 tari_utilities = "0.4.10"
 tari_dan_engine = { path = "../engine" }
 tari_dan_storage = { path = "../storage" }
@@ -38,7 +38,7 @@ tokio = { version = "1.10", features = ["macros", "time"] }
 tonic = "0.6.2"
 
 [dev-dependencies]
-tari_test_utils = { git = "https://github.com/tari-project/tari.git", tag = "v0.49.0-pre.5", package = "tari_test_utils" }
+tari_test_utils = { git = "https://github.com/tari-project/tari.git", tag = "v0.50.0-pre.0", package = "tari_test_utils" }
 
 [build-dependencies]
-tari_common = { git = "https://github.com/tari-project/tari.git", tag = "v0.49.0-pre.5", package = "tari_common", features = ["build"] }
+tari_common = { git = "https://github.com/tari-project/tari.git", tag = "v0.50.0-pre.0", package = "tari_common", features = ["build"] }

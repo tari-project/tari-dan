@@ -22,24 +22,27 @@
 
 use std::error::Error;
 
-use tari_common::initialize_logging;
-use tari_dan_wallet_daemon::{cli::Cli, run_tari_dan_wallet_daemon};
+use tari_common::{initialize_logging, load_configuration};
+use tari_dan_wallet_daemon::{cli::Cli, config::ApplicationConfig, run_tari_dan_wallet_daemon};
 use tari_shutdown::Shutdown;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
     let cli = Cli::init();
+    let config_path = cli.common.config_path();
+    let cfg = load_configuration(config_path, true, &cli)?;
+    let config = ApplicationConfig::load_from(&cfg)?;
 
     let shutdown = Shutdown::new();
     let shutdown_signal = shutdown.to_signal();
 
     if let Err(e) = initialize_logging(
-        cli.base_dir().join("config/logs.yml").as_path(),
-        &cli.base_dir(),
+        &cli.common.log_config_path("dan_wallet_daemon"),
+        &cli.common.get_base_path(),
         include_str!("../log4rs_sample.yml"),
     ) {
         eprintln!("{}", e);
     }
 
-    run_tari_dan_wallet_daemon(cli, shutdown_signal).await
+    run_tari_dan_wallet_daemon(config, shutdown_signal).await
 }

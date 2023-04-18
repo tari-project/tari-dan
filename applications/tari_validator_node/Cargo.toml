@@ -8,28 +8,28 @@ version = "0.50.0-pre.0"
 edition = "2018"
 
 [dependencies]
-tari_app_utilities = { git = "https://github.com/tari-project/tari.git", tag = "v0.49.0-pre.5" }
-tari_app_grpc = { git = "https://github.com/tari-project/tari.git", tag = "v0.49.0-pre.5" }
-tari_common = { git = "https://github.com/tari-project/tari.git", tag = "v0.49.0-pre.5" }
-tari_comms = { git = "https://github.com/tari-project/tari.git", tag = "v0.49.0-pre.5" }
-tari_comms_rpc_macros = { git = "https://github.com/tari-project/tari.git", tag = "v0.49.0-pre.5" }
+tari_app_utilities = { git = "https://github.com/tari-project/tari.git", tag = "v0.50.0-pre.0" }
+tari_app_grpc = { git = "https://github.com/tari-project/tari.git", tag = "v0.50.0-pre.0" }
+tari_common = { git = "https://github.com/tari-project/tari.git", tag = "v0.50.0-pre.0" }
+tari_comms = { git = "https://github.com/tari-project/tari.git", tag = "v0.50.0-pre.0" }
+tari_comms_rpc_macros = { git = "https://github.com/tari-project/tari.git", tag = "v0.50.0-pre.0" }
 tari_crypto ={ version = "0.16.10" }
-tari_p2p = { git = "https://github.com/tari-project/tari.git", tag = "v0.49.0-pre.5" }
-tari_shutdown = { git = "https://github.com/tari-project/tari.git", tag = "v0.49.0-pre.5" }
-tari_storage = { git = "https://github.com/tari-project/tari.git", tag = "v0.49.0-pre.5" }
-tari_core = { git = "https://github.com/tari-project/tari.git", tag = "v0.49.0-pre.5", default-features = false, features = ["transactions"] }
+tari_p2p = { git = "https://github.com/tari-project/tari.git", tag = "v0.50.0-pre.0" }
+tari_shutdown = { git = "https://github.com/tari-project/tari.git", tag = "v0.50.0-pre.0" }
+tari_storage = { git = "https://github.com/tari-project/tari.git", tag = "v0.50.0-pre.0" }
+tari_core = { git = "https://github.com/tari-project/tari.git", tag = "v0.50.0-pre.0", default-features = false, features = ["transactions"] }
 tari_dan_app_grpc = { path = "../tari_dan_app_grpc" }
 tari_dan_app_utilities = { path = "../tari_dan_app_utilities" }
 tari_dan_core = { path = "../../dan_layer/core" }
 tari_dan_storage = { path = "../../dan_layer/storage" }
 tari_dan_storage_sqlite = { path = "../../dan_layer/storage_sqlite" }
 tari_dan_common_types = { path = "../../dan_layer/common_types" }
-tari_common_types = { git = "https://github.com/tari-project/tari.git", tag = "v0.49.0-pre.5" }
+tari_common_types = { git = "https://github.com/tari-project/tari.git", tag = "v0.50.0-pre.0" }
 tari_dan_engine = { path = "../../dan_layer/engine" }
 tari_template_builtin = { path = "../../dan_layer/template_builtin" }
 tari_template_lib = { path = "../../dan_layer/template_lib" }
-tari_base_node_grpc_client = { git = "https://github.com/tari-project/tari.git", tag = "v0.49.0-pre.5" }
-tari_wallet_grpc_client = { git = "https://github.com/tari-project/tari.git", tag = "v0.49.0-pre.5" }
+tari_base_node_grpc_client = { git = "https://github.com/tari-project/tari.git", tag = "v0.50.0-pre.0" }
+tari_wallet_grpc_client = { git = "https://github.com/tari-project/tari.git", tag = "v0.50.0-pre.0" }
 tari_engine_types = { path = "../../dan_layer/engine_types" }
 tari_validator_node_client = { path = "../../clients/validator_node_client" }
 tari_comms_logging = { path = "../../comms/tari_comms_logging" }
@@ -66,20 +66,20 @@ tower-http = { version = "0.3.0", features = ["cors"] }
 tower-layer = "0.3"
 
 [build-dependencies]
-tari_common = { git = "https://github.com/tari-project/tari.git", tag = "v0.49.0-pre.5", package = "tari_common", features = ["build"] }
+tari_common = { git = "https://github.com/tari-project/tari.git", tag = "v0.50.0-pre.0", package = "tari_common", features = ["build"] }
 
 [dev-dependencies]
 cucumber = "0.19.1"
 tempfile = "3.3.0"
 multiaddr = "0.17.0"
 base64 = "0.21.0"
-tari_test_utils = { git = "https://github.com/tari-project/tari.git", tag = "v0.49.0-pre.5", package = "tari_test_utils" }
-tari_base_node = { git = "https://github.com/tari-project/tari.git", tag = "v0.49.0-pre.5", package = "tari_base_node" }
-tari_console_wallet = { git = "https://github.com/tari-project/tari.git", tag = "v0.49.0-pre.5", package = "tari_console_wallet" }
-tari_comms_dht = { git = "https://github.com/tari-project/tari.git", tag = "v0.49.0-pre.5", package = "tari_comms_dht" }
+tari_test_utils = { git = "https://github.com/tari-project/tari.git", tag = "v0.50.0-pre.0", package = "tari_test_utils" }
+tari_base_node = { git = "https://github.com/tari-project/tari.git", tag = "v0.50.0-pre.0", package = "tari_base_node" }
+tari_console_wallet = { git = "https://github.com/tari-project/tari.git", tag = "v0.50.0-pre.0", package = "tari_console_wallet" }
+tari_comms_dht = { git = "https://github.com/tari-project/tari.git", tag = "v0.50.0-pre.0", package = "tari_comms_dht" }
 tari_dan_wallet_daemon = { path = "../tari_dan_wallet_daemon" }
 tari_dan_wallet_storage_sqlite = { path = "../../dan_layer/wallet/storage_sqlite" }
-tari_wallet = { git = "https://github.com/tari-project/tari.git", tag = "v0.49.0-pre.5", package = "tari_wallet" }
+tari_wallet = { git = "https://github.com/tari-project/tari.git", tag = "v0.50.0-pre.0", package = "tari_wallet" }
 tari_wallet_daemon_client = { path = "../../clients/wallet_daemon_client" }
 tari_validator_node_cli = { path = "../tari_validator_node_cli" }
 tari_transaction_manifest = { path = "../../dan_layer/transaction_manifest" }

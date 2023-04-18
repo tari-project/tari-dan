@@ -52,7 +52,8 @@ export async function jsonRpc(method: string, params: any = null) {
   });
   let json = await response.json();
   if (json.error) {
-    throw json.error;
+      console.error(json.error);
+      throw json.error;
   }
   return json.result;
 }
@@ -102,7 +103,8 @@ export const transactionsWaitResult = (hash: string, timeoutSecs: number | null)
 
 // accounts
 export const accountsClaimBurn = (account: string, claimProof: any, fee: number) =>
-  jsonRpc("accounts.claim_burn", [account, claimProof, fee]);
+    // Fees are passed as strings because Amount is tagged
+  jsonRpc("accounts.claim_burn", { account, claim_proof: claimProof, fee : fee.toString()});
 export const accountsCreate = (
   accountName: string | undefined,
   signingKeyIndex: number | undefined,

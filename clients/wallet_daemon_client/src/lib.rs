@@ -20,6 +20,7 @@
 //   WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //   USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 pub mod error;
+pub mod serialize;
 pub mod types;
 
 use std::borrow::Borrow;
@@ -29,6 +30,8 @@ use serde::{de::DeserializeOwned, Serialize};
 use serde_json as json;
 use serde_json::json;
 use types::{
+    AccountsCreateFreeTestCoinsRequest,
+    AccountsCreateFreeTestCoinsResponse,
     ClaimBurnRequest,
     ClaimBurnResponse,
     ProofsCancelRequest,
@@ -242,6 +245,13 @@ impl WalletDaemonClient {
     ) -> Result<ConfidentialCreateOutputProofResponse, WalletDaemonClientError> {
         self.send_request("confidential.create_output_proof", req.borrow())
             .await
+    }
+
+    pub async fn create_free_test_coins<T: Borrow<AccountsCreateFreeTestCoinsRequest>>(
+        &mut self,
+        req: T,
+    ) -> Result<AccountsCreateFreeTestCoinsResponse, WalletDaemonClientError> {
+        self.send_request("accounts.create_free_test_coins", req.borrow()).await
     }
 
     fn next_request_id(&mut self) -> i64 {

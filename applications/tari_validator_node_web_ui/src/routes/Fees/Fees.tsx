@@ -20,19 +20,22 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use tari_template_lib::models::TemplateAddress;
-use tari_utilities::ByteArrayError;
+import PageHeading from '../../Components/PageHeading';
+import Grid from '@mui/material/Grid';
+import { StyledPaper } from '../../Components/StyledComponents';
+import Fees from '../VN/Components/Fees';
 
-use crate::{runtime::RuntimeError, wasm::WasmExecutionError};
-
-#[derive(Debug, thiserror::Error)]
-pub enum TransactionError {
-    #[error(transparent)]
-    WasmExecutionError(#[from] WasmExecutionError),
-    #[error("Template not found at address {address}")]
-    TemplateNotFound { address: TemplateAddress },
-    #[error(transparent)]
-    RuntimeError(#[from] RuntimeError),
-    #[error(transparent)]
-    ByteArrayError(#[from] ByteArrayError),
+function FeesLayout() {
+  return (
+    <Grid container spacing={5}>
+      <PageHeading>Fees</PageHeading>
+      <Grid item xs={12} md={12} lg={12}>
+        <StyledPaper>
+          <Fees />
+        </StyledPaper>
+      </Grid>
+    </Grid>
+  );
 }
+
+export default FeesLayout;

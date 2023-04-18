@@ -104,7 +104,7 @@ fn airdrop() {
             result.finalize.execution_results[3 + (i * 4)]
                 .decode::<Amount>()
                 .unwrap(),
-            Amount::new(1)
+            Amount(1)
         );
     }
 }

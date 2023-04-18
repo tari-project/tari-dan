@@ -7,6 +7,7 @@ use axum::{extract::Extension, routing::post, Router};
 use axum_jrpc::{
     error::{JsonRpcError, JsonRpcErrorReason},
     JrpcResult,
+    JsonRpcAnswer,
     JsonRpcExtractor,
     JsonRpcResponse,
 };
@@ -36,7 +37,7 @@ pub async fn listen(
         // TODO: Get these traces to work
         .layer(TraceLayer::new_for_http())
         .layer(Extension(Arc::new(context)))
-        .layer(Extension(Arc::new((preferred_address.clone(),signaling_server_address))))
+        .layer(Extension(Arc::new((preferred_address,signaling_server_address))))
         .layer(Extension(Arc::new(shutdown_signal.clone())))
         .layer(CorsLayer::permissive());
 
@@ -82,6 +83,7 @@ async fn handler(
             "invoke" => call_handler(context, value, accounts::handle_invoke).await,
             "get_by_name" => call_handler(context, value, accounts::handle_get_by_name).await,
             "confidential_transfer" => call_handler(context, value, accounts::handle_confidential_transfer).await,
+            "create_free_test_coins" => call_handler(context, value, accounts::handle_create_free_test_coins).await,
             _ => Ok(value.method_not_found(&value.method)),
         },
         Some(("confidential", method)) => match method {
@@ -119,7 +121,20 @@ where
 {
     let answer_id = value.get_answer_id();
     let resp = handler
-        .handle(&context, value.parse_params()?)
+        .handle(
+            &context,
+            value.parse_params().map_err(|e| {
+                match &e.result {
+                    JsonRpcAnswer::Result(_) => {
+                        unreachable!("parse_params should not return a result")
+                    },
+                    JsonRpcAnswer::Error(e) => {
+                        warn!(target: LOG_TARGET, "🌐 JSON-RPC params error: {}", e);
+                    },
+                }
+                e
+            })?,
+        )
         .await
         .map_err(|e| resolve_handler_error(answer_id, &e))?;
     Ok(JsonRpcResponse::success(answer_id, resp))
@@ -136,6 +151,7 @@ fn resolve_handler_error(answer_id: i64, e: &HandlerError) -> JsonRpcResponse {
 }
 
 fn resolve_any_error(answer_id: i64, e: &anyhow::Error) -> JsonRpcResponse {
+    warn!(target: LOG_TARGET, "🌐 JSON-RPC error: {}", e);
     if let Some(handler_err) = e.downcast_ref::<HandlerError>() {
         return resolve_handler_error(answer_id, handler_err);
     }

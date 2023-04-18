@@ -22,39 +22,52 @@
 
 use std::net::SocketAddr;
 
-use clap::Parser;
-use tari_app_utilities::common_cli_args::CommonCliArgs;
-use tari_common::configuration::{ConfigOverrideProvider, Network};
+use config::Config;
+use serde::{Deserialize, Serialize};
+use tari_common::{configuration::CommonConfig, ConfigurationError, DefaultConfigLoader, SubConfigPath};
 
-#[derive(Parser, Debug)]
-#[clap(author, version, about, long_about = None)]
-#[clap(propagate_version = true)]
-pub struct Cli {
-    #[clap(flatten)]
-    pub common: CommonCliArgs,
-    /// Enable tracing
-    #[clap(long, aliases = &["tracing", "enable-tracing"])]
-    pub tracing_enabled: bool,
-    /// Bind address for JSON-rpc server
-    #[clap(long, alias = "rpc-address")]
-    pub json_rpc_address: Option<SocketAddr>,
-    /// A replacement of a template address with a local WASM file, in the format <template_address>=<local file path>.
-    /// FOR DEBUGGING PURPOSES ONLY
-    #[clap(long, short = 'd')]
-    pub debug_templates: Vec<String>,
+#[derive(Debug, Clone)]
+pub struct ApplicationConfig {
+    pub common: CommonConfig,
+    pub dan_wallet_daemon: WalletDaemonConfig,
 }
 
-impl ConfigOverrideProvider for Cli {
-    fn get_config_property_overrides(&self, default_network: Network) -> Vec<(String, String)> {
-        let mut overrides = self.common.get_config_property_overrides(default_network);
-        let network = self.common.network.unwrap_or(default_network);
-        overrides.push(("network".to_string(), network.to_string()));
-        overrides.push(("validator_node.override_from".to_string(), network.to_string()));
-        overrides.push(("p2p.seeds.override_from".to_string(), network.to_string()));
+impl ApplicationConfig {
+    pub fn load_from(cfg: &Config) -> Result<Self, ConfigurationError> {
+        let config = Self {
+            common: CommonConfig::load_from(cfg)?,
+            dan_wallet_daemon: WalletDaemonConfig::load_from(cfg)?,
+        };
+        Ok(config)
+    }
+}
 
-        if let Some(ref addr) = self.json_rpc_address {
-            overrides.push(("validator_node.json_rpc_address".to_string(), addr.to_string()));
+#[derive(Debug, Serialize, Deserialize, Clone)]
+#[serde(deny_unknown_fields)]
+#[allow(clippy::struct_excessive_bools)]
+pub struct WalletDaemonConfig {
+    override_from: Option<String>,
+    /// The wallet daemon listening address
+    pub listen_addr: Option<SocketAddr>,
+    /// The signaling server address for the webrtc
+    pub signaling_server_addr: Option<SocketAddr>,
+    /// The validator nodes jrpc endpoint url
+    pub validator_node_endpoint: Option<String>,
+}
+
+impl Default for WalletDaemonConfig {
+    fn default() -> Self {
+        Self {
+            override_from: None,
+            listen_addr: Some(SocketAddr::from(([127u8, 0, 0, 1], 9000))),
+            signaling_server_addr: Some(SocketAddr::from(([127u8, 0, 0, 1], 9100))),
+            validator_node_endpoint: Some("http://127.0.0.1:18200/json_rpc".to_string()),
         }
-        overrides
+    }
+}
+
+impl SubConfigPath for WalletDaemonConfig {
+    fn main_key_prefix() -> &'static str {
+        "dan_wallet_daemon"
     }
 }
