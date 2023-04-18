@@ -14,7 +14,7 @@ use tari_engine_types::{substate::SubstateAddress, TemplateAddress};
 
 #[test]
 fn get_and_insert_substates() {
-    let example_addr = "component_1f019e4d434cbf2b99c0af89ee212f422af86de7280a169d2e392dfb66ab34d4"
+    let example_addr = "component_1f019e4d434cbf2b99c0af89ee212f422af86de7280a169d2e392dfb66ab34d4 index_0"
         .parse()
         .unwrap();
 
@@ -25,7 +25,7 @@ fn get_and_insert_substates() {
     assert!(substate.is_none());
     let hash = FixedHash::zero();
     let address =
-        SubstateAddress::from_str("component_1f019e4d434cbf2b99c0af89ee212f422af86de7280a169d2e392dfb66ab34d4")
+        SubstateAddress::from_str("component_1f019e4d434cbf2b99c0af89ee212f422af86de7280a169d2e392dfb66ab34d4 index_0")
             .unwrap();
     tx.substates_insert_parent(
         hash,
@@ -39,7 +39,7 @@ fn get_and_insert_substates() {
     .unwrap();
 
     let child_address =
-        SubstateAddress::from_str("component_d9e4a7ce7dbaa73ce10aabf309dd702054756a813f454ef13564f298887bb69d")
+        SubstateAddress::from_str("component_d9e4a7ce7dbaa73ce10aabf309dd702054756a813f454ef13564f298887bb69d index_0")
             .unwrap();
     tx.substates_insert_child(hash, address.clone(), VersionedSubstateAddress {
         address: child_address.clone(),
