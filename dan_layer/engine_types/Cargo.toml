@@ -19,3 +19,9 @@ digest = "0.9.0"
 lazy_static = "1.4.0"
 serde = "1.0.126"
 thiserror = "1"
+
+
+[features]
+default = ["debugging"]
+# Includes the ability to create free test coins
+debugging = []
