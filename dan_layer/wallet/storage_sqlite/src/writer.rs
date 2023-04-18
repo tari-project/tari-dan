@@ -300,16 +300,50 @@ impl WalletStoreWriter for WriteTransaction<'_> {
 
     // -------------------------------- Accounts -------------------------------- //
 
+    fn accounts_set_default(&mut self, address: &SubstateAddress) -> Result<(), WalletStorageError> {
+        use crate::schema::accounts;
+
+        diesel::update(accounts::table)
+            .set(accounts::is_default.eq(false))
+            .execute(self.connection())
+            .map_err(|e| WalletStorageError::general("accounts_set_default clear previous default", e))?;
+
+        let num_rows = diesel::update(accounts::table)
+            .set(accounts::is_default.eq(true))
+            .filter(accounts::address.eq(address.to_string()))
+            .execute(self.connection())
+            .map_err(|e| WalletStorageError::general("accounts_set_default", e))?;
+
+        if num_rows == 0 {
+            return Err(WalletStorageError::NotFound {
+                operation: "accounts_set_default",
+                entity: "account".to_string(),
+                key: address.to_string(),
+            });
+        }
+
+        Ok(())
+    }
+
     fn accounts_insert(
         &mut self,
         account_name: &str,
         address: &SubstateAddress,
         owner_key_index: u64,
+        is_default: bool,
     ) -> Result<(), WalletStorageError> {
-        sql_query("INSERT INTO accounts (name, address, owner_key_index) VALUES (?, ?, ?)")
+        if is_default {
+            diesel::update(crate::schema::accounts::table)
+                .set(crate::schema::accounts::is_default.eq(false))
+                .execute(self.connection())
+                .map_err(|e| WalletStorageError::general("accounts_insert clear previous default", e))?;
+        }
+
+        sql_query("INSERT INTO accounts (name, address, owner_key_index, is_default) VALUES (?, ?, ?)")
             .bind::<Text, _>(account_name)
             .bind::<Text, _>(address.to_string())
             .bind::<BigInt, _>(owner_key_index as i64)
+            .bind::<Bool, _>(is_default)
             .execute(self.connection())
             .map_err(|e| WalletStorageError::general("accounts_insert", e))?;
 

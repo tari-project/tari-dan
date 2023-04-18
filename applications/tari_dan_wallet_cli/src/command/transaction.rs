@@ -63,6 +63,7 @@ use tari_wallet_daemon_client::{
         TransactionWaitResultRequest,
         TransactionWaitResultResponse,
     },
+    ComponentAddressOrName,
     WalletDaemonClient,
 };
 
@@ -117,8 +118,8 @@ pub struct CommonSubmitArgs {
     /// New non-fungible index outputs to mint in the format <resource_address>,<index>
     #[clap(long, alias = "new-nft-index")]
     pub new_non_fungible_index_outputs: Vec<NewNonFungibleIndexOutput>,
-    #[clap(long, default_value_t = 1000)]
-    pub fee: u64,
+    #[clap(long)]
+    pub fee: Option<u64>,
     #[clap(long, short = 'f', alias = "fee-account")]
     pub fee_account_name: Option<String>,
 }
@@ -144,7 +145,8 @@ pub struct SendArgs {
 
 #[derive(Debug, Args, Clone)]
 pub struct ConfidentialTransferArgs {
-    source_account_name: String,
+    #[clap(long, short = 'a', alias = "account")]
+    source_account: Option<ComponentAddressOrName>,
     amount: u32,
     destination_account: ComponentAddress,
     destination_public_key: FromHex<Vec<u8>>,
@@ -264,7 +266,7 @@ pub async fn handle_submit(args: SubmitArgs, client: &mut WalletDaemonClient) ->
         fee_instructions: vec![Instruction::CallMethod {
             component_address: fee_account.address.as_component_address().unwrap(),
             method: "pay_fee".to_string(),
-            args: args![Amount::try_from(common.fee)?],
+            args: args![Amount::try_from(common.fee.unwrap_or(1000))?],
         }],
         instructions,
         inputs: common.inputs,
@@ -319,7 +321,7 @@ async fn handle_submit_manifest(
         fee_instructions: vec![Instruction::CallMethod {
             component_address: fee_account.address.as_component_address().unwrap(),
             method: "pay_fee".to_string(),
-            args: args![Amount::try_from(common.fee)?],
+            args: args![Amount::try_from(common.fee.unwrap_or(1000))?],
         }],
         instructions,
         inputs: common.inputs,
@@ -398,7 +400,7 @@ pub async fn handle_send(args: SendArgs, client: &mut WalletDaemonClient) -> Res
         fee_instructions: vec![Instruction::CallMethod {
             component_address: fee_account,
             method: "pay_fee".to_string(),
-            args: args![Amount::try_from(common.fee)?],
+            args: args![Amount::try_from(common.fee.unwrap_or(1000))?],
         }],
         instructions,
         inputs: common.inputs,
@@ -437,7 +439,7 @@ pub async fn handle_confidential_transfer(
     client: &mut WalletDaemonClient,
 ) -> Result<(), anyhow::Error> {
     let ConfidentialTransferArgs {
-        source_account_name,
+        source_account,
         resource_address,
         amount,
         destination_account,
@@ -445,16 +447,16 @@ pub async fn handle_confidential_transfer(
         common,
     } = args;
 
-    let AccountByNameResponse { account, .. } = client.accounts_get_by_name(&source_account_name).await?;
+    // let AccountByNameResponse { account, .. } = client.accounts_get_by_name(&source_account_name).await?;
     let destination_public_key = PublicKey::from_bytes(&destination_public_key.into_inner())?;
     let resp = client
         .accounts_confidential_transfer(ConfidentialTransferRequest {
-            account: account.address.as_component_address().unwrap(),
+            account: source_account,
             amount: Amount::from(amount),
             resource_address: resource_address.unwrap_or(CONFIDENTIAL_TARI_RESOURCE_ADDRESS),
             destination_account,
             destination_public_key,
-            fee: common.fee.try_into()?,
+            fee: common.fee.map(|f| f.try_into()).transpose()?,
         })
         .await?;
 

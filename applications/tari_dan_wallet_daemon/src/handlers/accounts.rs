@@ -29,29 +29,37 @@ use tari_template_lib::{
 };
 use tari_transaction::Transaction;
 use tari_utilities::ByteArray;
-use tari_wallet_daemon_client::types::{
-    AccountByNameRequest,
-    AccountByNameResponse,
-    AccountsCreateRequest,
-    AccountsCreateResponse,
-    AccountsGetBalancesRequest,
-    AccountsGetBalancesResponse,
-    AccountsInvokeRequest,
-    AccountsInvokeResponse,
-    AccountsListRequest,
-    AccountsListResponse,
-    BalanceEntry,
-    ClaimBurnRequest,
-    ClaimBurnResponse,
-    ConfidentialTransferRequest,
-    ConfidentialTransferResponse,
-    RevealFundsRequest,
-    RevealFundsResponse,
+use tari_wallet_daemon_client::{
+    types::{
+        AccountByNameRequest,
+        AccountByNameResponse,
+        AccountSetDefaultRequest,
+        AccountSetDefaultResponse,
+        AccountsCreateRequest,
+        AccountsCreateResponse,
+        AccountsGetBalancesRequest,
+        AccountsGetBalancesResponse,
+        AccountsInvokeRequest,
+        AccountsInvokeResponse,
+        AccountsListRequest,
+        AccountsListResponse,
+        BalanceEntry,
+        ClaimBurnRequest,
+        ClaimBurnResponse,
+        ConfidentialTransferRequest,
+        ConfidentialTransferResponse,
+        RevealFundsRequest,
+        RevealFundsResponse,
+    },
+    ComponentAddressOrName,
 };
 use tokio::{sync::broadcast, task};
 
 use super::context::HandlerContext;
-use crate::services::{TransactionFinalizedEvent, TransactionSubmittedEvent, WalletEvent};
+use crate::{
+    services::{TransactionFinalizedEvent, TransactionSubmittedEvent, WalletEvent},
+    DEFAULT_FEE,
+};
 
 const LOG_TARGET: &str = "tari::dan_wallet_daemon::handlers::transaction";
 
@@ -103,13 +111,23 @@ pub async fn handle_create(
         .ok_or_else(|| anyhow!("Create account transaction accepted but no component address was returned"))?;
 
     sdk.accounts_api()
-        .add_account(req.account_name.as_deref(), addr, key_index)?;
+        .add_account(req.account_name.as_deref(), addr, key_index, req.is_default)?;
 
     Ok(AccountsCreateResponse {
         address: addr.clone(),
         public_key: owner_pk,
         result: finalized.finalize,
     })
+}
+
+pub async fn handle_set_default(
+    context: &HandlerContext,
+    req: AccountSetDefaultRequest,
+) -> Result<AccountSetDefaultResponse, anyhow::Error> {
+    let sdk = context.wallet_sdk();
+    let account = sdk.accounts_api().get_account_by_name(&req.name)?;
+    sdk.accounts_api().set_default_account(&account.address)?;
+    Ok(AccountSetDefaultResponse {})
 }
 
 pub async fn handle_list(
@@ -141,7 +159,7 @@ pub async fn handle_invoke(
         .key_manager_api()
         .get_key_or_active(key_manager::TRANSACTION_BRANCH, None)?;
 
-    let account = sdk.accounts_api().get_account_by_name(&req.account_name)?;
+    let account = sdk.accounts_api().get_account_by_name_or_default(&req.account_name)?;
     let account_substate = sdk.substate_api().get_substate(&account.address)?;
 
     let vault = sdk
@@ -197,7 +215,7 @@ pub async fn handle_get_balances(
     let sdk = context.wallet_sdk();
     let account = sdk
         .accounts_api()
-        .get_account_by_name(&req.account_name)
+        .get_account_by_name_or_default(req.account_name.as_ref())
         .optional()?
         .ok_or_else(|| {
             JsonRpcError::new(
@@ -256,29 +274,33 @@ pub async fn handle_reveal_funds(
     task::spawn(async move {
         let mut inputs = vec![];
 
-        if req.pay_fee_from_reveal && req.amount_to_reveal < req.fee {
-            return Err(JsonRpcError::new(
-                JsonRpcErrorReason::InvalidParams,
-                "When pay_fee_from_reveal is true, amount to reveal must be greater than or equal to the fee"
-                    .to_string(),
-                json::Value::Null,
-            )
-            .into());
+        let account;
+        if let Some(a) = req.account {
+            match a {
+                ComponentAddressOrName::ComponentAddress(address) => {
+                    account = sdk.accounts_api().get_account(&address.into())?;
+                },
+                ComponentAddressOrName::Name(name) => {
+                    account = sdk.accounts_api().get_account_by_name(&name)?;
+                },
+            }
+        } else {
+            account = sdk.accounts_api().get_default()?;
         }
-
-        let account = sdk.accounts_api().get_account(&req.account.into())?;
-
         // Add the account component
-        let account_substate = sdk.substate_api().get_substate(&req.account.into())?;
+        let account_substate = sdk.substate_api().get_substate(&account.address)?;
+
         inputs.push(account_substate.address);
 
         // Add all versioned account child addresses as inputs
-        let child_addresses = sdk.substate_api().load_dependent_substates(&[req.account.into()])?;
+        let child_addresses = sdk
+            .substate_api()
+            .load_dependent_substates(&[account.address.clone()])?;
         inputs.extend(child_addresses);
 
         let vault = sdk
             .accounts_api()
-            .get_vault_by_resource(&req.account.into(), &CONFIDENTIAL_TARI_RESOURCE_ADDRESS)?;
+            .get_vault_by_resource(&account.address, &CONFIDENTIAL_TARI_RESOURCE_ADDRESS)?;
 
         let proof_id = sdk.confidential_outputs_api().add_proof(&vault.address)?;
 
@@ -348,7 +370,7 @@ pub async fn handle_reveal_funds(
             ]);
         } else {
             builder = builder
-                .fee_transaction_pay_from_component(account_address, req.fee)
+                .fee_transaction_pay_from_component(account_address, req.fee.unwrap_or(DEFAULT_FEE))
                 .call_method(account_address, "withdraw_confidential", args![
                     CONFIDENTIAL_TARI_RESOURCE_ADDRESS,
                     reveal_proof
@@ -410,7 +432,7 @@ pub async fn handle_claim_burn(
     req: ClaimBurnRequest,
 ) -> Result<ClaimBurnResponse, anyhow::Error> {
     let ClaimBurnRequest {
-        account: account_address,
+        account,
         claim_proof,
         fee,
     } = req;
@@ -463,7 +485,8 @@ pub async fn handle_claim_burn(
     )?;
 
     let sdk = context.wallet_sdk();
-    let account = sdk.accounts_api().get_account(&account_address.into())?;
+
+    let account = sdk.accounts_api().get_or_default(account.as_ref())?;
     let account_secret_key = sdk
         .key_manager_api()
         .derive_key(key_manager::TRANSACTION_BRANCH, account.key_index)?;

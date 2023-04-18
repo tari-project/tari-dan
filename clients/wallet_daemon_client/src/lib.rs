@@ -20,14 +20,20 @@
 //   WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //   USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 pub mod error;
+pub mod serialize;
 pub mod types;
 
-use std::borrow::Borrow;
+use std::{
+    borrow::Borrow,
+    fmt::{Display, Formatter},
+    str::FromStr,
+};
 
 use reqwest::{header, header::HeaderMap, IntoUrl, Url};
-use serde::{de::DeserializeOwned, Serialize};
+use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use serde_json as json;
 use serde_json::json;
+use tari_template_lib::models::ComponentAddress;
 use types::{
     ClaimBurnRequest,
     ClaimBurnResponse,
@@ -74,6 +80,33 @@ use crate::{
         TransactionWaitResultResponse,
     },
 };
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum ComponentAddressOrName {
+    ComponentAddress(ComponentAddress),
+    Name(String),
+}
+
+impl Display for ComponentAddressOrName {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::ComponentAddress(address) => write!(f, "{}", address),
+            Self::Name(name) => write!(f, "{}", name),
+        }
+    }
+}
+
+impl FromStr for ComponentAddressOrName {
+    type Err = String;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        if let Ok(address) = ComponentAddress::from_str(s) {
+            Ok(Self::ComponentAddress(address))
+        } else {
+            Ok(Self::Name(s.to_string()))
+        }
+    }
+}
 
 #[derive(Debug, Clone)]
 pub struct WalletDaemonClient {
@@ -188,7 +221,10 @@ impl WalletDaemonClient {
             .await
     }
 
-    pub async fn accounts_get_by_name(&mut self, name: &str) -> Result<AccountByNameResponse, WalletDaemonClientError> {
+    pub async fn accounts_get_by_name<S: Display>(
+        &mut self,
+        name: S,
+    ) -> Result<AccountByNameResponse, WalletDaemonClientError> {
         self.send_request("accounts.get_by_name", &AccountByNameRequest { name: name.to_string() })
             .await
     }

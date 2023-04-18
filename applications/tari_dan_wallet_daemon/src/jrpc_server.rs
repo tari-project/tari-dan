@@ -82,6 +82,7 @@ async fn handler(
             "invoke" => call_handler(context, value, accounts::handle_invoke).await,
             "get_by_name" => call_handler(context, value, accounts::handle_get_by_name).await,
             "confidential_transfer" => call_handler(context, value, accounts::handle_confidential_transfer).await,
+            "set_default" => call_handler(context, value, accounts::handle_set_default).await,
             _ => Ok(value.method_not_found(&value.method)),
         },
         Some(("confidential", method)) => match method {

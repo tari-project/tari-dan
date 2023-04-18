@@ -18,6 +18,7 @@ pub struct Account {
     pub balance: i64,
     pub created_at: NaiveDateTime,
     pub updated_at: NaiveDateTime,
+    pub is_default: bool,
 }
 
 impl TryFrom<Account> for tari_dan_wallet_sdk::models::Account {
@@ -29,6 +30,7 @@ impl TryFrom<Account> for tari_dan_wallet_sdk::models::Account {
             address: account.address.parse()?,
             balance: Amount(account.balance),
             key_index: account.owner_key_index as u64,
+            is_default: account.is_default,
         })
     }
 }

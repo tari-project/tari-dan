@@ -39,6 +39,11 @@ use tari_template_lib::{
 };
 use tari_transaction::Transaction;
 
+use crate::{
+    serialize::{opt_string_or_struct, string_or_struct},
+    ComponentAddressOrName,
+};
+
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct TransactionSubmitRequest {
     pub signing_key_index: Option<u64>,
@@ -156,10 +161,12 @@ pub struct KeysCreateResponse {
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct AccountsCreateRequest {
-    pub account_name: Option<String>,
+    #[serde(deserialize_with = "opt_string_or_struct")]
+    pub account_name: Option<ComponentAddressOrName>,
     pub signing_key_index: Option<u64>,
     pub custom_access_rules: Option<AccessRules>,
-    pub fee: Option<u64>,
+    pub fee: Option<Amount>,
+    pub is_default: bool,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -171,10 +178,11 @@ pub struct AccountsCreateResponse {
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct AccountsInvokeRequest {
-    pub account_name: String,
+    #[serde(deserialize_with = "opt_string_or_struct")]
+    pub account_name: Option<ComponentAddressOrName>,
     pub method: String,
     pub args: Vec<Arg>,
-    pub fee: Amount,
+    pub fee: Option<Amount>,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -196,7 +204,8 @@ pub struct AccountsListResponse {
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct AccountsGetBalancesRequest {
-    pub account_name: String,
+    #[serde(deserialize_with = "opt_string_or_struct")]
+    pub account_name: Option<ComponentAddressOrName>,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -250,10 +259,20 @@ pub struct AccountByNameResponse {
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct AccountSetDefaultRequest {
+    #[serde(deserialize_with = "string_or_struct")]
+    pub name: ComponentAddressOrName,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AccountSetDefaultResponse {}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct ProofsGenerateRequest {
     pub amount: Amount,
     pub reveal_amount: Amount,
-    pub source_account_name: String,
+    #[serde(deserialize_with = "opt_string_or_struct")]
+    pub source_account_name: Option<ComponentAddressOrName>,
     pub resource_address: ResourceAddress,
     // TODO: For now, we assume that this is obtained "somehow" from the destination account
     pub destination_public_key: PublicKey,
@@ -290,12 +309,13 @@ pub struct ConfidentialCreateOutputProofResponse {
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct ConfidentialTransferRequest {
-    pub account: ComponentAddress,
+    #[serde(deserialize_with = "opt_string_or_struct")]
+    pub account: Option<ComponentAddressOrName>,
     pub amount: Amount,
     pub resource_address: ResourceAddress,
     pub destination_account: ComponentAddress,
     pub destination_public_key: PublicKey,
-    pub fee: Amount,
+    pub fee: Option<Amount>,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -308,9 +328,10 @@ pub struct ConfidentialTransferResponse {
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct ClaimBurnRequest {
-    pub account: ComponentAddress,
+    #[serde(deserialize_with = "opt_string_or_struct")]
+    pub account: Option<ComponentAddressOrName>,
     pub claim_proof: serde_json::Value,
-    pub fee: Amount,
+    pub fee: Option<Amount>,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -327,13 +348,14 @@ pub struct ProofsCancelResponse {}
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct RevealFundsRequest {
     /// Account with funds to reveal
-    pub account: ComponentAddress,
+    #[serde(deserialize_with = "opt_string_or_struct")]
+    pub account: Option<ComponentAddressOrName>,
     /// Amount to reveal
     pub amount_to_reveal: Amount,
     /// Pay fee from revealed funds. If false, previously revealed funds in the account are used.
     pub pay_fee_from_reveal: bool,
     /// The amount of fees to add to the transaction. Any fees not charged are refunded.
-    pub fee: Amount,
+    pub fee: Option<Amount>,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]

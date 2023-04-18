@@ -10,4 +10,5 @@ pub struct Account {
     pub address: SubstateAddress,
     pub key_index: u64,
     pub balance: Amount,
+    pub is_default: bool,
 }
