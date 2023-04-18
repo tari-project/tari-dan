@@ -20,10 +20,10 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-import {jsonRpc} from './utils/json_rpc'
 import { Routes, Route, Outlet, Link } from 'react-router-dom';
 import './App.css'
 import Accounts from './routes/Accounts/Accounts';
+import AccountDetails from "./routes/AccountDetails/AccountDetails";
 import Keys from './routes/Keys/Keys';
 import ErrorPage from './routes/ErrorPage';
 import { ThemeProvider } from '@emotion/react';
@@ -154,6 +154,7 @@ function App() {
         <Route path="/" element={<Layout />}>
           <Route index element={<Wallet />} />
           <Route path="accounts" element={<Accounts />} />
+            <Route path="accounts/:name" element={<AccountDetails />} />
           <Route path="keys" element={<Keys />} />
           <Route path="*" element={<ErrorPage />} />
         </Route>

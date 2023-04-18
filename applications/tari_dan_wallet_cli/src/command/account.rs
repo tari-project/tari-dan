@@ -36,6 +36,7 @@ use tari_utilities::ByteArray;
 use tari_wallet_daemon_client::{
     types::{
         AccountByNameResponse,
+        AccountInfo,
         AccountsCreateFreeTestCoinsRequest,
         AccountsCreateRequest,
         AccountsGetBalancesRequest,
@@ -310,8 +311,8 @@ async fn handle_list(client: &mut WalletDaemonClient) -> Result<(), anyhow::Erro
     table.enable_row_count();
     table.set_titles(vec!["Name", "Address", "Public Key"]);
     println!("Accounts:");
-    for (account, pk) in resp.accounts {
-        table.add_row(table_row!(account.name, account.address, pk));
+    for AccountInfo { account, public_key } in resp.accounts {
+        table.add_row(table_row!(account.name, account.address, public_key));
     }
     table.print_stdout();
     Ok(())

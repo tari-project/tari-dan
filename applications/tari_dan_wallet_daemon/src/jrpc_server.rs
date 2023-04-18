@@ -7,6 +7,7 @@ use axum::{extract::Extension, routing::post, Router};
 use axum_jrpc::{
     error::{JsonRpcError, JsonRpcErrorReason},
     JrpcResult,
+    JsonRpcAnswer,
     JsonRpcExtractor,
     JsonRpcResponse,
 };
@@ -120,7 +121,20 @@ where
 {
     let answer_id = value.get_answer_id();
     let resp = handler
-        .handle(&context, value.parse_params()?)
+        .handle(
+            &context,
+            value.parse_params().map_err(|e| {
+                match &e.result {
+                    JsonRpcAnswer::Result(_) => {
+                        unreachable!("parse_params should not return a result")
+                    },
+                    JsonRpcAnswer::Error(e) => {
+                        warn!(target: LOG_TARGET, "🌐 JSON-RPC params error: {}", e);
+                    },
+                }
+                e
+            })?,
+        )
         .await
         .map_err(|e| resolve_handler_error(answer_id, &e))?;
     Ok(JsonRpcResponse::success(answer_id, resp))
@@ -137,6 +151,7 @@ fn resolve_handler_error(answer_id: i64, e: &HandlerError) -> JsonRpcResponse {
 }
 
 fn resolve_any_error(answer_id: i64, e: &anyhow::Error) -> JsonRpcResponse {
+    warn!(target: LOG_TARGET, "🌐 JSON-RPC error: {}", e);
     if let Some(handler_err) = e.downcast_ref::<HandlerError>() {
         return resolve_handler_error(answer_id, handler_err);
     }

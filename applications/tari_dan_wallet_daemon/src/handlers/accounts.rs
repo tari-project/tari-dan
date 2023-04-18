@@ -32,6 +32,7 @@ use tari_utilities::ByteArray;
 use tari_wallet_daemon_client::types::{
     AccountByNameRequest,
     AccountByNameResponse,
+    AccountInfo,
     AccountsCreateFreeTestCoinsRequest,
     AccountsCreateFreeTestCoinsResponse,
     AccountsCreateRequest,
@@ -127,7 +128,10 @@ pub async fn handle_list(
         .map(|a| {
             let key = km.derive_key(key_manager::TRANSACTION_BRANCH, a.key_index)?;
             let pk = PublicKey::from_secret_key(&key.k);
-            Ok((a, pk))
+            Ok(AccountInfo {
+                account: a,
+                public_key: pk,
+            })
         })
         .collect::<Result<_, anyhow::Error>>()?;
 
@@ -416,7 +420,6 @@ pub async fn handle_claim_burn(
         claim_proof,
         fee,
     } = req;
-
     let reciprocal_claim_public_key = PublicKey::from_bytes(
         &base64::decode(
             claim_proof["reciprocal_claim_public_key"]
@@ -639,7 +642,7 @@ pub async fn handle_create_free_test_coins(
     let account_address = account
         .address
         .as_component_address()
-        .ok_or(anyhow!("Invalid account address"))?;
+        .ok_or_else(|| anyhow!("Invalid account address"))?;
 
     let transaction = Transaction::builder()
         .with_fee_instructions(vec![
