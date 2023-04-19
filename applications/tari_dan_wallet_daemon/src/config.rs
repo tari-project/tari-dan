@@ -20,7 +20,7 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use std::net::SocketAddr;
+use std::{net::SocketAddr, time::Duration};
 
 use config::Config;
 use serde::{Deserialize, Serialize};
@@ -53,6 +53,10 @@ pub struct WalletDaemonConfig {
     pub signaling_server_addr: Option<SocketAddr>,
     /// The validator nodes jrpc endpoint url
     pub validator_node_endpoint: Option<String>,
+    /// Expiration duration of the JWT token
+    pub jwt_expiration: Option<Duration>,
+    /// Secret key for the JWT token.
+    pub secret_key: Option<String>,
 }
 
 impl Default for WalletDaemonConfig {
@@ -62,6 +66,11 @@ impl Default for WalletDaemonConfig {
             listen_addr: Some(SocketAddr::from(([127u8, 0, 0, 1], 9000))),
             signaling_server_addr: Some(SocketAddr::from(([127u8, 0, 0, 1], 9100))),
             validator_node_endpoint: Some("http://127.0.0.1:18200/json_rpc".to_string()),
+            // TODO: Come up with a reasonable default value
+            jwt_expiration: Some(Duration::from_secs(5 * 60)),
+            // TODO: Generate a random secret key at start if not set by hand. Otherwise anyone can generate a JWT token
+            // when they know the secret_key.
+            secret_key: Some("secret_key".to_string()),
         }
     }
 }

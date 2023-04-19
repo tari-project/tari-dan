@@ -130,6 +130,9 @@ pub struct TransactionClaimBurnResponse {
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct AuthLoginRequest {}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct KeysListRequest {}
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
