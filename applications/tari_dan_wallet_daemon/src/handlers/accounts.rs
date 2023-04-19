@@ -6,7 +6,6 @@ use anyhow::anyhow;
 use axum_jrpc::error::{JsonRpcError, JsonRpcErrorReason};
 use base64;
 use log::*;
-use serde_json as json;
 use tari_common_types::types::{FixedHash, PrivateKey, PublicKey};
 use tari_crypto::{
     commitment::{HomomorphicCommitment as Commitment, HomomorphicCommitmentFactory},
@@ -17,8 +16,7 @@ use tari_dan_common_types::{optional::Optional, ShardId};
 use tari_dan_wallet_sdk::{
     apis::key_manager,
     confidential::{get_commitment_factory, ConfidentialProofStatement},
-    models::{Account, ConfidentialOutputModel, OutputStatus, VersionedSubstateAddress},
-    DanWalletSdk,
+    models::{ConfidentialOutputModel, OutputStatus, VersionedSubstateAddress},
 };
 use tari_engine_types::{confidential::ConfidentialClaim, instruction::Instruction, substate::SubstateAddress};
 use tari_template_builtin::ACCOUNT_TEMPLATE_ADDRESS;
@@ -32,8 +30,9 @@ use tari_transaction::Transaction;
 use tari_utilities::ByteArray;
 use tari_wallet_daemon_client::{
     types::{
-        AccountByNameRequest,
-        AccountByNameResponse,
+        AccountGetDefaultRequest,
+        AccountGetRequest,
+        AccountGetResponse,
         AccountInfo,
         AccountSetDefaultRequest,
         AccountSetDefaultResponse,
@@ -130,7 +129,7 @@ pub async fn handle_set_default(
     req: AccountSetDefaultRequest,
 ) -> Result<AccountSetDefaultResponse, anyhow::Error> {
     let sdk = context.wallet_sdk();
-    let account = get_account(req.account, &sdk)?;
+    let account = get_account(req.account, sdk)?;
     sdk.accounts_api().set_default_account(&account.address)?;
     Ok(AccountSetDefaultResponse {})
 }
@@ -167,7 +166,7 @@ pub async fn handle_invoke(
         .key_manager_api()
         .get_key_or_active(key_manager::TRANSACTION_BRANCH, None)?;
 
-    let account = get_account_or_default(req.account, &sdk)?;
+    let account = get_account_or_default(req.account, sdk)?;
     let account_substate = sdk.substate_api().get_substate(&account.address)?;
 
     let vault = sdk
@@ -219,7 +218,7 @@ pub async fn handle_get_balances(
     req: AccountsGetBalancesRequest,
 ) -> Result<AccountsGetBalancesResponse, anyhow::Error> {
     let sdk = context.wallet_sdk();
-    let account = get_account_or_default(req.account, &sdk)?;
+    let account = get_account_or_default(req.account, sdk)?;
     let vaults = sdk.accounts_api().get_vaults_by_account(&account.address)?;
     let outputs_api = sdk.confidential_outputs_api();
 
@@ -247,16 +246,25 @@ pub async fn handle_get_balances(
     })
 }
 
-pub async fn handle_get_by_name(
-    context: &HandlerContext,
-    req: AccountByNameRequest,
-) -> Result<AccountByNameResponse, anyhow::Error> {
+pub async fn handle_get(context: &HandlerContext, req: AccountGetRequest) -> Result<AccountGetResponse, anyhow::Error> {
     let sdk = context.wallet_sdk();
-    let account = sdk.accounts_api().get_account_by_name(&req.name)?;
+    let account = get_account(req.name_or_address, sdk)?;
     let km = sdk.key_manager_api();
     let key = km.derive_key(key_manager::TRANSACTION_BRANCH, account.key_index)?;
     let public_key = PublicKey::from_secret_key(&key.k);
-    Ok(AccountByNameResponse { account, public_key })
+    Ok(AccountGetResponse { account, public_key })
+}
+
+pub async fn handle_get_default(
+    context: &HandlerContext,
+    _req: AccountGetDefaultRequest,
+) -> Result<AccountGetResponse, anyhow::Error> {
+    let sdk = context.wallet_sdk();
+    let account = get_account_or_default(None, sdk)?;
+    let km = sdk.key_manager_api();
+    let key = km.derive_key(key_manager::TRANSACTION_BRANCH, account.key_index)?;
+    let public_key = PublicKey::from_secret_key(&key.k);
+    Ok(AccountGetResponse { account, public_key })
 }
 
 #[allow(clippy::too_many_lines)]
@@ -284,11 +292,14 @@ pub async fn handle_reveal_funds(
             .accounts_api()
             .get_vault_by_resource(&account.address, &CONFIDENTIAL_TARI_RESOURCE_ADDRESS)?;
 
+        let fee = req.fee.unwrap_or(DEFAULT_FEE);
+        let amount_to_reveal = req.amount_to_reveal + if req.pay_fee_from_reveal { fee } else { 0.into() };
+
         let proof_id = sdk.confidential_outputs_api().add_proof(&vault.address)?;
 
         let (inputs, input_value) = sdk.confidential_outputs_api().lock_outputs_by_amount(
             &vault.address,
-            req.amount_to_reveal.as_u64_checked().unwrap(),
+            amount_to_reveal.as_u64_checked().unwrap(),
             proof_id,
         )?;
         let input_amount = Amount::try_from(input_value)?;
@@ -303,11 +314,11 @@ pub async fn handle_reveal_funds(
             .derive_output_mask_for_destination(&account_public_key);
 
         let output_statement = ConfidentialProofStatement {
-            amount: input_amount - req.amount_to_reveal,
+            amount: input_amount - amount_to_reveal,
             mask: output_mask,
             sender_public_nonce: Some(public_nonce),
             minimum_value_promise: 0,
-            reveal_amount: req.amount_to_reveal,
+            reveal_amount: amount_to_reveal,
         };
 
         let inputs = sdk
@@ -347,12 +358,12 @@ pub async fn handle_reveal_funds(
                 Instruction::CallMethod {
                     component_address: account_address,
                     method: "pay_fee".to_string(),
-                    args: args![req.fee],
+                    args: args![fee],
                 },
             ]);
         } else {
             builder = builder
-                .fee_transaction_pay_from_component(account_address, req.fee.unwrap_or(DEFAULT_FEE))
+                .fee_transaction_pay_from_component(account_address, fee)
                 .call_method(account_address, "withdraw_confidential", args![
                     CONFIDENTIAL_TARI_RESOURCE_ADDRESS,
                     reveal_proof
@@ -623,7 +634,7 @@ pub async fn handle_create_free_test_coins(
     req: AccountsCreateFreeTestCoinsRequest,
 ) -> Result<AccountsCreateFreeTestCoinsResponse, anyhow::Error> {
     let sdk = context.wallet_sdk().clone();
-    let account = sdk.accounts_api().get_account_by_name(req.account_name.as_str())?;
+    let account = get_account_or_default(req.account, &sdk)?;
 
     let account_secret_key = sdk
         .key_manager_api()
@@ -636,9 +647,7 @@ pub async fn handle_create_free_test_coins(
     inputs.push(account_substate.address);
 
     // Add all versioned account child addresses as inputs
-    let child_addresses = sdk
-        .substate_api()
-        .load_dependent_substates(&[account.address.clone()])?;
+    let child_addresses = sdk.substate_api().load_dependent_substates(&[&account.address])?;
     inputs.extend(child_addresses);
 
     // TODO: we assume that all inputs will be consumed and produce a new output however this is only the case when the
@@ -658,6 +667,7 @@ pub async fn handle_create_free_test_coins(
         .as_component_address()
         .ok_or_else(|| anyhow!("Invalid account address"))?;
 
+    let fee = req.fee.unwrap_or(DEFAULT_FEE);
     let transaction = Transaction::builder()
         .with_fee_instructions(vec![
             Instruction::CreateFreeTestCoins {
@@ -675,7 +685,7 @@ pub async fn handle_create_free_test_coins(
             Instruction::CallMethod {
                 component_address: account_address,
                 method: "pay_fee".to_string(),
-                args: args![req.fee],
+                args: args![fee],
             },
         ])
         .with_inputs(inputs)
@@ -703,7 +713,7 @@ pub async fn handle_create_free_test_coins(
     Ok(AccountsCreateFreeTestCoinsResponse {
         hash: tx_hash,
         amount: req.amount,
-        fee: req.fee,
+        fee,
         result: finalized.finalize,
     })
 }

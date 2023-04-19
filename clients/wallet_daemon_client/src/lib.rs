@@ -55,8 +55,11 @@ use types::{
 use crate::{
     error::WalletDaemonClientError,
     types::{
-        AccountByNameRequest,
-        AccountByNameResponse,
+        AccountGetDefaultRequest,
+        AccountGetRequest,
+        AccountGetResponse,
+        AccountSetDefaultRequest,
+        AccountSetDefaultResponse,
         AccountsCreateRequest,
         AccountsCreateResponse,
         AccountsGetBalancesRequest,
@@ -230,11 +233,24 @@ impl WalletDaemonClient {
             .await
     }
 
-    pub async fn accounts_get_by_name<S: Display>(
+    pub async fn accounts_get(
         &mut self,
-        name: S,
-    ) -> Result<AccountByNameResponse, WalletDaemonClientError> {
-        self.send_request("accounts.get_by_name", &AccountByNameRequest { name: name.to_string() })
+        name_or_address: ComponentAddressOrName,
+    ) -> Result<AccountGetResponse, WalletDaemonClientError> {
+        self.send_request("accounts.get", &AccountGetRequest { name_or_address })
+            .await
+    }
+
+    pub async fn accounts_get_default(&mut self) -> Result<AccountGetResponse, WalletDaemonClientError> {
+        self.send_request("accounts.get_default", &AccountGetDefaultRequest {})
+            .await
+    }
+
+    pub async fn accounts_set_default(
+        &mut self,
+        account: ComponentAddressOrName,
+    ) -> Result<AccountSetDefaultResponse, WalletDaemonClientError> {
+        self.send_request("accounts.set_default", &AccountSetDefaultRequest { account })
             .await
     }
 

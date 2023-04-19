@@ -4,7 +4,7 @@
 use tari_dan_common_types::optional::{IsNotFoundError, Optional};
 use tari_engine_types::substate::SubstateAddress;
 use tari_template_lib::{
-    models::{Amount, ComponentAddress, ResourceAddress},
+    models::{Amount, ResourceAddress},
     prelude::ResourceType,
 };
 
@@ -58,14 +58,20 @@ impl<'a, TStore: WalletStore> AccountsApi<'a, TStore> {
         let mut tx = self.store.create_read_tx()?;
         let account = match name {
             Some(name) => tx.accounts_get_by_name(name)?,
-            None => tx.accounts_get_default()?,
+            None => tx.accounts_get_default().map_err(|e| match e {
+                WalletStorageError::NotFound { .. } => AccountsApiError::DefaultAccountNotSet,
+                _ => AccountsApiError::StoreError(e),
+            })?,
         };
         Ok(account)
     }
 
     pub fn get_default(&self) -> Result<Account, AccountsApiError> {
         let mut tx = self.store.create_read_tx()?;
-        let account = tx.accounts_get_default()?;
+        let account = tx.accounts_get_default().map_err(|e| match e {
+            WalletStorageError::NotFound { .. } => AccountsApiError::DefaultAccountNotSet,
+            _ => AccountsApiError::StoreError(e),
+        })?;
         Ok(account)
     }
 
@@ -178,6 +184,8 @@ pub enum AccountsApiError {
     StoreError(#[from] WalletStorageError),
     #[error("Account name already exists: {name}")]
     AccountNameAlreadyExists { name: String },
+    #[error("No default account set")]
+    DefaultAccountNotSet,
 }
 
 impl IsNotFoundError for AccountsApiError {

@@ -339,7 +339,7 @@ impl WalletStoreWriter for WriteTransaction<'_> {
                 .map_err(|e| WalletStorageError::general("accounts_insert clear previous default", e))?;
         }
 
-        sql_query("INSERT INTO accounts (name, address, owner_key_index, is_default) VALUES (?, ?, ?)")
+        sql_query("INSERT INTO accounts (name, address, owner_key_index, is_default) VALUES (?, ?, ?, ?)")
             .bind::<Text, _>(account_name)
             .bind::<Text, _>(address.to_string())
             .bind::<BigInt, _>(owner_key_index as i64)

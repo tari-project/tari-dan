@@ -105,6 +105,8 @@ async fn handler(
         )
     })?;
 
+    dbg!(&value);
+
     match value.method.as_str().split_once('.') {
         Some(("rpc", "discover")) => call_handler(context, value, rpc::handle_discover).await,
         Some(("keys", method)) => match method {
@@ -127,7 +129,8 @@ async fn handler(
             "list" => call_handler(context, value, accounts::handle_list).await,
             "get_balances" => call_handler(context, value, accounts::handle_get_balances).await,
             "invoke" => call_handler(context, value, accounts::handle_invoke).await,
-            "get_by_name" => call_handler(context, value, accounts::handle_get_by_name).await,
+            "get" => call_handler(context, value, accounts::handle_get).await,
+            "get_default" => call_handler(context, value, accounts::handle_get_default).await,
             "confidential_transfer" => call_handler(context, value, accounts::handle_confidential_transfer).await,
             "set_default" => call_handler(context, value, accounts::handle_set_default).await,
             "create_free_test_coins" => call_handler(context, value, accounts::handle_create_free_test_coins).await,

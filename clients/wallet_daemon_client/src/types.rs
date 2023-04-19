@@ -256,12 +256,17 @@ impl BalanceEntry {
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
-pub struct AccountByNameRequest {
-    pub name: String,
+pub struct AccountGetRequest {
+    pub name_or_address: ComponentAddressOrName,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
-pub struct AccountByNameResponse {
+pub struct AccountGetDefaultRequest {
+    // Intentionally empty. Fields may be added in the future.
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct AccountGetResponse {
     pub account: Account,
     pub public_key: PublicKey,
 }
@@ -356,7 +361,6 @@ pub struct ProofsCancelResponse {}
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct RevealFundsRequest {
-    #[serde(deserialize_with = "string_or_struct")]
     /// Account with funds to reveal
     #[serde(deserialize_with = "opt_string_or_struct")]
     pub account: Option<ComponentAddressOrName>,
@@ -378,9 +382,9 @@ pub struct RevealFundsResponse {
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct AccountsCreateFreeTestCoinsRequest {
-    pub account_name: String,
+    pub account: Option<ComponentAddressOrName>,
     pub amount: Amount,
-    pub fee: Amount,
+    pub fee: Option<Amount>,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]

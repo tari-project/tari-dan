@@ -77,7 +77,7 @@ async fn when_i_burn_funds_with_wallet_daemon(
 ) {
     let mut wallet_daemon_client = wallet_daemon_cli::get_wallet_daemon_client(world, wallet_daemon_name).await;
     let account = wallet_daemon_client
-        .accounts_get_by_name(account_name.as_str())
+        .accounts_get(account_name.parse().unwrap())
         .await
         .unwrap();
     let public_key = account.public_key;
