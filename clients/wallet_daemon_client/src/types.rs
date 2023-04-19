@@ -161,8 +161,7 @@ pub struct KeysCreateResponse {
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct AccountsCreateRequest {
-    #[serde(deserialize_with = "opt_string_or_struct")]
-    pub account_name: Option<ComponentAddressOrName>,
+    pub account_name: Option<String>,
     pub signing_key_index: Option<u64>,
     pub custom_access_rules: Option<AccessRules>,
     pub fee: Option<Amount>,
@@ -179,7 +178,7 @@ pub struct AccountsCreateResponse {
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct AccountsInvokeRequest {
     #[serde(deserialize_with = "opt_string_or_struct")]
-    pub account_name: Option<ComponentAddressOrName>,
+    pub account: Option<ComponentAddressOrName>,
     pub method: String,
     pub args: Vec<Arg>,
     pub fee: Option<Amount>,
@@ -205,7 +204,7 @@ pub struct AccountsListResponse {
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct AccountsGetBalancesRequest {
     #[serde(deserialize_with = "opt_string_or_struct")]
-    pub account_name: Option<ComponentAddressOrName>,
+    pub account: Option<ComponentAddressOrName>,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -261,7 +260,7 @@ pub struct AccountByNameResponse {
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct AccountSetDefaultRequest {
     #[serde(deserialize_with = "string_or_struct")]
-    pub name: ComponentAddressOrName,
+    pub account: ComponentAddressOrName,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -272,7 +271,7 @@ pub struct ProofsGenerateRequest {
     pub amount: Amount,
     pub reveal_amount: Amount,
     #[serde(deserialize_with = "opt_string_or_struct")]
-    pub source_account_name: Option<ComponentAddressOrName>,
+    pub account: Option<ComponentAddressOrName>,
     pub resource_address: ResourceAddress,
     // TODO: For now, we assume that this is obtained "somehow" from the destination account
     pub destination_public_key: PublicKey,

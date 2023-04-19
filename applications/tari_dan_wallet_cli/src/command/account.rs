@@ -77,7 +77,7 @@ pub enum AccountsSubcommand {
 #[derive(Debug, Args, Clone)]
 pub struct CreateArgs {
     #[clap(long, alias = "name")]
-    pub account_name: Option<ComponentAddressOrName>,
+    pub account_name: Option<String>,
     #[clap(long, alias = "dry-run")]
     pub is_dry_run: bool,
     pub is_default: bool,
@@ -179,7 +179,7 @@ async fn hande_invoke(
     println!("Submitted invoke transaction for account...",);
     let resp = client
         .invoke_account_method(AccountsInvokeRequest {
-            account_name: account,
+            account,
             method,
             args: args.into_iter().map(|a| a.into_arg()).collect(),
             fee: fee.map(|u| Amount::new(u.into())),
@@ -201,7 +201,7 @@ async fn hande_invoke(
 async fn handle_get_balances(args: GetBalancesArgs, client: &mut WalletDaemonClient) -> Result<(), anyhow::Error> {
     let resp = client
         .get_account_balances(AccountsGetBalancesRequest {
-            account_name: args.account_name,
+            account: args.account_name,
         })
         .await?;
 

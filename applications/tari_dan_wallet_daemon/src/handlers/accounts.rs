@@ -17,7 +17,8 @@ use tari_dan_common_types::{optional::Optional, ShardId};
 use tari_dan_wallet_sdk::{
     apis::key_manager,
     confidential::{get_commitment_factory, ConfidentialProofStatement},
-    models::{ConfidentialOutputModel, OutputStatus, VersionedSubstateAddress},
+    models::{Account, ConfidentialOutputModel, OutputStatus, VersionedSubstateAddress},
+    DanWalletSdk,
 };
 use tari_engine_types::{confidential::ConfidentialClaim, instruction::Instruction, substate::SubstateAddress};
 use tari_template_builtin::ACCOUNT_TEMPLATE_ADDRESS;
@@ -57,6 +58,7 @@ use tokio::{sync::broadcast, task};
 
 use super::context::HandlerContext;
 use crate::{
+    handlers::{get_account, get_account_or_default},
     services::{TransactionFinalizedEvent, TransactionSubmittedEvent, WalletEvent},
     DEFAULT_FEE,
 };
@@ -125,7 +127,7 @@ pub async fn handle_set_default(
     req: AccountSetDefaultRequest,
 ) -> Result<AccountSetDefaultResponse, anyhow::Error> {
     let sdk = context.wallet_sdk();
-    let account = sdk.accounts_api().get_account_by_name(&req.name)?;
+    let account = get_account(req.account, &sdk)?;
     sdk.accounts_api().set_default_account(&account.address)?;
     Ok(AccountSetDefaultResponse {})
 }
@@ -159,7 +161,7 @@ pub async fn handle_invoke(
         .key_manager_api()
         .get_key_or_active(key_manager::TRANSACTION_BRANCH, None)?;
 
-    let account = sdk.accounts_api().get_account_by_name_or_default(&req.account_name)?;
+    let account = get_account_or_default(req.account, &sdk)?;
     let account_substate = sdk.substate_api().get_substate(&account.address)?;
 
     let vault = sdk
@@ -173,9 +175,7 @@ pub async fn handle_invoke(
         ShardId::from_address(&vault_substate.address.address, vault_substate.address.version + 1),
     ];
 
-    let inputs = sdk
-        .substate_api()
-        .load_dependent_substates(&[account.address.clone()])?;
+    let inputs = sdk.substate_api().load_dependent_substates(&[&account.address])?;
 
     let inputs = inputs
         .into_iter()
@@ -184,7 +184,7 @@ pub async fn handle_invoke(
 
     let account_address = account.address.as_component_address().unwrap();
     let transaction = Transaction::builder()
-        .fee_transaction_pay_from_component(account_address, req.fee)
+        .fee_transaction_pay_from_component(account_address, req.fee.unwrap_or(DEFAULT_FEE))
         .call_method(account_address, &req.method, req.args)
         .with_inputs(inputs)
         .with_outputs(outputs)
@@ -213,17 +213,7 @@ pub async fn handle_get_balances(
     req: AccountsGetBalancesRequest,
 ) -> Result<AccountsGetBalancesResponse, anyhow::Error> {
     let sdk = context.wallet_sdk();
-    let account = sdk
-        .accounts_api()
-        .get_account_by_name_or_default(req.account_name.as_ref())
-        .optional()?
-        .ok_or_else(|| {
-            JsonRpcError::new(
-                JsonRpcErrorReason::ApplicationError(404),
-                format!("Account '{}' not found", req.account_name),
-                json::Value::Null,
-            )
-        })?;
+    let account = get_account_or_default(req.account, &sdk)?;
     let vaults = sdk.accounts_api().get_vaults_by_account(&account.address)?;
     let outputs_api = sdk.confidential_outputs_api();
 
@@ -274,28 +264,14 @@ pub async fn handle_reveal_funds(
     task::spawn(async move {
         let mut inputs = vec![];
 
-        let account;
-        if let Some(a) = req.account {
-            match a {
-                ComponentAddressOrName::ComponentAddress(address) => {
-                    account = sdk.accounts_api().get_account(&address.into())?;
-                },
-                ComponentAddressOrName::Name(name) => {
-                    account = sdk.accounts_api().get_account_by_name(&name)?;
-                },
-            }
-        } else {
-            account = sdk.accounts_api().get_default()?;
-        }
+        let account = get_account_or_default(req.account, &sdk)?;
         // Add the account component
         let account_substate = sdk.substate_api().get_substate(&account.address)?;
 
         inputs.push(account_substate.address);
 
         // Add all versioned account child addresses as inputs
-        let child_addresses = sdk
-            .substate_api()
-            .load_dependent_substates(&[account.address.clone()])?;
+        let child_addresses = sdk.substate_api().load_dependent_substates(&[&account.address])?;
         inputs.extend(child_addresses);
 
         let vault = sdk
@@ -382,7 +358,7 @@ pub async fn handle_reveal_funds(
         // Add the account component
         let account_substate = sdk.substate_api().get_substate(&account.address)?;
         // Add all versioned account child addresses as inputs
-        let child_addresses = sdk.substate_api().load_dependent_substates(&[account.address])?;
+        let child_addresses = sdk.substate_api().load_dependent_substates(&[&account.address])?;
         let mut inputs = vec![account_substate.address];
         inputs.extend(child_addresses);
 
@@ -436,6 +412,7 @@ pub async fn handle_claim_burn(
         claim_proof,
         fee,
     } = req;
+    let fee = fee.unwrap_or(DEFAULT_FEE);
 
     let reciprocal_claim_public_key = PublicKey::from_bytes(
         &base64::decode(
@@ -486,7 +463,20 @@ pub async fn handle_claim_burn(
 
     let sdk = context.wallet_sdk();
 
-    let account = sdk.accounts_api().get_or_default(account.as_ref())?;
+    let requested_account;
+    if let Some(a) = account {
+        match a {
+            ComponentAddressOrName::ComponentAddress(addr) => {
+                requested_account = sdk.accounts_api().get_account(&addr.into())?;
+            },
+            ComponentAddressOrName::Name(name) => {
+                requested_account = sdk.accounts_api().get_account_by_name(&name)?;
+            },
+        }
+    } else {
+        requested_account = sdk.accounts_api().get_default()?;
+    }
+    let account = requested_account;
     let account_secret_key = sdk
         .key_manager_api()
         .derive_key(key_manager::TRANSACTION_BRANCH, account.key_index)?;
@@ -505,7 +495,7 @@ pub async fn handle_claim_burn(
     inputs.push(account_substate.address);
 
     // Add all versioned account child addresses as inputs
-    let child_addresses = sdk.substate_api().load_dependent_substates(&[account.address])?;
+    let child_addresses = sdk.substate_api().load_dependent_substates(&[&account.address])?;
     inputs.extend(child_addresses);
 
     // TODO: we assume that all inputs will be consumed and produce a new output however this is only the case when the
@@ -528,7 +518,7 @@ pub async fn handle_claim_burn(
         target: LOG_TARGET,
         "Loaded {} inputs for claim burn transaction on account: {}",
         inputs.len(),
-        account_address
+        account.name
     );
 
     // We have to unmask the commitment to allow us to reveal funds for the fee payment
@@ -553,7 +543,7 @@ pub async fn handle_claim_burn(
         mask,
         sender_public_nonce: Some(output_public_nonce),
         minimum_value_promise: 0,
-        reveal_amount: req.fee,
+        reveal_amount: fee,
     };
 
     let reveal_proof =
@@ -580,14 +570,14 @@ pub async fn handle_claim_burn(
             },
             Instruction::PutLastInstructionOutputOnWorkspace {key: b"burn".to_vec()},
             Instruction::CallMethod {
-                component_address: account_address,
+                component_address: account.address.clone().as_component_address().unwrap(),
                 method: "deposit".to_string(),
                 args: args![Workspace("burn")]
             },
             Instruction::CallMethod {
-                component_address: account_address,
+                component_address: account.address.clone().as_component_address().unwrap(),
                 method: "pay_fee".to_string(),
-                args: args![req.fee]
+                args: args![fee]
             }
         ])
         .with_inputs(inputs)
@@ -638,7 +628,7 @@ pub async fn handle_confidential_transfer(
         let key_manager_api = sdk.key_manager_api();
 
         // -------------------------------- Load up known substates -------------------------------- //
-        let account = accounts_api.get_account(&req.account.into())?;
+        let account = get_account_or_default(req.account, &sdk)?;
         let account_secret = key_manager_api.derive_key(key_manager::TRANSACTION_BRANCH, account.key_index)?;
         let source_component_address = account
             .address
@@ -652,10 +642,10 @@ pub async fn handle_confidential_transfer(
         info!(target: LOG_TARGET, "Scanning for account: {}", req.destination_account);
         // TODO: Scan for account and determine the dest vault for a particular resource
         //       For now we assume we already know it
-        let dest_dependent_states = substate_api.load_dependent_substates(&[req.destination_account.into()])?;
+        let dest_dependent_states = substate_api.load_dependent_substates(&[&req.destination_account.into()])?;
 
         // -------------------------------- Lock outputs for spending -------------------------------- //
-        let total_amount = req.fee + req.amount;
+        let total_amount = req.fee.unwrap_or(DEFAULT_FEE) + req.amount;
         let proof_id = outputs_api.add_proof(&src_vault.address)?;
         let (inputs, total_input_value) =
             outputs_api.lock_outputs_by_amount(&src_vault.address, total_amount.as_u64_checked().unwrap(), proof_id)?;
@@ -727,7 +717,7 @@ pub async fn handle_confidential_transfer(
         );
 
         let transaction = Transaction::builder()
-            .fee_transaction_pay_from_component(source_component_address, req.fee)
+            .fee_transaction_pay_from_component(source_component_address, req.fee.unwrap_or(DEFAULT_FEE))
             .call_method(source_component_address, "withdraw_confidential", args![
                 req.resource_address,
                 proof

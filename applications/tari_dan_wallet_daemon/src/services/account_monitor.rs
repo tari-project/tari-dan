@@ -89,7 +89,7 @@ where TStore: WalletStore + Clone + Send + Sync + 'static
                 target: LOG_TARGET,
                 "👁️‍🗨️ Checking balance for account '{}' {}", account.name, account.address
             );
-            let account_children = substate_api.load_dependent_substates(&[account.address.clone()])?;
+            let account_children = substate_api.load_dependent_substates(&[&account.address])?;
             // TODO: Support detecting new vaults
             let known_child_vaults = account_children
                 .iter()

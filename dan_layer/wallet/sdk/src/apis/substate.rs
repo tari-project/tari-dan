@@ -35,7 +35,7 @@ impl<'a, TStore: WalletStore> SubstatesApi<'a, TStore> {
 
     pub fn load_dependent_substates(
         &self,
-        parents: &[SubstateAddress],
+        parents: &[&SubstateAddress],
     ) -> Result<Vec<VersionedSubstateAddress>, SubstateApiError> {
         let mut substate_addresses = Vec::with_capacity(parents.len());
         let mut tx = self.store.create_read_tx()?;
