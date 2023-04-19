@@ -27,6 +27,7 @@ use std::{
 
 use cargo_metadata::MetadataCommand;
 use clap::{Args, Subcommand};
+use reqwest::Url;
 use tari_dan_engine::wasm::compile::compile_template;
 use tari_engine_types::{calculate_template_binary_hash, TemplateAddress};
 use tari_validator_node_client::{
@@ -46,7 +47,7 @@ pub enum TemplateSubcommand {
 #[derive(Debug, Args, Clone)]
 pub struct PublishTemplateArgs {
     #[clap(long, short = 'p', alias = "path")]
-    pub template_code_path: PathBuf,
+    pub template_code_path: Option<PathBuf>,
 
     #[clap(long, alias = "template-name")]
     pub template_name: Option<String>,
@@ -54,7 +55,7 @@ pub struct PublishTemplateArgs {
     #[clap(long, alias = "template-version")]
     pub template_version: Option<u16>,
 
-    #[clap(long, alias = "binary-url")]
+    #[clap(long, short = 'u', alias = "binary-url", alias = "url")]
     pub binary_url: Option<String>,
 }
 
@@ -87,7 +88,11 @@ async fn handle_get(template_address: TemplateAddress, mut client: ValidatorNode
     for f in abi.functions {
         table.add_row(table_row![
             format!("{}::{}", abi.template_name, f.name),
-            f.arguments.join(","),
+            f.arguments
+                .iter()
+                .map(|a| format!("{}:{}", a.name, a.arg_type))
+                .collect::<Vec<_>>()
+                .join(","),
             f.output
         ]);
     }
@@ -117,30 +122,61 @@ async fn handle_list(mut client: ValidatorNodeClient) -> Result<(), anyhow::Erro
 }
 
 async fn handle_publish(args: PublishTemplateArgs, mut client: ValidatorNodeClient) -> anyhow::Result<()> {
-    // retrieve the root folder of the template
-    let root_folder = args.template_code_path;
-    println!("Template code path {}", root_folder.display());
-    println!("⏳️ Compiling template...");
+    let version;
+    let name;
+    let binary_sha;
+    let binary_url;
+    if let Some(root_folder) = args.template_code_path {
+        // retrieve the root folder of the template
+        println!("Template code path {}", root_folder.display());
+        println!("⏳️ Compiling template...");
 
-    // compile the code and retrieve the binary content of the wasm
-    let wasm_module = compile_template(root_folder.as_path(), &[])?;
-    let wasm_code = wasm_module.code();
-    println!(
-        "✅ Template compilation successful (WASM file size: {} bytes)",
-        wasm_code.len()
-    );
-    println!();
+        // compile the code and retrieve the binary content of the wasm
+        let wasm_module = compile_template(root_folder.as_path(), &[])?;
+        let wasm_code = wasm_module.code();
+        println!(
+            "✅ Template compilation successful (WASM file size: {} bytes)",
+            wasm_code.len()
+        );
+        println!();
 
-    // calculate the hash of the WASM binary
-    let binary_sha = calculate_template_binary_hash(wasm_code);
+        // calculate the hash of the WASM binary
+        binary_sha = calculate_template_binary_hash(wasm_code);
 
-    // get the local path of the compiled wasm
-    // note that the file name will be the same as the root folder name
-    let file_name = root_folder.file_name().unwrap().to_str().unwrap();
-    let mut wasm_path = root_folder.clone();
-    wasm_path.push(format!("target/wasm32-unknown-unknown/release/{}.wasm", file_name));
+        // get the local path of the compiled wasm
+        // note that the file name will be the same as the root folder name
+        let file_name = root_folder.file_name().unwrap().to_str().unwrap();
+        let mut wasm_path = root_folder.clone();
+        wasm_path.push(format!("target/wasm32-unknown-unknown/release/{}.wasm", file_name));
 
-    let (version, name, default_binary_url) = parse_cargo_file(root_folder.as_path())?;
+        // Show the wasm file path and ask to upload it to the web
+        let (cargo_version, cargo_name, default_binary_url) = parse_cargo_file(root_folder.as_path())?;
+        binary_url = match args.binary_url {
+            Some(value) => value,
+            None => {
+                println!("Compiled template WASM file location: {}", wasm_path.display());
+                println!("Please upload the file to a public web location and then paste the URL");
+                Prompt::new("WASM public URL (max 255 characters):")
+                    .with_default(default_binary_url)
+                    .ask()?
+            },
+        };
+
+        version = cargo_version;
+        name = cargo_name;
+    } else if let Some(arg_binary_url) = args.binary_url {
+        let parsed_url = Url::parse(&arg_binary_url)?;
+        let file_name = parsed_url.path().split('/').last().unwrap();
+        version = file_name.split('-').nth(1).unwrap_or("0").parse::<u16>()?;
+        name = file_name.split('-').next().unwrap_or(file_name).to_string();
+
+        binary_sha = calculate_template_binary_hash(reqwest::get(&arg_binary_url).await?.bytes().await?.as_ref());
+        binary_url = arg_binary_url;
+    } else {
+        println!("Please specify a template code path or a binary url");
+        return Ok(());
+    }
+
     // ask the template name (skip if already passed as a CLI argument)
     let template_name = Prompt::new("Choose an user-friendly name for the template (max 32 characters):")
         .with_default(name)
@@ -153,26 +189,19 @@ async fn handle_publish(args: PublishTemplateArgs, mut client: ValidatorNodeClie
         .with_value(args.template_version)
         .ask_parsed()?;
 
+    let template_type = Prompt::new("Choose a template type (wasm, flow):")
+        .with_default("wasm")
+        .ask()?;
+
     // TODO: ask repository info
     let repo_url = String::new();
     let commit_hash = vec![];
-
-    // Show the wasm file path and ask to upload it to the web
-    let binary_url = match args.binary_url {
-        Some(value) => value,
-        None => {
-            println!("Compiled template WASM file location: {}", wasm_path.display());
-            println!("Please upload the file to a public web location and then paste the URL");
-            Prompt::new("WASM public URL (max 255 characters):")
-                .with_default(default_binary_url)
-                .ask()?
-        },
-    };
 
     // build and send the template registration request
     let request = TemplateRegistrationRequest {
         template_name,
         template_version,
+        template_type,
         repo_url,
         commit_hash,
         binary_sha: binary_sha.to_vec(),
