@@ -90,6 +90,7 @@ pub async fn handle_create(
         non_fungible_mint_outputs: vec![],
         new_non_fungible_outputs: vec![],
         new_non_fungible_index_outputs: vec![],
+        new_component_outputs: vec![],
     };
 
     submit_transaction(vec![instruction], common, base_dir, client).await

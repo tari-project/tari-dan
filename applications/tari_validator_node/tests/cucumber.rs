@@ -45,8 +45,11 @@ use tari_dan_app_utilities::base_node_client::GrpcBaseNodeClient;
 use tari_dan_common_types::QuorumDecision;
 use tari_dan_core::services::BaseNodeClient;
 use tari_dan_engine::abi::Type;
-use tari_template_lib::Hash;
-use tari_validator_node_cli::versioned_substate_address::VersionedSubstateAddress;
+use tari_template_lib::{models::TemplateAddress, Hash};
+use tari_validator_node_cli::{
+    command::transaction::NewComponentOutput,
+    versioned_substate_address::VersionedSubstateAddress,
+};
 use tari_validator_node_client::types::{
     AddPeerRequest,
     GetIdentityResponse,
@@ -96,6 +99,7 @@ pub struct TariWorld {
     pub account_public_keys: IndexMap<String, (RistrettoSecretKey, PublicKey)>,
     pub claim_public_keys: IndexMap<String, PublicKey>,
     pub wallet_daemons: IndexMap<String, DanWalletDaemonProcess>,
+    pub template_indexes: IndexMap<TemplateAddress, u64>,
 }
 
 impl TariWorld {
@@ -123,6 +127,15 @@ impl TariWorld {
             .get(name)
             .unwrap_or_else(|| panic!("Account component address {} not found", name));
         all_components.get("components/Account").map(|a| a.address.to_string())
+    }
+
+    pub fn next_component_output(&mut self, template_address: TemplateAddress) -> NewComponentOutput {
+        let index = *self.template_indexes.get(&template_address).unwrap_or(&0);
+        self.template_indexes.insert(template_address, index + 1);
+        NewComponentOutput {
+            template_address,
+            index,
+        }
     }
 
     pub fn after(&mut self, _scenario: &Scenario) {

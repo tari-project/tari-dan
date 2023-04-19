@@ -117,6 +117,8 @@ pub struct CommonSubmitArgs {
     /// New non-fungible index outputs to mint in the format <resource_address>,<index>
     #[clap(long, alias = "new-nft-index")]
     pub new_non_fungible_index_outputs: Vec<NewNonFungibleIndexOutput>,
+    #[clap(long, alias = "new-components")]
+    pub new_component_outputs: Vec<NewComponentOutput>,
     #[clap(long, default_value_t = 1000)]
     pub fee: u64,
     #[clap(long, short = 'f', alias = "fee-account")]
@@ -290,6 +292,11 @@ pub async fn handle_submit(args: SubmitArgs, client: &mut WalletDaemonClient) ->
             .into_iter()
             .map(|i| (i.parent_address, i.index))
             .collect(),
+        new_component_outputs: common
+            .new_component_outputs
+            .into_iter()
+            .map(|i| (i.template_address, i.index))
+            .collect(),
         is_dry_run: common.dry_run,
         proof_ids: vec![],
     };
@@ -344,6 +351,11 @@ async fn handle_submit_manifest(
             .new_non_fungible_index_outputs
             .into_iter()
             .map(|i| (i.parent_address, i.index))
+            .collect(),
+        new_component_outputs: common
+            .new_component_outputs
+            .into_iter()
+            .map(|i| (i.template_address, i.index))
             .collect(),
         is_dry_run: common.dry_run,
         proof_ids: vec![],
@@ -423,6 +435,11 @@ pub async fn handle_send(args: SendArgs, client: &mut WalletDaemonClient) -> Res
             .new_non_fungible_index_outputs
             .into_iter()
             .map(|i| (i.parent_address, i.index))
+            .collect(),
+        new_component_outputs: common
+            .new_component_outputs
+            .into_iter()
+            .map(|i| (i.template_address, i.index))
             .collect(),
         is_dry_run: common.dry_run,
         proof_ids: vec![],
@@ -980,6 +997,27 @@ impl FromStr for NewNonFungibleIndexOutput {
             .ok_or_else(|| anyhow!("Expected resource address but got {}", parent_address))?;
         Ok(NewNonFungibleIndexOutput {
             parent_address,
+            index: index_str.parse()?,
+        })
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct NewComponentOutput {
+    pub template_address: TemplateAddress,
+    pub index: u64,
+}
+
+impl FromStr for NewComponentOutput {
+    type Err = anyhow::Error;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let (template_address, index_str) = s
+            .split_once(',')
+            .ok_or_else(|| anyhow!("Expected template address and index"))?;
+        let template_address = TemplateAddress::from_hex(template_address)?;
+        Ok(NewComponentOutput {
+            template_address,
             index: index_str.parse()?,
         })
     }

@@ -43,7 +43,7 @@ use tari_template_lib::{
     arg,
     args::Arg,
     models::{Amount, NonFungibleAddress, NonFungibleId},
-    prelude::ResourceAddress,
+    prelude::{ComponentAddress, ResourceAddress},
 };
 use tari_transaction::Transaction;
 use tari_transaction_manifest::parse_manifest;
@@ -113,6 +113,8 @@ pub struct CommonSubmitArgs {
     pub new_non_fungible_outputs: Vec<NewNonFungibleMintOutput>,
     #[clap(long, alias = "new-nft-index")]
     pub new_non_fungible_index_outputs: Vec<NewNonFungibleIndexOutput>,
+    #[clap(long, alias = "new-components")]
+    pub new_component_outputs: Vec<NewComponentOutput>,
 }
 
 #[derive(Debug, Args, Clone)]
@@ -251,6 +253,13 @@ pub async fn submit_transaction(
             .map(|m| ShardId::from_address(&m.to_substate_address(), 0)),
     );
 
+    outputs.extend(
+        common
+            .new_component_outputs
+            .iter()
+            .map(|c| ShardId::from_address(&c.to_substate_address(), 0)),
+    );
+
     // Convert to shard id
     let inputs = inputs
         .into_iter()
@@ -284,6 +293,13 @@ pub async fn submit_transaction(
                 .new_non_fungible_index_outputs
                 .into_iter()
                 .map(|i| (i.parent_address, i.index))
+                .collect(),
+        )
+        .with_new_components(
+            common
+                .new_component_outputs
+                .into_iter()
+                .map(|i| ComponentAddress::new(i.template_address, i.index))
                 .collect(),
         )
         .sign(&key.secret_key)
@@ -803,6 +819,33 @@ impl FromStr for NewNonFungibleIndexOutput {
             .ok_or_else(|| anyhow!("Expected resource address but got {}", parent_address))?;
         Ok(NewNonFungibleIndexOutput {
             parent_address,
+            index: index_str.parse()?,
+        })
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct NewComponentOutput {
+    pub template_address: TemplateAddress,
+    pub index: u64,
+}
+
+impl NewComponentOutput {
+    pub fn to_substate_address(&self) -> SubstateAddress {
+        SubstateAddress::Component(ComponentAddress::new(self.template_address, self.index))
+    }
+}
+
+impl FromStr for NewComponentOutput {
+    type Err = anyhow::Error;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let (template_address, index_str) = s
+            .split_once(',')
+            .ok_or_else(|| anyhow!("Expected template address and index"))?;
+        let template_address = TemplateAddress::from_hex(template_address)?;
+        Ok(NewComponentOutput {
+            template_address,
             index: index_str.parse()?,
         })
     }

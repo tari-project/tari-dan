@@ -58,6 +58,7 @@ pub async fn create_account(world: &mut TariWorld, account_name: String, validat
         function: "create".to_string(),
         args: args!(owner_token),
     };
+    let new_component_output = world.next_component_output(ACCOUNT_TEMPLATE_ADDRESS);
     let common = CommonSubmitArgs {
         wait_for_result: true,
         wait_for_result_timeout: Some(90),
@@ -71,6 +72,7 @@ pub async fn create_account(world: &mut TariWorld, account_name: String, validat
         non_fungible_mint_outputs: vec![],
         new_non_fungible_outputs: vec![],
         new_non_fungible_index_outputs: vec![],
+        new_component_outputs: vec![new_component_output],
     };
     let mut client = get_validator_node_client(world, validator_node_name).await;
     let resp = submit_transaction(vec![instruction], common, data_dir, &mut client)
@@ -114,7 +116,7 @@ pub async fn create_component(
     } else {
         Some(num_outputs as u8)
     };
-
+    let new_component_output = world.next_component_output(template_address);
     let args = SubmitArgs {
         instruction,
         common: CommonSubmitArgs {
@@ -133,6 +135,7 @@ pub async fn create_component(
             non_fungible_mint_outputs: vec![],
             new_non_fungible_outputs: vec![],
             new_non_fungible_index_outputs: vec![],
+            new_component_outputs: vec![new_component_output],
         },
     };
     dbg!(args.clone());
@@ -257,6 +260,7 @@ pub async fn call_method(
             non_fungible_mint_outputs: vec![],
             new_non_fungible_outputs: vec![],
             new_non_fungible_index_outputs: vec![],
+            new_component_outputs: vec![],
         },
     };
     let mut client = get_validator_node_client(world, vn_name).await;
@@ -379,6 +383,7 @@ pub async fn submit_manifest(
         non_fungible_mint_outputs,
         new_non_fungible_outputs,
         new_non_fungible_index_outputs,
+        new_component_outputs: vec![],
     };
     let resp = submit_transaction(instructions, args, data_dir, &mut client)
         .await
