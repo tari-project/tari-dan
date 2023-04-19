@@ -62,7 +62,7 @@ pub async fn claim_burn(
             "reciprocal_claim_public_key": BASE64.encode(reciprocal_claim_public_key.as_bytes()),
             "range_proof": BASE64.encode(range_proof.as_bytes()),
         }),
-        fee: Amount::new(1),
+        fee: Amount(1),
     };
 
     client.claim_burn(claim_burn_request).await.unwrap()

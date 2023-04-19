@@ -6,8 +6,8 @@ edition = "2021"
 
 [dependencies]
 tari_bor = { path = "../tari_bor" }
-tari_core = { git = "https://github.com/tari-project/tari.git", tag = "v0.49.0-pre.5", default-features = false, features = ["transactions"] }
-tari_common_types = { git = "https://github.com/tari-project/tari.git", tag = "v0.49.0-pre.5" }
+tari_core = { git = "https://github.com/tari-project/tari.git", tag = "v0.50.0-pre.0", default-features = false, features = ["transactions"] }
+tari_common_types = { git = "https://github.com/tari-project/tari.git", tag = "v0.50.0-pre.0" }
 tari_crypto = { version="0.16.10", features = ["borsh"] }
 tari_template_abi = { path = "../template_abi", features = ["std"] }
 tari_template_lib = { path = "../template_lib" }
@@ -19,3 +19,9 @@ digest = "0.9.0"
 lazy_static = "1.4.0"
 serde = "1.0.126"
 thiserror = "1"
+
+
+[features]
+default = ["debugging"]
+# Includes the ability to create free test coins
+debugging = []

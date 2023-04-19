@@ -21,8 +21,10 @@
 // USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 pub mod cli;
+pub mod config;
 mod handlers;
 mod jrpc_server;
+mod jwt;
 mod notify;
 mod services;
 mod webrtc;
@@ -33,11 +35,14 @@ use tari_dan_wallet_sdk::{apis::key_manager, DanWalletSdk, WalletSdkConfig};
 use tari_dan_wallet_storage_sqlite::SqliteWalletStore;
 use tari_shutdown::ShutdownSignal;
 
-use crate::{cli::Cli, handlers::HandlerContext, notify::Notify, services::spawn_services};
+use crate::{config::ApplicationConfig, handlers::HandlerContext, jwt::Jwt, notify::Notify, services::spawn_services};
 
 const _LOG_TARGET: &str = "tari::dan_wallet_daemon::main";
 
-pub async fn run_tari_dan_wallet_daemon(cli: Cli, shutdown_signal: ShutdownSignal) -> Result<(), Box<dyn Error>> {
+pub async fn run_tari_dan_wallet_daemon(
+    config: ApplicationConfig,
+    shutdown_signal: ShutdownSignal,
+) -> Result<(), Box<dyn Error>> {
     // Uncomment to enable tokio tracing via tokio-console
     // console_subscriber::init();
 
@@ -49,13 +54,13 @@ pub async fn run_tari_dan_wallet_daemon(cli: Cli, shutdown_signal: ShutdownSigna
         process::exit(1);
     }));
 
-    let store = SqliteWalletStore::try_open(cli.base_dir().join("data/wallet.sqlite"))?;
+    let store = SqliteWalletStore::try_open(config.common.base_path.join("data/wallet.sqlite"))?;
     store.run_migrations()?;
 
     let params = WalletSdkConfig {
         // TODO: Configure
         password: None,
-        validator_node_jrpc_endpoint: cli.validator_node_endpoint(),
+        validator_node_jrpc_endpoint: config.dan_wallet_daemon.validator_node_endpoint.unwrap(),
     };
     let wallet_sdk = DanWalletSdk::initialize(store, params)?;
     wallet_sdk
@@ -65,9 +70,13 @@ pub async fn run_tari_dan_wallet_daemon(cli: Cli, shutdown_signal: ShutdownSigna
 
     let service_handles = spawn_services(shutdown_signal.clone(), notify.clone(), wallet_sdk.clone());
 
-    let address = cli.listen_address();
-    let signaling_server_address = cli.signaling_server_address();
-    let handlers = HandlerContext::new(wallet_sdk.clone(), notify);
+    let address = config.dan_wallet_daemon.listen_addr.unwrap();
+    let signaling_server_address = config.dan_wallet_daemon.signaling_server_addr.unwrap();
+    let jwt = Jwt::new(
+        config.dan_wallet_daemon.jwt_expiration.unwrap(),
+        config.dan_wallet_daemon.secret_key.unwrap(),
+    );
+    let handlers = HandlerContext::new(wallet_sdk.clone(), notify, jwt);
     let listen_fut = jrpc_server::listen(address, signaling_server_address, handlers, shutdown_signal);
 
     // Wait for shutdown, or for any service to error

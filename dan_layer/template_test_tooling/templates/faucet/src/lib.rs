@@ -39,7 +39,7 @@ mod faucet_template {
 
         pub fn take_free_coins(&mut self) -> Bucket {
             debug("Withdrawing 1000 coins from faucet");
-            self.vault.withdraw(Amount::new(1000))
+            self.vault.withdraw(Amount(1000))
         }
 
         pub fn take_free_coins_confidential(&mut self, proof: ConfidentialWithdrawProof) -> Bucket {

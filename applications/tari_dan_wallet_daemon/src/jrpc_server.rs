@@ -3,10 +3,18 @@
 
 use std::{net::SocketAddr, sync::Arc};
 
-use axum::{extract::Extension, routing::post, Router};
+use axum::{
+    extract::Extension,
+    http::{Request, StatusCode},
+    middleware::Next,
+    response::Response,
+    routing::post,
+    Router,
+};
 use axum_jrpc::{
     error::{JsonRpcError, JsonRpcErrorReason},
     JrpcResult,
+    JsonRpcAnswer,
     JsonRpcExtractor,
     JsonRpcResponse,
 };
@@ -24,6 +32,21 @@ use crate::{
 
 const LOG_TARGET: &str = "tari::dan_wallet_daemon::json_rpc";
 
+// We need to extract the token, because the first call is without any token. So we don't have to have two handlers.
+async fn extract_token<B>(mut request: Request<B>, next: Next<B>) -> Result<Response, StatusCode> {
+    let mut token_ext = None;
+    if let Some(token) = request.headers().get("authorization") {
+        if let Ok(token) = token.to_str() {
+            if let Some(token) = token.strip_prefix("Bearer ") {
+                token_ext = Some(token.to_string());
+            }
+        }
+    }
+    request.extensions_mut().insert::<Option<String>>(token_ext);
+    let response = next.run(request).await;
+    Ok(response)
+}
+
 pub async fn listen(
     preferred_address: SocketAddr,
     signaling_server_address: SocketAddr,
@@ -38,7 +61,8 @@ pub async fn listen(
         .layer(Extension(Arc::new(context)))
         .layer(Extension(Arc::new((preferred_address,signaling_server_address))))
         .layer(Extension(Arc::new(shutdown_signal.clone())))
-        .layer(CorsLayer::permissive());
+        .layer(CorsLayer::permissive())
+        .layer(axum::middleware::from_fn(extract_token));
 
     let server = axum::Server::try_bind(&preferred_address)?;
     let server = server.serve(router.into_make_service());
@@ -54,9 +78,32 @@ async fn handler(
     Extension(context): Extension<Arc<HandlerContext>>,
     Extension(addresses): Extension<Arc<(SocketAddr, SocketAddr)>>,
     Extension(shutdown_signal): Extension<Arc<ShutdownSignal>>,
+    Extension(token): Extension<Option<String>>,
     value: JsonRpcExtractor,
 ) -> JrpcResult {
     info!(target: LOG_TARGET, "🌐 JSON-RPC request: {}", value.method);
+    if value.method == "auth.login" {
+        return call_handler(context, value, rpc::handle_init).await;
+    }
+
+    // Now we check if there is a token present in this request.
+    let token = token.ok_or_else(|| {
+        JsonRpcResponse::error(
+            value.get_answer_id(),
+            JsonRpcError::new(
+                JsonRpcErrorReason::ApplicationError(401),
+                "You need to call 'auth.login' first".to_string(),
+                json!({}),
+            ),
+        )
+    })?;
+    // If so, it is valid (and not expired)?
+    context.jwt().check(&token).map_err(|e| {
+        JsonRpcResponse::error(
+            value.get_answer_id(),
+            JsonRpcError::new(JsonRpcErrorReason::ApplicationError(401), e.to_string(), json!({})),
+        )
+    })?;
 
     match value.method.as_str().split_once('.') {
         Some(("rpc", "discover")) => call_handler(context, value, rpc::handle_discover).await,
@@ -82,6 +129,7 @@ async fn handler(
             "invoke" => call_handler(context, value, accounts::handle_invoke).await,
             "get_by_name" => call_handler(context, value, accounts::handle_get_by_name).await,
             "confidential_transfer" => call_handler(context, value, accounts::handle_confidential_transfer).await,
+            "create_free_test_coins" => call_handler(context, value, accounts::handle_create_free_test_coins).await,
             _ => Ok(value.method_not_found(&value.method)),
         },
         Some(("confidential", method)) => match method {
@@ -93,13 +141,19 @@ async fn handler(
         },
         Some(("webrtc", "start")) => {
             let answer_id = value.get_answer_id();
-            let token = value.parse_params::<String>()?;
+            let signaling_server_token = value.parse_params::<String>()?;
             let shutdown_signal = (*shutdown_signal).clone();
             let (preferred_address, signaling_server_address) = *addresses.clone();
             tokio::spawn(async move {
-                webrtc_start_session(token, preferred_address, signaling_server_address, shutdown_signal)
-                    .await
-                    .unwrap();
+                webrtc_start_session(
+                    signaling_server_token,
+                    token,
+                    preferred_address,
+                    signaling_server_address,
+                    shutdown_signal,
+                )
+                .await
+                .unwrap();
             });
             Ok(JsonRpcResponse::success(answer_id, "started"))
         },
@@ -119,7 +173,20 @@ where
 {
     let answer_id = value.get_answer_id();
     let resp = handler
-        .handle(&context, value.parse_params()?)
+        .handle(
+            &context,
+            value.parse_params().map_err(|e| {
+                match &e.result {
+                    JsonRpcAnswer::Result(_) => {
+                        unreachable!("parse_params should not return a result")
+                    },
+                    JsonRpcAnswer::Error(e) => {
+                        warn!(target: LOG_TARGET, "🌐 JSON-RPC params error: {}", e);
+                    },
+                }
+                e
+            })?,
+        )
         .await
         .map_err(|e| resolve_handler_error(answer_id, &e))?;
     Ok(JsonRpcResponse::success(answer_id, resp))
@@ -136,6 +203,7 @@ fn resolve_handler_error(answer_id: i64, e: &HandlerError) -> JsonRpcResponse {
 }
 
 fn resolve_any_error(answer_id: i64, e: &anyhow::Error) -> JsonRpcResponse {
+    warn!(target: LOG_TARGET, "🌐 JSON-RPC error: {}", e);
     if let Some(handler_err) = e.downcast_ref::<HandlerError>() {
         return resolve_handler_error(answer_id, handler_err);
     }

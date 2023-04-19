@@ -142,14 +142,14 @@ async fn handler(
         }
     } else {
         result = match value.method() {
-            "get.jwt" => {
+            "auth.login" => {
                 info!(target: LOG_TARGET, "Generating new JWT token");
                 data.generate_jwt()
             },
             _ => {
                 error!(
                     target: LOG_TARGET,
-                    "Without bearer token there is only one method available \"get.jwt\""
+                    "Without bearer token there is only one method available \"auth.login\""
                 );
                 return Ok(JsonRpcResponse::error(
                     answer_id,
